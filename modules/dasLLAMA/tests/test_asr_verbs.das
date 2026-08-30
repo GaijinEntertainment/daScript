@@ -7,6 +7,7 @@ require dasllama/dasllama_parakeet
 require dasllama/dasllama_canary
 require dasllama/dasllama_gemma4a
 require dasllama/dasllama_qwen3a
+require dasllama/dasllama_audio   // audio_tower_gpu_serves — the qwen3a lane policy's own predicate
 
 // The family-owned halves of the ASR facade verbs (asr_exec_fmt / asr_encode_bucket), fed
 // constructed structs — the moved-bit test the extraction owes. Plus parakeet's SPM detokenizer
@@ -44,8 +45,50 @@ def test_family_exec_fmt_verbs(t : T?) {
         t |> equal(canary_exec_fmt(c, "q8"), "q8/q8", "canary q8 rail")
         c.q8 = false
         t |> equal(canary_exec_fmt(c, "q8"), "f32/q8", "canary fp32 parity encoder")
-        t |> equal(gemma4a_exec_fmt("q8"), "q8/q8", "gemma4a q8 tower (forced)")
-        t |> equal(qwen3a_exec_fmt("q8"), "q8/q8", "qwen3a q8 core (forced)")
+        var g = Gemma4aEncoder()
+        g.q8 = true
+        t |> equal(gemma4a_exec_fmt(g, "q8"), "q8/q8", "gemma4a q8 tower")
+        g.q8 = false
+        t |> equal(gemma4a_exec_fmt(g, "q8"), "f32/q8", "gemma4a fp32 parity encoder")
+        var q = Qwen3aTower()
+        q.core.q8 = true
+        t |> equal(qwen3a_exec_fmt(q, "q8"), "q8/q8", "qwen3a q8 core")
+        q.core.q8 = false
+        t |> equal(qwen3a_exec_fmt(q, "q8"), "f32/q8", "qwen3a fp32 parity core")
+    }
+}
+
+// the audio families' lane policies themselves - model-free: the un-pinned default follows
+// whether that family's Metal driver would serve, the pin flips it either way, reset returns.
+// Each assert names the predicate the policy consults, never a hardcoded lane.
+[test]
+def test_audio_lane_knobs(t : T?) {
+    t |> run("qwen3a: the q8 lane pin, and reset back to the policy") @(tt : T?) {
+        tt |> equal(qwen3a_serves_q8(), !audio_tower_gpu_serves(), "the default follows the Metal tower")
+        set_qwen3a_q8(true)
+        tt |> success(qwen3a_serves_q8(), "pinned q8")
+        set_qwen3a_q8(false)
+        tt |> success(!qwen3a_serves_q8(), "pinned exact")
+        reset_qwen3a_q8()   // from the EXACT pin, so a no-op reset cannot pass as a q8 policy default
+        tt |> equal(qwen3a_serves_q8(), !audio_tower_gpu_serves(), "reset returns to the policy")
+    }
+    t |> run("gemma4a: the q8 lane pin, and reset back to the policy") @(tt : T?) {
+        tt |> equal(gemma4a_serves_q8(), !gemma4a_gpu_serves(), "the default follows the Metal Conformer driver")
+        set_gemma4a_q8(true)
+        tt |> success(gemma4a_serves_q8(), "pinned q8")
+        set_gemma4a_q8(false)
+        tt |> success(!gemma4a_serves_q8(), "pinned exact")
+        reset_gemma4a_q8()
+        tt |> equal(gemma4a_serves_q8(), !gemma4a_gpu_serves(), "reset returns to the policy")
+    }
+    t |> run("canary: the q8 lane pin, and reset back to the policy") @(tt : T?) {
+        tt |> equal(canary_enc_serves_q8(), !canary_gpu_serves(), "the default follows the Metal FastConformer driver")
+        set_canary_enc_q8(true)
+        tt |> success(canary_enc_serves_q8(), "pinned q8")
+        set_canary_enc_q8(false)
+        tt |> success(!canary_enc_serves_q8(), "pinned exact")
+        reset_canary_enc_q8()
+        tt |> equal(canary_enc_serves_q8(), !canary_gpu_serves(), "reset returns to the policy")
     }
 }
 

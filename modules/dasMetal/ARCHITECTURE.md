@@ -77,7 +77,7 @@ reused as-is.
 | `src/dasMetal.h` | hand | The C++ header `src/dasMetal.mm` and any embedder share: the opaque handle struct declarations and the `DAS_MOD_API` prototype of every extern below. Declarations only - no implementation, no Obj-C, no binding registration. |
 | `src/dasMetal.mm` | hand | `Module("das_metal")` - Obj-C++ shim over Metal.framework. Opaque annotated handles (device, queue, command buffer, compute encoder, pipeline state, library, function, buffer) + the extern surface below. Compiled with ARC; handles cross to das as `__bridge_retained void*`; `metal_release` = `__bridge_transfer`. Shim-side live-object counter for the leak gate. APPLE-only; links `-framework Metal -framework Foundation`. |
 | `metal/msl_types.das` | hand | daslang `TypeDecl` -> MSL type name: 32-bit scalars/bool plus the 16- and 8-bit scalars (`half`/`short`/`char` in MSL) and their 2/3/4 vectors, classified via the shared `daslib/shader_block_layout` rails. `msl_buffer_elem_name` gives the layout-bearing spelling: 3-lane elements take MSL's `packed_T3` (das packs tightly; unified memory means the das array IS the buffer). |
-| `metal/metal_builtins.das` | hand | Metal-only builtin surface over the shared lingua franca (the spirv_builtins pattern): re-exports `daslib/shader_lingua_franca` (whence `gl_WorkGroupSize` and the four `gl_Subgroup*` IDs, shared with dasSpirv) and adds the `simd_sum`/`simd_shuffle*` intrinsics (Metal spellings, float/int/uint). The CPU bodies return their argument unchanged - on the CPU a simdgroup is one lane. |
+| `metal/metal_builtins.das` | hand | Metal-only builtin surface over the shared lingua franca (the spirv_builtins pattern): re-exports `daslib/shader_lingua_franca` (whence `gl_WorkGroupSize` and the four `gl_Subgroup*` IDs, shared with dasSpirv) and adds the `simd_sum`/`simd_max`/`simd_shuffle*` intrinsics (Metal spellings, float/int/uint). The CPU bodies return their argument unchanged - on the CPU a simdgroup is one lane. |
 | `metal/msl_emit.das` | hand | The text emitter: `generate_msl(fn, var errors, cfg, var census, var tgmem) : string`. Manual recursion (`emit_value`/`emit_stmt`, mirroring `spirv_emit`). Kernel-signature synthesis from `@ssbo` globals (the one structural novelty - below). Records the construct census at every emit site. |
 | `metal/msl_shader.das` | hand | `[metal_kernel]` function-macro (`MetalKernel : AstFunctionAnnotation`, modeled on `SpirvShader`), applied to a **class method**; args: `name`, `fastmath` (default **true**). `apply` declares the public MSL-text global - the `name=` argument, or `<Class>_<method>_msl` derived from the method - plus a `<name>_fastmath : bool` companion feeding the pipeline-compile options; **`fixup` fills `glob.init = new ExprConstString(...)`** - the initializer is a constant string, so nothing has to be called to build it and the late `fixup` pass is enough. Does `require msl_emit public` + `require metal_builtins public`. |
 | `metal/das_metal_boost.das` | hand | Host sugar over `das_metal`: `with_metal_device`, `pipeline_from_kernel` (compile + error surfacing), unified-memory buffer helpers, `run_compute_1d` one-liner, live-object leak assert. `require das_metal` -> usable only where the C++ module exists. |
@@ -225,3 +225,32 @@ Tests (all repo root): `tests/msl/_msl_common.das` + `tests/msl/test_msl_functio
 `tests/msl/_fail_closed/_fc_ptr_space_{tg,dev}.das` and
 `tests/msl/_fail_closed/_fc_ptr_untraceable.das` (both mismatch directions + the untraceable
 case).
+
+## 9. tmm2d staged-W threadgroup tiles {#tmm2d-staging}
+
+The q8u/q8uh GEMM helpers dequantize the interleaved-q8_0 W tile into threadgroup memory and
+stream activations from device memory. The staged tile's threadgroup layout is a contract with
+two parties, and `tmm2d_q8u_f32` is neither of them - its das body never touches `wt`, so it
+replays the GEMM and says nothing about staging. The first party is `tmm2d_tg_step_deva`, whose
+das body carries an `ldb` that must equal the emitted step's B extent. The second is every
+caller: the `@workgroup` array handed in as `wt` is sized by the caller against a stride only
+this document and the emitter know.
+
+**Staged rows are padded, not packed.** A 64-deep row of halves is 128 bytes, which is the
+threadgroup bank-conflict worst case: every row then starts in the same bank. Rows pad to 72
+halves, and a 32-deep tail row pads to 40, so consecutive rows walk the banks instead. The pad
+is the row stride the `matmul2d` tensor extent carries, so the emitter passes the stride
+explicitly rather than letting the extent default to the packed width.
+
+**`bk` names the resident staging footprint, not the chunk depth.** `bk = 32` stages one
+32-deep chunk between barriers. `bk = 64` stages one 64-deep chunk and halves the barriers per
+K walk (raced 5-11% per GEMM on M5). `bk = 128` is 64-deep double-buffered: two ping-pong
+tiles in an `n*144`-half `wt`, costing ONE barrier per chunk. That single barrier does both
+jobs - it orders the previous `op.run` against the overwrite of the tile that run consumed,
+and it publishes the tile staged during the previous iteration. Staging chunk `b+1` therefore
+overlaps `op.run` on chunk `b`, because the two touch disjoint halves of `wt`. A
+`kk % 64 == 32` remainder runs one 32-deep tail chunk in every mode.
+
+**`bk = 128`'s initial preload is guarded on `nb > 0`.** A `kk` under 64 has no 64-deep chunk to
+preload, and running the preload anyway reads W blocks past the panel's `ldwb` stride and writes
+`wt` bytes the tail chunk then writes again with no barrier between the two.

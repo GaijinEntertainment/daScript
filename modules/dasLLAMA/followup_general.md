@@ -621,7 +621,14 @@
     arm. Done = the arm carries the same `lock_count` guard as its siblings, added when that
     arm is next touched for real work.
 
-53. **The MoE tensor-twin templates are five hand-split copies of one scaffold** -
+53. **RESOLVED (2026-08-28) - the MoE tensor twins ride one scaffold template.**
+    `template_struct_instance` learned template CHAINS (a template deriving a template; the
+    instance reifies the whole chain in one pass), and `MetalMoeMulMmKqTensorBase` now
+    carries the shared shell with k45/k6/q51/mx4 deriving - kernel, PSO and global names all
+    unchanged, the MSL audit read statement-identical (scoping, a folded pointer alias, and
+    mx4's x/y renumber to the scaffold's 3/4). q8 stays its own template: its body IS the
+    tuned `tmm2d_q8u_f32` helper, a different mechanism, not a copy. Original entry:
+    five hand-split copies of one scaffold -
     `MetalMoeMulMmQ8/K45/K6/Mx4/Q51TensorT` share the expert prologue, the `while (work < 256u)`
     staging shell, the barrier pair, and the `tmm2d_tg_begin/step/store` epilogue verbatim,
     diverging only on the weight-format decode block and its buffer views (`REVIEW_GPU.md`:
@@ -637,3 +644,24 @@
     which is why 47 historical m1/zen2 rows read `parsec` and were hand-corrected to `off`
     (dormant by the box discipline). Done = the probe stamps `off` unless a session is live
     (a connected-client check per product), with the value naming the product only then.
+
+55. **The kernel-coverage census has no tower carrier.** `tests/test_kernel_coverage.das`'s
+    zoo is text-decoder-only, so the tower/ASR kernel classes (the tower flash, win-attn,
+    kv_hc, row_gather, the g4a/cn/q3a chain families, the q3v stem) ride
+    `CENSUS_NEVER_DISPATCHED` with reasons instead of census rows. Done = a tower carrier in
+    the zoo dispatches them and the never-dispatched entries move onto real rows.
+
+56. **Four servable capabilities have no board cell.** The canary Q8_0 decoder lane, the
+    canary Metal FastConformer tower, the gemma4a/qwen3a chat-decoder Metal rail, and the
+    qwen25v Metal tower shipped cell-less; `gen_bench_records.das`'s
+    `is_metal_served_family` still keys on Whisper alone, and `records/m1.json` /
+    `records/m4.json` still carry canary rows pinning the retired
+    `canary-qwen-2.5b-decoder-f16.gguf`. Done = metal-ASR rows spawn for the four (minted at
+    the arc-end re-mint on the b10659 ref pin, fresh tune manifest), and the stale m1/m4
+    canary rows re-mint or retire.
+
+57. **Plane types have no `long_length`.** `length(PlaneF)` / `length(PlaneU16)` return
+    `int`, so every `uint64(length(t.blob) * 4l)` spelling caps a plane at 2^31 elements
+    before the widening - headroom-only today (whisper large-v3's twin is ~632M elements).
+    Done = `long_length` overloads in `dasllama_plane` and the buffer-sizing call sites
+    moved onto them.

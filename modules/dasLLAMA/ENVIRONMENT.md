@@ -72,14 +72,21 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_ATTN` | flag | on | Tiled QK/AV prefill attention (~10x the trio GEMMs); 0 pins the trio. |
 | `DASLLAMA_METAL_SPAN` | flag | on | Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent. |
 | `DASLLAMA_METAL_TOWER` | flag | on | Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower. |
+| `DASLLAMA_METAL_TOWER_F16` | flag | on | Serve the qwen3v tower's block/merger GEMMs from the image's baked f16 twin plane on the crowned tensor mul_mm twins (the mint bakes the twin only for f16-sourced GEMMs, so it holds the file's own values; needs a tensor crown - a box without one, or an image without the plane, keeps the f32 route); 0 pins the f32 GEMM route - the A/B rail. |
+| `DASLLAMA_METAL_TOWER_FLASH` | flag | on | Serve head-72 tower attention at %64 canvases on the lifted flash kernel (no score slab, no rowstat pass, no head restrides - the gemma3v-geometry ViTs); 0 pins the three-pass slab - the A/B rail. |
 | `DASLLAMA_METAL_WDEC` | flag | on | Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 pins the CPU decoder. |
 | `DASLLAMA_METAL_WDEC_STEP` | flag | on | Serve the whisper DECODE STEP on the GPU too (needs wdec). Small decoders (n_text_state under the 1024 floor; set_metal_wdec_step_min_d) keep the CPU rail - the per-dispatch latency floor beats them. |
 | `DASLLAMA_METAL_ATTN_D` | flag | on | Fused single-pass decode attention (assumes head_size 128); 0 is the A/B rail to the chunked pair. |
 | `DASLLAMA_METAL_ATTN_SINGLE` | number | 64 | Row count below which attention uses the single-chunk kernel; clamped to 128. |
 | `DASLLAMA_METAL_MULMM` | flag | on | The mul_mm prefill GEMM; 0 falls back to the legacy per-op path. |
 | `DASLLAMA_METAL_MM_TAIL` | flag | on | GEMV-tail prefill dispatch: npos % 32 in [1,8] peels the last M tile's real rows onto the fixed-B GEMV family instead of billing a full 32-row tile; 0 pins the padded-tile path (the A/B rail). |
+| `DASLLAMA_METAL_QK_ROPE` | flag | on | Fused prefill qk_norm+rope pass (one panel rewrite, q panel dual-stores its f16 twin); 0 restores the split norm/rope/cvt dispatches (the A/B rail). |
+| `DASLLAMA_METAL_GRID1D` | flag | off | 1-D-grid tall hmm GEMM twin: the threadgroup launch order is forced linear (M-fastest) instead of the driver's 2-D walk; experiment rail, off by default. |
+| `DASLLAMA_METAL_LASTROW` | flag | on | Last-layer FFN tail narrowing: the final dense layer's FFN runs the last row alone (only the classifier reads past the final attention); 0 pins the full-panel tail (the A/B rail). Session keep_hidden opts a forward out. |
+| `DASLLAMA_METAL_DBUF` | flag | on | Double-buffered W staging on the dense staged prefill GEMMs (q8 and kq stamps; the MoE family measured a loss and stays single-tile): two ping-pong tiles, one barrier per 64-chunk, staging overlaps the tensor op; 0 pins the single-tile forms (the A/B rail). |
 | `DASLLAMA_METAL_NCB` | number | ~4 layers/chunk | Command-buffer split: each chunk commits as encoded so the scheduler overlaps chunk k with k-1. |
 | `DASLLAMA_METAL_UNRETAINED` | flag | off | Skip per-dispatch retain/release on the prefill command buffers. |
+| `DASLLAMA_METAL_DEVW_RESIDENT` | number | 0 (off) | MB budget for RESIDENT dev-W f16 panels: static weights dequantize ONCE and the panels persist across forwards (vs the per-forward scratch re-dequant). Sites past the budget fall back to scratch. |
 | `DASLLAMA_METAL_PF_CAPTURE` | flag | on | Record each prefill chunk as a step graph and replay on a concurrent encoder; 0 is serial-encode rollback. |
 | `DASLLAMA_METAL_SCHED` | number | 1 | Graph scheduling mode for replay; 0 keeps capture order. |
 | `DASLLAMA_METAL_DECODE_CONCURRENT` | flag | on | Concurrent encoder for the single-stream decode step, with barriers only at detected hazards. |

@@ -755,6 +755,7 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
     }
     let n_cols = w / t.patch
     let n_rows = h / t.patch
+    dispatch_phase_encode(n_cols * n_rows)
     var tp = ref_time_ticks()
     let npos = g4v_stem(t, s, planes, w, h, n_cols)
     g4v_rope_tables(t, s, n_cols, n_rows)

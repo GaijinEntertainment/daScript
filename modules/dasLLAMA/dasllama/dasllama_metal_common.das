@@ -75,6 +75,7 @@ var g_tower_encodes = 0l
 var g_tower_rows = 0l
 var g_tower_blocks = 0l
 var g_tower_convs = 0l                       // conv-frontend chunks served on the GPU
+var g_tower_f16_encodes = 0l                 // encodes whose GEMMs rode the f16-W shadow route
 var g_tower_declines_by_reason : table<string; int64>
 
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
@@ -162,6 +163,7 @@ var g_pso_rms : MetalComputePipeline?
 var g_pso_rms_hx : MetalComputePipeline?   // dual-store stamp: + the f16 twin panel
 var g_pso_add : MetalComputePipeline?
 var g_pso_addrms : MetalComputePipeline?
+var g_pso_addrms_hx : MetalComputePipeline?   // dual-store stamp: + the f16 twin panel (prefill spine)
 var g_pso_preaddrms : MetalComputePipeline?
 var g_pso_swiglu : MetalComputePipeline?
 var g_pso_swiglu_hx : MetalComputePipeline?   // dual-store stamp
@@ -172,6 +174,7 @@ var g_pso_ln : MetalComputePipeline?
 var g_pso_gelu_erf : MetalComputePipeline?
 var g_pso_gelu_lut : MetalComputePipeline?
 var g_pso_posadd : MetalComputePipeline?
+var g_pso_q3v_stem : MetalComputePipeline?   //!< the qwen3v stem assemble (reorder-gather + bias + pos)
 var g_pso_clamp : MetalComputePipeline?        // gemma4v: the ClippableLinear clamp
 var g_pso_rope2d : MetalComputePipeline?       // gemma4v: the two-axis NEOX rope
 var g_pso_head_restride : MetalComputePipeline?   // gemma3v: head-width repack around the attention tiles
@@ -1700,18 +1703,18 @@ def graph_flush(enc : MetalComputeEncoder?; order : array<int>) {
 }
 
 // the coverage check: every dispatch on a gated encoder must have passed hz_gate — a raw
-// metal_dispatch_* in a decode-path helper would run UNBARRIERED (silent race), so a count
+// metal_dispatch_* in a step-path helper would run UNBARRIERED (silent race), so a count
 // mismatch is loud: strict panics, otherwise one LOG_ERROR per process
-def hz_coverage_check(ndisp, ngated : int64) {
+def hz_coverage_check(ndisp, ngated : int64; who : string = "decode") {
     if (ndisp == ngated) {
         return
     }
     if (g_hz_strict) {
-        panic("dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder")
+        panic("dasLLAMA metal {who}: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder")
     }
     if (!g_hz_cover_warned) {
         g_hz_cover_warned = true
-        to_log(LOG_ERROR, "dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder - ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026,LINT019 — correctness tripwire; firing at all means the encoder is already wrong
+        to_log(LOG_ERROR, "dasLLAMA metal {who}: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder - ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026,LINT019 — correctness tripwire; firing at all means the encoder is already wrong
     }
 }
 

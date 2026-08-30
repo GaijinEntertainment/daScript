@@ -28,6 +28,35 @@ The rows that remain pick one of four forms, in this order, per site per forward
    already a multiple of 128, and otherwise stays whole-dispatch 32-tile.
 4. **32-row tile** - the default stamp.
 
+**The dense staged stamps double-buffer their W staging** (`DASLLAMA_METAL_DBUF=0` is the
+single-tile rail): two 64-deep ping-pong tiles hold 18432 B of threadgroup memory - probed at
+the allocation law's edge, 0-2% tax by shape - and the loop runs ONE barrier per chunk, which
+both publishes the tile staged last iteration and fences the previous `op.run` off the tile
+about to be overwritten; staging chunk b+1 overlaps the tensor op on chunk b. Raced per
+family (`benchmarks/lcpp_bench.das -p 512 -n 0` A/B with `DASLLAMA_METAL_DBUF` forced per
+run, m5): the staged-q8 stamps +1.7% end-to-end on 8B pp512 (3435 -> 3492 tok/s), the kq
+in-kernel-dequant stamps +1.8% on gemma-4-12B Q4_K_M (2040 -> 2077); the MoE q8 expert
+stamps measured -5.0% (Qwen3-30B-A3B q8) - the expert z-grid's many small dispatches pay
+the 18432 B occupancy cost the 2-D dense grids do not - so the MoE staged family stays
+single-tile. Outputs are bit-equal to the single-tile forms because the staged f16 rounding
+and chunk order are identical (the k6 stamp pins the factored `dsc*(q-32)` like its dequant
+kernel, so the equality holds by source). The pattern is the one Apple ships in MLX's
+fp-quantized NAX family at this exact tile size.
+
+A threadgroup-memory REQUEST size moves the clock on its own, independent of how much of it
+the kernel indexes: 10240-16384 B is a flat plateau, 9216 B a pothole, and 20480 B and above
+degrade (`harness/p2_alloc_gap_probe.das`'s allocation ladder). A staging-depth race is therefore a 2x2 - tile stride against allocation - and the
+deeper tile is judged at equal allocation.
+
+**A swiglu epilogue folded into the gate GEMM's store is REFUTED on M5.** Any per-element
+access of the cooperative C after `op.run` - the scattered-store walk, a modify-in-place
+before the optimized `cT.store`, even a cooperative-load register combine of the up panel -
+costs ~+340us on the 512x12288 gate GEMM (940us plain), 2.2x the standalone swiglu pass the
+fold deletes (~154us, 8B end-to-end +11.9ms fused vs unfused). The stall is structural to the
+tensor-op pipeline, not addressing: MPP tolerates elementwise epilogues only at that price,
+which is consistent with MLX shipping its epilogue slot unused. Elementwise fusion pays only
+kernel-to-kernel (rms_hx, swiglu_hx, add+rms), never inside a tensor-op store.
+
 **Half operands ride an f16 activation panel.** One pass converts the f32 panel; the GEMM then
 re-reads it at half the bytes `d/64` times, so the convert amortizes above a row floor
 (`CVT_MIN_ROWS`, default 256) and loses under it. Two panels alternate, so one site's GEMM reads
@@ -55,6 +84,20 @@ declines. The mechanism: the f16 panel's W stream is 2 bytes an element against 
 count repays. The raced evidence
 (32 MiB wins everywhere, 47 MiB only from 2048 rows, 112 MiB loses everywhere) is
 `benchmarks/matmul/bench_metal_nax_probe.das`'s grid.
+
+**Resident panels remove the re-dequant entirely.** The dev-W scratch pair re-pays every
+site's dequant every forward - at 8B geometry ~4.5 GB of panel writes and quant reads per
+512-chunk, the whole `devw_cvt` knockout pool (~7.7 ms, `harness/p0_ko_probe.das`). A resident site reads as a single
+full-panel GEMM at a `(buffer, offset)` seat (no N-column tiling - tiling exists only for the
+scratch pair's capacity), keyed by the site's quant-plane buffer pointer plus its offset in
+that plane's own unit (q8: mblob bytes; kq: elem woff) with the format folded into the key -
+the two unit spaces cannot alias - and a hit serves only at the seeded byte size. The cache
+is released on driver shutdown, on weight refill, and by the prefill's reload prep when the
+weights epoch bumps. Panels become resident two ways: an image-served model seeds them ZERO-COPY
+from its baked `devwf16` plane (`ARCHITECTURE_IMAGE.md` sec.2.1h - no dequant ever, no
+dedicated memory), and an owned load dequantizes once into persistent hazard-tracked buffers
+under the `DASLLAMA_METAL_DEVW_RESIDENT` MB budget (past it, scratch, warned once).
+Measured 8B npos=512: 162.1 -> 153.8 ms, both ways (`benchmarks/lcpp_bench.das -p 512 -n 0`, m5).
 
 Clauses the isolated grid cannot see, because it races one site while production overlaps
 sites:
@@ -91,7 +134,7 @@ dispatch (`enc_mv_b4_c`) - reads whole 128-quant rounds and needs `kdim % 128`.
 Prefill attention is a three-kernel pipeline over one per-head f16 score slab padded to
 `np32 = ceil32(npos)` columns: QK writes the raw scores half once, rowstat mints each row's max
 and reciprocal sum, and AV applies `exp` while it stages P. The slab is written once and read
-once, and no separate softmax pass touches it. Every stage and every stamp of every stage binds
+three times - rowstat's max pass, rowstat's sum pass, and AV. Every stage and every stamp of every stage binds
 ONE `AttnArgs` value, derived once per layer, and ignores the fields it does not read. Two forms
 serve it: the tiled QK/AV GEMM pair (the default, needing `head_size % 64` on BOTH attention
 classes) and the scalar 32x32 trio, which serves when that gate fails or `DASLLAMA_METAL_ATTN=0`
@@ -127,7 +170,14 @@ compatible.
 
 Pad rows inside each expert's padded bucket carry a stamped sentinel and the reduce never
 references them; rows past the last expert's stamped tail are unstamped stale pool bytes, which
-is why validity tests compare the per-row entry against the live count, never the sentinel. The gather-X pass
+is why validity tests compare the per-row entry against the live count, never the sentinel.
+
+The MoE tensor twins ride one scaffold: `MetalMoeMulMmKqTensorBase` carries the expert
+prologue, the staged K walk with its barrier pair, and the store; a weight format derives,
+owns its weight-view bindings, and overrides the staged decode (`stage_block`) - mx4 also the
+store (its per-expert bias) and the chunk shape (32-deep, 128-item quota). The q8 twin is not
+a copy of this scaffold: its whole body is the tuned `tmm2d_q8u_f32` staged helper, a
+different staging mechanism, so it stays its own template. The gather-X pass
 copies the bucket's token rows into a CONTIGUOUS f16 panel with pad rows zeroed, which lets the up
 and gate sites ride the contiguous tensor twins instead of the in-kernel gather form; the panel is
 minted once per layer and shared by both sites. An X read through the bucket index can never
@@ -170,3 +220,41 @@ capture order, `DASLLAMA_METAL_PF_CAPTURE=0` is the serial-encode rollback).
 Completion and readback interleave: chunks complete in commit order and each completed chunk's
 roped-K and raw-V rows stream into the CPU K/V codec while later chunks keep the GPU busy. The
 residual-stream copy waits for the LAST chunk.
+
+### 2.2u The f16 twin dual-store {#prefill-twin-dual-store}
+
+A producer kernel that already holds a panel's rows in registers writes the f16 twin beside its
+f32 output, and the consumer GEMM reads that twin instead of running a conversion pass. Two
+producers carry a dual-store stamp: the fused qk_norm+rope pass writes the q panel's twin, and
+the residual-add+RMS and RMS stamps of the FFN spine write the FFN input's twin. The consumer
+takes the twin directly through `pf_twin_panel`, so `pf_cvt_panel` and its row floor never run
+for that site. The dual store is one conversion, not a second computation: the twin is bit-equal
+to `float16` of the f32 panel at every element. Rows past the live row count are PAD - their f32
+values come back untouched and their twin slots carry the raw f16 copy, so a consumer that walks
+the padded tile reads the same numbers on both planes.
+
+The fused qk_norm+rope pass is one panel rewrite per q and per k row - RMS by simdgroup
+reduction, the rotation in register - where the split form runs a norm read-write, a rope
+read-write and a conversion. It is picked per layer and needs an even head size and an even
+rotary width; `DASLLAMA_METAL_QK_ROPE=0` restores the split dispatches.
+
+The twin is written only where a dense FFN reads it. A routed-MoE layer feeds its gathered
+expert panels instead, so no dual-store stamp is selected there and those layers pay no f16
+write. Fusing the residual add into the FFN norm also lets the norm re-read its row from the
+threadgroup slab rather than from device memory.
+
+### 2.2v The last-layer FFN tail {#prefill-last-row-tail}
+
+Past the final attention only the classifier's logits and the MTP head read the residual
+stream, and both read one row. The last dense layer's FFN therefore runs that final row alone:
+the add, the norm and the three FFN GEMMs dispatch at one row through the fixed-B GEMV forms,
+not through `enc_gemm_mm`, so the mm-tail peel counters (sec.2.2e) stay an instrument of the
+full-panel path only. The narrowing declines wherever another consumer reads every row - a
+session keeping the hidden state, a warm or MTP forward (`n_layer_nextn` present), a
+recurrent, MoE or PLE layer, a sandwich-norm or gated-query model, a deepstack-tapped layer -
+and it engages only at `npos > 1` with `dim` and the layer's hidden width both %32 and every
+FFN weight on the q8 plane (the GEMV forms it narrows onto are q8); a Q4_K_M carrier never
+takes it. `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail.
+A caller that consumes the whole `x_b` plane afterwards - embedding pooling, a plane-compare
+probe - sets `Session.keep_hidden` and the prefill keeps every row; the flag is zero-init, so
+narrowing is the default.

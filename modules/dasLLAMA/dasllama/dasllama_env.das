@@ -184,6 +184,12 @@ struct public MetalEnv {
     @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower."
     tower : bool = true
 
+    @clarg_doc = "Serve the qwen3v tower's block/merger GEMMs from the image's baked f16 twin plane on the crowned tensor mul_mm twins (the mint bakes the twin only for f16-sourced GEMMs, so it holds the file's own values; needs a tensor crown - a box without one, or an image without the plane, keeps the f32 route); 0 pins the f32 GEMM route - the A/B rail."
+    tower_f16 : bool = true
+
+    @clarg_doc = "Serve head-72 tower attention at %64 canvases on the lifted flash kernel (no score slab, no rowstat pass, no head restrides - the gemma3v-geometry ViTs); 0 pins the three-pass slab - the A/B rail."
+    tower_flash : bool = true
+
     @clarg_doc = "Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 pins the CPU decoder."
     wdec : bool = true
 
@@ -202,12 +208,28 @@ struct public MetalEnv {
     @clarg_doc = "GEMV-tail prefill dispatch: npos % 32 in [1,8] peels the last M tile's real rows onto the fixed-B GEMV family instead of billing a full 32-row tile; 0 pins the padded-tile path (the A/B rail)."
     mm_tail : bool = true
 
+    @clarg_doc = "Fused prefill qk_norm+rope pass (one panel rewrite, q panel dual-stores its f16 twin); 0 restores the split norm/rope/cvt dispatches (the A/B rail)."
+    qk_rope : bool = true
+
+    @clarg_doc = "1-D-grid tall hmm GEMM twin: the threadgroup launch order is forced linear (M-fastest) instead of the driver's 2-D walk; experiment rail, off by default."
+    grid1d : bool = false
+
+    @clarg_doc = "Last-layer FFN tail narrowing: the final dense layer's FFN runs the last row alone (only the classifier reads past the final attention); 0 pins the full-panel tail (the A/B rail). Session keep_hidden opts a forward out."
+    lastrow : bool = true
+
+    @clarg_doc = "Double-buffered W staging on the dense staged prefill GEMMs (q8 and kq stamps; the MoE family measured a loss and stays single-tile): two ping-pong tiles, one barrier per 64-chunk, staging overlaps the tensor op; 0 pins the single-tile forms (the A/B rail)."
+    dbuf : bool = true
+
     @clarg_default_doc = "~4 layers/chunk"
     @clarg_doc = "Command-buffer split: each chunk commits as encoded so the scheduler overlaps chunk k with k-1."
     ncb : int = 0
 
     @clarg_doc = "Skip per-dispatch retain/release on the prefill command buffers."
     unretained : bool = false
+
+    @clarg_default_doc = "0 (off)"
+    @clarg_doc = "MB budget for RESIDENT dev-W f16 panels: static weights dequantize ONCE and the panels persist across forwards (vs the per-forward scratch re-dequant). Sites past the budget fall back to scratch."
+    devw_resident : int = 0
 
     @clarg_doc = "Record each prefill chunk as a step graph and replay on a concurrent encoder; 0 is serial-encode rollback."
     pf_capture : bool = true

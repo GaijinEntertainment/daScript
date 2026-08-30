@@ -25,6 +25,10 @@ has two parts:
   If you cannot write this sentence, the item does not belong in the queue.
 - **What yes means and what no means** - one line each. The human's answer must be one word;
   design the item so it can be.
+- **A recommendation, one line: the answer you would give and the one fact that most drives
+  it.** You have read everything the human has not; withholding the lean wastes that reading.
+  The recommendation never widens the item into an argument - one line, then stop - and the
+  human overrides it at zero cost.
 
 **The bin** - everything else, in one short paragraph: what it is and which mechanism vouches
 for it ("the other 14 rules are mechanical rewordings; MCP lint passed all 8 files; CI is green

@@ -143,6 +143,58 @@ def test_partial_and_missing_are_no_ops(t : T?) {
 }
 
 [test]
+def test_jobque_pool_knobs_apply(t : T?) {
+    //! these knobs declare the NEXT que, never a live one - the [init] tier heuristic seeds
+    //! them and a profile overrides
+    let saved_pool = get_jobque_threads()
+    let saved_decode = get_phase_decode_workers()
+    var terr = ""
+    let dir = temp_directory(terr)
+    let path = path_join(dir, "dasllama_test_box_profile_pool.json")
+    t |> success(fwrite(path, "\{\"runtime\":\{\"jobque_pool\":14,\"phase_decode_workers\":9\}\}"), "pool profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(get_jobque_threads(), 14, "jobque_pool applied")
+    t |> equal(get_phase_decode_workers(), 9, "phase_decode_workers applied")
+    set_jobque_threads(saved_pool)
+    set_phase_decode_workers(saved_decode)
+    remove(path)
+}
+
+// a sidecar minted before the hybrid split spells "uncapped" as gemv_lane_cap 0; on a slow-tier
+// box that value would hand the GEMV every lane, so the apply REFUSES it and the seeded
+// fast-tier cap stands. Any other value still applies.
+[test]
+def test_gemv_lane_cap_zero_refused_on_hybrid(t : T?) {
+    if (!is_slow_tier_compute()) {
+        t |> skip("homogeneous box - a 0 cap is the honest uncapped value here, nothing to refuse")
+        return
+    }
+    restore_defaults()
+    var terr = ""
+    let dir = temp_directory(terr)
+    let path = path_join(dir, "dasllama_test_box_profile_gemv0.json")
+    set_gemv_lane_cap(6)
+    t |> success(fwrite(path, "\{\"runtime\":\{\"gemv_lane_cap\":0\}\}"), "uncapped profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(get_gemv_lane_cap(), 6, "gemv_lane_cap 0 refused on a hybrid box - the seeded cap stands")
+    t |> success(fwrite(path, "\{\"runtime\":\{\"gemv_lane_cap\":9\}\}"), "capped profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(get_gemv_lane_cap(), 9, "a nonzero cap from the same profile shape still applies")
+    remove(path)
+    restore_defaults()
+}
+
+[test, arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+def test_slow_tier_kind_contract(t : T?) {
+    if (is_slow_tier_compute()) {
+        t |> success(get_total_perf_cores() > 0, "compute slow tier implies known perf-core topology")
+        t |> success(get_total_perf_cores() < get_total_hw_cores(), "compute slow tier implies a genuine second tier")
+    } else {
+        t |> success(true, "homogeneous/Efficiency/unknown topology: extension stays off")
+    }
+}
+
+[test]
 def test_metal_prefill_knobs_apply(t : T?) {
     var terr = ""
     let dir = temp_directory(terr)

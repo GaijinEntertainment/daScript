@@ -61,8 +61,9 @@ def private row_maxdiff(a, b : array<float>; row, dim : int64) : float {
 }
 
 // one prefill: returns the full residual plane x_b (npos × dim), caller owns
-def private span_prefill(t : Model; embd : array<float>; non_causal : bool) : array<float> {
+def private span_prefill(t : Model; embd : array<float>; non_causal : bool; keep : bool = true) : array<float> {
     var s <- make_run_state(t.config)
+    s.keep_hidden = keep   //! the instrument reads the whole plane - no last-layer tail narrowing
     forward_prefill_embd(t, s, embd, NPOS, 0l, non_causal)
     var plane : array<float>
     plane |> resize(NPOS * t.config.dim)
@@ -97,6 +98,7 @@ def private span_turn_logits(t : Model; embd : array<float>; fuse : bool) : arra
 // one FUSED prefill with the mid-turn span; returns the full x_b plane, caller owns
 def private fused_plane(t : Model; embd : array<float>) : array<float> {
     var s <- make_run_state(t.config)
+    s.keep_hidden = true   //! the instrument reads the whole plane - no last-layer tail narrowing
     forward_prefill_embd(t, s, embd, NPOS, 0l, span_lo = SPAN_LO, span_hi = SPAN_HI)
     var plane : array<float>
     plane |> resize(NPOS * t.config.dim)

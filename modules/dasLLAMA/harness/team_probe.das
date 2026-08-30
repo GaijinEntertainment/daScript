@@ -87,8 +87,10 @@ def build_gemv_fixture() : GemvFixture {
     }
     var qt <- quantize_q8_0(w, planeQ)
     delete w
-    fx.q |> resize(int(planeQ) * GEMV_COPIES)
-    fx.s |> resize(int(planeS) * GEMV_COPIES)
+    fx.q |> reserve(planeQ * int64(GEMV_COPIES))   //! reserve first: an unreserved resize past max_unreserved_size panics
+    fx.q |> resize(planeQ * int64(GEMV_COPIES))
+    fx.s |> reserve(planeS * int64(GEMV_COPIES))
+    fx.s |> resize(planeS * int64(GEMV_COPIES))
     for (c in range(GEMV_COPIES)) {
         for (i in range64(planeQ)) {
             fx.q[int64(c) * planeQ + i] = qt.q[i]

@@ -256,3 +256,8 @@ prints a bare signature and the symbol re-stubs.
 **A diff that adds a numeric value form to the toml lexer routes it through `rewind_to_bare`
 on a bare-key character.** Without the rewind, a bare key that starts like a number lexes as
 a value.
+
+**A structure macro that instances inherit through `[|> name]` is idempotent: it appends a
+marker annotation to the instance it finishes, and returns unchanged when it sees that marker.**
+A chain of template ancestors delivers one copy of the annotation per level, so a macro without
+the marker runs a second time over a structure it already rewrote.

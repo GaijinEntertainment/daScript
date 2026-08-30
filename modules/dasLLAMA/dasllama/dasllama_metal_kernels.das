@@ -1211,9 +1211,8 @@ class MetalEmbedK6 {
 // Fused residual-add + rmsnorm, one threadgroup per row: x += a in place, then y = rms(x)·w
 // (the row stages through the tgmem slab — barrier() is a threadgroup fence only; dim caps at the
 // slab, wider models take enc_add_rms_site). Single-row = the lensed grid=1; batch = enc_add_rms_b.
-[metal_dispatch(name = "enc_addrms_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 1024, grid = "1"),
-    metal_dispatch(name = "enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
-class MetalAddRms {
+[ |> template_struct_instance]
+class template MetalAddRmsT {
     @ssbo @binding = 0 x : array<float>     // [dim] residual stream, add target
     @ssbo @binding = 1 a : array<float>     // [dim] addend (fully read before y is written — y may alias a)
     @ssbo @binding = 2 @role = "weight" w : array<float>     // [dim] norm weight
@@ -1222,11 +1221,13 @@ class MetalAddRms {
     @uniform @binding = 5 eps : float
     @uniform @binding = 6 @role = "weight" ascale : float    // (x + a) * ascale — gemma4 layer_out_scale scales
                                             // the whole layer output; every other site binds 1.0 (g_one)
+    @ssbo @binding = 7 @role = "write" @template_gate = HX yh : array<float16>   // f16 twin of y (the dual-store stamp)
+    @template_constant HX : bool = false
     @workgroup xrow : float[4096]           // == ADD_RMS_MAX_DIM
     @workgroup partial : float[32]          // one per simdgroup at the 1024-thread dispatch
     @workgroup inv_sh : float
 
-    [metal_kernel(name="metal_add_rms_msl")]
+    [metal_kernel]
     def metal_add_rms {
         let row = gl_WorkGroupID.x
         let lid = gl_LocalInvocationID.x
@@ -1257,10 +1258,24 @@ class MetalAddRms {
         let inv = inv_sh
         k = lid
         while (k < dim) {
-            y[row * dim + k] = w[k] * (xrow[k] * inv)
+            let ov = w[k] * (xrow[k] * inv)
+            y[row * dim + k] = ov
+            static_if (HX) {
+                yh[row * dim + k] = float16(ov)
+            }
             k += gl_WorkGroupSize.x
         }
     }
+}
+
+[metal_dispatch(name = "enc_addrms_c", pso = "g_pso_addrms", tgmem = "MetalAddRms_metal_add_rms_msl_tgmem", tg = 1024, grid = "1"),
+    metal_dispatch(name = "enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "MetalAddRms_metal_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
+class MetalAddRms : MetalAddRmsT {
+}
+
+[metal_dispatch(name = "pf_enc_add_rms_bhx_c", pso = "g_pso_addrms_hx", tgmem = "MetalAddRmsHX_metal_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
+class MetalAddRmsHX : MetalAddRmsT {
+    override HX = true
 }
 
 // Fused post-attn-norm + residual add + ffn-norm: a_n = rms(a)·wpa; x += a_n; y = rms(x)·wffn — one
@@ -3514,7 +3529,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_rms = compile_pso(MetalRmsNorm_metal_rmsnorm_msl, MetalRmsNorm_metal_rmsnorm_msl_entry, MetalRmsNorm_metal_rmsnorm_msl_fastmath, ok)
     g_pso_rms_hx = compile_pso(MetalRmsNormHX_metal_rmsnorm_msl, MetalRmsNormHX_metal_rmsnorm_msl_entry, MetalRmsNormHX_metal_rmsnorm_msl_fastmath, ok)
     g_pso_add = compile_pso(MetalAdd_metal_ew2_msl, MetalAdd_metal_ew2_msl_entry, MetalAdd_metal_ew2_msl_fastmath, ok)
-    g_pso_addrms = compile_pso(metal_add_rms_msl, metal_add_rms_msl_entry, metal_add_rms_msl_fastmath, ok)
+    g_pso_addrms = compile_pso(MetalAddRms_metal_add_rms_msl, MetalAddRms_metal_add_rms_msl_entry, MetalAddRms_metal_add_rms_msl_fastmath, ok)
+    g_pso_addrms_hx = compile_pso(MetalAddRmsHX_metal_add_rms_msl, MetalAddRmsHX_metal_add_rms_msl_entry, MetalAddRmsHX_metal_add_rms_msl_fastmath, ok)
     g_pso_preaddrms = compile_pso(metal_pre_add_rms_msl, metal_pre_add_rms_msl_entry, metal_pre_add_rms_msl_fastmath, ok)
     g_pso_swiglu = compile_pso(MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, MetalSwiglu_metal_ew2_msl_fastmath, ok)
     g_pso_swiglu_hx = compile_pso(MetalSwigluHX_metal_ew2_msl, MetalSwigluHX_metal_ew2_msl_entry, MetalSwigluHX_metal_ew2_msl_fastmath, ok)
@@ -3535,6 +3551,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_gelu_erf = compile_pso(MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, ok)
     g_pso_gelu_lut = compile_pso(MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, ok)
     g_pso_posadd = compile_pso(metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, ok)
+    g_pso_q3v_stem = compile_pso(metal_q3v_stem_msl, metal_q3v_stem_msl_entry, metal_q3v_stem_msl_fastmath, ok)
     g_pso_clamp = compile_pso(metal_clamp_msl, metal_clamp_msl_entry, metal_clamp_msl_fastmath, ok)
     g_pso_rope2d = compile_pso(metal_rope2d_msl, metal_rope2d_msl_entry, metal_rope2d_msl_fastmath, ok)
     g_pso_head_restride = compile_pso(metal_head_restride_msl, metal_head_restride_msl_entry, metal_head_restride_msl_fastmath, ok)
@@ -4149,6 +4166,10 @@ def enc_add_rms_b(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : Metal
     enc_add_rms_b_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one, nrows)
 }
 
+def pf_enc_add_rms_bhx(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps, bxh : MetalBuffer?; nrows : int64; bascale : MetalBuffer? = null) {
+    pf_enc_add_rms_bhx_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one, bxh, nrows)
+}
+
 // enc_rms_b (the batched prologue) and pf_enc_rms (the prefill 256/tg shape) are
 // [metal_dispatch]-generated from MetalRmsNorm alongside enc_rms.
 
@@ -4188,6 +4209,10 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     if (g_pso_add != null) {
         metal_release(g_pso_add)
         g_pso_add = null
+    }
+    if (g_pso_addrms_hx != null) {
+        metal_release(g_pso_addrms_hx)
+        g_pso_addrms_hx = null
     }
     if (g_pso_addrms != null) {
         metal_release(g_pso_addrms)
@@ -4229,6 +4254,7 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_posadd)
         g_pso_posadd = null
     }
+    release_pso(g_pso_q3v_stem)
     release_pso(g_pso_clamp)
     release_pso(g_pso_rope2d)
     release_pso(g_pso_head_restride)
@@ -4712,6 +4738,35 @@ class MetalPosAdd2D {
         let ex = tbl[(p % ncols) * dim + i]
         let ey = tbl[(pos_entries + p / ncols) * dim + i]
         x[gid] = (x[gid] + ex) + ey
+    }
+}
+
+// The qwen3v stem assemble: residual row r (the merge-adjacent walk - 2x2 partners adjacent,
+// groups row-major) gathers its natural-order conv row, + conv bias + that row's position -
+// bit-exact vs the CPU stem's (crow + bp) + prow order.
+[metal_dispatch(name = "enc_q3v_stem", pso = "g_pso_q3v_stem", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalQ3vStemAsm {
+    @ssbo @binding = 0 @role = "read" xn : array<float>                  // conv out, natural patch order [npos x dim]
+    @ssbo @binding = 1 @role = "weight" @off = "boff" b : array<float>   // conv bias [dim]
+    @ssbo @binding = 2 @role = "read" @off = "poff" pos : array<float>   // pos rows, natural order [npos x dim]
+    @ssbo @binding = 3 @role = "write" x : array<float>                  // residual, merge-adjacent [npos x dim]
+    @uniform @binding = 4 dim : uint
+    @uniform @binding = 5 pw : uint
+    @uniform @binding = 6 total : uint
+
+    [metal_kernel(name="metal_q3v_stem_msl")]
+    def metal_q3v_stem {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let r = gid / dim
+        let i = gid % dim
+        let g = r / 4u
+        let sub = r % 4u
+        let gcols = pw / 2u
+        let src = ((g / gcols) * 2u + sub / 2u) * pw + (g % gcols) * 2u + sub % 2u
+        x[gid] = (xn[src * dim + i] + b[i]) + pos[src * dim + i]
     }
 }
 

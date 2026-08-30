@@ -14,7 +14,7 @@ that a question answered for one backend has an obvious address in the other. Th
 | `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
 | `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates - no GPU C++ require, so any box can bake | device calls |
-| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT, gemma3v SigLIP and qwen3v block loops - qwen3v adds the vision NEOX rope, the fused-qkv weight-offset GEMMs, and the inline deepstack tap + tail merger chains - the whisper-class block loop, the conv frontends + the qwen3a padded-weight slab) - no session, no KV, no mirror; registers the gemma4uv, gemma4v, gemma3v, qwen3v, encoder_blocks, tower-conv and qwen3a-conv hooks | kernel bodies, decoder state |
+| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT, gemma3v SigLIP and qwen3v block loops - qwen3v adds the vision NEOX rope, the fused-qkv weight-offset GEMMs, and the inline deepstack tap + tail merger chains - the whisper-class block loop, the qwen25v window ViT, the gemma4a Conformer and canary FastConformer chains with their mel/conv fronts, the conv frontends + the qwen3a padded-weight slab and GPU front/mel) - no session, no KV, no mirror; registers the gemma4uv, gemma4v, gemma3v, qwen3v, qwen25v, encoder_blocks, tower-conv, qwen3a-front, qwen3a-mel, gemma4a, gemma4a-chunk and canary hooks | decoder state |
 | the ASR-decoder driver<br>`dasllama_metal_asr_dec` | the whisper decoder on Metal: the 34B weight blob, the f16 resident cross/self K/V, window-granular cross-KV + decode-step serves; registers the whisper cross-KV and decode hooks (family registries in `dasllama_whisper`) | kernel bodies, LLM session state |
 | the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan - the `[vk_dispatch]` macro derives access per class) | the kernel-access macro | anything else |
 
@@ -37,12 +37,17 @@ that a question answered for one backend has an obvious address in the other. Th
 - **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,
   posadd, the gemma4v clamp / rope2d / GEGLU-quick, the head restride - gemma3v's and, offset-bound, the qwen3v/prefill slicers) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
   releases them like every other registry PSO; the borrowed prefill builders (`pf_enc_bf16_mm`,
-  `enc_add_bias_rows`, `enc_rope` - the qwen3v vision NEOX apply - and the attention trio
-  `enc_qk_mm`/`enc_rowstat`/`enc_av_mm`; this list is the closed borrowed set REVIEW_GPU.md's
-  tower rules key on) come up through
+  `pf_enc_hmm`, `pf_enc_rms`, `enc_cvt_half`, `enc_add_bias_rows`, `enc_rope` - the qwen3v
+  vision NEOX apply - the attention trio `enc_qk_mm`/`enc_rowstat`/`enc_av_mm`, the tower
+  specials `enc_tower_flash`/`enc_tower_kv_hc`/`enc_tower_win_attn`/`enc_tower_row_gather`,
+  and the `enc_g4a_*`/`enc_cn_*`/`enc_q3a_*` chain families; this list is the closed borrowed
+  set `REVIEW_TOWER.md`'s rules key on) come up through
   `metal_prefill_pso_init`, prefill's public bring-up seat, and `plane_buffer` in common is
-  public for the same wrap-a-plane reason. The tower's own objects (the ones buffer, its
-  scratch pool) release through `metal_tower_shutdown`.
+  public for the same wrap-a-plane reason. The tower-only kernel classes COMPILE in the
+  prefill file beside the builders that bind their PSOs - the same convergence debt sec.1.5's
+  kernel-home entry ledgers, not a new placement. The tower's own objects (the ones buffer,
+  its scratch pool, the qwen3a padded-weight slab) release through `metal_tower_shutdown`,
+  and the slab additionally drops with the weights epoch through the tower's reload prep.
 - **The tower driver is a Metal-only role** - Vulkan has no tower twin; audio/vision encodes
   on the Vulkan tier stay CPU (the gemma4v ViT, gemma3v SigLIP and qwen3v block loops
   included: on Vulkan and on plain CPU boxes those towers serve their q8 lanes). Likewise the non-causal media span: Metal serves it through
@@ -188,7 +193,11 @@ re-buying a measured loss.
 The probe also RETAINS the decided-and-shipped arms (the half-A stream, the dev-W all-device
 form, the tall M-tile twin, the bk staging depths, the no-zero-init form) as hand-written MSL
 reference implementations beside the refuted ones - they are the arc's bisect ledger, and the
-sync duty is `REVIEW_GPU.md`'s.
+sync duty is `REVIEW_GPU.md`'s. The attention lab keeps the same class of retained references:
+its PORT/PORTH/PORTC arms and `benchmarks/attn/lcpp_flash_dk72.metal` are the oracle-exact
+external reference the shipped `MetalTowerFlash` was decided against, and the DIAL arm races
+the production dialect against them - the bisect seat when the flash regresses.
+
 
 - **Per-simdgroup register-fragment matmul2d (16x32x16, device -> `vec<T,8>` fragments):**
   1.7-2.0x slower for weight GEMMs, vectorized loads and deep n-blocking included. The
@@ -200,9 +209,11 @@ sync duty is `REVIEW_GPU.md`'s.
 
 **Sanctioned float-A stamps** - the kernel classes stamped `[metal_kernel(float_a_ok=true)]`:
 every tensor template's `XT = float` stamp - the live fallback wherever the half panel is absent
-(below the convert row floor, panel does not fit, half-X pinned off) - and the
+(below the convert row floor, panel does not fit, half-X pinned off) - the
 batch-decode/classifier `MetalQ8GemmTensorT` family, whose half-X extension is an open ledger
-item.
+item, and the double-buffered `*Db` staging templates (`MetalQ8MulMmDbT`, `MetalKqMulMmK45DbT`,
+`MetalKqMulMmK6DbT`), which pin `XT = float16` today - there the flag is scaffolding a future
+float stamp would need, not a live float operand.
 - **Fused single-kernel attention (scores in threadgroup, online softmax):** loses 10-80% to
   the pipelined three-pass at real shapes (`benchmarks/attn/bench_metal_pf_fused_attn.das`) -
   Metal's cross-kernel pipelining plus full-width softmax beat tg-scope fusion.
@@ -213,3 +224,35 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 and why they lose.
 
 Sections 2.2j-2.2p, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`.
+
+### 2.2w The tower attention routes {#tower-attn-routes}
+
+A tower head width is padded to `hs_pad = max(64, ceil32(hs))` - 72 and 80 both land on 96 -
+because the QK stamps walk multiples of 32 while the guarded AV forms carry no multiple-of-64
+requirement. A route that uses the padded width pays a restride to and from the towers' compact
+rows. Three routes serve tower attention:
+
+- **The flash route** takes a head size of exactly 72 on a canvas whose row count divides 64.
+  It runs one pass - no score slab, no rowstat, no head restrides - reading K and V as
+  per-head-contiguous f16 panels (the panel and tail-slack contract sits on the kernel class)
+  while Q and the output ride the compact f32 rows. `DASLLAMA_METAL_TOWER_FLASH=0` pins the
+  slab trio.
+- **The per-window route** serves the qwen2.5 ViT's block-diagonal layers: one threadgroup per
+  (window, head), one thread per query row, windows capped at 64 rows. It reads q, k and v
+  compact and straight from device in f32 - a window's K and V sit in L1, and f16 staging noise
+  would compound over the tower's 28 layers. Layers that attend in full restride onto the
+  padded slab and take the shared trio.
+- **The slab trio** - the prefill driver's QK, rowstat and AV builders - serves everything else
+  and sizes its score slab at `heads x mp x nk64` halfs. Off the flash route that slab is the
+  encode's only attention allocation; on it the driver takes a stub.
+
+### 2.2x The tower driver's encode chains {#tower-encode-chains}
+
+Each family the tower driver serves gets one chain that encodes the whole encode into ONE
+command buffer and reads back once: the block loop, and - for gemma4a and qwen3a - the mel and
+conv front ahead of it. A chain is dispatch for dispatch the same graph as its family's CPU
+encoder loop, in the same order and at the same operand shapes, so the CPU loop is the chain's
+specification and the CPU-vs-GPU transcript cells are its parity instrument. Every chain is
+best-effort: it answers false (or -1) on any shape, knob, quant-mode or device decline, and the
+CPU chain serves that encode. Engage is read from counter deltas (`metal_tower_stats`,
+`metal_tower_f16_encodes`), never from "the model ran".

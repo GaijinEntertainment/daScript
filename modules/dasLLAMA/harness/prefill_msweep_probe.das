@@ -72,7 +72,7 @@ def main {
             for (npos in [160l, 512l]) {
                 let base = measure_one(tr, npos, 3)
                 print("knockout npos={npos} base={base}ms\n")
-                for (fam in ["attn", "gemm", "ew", "nongemm"]) {
+                for (fam in ["attn", "gemm", "ew", "act_cvt", "devw_cvt", "nongemm"]) {
                     set_metal_prefill_skip(fam)
                     let ms = measure_one(tr, npos, 3)
                     set_metal_prefill_skip("")

@@ -400,7 +400,7 @@ def private blob_twin(t : T?; path : string; seq_cap : int64) : Model {
     return <- tg
 }
 
-[test]
+[test, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU-resident prefill == CPU control, 40-token greedy continuation (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
@@ -537,6 +537,8 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     var trsg <- blob_twin(t, spath, 2048l)
                     let sprompt <- encode(trs, counting_prompt(), true, false)
                     t |> success(select_prefill_override("metal"), "override registered (mm-tail smol)")
+                    //! the peel-count arithmetic below assumes every layer's FFN rides the mm path
+                    set_metal_prefill_lastrow(false)
                     var ssites : int64[2]
                     var sserved_all = true
                     for (li in range(2)) {
@@ -563,6 +565,68 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         t |> equal(ssites[1] * 7l, ssites[0], "smol npos=66: exactly the one hidden-kdim site per layer peeled")
                     } else {
                         feint("metal prefill declined on smol; the alignment-guard leg skipped\n")
+                    }
+                    set_metal_prefill_lastrow(true)
+                    {
+                        let nlr = 48l
+                        var tlr : array<int64>
+                        tlr |> reserve(nlr)
+                        for (i in range64(nlr)) {
+                            tlr |> push(sprompt[i])
+                        }
+                        let dim_s = trsg.config.dim
+                        let served0 = metal_prefill_stats().prefills
+                        set_metal_prefill_lastrow(false)
+                        var s_off <- make_run_state(trsg.config)
+                        forward_prefill(trsg, s_off, tlr, nlr, 0l)
+                        set_metal_prefill_lastrow(true)
+                        var s_on <- make_run_state(trsg.config)
+                        forward_prefill(trsg, s_on, tlr, nlr, 0l)
+                        var s_keep <- make_run_state(trsg.config)
+                        s_keep.keep_hidden = true
+                        forward_prefill(trsg, s_keep, tlr, nlr, 0l)
+                        if (metal_prefill_stats().prefills - served0 == 3l) {
+                            var lmax = 0.0
+                            var amax_on = 0l
+                            var amax_off = 0l
+                            for (i in range64(trsg.config.vocab_size)) {
+                                lmax = max(lmax, abs(s_on.logits[i] - s_off.logits[i]))
+                                if (s_on.logits[i] > s_on.logits[amax_on]) {
+                                    amax_on = i
+                                }
+                                if (s_off.logits[i] > s_off.logits[amax_off]) {
+                                    amax_off = i
+                                }
+                            }
+                            //! narrowed rides the mm-tail gemv, full stages X to f16 - measured ~7e-3 here, bar 2e-2
+                            to_log(LOG_INFO, "smol lastrow: narrowed-vs-full logits maxdiff {lmax}\n")
+                            t |> success(lmax <= 2e-2, "smol lastrow: narrowed logits inside the form-change envelope ({lmax})")
+                            // both picks decoded: a near-tie synonym flip and real garbage look the
+                            // same as ids and completely different as text
+                            var pick_off <- [amax_off]
+                            var pick_on <- [amax_on]
+                            to_log(LOG_INFO, "smol lastrow: full pick {amax_off} @{s_off.logits[amax_off]} = {eyeball_text(trsg, pick_off)}\n")
+                            to_log(LOG_INFO, "smol lastrow: narrowed pick {amax_on} @{s_on.logits[amax_on]} = {eyeball_text(trsg, pick_on)}\n")
+                            delete pick_off
+                            delete pick_on
+                            t |> equal(amax_on, amax_off, "smol lastrow: argmax unchanged")
+                            var row0 = 0.0
+                            var plane = 0.0
+                            for (i in range64(dim_s)) {
+                                row0 = max(row0, abs(s_on.x_b[i] - s_off.x_b[i]))
+                            }
+                            for (i in range64(nlr * dim_s)) {
+                                plane = max(plane, abs(s_keep.x_b[i] - s_off.x_b[i]))
+                            }
+                            t |> success(row0 > 1e-4, "smol lastrow: row 0 visibly narrowed ({row0}) - the arm engaged")
+                            t |> equal(plane, 0.0, "smol lastrow: keep_hidden restores the full plane bit-exactly")
+                        } else {
+                            feint("metal prefill declined on the smol lastrow legs; witnesses skipped\n")
+                        }
+                        delete s_off
+                        delete s_on
+                        delete s_keep
+                        delete tlr
                     }
                     select_prefill_override("")
                     delete trs

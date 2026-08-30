@@ -313,6 +313,10 @@ namespace das {
     DAS_API int getTotalHwThreads ();
     DAS_API int getTotalHwCores ();
     DAS_API void setJobqueThreadsCap ( int32_t cap );
+    DAS_API void setJobqueThreads ( int32_t total );
+    DAS_API int32_t getJobqueThreads ();
+    DAS_API int getTotalPerfCores ();
+    DAS_API bool isSlowTierCompute ();
     DAS_API void withJobStatus ( int32_t total, const TBlock<void,JobStatus *> & block, Context * context, LineInfoArg * lineInfo );
     DAS_API void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at );
     DAS_API void jobStatusReleaseRef ( JobStatus * & status, Context * context, LineInfoArg * at );

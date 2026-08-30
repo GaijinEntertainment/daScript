@@ -7,6 +7,7 @@ options _function_length = 0   // the two sniffing loaders mirror the format zoo
 
 require dasllama/dasllama_lint public
 require math
+require daslib/defer   // the tower-lane pins unwind through defer, so a panicking load resets them
 require daslib/fio
 require strings
 require daslib/strings_boost
@@ -156,13 +157,15 @@ def load_asr_model(path : string) : AsrModel {
     return <- m
 }
 
+[arch(at="../ARCHITECTURE_MEDIA.md#asr-decoder-session")]
 def load_asr_model(path : string; mmproj : string) : AsrModel {
     //! The two-file route: ``path`` is the decoder GGUF, ``mmproj`` its audio front end — sniffed:
     //! ``qwen3a`` mmproj = Qwen3-ASR/Qwen3-Omni AuT tower, ``gemma4a`` = Gemma-4 Conformer, "CNRY"
     //! bin = Canary-Qwen FastConformer. Every decoder loads Q8 (the tuned rail); the fp32 parity arm rides ``QuantMode.fp32 + image_fp32`` off-facade. Either file may be a prepared ``.dlim`` (the mmproj routes on its baked family tag).
     var emagic = 0u
     var eproj = ""
-    var canary_q8 = !(g_asr_force_fp32 || g_asr_tower_fp32)   // raw-bin default; a .dlim's baked tag overrides
+    //! the raw-bin default; a .dlim's baked tag overrides it
+    var canary_q8 = !(g_asr_force_fp32 || g_asr_tower_fp32) && canary_enc_serves_q8()
     if (mmproj |> ends_with(".dlim")) {
         let tag = image_family_tag(mmproj)
         if (tag == "qwen3a-f32") {
@@ -203,12 +206,21 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     }
     if (eproj == "gemma4a") {
         var m = AsrModel(kind = AsrKind.gemma4a)
-        m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
+        m.dec <- load_model_cached(path, QuantMode.q8)
         if (m.dec.arch != "gemma4") {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the gemma4a audio route expects a Gemma-4 decoder")
         }
         m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
-        m.g4a <- load_gemma4a_encoder(mmproj)
+        if (g_asr_force_fp32 || g_asr_tower_fp32) {
+            set_gemma4a_q8(false)
+            // a panicking load must not leave the pin standing
+            defer() {
+                reset_gemma4a_q8()
+            }
+            m.g4a <- load_gemma4a_encoder(mmproj)
+        } else {
+            m.g4a <- load_gemma4a_encoder(mmproj)
+        }
         if (m.g4a.proj_dim != m.dec.config.dim) {
             panic("dasLLAMA asr: gemma4a encoder projects to {m.g4a.proj_dim} but the decoder is {m.dec.config.dim}-wide - mismatched pair")
         }
@@ -216,7 +228,7 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     }
     if (emagic == CANARY_MAGIC) {
         var m = AsrModel(kind = AsrKind.canary)
-        m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
+        m.dec <- load_model_cached(path, QuantMode.q8)
         if (m.dec.arch != "qwen3") {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the Canary route expects a Qwen3-1.7B decoder")
         }
@@ -228,7 +240,7 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         return <- m
     }
     var m = AsrModel(kind = AsrKind.qwen3a)
-    m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
+    m.dec <- load_model_cached(path, QuantMode.q8)
     // Same qwen3a AuT tower, two thinkers: Qwen3-ASR is a dense qwen3 (arch `qwen3`/`qwen3vl`);
     // Qwen3-Omni-30B is the MoE thinker (arch `qwen3vlmoe`), driven as a chat/transcription turn.
     if (m.dec.arch == "qwen3vlmoe") {
@@ -237,7 +249,16 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the GGUF ASR route expects a Qwen3-ASR (qwen3/qwen3vl) or Qwen3-Omni (qwen3vlmoe) decoder")
     }
     m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
-    m.q3t <- load_qwen3a_tower(mmproj)
+    if (g_asr_force_fp32 || g_asr_tower_fp32) {
+        set_qwen3a_q8(false)
+        // a panicking load must not leave the pin standing
+        defer() {
+            reset_qwen3a_q8()
+        }
+        m.q3t <- load_qwen3a_tower(mmproj)
+    } else {
+        m.q3t <- load_qwen3a_tower(mmproj)
+    }
     if (m.q3t.proj_dim != m.dec.config.dim) {
         panic("dasLLAMA asr: mmproj projects to {m.q3t.proj_dim} but the decoder is {m.dec.config.dim}-wide - mismatched pair")
     }
@@ -256,8 +277,8 @@ def asr_exec_fmt(m : AsrModel) : string {
     if (m.kind == AsrKind.whisper) return whisper_exec_fmt(m.whisper)
     if (m.kind == AsrKind.parakeet) return parakeet_exec_fmt(m.pk)
     if (m.kind == AsrKind.canary) return canary_exec_fmt(m.cenc, quant_fmt(m.dec.quant))
-    if (m.kind == AsrKind.gemma4a) return gemma4a_exec_fmt(quant_fmt(m.dec.quant))
-    return qwen3a_exec_fmt(quant_fmt(m.dec.quant))   // qwen3a / qwen3omni share the AuT tower
+    if (m.kind == AsrKind.gemma4a) return gemma4a_exec_fmt(m.g4a, quant_fmt(m.dec.quant))
+    return qwen3a_exec_fmt(m.q3t, quant_fmt(m.dec.quant))   // qwen3a / qwen3omni share the AuT tower
 }
 
 def asr_encode_bucket(m : AsrModel) : string {

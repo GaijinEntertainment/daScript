@@ -12,6 +12,8 @@ require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gates pin the knob off
+require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown - the twin-W leg re-arms crowned PSOs
+require dasllama/dasllama_common   // set_metal_tensor_crowns - the twin-W leg's crown pin
 
 // Tier-1 gemma3v (SigLIP) tower parity vs llama-mtmd-debug -p encode.
 // Reference arm: the f32-widened gemma-3-4b mmproj, CPU, --no-mmproj-offload, -fa off.
@@ -165,6 +167,22 @@ def test_gemma3v_tier1_gpu(t : T?) {
             tt |> success(sq1.declines - sq0.declines >= 1l, "q8 tower recorded the quant_mode decline")
             delete stq
             delete twq
+            set_metal_tensor_crowns("mulmm_q8")
+            metal_prefill_shutdown()
+            set_metal_tower_f16(true)   // the twin route's own knob - established, never inherited
+            set_gemma3v_q8(false)       // the exact lane is the one that bakes the twin
+            var twt <- load_gemma3v_tower(mm)
+            reset_gemma3v_q8()
+            var stt = Gemma3vState()
+            let tw0 = metal_tower_f16_encodes()
+            if (gate_encode(tt, twt, stt, "cb", "g3.encode.cb896.log", TIER1_REL_GPU)) {
+                tt |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the f16-sourced tower rode the twin route")
+            }
+            set_metal_tower_f16(true)
+            set_metal_tensor_crowns("")
+            metal_prefill_shutdown()
+            delete stt
+            delete twt
         } else {
             feint("das_metal is not built on this platform - the GPU rung is Apple-only\n")
         }

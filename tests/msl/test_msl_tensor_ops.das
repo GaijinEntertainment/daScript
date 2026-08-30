@@ -4,7 +4,7 @@ options indenting = 4
 // Metal-4 tensor-op gate (text layer): the tmm2d surface lowers two ways. The all-device forms
 // (tmm2d_f16w_f32, tmm2d_q8u_f32) each become ONE generated preamble helper mangled by
 // kind/m/n/sgs — plus the staged K-chunk depth for the q8u family, whose 32-deep helper name is a
-// strict PREFIX of the 64-deep one, so every name assert here is delimiter-anchored. The staged
+// strict PREFIX of the 64- and 128-deep ones, so every name assert here is delimiter-anchored. The staged
 // protocol (begin / step / rowscale / store) keys a persistent cooperative tensor to the acc
 // local and emits the MPP op inline; the acc's own declaration is suppressed on the GPU.
 
@@ -42,6 +42,21 @@ def test_tmm2d_device_forms(t : T?) {
         t |> success(contains(tmmq8uh64_msl, "const uint nb = kk / 64u;"), "bk=64 walks 64-deep chunks")
         t |> success(contains(tmmq8uh64_msl, "if ((kk & 32u) != 0u) \{"), "bk=64 finishes a kk % 64 == 32 width with one 32-chunk")
         t |> success(contains(tmmq8uh64_msl, "__das_tmm2d_q8uh_8_16_2_k64(tq64,"), "the call site hands over the n*64 staging tile")
+    }
+    t |> run("bk=64: staged rows pad to 72 halves, the 32-deep tail to 40") <| @(t : T?) {
+        t |> success(contains(tmmq8uh64_msl, "threadgroup half * dstp = wt + col * 72u"), "staging writes one 72-half row per W column")
+        t |> success(contains(tmmq8uh64_msl, "metal::array<int32_t, 2>\{1, 72\}"), "the 64-deep B extent carries the 72-half row stride")
+        t |> success(contains(tmmq8uh64_msl, "metal::array<int32_t, 2>\{1, 40\}"), "the 32-deep tail extent carries the 40-half row stride")
+        t |> success(contains(tmmq8uh64_msl, "threadgroup half * dstp = wt + col * 40u + kh;"), "the tail stages at the 40-half stride it reads back")
+    }
+    t |> run("bk=128: ping-pong halves, and no preload when nb == 0") <| @(t : T?) {
+        t |> success(contains(tmmq8uh128_msl, "__das_tmm2d_q8uh_8_16_2_k128(tq128,"), "bk=128 emits the k128 helper over the n*144 staging tile")
+        t |> success(!contains(tmmq8uh128_msl, "__das_tmm2d_q8uh_8_16_2_k64("), "bk=128 emits NO k64 helper")
+        // a kk < 64 width has no chunk to preload; without the guard the loop reads W blocks past
+        // the panel AND races the tail staging, which writes the same wt bytes with no barrier between
+        t |> success(contains(tmmq8uh128_msl, "if (nb > 0u) \{"), "the initial preload is guarded on there being a 64-deep chunk")
+        t |> success(contains(tmmq8uh128_msl, "(wt + (b & 1u) * 16u * 72u)"), "each chunk runs off its own ping-pong half")
+        t |> success(contains(tmmq8uh128_msl, "threadgroup half * nxt = wt + ((b + 1u) & 1u) * 16u * 72u;"), "chunk b+1 stages into the half chunk b is not consuming")
     }
 }
 

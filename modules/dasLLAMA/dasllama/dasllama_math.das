@@ -269,12 +269,16 @@ def setup_dasllama_jobque_() {
     set_current_thread_priority(clamp(g_env_engine.caller_prio, -2, 2))
 }
 
-// dasLLAMA matmuls are lockstep linear algebra: SMT siblings share the FMA/load ports, so the
-// default jobque gets physical cores - 1 workers (EPYC 9654 confirmed 192 SMT
-// lanes lose to 96). Cap min()s with the stock rule; DAS_JOBQUE_THREADS overrides.
-[init]
+[init, arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def dasllama_jobque_threads_cap() {
-    set_jobque_threads_cap(max(get_total_hw_cores() - 1, 1))
+    let cores = get_total_hw_cores()
+    set_jobque_threads_cap(max(cores - 1, 1))
+    let perf = get_total_perf_cores()
+    if (perf > 0 && perf < cores && is_slow_tier_compute()) {
+        set_jobque_threads(cores)
+        set_gemv_lane_cap(perf)
+        set_phase_decode_workers(max(perf - 1, 1))
+    }
 }
 
 // darwin: unclassified workers demote under ambient load (big-model decode measured -5% tg);
@@ -363,6 +367,39 @@ def public get_gemv_lane_cap() : int { return g_gemv_lane_cap }
 var g_batch_lane_cap = 0
 def public set_batch_lane_cap(v : int) { g_batch_lane_cap = max(v, 0) }
 def public get_batch_lane_cap() : int { return g_batch_lane_cap }
+
+var g_phase_decode_workers = -1   //! the decode-phase worker limit; -1 = per-phase parking off (homogeneous box)
+def public set_phase_decode_workers(v : int) {
+    if (v == 0) {
+        to_log(LOG_WARNING, "dasLLAMA: set_phase_decode_workers(0) would park every worker - parking disabled instead\n")
+    }
+    g_phase_decode_workers = v < 1 ? -1 : v
+}
+def public get_phase_decode_workers() : int { return g_phase_decode_workers }
+
+[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+def public dispatch_phase_decode {
+    if (g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available()) {
+        set_jobque_worker_limit(g_phase_decode_workers)
+    }
+}
+
+[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+def public dispatch_phase_batch {
+    if (g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available()) {
+        set_jobque_worker_limit(-1)
+    }
+}
+
+//! A CPU encode is batch-shaped work: a tower/ASR encode entry calls this with its row count
+//! so a preceding decode's parked pool wakes for it; under 32 rows the slow tier cannot fill
+//! past the dispatch grain, so short encodes keep the parked pool (the prefill guard's shape).
+[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+def public dispatch_phase_encode(rows : int64) {
+    if (rows >= 32l) {
+        dispatch_phase_batch()
+    }
+}
 
 //! Dispatch lanes proportional to work: clamp(work / target_chunk_work, 1,
 //! min(get_dispatch_lanes(), lane_cap)). 1 means "not worth a dispatch" — the matmul_chunks
@@ -2356,6 +2393,56 @@ def hmax(x : float const?; n : int64) : float {
         }
         return maxv
     }
+}
+
+//! Greedy argmax over a row — [[hmax]] then a 4-wide locate of the first max position. The ASR
+//! decode loops call it once per generated token over the whole vocab; the scalar walk they
+//! carried was a measurable per-token tax (~0.15-0.3 ms at 152-262k).
+def hargmax(x : array<float> | #) : int64 {
+    let n = long_length(x)
+    if (n <= 0l) return 0l
+    unsafe {
+        let p = addr<float const?>(x[0])
+        let mx = hmax(p, n)
+        var i = 0l
+        while (i + 4l <= n) {
+            if (p[i] == mx || p[i + 1l] == mx || p[i + 2l] == mx || p[i + 3l] == mx) {
+                break
+            }
+            i += 4l
+        }
+        while (i < n) {
+            if (p[i] == mx) {
+                return i
+            }
+            i++
+        }
+    }
+    return 0l
+}
+
+//! Σ exp(x[i] − mx) — exp4-vectorized, groups of 4 accumulated in double (the mel dot's
+//! rounding pattern). With [[hargmax]]'s max this is the greedy pick's logsumexp half:
+//! logprob = x[best] − (log(hlse) + mx).
+def hlse(x : array<float> | #; mx : float) : double {
+    let n = long_length(x)
+    if (n <= 0l) return 0.0lf
+    var sum = 0.0lf
+    unsafe {
+        let p = addr<float const?>(x[0])
+        let m4 = float4(mx, mx, mx, mx)
+        var i = 0l
+        while (i + 4l <= n) {
+            let e = exp4(max(float4(p[i], p[i + 1l], p[i + 2l], p[i + 3l]) - m4, EXP4_LO))
+            sum += double(e.x + e.y + e.z + e.w)
+            i += 4l
+        }
+        while (i < n) {
+            sum += double(exp(max(p[i] - mx, -80.0)))
+            i++
+        }
+    }
+    return sum
 }
 
 def template softmax_template(var x : float ?; size : int64) : void {

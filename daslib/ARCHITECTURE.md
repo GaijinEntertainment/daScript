@@ -127,10 +127,16 @@ Three companions carry a concern each; a section number is unique across all fou
 - **`g_installed_agents` is the GC root for every installed agent** - the C++ adapter holds
   a raw classPtr the das GC cannot see.
 
-## 25. typemacro_boost
+## 25. typemacro_boost {#typemacro-boost}
 
 - **The parser does not run annotation `apply` for macro-added functions** - the add/erase
   pair in `tsi_stamp_methods` IS the trigger, not bookkeeping.
+
+- **A derived structure carries every ancestor level's fields before annotations run.**
+  `st.fields` on the instance already lists what the parser materialized from the whole parent
+  chain, so the reifier binds constants, gates and calls from the instance alone and never walks
+  an ancestor's field list. Only methods need the per-level walk, nearest ancestor first, where
+  the first name seen wins.
 
 ## 26. constant_expression
 

@@ -107,7 +107,11 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
   activation requant cannot represent (a q8q8 lane measures 2.0 x rms vs the oracle, where a
   DELETED layer measures less - the gate cannot discriminate; the weights themselves
   quantize fine at 0.007 x rms, and a float-activation q8 GEMM wins nothing on these
-  compute-bound shapes since the CPU speedup IS the int8xint8 dot).
+  compute-bound shapes since the CPU speedup IS the int8xint8 dot). It stages every GEMM
+  f32-in-blob at the served padded widths (sec.2.13) whatever the file's element type, and
+  bakes the halfword twin (`ARCHITECTURE_IMAGE.md` sec.2.1i) when the block and merger GEMMs
+  share one halfword type; the Metal tower serves stem, blocks and merger tail off `s.x0`
+  through `register_qwen25v_gpu`.
 - **`dasllama_vision_embedder.das`** - the vision carrier: `VisionEmbedder` / `VisionState`, the
   `AsrModel` shape for vision - one union through every seam, the family sniffed from the mmproj
   (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a
@@ -137,3 +141,53 @@ reference's Metal "f32" GEMM stages half operands, its flash-attention path cast
 and the shipped bf16 mmproj rounds activations to bf16; its own four arms spread
 <= 6.5e-3 on the gemma4v tokens).
 
+
+### 2.13 Towers serve padded GEMM widths {#tower-padded-widths}
+
+A tower's served GEMM widths round UP to 64 - the Metal mm tile - while the tensor-shape verify
+keeps the file's own widths. The gated FFN pair pads with zero weight ROWS and the down GEMM with
+zero tail COLUMNS; a patch conv pads its K through the im2col row stride, whose tail lanes are the
+resize's zeros. Every pad lane contributes a zero product, so a padded GEMM's output is
+bit-identical to the unpadded one on both the CPU and the Metal route, and one served layout feeds
+both. `q25v_patch_pad` / `gemma3v_patch_pad` and the `ff_pad` fields are the served widths;
+`im2col_rgb_patches` takes the padded stride as `row_stride`.
+
+The qwen25v tower stages every GEMM f32-in-blob at those widths whatever the file's element type -
+blocks and merger alike - because the Metal tower reads f32 planes or the baked halfword twin.
+
+### 2.14 Family GPU hooks install from the driver and always decline {#tower-gpu-hook}
+
+A family file owns the hook SLOT for a stage the GPU can serve - a `var private` function pointer
+plus a `register_*` entry - and the Metal tower driver fills it at `[init]`. The direction is
+forced: the driver requires the family file for its types, so the family cannot require the driver
+back. A box with no driver leaves the slot empty and the CPU form runs.
+
+Every hook answers "declined" in its own return - `false` for the block and front hooks, `-1` for
+the whole-chunk mel hook - so a decline is a fallback, never an outage, and the CPU form stays the
+reference.
+
+A family whose hook takes a whole stage splits its encode at the seam the driver needs: a
+`*_stem_cols` / `*_window_frames` half both routes run (im2col or windowing, plus every buffer the
+driver writes into), and a `*_stem_finish` half only the CPU route runs. The driver reads the
+column buffer (`s.x0`, `st.xw`) and never the residual stream the CPU half would have filled.
+
+### 2.15 The tower weight lane is a policy, not a default {#tower-weight-lane}
+
+A tower serves its GEMMs on one of two lanes: q8 planes (the CPU serving format) or the file's
+exact f32 planes. Un-pinned, the lane follows the fastest GEMM path on the box - a serving Metal
+driver reads the f32 blob and declines q8, so `*_gpu_serves` answering true flips the default to
+exact, and every other box takes q8. Each family exposes the same trio: `set_*_q8` pins a lane,
+`reset_*_q8` returns to the policy, `*_serves_q8` reports the lane the next load would take. The
+lane picks the image tag, so the two lanes are separate images that coexist.
+
+Pins exist for the arms that must not follow the box: the parity legs, the CPU board rows, and the
+facade's fp32 rail.
+
+### 2.16 An ASR decoder that is a plain Model session rides the box decode policy {#asr-decoder-session}
+
+The gemma4a, canary and qwen3a routes drive their decoders as ordinary `Model` sessions - embed
+rows, then eval - so they load with no planar pin and take whatever decode form the box has armed,
+the Metal blob included. The canary serving artifact is Q8_0 for exactly this reason: its tied
+classifier serves the q8 plane, while the f16 parity carrier still mints planar on its own because
+the blob drivers decline a tied-fp32 classifier at mint. Whisper and parakeet stay planar - their
+decoders are hand-written CPU loops that read planes directly.

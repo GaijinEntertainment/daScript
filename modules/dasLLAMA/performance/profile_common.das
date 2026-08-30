@@ -1191,19 +1191,18 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
         // (model card) — hp0-class single-window greedy decode runaway-loops on repetitive
         // audio in BOTH engines, the model's limitation, not a budget choice; 40 s chunked
         // long-form (the NVIDIA-sanctioned usage) is ledgered
-        AsrModelSpec(display = "Canary-Qwen 2.5B", das_model = "canary-qwen-2.5b-decoder-f16.gguf",
+        AsrModelSpec(display = "Canary-Qwen 2.5B", das_model = "canary-qwen-2.5b-decoder-q8_0.gguf",
             das_mmproj = "canary-qwen-2.5b-encoder-f32.bin", root = lroot,
             refs <- [AsrRef(tool = "nemo", handle = "nvidia/canary-qwen-2.5b", exec_fmt = "bf16")],
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto", tier = Tier.large,
-            prov = ProvEntry(name = "canary-qwen-2.5b-decoder-f16.gguf", root = "llm", recipe = CANARY_DEC_RECIPE),
+            prov = ProvEntry(name = "canary-qwen-2.5b-decoder-q8_0.gguf", root = "llm", recipe = CANARY_DEC_RECIPE),
             companions <- [ProvEntry(name = "canary-qwen-2.5b-encoder-f32.bin", root = "llm",
                 bytes = 3252768256l, sha256 = "37d1057ced3150cfde2fb996c1fc0a3d702d23a97f9347aedb52795ebec03e5c",
                 recipe = CANARY_ENC_RECIPE)]),
         // jfk3 (33 s) replaced gemma4a_test2.wav — the one corpus clip with no traceable
         // provenance; every published input must be re-fetchable (B2/B3)
-        // the 0.6B AuT pair (fetch_models-pinned): the small dense thinker — cheap cells; its
-        // GPU serve (the conv2d frontend) stands on the stage probe, not these rows — the
-        // metal leg is whisper-only and the cpu/accel rows pin the drivers off
+        //! the 0.6B AuT pair (fetch_models-pinned): the small dense thinker, so its cells are
+        //! cheap - the cpu/accel rows pin the tower and prefill drivers off
         AsrModelSpec(display = "Qwen3-ASR-0.6B", das_model = "Qwen3-ASR-0.6B-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-ASR-0.6B-bf16.gguf", root = lroot,
             // mtmd's CPU AuT encode runs near xRT 1 — the same per-rep budget cap as omni's
@@ -1223,14 +1222,14 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
         // [[model_specs]] row — a companion rides the row that pins its carrier
         AsrModelSpec(display = "Gemma-4 E2B audio", das_model = "gemma-4-E2B-it-Q8_0.gguf",
             das_mmproj = "mmproj-gemma-4-E2B-it-bf16.gguf", root = lroot,
-            // mtmd's CPU Conformer encode runs near xRT 1 — same per-rep budget cap as omni's
+            //! short reference ladder: mtmd encodes on the GPU in its Metal build, so a CPU-only
+            //! run sits near xRT 1 and needs the per-rep budget capped
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         AsrModelSpec(display = "Qwen3-Omni-30B audio", das_model = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = lroot,
-            // mtmd's CPU-only AuT encode runs near xRT 1 (and far worse on zen2) — the long
-            // clips would blow the per-rep budget, so this reference stays on the short ladder
+            //! short reference ladder: near xRT 1 on a CPU-only box, far worse on zen2
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
             buckets <- corpus_buckets(), libri_short = "", lang = "auto", tier = Tier.large,

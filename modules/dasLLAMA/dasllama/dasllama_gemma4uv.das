@@ -10,6 +10,7 @@ require strings
 require daslib/apply
 require daslib/archive
 require dasllama/dasllama_gguf
+require dasllama/dasllama_math     // dispatch_phase_encode — the encode's batch-phase pool wake
 require dasllama/dasllama_common   // apply_box_profile_runtime for the embedder-image identity
 require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
 require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — re-exported so requirers can delete an embedder
@@ -292,6 +293,7 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     let d = t.n_embd
     let n_cols = w / t.patch
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)
+    dispatch_phase_encode(npos)
     if (g_uv_gpu_set) {
         ensure_length(out, npos * t.proj_dim)
         if (invoke(g_uv_gpu, t, s, npos, n_cols, out)) {

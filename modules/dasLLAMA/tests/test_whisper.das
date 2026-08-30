@@ -278,7 +278,7 @@ def test_qwen3a_tower(t : T?) {
         }
         set_qwen3a_q8(false)
         var inscope tw <- load_qwen3a_tower(path)
-        set_qwen3a_q8(true)
+        reset_qwen3a_q8()
         t |> equal(tw.core.d_model, 896l, "d_model")
         t |> equal(tw.core.n_layer, 18l, "layers")
         t |> equal(tw.core.n_head, 14l, "heads")
@@ -798,5 +798,51 @@ def test_qwen3omni_audio_oracle(t : T?) {
                  9972, 13, 7684, 3729, 13, 151645])
         }
         set_asr_kv(KVDtype.f16)   // back to the serving default
+    }
+}
+
+[test]
+def test_mel_state_reuse_deterministic(t : T?) {
+    t |> run("gemma4a/canary log-mel is bit-identical across calls on one reused state") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let wav = path_join(corpus_dir(), "jfk.wav")
+        let samples <- read_wav_pcm16_mono(wav)
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present in the asr corpus")
+            return
+        }
+        let g4a_path = path_join(samples_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        if (model_available(t, g4a_path)) {
+            var inscope enc <- load_gemma4a_encoder(g4a_path)
+            var st = Gemma4aState()
+            gemma4a_log_mel(enc, samples, 0l, long_length(samples), st)
+            var mel1 := st.mel
+            gemma4a_log_mel(enc, samples, 0l, long_length(samples), st)
+            var md = 0.0
+            for (a, b in mel1, st.mel) {
+                md = max(md, abs(a - b))
+            }
+            t |> success(md == 0.0, "gemma4a mel maxdiff across state reuse is 0 (got {md})")
+            delete mel1
+            delete st
+        }
+        let cn_path = path_join(samples_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+        if (model_available(t, cn_path)) {
+            var inscope cenc <- load_canary_encoder(cn_path)
+            var cst = CanaryState()
+            canary_log_mel(cenc, samples, cst)
+            var cmel1 := cst.mel
+            canary_log_mel(cenc, samples, cst)
+            var cmd = 0.0
+            for (a, b in cmel1, cst.mel) {
+                cmd = max(cmd, abs(a - b))
+            }
+            t |> success(cmd == 0.0, "canary mel maxdiff across state reuse is 0 (got {cmd})")
+            delete cmel1
+            delete cst
+        }
     }
 }

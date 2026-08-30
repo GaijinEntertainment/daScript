@@ -233,7 +233,7 @@ def private embed_k6_gate(t : T?; dev, queue; dim, vocab, tok : int) {
 def private add_rms_gate(t : T?; dev, queue; batched : bool; dim, nrows : int; ascale : float) {
     let tag = "add_rms{batched ? "_b" : ""} dim={dim} rows={nrows} ascale={ascale}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_add_rms_msl, metal_add_rms_msl_entry, metal_add_rms_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalAddRms_metal_add_rms_msl, MetalAddRms_metal_add_rms_msl_entry, MetalAddRms_metal_add_rms_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let total = nrows * dim
@@ -275,7 +275,7 @@ def private add_rms_gate(t : T?; dev, queue; batched : bool; dim, nrows : int; a
     var basc = buf_f32(dev, ascale)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_add_rms_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, MetalAddRms_metal_add_rms_msl_tgmem, 0)
         metal_set_buffer(enc, bx, 0ul, 0)
         metal_set_buffer(enc, ba, 0ul, 1)
         metal_set_buffer(enc, bw, 0ul, 2)

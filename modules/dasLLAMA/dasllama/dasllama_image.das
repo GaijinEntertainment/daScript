@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 14
+let IMAGE_VERSION = 17   // 17: merged lineages - master's 14 and this branch's 14-16 (qwen3v f16 twin plane, devwf16 bake) numbered independently
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -976,8 +976,28 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
                                var jobs : array<FillJob>; path : string; tag : string = ""; quant : string = "q8") : bool {
     var regs : array<StreamReg>
     stream_collect_regions(t, regs)
-    let ok = save_image_to_file(t, path, stream_extra_bytes(t, jobs), tag, quant, layout_fingerprint(t)) $(name : string;
-                                                                                                           var w : ImgWriter; var sections : array<ImgSection>) {
+    //! the baked dev-W panels: tables fill BEFORE the build (they serialize as regular planes),
+    //! the panel plane itself streams from the gguf mapping at its field's turn below
+    let devw_bytes = t.metal_blob ? devw_bake_tables(t, jobs) : 0l
+    let ok = save_image_to_file(t, path, stream_extra_bytes(t, jobs) + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul), tag, quant, layout_fingerprint(t)) $(name : string;
+                                                                                                                                                                               var w : ImgWriter; var sections : array<ImgSection>) {
+        if (name == "devwf16" && devw_bytes > 0l) {
+            w_zeros(w, pad_to_page(w.cur) - w.cur)
+            let at = w.cur
+            let ts_dw = ref_time_ticks()
+            if (!fill_devwf16_plane(m, bytes, t, jobs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
+                to_log(LOG_ERROR, "dasLLAMA image: devwf16 bake failed - image save aborted\n")
+                w.ok = false
+            }
+            if (w.ok && w.cur - at != uint64(devw_bytes)) {
+                to_log(LOG_ERROR, "dasLLAMA image: devwf16 plane wrote {int64(w.cur - at)} bytes, tables say {devw_bytes} - image save aborted\n")
+                w.ok = false
+            }
+            let dw_ms = int64(get_time_usec(ts_dw)) / 1000l
+            to_log(LOG_INFO, "dasLLAMA image:   plane devwf16 {devw_bytes >> 20l} MB baked in {dw_ms} ms ({length(t.devwf16_key)} sites)\n")
+            sections |> push(ImgSection(name = "devwf16", off = at, bytes = w.cur - at))
+            return true
+        }
         let want = stream_plane_bytes(t, jobs, name)
         if (want <= 0l) {
             // a blob build's kq scale strips take their device form as each one's turn comes, before its bytes are written
@@ -1250,8 +1270,25 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
                                tag : string = ""; quant : string = "q8") : bool {
     var regs : array<StreamReg>
     stream_collect_regions(t, regs)
-    let ok = chunk_rail(t, out, save_to, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
-                                                                                    var w : ImgWriter; var sections : array<ImgSection>) {
+    //! sink parity: one image identity has one plane set - the in-memory mint bakes devwf16
+    //! exactly like the file mint above, or the two sinks serve different images
+    let devw_bytes = t.metal_blob ? devw_bake_tables(t, jobs) : 0l
+    let ok = chunk_rail(t, out, save_to, stream_extra_bytes(t, jobs) + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul), tag, quant) $(name : string;
+                                                                                                                                                        var w : ImgWriter; var sections : array<ImgSection>) {
+        if (name == "devwf16" && devw_bytes > 0l) {
+            w_zeros(w, pad_to_page(w.cur) - w.cur)
+            let at = w.cur
+            if (!fill_devwf16_plane(m, bytes, t, jobs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
+                to_log(LOG_ERROR, "dasLLAMA image: devwf16 bake failed - image build aborted\n")
+                w.ok = false
+            }
+            if (w.ok && w.cur - at != uint64(devw_bytes)) {
+                to_log(LOG_ERROR, "dasLLAMA image: devwf16 plane wrote {int64(w.cur - at)} bytes, tables say {devw_bytes} - image build aborted\n")
+                w.ok = false
+            }
+            sections |> push(ImgSection(name = "devwf16", off = at, bytes = w.cur - at))
+            return true
+        }
         let want = stream_plane_bytes(t, jobs, name)
         if (want <= 0l) {
             if (t.metal_blob) {   // the kq scale strips take their device form — see the file saver
@@ -1509,7 +1546,9 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         let img = image_path_for(path, "", qs)
         if (load_model_image(img, t, "", qs)) {
             vulkan_bake_flavor(t, path, vk_tag)
-            if (!(want_metal && metal_model_servable(t))) {
+            //! metal_blob_eligible must agree, or the rebake below refuses and re-mints the SAME
+            //! planar file every load (a repacking backend passes the mint-time shape gate)
+            if (!(want_metal && metal_model_servable(t) && metal_blob_eligible(t))) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
                 return <- t
             }

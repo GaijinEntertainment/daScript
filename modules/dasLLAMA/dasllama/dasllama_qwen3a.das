@@ -133,21 +133,64 @@ def private register_qwen3a_image_tags {
     register_image_family_tag("qwen3a-q8")
 }
 
-// q8 is the only serving format for the shared core AND the cblob GEMM trio (board policy);
-// the flag is the fp32 reference route parity legs compare against
-var private g_q3a_q8 = true
+enum private Q3aLane {
+    unset
+    exact
+    q8
+}
+var private g_q3a_pin = Q3aLane.unset
 
-//! Select the qwen3a tower's weight format for subsequent loads: q8 (the serving default) vs
-//! the fp32 reference route parity legs compare against.
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
+def private q3a_serve_q8() : bool {
+    if (g_q3a_pin != Q3aLane.unset) {
+        return g_q3a_pin == Q3aLane.q8
+    }
+    return !audio_tower_gpu_serves()
+}
+
+//! Pin the qwen3a tower's weight format for subsequent loads: q8 (the CPU serving format) vs
+//! f32 planes (the Metal tower's lane; also the fp32 reference-route parity legs).
+//! ``reset_qwen3a_q8`` returns to the policy default.
 def set_qwen3a_q8(on : bool) {
-    g_q3a_q8 = on
+    g_q3a_pin = on ? Q3aLane.q8 : Q3aLane.exact
+}
+
+def reset_qwen3a_q8() {
+    g_q3a_pin = Q3aLane.unset
+}
+
+//! Would the next load serve the tower q8 — the pin when set, the policy otherwise.
+def qwen3a_serves_q8() : bool => q3a_serve_q8()
+
+// the lane changes what a load mints and serves, so the load says which and why
+def private q3a_announce_lane() {
+    var why = "the CPU default (no Metal tower serving)"
+    if (g_q3a_pin != Q3aLane.unset) {
+        why = "pinned via set_qwen3a_q8"
+    } elif (audio_tower_gpu_serves()) {
+        why = "the Metal tower serves f32 planes"
+    }
+    to_log(LOG_INFO, "dasLLAMA qwen3a: tower GEMM lane {q3a_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
+}
+
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+def private q3a_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
+    for (l in range64(n_layer)) {
+        for (nm in ["attn_q", "attn_k", "attn_v", "attn_out", "ffn_up", "ffn_down"]) {
+            if (gguf_tensor_type(m, "a.blk.{l}.{nm}.weight") != gt) {
+                return false
+            }
+        }
+    }
+    return true
 }
 
 //! Load a Qwen3-ASR mmproj GGUF (projector type `qwen3a`, bf16/f16/f32 tensors). Like
 //! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload;
 //! ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_qwen3a_tower(path : string) : Qwen3aTower {
-    let tag = g_q3a_q8 ? "qwen3a-q8" : "qwen3a-f32"
+    let tag = q3a_serve_q8() ? "qwen3a-q8" : "qwen3a-f32"
+    q3a_announce_lane()
     if (path |> ends_with(".dlim")) {
         // named directly — no mmproj to regenerate from, so a wrong identity panics
         apply_box_profile_runtime()
@@ -243,9 +286,13 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         }
         gguf_read_tensor_f32(m, bytes, "a.post_ln.weight", st.core.fblob, c.lnp_w_off, d)
         gguf_read_tensor_f32(m, bytes, "a.post_ln.bias", st.core.fblob, c.lnp_b_off, d)
+        let gt = gguf_tensor_type(m, "a.blk.0.attn_q.weight")
+        c.blk_bf16 = gt == GGML_TYPE_BF16
         st.e.core <- c
-        if (g_q3a_q8) {
+        if (q3a_serve_q8()) {
             tower_quantize(st.e.core, st.core)   // arm the shared core's q8 rail (encoder_blocks reads core.q8)
+        } elif ((gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16) && q3a_gemm_types_uniform(m, st.e.core.n_layer, gt)) {
+            tower_bake_half_twin(st.core.fblob, st.core.wblob, st.e.core.blk_bf16)
         }
 
         // conv frontend + projector blob
@@ -292,7 +339,7 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.bias", st.cblob, st.e.mm1_b_off, d)
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", st.cblob, st.e.mm2_w_off, st.e.proj_dim * d)
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.bias", st.cblob, st.e.mm2_b_off, st.e.proj_dim)
-        if (g_q3a_q8) {
+        if (q3a_serve_q8()) {
             q3a_cblob_quantize(st.e, st.cblob, st.qcblob, st.qcscales)
         }
     }
@@ -341,6 +388,18 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
     tw_repack(qblob, qscales, t.mm2_w_off, d, t.proj_dim)
 }
 
+//! the GPU mel hook: DFT/power/mel off the CPU-windowed xw frames into m.data
+typedef Qwen3aMelGpuFn = function<(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64;
+                                   twiddles, filters : array<float>; var m : WhisperMel) : bool>
+var private g_q3a_mel_gpu : Qwen3aMelGpuFn
+var private g_q3a_mel_gpu_set = false
+
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_qwen3a_mel_gpu(fn : Qwen3aMelGpuFn) {
+    g_q3a_mel_gpu = fn
+    g_q3a_mel_gpu_set = true
+}
+
 //! Qwen3-ASR's log-mel (WhisperFeatureExtractor, center=True, truncation=False): 200-sample
 //! reflection pad both ends, NO 30s zero tail, clamp max stays in double (unlike the mtmd flavor,
 //! no float round-trip); n_len = min((n_padded−400)/160+1, n_in/160+1), mel-major.
@@ -383,38 +442,41 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
             xw[i * n_fft + j] = hann[j] * padded[off + j]
         }
     }
-    var reim : array<float>
-    reim |> reserve_resize(int(m.n_len * n_bins * 2l))
-    gemm_f32(unsafe(addr(reim[0])), unsafe(addr(xw[0])), unsafe(addr(twiddles[0])),
-             m.n_len, n_fft, n_bins * 2l)
+    let mel_on_gpu = g_q3a_mel_gpu_set && invoke(g_q3a_mel_gpu, xw, m.n_len, n_fft, n_bins, n_mel, twiddles, filters, m)
+    if (!mel_on_gpu) {
+        var reim : array<float>
+        reim |> reserve_resize(int(m.n_len * n_bins * 2l))
+        gemm_f32(unsafe(addr(reim[0])), unsafe(addr(xw[0])), unsafe(addr(twiddles[0])),
+                 m.n_len, n_fft, n_bins * 2l)
 
-    // power -> mel: float products in groups of 4 summed in float, groups accumulated in
-    // double (reference-exact rounding), floor 2^-24, log10
-    let mel_floor = 5.960464477539063e-08lf
-    let log10_e = 0.43429448190325176lf
-    var power : array<float>
-    power |> resize(int(n_bins))
-    for (i in range64(m.n_len)) {
-        for (k in range64(n_bins)) {
-            let re = reim[i * n_bins * 2l + k * 2l]
-            let im = reim[i * n_bins * 2l + k * 2l + 1l]
-            power[k] = re * re + im * im
-        }
-        for (j in range64(n_mel)) {
-            var sum = 0.0lf
-            var k = 0l
-            while (k + 3l < n_bins) {
-                sum += double(power[k] * filters[j * n_bins + k]
-                    + power[k + 1l] * filters[j * n_bins + k + 1l]
-                    + power[k + 2l] * filters[j * n_bins + k + 2l]
-                    + power[k + 3l] * filters[j * n_bins + k + 3l])
-                k += 4l
+        // power -> mel: float products in groups of 4 summed in float, groups accumulated in
+        // double (reference-exact rounding), floor 2^-24, log10
+        let mel_floor = 5.960464477539063e-08lf
+        let log10_e = 0.43429448190325176lf
+        var power : array<float>
+        power |> resize(int(n_bins))
+        for (i in range64(m.n_len)) {
+            for (k in range64(n_bins)) {
+                let re = reim[i * n_bins * 2l + k * 2l]
+                let im = reim[i * n_bins * 2l + k * 2l + 1l]
+                power[k] = re * re + im * im
             }
-            while (k < n_bins) {
-                sum += double(power[k] * filters[j * n_bins + k])
-                k++
+            for (j in range64(n_mel)) {
+                var sum = 0.0lf
+                var k = 0l
+                while (k + 3l < n_bins) {
+                    sum += double(power[k] * filters[j * n_bins + k]
+                        + power[k + 1l] * filters[j * n_bins + k + 1l]
+                        + power[k + 2l] * filters[j * n_bins + k + 2l]
+                        + power[k + 3l] * filters[j * n_bins + k + 3l])
+                    k += 4l
+                }
+                while (k < n_bins) {
+                    sum += double(power[k] * filters[j * n_bins + k])
+                    k++
+                }
+                m.data[j * m.n_len + i] = float(log(max(sum, mel_floor)) * log10_e)
             }
-            m.data[j * m.n_len + i] = float(log(max(sum, mel_floor)) * log10_e)
         }
     }
 
@@ -483,21 +545,20 @@ def private conv2d_s2(@scratch var out : array<float>; @scratch var col : array<
     asr_prof_add("q3a.conv.mm", tc)
 }
 
-// The GPU conv-frontend hook (registered by dasllama_metal_tower at [init]): serves the three
-// conv2d stages for EVERY chunk of one window, filling `y3all` ([n_chunks x 16*13*n_ch], the
-// conv3 outputs), or declines with false — the CPU conv2d_s2 chain stays the fallback.
-typedef Qwen3aConvGpuFn = function<(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var y3all : array<float>) : bool>
-var private g_q3a_conv_gpu : Qwen3aConvGpuFn
-var private g_q3a_conv_gpu_set = false
+//! the GPU front hook: the whole window's convs + shuffle + conv_out + bias/pos into s.x
+//! (the q8 cblob lane declines)
+typedef Qwen3aFrontGpuFn = function<(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var s : EncoderState) : bool>
+var private g_q3a_front_gpu : Qwen3aFrontGpuFn
+var private g_q3a_front_gpu_set = false
 
-def register_qwen3a_conv_gpu(fn : Qwen3aConvGpuFn) {
-    g_q3a_conv_gpu = fn
-    g_q3a_conv_gpu_set = true
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_qwen3a_front_gpu(fn : Qwen3aFrontGpuFn) {
+    g_q3a_front_gpu = fn
+    g_q3a_front_gpu_set = true
 }
 
 //! Scratch for the qwen3a conv frontend (sized on first use, reused across windows/calls).
 struct Qwen3aConvState {
-    @scratch y3all : array<float>  // GPU conv path: all chunks' conv3 outputs [n_chunks x 16*13*n_ch]
     @scratch xin : array<float>    // chunk input [100·128] as [ih][iw][1]
     col : array<float>
     y1 : array<float>
@@ -534,6 +595,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     let nch = t.n_ch
     let n_chunks = win.n_len / QWEN3A_CHUNK
     let npos = n_chunks * QWEN3A_TOK_PER_CHUNK
+    dispatch_phase_encode(npos)
     if (npos > t.core.n_ctx) {
         panic("qwen3a_encode: window has {npos} positions, tower sized for {t.core.n_ctx}")
     }
@@ -543,13 +605,12 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
         cs.xs |> grow_resize(need / 32l)
     }
 
-    // conv frontend per chunk -> rows of s.x; the GPU hook serves every chunk's three conv
-    // stages in one pass, the shuffle/conv_out/pos tail stays CPU either way
+    // conv frontend -> rows of s.x; the GPU hook serves the whole window's front in one pass
     var tstage = ref_time_ticks()
-    let conv_served_on_gpu = g_q3a_conv_gpu_set && invoke(g_q3a_conv_gpu, t, win, n_chunks, cs.y3all)
-    cs.xin |> resize(QWEN3A_CHUNK * nm)
-    for (ci in range64(n_chunks)) {
-        if (!conv_served_on_gpu) {
+    let front_on_gpu = g_q3a_front_gpu_set && invoke(g_q3a_front_gpu, t, win, n_chunks, s)
+    if (!front_on_gpu) {
+        cs.xin |> resize(QWEN3A_CHUNK * nm)
+        for (ci in range64(n_chunks)) {
             // chunk input as W=100 (frames), H=128 (mel), C=1: x[ih][iw] = mel[ih][ci·100 + iw]
             for (ih in range64(nm)) {
                 for (iw in range64(QWEN3A_CHUNK)) {
@@ -559,26 +620,24 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
             conv2d_s2(cs.y1, cs.col, cs.xin, t.cblob, t.c1_w_off, t.c1_b_off, QWEN3A_CHUNK, nm, 1l, nch)   // 50×64
             conv2d_s2(cs.y2, cs.col, cs.y1, t.cblob, t.c2_w_off, t.c2_b_off, 50l, 64l, nch, nch)           // 25×32
             conv2d_s2(cs.y3, cs.col, cs.y2, t.cblob, t.c3_w_off, t.c3_b_off, 25l, 32l, nch, nch)           // 13×16
-        }
-        let y3base = conv_served_on_gpu ? ci * 16l * QWEN3A_TOK_PER_CHUNK * nch : 0l
-        // features per output frame ow: v[h + 16·c] = y3[oh=h][ow][c]
-        let feat = 16l * nch
-        cs.feat |> resize(QWEN3A_TOK_PER_CHUNK * feat)
-        for (ow in range64(QWEN3A_TOK_PER_CHUNK)) {
-            for (h in range64(16l)) {
-                for (ch in range64(nch)) {
-                    let y3i = (h * QWEN3A_TOK_PER_CHUNK + ow) * nch + ch
-                    cs.feat[ow * feat + h + 16l * ch] = conv_served_on_gpu ? cs.y3all[y3base + y3i] : cs.y3[y3i]
+            // features per output frame ow: v[h + 16·c] = y3[oh=h][ow][c]
+            let feat = 16l * nch
+            cs.feat |> resize(QWEN3A_TOK_PER_CHUNK * feat)
+            for (ow in range64(QWEN3A_TOK_PER_CHUNK)) {
+                for (h in range64(16l)) {
+                    for (ch in range64(nch)) {
+                        cs.feat[ow * feat + h + 16l * ch] = cs.y3[(h * QWEN3A_TOK_PER_CHUNK + ow) * nch + ch]
+                    }
                 }
             }
-        }
-        // conv_out rows for this chunk, + per-chunk positions 0..12, into the residual stream
-        cs.crow |> resize(QWEN3A_TOK_PER_CHUNK * d)
-        q3a_mm_rq(t, cs.crow, t.cout_w_off, cs.feat, cs.xq, cs.xs, feat, d, QWEN3A_TOK_PER_CHUNK)
-        add_bias_rows(cs.crow, t.cblob, t.cout_b_off, d, QWEN3A_TOK_PER_CHUNK)
-        let xbase = ci * QWEN3A_TOK_PER_CHUNK * d
-        for (i in range64(QWEN3A_TOK_PER_CHUNK * d)) {
-            s.x[xbase + i] = cs.crow[i] + t.cblob[t.pos_off + i]
+            // conv_out rows for this chunk, + per-chunk positions 0..12, into the residual stream
+            cs.crow |> resize(QWEN3A_TOK_PER_CHUNK * d)
+            q3a_mm_rq(t, cs.crow, t.cout_w_off, cs.feat, cs.xq, cs.xs, feat, d, QWEN3A_TOK_PER_CHUNK)
+            add_bias_rows(cs.crow, t.cblob, t.cout_b_off, d, QWEN3A_TOK_PER_CHUNK)
+            let xbase = ci * QWEN3A_TOK_PER_CHUNK * d
+            for (i in range64(QWEN3A_TOK_PER_CHUNK * d)) {
+                s.x[xbase + i] = cs.crow[i] + t.cblob[t.pos_off + i]
+            }
         }
     }
     asr_prof_add("q3a.conv", tstage)
@@ -629,9 +688,10 @@ struct Qwen3aAsrSession {
 }
 
 //! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
-//! from the facade, which owns the shared LLM). The AuT core serves q8 GEMM planes.
-def qwen3a_exec_fmt(dec_fmt : string) : string {
-    return "{g_q3a_q8 ? "q8" : "f32"}/{dec_fmt}"
+//! from the facade, which owns the shared LLM) - read off the LOADED tower, not the lane
+//! policy, which a `reset_qwen3a_q8` after the load moves out from under the stamp.
+def qwen3a_exec_fmt(t : Qwen3aTower; dec_fmt : string) : string {
+    return "{t.core.q8 ? "q8" : "f32"}/{dec_fmt}"
 }
 
 //! The family's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm):
@@ -699,7 +759,9 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
     embed_text_rows(dec, tail, embd, n_head + n_audio)
 
     s.qctx.n_past = 0l   // each transcribe is a fresh sequence; the KV rewinds to position 0
+    var tp = ref_time_ticks()
     eval_embd_(dec, s.qctx, embd, npos)
+    asr_prof_add("q3a.prefill", tp)
 
     let eot = special_id(dec, "<|endoftext|>")
     let max_new = dec.config.seq_len - npos - 1l
@@ -708,20 +770,13 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
     var toks : array<int>
     var plog_sum = 0.0lf
     var raw : array<string>
+    tp = ref_time_ticks()
     for (_i in range64(max_new)) {
+        let ti = ref_time_ticks()
         // greedy argmax + its logprob (logit − logsumexp) for the confidence signal
-        var best = 0
-        for (i in range(1, length(s.qctx.logits))) {
-            if (s.qctx.logits[i] > s.qctx.logits[best]) {
-                best = i
-            }
-        }
+        let best = int(hargmax(s.qctx.logits))
         let mx = s.qctx.logits[best]
-        var lse = 0.0lf
-        for (v in s.qctx.logits) {
-            lse += double(exp(v - mx))
-        }
-        plog_sum += double(s.qctx.logits[best]) - (log(lse) + double(mx))
+        plog_sum += double(s.qctx.logits[best]) - (log(hlse(s.qctx.logits, mx)) + double(mx))
         if (int64(best) == im_end || int64(best) == eot) {
             break
         }
@@ -729,7 +784,9 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
         raw |> push(piece_(dec, int64(best)))
         one[0] = int64(best)
         eval_(dec, s.qctx, one)
+        asr_prof_add("q3a.dec.tok", ti)
     }
+    asr_prof_add("q3a.decode", tp)
 
     // parse `language {L}<asr_text>{text}` (the marker may detokenize as text or be muted)
     let full = join(raw, "")

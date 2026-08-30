@@ -110,6 +110,10 @@ namespace das {
         static int get_num_physical_cores();            // physical cores (SMT siblings collapsed); logical count where topology is unknown
         static void set_default_threads_cap(int cap);   // cap the DEFAULT worker count of a future JobQue (min with the stock rule); 0 = off. DAS_JOBQUE_THREADS still overrides
         static int get_default_threads_cap();
+        static void set_default_threads(int total);     // app-declared TOTAL lanes of a future JobQue (N-1 workers + the computing main) - the raise-capable twin of the cap, for workloads that want the slow tier too; <=1 = unset. DAS_JOBQUE_THREADS still overrides
+        static int get_default_threads();
+        static int get_num_perf_cores();                // fast-tier physical cores on heterogeneous boxes (Apple perflevel0); 0 = homogeneous or topology unknown
+        static bool is_slow_tier_compute();             // true only for a second-tier name on the compute allowlist ("Performance", "Super"); any other name - Efficiency, unknown, future - answers false
         static void set_default_affinity(int mode);     // affinity mode of a future JobQue: 0 off / 1 ideal-CPU hint / 2 hard mask (-1 = unset). DAS_JOBQUE_AFFINITY still overrides
         static int get_default_affinity();
         void EvalOnMainThread(Job && expr);

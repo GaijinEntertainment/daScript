@@ -2,8 +2,8 @@ options gen2
 options indenting = 4
 
 // Phase-3 simdgroup gate (text layer): the four simdgroup builtins lower to their attributed
-// parameters and all fifteen simd_* overloads (sum + four shuffles, each float/int/uint) lower
-// to direct Metal intrinsic calls.
+// parameters and all sixteen simd_* overloads (sum + four shuffles, each float/int/uint; max,
+// float only) lower to direct Metal intrinsic calls.
 
 require dastest/testing_boost public
 require _msl_common
@@ -28,6 +28,7 @@ kernel void simd_all(device const float* fa [[buffer(0)]],
     fo[i] = (((simd_sum(fa[i]) + simd_shuffle(fa[i], lane)) + (simd_shuffle_up(fa[i], 1u) + simd_shuffle_down(fa[i], 1u))) + simd_shuffle_xor(fa[i], 1u));
     io[i] = (((simd_sum(ia[i]) + simd_shuffle(ia[i], lane)) + (simd_shuffle_up(ia[i], 1u) + simd_shuffle_down(ia[i], 1u))) + simd_shuffle_xor(ia[i], 1u));
     uo[i] = (((simd_sum(ua[i]) + simd_shuffle(ua[i], lane)) + (simd_shuffle_up(ua[i], 1u) + simd_shuffle_down(ua[i], 1u))) + simd_shuffle_xor(ua[i], 1u));
+    fo[i] = (fo[i] + simd_max(fa[i]));
     meta[i] = ((lane + gl_SubgroupSize) + (gl_NumSubgroups + gl_SubgroupID));
 \}
 "
@@ -44,6 +45,7 @@ def test_simd_shape(t : T?) {
         t |> success(contains(simd_msl, "simd_sum(fa[i])"), "float sum")
         t |> success(contains(simd_msl, "simd_sum(ia[i])"), "int sum")
         t |> success(contains(simd_msl, "simd_sum(ua[i])"), "uint sum")
+        t |> success(contains(simd_msl, "simd_max(fa[i])"), "float max")
         t |> success(contains(simd_msl, "simd_shuffle(fa[i], lane)"), "shuffle by computed lane")
         t |> success(contains(simd_msl, "simd_shuffle_up(ua[i], 1u)"), "shuffle up")
         t |> success(contains(simd_msl, "simd_shuffle_down(ua[i], 1u)"), "shuffle down")

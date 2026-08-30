@@ -6,6 +6,9 @@ docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_PREFILL.md`, `ARCHITECTURE_GPU_VU
 **Routed from `REVIEW.md`: a diff touching a GPU kernel, driver, dispatch class, or the K/V
 mirrors applies this list together with `REVIEW.md`.**
 
+**A diff touching the tower driver (`dasllama/dasllama_metal_tower.das`), a kernel class or
+builder the tower dispatches, or the Metal ASR decoder applies `REVIEW_TOWER.md` too.**
+
 **A kernel body that emits a function pointer or a vtable into the shader is a defect - splice
 the choice at compile time instead.** A `class template` / `def abstract` / `def override`
 splice is compile-time and conforms - check the emission, not the das spelling.
@@ -33,10 +36,9 @@ the section already covers as a property needs no new line.
 stream it from device instead.** A dequant, a transpose, or a layout or element-type change
 makes the forms differ. A staged pass-through costs the op more than the reads it saves.
 
-**Never fill a `@workgroup` tile with a loop that gives each work item a stride - give each
-work item a consecutive run of elements instead.** A device-to-device copy loop fills no tile
-and is already coalesced. Per-element strided staging with div/mod addressing pays multiples
-of what the contiguous form costs.
+**Never fill a `@workgroup` tile with a per-element loop whose addressing needs a div or mod
+per element - give each work item a consecutive run of elements instead.** A lane-coalesced
+stride (`i += 32`) and a device-to-device copy loop are already coalesced and conform.
 
 **Never decide a kernel row's validity or owner by scanning the per-bucket base and count
 arrays - read the one per-row entry instead.** The bucket-building kernel writes that per-row
@@ -54,11 +56,11 @@ simdgroup matrix op, or a cross-lane reduction - on a per-thread value; gate it 
 threadgroup-uniform value instead.** A per-thread exit leaves the threadgroup unable to
 complete the op.
 
-**An encoder that picks a kernel's guard-free instance shows that every address the instance
-touches stays inside rows holding real data.** The guard-free instance is the one stamped
-without the loop's bounds or tail guard. One extent dividing evenly is not that showing. A
-padded chunk's walk can run past the live extent, and one poisoned read in a shared tile
-corrupts real rows.
+**An encoder that picks a kernel form whose loop carries no bounds or tail guard - stamped
+without it, or monomorphized with none - shows that every address the form touches stays
+inside its buffers' allocations.** One extent dividing evenly is not that showing. A padded
+chunk's walk can run past the live extent, and one poisoned read in a shared tile corrupts
+real rows; a deliberate tail over-read conforms only where the allocation carries the slack.
 
 **Never let a prefill pad output row reach a `matmul2d` or a staged cooperative tile as its B
 operand - stage it as zero, or bound the walk at the live row count.** Pad rows hold recycled
@@ -143,9 +145,10 @@ builder instead.** Binding it separately adds a second place to get it wrong.
 **Never key a cache on a host address alone - carry the span and the form, the element type and
 layout the upload produces, in the key too.** A hit must cover the request.
 
-**Never put a backend-only capability outside its backend's file for the matching role - a
-capability with no matching role gets its own role file.** `ARCHITECTURE_GPU.md` sec.1.5
-carries the role table.
+**A diff that lands a kernel class, driver arm, or backend capability in a file whose
+`ARCHITECTURE_GPU.md` sec.1.5 role row does not sanction it extends that row's ledger in the
+same change - or moves the code to the file whose row does.** The role table is the
+criterion; a placement the table does not carry does not exist.
 
 **A module that creates its own GPU device or queue is a defect - a GPU family shares the one
 device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
@@ -198,28 +201,9 @@ Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows the tie
 the changed path armed (`resident driver armed` for the whole-model driver, `GPU MoE tier: ...
 resident` for the per-op tier).** The Vulkan driver declines codec-mismatched sessions silently.
 
-**A change other than a comment-only one to `dasllama/dasllama_metal_tower.das`, to the
-`AttnArgs` kargs struct, to any kernel class the tower dispatches or builder the tower
-borrows, or to state the whole driver shares (a module-level `g_tw_*` variable,
-`metal_tower_init`, `dasllama_metal_tower_register` - reachable from every hook) runs the
-gate of every registered tower hook the changed code is reachable from.** The gates are the
-family gates `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, `tests/test_gemma3v.das`, and
-`test_qwen3v_tier1_metal` in `tests/test_qwen3v.das`; the encoder-blocks leg's
-`tests/test_whisper.das`; the conv legs' `tests/test_audio.das` and
-`tests/test_audio_embedder.das`; plus a `tests/test_model_image.das` run with the `mtower`
-arm, with `metal_tower_stats()`'s encode count rising across the run. A hook registered in
-`dasllama_metal_tower_register` that this rule's gates do not cover is the rule's defect to
-fix in the same change.
-
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq
 (K-quant) model.** Parity runs never reach it.
-
-**A change to `dasllama/dasllama_metal_asr_dec.das`, to `dasllama/dasllama_metal_common.das`,
-or to any kernel class the ASR decoder dispatches or builder the ASR decoder borrows, ships
-a `tests/test_model_image.das` run with the `mtower` arm** - its CPU-vs-GPU transcript cells
-are the ASR-decoder driver's parity instrument, and the shared common paths and borrowed
-kernels reach that driver with no line of its own file touched.
 
 **Never leave a K/V codec unserved by the kernels that read or write the residency rail's
 `k_mirror`/`v_mirror` slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair - a
@@ -260,7 +244,10 @@ same change - its variant class and any variants-module code that exists only fo
 the lab exists only for that decision, its driver and remaining arm go too.** An A/B lab is a
 timing script whose output SELECTS between implementations of the same compute, wherever it
 lives (`benchmarks/`, `harness/`); a decided arm that outlives its decision degrades into an
-unmaintained duplicate of the kernel it seeded.
+unmaintained duplicate of the kernel it seeded. An arm `ARCHITECTURE_GPU.md` sec.2.2b ledgers
+as a retained reference is the sanctioned survivor - and a retained arm that reimplements a
+shipped kernel is resynced or deleted in the same change that moves that kernel's staging
+shape or geometry.
 
 **Never read a `[spirv_decode]` callback's quant bytes by indexing `unpack8` of a 32-bit word
 with a runtime value - read them as 16-bit lanes instead: an `int16[N]` block member selected
@@ -275,8 +262,20 @@ changes the engine's GPU-embed probe - the gate registered through `register_emb
 engine skips the CPU embed on a true probe, so a probe that is true where that path declines
 hands the next consumer an unfilled residual stream.
 
-**A diff that adds a module-level variable to `dasllama/dasllama_gpu_resident.das` or
-`dasllama/dasllama_gpu_tier.das` whose value depends on the installed model also adds it to `moe_gpu_model_marks_save_`,
-`moe_gpu_model_marks_restore_` and `moe_gpu_drop_model_`, in the same change.** A global
-missing from one of the three survives a model swap and routes the next model's dispatches at
-the old model's planes.
+**A module-level variable in a GPU driver file whose value depends on the installed model
+gets a model-swap discharge in the same change that adds it** - the vulkan tier files
+discharge through `moe_gpu_model_marks_save_` / `moe_gpu_model_marks_restore_` /
+`moe_gpu_drop_model_`; the Metal prefill and tower through a registered reload prep. A global
+with no discharge survives a model swap and routes the next model's dispatches at the old
+model's planes.
+
+**A diff that changes how a dev-W resident panel's cache key is built changes both the seed
+site and the lookup site in the same change** - `pf_devw_seed_baked` and
+`pf_devw_resident_panel` in `dasllama/dasllama_metal_prefill.das`. A seed keyed differently
+from the forward never hits, and every baked site silently re-dequantizes.
+
+**A servability gate in `dasllama/dasllama_metal_shapes.das` never reads process-global
+runtime state - the active kernel backend, a mode toggle - on its mint-time path: such a read
+sits behind the gate's `mint_time` flag, and the mint-time verdict tests the model's own
+fields.** The load selects the repacking CPU backend before the flavor is decided, so a
+mint-time read bakes a verdict the drivers do not share.

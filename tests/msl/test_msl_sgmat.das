@@ -4,7 +4,7 @@ options indenting = 4
 // Phase-5 simdgroup_matrix gate (text layer): the reference-body 8x8 tile family lowers to
 // Metal's simdgroup_matrix surface — zero-init/filled locals via make_filled_simdgroup_matrix,
 // device and threadgroup loads as pointer+offset, multiply / multiply-accumulate (all-f32,
-// all-f16, and the mixed f32-accumulator/f16-operand combo), and device stores.
+// all-f16, and the mixed f32-accumulator/f16-operand combo), and device or threadgroup stores.
 
 require dastest/testing_boost public
 require _msl_common
@@ -102,6 +102,12 @@ def test_sgmat_shape(t : T?) {
         t |> success(contains(sgmat_tiled_msl, "simdgroup_float8x8 acc"), "accumulator is f32")
         t |> success(contains(sgmat_tiled_msl, "simdgroup_half8x8 ma"), "operands are f16")
         t |> success(contains(sgmat_tiled_msl, "threadgroup_barrier(mem_flags::mem_threadgroup);"), "staging barrier")
+    }
+    t |> run("sgmat store: a tile writes back into an @workgroup slab") <| @(t : T?) {
+        t |> success(contains(sgmat_store_tg_msl, "simdgroup_store(mh, th + 0u, 8u);"), "half tile stores into the threadgroup slab")
+        t |> success(contains(sgmat_store_tg_msl, "simdgroup_store(mf, tf + 0u, 8u);"), "f32 tile stores into the threadgroup slab")
+        t |> success(contains(sgmat_store_tg_msl, "threadgroup half * th = (threadgroup half *)(shmem"), "the half destination is threadgroup-space")
+        t |> success(contains(sgmat_store_tg_msl, "threadgroup float * tf = (threadgroup float *)(shmem"), "the f32 destination is threadgroup-space")
     }
 }
 

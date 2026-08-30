@@ -1102,6 +1102,8 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     let nch = m.n_sub_ch
     let n_head = m.n_head
     let dh = d / n_head
+    // the conformer block loop walks the subsampled frame count
+    dispatch_phase_encode((st.mel.n_len + m.subsampling - 1l) / m.subsampling)
 
     // conv subsampling ([time][mel] rows are already the [ih][iw][c=1] layout)
     var tp = ref_time_ticks()

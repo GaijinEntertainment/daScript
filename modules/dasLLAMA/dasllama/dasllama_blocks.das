@@ -1425,7 +1425,7 @@ def set_moe_gpu_prefill_route(on : bool) {
 
 def gpu_prefill_route_on() : bool => g_gpu_prefill_route
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
 def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
     let c = t.config
     let dim = c.dim
@@ -1562,14 +1562,15 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             moe_gather_rows(s, 0l, nk, dim, k, moe_kform && !fused_gpu, moe_kform)
         }
         prof_add("moe_gather", ts_gather)
-        // region triples (woff, row0, cnt) per touched expert; the three planes share row0/cnt
-        s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(ne * 3l)
-        s.moe_offs3 |> clear(); s.moe_offs3 |> reserve(ne * 3l)
-        s.moe_offs2 |> clear(); s.moe_offs2 |> reserve(ne * 3l)
+        let split_cap = !gpu_comb && !fused_gpu ? 32l : 0l
+        let cap_reg = split_cap > 0l ? ne + nk / split_cap + 1l : ne
+        s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(cap_reg * 3l)
+        s.moe_offs3 |> clear(); s.moe_offs3 |> reserve(cap_reg * 3l)
+        s.moe_offs2 |> clear(); s.moe_offs2 |> reserve(cap_reg * 3l)
         if (c.moe_exps_bias) {
-            s.moe_boffs1 |> clear(); s.moe_boffs1 |> reserve(ne)
-            s.moe_boffs3 |> clear(); s.moe_boffs3 |> reserve(ne)
-            s.moe_boffs2 |> clear(); s.moe_boffs2 |> reserve(ne)
+            s.moe_boffs1 |> clear(); s.moe_boffs1 |> reserve(cap_reg)
+            s.moe_boffs3 |> clear(); s.moe_boffs3 |> reserve(cap_reg)
+            s.moe_boffs2 |> clear(); s.moe_boffs2 |> reserve(cap_reg)
         }
         // LPT order (biggest buckets first) front-loads expensive spans; expert-order left 32% of GEMM windows idle
         s.moe_ord |> clear()
@@ -1589,21 +1590,26 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
             let eg = l * ne + e
             let base = e * dim * nfe
-            s.moe_offs1 |> push(t.we1_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs1 |> push(b0)
-            s.moe_offs1 |> push(cnt)
-            s.moe_offs3 |> push(t.we3_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs3 |> push(b0)
-            s.moe_offs3 |> push(cnt)
-            s.moe_offs2 |> push(t.we2_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs2 |> push(b0)
-            s.moe_offs2 |> push(cnt)
-            if (c.moe_exps_bias) {
-                s.moe_boffs1 |> push(t.web1_off + eg * nfe)
-                s.moe_boffs3 |> push(t.web3_off + eg * nfe)
-                s.moe_boffs2 |> push(t.web2_off + eg * dim)
+            var sub0 = 0l
+            while (sub0 < cnt) {   //! sub-regions share the expert's weights; the bias lists repeat per sub-region
+                let scnt = split_cap > 0l ? min(cnt - sub0, split_cap) : cnt
+                s.moe_offs1 |> push(t.we1_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
+                s.moe_offs1 |> push(b0 + sub0)
+                s.moe_offs1 |> push(scnt)
+                s.moe_offs3 |> push(t.we3_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
+                s.moe_offs3 |> push(b0 + sub0)
+                s.moe_offs3 |> push(scnt)
+                s.moe_offs2 |> push(t.we2_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
+                s.moe_offs2 |> push(b0 + sub0)
+                s.moe_offs2 |> push(scnt)
+                if (c.moe_exps_bias) {
+                    s.moe_boffs1 |> push(t.web1_off + eg * nfe)
+                    s.moe_boffs3 |> push(t.web3_off + eg * nfe)
+                    s.moe_boffs2 |> push(t.web2_off + eg * dim)
+                }
+                nreg++
+                sub0 += scnt
             }
-            nreg++
         }
         if (gpu_xf && moe_gpu_layer_streamed(l) && gpu_want_moe_split() && sb_fusable
                 && kq_sb(f1) && kq_sb(f3) && kq_sb(f2) && nk <= moe_gpu_ffn_xf_async_rows(dim, nfe)) {
@@ -1970,7 +1976,7 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends"), arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64;
                          non_causal : bool = false; src_off : int64 = 0l; skip_logits : bool = false;
                          span_lo : int64 = -1l; span_hi : int64 = -1l; ds_wide : bool = false) {
@@ -1988,6 +1994,9 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     }
     if (span_lo >= 0l && (span_hi <= span_lo || span_hi > npos)) {
         panic("forward_prefill_embd: span [{span_lo},{span_hi}) outside [0,{npos})")
+    }
+    if (npos >= 32l) {
+        dispatch_phase_batch()
     }
     // ds_wide (qwen3vl deepstack): every row is (1+n_deepstack)·dim wide — slice 0 is the
     // residual input, the tail slices stash for the per-layer adds (text rows carry zeros)
@@ -2019,7 +2028,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     prof_add("embed", ts_embed)
     if (has_ple(t.config)) {  // gemma-4 E-series: PLE side input (padding-token gather for the media path)
         let ts_ple = prof_ticks()
-        ple_pre_prefill_pad(t, s, npos)
+        ple_pre_prefill_pad_gated(t, s, npos, start_pos)
         prof_add("ple", ts_ple)
     }
     // the non-causal image span (gemma vision): span queries attend
@@ -2197,6 +2206,7 @@ def private eval_embd_slice_mrope_(t : Model; var s : Session; whole : array<int
 //! Mean-pooled, L2-normalized sentence embedding for `tokens` into `out`: last-layer hidden state
 //! averaged over positions, unit-normalized. Runs one forward over `s` from position 0 — pass a
 //! FRESH session (no KV history assumed; cache is left filled).
+[arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int64; var out : array<float>) {
     let c = t.config
     let dim = c.dim
@@ -2210,6 +2220,7 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
     if (t.quant != QuantMode.q4_0 && npos > 1l) {
         // batched prefill fills s.x_b (npos × dim residual) and leaves it intact; the body norms only
         // the last position, so re-apply the final RMSNorm to EVERY position and accumulate.
+        s.keep_hidden = true
         forward_prefill(t, s, tokens, npos, 0l)
         for (p in range64(npos)) {
             rms_at(s.xb, t, t.rms_final_off, s.x_b, p * dim, dim)

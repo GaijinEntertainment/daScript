@@ -628,7 +628,7 @@ def stream_collect_regions(t : Model; var regs : array<StreamReg>) {
 }
 
 // the streamed destination field of a job (Model plane field name), "" = not streamed
-def private stream_field_of(t : Model; fmt : KqFmt) : string {
+def stream_field_of(t : Model; fmt : KqFmt) : string {
     if (fmt == KqFmt.k4) {
         return "k4q"
     } elif (fmt == KqFmt.k5) {
@@ -817,6 +817,113 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
     delete scratch
     delete zeros
     return true
+}
+
+//! mirrors the prefill DEVW_BIG_PANEL knee: a panel past it never serves the dev-W route,
+//! so baking it would only grow the image
+let DEVW_BAKE_PANEL_MAX = 48ul * 1024ul * 1024ul
+
+//! The bake set: q8 blob and k4/k5/k6 plane jobs whose f16 panel fits the dev-W ceiling,
+//! ascending woff — the ONE order both the table build and the plane fill walk. q40/q51 stay
+//! out: the prefill dev-W route has no dequant kernel for them
+def private devw_bake_jobs(t : Model; jobs : array<FillJob>) : array<FillJob> {
+    var mine <- [for (j in jobs); j; where devw_bake_covers(stream_field_of(t, j.fmt)) && uint64(j.n * 2l) <= DEVW_BAKE_PANEL_MAX]
+    mine |> sort() $(a, b : FillJob) => a.woff < b.woff
+    return <- mine
+}
+
+def private devw_bake_covers(field : string) : bool {
+    return field == "mblob" || field == "k4q" || field == "k5q" || field == "k6q"
+}
+
+//! Fill the site tables (fmt/key/off/n) for the panels the plane fill will write — call BEFORE
+//! the image build so the tables serialize as regular planes. Returns total panel BYTES (page
+//! padding not included); 0 = nothing to bake.
+[arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+def devw_bake_tables(var t : Model; jobs : array<FillJob>) : int64 {
+    var mine <- devw_bake_jobs(t, jobs)
+    // the tables are the WHOLE bake set, not an addition to one: a second call on the same
+    // carrier would otherwise double every row and desync the plane fill's verify
+    t.devwf16_fmt |> clear()
+    t.devwf16_key |> clear()
+    t.devwf16_off |> clear()
+    t.devwf16_n |> clear()
+    t.devwf16_fmt |> reserve(length(mine))
+    t.devwf16_key |> reserve(length(mine))
+    t.devwf16_off |> reserve(length(mine))
+    t.devwf16_n |> reserve(length(mine))
+    var cur = 0l
+    for (j in mine) {
+        //! the key is what the prefill's resident lookup recomputes: q8 = the site's mblob
+        //! BYTE offset, kq = the site's ELEM woff (kq_quants_of adds it to the plane buffer)
+        t.devwf16_fmt |> push(j.fmt == KqFmt.q8 ? 0 : kq_stream_code(j.fmt))
+        t.devwf16_key |> push(j.fmt == KqFmt.q8 ? (j.woff / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB) : j.woff)
+        t.devwf16_off |> push(cur)
+        t.devwf16_n |> push(j.n)
+        cur += j.n
+    }
+    delete mine
+    return cur * 2l
+}
+
+//! Write the devwf16 plane: per baked site, transcode its data from the gguf mapping and run
+//! the format's devw_dequant_*_core (the CPU mirror of the runtime dev-W dequant kernel), so
+//! a baked panel is bit-equal to a runtime one. Walks the table build's sorted set verbatim
+[arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+def fill_devwf16_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model;
+                       jobs : array<FillJob>;
+                       append : block<(p : void?; nbytes : uint64) : void>) : bool {
+    var mine <- devw_bake_jobs(t, jobs)
+    verify(length(mine) == length(t.devwf16_key))
+    var temp_q8 : array<int8>
+    var temp_sf : array<float>
+    var temp_kq : array<uint8>
+    var temp_ks : array<uint8>
+    var scratch : array<float>
+    var panel : array<float16>
+    var ok = true
+    for (j in mine) {
+        panel |> grow_resize(int(j.n))
+        if (j.fmt == KqFmt.q8) {
+            temp_q8 |> grow_resize(int(j.n))
+            temp_sf |> grow_resize(int(j.n / 32l))
+            let kind = transcode_q8_tensor(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off, scratch)
+            if (empty(kind)) {
+                ok = false
+                break
+            }
+            unsafe {
+                devw_dequant_q8_core(addr(temp_q8[0]), addr(temp_sf[0]), j.n / 32l, addr(panel[0]))
+            }
+        } else {
+            let nsb = j.n / 256l
+            temp_kq |> grow_resize(int(nsb * kq_qsb(j.fmt)))
+            temp_ks |> grow_resize(int(nsb * kq_ssb(j.fmt)))
+            let kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, temp_kq, temp_ks, 0l, j.n, j.src_off, scratch)
+            if (empty(kind)) {
+                ok = false
+                break
+            }
+            unsafe {
+                if (j.fmt == KqFmt.k6) {
+                    devw_dequant_k6_core(addr(temp_kq[0]), addr(temp_ks[0]), K6_SSB, addr(temp_ks[16]), K6_SSB, nsb, addr(panel[0]))
+                } else {
+                    devw_dequant_k45_core(addr(temp_kq[0]), addr(temp_ks[0]), K4_SSB, nsb, j.fmt == KqFmt.k5, addr(panel[0]))
+                }
+            }
+        }
+        unsafe {
+            invoke(append, addr<void?>(panel[0]), uint64(j.n * 2l))
+        }
+    }
+    delete mine
+    delete temp_q8
+    delete temp_sf
+    delete temp_kq
+    delete temp_ks
+    delete scratch
+    delete panel
+    return ok
 }
 
 // One job's q8 temps -> the gguf-native 34B blocks the blob plane carries. Scales convert through

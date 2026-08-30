@@ -413,6 +413,20 @@ def tower_stage_f32_pad_cols(m : GGUFMeta; b : array<uint8> | #; name : string; 
     }
 }
 
+//! Re-stride ``rows`` already-read f32 rows from ``src`` (``src_stride`` wide, packed) into
+//! ``blob`` at ``wo`` on a wider ``dst_stride`` — the padded patch-conv GEMM: each row lands at
+//! its padded pitch and the pad columns stay whatever the region was sized to (zero).
+def tower_stage_f32_pad_row_stride(var blob : array<float>; src : array<float>;
+                                   wo, rows, src_stride, dst_stride : int64) {
+    unsafe {
+        var dp = addr(blob[wo])
+        let sp = addr<float const?>(src[0])
+        for (r in range64(rows)) {
+            copy_floats(dp + r * dst_stride, sp + r * src_stride, src_stride)
+        }
+    }
+}
+
 //! Zero ``n`` floats at ``at`` — pad tails of staged planes.
 def tower_zero_span(var a : array<float>; at, n : int64) {
     if (n <= 0l) {
@@ -575,14 +589,42 @@ def geglu_quick_lut_rows(var h : array<float>; gate, up : array<float>; ff, npos
     }
 }
 
+//! Bake a tower's halfword GEMM twin off its staged f32 blob - the file's own bits (an f16
+//! source round-trips exactly; bf16 = the f32 word's top halfword). Whole-blob at the same
+//! element offsets; ride-along f32 regions clamp on the f16 form and the route never reads them.
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : bool) {
+    let n = long_length(blob)
+    if (long_length(wblob) < n) {
+        wblob |> reserve(n)
+    }
+    wblob |> resize(n)
+    unsafe {
+        if (bf16) {
+            let up = addr<uint const?>(blob[0])
+            var dp = addr(wblob[0])
+            for (i in range64(n)) {
+                dp[i] = uint16(up[i] >> 16u)
+            }
+        } else {
+            let sp = addr<float const?>(blob[0])
+            var dp = addr<float16?>(wblob[0])
+            for (i in range64(n)) {
+                dp[i] = float16(clamp(sp[i], -65504.0, 65504.0))
+            }
+        }
+    }
+}
+
 //! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in [C][KH][KW]
 //! order (row index c·p² + ky·p + kx), one row per non-overlapping p×p patch walking the canvas
 //! row-major (pos_x = i % n_cols, pos_y = i / n_cols). Returns npos; ``x0`` grows to npos × 3p².
-def im2col_rgb_patches(planes : array<float>; w, h, p : int64; @scratch var x0 : array<float>) : int64 {
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]
+def im2col_rgb_patches(planes : array<float>; w, h, p : int64; @scratch var x0 : array<float>; row_stride : int64 = 0l) : int64 {
     let n_cols = w / p
     let npos = n_cols * (h / p)
     let psq = p * p
-    let row_dim = 3l * psq
+    let row_dim = row_stride > 0l ? row_stride : 3l * psq
     if (long_length(x0) < npos * row_dim) {
         x0 |> reserve(npos * row_dim)
         x0 |> resize(npos * row_dim)

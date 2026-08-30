@@ -11,7 +11,7 @@ options no_aot     // invokes the compiler at runtime (compile_file) — not AOT
 // @workgroup, and a dynamic-array @workgroup; the user-function surface: a RECURSIVE helper,
 // an un-lowerable helper PARAMETER type, and a @workgroup member bound to a thread-space `&`
 // parameter; the Phase-5 simdgroup_matrix surface: `.data` access in a kernel, an @ssbo of
-// tiles, a non-member load source, and a threadgroup store; the flatten surface: recursive
+// tiles, and a non-member load source; the flatten surface: recursive
 // methods in BOTH positions (the value one is refused while binding arguments, the statement
 // one only by the scan — emit lowers a splice by recursion), the value-position body shape, a
 // discarded value return, a non-tail `return`, the state-member kinds (bound, initialized
@@ -77,7 +77,6 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_sgmat_field", "field access `.data` is not a kernel-class member access")
         check_rejects(t, "_fc_sgmat_member", "element type metal_builtins::simdgroup_float8x8 has no MSL form")
         check_rejects(t, "_fc_sgmat_src", "simdgroup_load source must be an @ssbo or @workgroup member")
-        check_rejects(t, "_fc_sgmat_store_tg", "simdgroup_store targets an @ssbo buffer")
         // the flatten (method-splice) surface
         check_rejects(t, "_fc_method_recursion_stmt", "method `mrec` is recursive")
         check_rejects(t, "_fc_method_value_body", "used in value position must be a single `return <expr>` body")
@@ -96,7 +95,7 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_splice_ref_arg", "`&` parameter `acc` needs an lvalue argument")
         // the Metal-4 tensor-op surface
         check_rejects(t, "_fc_tmm2d_float_a", "FLOAT A operand")
-        check_rejects(t, "_fc_tmm2d_bk", "bk must be 32 or 64")
+        check_rejects(t, "_fc_tmm2d_bk", "bk must be 32, 64, or 128 (= 64-deep double-buffered: two ping-pong tiles, an n*144-half wt)")
         check_rejects(t, "_fc_tmm2d_deva_witness", "begin_deva's witness typed")
     }
 }

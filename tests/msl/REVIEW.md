@@ -10,3 +10,7 @@ direction's assertion in `test_msl_census.das` weakens the check, and so does dr
 from `declared_msl_census` or a fixture's census from `all_msl_censuses` (both in
 `_msl_common.das`). Emitted text cannot be read back into constructs, so the census is the
 only measure of coverage.
+
+**Every file under `_fail_closed/` fails to compile and has a needle assertion in
+`test_msl_fail_closed.das`.** A fixture that compiles, or a needle no emitter error contains, is
+a defect - delete the fixture and its assertion together.

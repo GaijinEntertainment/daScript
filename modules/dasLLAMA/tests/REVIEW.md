@@ -31,8 +31,8 @@ defect.** Out-of-folder instances are ledgered in `CLAUDE.md`'s "Out-of-folder t
 
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect.**
 
-**A change that re-scopes a test file with a `CLAUDE.md` entry keeps that entry true in the
-same change.**
+**A diff that adds, removes or re-lanes a gate in a file with a `CLAUDE.md` entry updates that
+entry in the same change.**
 
 **A new test file listed in `run.das`'s `model-free` suite, or in no `run.das` suite at all,
 whose name does not say what it covers, gets a `CLAUDE.md` entry in the same change** -
@@ -95,9 +95,8 @@ embedders, and union carriers load through their family or carrier loaders.
 test for the new value.** The test feeds the new value and checks the result. It lives in
 this folder, and it lands in the same change. "The model still runs" is not that test.
 
-**A predicate whose value is fixed by the build platform - it cannot differ between two runs on
-one machine - is never tested through its own value; test it through the argv it gates or the
-mode it selects.**
+**A predicate whose value cannot differ between two runs on one machine is never tested through
+its own value; test it through the argv it gates or the mode it selects.**
 
 **A test for an added, moved, or edited registration reaches the registered thing through its
 registry, and never calls it directly.** The registries this governs: the arch registrations
@@ -142,9 +141,11 @@ class a census row could dispatch is a defect.
 **A kernel-unit cell missing a compare against a CPU oracle that can witness the cell's
 property is a defect.**
 
-**A kernel-unit cell testing cross-dispatch bit-identity that does not compare GPU against GPU,
-with its output buffers prefilled with a sentinel, is a defect.** No CPU oracle can witness
-that property.
+**A kernel-unit cell that bit-compares a buffer the GPU writes prefills its output buffers with
+a sentinel.** An unprefilled output can pass a bit compare by staying stale.
+
+**A cross-dispatch bit-identity compare - comparing the outputs of two dispatches - runs GPU
+against GPU.** No CPU oracle can witness that property.
 
 **A kernel-unit cell whose output plane is its input plane, and whose compare is not paired
 with an assert that the output differs from the input at a known index, is a defect.** This
@@ -208,9 +209,13 @@ one predicate's own value.
 or audio samples, not a `.dlim` model image - with no model loaded is a defect when it does
 not build its fixture procedurally and pin its expectations in-repo.**
 
-**Media a test feeds an embedder - an image or an audio clip - that the test does not build,
-and that `DASLLAMA_VISION_DUMP` cannot preview (images), is a defect** - a red never requires
-adding instrumentation before a human can see what the model consumed.
+**An image a test feeds an embedder that the test does not build, and that
+`DASLLAMA_VISION_DUMP` cannot preview, is a defect** - a red never requires adding
+instrumentation before a human can see what the model consumed.
+
+**An audio clip a test feeds an embedder that the test does not build, and that is not one of
+the checked-in fixtures beside the models (`jfk.wav`, `gemma4a_test2.wav` - the sanctioned ASR
+corpus), is a defect** - the same reason: a clip nobody else can play makes a red unreadable.
 
 **A tier-1 media fixture - one an embedder-parity cell regenerates in-test and compares
 against an oracle dump - with no exact-value generator is a defect.** A generator running libm
@@ -230,3 +235,23 @@ change** - the wire-shape pins, the render pins, and a live server leg gated on 
 smallest GGUF that runs on the small tier (the file homes are `CLAUDE.md`'s "Model-free /
 no-arm tests" and "Out-of-folder test files" notes). A family whose vocab lacks the markers
 has no format to test.
+
+**A kernel-unit gate that compares a GPU attention kernel against a wider-precision CPU oracle
+feeds inputs that are exact in f16.** Otherwise the compare measures input rounding, and the
+bar has to be loosened until it no longer discriminates.
+
+**A gate for a kernel that attends inside a restricted horizon - a window, a sliding span, a
+block-diagonal range - writes its CPU oracle to attend strictly inside that horizon.** A leak
+then reds the ordinary compare, so the gate needs no separate leak control.
+
+**A cell whose only compare is bit-identity between two kernel forms also compares one of the
+two against a CPU oracle, in the same cell.** Two forms can be bit-equal and both wrong.
+
+**A poison leg on a tower the Metal driver serves reaches every plane the served route reads -
+a blob-only poison on a twin-serving route is laundered.** Which planes those are is the
+route's to say: a twin-W route reads the baked halfword twin (`wblob`), so poisoning that
+plane alone is a valid control there, while a route reading both planes needs both zeroed. A
+poison the served route never reads passes on a broken kernel.
+
+**Loosening a transcript-equality assert in an ASR CPU-vs-GPU cell is a defect - convert the
+cell to the forced-feed logits-tolerance form instead.**

@@ -12,6 +12,19 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
+  pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
+  668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous
+  f16 K/V restride - a strided compact K/V scatters every simdgroup tile; the adoption race
+  lives in `benchmarks/attn/bench_metal_pf_fused_attn.das`'s TOWER/PORTC arms and the PR).
+  Cell shape now (lcpp_bench image cells, m5): gemma-3-4b 404 ms and gemma-3-12b 407 vs the
+  pair's 370/380 [direction-grade - two processes]. The
+  remaining ~30 ms splits across the per-layer hc-cvt dispatches (~8 ms), the ledgered
+  post-CPU-window commit slack, and race-vs-cb occupancy; next levers if reopened: fold
+  the hc restride into the K/V GEMM epilogues (dual-store), a Q=16/C=128 flash variant via
+  the disasm discipline, and the flash's masked ragged-npos tail (would admit the qwen
+  towers, whose ~1200-row attention is small anyway).
+
 - **LANDED - the mul_mm prefill billed ceil-32 M tiles, so an npos just past a tile boundary
   paid a whole extra tile-row of wall for rows nothing reads; the GEMV-tail dispatch peels
   npos % 32 in [1,8] onto the fixed-B mv family (measured 2026-08-24, M1 Max, the qwen
@@ -1073,3 +1086,77 @@ group; wording kept.
   the DENSE k-quant crowns rather than raced on their own; give each its own
   `metal_tensor_race` family and crown so the gate stops proxying. Instrument:
   `metal_tensor_race` on an M5 box, one q8 and one k-quant MoE model.
+
+### From the qwen25v Metal-tower bring-up (2026-08-29)
+
+- **OPEN - qwen25v window-attention kernel is the naive per-thread form.** `enc_tower_win_attn`
+  runs one thread per q row, scalar dots straight from device f32 (the f16-staged simdgroup
+  form was reverted: its staging noise re-rolls the 32-layer chaos, and the naive form still
+  lands the pair ahead - enc 106 vs 117 ms, lcpp_bench image cell vs mtmd, m5
+  [direction-grade - two processes]). If the encoder profile ever shows the window
+  layers, the upgrade is a simdgroup-tiled f32 form (windows are 64x80 tiles; K%16 wants pad
+  to 96). Instrument: asr_prof q25v.gpu split via a skip-family knockout, npos ~1564.
+- **OPEN - qwen25v full layers ride the padded slab (hs 80 -> 96).** Four of 32 layers restride
+  to hs_pad 96 through the attention trio; a dk80 flash monomorph (the gemma3v dk72 recipe,
+  per-head-contiguous K/V) applies if the slab ever shows at big npos.
+
+### From the gemma4a Metal-tower bring-up (2026-08-29)
+
+- **CLOSED (same day) - the "long-context decode gap" was the embd path's CPU PLE pre-step.**
+  tg128-at-depth refuted the rail attribution (das ahead at every depth); the asr_prof turn
+  buckets (`benchmarks/lcpp_bench.das --asr`) pinned 774 ms of gb1's prefill on
+  ple_pre_prefill_pad - the E-series PLE model_proj GEMM
+  run on CPU because only the TOKEN prefill offered the pre-step to the device gate. The embd
+  path now offers it too (ple_pre_prefill_pad_gated), the CPU fallback broadcasts one gather,
+  and the scalar sampler is vectorized (hargmax/hlse). gb1 cell 0.83x -> 1.00x.
+
+### From the canary M5 baseline (2026-08-29)
+
+- **CLOSED - canary gb1 44.6 s -> 6.5 s (2.7x AHEAD of nemo's 17.8).** Notch (a) closed by the
+  Metal FastConformer driver: the 32-block loop rides one command buffer on the f32 blob
+  (enc_cn_attn = full bidirectional rel-pos XL attention with online softmax, one thread per
+  (q,head); enc_cn_dw = centered k9 + folded BN + SiLU; LN/GLU/SiLU/axpy/GEMM/bias reuse the
+  tower kernels). gb1 encode 26.8 -> 5.9 s; cells jfk 310 ms (8.5x ahead), jfk3 895 (7.2x),
+  gb1 6522; transcripts verbatim on all three; encode rel-rms vs CPU 3.1e-4; kernels-suite
+  oracle+poison gates + the canary mtower cell green. Residue: the encode's CPU half (mel +
+  subsample front + proj, ~5.9 s of gb1) - the gemma4a whole-chunk recipe applies if the cell
+  must go further.
+  Original finding (decoder half): Notch (b) is
+  closed: the serving decoder is the Q8_0 re-quant (CANARY_DEC_RECIPE), cls_q8 serves and the
+  blob drivers accept - jfk 1.25 s (2.12x ahead), jfk3 3.91 s (1.64x), gb1 27.7 s (0.64x),
+  transcript gate verbatim both serves. What remains of gb1 is notch (a) alone.
+  Original finding: Two independent notches: (a) the FastConformer-32 encoder
+  is CPU f32/q8 (26.8 s of the gb1 turn) - a Metal driver is the gemma4a-recipe class of
+  work; (b) the decoder cannot ride the Metal rail: the f16-sourced GGUF's TIED classifier
+  serves the exact fp32 path (cls_q8 wants a Q8_0 disk embedding) and the blob drivers
+  decline a tied-fp32 classifier - either an fp32-table classifier GEMV on the rail, or a
+  Q8_0 re-quantized decoder artifact (provenance churn: the CANARY_DEC_RECIPE would change).
+  Instrument: lcpp_bench --asr -m Canary vs canary_qwen_bench.py.
+
+### From the CPU board sweep under the hybrid pool (2026-08-29)
+
+- **CLOSED (same day) - MoE CPU batch pp trailed on a groupn straggler, fixed by the 32-row
+  region split.** The grouped-prefill offs builder now caps a CPU sub-region at 32 rows: the
+  batch-groupn dispatch chunks its region x row-group units by COUNT while a unit's cost is the
+  region's row count, so one zipf-heavy expert straggled the whole barrier
+  (`harness/moe_kq_probe.das`: 620 GFLOP/s zipf vs 3537 uniform vs 3929 split; the kernel
+  itself was never slow - narrow D=704 costs 2%, M=32 costs 14%). Post-fix cells (das/stock-BLAS ref best): 26B-A4B 448/301 =
+  1.49x (was 0.82x), gpt-oss 382/238 = 1.60x (0.99x), 30B-A3B 396/280 = 1.41x (0.91x), 35B-A3B
+  410/283 = 1.45x (0.94x); sanity argmax+logit fingerprints bit-identical on all four, MoE
+  family matrix cells green. GPU tiles keep whole regions (unsplit). Residue: MoE pp cv 6-9%
+  under the 18-lane pool remains on both engines.
+  Original finding (das/stock-BLAS
+  ref, both at their best lane count: 26B-A4B 242/301 = 0.82x, 30B-A3B 254/280 = 0.91x,
+  35B-A3B 266/283 = 0.94x) while the same sweep has das AHEAD on every dense Q4_K_M pp cell
+  (1.10-1.28x) and at 0.99-1.12x on q8/mxfp4. Not a pool-policy artifact - the hybrid pool
+  roughly doubled our own MoE pp vs 6 lanes; the gap class is the k-quant MoE batch GEMM
+  (expert-grouped rows), and both engines' MoE pp turns noisy at 18 lanes (cv 2-8% vs <1%
+  dense - routing imbalance across lanes). Profile (26B-A4B pp512/pp2048, --prof): the grouped
+  sb_kq expert batch GEMMs are 87% of ffn wall at ~0.85 TFLOP/s vs the dense batch kernel's
+  ~4.7 on the same box - NOT per-expert-M starvation (rate flat from M~32 to M~128), NOT MoE
+  plumbing (route+gather+reduce ~6%), NOT q51 alone (k4 gate/up 0.87 vs q51 down 0.79); mxfp4
+  MoE sits at parity, so the sb_kq expert path specifically. Remaining suspects: the narrow
+  per-expert output dim (D=704 -> 88 mr=8 row-tiles; q51 mr=4) and the kq_batch_groupn
+  per-region walk vs the dense flat sweep. Instrument: `harness/moe_kq_probe.das` (synthetic-k4
+  bare-kernel cells at expert shapes, dense-shape control included); ref bar re-taken against
+  the b10659 clean-cpu build at the arc-end re-mint.

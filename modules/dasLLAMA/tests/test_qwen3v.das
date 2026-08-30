@@ -12,6 +12,8 @@ require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
 require ?das_metal dasllama/dasllama_metal_tower   // the CPU gates pin the tower knob off
+require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown - the f16-route cell re-arms crowned PSOs
+require dasllama/dasllama_common   // set_metal_tensor_crowns - the f16-route cell's crown pin
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 
 // Tier-1 qwen3v tower parity vs llama-mtmd-debug -p encode (the Omni-30B SigLIP-geometry ViT).
@@ -136,6 +138,9 @@ def test_qwen3v_tier1(t : T?) {
             for (i in range64(pst.t.layer_w_stride)) {
                 pst.blob[base + i] = 0.0
             }
+            for (i in range64(long_length(pst.wblob) > 0l ? pst.t.layer_w_stride : 0l)) {
+                pst.wblob[base + i] = uint16(0)   // the baked twin serves the GPU route - a blob-only poison is laundered
+            }
             var ptw = Qwen3vTower()
             mint_qwen3v_tower(pst, ptw)
             let planes <- make_planes("gray", 448, 448)
@@ -158,7 +163,7 @@ def test_qwen3v_tier1(t : T?) {
 // The Metal tower arm: the SAME fixtures and bars, tower pinned ON — the GPU chain's parity
 // gate, with engage evidence (encode/block counter deltas), never "the model ran".
 [test]
-def test_qwen3v_tier1_metal(t : T?) {
+def test_qwen3v_tier1_metal(t : T?) {   // nolint:STYLE038 — one flat gate ladder + its poison leg, honest shape
     t |> run("tier-1 on the Metal tower (Omni-30B narrow + 4B deepstack)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
@@ -213,6 +218,9 @@ def test_qwen3v_tier1_metal(t : T?) {
                 for (i in range64(pst.t.layer_w_stride)) {
                     pst.blob[base + i] = 0.0
                 }
+                for (i in range64(long_length(pst.wblob) > 0l ? pst.t.layer_w_stride : 0l)) {
+                    pst.wblob[base + i] = uint16(0)
+                }
                 var ptw = Qwen3vTower()
                 mint_qwen3v_tower(pst, ptw)
                 let planes <- make_planes("gray", 448, 448)
@@ -233,6 +241,64 @@ def test_qwen3v_tier1_metal(t : T?) {
             delete tw4
         } else {
             tt |> skip("no das_metal on this build - the Metal tower arm has no device to serve")
+        }
+    }
+}
+
+[test, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+def test_qwen3v_tier1_metal_f16(t : T?) {
+    t |> run("tier-1 on the Metal tower's twin-W route (crowned twins, 4B f16 + Omni bf16)") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let mm4 = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
+            if (!model_available(tt, mm4)) {
+                return
+            }
+            set_metal_tensor_crowns("mulmm_q8")
+            metal_prefill_shutdown()
+            set_qwen3v_q8(false)
+            var tw4 <- load_qwen3v_tower(mm4)
+            reset_qwen3v_q8()
+            set_metal_tower(true)
+            set_metal_tower_f16(true)
+            var st4 = Qwen3vState()
+            let f0 = metal_tower_f16_encodes()
+            var gated = 0l
+            if (tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)) {
+                gated++
+            }
+            if (tt |> gate_encode(tw4, st4, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_GPU_DS)) {
+                gated++
+            }
+            let f1 = metal_tower_f16_encodes()
+            if (gated == 0l) {
+                tt |> skip("no oracle dumps present - the f16-route parity fixtures all skipped")
+            } else {
+                tt |> success(f1 - f0 >= gated, "every gated encode rode the f16-W route ({f1 - f0} of {gated})")
+                set_metal_tower_f16(false)
+                tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)
+                tt |> equal(metal_tower_f16_encodes() - f1, 0l, "the knob-off leg keeps the f32 GEMM route")
+                set_metal_tower_f16(true)
+            }
+            let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
+            if (model_available(tt, mm)) {
+                set_qwen3v_q8(false)
+                var tw <- load_qwen3v_tower(mm)
+                reset_qwen3v_q8()
+                var st = Qwen3vState()
+                let b0 = metal_tower_f16_encodes()
+                if (tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_GPU)) {
+                    tt |> success(metal_tower_f16_encodes() - b0 >= 1l, "the bf16-sourced tower rode the twin route")
+                }
+                delete st
+                delete tw
+            }
+            set_metal_tower_f16(true)
+            set_metal_tensor_crowns("")
+            metal_prefill_shutdown()
+            delete st4
+            delete tw4
+        } else {
+            tt |> skip("no das_metal on this build - the f16-W route has no device to serve")
         }
     }
 }

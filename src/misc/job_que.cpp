@@ -69,6 +69,16 @@ namespace das {
         if ( sysctlbyname("hw.perflevel0.logicalcpu", &good, &len, nullptr, 0) != 0 ) return 0;
         return good;
     }
+
+    static bool apple_slow_tier_is_compute() {
+        char name[64] = {}; size_t len = sizeof(name) - 1;
+        if ( sysctlbyname("hw.perflevel1.name", name, &len, nullptr, 0) != 0 ) return false;
+        static const char * const computeTiers[] = { "Performance", "Super" };
+        for ( const char * tier : computeTiers ) {
+            if ( strcmp(name, tier) == 0 ) return true;
+        }
+        return false;
+    }
 #endif
 
     // Worker count. Generic rule: logical cores - 1, capped at DAS_MAX_HW_JOBS — parallel_for's
@@ -98,6 +108,11 @@ namespace das {
             return v;
         }();
         if ( forced > 0 ) return forced - 1;
+        if ( int req = JobQue::get_default_threads(); req > 1 ) {
+            int workers = min(req, hw) - 1;
+            if ( int cap = JobQue::get_default_threads_cap() ) workers = min(workers, cap);
+            return max(1, workers);
+        }
         int def = 0;
 #if defined(__APPLE__)
         if ( int good = apple_perf_core_count() ) def = max(1, good - 1);
@@ -114,6 +129,26 @@ namespace das {
     static atomic<int> g_jobqueDefaultThreadsCap{0};
     void JobQue::set_default_threads_cap(int cap) { g_jobqueDefaultThreadsCap = max(cap, 0); }
     int JobQue::get_default_threads_cap() { return g_jobqueDefaultThreadsCap.load(); }
+
+    static atomic<int> g_jobqueDefaultThreads{0};
+    void JobQue::set_default_threads(int total) { g_jobqueDefaultThreads = total <= 1 ? 0 : total; }
+    int JobQue::get_default_threads() { return g_jobqueDefaultThreads.load(); }
+
+    int JobQue::get_num_perf_cores() {
+#if defined(__APPLE__)
+        return apple_perf_core_count();
+#else
+        return 0;
+#endif
+    }
+
+    bool JobQue::is_slow_tier_compute() {
+#if defined(__APPLE__)
+        return apple_perf_core_count() > 0 && apple_slow_tier_is_compute();
+#else
+        return false;
+#endif
+    }
 
     // App-declared affinity mode of a future JobQue (das set_jobque_affinity — apps expose it in
     // their config next to threads). -1 = unset (off). Applied at thread spawn, so it must be set
@@ -185,6 +220,12 @@ namespace das {
         if ( mode <= 0 ) return;
         int hw = static_cast<int>(thread::hardware_concurrency());
         if ( hw <= 1 ) return;
+#if defined(__APPLE__)
+        if ( int perf = apple_perf_core_count(); perf > 0 && perf < hw ) {
+            SetCurrentThreadAffinityCpu(slot, mode >= 2 && slot < perf);
+            return;
+        }
+#endif
         int half = hw / 2;
         int cpu;
         if ( half > 0 && slot < half ) cpu = slot * 2;               // distinct cores first

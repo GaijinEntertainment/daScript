@@ -1367,6 +1367,23 @@ namespace das {
         JobQue::set_default_threads_cap(cap);
     }
 
+    //! Read at worker spawn — call BEFORE with_job_que / create_job_que.
+    void setJobqueThreads ( int32_t total ) {
+        JobQue::set_default_threads(total);
+    }
+
+    int32_t getJobqueThreads () {
+        return JobQue::get_default_threads();
+    }
+
+    int getTotalPerfCores () {
+        return JobQue::get_num_perf_cores();
+    }
+
+    bool isSlowTierCompute () {
+        return JobQue::is_slow_tier_compute();
+    }
+
     // Affinity mode of a future JobQue: 0 off / 1 ideal-CPU hint / 2 hard mask (-1 = unset).
     // Applied at worker spawn — call BEFORE with_job_que / create_job_que. The
     // DAS_JOBQUE_AFFINITY env still overrides it (the A/B rail).
@@ -1722,6 +1739,15 @@ namespace das {
             addExtern<DAS_BIND_FUN(setJobqueThreadsCap)>(*this, lib,  "set_jobque_threads_cap",
                 SideEffects::modifyExternal, "setJobqueThreadsCap")
                     ->args({"cap"});
+            addExtern<DAS_BIND_FUN(setJobqueThreads)>(*this, lib,  "set_jobque_threads",
+                SideEffects::modifyExternal, "setJobqueThreads")
+                    ->args({"total"});
+            addExtern<DAS_BIND_FUN(getJobqueThreads)>(*this, lib,  "get_jobque_threads",
+                SideEffects::accessExternal, "getJobqueThreads");
+            addExtern<DAS_BIND_FUN(getTotalPerfCores)>(*this, lib,  "get_total_perf_cores",
+                SideEffects::accessExternal, "getTotalPerfCores");
+            addExtern<DAS_BIND_FUN(isSlowTierCompute)>(*this, lib,  "is_slow_tier_compute",
+                SideEffects::accessExternal, "isSlowTierCompute");
             addExtern<DAS_BIND_FUN(setJobqueAffinity)>(*this, lib,  "set_jobque_affinity",
                 SideEffects::modifyExternal, "setJobqueAffinity")
                     ->args({"mode"});

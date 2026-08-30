@@ -23,6 +23,7 @@ require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower/metal_towe
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_prefill_shutdown — the mtower re-arm leg
 require ?das_metal dasllama/dasllama_metal_asr_dec  // set_metal_wdec/metal_wdec_stats — the cross-KV gate + the tower cell's pin
 require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown — same
+require dasllama/dasllama_gemm_schema // Q8_BLOCK_ELEMS/Q8_QPB/Q8_SPB — the dev-W bake key arithmetic
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
 require daslib/jobque_boost
 require daslib/archive
@@ -961,6 +962,38 @@ def test_whisper_metal_tower(tst : T?) {
                 t |> success(!empty(lg.text), "large: non-empty transcript")
                 t |> success(lc.text == lg.text, "large: transcript-exact CPU vs GPU")
             }
+            set_metal_tensor_crowns("mulmm_q8")
+            metal_prefill_shutdown()
+            let tw0 = metal_tower_f16_encodes()
+            let twg = whisper_transcribe_text(path, samples, cached = false)
+            t |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the f16-sourced tower rode the twin route")
+            t |> success(twg.text == cpu.text, "twin route: transcript-exact vs CPU")
+            set_metal_tower_f16(false)
+            let tw1 = metal_tower_f16_encodes()
+            let twf = whisper_transcribe_text(path, samples, cached = false)
+            set_metal_tower_f16(true)
+            t |> equal(metal_tower_f16_encodes(), tw1, "twin knob off: the route never engaged")
+            t |> success(twf.text == cpu.text, "twin knob off: the f32 route stays transcript-exact")
+            var inscope wpz = WhisperModel()
+            var inscope stgz <- stage_whisper_model(path, false)
+            t |> success(long_length(stgz.enc.wblob) > 0l, "the f16 bin baked a twin at stage")
+            let zbase = stgz.e.enc.layers_off + 2l * stgz.e.enc.layer_stride
+            for (i in range64(long_length(stgz.enc.wblob) > 0l ? stgz.e.enc.layer_stride : 0l)) {
+                stgz.enc.wblob[zbase + i] = uint16(0)
+            }
+            mint_whisper_model(stgz, wpz)
+            var z_text = ""
+            with_job_que() {
+                setup_dasllama_jobque()
+                var sz <- create_session(wpz)
+                transcribe(wpz, sz, samples) $(seg) {
+                    z_text += seg.text
+                }
+                delete sz
+            }
+            t |> success(z_text != cpu.text, "a zeroed twin layer CHANGES the GPU transcript (the twin is read)")
+            set_metal_tensor_crowns("")
+            metal_prefill_shutdown()
             // the q8 SERVING DEFAULT declines (quant_mode) and never dispatches — the shipped path stays CPU
             var inscope w8 = WhisperModel()
             var inscope stg8 <- stage_whisper_model(path, true)
@@ -1267,6 +1300,7 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         if (!model_available(t, path)) {
             return
         }
+        set_qwen3a_q8(true)
         let img = image_path_for(path, "qwen3a-q8")
         remove(img)
         // off-rail truth: the staged read — both cached loads are image-backed and cannot
@@ -1300,7 +1334,8 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         var inscope c32 <- load_qwen3a_tower(path)
         t |> success(!c32.core.q8, "f32 rail still serves")
         t |> equal(count_mismatch(a32.core.fblob, c32.core.fblob), 0l, "f32 core.fblob element-exact")
-        set_qwen3a_q8(true)
+        t |> success(long_length(a32.core.wblob) > 0l, "the bf16 mmproj bakes the halfword twin on the exact lane")
+        reset_qwen3a_q8()
     }
 }
 
@@ -1653,6 +1688,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         if (!model_available(t, path)) {
             return
         }
+        set_gemma4a_q8(true)
         let img = image_path_for(path, "gemma4a-q8")
         remove(img)
         // off-rail truth: the staging carrier re-runs the read-time transcode + repack under
@@ -1686,7 +1722,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         var inscope c32 <- load_gemma4a_encoder(path)
         t |> success(!c32.q8, "f32 rail still serves")
         t |> equal(count_mismatch(a32.blob, c32.blob), 0l, "f32 blob element-exact")
-        set_gemma4a_q8(true)
+        reset_gemma4a_q8()
     }
 }
 
@@ -1713,6 +1749,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
             setup_dasllama_jobque_()
             // decoder off-rail (REVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
+            set_gemma4a_q8(true)
             var inscope enc <- load_gemma4a_encoder(mmp_path)
             var inscope s <- create_gemma4a_asr_session(dec)
             t |> success(enc.q8, "leg A tower is on the q8 rail")
@@ -1726,13 +1763,175 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
             gemma4a_transcribe(dec, enc32, s32, samples, $(seg : TranscribeSegment) {
                 f32_text += seg.text
             }, lang)
-            set_gemma4a_q8(true)
+            reset_gemma4a_q8()
             delete dec
         }
         to_log(LOG_INFO, "gemma4a q8 : {q8_text}\n")
         to_log(LOG_INFO, "gemma4a f32: {f32_text}\n")
         t |> equal(q8_text, f32_text, "q8 tower transcript matches the f32 rail")
         delete samples
+    }
+}
+
+[test]
+def test_gemma4a_tower_metal(t : T?) {
+    t |> run("gemma4a tower: the Metal Conformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "gemma4a") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
+            let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+            if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present beside the models")
+                return
+            }
+            var cpu_text = ""
+            var gpu_text = ""
+            var lang = ""
+            var nlayer = 0l
+            var enc_delta = 0l
+            var blk_delta = 0l
+            var enc_rel_rms = 0.0
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var dec <- load_model_(dec_path, QuantMode.q8)
+                dec.config.seq_len = min(dec.config.seq_len, 8192l)
+                set_gemma4a_q8(false)
+                var inscope enc <- load_gemma4a_encoder(mmp_path)
+                t |> success(!enc.q8, "tower is on the f32 rail")
+                nlayer = enc.n_layer
+                set_metal_tower(false)
+                var inscope s <- create_gemma4a_asr_session(dec)
+                gemma4a_transcribe(dec, enc, s, samples, $(seg : TranscribeSegment) {
+                    cpu_text += seg.text
+                }, lang)
+                let s0 = metal_tower_stats()
+                set_metal_tower(true)
+                var inscope s2 <- create_gemma4a_asr_session(dec)
+                gemma4a_transcribe(dec, enc, s2, samples, $(seg : TranscribeSegment) {
+                    gpu_text += seg.text
+                }, lang)
+                let s1 = metal_tower_stats()
+                enc_delta = s1.encodes - s0.encodes
+                blk_delta = s1.blocks - s0.blocks
+                var inscope stc = Gemma4aState()
+                var inscope stg = Gemma4aState()
+                set_metal_tower(false)
+                gemma4a_log_mel(enc, samples, 0l, long_length(samples), stc)
+                gemma4a_encode(enc, stc)
+                set_metal_tower(true)
+                gemma4a_log_mel(enc, samples, 0l, long_length(samples), stg)
+                gemma4a_encode(enc, stg)
+                var sd = 0.0lf
+                var sa = 0.0lf
+                for (i in range64(long_length(stc.out))) {
+                    let df = stc.out[i] - stg.out[i]
+                    sd += double(df * df)
+                    sa += double(stc.out[i] * stc.out[i])
+                }
+                enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
+                reset_gemma4a_q8()
+                delete dec
+            }
+            t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
+            t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
+            //! measured 3.9e-4 on the jfk fixture (12 blocks, window-12 attention caps the mixing)
+            t |> success(enc_rel_rms < 5.0e-3, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
+            to_log(LOG_INFO, "gemma4a mtower CPU eyeball: {cpu_text}\n")
+            to_log(LOG_INFO, "gemma4a mtower GPU eyeball: {gpu_text}\n")
+            t |> success(!empty(gpu_text), "non-empty transcript")
+            t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
+            delete samples
+        } else {
+            t |> skip("no Metal build - the gemma4a Conformer driver has no device to serve")
+        }
+    }
+}
+
+[test, arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
+def test_canary_tower_metal(t : T?) {
+    t |> run("canary tower: the Metal FastConformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "canary") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let dec_path = path_join(models_dir(), "canary-qwen-2.5b-decoder-q8_0.gguf")
+            let mmp_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+            if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present beside the models")
+                return
+            }
+            var cpu_text = ""
+            var gpu_text = ""
+            var nlayer = 0l
+            var enc_delta = 0l
+            var blk_delta = 0l
+            var enc_rel_rms = 0.0
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var dec <- load_model_(dec_path, QuantMode.q8)
+                dec.config.seq_len = min(dec.config.seq_len, 8192l)
+                set_canary_enc_q8(false)
+                var inscope enc <- load_canary_encoder(mmp_path, false)
+                t |> success(!enc.q8, "encoder is on the f32 rail")
+                nlayer = enc.n_layer
+                set_metal_tower(false)
+                var inscope s <- create_canary_asr_session(dec, "en")
+                var lang = ""
+                canary_transcribe(dec, enc, s, samples, $(seg : TranscribeSegment) {
+                    cpu_text += seg.text
+                }, lang)
+                let s0 = metal_tower_stats()
+                set_metal_tower(true)
+                var inscope s2 <- create_canary_asr_session(dec, "en")
+                canary_transcribe(dec, enc, s2, samples, $(seg : TranscribeSegment) {
+                    gpu_text += seg.text
+                }, lang)
+                let s1 = metal_tower_stats()
+                enc_delta = s1.encodes - s0.encodes
+                blk_delta = s1.blocks - s0.blocks
+                var inscope stc = CanaryState()
+                var inscope stg = CanaryState()
+                set_metal_tower(false)
+                canary_log_mel(enc, samples, stc)
+                canary_encode(enc, stc)
+                set_metal_tower(true)
+                canary_log_mel(enc, samples, stg)
+                canary_encode(enc, stg)
+                var sd = 0.0lf
+                var sa = 0.0lf
+                for (i in range64(long_length(stc.out))) {
+                    let df = stc.out[i] - stg.out[i]
+                    sd += double(df * df)
+                    sa += double(stc.out[i] * stc.out[i])
+                }
+                enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
+                reset_canary_enc_q8()
+                delete dec
+            }
+            t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
+            t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
+            //! measured 3.1e-4 on the jfk fixture (f32 GEMMs both sides; the online-softmax
+            //! attention re-orders accumulation) - the bar leaves deep-GPU headroom
+            t |> success(enc_rel_rms < 5.0e-2, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
+            to_log(LOG_INFO, "canary mtower encode rel-rms: {enc_rel_rms}\n")
+            to_log(LOG_INFO, "canary mtower CPU eyeball: {cpu_text}\n")
+            to_log(LOG_INFO, "canary mtower GPU eyeball: {gpu_text}\n")
+            t |> success(!empty(gpu_text), "non-empty transcript")
+            t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
+            delete samples
+        } else {
+            t |> skip("no Metal build - the canary FastConformer driver has no device to serve")
+        }
     }
 }
 
@@ -1751,6 +1950,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
             t |> skip("jfk.wav not present beside the models")
             return
         }
+        set_qwen3a_q8(true)
         var inscope twq <- load_qwen3a_tower(path)
         t |> success(twq.core.q8, "tower core is on the q8 rail")
         set_qwen3a_q8(false)
@@ -1785,6 +1985,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
         to_log(LOG_INFO, "qwen3a q8-vs-f32 window 0: rel-rms {rel_rms}, maxdiff {maxd} (signal max {maxa}) over {nv} values\n")
         // element-level tripwire; the real gate is transcript-level (test_qwen3a_transcribe_q8_ab)
         t |> success(rel_rms < 0.05, "q8 core tracks the f32 rail (element-level bar)")
+        reset_qwen3a_q8()
         delete samples
     }
 }
@@ -1813,6 +2014,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
             // decoder off-rail (REVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
             dec.config.seq_len = min(dec.config.seq_len, 8192l)
+            set_qwen3a_q8(true)
             var inscope tw <- load_qwen3a_tower(mmp_path)
             t |> success(tw.core.q8, "leg A tower core is on the q8 rail")
             var inscope s <- create_qwen3a_asr_session(dec, tw, "auto", false)
@@ -1826,7 +2028,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
             qwen3a_transcribe(dec, tw32, s32, "", samples, $(seg : TranscribeSegment) {
                 f32_text += seg.text
             }, lang)
-            set_qwen3a_q8(true)
+            reset_qwen3a_q8()
             delete dec
         }
         to_log(LOG_INFO, "qwen3a q8 : {q8_text}\n")
@@ -1839,7 +2041,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
 // The qwen3a f32-rail tower on the GPU (arm `mtower`): transcript equality with the knob off
 // vs on, blocks-counter delta derived from the loaded tower's own n_layer. The q8 SERVING
 // default declines by design (the whisper mtower cell above owns that assert).
-[test]
+[test, arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
 def test_qwen3a_metal_tower(tst : T?) {
     tst |> run("qwen3a f32 rail: the Metal tower blocks - transcript + counters") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1869,6 +2071,7 @@ def test_qwen3a_metal_tower(tst : T?) {
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
                 set_qwen3a_q8(false)
+                set_metal_tower_f16(false)   //! this cell's element bar claims the f32 GPU chain; the twin leg below re-arms
                 var inscope tw <- load_qwen3a_tower(mmp_path)
                 t |> success(!tw.core.q8, "tower core is on the f32 rail")
                 nlayer = tw.core.n_layer
@@ -1908,7 +2111,16 @@ def test_qwen3a_metal_tower(tst : T?) {
                     sa += double(ecpu.out[i] * ecpu.out[i])
                 }
                 enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
-                set_qwen3a_q8(true)
+                set_metal_tower_f16(true)
+                let tw0 = metal_tower_f16_encodes()
+                var twin_text = ""
+                var inscope s3 <- create_qwen3a_asr_session(dec, tw, "auto", false)
+                qwen3a_transcribe(dec, tw, s3, "", samples, $(seg : TranscribeSegment) {
+                    twin_text += seg.text
+                }, lang)
+                t |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the bf16-sourced tower rode the twin route")
+                t |> equal(gpu_text, twin_text, "twin route: transcript matches the f32 GPU turn")
+                reset_qwen3a_q8()
                 delete dec
             }
             t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
@@ -2079,6 +2291,42 @@ struct FpRows {
 
 struct FpRowsPlus {
     rows : array<FpPairPlus>
+}
+
+// the dev-W bake tables: devw_bake_tables fills the four site tables from the job list, and it
+// is the WHOLE bake set each time - a second call on the same carrier must not append to the
+// first. Model-free: the tables are pure taxonomy over a job list, no plane bytes are read.
+[test, arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+def test_devw_bake_tables(t : T?) {
+    t |> run("the bake tables are rebuilt, not appended, and key by format") @(tt : T?) {
+        if (!arm_on(tt, "mechanics")) {
+            return
+        }
+        var m = Model()
+        m.quant = QuantMode.q8
+        m.metal_blob = true   // q8 then streams as the one mblob plane, which the bake covers
+        var jobs <- [ FillJob(name = "blk.0.attn_q.weight", woff = 64l, n = 256l, src_off = 0l, fmt = KqFmt.q8),
+                      FillJob(name = "blk.0.ffn_up.weight", woff = 512l, n = 512l, src_off = 0l, fmt = KqFmt.k4) ]
+        let bytes = devw_bake_tables(m, jobs)
+        tt |> equal(bytes, (256l + 512l) * 2l, "panel bytes = the f16 element total")
+        tt |> equal(long_length(m.devwf16_key), 2l, "both sites landed")
+        // the key is what the prefill's resident lookup recomputes: q8 = the site's mblob BYTE
+        // offset, kq = the site's ELEM woff
+        tt |> equal(m.devwf16_key[0], (64l / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB), "q8 key is a byte offset")
+        tt |> equal(m.devwf16_key[1], 512l, "kq key is the elem woff")
+        tt |> equal(m.devwf16_fmt[0], 0, "q8 sites stamp fmt 0")
+        tt |> equal(m.devwf16_fmt[1], kq_stream_code(KqFmt.k4), "kq sites stamp their stream code")
+        tt |> equal(m.devwf16_off[0], 0l, "the first panel opens the plane")
+        tt |> equal(m.devwf16_off[1], 256l, "the second follows it")
+        let again = devw_bake_tables(m, jobs)
+        tt |> equal(again, bytes, "a second call reports the same panel bytes")
+        tt |> equal(long_length(m.devwf16_key), 2l, "and does not double the key table")
+        tt |> equal(long_length(m.devwf16_fmt), 2l, "nor the fmt table")
+        tt |> equal(long_length(m.devwf16_off), 2l, "nor the offset table")
+        tt |> equal(long_length(m.devwf16_n), 2l, "nor the length table")
+        delete jobs
+        delete m
+    }
 }
 
 [test]

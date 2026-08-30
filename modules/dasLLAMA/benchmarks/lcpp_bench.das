@@ -18,6 +18,7 @@ require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono c
 require dasllama/dasllama_tower   // the encode-stage prof rail (set_asr_prof/asr_prof_ms)
 require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
 require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
+require ?das_metal dasllama/dasllama_metal_prefill   // --asr --ngl: the chat-decoder prefill engage witness
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
 require dasllama/dasllama_vision_embedder   // --image: the vision embedder (any family) + encode_image_
 require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
@@ -289,13 +290,19 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         var enc_ms = 0.0lf
         var tw_enc0 = 0l   // nolint:LINT002,LINT019 — read in the apple static_if half; the linux flavor sees it unused
         var wd_win0 = 0l   // nolint:LINT002,LINT019 — same
+        var pf_n0 = 0l     // nolint:LINT002,LINT019 — same
         static_if (typeinfo builtin_module_exists(das_metal)) {
             tw_enc0 = metal_tower_stats().encodes
             wd_win0 = metal_wdec_stats().windows
+            pf_n0 = metal_prefill_stats().prefills
         }
         let das_ms = measure_das(m, samples, reps, spec.lang, text, enc_ms)
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (gpu && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
+            //! only families with a Metal tower driver (AudioTower + the gemma4a Conformer) -
+            //! canary/parakeet encoders are CPU by design
+            let tower_kind = (m.kind == AsrKind.whisper || m.kind == AsrKind.qwen3a
+                || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.gemma4a)
+            if (gpu && tower_kind && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never dispatched the tower (encodes delta {metal_tower_stats().encodes - tw_enc0}, encode_ms {enc_ms}) - a \"metal\" row that measured the CPU\n")
                 leg_ok = false
             }
@@ -304,6 +311,12 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
             // cannot see it, and exec_fmt cannot either)
             if (gpu && m.kind == AsrKind.whisper && metal_wdec_stats().windows == wd_win0) {
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never engaged the wdec driver (windows delta 0) - the decoder half measured the CPU\n")
+                leg_ok = false
+            }
+            //! the audio-chat decoders ride the standard Metal rail on the gpu leg: a flat
+            //! prefill counter means the turn's context prefill ran on the CPU
+            if (gpu && (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.gemma4a) && metal_prefill_stats().prefills == pf_n0) {
+                print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never engaged the Metal prefill (prefills delta 0) - the decoder half measured the CPU\n")
                 leg_ok = false
             }
         }
@@ -344,12 +357,13 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     return leg_ok
 }
 
-// The --asr entry: catalog match -> measure -> the same cell JSON the LLM rows emit. --ngl
-// selects the gpu leg: the f32 tower rail on the Metal tower driver; decoders and Conformer
-// paths stay CPU (declared intent), and every measured row must show tower engagement or the
-// leg exits non-zero.
+//! The --asr entry: catalog match -> measure -> the same cell JSON the LLM rows emit. --ngl
+//! selects the gpu leg - the f32 tower rail on the Metal tower driver, the audio-chat decoders
+//! on the standard Metal rail; whisper/parakeet decoders keep their own paths (wdec driver /
+//! CPU by design). A measured gpu row without tower engagement, or a chat-decoder row without
+//! prefill engagement, exits the leg non-zero.
 def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, accel : bool) : bool {
-    allow_cpu_prefill()   // ASR decoders/Conformer paths are CPU by protocol — disarm the tripwire
+    allow_cpu_prefill()   //! Conformer/planar decoder paths still CPU-prefill by protocol
     if (accel && gpu) {
         print("--accel is a CPU-tier lever - drop it or run with -ngl 0\n")
         return false
@@ -364,6 +378,7 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
     }
     if (gpu) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_mode(MetalMode.when_available)   //! before the loads: the audio-chat decoders mint the blob flavor and ride the Metal rail
             set_asr_tower_fp32(true)   // f32 TOWER only (q8 towers decline quant_mode); the decoder half stays on its q8 rail
             set_metal_tower(true)
             set_metal_wdec(true)        // explicit intent, like the CPU arm's pins: a stray
@@ -388,6 +403,8 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
     var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()
+        //! the regime line printed by main is the INTENT; this is the que that actually spawned
+        print("live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         for (spec in asr_catalog()) {
             if (find(spec.display, model) < 0 && find(spec.das_model, model) < 0) {
                 continue
@@ -512,6 +529,8 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
     var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()
+        //! the regime line printed by main is the INTENT; this is the que that actually spawned
+        print("live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         var m <- load_model_cached(model, QuantMode.q8)
         var emb <- load_vision_embedder(mmproj)
         var pic <- load_image_rgb(image)
@@ -1307,10 +1326,19 @@ def main() : int {
     // hard-pin lanes to distinct physical cores on the boxes that pin. -t is the explicit ask, but
     // DAS_JOBQUE_THREADS / DAS_JOBQUE_AFFINITY envs still win the que's actual lane count.
     let t_env = g_env_core.jobque_threads
-    var threads = cfg.threads > 0 ? cfg.threads : (t_env ?? profile_threads())
+    //! the engine's hybrid policy verbatim (dasllama_math.das dasllama_jobque_threads_cap): the
+    //! second tier joins the pool only when its KIND is compute — dropping that clause would
+    //! spend the whole pool on E-cores wherever the engine would not
+    let hybrid_default = (cfg.threads <= 0 && is_none(t_env) && get_total_perf_cores() > 0
+        && get_total_perf_cores() < get_total_hw_cores() && is_slow_tier_compute())
+    var threads = cfg.threads > 0 ? cfg.threads : (t_env ?? (hybrid_default ? get_total_hw_cores() : profile_threads()))
     if (is_some(t_env) && unwrap(t_env) != threads) {
         threads = unwrap(t_env)
         say(fmt, "warning: DAS_JOBQUE_THREADS overrides -t - running {threads} lanes\n")
+    } elif (hybrid_default) {
+        //! heterogeneous box, nothing explicit: keep the engine policy (pool = all cores, GEMV
+        //! capped to the fast tier) rather than capping the pool back to the fast tier
+        say(fmt, "lcpp_bench: hybrid box - pool {threads} lanes, decode capped to {get_total_perf_cores()} fast-tier lanes (-t overrides)\n")
     } elif (is_none(t_env)) {
         // the PC measurement regime caps at 16 lanes (an explicit env or -t always wins) —
         // a big-SMT box at full width measures the scheduler, not the kernels
@@ -1387,6 +1415,8 @@ def main() : int {
     var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()
+        //! the regime line above prints the INTENT; this is the que that actually spawned
+        say(fmt, "live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         for (mpath in model_list) {
         continue if (empty(mpath))
         say(fmt, "loading {mpath}\n")

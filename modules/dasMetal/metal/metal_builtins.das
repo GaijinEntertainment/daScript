@@ -24,6 +24,9 @@ require daslib/math_bits   // uint_bits_to_float — the tensor-op CPU stubs dec
 [unused_argument(v), sideeffects] def public simd_sum(v : int) : int { return v }
 [unused_argument(v), sideeffects] def public simd_sum(v : uint) : uint { return v }
 
+//! simd_max(v): maximum of v across the simdgroup's active lanes.
+[unused_argument(v), sideeffects] def public simd_max(v : float) : float { return v }
+
 // simd_shuffle(v, lane): v from the given absolute lane. Reading an inactive lane is undefined —
 // keep shuffles in simdgroup-uniform control flow and select the edge cases on the VALUE after.
 [unused_argument(lane), sideeffects] def public simd_shuffle(v : float; lane : uint) : float { return v }
@@ -135,7 +138,8 @@ def public tg_store_float4(var dst; idx : uint; v : float4) {
     dst[int(idx) + 3] = v.w
 }
 
-// simdgroup_store(m, dst, offset, stride): the tile back out — @ssbo destinations only.
+// simdgroup_store(m, dst, offset, stride): the tile back out — @ssbo (device) or @workgroup
+// (threadgroup) destinations, the latter writing the tile into a staged slab.
 def public simdgroup_store(m : simdgroup_float8x8; var dst; offset : uint; stride : uint) {
     for (r in range(8)) {
         for (c in range(8)) {
@@ -448,8 +452,8 @@ def public tmm2d_q8b_f32(m, n, sgs : uint; wsh : float16 const?; wqb : int8 cons
 //! cooperative C across the whole K loop. Same blob views and arg meanings as tmm2d_q8b_f32;
 //! `tid` is the caller's gl_LocalInvocationIndex (the staging stride). The CPU replay mirrors
 //! the f16 rounding of the staged dequant so conformance stays exact on f16-exact fixtures.
-//! `bk` (call-site constant 32/64) is the staged K-chunk depth: 64 halves the staging barriers
-//! (raced 5-11% per GEMM on M5) and needs an n*64 `wt`; a kk % 64 == 32 tail runs one 32-chunk.
+//! `bk` (call-site constant 32/64/128) is the resident staging footprint: 64 needs an
+//! n*72-half `wt`, 128 (64-deep double-buffered) an n*144-half `wt`.
 [unused_argument(sgs, wt, tid, bk), sideeffects]
 def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 const?; a : float const?; lda : uint; var c : float?; ldc : uint; kk : uint; ldwb : uint; tid : uint; bk : uint = 32u) {
     if (gl_LocalInvocationID.x != 0u) {
@@ -597,18 +601,20 @@ def public tmm2d_tg_begin_deva(var acc; a : float16 const?; m, n, sgs, kk : uint
 }
 
 //! step, deva flavor: acc[r][j] += a[r*lda + k] * tb[j][k] over one K-chunk — `a` points at
-//! the chunk's first activation (device f32 or f16, row stride lda), tb flat [n][kk] f16 staged.
+//! the chunk's first activation (device f32 or f16, row stride lda), tb flat [n][ldb] f16
+//! staged, where ldb mirrors the emitter: 72-half padded rows for a kk=64 tile, kk otherwise.
 [sideeffects]
 def public tmm2d_tg_step_deva(var acc; a : float const?; lda : uint; tb; m, n, kk : uint) {
     if (gl_LocalInvocationID.x != 0u) {
         return
     }
+    let ldb = kk == 64u ? 72 : int(kk)
     unsafe {
         for (r in range(int(m))) {
             for (j in range(int(n))) {
                 var facc = 0.0
                 for (k in range(int(kk))) {
-                    facc += a[r * int(lda) + k] * float(tb[j * int(kk) + k])
+                    facc += a[r * int(lda) + k] * float(tb[j * ldb + k])
                 }
                 acc[r * int(n) + j] += facc
             }
@@ -621,12 +627,13 @@ def public tmm2d_tg_step_deva(var acc; a : float16 const?; lda : uint; tb; m, n,
     if (gl_LocalInvocationID.x != 0u) {
         return
     }
+    let ldb = kk == 64u ? 72 : int(kk)
     unsafe {
         for (r in range(int(m))) {
             for (j in range(int(n))) {
                 var facc = 0.0
                 for (k in range(int(kk))) {
-                    facc += float(a[r * int(lda) + k]) * float(tb[j * int(kk) + k])
+                    facc += float(a[r * int(lda) + k]) * float(tb[j * ldb + k])
                 }
                 acc[r * int(n) + j] += facc
             }

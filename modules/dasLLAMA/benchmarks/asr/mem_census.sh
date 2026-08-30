@@ -31,12 +31,12 @@ cell() { # label model mmproj wav
 }
 
 echo "== canary (q8/q8), warm =="
-cell canary "$LM/canary-qwen-2.5b-decoder-f16.gguf" "$LM/canary-qwen-2.5b-encoder-f32.bin" jfk.wav
-cell canary "$LM/canary-qwen-2.5b-decoder-f16.gguf" "$LM/canary-qwen-2.5b-encoder-f32.bin" gb1.wav
-cell canary "$LM/canary-qwen-2.5b-decoder-f16.gguf" "$LM/canary-qwen-2.5b-encoder-f32.bin" hp0x2.wav
+cell canary "$LM/canary-qwen-2.5b-decoder-q8_0.gguf" "$LM/canary-qwen-2.5b-encoder-f32.bin" jfk.wav
+cell canary "$LM/canary-qwen-2.5b-decoder-q8_0.gguf" "$LM/canary-qwen-2.5b-encoder-f32.bin" gb1.wav
+cell canary "$LM/canary-qwen-2.5b-decoder-q8_0.gguf" "$LM/canary-qwen-2.5b-encoder-f32.bin" hp0x2.wav
 echo "== canary cold (mint) =="
-rm -f "$LM"/canary-qwen-2.5b-decoder-f16.gguf.*.dlim "$LM"/canary-qwen-2.5b-encoder-f32.bin.*.dlim
-cell canary-mint "$LM/canary-qwen-2.5b-decoder-f16.gguf" "$LM/canary-qwen-2.5b-encoder-f32.bin" gb1.wav
+rm -f "$LM"/canary-qwen-2.5b-decoder-q8_0.gguf.*.dlim "$LM"/canary-qwen-2.5b-encoder-f32.bin.*.dlim
+cell canary-mint "$LM/canary-qwen-2.5b-decoder-q8_0.gguf" "$LM/canary-qwen-2.5b-encoder-f32.bin" gb1.wav
 echo "== parakeet v3 (q8), warm =="
 cell parakeet-v3 "$WM/ggml-parakeet-tdt-0.6b-v3-f32.bin" "" hp0x2.wav
 echo "CENSUS-DONE"

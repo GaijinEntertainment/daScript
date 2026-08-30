@@ -325,3 +325,53 @@ def test_tsi_method_annotation_apply(t : T?) {
         }
     }
 }
+
+//! chain fixture: cross-level calls (ChainBase`run -> ChainMid`leaf_add) must resolve to the stamped names
+[ |> template_struct_instance]
+class template ChainBase {
+    @template_constant SCALE : int = 1
+    base_v : int = 7
+
+    def abstract leaf_add(x : int) : int
+
+    def run(x : int) : int {
+        return leaf_add(x) * SCALE + base_v
+    }
+}
+
+[ |> template_struct_instance]
+class template ChainMid : ChainBase {
+    @template_constant BUMP : int = 0
+    mid_v : TT
+
+    def override leaf_add(x : int) : int {
+        return x + int(mid_v) + BUMP
+    }
+}
+
+class ChainLeaf : ChainMid {
+    typedef TT = float
+    override SCALE = 3
+    override BUMP = 10
+}
+
+class ChainLeafOwn : ChainMid {
+    typedef TT = int
+    override SCALE = 2
+
+    def override leaf_add(x : int) : int { //! instance override beats BOTH template levels
+        return x - mid_v
+    }
+}
+
+[test]
+def test_tsi_template_chain(t : T?) {
+    t |> run("a template chain reifies whole: constants, typedefs and overrides at every level") @(t : T?) {
+        unsafe {
+            var inscope c <- new ChainLeaf(mid_v = 2.0)
+            t |> equal(c->run(5), (5 + 2 + 10) * 3 + 7)
+            var inscope o <- new ChainLeafOwn(mid_v = 4)
+            t |> equal(o->run(9), (9 - 4) * 2 + 7)
+        }
+    }
+}

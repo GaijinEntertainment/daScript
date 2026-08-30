@@ -8,6 +8,7 @@ options _dasllama_internal = true
 // CPU oracle. Causal-only v1: window/softcap/sink/span join before production wiring.
 
 require math
+require daslib/fio   // the lifted reference-flash arm reads its .metal sibling
 require metal/msl_shader
 require metal/das_metal_boost
 require ?das_metal das_metal
@@ -136,6 +137,124 @@ class LabPfFusedAttn {
     }
 }
 
+var g_lab_pso_twr : MetalComputePipeline?
+
+//! The TOWER flash form: bidirectional (every key visible - uend the whole canvas), COMPACT
+//! hs=72 heads (the vision towers' pre-restride q/k/v layout) - no 128 pad, no restride
+//! passes, no score slab, no rowstat pass. One tg per (32-query block, head); K/V walk in
+//! 32-position tiles, online softmax in f32, O in an accumulate-mode cooperative tensor.
+[metal_dispatch(name = "lab_enc_twr_attn", pso = "g_lab_pso_twr", tgmem = "lab_twr_attn_msl_tgmem", tg = 128, grid = "mp/32, heads", params = "mp : int64, heads : int64")]
+class LabTowerFlashAttn {
+    @ssbo @binding = 0 @role = "read" q : array<float>     // [np x heads*72], roped, UNSCALED
+    @ssbo @binding = 1 @role = "read" k : array<float>     // [np x heads*72]
+    @ssbo @binding = 2 @role = "read" v : array<float>     // [np x heads*72]
+    @ssbo @binding = 3 @role = "write" xb : array<float>   // [mp x heads*72] attention output
+    @uniform @binding = 4 ka : AttnArgs
+    @workgroup tq : float16[2560]           // Q tile: 32 q-rows x 80 (72 + 8 zero pad - matmul2d wants K%16), scale folded
+    @workgroup tk : float16[2560]           // K tile: 32 k-rows x 80, per jb
+    @workgroup tv : float16[2304]           // V^T tile: 72 v-cols x 32 pos, per jb
+    @workgroup ts : float[1024]             // score tile 32x32 f32 (the never-DRAM slab)
+    @workgroup tp : float16[1024]           // P tile 32x32 f16 (post-softmax)
+    @workgroup trs : float[32]              // per-row online rescale exp(m_old - m_new)
+    @workgroup tinv : float[32]             // per-row 1/sum at the end
+    @workgroup tsm : float[32]              // running row max
+    @workgroup tss : float[32]              // running row sum
+
+    [metal_kernel(name="lab_twr_attn_msl")]
+    def lab_twr_attn {   // nolint:STYLE038 — one MSL kernel body, tgmem-barrier coupled
+        let qi0 = gl_WorkGroupID.x * 32u
+        let h = gl_WorkGroupID.y
+        let hs = 72u
+        let hoff = h * hs
+        let lid = gl_LocalInvocationID.x
+        var acc : float[2304]               // O: 32 q-rows x 72, cooperative on GPU
+        var i = lid
+        while (i < 32u * 80u) {
+            let qr = qi0 + i / 80u
+            let dd = i % 80u
+            tq[i] = (qr < ka.npos && dd < hs) ? float16(q[qr * ka.qd + hoff + dd] * ka.scale) : float16(0.0)
+            i += gl_WorkGroupSize.x
+        }
+        var r0 = lid
+        while (r0 < 32u) {
+            tsm[r0] = -3.0e38
+            tss[r0] = 0.0
+            r0 += gl_WorkGroupSize.x
+        }
+        tmm2d_tg_begin(acc, 32u, 72u, 4u, 32u)
+        var jb = 0u
+        while (jb < ka.np32) {
+            // K tile: 32 key rows x 72, rows past npos zeroed (pads can carry NaN)
+            var w = lid
+            while (w < 64u) {
+                let r = w >> 1u
+                let kh = (w & 1u) * 40u
+                let pos = jb + r
+                for [unroll_full] (t in range(40)) {
+                    let dd = kh + uint(t)
+                    tk[r * 80u + dd] = (pos < ka.npos && dd < hs) ? float16(k[pos * ka.kv_dim + hoff + dd]) : float16(0.0)
+                }
+                w += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tile_tg(tq, tk, ts, 32u, 32u, 4u, 80u)
+            barrier()
+            // online softmax: thread r < 32 owns q-row r; every staged key column is visible
+            var rr = lid
+            while (rr < 32u) {
+                var tmax = -3.0e38
+                for (j in range(32)) {
+                    if (jb + uint(j) < ka.npos) {
+                        tmax = max(tmax, ts[int(rr) * 32 + j])
+                    }
+                }
+                let mold = tsm[rr]
+                let mnew = max(mold, tmax)
+                let resc = mnew > -3.0e38 ? exp(max(mold - mnew, -80.0)) : 1.0
+                var psum = 0.0
+                for (j in range(32)) {
+                    var p = 0.0
+                    if (jb + uint(j) < ka.npos && mnew > -3.0e38) {
+                        p = exp(ts[int(rr) * 32 + j] - mnew)
+                    }
+                    tp[int(rr) * 32 + j] = float16(p)
+                    psum += p
+                }
+                tsm[rr] = mnew
+                tss[rr] = tss[rr] * resc + psum
+                trs[rr] = resc
+                rr += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_rowscale(acc, trs, 32u, 72u)
+            // V^T tile: 72 v-cols x 32 pos (the transpose gather), pad pos zeroed
+            w = lid
+            while (w < 144u) {
+                let c = w >> 1u
+                let ph = (w & 1u) * 16u
+                for [unroll_full] (t in range(16)) {
+                    let pos = jb + ph + uint(t)
+                    tv[c * 32u + ph + uint(t)] = pos < ka.npos ? float16(v[pos * ka.kv_dim + hoff + c]) : float16(0.0)
+                }
+                w += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step(acc, tp, tv, 32u, 72u, 32u)
+            barrier()
+            jb += 32u
+        }
+        var rf = lid
+        while (rf < 32u) {
+            tinv[rf] = tss[rf] > 0.0 ? 1.0 / tss[rf] : 0.0
+            rf += gl_WorkGroupSize.x
+        }
+        barrier()
+        tmm2d_tg_rowscale(acc, tinv, 32u, 72u)
+        var op = unsafe(addr(xb[qi0 * ka.qd + hoff]))
+        tmm2d_tg_store(acc, op, 32u, 72u, ka.qd)
+    }
+}
+
 def private cpu_oracle(q, k, v : array<float>; var o : array<float>; np, heads, hs, kvmul, qd, kvd : int; scale : float) {
     for (h in range(heads)) {
         let kvh = (h / kvmul) * hs
@@ -172,8 +291,67 @@ def private cpu_oracle(q, k, v : array<float>; var o : array<float>; np, heads, 
     }
 }
 
+//! Bidirectional (uend = np) attention reference for the first `ncheck` q-rows, f64-accumulated.
+//! One `ld` row stride and `hh * hsz` head offset serve BOTH lab layouts - the compact hs=72
+//! extract and the padded hs=128 slab - because every shape that reaches here has kv_mul = 1, so
+//! q, k and v share a stride. hsz <= 128 by the `oa` slab.
+def private bidir_oracle(q, k, v : array<float>; var o : array<float>;
+                         ncheck, np, heads, hsz, ld : int; scale : float) {
+    for (hh in range(heads)) {
+        let hoff = hh * hsz
+        for (qi in range(ncheck)) {
+            var mx = -3.0e38
+            for (j in range(np)) {
+                var sd = 0.0lf
+                for (dd in range(hsz)) {
+                    sd += double(q[qi * ld + hoff + dd]) * double(k[j * ld + hoff + dd])
+                }
+                mx = max(mx, float(sd) * scale)
+            }
+            var tot = 0.0lf
+            var oa : float[128]
+            for (dd in range(hsz)) {
+                oa[dd] = 0.0
+            }
+            for (j in range(np)) {
+                var sd = 0.0lf
+                for (dd in range(hsz)) {
+                    sd += double(q[qi * ld + hoff + dd]) * double(k[j * ld + hoff + dd])
+                }
+                let e = exp(float(sd) * scale - mx)
+                tot += double(e)
+                for (dd in range(hsz)) {
+                    oa[dd] += e * v[j * ld + hoff + dd]
+                }
+            }
+            for (dd in range(hsz)) {
+                o[qi * ld + hoff + dd] = oa[dd] / float(tot)
+            }
+        }
+    }
+}
+
+//! ONE precision class covers this lab: every arm - the five flash variants and the three-pass
+//! slab they are raced against - carries f16 operands (f16 tiles, f16 K/V, an f16 score slab)
+//! into a tensor/simdgroup accumulate, so they all answer to the same rel bound against the
+//! f64-accumulated CPU oracle. 2e-2 is NOT measured on this box - it is the standing bound for
+//! f16 attention outputs: an order of magnitude above what a correct f16 kernel prints over a
+//! few thousand positions, far below what any real defect produces. Re-derive it from observed
+//! values before tightening.
+let ATTN_F16_MAXREL = 2.0e-2
+
+//! Every timed arm's report line states the verdict, not a bare number: an unbounded `maxrel=`
+//! reads as a passing arm to anyone who does not know the tolerance. Over the bound the arm is
+//! WRONG and its milliseconds price nothing, so the run dies rather than printing a ratio.
+def private gate_maxrel(arm : string; np : int; maxrel : float) : string {
+    if (maxrel > ATTN_F16_MAXREL) {
+        panic("{arm} np={np}: maxrel {maxrel} over the f16 attention bound {ATTN_F16_MAXREL} - the arm is WRONG, its timing prices nothing")
+    }
+    return maxrel == 0.0 ? "bit-exact vs oracle" : "maxrel={maxrel} <= {ATTN_F16_MAXREL} PASS"
+}
+
 [export]
-def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
+def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var dev = metal_create_system_default_device()
         var queue = metal_new_command_queue(dev)
@@ -181,6 +359,11 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
         g_lab_pso_fused = pipeline_from_source(dev, lab_pf_fused_attn_msl, lab_pf_fused_attn_msl_entry, lab_pf_fused_attn_msl_fastmath, err)
         if (g_lab_pso_fused == null) {
             print("fused pso: {err}\n")
+            return
+        }
+        g_lab_pso_twr = pipeline_from_source(dev, lab_twr_attn_msl, lab_twr_attn_msl_entry, lab_twr_attn_msl_fastmath, err)
+        if (g_lab_pso_twr == null) {
+            print("tower pso: {err}\n")
             return
         }
         var pso_qk = pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
@@ -192,15 +375,20 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
             print("three-pass pso: {err}\n")
             return
         }
-        let heads = 32
-        let hs = 64
-        let kvmul = 4
-        let qd = heads * hs
-        let kvd = (heads / kvmul) * hs
-        for (np in [512, 2048]) {
+        //! rows: the decoder-1B pair + the gemma3v tower shape (bidirectional via uend = np -
+        //! the vision-canvas attention the slab bills 27x per encode)
+        for (shape in [(np = 512, heads = 32, hs = 64, kvmul = 4, uend = 0),
+                       (np = 2048, heads = 32, hs = 64, kvmul = 4, uend = 0),
+                       (np = 4096, heads = 16, hs = 128, kvmul = 1, uend = 4096)]) {
+            let np = shape.np
+            let heads = shape.heads
+            let hs = shape.hs
+            let kvmul = shape.kvmul
+            let qd = heads * hs
+            let kvd = (heads / kvmul) * hs
             var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kvmul),
                 npos = uint(np), np32 = uint(np), scale = 0.125, qoff = 0u, qrows = uint(np),
-                window = 0u, softcap = 0.0, hass = 0u, uend = 0u, ulo = 0u)
+                window = 0u, softcap = 0.0, hass = 0u, uend = uint(shape.uend), ulo = 0u)
             var qh <- race_x_f32(np * qd)
             var kh <- race_x_f32(np * kvd)
             var vh <- race_x_f32(np * kvd)
@@ -303,6 +491,340 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
                 kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
             })
             print("  av_mm np={np}: base={t_avb}ms tensor={t_avt}ms ratio={t_avt / t_avb}\n")
+            if (shape.uend > 0) {
+                //! the tower flash arm: compact hs=72 (first 72 of each padded head-block) vs
+                //! the production three-pass on its padded layout - the exact A/B production faces
+                let hst = 72
+                let qdt = heads * hst
+                var qt : array<float>
+                var kt : array<float>
+                var vt : array<float>
+                qt |> resize(np * qdt)
+                kt |> resize(np * qdt)
+                vt |> resize(np * qdt + 256)   //! +tail slack: the lifted flash's dead PV tiles read past the last V row
+                for (p in range(np)) {
+                    for (hh in range(heads)) {
+                        for (dd in range(hst)) {
+                            qt[(p * heads + hh) * hst + dd] = qh[p * qd + hh * hs + dd]
+                            kt[(p * heads + hh) * hst + dd] = kh[p * kvd + hh * hs + dd]
+                            vt[(p * heads + hh) * hst + dd] = vh[p * kvd + hh * hs + dd]
+                        }
+                    }
+                }
+                var bqt = race_buf(dev, uint64(np * qdt * 4), unsafe(addr<void?>(qt[0])))
+                var bkt = race_buf(dev, uint64(np * qdt * 4), unsafe(addr<void?>(kt[0])))
+                var bvt = race_buf(dev, uint64((np * qdt + 256) * 4), unsafe(addr<void?>(vt[0])))
+                var bot = race_buf(dev, uint64(np * qdt * 4), null)
+                var kat = AttnArgs(qd = uint(qdt), kv_dim = uint(qdt), head_size = uint(hst), kv_mul = 1u,
+                    npos = uint(np), np32 = uint(np), scale = 0.125, qoff = 0u, qrows = uint(np),
+                    window = 0u, softcap = 0.0, hass = 0u, uend = uint(np), ulo = 0u)
+                var t_slab = -1.0lf
+                var t_flash = -1.0lf
+                race_pair_ms(queue, 5, t_slab, t_flash, $(enc) {
+                    kn_pipeline(enc, pso_qkt)
+                    kn_buffer(enc, bq, 0ul, 0)
+                    kn_buffer(enc, bk, 0ul, 1)
+                    kn_buffer(enc, batt, 0ul, 2)
+                    kn_kargs(enc, ka, 3)
+                    kn_dispatch(enc, uint3(uint(np / 32), uint(np / 64), uint(heads)), uint3(128u, 1u, 1u))
+                    kn_pipeline(enc, pso_sm)
+                    kn_tgmem(enc, metal_attn_rowstat_msl_tgmem, 0)
+                    kn_buffer(enc, batt, 0ul, 0)
+                    kn_kargs(enc, ka, 1)
+                    kn_buffer(enc, bstat, 0ul, 2)
+                    kn_buffer(enc, bsink, 0ul, 20)
+                    kn_dispatch(enc, uint3(uint(np), uint(heads), 1u), uint3(128u, 1u, 1u))
+                    kn_pipeline(enc, pso_av)
+                    kn_tgmem(enc, MetalAttnAVMm_metal_attn_av_mm_msl_tgmem, 0)
+                    kn_buffer(enc, batt, 0ul, 0)
+                    kn_buffer(enc, bv, 0ul, 1)
+                    kn_buffer(enc, bs, 0ul, 2)
+                    kn_kargs(enc, ka, 3)
+                    kn_buffer(enc, bstat, 0ul, 4)
+                    kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
+                }, $(enc) {
+                    kn_pipeline(enc, g_lab_pso_twr)
+                    kn_tgmem(enc, lab_twr_attn_msl_tgmem, 0)
+                    kn_buffer(enc, bqt, 0ul, 0)
+                    kn_buffer(enc, bkt, 0ul, 1)
+                    kn_buffer(enc, bvt, 0ul, 2)
+                    kn_buffer(enc, bot, 0ul, 3)
+                    kn_kargs(enc, kat, 4)
+                    kn_dispatch(enc, uint3(uint(np / 32), uint(heads), 1u), uint3(128u, 1u, 1u))
+                })
+                //! the bidirectional oracle on the first 128 q-rows, computed once for every arm
+                let ncheck = 128
+                var owant : array<float>
+                owant |> resize(ncheck * qdt)
+                bidir_oracle(qt, kt, vt, owant, ncheck, np, heads, hst, qdt, 0.125)
+                //! the slab is the DENOMINATOR of all five ratios below, so it answers to the same
+                //! oracle and the same bound - an unchecked baseline misprices every arm at once.
+                //! Its own layout is the padded hs=128 one, so it needs its own reference: fewer
+                //! rows than ncheck because that oracle is 128/72 the work per row.
+                let nbase = 32
+                if (kvmul != 1) {   // one stride serves q and k/v only while every head has its own kv head
+                    panic("SLAB np={np}: kv_mul {kvmul} - the slab reference assumes kv_mul 1, teach bidir_oracle a kv stride first")
+                }
+                var swant : array<float>
+                swant |> resize(nbase * qd)
+                bidir_oracle(qh, kh, vh, swant, nbase, np, heads, hs, qd, 0.125)
+                var maxrel_s = 0.0
+                unsafe {
+                    let pg = reinterpret<float?>(metal_buffer_contents(bs))
+                    for (ii in range(nbase * qd)) {
+                        maxrel_s = max(maxrel_s, abs(pg[ii] - swant[ii]) / max(abs(swant[ii]), 1e-3))
+                    }
+                }
+                print("  SLAB  np={np}: three-pass baseline (hs128) {gate_maxrel("SLAB", np, maxrel_s)}\n")
+                delete swant
+                var maxrel_t = 0.0
+                unsafe {
+                    let pg = reinterpret<float?>(metal_buffer_contents(bot))
+                    for (ii in range(ncheck * qdt)) {
+                        maxrel_t = max(maxrel_t, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
+                    }
+                }
+                print("  TOWER np={np}: slab(hs128)={t_slab}ms flash(hs72)={t_flash}ms ratio={t_flash / t_slab}  {gate_maxrel("TOWER", np, maxrel_t)}\n")
+                //! the lifted reference-flash arm (lcpp_flash_dk72.metal): np%64 and V-tail slack by contract
+                var fsrc = ""
+                fopen("modules/dasLLAMA/benchmarks/attn/lcpp_flash_dk72.metal", "rb") $(ff) {
+                    if (ff != null) {
+                        fsrc = fread(ff)
+                    }
+                }
+                var perr = ""
+                var pso_port = pipeline_from_source(dev, fsrc, "lab_lcpp_flash72", true, perr)
+                if (pso_port == null) {
+                    print("  port pso: {perr}\n")
+                } else {
+                    var bop = race_buf(dev, uint64(np * qdt * 4), null)
+                    var t_slab2 = -1.0lf
+                    var t_port = -1.0lf
+                    race_pair_ms(queue, 5, t_slab2, t_port, $(enc) {
+                        kn_pipeline(enc, pso_qkt)
+                        kn_buffer(enc, bq, 0ul, 0)
+                        kn_buffer(enc, bk, 0ul, 1)
+                        kn_buffer(enc, batt, 0ul, 2)
+                        kn_kargs(enc, ka, 3)
+                        kn_dispatch(enc, uint3(uint(np / 32), uint(np / 64), uint(heads)), uint3(128u, 1u, 1u))
+                        kn_pipeline(enc, pso_sm)
+                        kn_tgmem(enc, metal_attn_rowstat_msl_tgmem, 0)
+                        kn_buffer(enc, batt, 0ul, 0)
+                        kn_kargs(enc, ka, 1)
+                        kn_buffer(enc, bstat, 0ul, 2)
+                        kn_buffer(enc, bsink, 0ul, 20)
+                        kn_dispatch(enc, uint3(uint(np), uint(heads), 1u), uint3(128u, 1u, 1u))
+                        kn_pipeline(enc, pso_av)
+                        kn_tgmem(enc, MetalAttnAVMm_metal_attn_av_mm_msl_tgmem, 0)
+                        kn_buffer(enc, batt, 0ul, 0)
+                        kn_buffer(enc, bv, 0ul, 1)
+                        kn_buffer(enc, bs, 0ul, 2)
+                        kn_kargs(enc, ka, 3)
+                        kn_buffer(enc, bstat, 0ul, 4)
+                        kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
+                    }, $(enc) {
+                        kn_pipeline(enc, pso_port)
+                        kn_tgmem(enc, 10496ul, 0)
+                        kn_buffer(enc, bqt, 0ul, 0)
+                        kn_buffer(enc, bkt, 0ul, 1)
+                        kn_buffer(enc, bvt, 0ul, 2)
+                        kn_buffer(enc, bop, 0ul, 3)
+                        kn_kargs(enc, kat, 4)
+                        kn_dispatch(enc, uint3(uint(np / 8), uint(heads), 1u), uint3(128u, 1u, 1u))
+                    })
+                    var maxrel_p = 0.0
+                    unsafe {
+                        let pg = reinterpret<float?>(metal_buffer_contents(bop))
+                        for (ii in range(ncheck * qdt)) {
+                            maxrel_p = max(maxrel_p, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
+                        }
+                    }
+                    print("  PORT  np={np}: slab(hs128)={t_slab2}ms lcpp-flash72={t_port}ms ratio={t_port / t_slab2}  {gate_maxrel("PORT", np, maxrel_p)}\n")
+                    metal_release(bop)
+                    metal_release(pso_port)
+                }
+                //! the f16 data path (the reference's own FA_TYPES): K/V device half, half8x8 operands
+                var perrh = ""
+                var pso_porth = pipeline_from_source(dev, fsrc, "lab_lcpp_flash72h", true, perrh)
+                if (pso_porth == null) {
+                    print("  port-h pso: {perrh}\n")
+                } else {
+                    var kth : array<float16>
+                    var vth : array<float16>
+                    kth |> resize(np * qdt)
+                    vth |> resize(np * qdt + 256)
+                    for (ii in range(np * qdt)) {
+                        kth[ii] = float16(kt[ii])
+                        vth[ii] = float16(vt[ii])
+                    }
+                    var bkth = race_buf(dev, uint64(np * qdt * 2), unsafe(addr<void?>(kth[0])))
+                    var bvth = race_buf(dev, uint64((np * qdt + 256) * 2), unsafe(addr<void?>(vth[0])))
+                    var boph = race_buf(dev, uint64(np * qdt * 4), null)
+                    var t_slab3 = -1.0lf
+                    var t_porth = -1.0lf
+                    race_pair_ms(queue, 5, t_slab3, t_porth, $(enc) {
+                        kn_pipeline(enc, pso_qkt)
+                        kn_buffer(enc, bq, 0ul, 0)
+                        kn_buffer(enc, bk, 0ul, 1)
+                        kn_buffer(enc, batt, 0ul, 2)
+                        kn_kargs(enc, ka, 3)
+                        kn_dispatch(enc, uint3(uint(np / 32), uint(np / 64), uint(heads)), uint3(128u, 1u, 1u))
+                        kn_pipeline(enc, pso_sm)
+                        kn_tgmem(enc, metal_attn_rowstat_msl_tgmem, 0)
+                        kn_buffer(enc, batt, 0ul, 0)
+                        kn_kargs(enc, ka, 1)
+                        kn_buffer(enc, bstat, 0ul, 2)
+                        kn_buffer(enc, bsink, 0ul, 20)
+                        kn_dispatch(enc, uint3(uint(np), uint(heads), 1u), uint3(128u, 1u, 1u))
+                        kn_pipeline(enc, pso_av)
+                        kn_tgmem(enc, MetalAttnAVMm_metal_attn_av_mm_msl_tgmem, 0)
+                        kn_buffer(enc, batt, 0ul, 0)
+                        kn_buffer(enc, bv, 0ul, 1)
+                        kn_buffer(enc, bs, 0ul, 2)
+                        kn_kargs(enc, ka, 3)
+                        kn_buffer(enc, bstat, 0ul, 4)
+                        kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
+                    }, $(enc) {
+                        kn_pipeline(enc, pso_porth)
+                        kn_tgmem(enc, 9344ul, 0)
+                        kn_buffer(enc, bqt, 0ul, 0)
+                        kn_buffer(enc, bkth, 0ul, 1)
+                        kn_buffer(enc, bvth, 0ul, 2)
+                        kn_buffer(enc, boph, 0ul, 3)
+                        kn_kargs(enc, kat, 4)
+                        kn_dispatch(enc, uint3(uint(np / 8), uint(heads), 1u), uint3(128u, 1u, 1u))
+                    })
+                    var maxrel_h = 0.0
+                    unsafe {
+                        let pg = reinterpret<float?>(metal_buffer_contents(boph))
+                        for (ii in range(ncheck * qdt)) {
+                            maxrel_h = max(maxrel_h, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
+                        }
+                    }
+                    print("  PORTH np={np}: slab(hs128)={t_slab3}ms lcpp-flash72h={t_porth}ms ratio={t_porth / t_slab3}  {gate_maxrel("PORTH", np, maxrel_h)}\n")
+                    //! hc: K/V per-head contiguous - the reference's own tensor layout (ld = 72)
+                    var perrc = ""
+                    var pso_hc = pipeline_from_source(dev, fsrc, "lab_lcpp_flash72hc", true, perrc)
+                    if (pso_hc == null) {
+                        print("  port-hc pso: {perrc}\n")
+                    } else {
+                        var khc : array<float16>
+                        var vhc : array<float16>
+                        khc |> resize(np * qdt)
+                        vhc |> resize(np * qdt + 256)
+                        for (hh in range(heads)) {
+                            for (p_ in range(np)) {
+                                for (dd in range(hst)) {
+                                    khc[(hh * np + p_) * hst + dd] = float16(kt[p_ * qdt + hh * hst + dd])
+                                    vhc[(hh * np + p_) * hst + dd] = float16(vt[p_ * qdt + hh * hst + dd])
+                                }
+                            }
+                        }
+                        var bkhc = race_buf(dev, uint64(np * qdt * 2), unsafe(addr<void?>(khc[0])))
+                        var bvhc = race_buf(dev, uint64((np * qdt + 256) * 2), unsafe(addr<void?>(vhc[0])))
+                        var bohc = race_buf(dev, uint64(np * qdt * 4), null)
+                        var t_slab4 = -1.0lf
+                        var t_hc = -1.0lf
+                        race_pair_ms(queue, 5, t_slab4, t_hc, $(enc) {
+                            kn_pipeline(enc, pso_qkt)
+                            kn_buffer(enc, bq, 0ul, 0)
+                            kn_buffer(enc, bk, 0ul, 1)
+                            kn_buffer(enc, batt, 0ul, 2)
+                            kn_kargs(enc, ka, 3)
+                            kn_dispatch(enc, uint3(uint(np / 32), uint(np / 64), uint(heads)), uint3(128u, 1u, 1u))
+                            kn_pipeline(enc, pso_sm)
+                            kn_tgmem(enc, metal_attn_rowstat_msl_tgmem, 0)
+                            kn_buffer(enc, batt, 0ul, 0)
+                            kn_kargs(enc, ka, 1)
+                            kn_buffer(enc, bstat, 0ul, 2)
+                            kn_buffer(enc, bsink, 0ul, 20)
+                            kn_dispatch(enc, uint3(uint(np), uint(heads), 1u), uint3(128u, 1u, 1u))
+                            kn_pipeline(enc, pso_av)
+                            kn_tgmem(enc, MetalAttnAVMm_metal_attn_av_mm_msl_tgmem, 0)
+                            kn_buffer(enc, batt, 0ul, 0)
+                            kn_buffer(enc, bv, 0ul, 1)
+                            kn_buffer(enc, bs, 0ul, 2)
+                            kn_kargs(enc, ka, 3)
+                            kn_buffer(enc, bstat, 0ul, 4)
+                            kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
+                        }, $(enc) {
+                            kn_pipeline(enc, pso_hc)
+                            kn_tgmem(enc, 9344ul, 0)
+                            kn_buffer(enc, bqt, 0ul, 0)
+                            kn_buffer(enc, bkhc, 0ul, 1)
+                            kn_buffer(enc, bvhc, 0ul, 2)
+                            kn_buffer(enc, bohc, 0ul, 3)
+                            kn_kargs(enc, kat, 4)
+                            kn_dispatch(enc, uint3(uint(np / 8), uint(heads), 1u), uint3(128u, 1u, 1u))
+                        })
+                        var maxrel_c = 0.0
+                        unsafe {
+                            let pg = reinterpret<float?>(metal_buffer_contents(bohc))
+                            for (ii in range(ncheck * qdt)) {
+                                maxrel_c = max(maxrel_c, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
+                            }
+                        }
+                        print("  PORTC np={np}: slab(hs128)={t_slab4}ms lcpp-flash72hc={t_hc}ms ratio={t_hc / t_slab4}  {gate_maxrel("PORTC", np, maxrel_c)}\n")
+                        //! the PRODUCTION dialect emission (metal_tower_flash_msl) on the same buffers
+                        var perrd = ""
+                        var pso_dial = pipeline_from_source(dev, metal_tower_flash_msl, metal_tower_flash_msl_entry, metal_tower_flash_msl_fastmath, perrd)
+                        if (pso_dial == null) {
+                            print("  dial pso: {perrd}\n")
+                        } else {
+                            var bod = race_buf(dev, uint64(np * qdt * 4), null)
+                            var t_slab5 = -1.0lf
+                            var t_dial = -1.0lf
+                            race_pair_ms(queue, 5, t_slab5, t_dial, $(enc) {
+                                kn_pipeline(enc, pso_qkt)
+                                kn_buffer(enc, bq, 0ul, 0)
+                                kn_buffer(enc, bk, 0ul, 1)
+                                kn_buffer(enc, batt, 0ul, 2)
+                                kn_kargs(enc, ka, 3)
+                                kn_dispatch(enc, uint3(uint(np / 32), uint(np / 64), uint(heads)), uint3(128u, 1u, 1u))
+                            }, $(enc) {
+                                kn_pipeline(enc, pso_dial)
+                                kn_tgmem(enc, metal_tower_flash_msl_tgmem, 0)
+                                kn_buffer(enc, bqt, 0ul, 0)
+                                kn_buffer(enc, bkhc, 0ul, 1)
+                                kn_buffer(enc, bvhc, 0ul, 2)
+                                kn_buffer(enc, bod, 0ul, 3)
+                                kn_kargs(enc, kat, 4)
+                                kn_dispatch(enc, uint3(uint(np / 8), uint(heads), 1u), uint3(128u, 1u, 1u))
+                            })
+                            var maxrel_d = 0.0
+                            unsafe {
+                                let pg = reinterpret<float?>(metal_buffer_contents(bod))
+                                for (ii in range(ncheck * qdt)) {
+                                    maxrel_d = max(maxrel_d, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
+                                }
+                            }
+                            print("  DIAL  np={np}: flash-dialect={t_dial}ms  {gate_maxrel("DIAL", np, maxrel_d)}\n")
+                            metal_release(bod)
+                            metal_release(pso_dial)
+                        }
+                        metal_release(bkhc)
+                        metal_release(bvhc)
+                        metal_release(bohc)
+                        metal_release(pso_hc)
+                        delete khc
+                        delete vhc
+                    }
+                    metal_release(bkth)
+                    metal_release(bvth)
+                    metal_release(boph)
+                    metal_release(pso_porth)
+                    delete kth
+                    delete vth
+                }
+                delete owant
+                metal_release(bqt)
+                metal_release(bkt)
+                metal_release(bvt)
+                metal_release(bot)
+                delete qt
+                delete kt
+                delete vt
+            }
             delete oc
             metal_release(bq)
             metal_release(bk)

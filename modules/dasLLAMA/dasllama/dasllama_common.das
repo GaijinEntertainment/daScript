@@ -200,8 +200,8 @@ typedef AttnPrefillFn = function<(t : Model; var s : Session; l : int64; npos : 
 typedef FfnPrefillFn  = function<(t : Model; var s : Session; l : int64; npos : int64) : void>
 
 //! A whole-prefill override: claims the ENTIRE per-layer stack of one prefill. On true the KV
-//! cache is filled for every position and x_b holds the final residual stream; false = declined.
-//! Registered by name at [init], activated via select_prefill_override (env rail: DASLLAMA_PIN_PREFILL).
+//! cache is filled for every position; x_b holds the final residual stream at row npos-1 always,
+//! every row only under `Session.keep_hidden` (the Metal lastrow tail narrows). false = declined.
 typedef PrefillOverrideFn = function<(t : Model; var s : Session; npos : int64; start_pos : int64) : bool>
 
 // The prefill-override registry (see PrefillOverrideFn). Name-keyed like the kernel backends;
@@ -330,6 +330,21 @@ def ple_pre_prefill(t : Model; var s : Session; tokens : array<int64>; npos : in
 def ple_pre_prefill_pad(t : Model; var s : Session; npos : int64) {
     if (g_ple_pre_prefill_pad == null) ple_rail_missing()
     invoke(g_ple_pre_prefill_pad, t, s, npos)
+}
+
+//! The embd-prefill twin of the token path's PLE gate: offer the pre-step to the device driver
+//! (pad ids stashed — the media path has no tokens), CPU pad impl on decline. The model_proj
+//! GEMM inside the finish is the whole cost, so an eligible driver must get the offer here too.
+def ple_pre_prefill_pad_gated(t : Model; var s : Session; npos, start_pos : int64) {
+    if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
+        s.ple_gpu_tokens |> resize(npos)
+        for (p in range64(npos)) {
+            s.ple_gpu_tokens[p] = 0l
+        }
+        s.ple_gpu_pending = true
+        return
+    }
+    ple_pre_prefill_pad(t, s, npos)
 }
 
 // set by an override that ALSO produced the last position's logits; reset before every invocation
@@ -783,6 +798,12 @@ struct Model {
     // scale strips, k6s the GPU split form. CPU inference on a blob-only model PANICS.
     mblob : array<uint8>
     metal_blob : bool = false
+    //! Baked dev-W f16 panels (metal flavor): bound zero-copy by the prefill dev-W route; empty = runtime dequant
+    devwf16 : array<float16>
+    devwf16_fmt : array<int>
+    devwf16_key : array<int64>
+    devwf16_off : array<int64>   // site's ELEM offset into devwf16
+    devwf16_n : array<int64>     // site's element count
     // P3-trimmed image: the big CPU weight families are EMPTY (GPU-resident consumers only);
     // embed reads embq/embs, re-gathers must slice from vkblob, CPU fallbacks fail closed
     planes_trimmed : bool = false
@@ -1287,7 +1308,8 @@ def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v :
 //! Apply the runtime knobs from the app tune sidecar's optional "runtime" section (see
 //! tune_for_this_box.md): token block, L2 budget, threading thresholds, chunk multipliers, and an
 //! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
-def apply_box_profile_runtime(path : string = "") {
+[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a flat knob catalog; a split would invent seams
     if (path == "" && box_profile_stale()) {
         to_log(LOG_INFO, "dasLLAMA: tune sidecar is older than the binary - runtime knobs not applied (re-tune)\n")
         return
@@ -1323,12 +1345,20 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "kq_q40_native") $(v) { set_kq_q40_native(v != 0l) }
     apply_i64_knob(rt, "kq_q50_native") $(v) { set_kq_q50_native(v != 0l) }
     apply_i64_knob(rt, "noisy") $(v) { set_dasllama_noisy(v != 0l) }
-    apply_i64_knob(rt, "gemv_lane_cap") $(v) { set_gemv_lane_cap(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "gemv_lane_cap") $(v) {
+        if (v != 0l || !is_slow_tier_compute()) {
+            set_gemv_lane_cap(int(min(v, 2147483647l)))
+        } else {
+            to_log(LOG_INFO, "dasLLAMA: sidecar gemv_lane_cap = 0 is the pre-hybrid \"uncapped\" mint - keeping the fast-tier cap {get_gemv_lane_cap()}\n")
+        }
+    }
     apply_i64_knob(rt, "batch_lane_cap") $(v) { set_batch_lane_cap(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "batch_grid_2d") $(v) { set_batch_grid_2d(int(min(v, 2l))) }
     apply_i64_knob(rt, "dispatch_worker_limit") $(v) { set_dispatch_worker_limit_(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "gemv_wave_fill") $(v) { set_gemv_wave_fill(v != 0l) }
     apply_i64_knob(rt, "fused_decode") $(v) { set_fused_decode(v != 0l) }
+    apply_i64_knob(rt, "jobque_pool") $(v) { set_jobque_threads(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "phase_decode_workers") $(v) { set_phase_decode_workers(int(min(v, 2147483647l))) }
     // stored only — the queue may not exist yet; setup_dasllama_jobque applies these inside with_job_que
     apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us(v) }
     apply_i64_knob(rt, "jobque_join_poll") $(v) { set_jobque_join_poll(v) }
@@ -1701,6 +1731,8 @@ struct Session {
     // grown on demand by kv_ensure. Flat sessions: kv_pool == null, block_table empty.
     @do_not_delete kv_pool : KVPool?   // borrowed — the pool outlives its sessions
     block_table : array<int>
+    //! set by a caller that reads the whole x_b plane after a prefill: every row of the last layer's FFN tail
+    keep_hidden : bool
     // batched prefill scratch — empty until forward_prefill sizes them to npos × ... (see forward_prefill)
     x_b : array<float>        // residual stream (npos x dim)
     xb_b : array<float>       // rmsnorm / attention out (npos x dim)
@@ -3904,6 +3936,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
 def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE038 — one decode step; the phases share s and must stay in order
     let c = t.config
     let dim = c.dim
+    dispatch_phase_decode()
     kv_ensure(s, pos + 1l)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
 
     // token embedding: row `token` into the residual stream
@@ -4766,6 +4799,9 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
             forward(t, s, tokens[p], start_pos + p)
         }
         return
+    }
+    if (npos >= 32l) {
+        dispatch_phase_batch()
     }
     let ts_alloc = prof_ticks()
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist

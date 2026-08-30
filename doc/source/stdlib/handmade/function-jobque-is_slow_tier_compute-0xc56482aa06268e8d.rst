@@ -1,0 +1,1 @@
+Returns true only when the second core tier's reported kind is on the compute allowlist ("Performance", "Super") - a tier worth extending a batch pool over. An Efficiency tier, an unknown name, or an unreadable topology answers false, so a pool never extends onto cores nobody vouched for.

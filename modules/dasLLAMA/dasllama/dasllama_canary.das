@@ -451,6 +451,7 @@ def private cn_fold_bn(var blob : array<float>; w, b, mean, vr, dwb, d : int64; 
 //! Caches a box/knob-specific PREPARED IMAGE like ``load_model``; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_canary_encoder(path : string; q8 : bool = false) : CanaryEncoder {
     let tag = q8 ? "canary-q8" : "canary-f32"
+    cn_announce_lane(q8)
     if (path |> ends_with(".dlim")) {
         // named directly — no source bin to regenerate from, so a wrong identity panics
         apply_box_profile_runtime()
@@ -714,6 +715,9 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
         }
     }
     ensure_length(st.reim, n_len * n_bins * 2l)
+    for (i in range64(n_len * n_bins * 2l)) {
+        st.reim[i] = 0.0   //! gemm accumulates: the reused state buffer must start zeroed
+    }
     gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(m.twiddles, 0l),
              n_len, n_fft, n_bins * 2l)
 
@@ -845,65 +849,71 @@ def private cn_conv_pw(m : CanaryEncoder; var out : array<float>; x : array<floa
 
 // ===== encoder =====
 
-//! FastConformer-32 encode over ``st.mel`` (frame-major) + the perception.proj projector.
-//! Leaves the projected soft tokens (``proj_dim`` wide) in ``st.out``; returns the frame count.
+//! the GPU block hook: after the subsample front + inproj + pos table, the 32 FastConformer blocks on st.x
+typedef CanaryGpuBlocksFn = function<(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) : bool>
+typedef CanaryServesFn = function<() : bool>
+var private g_cn_gpu : CanaryGpuBlocksFn
+var private g_cn_serves : CanaryServesFn
+var private g_cn_gpu_set = false
+var private g_cn_serves_set = false
+
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_canary_gpu(fn : CanaryGpuBlocksFn; serves : CanaryServesFn) {
+    g_cn_gpu = fn
+    g_cn_serves = serves
+    g_cn_gpu_set = true
+    g_cn_serves_set = true
+}
+
+//! Would the Metal driver serve the block loop — the lane policy asks (a serving driver wants
+//! the f32 blob, so the un-pinned encoder lane defaults to exact); false on CPU builds or knob-off.
+def canary_gpu_serves() : bool => g_cn_serves_set && invoke(g_cn_serves)
+
+enum private CnLane {
+    unset
+    exact
+    q8
+}
+var private g_cn_pin = CnLane.unset
+
+//! Pin the canary encoder's weight format for subsequent loads: q8 (the CPU serving lane) vs
+//! the fp32 lane the parity legs and the GPU driver read. ``reset_canary_enc_q8`` returns to
+//! the policy default (exact when the Metal driver serves).
+def set_canary_enc_q8(on : bool) {
+    g_cn_pin = on ? CnLane.q8 : CnLane.exact
+}
+
+def reset_canary_enc_q8() {
+    g_cn_pin = CnLane.unset
+}
+
+//! The lane subsequent loads would take — the facade's default and the tests read it.
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
+def canary_enc_serves_q8() : bool {
+    if (g_cn_pin != CnLane.unset) {
+        return g_cn_pin == CnLane.q8
+    }
+    return !canary_gpu_serves()
+}
+
+// the lane changes what a load mints and serves, so the load says which and why. The caller
+// hands the lane in, so this names ITS pick and the policy that would have been asked for it.
+def private cn_announce_lane(q8 : bool) {
+    var why = "the CPU default (no Metal FastConformer driver serving)"
+    if (g_cn_pin != CnLane.unset) {
+        why = "pinned via set_canary_enc_q8"
+    } elif (canary_gpu_serves()) {
+        why = "the Metal FastConformer driver serves f32 planes"
+    }
+    to_log(LOG_INFO, "dasLLAMA canary: encoder GEMM lane {q8 ? "q8" : "f32 planes"} - {why}\n")
+}
+
 [hot_path]
-def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
+def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) {
     let d = m.d_model
     let ff = m.n_ff
-    let nch = m.n_sub_ch
     let n_head = m.n_head
     let dh = d / n_head
-    let n_mel = m.n_mel
-
-    // conv subsampling: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]
-    let t1 = (st.n_len - 1l) / 2l + 1l
-    let w1 = (n_mel - 1l) / 2l + 1l
-    // valid time lengths propagate through the stride-2 convs (the length mask)
-    let l0 = cn_conv_out_len(st.n_valid)
-    let l2 = cn_conv_out_len(l0)
-    cn_conv0(m, st, st.n_len, n_mel)                              // -> y0 [t1 × w1 × nch]
-    cn_mask_rows(st.y0, l0, t1, w1 * nch)                         // mask before conv2 (depthwise)
-    cn_conv_dw(m, st.y2, st.y0, m.c2_w, m.c2_b, w1, t1)          // -> y2 [t2 × w2 × nch]
-    let t2 = (t1 - 1l) / 2l + 1l
-    let w2 = (w1 - 1l) / 2l + 1l
-    cn_conv_pw(m, st.y3, st.y2, st.xqi, st.xsi, m.c3_w, m.c3_b, t2 * w2)   // -> y3
-    cn_mask_rows(st.y3, l2, t2, w2 * nch)                        // mask before conv5 (depthwise)
-    cn_conv_dw(m, st.y5, st.y3, m.c5_w, m.c5_b, w2, t2)         // -> y5 [t3 × w3 × nch]
-    let t3 = (t2 - 1l) / 2l + 1l
-    let w3 = (w2 - 1l) / 2l + 1l
-    cn_conv_pw(m, st.y6, st.y5, st.xqi, st.xsi, m.c6_w, m.c6_b, t3 * w3)   // -> y6
-
-    let tt = t3
-    let feat = w3 * nch
-    ensure_length(st.xf, tt * feat)                                  // xf[t][f + w3·c] = y6[t][f][c]
-    for (t in range64(tt)) {
-        for (fr in range64(w3)) {
-            for (c in range64(nch)) {
-                st.xf[t * feat + fr + w3 * c] = st.y6[(t * w3 + fr) * nch + c]
-            }
-        }
-    }
-    ensure_length(st.x, tt * d)
-    cn_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
-    add_bias_rows(st.x, m.blob, m.pre_b, d, tt)
-
-    // rel-pos embedding table [W × d], interleaved (sin, cos); W = 2T−1
-    let ww = 2l * tt - 1l
-    ensure_length(st.pos_emb, ww * d)
-    for (w in range64(ww)) {
-        let rel = double(tt - 1l - w)
-        for (k in range64(d / 2l)) {
-            let freq = exp(-(double(k * 2l) * log(10000.0lf) / double(d)))
-            let theta = float(freq * rel)
-            st.pos_emb[w * d + 2l * k] = sin(theta)
-            st.pos_emb[w * d + 2l * k + 1l] = cos(theta)
-        }
-    }
-    if (m.q8) {   // the pos input is layer-invariant — quantize its rows once per encode
-        cn_requant(st.pos_emb, d, ww, st.posq, st.poss)
-    }
-
     ensure_length(st.xb, tt * d)
     ensure_length(st.h, tt * ff)
     ensure_length(st.glu, tt * d)
@@ -917,7 +927,7 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     ensure_length(st.kt, dh * tt)
     ensure_length(st.vh, tt * dh)
     ensure_length(st.posh, dh * ww)
-    // per-job B-row slabs, NOT tt-row matrices — the parakeet twin's slab dispatch (job li
+    // nolint:STYLE015 — per-job B-row slabs, NOT tt-row matrices: the parakeet twin's slab dispatch (job li
     // owns slab li; 4-aligned row groups keep gemm_f32's FMA order, bit-exact). Jobs never
     // exceed blocks — the twin's short-clip dispatch-overhead lesson.
     let atn_jobs = min(int64(lanes_for_work(tt * dh * (2l * tt + ww), 0)),
@@ -970,7 +980,7 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
                 let plp = addr<float const?>(st.posl[0])
                 let bup = plane_at(m.blob, lo.bias_u + hoff)
                 let bvp = plane_at(m.blob, lo.bias_v + hoff)
-                // transposed head views ((Q+u), (Q+v), Kᵀ, V_h, pos_hᵀ) — the row GEMMs read
+                // nolint:STYLE015 — transposed head views ((Q+u), (Q+v), Kᵀ, V_h, pos_hᵀ): the row GEMMs read
                 // these in full, so they build before the compute dispatch
                 maybe_parallel_for(0, int(tt), lanes_for_work(tt * dh * 4l, 0)) $(rb, re) {
                     unsafe {
@@ -994,7 +1004,7 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
                         }
                     }
                 }
-                // content scores (Q+u)·Kᵀ + rel scores (Q+v)·pos_hᵀ + softmax + P·V_h — atn_jobs
+                // nolint:STYLE015 — content scores (Q+u)·Kᵀ + rel scores (Q+v)·pos_hᵀ + softmax + P·V_h: atn_jobs
                 // jobs over B-row blocks into per-job slabs: gemm_f32 never mixes accumulation
                 // across 4-row groups, so 4-aligned starts stay bit-exact and scratch is O(jobs·B)
                 let nblkb = (tt + CN_ATN_BLOCK - 1l) / CN_ATN_BLOCK
@@ -1085,6 +1095,73 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
         // per-layer post norm
         layernorm_batch(st.x, st.x, m.blob, lo.nout_w, lo.nout_b, d, tt, m.eps)
     }
+}
+
+//! FastConformer-32 encode over ``st.mel`` (frame-major) + the perception.proj projector.
+//! Leaves the projected soft tokens (``proj_dim`` wide) in ``st.out``; returns the frame count.
+[hot_path]
+def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
+    let d = m.d_model
+    let nch = m.n_sub_ch
+    let n_mel = m.n_mel
+    // the conformer block loop walks the thrice-subsampled frame count
+    dispatch_phase_encode(cn_conv_out_len(cn_conv_out_len(cn_conv_out_len(st.n_len))))
+
+    // conv subsampling: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]
+    let t1 = (st.n_len - 1l) / 2l + 1l
+    let w1 = (n_mel - 1l) / 2l + 1l
+    // valid time lengths propagate through the stride-2 convs (the length mask)
+    let l0 = cn_conv_out_len(st.n_valid)
+    let l2 = cn_conv_out_len(l0)
+    cn_conv0(m, st, st.n_len, n_mel)                              // -> y0 [t1 × w1 × nch]
+    cn_mask_rows(st.y0, l0, t1, w1 * nch)                         // mask before conv2 (depthwise)
+    cn_conv_dw(m, st.y2, st.y0, m.c2_w, m.c2_b, w1, t1)          // -> y2 [t2 × w2 × nch]
+    let t2 = (t1 - 1l) / 2l + 1l
+    let w2 = (w1 - 1l) / 2l + 1l
+    cn_conv_pw(m, st.y3, st.y2, st.xqi, st.xsi, m.c3_w, m.c3_b, t2 * w2)   // -> y3
+    cn_mask_rows(st.y3, l2, t2, w2 * nch)                        // mask before conv5 (depthwise)
+    cn_conv_dw(m, st.y5, st.y3, m.c5_w, m.c5_b, w2, t2)         // -> y5 [t3 × w3 × nch]
+    let t3 = (t2 - 1l) / 2l + 1l
+    let w3 = (w2 - 1l) / 2l + 1l
+    cn_conv_pw(m, st.y6, st.y5, st.xqi, st.xsi, m.c6_w, m.c6_b, t3 * w3)   // -> y6
+
+    let tt = t3
+    let feat = w3 * nch
+    ensure_length(st.xf, tt * feat)                                  // xf[t][f + w3·c] = y6[t][f][c]
+    for (t in range64(tt)) {
+        for (fr in range64(w3)) {
+            for (c in range64(nch)) {
+                st.xf[t * feat + fr + w3 * c] = st.y6[(t * w3 + fr) * nch + c]
+            }
+        }
+    }
+    ensure_length(st.x, tt * d)
+    cn_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
+    add_bias_rows(st.x, m.blob, m.pre_b, d, tt)
+
+    // rel-pos embedding table [W × d], interleaved (sin, cos); W = 2T−1
+    let ww = 2l * tt - 1l
+    ensure_length(st.pos_emb, ww * d)
+    for (w in range64(ww)) {
+        let rel = double(tt - 1l - w)
+        for (k in range64(d / 2l)) {
+            let freq = exp(-(double(k * 2l) * log(10000.0lf) / double(d)))
+            let theta = float(freq * rel)
+            st.pos_emb[w * d + 2l * k] = sin(theta)
+            st.pos_emb[w * d + 2l * k + 1l] = cos(theta)
+        }
+    }
+    if (m.q8) {   // the pos input is layer-invariant — quantize its rows once per encode
+        cn_requant(st.pos_emb, d, ww, st.posq, st.poss)
+    }
+
+    var gpu_served = false
+    if (g_cn_gpu_set && !m.q8) {   //! the driver reads the f32 blob; a q8 encoder stays CPU
+        gpu_served = invoke(g_cn_gpu, m, st, tt, ww)
+    }
+    if (!gpu_served) {
+        cn_blocks_cpu(m, st, tt, ww)
+    }
 
     // perception.proj: encoder rows (d) -> decoder embedding (proj_dim)
     ensure_length(st.out, tt * m.proj_dim)
@@ -1167,18 +1244,9 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
     var hit_eos = false
     let tdec = ref_time_ticks()
     for (_i in range64(max_new)) {
-        var best = 0
-        for (i in range(1, length(s.qctx.logits))) {
-            if (s.qctx.logits[i] > s.qctx.logits[best]) {
-                best = i
-            }
-        }
+        let best = int(hargmax(s.qctx.logits))
         let mx = s.qctx.logits[best]
-        var lse = 0.0lf
-        for (v in s.qctx.logits) {
-            lse += double(exp(v - mx))
-        }
-        plog_sum += double(s.qctx.logits[best]) - (log(lse) + double(mx))
+        plog_sum += double(s.qctx.logits[best]) - (log(hlse(s.qctx.logits, mx)) + double(mx))
         toks |> push(best)
         if (int64(best) == im_end) {   // EOS: emitted into the ids, then stop
             hit_eos = true
