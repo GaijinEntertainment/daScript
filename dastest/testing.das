@@ -364,10 +364,8 @@ def run(b : B?, name : string; chunk_size : int; op : block) {
 }
 
 
-def private run_batch(num_runs : int; op : block) : int64 {
-    //! Runs op num_runs times and returns the wall time in nanoseconds. A batch of 1000 or
-    //! more runs is unrolled ten-fold under one timer so the loop stays out of the number;
-    //! a shorter batch times every call, since the call dominates the loop there.
+[arch(at="README.md#benchmark-measurement")]
+def private run_batch_ns(num_runs : int; op : block) : int64 {
     let unroll_count = 10
     if (num_runs >= 100 * unroll_count) {
         let loop_runs = num_runs / unroll_count
@@ -390,11 +388,8 @@ def private run_batch(num_runs : int; op : block) : int64 {
     return time_total
 }
 
+[arch(at="README.md#benchmark-measurement")]
 def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
-    //! The first batch is one call - the warm-up and the calibration. Every batch that ends
-    //! under the budget grows the count from what that batch measured (1.2x the projection,
-    //! at most 100x, the way Go's testing.B does), so a tier that was cold on the first
-    //! call is measured warm; the batch that meets the budget is the one reported.
     let budget_ns = 1_000_000_000l
     let max_runs = 1_000_000_000l
     var num_runs = 1
@@ -414,14 +409,14 @@ def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
         string_bytes_start = string_heap_allocation_stats()[0]
         string_num_allocs_start = string_heap_allocation_count()
 
-        time_total = run_batch(num_runs, op)
+        time_total = run_batch_ns(num_runs, op)
 
         heap_bytes_end = heap_allocation_stats()[0]
         num_allocs_end = heap_allocation_count()
         string_bytes_end = string_heap_allocation_stats()[0]
         string_num_allocs_end = string_heap_allocation_count()
 
-        // on_start runs after the first call, so a benchmark that fails fast never prints its name
+        //! on_start runs after the first call: a benchmark that fails fast never prints its name
         if (!started) {
             b.on_start(name)
             started = true
