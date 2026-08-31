@@ -110,6 +110,17 @@ from slice B minted here. Parity pregate per row; predictions logged before each
 process per box, cv>3% void; `gen_site_records` closes it. Full board on one pin = one
 provenance (the v14/fallback-stamp taint is not per-cell diagnosable).
 
+## Post-sweep ruling (Boris, 2026-08-30)
+
+The two-tier stop rule: a FAIL (crash/refusal/no-measure) stops the sweep for an immediate
+fix — it poisons every cell after it; a PERFORMANCE red lets the sweep finish, then fix and
+re-profile ONLY the red cells (`-o` narrowing) — no full re-sweep, the board is then good;
+more sweeps follow after the coming arcs.
+Red #1: gpt-oss-20b (mxfp4 MoE) das metal pp halved vs the pre-merge row (3989 -> 2047)
+while every k-quant MoE gained +6-7%; window = the master merge (first post-merge perf
+pass); suspect = the ffn_moe_prefill_grouped seam x the 32-row split on the Metal mx4
+path (per-expert-bias staging pays per region where k-quant's cnt/basep walk does not).
+
 ## Slice E — M4 over ssh
 
 Canary rows re-mint (Q8_0 decoder artifact) + the Efficiency-tier gate proof: live-lane

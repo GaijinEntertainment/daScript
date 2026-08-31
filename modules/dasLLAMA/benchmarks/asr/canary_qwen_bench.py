@@ -27,7 +27,10 @@ def main():
     args = ap.parse_args()
 
     import torch
-    if args.threads > 0:
+    if args.threads > 0 and args.device == "cpu":
+        # CPU-arm only: set_num_threads alongside an MPS device degenerates SALM.generate
+        # to a 3-token stub (reproduced 2026-08-30, torch in the pinned venv) - the threads
+        # knob is meaningless off-CPU anyway
         torch.set_num_threads(args.threads)
     import soundfile as sf
     from transformers import GenerationConfig
@@ -54,13 +57,21 @@ def main():
         info = sf.info(wav)
         audio_s = info.frames / info.samplerate
         base = wav.rsplit("/", 1)[-1]
-        prompts = [[{"role": "user", "content": f"{args.prompt}{tag}", "audio": [wav]}]]
         for rep in range(args.reps):
+            # prompts rebuilt PER REP: model.generate mutates the chat list in place, and a
+            # reused list degenerates the next rep to a few tokens (fast on MPS, where it
+            # silently won best-of; on CPU the encode cost hid it while the transcript was
+            # still garbage). A rep that emits almost nothing is invalid either way.
+            prompts = [[{"role": "user", "content": f"{args.prompt}{tag}", "audio": [wav]}]]
             t0 = time.perf_counter()
             with torch.inference_mode():
-                model.generate(prompts=prompts, generation_config=gen_cfg,
-                               max_new_tokens=args.max_new_tokens)
+                out = model.generate(prompts=prompts, generation_config=gen_cfg,
+                                     max_new_tokens=args.max_new_tokens)
             ms = (time.perf_counter() - t0) * 1000.0
+            n_ids = len(out[0]) if out is not None and len(out) else 0
+            if n_ids < 8:
+                print(f"DEGENERATE\t{args.model}\t{base}\t{rep}\t{n_ids} ids - rep discarded", flush=True)
+                continue
             speed = audio_s / (ms / 1000.0)
             print(f"BENCH\t{args.model}\t{base}\t{audio_s:.0f}\t{rep}\t{ms:.3f}\t{speed:.4f}", flush=True)
 

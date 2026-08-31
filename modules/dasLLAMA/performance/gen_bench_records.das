@@ -1120,9 +1120,12 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         rr.cmd = argv_line(pyargs)
         var out = run_capture_argv(pyargs)
         if (find(out, "BENCH") < 0) {
-            // pipe came back rowless — fall back to the --out file (Windows: parakeet loaders
-            // wreck the child's stdout pipe; the file survives everything)
-            let sidecar = fread(asr_pybench_out_path())
+            // pipe came back rowless — for onnx ONLY, fall back to its --out file (Windows:
+            // parakeet loaders wreck the child's stdout pipe; the file survives everything).
+            // Only onnx WRITES that file, so any other tool reading it would launder a STALE
+            // onnx row into its own record under a matching clip name (a nemo-mps crash did
+            // exactly that - the recovered "nemo" jfk was onnx-whisper-turbo's).
+            let sidecar = ref.tool == "onnx" ? fread(asr_pybench_out_path()) : ""
             if (find(sidecar, "BENCH") >= 0) {
                 to_log(LOG_INFO, "gen_bench_records:   {ref.tool} pipe was rowless - rows recovered from --out file\n")
                 out = sidecar

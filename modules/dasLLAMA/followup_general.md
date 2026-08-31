@@ -675,3 +675,12 @@
     valid. A generic llvm_tune feature, useful beyond dasLLAMA. Done = entry-level staleness
     by kernel hash, the release scope untouched, and the refusal-reason rail naming
     "kernel-hash" beside the existing reasons.
+
+59. **daslang's AST serializer could restore function-typed globals by name - retiring the
+    boot-restore class outright.** A serialized exe restores globals as data, so function
+    values arrive null; today every module carrying `var g_x = @@fn` declaration defaults
+    owes a boot-restore `[init]` (the REVIEW.das restore check + test_exe_smoke guard the
+    dasLLAMA tree, minted after the vulkan decode-mirror claim shipped crashing every exe
+    forward). The root fix is daslang-core: serialize a function value as its mangled name
+    and re-resolve at restore - the whole hazard class disappears language-wide, and the
+    restore inits + the gate collapse to history. das-core scope, its own arc.

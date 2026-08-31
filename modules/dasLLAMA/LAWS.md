@@ -49,3 +49,10 @@
   kernel-work bump duty in `REVIEW.md` was replaced by the declared-release rule; wire
   field `dasllama_version` stays schema-stable; the per-kernel-hash hardening ledgered as
   followup_general 58.
+
+- **2026-08-30** (`REVIEW.md`, `REVIEW.das`): on the serialized-exe null-function crash
+  (the vulkan decode-mirror claim; every -jit gate green while every exe forward died),
+  Boris confirmed the rule - "likely REVIEW.md candidate?" ... "yes. excellent followup" -
+  a declaration-initialized function-typed global joins its file's boot-restore [init] in
+  the same change; check_exe_fn_global_restore is the mechanical half, test_exe_smoke the
+  end-to-end tripwire.

@@ -63,6 +63,14 @@ mechanisms (`IMAGE_VERSION`, the reflected layout fingerprint).
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value
 that can change between dispatches goes in a uniform, a kargs field, or an `@off` bind offset.
 
+**A function-typed global with a declaration initializer joins its file's boot-restore
+`[init]` in the same change, and weakening `REVIEW.das`'s restore check is a defect.** A
+serialized exe restores globals as data - the function value arrives null, and the first
+invoke to reach it dies at exe runtime while every `-jit` gate stays green (script mode runs
+the declaration initializers). The restore guard (`if (g_x == null) { g_x = @@sentinel }`)
+lets a real registrar win in either `[init]` order; `test_exe_smoke` is the end-to-end
+tripwire for the class, the `REVIEW.das` check is the per-diff one.
+
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`) - keep the multiply order the code already has.** A regrouping
 moves the angles in the last bits and flips token-exact fixtures.

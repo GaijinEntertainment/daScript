@@ -402,9 +402,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_qwen_count([moe_reference = true])),
         // the qwen vision pairs (the qwen3vl arc): parity-less provenance carriers —
         // test_vision_chat's deepstack/qwen25o legs and the qwen tier-1 suites are their coverage
-        ModelSpec(file = "Qwen3VL-4B-Instruct-Q8_0.gguf", display = "Qwen3-VL-4B",
+        ModelSpec(file = "Qwen3VL-4B-Instruct-Q8_0.gguf", display = "Qwen3-VL-4B", official = true,
             url = "{HF}/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/Qwen3VL-4B-Instruct-Q8_0.gguf",
             bytes = 4280406144l, sha256 = "054721f478bc5fa6beffb7f38eae575d45298f88cbb8d2f83ef675a727863eb1",
+            // verified 40/40 against the live oracle 2026-08-30 (the deepstack tower's carrier)
+            parity <- ev_qwen_count(),
             companions <- [
                 ProvEntry(name = "mmproj-Qwen3VL-4B-Instruct-F16.gguf", root = "llm",
                     url = "{HF}/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-F16.gguf",
@@ -416,9 +418,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                 ProvEntry(name = "mmproj-Qwen3VL-8B-Instruct-F16.gguf", root = "llm",
                     url = "{HF}/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-8B-Instruct-F16.gguf",
                     bytes = 1159029824l, sha256 = "ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38")]),
-        ModelSpec(file = "Qwen2.5-Omni-3B-Q8_0.gguf", display = "Qwen2.5-Omni-3B",
+        ModelSpec(file = "Qwen2.5-Omni-3B-Q8_0.gguf", display = "Qwen2.5-Omni-3B", official = true,
             url = "{HF}/ggml-org/Qwen2.5-Omni-3B-GGUF/resolve/main/Qwen2.5-Omni-3B-Q8_0.gguf",
             bytes = 3616087360l, sha256 = "c7d8b07c8d8d7a9ed1de1b8df7ac821eb4d259a224bd44310baacfaa5a473d4c",
+            // verified 40/40 against the live oracle 2026-08-30 (the window-ViT tower's carrier)
+            parity <- ev_qwen_count(),
             companions <- [
                 ProvEntry(name = "mmproj-Qwen2.5-Omni-3B-f16.gguf", root = "llm",
                     url = "{HF}/ggml-org/Qwen2.5-Omni-3B-GGUF/resolve/main/mmproj-Qwen2.5-Omni-3B-f16.gguf",
