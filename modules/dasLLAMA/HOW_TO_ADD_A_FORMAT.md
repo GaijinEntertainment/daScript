@@ -422,6 +422,14 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    iq2 tier - so the file cannot load end to end. `gguf_census.py` (scratch) reads the tensor
    type table in seconds; pick a vehicle whose mix is {supported} + the new format only
    (bartowski's Qwen2.5-1.5B IQ3_XS carries iq3_xxs with iq3_s/q4_K/q6_K siblings).
+24. **A layout/pack edit does NOT invalidate cached `.dlim` images.** The prepared-image
+    filename hash folds the model and schema, not the packing code: after the grouped-scale
+    copy fix, the rerun "mapped" the stale image and kept serving the broken device planes -
+    garbage text and all-zero decode logits survived a correct fix. Delete the model's
+    `*.dlim` beside the GGUF after ANY `dasllama_layout.das`/pack edit and confirm the next
+    log line says "baked", not "mapped". Unquirked: fold a pack-code version into the image
+    hash, the way QUIRK 21's fix would version the JIT DLL cache.
+
 ### IQ4_NL (the near-free one, 2026-08-30)
 
 Shape: 32-element blocks, 18B each on disk - f16 d + 16 nibble bytes with the k/k+16
@@ -444,8 +452,19 @@ Vehicle: a local requant again - IQ4_NL needs NO imatrix, just `--allow-requanti
 stamped: coherent text at gen 60 t/s, 11/64 greedy ids vs `simple_ids.exe` where the fork
 is a 0.042-logit near-tie (the window's smallest margin by 100x) whose top-2 IS our token.
 zen2 rows vs llama.cpp clean-cpu: pp512 618.3 vs 540.6 (1.14x), tg128 64.2 vs
-62.2 (1.03x). Vulkan, Metal: pending (the generic-dequant class shells + the LUT
-already live on both tiers).
+62.2 (1.03x).
+
+Vulkan followed as pure composition - not one new decode was written: `KqGemvIq4nl` =
+iq4xs's `iq4_dot` codebook compose folded by q40's `q40_d` per-block d (no sub-scale, no
+bsum); `KqBatchIq4nl : KqBatchIq4xs` overrides ONLY `stage_ws` with q40's (the LUT stage_w
+and the no-min blk_fma inherit); `Iq4nlCm2T` = `VkK4Blk` + the existing `IQLUT` axis with
+Q40Cm2T's d pick times `iq4lut[q]`. Schema fmt 10 -> 45, the nine-format family cells at
+stride 32 words, the cm2 cell mirrors q40's with the codebook oracle. Gates: the suite
+78/78 (the three cm2 tiles 0-off at 89600 cells each); the resident driver arms and runs
+gen 245 t/s, greedy ids 11/64 vs `simple_ids.exe` (the near-tie class - the margin
+oracle's step-11 tie is 0.042 logits on this stream). Rows (5060 Ti vs llama.cpp b10660
+Vulkan): pp512 15027.4 vs 19177.8 (0.78x), tg128 340.7 vs 363.6 (0.94x). Metal:
+pending (q40's Metal kernels + iq4xs's LUT staging compose the same way).
 
 ### IQ3_XXS (2026-08-30)
 

@@ -2962,6 +2962,28 @@ class KqBatchIq3xxs : KqBatchIq4xs {
     }
 }
 
+// IQ4_NL tile: iq4xs's LUT staging (stage_w and the no-min blk_fma inherit) with q40's
+// per-block f16 d staged as the scale - no sub-scales, no bsum term anywhere.
+[vk_dispatch(name = "kq_batch_iq4nl_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchIq4nl : KqBatchIq4xs {
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var sa = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            let dp = unpackHalf2x16(wsu[wsb * 5u + sblk / 2u])
+            sa = sblk % 2u == 0u ? dp.x : dp.y
+        }
+        wsw[sblk * 32u + slane] = sa
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_iq4nl_cls_spv")]
+    def override run {
+        tile_shell()
+    }
+}
+
 // Q5_K tile: the k4 compose with the 5th bit OR'd in from the 40B block's qh words
 [vk_dispatch(name = "kq_batch_k5_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchK5 : KqBatchBase {
@@ -4368,6 +4390,26 @@ class template Iq3xxsCm2T : KqCm2BatchT {
     }
 }
 
+[ |> template_struct_instance]
+class template Iq4nlCm2T : KqCm2BatchT {
+    typedef BLK = VkK4Blk   // q40's nibble plane verbatim - the k4 lane view fits
+    typedef ST = uint
+    override IQLUT = true
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
+        let g = cib.y >> 5u
+        let e = cib.y & 31u
+        let bidx = g * 16u + (e & 15u)
+        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
+        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let dp = unpackHalf2x16(ws[srow + (g >> 1u)])
+        let d = (g & 1u) == 0u ? dp.x : dp.y
+        return float16(d * float(iq4lut[int(q)]))
+    }
+}
+
 // the stamps: the three width columns of each format (the dispatcher keys on (fmt, tc))
 [vk_dispatch(name = "q8_batch_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2LBatch : Q8Cm2T {
@@ -4604,6 +4646,33 @@ class Iq3xxsCm2MBatch : Iq3xxsCm2T {
 
 [vk_dispatch(name = "kq_batch_iq3xxs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3xxsCm2SBatch : Iq3xxsCm2T {
+    override BN = 32u
+    override STILE = true
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+    typedef FLO = tensorLayout2DPad
+}
+
+[vk_dispatch(name = "kq_batch_iq4nl_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq4nlCm2LBatch : Iq4nlCm2T {
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq4nl_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq4nlCm2MBatch : Iq4nlCm2T {
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq4nl_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq4nlCm2SBatch : Iq4nlCm2T {
     override BN = 32u
     override STILE = true
     typedef BT = coopmatWgB_f16_64x32
@@ -5185,6 +5254,8 @@ def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {
         return ensure_kq_batch_iq3s_cls()
     } elif (fmt == int(KqFmt.iq3xxs)) {
         return ensure_kq_batch_iq3xxs_cls()
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        return ensure_kq_batch_iq4nl_cls()
     }
     panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     return false
@@ -5219,6 +5290,8 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
         enc_kq_batch_iq3s_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq3xxs)) {
         enc_kq_batch_iq3xxs_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        enc_kq_batch_iq4nl_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     }
@@ -5247,6 +5320,8 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_kq_gemv_iq3s_cls()
     } elif (fmt == int(KqFmt.iq3xxs)) {
         return ensure_kq_gemv_iq3xxs_cls()
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        return ensure_kq_gemv_iq4nl_cls()
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return false
@@ -5281,14 +5356,16 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_kq_gemv_iq3s_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq3xxs)) {
         enc_kq_gemv_iq3xxs_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        enc_kq_gemv_iq4nl_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     }
 }
 
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).
-// The eight formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
-// eight pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
+// The nine formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
+// nine pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
 [vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4 : KqGemvBase {
     def override blk_contrib(wsb, blk, xsb : uint) : float {
@@ -5451,6 +5528,34 @@ class KqGemvIq3xxs : KqGemvBase {
             gridw[idx] = iq3xxs_grid_word(int(idx))
         }
         barrier()   // the grid visible before the shell's block walk
+        gemv_shell()
+    }
+}
+
+// IQ4_NL: iq4xs's codebook dot (iq4_word, pure ALU) folded by q40's per-block f16 d - no
+// sub-scales, no bsum term; the rows are q40's 32-word planes verbatim.
+[vk_dispatch(name = "kq_gemv_iq4nl_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4nl : KqGemvBase {
+    def iq4_dot(wv, xl, xh : uint4) : int {
+        var idot = sdot4(iq4_word(wv.x & KQC_LOW), xl.x) + sdot4(iq4_word(wv.y & KQC_LOW), xl.y)
+        idot += sdot4(iq4_word(wv.z & KQC_LOW), xl.z) + sdot4(iq4_word(wv.w & KQC_LOW), xl.w)
+        idot += sdot4(iq4_word((wv.x >> 4u) & KQC_LOW), xh.x) + sdot4(iq4_word((wv.y >> 4u) & KQC_LOW), xh.y)
+        return idot + sdot4(iq4_word((wv.z >> 4u) & KQC_LOW), xh.z) + sdot4(iq4_word((wv.w >> 4u) & KQC_LOW), xh.w)
+    }
+
+    def q40_d(wsb, blk : uint) : float {
+        let dp = unpackHalf2x16(wsu[wsb * 5u + blk / 2u])
+        return blk % 2u == 0u ? dp.x : dp.y
+    }
+
+    def override blk_contrib(wsb, blk, xsb : uint) : float {
+        let xb4 = xsb * 16u + blk * 2u
+        let idot = iq4_dot(wq4[wsb * 8u + blk], xq4[xb4], xq4[xb4 + 1u])
+        return axs[xsb] * q40_d(wsb, blk) * float(idot)
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_cls_spv")]
+    def run {
         gemv_shell()
     }
 }

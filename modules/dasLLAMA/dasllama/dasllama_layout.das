@@ -894,8 +894,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     dsc[17] = gs[16l * mr + 2l * r + 1l]
                                     dsc[18] = uint8(0)
                                     dsc[19] = uint8(0)
-                                } elif (fmt == KqFmt.q40) {
-                                    for (blk in range64(8l)) {   // 8 per-block f16 d, mr-interleaved
+                                } elif (fmt == KqFmt.q40 || fmt == KqFmt.iq4nl) {
+                                    for (blk in range64(8l)) {   // 8 per-block f16 d, mr-interleaved (iq4nl repacks with q40's interleave)
                                         dsc[blk * 2l] = gs[blk * 2l * mr + 2l * r]
                                         dsc[blk * 2l + 1l] = gs[blk * 2l * mr + 2l * r + 1l]
                                     }

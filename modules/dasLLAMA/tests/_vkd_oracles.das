@@ -185,6 +185,8 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
             kx.gridw[i] = IQ3XXS_GRID[i]
         }
         k = kx
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        k = new KqGemvIq4nl()   // pure-ALU codebook - no workgroup state to fill
     } else {
         k = new KqGemvK6()
     }
@@ -427,6 +429,37 @@ def iq3xxsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                             let gb = float(int(IQ3XXS_GRID[qi] >> uint(8 * (e % 4))) & 0xFF)
                             let sbit = (int(KSIGNS_IQ2XS[(aux >> (7 * (e / 8))) & 127]) >> (e % 8)) & 1
                             let w = float(float16(dv * sc * (sbit != 0 ? -gb : gb)))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+// IQ4_NL f16-feed GEMM reference over the device form: q40's walk with the codebook in place
+// of (q - 8), f16-rounded per weight like its siblings (q40's 32-word rows + 8 f16 d).
+def iq4nlf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    for (g in range(8)) {
+                        let dp = unpackHalf2x16(wsu[sb * 5 + g / 2])
+                        let dv = g % 2 == 0 ? dp.x : dp.y
+                        for (e in range(32)) {
+                            let by = byte_u8(wq, sb * 128 + g * 16 + e % 16)
+                            let q = (by >> ((e / 16) * 4)) & 0xF
+                            let w = float(float16(dv * float(int(IQ4NL_LUT[q]))))
                             acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
                         }
                     }
