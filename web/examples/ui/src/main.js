@@ -690,8 +690,11 @@ runCode = async function() {
         const assets = await collectAssetUrls();
         await markProgramBusy('starting');
         dispatchingRun = true;
-        activeRunToken = PlaygroundRunner.run(collectProgramFiles(), ['main.das'], assets);
-        dispatchingRun = false;
+        try {
+            activeRunToken = PlaygroundRunner.run(collectProgramFiles(), ['main.das'], assets);
+        } finally {
+            dispatchingRun = false;
+        }
     } finally {
         runEntryBusy = false;
     }
@@ -716,11 +719,14 @@ runTests = async function() {
         const assets = await collectAssetUrls();
         await markProgramBusy('starting');
         dispatchingRun = true;
-        activeRunToken = PlaygroundRunner.run(
-            collectProgramFiles(),
-            ['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0'],
-            assets);
-        dispatchingRun = false;
+        try {
+            activeRunToken = PlaygroundRunner.run(
+                collectProgramFiles(),
+                ['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0'],
+                assets);
+        } finally {
+            dispatchingRun = false;
+        }
     } finally {
         runEntryBusy = false;
     }
