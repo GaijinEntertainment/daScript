@@ -356,7 +356,10 @@
             if (now - lastReviveAt < REVIVE_COOLDOWN_MS) return false;
             lastReviveAt = now;
             spareAborts = 0;
-            reportProgress("start", 0);
+            // Back to an indeterminate download, not "start": a revive after a
+            // failed compile re-fetches the runtime, and the first real chunk
+            // tick takes over the percentage from here.
+            reportProgress("download", -1);
             ensureSpare();
             if (typeof window.updateButtonStates === "function") window.updateButtonStates();
             return true;
