@@ -3,14 +3,19 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md` (repo root).
 
+A tool is a directory that owns one program - its entry point and the files only that program
+uses - under `utils/`, or outside `utils/` when `CMakeLists.txt` (beside this file) builds or
+ships it.
+
 **A file under `utils/` that belongs to a tool other than the one owning the directory it
 sits in is reviewed with that tool's own `REVIEW.md`, where one exists, as well as with this
-checklist - not with the checklist of the directory it sits in. A file in a `utils/` library
-directory (`common/`) is reviewed with this checklist and with the checklist of every tool
-that requires it.** A tool is a directory that owns one program - its entry point and the files
-only that program uses - under `utils/`, or outside `utils/` when `CMakeLists.txt` (beside this
-file) builds or ships it; a tool's file outside `utils/` answers to the checklist of the folder
-that contains it as well as to this one.
+checklist - not with the checklist of the directory it sits in.**
+
+**A file in a `utils/` library directory (`common/`) is reviewed with this checklist and with
+the checklist of every tool that requires it.**
+
+**A tool's file outside `utils/` answers to the checklist of the folder that contains it as
+well as to this one.**
 
 **A diff that changes the consent wording in `watchdog/watchdog.py` answers to
 `modules/dasLLAMA/performance/REVIEW.md` (repo root) too.**
@@ -26,15 +31,21 @@ removed entry.
 **A diff that deletes a tool outright records the decision beside `DAS_UTILS_SHIPPED_EXES` in
 `CMakeLists.txt` (beside this file), in the same change.**
 
-**A new or changed test for a `utils/` tool whose load-bearing assertions a CI lane can run -
-the assertions that prove the change, not a skip-path assertion - ships with a CI row that
-executes those assertions, wherever the diff puts the test, added in the same change if no
-row already covers it.** A row that only compile-checks the test (`dastest --compile-only`)
-does not execute them. A test whose assertions no row executes never runs again.
+**A test the diff adds or changes alongside a change under `utils/`, whose load-bearing
+assertions a CI lane runs against the change - the assertions that prove it, not a skip-path
+assertion - ships with a CI row that executes those assertions, wherever the diff puts the
+test, added in the same change if no row already covers it.** A row that only compile-checks
+the test (`dastest --compile-only`) does not execute them. A test whose assertions no row
+executes never runs again.
 
-**A new or changed test for a `utils/` tool whose load-bearing assertions no CI lane can run
-ships with a CI row that compile-checks it.**
+**A test whose only executing row runs against an already-deployed artifact (a nightly lane
+driving the live site) takes the same obligation as a compile-only row: the PR description
+records an executed local run of those assertions against the change.** A lane that tests
+production after merge proves nothing about the diff under review.
 
-**A new or changed test for a `utils/` tool that gets a compile-only row records its executed
+**A test the diff adds or changes alongside a change under `utils/`, whose load-bearing
+assertions no CI lane can run, ships with a CI row that compile-checks it.**
+
+**A test the diff adds or changes alongside a change under `utils/` that gets a compile-only row records its executed
 run in the PR description**: the machine the assertions ran on, what that machine had that CI
 lacks, and the pass count.

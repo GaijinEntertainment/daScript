@@ -450,6 +450,32 @@ def gate_review_md(ctx : PreflightCtx) : GateResult {
         output = join(findings, "\n"))
 }
 
+def gate_md_ascii(ctx : PreflightCtx) : GateResult {
+    let t0 = ref_time_ticks()
+    let changed = run_argv(["git", "diff", "--name-only", "{ctx.base}..HEAD"])
+    if (changed.rc != 0) {
+        return GateResult(name = "md-ascii", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "git diff {ctx.base}..HEAD failed - fetch origin first")
+    }
+    var touches_md = false
+    for (f in non_empty_lines(changed.out)) {
+        if (f |> ends_with(".md")) {
+            touches_md = true
+        }
+    }
+    if (!touches_md) {
+        return GateResult(name = "md-ascii", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "no .md changed vs {ctx.base}")
+    }
+    let r = run_argv(["python3", "ci/fix_md_ascii.py", "--check"])
+    if (r.rc == 0) {
+        return GateResult(name = "md-ascii", status = GateStatus.Pass, seconds = seconds_since(t0))
+    }
+    return GateResult(name = "md-ascii", status = GateStatus.Fail, seconds = seconds_since(t0),
+        detail = "non-ascii markdown (mirrors CI's Markdown ASCII gate) - `python3 ci/fix_md_ascii.py` fixes in place",
+        output = r.out)
+}
+
 def gate_hash_refs() : GateResult {
     let t0 = ref_time_ticks()
     let shas = run_argv(["git", "log", "origin/master..HEAD", "--format=%H"])
@@ -1315,6 +1341,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings; --lint-skip-exe-rail drops the exe rail"),
         GateInfo(name = "hash-refs", full_only = false, doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
         GateInfo(name = "review-md", full_only = false, doc = "REVIEW.das gates of every folder the diff touches (utils/internal/review-md; mirrors CI's extended_checks step)"),
+        GateInfo(name = "md-ascii", full_only = false, doc = "ci/fix_md_ascii.py --check when the diff touches .md (mirrors CI's Markdown ASCII gate in extended_checks)"),
         GateInfo(name = "ast-verify", full_only = false, doc = "daslang -dry-run --ast-verify-batch on changed .das (parallel, 300s/file; mirrors CI) - an AST verify line, a crash, or a timeout fails"),
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
@@ -1478,6 +1505,8 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 r <- gate_hash_refs()
             } elif (info.name == "review-md") {
                 r <- gate_review_md(ctx)
+            } elif (info.name == "md-ascii") {
+                r <- gate_md_ascii(ctx)
             } elif (info.name == "ast-verify") {
                 r <- gate_ast_verify(ctx)
             } elif (info.name == "cpp-syntax") {

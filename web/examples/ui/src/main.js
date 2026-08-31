@@ -503,6 +503,102 @@ function isWasmReady() {
     return typeof PlaygroundRunner !== 'undefined' && PlaygroundRunner.isReady();
 }
 
+// ── The Run button doubles as the status indicator ──────────────────────────
+// Two waits used to be invisible: the ~40MB runtime download on page load (the
+// button just sat dark) and the seconds between a Run click and the program's
+// first output (the interpreter compiles the script synchronously — nothing on
+// screen moves). The button itself now carries both: a left-to-right progress
+// fill with a percent label while the runtime loads, and an animated "running…"
+// stripe from the click until the program first shows life (any output, a
+// canvas, an fps tick, or exit — playground-runner.js reports it). The stripe
+// animates a compositor-driven transform, so it keeps moving even while the
+// frame's synchronous compile has this thread blocked.
+var runtimePhase = 'download';   // download → compile → start → ready (or dead)
+var runtimeFraction = -1;        // 0..1, or -1 = unknown (no tick yet / no Content-Length)
+var programBusy = null;          // null | 'starting' (interpreter) | 'building' (wasm)
+var activeRunToken = 0;          // PlaygroundRunner.run() token the busy state belongs to
+var buildSeq = 0;                // ditto for wasm builds
+var dispatchingRun = false;      // inside PlaygroundRunner.run(): its reset() is not a stop
+var runEntryBusy = false;        // reentrancy guard across runCode/runTests' await windows
+
+var RUN_LABEL = '▶ run';
+
+function paintRunButton() {
+    const runBtn = document.getElementById('run');
+    if (!runBtn) return;
+    const runnerDead = typeof PlaygroundRunner !== 'undefined'
+        && PlaygroundRunner.isDead && PlaygroundRunner.isDead();
+    const loading = selectedEngine() !== 'wasm' && !isWasmReady() && !runnerDead;
+    runBtn.classList.toggle('pg-busy', !!programBusy);
+    runBtn.classList.toggle('pg-loading', !programBusy && loading);
+    if (programBusy) {
+        runBtn.textContent = programBusy === 'building' ? 'building…' : 'running…';
+    } else if (loading) {
+        if (runtimePhase === 'download') {
+            if (runtimeFraction >= 0) {
+                const pct = Math.round(runtimeFraction * 100);
+                runBtn.textContent = 'loading ' + pct + '%';
+                runBtn.style.setProperty('--pg-progress', pct + '%');
+            } else {
+                // fraction unknown (no Content-Length): indeterminate, no made-up number
+                runBtn.textContent = 'loading…';
+                runBtn.style.removeProperty('--pg-progress');
+            }
+        } else if (runtimePhase === 'compile' || runtimePhase === 'start') {
+            // bytes are in; the compile/instantiation tail is short
+            runBtn.textContent = runtimePhase === 'compile' ? 'compiling…' : 'starting…';
+            runBtn.style.setProperty('--pg-progress', '100%');
+        } else {
+            // phase 'ready' with no ready frame = the post-run spare warming; no
+            // fake full bar for it
+            runBtn.textContent = 'starting…';
+            runBtn.style.removeProperty('--pg-progress');
+        }
+    } else {
+        runBtn.textContent = RUN_LABEL;
+        runBtn.style.removeProperty('--pg-progress');
+    }
+}
+
+// Called by playground-runner.js on every download tick and phase change.
+window.pgRuntimeProgress = function (phase, fraction) {
+    runtimePhase = phase;
+    runtimeFraction = (typeof fraction === 'number') ? fraction : -1;
+    if (phase === 'ready' || phase === 'dead') updateButtonStates();
+    else paintRunButton();
+};
+
+// First message from the running frame. The token pins it to the run that set
+// the state — the OUTGOING frame keeps posting until run() swaps it out, and a
+// wasm 'building' state must never be cleared by an interpreter frame.
+window.pgProgramActivity = function (type, token) {
+    if (programBusy !== 'starting' || token !== activeRunToken) return;
+    programBusy = null;
+    updateButtonStates();
+};
+
+// The current frame was destroyed (Clear/New, or a new run superseding): it
+// will never post again, so a 'running…' state it owned clears here. run()'s
+// own reset() is not a stop — the dispatch flag covers that window.
+window.pgProgramStopped = function () {
+    if (dispatchingRun || programBusy !== 'starting') return;
+    programBusy = null;
+    updateButtonStates();
+};
+
+// Flip into the busy state and give the browser one painted frame before the
+// heavy work starts (the frame's callMain compiles synchronously on this same
+// thread). The timeout arm keeps a hidden tab — where rAF never fires — from
+// deferring the dispatch itself.
+function markProgramBusy(kind) {
+    programBusy = kind;
+    updateButtonStates();
+    return new Promise(resolve => {
+        const t = setTimeout(resolve, 100);
+        requestAnimationFrame(() => setTimeout(() => { clearTimeout(t); resolve(); }, 0));
+    });
+}
+
 // Toggle Run + Test buttons. Run requires WASM ready; Test additionally
 // requires a [test] annotation in any open buffer. Called from autosave
 // (every buffer/state mutation) and from Module.onRuntimeInitialized (WASM
@@ -534,11 +630,19 @@ function updateButtonStates() {
     // button on a dead page would make that state permanent.
     const runnerDead = typeof PlaygroundRunner !== 'undefined'
         && PlaygroundRunner.isDead && PlaygroundRunner.isDead();
-    if (runBtn) runBtn.disabled = selectedEngine() === 'wasm' ? false : !(ready || runnerDead);
+    // The interpreter busy state is VISUAL only ('running…' + stripe): Run
+    // re-enables as soon as the next spare is ready, and a click during a run is
+    // the kill switch (run() destroys the old frame) — a misbehaving program
+    // must never hold down the one button that stops it. Only a wasm build
+    // disables Run: nothing to kill there, just a duplicate build to prevent.
+    if (runBtn) runBtn.disabled = selectedEngine() === 'wasm'
+        ? programBusy === 'building'
+        : !(ready || runnerDead);
     // Test always runs interpreted, through the local runtime — and on a dead
     // page it stays clickable for the same reason Run does: the click is the
     // revive trigger (runTests routes through the same reportNotReady).
     if (testBtn) testBtn.disabled = !(ready || runnerDead) || !hasTestAnnotation();
+    paintRunButton();
 }
 // Kept under the old name so playground-tabs.js's existing autosave hook
 // still works without churn — it triggers a full refresh.
@@ -565,19 +669,35 @@ function reportNotReady() {
 // (stdout flushing moved into run-frame.html, where FS now lives)
 
 runCode = async function() {
-    syncUrlToState();
-    if (selectedEngine() === 'wasm') {
-        await runWasm();
-        return;
+    if (runEntryBusy) return;   // a click mid-await must not queue a second run
+    runEntryBusy = true;
+    try {
+        syncUrlToState();
+        if (selectedEngine() === 'wasm') {
+            await runWasm();
+            return;
+        }
+        if (!isWasmReady()) {
+            reportNotReady();
+            return;
+        }
+        // Each run gets a fresh frame, so the previous program's canvas, GL
+        // context, module registry and MEMFS are gone before this one starts.
+        // No "compiling…" line in the output pane: the pane is the PROGRAM's
+        // output (tests and the sample verifier read it); the button carries
+        // the status.
+        showCanvas(false);
+        const assets = await collectAssetUrls();
+        await markProgramBusy('starting');
+        dispatchingRun = true;
+        try {
+            activeRunToken = PlaygroundRunner.run(collectProgramFiles(), ['main.das'], assets);
+        } finally {
+            dispatchingRun = false;
+        }
+    } finally {
+        runEntryBusy = false;
     }
-    if (!isWasmReady()) {
-        reportNotReady();
-        return;
-    }
-    // Each run gets a fresh frame, so the previous program's canvas, GL context,
-    // module registry and MEMFS are gone before this one starts.
-    showCanvas(false);
-    PlaygroundRunner.run(collectProgramFiles(), ['main.das'], await collectAssetUrls());
 }
 
 // Invoke dastest against the current main.das. `[test]` functions in the file
@@ -587,16 +707,29 @@ runCode = async function() {
 // wall-clock thread (suite.das wraps each file in new_thread when timeout>0),
 // keeping the run single-threaded in the WASM build.
 runTests = async function() {
-    if (!isWasmReady()) {
-        reportNotReady();
-        return;
+    if (runEntryBusy) return;
+    runEntryBusy = true;
+    try {
+        if (!isWasmReady()) {
+            reportNotReady();
+            return;
+        }
+        syncUrlToState();
+        showCanvas(false);
+        const assets = await collectAssetUrls();
+        await markProgramBusy('starting');
+        dispatchingRun = true;
+        try {
+            activeRunToken = PlaygroundRunner.run(
+                collectProgramFiles(),
+                ['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0'],
+                assets);
+        } finally {
+            dispatchingRun = false;
+        }
+    } finally {
+        runEntryBusy = false;
     }
-    syncUrlToState();
-    showCanvas(false);
-    PlaygroundRunner.run(
-        collectProgramFiles(),
-        ['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0'],
-        await collectAssetUrls());
 }
 
 // Minimal wasi_snapshot_preview1 shim — daslang STANDALONE_WASM output only
@@ -723,10 +856,11 @@ async function runWasm() {
         printOutput('wasm engine unavailable: build client not loaded', '#ff9393');
         return;
     }
-    // A build is not instant, so the button must not invite a second one.
-    const runBtn = document.getElementById('run');
-    const wasBusy = runBtn ? runBtn.disabled : false;
-    if (runBtn) runBtn.disabled = true;
+    // A build is not instant, so the button must not invite a second one — the
+    // busy state disables it and shows the animated "building…" stripe. The
+    // token keeps this build's finally from clearing a state a later run owns.
+    const myBuild = ++buildSeq;
+    await markProgramBusy('building');
     try {
         const result = await window.pgWasmBuild.build(line => printOutput(line, '#9aa0a6'));
         if (!result.ok) {
@@ -742,7 +876,10 @@ async function runWasm() {
     } catch (e) {
         printOutput('wasm build error: ' + (e && e.message ? e.message : e), '#ff2d2d');
     } finally {
-        if (runBtn) runBtn.disabled = wasBusy;
+        if (programBusy === 'building' && myBuild === buildSeq) {
+            programBusy = null;
+            updateButtonStates();
+        }
     }
 }
 

@@ -3,7 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-- **A plain-value bind added or changed under this folder uses `addExternInline` or
+- **A diff that adds or changes an `addExtern...`/`addInterop` registration under this folder
+  uses, for a plain-value bind, `addExternInline` or
   `addExternInlineEx` when its module is an Inline module, and an `addExtern...` entry point
   whose name does not contain `Inline` in every other module.** A bind is a C++ function
   registered into a module with an `addExtern...` or `addInterop` entry point; annotation,

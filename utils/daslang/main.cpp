@@ -268,6 +268,12 @@ int das_aot_main ( int argc, char * argv[] ) {
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 
+namespace das {
+    // link-time resolved: src/builtin/module_builtin_jobque.cpp — bounded drain +
+    // teardown of the global job que; false = jobs did not drain, LEAK the context
+    bool shutdown_job_que_bounded ( int timeoutMs );
+}
+
 // Browser 3-call lifecycle: a wasm page cannot block in main()'s while(true) — it
 // must yield to the browser each frame. So a program that exposes `update` is run
 // as a browser main-loop instead of single-shot main(): init() once, then update()
@@ -308,18 +314,34 @@ namespace {
     // in stop_browser_loop respects the same flag as the end-of-callMain dump.
     bool g_webloop_dump_leaks = true;
 
-    // Stop the active loop: cancel its main loop, run its shutdown() (which
-    // destroys the GLFW window + glfwTerminate — without this the next program's
-    // glfwCreateWindow aborts "only supports one window at a time"), free the
-    // Context. Idempotent; null-guarded; best-effort (teardown ignores exceptions).
-    void stop_browser_loop () {
-        if ( !g_activeWebLoop ) return;
+    // main() returns while the loop still runs the program — Module::Shutdown
+    // there destroys live state (~Module_JobQue killed init()'s persistent que:
+    // the playground wedge). main() sets this; the loop's natural end consumes
+    // it. The superseded path leaves modules alive — the next program needs them.
+    bool g_webloop_defer_module_shutdown = false;
+
+    // Stop the active loop: cancel it, run the script's shutdown() (destroys the
+    // GLFW window — the next glfwCreateWindow aborts otherwise), drain the jobs,
+    // free the Context. Idempotent; best-effort. False = que would not drain:
+    // the Context is deliberately LEAKED (jobs still reference its memory) and
+    // the caller must skip anything that joins the workers.
+    bool stop_browser_loop () {
+        if ( !g_activeWebLoop ) return true;
         auto loop = g_activeWebLoop;
         g_activeWebLoop = nullptr;
         emscripten_cancel_main_loop();
         if ( loop->shutdownFn ) {
             loop->ctx->evalWithCatch(loop->shutdownFn, nullptr);
-            loop->ctx->getException();   // swallow — teardown is best-effort
+            if ( auto ex = loop->ctx->getException() ) {
+                // best-effort continues, but not silently — the throw also skipped
+                // the rest of the program's shutdown()
+                tout << "EXCEPTION in shutdown(): " << ex << " at " << loop->ctx->exceptionAt.describe() << "\n";
+            }
+        }
+        // drain BEFORE the Context dies — fork contexts share its memory; bounded
+        if ( !das::shutdown_job_que_bounded(3000) ) {
+            tout << "job que did not drain in 3s — leaking the program's context rather than freeing memory under running jobs\n";
+            return false;
         }
         delete loop;   // drops the Context shared_ptr -> Context + its objects freed
         // Real leak check for browser-loop programs: now that the program has ended
@@ -333,6 +355,7 @@ namespace {
                 JobStatus::DumpJobQueLeaks();
             }
         }
+        return true;
     }
 
     void web_loop_tick ( void * arg ) {
@@ -352,7 +375,16 @@ namespace {
         }
         // void update(): runs until the page closes or the next run stops it.
         if ( keepGoing ) loop->ctx->collectHeapIfMostlyFree();
-        if ( !keepGoing ) stop_browser_loop();
+        if ( !keepGoing ) {
+            bool drained = stop_browser_loop();
+            // the deferred Module::Shutdown runs only on a drained que —
+            // ~Module_JobQue joins workers unbounded; undrained = leak modules
+            // alongside the already-leaked context (one program per frame)
+            if ( g_webloop_defer_module_shutdown ) {
+                g_webloop_defer_module_shutdown = false;
+                if ( drained ) Module::Shutdown(g_webloop_dump_leaks);
+            }
+        }
     }
 
     // True ⇒ the program was launched as a browser loop (Context persisted, main
@@ -1022,24 +1054,18 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     // and done
     if ( pauseAfterDone ) getchar();
 #ifdef __EMSCRIPTEN__
-    // A browser main-loop (update/init/shutdown program) keeps running after
-    // callMain returns — its Context, JobStatus and smart_ptrs are legitimately
-    // still alive (freed when the loop ends, via stop_browser_loop, which runs its
-    // own leak check). Module::Shutdown still runs (its per-run cleanup is needed
-    // for the next program to start cleanly), but with leak reporting off; then we
-    // return before the end-of-run JobStatus/smart_ptr dump + exit(1), which assume
-    // the program is finished and would flag every in-use object as "leaked".
-    const bool browserLoopActive = ( g_activeWebLoop != nullptr );
-#else
-    const bool browserLoopActive = false;
+    // A browser-loop program is still RUNNING here: no Module::Shutdown (its
+    // dtors destroy live state — see g_webloop_defer_module_shutdown), and no
+    // leak dump/exit(1) — every in-use object would read as leaked.
+    if ( g_activeWebLoop != nullptr ) {
+        g_webloop_defer_module_shutdown = true;
+        return exitCode;
+    }
 #endif
     // Handle-leak dump runs inside Module::Shutdown, between module
     // destruction (drains job threads) and DLL unload (invalidates the
     // dumpHandleLeaks<T> function pointers registered from shared modules).
-    Module::Shutdown(dumpLeaks && !browserLoopActive);
-    if ( browserLoopActive ) {
-        return exitCode;
-    }
+    Module::Shutdown(dumpLeaks);
     if ( dumpLeaks ) {
         JobStatus::DumpJobQueLeaks();
     }

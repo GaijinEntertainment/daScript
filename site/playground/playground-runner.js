@@ -13,11 +13,12 @@
 (function () {
     "use strict";
 
-    var FRAME_SRC = "run-frame.html?v=3";
+    var FRAME_SRC = "run-frame.html?v=5";
 
     var host = null;        // element the frames live in
     var current = null;     // frame serving the run in flight (or the idle one)
     var spare = null;       // pre-warmed frame, so a Run click pays ~0 startup
+    var runSeq = 0;         // run identity for the busy-state token (see run())
     var onOutput = null;    // set by main.js: (text, color) => void
     var onExit = null;
 
@@ -42,6 +43,27 @@
     var WASM_URL = "daslang_static.wasm";
     var wasmModulePromise = null;
 
+    // ── load progress ────────────────────────────────────────────────────────
+    // The runtime is ~40MB and the Run button is dead until it lands, so the
+    // button doubles as the progress bar (main.js paints it). Reported phases:
+    //   download  (0..1 of the runtime fetch — the long pole)
+    //   compile   (WebAssembly.compileStreaming, indeterminate)
+    //   start     (frame instantiation, indeterminate)
+    //   ready     (a frame is standing by)
+    //   dead      (the runner gave up — Run click revives)
+    // Phase changes and download ticks both go through here; main.js owns the
+    // presentation.
+    var loadPhase = "download";
+    var loadFraction = 0;
+
+    function reportProgress(phase, fraction) {
+        loadPhase = phase;
+        if (fraction !== undefined) loadFraction = fraction;
+        if (typeof window.pgRuntimeProgress === "function") {
+            window.pgRuntimeProgress(loadPhase, loadFraction);
+        }
+    }
+
     // A download that stops flowing must reject rather than hang: once a frame
     // has been acked, this promise is the only thing it is waiting on — nothing
     // else times out, so a silent stall would wedge the page in the exact shape
@@ -53,6 +75,8 @@
         return fetch(WASM_URL).then(function (r) {
             if (!r.ok) throw new Error("HTTP " + r.status + " fetching " + WASM_URL);
             if (!r.body || typeof TransformStream === "undefined") return r;
+            var total = +r.headers.get("Content-Length") || 0;
+            var loaded = 0;
             var timer = null;
             function arm(controller) {
                 clearTimeout(timer);
@@ -62,8 +86,22 @@
             }
             var guard = new TransformStream({
                 start: function (c) { arm(c); },
-                transform: function (chunk, c) { arm(c); c.enqueue(chunk); },
-                flush: function () { clearTimeout(timer); },
+                transform: function (chunk, c) {
+                    arm(c);
+                    loaded += chunk.byteLength;
+                    // No Content-Length (chunked encoding): report the phase with
+                    // an UNKNOWN fraction (-1) rather than inventing a percentage —
+                    // the button then shows an indeterminate "loading…" instead of
+                    // sitting on a stuck number.
+                    reportProgress("download", total > 0 ? Math.min(loaded / total, 1) : -1);
+                    c.enqueue(chunk);
+                },
+                flush: function () {
+                    clearTimeout(timer);
+                    // Bytes are all in; what remains is the tail of the
+                    // streaming compile, then frame instantiation.
+                    reportProgress("compile", 1);
+                },
             });
             // Headers ride along so compileStreaming still sees the wasm MIME type.
             return new Response(r.body.pipeThrough(guard), { headers: r.headers });
@@ -74,6 +112,7 @@
         if (!wasmModulePromise) {
             wasmModulePromise = fetchRuntimeWithStallGuard()
                 .then(function (r) { return WebAssembly.compileStreaming(r); })
+                .then(function (mod) { reportProgress("start", 1); return mod; })
                 .catch(function (e) {
                     // The ladder the emscripten glue always had: streaming compile
                     // hard-requires the application/wasm MIME type, and losing the
@@ -205,6 +244,17 @@
         else if (spare && ev.source === spare.el.contentWindow) rec = spare;
         if (!rec) return;
 
+        // First sign of life from the running program — output, a canvas, a drawn
+        // frame, an exit — ends the Run button's "running…" state (main.js). The
+        // token pins the signal to the run that set the state: an OUTGOING frame
+        // stays `current` (and alive, posting) until the next run() promotes the
+        // spare, and its messages must not clear a state it did not own. A bare
+        // fps tick is not life — the meter ticks from frame load; value > 0 is.
+        if (rec === current && msg.type !== "need-wasm-module" && msg.type !== "ready"
+            && (msg.type !== "fps" || msg.value > 0)) {
+            if (typeof window.pgProgramActivity === "function") window.pgProgramActivity(msg.type, rec.runToken);
+        }
+
         switch (msg.type) {
             case "need-wasm-module":
                 // Ack immediately: the compile can take seconds, and without an
@@ -224,6 +274,7 @@
             case "ready":
                 rec.ready = true;
                 if (rec === spare) spareAborts = 0;
+                reportProgress("ready", 1);
                 if (typeof window.updateButtonStates === "function") window.updateButtonStates();
                 if (rec.pending) { var p = rec.pending; rec.pending = null; send(rec, p); }
                 break;
@@ -239,6 +290,7 @@
                     destroy(spare);
                     spare = null;
                     if (++spareAborts <= MAX_SPARE_ABORTS) ensureSpare();
+                    else reportProgress("dead", 0);
                     if (typeof window.updateButtonStates === "function") window.updateButtonStates();
                 }
                 break;
@@ -307,6 +359,10 @@
             if (now - lastReviveAt < REVIVE_COOLDOWN_MS) return false;
             lastReviveAt = now;
             spareAborts = 0;
+            // Back to an indeterminate download, not "start": a revive after a
+            // failed compile re-fetches the runtime, and the first real chunk
+            // tick takes over the percentage from here.
+            reportProgress("download", -1);
             ensureSpare();
             if (typeof window.updateButtonStates === "function") window.updateButtonStates();
             return true;
@@ -338,20 +394,28 @@
             renderBadge(null);   // the run it described is gone
             spareAborts = 0;
             ensureSpare();
+            // The destroyed frame will never post again — tell main.js so a
+            // "running…" state it owned cannot outlive it (Clear during a run
+            // used to leave the buttons latched for the life of the page).
+            if (typeof window.pgProgramStopped === "function") window.pgProgramStopped();
             if (typeof window.updateButtonStates === "function") window.updateButtonStates();
         },
 
         // files: { "main.das": "...", ... }  args: argv for callMain
         // assets: URLs fetched into MEMFS before the program starts
+        // Returns a token identifying this run; program-activity callbacks carry
+        // it so main.js can pin its busy state to the run that set it.
         run: function (files, args, assets) {
             this.reset();
             current = spare;
             spare = null;
             current.used = true;
+            current.runToken = ++runSeq;
             send(current, { type: "run", files: files, args: args, assets: assets || [] });
             // Warm the next one while this program runs, so the following Run
             // click does not pay startup either.
             ensureSpare();
+            return current.runToken;
         },
     };
 

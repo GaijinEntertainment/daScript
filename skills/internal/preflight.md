@@ -126,6 +126,7 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 
 | CI step | Local mirror | Notes |
 |---|---|---|
+| Markdown ASCII gate | preflight's `md-ascii` gate (fast tier, runs when the diff touches any `.md`); manual: `python3 ci/fix_md_ascii.py --check`, fix in place by dropping `--check` | em-dashes/arrows/ellipses in new markdown are the usual trip |
 | dasgen freshness | `<daslang> utils/internal/dasgen/gen_bind.das` then `git diff --exit-code -- include/daScript/builtin/` | regen + commit if dirty; `skills/internal/visitor_gen_bind.md` |
 | Run examples | `cmake --build build --config Release --target run_examples` | |
 | Utils tests | `cmake --build build --config Release --target run_utils_tests` | |

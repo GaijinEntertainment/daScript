@@ -8,6 +8,10 @@
 #include "daScript/misc/job_que.h"
 #include "module_builtin_rtti.h"
 
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+#include <emscripten/threading.h>   // emscripten_is_main_browser_thread (waitForJob's bounded join)
+#endif
+
 MAKE_TYPE_FACTORY(JobStatus, JobStatus)
 MAKE_TYPE_FACTORY(Channel, Channel)
 MAKE_TYPE_FACTORY(LockBox, LockBox)
@@ -1301,6 +1305,27 @@ namespace das {
         if ( g_jobQue.use_count()==1 ) g_jobQue.reset();  // ~JobQue drains/joins the pool
     }
 
+    // Bounded drain + teardown of the global que, for an embedder about to
+    // destroy a Context that in-flight jobs still reference (the browser loop).
+    // On timeout the que stays alive and the CALLER must leak the context —
+    // freeing it under running jobs is heap corruption, joining them a frozen tab.
+    bool shutdown_job_que_bounded ( int timeoutMs ) {
+        flushPendingForkJobs();     // batched closures reference the context too — publish them into the drain
+        g_batchForkJobs = false;
+        shared_ptr<JobQue> jq;
+        {
+            lock_guard<mutex> guard(g_jobQueMutex);
+            jq = g_jobQue;
+        }
+        if ( !jq ) return true;
+        if ( !jq->drain(timeoutMs) ) return false;
+        jq.reset();
+        lock_guard<mutex> guard(g_jobQueMutex);
+        g_persistentJobQue.reset();
+        if ( g_jobQue.use_count()==1 ) g_jobQue.reset();  // idle pool — ~JobQue joins promptly
+        return true;
+    }
+
     void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "jobStatusAddRef: status is null");
         status->addRef(at);
@@ -1338,6 +1363,42 @@ namespace das {
     void waitForJob ( JobStatus * status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "waitForJob: status is null");
         flushPendingForkJobs();     // batched dispatch publishes at the join point
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+        // An unbounded join on the browser main thread is a frozen tab. Join in
+        // slices; on a stall, throw ONLY when nothing can ever notify: every
+        // dispatched job/thread holds a ref (capture macros add_ref), so
+        // refCount()<=1 = the wedge class. Refs held = live work — keep waiting
+        // (a throw there unwinds through noexcept with_* guard dtors =
+        // std::terminate, and a late notifier writes into a dead stack frame);
+        // log the stall to stderr instead.
+        if ( emscripten_is_main_browser_thread() ) {
+            const int sliceMs = 500, stallLimitMs = 10000;
+            int32_t last = status->size();
+            int stalledMs = 0;
+            bool warned = false;
+            while ( !status->WaitFor(sliceMs) ) {
+                int32_t now = status->size();
+                if ( now < last ) {         // only completions are progress; an append is not
+                    last = now;
+                    stalledMs = 0;
+                    continue;
+                }
+                last = now;
+                if ( (stalledMs += sliceMs) < stallLimitMs ) continue;
+                stalledMs = 0;
+                if ( status->refCount() <= 1 ) {
+                    context->throw_error_at(at,
+                        "join deadlock avoided: %d job(s) can never complete — appended but never dispatched (no live job or thread holds this status)",
+                        int(now));
+                } else if ( !warned ) {
+                    warned = true;
+                    fprintf(stderr, "join stalled for %ds on the browser main thread: %d job(s) remaining, still held by live work — waiting\n",
+                        stallLimitMs / 1000, int(now));
+                }
+            }
+            return;
+        }
+#endif
         status->Wait();
     }
 
