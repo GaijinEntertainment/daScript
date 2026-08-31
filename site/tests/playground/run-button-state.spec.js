@@ -15,11 +15,15 @@ async function waitWasmReady(page) {
 }
 
 test('pgRuntimeProgress paints percent, indeterminate, and phase labels', async ({ playground }) => {
-    // Pin the loading state: with a staged runtime the spare is ready and the
-    // paint would show '▶ run' regardless of phase. Real download ticks from the
-    // warming spare race any two-step read, so each probe paints AND reads in
-    // one evaluate. Restored by page teardown.
-    await playground.evaluate(() => { window.PlaygroundRunner.isReady = () => false; });
+    // Pin the loading state: with a staged runtime the spare is ready, and with
+    // none (the no-WASM lane) the runner goes DEAD after its abort budget —
+    // either way the paint would show '▶ run' regardless of phase. Real download
+    // ticks race any two-step read, so each probe paints AND reads in one
+    // evaluate. Restored by page teardown.
+    await playground.evaluate(() => {
+        window.PlaygroundRunner.isReady = () => false;
+        window.PlaygroundRunner.isDead = () => false;
+    });
     const paint = (phase, fraction) => playground.evaluate(
         ([p, f]) => {
             window.pgRuntimeProgress(p, f);
