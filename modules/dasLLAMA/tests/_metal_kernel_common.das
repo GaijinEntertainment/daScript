@@ -174,7 +174,7 @@ let KQ_SAFE_SCALES = fixed_array(0.25, 0.5, 1.0, 0.125, 2.0, 0.75, 1.5, 0.375)
 // [12 packed 6-bit bytes] per superblock, K6 = [16B sub-scales] x nsb + f16 d tail, IQ4_XS (44) =
 // the same split form with [8 signed sub-scales in -31..31][8 zero] strips, Q3_K (3) = the k6 form over 96B quants
 def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>) {   // nolint:STYLE037 - the flat per-format fill ladder is the honest shape
-    let qsb = fmt == 2 ? 64 : (fmt == 23 ? 72 : (fmt == 4 || fmt == 44 || fmt == 45 ? 128 : (fmt == 5 ? 160 : (fmt == 3 ? 96 : (fmt == 33 ? 104 : (fmt == 34 ? 96 : 192))))))
+    let qsb = fmt == 2 || fmt == 24 ? 64 : (fmt == 23 ? 72 : (fmt == 4 || fmt == 44 || fmt == 45 ? 128 : (fmt == 5 ? 160 : (fmt == 3 ? 96 : (fmt == 33 ? 104 : (fmt == 34 ? 96 : 192))))))
     kq |> resize(nsb * qsb)
     for (i in range(nsb * qsb)) {
         kq[i] = kq_hash_byte(i * 3 + fmt)
@@ -201,10 +201,10 @@ def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>)
             ks[b * 2] = uint8(dbits & 0xFFu)
             ks[b * 2 + 1] = uint8(dbits >> 8u)
         }
-    } elif (fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 23) {
+    } elif (fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24) {
         ks |> resize(nsb * 18)
         for (i in range(nsb * 16)) {
-            ks[i] = fmt == 6 || fmt == 3 || fmt == 23 ? kq_hash_byte(i * 7 + 13) : uint8(i % 16 < 8 ? int(kq_hash_byte(i * 7 + 13)) % 63 - 31 : 0)   // 44/33: signed strip bytes + zero pad; 23: 16 unsigned strips
+            ks[i] = fmt == 6 || fmt == 3 || fmt == 23 || fmt == 24 ? kq_hash_byte(i * 7 + 13) : uint8(i % 16 < 8 ? int(kq_hash_byte(i * 7 + 13)) % 63 - 31 : 0)   // 44/33: signed strip bytes + zero pad; 23: 16 unsigned strips
         }
         for (b in range(nsb)) {
             let dbits = f32_to_f16(KQ_SAFE_SCALES[b % 8])
@@ -286,6 +286,9 @@ def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wro
                 int64(nsb_total * 16 + sb * 4), wrow, int64(ib * 256))
         } elif (fmt == 23) {
             dequant_iq2s_plane_superblock_at(kq, int64(sb * 72), ks, int64(sb * 16),
+                int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
+        } elif (fmt == 24) {
+            dequant_iq2xs_plane_superblock_at(kq, int64(sb * 64), ks, int64(sb * 16),
                 int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
         } else {
             dequant_k6_plane_superblock_at(kq, int64(sb * 192), ks, int64(sb * 16),

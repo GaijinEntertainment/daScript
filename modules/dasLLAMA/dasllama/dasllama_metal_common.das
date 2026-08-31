@@ -282,6 +282,11 @@ var g_pso_kq_mvb2_iq2s : MetalComputePipeline?
 var g_pso_kq_mvb4_iq2s : MetalComputePipeline?
 var g_pso_kq_mvb8_iq2s : MetalComputePipeline?
 var g_pso_kq_mm_b23 : MetalComputePipeline?
+var g_pso_kq_iq2xs : MetalComputePipeline?
+var g_pso_kq_mvb2_iq2xs : MetalComputePipeline?
+var g_pso_kq_mvb4_iq2xs : MetalComputePipeline?
+var g_pso_kq_mvb8_iq2xs : MetalComputePipeline?
+var g_pso_kq_mm_b24 : MetalComputePipeline?
 var g_pso_kq_mvb2_iq3xxs : MetalComputePipeline?
 var g_pso_kq_mvb4_iq3xxs : MetalComputePipeline?
 var g_pso_kq_mvb8_iq3xxs : MetalComputePipeline?
@@ -897,6 +902,10 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
             return (buf = plane_buffer(dev, addr < void? >(t.iq2sq[0]), uint64(long_length(t.iq2sq)), t.image_map != null),
                     qoff = uint64(sb0 * 72l))
         }
+        if (fmt == KqFmt.iq2xs) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq2xsq[0]), uint64(long_length(t.iq2xsq)), t.image_map != null),
+                    qoff = uint64(sb0 * 64l))
+        }
         return (buf = plane_buffer(dev, addr < void? >(t.k6q[0]), uint64(long_length(t.k6q)), t.image_map != null),
                 qoff = uint64(sb0 * 192l))
     }
@@ -950,6 +959,11 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
         if (fmt == KqFmt.iq2s) {   // the k6 split form over the 18B/sb device plane (d8 tail)
             let plane_sb = long_length(t.iq2ss) / 18l
             return (buf = plane_buffer(dev, addr < void? >(t.iq2ss[0]), uint64(long_length(t.iq2ss)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
+        }
+        if (fmt == KqFmt.iq2xs) {   // the same split 18B/sb plane over t.iq2xss
+            let plane_sb = long_length(t.iq2xss) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.iq2xss[0]), uint64(long_length(t.iq2xss)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
         }
         return (buf = plane_buffer(dev, addr < void? >(t.k5s[0]), uint64(long_length(t.k5s)), t.image_map != null),

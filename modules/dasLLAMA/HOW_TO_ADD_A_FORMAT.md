@@ -525,6 +525,20 @@ E2e resident: parity ids 64/64 vs llama.cpp - the full-match stream holds on the
 0.70x tier class), tg128 188.7 vs 349.9 (0.54x - the grid-format gemv workgroup re-stage
 amplified on a 1B, followup_vulkan #35; pp healthy isolates it to the gemv). Metal: pending.
 
+
+Phase D (Metal, 2026-08-31): the iq2s Metal walk with the parity trick end to end - `iq2xs_gw`
+(1024 words, the same all-literal program-scope-constant hoisting), `MetalKqGemvIq2xs` +
+`MetalKqMvIq2xsT` B2/B4 + `MetalKqMvB8Iq2xs` + `MetalKqMulMmIq2xs` (its own `IQ2XS`
+static_if arm nested over IQ2S's), every kernel deriving the sign byte via `ksign7m` off the
+u16 word (no sign plane, no qh); the "iq2xss" blob arm = the iq2ss split verbatim (16 strips +
+2B d8 tail, 18B/sb) over the SAME 20B row. Gates: test_metal_gemv 2/2 + test_metal_gemm 2/2
+on the M1 (first try - the iq2s shells carried it), zen2 kquant -jit 246/4 regression, lint 0.
+E2e --ngl 99: parity ids 64/64 - the FIRST format whose full-match stream holds on ALL FOUR
+tiers. M1 16GB benches: CPU das 746.6/51.6 vs llama.cpp 144.8/101.1 (5.16x/0.51x - the
+#60/#61 CPU tg tail, deepest of the grid formats), Metal das 3223.1/180.1 vs 3462.0/208.3
+(0.93x/0.86x - the iq2s pp class). The format is CLOSED on all four tiers; four-tier table:
+zen2 2.78x/0.70x, vk 0.77x/0.54x, M1 CPU 5.16x/0.51x, Metal 0.93x/0.86x.
+
 ### IQ2_S Phase A (CPU, 2026-08-31) - the u64-grid tier
 
 Shape: 256-superblock grid format, the first with a u64 grid - a 10-bit index (qs byte |
