@@ -302,12 +302,10 @@
     names its reason (stale-binary with both dates / foreign-box / version / missing
     entries / absent / unreadable), `DAS_TUNE_MANIFEST` at an untuned-reading file warns
     loudly instead of silently stamping fallbacks, and `[tune_scope] version_of=` pins the
-    scope to `DASLLAMA_VERSION` so a copy-restored old sidecar (fresh mtime, old winners -
+    scope to `DASLLAMA_RELEASE` so a copy-restored old sidecar (fresh mtime, old winners -
     the trap the forensics surfaced) refuses by name. Metal-arm measurement is unblocked;
-    bringup owes the standing fresh quiet-box mint, which also refreshes
-    `performance/last_known_good_sidecar.json` and the `performance/<box>.tune.json` rig
-    sidecars - the checked-in and on-box copies predate the version pin, so until then they
-    serve fallbacks with the named warning.
+    the owed quiet-box mint landed with the release-scope re-mint
+    (`performance/last_known_good_sidecar.json` and the rig sidecars are fresh under it).
 
 23. **Uniform-bound non-causal prefill kernels for Metal and Vulkan.** The image span
     currently serves on the CPU loop by decline: `attn_gpu_prefill_ready`,
@@ -505,7 +503,7 @@
 - **`check_committed_records` gate in `performance/REVIEW.das`** (fused-image-span review round):
     machine-check the two records-provenance rules - every `runs[]` row's
     `hardware.remote_desktop == "off"`, every row `sha` and sidecar `provenance.engine_sha`
-    an ancestor of HEAD, and `provenance.dasllama_version` equal to `DASLLAMA_VERSION` at that
+    an ancestor of HEAD, and `provenance.dasllama_version` equal to `DASLLAMA_RELEASE` at that
     commit. When it lands, the two prose rules in `performance/REVIEW.md` collapse to the
     "weakening that gate is a defect" residue form. Also owed: a re-mint of the gemma-3-4b cpu
     image row (hand-minted in the gemma3v arc; still stamps `parsec` + a pre-branch sha, and
@@ -551,12 +549,11 @@
     its own gate design). Done = either path serving the Omni-3B encode with a
     poison-discriminating tier-1 gate.
 
-45. **The `tests/msl/_fail_closed/` fixture list and `test_msl_fail_closed.das`'s
-    `check_rejects` calls are hand-synced (37 files, 37 calls, nothing checks).** A fixture
-    added without its needle assert (or an assert whose fixture was deleted) drifts silently.
-    Done = a `modules/dasMetal/REVIEW.das` gate cell (the module has none yet - this creates
-    it): every `_fail_closed/*.das` basename appears as a `check_rejects` argument and vice
-    versa - the list-A-equals-list-B shape.
+45. **RESOLVED (2026-08-30, the release-remint arc) - the fixture/assert sync is a
+    `modules/dasMetal/REVIEW.das` cell.** `check_fail_closed_sync` walks
+    `tests/msl/_fail_closed/*.das` and the `check_rejects` calls both directions; either
+    drift is a finding (negative-controlled both ways at landing). The module's REVIEW.das
+    already existed (the RP law) by the time this landed.
 
 46. **The `// clock: control` marker (dasllama REVIEW.md's ad-hoc-profiling split) has no
     mechanical check.** Done = a `REVIEW.das` cell or lint: every `ref_time_ticks()` /
@@ -660,8 +657,44 @@
     the arc-end re-mint on the b10659 ref pin, fresh tune manifest), and the stale m1/m4
     canary rows re-mint or retire.
 
-57. **Plane types have no `long_length`.** `length(PlaneF)` / `length(PlaneU16)` return
-    `int`, so every `uint64(length(t.blob) * 4l)` spelling caps a plane at 2^31 elements
-    before the widening - headroom-only today (whisper large-v3's twin is ~632M elements).
-    Done = `long_length` overloads in `dasllama_plane` and the buffer-sizing call sites
-    moved onto them.
+57. **RESOLVED (2026-08-30, verified no-work) - the Plane `length` overloads already return
+    `int64`.** `dasllama_plane.das` sec.108-112: `def length(pl : PlaneF) : int64 => pl.n`
+    (all five Plane types), so `uint64(length(t.blob) * 4l)` is int64 arithmetic end to end
+    and no plane caps at 2^31. The ledger entry's premise ("return `int`") was wrong when
+    written; the das-array staging twins cannot exceed 2^31 elements by the array limit.
+
+58. **Per-entry kernel-identity hashes in llvm_tune - the fine invalidation the release
+    split trades away.** With tune sidecars scoped to `DASLLAMA_RELEASE` (bumped only on a
+    declared release), a kernel changed mid-release keeps its stale sidecar winner - accepted
+    as perf-only drift (crowns pick among envelope-verified twins; races re-verify at mint).
+    The principled hardening: each sidecar kernel entry carries its kernel's identity hash
+    (the per-function AOT semantic hash the JIT dll cache already folds - in-tree precedent),
+    and a mismatching entry alone re-races or falls back while the rest of the sidecar stays
+    valid. A generic llvm_tune feature, useful beyond dasLLAMA. Done = entry-level staleness
+    by kernel hash, the release scope untouched, and the refusal-reason rail naming
+    "kernel-hash" beside the existing reasons.
+
+59. **daslang's AST serializer could restore function-typed globals by name - retiring the
+    boot-restore class outright.** A serialized exe restores globals as data, so function
+    values arrive null; today every module carrying `var g_x = @@fn` declaration defaults
+    owes a boot-restore `[init]` (the REVIEW.das restore check + test_exe_smoke guard the
+    dasLLAMA tree, minted after the vulkan decode-mirror claim shipped crashing every exe
+    forward). The root fix is daslang-core: serialize a function value as its mangled name
+    and re-resolve at restore - the whole hazard class disappears language-wide, and the
+    restore inits + the gate collapse to history. das-core scope, its own arc.
+
+60. **Crowned-lane strict parity: decide whether the tensor twins owe token-exactness, or
+    the strict gates own the simdgroup lane only.** The release re-mint armed the box's
+    crowns in the test suites for the first time in a while (the pre-remint sidecar was
+    stale, so the crown-consuming gates had been silently measuring fallback), and two
+    strict cells crossed their bars under crowned kernels: whisper's cross-lane
+    token-identity (attn_qkmm - 10/25 flips on jfk) and gemma4uv's tier-1 rung (mulmm_bf16 -
+    6e-05 past a scale-relative bar on one canvas). Both cells now pin the simdgroup lane
+    via `pin_metal_tensor_crowns` (dasllama_common - a latch `apply_box_profile_runtime`
+    respects, since every load re-applies profile crowns over a bare setter); the crowned
+    lane's serving quality stays covered by the board's parity pregate (word-level). The
+    open question: should the tensor twins' race envelope bar be tightened until the strict
+    gates pass crowned, or is per-lane gating the honest end state? Also ride-along: the
+    trio's crown flags cache at prefill init, so a crown pin needs
+    tower+wdec+prefill shutdowns - a single `metal_crown_flags_reset()` seam would retire
+    that triple-shutdown incantation.

@@ -30,6 +30,39 @@ def private check_rp_law {
     }
 }
 
+let private FC_DIR = "tests/msl/_fail_closed"
+let private FC_TEST = "tests/msl/test_msl_fail_closed.das"
+
+def private check_fail_closed_sync {
+    var fixtures : table<string>
+    dir(FC_DIR) $(name) {
+        if (name |> ends_with(".das")) {
+            fixtures |> insert(slice(name, 0, length(name) - 4))
+        }
+    }
+    var asserted : table<string; int>
+    var line_no = 0
+    for (line in split(fread(FC_TEST), "\n")) {
+        line_no++
+        let at = find(line, "check_rejects(t, \"")
+        continue if (at < 0)
+        let rest = slice(line, at + length("check_rejects(t, \""))
+        let q = find(rest, "\"")
+        continue if (q <= 0)
+        asserted[slice(rest, 0, q)] = line_no
+    }
+    for (fx in keys(fixtures)) {
+        if (!key_exists(asserted, fx)) {
+            gate_finding("{FC_DIR}/{fx}.das", 0, "fixture has no check_rejects assert in {FC_TEST} - its rejection is unpinned")
+        }
+    }
+    for (name, ln in keys(asserted), values(asserted)) {
+        if (!key_exists(fixtures, name)) {
+            gate_finding(FC_TEST, ln, "check_rejects(\"{name}\") has no {FC_DIR}/{name}.das fixture - the assert is stranded")
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasMetal/REVIEW.das") || !fexist(EMITTER)) {
@@ -37,5 +70,6 @@ def main() : int {
         return 2
     }
     check_rp_law()
+    check_fail_closed_sync()
     return gate_verdict("dasmetal")
 }

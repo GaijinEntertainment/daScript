@@ -45,6 +45,14 @@ def test_catalog_table(t : T?) {
         }
         t |> equal(defaults, 1, "exactly one recommended default")
         t |> success(count >= 5, "curated list shrank: {count} entries, expected at least 5")
+        // presence pins: a floor alone would let a whole card vanish green
+        for (want in ["gemma-4-e2b", "qwen3.8-27b", "qwen3-vl-4b", "qwen2.5-omni-3b"]) {
+            var found = false
+            for (e in model_catalog()) {
+                found ||= e.name == want
+            }
+            t |> success(found, "curated card '{want}' is on the roster")
+        }
     }
     t |> run("every vision tower resolves pinned, and the default model carries one") @(t : T?) {
         var towers = 0

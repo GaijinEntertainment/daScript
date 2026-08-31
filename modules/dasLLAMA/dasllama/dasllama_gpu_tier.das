@@ -1554,4 +1554,40 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     if (g_moe_gpu_bake_tag == null) {
         g_moe_gpu_bake_tag = @@moe_gpu_no_bake_tag
     }
+    if (g_rdec_prefill_ids == null) {
+        g_rdec_prefill_ids = @@rdec_unset_prefill_ids
+    }
+    if (g_rdec_set_emb == null) {
+        g_rdec_set_emb = @@rdec_unset_set_emb
+    }
+    if (g_rdec_upload_emb_f32 == null) {
+        g_rdec_upload_emb_f32 = @@rdec_unset_upload_emb_f32
+    }
+    if (g_moe_gpu_ffn_xf == null) {
+        g_moe_gpu_ffn_xf = @@moe_gpu_unset_ffn_xf
+    }
+    if (g_moe_gpu_ffn_xf_ok == null) {
+        g_moe_gpu_ffn_xf_ok = @@moe_gpu_no_ffn_xf
+    }
+    if (g_moe_gpu_ffn_xf_begin == null) {
+        g_moe_gpu_ffn_xf_begin = @@moe_gpu_unset_ffn_xf_begin
+    }
+    if (g_moe_gpu_ffn_xf_join == null) {
+        g_moe_gpu_ffn_xf_join = @@moe_gpu_unset_ffn_xf_join
+    }
+    if (g_moe_gpu_ffn_xf_rows == null) {
+        g_moe_gpu_ffn_xf_rows = @@moe_gpu_no_ffn_xf_rows
+    }
+    if (g_moe_gpu_attn_dec == null) {
+        g_moe_gpu_attn_dec = @@moe_gpu_unset_attn_dec
+    }
+    if (g_moe_gpu_attn_dec_ok == null) {
+        g_moe_gpu_attn_dec_ok = @@moe_gpu_no_attn_dec
+    }
+    if (g_moe_gpu_attn_dec_claim == null) {
+        g_moe_gpu_attn_dec_claim = @@moe_gpu_noop_attn_dec_claim
+    }
+    if (g_moe_gpu_attn_dec_hydrate == null) {
+        g_moe_gpu_attn_dec_hydrate = @@moe_gpu_unset_attn_dec_hydrate
+    }
 }

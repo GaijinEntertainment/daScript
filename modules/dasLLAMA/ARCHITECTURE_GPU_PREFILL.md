@@ -177,7 +177,12 @@ prologue, the staged K walk with its barrier pair, and the store; a weight forma
 owns its weight-view bindings, and overrides the staged decode (`stage_block`) - mx4 also the
 store (its per-expert bias) and the chunk shape (32-deep, 128-item quota). The q8 twin is not
 a copy of this scaffold: its whole body is the tuned `tmm2d_q8u_f32` staged helper, a
-different staging mechanism, so it stays its own template. The gather-X pass
+different staging mechanism, so it stays its own template. The scaffold fixes its own binding numbers - `xf` at 3, `y` at 4, kargs at 5, `cnt` at 6,
+`basep` at 7 - and every derived twin inherits them. Those are NOT the family tail's numbers
+(`kn_moe_mm_family_tail` binds `cnt` at 7, `basep` at 8, `bkt` at 9), so a race harness
+hand-binding a tensor twin follows the scaffold's declaration and its base arm follows the
+tail's; binding a twin at the base's numbers hands the kernel the OUTPUT buffer as X, and the
+race then crowns whichever arm computed nothing. The gather-X pass
 copies the bucket's token rows into a CONTIGUOUS f16 panel with pad rows zeroed, which lets the up
 and gate sites ride the contiguous tensor twins instead of the in-kernel gather form; the panel is
 minted once per layer and shared by both sites. An X read through the bucket index can never

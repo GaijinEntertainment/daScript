@@ -5,12 +5,14 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_gemma4uv
+require dasllama/dasllama_common   // the tensor-crown pin (the rung is simdgroup-calibrated)
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gate pins the knob off
+require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
 
 // Tier-1 gemma4uv embedder parity vs llama-mtmd-debug -p encode (CPU, --no-mmproj-offload, dumps
 // minted from the f32-widened 12B mmproj twin; the embedder has no attention, so the flash-attn
@@ -111,6 +113,15 @@ def test_gemma4uv_tier1_gpu(t : T?) {
             if (!model_available(tt, mm)) {
                 return
             }
+            // the scale-relative rung is calibrated on the SIMDGROUP kernel set - pin it
+            // (a bare setter would not survive the load, which re-applies the box
+            // profile's crowns): the envelope-verified mulmm_bf16 tensor crown rounds
+            // differently and sits a hair past the rung on some canvases; the crowned
+            // lane's quality is the board pregate's claim, not this cell's
+            let prev_crowns = get_metal_tensor_crowns()
+            pin_metal_tensor_crowns("")
+            metal_tower_shutdown()
+            metal_prefill_shutdown()   // the crown flags the shared GEMM/trio builders cache
             var emb <- load_gemma4uv_embedder(mm)
             var st = Gemma4uvState()
             set_metal_tower(true)
@@ -126,6 +137,10 @@ def test_gemma4uv_tier1_gpu(t : T?) {
                                 "{fx.kind} {fx.w}x{fx.h}: GPU-served (encodes delta)")
                 }
             }
+            unpin_metal_tensor_crowns()
+            set_metal_tensor_crowns(prev_crowns)
+            metal_tower_shutdown()
+            metal_prefill_shutdown()
             delete st
             delete emb
         }

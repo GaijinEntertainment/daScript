@@ -684,6 +684,16 @@ def clear_float_batch_override() {
     g_fp_override_active = false
 }
 
+[init]
+def private restore_float_override_defaults {
+    if (g_mm_fp_batch_override == null) {
+        g_mm_fp_batch_override = @@fp_batch_override_unset
+    }
+    if (g_mm_bf16_batch_override == null) {
+        g_mm_bf16_batch_override = @@bf16_batch_override_unset
+    }
+}
+
 def float_batch_override_active() : bool => g_fp_override_active
 
 // the one body: the float-override seam then the core. Both weight forms below reach it with a

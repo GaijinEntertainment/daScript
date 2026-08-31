@@ -65,6 +65,14 @@ def set_metal_tower_f16(on : bool) {
     g_tw_env_tower_f16 = on
 }
 
+def get_metal_tower_f16 : bool {
+    return g_tw_env_tower_f16
+}
+
+def get_metal_tower_flash : bool {
+    return g_tw_env_tower_flash
+}
+
 //! The tower-flash route's A/B seat (DASLLAMA_METAL_TOWER_FLASH's in-process twin).
 def set_metal_tower_flash(on : bool) {
     g_tw_env_tower_flash = on

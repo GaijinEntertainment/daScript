@@ -1,7 +1,0 @@
-LOAD	onnx-community/whisper-tiny	346.364
-BENCH	onnx-whisper-tiny-int8	jfk.wav	11.000	1	450.111	24.438
-BENCH	onnx-whisper-tiny-int8	jfk.wav	11.000	2	416.283	26.424
-SKIP	onnx-whisper-tiny-int8	jfk3.wav	single-window adapter: 33s > 30s
-SKIP	onnx-whisper-tiny-int8	gb1.wav	single-window adapter: 199s > 30s
-SKIP	onnx-whisper-tiny-int8	hp0.wav	single-window adapter: 273s > 30s
-SKIP	onnx-whisper-tiny-int8	hp0x2.wav	single-window adapter: 547s > 30s

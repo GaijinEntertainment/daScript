@@ -14,7 +14,7 @@ require metal/das_metal_boost
 
 var private g_rf_deva_w_pso : MetalComputePipeline?
 
-[metal_dispatch(name = "enc_rf_deva_w", pso = "g_rf_deva_w_pso", tg = 128, grid = "m/32, n/64", params = "m : int64, n : int64")]
+[metal_dispatch(name = "enc_rf_deva_w", pso = "g_rf_deva_w_pso", tgmem = "rf_deva_w_msl_tgmem", tg = 128, grid = "m/32, n/64", params = "m : int64, n : int64")]
 class RfDevaWrong {
     @ssbo @binding = 0 @role = "write" src : array<float>
     @ssbo @binding = 1 @role = "write" dst : array<float>

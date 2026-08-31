@@ -39,3 +39,30 @@
   `ARCHITECTURE.md` subsections cited from the owning functions via `[arch(at=...)]`, and
   the `cache_via_image` return contract promoted to a `//!` doc matching its sibling's
   wording. The module arms `[docs] enforce_arch = true` so every minted anchor stays cited.
+
+- **2026-08-30** (`REVIEW.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`,
+  `performance/REVIEW.md`, `BRINGUP.md`): Boris ruled the version split - "separate dasLLAMA
+  version from all other versions. current one bumps version on any change. its inpractical.
+  we need 'major release' thing. otherwise ladderboard invalidates daily", approving the
+  minimal RELEASE form: "yes. this works for sure. it gives us flexibility we were missing".
+  `DASLLAMA_VERSION` became `DASLLAMA_RELEASE`, bumped only on a declared release; the
+  kernel-work bump duty in `REVIEW.md` was replaced by the declared-release rule; wire
+  field `dasllama_version` stays schema-stable; the per-kernel-hash hardening ledgered as
+  followup_general 58.
+
+- **2026-08-30** (`REVIEW.md`, `REVIEW.das`): on the serialized-exe null-function crash
+  (the vulkan decode-mirror claim; every -jit gate green while every exe forward died),
+  Boris confirmed the rule - "likely REVIEW.md candidate?" ... "yes. excellent followup" -
+  a declaration-initialized function-typed global joins its file's boot-restore [init] in
+  the same change; check_exe_fn_global_restore is the mechanical half, test_exe_smoke the
+  end-to-end tripwire.
+
+- **2026-08-30** (`REVIEW_MEASUREMENT.md`): at the pre-PR .md stop Boris ratified the
+  figure rules' re-scoping to module-owned surfaces (ledgers, docs, code comments, PR
+  bodies), with served pages routed to the site checklists' own provenance duty - "3.
+  agreed".
+
+- **2026-08-30** (`REVIEW.md`): Boris ratified the DASLLAMA_RELEASE bump rule's paper-trail
+  clause - a bump's diff also carries the LAWS.md entry recording the declared release; the
+  declaration itself stays his call, on feel ("the intent was to bump due to major changes
+  ... i go on feel on that one" - "4. agreee").

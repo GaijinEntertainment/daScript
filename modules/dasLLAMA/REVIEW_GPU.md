@@ -119,10 +119,12 @@ an `upload_region` upload never written after arming - is a defect unless it car
 defect; a per-encode field either omits `@role` or names the access its body performs.**
 `weight` drops the hazard staging.
 
-**A new kernel class carries `[metal_dispatch]` / `[vk_dispatch]` with every annotation that
-backend's generated builder reads - per-field `@binding` / `@role` / `@off` / `@default`, and
-`@workgroup` state with its `tgmem=` dispatch key.** A field carrying none of them is dropped
-from the bind list with no error.
+**A new kernel class declared in `dasllama/` carries `[metal_dispatch]` / `[vk_dispatch]`
+with every annotation that backend's generated builder reads - per-field `@binding` /
+`@role` / `@off` / `@default`.** A field carrying none of them is dropped from the bind list
+with no error. (A source-text fixture a test spawns to compile is outside this rule.) The
+`@workgroup`/`tgmem=` half is a lens compile refusal now - weakening that refusal, or its
+gate `test_lens_tgmem_gate`, is a defect.
 
 **A kernel field carries `@span` only when every caller binds whole output rows.** A caller
 binding a column tile of a wider row passes the tile width as the kernel's n while its rows
@@ -132,8 +134,14 @@ every row outside the tracked hazard range.
 **A NEW hand-written `enc_*` body is a defect unless it is a wrapper - a format or twin pick, a
 default-filling wrapper, or a composite over generated builders.**
 
-**A hand-rolled bind list that dispatches a kernel in `dasllama/` or `performance/` is a
-defect - dispatch through the kernel's `enc_*` builder instead.**
+**A hand-rolled bind list on a SERVED dispatch in `dasllama/` or `performance/` is a defect -
+dispatch through the kernel's `enc_*` builder instead.** A race or knockout arm hand-binds by
+construction and answers to the hand-binding-arm rules instead.
+
+**A hand-binding arm binds every field at the binding number its target kernel class
+declares - a number the class does not declare, or a field bound at another field's number,
+is a defect.** A mis-numbered arm dispatches, reads the wrong buffer, and its timing crowns
+the wrong kernel silently.
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
 and as a kargs field - is a defect.** A `params=` value that the `grid=`/`tg=` spec consumes
@@ -189,9 +197,10 @@ bind site cannot shrink a buffer that was sized wrong.
 
 **A change to code that a served GPU decode or prefill path executes ships GPU-vs-CPU parity
 on one q8 and one kq (K-quant) model with the armed mirror codec.** That code is anything a
-served GPU decode or prefill call executes - a driver, a kernel class it dispatches, that
-class's builder, a servability gate, a weight-region or residency path, the tier forwarders
-and engine seams the call routes through; never the bake paths, never a comment. The parity
+served GPU decode or prefill call executes OR that selects what it executes - a driver, a
+kernel class it dispatches, that class's builder, a servability gate, a kernel crown race, a
+forwarder default, a weight-region or residency path, the tier forwarders and engine seams
+the call routes through; never the bake paths, never a comment. The parity
 run is `harness/parity.das` on either backend, or - on Metal only - the in-suite instruments
 `tests/test_metal_decode_parity.das` / `tests/test_metal_prefill_parity.das` through
 `tests/run.das`.
@@ -235,9 +244,9 @@ clear** - put it in a `*_ready` latch, or in a holder that function already clea
 **A diff that changes anything a hand-binding arm must mirror to dispatch a kernel - binding
 numbers, kargs layout, threadgroup memory, grid or threadgroup geometry - fixes or deletes,
 in the same change, every arm of a hand-binding lab that binds it** - a hand-binding lab is a
-kernel A/B or knockout timing script, wherever it lives (`benchmarks/`, `harness/`), that
-hand-lists its bindings instead of dispatching through the `enc_*` builder. A lab left
-dispatching stale geometry measures the wrong kernel silently.
+kernel A/B or knockout timing script, wherever it lives, that hand-lists its bindings
+instead of dispatching through the `enc_*` builder. A lab left dispatching stale geometry
+measures the wrong kernel silently.
 
 **A diff that ports an A/B lab's winning variant into a kernel deletes the ported arm in the
 same change - its variant class and any variants-module code that exists only for it; when

@@ -59,8 +59,8 @@ The tuner is the detector, so the human never has to be. For a box with existing
    **Any dasLLAMA source edit between here and the sweep invalidates the exe** - it bakes both
    the sources and the tune winners, so the rig refuses a stale one and prints the rebuild line.
    Re-release with `--quick` (inherits the complete sidecar, ~85 s) and carry on; the full
-   mint is not repeated for a code edit. Exception: kernel work - its `DASLLAMA_VERSION` bump
-   makes every existing sidecar read version-stale, so that release re-mints.
+   mint is not repeated for a code edit. Exception: a declared `DASLLAMA_RELEASE` bump
+   makes every existing sidecar read release-stale, so that release re-mints.
 4. **New box only:** the same big model vs llama.cpp (section 3 references) - when the
    absolutes have no history, the RATIO is the known quantity.
 
@@ -96,8 +96,8 @@ which makes every cell silently re-bake its own duplicate images. The orchestrat
 env itself when unset, but the converter runs in step 4 need it exported in the shell.
 
 **Mint the tune BEFORE the pre-bake, and re-mint after ANY daslang rebuild.** The manifest is
-mtime-gated against the binary and version-gated against `DASLLAMA_VERSION`: a rebuild or a
-kernel-work bump turns it stale (the refusal names which) and every kernel drops to
+mtime-gated against the binary and release-gated against `DASLLAMA_RELEASE`: a rebuild or a
+release bump turns it stale (the refusal names which) and every kernel drops to
 its fallback winner - the m4 pilot pre-baked one identity, then swept a whole board on
 fallback kernels under a manifest one rebuild older. The bench cells REFUSE to measure on
 non-manifest winners (`tune gate`; `DASLLAMA_ALLOW_UNTUNED=1` is the dev-run escape - it also

@@ -1122,6 +1122,7 @@ struct AsrModelSpec {
     // model-speed, and bytes mis-sort it — large-v3-turbo is 1.51 GB against Parakeet's 2.33 GB
     // yet costs 97.5 s per rep against Parakeet's 38.6 s (m1, the five corpus buckets).
     tier : Tier = Tier.small
+    metal_served : bool = false
     // provenance facet ([[models_provenance]]): `prov` pins the das-side carrier itself
     // (ProvEntry.root is the symbolic "llm"/"whisper", not this spec's resolved dir);
     // companions carry the mmproj + reference-side derivatives fetched/verified with it
@@ -1170,7 +1171,7 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
             prov = serve_asr_tower(),
             companions <- [ProvEntry(name = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin", root = "whisper", recipe = REF_Q8_RECIPE)]),
         AsrModelSpec(display = "Whisper tiny", das_model = "ggml-tiny.bin",
-            das_mmproj = "", root = wroot,
+            das_mmproj = "", root = wroot, metal_served = true,
             refs <- [AsrRef(tool = "whisper-cli", handle = "ggml-tiny-q8_0.bin", exec_fmt = "q8_0"),
                      AsrRef(tool = "onnx", handle = "whisper-tiny-int8", exec_fmt = "int8")],
             buckets <- corpus_buckets(), libri_short = "", lang = "en",
@@ -1179,7 +1180,7 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
                 bytes = 77691713l, sha256 = "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"),
             companions <- [ProvEntry(name = "ggml-tiny-q8_0.bin", root = "whisper", recipe = REF_Q8_RECIPE)]),
         AsrModelSpec(display = "Whisper large-v3-turbo", das_model = "ggml-large-v3-turbo.bin",
-            das_mmproj = "", root = wroot,
+            das_mmproj = "", root = wroot, metal_served = true,
             refs <- [AsrRef(tool = "whisper-cli", handle = "ggml-large-v3-turbo-q8_0.bin", exec_fmt = "q8_0"),
                      AsrRef(tool = "onnx", handle = "whisper-turbo-int8", exec_fmt = "int8")],
             buckets <- corpus_buckets(), libri_short = "", lang = "en", tier = Tier.large,
@@ -1192,7 +1193,7 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
         // audio in BOTH engines, the model's limitation, not a budget choice; 40 s chunked
         // long-form (the NVIDIA-sanctioned usage) is ledgered
         AsrModelSpec(display = "Canary-Qwen 2.5B", das_model = "canary-qwen-2.5b-decoder-q8_0.gguf",
-            das_mmproj = "canary-qwen-2.5b-encoder-f32.bin", root = lroot,
+            das_mmproj = "canary-qwen-2.5b-encoder-f32.bin", root = lroot, metal_served = true,
             refs <- [AsrRef(tool = "nemo", handle = "nvidia/canary-qwen-2.5b", exec_fmt = "bf16")],
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto", tier = Tier.large,
             prov = ProvEntry(name = "canary-qwen-2.5b-decoder-q8_0.gguf", root = "llm", recipe = CANARY_DEC_RECIPE),
@@ -1204,7 +1205,7 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
         //! the 0.6B AuT pair (fetch_models-pinned): the small dense thinker, so its cells are
         //! cheap - the cpu/accel rows pin the tower and prefill drivers off
         AsrModelSpec(display = "Qwen3-ASR-0.6B", das_model = "Qwen3-ASR-0.6B-Q8_0.gguf",
-            das_mmproj = "mmproj-Qwen3-ASR-0.6B-bf16.gguf", root = lroot,
+            das_mmproj = "mmproj-Qwen3-ASR-0.6B-bf16.gguf", root = lroot, metal_served = true,
             // mtmd's CPU AuT encode runs near xRT 1 — the same per-rep budget cap as omni's
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-ASR-0.6B-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
@@ -1221,14 +1222,14 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
         // the E2B carrier's provenance AND its mmproj companion live on its official
         // [[model_specs]] row — a companion rides the row that pins its carrier
         AsrModelSpec(display = "Gemma-4 E2B audio", das_model = "gemma-4-E2B-it-Q8_0.gguf",
-            das_mmproj = "mmproj-gemma-4-E2B-it-bf16.gguf", root = lroot,
+            das_mmproj = "mmproj-gemma-4-E2B-it-bf16.gguf", root = lroot, metal_served = true,
             //! short reference ladder: mtmd encodes on the GPU in its Metal build, so a CPU-only
             //! run sits near xRT 1 and needs the per-rep budget capped
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         AsrModelSpec(display = "Qwen3-Omni-30B audio", das_model = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
-            das_mmproj = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = lroot,
+            das_mmproj = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = lroot, metal_served = true,
             //! short reference ladder: near xRT 1 on a CPU-only box, far worse on zen2
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
@@ -1321,6 +1322,14 @@ def onnx_py() : string {
 
 def nemo_py() : string {
     return normalize(empty(g_env_prof.nemo_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-nemo") : g_env_prof.nemo_py)
+}
+
+//! The Metal twin of mtmd_bin() — the same patched checkout built with Metal ON
+//! (setup_asr_rig's build-metal, Apple boxes); "" when absent, and the gpu ref leg skips loudly.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
+def mtmd_bin_metal() : string {
+    let c = normalize("../llama.cpp-mtmd-ref/build-metal/bin/llama-mtmd-cli")
+    return stat(c).is_valid ? c : ""
 }
 
 // The clean CPU-only reference build (ebd048fc5, Accelerate ON, Metal OFF, no dasprof)
@@ -1546,15 +1555,15 @@ def run_asr_cli_multi(cli, model_path : string; wav_paths : array<string>; threa
 }
 
 //! patched llama-mtmd-cli — one process per clip (30B load is heavy; MTMD_TIMING excludes it).
-//! Best total over `reps`.
+//! Best total over `reps`; `gpu` runs the Metal-ON sibling ([[mtmd_bin_metal]]) at -ngl 99.
 def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int;
-                 var cmd_out : string&; var encode_out : double&; var text_out : string&) : double {
+                 var cmd_out : string&; var encode_out : double&; var text_out : string&; gpu : bool = false) : double {
     var best = -1.0lf
     encode_out = 0.0lf
     text_out = ""
-    let args <- [mtmd_bin(), "-m", model_path, "--mmproj", mmproj_path, "--audio", wav_path,
+    let args <- [gpu ? mtmd_bin_metal() : mtmd_bin(), "-m", model_path, "--mmproj", mmproj_path, "--audio", wav_path,
                  "-p", "Transcribe the audio.", "--temp", "0", "--jinja", "--reasoning", "off",
-                 "-ngl", "0", "-t", "{threads}"]
+                 "-ngl", gpu ? "99" : "0", "-t", "{threads}"]
     cmd_out = argv_line(args)
     for (_rep in range(reps)) {
         let out = run_capture_argv(args)
@@ -1610,11 +1619,15 @@ def private mtmd_log_line(s : string) : bool {
 //! is expensive, amortize it); the caller parses per-clip rows out with [[parse_bench_best]].
 //! The onnx rows ALSO land in [[asr_pybench_out_path]] via --out: parakeet-variant loaders
 //! wreck the child's stdout pipe on Windows (~1 byte then EOF while the run continues), so
-//! the caller re-reads the file whenever the captured stream carries no rows.
-def asr_pybench_args(tool, handle : string; clips : array<string>; threads, reps : int) : array<string> {
+//! the caller re-reads the file whenever the captured stream carries no rows - onnx only.
+//! `device` reaches the nemo script alone (its torch-MPS arm); onnx stays CPU.
+def asr_pybench_args(tool, handle : string; clips : array<string>; threads, reps : int; device : string = "") : array<string> {
     var args <- (tool == "onnx"
         ? [onnx_py(), "{asr_dir()}/onnx_bench.py", "--variant", handle, "--out", asr_pybench_out_path()]
         : [nemo_py(), "{asr_dir()}/canary_qwen_bench.py"])
+    if (tool == "nemo" && !empty(device)) {
+        args |> push_from(["--device", device])
+    }
     args |> push_from(["--threads", "{threads}", "--reps", "{reps}"])
     for (c in clips) {
         args |> push_from(["--wav", "{asr_corpus_dir()}{c}"])

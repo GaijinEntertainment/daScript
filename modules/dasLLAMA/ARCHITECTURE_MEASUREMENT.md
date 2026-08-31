@@ -56,11 +56,36 @@ full retune when no manifest is armed. `performance/last_known_good_sidecar.json
 exactly that: a frozen copy of a complete, noise-gated mint, tracked in git (the `*.tune.json`
 ignore rule deliberately does not match it). Point `DAS_TUNE_MANIFEST` at it and the framework
 never retunes; on a different box the identity mismatch just serves fallbacks, and a copy minted
-before the current `DASLLAMA_VERSION` serves fallbacks on any box - the compile says which with
+before the current `DASLLAMA_RELEASE` serves fallbacks on any box - the compile says which with
 one `WARNING DAS_TUNE_MANIFEST` line per scope. That is the whole
 contract - it suppresses the re-exec, it does not tune the box, and a number measured under it
 is not a benchmark. Benches and the rig keep minting their own; refresh the copy when a
-re-mint moves the crowns or `DASLLAMA_VERSION` bumps.
+re-mint moves the crowns or `DASLLAMA_RELEASE` bumps.
+
+### 2.20 The ASR board's GPU row pairs {#asr-gpu-pairs}
+
+The das Metal ASR leg is OPT-IN per catalog row: `AsrModelSpec.metal_served`
+(`performance/profile_common.das`) declares that the Metal driver serves that family end to
+end - tower and decoder both. An unflagged family keeps the CPU by design, and asking for its
+GPU leg trips the anti-sandbag: the `--ngl` arms assert that the tower engage counters moved,
+so a family whose tower silently falls back reds its row instead of publishing a CPU wall
+under a GPU heading.
+
+Three reference tools carry a GPU arm the board pairs against a das Metal row, each with its
+own spelling: the whisper reference exe takes `-ngl`, the media-chat reference exe takes
+`-ngl 99`, and the NeMo bench script takes `--device mps`. The remaining two reference legs
+have no pair - the parakeet exe measures slower on the GPU, and the ONNX export is CPU-only -
+so their das rows stand alone in the CPU category.
+
+The media-chat reference exe is built as the bench exe's sibling in one reference worktree:
+`benchmarks/setup_lcpp_ref.das` builds both targets, because a bench-only build leaves the
+image and audio-chat cells with no binary and the board quietly mints das-only rows. That
+sibling needs the timing patch beside it (`benchmarks/asr/patches/`) - the record parser reads
+its per-rep timing lines, and an unpatched sibling mints "no rep parsed" failures. The apply
+is guarded on the patched marker already being in the tree, and runs three-way so it rides
+pin drift. On Apple boxes `performance/setup_asr_rig.das` builds a second, Metal-ON copy of
+the same patched checkout, because `-ngl` on a Metal-OFF build is inert; `mtmd_bin_metal()`
+returns "" when it is absent and the GPU reference leg skips loudly.
 
 ### 2.10 Sanctioned instrumentation rails
 

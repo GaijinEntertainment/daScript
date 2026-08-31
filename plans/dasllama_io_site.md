@@ -28,6 +28,11 @@ from the first commit, watchdog contract, ndjson logging).
 
 ## Versioning decisions (Boris, 2026-08-10)
 
+> SUPERSEDED 2026-08-30 (the release-split arc): the constant is now `DASLLAMA_RELEASE`,
+> bumped ONLY on a declared release - routine kernel work no longer bumps it, so sidecars
+> and board rows live for a whole release. Wire field `dasllama_version` unchanged. The
+> per-kernel partial re-race below remains the ledgered hardening (followup_general 58).
+
 - **dasLLAMA gets its own version**, decoupled from daslang's version AND from
   `LLVM_JIT_CODEGEN_VERSION`. **Any kernel work bumps it.** The rule is enforced in
   `modules/dasLLAMA/REVIEW.md`; the constant (`DASLLAMA_VERSION`) lands in the same

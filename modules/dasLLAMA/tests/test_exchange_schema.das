@@ -86,7 +86,7 @@ def test_corpus_sidecars(t : T?) {
 def private make_das_run() : BenchRun {
     var r = BenchRun(engine = "das", backend = "cpu", flavor = "tuned", box = "testbox",
         threads = 8, date = "2026-08-10", cmd = "daslang -jit bench.das", env = "DASLLAMA_BOX=test",
-        sha = "abc123def", version = "0.6.4", dasllama_version = DASLLAMA_VERSION,
+        sha = "abc123def", version = "0.6.4", dasllama_version = DASLLAMA_RELEASE,
         tune = "k4q8_tile_gen=mr8 (manifest)", tune_sha = "cafe0123beef", exec_fmt = "q8 blob")
     r.hardware.cpu = "Test CPU 9000"
     r.tests |> insert("pp512", BenchTest(tok_s = 100.0lf, stddev = 1.0lf))
@@ -432,5 +432,19 @@ def test_writer_phrases(t : T?) {
         t |> success(!validate_sidecar_submission(bad, berrors), "the pre-fix arrow spelling is refused")
         t |> success(find(join(berrors, ";"), "noise_probes") >= 0, "the refusal names the field")
         delete berrors
+    }
+}
+
+[test]
+def test_tune_scope_wire_key(t : T?) {
+    t |> run("the tune scope pins staleness under the schema-stable wire key") @(t : T?) {
+        // the rename's load-bearing compensator: without version_key= the scope's staleness
+        // pin silently becomes "dasllama_release" - a key no sidecar in records/ carries, so
+        // every box re-tunes; llvm_tune exposes no runtime reader, so the pin is textual
+        let src = fread("modules/dasLLAMA/dasllama/dasllama_math_gen.das")
+        t |> success(find(src, "version_of = \"dasllama_version/DASLLAMA_RELEASE\"") >= 0,
+                     "the scope versions off DASLLAMA_RELEASE")
+        t |> success(find(src, "version_key = \"dasllama_version\"") >= 0,
+                     "the wire key stays 'dasllama_version' (drop this and every sidecar reads version-stale)")
     }
 }

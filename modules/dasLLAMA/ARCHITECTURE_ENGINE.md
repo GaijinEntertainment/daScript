@@ -2,16 +2,23 @@
 
 Companion to `ARCHITECTURE.md`; section numbers are that document's.
 
+`REVIEW.das`'s `check_exe_fn_global_restore` walks every `dasllama/` file and licenses no
+names: each `var g_x = @@fn` declaration carries an `if (g_x == null)` boot-restore guard in
+the same file - a serialized exe restores globals as data, and only a boot-restore `[init]`
+heals the null function value.
+
 ### 1.1 Engine core
 
 - **`dasllama.das`** - the public API facade and nothing else: `load_model` -> `create_session` ->
   generate, re-exported names, the doc surface. No engine logic; a function that does work belongs
   in the module that owns the concern, and the facade re-exports it.
-- **`dasllama_version.das`** - `DASLLAMA_VERSION`, the module's own release counter, and nothing
-  else. Decoupled from the daslang version and from `LLVM_JIT_CODEGEN_VERSION`; ANY kernel work
-  bumps it (REVIEW.md), so equal versions mean an equal kernel roster - the sidecar exchange
-  keys validity on (version, box). A zero-require leaf so the tuner's noise half, the benches,
-  and the facade chain (`dasllama_common` re-exports it) all reach it without weight.
+- **`dasllama_version.das`** - `DASLLAMA_RELEASE`, the module's release number, and nothing
+  else. Decoupled from the daslang version, `LLVM_JIT_CODEGEN_VERSION` and `IMAGE_VERSION`;
+  bumped only on a declared release (REVIEW.md), so tune sidecars and board rows live for a
+  whole release - the sidecar exchange keys validity on (release, box), under the
+  schema-stable wire name `dasllama_version`. A zero-require leaf so the tuner's noise half,
+  the benches, and the facade chain (`dasllama_common` re-exports it) all reach it without
+  weight.
 - **`dasllama_common.das`** - the engine: `Model`/`Session`/`Config`, the forward loops, the
   override registries, the runtime knobs. **Not** the load walk (sec.1.3) and **not** GPU residency
   (`ARCHITECTURE_GPU.md` sec.1.5) - both left, and the seam each left behind is a registered hook,

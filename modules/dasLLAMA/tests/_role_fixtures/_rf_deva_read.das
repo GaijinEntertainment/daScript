@@ -12,7 +12,7 @@ require metal/das_metal_boost
 
 var private g_rf_deva_pso : MetalComputePipeline?
 
-[metal_dispatch(name = "enc_rf_deva", pso = "g_rf_deva_pso", tg = 128, grid = "m/32, n/64", params = "m : int64, n : int64")]
+[metal_dispatch(name = "enc_rf_deva", pso = "g_rf_deva_pso", tgmem = "rf_deva_msl_tgmem", tg = 128, grid = "m/32, n/64", params = "m : int64, n : int64")]
 class RfDevaRead {
     @ssbo @binding = 0 @role = "read" src : array<float>
     @ssbo @binding = 1 @role = "write" dst : array<float>

@@ -3,6 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasllama_io_site.md`.
 
+In this checklist "a page" means every served page in this directory - index.html,
+ladder.html, sidecars.html - the generated news region inside index.html included.
+
 **A shell command, flag, or output line shown on a page is a defect unless the command runs
 verbatim and produces the result the page shows.** Never show a command for an
 implementation that does not exist yet.
@@ -10,14 +13,13 @@ implementation that does not exist yet.
 **A code sample shown on a page that does not compile and run with the current toolchain is
 a defect.**
 
-**A number shown on a page carries checkable provenance: rendered from live data, copied from
-a named checked-in measurement record, or an HTML comment naming the box, date, and what was
-measured (or naming it a placeholder). A number with none of these is a defect.**
+**A number shown on a page whose source is not identifiable from the page itself is a
+defect: rendered from live data, or a page comment / prose clause naming the checked-in
+measurement record (or the box, date and measurement - or naming it a placeholder).**
 
-**A claim in words on index.html that one engine beats another ("beats", "Nx faster than",
-"fastest") is a defect, the generated news region included.** Figures copied from a
-checked-in record may stand side by side, ours and another engine's - the arithmetic a
-reader does is not the page's claim.
+**A comparative superiority claim made in words rather than as side-by-side figures, on any
+page, is a defect.** Figures copied from a checked-in record may stand side by side, ours
+and another engine's - the arithmetic a reader does is not the page's claim.
 
 **Copy or rendering that lets a row with no reference engine's figure imply parity with a
 reference engine is a defect - an empty ratio cell reads "not raced".**

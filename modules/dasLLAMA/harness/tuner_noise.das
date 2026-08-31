@@ -12,7 +12,7 @@ module tuner_noise shared public
 
 require dasllama/dasllama_lint public
 require llvm/daslib/llvm_tune
-require dasllama/dasllama_version  // DASLLAMA_VERSION — stamped into sidecar provenance (zero-require leaf)
+require dasllama/dasllama_version  // DASLLAMA_RELEASE — stamped into sidecar provenance (zero-require leaf)
 require tuner_phrases  // provenance phrase leaf — render-charset-pinned by test_exchange_schema
 require daslib/strings_boost
 require daslib/fio            // popen + get_das_root — the engine-sha probe
@@ -172,7 +172,7 @@ def noise_provenance_stamp() {
     tune_provenance_note("noise_floor_cv_pct", "{g_floor_pct:0.2f}")
     tune_provenance_note("mode", "normal")   // one protocol; the key stays for readers of older sidecars
     tune_provenance_note("engine_sha", engine_sha())
-    tune_provenance_note("dasllama_version", "{DASLLAMA_VERSION}")
+    tune_provenance_note("dasllama_version", "{DASLLAMA_RELEASE}")
 }
 
 // the engine commit this mint measured, "unknown" outside a repo (the shipped SDK)

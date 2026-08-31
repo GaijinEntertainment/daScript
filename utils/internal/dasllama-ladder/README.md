@@ -57,7 +57,7 @@ Three tables, one migration stream (`ladder_migration_*`):
 
 Validation is `dasllama/dasllama_exchange_schema` (required through the registered package
 name, re-exported `public`): submission grade for community uploads, shape grade for official imports (official
-history predates `DASLLAMA_VERSION`). `Source` and `Verified` are always stamped by the store;
+history predates the `dasllama_version` stamp). `Source` and `Verified` are always stamped by the store;
 nothing submitter-supplied reaches those columns. Sidecar submissions are privacy-stripped
 server-side before hashing and storage (`exchange_strip_private` - `provenance.binary` and any
 path-shaped value; the submitting client runs the same strip, so a clean upload round-trips

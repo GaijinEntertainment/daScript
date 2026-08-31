@@ -1,7 +1,9 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions it indexes. Planned work:
+docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions it indexes - the rules below
+cite `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`, and
+`ARCHITECTURE_MEASUREMENT.md`. Planned work:
 `followup_general.md`, `followup_vulkan.md`, `PERF_LEDGER.md` (performance goes to the perf
 ledger, everything else to the followup ledgers).
 
@@ -22,6 +24,9 @@ fixture. A test or tool merely opening a stocked model file by name does not rou
 **A change to the sidecar-exchange client or schema answers to `performance/REVIEW.md`.** The
 sidecar exchange is the code that downloads tune winners to a box and submits that box's
 winners back.
+
+**A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`), or to a
+tune-boot path that reaches it, applies `REVIEW_EXCHANGE.md`.**
 
 **Every `dasllama/` change applies this folder's `tests/REVIEW.md`.**
 
@@ -52,16 +57,26 @@ not thereby pick up the other modality's checklist.
 **A routed file applies BOTH the checklist it routes to and this one; every other file under
 `modules/dasLLAMA/` applies this one.**
 
-**Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same
-change, and a bump with no kernel work is the same defect.** Kernel work is whatever changes
-the generated kernel source, or the set of compiled pipeline variants (PSOs) built from it -
-a kernel body, a variant set, or a `[tune]` / `[tune_perm]` / `[tune_companion]` grid. A
-host-side bind or dispatch-argument change (an `@off` binding, a uniform value) is not, and
-neither is `[tune_scope]` metadata (`covers=`, `tuner=`, `version_of=`).
+**`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
+a maintainer ruling that bench comparability is broken - and a bump riding any other diff is
+a defect. A bump whose diff carries no `LAWS.md` entry recording the ruling is a defect
+too.** Routine kernel work never bumps it: tune sidecars and board rows stay valid
+across code changes (a changed kernel keeping a stale sidecar winner is perf-only drift -
+crowns pick among envelope-verified twins), and per-change invalidation lives in the finer
+mechanisms (`IMAGE_VERSION`, the reflected layout fingerprint).
 
 **A value that cannot change between dispatches of one compiled kernel never reaches that
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value
 that can change between dispatches goes in a uniform, a kargs field, or an `@off` bind offset.
+
+**Weakening `REVIEW.das`'s restore check - the walk over `dasllama/` requiring every
+function-typed global with a declaration initializer to join its file's boot-restore
+`[init]` - is a defect, and so is landing such a global anywhere the walk does not reach.** A
+serialized exe restores globals as data - the function value arrives null, and the first
+invoke to reach it dies at exe runtime while every `-jit` gate stays green (script mode runs
+the declaration initializers). The restore guard (`if (g_x == null) { g_x = @@sentinel }`)
+lets a real registrar win in either `[init]` order; `test_exe_smoke` is the end-to-end
+tripwire for the class.
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`) - keep the multiply order the code already has.** A regrouping
@@ -206,9 +221,9 @@ owns lands the sec.1 edit that keeps the charters true - in `ARCHITECTURE_ENGINE
 a file beside one that has its own sec.1 charter line lands that edit too. A module-root doc
 file - a ledger, a plan, `LAWS.md` - has no charter line and lands free.
 
-**A diff that adds an `ARCHITECTURE_*.md` companion, or moves a section between companions,
-lands `ARCHITECTURE.md`'s index line and section range and repoints every prose `sec.N` /
-file citation of the moved sections, in the same change.** The `[arch]` citations are
+**A diff that adds or removes an `ARCHITECTURE_*.md` companion, or moves a section between
+companions, lands `ARCHITECTURE.md`'s index line and section range and repoints every prose
+`sec.N` / file citation of the moved sections, in the same change.** The `[arch]` citations are
 LINT026-gated; the prose ones are not, and a prose citation of a section that left its file
 sends the reader to nothing.
 

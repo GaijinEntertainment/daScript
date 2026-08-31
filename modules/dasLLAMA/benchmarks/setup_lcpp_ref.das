@@ -157,6 +157,7 @@ def main : int {
     return rc
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
 def private build_flavor(dest, f, short_sha : string; jobs : int) : int {
     let build_dir = path_join(dest, "build-{f}")
     print("=== {f} -> {build_dir} (minutes-class: configure + build llama-bench)\n")
@@ -167,7 +168,14 @@ def private build_flavor(dest, f, short_sha : string; jobs : int) : int {
             return 1
         }
     }
-    if (run_visible("cmake --build \"{build_dir}\" --config Release --target llama-bench -j {jobs}") != 0) {
+    if (find(fread(path_join(dest, "tools/mtmd/mtmd-cli.cpp")), "MTMD_TIMING") < 0) {
+        let patch = get_full_file_name("modules/dasLLAMA/benchmarks/asr/patches/mtmd-timing.patch")
+        if (run_visible("git -C \"{dest}\" apply -3 \"{patch}\"") != 0) {
+            print("error: mtmd-timing.patch does not apply at this pin - port the patch before building the sibling\n")
+            return 1
+        }
+    }
+    if (run_visible("cmake --build \"{build_dir}\" --config Release --target llama-bench llama-mtmd-cli -j {jobs}") != 0) {
         print("error: build failed for {f}\n")
         return 1
     }

@@ -4,39 +4,69 @@
 <author><name>dasllama.io</name></author>
 <link href="https://dasllama.io/"/>
 <link href="https://dasllama.io/feed.xml" rel="self"/>
-<updated>2026-08-18T00:00:00Z</updated>
+<updated>2026-08-30T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
 <entry>
-<title>Qwen 3.8 27B joins the board — the new dense hybrid runs on CPU and Metal.</title>
+<title>Apple M5 support lands - text, vision and speech, tuned on the new silicon.</title>
+<link href="https://dasllama.io/#n-2026-08-30-apple-m5"/>
+<id>https://dasllama.io/#n-2026-08-30-apple-m5</id>
+<updated>2026-08-30T00:00:00Z</updated>
+<content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max, minted 2026-08-30)
+     and m4.json (M4, 2026-08-31), rendered on the board from the same records --&gt;
+&lt;p&gt;dasLLAMA now treats the Apple M5 as a first-class target. The Metal kernels pick up the
+M5&#x27;s GPU tensor units through the Metal 4 tensor API wherever the per-box tune races crown
+them, the vision towers and the speech-to-text encoders serve on the GPU, and the CPU lane
+learned the M5 Max&#x27;s all-compute core layout - 6 &quot;Super&quot; plus 12 &quot;Performance&quot; cores, the
+pool spanning both tiers with decode parking the slower one; on the M4 the efficiency
+cores stay excluded. Both core gates were verified live this sweep.&lt;/p&gt;
+&lt;p&gt;The full M5 Max board is re-minted and on the &lt;a href=&quot;https://daslang.io/dasllama.html&quot;&gt;board&lt;/a&gt;
+(pp512 / tg128, Metal, llama-bench protocol): gemma-4-E2B Q8_0 - das 9074.3 / 161.3
+tok/s, llama.cpp 7413.4 / 137.0; Qwen3.8-27B - das 913.9 / 27.8, llama.cpp 752.1 / 25.4;
+Qwen3-30B-A3B - das 3752.9 / 165.7, llama.cpp 3422.4 / 137.0; gpt-oss-20b - das 3995.1 /
+162.7, llama.cpp 3476.6 / 149.0. The other modalities ride the same rails: the
+gemma-4-12B image encode lands at 7.1 ms against the reference&#x27;s 95 ms, the Qwen2.5-Omni
+window ViT at 106 ms against 118, and whisper large-v3-turbo transcribes jfk in 140 ms
+against whisper-cli&#x27;s 153 on the same GPU. The M4 board rows are refreshed alongside,
+including Canary-Qwen on its new Q8_0 serving artifact - jfk in 307.6 ms on the M5 and
+512.9 on the M4, beside the NeMo torch-MPS reference&#x27;s 704.7 and 1076.5; on the long gb1
+clip the das row reads 6484 ms beside the reference&#x27;s 4383 - the one remaining gap on long
+audio, and the next dig. The M1 board stands unchanged as the long-term record, its Canary
+rows retiring with the old decoder artifact.&lt;/p&gt;
+&lt;p&gt;Bringing a new chip up one model at a time - watching kernels tuned for one generation
+get re-raced, re-crowned, and here and there rewritten for the next - has been genuinely
+fun.&lt;/p&gt;</content>
+</entry>
+<entry>
+<title>Qwen 3.8 27B joins the board - the new dense hybrid runs on CPU and Metal.</title>
 <link href="https://dasllama.io/#n-2026-08-18-qwen38-27b"/>
 <id>https://dasllama.io/#n-2026-08-18-qwen38-27b</id>
 <updated>2026-08-18T00:00:00Z</updated>
 <content type="html">&lt;p&gt;Qwen 3.8 27B is out, and it needed no new architecture support in dasLLAMA: the 3.8
-generation keeps the qwen3.5 architecture — Gated-DeltaNet recurrent layers interleaved
-3:1 with gated full attention — so it loads on the existing family path as a pure
+generation keeps the qwen3.5 architecture - Gated-DeltaNet recurrent layers interleaved
+3:1 with gated full attention - so it loads on the existing family path as a pure
 scale-up. The Q4_K_M file&#x27;s attention and FFN planes serve natively on the kq rails, CPU
 and Metal alike (the DeltaNet projections transcode to q8 at load), and the model joins
 the official board catalog.&lt;/p&gt;
-&lt;p&gt;On an M1 Max (pp512 / tg128, llama-bench protocol): Metal — das 147.0 / 14.5 tok/s,
-llama.cpp 137.6 / 11.5; CPU — das 33.2 / 5.8, llama.cpp 29.8 / 5.6. On an M4 Pro:
-Metal — das 127.0 / 12.8, llama.cpp 126.2 / 11.5; CPU — das 45.8 / 11.6, llama.cpp
+&lt;p&gt;On an M1 Max (pp512 / tg128, llama-bench protocol): Metal - das 147.0 / 14.5 tok/s,
+llama.cpp 137.6 / 11.5; CPU - das 33.2 / 5.8, llama.cpp 29.8 / 5.6. On an M4 Pro:
+Metal - das 127.0 / 12.8, llama.cpp 126.2 / 11.5; CPU - das 45.8 / 11.6, llama.cpp
 40.4 / 11.0. Full rows for both boxes are on the
 &lt;a href=&quot;https://daslang.io/dasllama.html&quot;&gt;board&lt;/a&gt;.&lt;/p&gt;</content>
 </entry>
 <entry>
-<title>Metal support lands in speech-to-text — whisper large-v3-turbo at 49x realtime on an M1 Max.</title>
+<title>Metal support lands in speech-to-text - whisper large-v3-turbo at 49x realtime on an M1 Max.</title>
 <link href="https://dasllama.io/#n-2026-08-17-metal-asr"/>
 <id>https://dasllama.io/#n-2026-08-17-metal-asr</id>
 <updated>2026-08-17T00:00:00Z</updated>
 <content type="html">&lt;p&gt;Speech-to-text now serves on Metal: whisper&#x27;s cross-attention and decoder run on the GPU
 by default on Apple silicon, and the full-GPU mode powers the new gpu category on the
-board. On an M1 Max, whisper large-v3-turbo transcribes a 3:19 clip in 4.0 s — 49x
+board. On an M1 Max, whisper large-v3-turbo transcribes a 3:19 clip in 4.0 s - 49x
 realtime, against 36x for whisper.cpp&#x27;s Metal path and 12x for our CPU lane. The
 &lt;a href=&quot;https://daslang.io/dasllama.html&quot;&gt;board&lt;/a&gt; now splits ASR into the same cpu / cpu + accel /
 gpu categories the LLM board has.&lt;/p&gt;</content>
 </entry>
 <entry>
-<title>dasllama.io is live — news, the full ladder, and the sidecar exchange.</title>
+<title>dasllama.io is live - news, the full ladder, and the sidecar exchange.</title>
 <link href="https://dasllama.io/#n-2026-08-10-dasllama-io-is-live"/>
 <id>https://dasllama.io/#n-2026-08-10-dasllama-io-is-live</id>
 <updated>2026-08-10T00:00:00Z</updated>

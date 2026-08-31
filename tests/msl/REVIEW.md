@@ -11,6 +11,8 @@ from `declared_msl_census` or a fixture's census from `all_msl_censuses` (both i
 `_msl_common.das`). Emitted text cannot be read back into constructs, so the census is the
 only measure of coverage.
 
-**Every file under `_fail_closed/` fails to compile and has a needle assertion in
-`test_msl_fail_closed.das`.** A fixture that compiles, or a needle no emitter error contains, is
-a defect - delete the fixture and its assertion together.
+**Weakening `test_msl_fail_closed.das`'s `check_rejects` is a defect.** It asserts each
+`_fail_closed/` fixture fails to compile and that the compile error contains the fixture's
+needle - the substring naming the rejected construct. The fixture-has-its-assert pairing is
+machine-checked both directions (`modules/dasMetal/REVIEW.das`'s `check_fail_closed_sync`;
+its weakening rule lives with that checklist).

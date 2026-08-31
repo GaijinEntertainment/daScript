@@ -127,6 +127,10 @@ let RIG_EXE_OUT = "modules/dasLLAMA/performance/_rig"
 let RIG_BENCH_SRC = "modules/dasLLAMA/benchmarks/lcpp_bench.das"
 let RIG_ENGINE_SRC = "modules/dasLLAMA/dasllama"
 
+// every cell that lands a row bumps this - a run that measured NOTHING exits nonzero
+// (a scoped run whose every selected cell declines would otherwise read as a green board)
+var private g_cells_measured = 0
+
 def private rig_exe_path() : string {
     // macOS ships a clickable .app; every other platform gets <out>/<name>/<name>, .exe on Windows
     if (is_apple_box()) {
@@ -405,6 +409,7 @@ def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; thr
     mint_check(models_dir(), "{file} das {tag}")
     absorb_cell(models, cell, store, note, failed, "ok")
     remove(cellPath)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {tag} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -876,6 +881,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     upsert_bench_model(models, bm)
     stamp_note(models, file, note)
     write_bench_records(store, models)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -917,6 +923,7 @@ def private image_das_cell(file, path, mm, pic : string; cfg : Args; threads : i
     mint_check(models_dir(), "{file} das {log_leg}")
     absorb_cell(models, cell, store, note, failed, "ok")
     remove(cellPath)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {log_leg} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -1003,6 +1010,7 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
     upsert_bench_model(models, bm)
     stamp_note(models, file, note)
     write_bench_records(store, models)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {file} ref image {flavor} {backend} - enc {best_enc:.1f} ms | pp {best_pp:.1f} | tg {best_tg:.1f} tok/s ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("image {flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -1010,9 +1018,7 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
 // ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
 
 // das side: one lcpp_bench --asr child per catalog model, absorbed via the same cell protocol
-// the families the metal das leg serves end to end (tower + decoder); the Conformer and
-// GGUF-tower rows would trip the --ngl anti-sandbag (their towers keep the CPU by design)
-def private is_metal_served_family(spec : AsrModelSpec) : bool => find(spec.display, "Whisper") >= 0
+def private is_metal_served_family(spec : AsrModelSpec) : bool => spec.metal_served
 
 def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store, exe : string;
                          var models : array<BenchModel>; var failed : array<string>; leg : string = "") {
@@ -1040,6 +1046,7 @@ def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPat
     }
     absorb_cell(models, cell, store, "", failed)
     remove(cellPath)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} das {log_leg} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -1068,6 +1075,10 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
                          var models : array<BenchModel>; var failed : array<string>; gpu : bool = false) {
     if (!asr_ref_available(ref.tool)) {
         to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} ref {ref.tool} - tool not on this box\n")
+        return
+    }
+    if (gpu && ref.tool == "mtmd" && empty(mtmd_bin_metal())) {
+        to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} ref mtmd gpu - no build-metal mtmd on this box (setup_asr_rig builds it on Apple)\n")
         return
     }
     let t0 = ref_time_ticks()
@@ -1111,13 +1122,15 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             }
         }
         to_log(LOG_INFO, "gen_bench_records:   {ref.tool} over {length(clips)} clip(s) in one process (python model load amortized)\n")
-        let pyargs <- asr_pybench_args(ref.tool, ref.handle, clips, threads, cfg.asr_reps)
+        fwrite(asr_pybench_out_path(), "")   //! truncate the --out sidecar first: a stale row from an
+                                             //! earlier variant would launder in through the rowless-pipe fallback
+        let pyargs <- asr_pybench_args(ref.tool, ref.handle, clips, threads, cfg.asr_reps, gpu ? "mps" : "")
         rr.cmd = argv_line(pyargs)
         var out = run_capture_argv(pyargs)
         if (find(out, "BENCH") < 0) {
-            // pipe came back rowless — fall back to the --out file (Windows: parakeet loaders
-            // wreck the child's stdout pipe; the file survives everything)
-            let sidecar = fread(asr_pybench_out_path())
+            // pipe came back rowless — for onnx ONLY, fall back to its --out file (Windows:
+            // parakeet loaders wreck the child's stdout pipe; the file survives everything)
+            let sidecar = ref.tool == "onnx" ? fread(asr_pybench_out_path()) : ""
             if (find(sidecar, "BENCH") >= 0) {
                 to_log(LOG_INFO, "gen_bench_records:   {ref.tool} pipe was rowless - rows recovered from --out file\n")
                 out = sidecar
@@ -1172,7 +1185,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             var enc_ms = 0.0lf
             var rtext = ""
             let ms = (ref.tool == "mtmd"
-                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms, rtext)
+                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms, rtext, gpu)
                 : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd, gpu))
             rr.cmd = cmd   // last clip's line; they differ only in -f
             if (ms > 0.0lf) {
@@ -1225,6 +1238,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     bm.runs |> emplace(rr)
     upsert_bench_model(models, bm)
     write_bench_records(store, models)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} ref {ref.tool} ({measured} clip(s), {elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr"), "clips" => JV(measured), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -1232,7 +1246,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
 // The orchestrator never measures: it spawns the released exe per cell and reads its JSON, so its
 // own kernels are irrelevant and tuning them would put minutes of hidden work in front of a
 // measurement run — the trap this rig exists to avoid.
-[export, tune_policy(missing = "fallback")]
+[export, tune_policy(missing = "fallback"), arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
 def main : int {
     var r <- parse_args(type<Args>)
     if (r |> is_err) {
@@ -1511,7 +1525,8 @@ def main : int {
                 settle(cfg)
                 asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed)
                 static_if (typeinfo builtin_module_exists(das_metal)) {
-                    if (rf.tool == "whisper-cli" && is_metal_served_family(spec)) {   // the metal das row's like-for-like pair
+                    let gpu_pair = rf.tool == "whisper-cli" || rf.tool == "mtmd" || rf.tool == "nemo"
+                    if (gpu_pair && is_metal_served_family(spec)) {
                         settle(cfg)
                         asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed, true)
                     }
@@ -1530,6 +1545,10 @@ def main : int {
     if (!empty(failed)) {
         let list = join(failed, ", ")
         to_log(LOG_ERROR, "gen_bench_records: {length(failed)} FAILED cell(s): {list}\n")
+        return 1
+    }
+    if (g_cells_measured == 0) {
+        to_log(LOG_ERROR, "gen_bench_records: ZERO cells measured - every selected cell skipped or declined; an empty run is never a green board\n")
         return 1
     }
     return 0

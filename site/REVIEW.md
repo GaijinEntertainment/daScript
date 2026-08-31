@@ -6,8 +6,9 @@
 with what the scripts it loads render into it.
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
-illustration - show only a command a run actually executed, producing the result the page
-shows.**
+illustration - show only a command the run actually executed.** A rendered `cmd` identifies
+the RUN, not the row: where one run produced several rendered rows (an ASR run's per-clip
+rows), each row's receipt is the run's command.
 
 **A diff that writes a `cmd` field in `files/dasllama/bench_records.json` that is not the
 exact argv `modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it
@@ -25,7 +26,7 @@ defect - the pair belongs on the run object that produced the rows.**
 the same sweep output that regenerates those tables.
 
 **A cell in `files/performance_bench.json` differing from the same family-and-lane cell in the
-`benchmarks/sql/results.md` tables is a defect.**
+`benchmarks/sql/results.md` (repo root) tables is a defect.**
 
 **A diff that changes `files/performance_engines.json` also changes
 `examples/benchmarks/sql/results.md` (repo root), in the same change.**

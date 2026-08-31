@@ -402,12 +402,18 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_qwen_count([moe_reference = true])),
         // the qwen vision pairs (the qwen3vl arc): parity-less provenance carriers —
         // test_vision_chat's deepstack/qwen25o legs and the qwen tier-1 suites are their coverage
-        ModelSpec(file = "Qwen3VL-4B-Instruct-Q8_0.gguf", display = "Qwen3-VL-4B",
-            url = "{HF}/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/Qwen3VL-4B-Instruct-Q8_0.gguf",
+        ModelSpec(file = "Qwen3VL-4B-Instruct-Q8_0.gguf", display = "Qwen3-VL-4B", official = true,
+            url = "{HF}/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266/Qwen3VL-4B-Instruct-Q8_0.gguf",
+            serve_name = "qwen3-vl-4b", serve_display = "Qwen3 VL 4B",
+            serve_note = "the deepstack vision Qwen - reads images through wide multi-tap rows",
+            serve_ctx = 262144, serve_vram_gb = 6.0,
+            serve_vision = "mmproj-Qwen3VL-4B-Instruct-F16.gguf",
             bytes = 4280406144l, sha256 = "054721f478bc5fa6beffb7f38eae575d45298f88cbb8d2f83ef675a727863eb1",
+            // verified 40/40 against the live oracle 2026-08-30 (the deepstack tower's carrier)
+            parity <- ev_qwen_count(),
             companions <- [
                 ProvEntry(name = "mmproj-Qwen3VL-4B-Instruct-F16.gguf", root = "llm",
-                    url = "{HF}/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-F16.gguf",
+                    url = "{HF}/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266/mmproj-Qwen3VL-4B-Instruct-F16.gguf",
                     bytes = 836180256l, sha256 = "256f3a43bd4205ffef48d6b92715e1e70b5b0e9aef06522584967513a9985331")]),
         ModelSpec(file = "Qwen3VL-8B-Instruct-Q8_0.gguf", display = "Qwen3-VL-8B",
             url = "{HF}/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/Qwen3VL-8B-Instruct-Q8_0.gguf",
@@ -416,12 +422,18 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                 ProvEntry(name = "mmproj-Qwen3VL-8B-Instruct-F16.gguf", root = "llm",
                     url = "{HF}/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-8B-Instruct-F16.gguf",
                     bytes = 1159029824l, sha256 = "ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38")]),
-        ModelSpec(file = "Qwen2.5-Omni-3B-Q8_0.gguf", display = "Qwen2.5-Omni-3B",
-            url = "{HF}/ggml-org/Qwen2.5-Omni-3B-GGUF/resolve/main/Qwen2.5-Omni-3B-Q8_0.gguf",
+        ModelSpec(file = "Qwen2.5-Omni-3B-Q8_0.gguf", display = "Qwen2.5-Omni-3B", official = true,
+            url = "{HF}/ggml-org/Qwen2.5-Omni-3B-GGUF/resolve/75f1b73b657a50f5092502799457ccb4a4a1f9df/Qwen2.5-Omni-3B-Q8_0.gguf",
+            serve_name = "qwen2.5-omni-3b", serve_display = "Qwen2.5 Omni 3B",
+            serve_note = "the window-ViT omni - compact vision chat on the Metal tower",
+            serve_ctx = 32768, serve_vram_gb = 5.5,
+            serve_vision = "mmproj-Qwen2.5-Omni-3B-f16.gguf",
             bytes = 3616087360l, sha256 = "c7d8b07c8d8d7a9ed1de1b8df7ac821eb4d259a224bd44310baacfaa5a473d4c",
+            // verified 40/40 against the live oracle 2026-08-30 (the window-ViT tower's carrier)
+            parity <- ev_qwen_count(),
             companions <- [
                 ProvEntry(name = "mmproj-Qwen2.5-Omni-3B-f16.gguf", root = "llm",
-                    url = "{HF}/ggml-org/Qwen2.5-Omni-3B-GGUF/resolve/main/mmproj-Qwen2.5-Omni-3B-f16.gguf",
+                    url = "{HF}/ggml-org/Qwen2.5-Omni-3B-GGUF/resolve/75f1b73b657a50f5092502799457ccb4a4a1f9df/mmproj-Qwen2.5-Omni-3B-f16.gguf",
                     bytes = 2623983328l, sha256 = "f6d9276e9fa4f060c7abdbe886786cf31a8911b62770f8a54b7581b7b99fa27e")]),
         // parity-less provenance carrier: the gemma3 vision 12B pair (the same SigLIP tower at
         // projection 3840; test_vision_chat's PARITY_FULL leg is its coverage)

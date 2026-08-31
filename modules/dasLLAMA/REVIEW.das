@@ -240,12 +240,48 @@ def private check_gpu_role_partition {
     }
 }
 
+// A serialized exe restores globals as DATA - a function value assigned in a declaration
+// initializer arrives NULL, and only a boot-restore [init] heals it (dasllama_config's
+// restore_dlim_source_defaults states the law). So every `var g_x = @@fn` declaration must
+// have an `if (g_x == null)` restore guard in the SAME file, or the first exe run to reach
+// its invoke dies with `invoke null function` while every -jit gate stays green - the vulkan
+// decode-mirror claim shipped exactly that way.
+def private check_exe_fn_global_restore {
+    dir("modules/dasLLAMA/dasllama") $(name) {
+        if (!(name |> ends_with(".das"))) {
+            return
+        }
+        let path = "modules/dasLLAMA/dasllama/{name}"
+        let text = fread(path)
+        var line_no = 0
+        for (line in split(text, "\n")) {
+            line_no++
+            var rest = ""
+            if (line |> starts_with("var private ")) {
+                rest = slice(line, length("var private "))
+            } elif (line |> starts_with("var ")) {
+                rest = slice(line, length("var "))
+            } else {
+                continue
+            }
+            let gname = ident_prefix(rest)
+            continue if (!(gname |> starts_with("g_")))
+            let eq = find(line, "= @@")
+            continue if (eq < 0 || (find(line, "//") >= 0 && find(line, "//") < eq))
+            if (find(text, "if ({gname} == null)") < 0) {
+                gate_finding(path, line_no, "function global `{gname}` has a declaration initializer but no `if ({gname} == null)` boot-restore guard - a serialized exe restores it as NULL and the first invoke dies (add it to the file's restore [init])")
+            }
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
         to_log(LOG_ERROR, "modules/dasLLAMA/REVIEW.das: run from the repo root\n")
         return 2
     }
+    check_exe_fn_global_restore()
     check_gpu_role_partition()
     check_fastmath_default()
     var inscope tut_texts : array<string>
