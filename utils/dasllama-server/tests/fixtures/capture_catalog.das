@@ -54,6 +54,16 @@ def private poll_state(base_url : string; var got : int64&) : tuple<state : stri
     return (state = state, body = body)
 }
 
+def private pick_total(body : string) : int64 {
+    var perr = ""
+    var pj = read_json(body, perr)
+    let total = int64(pj?["download"]?["total"] ?? 0.0lf)
+    unsafe {
+        delete pj
+    }
+    return total > 0l ? total : 1l
+}
+
 // the smallest card - every entry reads absent against the scratch dir
 def private pick_smallest(base_url : string) : string {
     var jerr = ""
@@ -90,10 +100,12 @@ def private capture_both(base_url, cat_dir : string) {
         }
     }
     var rolling = ""   // mid-flight snapshot: real bytes moving, state == downloading
-    for (_attempt in range(3000)) {
+    for (_attempt in range(6000)) {
         var got = 0l
         let p = poll_state(base_url, got)
-        if (p.state == "downloading" && got > 0l) {
+        // wait past the first chunk: a 32KB snapshot pins 0% and the progress-render
+        // assertion downstream loses its teeth - 5% is a real mid-flight picture
+        if (p.state == "downloading" && got * 20l >= pick_total(p.body)) {
             rolling = p.body
             break
         }

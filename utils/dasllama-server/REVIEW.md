@@ -3,13 +3,18 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `README.md`. Planned work: `CONTROL_PAGE_PLAN.md`.
 
-**A diff to a file that requires a `dasllama/*` module applies `modules/dasLLAMA/REVIEW.md`
-(repo root) too.**
+**A diff to a file that requires - directly or through another file in this folder - a
+`dasllama/*` module applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
-**Never hand-write or hand-edit a fixture under `tests/fixtures/` (beside this file), or a
-wire body in a Playwright `.spec.js` under that `tests/` - capture the bytes of a real server
-run and normalize the machine-local paths instead.** `tests/fixtures/README.md` gives the
-capture steps.
+**A captured response body - a `.json`/`.txt` under `tests/fixtures/` - is never
+hand-authored, and never edited beyond machine-local path normalization; a request or
+response body in a Playwright `.spec.js` under `tests/` (beside this file) is a captured
+fixture, or a clone of one with named fields overridden - a body authored from nothing is a
+defect.** `tests/fixtures/README.md` gives the capture rails (a capture SCRIPT beside the
+fixtures is code, not a fixture).
+
+**A diff that re-captures a fixture under `tests/fixtures/`, or edits `control.html`, runs
+the Playwright suite in `tests/` (beside this file) and ships green.**
 
 **Weakening `REVIEW.das` (beside this file) is a defect** - dropping a check, narrowing what a
 check scans, adding a name to a check's licensed set (the names that check does not flag), or

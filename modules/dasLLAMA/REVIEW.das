@@ -308,19 +308,25 @@ def private rb_class_declares(declared : table<string>; class_base : table<strin
     return false
 }
 
-// "<Class>_<kernel>" / "<kernel>" / with a trailing "_msl..." tail -> the owning class
+// "<Class>_<kernel>" / "<kernel>" / with a "_tgmem"/"_entry"/"_fastmath" tail -> the owning
+// class. Kernel names themselves may end in "_msl" (the annotation names the MSL global), so
+// the kernel lookup tries the token both with and without that suffix.
 def private rb_resolve_class(token : string; class_names : table<string>; kernel_class : table<string; string>) : string {
     var t = token
-    let msl = find(t, "_msl")
-    if (msl >= 0) {
-        t = slice(t, 0, msl)
+    for (suffix in ["_msl_tgmem", "_msl_entry", "_msl_fastmath", "_tgmem", "_entry", "_fastmath"]) {
+        if (t |> ends_with(suffix)) {
+            t = slice(t, 0, length(t) - length(suffix))
+            break
+        }
     }
-    var owner = ""
-    kernel_class |> get(t) $(v) {
-        owner = v
-    }
-    if (!empty(owner)) {
-        return owner
+    for (cand in [t, "{t}_msl"]) {
+        var owner = ""
+        kernel_class |> get(cand) $(v) {
+            owner = v
+        }
+        if (!empty(owner)) {
+            return owner
+        }
     }
     let us = find(t, "_")
     if (us > 0 && key_exists(class_names, slice(t, 0, us))) {
@@ -373,9 +379,7 @@ def private check_race_bind_numbers {
         for (line in split(fread(path), "\n")) {
             line_no++
             if (line |> starts_with("def ")) {
-                unsafe {
-                    delete pso_class
-                }
+                pso_class |> clear()   // reset, never delete: the table is reused next function
                 target = ""
                 continue
             }

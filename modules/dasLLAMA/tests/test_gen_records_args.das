@@ -12,11 +12,6 @@ require daslib/strings_boost
 // builder's per-tool arms, the GPU-pair roster, and the ZERO-cells refusal - the branches
 // that decide what lands on the public board, none of which any model suite reaches.
 
-def private self_daslang() : string {
-    let argv <- get_command_line_arguments()
-    return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
-}
-
 def private has(args : array<string>; v : string) : bool {
     for (a in args) {
         if (a == v) {
@@ -92,6 +87,11 @@ def test_canary_bench_seams(t : T?) {
                                   "--self-test"], out, 60.0)
         t |> equal(0, rc, "the self-test passes: {out}")
         t |> success(find(out, "SELFTEST") >= 0, "the self-test announces itself: {out}")
+        // the rejection branch: no --wav (and no --self-test) refuses before any model import
+        var rout = ""
+        let rrc = run_and_capture(["python3", "modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py"], rout, 60.0)
+        t |> equal(2, rrc, "an argless run refuses: {rout}")
+        t |> success(find(rout, "required") >= 0, "the refusal names --wav: {rout}")
     }
 }
 

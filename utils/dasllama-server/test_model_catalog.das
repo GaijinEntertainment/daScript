@@ -221,3 +221,20 @@ def test_state_json(t : T?) {
         rmdir(dir)
     }
 }
+
+[test]
+def test_fixture_path_normalization(t : T?) {
+    t |> run("the captured catalog fixtures carry only normalized paths") @(t : T?) {
+        // pins capture_catalog.das's normalize_paths ON ITS ARTIFACTS: every path value in
+        // a committed fixture is the windows convention, never a capture box's local path
+        for (fx in ["catalog_idle", "catalog_downloading", "catalog_done"]) {
+            let text = fread("utils/dasllama-server/tests/fixtures/{fx}.json")
+            t |> success(!empty(text), "{fx}.json reads")
+            t |> success(find(text, "C:\\\\Users\\\\user\\\\.dasllama\\\\models") >= 0,
+                         "{fx}: the normalized models dir is present")
+            for (leak in ["/var/folders/", "/tmp/", "/Users/", "/home/"]) {
+                t |> success(find(text, "\"{leak}") < 0, "{fx}: no machine-local path ({leak})")
+            }
+        }
+    }
+}

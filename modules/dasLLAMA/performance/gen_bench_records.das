@@ -1541,14 +1541,10 @@ def main : int {
         // the loud tail of the sweep-start UNSET warning: name every pair the board is missing
         to_log(LOG_WARNING, "gen_bench_records: {length(refSkipped)} ref cell(s) SKIPPED (refs unset - das-only rows, no board ratio): {join(refSkipped, ", ")}\n")
     }
-    if (!empty(failed)) {
-        let list = join(failed, ", ")
-        to_log(LOG_ERROR, "gen_bench_records: {length(failed)} FAILED cell(s): {list}\n")
-        return 1
-    }
     let verdict = records_run_verdict(length(failed), g_cells_measured)
     if (verdict.rc != 0) {
-        to_log(LOG_ERROR, "gen_bench_records: {verdict.msg}\n")
+        let detail = empty(failed) ? "" : ": {join(failed, ", ")}"
+        to_log(LOG_ERROR, "gen_bench_records: {verdict.msg}{detail}\n")
     }
     return verdict.rc
 }

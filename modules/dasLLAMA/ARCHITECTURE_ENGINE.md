@@ -7,13 +7,15 @@ names: each `var g_x = @@fn` declaration carries an `if (g_x == null)` boot-rest
 the same file - a serialized exe restores globals as data, and only a boot-restore `[init]`
 heals the null function value.
 
-`REVIEW.das`'s `check_race_bind_numbers` walks every `dasllama/` file and licenses no names:
-each hand-written `kn_buffer`/`kn_kargs` literal in a race or knockout arm lands on a
-binding number its target kernel class declares (the class resolves from the arm's
-`kn_tgmem` constant, or from `kn_pipeline`'s pso built by `pipeline_from_source` in the same
-function; a `@uniform` slot legitimately takes a 4-byte buffer). A mis-numbered arm
-dispatches, reads the wrong buffer, and `race_envelope_ok` fails closed - the twin silently
-loses its crown.
+`REVIEW.das`'s `check_race_bind_numbers` walks every `dasllama/` file: each hand-written
+`kn_buffer`/`kn_kargs` literal in a race or knockout arm lands on a binding number its
+target kernel class declares (the class resolves from the arm's `kn_tgmem` constant - with
+or without the kernel's own `_msl` suffix - or from `kn_pipeline`'s pso built by
+`pipeline_from_source` in the same function; a `@uniform` slot legitimately takes a 4-byte
+buffer). The licensed residue is exactly the arms whose pso or tgmem arrives as a FUNCTION
+PARAMETER (the parameterized race helpers) - those the check cannot resolve textually and
+stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
+`race_envelope_ok` fails closed - the twin silently loses its crown.
 
 ### 1.1 Engine core
 

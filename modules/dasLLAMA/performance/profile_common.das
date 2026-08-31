@@ -1639,9 +1639,7 @@ def asr_pybench_out_path() : string {
     return "{asr_dir()}/_pybench_rows.txt"
 }
 
-//! The reference tools that field a GPU twin leg beside their CPU pass (whisper-cli and
-//! mtmd via their Metal builds, nemo via torch-MPS) — the gpu-vs-gpu pairing half of the
-//! `#asr-gpu-pairs` contract; onnx and parakeet-cli stay CPU-only.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
 def asr_gpu_pair_tool(tool : string) : bool {
     return tool == "whisper-cli" || tool == "mtmd" || tool == "nemo"
 }

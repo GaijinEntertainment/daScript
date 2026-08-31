@@ -85,6 +85,7 @@ def main():
     )
     tag = model.audio_locator_tag
 
+    rows = 0
     for wav in args.wav:
         info = sf.info(wav)
         audio_s = info.frames / info.samplerate
@@ -102,6 +103,11 @@ def main():
                 continue
             speed = audio_s / (ms / 1000.0)
             print(f"BENCH\t{args.model}\t{base}\t{audio_s:.0f}\t{rep}\t{ms:.3f}\t{speed:.4f}", flush=True)
+            rows += 1
+    if rows == 0:
+        # a run with zero BENCH rows is never a green harness - every rep degenerated
+        print("ERROR\tzero BENCH rows - every rep discarded as degenerate", flush=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

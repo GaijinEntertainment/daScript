@@ -644,69 +644,95 @@ def private word_forms(text : string) : array<string> {
     return <- [for (w in split_by_chars(norm, " ")); w; where !empty(w)]
 }
 
+def private word_flips(a, b : array<string>) : int {
+    var flips = 0
+    for (x, y in a, b) {
+        if (x != y) {
+            flips++
+        }
+    }
+    return flips
+}
+
 [test]
 def test_whisper_crowned_word_level(t : T?) {
-    t |> run("the CROWNED lanes agree at word level on jfk (the tensor twins' quality gate)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
-        let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
-        if (!model_available(t, model_path)) return
-        let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
-        if (empty(samples)) {
-            t |> skip("jfk.wav not present")
-            return
-        }
-        // the tolerance-graded twin of the strict cell above: crowns pinned ON, so the
-        // tensor twins actually serve, and the bar is WORD equality - rounding drift that
-        // flips a token or a comma passes, a garbled crowned kernel does not
-        let prev_crowns = get_metal_tensor_crowns()
-        pin_metal_tensor_crowns("attn_qkmm,mulmm_bf16,mulmm_q8,gemmb_q8,gemmb_sk_q8,gemm64b_q8,kq_mulmm_k4,kq_mulmm_k5,kq_mulmm_k6")
+    t |> run("the CROWNED lanes agree at word level on jfk (the crowned-pipeline quality gate)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
+            if (!model_available(t, model_path)) return
+            let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            // the tolerance-graded twin of the strict cell above: crowns pinned ON, the
+            // pipeline serves whatever crowned variants the box readies, and the bar is
+            // WORD equality - rounding drift that flips a token or a comma passes, a
+            // garbled kernel on the mixed lane's route does not. Per-VARIANT dispatch
+            // witnesses (kcov row asserts) are followup 60's stronger form - tiny's hs=64
+            // attention may not take the tensor QK route at all
+            set_metal_tower(true)
+            set_metal_wdec(true)
+            set_metal_wdec_step(true)
+            set_metal_wdec_step_min_d(0l)   // tiny sits under the step's serving floor - the census's same seat
+            let prev_crowns = get_metal_tensor_crowns()
+            pin_metal_tensor_crowns("attn_qkmm,mulmm_bf16,mulmm_q8,gemmb_q8,gemmb_sk_q8,gemm64b_q8,kq_mulmm_k4,kq_mulmm_k5,kq_mulmm_k6")
             metal_tower_shutdown()
             metal_wdec_shutdown()
             metal_prefill_shutdown()
-        }
-        set_asr_tower_fp32(true)
-        var inscope mm <- load_asr_model(model_path)
-        set_asr_tower_fp32(false)
-        var inscope m <- load_asr_model(model_path)
-        with_job_que() {
-            setup_dasllama_jobque_()
-            var inscope s <- create_session(m)
-            var text_default = ""
-            transcribe(m, s, samples) $(seg) {
-                text_default = "{text_default}{seg.text} "
-            }
-            var inscope sm <- create_session(mm)
-            var text_mixed = ""
-            transcribe(mm, sm, samples) $(seg) {
-                text_mixed = "{text_mixed}{seg.text} "
-            }
-            to_log(LOG_INFO, "whisper-tiny crowned q8 jfk eyeball: '{text_default}'\n")
-            to_log(LOG_INFO, "whisper-tiny crowned f32/q8 jfk eyeball: '{text_mixed}'\n")
-            let wa <- word_forms(text_default)
-            let wb <- word_forms(text_mixed)
-            t |> success(!empty(wa) && !empty(wb), "both crowned lanes produced words")
-            t |> equal(length(wa), length(wb), "word count agrees across crowned lanes")
-            var flips = 0
-            for (x, y in wa, wb) {
-                if (x != y) {
-                    flips++
+            set_asr_tower_fp32(true)
+            var inscope mm <- load_asr_model(model_path)
+            set_asr_tower_fp32(false)
+            var inscope m <- load_asr_model(model_path)
+            let s0 = metal_tower_stats()
+            let w0 = metal_wdec_stats()
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var inscope s <- create_session(m)
+                var text_default = ""
+                transcribe(m, s, samples) $(seg) {
+                    text_default = "{text_default}{seg.text} "
                 }
+                var inscope sm <- create_session(mm)
+                var text_mixed = ""
+                transcribe(mm, sm, samples) $(seg) {
+                    text_mixed = "{text_mixed}{seg.text} "
+                }
+                to_log(LOG_INFO, "whisper-tiny crowned q8 jfk eyeball: '{text_default}'\n")
+                to_log(LOG_INFO, "whisper-tiny crowned f32/q8 jfk eyeball: '{text_mixed}'\n")
+                // engage witness - without it a declining driver would compare two CPU
+                // transcripts and pass vacuously. The q8-default ENCODER declines the tower
+                // by design (quant_mode), so the tower delta is the mixed lane's f32 encode
+                // alone; both DECODERS ride the crowned wdec
+                t |> equal(metal_tower_stats().encodes - s0.encodes, 1l,
+                           "the mixed lane's f32 encoder GPU-served (tower encode delta)")
+                t |> success(metal_wdec_stats().steps - w0.steps > 0l,
+                             "the crowned decoder served (wdec step delta)")
+                let wa <- word_forms(text_default)
+                let wb <- word_forms(text_mixed)
+                t |> success(!empty(wa) && !empty(wb), "both crowned lanes produced words")
+                t |> equal(length(wa), length(wb), "word count agrees across crowned lanes")
+                let flips = word_flips(wa, wb)
+                t |> equal(flips, 0, "crowned lanes word-identical ({flips}/{length(wa)} word flips)")
             }
-            t |> equal(flips, 0, "crowned lanes word-identical ({flips}/{length(wa)} word flips)")
-        }
-        unpin_metal_tensor_crowns()
-        set_metal_tensor_crowns(prev_crowns)
-        static_if (typeinfo builtin_module_exists(das_metal)) {
+            unpin_metal_tensor_crowns()
+            set_metal_tensor_crowns(prev_crowns)
             metal_tower_shutdown()
             metal_wdec_shutdown()
             metal_prefill_shutdown()
+            set_metal_tower(true)   // restore: the defaults later cells' GPU-serving claims see
+            set_metal_wdec(true)
+            set_metal_wdec_step(true)
+            set_metal_wdec_step_min_d(1024l)   // the measured serving floor (the declaration default)
+            delete m
+            delete mm
+        } else {
+            t |> skip("das_metal not built - the crowned lanes cannot serve here")
         }
-        delete m
-        delete mm
     }
 }
 
