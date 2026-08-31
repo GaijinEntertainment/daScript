@@ -56,3 +56,13 @@
   a declaration-initialized function-typed global joins its file's boot-restore [init] in
   the same change; check_exe_fn_global_restore is the mechanical half, test_exe_smoke the
   end-to-end tripwire.
+
+- **2026-08-30** (`REVIEW_MEASUREMENT.md`): at the pre-PR .md stop Boris ratified the
+  figure rules' re-scoping to module-owned surfaces (ledgers, docs, code comments, PR
+  bodies), with served pages routed to the site checklists' own provenance duty - "3.
+  agreed".
+
+- **2026-08-30** (`REVIEW.md`): Boris ratified the DASLLAMA_RELEASE bump rule's paper-trail
+  clause - a bump's diff also carries the LAWS.md entry recording the declared release; the
+  declaration itself stays his call, on feel ("the intent was to bump due to major changes
+  ... i go on feel on that one" - "4. agreee").
