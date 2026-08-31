@@ -22,6 +22,10 @@ IF (NOT DAS_METAL_DAS_INCLUDED)
         PATTERN "*.das"
         PATTERN "_*" EXCLUDE
     )
+    # metal/ carries [arch] citations; ship generated excerpts of the cited sections
+    # (registry processed by the root CMakeLists)
+    set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
+        "modules/dasMetal/metal|modules/dasMetal|${DAS_INSTALL_MODULESDIR}/dasMetal")
 ENDIF()
 
 # C++ binding is Apple-only (system Metal.framework, zero third-party code).

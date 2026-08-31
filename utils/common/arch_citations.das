@@ -55,6 +55,14 @@ struct public ArchDocs {
 }
 
 
+// True for an entry name every [arch] walk skips: `_`/`.`-prefixed entries, and
+// `builtin.das`, which sits outside the citation system in LINT026's walk
+// (utils/lint/main.das), the census walk (arch_common), and extraction alike.
+def public arch_walk_skips(name : string) : bool {
+    return name |> starts_with("_") || name |> starts_with(".") || name == "builtin.das"
+}
+
+
 // The one spelling a path is compared under: lexical, so it works on a document that is not
 // there, and '/'-folded, so a Windows walk and a citation agree.
 def public arch_path(path : string) : string {
@@ -207,6 +215,59 @@ def public each_arch_anchor(var docs : ArchDocs; doc : string; blk : block<(a : 
     return if (!arch_doc_exists(docs, doc))
     for (a in docs.anchors[doc]) {
         invoke(blk, a)
+    }
+}
+
+
+// The line span of the anchor's section: x = the heading's 1-based line, y = the 1-based line
+// AFTER the section (the next heading of the same or a higher level, trailing blank lines
+// dropped). (0,0) when the document declares no such anchor. A deeper heading's span nests
+// inside its parent's - `y <= parent.y` - which is what lets a caller emitting several
+// sections tell a subsection it already carries from one it still owes.
+def public section_span(doc, anchor : string) : int2 {
+    let text = fread(doc)
+    return int2(0, 0) if (empty(text))
+    let lines <- split(text, "\n")
+    var start = -1
+    var level = 0
+    for (i in range(length(lines))) {
+        let a = anchor_of_heading(lines[i])
+        if (a.name == anchor) {
+            start = i
+            level = a.level
+            break
+        }
+    }
+    return int2(0, 0) if (start < 0)
+    var stop = length(lines)
+    for (i in range(start + 1, length(lines))) {
+        let lv = heading_level(lines[i])
+        if (lv > 0 && lv <= level) {
+            stop = i
+            break
+        }
+    }
+    while (stop > start + 1 && empty(strip(lines[stop - 1]))) {
+        stop --
+    }
+    return int2(start + 1, stop + 1)
+}
+
+
+// The cited section: the anchor's heading line through the last line before the next heading of
+// the same or a higher level, trailing blank lines dropped. "" when the document declares no
+// such anchor.
+def public section_text(doc, anchor : string) : string {
+    let span = section_span(doc, anchor)
+    return "" if (span.x == 0)
+    let lines <- split(fread(doc), "\n")
+    return build_string() $(var w) {
+        for (i in range(span.x - 1, span.y - 1)) {
+            // split() leaves the '\r' of a CRLF document on the line
+            let raw = lines[i]
+            w |> write(raw |> ends_with("\r") ? slice(raw, 0, length(raw) - 1) : raw)
+            w |> write("\n")
+        }
     }
 }
 

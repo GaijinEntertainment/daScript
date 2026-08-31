@@ -23,6 +23,10 @@ IF(NOT DAS_SPIRV_INCLUDED)
         PATTERN "*.das"
         PATTERN "_*" EXCLUDE
     )
+    # spirv/ carries [arch] citations; ship generated excerpts of the cited sections
+    # (registry processed by the root CMakeLists)
+    set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
+        "modules/dasSpirv/spirv|modules/dasSpirv|${DAS_INSTALL_MODULESDIR}/dasSpirv")
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasSpirv/.das_module
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasSpirv
     )

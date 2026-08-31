@@ -106,6 +106,10 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
         INSTALL(FILES ${DAS_VULKAN_DASLIB}
             DESTINATION ${DAS_INSTALL_MODULESDIR}/dasVulkan/daslib
         )
+        # the daslib carries [arch] citations; ship generated excerpts of the cited
+        # sections (registry processed by the root CMakeLists)
+        set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
+            "modules/dasVulkan/daslib|modules/dasVulkan|${DAS_INSTALL_MODULESDIR}/dasVulkan")
         # SDK payload: examples and the tutorial ladder (offscreen tutorials,
         # their shaders and oracles, the windowed viewers). The .das_test gating
         # files ride along so folder skips (window/ needs glfw, recording/ needs

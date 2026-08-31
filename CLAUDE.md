@@ -34,7 +34,10 @@ An implementation folder - `daslib/`, a module's `daslib/` or engine folder - ho
 besides `REVIEW*.md`, `ARCHITECTURE*.md`, and `LAWS.md` (lint-enforced: `.lint_config`
 `rule_docs_only`). Ledgers and plans live at the module root or in `plans/` (repo root). None
 of these documents installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` and
-`ARCHITECTURE_COMMON.md` at the install root are the two vendoring exceptions.
+`ARCHITECTURE_COMMON.md` at the install root are the two vendoring exceptions, and a shipped
+tree with `[arch]` citations installs a GENERATED excerpt of each cited document (the cited
+sections only, banner-marked; `utils/internal/arch-extract`, registered on `DAS_ARCH_EXTRACT_SPECS`
+beside the tree's install rules) so LINT026 stays armed in an installed SDK.
 
 The mood test routes misplaced text: must/never binding a diff -> REVIEW.md; present-tense
 fact -> ARCHITECTURE.md; dated or past-tense -> /history.

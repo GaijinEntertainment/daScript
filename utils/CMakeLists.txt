@@ -159,6 +159,7 @@ add_custom_target(jit_cache_all_tests
 )
 
 SET(DAS_UTILS_TO_TEST
+    internal/arch-extract/tests
     dascov
     mcp
     lint
