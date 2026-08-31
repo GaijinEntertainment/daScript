@@ -131,6 +131,18 @@ print shows the fast-tier-only pool, pp/tg spot-check against existing rows with
 
 ## Gate-phase evidence ledger (for the PR body)
 
+- **TDD audit (worktree, tip 013a151f4)**: 47 branches - 19 CONTROLLED (all 14 restore
+  guards via `check_exe_fn_global_restore` incl. a base-source reverse run reporting exactly
+  the 14; the lens tgmem refusal via an inverted control; both fail-closed-sync arms; the two
+  serve rows), 12/12 test edits JUSTIFIED with reverse controls where runnable. Three of its
+  named gaps closed in-PR with must-red controls: the `metal_served` roster pin
+  (test_asr_catalog_invariants), serve-card presence pins (test_model_catalog), and the
+  `version_key = "dasllama_version"` textual pin (test_exchange_schema - llvm_tune exposes no
+  runtime reader). Remaining measurement-orchestrator branches (gen_bench_records x7,
+  canary pybench x4, rig plumbing) ride the standing coverage-followup PR; the mx4-race
+  bind-number gate is proposed to Boris as a REVIEW.das rule.
+- **Woodpecker round 2** (tip 013a151f4): zero findings ("no discrete, actionable
+  correctness issues"); round 1 at the pre-fix tip was also zero.
 - **Suite evidence (the tests-checklist's owed runs, final tree, 2026-08-30)**: `run.das --
   --suite model-free` rc=0 (75 files); `--arm kernels --suite kernels` rc=0; `--arm coverage
   --suite coverage` rc=0 (small tier; the large-tier census rows stay

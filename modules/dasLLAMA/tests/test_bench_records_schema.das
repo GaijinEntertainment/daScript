@@ -162,6 +162,10 @@ def test_asr_catalog_invariants(t : T?) {
     t |> run("catalog stays reproducible") @(t : T?) {
         var cat <- asr_catalog()
         var libriCount = 0
+        // the Metal-rail roster: metal_served decides which rows get GPU board cells and
+        // which reference legs pair GPU-vs-GPU, so a silent flip re-lanes the public board
+        let metal_families <- {"Whisper tiny", "Whisper large-v3-turbo", "Canary-Qwen 2.5B",
+                               "Qwen3-ASR-0.6B", "Gemma-4 E2B audio", "Qwen3-Omni-30B audio"}
         for (spec in cat) {
             if (!empty(spec.libri_short)) {
                 libriCount++
@@ -171,6 +175,8 @@ def test_asr_catalog_invariants(t : T?) {
             }
             let wl = asr_workload(spec)
             t |> success(wl == "asr" || wl == "audio-chat", "workload classifies")
+            t |> equal(spec.metal_served, key_exists(metal_families, spec.display),
+                       "{spec.display}: metal_served matches the Metal-rail roster")
         }
         t |> equal(libriCount, 1)   // LibriSpeech scope: Parakeet v3 only
     }

@@ -434,3 +434,17 @@ def test_writer_phrases(t : T?) {
         delete berrors
     }
 }
+
+[test]
+def test_tune_scope_wire_key(t : T?) {
+    t |> run("the tune scope pins staleness under the schema-stable wire key") @(t : T?) {
+        // the rename's load-bearing compensator: without version_key= the scope's staleness
+        // pin silently becomes "dasllama_release" - a key no sidecar in records/ carries, so
+        // every box re-tunes; llvm_tune exposes no runtime reader, so the pin is textual
+        let src = fread("modules/dasLLAMA/dasllama/dasllama_math_gen.das")
+        t |> success(find(src, "version_of = \"dasllama_version/DASLLAMA_RELEASE\"") >= 0,
+                     "the scope versions off DASLLAMA_RELEASE")
+        t |> success(find(src, "version_key = \"dasllama_version\"") >= 0,
+                     "the wire key stays 'dasllama_version' (drop this and every sidecar reads version-stale)")
+    }
+}
