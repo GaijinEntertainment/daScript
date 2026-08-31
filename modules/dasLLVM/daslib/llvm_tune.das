@@ -1601,8 +1601,8 @@ class private TuneScopeAnnotation : AstStructureAnnotation {
 }
 
 // The tune flags, parsed off the APP's command line — we share an argv we do not own, so this
-// is the two-arg parse_args form (clargs skips unknown flag-shaped tokens). Keep every field a
-// bool and never read positionals: an app's own `--model foo.gguf` leaves `foo.gguf` in there.
+// is the two-arg parse_args form (clargs skips unknown flag-shaped tokens). Never read
+// positionals - an app's own `--model foo.gguf` leaves `foo.gguf` in there.
 [CommandLineArgs]
 struct private TuneCliArgs {
     @clarg_doc = "Re-tune this box's kernels before the app runs"
@@ -1615,6 +1615,10 @@ struct private TuneCliArgs {
     @clarg_name = "tune-verbose"
     @clarg_doc = "Tune with the full per-variant output instead of a progress display"
     tune_verbose : bool
+
+    @clarg_name = "tune-only"
+    @clarg_doc = "Comma-separated name filter: re-tune only kernel families whose name contains one of these tokens (implies --tune); every other sidecar entry survives"
+    tune_only : string
 }
 
 // Adopts --tune-quiet/--tune-verbose and answers whether --tune was passed. Runs at MACRO
@@ -1631,7 +1635,10 @@ def private apply_cli_tune_flags() : bool {
     } elif (cfg.tune_verbose) {
         tune_set_verbosity("verbose")
     }
-    return cfg.tune
+    if (!empty(cfg.tune_only)) {
+        set_env_variable("DAS_TUNE_ONLY", cfg.tune_only)   // the tuner children inherit it
+    }
+    return cfg.tune || !empty(cfg.tune_only)
 }
 
 // the exact command a user (or the auto path) runs to tune one scope; the env prefix leads
@@ -1988,10 +1995,18 @@ def tune_auto_reexec() : bool {
     var argv <- get_command_line_arguments()
     var args : array<string>
     args |> reserve(length(argv))
+    var skipValue = false
     for (a in argv) {
-        if (a != "--tune") {
-            args |> push("{a}")
+        if (skipValue) {   // the value token of a `--tune-only <tokens>` pair
+            skipValue = false
+            continue
         }
+        continue if (a == "--tune" || starts_with(a, "--tune-only="))
+        if (a == "--tune-only") {
+            skipValue = true
+            continue
+        }
+        args |> push("{a}")
     }
     print("llvm_tune: re-launching to apply the fresh manifests\n")
     var rc : int
@@ -2047,6 +2062,29 @@ def tune_interrupt_requested() : bool {
     }
     var fs : FStat
     return stat(p, fs)
+}
+
+    //! The `--tune-only` re-mint filter (`DAS_TUNE_ONLY`), verbatim: comma-separated name
+    //! tokens, empty = race everything.
+def tune_only_filter() : string {
+    return g_env_tune.tune_only
+}
+
+    //! True when family `name` should race under the `--tune-only` filter - no filter set, or
+    //! some comma-separated token is a substring of the name. A harness consults this at each
+    //! family boundary; a skipped family writes no entry, so its sidecar seat survives.
+def tune_family_selected(name : string) : bool {
+    let f = g_env_tune.tune_only
+    if (empty(f)) {
+        return true
+    }
+    for (tok in split(f, ",")) {
+        let t = strip(tok)
+        if (!empty(t) && find(name, t) >= 0) {
+            return true
+        }
+    }
+    return false
 }
 
     //! Runtime half of `[tune_policy(missing = "restart")]`, injected as a guard at the top of

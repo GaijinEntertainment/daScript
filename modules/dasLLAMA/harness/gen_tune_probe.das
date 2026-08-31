@@ -1788,18 +1788,11 @@ def private confirm_winner(winner : string) : string {
     return fb
 }
 
-def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family race rail; gates + deferred flush in call order
-    let tune_total_t0 = ref_time_ticks()
-    // refuse before burning minutes measuring noise; every winner below queues into `pending`
-    // and nothing reaches the sidecar until the end-of-run gate passes
-    if (!noise_gate("start")) {
-        return false
-    }
-    var pending : table<string; string>
-    // q8q8 + four kq formats + q51 + the end-to-end confirm
-    tune_progress_plan("dasllama_generators", 7)
-    interrupt_gate("q8q8_tile_gen")
-    tune_progress_kernel_begin("q8q8_tile_gen", ROUNDS)
+// The q8q8 family race, verbatim the old inline tune_mode_run body: the fat-batch tile bench
+// picks the tile knobs (and with them the layout), the hot decode bench picks gkstep among the
+// rows sharing them, incumbent stickiness last. Returns the merged winner's suffix; "" means a
+// correctness gate failed and the tune must abort (the mismatch is printed inside).
+def private q8q8_tune_family : string { // nolint:STYLE037,STYLE038 - the q8q8 race rail, one flat pass
     // batch shape: fat STREAMING ffn like the kq fixture — the old 2048x512x64 kv-projection was
     // L2-hot; divergent crowns still pass the e2e confirm gate before shipping
     var fx <- build_fixture(2048l, 8192l, 256l)
@@ -1913,13 +1906,13 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         var maxdiff = 0.0
         if (!close_to_ref(fx, y, maxdiff)) {
             print("{vs[vi]._0}: tile MISMATCH (maxdiff {maxdiff}) - aborting tune\n")
-            return false
+            return ""
         }
         run_gemv(gtab[vs[vi]._0], gfx, gbufs[vi].q, gbufs[vi].s, vmr[vi], yg)
         var gmaxdiff = 0.0
         if (!close_to_ref(gfx, yg, gmaxdiff)) {
             print("{vs[vi]._0}: gemv MISMATCH (maxdiff {gmaxdiff}) - aborting tune\n")
-            return false
+            return ""
         }
     }
     // the hot shape runs HOT_REPS back-to-back per timing sample: 1MB of weights stays
@@ -1992,18 +1985,78 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     merged = gen_sticky("q8q8_tile_gen", vnames, incSameTile ? hbest : best, merged)
     delete vnames
     delete keep
+    let w = vs[merged]._0
+    delete y
+    delete yg
+    delete yh
+    delete bufs
+    delete gbufs
+    delete hbufs
+    delete vmr
+    delete vts
+    delete vgs
+    delete best
+    delete gbest
+    delete hbest
+    delete gtab
+    delete ctab
+    delete tss
+    delete kgs
+    delete wbs
+    delete mrs
+    delete vs
+    delete fx
+    delete gfx
+    delete hfx
+    return w
+}
+
+def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family race rail; gates + deferred flush in call order
+    let tune_total_t0 = ref_time_ticks()
+    // the --tune-only re-mint filter: only matching families race (q8q8 brings its e2e
+    // confirm along); a skipped family writes no entry, so its previous seat survives the
+    // upsert - a one-family re-mint after landing a format is seconds, not the full walk
+    var kqSel <- [for (fmt in fixed_array(4l, 5l, 6l, 40l, 44l, 3l, 33l, 34l, 45l, 2l, 23l, 24l)); fmt; where tune_family_selected(kq_tile_entry(fmt))]
+    let wantQ8 = tune_family_selected("q8q8_tile_gen")
+    let wantQ51 = tune_family_selected("q51q8_tile_gen")
+    let planTotal = (wantQ8 ? 2 : 0) + length(kqSel) + (wantQ51 ? 1 : 0)
+    if (planTotal == 0) {
+        print("tune-only '{tune_only_filter()}': no generator family matches - half skipped, sidecar untouched\n")
+        delete kqSel
+        return true
+    }
+    if (!empty(tune_only_filter())) {
+        tune_detail("tune-only '{tune_only_filter()}': racing {planTotal - (wantQ8 ? 1 : 0)} of 14 generator families\n")
+    }
+    // refuse before burning minutes measuring noise; every winner below queues into `pending`
+    // and nothing reaches the sidecar until the end-of-run gate passes
+    if (!noise_gate("start")) {
+        return false
+    }
+    var pending : table<string; string>
+    tune_progress_plan("dasllama_generators", planTotal)
+    var q8winner = ""
+    if (wantQ8) {
+        interrupt_gate("q8q8_tile_gen")
+        let q8_t0 = ref_time_ticks()
+        tune_progress_kernel_begin("q8q8_tile_gen", ROUNDS)
+        q8winner = q8q8_tune_family()
+        tune_detail("TUNE_GEN_TIME q8q8_family {get_time_usec(q8_t0) / 1000} ms\n")
+        tune_progress_kernel_end("q8q8_tile_gen", q8winner, "beats")
+        if (empty(q8winner)) {
+            return false   // a tile/gemv correctness gate failed - the mismatch is named above
+        }
+    }
+    if (!noise_gate("mid1")) {
+        print("aborting mid-run - no sidecar written\n")
+        return false
+    }
     // the kq families tune separately — one manifest entry per format, tile-best wins (the
     // gemv is nrsplit-independent, so same-mr rows share its plane and kernel shape). No
     // child-process confirm gate here: the kq stamp only moves the kq planes' interleave,
     // and the e2e exposure (a tile-optimal mr shaving decode kernel rate) is bounded by the
     // decode path staying DRAM-bound — validated end-to-end when the entries first landed.
-    tune_detail("TUNE_GEN_TIME q8q8_family {get_time_usec(tune_total_t0) / 1000} ms\n")
-    tune_progress_kernel_end("q8q8_tile_gen", vs[merged]._0, "beats")
-    if (!noise_gate("mid1")) {
-        print("aborting mid-run - no sidecar written\n")
-        return false
-    }
-    for (fmt in fixed_array(4l, 5l, 6l, 40l, 44l, 3l, 33l, 34l, 45l, 2l, 23l, 24l)) {
+    for (fmt in kqSel) {
         interrupt_gate("k{fmt}q8_tile_gen")
         let kq_t0 = ref_time_ticks()
         let entry = kq_tile_entry(fmt)
@@ -2022,30 +2075,35 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         print("aborting mid-run - no sidecar written\n")
         return false
     }
-    interrupt_gate("q51q8_tile_gen")
-    let q51_t0 = ref_time_ticks()
-    // the manifest key must match the [tune] fn (the TILE) or the stamp misses its own crown;
-    // the race still benches the gemv shape
-    tune_progress_kernel_begin("q51q8_tile_gen", ROUNDS)
-    var qrows : table<string; JsonValue?>
-    let qw = q51_tune_family(qrows)
-    tune_detail("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
-    tune_progress_kernel_end("q51q8_tile_gen", qw, empty(qw) ? "rejected" : "beats")
-    // same gate-failure fallback as the kq loop: complete the scope on the reference body
-    pending["q51q8_tile_gen"] = empty(qw) ? "reference" : qw
-    g_rows["q51q8_tile_gen"] = JV(qrows)
-    print("q51q8_tile_gen winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
-    interrupt_gate("confirm_e2e_prefill")
-    let confirm_t0 = ref_time_ticks()
-    tune_progress_kernel_begin("confirm_e2e_prefill", 0)
-    let cw = confirm_winner(vs[merged]._0)
-    var ok = !empty(cw)
-    if (ok) {
-        pending["q8q8_tile_gen"] = cw
-        print("q8q8_tile_gen winner: {cw}\n")
+    if (wantQ51) {
+        interrupt_gate("q51q8_tile_gen")
+        let q51_t0 = ref_time_ticks()
+        // the manifest key must match the [tune] fn (the TILE) or the stamp misses its own crown;
+        // the race still benches the gemv shape
+        tune_progress_kernel_begin("q51q8_tile_gen", ROUNDS)
+        var qrows : table<string; JsonValue?>
+        let qw = q51_tune_family(qrows)
+        tune_detail("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
+        tune_progress_kernel_end("q51q8_tile_gen", qw, empty(qw) ? "rejected" : "beats")
+        // same gate-failure fallback as the kq loop: complete the scope on the reference body
+        pending["q51q8_tile_gen"] = empty(qw) ? "reference" : qw
+        g_rows["q51q8_tile_gen"] = JV(qrows)
+        print("q51q8_tile_gen winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
     }
-    tune_detail("TUNE_GEN_TIME confirm {get_time_usec(confirm_t0) / 1000} ms\n")
-    tune_progress_kernel_end("confirm_e2e_prefill", "", ok ? "holds" : "rejected")
+    var ok = true
+    if (wantQ8) {
+        interrupt_gate("confirm_e2e_prefill")
+        let confirm_t0 = ref_time_ticks()
+        tune_progress_kernel_begin("confirm_e2e_prefill", 0)
+        let cw = confirm_winner(q8winner)
+        ok = !empty(cw)
+        if (ok) {
+            pending["q8q8_tile_gen"] = cw
+            print("q8q8_tile_gen winner: {cw}\n")
+        }
+        tune_detail("TUNE_GEN_TIME confirm {get_time_usec(confirm_t0) / 1000} ms\n")
+        tune_progress_kernel_end("confirm_e2e_prefill", "", ok ? "holds" : "rejected")
+    }
     tune_progress_finish()
     // the only write, behind the last gate: a noisy end-probe means NO entry is written — the
     // winners above were raced in conditions the probe just proved untrustworthy
@@ -2071,28 +2129,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     }
     delete pending
     tune_detail("TUNE_GEN_TIME total {get_time_usec(tune_total_t0) / 1000} ms\n")
-    delete y
-    delete yg
-    delete yh
-    delete bufs
-    delete gbufs
-    delete hbufs
-    delete vmr
-    delete vts
-    delete vgs
-    delete best
-    delete gbest
-    delete hbest
-    delete gtab
-    delete ctab
-    delete tss
-    delete kgs
-    delete wbs
-    delete mrs
-    delete vs
-    delete fx
-    delete gfx
-    delete hfx
+    delete kqSel
     return ok
 }
 

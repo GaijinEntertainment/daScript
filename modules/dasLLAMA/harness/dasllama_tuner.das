@@ -178,6 +178,9 @@ def main : int {
     if (tune_noise_override()) {
         print("dasllama_tuner: OVERRIDE DAS_TUNE_NOISE_OVERRIDE - a busy-box refusal mints anyway (sidecar stamped 'noise: overridden')\n")
     }
+    if (!empty(tune_only_filter())) {
+        print("dasllama_tuner: FILTER --tune-only '{tune_only_filter()}' - only matching kernel families race; every other sidecar entry survives the upsert\n")
+    }
     // pre-mint snapshot: COPY, not rename — the halves UPSERT, and a rename would drop other
     // scopes' keys from the shared file. The post-mint diff reads it back.
     let sidecar = g_env_core.tune_manifest

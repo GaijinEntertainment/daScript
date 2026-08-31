@@ -2343,24 +2343,9 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     if (tuner_paranoid_requested()) {
         tune_detail("kernel tuner: --tune-paranoid is retired - one protocol, margin-decided; running it\n")
     }
-    let affinity_inherited = is_some(g_env_core.jobque_affinity)
-    if (!affinity_inherited) {
-        set_jobque_affinity(2)   // JobQue pins its creator (this measurement thread) to physical CPU 0
-    }
-    create_job_que()   // child process exit restores affinity; runtime snapshot also reads its lane count
-    let affinity_desc = (affinity_inherited
-        ? "DAS_JOBQUE_AFFINITY={unwrap(g_env_core.jobque_affinity)}"
-        : (get_platform_name() == "darwin" ? "QoS USER_INTERACTIVE (macOS has no core mask)" : "hard CPU0 (tuner default)"))
-    tune_detail("kernel tuner: N={N}, ~{int(TARGET_WINDOW_US / 1000.0lf)} ms windows, {SCREEN_ROUNDS} screening rounds over the grid, {FINAL_ROUNDS} rounds over the finalists (the best candidate + its twins, up to {MAX_FINALISTS}, + fallback), win margin {WIN_MARGIN_PCT:0.1f}%, validation {VALIDATE_ROUNDS} rounds winner vs fallback, measurement affinity {affinity_desc}\n\n")
-    // the probes bracket the measurement window; only a busy box refuses (the hard ceiling),
-    // anything quieter is stamped and raced - the margin rule is what keeps weather out
-    if (!noise_gate("start")) {
-        return 1
-    }
-    tune_progress_plan("dasllama_kernels", TUNED_KERNEL_COUNT + VALIDATE_PLAN_ALLOWANCE)
-
-    load_incumbents()
-    // every bench by name: the sweep runs the list in order, validation re-runs the changed ones
+    // every bench by name, declared up front so the --tune-only filter can prune it before
+    // the job queue even spins up; the sweep runs the list in order, validation re-runs the
+    // changed ones
     var benches <- [
         ("dot", @@bench_dot), ("axpy", @@bench_axpy), ("dot_f16", @@bench_dot_f16),
         ("axpy_f16", @@bench_axpy_f16), ("cvt_f32_to_f16", @@bench_cvt_f32_to_f16),
@@ -2375,6 +2360,39 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         ("gemm_f32_uk_4x16", @@bench_gemm_tile),
         ("dot_q8q8_laneq4x4", @@bench_laneq4x4)   // last: it pins the repack backend (sticks until process exit)
     ]
+    let filtered = !empty(tune_only_filter())
+    if (filtered) {
+        let nb = length(benches)
+        for (k in range(nb)) {
+            let i = nb - 1 - k
+            if (!tune_family_selected(benches[i]._0)) {
+                benches |> erase(i)
+            }
+        }
+        if (empty(benches)) {
+            print("tune-only '{tune_only_filter()}': no loop-hint kernel matches - half skipped, sidecar untouched\n")
+            delete benches
+            return 0
+        }
+        tune_detail("tune-only '{tune_only_filter()}': racing {length(benches)} loop-hint kernel(s); the Metal tensor race and the runtime knob snapshot sit out (previous sidecar values survive)\n")
+    }
+    let affinity_inherited = is_some(g_env_core.jobque_affinity)
+    if (!affinity_inherited) {
+        set_jobque_affinity(2)   // JobQue pins its creator (this measurement thread) to physical CPU 0
+    }
+    create_job_que()   // child process exit restores affinity; runtime snapshot also reads its lane count
+    let affinity_desc = (affinity_inherited
+        ? "DAS_JOBQUE_AFFINITY={unwrap(g_env_core.jobque_affinity)}"
+        : (get_platform_name() == "darwin" ? "QoS USER_INTERACTIVE (macOS has no core mask)" : "hard CPU0 (tuner default)"))
+    tune_detail("kernel tuner: N={N}, ~{int(TARGET_WINDOW_US / 1000.0lf)} ms windows, {SCREEN_ROUNDS} screening rounds over the grid, {FINAL_ROUNDS} rounds over the finalists (the best candidate + its twins, up to {MAX_FINALISTS}, + fallback), win margin {WIN_MARGIN_PCT:0.1f}%, validation {VALIDATE_ROUNDS} rounds winner vs fallback, measurement affinity {affinity_desc}\n\n")
+    // the probes bracket the measurement window; only a busy box refuses (the hard ceiling),
+    // anything quieter is stamped and raced - the margin rule is what keeps weather out
+    if (!noise_gate("start")) {
+        return 1
+    }
+    tune_progress_plan("dasllama_kernels", length(benches) + VALIDATE_PLAN_ALLOWANCE)
+
+    load_incumbents()
     for (b in benches) {
         let kernel_t0 = kernel_begin(b._0)
         invoke(b._1)
@@ -2424,7 +2442,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         ? "\nevery kernel keeps its shipped fallback - the tuner found nothing new on this box.\n"
         : "\n{changed} kernel(s) beat their shipped fallback on this box.\n")
     // the one count still written by hand; say so rather than let the bar quietly misreport
-    if (length(g_results) != TUNED_KERNEL_COUNT) {
+    if (!filtered && length(g_results) != TUNED_KERNEL_COUNT) {
         print("note: TUNED_KERNEL_COUNT is {TUNED_KERNEL_COUNT} but {length(g_results)} kernels ran - the progress bar was scaled wrong; update the constant\n")
     }
 
@@ -2435,8 +2453,12 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var mt_wins : array<string>
         var mt_ran = false
-        var mt_all <- metal_tensor_race()
-        var mt_dec <- metal_tensor_race_decode()
+        var mt_all : array<MetalTensorRaceResult>
+        var mt_dec : array<MetalTensorRaceResult>
+        if (!filtered) {   // a filtered mint leaves "runtime" untouched - no crowns to record
+            mt_all <- metal_tensor_race()
+            mt_dec <- metal_tensor_race_decode()
+        }
         mt_all |> reserve(length(mt_all) + length(mt_dec))
         for (r in mt_dec) {
             mt_all |> emplace(r)
@@ -2450,7 +2472,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
                 mt_wins |> push(r.family)
             }
         }
-        if (!mt_ran) {
+        if (!mt_ran && !filtered) {
             tune_detail("METAL_TWIN: no Metal device - tensor race skipped\n")
         }
         metal_crowns = join(mt_wins, ",")
@@ -2480,6 +2502,12 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         threads = get_total_hw_jobs() + 1, metal_tensor = metal_crowns,
     metal_tall_floor = metal_tall_floor(), metal_devw_small_panel_mb = metal_devw_small_panel_mb(),
     metal_cvt_min_rows = metal_cvt_min_rows()))   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
+    if (filtered) {
+        // a filtered mint must not clobber the runtime knobs (hand-edited TB/L2 refinements
+        // live there): a null runtime leaves the sidecar section untouched
+        delete_json(runtime)
+        runtime = null
+    }
     // winners come from the results table (validation may have demoted one); the [tuned]
     // kernels this harness doesn't sweep yet keep their SHIPPED fallback as an explicit entry -
     // the scope completeness check demands every non-pinned [tuned] kernel
@@ -2488,6 +2516,9 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         "axpy_tq4kv" => "vec8_u2", "cvt_tq4kv_to_f32" => "vec8_u2",
         "dot_q8tq4kv" => "vec16", "quantize_tq4kv_row" => "plain",
         "dot_q8q8_f16s" => "vec16", "dot_q51e" => "vec16"
+    }
+    if (filtered) {   // a filtered mint seeds nothing - only the raced kernels write
+        winners |> clear()
     }
     for (r in g_results) {
         winners[r.kernel] = r.winner

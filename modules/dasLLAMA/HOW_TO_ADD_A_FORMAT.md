@@ -339,8 +339,12 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    the original body. Sidecar staleness keys on the binary's mtime, and the emitter is `.das`
    (JIT-compiled), so landing it invalidates nothing: the next run logs the same
    `27 tune-stamped`, serves the reference body, and its text and t/s match the pre-emitter run
-   exactly - a "the emitter changed nothing" reading that is false. Re-mint with `-- --tune`
-   on the app (a whole-scope re-tune) or delete the sidecar. Unquirked: fold the family's
+   exactly - a "the emitter changed nothing" reading that is false. Re-mint with
+   `-- --tune-only <fmt>q8_tile_gen` on the app (one family races, every other seat and the
+   runtime knobs survive the upsert; ~3 min end to end vs the 20-minute whole-scope walk the
+   doubled family list costs now - and each app roots its OWN sidecar, so run/parity/
+   lcpp_bench each re-mint on first touch of a new family; bare `--tune` stays the
+   whole-scope form, skills/tune.md has the flag) or delete the sidecar. Unquirked: fold the family's
    generator hash (the JIT DLL cache key already carries it) into the sidecar identity, so a
    generator change reads as stale.
 12. **A fresh worktree has no JIT until `lib/LLVM.dll` is staged - on every platform.** The
@@ -480,6 +484,22 @@ and Boris's team-lane global-init rule (GEMM_REFERENCE_MR is a function now). Ga
 test_kqformat 18/18, test_kquant 250 (232 pass, 18 env skips), probe GEN TUNE TEST OK,
 lint 0. E2e: ids 64/64 vs llama.cpp - the arc's FIRST full-match greedy stream, no fork
 anywhere in the window - gen 23 t/s reference bodies. JIT emitter, Vulkan, Metal: pending.
+
+Phase B (JIT emitter, 2026-08-31): iq2xs rides the fmt-23 panel route wholesale - the
+kq_grp_row_dot_b 23 arms extend `|| fmt == 24l` (signed panel bytes, per-16 UNSIGNED
+strips, d/8 fold), the tile drops off the packed lists and reads the byte-expanded panel
+via `unpack_iq2xs_panel_grp` (each u16 = a 9-bit iq2xs_grid[512] index doubled into the
+u64 low/high word pair + a 7-bit ksigns byte through the shared smask negate), and the
+gemv gathers per superblock via `emit_iq2xs_gather` off `iq2xs_emit_globals`' [1024 x i32]
+private grid plus the SHARED iq3xxs ksigns / iq3s smask globals. kfxs24 TEST rows return
+(QUIRK 16 closed). Probe: 11/11 k24 perms ok (maddubs 5.2e-7); the tuner crowns
+dot_maddubs_width256_mr8. QUIRK 15 reran as written, cleared with a whole-scope
+`run.das -- <model> --tune` - the 20-minute walk that motivated `--tune-only` (the QUIRK 15
+recipe above carries the new spelling). Gates: test_kquant -jit 246 pass / 4 skips, interp
+232/18, GEN TUNE TEST OK, lint 0. E2e stamped: parity ids 64/64 vs llama.cpp - Phase A's
+first-ever full-match stream HOLDS under the stamped folds; gen 23 -> 54 t/s. zen2 16t vs
+clean-cpu: pp512 486.4 vs 174.8 (2.78x), tg128 59.4 vs 84.6 (0.70x - the ledgered
+grid-format CPU-decode tail, the iq2s class). Vulkan, Metal: pending.
 
 ### IQ2_S Phase A (CPU, 2026-08-31) - the u64-grid tier
 

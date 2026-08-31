@@ -37,6 +37,7 @@ Loaded once at context init into `g_env_tune`; tuner children inherit the enviro
 | `DAS_TUNE_VERBOSITY` | text | normal | What a tune shows: silent, normal, or verbose. Anything unrecognized reads as normal, so a typo never silences a tune. |
 | `DAS_TUNE_POLICY` | text | declared by [tune_policy] | Override the missing-scope policy: fallback, warn, error, auto, or restart. The announce line says when the environment shaped the policy. |
 | `DAS_TUNE_CONTROL` | path | unset | A supervisor's stop channel: while the named file exists, tune_interrupt_requested() is true and tuners abort at the next kernel-family boundary without minting. The watchdog sets it and owns the file's lifetime; the measurement in flight always completes. |
+| `DAS_TUNE_ONLY` | text | unset (every family races) | Comma-separated re-mint filter: a tuner races only kernel families whose name contains one of these tokens, and every skipped family's sidecar entry survives the upsert. Set by --tune-only on the application; the tuner children inherit it. |
 
 ## Ambient variables dasLLVM reads but does not own
 

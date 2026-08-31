@@ -205,6 +205,16 @@ even when the sidecar is complete (a re-tune; the flag is stripped from the
 re-exec so the child converges). `DAS_TUNE_POLICY` overrides the declared
 value - `DAS_TUNE_POLICY=fallback` is the CI kill switch.
 
+`--tune-only <tokens>` (comma-separated; implies `--tune`) re-tunes only the
+kernel families whose name contains one of the tokens - after landing one
+family's kernels, `--tune-only iq2xs` re-mints that family in seconds instead
+of walking every family the app owns. A skipped family races nothing and
+writes nothing, so its sidecar entry survives the upsert. The filter rides
+the tuner process chain as `DAS_TUNE_ONLY`, and a harness consults
+`tune_family_selected(name)` at each family boundary. On a box with no
+complete sidecar a filtered mint leaves the scope incomplete (the startup
+warning names the missing kernels) - the first full mint still has to happen.
+
 Two further escapes exist for a run that must not mint. `--jit-opt-level=0`
 flips the *injected default* to `fallback`, because winners raced under O3
 codegen mean nothing at O0; a declared `[tune_policy]` is left alone, and
