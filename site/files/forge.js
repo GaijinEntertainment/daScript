@@ -499,7 +499,7 @@ def main() {
         'primes loop':          'primes',
         'sort':                 'table_sort',
         'tree':                 'tree',
-        // 'native loop' — C-baseline workload, no playground sample.
+        // 'interop host calls' — C-baseline workload, no playground sample.
     };
 
     function renderFooter() {
