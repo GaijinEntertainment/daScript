@@ -16,45 +16,6 @@ require daslib/strings_boost
 //! `utils/common/arch_citations.das`, the same code LINT026 runs, so a tool and the rule never
 //! disagree about whether a citation resolves.
 
-// The cited section: the anchor's heading line through the last line before the next heading of
-// the same or a higher level, trailing blank lines dropped. "" when the document declares no
-// such anchor.
-def section_text(doc, anchor : string) : string {
-    let text = fread(doc)
-    return "" if (empty(text))
-    let lines <- split(text, "\n")
-    var start = -1
-    var level = 0
-    for (i in range(length(lines))) {
-        let a = anchor_of_heading(lines[i])
-        if (a.name == anchor) {
-            start = i
-            level = a.level
-            break
-        }
-    }
-    return "" if (start < 0)
-    var stop = length(lines)
-    for (i in range(start + 1, length(lines))) {
-        let lv = heading_level(lines[i])
-        if (lv > 0 && lv <= level) {
-            stop = i
-            break
-        }
-    }
-    while (stop > start + 1 && empty(strip(lines[stop - 1]))) {
-        stop --
-    }
-    return build_string() $(var w) {
-        for (i in range(start, stop)) {
-            // split() leaves the '\r' of a CRLF document on the line
-            let raw = lines[i]
-            w |> write(raw |> ends_with("\r") ? slice(raw, 0, length(raw) - 1) : raw)
-            w |> write("\n")
-        }
-    }
-}
-
 // The name a declaration line introduces, "" when the line declares nothing. Keyword plus the
 // modifiers `outline` already knows how to skip, which is all a navigation aid needs.
 def private declared_name(t : string) : string {
@@ -89,13 +50,13 @@ def annotated_symbol(lines : array<string>; line : int) : string {
 // dot-prefixed names are fixtures and tooling, and `builtin.das` is not source anyone cites.
 def scan_das_tree(path : string; var out : array<string>) {
     fio::dir(path) $(name) {
-        return if (name == "." || name == ".." || name |> starts_with("_") || name |> starts_with("."))
+        return if (arch_walk_skips(name))
         let full = "{path}/{name}"
         let fst = stat(full)
         return if (!fst.is_valid)
         if (fst.is_dir) {
             scan_das_tree(full, out)
-        } elif (fst.is_reg && name |> ends_with(".das") && name != "builtin.das") {
+        } elif (fst.is_reg && name |> ends_with(".das")) {
             out |> push(full)
         }
     }

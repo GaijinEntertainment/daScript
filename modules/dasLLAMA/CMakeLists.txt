@@ -11,6 +11,10 @@ IF(NOT DAS_LLAMA_INCLUDED)
         FILES_MATCHING
         PATTERN "*.das"
     )
+    # dasllama/ carries [arch] citations; ship generated excerpts of the cited sections
+    # (registry processed by the root CMakeLists)
+    set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
+        "modules/dasLLAMA/dasllama|modules/dasLLAMA|${DAS_INSTALL_MODULESDIR}/dasLLAMA")
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/.das_module
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA
     )
