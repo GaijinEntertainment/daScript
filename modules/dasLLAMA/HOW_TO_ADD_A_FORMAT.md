@@ -532,6 +532,20 @@ step-3 0.0267 top-2 flip vs llama.cpp. 5060 Ti vs llama.cpp b10660 -ngl 99: pp51
 vs 18572.5 (0.78x - above the 0.70x class), tg128 297.0 vs 421.4 (0.70x - the grid-gemv
 re-stage at 2 KB, milder than iq2xs's 4 KB; followup_vulkan #35). Metal: pending.
 
+
+Phase D (Metal, 2026-08-31): the iq2xs Metal walk over the aux32 form - `iq2xxs_gw` (512
+words, program-scope constant), `MetalKqGemvIq2xxs` + `MetalKqMvIq2xxsT` B2/B4 +
+`MetalKqMvB8Iq2xxs` + `MetalKqMulMmIq2xxs` (its own `IQ2XXS` static_if arm), every kernel
+deriving signs via `ksign7m` off the block's aux32 and reading the ONE per-32 UNSIGNED strip
+(byte `bu` of the 16B strip region - the 8 pad bytes ride along unread); the "iq2xxss" blob
+arm is the iq2xss split verbatim. Gates: metal gemv 2/2 + gemm 2/2 FIRST TRY, zen2 kquant
+-jit 263/0 regression, lint 0. E2e --ngl 99: the Metal stream is 64/64 IDENTICAL to the
+stamped CPU stream - ALL FOUR TIERS of IQ2_XXS are bit-consistent with each other, carrying
+only the step-3 0.0267 top-2 flip vs llama.cpp. M1 benches: CPU das 897.4/56.3 vs llama.cpp
+139.9/98.4 (6.41x/0.57x), Metal das 3227.6/180.7 vs 3473.3/231.5 (0.93x/0.78x). The format
+is CLOSED - and with it THE FORMAT LADDER: four-tier table zen2 2.86x/0.70x, vk 0.78x/0.70x,
+M1 CPU 6.41x/0.57x, Metal 0.93x/0.78x.
+
 ### IQ2_XS Phase A (CPU, 2026-08-31) - the ksigns u64 tier
 
 Shape: 256-superblock grid format - each of the 32 u16 qs words carries a 9-bit index into

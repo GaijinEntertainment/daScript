@@ -3670,6 +3670,11 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mvb4_iq2xs = compile_pso(MetalKqMvB4Iq2xs_metal_kq_mv_iq2xs_msl, MetalKqMvB4Iq2xs_metal_kq_mv_iq2xs_msl_entry, MetalKqMvB4Iq2xs_metal_kq_mv_iq2xs_msl_fastmath, ok)
     g_pso_kq_mvb8_iq2xs = compile_pso(metal_kq_mvb8_iq2xs_msl, metal_kq_mvb8_iq2xs_msl_entry, metal_kq_mvb8_iq2xs_msl_fastmath, ok)
     g_pso_kq_mm_b24 = compile_pso(MetalKqMulMmIq2xs_metal_kq_mulmm_msl, MetalKqMulMmIq2xs_metal_kq_mulmm_msl_entry, MetalKqMulMmIq2xs_metal_kq_mulmm_msl_fastmath, ok)
+    g_pso_kq_iq2xxs = compile_pso(metal_kq_gemv_iq2xxs_msl, metal_kq_gemv_iq2xxs_msl_entry, metal_kq_gemv_iq2xxs_msl_fastmath, ok)
+    g_pso_kq_mvb2_iq2xxs = compile_pso(MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl, MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl_entry, MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl_fastmath, ok)
+    g_pso_kq_mvb4_iq2xxs = compile_pso(MetalKqMvB4Iq2xxs_metal_kq_mv_iq2xxs_msl, MetalKqMvB4Iq2xxs_metal_kq_mv_iq2xxs_msl_entry, MetalKqMvB4Iq2xxs_metal_kq_mv_iq2xxs_msl_fastmath, ok)
+    g_pso_kq_mvb8_iq2xxs = compile_pso(metal_kq_mvb8_iq2xxs_msl, metal_kq_mvb8_iq2xxs_msl_entry, metal_kq_mvb8_iq2xxs_msl_fastmath, ok)
+    g_pso_kq_mm_b25 = compile_pso(MetalKqMulMmIq2xxs_metal_kq_mulmm_msl, MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_entry, MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_mm_b45 = compile_pso(MetalKqMulMmIq4nl_metal_kq_mulmm_msl, MetalKqMulMmIq4nl_metal_kq_mulmm_msl_entry, MetalKqMulMmIq4nl_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_k2 = compile_pso(metal_kq_gemv_k2_msl, metal_kq_gemv_k2_msl_entry, metal_kq_gemv_k2_msl_fastmath, ok)
     g_pso_kq_mvb2_k2 = compile_pso(MetalKqMvB2K2_metal_kq_mv_k2_msl, MetalKqMvB2K2_metal_kq_mv_k2_msl_entry, MetalKqMvB2K2_metal_kq_mv_k2_msl_fastmath, ok)
@@ -3758,6 +3763,8 @@ def enc_kq_gemv(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff
         enc_kq_iq2s_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     } elif (fmt == KqFmt.iq2xs) {
         enc_kq_iq2xs_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
+    } elif (fmt == KqFmt.iq2xxs) {
+        enc_kq_iq2xxs_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     } elif (fmt == KqFmt.k6) {
         enc_kq_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     } elif (fmt == KqFmt.k5 && (n < 3072l || rows <= 1024l)) {
@@ -3858,6 +3865,14 @@ def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff 
         } else {
             enc_kq_mvb4_iq2xs_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows, gcols)
         }
+    } elif (fmt == KqFmt.iq2xxs) {
+        if (b8) {
+            enc_kq_mvb8_iq2xxs_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+        } elif (two) {
+            enc_kq_mvb2_iq2xxs_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+        } else {
+            enc_kq_mvb4_iq2xxs_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows, gcols)
+        }
     } elif (fmt == KqFmt.k6) {
         if (b8) {
             enc_kq_mvb8_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
@@ -3906,6 +3921,8 @@ def enc_kq_gemm_mm_b(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?;
         enc_kq_mm_iq2s_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
     } elif (fmt == KqFmt.iq2xs) {
         enc_kq_mm_iq2xs_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
+    } elif (fmt == KqFmt.iq2xxs) {
+        enc_kq_mm_iq2xxs_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
     } elif (fmt == KqFmt.k6) {
         enc_kq_mm_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
     } elif (fmt == KqFmt.k4) {
@@ -4363,6 +4380,11 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     release_pso(g_pso_kq_mvb4_iq2xs)
     release_pso(g_pso_kq_mvb8_iq2xs)
     release_pso(g_pso_kq_mm_b24)
+    release_pso(g_pso_kq_iq2xxs)
+    release_pso(g_pso_kq_mvb2_iq2xxs)
+    release_pso(g_pso_kq_mvb4_iq2xxs)
+    release_pso(g_pso_kq_mvb8_iq2xxs)
+    release_pso(g_pso_kq_mm_b25)
     release_pso(g_pso_kq_mvb2_iq4nl)
     release_pso(g_pso_kq_mvb4_iq4nl)
     release_pso(g_pso_kq_mvb8_iq4nl)
@@ -5605,6 +5627,7 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
     @template_constant K2 : bool = false // q2_K: per-16 sc/min nibble pairs (one uint4 strip), the split 4B d+dmin tail at s0off
     @template_constant IQ2S : bool = false // iq2s: the u64-grid gather DIRECT off the hoisted constant table, per-16 UNSIGNED strips
     @template_constant IQ2XS : bool = false // iq2xs: iq2s's walk with ksigns-by-parity off each u16 qs word (no sign plane, no qh)
+    @template_constant IQ2XXS : bool = false // iq2xxs: byte grid indices + aux32 parity ksigns, per-32 UNSIGNED strips
     @workgroup @template_gate = IQ4XS iq4lut : float[16]   // kvalues_iq4nl as floats, staged once per threadgroup
     @workgroup @template_gate = IQ3S gridw3 : uint[512]   // the 2 KB iq3s grid, staged once per threadgroup
     @workgroup @template_gate = IQ3XXS gridw3x : uint[256]   // the 1 KB halved iq3xxs grid, staged once per threadgroup
@@ -5725,6 +5748,25 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
                         va[k * 4 + 3] = float16(dsc3 * float(qv & 4278190080u) - dmn)
                     }
                 } else {
+                    static_if (IQ2XXS) {
+                        // iq2xxs: per-32 UNSIGNED strip byte js; block js's grid word carries
+                        // four byte indices, its aux32 the parity-derived ksigns
+                        let sv = ks4[blk]
+                        let scw = js < 4u ? sv.x : sv.y
+                        let dsc = float(ksh[blk]) * float((scw >> ((js & 3u) * 8u)) & 255u)
+                        let gw2 = kqu[blk * 16u + js * 2u]
+                        let aux2 = kqu[blk * 16u + js * 2u + 1u]
+                        for [unroll_full] (k in range(4)) {
+                            let q3 = il0 * 2u + uint(k) / 2u
+                            let bidx = (gw2 >> (8u * q3)) & 255u
+                            let sgb2 = ksign7m((aux2 >> (7u * q3)) & 127u)
+                            let nib = uint(k) % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u
+                            let sw = iq3s_sw(iq2xxs_gw(int(bidx * 2u + uint(k) % 2u)), nib)
+                            for [unroll_full] (c in range(4)) {
+                                va[k * 4 + c] = float16(dsc * iq3s_sx(sw, uint(c)))
+                            }
+                        }
+                    } else {
                     static_if (IQ2XS) {
                         // iq2xs: the iq2s strip/scale reads; each u16 qs word = 9-bit grid
                         // index + 7-bit ksigns index whose sign byte ksign7m recomputes
@@ -5889,6 +5931,7 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
                     }
                     }
                     }
+                    }
                 }
             }
             barrier()
@@ -5968,6 +6011,12 @@ class MetalKqMulMmIq2s : MetalKqMulMmK45T {
 [metal_dispatch(name = "enc_kq_mm_iq2xs_c", pso = "g_pso_kq_mm_b24", tgmem = "MetalKqMulMmIq2xs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmIq2xs : MetalKqMulMmK45T {
     override IQ2XS = true
+}
+
+// iq2xxs rides its own IQ2XXS arm; the same split scale plane binds (d8 plane at s0off = doff)
+[metal_dispatch(name = "enc_kq_mm_iq2xxs_c", pso = "g_pso_kq_mm_b25", tgmem = "MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+class MetalKqMulMmIq2xxs : MetalKqMulMmK45T {
+    override IQ2XXS = true
 }
 
 // iq4nl rides the IQ4XS arm with IQ4NL flipping the scale read to q40's per-32-block d plane
@@ -6388,6 +6437,77 @@ def private ksign7m(v : uint) : uint {
     t = t ^ (t >> 2u)
     t = t ^ (t >> 1u)
     return v | ((t & 1u) << 7u)
+}
+
+// ggml's iq2xxs_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word
+// 2i+1 = 4..7); the same all-literal program-scope-constant form as its grid siblings.
+def private iq2xxs_gw(i : int) : uint {
+    let tbl = fixed_array<uint>(
+        0x08080808, 0x08080808, 0x0808082b, 0x08080808, 0x08081919, 0x08080808, 0x08082b08, 0x08080808,
+        0x08082b2b, 0x08080808, 0x08190819, 0x08080808, 0x08191908, 0x08080808, 0x082b0808, 0x08080808,
+        0x082b082b, 0x08080808, 0x082b2b08, 0x08080808, 0x082b2b2b, 0x08080808, 0x19080819, 0x08080808,
+        0x19081908, 0x08080808, 0x19190808, 0x08080808, 0x19192b08, 0x08080808, 0x192b0819, 0x08080808,
+        0x192b1908, 0x08080808, 0x2b080808, 0x08080808, 0x2b08082b, 0x08080808, 0x2b082b2b, 0x08080808,
+        0x2b2b082b, 0x08080808, 0x08080819, 0x08080819, 0x08081908, 0x08080819, 0x08190808, 0x08080819,
+        0x08191919, 0x08080819, 0x19080808, 0x08080819, 0x2b081908, 0x08080819, 0x2b192b08, 0x08080819,
+        0x08080808, 0x0808082b, 0x0808082b, 0x0808082b, 0x082b082b, 0x0808082b, 0x2b08082b, 0x0808082b,
+        0x08080819, 0x08081908, 0x08081908, 0x08081908, 0x08190808, 0x08081908, 0x082b0819, 0x08081908,
+        0x082b1908, 0x08081908, 0x19080808, 0x08081908, 0x1908082b, 0x08081908, 0x19082b08, 0x08081908,
+        0x192b0808, 0x08081908, 0x2b080819, 0x08081908, 0x2b081908, 0x08081908, 0x2b190808, 0x08081908,
+        0x2b2b1908, 0x08081908, 0x08080808, 0x08081919, 0x0808082b, 0x08081919, 0x08082b08, 0x08081919,
+        0x082b0808, 0x08081919, 0x1908192b, 0x08081919, 0x192b2b19, 0x08081919, 0x2b080808, 0x08081919,
+        0x2b190819, 0x08081919, 0x08082b19, 0x0808192b, 0x08190808, 0x0808192b, 0x19080808, 0x0808192b,
+        0x2b081908, 0x0808192b, 0x2b2b1908, 0x0808192b, 0x08080808, 0x08082b08, 0x08081919, 0x08082b08,
+        0x08082b08, 0x08082b08, 0x08191908, 0x08082b08, 0x082b2b08, 0x08082b08, 0x19080819, 0x08082b08,
+        0x19081908, 0x08082b08, 0x19190808, 0x08082b08, 0x1919082b, 0x08082b08, 0x2b082b08, 0x08082b08,
+        0x08081908, 0x08082b19, 0x19080808, 0x08082b19, 0x0808082b, 0x08082b2b, 0x08191908, 0x08082b2b,
+        0x08080819, 0x08190808, 0x08081908, 0x08190808, 0x08190808, 0x08190808, 0x082b0819, 0x08190808,
+        0x19080808, 0x08190808, 0x192b0808, 0x08190808, 0x2b081908, 0x08190808, 0x2b190808, 0x08190808,
+        0x2b191919, 0x08190808, 0x08080808, 0x08190819, 0x08082b08, 0x08190819, 0x082b0808, 0x08190819,
+        0x19190808, 0x08190819, 0x19192b2b, 0x08190819, 0x2b080808, 0x08190819, 0x082b1908, 0x0819082b,
+        0x19081919, 0x0819082b, 0x08080808, 0x08191908, 0x08082b08, 0x08191908, 0x082b0808, 0x08191908,
+        0x082b1919, 0x08191908, 0x19082b19, 0x08191908, 0x2b080808, 0x08191908, 0x08192b08, 0x08191919,
+        0x192b082b, 0x08191919, 0x08080808, 0x0819192b, 0x0819192b, 0x0819192b, 0x08080819, 0x08192b08,
+        0x08081908, 0x08192b08, 0x08190808, 0x08192b08, 0x19080808, 0x08192b08, 0x2b080819, 0x08192b08,
+        0x08080808, 0x08192b19, 0x08081919, 0x08192b19, 0x2b2b0808, 0x08192b19, 0x19190819, 0x08192b2b,
+        0x08080808, 0x082b0808, 0x0808082b, 0x082b0808, 0x08082b2b, 0x082b0808, 0x19081908, 0x082b0808,
+        0x192b0819, 0x082b0808, 0x2b080808, 0x082b0808, 0x2b08082b, 0x082b0808, 0x082b2b19, 0x082b0819,
+        0x19082b08, 0x082b0819, 0x08080808, 0x082b082b, 0x0808082b, 0x082b082b, 0x08080819, 0x082b1908,
+        0x08081908, 0x082b1908, 0x08190808, 0x082b1908, 0x19080808, 0x082b1908, 0x1919192b, 0x082b1908,
+        0x08080808, 0x082b1919, 0x19080819, 0x082b1919, 0x192b1908, 0x082b1919, 0x2b190808, 0x082b192b,
+        0x08082b08, 0x082b2b08, 0x082b0808, 0x082b2b08, 0x2b191908, 0x082b2b08, 0x19081908, 0x082b2b2b,
+        0x08080819, 0x19080808, 0x08081908, 0x19080808, 0x08190808, 0x19080808, 0x08192b08, 0x19080808,
+        0x082b0819, 0x19080808, 0x082b1908, 0x19080808, 0x19080808, 0x19080808, 0x19082b08, 0x19080808,
+        0x1919192b, 0x19080808, 0x192b0808, 0x19080808, 0x2b080819, 0x19080808, 0x2b081908, 0x19080808,
+        0x2b190808, 0x19080808, 0x08080808, 0x19080819, 0x082b0808, 0x19080819, 0x192b0819, 0x19080819,
+        0x2b080808, 0x19080819, 0x2b081919, 0x19080819, 0x08080819, 0x1908082b, 0x08190808, 0x1908082b,
+        0x19082b08, 0x1908082b, 0x1919192b, 0x1908082b, 0x192b2b08, 0x1908082b, 0x08080808, 0x19081908,
+        0x08082b08, 0x19081908, 0x082b0808, 0x19081908, 0x2b080808, 0x19081908, 0x2b192b19, 0x19081908,
+        0x0819082b, 0x19081919, 0x082b1908, 0x19081919, 0x08080808, 0x1908192b, 0x08080819, 0x19082b08,
+        0x08081908, 0x19082b08, 0x08190808, 0x19082b08, 0x19080808, 0x19082b08, 0x19081919, 0x19082b08,
+        0x08080808, 0x19082b19, 0x19192b08, 0x19082b19, 0x192b0819, 0x19082b19, 0x2b08082b, 0x19082b19,
+        0x19081919, 0x19082b2b, 0x2b190808, 0x19082b2b, 0x08080808, 0x19190808, 0x08082b08, 0x19190808,
+        0x08190819, 0x19190808, 0x08192b19, 0x19190808, 0x082b0808, 0x19190808, 0x2b080808, 0x19190808,
+        0x2b082b08, 0x19190808, 0x08081908, 0x19190819, 0x1908082b, 0x19190819, 0x2b2b1908, 0x19190819,
+        0x2b190819, 0x1919082b, 0x2b190808, 0x19191908, 0x2b19082b, 0x19191908, 0x08082b2b, 0x19191919,
+        0x08080819, 0x1919192b, 0x19191908, 0x1919192b, 0x08080808, 0x19192b08, 0x08190819, 0x19192b08,
+        0x08192b19, 0x19192b08, 0x192b1908, 0x19192b08, 0x19080808, 0x19192b19, 0x08082b08, 0x19192b2b,
+        0x08081908, 0x192b0808, 0x08190808, 0x192b0808, 0x19080808, 0x192b0808, 0x192b2b08, 0x192b0808,
+        0x08080808, 0x192b0819, 0x19191919, 0x192b0819, 0x08192b08, 0x192b082b, 0x192b0808, 0x192b082b,
+        0x08080808, 0x192b1908, 0x08081919, 0x192b1908, 0x08190808, 0x192b1919, 0x0819082b, 0x192b1919,
+        0x2b081908, 0x192b1919, 0x1908082b, 0x192b2b08, 0x08080808, 0x2b080808, 0x0808082b, 0x2b080808,
+        0x08082b2b, 0x2b080808, 0x19080819, 0x2b080808, 0x2b08082b, 0x2b080808, 0x08081908, 0x2b080819,
+        0x08192b08, 0x2b080819, 0x19080808, 0x2b080819, 0x08190819, 0x2b08082b, 0x08080819, 0x2b081908,
+        0x08081908, 0x2b081908, 0x08190808, 0x2b081908, 0x08191919, 0x2b081908, 0x19080808, 0x2b081908,
+        0x192b0808, 0x2b081908, 0x08080808, 0x2b081919, 0x1908192b, 0x2b081919, 0x2b191908, 0x2b081919,
+        0x08082b19, 0x2b08192b, 0x19080808, 0x2b08192b, 0x192b0808, 0x2b08192b, 0x0808082b, 0x2b082b08,
+        0x08081908, 0x2b082b19, 0x08190819, 0x2b082b2b, 0x08081908, 0x2b190808, 0x08190808, 0x2b190808,
+        0x082b1908, 0x2b190808, 0x19080808, 0x2b190808, 0x2b2b0819, 0x2b190808, 0x0819192b, 0x2b190819,
+        0x2b080808, 0x2b190819, 0x19081919, 0x2b19082b, 0x08080808, 0x2b191908, 0x082b082b, 0x2b191908,
+        0x19081908, 0x2b191908, 0x19190819, 0x2b191919, 0x2b080819, 0x2b192b08, 0x082b0808, 0x2b192b19,
+        0x0808082b, 0x2b2b0808, 0x19190808, 0x2b2b0808, 0x2b081919, 0x2b2b0808, 0x08082b19, 0x2b2b0819,
+        0x08080808, 0x2b2b082b, 0x08192b08, 0x2b2b1908, 0x19190808, 0x2b2b2b08, 0x08081908, 0x2b2b2b19)
+    return tbl[i]
 }
 
 // ggml's iq2xs_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word
@@ -8591,6 +8711,66 @@ class MetalKqGemvIq2xs {
     }
 }
 
+// IQ2_XXS: the iq2xs GEMV geometry over the aux32 form - per (block, half) the block's grid
+// word supplies two BYTE indices (each doubling into the u64 grid pair), its aux32 the
+// parity ksigns; ONE per-32 UNSIGNED strip scales the whole block on the eighth-ed d.
+[metal_dispatch(name = "enc_kq_iq2xxs_c", pso = "g_pso_kq_iq2xxs", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
+class MetalKqGemvIq2xxs {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // strip region: 8 UNSIGNED per-32 sub-scales + 8 pad, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2xxs quant plane, uint view (16 words per superblock: [grid bytes][aux32] per block)
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="metal_kq_gemv_iq2xxs_msl")]
+    def metal_kq_gemv_iq2xxs {
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 16u
+        let it = lane % 16u
+        let bu = it / 2u
+        let il = it % 2u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 4u
+        var sumf : float[4]
+        var ib = ix
+        while (ib < nb) {
+            let yb4 = ib * 64u + bu * 8u + il * 4u
+            let y0 = x[yb4]
+            let y1 = x[yb4 + 1u]
+            let y2 = x[yb4 + 2u]
+            let y3 = x[yb4 + 3u]
+            for [unroll_full] (r in range(4)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                let gw = kqu[blk * 16u + bu * 2u]
+                let aux = kqu[blk * 16u + bu * 2u + 1u]
+                var accv = float4(0.0)
+                for [unroll_full] (wi in range(2)) {
+                    let q3 = il * 2u + uint(wi)
+                    let bidx = (gw >> (8u * q3)) & 255u
+                    let sgn = ksign7m((aux >> (7u * q3)) & 127u)
+                    let w0 = iq3s_sw(iq2xxs_gw(int(bidx * 2u)), sgn & 15u)
+                    let w1 = iq3s_sw(iq2xxs_gw(int(bidx * 2u + 1u)), sgn >> 4u)
+                    let ya = wi == 0 ? y0 : y2
+                    let yb = wi == 0 ? y1 : y3
+                    accv += ya * float4(iq3s_sx(w0, 0u), iq3s_sx(w0, 1u), iq3s_sx(w0, 2u), iq3s_sx(w0, 3u))
+                    accv += yb * float4(iq3s_sx(w1, 0u), iq3s_sx(w1, 1u), iq3s_sx(w1, 2u), iq3s_sx(w1, 3u))
+                }
+                let sc = float(kscb[blk * 16u + bu])
+                sumf[r] += float(kdh[blk]) * sc * (accv.x + accv.y + accv.z + accv.w)
+            }
+            ib += 2u
+        }
+        for [unroll_full] (r in range(4)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
+
 // IQ3_XXS: the iq3s GEMV shape verbatim over the 24-word rows - the 1 KB halved grid as a
 // float4 magnitude slab, signs from the block's aux32 through the parity helper (no table),
 // the same (2ls+1)-strip x halved-d fold. 4 rows per simdgroup, dispatch rows/8.
@@ -9289,6 +9469,160 @@ class MetalKqMvB8Iq2xs {
                 let dl = l < 2 ? dl0 : dl1
                 let sw0 = iq3s_sw(iq2xs_gw(int(idx2)), sgn & 15u)
                 let sw1 = iq3s_sw(iq2xs_gw(int(idx2 + 1u)), sgn >> 4u)
+                w[l * 2] = float4(iq3s_sx(sw0, 0u), iq3s_sx(sw0, 1u), iq3s_sx(sw0, 2u), iq3s_sx(sw0, 3u)) * dl
+                w[l * 2 + 1] = float4(iq3s_sx(sw1, 0u), iq3s_sx(sw1, 1u), iq3s_sx(sw1, 2u), iq3s_sx(sw1, 3u)) * dl
+            }
+            let cxl = tx * 8u
+            for [unroll_full] (b in range(8)) {
+                for [unroll_full] (u in range(8)) {
+                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(8)) {
+            var s = acc[b].x + acc[b].y + acc[b].z + acc[b].w
+            s += simd_shuffle_down(s, 4u)
+            s += simd_shuffle_down(s, 2u)
+            s += simd_shuffle_down(s, 1u)
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = s
+            }
+        }
+    }
+}
+
+// The iq2xxs B2/B4 pair: the iq2xs shell over the aux32 walk - lane tx owns block tx; the
+// block's grid word supplies four byte indices, ksign7m per index; ONE per-32 strip as dl.
+[ |> template_struct_instance]
+class template MetalKqMvIq2xxsT {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // strip region: 8 UNSIGNED per-32 sub-scales + 8 pad (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2xxs quant plane, uint view
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+    @template_constant NR : int = 2
+    @template_constant NRU : uint = 2u  // NR's uint spelling (colbase math) - override BOTH together
+    @template_constant TILED : bool = false
+
+    [metal_kernel]
+    def metal_kq_mv_iq2xxs {
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * NRU   // nolint:LINT002 dead in the TILED=false stamp - measured free
+        let nb = ka.ndim / 256u
+        let nb4 = ka.ndim / 4u
+        var sumf : float[NR]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let dl = float(kdh[blk]) * float(kscb[blk * 16u + tx])
+            let gw = kqu[blk * 16u + tx * 2u]
+            let aux = kqu[blk * 16u + tx * 2u + 1u]
+            var w : float4[8]
+            for [unroll_full] (l in range(4)) {
+                let lu = uint(l)
+                let bidx = (gw >> (8u * lu)) & 255u
+                let sgn = ksign7m((aux >> (7u * lu)) & 127u)
+                let sw0 = iq3s_sw(iq2xxs_gw(int(bidx * 2u)), sgn & 15u)
+                let sw1 = iq3s_sw(iq2xxs_gw(int(bidx * 2u + 1u)), sgn >> 4u)
+                w[l * 2] = float4(iq3s_sx(sw0, 0u), iq3s_sx(sw0, 1u), iq3s_sx(sw0, 2u), iq3s_sx(sw0, 3u)) * dl
+                w[l * 2 + 1] = float4(iq3s_sx(sw1, 0u), iq3s_sx(sw1, 1u), iq3s_sx(sw1, 2u), iq3s_sx(sw1, 3u)) * dl
+            }
+            let cx4 = sb * 64u + tx * 8u
+            static_if (TILED) {
+                for [unroll_full] (b in range(NR)) {
+                    let xb4 = (colbase + uint(b)) * nb4 + cx4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(8)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
+                    }
+                    sumf[b] += acc
+                }
+            } else {
+                for [unroll_full] (b in range(NR)) {
+                    let xb4 = uint(b) * nb4 + cx4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(8)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
+                    }
+                    sumf[b] += acc
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(NR)) {
+            var s = sumf[b]
+            s += simd_shuffle_down(s, 4u)
+            s += simd_shuffle_down(s, 2u)
+            s += simd_shuffle_down(s, 1u)
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = s
+            }
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_kq_mvb2_iq2xxs_c", pso = "g_pso_kq_mvb2_iq2xxs", tg = 64, grid = "rows/8", params = "rows : int64")]
+class MetalKqMvB2Iq2xxs : MetalKqMvIq2xxsT {
+    override NR = 2
+    override NRU = 2u
+    override TILED = false
+}
+
+[metal_dispatch(name = "enc_kq_mvb4_iq2xxs_c", pso = "g_pso_kq_mvb4_iq2xxs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+class MetalKqMvB4Iq2xxs : MetalKqMvIq2xxsT {
+    override NR = 4
+    override NRU = 4u
+    override TILED = true
+}
+
+// the iq2xxs B8 twin: the iq2xs B8 shell (one superblock's X panel staged per threadgroup)
+// with the aux32 compose; the grid read direct.
+[metal_dispatch(name = "enc_kq_mvb8_iq2xxs_c", pso = "g_pso_kq_mvb8_iq2xxs", tgmem = "metal_kq_mvb8_iq2xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+class MetalKqMvB8Iq2xxs {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // strip region: 8 UNSIGNED per-32 sub-scales + 8 pad (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2xxs quant plane, uint view
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+    @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
+
+    [metal_kernel(name="metal_kq_mvb8_iq2xxs_msl")]
+    def metal_kq_mvb8_iq2xxs {
+        let lid = gl_LocalInvocationID.x
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let nb = ka.ndim / 256u
+        let nb4 = ka.ndim / 4u
+        var acc : float4[8]
+        var sb = 0u
+        while (sb < nb) {
+            barrier()
+            for [unroll_full] (j in range(8)) {
+                let slot = uint(j) * 64u + lid
+                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
+            }
+            barrier()
+            let blk = row * nb + sb
+            let dl = float(kdh[blk]) * float(kscb[blk * 16u + tx])
+            let gw = kqu[blk * 16u + tx * 2u]
+            let aux = kqu[blk * 16u + tx * 2u + 1u]
+            var w : float4[8]
+            for [unroll_full] (l in range(4)) {
+                let lu = uint(l)
+                let bidx = (gw >> (8u * lu)) & 255u
+                let sgn = ksign7m((aux >> (7u * lu)) & 127u)
+                let sw0 = iq3s_sw(iq2xxs_gw(int(bidx * 2u)), sgn & 15u)
+                let sw1 = iq3s_sw(iq2xxs_gw(int(bidx * 2u + 1u)), sgn >> 4u)
                 w[l * 2] = float4(iq3s_sx(sw0, 0u), iq3s_sx(sw0, 1u), iq3s_sx(sw0, 2u), iq3s_sx(sw0, 3u)) * dl
                 w[l * 2 + 1] = float4(iq3s_sx(sw1, 0u), iq3s_sx(sw1, 1u), iq3s_sx(sw1, 2u), iq3s_sx(sw1, 3u)) * dl
             }
