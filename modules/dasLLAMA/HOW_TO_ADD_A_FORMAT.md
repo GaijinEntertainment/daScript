@@ -472,7 +472,26 @@ kqformat 18/18, M1 probe + kquant -jit 232/1, lint 0. E2e stamped: gen 41 -> 47 
 fork vs llama.cpp moves from step 10 to step 5 (0.211-logit top-2 near-tie - stamped folds
 move the flip point, not the class; the iq3xxs precedent). zen2 16t vs clean-cpu on the i1
 vehicle: pp512 501.5 vs 138.5 (3.62x), tg128 55.8 vs 73.5 (0.76x - the ledgered #60/#61
-CPU-decode tail). Vulkan, Metal: pending.
+CPU-decode tail).
+
+Phase C (Vulkan, 2026-08-31): the iq3s walk widened to the u64 grid. `iq2s_grid_word` ships
+the 8 KB table as low/high word pairs (word 2i / 2i+1); `KqGemvIq2s` = the iq3s shell with
+`@workgroup uint[2048]` (32 words staged per thread at local_size 64), TWO grid words per
+10-bit qs|qh index (`(qh << (8-2l)) & 0x300`), the block's own sign bytes through the same
+smask negate, and the per-16 UNSIGNED strips folded k2-style off wsu words 1..4 (split
+lo/hi dots, d pre-eighth-ed). `KqBatchIq2s : KqBatchK6` - the iq3s gather in stage_w, the
+strip pair on the wsw/wsw2 planes, and a plain split fma (no offset, no min term).
+`Iq2sCm2T` = `VkIq2sBlk` ([qs 16][sg 16][qh 4] int16 lanes) on a new `IQ2SGRID` gated axis
+(8 words per thread at 256); the device scale row is the CPU 20B row VERBATIM (d + 2B hole
++ 16 strips - the grouped gather's k4/k5 else arm already emits exactly that, no layout
+edit). vk_kq_schema_id 12 -> 23; eleven-format family cells at stride 18 words; a dedicated
+float witness (`iq2s_gemv_float_oracle`) plus `iq2sf16_gemm_oracle` for the cm2 tiles.
+Gates: the suite 82/82 (the three iq2s cm2 tiles 0-off at 89600 cells each); lint 0. The
+resident driver arms on the i1 vehicle: gen 233 t/s, the fork vs llama.cpp at step 5 = the
+SAME 0.211-logit top-2 near-tie as the CPU-JIT tier. Rows (5060 Ti vs llama.cpp b10660
+build-vulkan -ngl 99): pp512 12099.3 / 17377.5 (0.70x - the tier class), tg128 292.4 /
+362.5 (0.81x; the gemv re-stages the 8 KB grid per 2-row workgroup - the obvious tg lever,
+same ledger class as the pp tier). Metal: pending.
 
 ### Q2_K Phase A (CPU, 2026-08-31)
 
