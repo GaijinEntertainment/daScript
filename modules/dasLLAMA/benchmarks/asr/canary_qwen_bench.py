@@ -15,16 +15,48 @@ import time
 import sys
 
 
+def rep_is_degenerate(n_ids):
+    # a rep that emits almost nothing is invalid: the mutated-prompt and MPS+set_num_threads
+    # failure modes both degenerate to a few-token stub that would silently win best-of
+    return n_ids < 8
+
+
+def build_prompts(prompt, tag, wav):
+    # rebuilt PER REP: model.generate mutates the chat list in place, and a reused list
+    # degenerates the next rep to a few tokens (fast on MPS, where it silently won best-of;
+    # on CPU the encode cost hid it while the transcript was still garbage)
+    return [[{"role": "user", "content": f"{prompt}{tag}", "audio": [wav]}]]
+
+
+def self_test():
+    # torch/nemo never imported here - the pure seams check on any stock python3
+    assert rep_is_degenerate(0) and rep_is_degenerate(7)
+    assert not rep_is_degenerate(8) and not rep_is_degenerate(256)
+    p1 = build_prompts("T: ", "<a>", "x.wav")
+    p1[0].append({"role": "assistant", "content": "mutated"})  # what generate() does in place
+    p2 = build_prompts("T: ", "<a>", "x.wav")
+    assert len(p2[0]) == 1, "prompts must come back fresh per rep"
+    assert p2[0][0]["content"] == "T: <a>" and p2[0][0]["audio"] == ["x.wav"]
+    print("SELFTEST\tok", flush=True)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="nvidia/canary-qwen-2.5b")
-    ap.add_argument("--wav", action="append", required=True)
+    ap.add_argument("--wav", action="append")
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--max-new-tokens", type=int, default=256)
     ap.add_argument("--prompt", default="Transcribe the following: ")
     ap.add_argument("--threads", type=int, default=0)
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
+
+    if args.self_test:
+        sys.exit(self_test())
+    if not args.wav:
+        ap.error("--wav is required")
 
     import torch
     if args.threads > 0 and args.device == "cpu":
@@ -58,18 +90,14 @@ def main():
         audio_s = info.frames / info.samplerate
         base = wav.rsplit("/", 1)[-1]
         for rep in range(args.reps):
-            # prompts rebuilt PER REP: model.generate mutates the chat list in place, and a
-            # reused list degenerates the next rep to a few tokens (fast on MPS, where it
-            # silently won best-of; on CPU the encode cost hid it while the transcript was
-            # still garbage). A rep that emits almost nothing is invalid either way.
-            prompts = [[{"role": "user", "content": f"{args.prompt}{tag}", "audio": [wav]}]]
+            prompts = build_prompts(args.prompt, tag, wav)
             t0 = time.perf_counter()
             with torch.inference_mode():
                 out = model.generate(prompts=prompts, generation_config=gen_cfg,
                                      max_new_tokens=args.max_new_tokens)
             ms = (time.perf_counter() - t0) * 1000.0
             n_ids = len(out[0]) if out is not None and len(out) else 0
-            if n_ids < 8:
+            if rep_is_degenerate(n_ids):
                 print(f"DEGENERATE\t{args.model}\t{base}\t{rep}\t{n_ids} ids - rep discarded", flush=True)
                 continue
             speed = audio_s / (ms / 1000.0)

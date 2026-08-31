@@ -20,6 +20,7 @@ require math
 require strings
 require _model_tier   // model_available() presence/size-tier gate (see the file's header)
 require dasllama/dasllama_env
+require daslib/strings_boost   // split_by_chars — the crowned word-level cell's normalizer
 require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec — the CPU-claim cells pin the GPU cross-KV hook off
 require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the mtmd-oracle cells pin the GPU conv hook off
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
@@ -616,6 +617,86 @@ def test_whisper_tower_fp32_knob(t : T?) {
                 t |> success(a.text == b.text, "q8-default/mixed text")
             }
             t |> success(mismatches == 0, "q8-default/mixed token-identical ({mismatches}/{total} flips)")
+        }
+        unpin_metal_tensor_crowns()
+        set_metal_tensor_crowns(prev_crowns)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            metal_tower_shutdown()
+            metal_wdec_shutdown()
+            metal_prefill_shutdown()
+        }
+        delete m
+        delete mm
+    }
+}
+
+// lowercase word list, punctuation dropped - the grade the crowned lane answers to
+def private word_forms(text : string) : array<string> {
+    let lowered = to_lower(text)
+    let norm = build_string() $(w) {
+        peek_data(lowered) $(d) {
+            for (b in d) {
+                let c = int(b)
+                w |> write(is_alnum(c) ? to_char(c) : " ")
+            }
+        }
+    }
+    return <- [for (w in split_by_chars(norm, " ")); w; where !empty(w)]
+}
+
+[test]
+def test_whisper_crowned_word_level(t : T?) {
+    t |> run("the CROWNED lanes agree at word level on jfk (the tensor twins' quality gate)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
+        if (!model_available(t, model_path)) return
+        let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        // the tolerance-graded twin of the strict cell above: crowns pinned ON, so the
+        // tensor twins actually serve, and the bar is WORD equality - rounding drift that
+        // flips a token or a comma passes, a garbled crowned kernel does not
+        let prev_crowns = get_metal_tensor_crowns()
+        pin_metal_tensor_crowns("attn_qkmm,mulmm_bf16,mulmm_q8,gemmb_q8,gemmb_sk_q8,gemm64b_q8,kq_mulmm_k4,kq_mulmm_k5,kq_mulmm_k6")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            metal_tower_shutdown()
+            metal_wdec_shutdown()
+            metal_prefill_shutdown()
+        }
+        set_asr_tower_fp32(true)
+        var inscope mm <- load_asr_model(model_path)
+        set_asr_tower_fp32(false)
+        var inscope m <- load_asr_model(model_path)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope s <- create_session(m)
+            var text_default = ""
+            transcribe(m, s, samples) $(seg) {
+                text_default = "{text_default}{seg.text} "
+            }
+            var inscope sm <- create_session(mm)
+            var text_mixed = ""
+            transcribe(mm, sm, samples) $(seg) {
+                text_mixed = "{text_mixed}{seg.text} "
+            }
+            to_log(LOG_INFO, "whisper-tiny crowned q8 jfk eyeball: '{text_default}'\n")
+            to_log(LOG_INFO, "whisper-tiny crowned f32/q8 jfk eyeball: '{text_mixed}'\n")
+            let wa <- word_forms(text_default)
+            let wb <- word_forms(text_mixed)
+            t |> success(!empty(wa) && !empty(wb), "both crowned lanes produced words")
+            t |> equal(length(wa), length(wb), "word count agrees across crowned lanes")
+            var flips = 0
+            for (x, y in wa, wb) {
+                if (x != y) {
+                    flips++
+                }
+            }
+            t |> equal(flips, 0, "crowned lanes word-identical ({flips}/{length(wa)} word flips)")
         }
         unpin_metal_tensor_crowns()
         set_metal_tensor_crowns(prev_crowns)

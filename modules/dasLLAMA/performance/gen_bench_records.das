@@ -1525,8 +1525,7 @@ def main : int {
                 settle(cfg)
                 asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed)
                 static_if (typeinfo builtin_module_exists(das_metal)) {
-                    let gpu_pair = rf.tool == "whisper-cli" || rf.tool == "mtmd" || rf.tool == "nemo"
-                    if (gpu_pair && is_metal_served_family(spec)) {
+                    if (asr_gpu_pair_tool(rf.tool) && is_metal_served_family(spec)) {
                         settle(cfg)
                         asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed, true)
                     }
@@ -1547,9 +1546,9 @@ def main : int {
         to_log(LOG_ERROR, "gen_bench_records: {length(failed)} FAILED cell(s): {list}\n")
         return 1
     }
-    if (g_cells_measured == 0) {
-        to_log(LOG_ERROR, "gen_bench_records: ZERO cells measured - every selected cell skipped or declined; an empty run is never a green board\n")
-        return 1
+    let verdict = records_run_verdict(length(failed), g_cells_measured)
+    if (verdict.rc != 0) {
+        to_log(LOG_ERROR, "gen_bench_records: {verdict.msg}\n")
     }
-    return 0
+    return verdict.rc
 }
