@@ -14,10 +14,20 @@ function statsServing(name, file) {
 // catalog_done rows, in fixture order
 const E2B_ROW = 0, E4B_ROW = 1;
 
+// the capture rail downloads one card, so the second present row these specs need is a
+// precondition synthesized on the clone (the withVisionPresent pattern)
+function withE4bPresent(doc) {
+    const d = JSON.parse(JSON.stringify(doc));
+    const e = d.entries[E4B_ROW];
+    e.present = true;
+    e.path = 'C:\\Users\\user\\.dasllama\\models\\' + e.file;
+    return d;
+}
+
 test('a present, unserved row offers serve live; a served row does not', async ({ page }) => {
     await openControl(page, {
         stats: statsServing('gemma-4-E2B-it-Q4_K_M.gguf'),
-        catalog: fx('catalog_done'),
+        catalog: withE4bPresent(fx('catalog_done')),
     });
     const rows = page.locator('#cat-body tr');
     const e2b = rows.nth(E2B_ROW), e4b = rows.nth(E4B_ROW);
@@ -28,7 +38,7 @@ test('a present, unserved row offers serve live; a served row does not', async (
 test('a served file under a custom slot name still hides serve live', async ({ page }) => {
     await openControl(page, {
         stats: statsServing('my-gemma', 'gemma-4-E2B-it-Q4_K_M.gguf'),
-        catalog: fx('catalog_done'),
+        catalog: withE4bPresent(fx('catalog_done')),
     });
     const rows = page.locator('#cat-body tr');
     await expect(rows.nth(E2B_ROW).getByRole('button', { name: 'serve live' })).toHaveCount(0);
@@ -38,7 +48,7 @@ test('a served file under a custom slot name still hides serve live', async ({ p
 test('the serve-live offer retires when a later poll reports the file served', async ({ page }) => {
     await openControl(page, {
         stats: n => n < 2 ? fx('stats_multi') : statsServing('gemma-4-E4B-it-Q4_K_M.gguf'),
-        catalog: fx('catalog_done'),
+        catalog: withE4bPresent(fx('catalog_done')),
     });
     const row = page.locator('#cat-body tr').nth(E4B_ROW);
     await expect(row.getByRole('button', { name: 'serve live' })).toBeVisible();
@@ -49,7 +59,7 @@ test('the serve-live offer retires when a later poll reports the file served', a
 test('serve live posts the load with the row path and echoes the switch', async ({ page }) => {
     const { posts } = await openControl(page, {
         stats: fx('stats_multi'),
-        catalog: fx('catalog_done'),
+        catalog: withE4bPresent(fx('catalog_done')),
         responses: { '/v1/models/load': { status: 200, json: {
             ok: true, model: 'gemma-4-E4B-it-Q4_K_M.gguf', backend_effective: 'gpu:rails',
             load_ms: 4200, ctx: 131072, tower_note: '' } } },
@@ -64,7 +74,7 @@ test('serve live posts the load with the row path and echoes the switch', async 
 test('a load refusal lands in the note and re-enables the button', async ({ page }) => {
     await openControl(page, {
         stats: fx('stats_multi'),
-        catalog: fx('catalog_done'),
+        catalog: withE4bPresent(fx('catalog_done')),
         responses: { '/v1/models/load': { status: 409, json: {
             error: { message: 'streams are live (active 2, queued 0) — retry when idle', type: 'busy' } } } },
     });
