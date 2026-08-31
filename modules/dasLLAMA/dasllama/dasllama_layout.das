@@ -384,6 +384,10 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
         var iq3xxssp : uint8? = null
         if (!empty(t.iq3xxsq)) { iq3xxsqp = addr(t.iq3xxsq[0]) }
         if (!empty(t.iq3xxss)) { iq3xxssp = addr(t.iq3xxss[0]) }
+        var iq4nlqp : uint8? = null
+        var iq4nlsp : uint8? = null
+        if (!empty(t.iq4nlq)) { iq4nlqp = addr(t.iq4nlq[0]) }
+        if (!empty(t.iq4nls)) { iq4nlsp = addr(t.iq4nls[0]) }
         if (!empty(t.qblob)) { qbp = addr(t.qblob[0]) }
         if (!empty(t.qscales)) { qsp = addr(t.qscales[0]) }
         if (!empty(t.mxq)) { mxqp = addr(t.mxq[0]) }
@@ -415,8 +419,8 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                         let sb = rp[i].off / 256l
                         let qsb = kq_qsb(f)
                         let ssb = kq_ssb(f)
-                        var kqp = f == 4 ? k4qp : (f == 5 ? k5qp : (f == 6 ? k6qp : (f == 40 ? q40qp : (f == 44 ? iq4xsqp : (f == 3 ? k3qp : (f == 33 ? iq3sqp : iq3xxsqp))))))
-                        var ksp = f == 4 ? k4sp : (f == 5 ? k5sp : (f == 6 ? k6sp : (f == 40 ? q40sp : (f == 44 ? iq4xssp : (f == 3 ? k3sp : (f == 33 ? iq3ssp : iq3xxssp))))))
+                        var kqp = f == 4 ? k4qp : (f == 5 ? k5qp : (f == 6 ? k6qp : (f == 40 ? q40qp : (f == 44 ? iq4xsqp : (f == 3 ? k3qp : (f == 33 ? iq3sqp : (f == 34 ? iq3xxsqp : iq4nlqp)))))))
+                        var ksp = f == 4 ? k4sp : (f == 5 ? k5sp : (f == 6 ? k6sp : (f == 40 ? q40sp : (f == 44 ? iq4xssp : (f == 3 ? k3sp : (f == 33 ? iq3ssp : (f == 34 ? iq3xxssp : iq4nlsp)))))))
                         invoke(rkq, f, kqp + sb * qsb, ksp + sb * ssb, rp[i].n, rp[i].d)
                     }
                 }
@@ -550,6 +554,8 @@ def private push_repack_kq(var regs : array<StreamReg>; fmt : KqFmt; woff, n, d 
         push_repack(regs, 33, woff, n, d)
     } elif (fmt == KqFmt.iq3xxs) {
         push_repack(regs, 34, woff, n, d)
+    } elif (fmt == KqFmt.iq4nl) {
+        push_repack(regs, 45, woff, n, d)
     }
 }
 
@@ -825,13 +831,13 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
             : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6q[sb0 * kq_qsb(6)])
             : (fmt == KqFmt.q40 ? addr<uint8 const?>(t.q40q[sb0 * kq_qsb(40)])
             : (fmt == KqFmt.iq4xs ? addr<uint8 const?>(t.iq4xsq[sb0 * kq_qsb(44)])
-            : (fmt == KqFmt.k3 ? addr<uint8 const?>(t.k3q[sb0 * kq_qsb(3)]) : (fmt == KqFmt.iq3s ? addr<uint8 const?>(t.iq3sq[sb0 * kq_qsb(33)]) : addr<uint8 const?>(t.iq3xxsq[sb0 * kq_qsb(34)]))))))))
+            : (fmt == KqFmt.k3 ? addr<uint8 const?>(t.k3q[sb0 * kq_qsb(3)]) : (fmt == KqFmt.iq3s ? addr<uint8 const?>(t.iq3sq[sb0 * kq_qsb(33)]) : (fmt == KqFmt.iq3xxs ? addr<uint8 const?>(t.iq3xxsq[sb0 * kq_qsb(34)]) : addr<uint8 const?>(t.iq4nlq[sb0 * kq_qsb(45)])))))))))
         let sp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4s[sb0 * kq_ssb(4)])
             : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5s[sb0 * kq_ssb(5)])
             : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6s[sb0 * kq_ssb(6)])
             : (fmt == KqFmt.q40 ? addr<uint8 const?>(t.q40s[sb0 * kq_ssb(40)])
             : (fmt == KqFmt.iq4xs ? addr<uint8 const?>(t.iq4xss[sb0 * kq_ssb(44)])
-            : (fmt == KqFmt.k3 ? addr<uint8 const?>(t.k3s[sb0 * kq_ssb(3)]) : (fmt == KqFmt.iq3s ? addr<uint8 const?>(t.iq3ss[sb0 * kq_ssb(33)]) : addr<uint8 const?>(t.iq3xxss[sb0 * kq_ssb(34)]))))))))
+            : (fmt == KqFmt.k3 ? addr<uint8 const?>(t.k3s[sb0 * kq_ssb(3)]) : (fmt == KqFmt.iq3s ? addr<uint8 const?>(t.iq3ss[sb0 * kq_ssb(33)]) : (fmt == KqFmt.iq3xxs ? addr<uint8 const?>(t.iq3xxss[sb0 * kq_ssb(34)]) : addr<uint8 const?>(t.iq4nls[sb0 * kq_ssb(45)])))))))))
         var wqp = addr(wq[0])
         var wsp = addr(ws[0])
         let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1
@@ -909,7 +915,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                             } else {
                                 let rq = qp + sliceQ + ri * qrow + sbi * qsb
                                 let rs = sp + sliceS + ri * srow + sbi * dssb
-                                if (fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs) {
+                                if (fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl) {
                                     for (m in range64(qsb)) {   // disk bytes already in the device form (k/k+16 pairs; k3's lanes)
                                         dq[m] = rq[m]
                                     }
@@ -936,7 +942,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                         dq[128l + p] = rq[128l + p]
                                     }
                                 }
-                                if (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs) {   // rows already in the decoded device form
+                                if (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl) {   // rows already in the decoded device form
                                     for (idx in range64(dssb)) {
                                         dsc[idx] = rs[idx]
                                     }

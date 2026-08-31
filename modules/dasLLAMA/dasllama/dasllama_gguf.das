@@ -50,6 +50,7 @@ let GGML_TYPE_Q8_0 = 8
 let GGML_TYPE_Q3_K = 11
 let GGML_TYPE_IQ3_S = 21
 let GGML_TYPE_IQ3_XXS = 18
+let GGML_TYPE_IQ4_NL = 20
 let GGML_TYPE_Q4_K = 12
 let GGML_TYPE_Q5_K = 13
 let GGML_TYPE_Q6_K = 14
@@ -862,6 +863,40 @@ def gguf_transcode_iq3xxs(m : GGUFMeta; srcbytes : array<uint8> | #; name : stri
                             row[i] = uint8(0)
                         }
                         bcopy(kqp + sb * IQ3XXS_QSB, src + 2l, 96l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+//! Transcode an IQ4_NL tensor into the iq4nl planes (q40's strides 128/16, exact): the disk
+//! bytes ARE q40's shape - per 32-block f16 d + 16 nibble bytes, split verbatim; only the
+//! nibble semantics differ (IQ4NL_LUT at decode, no -8 offset, no bsum term).
+def gguf_transcode_iq4nl(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_IQ4_NL, "IQ4_NL", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "iq4nl quant plane", (eloff / 256l) * Q40_QSB, nb * Q40_QSB, long_length(kq))
+    guard_dst(name, "iq4nl scale plane", (eloff / 256l) * Q40_SSB, nb * Q40_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 144l   // 8 x 18B disk blocks per superblock
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * Q40_QSB])
+            var ksp = addr(ks[(eloff / 256l) * Q40_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 144l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        for (blk in range64(8l)) {
+                            let src = srcp + sb * 144l + blk * 18l
+                            ksp[sb * Q40_SSB + blk * 2l] = src[0]        // f16 d
+                            ksp[sb * Q40_SSB + blk * 2l + 1l] = src[1]
+                            bcopy(kqp + sb * Q40_QSB + blk * 16l, src + 2l, 16l)
+                        }
                     }
                 }
             }

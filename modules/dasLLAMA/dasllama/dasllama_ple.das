@@ -70,6 +70,8 @@ def ple_check_table(t : Model; origin : string) {
         have = (long_length(t.iq3sq) / IQ3S_QSB) * 256l
     } elif (t.ple_emb_fmt == KqFmt.iq3xxs) {
         have = (long_length(t.iq3xxsq) / IQ3XXS_QSB) * 256l
+    } elif (t.ple_emb_fmt == KqFmt.iq4nl) {
+        have = (long_length(t.iq4nlq) / Q40_QSB) * 256l
     }
     if (have < need) {
         panic("dasLLAMA: the PLE token table is not resident ({origin}): fmt {t.ple_emb_fmt} plane holds {have} of {need} elements - regenerate this carrier (it predates the pinned-table rail)")
@@ -111,6 +113,8 @@ def private ple_gather_row(t : Model; row : int64; var dst : array<float>; doff 
             dequant_iq3s_plane_superblock(t.iq3sq, sb * IQ3S_QSB, t.iq3ss, sb * IQ3S_SSB, dst, doff + blk * 256l)
         } elif (t.ple_emb_fmt == KqFmt.iq3xxs) {
             dequant_iq3xxs_plane_superblock(t.iq3xxsq, sb * IQ3XXS_QSB, t.iq3xxss, sb * IQ3XXS_SSB, dst, doff + blk * 256l)
+        } elif (t.ple_emb_fmt == KqFmt.iq4nl) {
+            dequant_iq4nl_plane_superblock(t.iq4nlq, sb * Q40_QSB, t.iq4nls, sb * Q40_SSB, dst, doff + blk * 256l)
         } else {
             panic("ple_gather_row: '{t.ple_emb_fmt}' has no kq plane pair")
         }

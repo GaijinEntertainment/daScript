@@ -422,6 +422,31 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    iq2 tier - so the file cannot load end to end. `gguf_census.py` (scratch) reads the tensor
    type table in seconds; pick a vehicle whose mix is {supported} + the new format only
    (bartowski's Qwen2.5-1.5B IQ3_XS carries iq3_xxs with iq3_s/q4_K/q6_K siblings).
+### IQ4_NL (the near-free one, 2026-08-30)
+
+Shape: 32-element blocks, 18B each on disk - f16 d + 16 nibble bytes with the k/k+16
+pairing. That is Q4_0's disk shape BYTE FOR BYTE; only the nibble semantics differ
+(`kvalues_iq4nl` - already shipped as `IQ4NL_LUT` - instead of q - 8, so no offset and no
+bsum term). The whole CPU story follows from that identity: planes = `Q40_QSB`/`Q40_SSB`
+verbatim, transcode = q40's byte split with the type check swapped, grp repack = literally
+`repack_q40_grp` (routed, not copied), and the tile rides the PACKED lists - no panel, no
+gather. Identity 45. The scalar dot is iq4xs's LUT loop with q40's per-block f16-d fold;
+the JIT emitter is one `nl` mode on `emit_block_iq4xs`: the per-block d vectors load with
+the same `load_f16_vec_at` helper over q40's scale interleave, and the fold moves INTO the
+block loop (float per-block fma) replacing the sub-scale integer sum - plus the LUT-bake
+condition widening to `te.kq == 44 || 45`. QUIRK 16 replayed on cue: the pre-emitter gate
+stamped 10 perms whose maddubs rows mismatched (declined generators at layout mr 8); the
+emitter arm turned all 11 k45 rows green (maxdiff ~2e-6) in the same sitting.
+
+Vehicle: a local requant again - IQ4_NL needs NO imatrix, just `--allow-requantize`
+(mix: iq4_nl x94 + q5_K x18 + q6_K embd, all supported; census first, QUIRK 23). Gates:
+`test_kqformat` 18/18, `test_kquant` 199 tests 0 failed, the probe 11/11 k45 perms. E2e
+stamped: coherent text at gen 60 t/s, 11/64 greedy ids vs `simple_ids.exe` where the fork
+is a 0.042-logit near-tie (the window's smallest margin by 100x) whose top-2 IS our token.
+zen2 rows vs llama.cpp clean-cpu: pp512 618.3 vs 540.6 (1.14x), tg128 64.2 vs
+62.2 (1.03x). Vulkan, Metal: pending (the generic-dequant class shells + the LUT
+already live on both tiers).
+
 ### IQ3_XXS (2026-08-30)
 
 Shape: 256-superblock, 98B disk block - f16 d, 64 grid-index bytes (`iq3xxs_grid[256]`, one
