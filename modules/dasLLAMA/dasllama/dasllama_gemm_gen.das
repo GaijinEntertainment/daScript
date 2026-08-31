@@ -1628,6 +1628,61 @@ def private iq2xs_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
     te.iq3s_smask_g = smask
 }
 
+// The iq2xxs gemv gather globals: the u64 grid as a [512 x i32] private constant (256 entries
+// as low/high word pairs), the shared ksigns table, and the shared smask.
+def private iq2xxs_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
+    var grid = LLVMGetNamedGlobal(mod, "dasllama.iq2xxs.grid")
+    if (grid == null) {
+        let g = iq2xxs_grid2()
+        var elems : array<LLVMOpaqueValue?>
+        elems |> reserve(512)
+        for (i in range(512)) {
+            elems |> push(LLVMConstInt(te.types.t_int32, uint64(g[i]), 0))
+        }
+        grid = LLVMAddGlobal(mod, LLVMArrayType(te.types.t_int32, 512u), "dasllama.iq2xxs.grid")
+        LLVMSetInitializer(grid, LLVMConstArray(te.types.t_int32, array_data_ptr(elems), 512u))
+        LLVMSetGlobalConstant(grid, 1)
+        LLVMSetLinkage(grid, LLVMLinkage.LLVMPrivateLinkage)
+        LLVMSetAlignment(grid, 64u)
+    }
+    te.iq3s_grid_g = grid
+    var ksg = LLVMGetNamedGlobal(mod, "dasllama.iq3xxs.ksigns")
+    if (ksg == null) {
+        let kt = ksigns_iq2xs()
+        var elems3 : array<LLVMOpaqueValue?>
+        elems3 |> reserve(128)
+        for (i in range(128)) {
+            elems3 |> push(LLVMConstInt(te.types.t_int32, uint64(kt[i]), 0))
+        }
+        ksg = LLVMAddGlobal(mod, LLVMArrayType(te.types.t_int32, 128u), "dasllama.iq3xxs.ksigns")
+        LLVMSetInitializer(ksg, LLVMConstArray(te.types.t_int32, array_data_ptr(elems3), 128u))
+        LLVMSetGlobalConstant(ksg, 1)
+        LLVMSetLinkage(ksg, LLVMLinkage.LLVMPrivateLinkage)
+        LLVMSetAlignment(ksg, 16u)
+    }
+    te.iq3xxs_ksigns_g = ksg
+    var smask = LLVMGetNamedGlobal(mod, "dasllama.iq3s.smask")
+    if (smask == null) {
+        var elems2 : array<LLVMOpaqueValue?>
+        elems2 |> reserve(16)
+        for (m in range(16)) {
+            var v = 0ul
+            for (t in range(4)) {
+                if ((m & (1 << t)) != 0) {
+                    v |= 0xFFul << uint64(8 * t)
+                }
+            }
+            elems2 |> push(LLVMConstInt(te.types.t_int32, v, 0))
+        }
+        smask = LLVMAddGlobal(mod, LLVMArrayType(te.types.t_int32, 16u), "dasllama.iq3s.smask")
+        LLVMSetInitializer(smask, LLVMConstArray(te.types.t_int32, array_data_ptr(elems2), 16u))
+        LLVMSetGlobalConstant(smask, 1)
+        LLVMSetLinkage(smask, LLVMLinkage.LLVMPrivateLinkage)
+        LLVMSetAlignment(smask, 16u)
+    }
+    te.iq3s_smask_g = smask
+}
+
 // iq2xs gemv: gather superblock `sbi` off the PACKED grp planes into the alloca panel - the
 // iq2s gather's two-word u64 form with the u16 qs word's 9-bit index and its high-7-bit
 // KSIGNS lookup in place of explicit sign bytes (the iq3xxs sign path).
@@ -1688,6 +1743,69 @@ def private emit_iq2xs_gather(var te : TileEmit; var sbi : LLVMOpaqueValue?) {
     LLVMPositionBuilderAtEnd(b, cont)
 }
 
+// iq2xxs gemv: gather superblock `sbi` off the PACKED grp planes into the alloca panel - the
+// aux32 form: block b's grid BYTES (column 2b) each double into the u64 grid's word pair, its
+// aux32 (column 2b+1) carries the four 7-bit KSIGNS indices (the per-32 scale nibble rides the
+// scale row, not the gather).
+def private emit_iq2xxs_gather(var te : TileEmit; var sbi : LLVMOpaqueValue?) {
+    let b = te.builder
+    let mr = te.interleave
+    var wbP = LLVMBuildMul(b, sbi, te.types->ConstI64(uint64(mr * 64)), "iq2xx.wb")
+    var pre = LLVMGetInsertBlock(b)
+    var head = LLVMAppendBasicBlockInContext(te.gctx, te.gfn, "iq2xx.gath")
+    var cont = LLVMAppendBasicBlockInContext(te.gctx, te.gfn, "iq2xx.cont")
+    LLVMBuildBr(b, head)
+    LLVMPositionBuilderAtEnd(b, head)
+    var rPhi = LLVMBuildPhi(b, te.types.t_int64, "iq2xx.r")
+    var preVals <- [te.types->ConstI64(0ul)]
+    var preBlocks <- [pre]
+    LLVMAddIncoming(rPhi, preVals, preBlocks)
+    var rT4 = LLVMBuildMul(b, rPhi, te.types->ConstI64(4ul), "iq2xx.r4")
+    var base = LLVMBuildAdd(b, wbP, rT4, "iq2xx.base")
+    let c15 = LLVMConstInt(te.types.t_int32, 15ul, 0)
+    let c127 = LLVMConstInt(te.types.t_int32, 127ul, 0)
+    let cneg = LLVMConstInt(te.types.t_int32, 0x01010101ul, 0)
+    for (blk in range(8)) {
+        var a0p = LLVMBuildGEP2(b, te.types.t_int8, te.wg, LLVMBuildAdd(b, base, te.types->ConstI64(uint64((2 * blk + 1) * mr * 4)), ""), "")
+        var aux = LLVMBuildZExt(b, LLVMBuildLoad2Aligned(b, te.types.t_int8, a0p, 1u, ""), te.types.t_int32, "")
+        for (k in range(1, 4)) {
+            var akp = LLVMBuildGEP2(b, te.types.t_int8, te.wg, LLVMBuildAdd(b, base, te.types->ConstI64(uint64((2 * blk + 1) * mr * 4 + k)), ""), "")
+            var ab = LLVMBuildZExt(b, LLVMBuildLoad2Aligned(b, te.types.t_int8, akp, 1u, ""), te.types.t_int32, "")
+            aux = LLVMBuildOr(b, aux, LLVMBuildShl(b, ab, LLVMConstInt(te.types.t_int32, uint64(8 * k), 0), ""), "iq2xx.aux{blk}_{k}")
+        }
+        for (l in range(4)) {
+            var ip = LLVMBuildGEP2(b, te.types.t_int8, te.wg, LLVMBuildAdd(b, base, te.types->ConstI64(uint64(2 * blk * mr * 4 + l)), ""), "")
+            var idx = LLVMBuildZExt(b, LLVMBuildLoad2Aligned(b, te.types.t_int8, ip, 1u, ""), te.types.t_int32, "iq2xx.i{blk}_{l}")
+            var idx2 = LLVMBuildShl(b, idx, LLVMConstInt(te.types.t_int32, 1ul, 0), "")
+            var sidx = LLVMBuildAnd(b, LLVMBuildLShr(b, aux, LLVMConstInt(te.types.t_int32, uint64(7 * l), 0), ""), c127, "")
+            var ksp2 = LLVMBuildGEP2(b, te.types.t_int32, te.iq3xxs_ksigns_g, sidx, "")
+            var sgn = LLVMBuildLoad2Aligned(b, te.types.t_int32, ksp2, 4u, "iq2xx.sg{blk}_{l}")
+            var mv : LLVMOpaqueValue? [2]
+            mv[0] = LLVMBuildAnd(b, sgn, c15, "")
+            mv[1] = LLVMBuildAnd(b, LLVMBuildLShr(b, sgn, LLVMConstInt(te.types.t_int32, 4ul, 0), ""), c15, "")
+            for (h in range(2)) {
+                var gi = h == 0 ? idx2 : LLVMBuildAdd(b, idx2, LLVMConstInt(te.types.t_int32, 1ul, 0), "")
+                var gp = LLVMBuildGEP2(b, te.types.t_int32, te.iq3s_grid_g, gi, "")
+                var gw = LLVMBuildLoad2Aligned(b, te.types.t_int32, gp, 4u, "iq2xx.g{blk}_{l}_{h}")
+                var mp = LLVMBuildGEP2(b, te.types.t_int32, te.iq3s_smask_g, mv[h], "")
+                var mw = LLVMBuildLoad2Aligned(b, te.types.t_int32, mp, 4u, "")
+                var w = LLVMBuildAdd(b, LLVMBuildXor(b, gw, mw, ""), LLVMBuildAnd(b, mw, cneg, ""), "iq2xx.w{blk}_{l}_{h}")
+                let e = l * 8 + h * 4
+                let dd = (e < 16 ? 0 : 128 * mr) + (blk * 4 + (e % 16) / 4) * mr * 4
+                var dp = LLVMBuildGEP2(b, te.types.t_int8, te.iq3s_panel, LLVMBuildAdd(b, rT4, te.types->ConstI64(uint64(dd)), ""), "")
+                LLVMBuildStore(b, w, dp)
+            }
+        }
+    }
+    var rNext = LLVMBuildAdd(b, rPhi, te.types->ConstI64(1ul), "iq2xx.rn")
+    var more = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, rNext, te.types->ConstI64(uint64(mr)), "iq2xx.more")
+    LLVMBuildCondBr(b, more, head, cont)
+    var loopVals <- [rNext]
+    var loopBlocks <- [head]
+    LLVMAddIncoming(rPhi, loopVals, loopBlocks)
+    LLVMPositionBuilderAtEnd(b, cont)
+}
+
 // One 256-weight SUPERBLOCK, IQ4_XS/iq3s grp<mr> form (te.kq = 44/33): mx4's LUT decode (44)
 // or the byte-expanded signed panel (33; the gemv gathers it per superblock, the tile gets the
 // runtime unpack) — dot_lane's sign-trick lattice, k4's fold with no min term.
@@ -1696,7 +1814,7 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
     let rq = te.rq
     let mr = te.interleave
     let w8 = te.width / 8
-    let panel = te.kq == 33 || te.kq == 34 || te.kq == 23 || te.kq == 24   // iq3s/iq3xxs/iq2s/iq2xs: the byte-expanded signed panel replaces the nibble+LUT decode
+    let panel = te.kq == 33 || te.kq == 34 || te.kq == 23 || te.kq == 24 || te.kq == 25   // iq3s/iq3xxs/iq2s/iq2xs/iq2xxs: the byte-expanded signed panel replaces the nibble+LUT decode
     let iq2 = te.kq == 23 || te.kq == 24     // iq2s/iq2xs: per-16 UNSIGNED strips - lo/hi halves keep split accumulators
     let nl = te.kq == 45                     // iq4nl: the 44 LUT decode with q40's PER-BLOCK f16 d fold (no sub-scales, no min term)
     let gather = panel && te.iq3s_panel != null   // gemv mode: gather this superblock off the packed planes first
@@ -1709,6 +1827,8 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
             emit_iq2s_gather(te, sbi)
         } elif (te.kq == 24) {
             emit_iq2xs_gather(te, sbi)
+        } elif (te.kq == 25) {
+            emit_iq2xxs_gather(te, sbi)
         } else {
             emit_iq3xxs_gather(te, sbi)
         }
@@ -1837,7 +1957,7 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
 // token PAIR — single-token slices ride the sdot lattice instead. kq blocks are SUPERBLOCKS
 // (the kq gemv/tile drive emit_slice with nb = n/256).
 def private emit_one_block(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
-    if (te.kq == 44 || te.kq == 33 || te.kq == 34 || te.kq == 45 || te.kq == 23 || te.kq == 24) {
+    if (te.kq == 44 || te.kq == 33 || te.kq == 34 || te.kq == 45 || te.kq == 23 || te.kq == 24 || te.kq == 25) {
         emit_block_iq4xs(te, bi, f, tokBase, tokCount)
     } elif (te.kq != 0) {
         emit_block_kqv2(te, bi, f, tokBase, tokCount)
@@ -2944,7 +3064,7 @@ def private kq_gemv_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
 
     // entry: group range off the row range; strides are disk footprints (quants 128/160/192B, scales 20/20/18B)
     LLVMPositionBuilderAtEnd(b, entry)
-    if (fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24) {
+    if (fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24 || fmt == 25) {
         // iq3s/iq3xxs/iq2s/iq2xs: the gemv gathers each superblock into an alloca panel (the tile gets the runtime unpack)
         te.gfn = gc.impl
         te.gctx = gc.jit.ctx
@@ -2954,6 +3074,8 @@ def private kq_gemv_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
             iq2s_emit_globals(te, LLVMGetGlobalParent(gc.impl))
         } elif (fmt == 24) {
             iq2xs_emit_globals(te, LLVMGetGlobalParent(gc.impl))
+        } elif (fmt == 25) {
+            iq2xxs_emit_globals(te, LLVMGetGlobalParent(gc.impl))
         } else {
             iq3xxs_emit_globals(te, LLVMGetGlobalParent(gc.impl))
         }
@@ -3217,12 +3339,11 @@ def private q51_tile_gen(var gc : LlvmCodeCtx) : bool {
 // Called from llvm_user_modules::register_user_llvm_code_generators — the JIT invokes that in the
 // context that reads the registry, so the direct call lands in the right table copy.
 
-// iq2xxs: the grid-gather emitter arm lands with its Phase B; until then both stamps decline
-// (reference bodies serve) - a declined generator is the framework's own fallback path.
-[unused_argument(gc)]
-def private iq2xxs_gemv_gen(var gc : LlvmCodeCtx) : bool => false
-[unused_argument(gc)]
-def private iq2xxs_tile_gen(var gc : LlvmCodeCtx) : bool => false
+// iq2xxs rides the iq4xs walk through the panel route: emit_iq2xxs_gather feeds the shared
+// byte-expanded panel; per-32 UNSIGNED strips ride the iq3s/iq3xxs scale fold (the strip
+// bytes stay under 128, so the shared SExt load reads them exactly).
+def private iq2xxs_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 25)
+def private iq2xxs_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 25)
 
 [macro_function]
 def public register_dasllama_gemm_generators {

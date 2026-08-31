@@ -498,6 +498,23 @@ OK, lint 0 (20 files). QUIRK 15 pinned via `--tune-only iq2xxsq8_tile_gen` (1 of
 seconds). E2e: parity ids 64/64 vs llama.cpp - the THIRD consecutive full-match stream.
 JIT emitter, Vulkan, Metal: pending.
 
+
+Phase B (JIT emitter, 2026-08-31): the panel route absorbs the aux32 form with ONE new arm -
+`kq_grp_row_dot_b` grows a fmt-25 strip arm (per-32 UNSIGNED, the iq3xxs shape; the emitter
+needs NO new fold at all, because (2ls+1) strip bytes stay under 128 and the shared per-32
+SExt load reads them exactly - iq2xxs sets `panel` but NOT the `iq2` split-accumulator flag).
+`emit_iq2xxs_gather` loads each block's aux32 once (four byte loads composed), then per l a
+grid-BYTE index doubles into the [512 x i32] private grid; signs ride the shared iq3xxs
+ksigns global. `unpack_iq2xxs_panel_grp` mirrors it for the tile. kfxs25 TEST rows returned.
+Probe: 11/11 k25 perms ok (maddubs 9.5e-7). Gates: kquant -jit 263 / interp 248, 0 failed,
+lint 0. QUIRK 15 cleared per-app with `--tune-only iq2xxsq8_tile_gen` (crowned
+dot_maddubs_width256_mr8); TRAP: run.das takes the model as the LAST `.gguf` argv token -
+flags placed after it silently fall back to DEFAULT_MODEL (put the model last). E2e stamped:
+the reference stream's 64/64 full match moves to a fork at step 3 that is a 0.0267-logit
+top-2 near-tie (das picks the oracle's #2 - the ARC'S TIGHTEST; stamped folds move flip
+points, not the class). zen2 16t vs clean-cpu: pp512 519.0 vs 181.6 (2.86x), tg128 61.1 vs
+87.3 (0.70x - the grid-format decode tail class). Vulkan, Metal: pending.
+
 ### IQ2_XS Phase A (CPU, 2026-08-31) - the ksigns u64 tier
 
 Shape: 256-superblock grid format - each of the 32 u16 qs words carries a 9-bit index into

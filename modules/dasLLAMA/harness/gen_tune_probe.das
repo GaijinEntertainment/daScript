@@ -948,7 +948,7 @@ def kq_layout_mrs(fmt : int64) : table<string; int> {   // nolint:STYLE037,STYLE
 def run_kq_tile(tile; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr : int64; var y : array<float>) {
     let ng = fx.d / mr
     verify(fx.ntok % 4l == 0l)
-    let packed = fx.fmt == 4l || fx.fmt == 40l || fx.fmt == 44l || fx.fmt == 3l || fx.fmt == 45l || fx.fmt == 2l || fx.fmt == 25l   // packed planes: the tile reads them directly (iq3s/iq3xxs/iq2s unpack their panels per group)
+    let packed = fx.fmt == 4l || fx.fmt == 40l || fx.fmt == 44l || fx.fmt == 3l || fx.fmt == 45l || fx.fmt == 2l   // packed planes: the tile reads them directly (iq3s/iq3xxs/iq2s unpack their panels per group)
     var panel : array<uint8>
     if (!packed) {
         panel |> resize(int(mr * fx.nsb * 256l))
@@ -1436,6 +1436,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     var kfxs2 <- [ <- build_kq_fixture(2l, 256l, 32l, 8l), <- build_kq_fixture(2l, 768l, 32l, 8l), <- build_kq_fixture(2l, 2048l, 32l, 8l)]
     var kfxs23 <- [ <- build_kq_fixture(23l, 256l, 32l, 8l), <- build_kq_fixture(23l, 768l, 32l, 8l), <- build_kq_fixture(23l, 2048l, 32l, 8l)]
     var kfxs24 <- [ <- build_kq_fixture(24l, 256l, 32l, 8l), <- build_kq_fixture(24l, 768l, 32l, 8l), <- build_kq_fixture(24l, 2048l, 32l, 8l)]
+    var kfxs25 <- [ <- build_kq_fixture(25l, 256l, 32l, 8l), <- build_kq_fixture(25l, 768l, 32l, 8l), <- build_kq_fixture(25l, 2048l, 32l, 8l)]
     var vs <- q8q8_tile_gen_variants()
     var mrs <- variant_mrs()
     var wbs <- variant_wbias()
@@ -1568,6 +1569,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     allok = kq_test_family(2l, kfxs2) && allok
     allok = kq_test_family(23l, kfxs23) && allok
     allok = kq_test_family(24l, kfxs24) && allok
+    allok = kq_test_family(25l, kfxs25) && allok
     delete wtab
     delete mtab
     delete gtab
@@ -1591,6 +1593,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     delete kfxs2
     delete kfxs23
     delete kfxs24
+    delete kfxs25
     return allok
 }
 
