@@ -514,7 +514,7 @@ function isWasmReady() {
 // animates a compositor-driven transform, so it keeps moving even while the
 // frame's synchronous compile has this thread blocked.
 var runtimePhase = 'download';   // download → compile → start → ready (or dead)
-var runtimeFraction = 0;
+var runtimeFraction = -1;        // 0..1, or -1 = unknown (no tick yet / no Content-Length)
 var programBusy = null;          // null | 'starting' (interpreter) | 'building' (wasm)
 
 var RUN_LABEL = '▶ run';
@@ -531,9 +531,15 @@ function paintRunButton() {
         runBtn.textContent = programBusy === 'building' ? 'building…' : 'running…';
     } else if (loading) {
         if (runtimePhase === 'download') {
-            const pct = Math.round(runtimeFraction * 100);
-            runBtn.textContent = 'loading ' + pct + '%';
-            runBtn.style.setProperty('--pg-progress', pct + '%');
+            if (runtimeFraction >= 0) {
+                const pct = Math.round(runtimeFraction * 100);
+                runBtn.textContent = 'loading ' + pct + '%';
+                runBtn.style.setProperty('--pg-progress', pct + '%');
+            } else {
+                // fraction unknown (no Content-Length): indeterminate, no made-up number
+                runBtn.textContent = 'loading…';
+                runBtn.style.removeProperty('--pg-progress');
+            }
         } else {
             // compile / start: bytes are in, the tail is indeterminate but short
             runBtn.textContent = runtimePhase === 'compile' ? 'compiling…' : 'starting…';
@@ -548,7 +554,7 @@ function paintRunButton() {
 // Called by playground-runner.js on every download tick and phase change.
 window.pgRuntimeProgress = function (phase, fraction) {
     runtimePhase = phase;
-    runtimeFraction = fraction || 0;
+    runtimeFraction = (typeof fraction === 'number') ? fraction : -1;
     if (phase === 'ready' || phase === 'dead') updateButtonStates();
     else paintRunButton();
 };

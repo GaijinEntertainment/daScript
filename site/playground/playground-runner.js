@@ -88,9 +88,11 @@
                 transform: function (chunk, c) {
                     arm(c);
                     loaded += chunk.byteLength;
-                    // No Content-Length (chunked encoding): stay indeterminate
-                    // rather than inventing a percentage.
-                    if (total > 0) reportProgress("download", Math.min(loaded / total, 1));
+                    // No Content-Length (chunked encoding): report the phase with
+                    // an UNKNOWN fraction (-1) rather than inventing a percentage —
+                    // the button then shows an indeterminate "loading…" instead of
+                    // sitting on a stuck number.
+                    reportProgress("download", total > 0 ? Math.min(loaded / total, 1) : -1);
                     c.enqueue(chunk);
                 },
                 flush: function () {
