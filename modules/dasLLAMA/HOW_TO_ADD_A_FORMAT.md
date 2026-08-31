@@ -453,7 +453,26 @@ with 16 strips. Gates: test_kqformat 18/18, test_kquant 233 (216 pass, 17 env sk
 lint 0. E2e: the mradermacher i1-IQ3_XXS vehicle (on disk since the iq3xxs phase, blocked
 on its IQ2_S attn x32) now loads and decodes FIVE formats in one graph - ids 10/64 vs
 llama.cpp with the fork a 0.040-logit near-tie (the arc's tightest; top2 IS our token),
-gen 41 t/s reference bodies. JIT emitter, Vulkan, Metal: pending.
+gen 41 t/s reference bodies.
+
+Phase B (JIT emitter, 2026-08-31): iq2s joins the fmt-33/34 PANEL route end to end - the
+tile drops off the packed lists (probe, batch cell, test gate) and reads the byte-expanded
+panel via a new `unpack_iq2s_panel_grp` (the 10-bit qs|qh index - `(qh << (8-2l)) & 0x300` -
+doubled into the u64 grid's low/high word pair, sign bytes through the same smask
+expansion), with `kq_grp_row_dot_b` growing a 23 arm: SIGNED panel bytes but per-16
+UNSIGNED strips (s0*ilo + s1*ihi) under the 33/34 d fold (d pre-eighth-ed at transcode).
+The gemv gathers per superblock via `emit_iq2s_gather` off `iq2s_emit_globals`' [2048 x
+i32] private grid + the shared smask; in `emit_block_iq4xs` the iq2 flag SPLITS the lo/hi
+accumulators (a/a1) and loads two ZExt strip vectors per block, since per-16 strips cannot
+share the fused 33/34 dot. Probe: 11/11 k23 perms ok (maddubs 8.3e-7); the tuner crowns
+`dot_maddubs_width256_mr8` verdict=beats (the zen2 usual). QUIRK 15 reran exactly as
+written: run.tune.json still pinned `iq2sq8_tile_gen : "reference"` from Phase A, cleared
+with `run.das -- <model> --tune`. Gates: test_kquant -jit 229 pass, interp 216/17 skips,
+kqformat 18/18, M1 probe + kquant -jit 232/1, lint 0. E2e stamped: gen 41 -> 47 t/s; the
+fork vs llama.cpp moves from step 10 to step 5 (0.211-logit top-2 near-tie - stamped folds
+move the flip point, not the class; the iq3xxs precedent). zen2 16t vs clean-cpu on the i1
+vehicle: pp512 501.5 vs 138.5 (3.62x), tg128 55.8 vs 73.5 (0.76x - the ledgered #60/#61
+CPU-decode tail). Vulkan, Metal: pending.
 
 ### Q2_K Phase A (CPU, 2026-08-31)
 
