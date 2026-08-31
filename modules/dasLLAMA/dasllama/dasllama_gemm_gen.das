@@ -3216,6 +3216,14 @@ def private q51_tile_gen(var gc : LlvmCodeCtx) : bool {
 
 // Called from llvm_user_modules::register_user_llvm_code_generators — the JIT invokes that in the
 // context that reads the registry, so the direct call lands in the right table copy.
+
+// iq2xxs: the grid-gather emitter arm lands with its Phase B; until then both stamps decline
+// (reference bodies serve) - a declined generator is the framework's own fallback path.
+[unused_argument(gc)]
+def private iq2xxs_gemv_gen(var gc : LlvmCodeCtx) : bool => false
+[unused_argument(gc)]
+def private iq2xxs_tile_gen(var gc : LlvmCodeCtx) : bool => false
+
 [macro_function]
 def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_tile", @@tile_gen)
@@ -3255,5 +3263,7 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::iq2s_tile", @@iq2s_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq2xs_gemv", @@iq2xs_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq2xs_tile", @@iq2xs_tile_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2xxs_gemv", @@iq2xxs_gemv_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2xxs_tile", @@iq2xxs_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_witness", @@witness_gen)
 }

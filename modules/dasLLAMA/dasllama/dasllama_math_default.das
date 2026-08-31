@@ -727,6 +727,44 @@ def dot_iq2xs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; 
     return acc
 }
 
+//! IQ2_XXS row dot off the DISK-ORDER planes: per block the aux32[0] bytes pick u64 grid
+//! entries (two words each), the aux32[1]'s 7-bit ksigns indices flip signs, its top nibble
+//! is the per-32 strip (1 + 2s) on the eighth-ed d - decoded to the strip byte at transcode.
+[unused_argument(xbsp)]
+def dot_iq2xxs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+    var acc = 0.0
+    let grid = iq2xxs_grid2()
+    let signs = ksigns_iq2xs()
+    unsafe {
+        for (sb in range64(n / 256l)) {
+            let kqo = sb * 64l
+            let kso = sb * 20l
+            let d8 = f16_to_f32(uint(ksrow[kso]) | (uint(ksrow[kso + 1l]) << 8u))
+            var isum = 0
+            for (blk in range64(8l)) {
+                let aux = uint(kqrow[kqo + blk * 8l + 4l]) | (uint(kqrow[kqo + blk * 8l + 5l]) << 8u) | (uint(kqrow[kqo + blk * 8l + 6l]) << 16u) | (uint(kqrow[kqo + blk * 8l + 7l]) << 24u)
+                let ab = (sb * 8l + blk) * 32l
+                var ib = 0
+                for (l in range64(4l)) {
+                    let sgn = int(signs[int((aux >> uint(7l * l)) & 127u)])
+                    let idx = int(kqrow[kqo + blk * 8l + l])
+                    let g1 = grid[idx * 2]
+                    let g2 = grid[idx * 2 + 1]
+                    for (j in range64(4l)) {
+                        let w1 = int((g1 >> uint(8l * j)) & 0xFFu)
+                        let w2 = int((g2 >> uint(8l * j)) & 0xFFu)
+                        ib += (((sgn >> int(j)) & 1) != 0 ? -w1 : w1) * int(xqp[ab + l * 8l + j])
+                        ib += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(xqp[ab + l * 8l + 4l + j])
+                    }
+                }
+                isum += int(ksrow[kso + 4l + blk]) * ib
+            }
+            acc += float(isum) * (d8 * xsp[sb])
+        }
+    }
+    return acc
+}
+
 // Row-range cores + full GEMVs per format. Not `private`: invoked through hoisted function
 // pointers from lifted worker lambdas (the fused chains) and the dispatch wrappers in common.
 def k4_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
@@ -931,6 +969,15 @@ def iq2xs_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; x
     }
 }
 
+def iq2xxs_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    let nsb = n / 256l
+    unsafe {
+        for (i in range64(rb, re)) {
+            yp[i] = dot_iq2xxs_q8(kqp + i * nsb * 64l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
+        }
+    }
+}
+
 def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
     var myp = yp
     maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
@@ -956,6 +1003,8 @@ def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp :
             iq2s_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         } elif (fmt == 24) {
             iq2xs_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
+        } elif (fmt == 25) {
+            iq2xxs_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         } else {
             k6_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         }
@@ -1209,6 +1258,38 @@ def private dequant_iq2xs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr,
     }
 }
 
+//! iq2xxs grp row dequant: 16 uniform 4-byte columns per superblock row - column 2b carries
+//! block b's four grid bytes, column 2b+1 its aux32 (signs + the per-32 scale nibble, whose
+//! strip byte the scale row already carries).
+def private dequant_iq2xxs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
+    let grid = iq2xxs_grid2()
+    let ksgn = ksigns_iq2xs()
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 64l * mr
+            let sb = sbi * 20l * mr
+            let d8 = f16_to_f32(uint(ksg[sb + 2l * r]) | (uint(ksg[sb + 2l * r + 1l]) << 8u))
+            for (b in range64(8l)) {
+                let db = d8 * float(int(ksg[sb + 4l * mr + b * mr + r]))
+                let ac = (2l * b + 1l) * mr + r
+                let aux = uint(kqg[qb + ac * 4l]) | (uint(kqg[qb + ac * 4l + 1l]) << 8u) | (uint(kqg[qb + ac * 4l + 2l]) << 16u) | (uint(kqg[qb + ac * 4l + 3l]) << 24u)
+                let gc = (2l * b) * mr + r
+                for (l in range64(4l)) {
+                    let sgn = int(ksgn[int((aux >> uint(7l * l)) & 127u)])
+                    let idx = int(kqg[qb + gc * 4l + l])
+                    let g1 = grid[idx * 2]
+                    let g2 = grid[idx * 2 + 1]
+                    let kb = sbi * 256l + b * 32l + l * 8l
+                    for (j in range64(4l)) {
+                        dst[kb + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+                        dst[kb + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! Dequant one row off the grp<mr>-REPACKED K-quant planes (repack_k4/k5/k6_grp layout).
 //! kqg/ksg = row's GROUP plane base (group g = row/mr); r = row % mr.
 //! embed_row's kq_repacked path — per-token, so scalar is fine.
@@ -1250,6 +1331,10 @@ def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, m
     }
     if (fmt == 24l) {
         dequant_iq2xs_row_grp(kqg, ksg, r, mr, nsb, dst)
+        return
+    }
+    if (fmt == 25l) {
+        dequant_iq2xxs_row_grp(kqg, ksg, r, mr, nsb, dst)
         return
     }
     unsafe {
@@ -1362,6 +1447,8 @@ def matmul_kq_groupn(fmt : int; var y : array<float> | #; kq : array<uint8> | #;
                         myp[ii] = dot_iq2s_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     } elif (fmt == 24) {
                         myp[ii] = dot_iq2xs_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
+                    } elif (fmt == 25) {
+                        myp[ii] = dot_iq2xxs_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     } else {
                         myp[ii] = dot_k6q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     }

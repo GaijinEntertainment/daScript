@@ -227,7 +227,7 @@ def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, row
 //! P3 trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
 //! trimmed, and FREE the big CPU weight families — the save then writes them as empty planes.
 //! Arena-only plans qualify (pure resident-driver dense); false = declined, nothing changed.
-def trim_model_planes(var t : Model) : bool {   // nolint:STYLE038 — the flat per-format plane-trim ladder (one arm per KqFmt) is the honest shape
+def trim_model_planes(var t : Model) : bool {   // nolint:STYLE037,STYLE038 — the flat per-format plane-trim ladder (one arm per KqFmt) is the honest shape
     if (empty(t.vkplan) || t.config.n_layer_nextn > 0l) {
         return false
     }
@@ -310,6 +310,11 @@ def trim_model_planes(var t : Model) : bool {   // nolint:STYLE038 — the flat 
                 t.embs |> reserve_resize(nsb * IQ2XS_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq2xsq[sb0 * IQ2XS_QSB]), nsb * IQ2XS_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq2xss[sb0 * IQ2XS_SSB]), nsb * IQ2XS_SSB)
+            } elif (t.emb_fmt == KqFmt.iq2xxs) {
+                t.embq |> reserve_resize(nsb * IQ2XXS_QSB)
+                t.embs |> reserve_resize(nsb * IQ2XXS_SSB)
+                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq2xxsq[sb0 * IQ2XXS_QSB]), nsb * IQ2XXS_QSB)
+                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq2xxss[sb0 * IQ2XXS_SSB]), nsb * IQ2XXS_SSB)
             } elif (t.emb_fmt == KqFmt.iq3xxs) {
                 t.embq |> resize(nsb * IQ3XXS_QSB)
                 t.embs |> resize(nsb * IQ3XXS_SSB)
@@ -354,6 +359,8 @@ def trim_model_planes(var t : Model) : bool {   // nolint:STYLE038 — the flat 
     delete t.iq2ss
     delete t.iq2xsq
     delete t.iq2xss
+    delete t.iq2xxsq
+    delete t.iq2xxss
     delete t.q40q
     delete t.q40s
     delete t.q51q

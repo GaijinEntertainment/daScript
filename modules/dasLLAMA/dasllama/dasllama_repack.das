@@ -643,6 +643,50 @@ def repack_iq2xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete ts
 }
 
+//! iq2xxs grp layout: the whole 64B row as 16 four-byte columns x mr rows - the u16 qs words
+//! stay in place per column (each word's two bytes share a column); scales interleave as k4's
+//! row with 16 strips ([d8 f16 x mr][pad x mr][16 strips x mr]).
+def repack_iq2xxs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 64l
+    let srow = nsb * 20l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 64l * mr
+                let ds = g * mr * srow + sbi * 20l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 64l
+                    let ss = (g * mr + r) * srow + sbi * 20l
+                    for (c in range64(16l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                        }
+                    }
+                    ks[ds + 2l * r] = tsp[ss]
+                    ks[ds + 2l * r + 1l] = tsp[ss + 1l]
+                    ks[ds + 2l * mr + 2l * r] = tsp[ss + 2l]
+                    ks[ds + 2l * mr + 2l * r + 1l] = tsp[ss + 3l]
+                    for (g16 in range64(16l)) {
+                        ks[ds + 4l * mr + g16 * mr + r] = tsp[ss + 4l + g16]
+                    }
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
 // ===== grp<mr> panel unpack (the byte-expanded tile form the kq stamps load) =====
 
 //! Unpack ONE group's packed grp<mr> k5/k6 quant panel into the BYTE-EXPANDED tile form (wlo/whi

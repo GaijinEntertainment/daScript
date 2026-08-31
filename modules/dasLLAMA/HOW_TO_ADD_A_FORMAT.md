@@ -472,6 +472,32 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
 
 ## Per-format notes
 
+### IQ2_XXS Phase A (CPU, 2026-08-31) - the LAST format: iq3xxs's aux32 over a 256-entry u64 grid
+
+Shape: 66B disk = [f16 d][8 blocks x 8B], each block = aux32[0] (4 BYTE indices into
+iq2xxs_grid[256], u64 entries, magnitudes {8, 25, 43}) + aux32[1] (four 7-bit KSIGNS_IQ2XS
+indices + the per-32 scale nibble in the top 4 bits) - iq3xxs's sign/scale machinery over the
+iq2xs-style two-word u64 grid. Planes: the 64B qs region VERBATIM (aux stays in-plane;
+IQ2XXS_QSB 64, 16 uniform grp columns - column 2b grid bytes, 2b+1 aux32); scale row = the
+iq3xxs shape (d EIGHTH-ed, 8 per-32 (1+2s) strips + 8 pad, IQ2XXS_SSB 20). Ids: enum
+iq2xxs = 14, kernel/stream 25, GGML_TYPE_IQ2_XXS = 16, IMAGE_VERSION 26. Vehicle: local
+requant again - census iq2_xxs x94 + q4_K x16 + q2_K x2 + q5_K embd, the exact IQ2_XS mix.
+
+MOST of the walk was GENERATED: a twinning script replayed the IQ2_XS Phase A commit's
+pure-insert hunks with iq2xs->iq2xxs / 24->25 substitutions (~500 of ~900 inserted lines);
+the hand work was the codec bodies (transcode/dequant/dot/grp-dot: the aux32 walk), the
+512-word grid table, and the chain-tail extensions the twin cannot express. TRAPS the gates
+caught: kq_batch_cell_gen and the tests' tile ladder needed their PACKED fmt-25 arms BY HAND
+(the fmt-24 template is a panel arm - a missing cell arm falls to k6's panel path and
+segfaults JIT-ONLY, since the groupn gate skips off-JIT); the grid fn must `return
+fixed_array<uint>(...)` DIRECTLY (a let-local round trip crashed the JIT's cmres return);
+the generated per-format sections in gen_tune_probe silently kept iq2xs sizes until the
+filtered mint reported "no generator family matches" - the --tune-only re-mint doubles as a
+REGISTRATION gate. Gates: kqformat 18/18, kquant interp 248/0 + -jit 263/0, GEN TUNE TEST
+OK, lint 0 (20 files). QUIRK 15 pinned via `--tune-only iq2xxsq8_tile_gen` (1 of 15 families,
+seconds). E2e: parity ids 64/64 vs llama.cpp - the THIRD consecutive full-match stream.
+JIT emitter, Vulkan, Metal: pending.
+
 ### IQ2_XS Phase A (CPU, 2026-08-31) - the ksigns u64 tier
 
 Shape: 256-superblock grid format - each of the 32 u16 qs words carries a 9-bit index into

@@ -1421,7 +1421,7 @@ def private kq_bytes_per_weight(f : KqFmt) : float {
     if (f == KqFmt.iq2s) {
         return 92.0 / 256.0   // 72B quants + the 20B scale row per 256
     }
-    if (f == KqFmt.iq2xs) {
+    if (f == KqFmt.iq2xs || f == KqFmt.iq2xxs) {
         return 84.0 / 256.0   // 64B quants + the 20B scale row per 256
     }
     return 34.0 / 32.0   // q8: 32 quants + an f16 scale per block

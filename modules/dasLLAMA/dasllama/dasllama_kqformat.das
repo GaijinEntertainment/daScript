@@ -13,7 +13,7 @@ module dasllama_kqformat shared public
 require dasllama/dasllama_lint public
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
-//! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs/iq4nl/k2/iq2s/iq2xs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
+//! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs/iq4nl/k2/iq2s/iq2xs/iq2xxs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
 //! planes. New members append — the int value is the device stack tag and the image plane id.
 enum KqFmt : uint8 {
     q8
@@ -30,15 +30,16 @@ enum KqFmt : uint8 {
     k2
     iq2s
     iq2xs
+    iq2xxs
 }
 
 //! The superblock-lattice formats (Q8_K-form activations, % 256 rows, repack + stamped kq
 //! kernels). q51 deliberately fails this: it rides per-32 planes with Q8_0-form activations —
 //! a `fmt != KqFmt.q8` test does not imply the kq lattice; branch on kq_sb where it does.
-def kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs
+def kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
 
 //! The same predicate over the int id space the GPU drivers carry per stack/plane.
-def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.k3) || fmt == int(KqFmt.iq3s) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.k2) || fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs)
+def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.k3) || fmt == int(KqFmt.iq3s) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.k2) || fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs)
 
 //! KqFmt -> the kernel/IR format id space — the ONE bridge between the enum and the int ids the
 //! generated kernels take as runtime params. Mnemonic ids: a K-quant is its bit width (3/4/5/6),
@@ -80,6 +81,9 @@ def kq_schema_id(f : KqFmt) : int {
     if (f == KqFmt.iq2xs) {
         return 24
     }
+    if (f == KqFmt.iq2xxs) {
+        return 25
+    }
     panic("kq_schema_id: not a kq superblock format")
     return 0
 }
@@ -110,6 +114,8 @@ let IQ2S_QSB = 72l    // IQ2_S quant plane: [32 grid-index low bytes][32 sign by
 let IQ2S_SSB = 20l    // IQ2_S scale plane: f16 d EIGHTH-ed (ggml's (0.5+ls)*0.25 = (2ls+1)/8), 2 pad, 16 x uint8 (2ls+1) - per-16 strips in the 20B row
 let IQ2XS_QSB = 64l   // IQ2_XS quant plane: 32 u16 words ([9-bit grid index][7-bit ksigns index]), verbatim disk order
 let IQ2XS_SSB = 20l   // IQ2_XS scale plane: the iq2s row exactly - f16 d EIGHTH-ed, 2 pad, 16 x uint8 (2ls+1) per-16 strips
+let IQ2XXS_QSB = 64l   // IQ2_XXS quant plane: 8 blocks x [4 iq2xxs_grid byte indices][aux32: 4 x 7-bit ksigns + 4-bit ls], verbatim disk order
+let IQ2XXS_SSB = 20l   // IQ2_XXS scale plane: the iq3xxs row shape - f16 d EIGHTH-ed, 2 pad, 8 x uint8 (2ls+1) per-32 strips, 8 pad
 // IQ4_NL reuses Q40_QSB/Q40_SSB outright: the disk bytes are q40's (f16 d + 16 nibble bytes
 // per 32-block, the k/k+16 pairing) — only the nibble SEMANTICS differ (IQ4NL_LUT, no -8).
 
@@ -677,6 +683,82 @@ def iq2xs_grid2() : uint[1024] {   // nolint:STYLE038 - a 1024-word data table, 
 //! a module global as zeros; kernels take `iq2xs_grid2()` instead.
 let IQ2XS_GRID = iq2xs_grid2()
 
+
+//! The IQ2_XXS grid (ggml's iq2xxs_grid, 256 u64 entries as low/high uint pairs): a block's
+//! aux32[0] BYTES each select EIGHT magnitudes ({8, 25, 43}), flipped through the shared
+//! ksigns_iq2xs table. Per-call local (2 KB), worker-safe; IQ2XXS_GRID = main-context copy.
+def iq2xxs_grid2() : uint[512] {
+    return fixed_array<uint>(
+        0x08080808, 0x08080808, 0x0808082b, 0x08080808, 0x08081919, 0x08080808, 0x08082b08, 0x08080808,
+        0x08082b2b, 0x08080808, 0x08190819, 0x08080808, 0x08191908, 0x08080808, 0x082b0808, 0x08080808,
+        0x082b082b, 0x08080808, 0x082b2b08, 0x08080808, 0x082b2b2b, 0x08080808, 0x19080819, 0x08080808,
+        0x19081908, 0x08080808, 0x19190808, 0x08080808, 0x19192b08, 0x08080808, 0x192b0819, 0x08080808,
+        0x192b1908, 0x08080808, 0x2b080808, 0x08080808, 0x2b08082b, 0x08080808, 0x2b082b2b, 0x08080808,
+        0x2b2b082b, 0x08080808, 0x08080819, 0x08080819, 0x08081908, 0x08080819, 0x08190808, 0x08080819,
+        0x08191919, 0x08080819, 0x19080808, 0x08080819, 0x2b081908, 0x08080819, 0x2b192b08, 0x08080819,
+        0x08080808, 0x0808082b, 0x0808082b, 0x0808082b, 0x082b082b, 0x0808082b, 0x2b08082b, 0x0808082b,
+        0x08080819, 0x08081908, 0x08081908, 0x08081908, 0x08190808, 0x08081908, 0x082b0819, 0x08081908,
+        0x082b1908, 0x08081908, 0x19080808, 0x08081908, 0x1908082b, 0x08081908, 0x19082b08, 0x08081908,
+        0x192b0808, 0x08081908, 0x2b080819, 0x08081908, 0x2b081908, 0x08081908, 0x2b190808, 0x08081908,
+        0x2b2b1908, 0x08081908, 0x08080808, 0x08081919, 0x0808082b, 0x08081919, 0x08082b08, 0x08081919,
+        0x082b0808, 0x08081919, 0x1908192b, 0x08081919, 0x192b2b19, 0x08081919, 0x2b080808, 0x08081919,
+        0x2b190819, 0x08081919, 0x08082b19, 0x0808192b, 0x08190808, 0x0808192b, 0x19080808, 0x0808192b,
+        0x2b081908, 0x0808192b, 0x2b2b1908, 0x0808192b, 0x08080808, 0x08082b08, 0x08081919, 0x08082b08,
+        0x08082b08, 0x08082b08, 0x08191908, 0x08082b08, 0x082b2b08, 0x08082b08, 0x19080819, 0x08082b08,
+        0x19081908, 0x08082b08, 0x19190808, 0x08082b08, 0x1919082b, 0x08082b08, 0x2b082b08, 0x08082b08,
+        0x08081908, 0x08082b19, 0x19080808, 0x08082b19, 0x0808082b, 0x08082b2b, 0x08191908, 0x08082b2b,
+        0x08080819, 0x08190808, 0x08081908, 0x08190808, 0x08190808, 0x08190808, 0x082b0819, 0x08190808,
+        0x19080808, 0x08190808, 0x192b0808, 0x08190808, 0x2b081908, 0x08190808, 0x2b190808, 0x08190808,
+        0x2b191919, 0x08190808, 0x08080808, 0x08190819, 0x08082b08, 0x08190819, 0x082b0808, 0x08190819,
+        0x19190808, 0x08190819, 0x19192b2b, 0x08190819, 0x2b080808, 0x08190819, 0x082b1908, 0x0819082b,
+        0x19081919, 0x0819082b, 0x08080808, 0x08191908, 0x08082b08, 0x08191908, 0x082b0808, 0x08191908,
+        0x082b1919, 0x08191908, 0x19082b19, 0x08191908, 0x2b080808, 0x08191908, 0x08192b08, 0x08191919,
+        0x192b082b, 0x08191919, 0x08080808, 0x0819192b, 0x0819192b, 0x0819192b, 0x08080819, 0x08192b08,
+        0x08081908, 0x08192b08, 0x08190808, 0x08192b08, 0x19080808, 0x08192b08, 0x2b080819, 0x08192b08,
+        0x08080808, 0x08192b19, 0x08081919, 0x08192b19, 0x2b2b0808, 0x08192b19, 0x19190819, 0x08192b2b,
+        0x08080808, 0x082b0808, 0x0808082b, 0x082b0808, 0x08082b2b, 0x082b0808, 0x19081908, 0x082b0808,
+        0x192b0819, 0x082b0808, 0x2b080808, 0x082b0808, 0x2b08082b, 0x082b0808, 0x082b2b19, 0x082b0819,
+        0x19082b08, 0x082b0819, 0x08080808, 0x082b082b, 0x0808082b, 0x082b082b, 0x08080819, 0x082b1908,
+        0x08081908, 0x082b1908, 0x08190808, 0x082b1908, 0x19080808, 0x082b1908, 0x1919192b, 0x082b1908,
+        0x08080808, 0x082b1919, 0x19080819, 0x082b1919, 0x192b1908, 0x082b1919, 0x2b190808, 0x082b192b,
+        0x08082b08, 0x082b2b08, 0x082b0808, 0x082b2b08, 0x2b191908, 0x082b2b08, 0x19081908, 0x082b2b2b,
+        0x08080819, 0x19080808, 0x08081908, 0x19080808, 0x08190808, 0x19080808, 0x08192b08, 0x19080808,
+        0x082b0819, 0x19080808, 0x082b1908, 0x19080808, 0x19080808, 0x19080808, 0x19082b08, 0x19080808,
+        0x1919192b, 0x19080808, 0x192b0808, 0x19080808, 0x2b080819, 0x19080808, 0x2b081908, 0x19080808,
+        0x2b190808, 0x19080808, 0x08080808, 0x19080819, 0x082b0808, 0x19080819, 0x192b0819, 0x19080819,
+        0x2b080808, 0x19080819, 0x2b081919, 0x19080819, 0x08080819, 0x1908082b, 0x08190808, 0x1908082b,
+        0x19082b08, 0x1908082b, 0x1919192b, 0x1908082b, 0x192b2b08, 0x1908082b, 0x08080808, 0x19081908,
+        0x08082b08, 0x19081908, 0x082b0808, 0x19081908, 0x2b080808, 0x19081908, 0x2b192b19, 0x19081908,
+        0x0819082b, 0x19081919, 0x082b1908, 0x19081919, 0x08080808, 0x1908192b, 0x08080819, 0x19082b08,
+        0x08081908, 0x19082b08, 0x08190808, 0x19082b08, 0x19080808, 0x19082b08, 0x19081919, 0x19082b08,
+        0x08080808, 0x19082b19, 0x19192b08, 0x19082b19, 0x192b0819, 0x19082b19, 0x2b08082b, 0x19082b19,
+        0x19081919, 0x19082b2b, 0x2b190808, 0x19082b2b, 0x08080808, 0x19190808, 0x08082b08, 0x19190808,
+        0x08190819, 0x19190808, 0x08192b19, 0x19190808, 0x082b0808, 0x19190808, 0x2b080808, 0x19190808,
+        0x2b082b08, 0x19190808, 0x08081908, 0x19190819, 0x1908082b, 0x19190819, 0x2b2b1908, 0x19190819,
+        0x2b190819, 0x1919082b, 0x2b190808, 0x19191908, 0x2b19082b, 0x19191908, 0x08082b2b, 0x19191919,
+        0x08080819, 0x1919192b, 0x19191908, 0x1919192b, 0x08080808, 0x19192b08, 0x08190819, 0x19192b08,
+        0x08192b19, 0x19192b08, 0x192b1908, 0x19192b08, 0x19080808, 0x19192b19, 0x08082b08, 0x19192b2b,
+        0x08081908, 0x192b0808, 0x08190808, 0x192b0808, 0x19080808, 0x192b0808, 0x192b2b08, 0x192b0808,
+        0x08080808, 0x192b0819, 0x19191919, 0x192b0819, 0x08192b08, 0x192b082b, 0x192b0808, 0x192b082b,
+        0x08080808, 0x192b1908, 0x08081919, 0x192b1908, 0x08190808, 0x192b1919, 0x0819082b, 0x192b1919,
+        0x2b081908, 0x192b1919, 0x1908082b, 0x192b2b08, 0x08080808, 0x2b080808, 0x0808082b, 0x2b080808,
+        0x08082b2b, 0x2b080808, 0x19080819, 0x2b080808, 0x2b08082b, 0x2b080808, 0x08081908, 0x2b080819,
+        0x08192b08, 0x2b080819, 0x19080808, 0x2b080819, 0x08190819, 0x2b08082b, 0x08080819, 0x2b081908,
+        0x08081908, 0x2b081908, 0x08190808, 0x2b081908, 0x08191919, 0x2b081908, 0x19080808, 0x2b081908,
+        0x192b0808, 0x2b081908, 0x08080808, 0x2b081919, 0x1908192b, 0x2b081919, 0x2b191908, 0x2b081919,
+        0x08082b19, 0x2b08192b, 0x19080808, 0x2b08192b, 0x192b0808, 0x2b08192b, 0x0808082b, 0x2b082b08,
+        0x08081908, 0x2b082b19, 0x08190819, 0x2b082b2b, 0x08081908, 0x2b190808, 0x08190808, 0x2b190808,
+        0x082b1908, 0x2b190808, 0x19080808, 0x2b190808, 0x2b2b0819, 0x2b190808, 0x0819192b, 0x2b190819,
+        0x2b080808, 0x2b190819, 0x19081919, 0x2b19082b, 0x08080808, 0x2b191908, 0x082b082b, 0x2b191908,
+        0x19081908, 0x2b191908, 0x19190819, 0x2b191919, 0x2b080819, 0x2b192b08, 0x082b0808, 0x2b192b19,
+        0x0808082b, 0x2b2b0808, 0x19190808, 0x2b2b0808, 0x2b081919, 0x2b2b0808, 0x08082b19, 0x2b2b0819,
+        0x08080808, 0x2b2b082b, 0x08192b08, 0x2b2b1908, 0x19190808, 0x2b2b2b08, 0x08081908, 0x2b2b2b19)
+}
+
+//! Main-context use only (tests, oracles, the emitter's constant bake) - a forked worker reads
+//! a module global as zeros; kernels take `iq2xxs_grid2()` instead.
+let IQ2XXS_GRID = iq2xxs_grid2()
+
 //! Quant-plane bytes per stride unit — the typed stride surface. The stride unit is one
 //! 256-weight superblock for the kq lattice and one 32-weight block for q51 (see kq_elems).
 //! q8 panics (its planes are byte-per-elem, not stride-walked here).
@@ -711,13 +793,16 @@ def kq_qsb(f : KqFmt) : int64 {
     if (f == KqFmt.iq2xs) {
         return IQ2XS_QSB
     }
+    if (f == KqFmt.iq2xxs) {
+        return IQ2XXS_QSB
+    }
     panic("kq_qsb: no plane stride for this format")
     return 0l
 }
 
 //! Scale-plane bytes per stride unit (see kq_qsb for the unit).
 def kq_ssb(f : KqFmt) : int64 {
-    if (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs) {
+    if (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs) {
         return K4_SSB
     }
     if (f == KqFmt.k6 || f == KqFmt.k3) {

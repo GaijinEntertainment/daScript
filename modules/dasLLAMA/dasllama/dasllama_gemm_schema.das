@@ -73,6 +73,7 @@ def kq_qsb(fmt : int) : int64 {
     if (fmt == 2) return kq_qsb(KqFmt.k2)
     if (fmt == 23) return kq_qsb(KqFmt.iq2s)
     if (fmt == 24) return kq_qsb(KqFmt.iq2xs)
+    if (fmt == 25) return kq_qsb(KqFmt.iq2xxs)
     panic("kq_qsb: unknown kq format id {fmt}")
     return 0l
 }
@@ -93,6 +94,7 @@ def kq_ssb(fmt : int) : int64 {
     if (fmt == 2) return kq_ssb(KqFmt.k2)
     if (fmt == 23) return kq_ssb(KqFmt.iq2s)
     if (fmt == 24) return kq_ssb(KqFmt.iq2xs)
+    if (fmt == 25) return kq_ssb(KqFmt.iq2xxs)
     panic("kq_ssb: unknown kq format id {fmt}")
     return 0l
 }
