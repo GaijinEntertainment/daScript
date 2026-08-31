@@ -24,10 +24,18 @@ let FIXTURE_DIR = "utils/dasllama-server/tests/fixtures"
 let WIN_DIR_FILE = "C:\\\\Users\\\\user\\\\.dasllama\\\\models"   // as BYTES in the fixture (JSON-escaped)
 
 def private normalize_paths(text, cat_dir : string) : string {
-    // values arrive as JSON strings holding POSIX paths; the fixture convention is the
-    // windows dir with escaped backslashes, so the dir prefix AND its separator both map
+    // values arrive as JSON strings; the fixture convention is the windows dir with escaped
+    // backslashes, so the dir prefix AND its separator both map. On a windows capture box
+    // the server may emit the dir with JSON-escaped backslashes - normalize that spelling
+    // too, and FAIL CLOSED below if any spelling survives.
+    let cat_bs = replace(to_generic_path(cat_dir), "/", "\\\\")   //! the JSON-escaped windows form
     var out = replace(text, "{cat_dir}/", "{WIN_DIR_FILE}\\\\")
     out = replace(out, cat_dir, WIN_DIR_FILE)
+    out = replace(out, "{cat_bs}\\\\", "{WIN_DIR_FILE}\\\\")
+    out = replace(out, cat_bs, WIN_DIR_FILE)
+    if (find(out, cat_dir) >= 0 || find(out, cat_bs) >= 0) {
+        panic("capture_catalog: a machine-local path survived normalization - refusing to write the fixture")
+    }
     return out
 }
 

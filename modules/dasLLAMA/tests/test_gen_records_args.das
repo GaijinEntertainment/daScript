@@ -32,17 +32,21 @@ def private at_of(args : array<string>; v : string) : int {
     return -1
 }
 
+// the value following a flag, or "<absent>" - a missing flag asserts cleanly, never OOB
+def private arg_value(args : array<string>; flag : string) : string {
+    let at = at_of(args, flag)
+    return at >= 0 && at + 1 < length(args) ? args[at + 1] : "<absent>"
+}
+
 [test]
 def test_pybench_args(t : T?) {
     t |> run("the onnx arm carries the recovery --out and never a device") @(t : T?) {
         let args <- asr_pybench_args("onnx", "parakeet-v3-int8", ["jfk.wav", "gb1.wav"], 6, 2, "mps")
         t |> success(find(args[1], "onnx_bench.py") >= 0, "the onnx script is the target")
-        let outAt = at_of(args, "--out")
-        t |> success(outAt >= 0, "--out present (the Windows stdout-wreck recovery file)")
-        t |> equal(args[outAt + 1], asr_pybench_out_path(), "--out names the recovery path")
+        t |> equal(arg_value(args, "--out"), asr_pybench_out_path(), "--out names the recovery path (the Windows stdout-wreck recovery file)")
         t |> success(!has(args, "--device"), "onnx stays CPU - device never reaches it")
-        t |> equal(args[at_of(args, "--threads") + 1], "6", "threads literal")
-        t |> equal(args[at_of(args, "--reps") + 1], "2", "reps literal")
+        t |> equal(arg_value(args, "--threads"), "6", "threads literal")
+        t |> equal(arg_value(args, "--reps"), "2", "reps literal")
         var wavs = 0
         for (a in args) {
             if (a == "--wav") {
@@ -54,9 +58,7 @@ def test_pybench_args(t : T?) {
     t |> run("the nemo arm forwards the device and skips the recovery file") @(t : T?) {
         let args <- asr_pybench_args("nemo", "nvidia/canary-qwen-2.5b", ["jfk.wav"], 8, 3, "mps")
         t |> success(find(args[1], "canary_qwen_bench.py") >= 0, "the nemo script is the target")
-        let devAt = at_of(args, "--device")
-        t |> success(devAt >= 0, "--device present (the torch-MPS arm)")
-        t |> equal(args[devAt + 1], "mps", "--device carries the value")
+        t |> equal(arg_value(args, "--device"), "mps", "--device carries the value (the torch-MPS arm)")
         t |> success(!has(args, "--out"), "no recovery file - nemo rows parse from stdout")
         let bare <- asr_pybench_args("nemo", "nvidia/canary-qwen-2.5b", ["jfk.wav"], 8, 3)
         t |> success(!has(bare, "--device"), "no device argument when none is asked")
