@@ -2540,6 +2540,55 @@ def private iq3s_grid_word(i : int) : uint {
     return tbl[i]
 }
 
+// the HALVED iq3xxs grid (ggml's iq3xxs_grid with every byte / 2 - the plane convention that
+// absorbs the format's 0.25 into the stored d), one word per call; staging loops copy it into
+// workgroup memory (QUIRK 20's slow path stays off the hot loop).
+def private iq3xxs_grid_word(i : int) : uint {
+    let tbl = fixed_array<uint>(
+        0x02020202u, 0x0202020au, 0x02020212u, 0x02020606u, 0x0202060eu, 0x0202061fu, 0x02020a02u, 0x02020a0au,
+        0x02020e06u, 0x0202120au, 0x02021f0eu, 0x02021f16u, 0x02060206u, 0x0206020eu, 0x02060602u, 0x0206060au,
+        0x02060a06u, 0x02060a16u, 0x02060e02u, 0x02060e0au, 0x02061206u, 0x02061612u, 0x02061f02u, 0x020a0202u,
+        0x020a020au, 0x020a0212u, 0x020a0606u, 0x020a0a02u, 0x020a0a0au, 0x020a0e06u, 0x020a0e0eu, 0x020a0e1fu,
+        0x020a1606u, 0x020a161fu, 0x020a1f16u, 0x020e0206u, 0x020e021fu, 0x020e0602u, 0x020e060au, 0x020e0a16u,
+        0x020e1f02u, 0x0212060eu, 0x02120e1fu, 0x02121212u, 0x0212161fu, 0x02121f0eu, 0x02121f16u, 0x02160206u,
+        0x0216021fu, 0x02160e0au, 0x0216160au, 0x021a0e16u, 0x021a1a12u, 0x021f0602u, 0x021f0612u, 0x021f061au,
+        0x021f120eu, 0x021f1a06u, 0x06020206u, 0x0602020eu, 0x06020602u, 0x0602060au, 0x06020a06u, 0x06020a0eu,
+        0x06020e02u, 0x06020e0au, 0x06020e12u, 0x0602121fu, 0x06021602u, 0x06060202u, 0x0606020au, 0x06060606u,
+        0x06060a02u, 0x06060a0au, 0x060a0206u, 0x060a020eu, 0x060a0602u, 0x060a060au, 0x060a0a06u, 0x060a0e02u,
+        0x060a1f0au, 0x060e0202u, 0x060e020au, 0x060e0a02u, 0x060e0e06u, 0x060e121au, 0x060e1a1au, 0x06120206u,
+        0x06120216u, 0x06121602u, 0x06160a02u, 0x06160a12u, 0x0616121au, 0x06161f06u, 0x061a0216u, 0x061f0a0au,
+        0x061f1202u, 0x0a020202u, 0x0a02020au, 0x0a020606u, 0x0a02060eu, 0x0a020a02u, 0x0a020a0au, 0x0a020a1au,
+        0x0a020e06u, 0x0a02120au, 0x0a060206u, 0x0a06020eu, 0x0a060216u, 0x0a060602u, 0x0a06060au, 0x0a060a06u,
+        0x0a060e02u, 0x0a061a0eu, 0x0a061a1fu, 0x0a061f02u, 0x0a0a0202u, 0x0a0a020au, 0x0a0a0606u, 0x0a0a061fu,
+        0x0a0a0a02u, 0x0a0a0a0au, 0x0a0a0e1fu, 0x0a0a1202u, 0x0a0a1616u, 0x0a0e0206u, 0x0a0e0602u, 0x0a0e0612u,
+        0x0a0e1f02u, 0x0a0e1f12u, 0x0a120e16u, 0x0a12160eu, 0x0a16020eu, 0x0a160a1fu, 0x0a161206u, 0x0a161f12u,
+        0x0a1f0206u, 0x0a1f020eu, 0x0a1f061au, 0x0a1f1216u, 0x0e020206u, 0x0e020602u, 0x0e02060au, 0x0e020a06u,
+        0x0e020a0eu, 0x0e021602u, 0x0e021a16u, 0x0e021f0au, 0x0e060202u, 0x0e06020au, 0x0e060a02u, 0x0e060e06u,
+        0x0e061212u, 0x0e06121au, 0x0e0a0206u, 0x0e0a020eu, 0x0e0a0602u, 0x0e0a0a16u, 0x0e0a160au, 0x0e0a1f0au,
+        0x0e0e0606u, 0x0e0e0e0eu, 0x0e120e02u, 0x0e12121fu, 0x0e121f0au, 0x0e160202u, 0x0e16021au, 0x0e160a0au,
+        0x0e161616u, 0x0e1a0612u, 0x0e1a0e1au, 0x0e1a1a0eu, 0x0e1f0e0eu, 0x0e1f1a02u, 0x12020212u, 0x1202061fu,
+        0x12020e16u, 0x12020e1fu, 0x1202160eu, 0x1202161fu, 0x12061f12u, 0x120a0a02u, 0x120a0e1fu, 0x120a1202u,
+        0x120a1a02u, 0x120a1a1au, 0x120e021fu, 0x120e1216u, 0x12120212u, 0x12121606u, 0x12121a12u, 0x12160a16u,
+        0x1216120eu, 0x12161f02u, 0x121f0216u, 0x121f0602u, 0x121f060au, 0x121f0e02u, 0x1602060au, 0x16021206u,
+        0x16021f02u, 0x16060202u, 0x1606021au, 0x16060a1au, 0x16061616u, 0x160a0612u, 0x160a0e0au, 0x160a1f0au,
+        0x160e020au, 0x160e160eu, 0x16120602u, 0x16120a0eu, 0x16120a1fu, 0x16121f0au, 0x1616020au, 0x16160e06u,
+        0x161a1602u, 0x161f0a12u, 0x161f120au, 0x1a020a12u, 0x1a021212u, 0x1a02121au, 0x1a021a12u, 0x1a060a06u,
+        0x1a061a06u, 0x1a0a061fu, 0x1a0a1a12u, 0x1a0e0e02u, 0x1a0e0e1au, 0x1a121212u, 0x1a160216u, 0x1a16160au,
+        0x1a1a0e0eu, 0x1a1f020eu, 0x1a1f0a06u, 0x1f02020eu, 0x1f020216u, 0x1f02021fu, 0x1f020602u, 0x1f020e0au,
+        0x1f02160au, 0x1f060a1au, 0x1f061202u, 0x1f0a060au, 0x1f0a1216u, 0x1f0a160au, 0x1f0e0202u, 0x1f0e0616u,
+        0x1f0e0e0eu, 0x1f0e1a02u, 0x1f120a06u, 0x1f121206u, 0x1f160202u, 0x1f16020au, 0x1f160a12u, 0x1f1a0e02u)
+    return tbl[i]
+}
+
+// ksigns_iq2xs without the table: bit 7 of the sign byte is the EVEN PARITY of the 7-bit
+// index, so the byte is idx | (parity << 7) - five ALU ops, nothing staged.
+def private ksign7(v : uint) : uint {
+    var t = v ^ (v >> 4u)
+    t = t ^ (t >> 2u)
+    t = t ^ (t >> 1u)
+    return v | ((t & 1u) << 7u)
+}
+
 def private iq4_word(n : uint) : uint {
     let tbl = uint4(3215825025u, 4142587343u, 639175937u, 1901675829u)   // kvalues_iq4nl, 4 bytes per word
     let q0 = n & 15u
@@ -2866,6 +2915,48 @@ class KqBatchIq3s : KqBatchIq4xs {
         let tid = gl_LocalInvocationID.x
         gridw[tid] = iq3s_grid_word(int(tid))
         gridw[tid + 256u] = iq3s_grid_word(int(tid + 256u))
+        barrier()   // the grid visible before the first stage_w
+        tile_shell()
+    }
+}
+
+// IQ3_XXS tile: the iq3s staging with the halved-grid gather - bare 8-bit indices (no ninth
+// bit), signs from the aux32's four 7-bit ksigns indices via the parity helper (no table);
+// scale row and blk_fma are iq4xs's verbatim (inherited). The 1 KB grid stages once.
+[vk_dispatch(name = "kq_batch_iq3xxs_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchIq3xxs : KqBatchIq4xs {
+    @workgroup gridw : uint[256]
+
+    def iq3s_signed(g, nib : uint) : uint {
+        let m1 = (nib * 0x00204081u) & 0x01010101u
+        let mask = m1 * 255u
+        return (g ^ mask) + m1
+    }
+
+    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
+        for (ki in range(2)) {
+            let k = word + uint(ki) * 8u
+            let bu = k / 2u
+            let hh = k % 2u
+            var wv = uint4(0u)
+            if (wcol < pa.d) {
+                let wsb = wsb0 + wcol * nsb + s
+                let qsw = wq[wsb * 24u + bu * 2u + hh]
+                let aux = wq[wsb * 24u + 16u + bu]
+                let l0 = hh * 2u
+                let sg0 = ksign7((aux >> (7u * l0)) & 127u)
+                let sg1 = ksign7((aux >> (7u * l0 + 7u)) & 127u)
+                wv = uint4(iq3s_signed(gridw[qsw & 255u], sg0 & 15u), iq3s_signed(gridw[(qsw >> 8u) & 255u], sg0 >> 4u),
+                    iq3s_signed(gridw[(qsw >> 16u) & 255u], sg1 & 15u), iq3s_signed(gridw[qsw >> 24u], sg1 >> 4u))
+            }
+            ww4[grp * 17u + k] = wv
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_iq3xxs_cls_spv")]
+    def override run {
+        let tid = gl_LocalInvocationID.x
+        gridw[tid] = iq3xxs_grid_word(int(tid))
         barrier()   // the grid visible before the first stage_w
         tile_shell()
     }
@@ -3869,6 +3960,11 @@ struct VkIq3sBlk {
     sg : int16[16]   // ... and its 32 sign bytes; scales (f16 d + 8 int8 (1 + 2s)) live in ws
 }
 
+struct VkIq3xxsBlk {
+    qs : int16[32]   // one IQ3_XXS superblock's 64 grid-index bytes as 16-bit lanes
+    ax : int16[16]   // ... and its 32 aux bytes (per block: 4x7-bit ksigns indices + 4-bit ls); scales (halved f16 d + 8 x (2ls+1)) live in ws
+}
+
 struct VkK3Blk {
     qs : int16[32]   // one Q3_K superblock's 64 qs bytes, four 2-bit lanes each, verbatim disk order
     hm : int16[16]   // ... and its 32 hmask bytes; scales (16 int8 (sc-32) + f16 d) live in ws
@@ -3895,6 +3991,8 @@ class template KqCm2BatchT : MoeCmBase {
     @workgroup @template_gate = IQLUT iq4lut : float16[16]   // kvalues_iq4nl as f16 (llama.cpp's init_iq_shmem form)
     @template_constant IQ3GRID : bool = false             // stage the 2 KB iq3s grid into workgroup memory
     @workgroup @template_gate = IQ3GRID iq3s_gridc : uint[512]
+    @template_constant IQ3XGRID : bool = false            // stage the 1 KB halved iq3xxs grid into workgroup memory
+    @workgroup @template_gate = IQ3XGRID iq3x_gridc : uint[256]
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
@@ -3936,6 +4034,9 @@ class template KqCm2BatchT : MoeCmBase {
             let gi = gl_LocalInvocationID.x
             iq3s_gridc[gi] = iq3s_grid_word(int(gi))
             iq3s_gridc[gi + 256u] = iq3s_grid_word(int(gi + 256u))
+        }
+        static_if (IQ3XGRID) {
+            iq3x_gridc[gl_LocalInvocationID.x] = iq3xxs_grid_word(int(gl_LocalInvocationID.x))
         }
         barrier()   // wg_blk0 (and the gated codebook) visible before the first decode load
         var a : coopmatWgA_f16_128x64
@@ -4234,6 +4335,39 @@ class template Iq3sCm2T : KqCm2BatchT {
     }
 }
 
+[ |> template_struct_instance]
+class template Iq3xxsCm2T : KqCm2BatchT {
+    typedef BLK = VkIq3xxsBlk
+    typedef ST = uint
+    override IQ3XGRID = true
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkIq3xxsBlk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let g = e >> 5u
+        let r = e & 31u
+        let wj = r >> 2u
+        let qi = g * 8u + wj
+        let qb = uint(int(unpack8(blk.qs[int(qi >> 1u)])[int(qi & 1u)])) & 0xFFu
+        let l = r >> 3u
+        let bl = 7u * l
+        let a0i = g * 4u + (bl >> 3u)
+        let b0 = uint(int(unpack8(blk.ax[int(a0i >> 1u)])[int(a0i & 1u)])) & 0xFFu
+        let b1 = uint(int(unpack8(blk.ax[int((a0i + 1u) >> 1u)])[int((a0i + 1u) & 1u)])) & 0xFFu
+        let sidx = ((b0 | (b1 << 8u)) >> (bl & 7u)) & 127u
+        var tt = sidx ^ (sidx >> 4u)
+        tt = tt ^ (tt >> 2u)
+        tt = tt ^ (tt >> 1u)
+        let sgb = sidx | ((tt & 1u) << 7u)
+        let gw = iq3x_gridc[qb]
+        let gb = float((gw >> ((r & 3u) * 8u)) & 0xFFu)
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let d = unpackHalf2x16(ws[srow]).x
+        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        return float16(d * float(sc) * (((sgb >> (r & 7u)) & 1u) != 0u ? -gb : gb))
+    }
+}
+
 // the stamps: the three width columns of each format (the dispatcher keys on (fmt, tc))
 [vk_dispatch(name = "q8_batch_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2LBatch : Q8Cm2T {
@@ -4443,6 +4577,33 @@ class Iq3sCm2MBatch : Iq3sCm2T {
 
 [vk_dispatch(name = "kq_batch_iq3s_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3sCm2SBatch : Iq3sCm2T {
+    override BN = 32u
+    override STILE = true
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+    typedef FLO = tensorLayout2DPad
+}
+
+[vk_dispatch(name = "kq_batch_iq3xxs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3xxsCm2LBatch : Iq3xxsCm2T {
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq3xxs_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3xxsCm2MBatch : Iq3xxsCm2T {
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq3xxs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3xxsCm2SBatch : Iq3xxsCm2T {
     override BN = 32u
     override STILE = true
     typedef BT = coopmatWgB_f16_64x32
@@ -5022,6 +5183,8 @@ def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {
         return ensure_kq_batch_k3_cls()
     } elif (fmt == int(KqFmt.iq3s)) {
         return ensure_kq_batch_iq3s_cls()
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        return ensure_kq_batch_iq3xxs_cls()
     }
     panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     return false
@@ -5054,6 +5217,8 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
         enc_kq_batch_k3_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq3s)) {
         enc_kq_batch_iq3s_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        enc_kq_batch_iq3xxs_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     }
@@ -5080,6 +5245,8 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_kq_gemv_k3_cls()
     } elif (fmt == int(KqFmt.iq3s)) {
         return ensure_kq_gemv_iq3s_cls()
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        return ensure_kq_gemv_iq3xxs_cls()
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return false
@@ -5112,14 +5279,16 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_kq_gemv_k3_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq3s)) {
         enc_kq_gemv_iq3s_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        enc_kq_gemv_iq3xxs_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     }
 }
 
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).
-// The seven formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
-// seven pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
+// The eight formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
+// eight pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
 [vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4 : KqGemvBase {
     def override blk_contrib(wsb, blk, xsb : uint) : float {
@@ -5228,6 +5397,58 @@ class KqGemvIq3s : KqGemvBase {
         for (k in range(8)) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = iq3s_grid_word(int(idx))
+        }
+        barrier()   // the grid visible before the shell's block walk
+        gemv_shell()
+    }
+}
+
+// IQ3_XXS: halved-grid gather (bare 8-bit index -> 4 magnitudes per word), signs from the
+// aux32's four 7-bit ksigns indices (bit 7 = parity, computed - no table), per-32 (2ls + 1)
+// sub-scale x halved d - iq3s's fold exactly, over the 24-word rows; the 1 KB grid stages
+// into workgroup memory ahead of the shell.
+[vk_dispatch(name = "kq_gemv_iq3xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3xxs : KqGemvBase {
+    @workgroup gridw : uint[256]
+
+    def iq3s_signed(g, nib : uint) : uint {
+        let m1 = (nib * 0x00204081u) & 0x01010101u
+        let mask = m1 * 255u
+        return (g ^ mask) + m1
+    }
+
+    def override blk_contrib(wsb, blk, xsb : uint) : float {
+        let qb = wsb * 24u + blk * 2u
+        let aux = wq[wsb * 24u + 16u + blk]
+        let xb4 = xsb * 16u + blk * 2u
+        let xl = xq4[xb4]
+        let xh = xq4[xb4 + 1u]
+        var isum = 0
+        for (l in range(2)) {
+            let qsw = wq[qb + uint(l)]
+            let l0 = uint(l) * 2u
+            let sg0 = ksign7((aux >> (7u * l0)) & 127u)
+            let sg1 = ksign7((aux >> (7u * l0 + 7u)) & 127u)
+            let w0 = iq3s_signed(gridw[qsw & 255u], sg0 & 15u)
+            let w1 = iq3s_signed(gridw[(qsw >> 8u) & 255u], sg0 >> 4u)
+            let w2 = iq3s_signed(gridw[(qsw >> 16u) & 255u], sg1 & 15u)
+            let w3 = iq3s_signed(gridw[qsw >> 24u], sg1 >> 4u)
+            if (l == 0) {
+                isum += sdot4(w0, xl.x) + sdot4(w1, xl.y) + sdot4(w2, xl.z) + sdot4(w3, xl.w)
+            } else {
+                isum += sdot4(w0, xh.x) + sdot4(w1, xh.y) + sdot4(w2, xh.z) + sdot4(w3, xh.w)
+            }
+        }
+        let dd = unpackHalf2x16(wsu[wsb * 5u]).x
+        return axs[xsb] * dd * float(iq4_sc(wsu[wsb * 5u + 1u + blk / 4u], blk) * isum)
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3xxs_cls_spv")]
+    def run {
+        let lid = gl_LocalInvocationID.x
+        for (k in range(4)) {
+            let idx = lid + uint(k) * 64u
+            gridw[idx] = iq3xxs_grid_word(int(idx))
         }
         barrier()   // the grid visible before the shell's block walk
         gemv_shell()

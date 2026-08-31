@@ -1709,7 +1709,7 @@ struct ArenaSlab {
 }
 
 struct ArenaFmt {
-    fmt : int                // int(KqFmt): 0 = q8, 1/2/3 = k4/k5/k6, 4 = q40, 6 = iq4xs, 7 = k3, 8 = iq3s
+    fmt : int                // int(KqFmt): 0 = q8, 1/2/3 = k4/k5/k6, 4 = q40, 6 = iq4xs, 7 = k3, 8 = iq3s, 9 = iq3xxs
     slabs : array<ArenaSlab>
     cur : int                // slab the bump cursor is in
     slab_cap : int64         // max blocks one slab may carry (msr over both plane strides)
@@ -1740,7 +1740,7 @@ def arena_local_blk(blk : int64) : int64 => blk & ((1l << 32l) - 1l)
 
 // per-block plane strides — the block is 32 weights for q8 and a 256-weight superblock for kq.
 // Mirrors stack_plane_bytes: it computes the same totals as count * these strides.
-// the tier's stack fmt space is int(KqFmt) — bridge to the gemm_schema kq id space (4/5/6/40/44/3/33)
+// the tier's stack fmt space is int(KqFmt) — bridge to the gemm_schema kq id space (4/5/6/40/44/3/33/34)
 def vk_kq_schema_id(fmt : int) : int {
     if (fmt == 1) return 4
     if (fmt == 2) return 5
@@ -1749,11 +1749,12 @@ def vk_kq_schema_id(fmt : int) : int {
     if (fmt == 6) return 44
     if (fmt == 7) return 3
     if (fmt == 8) return 33
+    if (fmt == 9) return 34
     panic("vk_kq_schema_id: not a kq stack fmt")
     return 0
 }
 
-// fmt space here = int(KqFmt): 0 q8 (32-elem blocks), 1-4 and 6..8 the kq lattice (+ q40, iq4xs, k3, iq3s)
+// fmt space here = int(KqFmt): 0 q8 (32-elem blocks), 1-4 and 6..9 the kq lattice (+ q40, iq4xs, k3, iq3s, iq3xxs)
 def vk_fmt_b32(fmt : int) : bool => fmt == 0
 
 // meta/activation block unit of a stack format — q8 counts 32-weight blocks, the kq

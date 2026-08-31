@@ -462,7 +462,28 @@ silently skips it: the test-mode fixture families AND the tune loop's
 ~2e-6); the tuner crowns `dot_maddubs_width256_mr8` verdict=beats (the zen2 board's usual
 winner, same as iq3s/k3). E2e stamped: prefill 6 -> 17 t/s, gen 19 -> 41 t/s; ids 17/64
 with the fork again ON the margin oracle's top-2 (0.43 logits at step 17 - stamped float
-folds move the flip point, they do not change the class). Vulkan, Metal: pending.
+folds move the flip point, they do not change the class).
+
+Vulkan came as the iq3s walk compressed: `vk_kq_schema_id` 9 -> 34; the 1 KB HALVED grid
+stages into `@workgroup uint[256]` (one word per thread on the tile, four on the gemv), and
+the ksigns TABLE DISAPPEARS - bit 7 of the sign byte is the even parity of the 7-bit index,
+five ALU ops (`t = v ^ (v >> 4); t = t ^ (t >> 2); t = t ^ (t >> 1)`; the SPIR-V emitter has
+no `^=`, spell the fold as plain assignments). `KqGemvIq3xxs : KqGemvBase` (24-word rows,
+one aligned aux word per block, iq3s's fold via `iq4_sc` - the (2ls+1) strips read the same);
+`KqBatchIq3xxs : KqBatchIq4xs` (the halved-grid gather at stage time); `Iq3xxsCm2T` on a new
+`IQ3XGRID` gated axis (the aux 7-bit field spans at most two bytes - two unpack8 picks per
+element). The sdot4 arms, cm2 dispatcher arms and the family/witness/cm2 test cells mirror
+iq3s's rows exactly. VEHICLE trap beyond QUIRK 23: the Qwen2.5 vehicle proves kernels but
+CANNOT arm the resident decode driver (attention QKV bias - a silent decline), so the
+Vulkan e2e/bench vehicle is a LOCAL requant: `llama-quantize --allow-requantize --imatrix
+<bartowski's> --tensor-type attn_k=iq3_xxs --tensor-type attn_q=iq3_xxs <Q8_0> out IQ3_XXS`
+- llama.cpp's own ftype recipe puts IQ2_S on attn_k/q, the override keeps the mix inside
+the supported set. Gates: the suite 76/76 (the three cm2 tiles 0-off at 89600 cells each,
+the float witness in the family cell); the resident driver arms and matches llama.cpp's
+greedy ids 32/64 with the fork a 0.093-logit near-tie whose top-2 IS our token (the
+smallest margin in the window), gen 202 t/s. Rows (5060 Ti vs llama.cpp b10660 Vulkan,
+the local requant): pp512 12225.7 vs 17807.7 (0.69x), tg128 372.1 vs 389.9 (0.95x).
+Metal: pending (the constant-table hoisting from the iq3s arc carries the grid).
 
 ### IQ3_S (the third format - and the first grid format, 2026-08-30)
 
