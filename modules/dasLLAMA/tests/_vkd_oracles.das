@@ -187,6 +187,8 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
         k = kx
     } elif (fmt == int(KqFmt.iq4nl)) {
         k = new KqGemvIq4nl()   // pure-ALU codebook - no workgroup state to fill
+    } elif (fmt == int(KqFmt.k2)) {
+        k = new KqGemvK2()   // pure ALU - no workgroup state to fill
     } else {
         k = new KqGemvK6()
     }
@@ -461,6 +463,38 @@ def iq4nlf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                             let q = (by >> ((e / 16) * 4)) & 0xF
                             let w = float(float16(dv * float(int(IQ4NL_LUT[q]))))
                             acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+// Q2_K f16-feed GEMM reference over the device form: per-16 sc/min nibble pairs x d/dmin,
+// f16-rounded per weight like its siblings (16-word rows + [d|dmin][16 pair bytes] scales).
+def k2f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                      recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dm = unpackHalf2x16(wsu[sb * 5])
+                    for (g in range(16)) {
+                        let pb = (int(wsu[sb * 5 + 1 + g / 4]) >> ((g % 4) * 8)) & 0xFF
+                        for (l in range(16)) {
+                            let qi = (g / 8) * 32 + (g % 2) * 16 + l
+                            let by = byte_u8(wq, sb * 64 + qi)
+                            let q = (by >> (((g / 2) % 4) * 2)) & 3
+                            let w = float(float16(dm.x * float(pb & 0xF) * float(q) - dm.y * float(pb >> 4)))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 16 + l)
                         }
                     }
                 }

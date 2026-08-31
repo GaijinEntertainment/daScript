@@ -3176,6 +3176,90 @@ class KqBatchK3 : KqBatchK6 {
     }
 }
 
+// Q2_K tile: k3's staging minus the hmask (unsigned 0..3 lanes), FOUR scale planes - d*sc and
+// dmin*mn per 16-half - and a split-half fma folding the min sides against the half sums.
+[vk_dispatch(name = "kq_batch_k2_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchK2 : KqBatchK6 {
+    @workgroup wsw3 : float[256]   // dmin*mn, lo half
+    @workgroup wsw4 : float[256]   // dmin*mn, hi half
+
+    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
+        for (ki in range(2)) {
+            let k = word + uint(ki) * 8u
+            let bu = k / 2u
+            let hh = k % 2u
+            var wv = uint4(0u)
+            if (wcol < pa.d) {
+                let wsb = wsb0 + wcol * nsb + s
+                let qb4 = wsb * 16u + (bu / 4u) * 8u + hh * 4u
+                let shift = (bu % 4u) * 2u
+                wv = uint4((wq[qb4] >> shift) & 0x03030303, (wq[qb4 + 1u] >> shift) & 0x03030303,
+                    (wq[qb4 + 2u] >> shift) & 0x03030303, (wq[qb4 + 3u] >> shift) & 0x03030303)
+            }
+            ww4[grp * 17u + k] = wv
+        }
+    }
+
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var sa = 0.0
+        var sbv = 0.0
+        var ma = 0.0
+        var mb = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            let w = wsu[wsb * 5u + 1u + sblk / 2u]
+            let b0 = (w >> ((sblk % 2u) * 16u)) & 255u
+            let b1 = (w >> ((sblk % 2u) * 16u + 8u)) & 255u
+            let dm = unpackHalf2x16(wsu[wsb * 5u])
+            sa = dm.x * float(b0 & 15u)
+            sbv = dm.x * float(b1 & 15u)
+            ma = dm.y * float(b0 >> 4u)
+            mb = dm.y * float(b1 >> 4u)
+        }
+        wsw[sblk * 32u + slane] = sa
+        wsw2[sblk * 32u + slane] = sbv
+        wsw3[sblk * 32u + slane] = ma
+        wsw4[sblk * 32u + slane] = mb
+    }
+
+    // the split-half fma with the min planes: xscl * (sc_lo*l + sc_hi*h - mn_lo*blo - mn_hi*bhi)
+    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
+        let kL = bu * 2u
+        let kH = bu * 2u + 1u
+        let xwL = xw4[grp * 17u + kL]
+        let xwH = xw4[grp * 17u + kH]
+        let blo = sdot4(xwL.x, 0x01010101) + sdot4(xwL.y, 0x01010101) + sdot4(xwL.z, 0x01010101) + sdot4(xwL.w, 0x01010101)
+        let bhi = sdot4(xwH.x, 0x01010101) + sdot4(xwH.y, 0x01010101) + sdot4(xwH.z, 0x01010101) + sdot4(xwH.w, 0x01010101)
+        let wL0 = ww4[word * 17u + kL]
+        let wL1 = ww4[(word + 8u) * 17u + kL]
+        let wL2 = ww4[(word + 16u) * 17u + kL]
+        let wL3 = ww4[(word + 24u) * 17u + kL]
+        let wH0 = ww4[word * 17u + kH]
+        let wH1 = ww4[(word + 8u) * 17u + kH]
+        let wH2 = ww4[(word + 16u) * 17u + kH]
+        let wH3 = ww4[(word + 24u) * 17u + kH]
+        let l0 = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
+        let l1 = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
+        let l2 = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
+        let l3 = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
+        let h0 = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
+        let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
+        let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
+        let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
+        return float4(xscl * (wsw[bu * 32u + word] * float(l0) + wsw2[bu * 32u + word] * float(h0) - wsw3[bu * 32u + word] * float(blo) - wsw4[bu * 32u + word] * float(bhi)),
+            xscl * (wsw[bu * 32u + word + 8u] * float(l1) + wsw2[bu * 32u + word + 8u] * float(h1) - wsw3[bu * 32u + word + 8u] * float(blo) - wsw4[bu * 32u + word + 8u] * float(bhi)),
+            xscl * (wsw[bu * 32u + word + 16u] * float(l2) + wsw2[bu * 32u + word + 16u] * float(h2) - wsw3[bu * 32u + word + 16u] * float(blo) - wsw4[bu * 32u + word + 16u] * float(bhi)),
+            xscl * (wsw[bu * 32u + word + 24u] * float(l3) + wsw2[bu * 32u + word + 24u] * float(h3) - wsw3[bu * 32u + word + 24u] * float(blo) - wsw4[bu * 32u + word + 24u] * float(bhi)))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k2_cls_spv")]
+    def override run {
+        tile_shell()
+    }
+}
+
 // ===== the prefill batch GEMMs — cooperative-matrix variants (DASLLAMA_COOPMAT=f16|int8|mm) =====
 
 let private CML_SST = 20u   // mm shared row stride in uints (16 f16-pair data + 4 pad — bank spread)
@@ -3992,6 +4076,10 @@ struct VkK3Blk {
     hm : int16[16]   // ... and its 32 hmask bytes; scales (16 int8 (sc-32) + f16 d) live in ws
 }
 
+struct VkK2Blk {
+    qs : int16[32]   // one Q2_K superblock's 64 qs bytes, four 2-bit lanes each; scales ([f16 d][f16 dmin][16 sc/min pair bytes]) live in ws
+}
+
 // The cm2 tile: one class template over the two stamp axes. The token column BN - l 256, m 128,
 // s 32 (the expert-bucket geometry: STILE's fast path loads a partial column UNCLAMPED and clamps
 // only the store, so every plane it reads carries 32 rows of slack) - and the weight format: BLK
@@ -4328,6 +4416,26 @@ class template K3Cm2T : KqCm2BatchT {
         let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
         let d = unpackHalf2x16(ws[srow + 4u]).x
         return float16(d * float(sc) * float(q3))
+    }
+}
+
+[ |> template_struct_instance]
+class template K2Cm2T : KqCm2BatchT {
+    typedef BLK = VkK2Blk
+    typedef ST = uint
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkK2Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let g = e >> 4u
+        let l = e & 15u
+        let qi = (g >> 3u) * 32u + (g & 1u) * 16u + l
+        let qby = uint(int(unpack8(blk.qs[int(qi >> 1u)])[int(qi & 1u)])) & 0xFFu
+        let q = (qby >> (((g >> 1u) & 3u) * 2u)) & 3u
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let dm = unpackHalf2x16(ws[srow])
+        let pb = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+        return float16(dm.x * float(pb & 15u) * float(q) - dm.y * float(pb >> 4u))
     }
 }
 
@@ -4673,6 +4781,33 @@ class Iq4nlCm2MBatch : Iq4nlCm2T {
 
 [vk_dispatch(name = "kq_batch_iq4nl_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4nlCm2SBatch : Iq4nlCm2T {
+    override BN = 32u
+    override STILE = true
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+    typedef FLO = tensorLayout2DPad
+}
+
+[vk_dispatch(name = "kq_batch_k2_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K2Cm2LBatch : K2Cm2T {
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_k2_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K2Cm2MBatch : K2Cm2T {
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_k2_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K2Cm2SBatch : K2Cm2T {
     override BN = 32u
     override STILE = true
     typedef BT = coopmatWgB_f16_64x32
@@ -5256,6 +5391,8 @@ def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {
         return ensure_kq_batch_iq3xxs_cls()
     } elif (fmt == int(KqFmt.iq4nl)) {
         return ensure_kq_batch_iq4nl_cls()
+    } elif (fmt == int(KqFmt.k2)) {
+        return ensure_kq_batch_k2_cls()
     }
     panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     return false
@@ -5292,6 +5429,8 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
         enc_kq_batch_iq3xxs_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq4nl)) {
         enc_kq_batch_iq4nl_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k2)) {
+        enc_kq_batch_k2_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     }
@@ -5322,6 +5461,8 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_kq_gemv_iq3xxs_cls()
     } elif (fmt == int(KqFmt.iq4nl)) {
         return ensure_kq_gemv_iq4nl_cls()
+    } elif (fmt == int(KqFmt.k2)) {
+        return ensure_kq_gemv_k2_cls()
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return false
@@ -5358,14 +5499,16 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_kq_gemv_iq3xxs_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq4nl)) {
         enc_kq_gemv_iq4nl_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k2)) {
+        enc_kq_gemv_k2_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     }
 }
 
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).
-// The nine formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
-// nine pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
+// The ten formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
+// ten pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
 [vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4 : KqGemvBase {
     def override blk_contrib(wsb, blk, xsb : uint) : float {
@@ -5595,6 +5738,45 @@ class KqGemvK3 : KqGemvBase {
     }
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k3_cls_spv")]
+    def run {
+        gemv_shell()
+    }
+}
+
+// Q2_K: q = the unsigned 2-bit qs lane, per-16 sc/min NIBBLE pairs x d/dmin - the k4 d|dmin
+// fold at k6's granularity over the 16-word rows (4 uint4 of qs; scale row [d|dmin][16 pair bytes])
+[vk_dispatch(name = "kq_gemv_k2_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK2 : KqGemvBase {
+    // (ilo, ihi, blo, bhi) - an int4, since a shader function cannot return a tuple
+    def k2_dot(ql, qh, xl, xh : uint4; sh : uint) : int4 {
+        let m2 = 0x03030303u
+        let l0 = (ql.x >> sh) & m2
+        let l1 = (ql.y >> sh) & m2
+        let l2 = (ql.z >> sh) & m2
+        let l3 = (ql.w >> sh) & m2
+        let h0 = (qh.x >> sh) & m2
+        let h1 = (qh.y >> sh) & m2
+        let h2 = (qh.z >> sh) & m2
+        let h3 = (qh.w >> sh) & m2
+        return int4(sdot4(l0, xl.x) + sdot4(l1, xl.y) + sdot4(l2, xl.z) + sdot4(l3, xl.w),
+                    sdot4(h0, xh.x) + sdot4(h1, xh.y) + sdot4(h2, xh.z) + sdot4(h3, xh.w),
+                    sdot4(xl.x, KQC_ONES) + sdot4(xl.y, KQC_ONES) + sdot4(xl.z, KQC_ONES) + sdot4(xl.w, KQC_ONES),
+                    sdot4(xh.x, KQC_ONES) + sdot4(xh.y, KQC_ONES) + sdot4(xh.z, KQC_ONES) + sdot4(xh.w, KQC_ONES))
+    }
+
+    def override blk_contrib(wsb, blk, xsb : uint) : float {
+        let xb4 = xsb * 16u + blk * 2u
+        let q4 = wsb * 4u + (blk / 4u) * 2u
+        let dot = k2_dot(wq4[q4], wq4[q4 + 1u], xq4[xb4], xq4[xb4 + 1u], (blk % 4u) * 2u)
+        let w = wsu[wsb * 5u + 1u + blk / 2u]
+        let b0 = (w >> ((blk % 2u) * 16u)) & 255u
+        let b1 = (w >> ((blk % 2u) * 16u + 8u)) & 255u
+        let dm = unpackHalf2x16(wsu[wsb * 5u])
+        return axs[xsb] * (dm.x * float(int(b0 & 15u) * dot.x + int(b1 & 15u) * dot.y)
+            - dm.y * float(int(b0 >> 4u) * dot.z + int(b1 >> 4u) * dot.w))
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k2_cls_spv")]
     def run {
         gemv_shell()
     }

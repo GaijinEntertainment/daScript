@@ -468,7 +468,22 @@ repack_k2_grp and both grp readers moved together, re-gated bit-exact. Gates: pr
 mode 11/11 k2 perms (maddubs mr8 stamps at 4.8e-7; vpdpbusd declines on zen2 as every
 format), test_kquant -jit 212/216. Crowned dot_maddubs_width256_mr8; stamped e2e gen
 30 -> 75 t/s, ids 19/64 with the same token-19 near-tie. zen2 16t vs llama.cpp clean-cpu
-b10660: pp512 418.6 / 412.0 (1.02x), tg128 77.1 / 81.1 (0.95x). Vulkan, Metal: pending.
+b10660: pp512 418.6 / 412.0 (1.02x), tg128 77.1 / 81.1 (0.95x).
+
+Phase C (Vulkan, 2026-08-31): KqGemvK2 = k3's dot minus the hmask (its int4 (ilo, ihi,
+blo, bhi) already carries the half sums) folded by the pair-byte nibble scales and the k4
+d|dmin word: dm.x*(sc_lo*ilo + sc_hi*ihi) - dm.y*(mn_lo*blo + mn_hi*bhi). KqBatchK2 :
+KqBatchK6 stages the unsigned lanes (k3's staging minus the hmask), FOUR scale planes
+(d*sc and dmin*mn per 16-half - two new @workgroup arrays), and a split-half fma folding
+the min sides on the half sums. K2Cm2T = VkK2Blk (int16[32]) with K4Cm2T's srow walk over
+the pair bytes. The device scale row is the CPU 20B row VERBATIM - both gather paths copy
+through (the grouped path re-packs the field-major grp header). vk_kq_schema_id 11 -> 2;
+ten-format family cells at stride 16 words. TRAP replayed from k3: a vk class child must
+FOLLOW its parent in the file (KqBatchK2 first landed above KqBatchK6 - "parent structure
+not found"). Gates: the suite 80/80, the three k2 cm2 tiles 0-off; resident e2e armed
+(fresh bake), gen 284 t/s, ids 19/64 with the same token-19 near-tie. Rows (5060 Ti vs
+llama.cpp b10660 build-vulkan): pp512 14544.0 / 16752.7 (0.87x - above the 0.69-0.78 tier
+class), tg128 442.8 / 424.1 (1.04x). Metal: pending.
 
 ### IQ4_NL (the near-free one, 2026-08-30)
 
