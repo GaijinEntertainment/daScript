@@ -251,6 +251,15 @@ the MoE GEMV/mul_mm trio for the format - ledgered for the M5 kernel pass.
 
 ## 8. End to end
 
+**Dev-loop invocation (adopted 2026-08-31):** every correctness-loop run (probe tests,
+parity, run.das spot checks) goes through the fast stack -
+`daslang.exe -jit -module-cache .jitted_scripts/module_cache/<app>.dascache <app>.das --
+--jit-split-modules=-1 ...` - warm no-edit reruns drop 48 s -> 5 s, an edit loop 196 s ->
+~60 s (zen2, lcpp_bench scale). Bench t/s rows keep the stock monolith invocation (split
+loses cross-module inlining); the first run after a cache write pays one cold codegen (the
+deser re-key); QUIRK 21 still applies to emitter edits. Numbers, caveats and the
+invalidation ledger: `plans/jit_compile_time.md`.
+
 A real file whose every tensor type is now loadable (the header census script in the session
 scratchpad, or `harness/gguf_dump.das`), through `examples/dasLLAMA/run.das` against
 `simple_ids.exe` from the llama.cpp reference build for the same prompt; then `test_model_image`
