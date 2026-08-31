@@ -536,3 +536,11 @@ module) is independent and can land any time - it is pure structure.
     (`keep_hidden`), plus an override-capability row so a whole-plane consumer can test for
     it; a cell that embeds through the vulkan override and compares against the CPU pool
     proves it.
+
+34. **END-OF-ARC: the pp512 tier class (~0.67-0.70x of llama.cpp on 1B shapes).** Every
+    sb-format cm2 tile lands in the same band (k4 control 0.67x, iq3s 0.70x on the 5060 Ti)
+    while tg and the CPU tiers hold parity or better - the gap is the shared batch-GEMM
+    tier, not any one format's decode. Boris 2026-08-30: this one bothers him at 0.7 -
+    schedule a dedicated pass at the END of the iquant-formats arc (after the last format
+    lands), not per-format. Start from the followup 29-32 streamed-layer levers and a
+    kernel-level probe of the cm2 tile vs llama.cpp's mul_mm_cm2 at matched shapes.

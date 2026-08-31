@@ -23,6 +23,7 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.iq4xs), 6)
         t |> equal(int(KqFmt.k3), 7)
         t |> equal(int(KqFmt.iq3s), 8)
+        t |> equal(int(KqFmt.iq3xxs), 9)
     }
 }
 
@@ -40,7 +41,9 @@ def test_kqfmt_predicates(t : T?) {
         t |> success(kq_sb(KqFmt.k3), "k3 is superblock")
         t |> success(kq_sb(int(KqFmt.k3)), "the int-id predicate agrees for k3")
         t |> success(kq_sb(KqFmt.iq3s), "iq3s is superblock")
+        t |> success(kq_sb(KqFmt.iq3xxs), "iq3xxs is superblock")
         t |> success(kq_sb(int(KqFmt.iq3s)), "the int-id predicate agrees for iq3s")
+        t |> success(kq_sb(int(KqFmt.iq3xxs)), "the int-id predicate agrees for iq3xxs")
     }
 }
 
@@ -62,7 +65,9 @@ def test_kqfmt_strides(t : T?) {
         t |> equal(kq_qsb(KqFmt.k3), 96l)     // 64 qs + 32 hmask, verbatim
         t |> equal(kq_ssb(KqFmt.k3), 18l)     // the k6 row: 16 int8 sub-scales + f16 d
         t |> equal(kq_qsb(KqFmt.iq3s), 104l)  // [64 qs][8 qh][32 signs], verbatim
+        t |> equal(kq_qsb(KqFmt.iq3xxs), 96l)  // [64 qs][32 aux], verbatim
         t |> equal(kq_ssb(KqFmt.iq3s), 20l)   // the k4 row: f16 d + 8 int8 (1 + 2s)
+        t |> equal(kq_ssb(KqFmt.iq3xxs), 20l) // the same row: f16 d halved + 8 x (2ls + 1)
     }
     t |> run("named constants agree with the literals") @(t : T?) {
         t |> equal(K4_QSB, 128l)
@@ -114,9 +119,10 @@ def test_kqfmt_id_bridge(t : T?) {
         t |> equal(kq_schema_id(KqFmt.iq4xs), 44)
         t |> equal(kq_schema_id(KqFmt.k3), 3)
         t |> equal(kq_schema_id(KqFmt.iq3s), 33)
+        t |> equal(kq_schema_id(KqFmt.iq3xxs), 34)
     }
     t |> run("gemm_schema's int-id forms delegate to the same truth") @(t : T?) {
-        for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s]) {
+        for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs]) {
             t |> equal(kq_qsb(kq_schema_id(f)), kq_qsb(f))
             t |> equal(kq_ssb(kq_schema_id(f)), kq_ssb(f))
         }
@@ -133,6 +139,7 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_elems(KqFmt.iq4xs), 256l)
         t |> equal(kq_elems(KqFmt.k3), 256l)
         t |> equal(kq_elems(KqFmt.iq3s), 256l)
+        t |> equal(kq_elems(KqFmt.iq3xxs), 256l)
         t |> equal(kq_elems(KqFmt.q8), 32l)
         t |> equal(kq_elems(KqFmt.q51), 32l)
     }
@@ -146,5 +153,35 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_stream_code(KqFmt.iq4xs), 44)
         t |> equal(kq_stream_code(KqFmt.k3), 3)
         t |> equal(kq_stream_code(KqFmt.iq3s), 33)
+        t |> equal(kq_stream_code(KqFmt.iq3xxs), 34)
+    }
+}
+
+[test]
+def test_iq3xxs_tables(t : T?) {
+    t |> run("the halved IQ3_XXS grid, ksigns and the f16 halver hold their contracts") @(t : T?) {
+        let lut = iq3xxs_grid()
+        for (i in range(256)) {
+            t |> equal(IQ3XXS_GRID[i], lut[i])
+            for (b in range(4)) {
+                let v = int((lut[i] >> uint(8 * b)) & 0xFFu)
+                // ggml levels 4..62 halved: even 2..30 plus 31 (the 62 top level)
+                t |> success(v == 31 || (v >= 2 && v <= 30 && v % 2 == 0), "halved grid byte in range")
+            }
+        }
+        let ks = ksigns_iq2xs()
+        for (i in range(128)) {
+            t |> equal(int(KSIGNS_IQ2XS[i]), int(ks[i]))
+            var parity = 0
+            for (b in range(7)) {
+                parity ^= (i >> b) & 1
+            }
+            t |> equal(int(ks[i]), i | (parity << 7))   // bit 7 = even parity of the 7-bit index
+        }
+        // exact halving: a normal f16 halves by exponent decrement (0x3400 = 0.25 -> 0x3000 =
+        // 0.125), the sign rides along, and the exp==1 edge shifts into the subnormal space
+        t |> equal(f16_half_bits(0x3400u), 0x3000u)
+        t |> equal(f16_half_bits(0xB400u), 0xB000u)
+        t |> equal(f16_half_bits(0x0400u), 0x0200u)
     }
 }

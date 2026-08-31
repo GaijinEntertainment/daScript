@@ -417,6 +417,37 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    per encoder, best-of-3 encoders, GB/s off plane bytes) resolves 3% in seconds.
 ## Per-format notes
 
+23. **Census the vehicle GGUF before committing to it.** An ftype is a MIX: the natural
+   "IQ3_XXS" download (mradermacher i1) quantizes attn_k/q to IQ2_S - unsupported until the
+   iq2 tier - so the file cannot load end to end. `gguf_census.py` (scratch) reads the tensor
+   type table in seconds; pick a vehicle whose mix is {supported} + the new format only
+   (bartowski's Qwen2.5-1.5B IQ3_XS carries iq3_xxs with iq3_s/q4_K/q6_K siblings).
+### IQ3_XXS (2026-08-30)
+
+Shape: 256-superblock, 98B disk block - f16 d, 64 grid-index bytes (`iq3xxs_grid[256]`, one
+byte = FOUR magnitudes), 8 x aux32 per superblock (bits 0..27 = four 7-bit `ksigns_iq2xs`
+indices, bits 28..31 = the block scale ls; ggml folds w = 0.25 * d * (2ls+1) * grid * sign).
+The plane design removes the 0.25 EXACTLY: every ggml grid level is even (4..62), so our
+plane grid stores the bytes HALVED (2..31) and the transcode stores d halved
+(`f16_half_bits` - an exponent decrement, exact down to the subnormal edge) - the kernel
+fold is then iq3s's `d x strip x grid_byte` verbatim with strip = 2ls+1, and the smask sign
+trick still holds (it needs g != 0, not odd). Planes 96/20: quants = [qs][aux] verbatim
+(24 uniform grp columns), scale = the iq3s row. `ksigns_iq2xs` (bit 7 = even parity) ships
+in kqformat and is shared with the coming IQ2 family. Identity 34.
+
+The panel form is SHARED with iq3s: `unpack_iq3xxs_panel_grp` emits the same signed-byte
+panel, so `kq_grp_row_dot_b`, the tile ladders and the batch cell take `fmt == 33 || 34`
+conditions rather than new arms. Vehicle: `Qwen2.5-1.5B-Instruct-IQ3_XS` (bartowski - iq3_xxs
+on attn_k/q + parts of ffn, everything else already supported); the obvious
+mradermacher i1-IQ3_XXS 1B carries IQ2_S attn tensors and must WAIT for the iq2 tier -
+census the candidate GGUF first (QUIRK 23). Gates: `test_kqformat` 18/18 (tables, parity
+property, the halver edges), `test_kquant` 181 tests 0 failed with fmt 34 in every gate
+loop - and the tile gate's `packed` list wrongly held 33 (the iq3s tile reads the
+byte-expanded panel), a pre-existing red on x64 fixed in the same change. End to end
+(reference bodies - both generators decline until the emitter arc): coherent text, 22/64
+greedy ids vs llama.cpp's `simple_ids.exe` where the fork is a 0.12-logit near-tie whose
+top-2 IS our token (`simple_ids_margin`), gen 19 t/s. JIT emitter, Vulkan, Metal: pending.
+
 ### IQ3_S (the third format - and the first grid format, 2026-08-30)
 
 Shape: 256-superblock grid format - an 8-bit grid index plus a qh ninth bit selects

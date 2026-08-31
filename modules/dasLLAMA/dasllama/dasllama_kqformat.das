@@ -13,7 +13,7 @@ module dasllama_kqformat shared public
 require dasllama/dasllama_lint public
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
-//! k4/k5/k6/q40/iq4xs/k3/iq3s = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
+//! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
 //! planes. New members append — the int value is the device stack tag and the image plane id.
 enum KqFmt : uint8 {
     q8
@@ -25,15 +25,16 @@ enum KqFmt : uint8 {
     iq4xs
     k3
     iq3s
+    iq3xxs
 }
 
 //! The superblock-lattice formats (Q8_K-form activations, % 256 rows, repack + stamped kq
 //! kernels). q51 deliberately fails this: it rides per-32 planes with Q8_0-form activations —
 //! a `fmt != KqFmt.q8` test does not imply the kq lattice; branch on kq_sb where it does.
-def kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s
+def kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs
 
 //! The same predicate over the int id space the GPU drivers carry per stack/plane.
-def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.k3) || fmt == int(KqFmt.iq3s)
+def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.k3) || fmt == int(KqFmt.iq3s) || fmt == int(KqFmt.iq3xxs)
 
 //! KqFmt -> the kernel/IR format id space — the ONE bridge between the enum and the int ids the
 //! generated kernels take as runtime params. Mnemonic ids: a K-quant is its bit width (3/4/5/6),
@@ -60,6 +61,9 @@ def kq_schema_id(f : KqFmt) : int {
     if (f == KqFmt.iq3s) {
         return 33
     }
+    if (f == KqFmt.iq3xxs) {
+        return 34
+    }
     panic("kq_schema_id: not a kq superblock format")
     return 0
 }
@@ -82,6 +86,8 @@ let K3_QSB = 96l    // Q3_K quant plane: 64 qs bytes (four 2-bit lanes each) + 3
 let K3_SSB = 18l    // Q3_K scale plane: 16 x int8 (6-bit scale - 32, decoded at transcode) + f16 d — the k6 row
 let IQ3S_QSB = 104l   // IQ3_S quant plane: [64 grid-index qs][8 qh ninth bits][32 sign bytes], verbatim disk order
 let IQ3S_SSB = 20l    // IQ3_S scale plane: f16 d, 2 pad, 8 x int8 (1 + 2s), 8 pad — the iq4xs/k4 row shape
+let IQ3XXS_QSB = 96l  // IQ3_XXS quant plane: [64 grid-index qs][32 aux bytes: per block 4x7-bit sign indices + 4-bit scale], verbatim disk order
+let IQ3XXS_SSB = 20l  // IQ3_XXS scale plane: f16 d HALVED, 2 pad, 8 x uint8 (2*ls + 1), 8 pad — the iq3s row shape and fold (ggml's global 0.25 = the halved d x the halved grid)
 
 //! The IQ4_NL / IQ4_XS nibble codebook: weight = scale x IQ4NL_LUT[nibble] (ggml's kvalues_iq4nl).
 //! Main-context use only (tests, oracles, the emitter's constant bake): a kernel that can run on a
@@ -167,6 +173,78 @@ def iq3s_grid() : uint[512] {
 //! a module global as zeros; kernels take `iq3s_grid()` instead.
 let IQ3S_GRID = iq3s_grid()
 
+//! The IQ3_XXS grid, every byte HALVED (ggml levels are even, 4..62 -> 2..31): one qs byte =
+//! FOUR magnitudes; the halved grid + halved stored d absorb ggml's 0.25 exactly, so the fold
+//! is iq3s's d x strip x byte. Per-call local (1 KB) - the worker-safe form kernels read.
+def iq3xxs_grid() : uint[256] {
+    return fixed_array<uint>(
+        0x02020202u, 0x0202020au, 0x02020212u, 0x02020606u, 0x0202060eu, 0x0202061fu, 0x02020a02u, 0x02020a0au,
+        0x02020e06u, 0x0202120au, 0x02021f0eu, 0x02021f16u, 0x02060206u, 0x0206020eu, 0x02060602u, 0x0206060au,
+        0x02060a06u, 0x02060a16u, 0x02060e02u, 0x02060e0au, 0x02061206u, 0x02061612u, 0x02061f02u, 0x020a0202u,
+        0x020a020au, 0x020a0212u, 0x020a0606u, 0x020a0a02u, 0x020a0a0au, 0x020a0e06u, 0x020a0e0eu, 0x020a0e1fu,
+        0x020a1606u, 0x020a161fu, 0x020a1f16u, 0x020e0206u, 0x020e021fu, 0x020e0602u, 0x020e060au, 0x020e0a16u,
+        0x020e1f02u, 0x0212060eu, 0x02120e1fu, 0x02121212u, 0x0212161fu, 0x02121f0eu, 0x02121f16u, 0x02160206u,
+        0x0216021fu, 0x02160e0au, 0x0216160au, 0x021a0e16u, 0x021a1a12u, 0x021f0602u, 0x021f0612u, 0x021f061au,
+        0x021f120eu, 0x021f1a06u, 0x06020206u, 0x0602020eu, 0x06020602u, 0x0602060au, 0x06020a06u, 0x06020a0eu,
+        0x06020e02u, 0x06020e0au, 0x06020e12u, 0x0602121fu, 0x06021602u, 0x06060202u, 0x0606020au, 0x06060606u,
+        0x06060a02u, 0x06060a0au, 0x060a0206u, 0x060a020eu, 0x060a0602u, 0x060a060au, 0x060a0a06u, 0x060a0e02u,
+        0x060a1f0au, 0x060e0202u, 0x060e020au, 0x060e0a02u, 0x060e0e06u, 0x060e121au, 0x060e1a1au, 0x06120206u,
+        0x06120216u, 0x06121602u, 0x06160a02u, 0x06160a12u, 0x0616121au, 0x06161f06u, 0x061a0216u, 0x061f0a0au,
+        0x061f1202u, 0x0a020202u, 0x0a02020au, 0x0a020606u, 0x0a02060eu, 0x0a020a02u, 0x0a020a0au, 0x0a020a1au,
+        0x0a020e06u, 0x0a02120au, 0x0a060206u, 0x0a06020eu, 0x0a060216u, 0x0a060602u, 0x0a06060au, 0x0a060a06u,
+        0x0a060e02u, 0x0a061a0eu, 0x0a061a1fu, 0x0a061f02u, 0x0a0a0202u, 0x0a0a020au, 0x0a0a0606u, 0x0a0a061fu,
+        0x0a0a0a02u, 0x0a0a0a0au, 0x0a0a0e1fu, 0x0a0a1202u, 0x0a0a1616u, 0x0a0e0206u, 0x0a0e0602u, 0x0a0e0612u,
+        0x0a0e1f02u, 0x0a0e1f12u, 0x0a120e16u, 0x0a12160eu, 0x0a16020eu, 0x0a160a1fu, 0x0a161206u, 0x0a161f12u,
+        0x0a1f0206u, 0x0a1f020eu, 0x0a1f061au, 0x0a1f1216u, 0x0e020206u, 0x0e020602u, 0x0e02060au, 0x0e020a06u,
+        0x0e020a0eu, 0x0e021602u, 0x0e021a16u, 0x0e021f0au, 0x0e060202u, 0x0e06020au, 0x0e060a02u, 0x0e060e06u,
+        0x0e061212u, 0x0e06121au, 0x0e0a0206u, 0x0e0a020eu, 0x0e0a0602u, 0x0e0a0a16u, 0x0e0a160au, 0x0e0a1f0au,
+        0x0e0e0606u, 0x0e0e0e0eu, 0x0e120e02u, 0x0e12121fu, 0x0e121f0au, 0x0e160202u, 0x0e16021au, 0x0e160a0au,
+        0x0e161616u, 0x0e1a0612u, 0x0e1a0e1au, 0x0e1a1a0eu, 0x0e1f0e0eu, 0x0e1f1a02u, 0x12020212u, 0x1202061fu,
+        0x12020e16u, 0x12020e1fu, 0x1202160eu, 0x1202161fu, 0x12061f12u, 0x120a0a02u, 0x120a0e1fu, 0x120a1202u,
+        0x120a1a02u, 0x120a1a1au, 0x120e021fu, 0x120e1216u, 0x12120212u, 0x12121606u, 0x12121a12u, 0x12160a16u,
+        0x1216120eu, 0x12161f02u, 0x121f0216u, 0x121f0602u, 0x121f060au, 0x121f0e02u, 0x1602060au, 0x16021206u,
+        0x16021f02u, 0x16060202u, 0x1606021au, 0x16060a1au, 0x16061616u, 0x160a0612u, 0x160a0e0au, 0x160a1f0au,
+        0x160e020au, 0x160e160eu, 0x16120602u, 0x16120a0eu, 0x16120a1fu, 0x16121f0au, 0x1616020au, 0x16160e06u,
+        0x161a1602u, 0x161f0a12u, 0x161f120au, 0x1a020a12u, 0x1a021212u, 0x1a02121au, 0x1a021a12u, 0x1a060a06u,
+        0x1a061a06u, 0x1a0a061fu, 0x1a0a1a12u, 0x1a0e0e02u, 0x1a0e0e1au, 0x1a121212u, 0x1a160216u, 0x1a16160au,
+        0x1a1a0e0eu, 0x1a1f020eu, 0x1a1f0a06u, 0x1f02020eu, 0x1f020216u, 0x1f02021fu, 0x1f020602u, 0x1f020e0au,
+        0x1f02160au, 0x1f060a1au, 0x1f061202u, 0x1f0a060au, 0x1f0a1216u, 0x1f0a160au, 0x1f0e0202u, 0x1f0e0616u,
+        0x1f0e0e0eu, 0x1f0e1a02u, 0x1f120a06u, 0x1f121206u, 0x1f160202u, 0x1f16020au, 0x1f160a12u, 0x1f1a0e02u)
+}
+
+//! Main-context copy of the halved IQ3_XXS grid (tests, oracles, emitter bakes).
+let IQ3XXS_GRID = iq3xxs_grid()
+
+//! ggml's ksigns_iq2xs: 7-bit sign index -> 8 sign bits (bit 7 = even parity). Shared by the
+//! IQ3_XXS and IQ2 families. Per-call local - the worker-safe form.
+def ksigns_iq2xs() : uint8[128] {
+    return fixed_array<uint8>(
+        0x00, 0x81, 0x82, 0x03, 0x84, 0x05, 0x06, 0x87, 0x88, 0x09, 0x0a, 0x8b, 0x0c, 0x8d, 0x8e, 0x0f,
+        0x90, 0x11, 0x12, 0x93, 0x14, 0x95, 0x96, 0x17, 0x18, 0x99, 0x9a, 0x1b, 0x9c, 0x1d, 0x1e, 0x9f,
+        0xa0, 0x21, 0x22, 0xa3, 0x24, 0xa5, 0xa6, 0x27, 0x28, 0xa9, 0xaa, 0x2b, 0xac, 0x2d, 0x2e, 0xaf,
+        0x30, 0xb1, 0xb2, 0x33, 0xb4, 0x35, 0x36, 0xb7, 0xb8, 0x39, 0x3a, 0xbb, 0x3c, 0xbd, 0xbe, 0x3f,
+        0xc0, 0x41, 0x42, 0xc3, 0x44, 0xc5, 0xc6, 0x47, 0x48, 0xc9, 0xca, 0x4b, 0xcc, 0x4d, 0x4e, 0xcf,
+        0x50, 0xd1, 0xd2, 0x53, 0xd4, 0x55, 0x56, 0xd7, 0xd8, 0x59, 0x5a, 0xdb, 0x5c, 0xdd, 0xde, 0x5f,
+        0x60, 0xe1, 0xe2, 0x63, 0xe4, 0x65, 0x66, 0xe7, 0xe8, 0x69, 0x6a, 0xeb, 0x6c, 0xed, 0xee, 0x6f,
+        0xf0, 0x71, 0x72, 0xf3, 0x74, 0xf5, 0xf6, 0x77, 0x78, 0xf9, 0xfa, 0x7b, 0xfc, 0x7d, 0x7e, 0xff)
+}
+
+//! Main-context copy of ksigns_iq2xs.
+let KSIGNS_IQ2XS = ksigns_iq2xs()
+
+//! Halve an f16 bit pattern exactly (exponent decrement; subnormal results truncate-halve).
+//! The IQ3_XXS transcode folds ggml's 0.25 into the stored d (one half) and the grid (the other).
+def f16_half_bits(u : uint) : uint {
+    let e = (u >> 10u) & 0x1Fu
+    if (e >= 2u) {
+        return u - 0x400u
+    }
+    if (e == 1u) {
+        return (u & 0x8000u) | ((0x400u | (u & 0x3FFu)) >> 1u)
+    }
+    return (u & 0x8000u) | ((u & 0x3FFu) >> 1u)
+}
+
 //! Quant-plane bytes per stride unit — the typed stride surface. The stride unit is one
 //! 256-weight superblock for the kq lattice and one 32-weight block for q51 (see kq_elems).
 //! q8 panics (its planes are byte-per-elem, not stride-walked here).
@@ -189,13 +267,16 @@ def kq_qsb(f : KqFmt) : int64 {
     if (f == KqFmt.iq3s) {
         return IQ3S_QSB
     }
+    if (f == KqFmt.iq3xxs) {
+        return IQ3XXS_QSB
+    }
     panic("kq_qsb: no plane stride for this format")
     return 0l
 }
 
 //! Scale-plane bytes per stride unit (see kq_qsb for the unit).
 def kq_ssb(f : KqFmt) : int64 {
-    if (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.iq4xs || f == KqFmt.iq3s) {
+    if (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs) {
         return K4_SSB
     }
     if (f == KqFmt.k6 || f == KqFmt.k3) {

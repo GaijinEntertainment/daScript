@@ -716,6 +716,51 @@ def dequant_k3_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : arra
 //! Transcode one IQ3_S superblock (110 bytes at `bo`: f16 d, 64 qs, 8 qh, 32 signs, 4 packed
 //! 4-bit scales) into the iq3s planes: [qs][qh][signs] verbatim to kq[kqo..+104), the 8
 //! sub-scales DECODED to int8 (1 + 2s) + the f16 d to ks[kso..+20) — the k4 row shape (exact).
+def transcode_iq3xxs_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    for (i in range64(96l)) {
+        kq[kqo + i] = bytes[bo + 2l + i]
+    }
+    let dh = f16_half_bits(uint(bytes[bo]) | (uint(bytes[bo + 1l]) << 8u))
+    ks[kso] = uint8(dh & 0xFFu)
+    ks[kso + 1l] = uint8(dh >> 8u)
+    ks[kso + 2l] = uint8(0)
+    ks[kso + 3l] = uint8(0)
+    for (b in range64(8l)) {
+        ks[kso + 4l + b] = uint8(1 + 2 * (int(bytes[bo + 66l + b * 4l + 3l]) >> 4))
+    }
+    for (i in range64(12l, 20l)) {
+        ks[kso + i] = uint8(0)
+    }
+}
+
+//! Reference dequant of one iq3xxs-plane superblock: w = (d_halved * (2ls + 1)) * halved_grid
+//! byte * sign — ggml's 0.25 * d * (2ls+1) * grid * sign exactly (both halvings are lossless).
+//! Grid entry = one qs byte; sign byte = ksigns_iq2xs[(aux32 >> 7l) & 127], bit j (bit 7 = parity).
+def dequant_iq3xxs_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_iq3xxs_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `dso` names the f16 d halfword's byte offset independently of the
+//! 8-byte sub-scale strip at kso (the metal split form keeps them apart).
+def dequant_iq3xxs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, dso))
+    let grid = iq3xxs_grid()
+    let signs = ksigns_iq2xs()
+    for (b in range64(8l)) {
+        let db = d * float(int(ks[kso + b]))
+        let aux = uint(kq[kqo + 64l + b * 4l]) | (uint(kq[kqo + 64l + b * 4l + 1l]) << 8u) | (uint(kq[kqo + 64l + b * 4l + 2l]) << 16u) | (uint(kq[kqo + 64l + b * 4l + 3l]) << 24u)
+        for (l in range64(4l)) {
+            let sgn = int(signs[int((aux >> uint(7l * l)) & 127u)])
+            let g1 = grid[int(kq[kqo + b * 8l + 2l * l])]
+            let g2 = grid[int(kq[kqo + b * 8l + 2l * l + 1l])]
+            for (j in range64(4l)) {
+                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+            }
+        }
+    }
+}
+
 def transcode_iq3s_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
     for (i in range64(104l)) {
         kq[kqo + i] = bytes[bo + 2l + i]

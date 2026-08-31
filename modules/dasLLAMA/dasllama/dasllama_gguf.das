@@ -49,6 +49,7 @@ let GGML_TYPE_Q5_1 = 7
 let GGML_TYPE_Q8_0 = 8
 let GGML_TYPE_Q3_K = 11
 let GGML_TYPE_IQ3_S = 21
+let GGML_TYPE_IQ3_XXS = 18
 let GGML_TYPE_Q4_K = 12
 let GGML_TYPE_Q5_K = 13
 let GGML_TYPE_Q6_K = 14
@@ -819,6 +820,48 @@ def gguf_transcode_iq3s(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
                             row[i] = uint8(0)
                         }
                         bcopy(kqp + sb * IQ3S_QSB, src + 2l, 104l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+//! Transcode an IQ3_XXS tensor into the iq3xxs planes (strides 96/20, exact): qs+aux copy
+//! verbatim off the 98B disk block, the iq3s-shaped scale row carries d HALVED (f16_half_bits)
+//! and strips (2*ls + 1) — with the halved grid this absorbs ggml's 0.25 exactly.
+def gguf_transcode_iq3xxs(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_IQ3_XXS, "IQ3_XXS", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "iq3xxs quant plane", (eloff / 256l) * IQ3XXS_QSB, nb * IQ3XXS_QSB, long_length(kq))
+    guard_dst(name, "iq3xxs scale plane", (eloff / 256l) * IQ3XXS_SSB, nb * IQ3XXS_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 98l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * IQ3XXS_QSB])
+            var ksp = addr(ks[(eloff / 256l) * IQ3XXS_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 98l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 98l
+                        var row = ksp + sb * IQ3XXS_SSB
+                        let dh = f16_half_bits(uint(src[0]) | (uint(src[1]) << 8u))
+                        row[0] = uint8(dh & 0xFFu)
+                        row[1] = uint8(dh >> 8u)
+                        row[2] = uint8(0)
+                        row[3] = uint8(0)
+                        for (b in range64(8l)) {
+                            row[4l + b] = uint8(1 + 2 * (int(src[66l + b * 4l + 3l]) >> 4))
+                        }
+                        for (i in range64(12l, 20l)) {
+                            row[i] = uint8(0)
+                        }
+                        bcopy(kqp + sb * IQ3XXS_QSB, src + 2l, 96l)
                     }
                 }
             }

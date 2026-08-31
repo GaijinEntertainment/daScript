@@ -708,11 +708,54 @@ def k3_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp 
     }
 }
 
+[unused_argument(xbsp)]
+def dot_iq3xxs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+    var acc = 0.0
+    let grid = iq3xxs_grid()
+    let signs = ksigns_iq2xs()
+    unsafe {
+        for (sb in range64(n / 256l)) {
+            let kqo = sb * 96l
+            let kso = sb * 20l
+            let d = f16_to_f32(uint(ksrow[kso]) | (uint(ksrow[kso + 1l]) << 8u))
+            var isum = 0
+            for (blk in range64(8l)) {
+                let aux = uint(kqrow[kqo + 64l + blk * 4l]) | (uint(kqrow[kqo + 64l + blk * 4l + 1l]) << 8u) | (uint(kqrow[kqo + 64l + blk * 4l + 2l]) << 16u) | (uint(kqrow[kqo + 64l + blk * 4l + 3l]) << 24u)
+                let ab = (sb * 8l + blk) * 32l
+                var ib = 0
+                for (l in range64(4l)) {
+                    let sgn = int(signs[int((aux >> uint(7l * l)) & 127u)])
+                    let g1 = grid[int(kqrow[kqo + blk * 8l + 2l * l])]
+                    let g2 = grid[int(kqrow[kqo + blk * 8l + 2l * l + 1l])]
+                    for (j in range64(4l)) {
+                        let w1 = int((g1 >> uint(8l * j)) & 0xFFu)
+                        let w2 = int((g2 >> uint(8l * j)) & 0xFFu)
+                        ib += (((sgn >> int(j)) & 1) != 0 ? -w1 : w1) * int(xqp[ab + l * 8l + j])
+                        ib += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(xqp[ab + l * 8l + 4l + j])
+                    }
+                }
+                isum += int(ksrow[kso + 4l + blk]) * ib
+            }
+            acc += float(isum) * (d * xsp[sb])
+        }
+    }
+    return acc
+}
+
 def iq3s_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
     let nsb = n / 256l
     unsafe {
         for (i in range64(rb, re)) {
             yp[i] = dot_iq3s_q8(kqp + i * nsb * 104l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
+        }
+    }
+}
+
+def iq3xxs_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    let nsb = n / 256l
+    unsafe {
+        for (i in range64(rb, re)) {
+            yp[i] = dot_iq3xxs_q8(kqp + i * nsb * 96l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
         }
     }
 }
@@ -732,6 +775,8 @@ def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp :
             k3_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         } elif (fmt == 33) {
             iq3s_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
+        } elif (fmt == 34) {
+            iq3xxs_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         } else {
             k6_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         }
@@ -840,6 +885,40 @@ def private dequant_iq3s_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, 
     }
 }
 
+//! iq3xxs grp row dequant: 24 uniform 4-byte columns per superblock row ([qs][aux] in place),
+//! the iq3s scale interleave — w = (d_halved * (2ls + 1)) * halved_grid_byte * sign.
+def private dequant_iq3xxs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
+    let grid = iq3xxs_grid()
+    let signs = ksigns_iq2xs()
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 96l * mr
+            let sb = sbi * 20l * mr
+            let d = f16_to_f32(uint(ksg[sb + 2l * r]) | (uint(ksg[sb + 2l * r + 1l]) << 8u))
+            for (blk in range64(8l)) {
+                let db = d * float(int(ksg[sb + 4l * mr + blk * mr + r]))
+                var aux = 0u
+                for (t in range64(4l)) {
+                    let ap = 64l + blk * 4l + t
+                    aux |= uint(kqg[qb + ((ap / 4l) * mr + r) * 4l + ap % 4l]) << uint(8l * t)
+                }
+                for (l in range64(4l)) {
+                    let sgn = int(signs[int((aux >> uint(7l * l)) & 127u)])
+                    let q1p = blk * 8l + 2l * l
+                    let q2p = q1p + 1l
+                    let g1 = grid[int(kqg[qb + ((q1p / 4l) * mr + r) * 4l + q1p % 4l])]
+                    let g2 = grid[int(kqg[qb + ((q2p / 4l) * mr + r) * 4l + q2p % 4l])]
+                    let kb = sbi * 256l + blk * 32l + l * 8l
+                    for (j in range64(4l)) {
+                        dst[kb + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+                        dst[kb + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! Dequant one row off the grp<mr>-REPACKED K-quant planes (repack_k4/k5/k6_grp layout).
 //! kqg/ksg = row's GROUP plane base (group g = row/mr); r = row % mr.
 //! embed_row's kq_repacked path — per-token, so scalar is fine.
@@ -861,6 +940,10 @@ def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, m
     }
     if (fmt == 33l) {
         dequant_iq3s_row_grp(kqg, ksg, r, mr, nsb, dst)
+        return
+    }
+    if (fmt == 34l) {
+        dequant_iq3xxs_row_grp(kqg, ksg, r, mr, nsb, dst)
         return
     }
     unsafe {
@@ -963,6 +1046,8 @@ def matmul_kq_groupn(fmt : int; var y : array<float> | #; kq : array<uint8> | #;
                         myp[ii] = dot_k3q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     } elif (fmt == 33) {
                         myp[ii] = dot_iq3s_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
+                    } elif (fmt == 34) {
+                        myp[ii] = dot_iq3xxs_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     } else {
                         myp[ii] = dot_k6q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     }
