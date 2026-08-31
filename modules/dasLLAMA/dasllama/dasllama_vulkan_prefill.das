@@ -94,6 +94,9 @@ def private cm2_cls_ensure(fmt : int; tc : int64) : bool {
     if (fmt == int(KqFmt.iq2xs)) {
         return tc == 256l ? ensure_kq_batch_iq2xs_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq2xs_cm2m_cls() : ensure_kq_batch_iq2xs_cm2s_cls())
     }
+    if (fmt == int(KqFmt.iq2xxs)) {
+        return tc == 256l ? ensure_kq_batch_iq2xxs_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq2xxs_cm2m_cls() : ensure_kq_batch_iq2xxs_cm2s_cls())
+    }
     verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 ensure fell through for a kq format - a format the feed admits must own a tile arm")
     return tc == 256l ? ensure_q8_batch_cm2l_cls() : (tc == 128l ? ensure_q8_batch_cm2m_cls() : ensure_q8_batch_cm2s_cls())
 }
@@ -171,6 +174,12 @@ def private cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : i
             return set_kq_batch_iq2xs_cm2l_cls(bufs, sizes, gbits)
         }
         return tc == 128l ? set_kq_batch_iq2xs_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq2xs_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.iq2xxs)) {
+        if (tc == 256l) {
+            return set_kq_batch_iq2xxs_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_iq2xxs_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq2xxs_cm2s_cls(bufs, sizes, gbits)
     }
     verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 set fell through for a kq format - a format the feed admits must own a tile arm")
     if (tc == 256l) {
@@ -276,6 +285,14 @@ def private cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : Vk
             enc_kq_batch_iq2xs_cm2m_cls(raw, h, s, pc, groups)
         } else {
             enc_kq_batch_iq2xs_cm2s_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        if (tc == 256l) {
+            enc_kq_batch_iq2xxs_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_iq2xxs_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_iq2xxs_cm2s_cls(raw, h, s, pc, groups)
         }
     } elif (tc == 256l) {
         verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 enc fell through for a kq format - a format the feed admits must own a tile arm")

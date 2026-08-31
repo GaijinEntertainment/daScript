@@ -1754,6 +1754,7 @@ def vk_kq_schema_id(fmt : int) : int {
     if (fmt == 11) return 2
     if (fmt == 12) return 23
     if (fmt == 13) return 24
+    if (fmt == 14) return 25
     panic("vk_kq_schema_id: not a kq stack fmt")
     return 0
 }

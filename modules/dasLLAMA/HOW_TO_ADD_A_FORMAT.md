@@ -515,6 +515,23 @@ top-2 near-tie (das picks the oracle's #2 - the ARC'S TIGHTEST; stamped folds mo
 points, not the class). zen2 16t vs clean-cpu: pp512 519.0 vs 181.6 (2.86x), tg128 61.1 vs
 87.3 (0.70x - the grid-format decode tail class). Vulkan, Metal: pending.
 
+
+Phase C (Vulkan, 2026-08-31): the iq3xxs shell over the two-word u64 grid - `KqGemvIq2xxs`
+(2 KB `@workgroup uint[512]`, 8 words per thread; block b's grid word carries four BYTE
+indices, its aux32 the parity-derived ksigns via `ksign7`), `KqBatchIq2xxs : KqBatchIq4xs`
+(the per-32 strip plane and fma INHERIT - (2ls+1) strips stay under 128, so the base's
+signed extract reads them exactly), `Iq2xxsCm2T` / `VkIq2xxsBlk` (the 64B qs as 16-bit
+lanes) on a gated `IQ2XXSGRID` axis; schema 14 -> 25; thirteen-format family cells at
+stride 16. SIGN CONVENTION TRAP: the family's random-byte tests demand SIGNED per-32 strip
+reads EVERYWHERE (class, cm2 decode, float + f16 oracles alike) - an unsigned `& 0xFF` read
+agrees on real (2ls+1 < 128) strips but forks the hash-fill fixtures, and the mismatch
+surfaces one tier at a time (batch first, then cm2) as each side is aligned. Gates:
+test_vulkan_kernels 86/86, lint 0. E2e resident (DASLLAMA_GPU=1): the Vulkan stream is
+64/64 IDENTICAL to the stamped CPU stream - tier-bit-consistency; both carry only the
+step-3 0.0267 top-2 flip vs llama.cpp. 5060 Ti vs llama.cpp b10660 -ngl 99: pp512 14423.2
+vs 18572.5 (0.78x - above the 0.70x class), tg128 297.0 vs 421.4 (0.70x - the grid-gemv
+re-stage at 2 KB, milder than iq2xs's 4 KB; followup_vulkan #35). Metal: pending.
+
 ### IQ2_XS Phase A (CPU, 2026-08-31) - the ksigns u64 tier
 
 Shape: 256-superblock grid format - each of the 32 u16 qs words carries a 9-bit index into

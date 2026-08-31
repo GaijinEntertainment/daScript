@@ -2540,6 +2540,77 @@ def private iq3s_grid_word(i : int) : uint {
     return tbl[i]
 }
 
+// ggml's iq2xxs_grid as low/high word pairs - 256 u64 entries, one uint word per call (word
+// 2i = magnitudes 0..3 of entry i, word 2i+1 = 4..7); staged into workgroup memory per kernel.
+def private iq2xxs_grid_word(i : int) : uint {
+    let tbl = fixed_array<uint>(
+        0x08080808, 0x08080808, 0x0808082b, 0x08080808, 0x08081919, 0x08080808, 0x08082b08, 0x08080808,
+        0x08082b2b, 0x08080808, 0x08190819, 0x08080808, 0x08191908, 0x08080808, 0x082b0808, 0x08080808,
+        0x082b082b, 0x08080808, 0x082b2b08, 0x08080808, 0x082b2b2b, 0x08080808, 0x19080819, 0x08080808,
+        0x19081908, 0x08080808, 0x19190808, 0x08080808, 0x19192b08, 0x08080808, 0x192b0819, 0x08080808,
+        0x192b1908, 0x08080808, 0x2b080808, 0x08080808, 0x2b08082b, 0x08080808, 0x2b082b2b, 0x08080808,
+        0x2b2b082b, 0x08080808, 0x08080819, 0x08080819, 0x08081908, 0x08080819, 0x08190808, 0x08080819,
+        0x08191919, 0x08080819, 0x19080808, 0x08080819, 0x2b081908, 0x08080819, 0x2b192b08, 0x08080819,
+        0x08080808, 0x0808082b, 0x0808082b, 0x0808082b, 0x082b082b, 0x0808082b, 0x2b08082b, 0x0808082b,
+        0x08080819, 0x08081908, 0x08081908, 0x08081908, 0x08190808, 0x08081908, 0x082b0819, 0x08081908,
+        0x082b1908, 0x08081908, 0x19080808, 0x08081908, 0x1908082b, 0x08081908, 0x19082b08, 0x08081908,
+        0x192b0808, 0x08081908, 0x2b080819, 0x08081908, 0x2b081908, 0x08081908, 0x2b190808, 0x08081908,
+        0x2b2b1908, 0x08081908, 0x08080808, 0x08081919, 0x0808082b, 0x08081919, 0x08082b08, 0x08081919,
+        0x082b0808, 0x08081919, 0x1908192b, 0x08081919, 0x192b2b19, 0x08081919, 0x2b080808, 0x08081919,
+        0x2b190819, 0x08081919, 0x08082b19, 0x0808192b, 0x08190808, 0x0808192b, 0x19080808, 0x0808192b,
+        0x2b081908, 0x0808192b, 0x2b2b1908, 0x0808192b, 0x08080808, 0x08082b08, 0x08081919, 0x08082b08,
+        0x08082b08, 0x08082b08, 0x08191908, 0x08082b08, 0x082b2b08, 0x08082b08, 0x19080819, 0x08082b08,
+        0x19081908, 0x08082b08, 0x19190808, 0x08082b08, 0x1919082b, 0x08082b08, 0x2b082b08, 0x08082b08,
+        0x08081908, 0x08082b19, 0x19080808, 0x08082b19, 0x0808082b, 0x08082b2b, 0x08191908, 0x08082b2b,
+        0x08080819, 0x08190808, 0x08081908, 0x08190808, 0x08190808, 0x08190808, 0x082b0819, 0x08190808,
+        0x19080808, 0x08190808, 0x192b0808, 0x08190808, 0x2b081908, 0x08190808, 0x2b190808, 0x08190808,
+        0x2b191919, 0x08190808, 0x08080808, 0x08190819, 0x08082b08, 0x08190819, 0x082b0808, 0x08190819,
+        0x19190808, 0x08190819, 0x19192b2b, 0x08190819, 0x2b080808, 0x08190819, 0x082b1908, 0x0819082b,
+        0x19081919, 0x0819082b, 0x08080808, 0x08191908, 0x08082b08, 0x08191908, 0x082b0808, 0x08191908,
+        0x082b1919, 0x08191908, 0x19082b19, 0x08191908, 0x2b080808, 0x08191908, 0x08192b08, 0x08191919,
+        0x192b082b, 0x08191919, 0x08080808, 0x0819192b, 0x0819192b, 0x0819192b, 0x08080819, 0x08192b08,
+        0x08081908, 0x08192b08, 0x08190808, 0x08192b08, 0x19080808, 0x08192b08, 0x2b080819, 0x08192b08,
+        0x08080808, 0x08192b19, 0x08081919, 0x08192b19, 0x2b2b0808, 0x08192b19, 0x19190819, 0x08192b2b,
+        0x08080808, 0x082b0808, 0x0808082b, 0x082b0808, 0x08082b2b, 0x082b0808, 0x19081908, 0x082b0808,
+        0x192b0819, 0x082b0808, 0x2b080808, 0x082b0808, 0x2b08082b, 0x082b0808, 0x082b2b19, 0x082b0819,
+        0x19082b08, 0x082b0819, 0x08080808, 0x082b082b, 0x0808082b, 0x082b082b, 0x08080819, 0x082b1908,
+        0x08081908, 0x082b1908, 0x08190808, 0x082b1908, 0x19080808, 0x082b1908, 0x1919192b, 0x082b1908,
+        0x08080808, 0x082b1919, 0x19080819, 0x082b1919, 0x192b1908, 0x082b1919, 0x2b190808, 0x082b192b,
+        0x08082b08, 0x082b2b08, 0x082b0808, 0x082b2b08, 0x2b191908, 0x082b2b08, 0x19081908, 0x082b2b2b,
+        0x08080819, 0x19080808, 0x08081908, 0x19080808, 0x08190808, 0x19080808, 0x08192b08, 0x19080808,
+        0x082b0819, 0x19080808, 0x082b1908, 0x19080808, 0x19080808, 0x19080808, 0x19082b08, 0x19080808,
+        0x1919192b, 0x19080808, 0x192b0808, 0x19080808, 0x2b080819, 0x19080808, 0x2b081908, 0x19080808,
+        0x2b190808, 0x19080808, 0x08080808, 0x19080819, 0x082b0808, 0x19080819, 0x192b0819, 0x19080819,
+        0x2b080808, 0x19080819, 0x2b081919, 0x19080819, 0x08080819, 0x1908082b, 0x08190808, 0x1908082b,
+        0x19082b08, 0x1908082b, 0x1919192b, 0x1908082b, 0x192b2b08, 0x1908082b, 0x08080808, 0x19081908,
+        0x08082b08, 0x19081908, 0x082b0808, 0x19081908, 0x2b080808, 0x19081908, 0x2b192b19, 0x19081908,
+        0x0819082b, 0x19081919, 0x082b1908, 0x19081919, 0x08080808, 0x1908192b, 0x08080819, 0x19082b08,
+        0x08081908, 0x19082b08, 0x08190808, 0x19082b08, 0x19080808, 0x19082b08, 0x19081919, 0x19082b08,
+        0x08080808, 0x19082b19, 0x19192b08, 0x19082b19, 0x192b0819, 0x19082b19, 0x2b08082b, 0x19082b19,
+        0x19081919, 0x19082b2b, 0x2b190808, 0x19082b2b, 0x08080808, 0x19190808, 0x08082b08, 0x19190808,
+        0x08190819, 0x19190808, 0x08192b19, 0x19190808, 0x082b0808, 0x19190808, 0x2b080808, 0x19190808,
+        0x2b082b08, 0x19190808, 0x08081908, 0x19190819, 0x1908082b, 0x19190819, 0x2b2b1908, 0x19190819,
+        0x2b190819, 0x1919082b, 0x2b190808, 0x19191908, 0x2b19082b, 0x19191908, 0x08082b2b, 0x19191919,
+        0x08080819, 0x1919192b, 0x19191908, 0x1919192b, 0x08080808, 0x19192b08, 0x08190819, 0x19192b08,
+        0x08192b19, 0x19192b08, 0x192b1908, 0x19192b08, 0x19080808, 0x19192b19, 0x08082b08, 0x19192b2b,
+        0x08081908, 0x192b0808, 0x08190808, 0x192b0808, 0x19080808, 0x192b0808, 0x192b2b08, 0x192b0808,
+        0x08080808, 0x192b0819, 0x19191919, 0x192b0819, 0x08192b08, 0x192b082b, 0x192b0808, 0x192b082b,
+        0x08080808, 0x192b1908, 0x08081919, 0x192b1908, 0x08190808, 0x192b1919, 0x0819082b, 0x192b1919,
+        0x2b081908, 0x192b1919, 0x1908082b, 0x192b2b08, 0x08080808, 0x2b080808, 0x0808082b, 0x2b080808,
+        0x08082b2b, 0x2b080808, 0x19080819, 0x2b080808, 0x2b08082b, 0x2b080808, 0x08081908, 0x2b080819,
+        0x08192b08, 0x2b080819, 0x19080808, 0x2b080819, 0x08190819, 0x2b08082b, 0x08080819, 0x2b081908,
+        0x08081908, 0x2b081908, 0x08190808, 0x2b081908, 0x08191919, 0x2b081908, 0x19080808, 0x2b081908,
+        0x192b0808, 0x2b081908, 0x08080808, 0x2b081919, 0x1908192b, 0x2b081919, 0x2b191908, 0x2b081919,
+        0x08082b19, 0x2b08192b, 0x19080808, 0x2b08192b, 0x192b0808, 0x2b08192b, 0x0808082b, 0x2b082b08,
+        0x08081908, 0x2b082b19, 0x08190819, 0x2b082b2b, 0x08081908, 0x2b190808, 0x08190808, 0x2b190808,
+        0x082b1908, 0x2b190808, 0x19080808, 0x2b190808, 0x2b2b0819, 0x2b190808, 0x0819192b, 0x2b190819,
+        0x2b080808, 0x2b190819, 0x19081919, 0x2b19082b, 0x08080808, 0x2b191908, 0x082b082b, 0x2b191908,
+        0x19081908, 0x2b191908, 0x19190819, 0x2b191919, 0x2b080819, 0x2b192b08, 0x082b0808, 0x2b192b19,
+        0x0808082b, 0x2b2b0808, 0x19190808, 0x2b2b0808, 0x2b081919, 0x2b2b0808, 0x08082b19, 0x2b2b0819,
+        0x08080808, 0x2b2b082b, 0x08192b08, 0x2b2b1908, 0x19190808, 0x2b2b2b08, 0x08081908, 0x2b2b2b19)
+    return tbl[i]
+}
+
 // ggml's iq2xs_grid as low/high word pairs - 512 u64 entries, one uint word per call (word
 // 2i = magnitudes 0..3 of entry i, word 2i+1 = 4..7); staged into workgroup memory per kernel.
 def private iq2xs_grid_word(i : int) : uint {   // nolint:STYLE038 - a 1024-word data table, not splittable
@@ -3357,6 +3428,51 @@ class KqBatchIq3xxs : KqBatchIq4xs {
         let tid = gl_LocalInvocationID.x
         gridw[tid] = iq3xxs_grid_word(int(tid))
         barrier()   // the grid visible before the first stage_w
+        tile_shell()
+    }
+}
+
+// IQ2_XXS tile: the iq3xxs shell over the two-word u64 grid - block b's grid word (column 2b)
+// carries four BYTE indices, its aux32 (column 2b+1) the parity-derived ksigns; the per-32
+// strip plane and fma inherit from KqBatchIq4xs (the (2ls+1) strips read exactly under the
+// signed extract, staying below 128).
+[vk_dispatch(name = "kq_batch_iq2xxs_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchIq2xxs : KqBatchIq4xs {
+    @workgroup gridw : uint[512]
+
+    def iq3s_signed(g, nib : uint) : uint {
+        let m1 = (nib * 0x00204081u) & 0x01010101u
+        let mask = m1 * 255u
+        return (g ^ mask) + m1
+    }
+
+    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
+        for (ki in range(2)) {
+            let k = word + uint(ki) * 8u
+            let bu = k / 2u
+            let hh = k % 2u
+            var wv = uint4(0u)
+            if (wcol < pa.d) {
+                let wsb = wsb0 + wcol * nsb + s
+                let gw = wq[wsb * 16u + bu * 2u]
+                let aux = wq[wsb * 16u + bu * 2u + 1u]
+                let b0 = (gw >> (16u * hh)) & 255u
+                let b1 = (gw >> (16u * hh + 8u)) & 255u
+                let sg0 = ksign7((aux >> (14u * hh)) & 127u)
+                let sg1 = ksign7((aux >> (14u * hh + 7u)) & 127u)
+                wv = uint4(iq3s_signed(gridw[b0 * 2u], sg0 & 15u), iq3s_signed(gridw[b0 * 2u + 1u], sg0 >> 4u),
+                    iq3s_signed(gridw[b1 * 2u], sg1 & 15u), iq3s_signed(gridw[b1 * 2u + 1u], sg1 >> 4u))
+            }
+            ww4[grp * 17u + k] = wv
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_iq2xxs_cls_spv")]
+    def override run {
+        let tid = gl_LocalInvocationID.x
+        gridw[tid] = iq2xxs_grid_word(int(tid))
+        gridw[tid + 256u] = iq2xxs_grid_word(int(tid + 256u))
+        barrier()   // the iq2xxs grid visible before the first stage_w
         tile_shell()
     }
 }
@@ -4673,6 +4789,10 @@ struct VkIq2xsBlk {
     qs : int16[32]   // one IQ2_XS superblock's 32 u16 qs words as 16-bit lanes (9-bit grid index + 7-bit ksigns index each); scales (f16 d8 + 16 unsigned (1 + 2s) strips) live in ws
 }
 
+struct VkIq2xxsBlk {
+    qs : int16[32]   // one IQ2_XXS superblock's 64B qs as 16-bit lanes: per block 4 grid byte indices + its aux32 (4 x 7-bit ksigns + per-32 ls nibble); scales (f16 d8 + 8 unsigned (1 + 2s) strips) live in ws
+}
+
 // The cm2 tile: one class template over the two stamp axes. The token column BN - l 256, m 128,
 // s 32 (the expert-bucket geometry: STILE's fast path loads a partial column UNCLAMPED and clamps
 // only the store, so every plane it reads carries 32 rows of slack) - and the weight format: BLK
@@ -4700,6 +4820,8 @@ class template KqCm2BatchT : MoeCmBase {
     @workgroup @template_gate = IQ2SGRID iq2s_gridc : uint[2048]
     @template_constant IQ2XSGRID : bool = false           // stage the 4 KB iq2xs u64 grid into workgroup memory
     @workgroup @template_gate = IQ2XSGRID iq2xs_gridc : uint[1024]
+    @template_constant IQ2XXSGRID : bool = false          // stage the 2 KB iq2xxs u64 grid into workgroup memory
+    @workgroup @template_gate = IQ2XXSGRID iq2xxs_gridc : uint[512]
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE037,STYLE038 — the fast/edge path pair, barrier- and register-coupled
@@ -4755,6 +4877,12 @@ class template KqCm2BatchT : MoeCmBase {
             let g2x = gl_LocalInvocationID.x
             for (k in range(4)) {
                 iq2xs_gridc[g2x + uint(k) * 256u] = iq2xs_grid_word(int(g2x + uint(k) * 256u))
+            }
+        }
+        static_if (IQ2XXSGRID) {
+            let g2xx = gl_LocalInvocationID.x
+            for (k in range(2)) {
+                iq2xxs_gridc[g2xx + uint(k) * 256u] = iq2xxs_grid_word(int(g2xx + uint(k) * 256u))
             }
         }
         barrier()   // wg_blk0 (and the gated codebook) visible before the first decode load
@@ -5180,6 +5308,38 @@ class template Iq2xsCm2T : KqCm2BatchT {
     }
 }
 
+class template Iq2xxsCm2T : KqCm2BatchT {
+    typedef BLK = VkIq2xxsBlk
+    typedef ST = uint
+    override IQ2XXSGRID = true
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkIq2xxsBlk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let g = e >> 5u
+        let r = e & 31u
+        let l = r >> 3u
+        let j = r & 7u
+        let qi = g * 8u + l
+        let qb = uint(int(unpack8(blk.qs[int(qi >> 1u)])[int(qi & 1u)])) & 0xFFu
+        let bl = 7u * l
+        let a0i = g * 8u + 4u + (bl >> 3u)
+        let b0 = uint(int(unpack8(blk.qs[int(a0i >> 1u)])[int(a0i & 1u)])) & 0xFFu
+        let b1 = uint(int(unpack8(blk.qs[int((a0i + 1u) >> 1u)])[int((a0i + 1u) & 1u)])) & 0xFFu
+        let sidx = ((b0 | (b1 << 8u)) >> (bl & 7u)) & 127u
+        var tt = sidx ^ (sidx >> 4u)
+        tt = tt ^ (tt >> 2u)
+        tt = tt ^ (tt >> 1u)
+        let sgb = sidx | ((tt & 1u) << 7u)
+        let gw = iq2xxs_gridc[qb * 2u + (j >> 2u)]
+        let gb = float((gw >> ((j & 3u) * 8u)) & 0xFFu)
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let dv = unpackHalf2x16(ws[srow]).x
+        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        return float16(dv * float(sc) * (((sgb >> j) & 1u) != 0u ? -gb : gb))
+    }
+}
+
 // the stamps: the three width columns of each format (the dispatcher keys on (fmt, tc))
 [vk_dispatch(name = "q8_batch_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2LBatch : Q8Cm2T {
@@ -5524,6 +5684,33 @@ class Iq2xsCm2MBatch : Iq2xsCm2T {
 
 [vk_dispatch(name = "kq_batch_iq2xs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xsCm2SBatch : Iq2xsCm2T {
+    override BN = 32u
+    override STILE = true
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+    typedef FLO = tensorLayout2DPad
+}
+
+[vk_dispatch(name = "kq_batch_iq2xxs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2xxsCm2LBatch : Iq2xxsCm2T {
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq2xxs_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2xxsCm2MBatch : Iq2xxsCm2T {
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq2xxs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2xxsCm2SBatch : Iq2xxsCm2T {
     override BN = 32u
     override STILE = true
     typedef BT = coopmatWgB_f16_64x32
@@ -6113,6 +6300,8 @@ def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {
         return ensure_kq_batch_iq2s_cls()
     } elif (fmt == int(KqFmt.iq2xs)) {
         return ensure_kq_batch_iq2xs_cls()
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        return ensure_kq_batch_iq2xxs_cls()
     }
     panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     return false
@@ -6155,6 +6344,8 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
         enc_kq_batch_iq2s_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq2xs)) {
         enc_kq_batch_iq2xs_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        enc_kq_batch_iq2xxs_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     }
@@ -6191,6 +6382,8 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_kq_gemv_iq2s_cls()
     } elif (fmt == int(KqFmt.iq2xs)) {
         return ensure_kq_gemv_iq2xs_cls()
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        return ensure_kq_gemv_iq2xxs_cls()
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return false
@@ -6233,6 +6426,8 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_kq_gemv_iq2s_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq2xs)) {
         enc_kq_gemv_iq2xs_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        enc_kq_gemv_iq2xxs_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     }
@@ -6692,6 +6887,58 @@ class KqGemvIq2xs : KqGemvBase {
             gridw[idx] = iq2xs_grid_word(int(idx))
         }
         barrier()   // the iq2xs grid visible before the shell's block walk
+        gemv_shell()
+    }
+}
+
+// IQ2_XXS: the iq3xxs GEMV shell over the two-word u64 grid - block b's grid word carries
+// four BYTE indices (two staged words each), its aux32 the parity-derived ksigns; the per-32
+// (1 + 2s) strip under the eighth-ed d reads exactly through the shared signed extract.
+[vk_dispatch(name = "kq_gemv_iq2xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xxs : KqGemvBase {
+    @workgroup gridw : uint[512]
+
+    def iq3s_signed(g, nib : uint) : uint {
+        let m1 = (nib * 0x00204081u) & 0x01010101u
+        let mask = m1 * 255u
+        return (g ^ mask) + m1
+    }
+
+    def override blk_contrib(wsb, blk, xsb : uint) : float {
+        let gw = wq[wsb * 16u + blk * 2u]
+        let aux = wq[wsb * 16u + blk * 2u + 1u]
+        let xb4 = xsb * 16u + blk * 2u
+        let xl = xq4[xb4]
+        let xh = xq4[xb4 + 1u]
+        var isum = 0
+        for (h in range(2)) {
+            let hu = uint(h)
+            let b0 = (gw >> (16u * hu)) & 255u
+            let b1 = (gw >> (16u * hu + 8u)) & 255u
+            let sg0 = ksign7((aux >> (14u * hu)) & 127u)
+            let sg1 = ksign7((aux >> (14u * hu + 7u)) & 127u)
+            let w0 = iq3s_signed(gridw[b0 * 2u], sg0 & 15u)
+            let w1 = iq3s_signed(gridw[b0 * 2u + 1u], sg0 >> 4u)
+            let w2 = iq3s_signed(gridw[b1 * 2u], sg1 & 15u)
+            let w3 = iq3s_signed(gridw[b1 * 2u + 1u], sg1 >> 4u)
+            if (h == 0) {
+                isum += sdot4(w0, xl.x) + sdot4(w1, xl.y) + sdot4(w2, xl.z) + sdot4(w3, xl.w)
+            } else {
+                isum += sdot4(w0, xh.x) + sdot4(w1, xh.y) + sdot4(w2, xh.z) + sdot4(w3, xh.w)
+            }
+        }
+        let dd = unpackHalf2x16(wsu[wsb * 5u]).x
+        return axs[xsb] * dd * float(iq4_sc(wsu[wsb * 5u + 1u + blk / 4u], blk) * isum)
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xxs_cls_spv")]
+    def run {
+        let lid = gl_LocalInvocationID.x
+        for (k in range(8)) {
+            let idx = lid + uint(k) * 64u
+            gridw[idx] = iq2xxs_grid_word(int(idx))
+        }
+        barrier()   // the iq2xxs grid visible before the shell's block walk
         gemv_shell()
     }
 }
