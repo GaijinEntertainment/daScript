@@ -340,7 +340,7 @@ def private cov_tower_qwen3v(t : T?) {
 
 // the gemma4a row of cov_tower: one whole chunk from raw samples — GPU mel (twiddle-T DFT
 // GEMM + mag + filter + log), both subsample convs, and the 12-block Conformer chain
-[unused_argument(t)]   // off-Apple the gated body is empty
+[unused_argument(t, samples)]   // off-Apple the gated body is empty
 def private cov_tower_gemma4a(t : T?; samples : array<float>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let gpath = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
@@ -364,7 +364,7 @@ def private cov_tower_gemma4a(t : T?; samples : array<float>) {
 
 // the canary row of cov_tower: CPU mel, then the 32-block Metal FastConformer chain — the
 // bidirectional rel-pos XL attention and the centered-k9 depthwise kernels
-[unused_argument(t)]   // off-Apple the gated body is empty
+[unused_argument(t, samples)]   // off-Apple the gated body is empty
 def private cov_tower_canary(t : T?; samples : array<float>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let cnpath = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")

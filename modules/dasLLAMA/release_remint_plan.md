@@ -131,6 +131,14 @@ print shows the fast-tier-only pool, pp/tg spot-check against existing rows with
 
 ## Gate-phase evidence ledger (for the PR body)
 
+- **Preflight --full ran ONCE** (the make-pr chain; every other gate green first pass). Its
+  three reds, each fixed and validated with the TARGETED lane per policy: lint = LINT027
+  (module REVIEW.md hit 317 lines after the exchange-rule move - split into the routed
+  `REVIEW_EXCHANGE.md` companion, 294 left) + two off-Apple LINT012s
+  (`[unused_argument(t, samples)]`); tests-interp / tests-jit = the same three files
+  (jobque affinity, math_misc, crt_twins) erroring on missing builtins under the chained
+  full run only - solo-green with the same binary before the fix, both lanes PASS clean on
+  targeted rerun, so the failure was chained-load pressure, not code. CI validates the tip.
 - **TDD audit (worktree, tip 013a151f4)**: 47 branches - 19 CONTROLLED (all 14 restore
   guards via `check_exe_fn_global_restore` incl. a base-source reverse run reporting exactly
   the 14; the lens tgmem refusal via an inverted control; both fail-closed-sync arms; the two
