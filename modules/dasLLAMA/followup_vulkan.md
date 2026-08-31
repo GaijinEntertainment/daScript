@@ -544,3 +544,14 @@ module) is independent and can land any time - it is pure structure.
     schedule a dedicated pass at the END of the iquant-formats arc (after the last format
     lands), not per-format. Start from the followup 29-32 streamed-layer levers and a
     kernel-level probe of the cm2 tile vs llama.cpp's mul_mm_cm2 at matched shapes.
+
+35. **The grid-format GEMV workgroup re-stage is a fixed per-workgroup cost - amplified on
+    small models.** Every u64-grid gemv (iq2s 8 KB, iq2xs 4 KB) stages the codebook into
+    workgroup memory per 2-row workgroup, so tg pays a fixed latency the row length must
+    amortize. On the 3B i1 vehicle iq2s tg landed 0.81x llama.cpp (~350 GB/s effective);
+    the 1B IQ2_XS vehicle lands 0.54x (188.7 vs 349.9 t/s = ~84 GB/s effective - latency-
+    bound, while its cm2 pp512 sits at a healthy 0.77x). Levers, in likely order: persist
+    the staged grid across the row loop (one stage per SM residency, not per workgroup),
+    widen rows-per-workgroup for grid formats, or fold the grid into a device-buffer read
+    the L2 serves. Done = 1B-class grid-format tg within the k-format band on the same
+    vehicle.

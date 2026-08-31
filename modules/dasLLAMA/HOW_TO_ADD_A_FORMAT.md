@@ -510,6 +510,21 @@ first-ever full-match stream HOLDS under the stamped folds; gen 23 -> 54 t/s. ze
 clean-cpu: pp512 486.4 vs 174.8 (2.78x), tg128 59.4 vs 84.6 (0.70x - the ledgered
 grid-format CPU-decode tail, the iq2s class). Vulkan, Metal: pending.
 
+
+Phase C (Vulkan, 2026-08-31): the iq2s walk with ksigns-by-parity and NO extra planes - each
+u16 qs word carries its 9-bit grid index (TWO staged words out of a 4 KB `@workgroup
+uint[1024]`) and a 7-bit KSIGNS_IQ2XS index whose sign byte `ksign7` recomputes (the iq3xxs
+parity trick; no sign plane, no qh), the strips/d epilogue verbatim iq2s. `KqGemvIq2xs`,
+`KqBatchIq2xs : KqBatchK6` (stage_w gathers off `wq[wsb * 16u + k]` - the u32 word index IS
+k), `Iq2xsCm2T` over `VkIq2xsBlk` (the 32 u16 words as 16-bit lanes) on a new gated
+`IQ2XSGRID` axis; schema arm 13 -> 24; twelve-format family cells at stride 16 (uint4-ALIGNED,
+unlike iq3s/iq3xxs/iq2s); a parity-fold float witness + an iq2xsf16 cm2 oracle. Gates:
+test_vulkan_kernels 84/84 (the three iq2xs cm2 tiles 0-off at 89600 cells each), lint 0.
+E2e resident: parity ids 64/64 vs llama.cpp - the full-match stream holds on the THIRD tier.
+5060 Ti vs llama.cpp b10660 Vulkan -ngl 99: pp512 14023.3 vs 18320.0 (0.77x - above the
+0.70x tier class), tg128 188.7 vs 349.9 (0.54x - the grid-format gemv workgroup re-stage
+amplified on a 1B, followup_vulkan #35; pp healthy isolates it to the gemv). Metal: pending.
+
 ### IQ2_S Phase A (CPU, 2026-08-31) - the u64-grid tier
 
 Shape: 256-superblock grid format, the first with a u64 grid - a 10-bit index (qs byte |
