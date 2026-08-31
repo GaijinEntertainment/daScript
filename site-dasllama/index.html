@@ -69,13 +69,18 @@
 M5's GPU tensor units through the Metal 4 tensor API wherever the per-box tune races crown
 them, the vision towers and the speech-to-text encoders serve on the GPU, and the CPU lane
 learned the M5 Max's all-compute core layout - 6 "Super" plus 12 "Performance" cores, the
-pool spanning both tiers with decode parking the slower one.</p>
-<p>First official rows on an M5 Max (pp512 / tg128, Metal, llama-bench protocol):
-gemma-4-E2B Q8_0 - das 8692.8 / 161.7 tok/s, llama.cpp 7527.4 / 136.6; gpt-oss-20b -
-das 3989.4 / 163.2, llama.cpp 3475.3 / 147.5; Qwen3-30B-A3B - das 3506.8 / 165.2,
-llama.cpp 3425.5 / 136.4. The image turn rides the same rails - the gemma-4-12B image
-encode lands at 7.2 ms. Full rows for the box are on the
-<a href="https://daslang.io/dasllama.html">board</a>.</p>
+pool spanning both tiers with decode parking the slower one (the M1/M4 efficiency cores
+stay excluded, verified live on both boxes).</p>
+<p>The full M5 Max board is re-minted and on the <a href="https://daslang.io/dasllama.html">board</a>
+(pp512 / tg128, Metal, llama-bench protocol): gemma-4-E2B Q8_0 - das 9074.3 / 161.3
+tok/s, llama.cpp 7413.4 / 137.0; Qwen3.8-27B - das 913.9 / 27.8, llama.cpp 752.1 / 25.4;
+Qwen3-30B-A3B - das 3752.9 / 165.7, llama.cpp 3422.4 / 137.0; gpt-oss-20b - das 3995.1 /
+162.7, llama.cpp 3476.6 / 149.0. The other modalities ride the same rails: the
+gemma-4-12B image encode lands at 7.1 ms against the reference's 95 ms, the Qwen2.5-Omni
+window ViT at 106 ms against 118, and whisper large-v3-turbo transcribes jfk in 140 ms
+against whisper-cli's 153 on the same GPU. The M4 board rows are refreshed alongside -
+including Canary-Qwen on its new Q8_0 serving artifact, ahead of the NeMo torch-MPS
+reference on both boxes - and the M1 rows stand as the long-term record.</p>
 <p>Bringing a new chip up one model at a time - watching kernels tuned for one generation
 get re-raced, re-crowned, and here and there rewritten for the next - has been genuinely
 fun.</p></div>
