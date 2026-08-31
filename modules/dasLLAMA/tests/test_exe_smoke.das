@@ -1,6 +1,6 @@
 options gen2
-options stack = 524288   // every dasllama program root takes this budget
-options _dasllama_internal = true   // spawns the fixture; its own requires stay light
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require daslib/fio
@@ -9,12 +9,10 @@ require daslib/strings_boost
 require strings
 require _model_tier
 
-// The standalone-exe context gate: build _exe_smoke_root.das with `-jit -exe` and run the
-// artifact. A serialized exe restores globals as DATA - function-typed globals arrive null
-// unless a boot-restore [init] heals them (dasllama_config's restore_dlim_source_defaults is
-// the precedent) - and every -jit suite is structurally blind to that class: the vulkan
-// decode-mirror claim shipped crashing every exe forward while all script-mode gates ran
-// green. One tiny model, one 4-token generate, ~90 s; skips honestly without the model.
+// The standalone-exe context gate: build `_exe_smoke_root.das` with `-jit -exe` and run the
+// artifact - the one rail where globals restore as DATA, so a function-typed global with no
+// boot-restore [init] dies on its first invoke while every -jit suite stays green. One tiny
+// model, one 4-token generate, ~90 s; skips honestly without the model.
 
 def private self_daslang() : string {
     let argv <- get_command_line_arguments()
@@ -34,7 +32,7 @@ def test_exe_smoke(t : T?) {
             return
         }
         let dir = unsafe(dir_r.value)
-        let exe = path_join(dir, "smoke.exe")   // daslang -exe appends `.exe` to -output itself
+        let exe = path_join(dir, "smoke.exe")   //! daslang -exe appends `.exe` to -output itself
         var bout = ""
         let brc = run_and_capture([self_daslang(), "-jit", "-exe", "-output", path_join(dir, "smoke"),
                                    "modules/dasLLAMA/tests/_exe_smoke_root.das"], bout, 600.0)

@@ -157,6 +157,7 @@ def main : int {
     return rc
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
 def private build_flavor(dest, f, short_sha : string; jobs : int) : int {
     let build_dir = path_join(dest, "build-{f}")
     print("=== {f} -> {build_dir} (minutes-class: configure + build llama-bench)\n")
@@ -167,11 +168,6 @@ def private build_flavor(dest, f, short_sha : string; jobs : int) : int {
             return 1
         }
     }
-    // llama-mtmd-cli rides along: the image/audio-chat ref cells resolve it as llama-bench's
-    // sibling (gen_bench_records' sibling_mtmd rule) - a bench-only build mints das-only rows.
-    // The sibling needs mtmd-timing.patch (parse_mtmd_image reads MTMD_TIMING lines - an
-    // unpatched sibling mints "no rep parsed" failures); -3 rides pin drift, and a tree that
-    // already carries the print skips the apply
     if (find(fread(path_join(dest, "tools/mtmd/mtmd-cli.cpp")), "MTMD_TIMING") < 0) {
         let patch = get_full_file_name("modules/dasLLAMA/benchmarks/asr/patches/mtmd-timing.patch")
         if (run_visible("git -C \"{dest}\" apply -3 \"{patch}\"") != 0) {

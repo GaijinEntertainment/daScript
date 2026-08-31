@@ -54,7 +54,7 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   MoE region split.
 - `ARCHITECTURE_MEDIA.md` - sec.2.13-2.16: the padded tower GEMM widths, the family GPU hooks,
   the tower weight lane, and the plain-Model ASR decoders.
-- `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10: the benchmark rig, the tune gate, and the
+- `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10, 2.20: the benchmark rig, the tune gate, and the
   sanctioned instrumentation rails.
 
 ## 3. Inherited invariants

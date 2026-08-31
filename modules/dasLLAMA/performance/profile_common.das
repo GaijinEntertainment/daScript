@@ -1122,8 +1122,6 @@ struct AsrModelSpec {
     // model-speed, and bytes mis-sort it — large-v3-turbo is 1.51 GB against Parakeet's 2.33 GB
     // yet costs 97.5 s per rep against Parakeet's 38.6 s (m1, the five corpus buckets).
     tier : Tier = Tier.small
-    // the das metal leg serves this family end to end (tower + decoder) — the board mints a
-    // gpu-category row pair for it; false = the --ngl anti-sandbag would refuse the leg
     metal_served : bool = false
     // provenance facet ([[models_provenance]]): `prov` pins the das-side carrier itself
     // (ProvEntry.root is the symbolic "llm"/"whisper", not this spec's resolved dir);
@@ -1326,17 +1324,18 @@ def nemo_py() : string {
     return normalize(empty(g_env_prof.nemo_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-nemo") : g_env_prof.nemo_py)
 }
 
-// The clean CPU-only reference build (ebd048fc5, Accelerate ON, Metal OFF, no dasprof)
-// patched with patches/mtmd-timing.patch. CPU-only is deliberate: the fast historical mtmd numbers
-// rode Metal (GPU) despite the "CPU-only" label — ggml's Conformer audio ops don't route through
-// BLAS/AMX, so a genuine CPU encode is ~16 s (and das's optimized scalar Conformer beats it).
 //! The Metal twin of mtmd_bin() — the same patched checkout built with Metal ON
 //! (setup_asr_rig's build-metal, Apple boxes); "" when absent, and the gpu ref leg skips loudly.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
 def mtmd_bin_metal() : string {
     let c = normalize("../llama.cpp-mtmd-ref/build-metal/bin/llama-mtmd-cli")
     return stat(c).is_valid ? c : ""
 }
 
+// The clean CPU-only reference build (ebd048fc5, Accelerate ON, Metal OFF, no dasprof)
+// patched with patches/mtmd-timing.patch. CPU-only is deliberate: the fast historical mtmd numbers
+// rode Metal (GPU) despite the "CPU-only" label — ggml's Conformer audio ops don't route through
+// BLAS/AMX, so a genuine CPU encode is ~16 s (and das's optimized scalar Conformer beats it).
 def mtmd_bin() : string {
     let env = g_env_prof.mtmd_bin
     if (!empty(env)) {
@@ -1556,7 +1555,7 @@ def run_asr_cli_multi(cli, model_path : string; wav_paths : array<string>; threa
 }
 
 //! patched llama-mtmd-cli — one process per clip (30B load is heavy; MTMD_TIMING excludes it).
-//! Best total over `reps`.
+//! Best total over `reps`; `gpu` runs the Metal-ON sibling ([[mtmd_bin_metal]]) at -ngl 99.
 def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int;
                  var cmd_out : string&; var encode_out : double&; var text_out : string&; gpu : bool = false) : double {
     var best = -1.0lf
@@ -1620,7 +1619,8 @@ def private mtmd_log_line(s : string) : bool {
 //! is expensive, amortize it); the caller parses per-clip rows out with [[parse_bench_best]].
 //! The onnx rows ALSO land in [[asr_pybench_out_path]] via --out: parakeet-variant loaders
 //! wreck the child's stdout pipe on Windows (~1 byte then EOF while the run continues), so
-//! the caller re-reads the file whenever the captured stream carries no rows.
+//! the caller re-reads the file whenever the captured stream carries no rows - onnx only.
+//! `device` reaches the nemo script alone (its torch-MPS arm); onnx stays CPU.
 def asr_pybench_args(tool, handle : string; clips : array<string>; threads, reps : int; device : string = "") : array<string> {
     var args <- (tool == "onnx"
         ? [onnx_py(), "{asr_dir()}/onnx_bench.py", "--variant", handle, "--out", asr_pybench_out_path()]

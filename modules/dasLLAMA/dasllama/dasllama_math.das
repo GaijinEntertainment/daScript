@@ -684,9 +684,6 @@ def clear_float_batch_override() {
     g_fp_override_active = false
 }
 
-// Function values do not survive program serialization (a baked exe restores globals as DATA -
-// the declaration defaults arrive null); the g_fp_override_active gate keeps the invokes off
-// the null today, but the restore holds the invariant structurally (REVIEW.md's rule)
 [init]
 def private restore_float_override_defaults {
     if (g_mm_fp_batch_override == null) {

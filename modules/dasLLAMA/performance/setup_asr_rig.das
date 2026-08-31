@@ -314,8 +314,7 @@ def private setup_refs(cfg : Args) : bool {
         run_capture("cmake -S \"{lroot}\" -B \"{lroot}/build-cpu\" -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=OFF && cmake --build \"{lroot}/build-cpu\" --config Release -j 8 --target llama-mtmd-cli", false)
         to_log(LOG_INFO, "setup_asr_rig: set MTMD_BIN={lroot}/build-cpu/bin/llama-mtmd-cli\n")
     }
-    // the Metal twin (Apple boxes): the same patched checkout, Metal ON - the gpu ref leg
-    // pairs the das metal ASR rows against it (a -ngl on the CPU-only build is inert)
+    // the Metal twin (Apple boxes): the same patched checkout, Metal ON
     if (is_apple_box() && !stat(mtmd_bin_metal()).is_valid && stat(normalize("{lroot}/CMakeLists.txt")).is_valid) {
         to_log(LOG_INFO, "setup_asr_rig: building llama-mtmd-cli (build-metal: Metal ON)\n")
         run_capture("cmake -S \"{lroot}\" -B \"{lroot}/build-metal\" -DCMAKE_BUILD_TYPE=Release && cmake --build \"{lroot}/build-metal\" --config Release -j 8 --target llama-mtmd-cli", false)

@@ -1010,9 +1010,6 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
 // ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
 
 // das side: one lcpp_bench --asr child per catalog model, absorbed via the same cell protocol
-// the families the metal das leg serves end to end (tower + decoder) declare it on their
-// catalog row; an unflagged row (parakeet — its GPU arm measures slower and keeps the CPU
-// by design) would trip the --ngl anti-sandbag
 def private is_metal_served_family(spec : AsrModelSpec) : bool => spec.metal_served
 
 def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store, exe : string;
@@ -1121,10 +1118,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         var out = run_capture_argv(pyargs)
         if (find(out, "BENCH") < 0) {
             // pipe came back rowless — for onnx ONLY, fall back to its --out file (Windows:
-            // parakeet loaders wreck the child's stdout pipe; the file survives everything).
-            // Only onnx WRITES that file, so any other tool reading it would launder a STALE
-            // onnx row into its own record under a matching clip name (a nemo-mps crash did
-            // exactly that - the recovered "nemo" jfk was onnx-whisper-turbo's).
+            // parakeet loaders wreck the child's stdout pipe; the file survives everything)
             let sidecar = ref.tool == "onnx" ? fread(asr_pybench_out_path()) : ""
             if (find(sidecar, "BENCH") >= 0) {
                 to_log(LOG_INFO, "gen_bench_records:   {ref.tool} pipe was rowless - rows recovered from --out file\n")
@@ -1240,7 +1234,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
 // The orchestrator never measures: it spawns the released exe per cell and reads its JSON, so its
 // own kernels are irrelevant and tuning them would put minutes of hidden work in front of a
 // measurement run — the trap this rig exists to avoid.
-[export, tune_policy(missing = "fallback")]
+[export, tune_policy(missing = "fallback"), arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
 def main : int {
     var r <- parse_args(type<Args>)
     if (r |> is_err) {
@@ -1519,9 +1513,6 @@ def main : int {
                 settle(cfg)
                 asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed)
                 static_if (typeinfo builtin_module_exists(das_metal)) {
-                    // the metal das row's like-for-like pair: whisper-cli gets its own -ngl
-                    // arm, mtmd its -ngl 99 arm, nemo its torch-MPS arm; parakeet-cli and
-                    // onnx have no GPU arm worth pairing (measured slower / CPU-only export)
                     let gpu_pair = rf.tool == "whisper-cli" || rf.tool == "mtmd" || rf.tool == "nemo"
                     if (gpu_pair && is_metal_served_family(spec)) {
                         settle(cfg)

@@ -13,4 +13,4 @@ require dasllama/dasllama_lint public
 //! layout fingerprint for images; kernel-identity hashing for tune winners when it lands).
 //! Tune sidecars scope on it, the sidecar exchange keys validity on (release, box), and bench
 //! records carry it — all under the wire name `dasllama_version`, which is schema-stable.
-let DASLLAMA_RELEASE = 15   // release 15 == the last DASLLAMA_VERSION value, so every v15 artifact stays valid across the rename
+let DASLLAMA_RELEASE = 15

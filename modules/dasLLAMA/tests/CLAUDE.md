@@ -240,6 +240,10 @@ against the committed `site/files/dasllama/bench_records.json` (what daslang.io/
 renders); red means a records commit skipped `gen_site_records`.
 `test_tok_seed.das` - model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
+`test_exe_smoke.das` - model-free suite; model-gated (SmolLM2-135M, small tier): the
+standalone-exe context gate. Builds `_exe_smoke_root.das` with `-jit -exe` and runs the
+artifact - the one rail where globals restore as DATA, so a function-typed global with no
+boot-restore `[init]` dies on its first invoke while every `-jit` suite stays green. ~90 s.
 `test_sizing_helpers.das` - model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse, `overwrite_resize` grow-only no-init) fed directly, including
 grows past the `max_unreserved_size` guard that must not panic.

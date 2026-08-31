@@ -43,6 +43,11 @@ reference exe the ref pin builds.**
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the
 validator ignores run keys it does not know, so an unvalidated field ships silently.
 
+**A fallback that recovers reference rows from a file on disk names the tool that writes
+that file, and reads it for no other tool - a shared recovery file read by a second tool
+copies the first tool's rows into the second's record under a matching clip name.** The
+laundered row carries the wrong engine and looks real.
+
 **Never add a second HTTP path to the sidecar exchange - every HTTP call (lookup, download,
 submit) goes through `../dasllama/dasllama_exchange.das`.** The mechanical half (no second
 `dashv` requirer under the module) is `REVIEW.das`'s to enforce.

@@ -1915,7 +1915,7 @@ def test_metal_misc_kernels(t : T?) {
     }
 }
 
-// a spawned one-class [metal_dispatch] program: @workgroup state, tgmem= present or absent
+//! spawns a compile of a one-class [metal_dispatch] program carrying @workgroup state
 def private spawn_wg_fixture(with_tgmem : bool; tag : string) : tuple<rc : int; out : string> {
     let tgarg = with_tgmem ? "tgmem = \"wg_fixture_msl_tgmem\", " : ""
     let src = join([

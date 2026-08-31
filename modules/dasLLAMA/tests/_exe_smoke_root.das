@@ -1,15 +1,12 @@
 options gen2
-options stack = 524288   // every dasllama program root takes this budget
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama
 require daslib/jobque_boost
 require daslib/fio
 
-// The standalone-exe smoke root (test_exe_smoke builds it with -jit -exe and runs the artifact):
-// one tiny load + a 4-token generate through the facade. A serialized exe restores globals as
-// DATA - function values arrive null unless a boot-restore [init] heals them - so this is the
-// one context the -jit suites can never cover; the vulkan decode-mirror claim shipped crashing
-// exactly here while every script-mode gate stayed green.
+// The fixture test_exe_smoke builds with `-jit -exe` and runs: one tiny load plus a 4-token
+// generate through the facade, on the serialized-globals rail no `-jit` suite can reach.
 
 [export]
 def main {

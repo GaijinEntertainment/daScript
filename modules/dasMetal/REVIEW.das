@@ -33,9 +33,6 @@ def private check_rp_law {
 let private FC_DIR = "tests/msl/_fail_closed"
 let private FC_TEST = "tests/msl/test_msl_fail_closed.das"
 
-// every _fail_closed/*.das fixture has its check_rejects needle assert and vice versa - the
-// two lists are hand-synced, and a fixture without its assert (or an assert whose fixture
-// was deleted) drifts silently: the suite stays green while the rejection it pins is gone
 def private check_fail_closed_sync {
     var fixtures : table<string>
     dir(FC_DIR) $(name) {

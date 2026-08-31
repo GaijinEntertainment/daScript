@@ -391,9 +391,7 @@ def private cov_tower_gemma4v(t : T?) {
 // cov_tower: the tower-driver kernels (LN / f32 mul_mm / the gelu flavors / posadd / the
 // borrowed trio / the gemma4v clamp, rope2d, GEGLU-quick) AND the decoder-side cross-KV kernels
 // go non-zero — a whisper tiny MIXED chunk (f32 enc = the tower LUT flavor, q8 dec = the wdec
-// driver), the qwen3a GPU-mel + conv2d window, the gemma4a whole-chunk Conformer, the canary
-// FastConformer chain, small gemma4uv/gemma4v canvases, the gemma3v flash+slab pair, the
-// qwen25v single window, and the qwen3v GPU-stem canvas
+// driver) plus one row per tower family, each row's own comment naming the kernels it reaches
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -433,9 +431,9 @@ def private cov_tower(t : T?) {
             delete aenc
             delete atw
         }
-        // the qwen3a conv2d + mel carrier: the mel built from raw samples so the GPU mel hook
-        // (twiddle-T DFT GEMM + power + mel-major log store) dispatches, then one padded
-        // window drives the im2col2d + padded tile GEMMs
+        // the qwen3a conv2d + mel carrier: the mel is built from raw samples so the GPU mel hook
+        // (twiddle-T DFT GEMM + power + mel-major log store) dispatches ahead of the im2col2d
+        // window and its padded tile GEMMs
         let qpath = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         if (model_available(t, qpath) && !empty(samples)) {
             var inscope qtw <- load_qwen3a_tower(qpath)

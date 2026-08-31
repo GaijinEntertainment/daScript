@@ -6494,6 +6494,7 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
     return res
 }
 
+[arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-moe-buckets")]
 def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
     var res = MetalTensorRaceResult(family = "moe_mulmm_mx4", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let ne = 4
@@ -6575,9 +6576,9 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
         kn_tgmem(enc, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_tgmem, 0)
         kn_buffer(enc, bnq, 0ul, 0)
         kn_buffer(enc, bee, 0ul, 1)
-        kn_buffer(enc, bxa, 0ul, 3)   //! the scaffold family contract: xf@3, y@4 (the followup-53
-        kn_buffer(enc, by_twin, 0ul, 4)   //! renumber; the old 2/3 read the OUTPUT buffer as X - the race
-        kn_kargs(enc, rka, 5)             //! then un-crowned a correct twin and gpt-oss pp halved)
+        kn_buffer(enc, bxa, 0ul, 3)
+        kn_buffer(enc, by_twin, 0ul, 4)
+        kn_kargs(enc, rka, 5)
         kn_buffer(enc, bcnt, 0ul, 6)
         kn_buffer(enc, bbase, 0ul, 7)
         kn_buffer(enc, bwbb, 0ul, 12)
