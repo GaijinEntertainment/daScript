@@ -7,6 +7,14 @@ names: each `var g_x = @@fn` declaration carries an `if (g_x == null)` boot-rest
 the same file - a serialized exe restores globals as data, and only a boot-restore `[init]`
 heals the null function value.
 
+`REVIEW.das`'s `check_race_bind_numbers` walks every `dasllama/` file and licenses no names:
+each hand-written `kn_buffer`/`kn_kargs` literal in a race or knockout arm lands on a
+binding number its target kernel class declares (the class resolves from the arm's
+`kn_tgmem` constant, or from `kn_pipeline`'s pso built by `pipeline_from_source` in the same
+function; a `@uniform` slot legitimately takes a 4-byte buffer). A mis-numbered arm
+dispatches, reads the wrong buffer, and `race_envelope_ok` fails closed - the twin silently
+loses its crown.
+
 ### 1.1 Engine core
 
 - **`dasllama.das`** - the public API facade and nothing else: `load_model` -> `create_session` ->

@@ -2,6 +2,7 @@ options gen2
 
 require strings
 require daslib/strings_boost
+require daslib/strings_convert
 require daslib/fio
 require dastest/review_gate
 
@@ -246,6 +247,187 @@ def private check_gpu_role_partition {
 // have an `if (g_x == null)` restore guard in the SAME file, or the first exe run to reach
 // its invoke dies with `invoke null function` while every -jit gate stays green - the vulkan
 // decode-mirror claim shipped exactly that way.
+// A hand-binding arm (a race/knockout `$(enc)` block spelling kn_buffer/kn_kargs literals)
+// must bind at the numbers its target kernel class DECLARES. A mis-numbered arm dispatches,
+// reads the wrong buffer, and race_envelope_ok fails CLOSED - the twin just loses and the
+// board quietly serves the slower kernel (the mx4 race shipped exactly that way). The target
+// class resolves from the arm's kn_tgmem constant, or from kn_pipeline's pso built by
+// pipeline_from_source in the same function.
+def private rb_scan_classes(text : string; var declared, class_names : table<string>; var class_base : table<string; string>; var kernel_class : table<string; string>) {
+    var cur = ""
+    for (line in split(text, "\n")) {
+        if (line |> starts_with("class ")) {
+            var rest = slice(line, length("class "))
+            if (rest |> starts_with("template ")) {
+                rest = slice(rest, length("template "))
+            }
+            cur = ident_prefix(rest)
+            class_names |> insert(cur)
+            let colon = find(rest, " : ")
+            if (colon >= 0) {
+                class_base[cur] = ident_prefix(slice(rest, colon + 3))
+            }
+        } elif (line |> starts_with("}")) {
+            cur = ""
+        } elif (!empty(cur)) {
+            let mk = find(line, "[metal_kernel(")
+            if (mk >= 0) {
+                let nm = find(line, "name", mk)
+                if (nm >= 0) {
+                    let q1 = find(line, "\"", nm)
+                    if (q1 >= 0) {
+                        let kn = slice(line, q1 + 1)
+                        kernel_class[slice(kn, 0, find(kn, "\""))] = cur
+                    }
+                }
+            }
+            let bat = find(line, "@binding = ")
+            if (bat >= 0) {
+                let n = try_to_int(ident_prefix(slice(line, bat + length("@binding = ")))) ?? -1
+                if (n >= 0) {
+                    let kind = find(line, "@uniform") >= 0 ? "u" : "b"
+                    declared |> insert("{cur}|{kind}|{n}")
+                }
+            }
+        }
+    }
+}
+
+def private rb_class_declares(declared : table<string>; class_base : table<string; string>; cls, kind : string; n : int) : bool {
+    var c = cls
+    while (!empty(c)) {
+        if (key_exists(declared, "{c}|{kind}|{n}")) {
+            return true
+        }
+        var nxt = ""
+        class_base |> get(c) $(v) {
+            nxt = v
+        }
+        c = nxt
+    }
+    return false
+}
+
+// "<Class>_<kernel>" / "<kernel>" / with a trailing "_msl..." tail -> the owning class
+def private rb_resolve_class(token : string; class_names : table<string>; kernel_class : table<string; string>) : string {
+    var t = token
+    let msl = find(t, "_msl")
+    if (msl >= 0) {
+        t = slice(t, 0, msl)
+    }
+    var owner = ""
+    kernel_class |> get(t) $(v) {
+        owner = v
+    }
+    if (!empty(owner)) {
+        return owner
+    }
+    let us = find(t, "_")
+    if (us > 0 && key_exists(class_names, slice(t, 0, us))) {
+        return slice(t, 0, us)
+    }
+    return ""
+}
+
+// the integer between a call's last comma and its closing paren, or -1
+def private rb_trailing_int(line : string) : int {
+    let close = find(line, ")")
+    if (close < 0) {
+        return -1
+    }
+    var last_comma = -1
+    var from = 0
+    while (true) {
+        let c = find(line, ",", from)
+        if (c < 0 || c > close) {
+            break
+        }
+        last_comma = c
+        from = c + 1
+    }
+    if (last_comma < 0) {
+        return -1
+    }
+    return try_to_int(strip(slice(line, last_comma + 1, close))) ?? -1
+}
+
+def private check_race_bind_numbers {
+    var declared : table<string>
+    var class_base : table<string; string>
+    var kernel_class : table<string; string>
+    var files : array<string>
+    dir("modules/dasLLAMA/dasllama") $(name) {
+        if (name |> ends_with(".das")) {
+            files |> push(name)
+        }
+    }
+    var class_names : table<string>
+    for (name in files) {
+        rb_scan_classes(fread("modules/dasLLAMA/dasllama/{name}"), declared, class_names, class_base, kernel_class)
+    }
+    for (name in files) {
+        let path = "modules/dasLLAMA/dasllama/{name}"
+        var pso_class : table<string; string>   // per-function psoVar -> class
+        var target = ""
+        var line_no = 0
+        for (line in split(fread(path), "\n")) {
+            line_no++
+            if (line |> starts_with("def ")) {
+                unsafe {
+                    delete pso_class
+                }
+                target = ""
+                continue
+            }
+            let pf = find(line, "pipeline_from_source(")
+            if (pf >= 0) {
+                var v = strip(line)
+                v = slice(v, find(v, "var ") >= 0 ? find(v, "var ") + 4 : 0)
+                let pvar = ident_prefix(v)
+                let args = slice(line, pf + length("pipeline_from_source("))
+                let c1 = find(args, ",")
+                let src = strip(slice(args, c1 + 1, find(args, ",", c1 + 1)))
+                let cls = rb_resolve_class(src, class_names, kernel_class)
+                if (!empty(pvar) && !empty(cls)) {
+                    pso_class[pvar] = cls
+                }
+                continue
+            }
+            let kp = find(line, "kn_pipeline(enc, ")
+            if (kp >= 0) {
+                target = pso_class?[ident_prefix(slice(line, kp + length("kn_pipeline(enc, ")))] ?? ""
+                continue
+            }
+            let kt = find(line, "kn_tgmem(enc, ")
+            if (kt >= 0) {
+                let cls = rb_resolve_class(ident_prefix(slice(line, kt + length("kn_tgmem(enc, "))), class_names, kernel_class)
+                if (!empty(cls)) {
+                    target = cls
+                }
+                continue
+            }
+            continue if (empty(target))
+            let kb = find(line, "kn_buffer(enc, ")
+            if (kb >= 0) {
+                let n = rb_trailing_int(line)
+                // kind-agnostic on purpose: a hand arm legitimately binds a @uniform slot
+                // as a 4-byte buffer; the hazard is a number the class never declared
+                if (n >= 0 && !rb_class_declares(declared, class_base, target, "b", n) &&
+                        !rb_class_declares(declared, class_base, target, "u", n)) {
+                    gate_finding(path, line_no, "hand-bound buffer at binding {n}, which '{target}' does not declare - the arm dispatches, reads the wrong buffer, and the race fails closed (the twin silently loses); bind at the class's declared @binding numbers")
+                }
+            }
+            let kk = find(line, "kn_kargs(enc, ")
+            if (kk >= 0) {
+                let n = rb_trailing_int(line)
+                if (n >= 0 && !rb_class_declares(declared, class_base, target, "u", n)) {
+                    gate_finding(path, line_no, "hand-bound kargs at binding {n}, which '{target}' does not declare as a uniform - the arm dispatches with garbage args; bind at the class's declared @binding")
+                }
+            }
+        }
+    }
+}
+
 def private check_exe_fn_global_restore {
     dir("modules/dasLLAMA/dasllama") $(name) {
         if (!(name |> ends_with(".das"))) {
@@ -282,6 +464,7 @@ def main() : int {
         return 2
     }
     check_exe_fn_global_restore()
+    check_race_bind_numbers()
     check_gpu_role_partition()
     check_fastmath_default()
     var inscope tut_texts : array<string>

@@ -141,7 +141,9 @@ construction and answers to the hand-binding-arm rules instead.
 **A hand-binding arm binds every field at the binding number its target kernel class
 declares - a number the class does not declare, or a field bound at another field's number,
 is a defect.** A mis-numbered arm dispatches, reads the wrong buffer, and its timing crowns
-the wrong kernel silently.
+the wrong kernel silently. The undeclared-number half is machine-checked
+(`REVIEW.das`'s `check_race_bind_numbers`; weakening it is a defect) - the
+right-number-wrong-field half stays the reviewer's.
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
 and as a kargs field - is a defect.** A `params=` value that the `grid=`/`tg=` spec consumes
