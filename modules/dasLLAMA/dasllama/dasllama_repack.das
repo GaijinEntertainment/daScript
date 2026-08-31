@@ -511,6 +511,49 @@ def repack_iq3s_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete ts
 }
 
+//! k2 grp layout: the qs bytes as 16 four-byte columns x mr rows (the 2-bit lanes stay in
+//! place - the kernels shift per group); scale row interleaves as [16 sc/min bytes x mr]
+//! [mr x 4B d+dmin header].
+def repack_k2_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 64l
+    let srow = nsb * 20l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 64l * mr
+                let ds = g * mr * srow + sbi * 20l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 64l
+                    let ss = (g * mr + r) * srow + sbi * 20l
+                    for (c in range64(16l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                        }
+                    }
+                    for (idx in range64(16l)) {
+                        ks[ds + idx * mr + r] = tsp[ss + 4l + idx]
+                    }
+                    for (h in range64(4l)) {
+                        ks[ds + 16l * mr + 4l * r + h] = tsp[ss + h]
+                    }
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
 // ===== grp<mr> panel unpack (the byte-expanded tile form the kq stamps load) =====
 
 //! Unpack ONE group's packed grp<mr> k5/k6 quant panel into the BYTE-EXPANDED tile form (wlo/whi

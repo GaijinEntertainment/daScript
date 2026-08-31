@@ -48,6 +48,7 @@ let GGML_TYPE_Q5_0 = 6
 let GGML_TYPE_Q5_1 = 7
 let GGML_TYPE_Q8_0 = 8
 let GGML_TYPE_Q3_K = 11
+let GGML_TYPE_Q2_K = 10
 let GGML_TYPE_IQ3_S = 21
 let GGML_TYPE_IQ3_XXS = 18
 let GGML_TYPE_IQ4_NL = 20
@@ -742,6 +743,41 @@ def gguf_transcode_iq4xs(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
                             row[12l + i] = uint8(0)
                         }
                         bcopy(kqp + sb * IQ4XS_QSB, src + 8l, 128l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! Transcode a Q2_K tensor into the k2 planes (strides 64/20, exact): the 84B disk superblock
+//! splits into qs verbatim and the 20B scale row [f16 d][f16 dmin][16 sc/min bytes] - all
+//! bytes verbatim, header moved first (transcode_q2k_superblock).
+def gguf_transcode_q2k(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_Q2_K, "Q2_K", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "k2 quant plane", (eloff / 256l) * K2_QSB, nb * K2_QSB, long_length(kq))
+    guard_dst(name, "k2 scale plane", (eloff / 256l) * K2_SSB, nb * K2_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 84l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * K2_QSB])
+            var ksp = addr(ks[(eloff / 256l) * K2_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 84l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 84l
+                        var row = ksp + sb * K2_SSB
+                        row[0l] = src[80l]
+                        row[1l] = src[81l]
+                        row[2l] = src[82l]
+                        row[3l] = src[83l]
+                        bcopy(row + 4l, src, 16l)
+                        bcopy(kqp + sb * K2_QSB, src + 16l, 64l)
                     }
                 }
             }

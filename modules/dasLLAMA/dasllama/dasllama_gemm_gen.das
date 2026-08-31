@@ -1439,7 +1439,7 @@ def private emit_iq3xxs_gather(var te : TileEmit; var sbi : LLVMOpaqueValue?) {
 // One 256-weight SUPERBLOCK, IQ4_XS/iq3s grp<mr> form (te.kq = 44/33): mx4's LUT decode (44)
 // or the byte-expanded signed panel (33; the gemv gathers it per superblock, the tile gets the
 // runtime unpack) — dot_lane's sign-trick lattice, k4's fold with no min term.
-def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {   // nolint:STYLE038 — one register-coupled superblock loop nest (the kqv2 emitters' shape)
+def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {   // nolint:STYLE037,STYLE038 — one register-coupled superblock loop nest (the kqv2 emitters' shape)
     let b = te.builder
     let rq = te.rq
     let mr = te.interleave
@@ -2867,6 +2867,13 @@ def private iq3xxs_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc,
 def private iq4nl_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 45)
 def private iq4nl_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 45)
 
+// k2: the 2-bit + min-fold emitter arm lands with Phase B; until then both stamps decline
+// (reference bodies serve) - a declined generator is the framework's own fallback path.
+[unused_argument(gc)]
+def private k2_gemv_gen(var gc : LlvmCodeCtx) : bool => false
+[unused_argument(gc)]
+def private k2_tile_gen(var gc : LlvmCodeCtx) : bool => false
+
 def private k4_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 4)
 def private k5_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 5)
 def private k6_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 6)
@@ -2954,5 +2961,7 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::iq3xxs_tile", @@iq3xxs_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq4nl_gemv", @@iq4nl_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq4nl_tile", @@iq4nl_tile_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k2_gemv", @@k2_gemv_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k2_tile", @@k2_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_witness", @@witness_gen)
 }

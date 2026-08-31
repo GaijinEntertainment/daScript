@@ -1089,6 +1089,7 @@ struct KernelBackend {
     kq_rows_iq3s : MatmulKqRowsFn = @@kq_unset_rows
     kq_rows_iq3xxs : MatmulKqRowsFn = @@kq_unset_rows
     kq_rows_iq4nl : MatmulKqRowsFn = @@kq_unset_rows
+    kq_rows_k2 : MatmulKqRowsFn = @@kq_unset_rows
     kq_batch : MatmulKqBatchFn = @@kq_unset_batch
     kq_groupn : MatmulKqGroupNFn = @@kq_unset_groupn
     kq_batch_groupn : MatmulKqBatchGroupNFn = @@kq_unset_batch_groupn
@@ -1156,6 +1157,7 @@ var g_kq_rows_k3 = @@kq_unset_rows
 var g_kq_rows_iq3s = @@kq_unset_rows
 var g_kq_rows_iq3xxs = @@kq_unset_rows
 var g_kq_rows_iq4nl = @@kq_unset_rows
+var g_kq_rows_k2 = @@kq_unset_rows
 var g_mm_kq_batch = @@kq_unset_batch
 var g_mm_kq_groupn = @@kq_unset_groupn
 var g_mm_kq_batch_groupn = @@kq_unset_batch_groupn
@@ -1483,7 +1485,7 @@ def active_q8_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_mr : g_
 //! family split; the loader freezes these onto the Model at repack time.
 def active_kq_layout_mr(fmt : int) : int64 {
     if (g_bake_cpu_override) {
-        return fmt == 4 ? g_bake_cpu.kq_mr4 : (fmt == 5 ? g_bake_cpu.kq_mr5 : (fmt == 40 ? g_bake_cpu.kq_mr40 : (fmt == 44 ? g_bake_cpu.kq_mr44 : (fmt == 3 ? g_bake_cpu.kq_mr3 : (fmt == 33 ? g_bake_cpu.kq_mr33 : (fmt == 34 ? g_bake_cpu.kq_mr34 : (fmt == 45 ? g_bake_cpu.kq_mr45 : g_bake_cpu.kq_mr6)))))))
+        return fmt == 4 ? g_bake_cpu.kq_mr4 : (fmt == 5 ? g_bake_cpu.kq_mr5 : (fmt == 40 ? g_bake_cpu.kq_mr40 : (fmt == 44 ? g_bake_cpu.kq_mr44 : (fmt == 3 ? g_bake_cpu.kq_mr3 : (fmt == 33 ? g_bake_cpu.kq_mr33 : (fmt == 34 ? g_bake_cpu.kq_mr34 : (fmt == 45 ? g_bake_cpu.kq_mr45 : (fmt == 2 ? g_bake_cpu.kq_mr2 : g_bake_cpu.kq_mr6))))))))
     }
     return int64(invoke(g_active_kq_layout, fmt))
 }
@@ -1664,6 +1666,7 @@ def private activate(be : KernelBackend) {
     g_kq_rows_iq3s = be.kq_rows_iq3s
     g_kq_rows_iq3xxs = be.kq_rows_iq3xxs
     g_kq_rows_iq4nl = be.kq_rows_iq4nl
+    g_kq_rows_k2 = be.kq_rows_k2
     g_mm_kq_batch = be.kq_batch
     g_mm_kq_groupn = be.kq_groupn
     g_mm_kq_batch_groupn = be.kq_batch_groupn
@@ -1871,6 +1874,7 @@ def kq_rows_fn(fmt : int) : MatmulKqRowsFn {
     if (fmt == 33) return g_kq_rows_iq3s
     if (fmt == 34) return g_kq_rows_iq3xxs
     if (fmt == 45) return g_kq_rows_iq4nl
+    if (fmt == 2) return g_kq_rows_k2
     return @@kq_unset_rows
 }
 
@@ -3245,6 +3249,9 @@ def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam
     }
     if (g_kq_rows_iq4nl == null) {
         g_kq_rows_iq4nl = @@kq_unset_rows
+    }
+    if (g_kq_rows_k2 == null) {
+        g_kq_rows_k2 = @@kq_unset_rows
     }
     if (g_mm_kq_batch == null) {
         g_mm_kq_batch = @@kq_unset_batch

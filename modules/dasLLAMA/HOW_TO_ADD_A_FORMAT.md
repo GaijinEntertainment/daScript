@@ -415,8 +415,6 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    row on the M1 carries +-8 t/s of noise; the iq3s f4-slab GEMV form (+9% at the kernel)
    measured FLAT on e2e twice and was nearly discarded. The dispatch-loop probe (50 dispatches
    per encoder, best-of-3 encoders, GB/s off plane bytes) resolves 3% in seconds.
-## Per-format notes
-
 23. **Census the vehicle GGUF before committing to it.** An ftype is a MIX: the natural
    "IQ3_XXS" download (mradermacher i1) quantizes attn_k/q to IQ2_S - unsupported until the
    iq2 tier - so the file cannot load end to end. `gguf_census.py` (scratch) reads the tensor
@@ -429,6 +427,34 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
     `*.dlim` beside the GGUF after ANY `dasllama_layout.das`/pack edit and confirm the next
     log line says "baked", not "mapped". Unquirked: fold a pack-code version into the image
     hash, the way QUIRK 21's fix would version the JIT DLL cache.
+
+25. **The stream-code space is NOT the kernel-id space: q51 squats on 2.** Stream region
+    tags are q8=0, mx4=1, q51=2, then the kq kernel ids - Q2_K's mnemonic id 2 collided and
+    the first load dispatched k2 regions down the q51 repack arm (index out of range on the
+    empty q51s plane). k2 streams under code 20 (kq_stream_code), translated back to kernel
+    id 2 at the two dispatch boundaries (stream_repack_one's arm, repack_regions' fk). A new
+    format's kernel id must dodge 0/1/2 in the stream space or claim a distinct code the
+    same way.
+
+## Per-format notes
+
+### Q2_K Phase A (CPU, 2026-08-31)
+
+Shape: 256-superblock, the k4/k5 scale STRUCTURE at k6's granularity - 16 per-16-element
+sc/min nibble-pair bytes folded as (d*sc)*q - (dmin*mn); the 2-bit lanes are unsigned, so
+the min term rides the activation 16-sums (xbsp), exactly dot_k4q8's shape. Disk 84B:
+[16 sc/min][64 qs][f16 d][f16 dmin]. Planes: qs verbatim (K2_QSB 64 - k3's lanes minus the
+hmask), the scale row reordered header-first [d][dmin][16 sc/min] (K2_SSB 20). Ids:
+KqFmt.k2 = 11, kernel id 2, stream code 20 (QUIRK 25). Kernels: dot_k2q8 (dot_k4q8's fold
+over 16 groups), k2_grp_row_dot, repack_k2_grp (16 four-byte columns x mr; scale
+[16 sc x mr][mr x 4B header]); the tile rides the packed planes. Gates: test_kqformat
+18/18, test_kquant 216 (200 pass, 16 env-gated skips), lint 0. E2e: the local requant
+(Q2_K x64 + Q3_K/Q4_K/Q6_K siblings, all supported - llama-quantize with the imatrix, no
+--tensor-type override needed) decodes coherently at gen 30 t/s reference bodies, greedy
+ids 19/64 with the fork a 0.153-logit near-tie (top2 IS our token; the lossiest format
+diverges earliest). No whole-scope re-mint fired on the first e2e (zero "@tune begin"
+lines), unlike QUIRK 17's precedent - watch at Phase B. JIT emitter, Vulkan, Metal:
+pending.
 
 ### IQ4_NL (the near-free one, 2026-08-30)
 

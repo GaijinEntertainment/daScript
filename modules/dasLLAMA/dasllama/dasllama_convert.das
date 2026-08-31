@@ -663,6 +663,40 @@ def dequant_iq4xs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : a
     }
 }
 
+//! Transcode one Q2_K superblock (84 bytes at `bo`: 16 sc/min nibble-pair bytes, 64 qs, f16 d,
+//! f16 dmin) into the k2 planes: qs verbatim to kq[kqo..+64), the scale row REORDERED to
+//! [f16 d][f16 dmin][16 sc/min bytes] at ks[kso..+20) - all bytes verbatim (exact).
+def transcode_q2k_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    ks[kso] = bytes[bo + 80l]
+    ks[kso + 1l] = bytes[bo + 81l]
+    ks[kso + 2l] = bytes[bo + 82l]
+    ks[kso + 3l] = bytes[bo + 83l]
+    for (i in range64(16l)) {
+        ks[kso + 4l + i] = bytes[bo + i]
+    }
+    for (i in range64(64l)) {
+        kq[kqo + i] = bytes[bo + 16l + i]
+    }
+}
+
+//! Reference dequant of one k2-plane superblock: w = (d * sc) * q - (dmin * mn) per 16-elem group
+//! g (sc/mn = the group's nibble pair); q = the 2-bit lane of qs byte (g/8)*32 + (g%2)*16 + l at
+//! shift 2*((g%8)/2) - ggml's dequantize_row_q2_K float order (dl*q - ml).
+def dequant_k2_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, kso))
+    let dmin = f16_to_f32(rd_u16(ks, kso + 2l))
+    for (g in range64(16l)) {
+        let scb = int(ks[kso + 4l + g])
+        let dl = d * float(scb & 15)
+        let ml = dmin * float(scb >> 4)
+        let qb = kqo + (g / 8l) * 32l + (g % 2l) * 16l
+        let sh = int(((g % 8l) / 2l) * 2l)
+        for (l in range64(16l)) {
+            dst[doff + g * 16l + l] = dl * float((int(kq[qb + l]) >> sh) & 3) - ml
+        }
+    }
+}
+
 //! The 6-bit sub-scale i (0..15) of a Q3_K disk block off its 12 packed scale bytes at `so` —
 //! ggml's kmask unpack: low nibbles of bytes 0..7 carry scales 0..7, their high nibbles 8..15,
 //! bytes 8..11 carry every scale's top two bits at shift 2 * (i / 4).
