@@ -3661,6 +3661,11 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mvb4_iq4nl = compile_pso(MetalKqMvB4Iq4nl_metal_kq_mv_iq4nl_msl, MetalKqMvB4Iq4nl_metal_kq_mv_iq4nl_msl_entry, MetalKqMvB4Iq4nl_metal_kq_mv_iq4nl_msl_fastmath, ok)
     g_pso_kq_mvb8_iq4nl = compile_pso(metal_kq_mvb8_iq4nl_msl, metal_kq_mvb8_iq4nl_msl_entry, metal_kq_mvb8_iq4nl_msl_fastmath, ok)
     g_pso_kq_mm_b45 = compile_pso(MetalKqMulMmIq4nl_metal_kq_mulmm_msl, MetalKqMulMmIq4nl_metal_kq_mulmm_msl_entry, MetalKqMulMmIq4nl_metal_kq_mulmm_msl_fastmath, ok)
+    g_pso_kq_k2 = compile_pso(metal_kq_gemv_k2_msl, metal_kq_gemv_k2_msl_entry, metal_kq_gemv_k2_msl_fastmath, ok)
+    g_pso_kq_mvb2_k2 = compile_pso(MetalKqMvB2K2_metal_kq_mv_k2_msl, MetalKqMvB2K2_metal_kq_mv_k2_msl_entry, MetalKqMvB2K2_metal_kq_mv_k2_msl_fastmath, ok)
+    g_pso_kq_mvb4_k2 = compile_pso(MetalKqMvB4K2_metal_kq_mv_k2_msl, MetalKqMvB4K2_metal_kq_mv_k2_msl_entry, MetalKqMvB4K2_metal_kq_mv_k2_msl_fastmath, ok)
+    g_pso_kq_mvb8_k2 = compile_pso(metal_kq_mvb8_k2_msl, metal_kq_mvb8_k2_msl_entry, metal_kq_mvb8_k2_msl_fastmath, ok)
+    g_pso_kq_mm_b2 = compile_pso(MetalKqMulMmK2_metal_kq_mulmm_msl, MetalKqMulMmK2_metal_kq_mulmm_msl_entry, MetalKqMulMmK2_metal_kq_mulmm_msl_fastmath, ok)
     // the batched-step set (P4)
     g_pso_gemv_b2 = compile_pso(MetalGemvB2_metal_gemv_msl, MetalGemvB2_metal_gemv_msl_entry, MetalGemvB2_metal_gemv_msl_fastmath, ok)
     g_pso_gemv_b4 = compile_pso(MetalGemvB4_metal_gemv_msl, MetalGemvB4_metal_gemv_msl_entry, MetalGemvB4_metal_gemv_msl_fastmath, ok)
@@ -3737,6 +3742,8 @@ def enc_kq_gemv(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff
         enc_kq_iq3xxs_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     } elif (fmt == KqFmt.iq4nl) {
         enc_kq_iq4nl_c(enc, bs, soff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
+    } elif (fmt == KqFmt.k2) {
+        enc_kq_k2_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     } elif (fmt == KqFmt.k6) {
         enc_kq_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     } elif (fmt == KqFmt.k5 && (n < 3072l || rows <= 1024l)) {
@@ -3813,6 +3820,14 @@ def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff 
         } else {
             enc_kq_mvb4_iq4nl_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, ka, rows, gcols)
         }
+    } elif (fmt == KqFmt.k2) {
+        if (b8) {
+            enc_kq_mvb8_k2_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+        } elif (two) {
+            enc_kq_mvb2_k2_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+        } else {
+            enc_kq_mvb4_k2_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows, gcols)
+        }
     } elif (fmt == KqFmt.k6) {
         if (b8) {
             enc_kq_mvb8_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
@@ -3855,6 +3870,8 @@ def enc_kq_gemm_mm_b(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?;
         enc_kq_mm_iq3xxs_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
     } elif (fmt == KqFmt.iq4nl) {
         enc_kq_mm_iq4nl_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
+    } elif (fmt == KqFmt.k2) {
+        enc_kq_mm_k2_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
     } elif (fmt == KqFmt.k6) {
         enc_kq_mm_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
     } elif (fmt == KqFmt.k4) {
@@ -4306,6 +4323,11 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     release_pso(g_pso_kq_mvb4_iq4nl)
     release_pso(g_pso_kq_mvb8_iq4nl)
     release_pso(g_pso_kq_mm_b45)
+    release_pso(g_pso_kq_k2)
+    release_pso(g_pso_kq_mvb2_k2)
+    release_pso(g_pso_kq_mvb4_k2)
+    release_pso(g_pso_kq_mvb8_k2)
+    release_pso(g_pso_kq_mm_b2)
     if (g_pso_rms != null) {
         metal_release(g_pso_rms)
         g_pso_rms = null
@@ -5536,6 +5558,7 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
     @template_constant IQ3S : bool = false // iq3s: the k6 split scale form, threadgroup grid gather + sign flip
     @template_constant IQ3XXS : bool = false // iq3xxs: the same form over the halved grid + parity signs
     @template_constant IQ4NL : bool = false // iq4nl: the IQ4XS nibble walk with the per-32-block f16 d plane (no sub-scale; s0off = soff)
+    @template_constant K2 : bool = false // q2_K: per-16 sc/min nibble pairs (one uint4 strip), the split 4B d+dmin tail at s0off
     @workgroup @template_gate = IQ4XS iq4lut : float[16]   // kvalues_iq4nl as floats, staged once per threadgroup
     @workgroup @template_gate = IQ3S gridw3 : uint[512]   // the 2 KB iq3s grid, staged once per threadgroup
     @workgroup @template_gate = IQ3XXS gridw3x : uint[256]   // the 1 KB halved iq3xxs grid, staged once per threadgroup
@@ -5714,6 +5737,30 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
                                     }
                                 }
                             } else {
+                                static_if (K2) {
+                                    // q2_K: pair byte si = the group's sc|mn nibbles; d/dmin off the split tail
+                                    let hf3 = js / 4u
+                                    let gg3 = js % 4u
+                                    let sv = ks4[blk]
+                                    let si = hf3 * 8u + gg3 * 2u + il0
+                                    let pw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
+                                    let pb = (pw >> ((si & 3u) * 8u)) & 255u
+                                    let dsc = float(ksh[blk * 2u]) * float(pb & 15u)
+                                    let dmn = float(ksh[blk * 2u + 1u]) * float(pb >> 4u)
+                                    let dsc1 = dsc * 0.00390625
+                                    let dsc2 = dsc * 0.0000152587890625
+                                    let dsc3 = dsc * 0.000000059604644775390625
+                                    let qb = blk * 16u + hf3 * 8u + il0 * 4u
+                                    let nsh = gg3 * 2u
+                                    for [unroll_full] (k in range(4)) {
+                                        let u = kqu[qb + uint(k)]
+                                        let qv = (u >> nsh) & 0x03030303
+                                        va[k * 4] = float16(dsc * float(qv & 255u) - dmn)
+                                        va[k * 4 + 1] = float16(dsc1 * float(qv & 65280u) - dmn)
+                                        va[k * 4 + 2] = float16(dsc2 * float(qv & 16711680u) - dmn)
+                                        va[k * 4 + 3] = float16(dsc3 * float(qv & 4278190080u) - dmn)
+                                    }
+                                } else {
                                 let sv = ks4[blk]
                                 var sc = 0u
                                 var mn = 0u
@@ -5751,6 +5798,7 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
                                     }
                                 }
                             }
+                        }
                         }
                     }
                 }
@@ -5814,6 +5862,12 @@ class MetalKqMulMmIq3s : MetalKqMulMmK45T {
 [metal_dispatch(name = "enc_kq_mm_iq3xxs_c", pso = "g_pso_kq_mm_b34", tgmem = "MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmIq3xxs : MetalKqMulMmK45T {
     override IQ3XXS = true
+}
+
+// q2_K rides its own K2 arm; the split scale plane binds twice like k6 (the 4B tail at s0off = doff)
+[metal_dispatch(name = "enc_kq_mm_k2_c", pso = "g_pso_kq_mm_b2", tgmem = "MetalKqMulMmK2_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+class MetalKqMulMmK2 : MetalKqMulMmK45T {
+    override K2 = true
 }
 
 // iq4nl rides the IQ4XS arm with IQ4NL flipping the scale read to q40's per-32-block d plane
@@ -7225,6 +7279,257 @@ class MetalKqGemvK6 {
             let s = simd_sum(sumf[r])
             if (lane == 0u && first_row + uint(r) < ddim) {
                 y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
+
+// Q2_K: the k3 GEMV's lane map minus the hmask - unsigned 2-bit lanes, per-16 sc/min NIBBLE
+// pairs off the split strips (sc scales the dot, mn folds on the lane's x sums against dmin),
+// d + dmin off the 4B tail plane.
+[metal_dispatch(name = "enc_kq_k2_c", pso = "g_pso_kq_k2", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+class MetalKqGemvK2 {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d+dmin tail - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B pair-byte strips, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k2 quant plane, byte view (qs at 64*blk)
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="metal_kq_gemv_k2_msl")]
+    def metal_kq_gemv_k2 {
+        let lane = gl_SubgroupInvocationID
+        let tid = lane / 2u
+        let ix = lane % 2u
+        let ip = tid / 8u
+        let il = tid % 8u
+        let l0 = il * 4u
+        let is0 = ip * 8u + l0 / 16u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        var yl : float[16]
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let yb = ib * 256u + ip * 128u + l0
+            var ysum : float[4]
+            for [unroll_full] (l in range(4)) {
+                yl[4 * l] = x[yb + uint(l)]
+                yl[4 * l + 1] = x[yb + 32u + uint(l)]
+                yl[4 * l + 2] = x[yb + 64u + uint(l)]
+                yl[4 * l + 3] = x[yb + 96u + uint(l)]
+                ysum[0] += yl[4 * l]
+                ysum[1] += yl[4 * l + 1]
+                ysum[2] += yl[4 * l + 2]
+                ysum[3] += yl[4 * l + 3]
+            }
+            for [unroll_full] (r in range(2)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                let qs0 = blk * 64u + ip * 32u + l0
+                let sb = blk * 16u + is0
+                var sums : float[4]
+                for [unroll_full] (l in range(4)) {
+                    let q = uint(kqb[qs0 + uint(l)])
+                    sums[0] += yl[4 * l] * float(q & 3u)
+                    sums[1] += yl[4 * l + 1] * float((q >> 2u) & 3u)
+                    sums[2] += yl[4 * l + 2] * float((q >> 4u) & 3u)
+                    sums[3] += yl[4 * l + 3] * float(q >> 6u)
+                }
+                let b0 = uint(kscb[sb])
+                let b2 = uint(kscb[sb + 2u])
+                let b4 = uint(kscb[sb + 4u])
+                let b6 = uint(kscb[sb + 6u])
+                let dd = float(kdh[blk * 2u])
+                let dmn = float(kdh[blk * 2u + 1u])
+                sumf[r] += dd * (sums[0] * float(b0 & 15u) + sums[1] * float(b2 & 15u) + sums[2] * float(b4 & 15u) + sums[3] * float(b6 & 15u))
+                sumf[r] -= dmn * (ysum[0] * float(b0 >> 4u) + ysum[1] * float(b2 >> 4u) + ysum[2] * float(b4 >> 4u) + ysum[3] * float(b6 >> 4u))
+            }
+            ib += 2u
+        }
+        for [unroll_full] (r in range(2)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
+
+// The k2 B2/B4 pair: the K3T shell minus the hmask - w = q*d*sc - dmin*mn per element, the
+// pair byte picked per (slot, half).
+[ |> template_struct_instance]
+class template MetalKqMvK2T {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d+dmin tail - the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B pair-byte strips, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k2 quant plane, uint view (16 qs words per superblock)
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+    @template_constant NR : int = 2
+    @template_constant NRU : uint = 2u  // NR's uint spelling (colbase math) — override BOTH together
+    @template_constant TILED : bool = false
+
+    [metal_kernel]
+    def metal_kq_mv_k2 {   // nolint:STYLE038 — the TILED twin loops are byte-identity-driven, not splittable
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * NRU   // nolint:LINT002 dead in the TILED=false stamp — measured free
+        let nb = ka.ndim / 256u
+        let s = tx / 2u
+        let o4 = (tx % 2u) * 4u
+        let shr = 2u * s
+        let nb4 = ka.ndim / 4u
+        var sumf : float[NR]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let dd = float(kdh[blk * 2u])
+            let dmn = float(kdh[blk * 2u + 1u])
+            for [unroll_full] (ch in range(2)) {
+                let ip = uint(ch)
+                let qb = blk * 16u + ip * 8u + o4
+                let g = ip * 8u + s * 2u + (tx % 2u)
+                let pb = uint(kscb[blk * 16u + g])
+                let dl = dd * float(pb & 15u)
+                let ml = dmn * float(pb >> 4u)
+                var w : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qu = kqu[qb + uint(u)]
+                    let qv = (qu >> shr) & 0x03030303
+                    for [unroll_full] (e in range(4)) {
+                        w[4 * u + e] = float((qv >> (8u * uint(e))) & 255u) * dl - ml
+                    }
+                }
+                let cx4 = sb * 64u + ip * 32u + s * 8u + o4
+                static_if (TILED) {
+                    for [unroll_full] (b in range(NR)) {
+                        let xb4 = (colbase + uint(b)) * nb4 + cx4
+                        var acc = 0.0
+                        for [unroll_full] (u in range(4)) {
+                            let v = x[xb4 + uint(u)]
+                            acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                        }
+                        sumf[b] += acc
+                    }
+                } else {
+                    for [unroll_full] (b in range(NR)) {
+                        let xb4 = uint(b) * nb4 + cx4
+                        var acc = 0.0
+                        for [unroll_full] (u in range(4)) {
+                            let v = x[xb4 + uint(u)]
+                            acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                        }
+                        sumf[b] += acc
+                    }
+                }
+            }
+            sb++
+        }
+        static_if (TILED) {
+            for [unroll_full] (b in range(NR)) {
+                var sm = sumf[b]
+                sm += simd_shuffle_down(sm, 4u)
+                sm += simd_shuffle_down(sm, 2u)
+                sm += simd_shuffle_down(sm, 1u)
+                if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                    y[(colbase + uint(b)) * ka.ys + row] = sm
+                }
+            }
+        } else {
+            for [unroll_full] (b in range(NR)) {
+                var sm = sumf[b]
+                sm += simd_shuffle_down(sm, 4u)
+                sm += simd_shuffle_down(sm, 2u)
+                sm += simd_shuffle_down(sm, 1u)
+                if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                    y[uint(b) * ka.ys + row] = sm
+                }
+            }
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_kq_mvb2_k2_c", pso = "g_pso_kq_mvb2_k2", tg = 64, grid = "rows/8", params = "rows : int64")]
+class MetalKqMvB2K2 : MetalKqMvK2T {
+    override NR = 2
+    override NRU = 2u
+    override TILED = false
+}
+
+[metal_dispatch(name = "enc_kq_mvb4_k2_c", pso = "g_pso_kq_mvb4_k2", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+class MetalKqMvB4K2 : MetalKqMvK2T {
+    override NR = 4
+    override NRU = 4u
+    override TILED = true
+}
+
+// the k2 B8 twin: the k3 B8 shell minus the hmask, per-element w = q*d*sc - dmin*mn
+[metal_dispatch(name = "enc_kq_mvb8_k2_c", pso = "g_pso_kq_mvb8_k2", tgmem = "metal_kq_mvb8_k2_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+class MetalKqMvB8K2 {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d+dmin tail - the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B pair-byte strips, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k2 quant plane, uint view
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+    @workgroup txp : float4[512]
+
+    [metal_kernel(name="metal_kq_mvb8_k2_msl")]
+    def metal_kq_mvb8_k2 {
+        let lid = gl_LocalInvocationID.x
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let nb = ka.ndim / 256u
+        let s = tx / 2u
+        let o4 = (tx % 2u) * 4u
+        let shr = 2u * s
+        let nb4 = ka.ndim / 4u
+        var acc : float4[8]
+        var sb = 0u
+        while (sb < nb) {
+            barrier()
+            for [unroll_full] (j in range(8)) {
+                let slot = uint(j) * 64u + lid
+                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
+            }
+            barrier()
+            let blk = row * nb + sb
+            let dd = float(kdh[blk * 2u])
+            let dmn = float(kdh[blk * 2u + 1u])
+            for [unroll_full] (ch in range(2)) {
+                let ip = uint(ch)
+                let qb = blk * 16u + ip * 8u + o4
+                let g = ip * 8u + s * 2u + (tx % 2u)
+                let pb = uint(kscb[blk * 16u + g])
+                let dl = dd * float(pb & 15u)
+                let ml = dmn * float(pb >> 4u)
+                var w4 : float4[4]
+                for [unroll_full] (u in range(4)) {
+                    let qvc = (kqu[qb + uint(u)] >> shr) & 0x03030303
+                    w4[u] = float4(float(qvc & 255u), float((qvc >> 8u) & 255u),
+                        float((qvc >> 16u) & 255u), float((qvc >> 24u) & 255u)) * dl - float4(ml)
+                }
+                let cxl = ip * 32u + s * 8u + o4
+                for [unroll_full] (b in range(8)) {
+                    for [unroll_full] (u in range(4)) {
+                        acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
+                    }
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(8)) {
+            var sm = acc[b].x + acc[b].y + acc[b].z + acc[b].w
+            sm += simd_shuffle_down(sm, 4u)
+            sm += simd_shuffle_down(sm, 2u)
+            sm += simd_shuffle_down(sm, 1u)
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = sm
             }
         }
     }

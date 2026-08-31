@@ -226,6 +226,26 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         }
         return true
     }
+    if (name == "k2s") {
+        // k2: the 20B row splits like k6 - the 16 pair-byte strips first, the 4B d+dmin headers as the tail
+        if (!empty(t.k2s)) {
+            var @exact_size k2c : array<uint8>
+            let nsb = long_length(t.k2s) / K2_SSB
+            k2c |> reserve_resize(nsb * K2_SSB)
+            unsafe {
+                var dp = addr(k2c[0])
+                let sp = addr < uint8 const? >(t.k2s[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * K2_SSB + 4l), 16)
+                    for (h in range64(4l)) {
+                        dp[nsb * 16l + sb * 4l + h] = sp[sb * K2_SSB + h]
+                    }
+                }
+            }
+            t.k2s <- k2c
+        }
+        return true
+    }
     if (name == "k3s") {
         // k3: the CPU row IS the k6 form ([16 int8][f16 d]) — the same split, over t.k3s
         if (!empty(t.k3s)) {
@@ -274,7 +294,7 @@ def metal_blob_commit(var t : Model) : bool {
     if (!metal_blob_eligible(t)) {
         return false
     }
-    for (nm in ["k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss", "iq3xxss"]) {
+    for (nm in ["k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss", "iq3xxss", "k2s"]) {
         metal_blob_scale_plane(t, nm)
     }
     t.metal_blob = true

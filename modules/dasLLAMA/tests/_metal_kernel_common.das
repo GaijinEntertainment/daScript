@@ -174,12 +174,26 @@ let KQ_SAFE_SCALES = fixed_array(0.25, 0.5, 1.0, 0.125, 2.0, 0.75, 1.5, 0.375)
 // [12 packed 6-bit bytes] per superblock, K6 = [16B sub-scales] x nsb + f16 d tail, IQ4_XS (44) =
 // the same split form with [8 signed sub-scales in -31..31][8 zero] strips, Q3_K (3) = the k6 form over 96B quants
 def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>) {
-    let qsb = fmt == 4 || fmt == 44 || fmt == 45 ? 128 : (fmt == 5 ? 160 : (fmt == 3 ? 96 : (fmt == 33 ? 104 : (fmt == 34 ? 96 : 192))))
+    let qsb = fmt == 2 ? 64 : (fmt == 4 || fmt == 44 || fmt == 45 ? 128 : (fmt == 5 ? 160 : (fmt == 3 ? 96 : (fmt == 33 ? 104 : (fmt == 34 ? 96 : 192)))))
     kq |> resize(nsb * qsb)
     for (i in range(nsb * qsb)) {
         kq[i] = kq_hash_byte(i * 3 + fmt)
     }
-    if (fmt == 45) {
+    if (fmt == 2) {
+        // k2: the metal split form - [16 pair-byte strips x nsb][4B d+dmin tail x nsb]
+        ks |> resize(nsb * 20)
+        for (i in range(nsb * 16)) {
+            ks[i] = kq_hash_byte(i * 7 + 13)
+        }
+        for (b in range(nsb)) {
+            let dbits = f32_to_f16(KQ_SAFE_SCALES[b % 8])
+            let mbits = f32_to_f16(KQ_SAFE_SCALES[(b + 3) % 8])
+            ks[nsb * 16 + b * 4] = uint8(dbits & 0xFFu)
+            ks[nsb * 16 + b * 4 + 1] = uint8(dbits >> 8u)
+            ks[nsb * 16 + b * 4 + 2] = uint8(mbits & 0xFFu)
+            ks[nsb * 16 + b * 4 + 3] = uint8(mbits >> 8u)
+        }
+    } elif (fmt == 45) {
         // iq4nl: 16B/sb = 8 per-32-block f16 d's, verbatim (no strips)
         ks |> resize(nsb * 16)
         for (b in range(nsb * 8)) {
@@ -267,6 +281,9 @@ def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wro
                 int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
         } elif (fmt == 45) {
             dequant_iq4nl_plane_superblock(kq, int64(sb * 128), ks, int64(sb * 16), wrow, int64(ib * 256))
+        } elif (fmt == 2) {
+            dequant_k2_plane_superblock_at(kq, int64(sb * 64), ks, int64(sb * 16),
+                int64(nsb_total * 16 + sb * 4), wrow, int64(ib * 256))
         } else {
             dequant_k6_plane_superblock_at(kq, int64(sb * 192), ks, int64(sb * 16),
                 int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))

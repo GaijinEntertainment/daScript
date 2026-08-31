@@ -483,7 +483,28 @@ FOLLOW its parent in the file (KqBatchK2 first landed above KqBatchK6 - "parent 
 not found"). Gates: the suite 80/80, the three k2 cm2 tiles 0-off; resident e2e armed
 (fresh bake), gen 284 t/s, ids 19/64 with the same token-19 near-tie. Rows (5060 Ti vs
 llama.cpp b10660 build-vulkan): pp512 14544.0 / 16752.7 (0.87x - above the 0.69-0.78 tier
-class), tg128 442.8 / 424.1 (1.04x). Metal: pending.
+class), tg128 442.8 / 424.1 (1.04x).
+
+Phase D (Metal, 2026-08-31): the "k2s" blob arm splits the 20B row k6-style into [16
+pair-byte strips x nsb][4B d+dmin tails x nsb] (a verbatim 20B bind would need off % 1024;
+the split keeps every bind aligned free - no off_ok arm). dequant_k2_plane_superblock grew
+its _at twin for the split read. Kernels are the k3 shells minus the hmask: MetalKqGemvK2
+(the k3 lane map; sc scales the dot, mn folds on per-block x sums against dmin off the 4B
+tail), MetalKqMvK2T B2/B4 + MetalKqMvB8K2 (w = q*d*sc - dmin*mn per element), and a K2 arm
+on MetalKqMulMmK45T (the pair byte from the one uint4 strip; wrapped around the k4/k5
+default - a hand brace-balance close landed one line early and the default ran after the
+arm, "redefinition of sv" in the emitted MSL; balance from INSIDE the else). Gates on the
+M1 Max: gemv 2/2, gemm 2/2; the metal-blob e2e decodes the same stream at gen 246 t/s,
+ids 19/64 with the same token-19 near-tie.
+
+Where Q2_K landed (vs llama.cpp b10660, the local requant):
+
+| tier | pp512 (ours / theirs) | tg128 (ours / theirs) |
+|---|---|---|
+| zen2 CPU | 418.6 / 412.0 (1.02x) | 77.1 / 81.1 (0.95x) |
+| M1 CPU | 543.4 / 210.0 (2.59x) | 155.8 / 128.2 (1.21x) |
+| 5060 Ti Vulkan | 14544.0 / 16752.7 (0.87x) | 442.8 / 424.1 (1.04x) |
+| M1 Metal | 3577.6 / 3568.1 (1.00x) | 213.7 / 237.1 (0.90x, both refs drift +-11 thermally) |
 
 ### IQ4_NL (the near-free one, 2026-08-30)
 

@@ -180,7 +180,7 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
 // formats) must DECLINE kquant_native instead of falling into a wrong-layout kernel branch
 // (the dispatchers below treat "not k4/k6" as k5)
 def kq_fmt_gpu_supported(f : KqFmt) : bool {
-    return f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl
+    return f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.k2
 }
 
 def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {

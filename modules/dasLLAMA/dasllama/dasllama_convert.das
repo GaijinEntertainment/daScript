@@ -683,10 +683,16 @@ def transcode_q2k_superblock(bytes : array<uint8> | #; bo : int64; var kq : arra
 //! g (sc/mn = the group's nibble pair); q = the 2-bit lane of qs byte (g/8)*32 + (g%2)*16 + l at
 //! shift 2*((g%8)/2) - ggml's dequantize_row_q2_K float order (dl*q - ml).
 def dequant_k2_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
-    let d = f16_to_f32(rd_u16(ks, kso))
-    let dmin = f16_to_f32(rd_u16(ks, kso + 2l))
+    dequant_k2_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `sso` names the 16 pair-byte strip, `dso` the 4B d+dmin header -
+//! independent bases, so the metal-blob split plane reads through the same math.
+def dequant_k2_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; sso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, dso))
+    let dmin = f16_to_f32(rd_u16(ks, dso + 2l))
     for (g in range64(16l)) {
-        let scb = int(ks[kso + 4l + g])
+        let scb = int(ks[sso + g])
         let dl = d * float(scb & 15)
         let ml = dmin * float(scb >> 4)
         let qb = kqo + (g / 8l) * 32l + (g % 2l) * 16l
