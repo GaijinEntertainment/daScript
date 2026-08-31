@@ -4411,7 +4411,7 @@ def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wbo
 //! quant superblocks, plus the k6 2B d tail
 def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64;
                              bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64) : bool {
-    if (fmt == KqFmt.iq4xs || fmt == KqFmt.k3) {   // no dev-W dequant kernel for these formats yet
+    if (fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s) {   // no dev-W dequant kernel for these formats yet
         return false
     }
     let dq = fmt == KqFmt.k6 ? g_pf_pso_dq_k6 : (fmt == KqFmt.k4 ? g_pf_pso_dq_k4 : g_pf_pso_dq_k5)
@@ -4584,6 +4584,10 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
         enc_kq_mm_k3_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, bk, bn, mp, rows)
         return
     }
+    if (fmt == KqFmt.iq3s) {   // the base mul_mm only - no tensor / tall / dev-W twins yet
+        enc_kq_mm_iq3s_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, bk, bn, mp, rows)
+        return
+    }
     //! deep-class arm: a panel dev-W would split past 8 tiles is DRAM-resident - the tall
     //! in-kernel-dequant stamp reads the quant plane once per 128-row tile instead of
     //! materializing and re-streaming a 2B/element f16 panel
@@ -4691,6 +4695,8 @@ def private pf_enc_kq_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; w
         enc_kq_iq4xs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
     } elif (fmt == KqFmt.k3) {
         enc_kq_k3_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+    } elif (fmt == KqFmt.iq3s) {
+        enc_kq_iq3s_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
     } elif (fmt == KqFmt.k6) {
         enc_kq_k6_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
     } elif (fmt == KqFmt.k4) {

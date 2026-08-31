@@ -261,6 +261,11 @@ var g_pso_kq_mvb8_iq4xs : MetalComputePipeline?
 var g_pso_kq_mvb2_k3 : MetalComputePipeline?
 var g_pso_kq_mvb4_k3 : MetalComputePipeline?
 var g_pso_kq_mvb8_k3 : MetalComputePipeline?
+var g_pso_kq_iq3s : MetalComputePipeline?
+var g_pso_kq_mvb2_iq3s : MetalComputePipeline?
+var g_pso_kq_mvb4_iq3s : MetalComputePipeline?
+var g_pso_kq_mvb8_iq3s : MetalComputePipeline?
+var g_pso_kq_mm_b33 : MetalComputePipeline?
 var g_pso_kq_mm_b4 : MetalComputePipeline?   // batch B>=9: the prefill-owned kq mul_mm twins
 var g_pso_kq_mm_b5 : MetalComputePipeline?
 var g_pso_kq_mm_b6 : MetalComputePipeline?
@@ -852,6 +857,10 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
             return (buf = plane_buffer(dev, addr < void? >(t.k3q[0]), uint64(long_length(t.k3q)), t.image_map != null),
                     qoff = uint64(sb0 * 96l))
         }
+        if (fmt == KqFmt.iq3s) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq3sq[0]), uint64(long_length(t.iq3sq)), t.image_map != null),
+                    qoff = uint64(sb0 * 104l))
+        }
         return (buf = plane_buffer(dev, addr < void? >(t.k6q[0]), uint64(long_length(t.k6q)), t.image_map != null),
                 qoff = uint64(sb0 * 192l))
     }
@@ -876,6 +885,11 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
         if (fmt == KqFmt.k3) {   // the k6 split form over the 18B/sb device plane
             let plane_sb = long_length(t.k3s) / 18l
             return (buf = plane_buffer(dev, addr < void? >(t.k3s[0]), uint64(long_length(t.k3s)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
+        }
+        if (fmt == KqFmt.iq3s) {   // the k6 split form over the 18B/sb device plane
+            let plane_sb = long_length(t.iq3ss) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.iq3ss[0]), uint64(long_length(t.iq3ss)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
         }
         if (fmt == KqFmt.iq4xs) {   // the k6 split form over the 18B/sb device plane

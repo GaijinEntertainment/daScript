@@ -764,3 +764,14 @@
     (insertelement per i32 lane, no panel), and/or the signs-on-activation form that drops
     the abs+psign pair. Done = a gemv perm that takes tg128 at or past llama.cpp's, crowned
     by the probe.
+
+62. **IQ3_S Metal decode: the ~140 GB/s compose ceiling (tg 0.95x).** Eight GEMV forms raced
+    at n=2048 d=8192 - gather placement x3, gather deleted, signs deleted, llama.cpp's exact
+    1-lane-per-block geometry, row width, f4 magnitude slab - all land in 127-141 GB/s while
+    k4 does 204 and k6 287 in the same harness; the 9-bit-index + per-nibble-sign compose is
+    the cost, not any one instruction class (deleting the gather OR the signs moves it under
+    10%). The f4 slab ships (+9%, tg128 0.82x -> 0.95x same-run). Candidates beyond kernel
+    shape: emitted-MSL diffs vs llama.cpp's compiled kernel (half math, function constants),
+    or fusing the sign flip into the staged slab per SITE via a second indexed table. Done =
+    a form that clears 180 GB/s in the dispatch-loop probe (QUIRK 22's harness), or a note
+    proving the ceiling is shared by llama.cpp's own kernel when isolated the same way.

@@ -411,6 +411,10 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    hash folds the generator bodies (plans/interpreter ledger has the sibling
    `jit_dll_semantic_hash` item).
 
+22. **A Metal kernel lever is judged by a kernel-level probe, never by tg128 e2e.** A tg128
+   row on the M1 carries +-8 t/s of noise; the iq3s f4-slab GEMV form (+9% at the kernel)
+   measured FLAT on e2e twice and was nearly discarded. The dispatch-loop probe (50 dispatches
+   per encoder, best-of-3 encoders, GB/s off plane bytes) resolves 3% in seconds.
 ## Per-format notes
 
 ### IQ3_S (the third format - and the first grid format, 2026-08-30)
@@ -476,8 +480,44 @@ arms, and iq3s re-admitted to `pf_f16_feed`. The three tiles gate 0-off (89600 c
 the e2e holds 63/64 on the f16 feed (the final-token near-tie; the quant feed ran 64/64).
 Rows (5060 Ti vs llama.cpp b10660 Vulkan): tg128 288.1 vs 324.2 (0.89x), pp512 12540 vs
 17865 (0.70x - AT the tier's shared 1B-shape class; the k4 control on this box is 0.67x),
-up from 6241 on the quant feed. Metal: pending (threadgroup floats + the base-pointer
-9th-bit trick).
+up from 6241 on the quant feed.
+
+Metal came in five surfaces plus one emitter feature. The blob "iq3ss" arm is the iq4xs
+20->18 split VERBATIM over `t.iq3ss` (same strip/d addressing, so `kq_scales_of` is a copy of
+the iq4xs arm with the plane swapped); quants bind at `sb0*104`. The MSL emitter grew
+constant-table hoisting for the grid (its own dasMetal commit: a `let` fixed-array local with
+all-literal elements lowers to a program-scope `constant T name[N] = {...}` - before that,
+ANY fixed-array initializer was a compile error, and there is no other way to put 2 KB of
+data into a kernel). `iq3s_gw()` carries the 512-word literal; the GEMV and mul_mm stage it
+into threadgroup memory, the Mv twins read it direct (unmeasured batch shapes). Kernels:
+`MetalKqGemvIq3s` (the iq4xs parity shape but 4 rows/simdgroup - llama.cpp's N_R0_IQ3_S -
+with the grid staged as a `float4[512]` MAGNITUDE slab and signs applied by select),
+`MetalKqMvIq3sT` B2/B4 + `MetalKqMvB8Iq3s` (iq4xs shells, per-32-block lane map, consecutive
+float4 x loads), an `IQ3S` arm in `MetalKqMulMmK45T` (threadgroup grid under
+`@template_gate`; re-nest the chain - `} else static_if` is a parse error, QUIRK 14's rule
+holds in the MSL emitter too).
+
+The decode-GEMV gap got the full treatment: at n=2048 d=8192 the shipped kernel raced EIGHT
+forms (tg-slab uint gather, constant-table gather, duplicated slab, gather deleted, sign
+flip deleted, llama.cpp's exact 1-lane-per-block geometry, 2- vs 4-row, f4 magnitude slab) -
+all land in 127-141 GB/s while k4 does 204 and k6 287 in the same harness. The compose chain
+(9-bit index + per-nibble signs) is format-intrinsic on M1; the f4 slab is the best form
+(+9%) and ships. Gates on the M1 Max: `test_metal_gemv_kernels` 2/2, `test_metal_gemm_kernels`
+2/2 (~108s corpus), e2e decodes the coherent story at gen 227 t/s.
+
+Against llama.cpp b10660 (`lcpp_bench --for-debug-purposes`, das = the debug-jit instrument;
+zen2 = 16 threads, M1 = 8; IQ3_M, so attn_v/attn_output/ffn_down are Q4_K and the tied
+embedding head is Q6_K - three formats share every decode step):
+
+| tier | pp512 das / llama.cpp | tg128 das / llama.cpp |
+|---|---|---|
+| zen2 CPU | 516.9 / 104.9 (4.93x) | 52.4 / 57.0 (0.92x) |
+| 5060 Ti Vulkan | 12539.6 / 17865 (0.70x) | 288.1 / 324.2 (0.89x) |
+| M1 CPU | 886.2 / 433.6 (2.04x) | 57.4 / 66.6 (0.86x) |
+| M1 Metal | 3237.6 / 3344.3 (0.97x) | 199.4 / 209.0 (0.95x) |
+
+(The M1 Metal ref tg drifts 209-230 across back-to-back rounds - thermal; ratios are
+same-run. The tg tails on every tier are the one ledgered class: followup_general #61/#62.)
 
 ### Q3_K (the second format, 2026-08-30)
 

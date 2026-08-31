@@ -29,7 +29,7 @@ require math
 def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
     if (off < 0l) return true
     if (fmt == KqFmt.q8) return off % 256l == 0l
-    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3) return off % 512l == 0l   // the split scale form: the (off/256)*2 d-plane bind stays 4B-aligned
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s) return off % 512l == 0l   // the split scale form: the (off/256)*2 d-plane bind stays 4B-aligned
     if (fmt == KqFmt.q51) return off % 128l == 0l   // (off/32)*20 and (off/32)*4 both 16B-aligned
     return true
 }
@@ -188,6 +188,25 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         }
         return true
     }
+    if (name == "iq3ss") {
+        // iq3s: the row IS the iq4xs 20B shape — the same split (strips = bytes 4..19, d = bytes 0..1), over t.iq3ss
+        if (!empty(t.iq3ss)) {
+            var @exact_size i3c : array<uint8>
+            let nsb = long_length(t.iq3ss) / IQ3S_SSB
+            i3c |> reserve_resize(nsb * 18l)
+            unsafe {
+                var dp = addr(i3c[0])
+                let sp = addr < uint8 const? >(t.iq3ss[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ3S_SSB + 4l), 16)
+                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ3S_SSB]
+                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ3S_SSB + 1l]
+                }
+            }
+            t.iq3ss <- i3c
+        }
+        return true
+    }
     if (name == "k3s") {
         // k3: the CPU row IS the k6 form ([16 int8][f16 d]) — the same split, over t.k3s
         if (!empty(t.k3s)) {
@@ -236,7 +255,7 @@ def metal_blob_commit(var t : Model) : bool {
     if (!metal_blob_eligible(t)) {
         return false
     }
-    for (nm in ["k4s", "k5s", "k6s", "iq4xss", "k3s"]) {
+    for (nm in ["k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss"]) {
         metal_blob_scale_plane(t, nm)
     }
     t.metal_blob = true

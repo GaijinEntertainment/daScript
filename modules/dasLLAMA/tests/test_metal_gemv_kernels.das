@@ -23,12 +23,12 @@ require math
 // ===== single-stream kq GEMV (MetalKqGemvK4 / K5 / K5C / K6) =====
 
 def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
-    let fmt = vform == "k4" ? 4 : (vform == "k6" ? 6 : (vform == "iq4xs" ? 44 : (vform == "k3" ? 3 : 5)))
+    let fmt = vform == "k4" ? 4 : (vform == "k6" ? 6 : (vform == "iq4xs" ? 44 : (vform == "k3" ? 3 : (vform == "iq3s" ? 33 : 5))))
     let tag = "kq_gemv_{vform} n={n} d={d}"
     var err : string
-    let src = vform == "k3" ? metal_kq_gemv_k3_msl : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl : (vform == "k4" ? metal_kq_gemv_k4_msl : (vform == "k5" ? metal_kq_gemv_k5_msl : (vform == "k5c" ? metal_kq_gemv_k5c_msl : metal_kq_gemv_k6_msl))))
-    let entry = vform == "k3" ? metal_kq_gemv_k3_msl_entry : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl_entry : (vform == "k4" ? metal_kq_gemv_k4_msl_entry : (vform == "k5" ? metal_kq_gemv_k5_msl_entry : (vform == "k5c" ? metal_kq_gemv_k5c_msl_entry : metal_kq_gemv_k6_msl_entry))))
-    let fm = vform == "k3" ? metal_kq_gemv_k3_msl_fastmath : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl_fastmath : (vform == "k4" ? metal_kq_gemv_k4_msl_fastmath : (vform == "k5" ? metal_kq_gemv_k5_msl_fastmath : (vform == "k5c" ? metal_kq_gemv_k5c_msl_fastmath : metal_kq_gemv_k6_msl_fastmath))))
+    let src = vform == "iq3s" ? metal_kq_gemv_iq3s_msl : (vform == "k3" ? metal_kq_gemv_k3_msl : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl : (vform == "k4" ? metal_kq_gemv_k4_msl : (vform == "k5" ? metal_kq_gemv_k5_msl : (vform == "k5c" ? metal_kq_gemv_k5c_msl : metal_kq_gemv_k6_msl)))))
+    let entry = vform == "iq3s" ? metal_kq_gemv_iq3s_msl_entry : (vform == "k3" ? metal_kq_gemv_k3_msl_entry : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl_entry : (vform == "k4" ? metal_kq_gemv_k4_msl_entry : (vform == "k5" ? metal_kq_gemv_k5_msl_entry : (vform == "k5c" ? metal_kq_gemv_k5c_msl_entry : metal_kq_gemv_k6_msl_entry)))))
+    let fm = vform == "iq3s" ? metal_kq_gemv_iq3s_msl_fastmath : (vform == "k3" ? metal_kq_gemv_k3_msl_fastmath : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl_fastmath : (vform == "k4" ? metal_kq_gemv_k4_msl_fastmath : (vform == "k5" ? metal_kq_gemv_k5_msl_fastmath : (vform == "k5c" ? metal_kq_gemv_k5c_msl_fastmath : metal_kq_gemv_k6_msl_fastmath)))))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
@@ -66,13 +66,16 @@ def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
     var by = buf_fill(dev, d, -1000.0)
     var bn = buf_u32(dev, uint(n))
     var bd = buf_u32(dev, uint(d))
-    let groups = vform == "k5c" ? (d + 1) / 2 : (d + 3) / 4
+    let groups = vform == "k5c" ? (d + 1) / 2 : (vform == "iq3s" ? (d + 7) / 8 : (d + 3) / 4)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         if (vform == "iq4xs") {
             metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq4xs_msl_tgmem, 0)   // the codebook slab
         }
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs/k3: the f16 d tail
+        if (vform == "iq3s") {
+            metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq3s_msl_tgmem, 0)   // the grid slab
+        }
+        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs/k3: the f16 d tail
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -105,15 +108,15 @@ def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
 def private kq_mvb_gate(t : T?; dev, queue; fmt, bwidth, n, d, nr, ys : int) {
     let tag = "kq_mvb{bwidth}_k{fmt} n={n} d={d} nr={nr} ys={ys}"
     var err : string
-    let src = (bwidth == 2 ? (fmt == 3 ? MetalKqMvB2K3_metal_kq_mv_k3_msl : (fmt == 44 ? MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl : (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl : MetalKqMvB2K6_metal_kq_mv_k6_msl))))
-        : (bwidth == 4 ? (fmt == 3 ? MetalKqMvB4K3_metal_kq_mv_k3_msl : (fmt == 44 ? MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl : (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl : MetalKqMvB4K6_metal_kq_mv_k6_msl))))
-            : (fmt == 3 ? metal_kq_mvb8_k3_msl : (fmt == 44 ? metal_kq_mvb8_iq4xs_msl : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl : metal_kq_mvb8_k6_msl))))))
-    let entry = (bwidth == 2 ? (fmt == 3 ? MetalKqMvB2K3_metal_kq_mv_k3_msl_entry : (fmt == 44 ? MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl_entry : (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl_entry : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl_entry : MetalKqMvB2K6_metal_kq_mv_k6_msl_entry))))
-        : (bwidth == 4 ? (fmt == 3 ? MetalKqMvB4K3_metal_kq_mv_k3_msl_entry : (fmt == 44 ? MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl_entry : (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl_entry : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl_entry : MetalKqMvB4K6_metal_kq_mv_k6_msl_entry))))
-            : (fmt == 3 ? metal_kq_mvb8_k3_msl_entry : (fmt == 44 ? metal_kq_mvb8_iq4xs_msl_entry : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl_entry : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl_entry : metal_kq_mvb8_k6_msl_entry))))))
-    let fm = (bwidth == 2 ? (fmt == 3 ? MetalKqMvB2K3_metal_kq_mv_k3_msl_fastmath : (fmt == 44 ? MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl_fastmath : (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl_fastmath : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl_fastmath : MetalKqMvB2K6_metal_kq_mv_k6_msl_fastmath))))
-        : (bwidth == 4 ? (fmt == 3 ? MetalKqMvB4K3_metal_kq_mv_k3_msl_fastmath : (fmt == 44 ? MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl_fastmath : (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl_fastmath : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl_fastmath : MetalKqMvB4K6_metal_kq_mv_k6_msl_fastmath))))
-            : (fmt == 3 ? metal_kq_mvb8_k3_msl_fastmath : (fmt == 44 ? metal_kq_mvb8_iq4xs_msl_fastmath : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl_fastmath : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl_fastmath : metal_kq_mvb8_k6_msl_fastmath))))))
+    let src = (bwidth == 2 ? (fmt == 33 ? MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl : (fmt == 3 ? MetalKqMvB2K3_metal_kq_mv_k3_msl : (fmt == 44 ? MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl : (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl : MetalKqMvB2K6_metal_kq_mv_k6_msl)))))
+        : (bwidth == 4 ? (fmt == 33 ? MetalKqMvB4Iq3s_metal_kq_mv_iq3s_msl : (fmt == 3 ? MetalKqMvB4K3_metal_kq_mv_k3_msl : (fmt == 44 ? MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl : (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl : MetalKqMvB4K6_metal_kq_mv_k6_msl)))))
+            : (fmt == 33 ? metal_kq_mvb8_iq3s_msl : (fmt == 3 ? metal_kq_mvb8_k3_msl : (fmt == 44 ? metal_kq_mvb8_iq4xs_msl : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl : metal_kq_mvb8_k6_msl)))))))
+    let entry = (bwidth == 2 ? (fmt == 33 ? MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_entry : (fmt == 3 ? MetalKqMvB2K3_metal_kq_mv_k3_msl_entry : (fmt == 44 ? MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl_entry : (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl_entry : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl_entry : MetalKqMvB2K6_metal_kq_mv_k6_msl_entry)))))
+        : (bwidth == 4 ? (fmt == 33 ? MetalKqMvB4Iq3s_metal_kq_mv_iq3s_msl_entry : (fmt == 3 ? MetalKqMvB4K3_metal_kq_mv_k3_msl_entry : (fmt == 44 ? MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl_entry : (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl_entry : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl_entry : MetalKqMvB4K6_metal_kq_mv_k6_msl_entry)))))
+            : (fmt == 33 ? metal_kq_mvb8_iq3s_msl_entry : (fmt == 3 ? metal_kq_mvb8_k3_msl_entry : (fmt == 44 ? metal_kq_mvb8_iq4xs_msl_entry : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl_entry : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl_entry : metal_kq_mvb8_k6_msl_entry)))))))
+    let fm = (bwidth == 2 ? (fmt == 33 ? MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_fastmath : (fmt == 3 ? MetalKqMvB2K3_metal_kq_mv_k3_msl_fastmath : (fmt == 44 ? MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl_fastmath : (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl_fastmath : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl_fastmath : MetalKqMvB2K6_metal_kq_mv_k6_msl_fastmath)))))
+        : (bwidth == 4 ? (fmt == 33 ? MetalKqMvB4Iq3s_metal_kq_mv_iq3s_msl_fastmath : (fmt == 3 ? MetalKqMvB4K3_metal_kq_mv_k3_msl_fastmath : (fmt == 44 ? MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl_fastmath : (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl_fastmath : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl_fastmath : MetalKqMvB4K6_metal_kq_mv_k6_msl_fastmath)))))
+            : (fmt == 33 ? metal_kq_mvb8_iq3s_msl_fastmath : (fmt == 3 ? metal_kq_mvb8_k3_msl_fastmath : (fmt == 44 ? metal_kq_mvb8_iq4xs_msl_fastmath : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl_fastmath : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl_fastmath : metal_kq_mvb8_k6_msl_fastmath)))))))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
@@ -163,9 +166,9 @@ def private kq_mvb_gate(t : T?; dev, queue; fmt, bwidth, n, d, nr, ys : int) {
         metal_set_pipeline(enc, pso)
         if (bwidth == 8) {
             metal_set_threadgroup_memory_length(enc,
-                fmt == 3 ? metal_kq_mvb8_k3_msl_tgmem : (fmt == 44 ? metal_kq_mvb8_iq4xs_msl_tgmem : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl_tgmem : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl_tgmem : metal_kq_mvb8_k6_msl_tgmem))), 0)
+                fmt == 33 ? metal_kq_mvb8_iq3s_msl_tgmem : (fmt == 3 ? metal_kq_mvb8_k3_msl_tgmem : (fmt == 44 ? metal_kq_mvb8_iq4xs_msl_tgmem : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl_tgmem : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl_tgmem : metal_kq_mvb8_k6_msl_tgmem)))), 0)
         }
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs/k3: the f16 d tail
+        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs/k3: the f16 d tail
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -254,7 +257,7 @@ def private moe_kq_gemv_gate(t : T?; dev, queue; fmt, n, d, net, k, nst : int; p
         bxs = uint((perslot ? k : 1) * n), bys = uint(k * d), hasb = 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs/k3: the f16 d tail
+        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs/k3: the f16 d tail
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -728,8 +731,10 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 kq_gemv_gate(t, dev, queue, "iq4xs", 512, 30)
                 kq_gemv_gate(t, dev, queue, "k3", 1280, 11)
                 kq_gemv_gate(t, dev, queue, "k3", 512, 30)
+                kq_gemv_gate(t, dev, queue, "iq3s", 1280, 11)
+                kq_gemv_gate(t, dev, queue, "iq3s", 512, 30)
                 // the small-batch twins: nr = 2 / 3 (b4 col guard) / 6 (b8 pad), ys > d
-                for (fmt in [4, 5, 6, 44, 3]) {
+                for (fmt in [4, 5, 6, 44, 3, 33]) {
                     kq_mvb_gate(t, dev, queue, fmt, 2, 768, 17, 2, 22)
                     kq_mvb_gate(t, dev, queue, fmt, 4, 768, 17, 3, 22)
                     kq_mvb_gate(t, dev, queue, fmt, 8, 768, 17, 6, 22)
