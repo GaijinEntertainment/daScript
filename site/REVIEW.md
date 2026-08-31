@@ -3,7 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. **A Playwright spec (`*.spec.js`), wherever the diff puts it, answers to the
 `tests/playground/` checklist.** A page is an `.html` or `.md` file under this folder that a
-visitor navigates to, together with what the scripts it loads render into it — not a
+visitor navigates to, together with what the scripts it loads render into it - not a
 machine-only harness document (`playground/run-frame.html`), and not editor content.
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
@@ -69,7 +69,7 @@ recorded mid-branch describes a tree that no longer ships.
 it, or - when no spec loads it - that it was opened and run by hand in the playground.**
 
 **A stated Playwright run names the runtime artifacts it used: built from this change when
-the diff touches any source compiled into the WASM runtime (`daslang_static` — its `main()`
+the diff touches any source compiled into the WASM runtime (`daslang_static` - its `main()`
 lives in `utils/daslang/`) or the web build; the deployed ones otherwise.**
 
 **A diff that puts a measurement number - a rate, a duration, a size, a score some run
