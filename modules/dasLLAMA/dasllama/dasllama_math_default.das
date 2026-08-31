@@ -1024,15 +1024,16 @@ def private dequant_iq4nl_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr,
 }
 
 //! k2 grp row dequant: the 2-bit lanes stay in place as 16 four-byte columns x mr; scale row =
-//! [16 sc/min bytes interleaved x mr][mr x 4B d+dmin header]. w = (d*sc)*q - (dmin*mn).
+//! [16 sc/min bytes interleaved x mr][mr x f16 d][mr x f16 dmin]. w = (d*sc)*q - (dmin*mn).
 def private dequant_k2_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
     unsafe {
         for (sbi in range64(nsb)) {
             let qb = sbi * 64l * mr
             let sb = sbi * 20l * mr
-            let hd = sb + 16l * mr + 4l * r
+            let hd = sb + 16l * mr + 2l * r
             let d = f16_to_f32(uint(ksg[hd]) | (uint(ksg[hd + 1l]) << 8u))
-            let dmin = f16_to_f32(uint(ksg[hd + 2l]) | (uint(ksg[hd + 3l]) << 8u))
+            let hm = sb + 18l * mr + 2l * r
+            let dmin = f16_to_f32(uint(ksg[hm]) | (uint(ksg[hm + 1l]) << 8u))
             for (g in range64(16l)) {
                 let scb = int(ksg[sb + g * mr + r])
                 let dl = d * float(scb & 15)

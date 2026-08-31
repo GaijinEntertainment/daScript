@@ -453,8 +453,22 @@ over 16 groups), k2_grp_row_dot, repack_k2_grp (16 four-byte columns x mr; scale
 --tensor-type override needed) decodes coherently at gen 30 t/s reference bodies, greedy
 ids 19/64 with the fork a 0.153-logit near-tie (top2 IS our token; the lossiest format
 diverges earliest). No whole-scope re-mint fired on the first e2e (zero "@tune begin"
-lines), unlike QUIRK 17's precedent - watch at Phase B. JIT emitter, Vulkan, Metal:
-pending.
+lines), unlike QUIRK 17's precedent - resolved at Phase B: a declined-stub family demands
+no sidecar entry; the mint fires once real generators exist.
+
+Phase B (JIT emitter, 2026-08-31): a fourth arm through emit_block_kqv2 - the k2 flag
+swaps the quant compose to k3's column walk minus the hmask (2-bit lane at shift
+2*(blk%4)), the scale reads to per-16 nibble extracts (ZExt the pair bytes to i32 lanes,
+then &15 / >>4 - no i8-width splat needed; scv/mnv carry the two groups' sc, mnlo/mnhi
+their mins), keeps the k63 split lo/hi accumulators behind a per16 flag
+(vecBsums/fuseAcc/madd16/flush/bs0-bs1), and takes the k4/k5 two-fma epilogue (bacc folds
+on dmin). Prerequisite refactor: the grp scale header went FIELD-MAJOR
+([16 sc x mr][mr x f16 d][mr x f16 dmin]) so load_f16_vec_at serves the d/dmin vectors -
+repack_k2_grp and both grp readers moved together, re-gated bit-exact. Gates: probe test
+mode 11/11 k2 perms (maddubs mr8 stamps at 4.8e-7; vpdpbusd declines on zen2 as every
+format), test_kquant -jit 212/216. Crowned dot_maddubs_width256_mr8; stamped e2e gen
+30 -> 75 t/s, ids 19/64 with the same token-19 near-tie. zen2 16t vs llama.cpp clean-cpu
+b10660: pp512 418.6 / 412.0 (1.02x), tg128 77.1 / 81.1 (0.95x). Vulkan, Metal: pending.
 
 ### IQ4_NL (the near-free one, 2026-08-30)
 

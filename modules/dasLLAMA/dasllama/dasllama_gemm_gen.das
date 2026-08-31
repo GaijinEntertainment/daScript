@@ -942,10 +942,12 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
     let w8 = te.width / 8
     let k6 = te.kq == 6
     let k3 = te.kq == 3
+    let k2 = te.kq == 2
     let k63 = k6 || k3          // k3 rides k6's scale row and fold; only the quant compose and the offset differ
+    let per16 = k63 || k2       // per-16 scale granularity: split lo/hi accumulators, unsummed bs0/bs1
     let koff = k3 ? 4 : 32      // the signed-lattice offset the bsum fold removes
     let q40 = te.kq == 40
-    let qsb = (te.kq == 4 || q40) ? 128 : (k3 ? 96 : (te.kqBytes ? 256 : (te.kq == 5 ? 160 : 192)))
+    let qsb = (te.kq == 4 || q40) ? 128 : (k3 ? 96 : (k2 ? 64 : (te.kqBytes ? 256 : (te.kq == 5 ? 160 : 192))))
     var wb = LLVMBuildMul(b, sbi, te.types->ConstI64(uint64(mr * qsb)), "wb")
     var sb = LLVMBuildMul(b, sbi, te.types->ConstI64(uint64(mr * (k63 ? 18 : (q40 ? 16 : 20)))), "sb")
     var xb = LLVMBuildMul(b, sbi, te.types->ConstI64(0x100ul), "xb")
@@ -963,8 +965,11 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
     var mv : LLVMOpaqueValue? [2]
     if (!q40) {
         for (qd in range(rq)) {
-            if (k63) {
+            if (k63 || k2) {
                 dv[qd] = load_f16_vec_at(te, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(16 * mr + 2 * (qd * te.rv))), ""), "d{qd}")
+                if (k2) {
+                    mv[qd] = load_f16_vec_at(te, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(18 * mr + 2 * (qd * te.rv))), ""), "dm{qd}")
+                }
             } else {
                 dv[qd] = load_f16_vec_at(te, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(2 * (qd * te.rv))), ""), "d{qd}")
                 mv[qd] = load_f16_vec_at(te, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(2 * mr + 2 * (qd * te.rv))), ""), "dm{qd}")
@@ -980,9 +985,9 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
         facc[i] = LLVMConstNull(te.vnf32)
     }
     // vector bsums: sdot leg only (x64's vpbroadcastd makes scalars free; k6 needs bs0/bs1 unsummed)
-    let vecBsums = !memBcast && !k63
+    let vecBsums = !memBcast && !per16
     // mr>=8 fuses lo+hi into ONE acc (i32-exact — the fold adds them anyway); mr4 keeps split accs for ILP
-    let fuseAcc = !memBcast && mr >= 8 && !k63
+    let fuseAcc = !memBcast && mr >= 8 && !per16
     var a32v8 : LLVMOpaqueValue? [8]   // [tok * 2 + blk / 4], lane blk % 4
     if (vecBsums) {
         var xb16 = LLVMBuildShl(b, sbi, te.types->ConstI64(4ul), "xb16")
@@ -1041,6 +1046,14 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                     var hib = LLVMBuildShl(b, LLVMBuildAnd(b, LLVMBuildLShr(b, h3h, splat_i8w(te, blk), ""), splat_i8w(te, 1), ""), splat_i8w(te, 2), "")
                     wlo = LLVMBuildOr(b, lo2, lob, "wlo3{blk}_{j * rq + qd}")
                     whi = LLVMBuildOr(b, hi2, hib, "whi3{blk}_{j * rq + qd}")
+                } elif (k2) {
+                    // k2: qs column (blk/4)*8 + j (lo 16) / + 4 (hi 16), 2-bit lane at shift 2*(blk%4) - k3's walk minus the hmask
+                    let c0 = (blk / 4) * 8 + j
+                    let sh = (blk % 4) * 2
+                    var q2l = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(c0 * 4 * mr + qd * w8)), ""), "q2l{blk}_{j * rq + qd}")
+                    var q2h = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((c0 + 4) * 4 * mr + qd * w8)), ""), "q2h{blk}_{j * rq + qd}")
+                    wlo = LLVMBuildAnd(b, LLVMBuildLShr(b, q2l, splat_i8w(te, sh), ""), splat_i8w(te, 3), "wlo2{blk}_{j * rq + qd}")
+                    whi = LLVMBuildAnd(b, LLVMBuildLShr(b, q2h, splat_i8w(te, sh), ""), splat_i8w(te, 3), "whi2{blk}_{j * rq + qd}")
                 } elif (te.kqBytes) {
                     var hoff2 = LLVMBuildAdd(b, noff, te.types->ConstI64(uint64(128 * mr)), "")
                     wlo = load_vec(te, te.vwi8, te.wg, noff, "wlo{blk}_{j * rq + qd}")
@@ -1075,7 +1088,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                         var xhi = bcast_dword(te, te.x[tokBase + i], doff1, "xd{tokBase + i}_{blk}_{j}b")
                         if (madd16) {
                             let k = i * rq + qd
-                            if (k63) {
+                            if (per16) {
                                 p16lo[k] = madd16_acc(te, p16lo[k], wlo, xlo)
                                 p16hi[k] = madd16_acc(te, p16hi[k], whi, xhi)
                             } else {
@@ -1102,7 +1115,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                 for (k in range(tokCount * rq)) {
                     a0[k] = madd16_flush(te, a0[k], p16lo[k])
                     p16lo[k] = null
-                    if (k63) {
+                    if (per16) {
                         a1[k] = madd16_flush(te, a1[k], p16hi[k])
                         p16hi[k] = null
                     }
@@ -1118,6 +1131,8 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
         // the integer fold — no float ops per block, except q40 (its per-32 f16 d admits no cross-block integer fold)
         var scv : LLVMOpaqueValue? [2]
         var mnv : LLVMOpaqueValue? [2]
+        var mnlo : LLVMOpaqueValue? [2]   // k2: the two groups' min nibbles (scv/mnv carry their sc nibbles)
+        var mnhi : LLVMOpaqueValue? [2]
         var dvb : LLVMOpaqueValue? [2]
         for (qd in range(rq)) {
             if (q40) {
@@ -1127,6 +1142,16 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                 var sc1p = LLVMBuildGEP2(b, te.types.t_int8, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64((2 * blk + 1) * mr + qd * te.rv)), ""), "scp{blk}_{qd}b")
                 scv[qd] = LLVMBuildSExt(b, LLVMBuildLoad2Aligned(b, vri8, sc0p, 1u, ""), te.vni32, "sc{blk}_{qd}a")
                 mnv[qd] = LLVMBuildSExt(b, LLVMBuildLoad2Aligned(b, vri8, sc1p, 1u, ""), te.vni32, "sc{blk}_{qd}b")
+            } elif (k2) {
+                // per-16 nibble pairs: byte 2blk = the lo group's sc|mn<<4, byte 2blk+1 = the hi group's
+                var b0p = LLVMBuildGEP2(b, te.types.t_int8, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(2 * blk * mr + qd * te.rv)), ""), "k2p{blk}_{qd}a")
+                var b1p = LLVMBuildGEP2(b, te.types.t_int8, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64((2 * blk + 1) * mr + qd * te.rv)), ""), "k2p{blk}_{qd}b")
+                var z0 = LLVMBuildZExt(b, LLVMBuildLoad2Aligned(b, vri8, b0p, 1u, ""), te.vni32, "k2z{blk}_{qd}a")
+                var z1 = LLVMBuildZExt(b, LLVMBuildLoad2Aligned(b, vri8, b1p, 1u, ""), te.vni32, "k2z{blk}_{qd}b")
+                scv[qd] = LLVMBuildAnd(b, z0, splat_i32n(te, 15), "sc2{blk}_{qd}a")
+                mnv[qd] = LLVMBuildAnd(b, z1, splat_i32n(te, 15), "sc2{blk}_{qd}b")
+                mnlo[qd] = LLVMBuildLShr(b, z0, splat_i32n(te, 4), "mn2{blk}_{qd}a")
+                mnhi[qd] = LLVMBuildLShr(b, z1, splat_i32n(te, 4), "mn2{blk}_{qd}b")
             } else {
                 var scp = LLVMBuildGEP2(b, te.types.t_int8, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(4 * mr + blk * mr + qd * te.rv)), ""), "scp{blk}_{qd}")
                 scv[qd] = LLVMBuildZExt(b, LLVMBuildLoad2Aligned(b, vri8, scp, 1u, ""), te.vni32, "sc{blk}_{qd}")
@@ -1151,7 +1176,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                 bs0 = LLVMBuildLoad2Aligned(b, te.types.t_int32, bp0, 4u, "bs{tk}_{blk}a")
                 var bp1 = LLVMBuildGEP2(b, te.types.t_int32, te.xbs[tk], bi2b, "bp{tk}_{blk}b")
                 bs1 = LLVMBuildLoad2Aligned(b, te.types.t_int32, bp1, 4u, "bs{tk}_{blk}b")
-                if (!k63) {
+                if (!per16) {
                     a32v = splat_i32(te, LLVMBuildAdd(b, bs0, bs1, "a32{tk}_{blk}"), "a32v{tk}_{blk}")
                 }
             }
@@ -1169,6 +1194,16 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                     var ba = LLVMBuildAdd(b, LLVMBuildMul(b, scv[qd], bs0v, ""), LLVMBuildMul(b, mnv[qd], bs1v, ""), "ba6{tk}_{blk}_{qd}")
                     iacc[i * rq + qd] = LLVMBuildAdd(b, iacc[i * rq + qd], ia, "ia{tk}_{blk}_{qd}")
                     bacc[i * rq + qd] = LLVMBuildAdd(b, bacc[i * rq + qd], ba, "ba{tk}_{blk}_{qd}")
+                }
+            } elif (k2) {
+                // ia = sc_lo*dot_lo + sc_hi*dot_hi; ba = mn_lo*bs0 + mn_hi*bs1 - the k4/k5 epilogue folds bacc on dmin
+                var bs0v = splat_i32(te, bs0, "bs0v{tk}_{blk}")
+                var bs1v = splat_i32(te, bs1, "bs1v{tk}_{blk}")
+                for (qd in range(rq)) {
+                    var ia = LLVMBuildAdd(b, LLVMBuildMul(b, scv[qd], a0[i * rq + qd], ""), LLVMBuildMul(b, mnv[qd], a1[i * rq + qd], ""), "ia2{tk}_{blk}_{qd}")
+                    var ba = LLVMBuildAdd(b, LLVMBuildMul(b, mnlo[qd], bs0v, ""), LLVMBuildMul(b, mnhi[qd], bs1v, ""), "ba2{tk}_{blk}_{qd}")
+                    iacc[i * rq + qd] = LLVMBuildAdd(b, iacc[i * rq + qd], ia, "ia{tk}_{blk}_{qd}k2")
+                    bacc[i * rq + qd] = LLVMBuildAdd(b, bacc[i * rq + qd], ba, "ba{tk}_{blk}_{qd}k2")
                 }
             } else {
                 for (qd in range(rq)) {
@@ -2867,12 +2902,10 @@ def private iq3xxs_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc,
 def private iq4nl_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 45)
 def private iq4nl_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 45)
 
-// k2: the 2-bit + min-fold emitter arm lands with Phase B; until then both stamps decline
-// (reference bodies serve) - a declined generator is the framework's own fallback path.
-[unused_argument(gc)]
-def private k2_gemv_gen(var gc : LlvmCodeCtx) : bool => false
-[unused_argument(gc)]
-def private k2_tile_gen(var gc : LlvmCodeCtx) : bool => false
+// k2 rides the kq walks through emit_block_kqv2's per-16 arms (the k2 flag swaps the 2-bit
+// compose, the nibble scale extracts, and the epilogue to k4/k5's dmin fold)
+def private k2_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 2)
+def private k2_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 2)
 
 def private k4_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 4)
 def private k5_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 5)

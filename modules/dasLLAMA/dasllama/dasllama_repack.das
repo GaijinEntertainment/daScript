@@ -512,8 +512,8 @@ def repack_iq3s_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
 }
 
 //! k2 grp layout: the qs bytes as 16 four-byte columns x mr rows (the 2-bit lanes stay in
-//! place - the kernels shift per group); scale row interleaves as [16 sc/min bytes x mr]
-//! [mr x 4B d+dmin header].
+//! place - the kernels shift per group); scale row interleaves FIELD-MAJOR as
+//! [16 sc/min bytes x mr][mr x f16 d][mr x f16 dmin] (contiguous d rows for the emitter's f16 vector loads).
 def repack_k2_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let nsb = n / 256l
     let qrow = nsb * 64l
@@ -543,9 +543,10 @@ def repack_k2_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
                     for (idx in range64(16l)) {
                         ks[ds + idx * mr + r] = tsp[ss + 4l + idx]
                     }
-                    for (h in range64(4l)) {
-                        ks[ds + 16l * mr + 4l * r + h] = tsp[ss + h]
-                    }
+                    ks[ds + 16l * mr + 2l * r] = tsp[ss]
+                    ks[ds + 16l * mr + 2l * r + 1l] = tsp[ss + 1l]
+                    ks[ds + 18l * mr + 2l * r] = tsp[ss + 2l]
+                    ks[ds + 18l * mr + 2l * r + 1l] = tsp[ss + 3l]
                 }
             }
         }

@@ -848,9 +848,10 @@ def k2_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : 
                 isum += (scb & 15) * ig
                 bsum += (scb >> 4) * xbsp[sbi * 16l + g]
             }
-            let hd = sb + 16l * mr + 4l * r
+            let hd = sb + 16l * mr + 2l * r
             let dk = f16_to_f32(uint(ksg[hd]) | (uint(ksg[hd + 1l]) << 8u))
-            let dm = f16_to_f32(uint(ksg[hd + 2l]) | (uint(ksg[hd + 3l]) << 8u))
+            let hm = sb + 18l * mr + 2l * r
+            let dm = f16_to_f32(uint(ksg[hm]) | (uint(ksg[hm + 1l]) << 8u))
             acc += float(isum) * (dk * xsp[sbi])
             acc -= float(bsum) * (dm * xsp[sbi])
         }
