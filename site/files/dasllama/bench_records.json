@@ -23363,6 +23363,368 @@
     "runs":[
       {
         "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m4",
+        "threads":10,
+        "date":"2026-08-31",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m canary-qwen-2.5b-decoder-q8_0.gguf -r 2 -t 10 --json-path modules/dasLLAMA/performance/records/_cell_m4.json",
+        "hardware":{
+          "cpu":"Apple M4 Pro",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":10,
+          "total_cores":14,
+          "ram_gb":64,
+          "gpu":"Apple M4 Pro (20-core)",
+          "model_id":"Mac16,11",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":609.84799999999996,
+            "audio_s":11,
+            "encode_ms":267.62900000000002,
+            "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country"
+          },
+          "asr:jfk3.wav":{
+            "ms":1839.9780000000001,
+            "audio_s":33,
+            "encode_ms":731.52200000000005,
+            "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
+          },
+          "asr:gb1.wav":{
+            "ms":11773.228999999999,
+            "audio_s":198.734375,
+            "encode_ms":7155.732,
+            "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. In the words of the prophet Isaiah, May God bless the grieving families and may God continue to bless America."
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"54595cfea",
+        "version":"0.6.4",
+        "dasllama_version":15,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8_nrsplit2 (manifest)",
+        "tune_sha":"05da625247568832fb62c97386a74b5d7f092db3e58788b192078092d3f63a50",
+        "noise":"ok",
+        "exec_fmt":"q8/q8",
+        "env":"DASLLAMA_BOX=m4 DASLLAMA_MODELS_DIR=/Users/dasbox/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"canary-qwen-2.5b-decoder-q8_0.gguf",
+            "sha256":"24c5f521ef7fce86f3752a9566605527921e3c534d27dd9ab262879b4690cabe",
+            "bytes":1834425984
+          },
+          {
+            "role":"mmproj",
+            "name":"canary-qwen-2.5b-encoder-f32.bin",
+            "sha256":"37d1057ced3150cfde2fb996c1fc0a3d702d23a97f9347aedb52795ebec03e5c",
+            "bytes":3252768256
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"accel",
+        "box":"m4",
+        "threads":10,
+        "date":"2026-08-31",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m canary-qwen-2.5b-decoder-q8_0.gguf -r 2 -t 10 --json-path modules/dasLLAMA/performance/records/_cell_m4.json --accel",
+        "hardware":{
+          "cpu":"Apple M4 Pro",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":10,
+          "total_cores":14,
+          "ram_gb":64,
+          "gpu":"Apple M4 Pro (20-core)",
+          "model_id":"Mac16,11",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":603.404,
+            "audio_s":11,
+            "encode_ms":260.77699999999999,
+            "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country"
+          },
+          "asr:jfk3.wav":{
+            "ms":1823.1610000000001,
+            "audio_s":33,
+            "encode_ms":728.96299999999997,
+            "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
+          },
+          "asr:gb1.wav":{
+            "ms":11705.264999999999,
+            "audio_s":198.734375,
+            "encode_ms":7783.0370000000003,
+            "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. In the words of the prophet Isaiah, May God bless the grieving families and may God continue to bless America."
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"54595cfea",
+        "version":"0.6.4",
+        "dasllama_version":15,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8_nrsplit2 (manifest)",
+        "tune_sha":"05da625247568832fb62c97386a74b5d7f092db3e58788b192078092d3f63a50",
+        "noise":"ok",
+        "exec_fmt":"q8/q8",
+        "env":"DASLLAMA_BOX=m4 DASLLAMA_MODELS_DIR=/Users/dasbox/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"canary-qwen-2.5b-decoder-q8_0.gguf",
+            "sha256":"24c5f521ef7fce86f3752a9566605527921e3c534d27dd9ab262879b4690cabe",
+            "bytes":1834425984
+          },
+          {
+            "role":"mmproj",
+            "name":"canary-qwen-2.5b-encoder-f32.bin",
+            "sha256":"37d1057ced3150cfde2fb996c1fc0a3d702d23a97f9347aedb52795ebec03e5c",
+            "bytes":3252768256
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m4",
+        "threads":10,
+        "date":"2026-08-31",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m canary-qwen-2.5b-decoder-q8_0.gguf -r 2 -t 10 --json-path modules/dasLLAMA/performance/records/_cell_m4.json --ngl 1",
+        "hardware":{
+          "cpu":"Apple M4 Pro",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":10,
+          "total_cores":14,
+          "ram_gb":64,
+          "gpu":"Apple M4 Pro (20-core)",
+          "model_id":"Mac16,11",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":512.86400000000003,
+            "audio_s":11,
+            "encode_ms":247.178,
+            "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country"
+          },
+          "asr:jfk3.wav":{
+            "ms":1574.452,
+            "audio_s":33,
+            "encode_ms":746.52700000000004,
+            "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
+          },
+          "asr:gb1.wav":{
+            "ms":12254.620999999999,
+            "audio_s":198.734375,
+            "encode_ms":10310.376,
+            "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. In the words of the prophet Isaiah, May God bless the grieving families and may God continue to bless America."
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"54595cfea",
+        "version":"0.6.4",
+        "dasllama_version":15,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8_nrsplit2 (manifest)",
+        "tune_sha":"05da625247568832fb62c97386a74b5d7f092db3e58788b192078092d3f63a50",
+        "noise":"ok",
+        "exec_fmt":"f32/q8",
+        "env":"DASLLAMA_BOX=m4 DASLLAMA_MODELS_DIR=/Users/dasbox/models",
+        "files":[
+          {
+            "role":"weights",
+            "name":"canary-qwen-2.5b-decoder-q8_0.gguf",
+            "sha256":"24c5f521ef7fce86f3752a9566605527921e3c534d27dd9ab262879b4690cabe",
+            "bytes":1834425984
+          },
+          {
+            "role":"mmproj",
+            "name":"canary-qwen-2.5b-encoder-f32.bin",
+            "sha256":"37d1057ced3150cfde2fb996c1fc0a3d702d23a97f9347aedb52795ebec03e5c",
+            "bytes":3252768256
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          }
+        ]
+      },
+      {
+        "engine":"nemo",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"m4",
+        "threads":10,
+        "date":"2026-08-31",
+        "cmd":"modules/dasLLAMA/benchmarks/asr/.venv-nemo/bin/python modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py --threads 10 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav",
+        "hardware":{
+          "cpu":"Apple M4 Pro",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":10,
+          "total_cores":14,
+          "ram_gb":64,
+          "gpu":"Apple M4 Pro (20-core)",
+          "model_id":"Mac16,11",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":3305.2919999999999,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":7576.8860000000004,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":19144.050999999999,
+            "audio_s":199
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"nemo 3.1.0+06312c963 / torch 2.12.1",
+        "exec_fmt":"bf16",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          }
+        ]
+      },
+      {
+        "engine":"nemo",
+        "backend":"metal",
+        "flavor":"stock",
+        "box":"m4",
+        "threads":10,
+        "date":"2026-08-31",
+        "cmd":"modules/dasLLAMA/benchmarks/asr/.venv-nemo/bin/python modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py --device mps --threads 10 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav",
+        "hardware":{
+          "cpu":"Apple M4 Pro",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":10,
+          "total_cores":14,
+          "ram_gb":64,
+          "gpu":"Apple M4 Pro (20-core)",
+          "model_id":"Mac16,11",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":1076.4870000000001,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":3445.7959999999998,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":9723.1990000000005,
+            "audio_s":199
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "versions":"nemo 3.1.0+06312c963 / torch 2.12.1",
+        "exec_fmt":"bf16",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          }
+        ]
+      },
+      {
+        "engine":"das",
         "backend":"metal",
         "flavor":"tuned",
         "box":"m5",
