@@ -50,6 +50,7 @@ let GGML_TYPE_Q8_0 = 8
 let GGML_TYPE_Q3_K = 11
 let GGML_TYPE_Q2_K = 10
 let GGML_TYPE_IQ3_S = 21
+let GGML_TYPE_IQ2_S = 22
 let GGML_TYPE_IQ3_XXS = 18
 let GGML_TYPE_IQ4_NL = 20
 let GGML_TYPE_Q4_K = 12
@@ -933,6 +934,45 @@ def gguf_transcode_iq4nl(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
                             ksp[sb * Q40_SSB + blk * 2l + 1l] = src[1]
                             bcopy(kqp + sb * Q40_QSB + blk * 16l, src + 2l, 16l)
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! Transcode an IQ2_S tensor into the iq2s planes (strides 72/20, exact): the 82B disk
+//! superblock splits into [idx][signs][qh] verbatim, d eighth-ed, the 16 strips decoded to
+//! (1 + 2s) - transcode_iq2s_superblock.
+def gguf_transcode_iq2s(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_IQ2_S, "IQ2_S", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "iq2s quant plane", (eloff / 256l) * IQ2S_QSB, nb * IQ2S_QSB, long_length(kq))
+    guard_dst(name, "iq2s scale plane", (eloff / 256l) * IQ2S_SSB, nb * IQ2S_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 82l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * IQ2S_QSB])
+            var ksp = addr(ks[(eloff / 256l) * IQ2S_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 82l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 82l
+                        var row = ksp + sb * IQ2S_SSB
+                        let d8 = f16_half_bits(f16_half_bits(f16_half_bits(uint(src[0l]) | (uint(src[1l]) << 8u))))
+                        row[0l] = uint8(d8 & 0xFFu)
+                        row[1l] = uint8(d8 >> 8u)
+                        row[2l] = uint8(0)
+                        row[3l] = uint8(0)
+                        for (g in range64(16l)) {
+                            let nib = g % 2l == 0l ? int(src[74l + g / 2l]) & 15 : int(src[74l + g / 2l]) >> 4
+                            row[4l + g] = uint8(1 + 2 * nib)
+                        }
+                        bcopy(kqp + sb * IQ2S_QSB, src + 2l, 72l)
                     }
                 }
             }

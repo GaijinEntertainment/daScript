@@ -2907,6 +2907,13 @@ def private iq4nl_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 
 def private k2_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 2)
 def private k2_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 2)
 
+// iq2s: the grid-gather emitter arm lands with Phase B; until then both stamps decline
+// (reference bodies serve) - a declined generator is the framework's own fallback path.
+[unused_argument(gc)]
+def private iq2s_gemv_gen(var gc : LlvmCodeCtx) : bool => false
+[unused_argument(gc)]
+def private iq2s_tile_gen(var gc : LlvmCodeCtx) : bool => false
+
 def private k4_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 4)
 def private k5_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 5)
 def private k6_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 6)
@@ -2996,5 +3003,7 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::iq4nl_tile", @@iq4nl_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::k2_gemv", @@k2_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::k2_tile", @@k2_tile_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2s_gemv", @@iq2s_gemv_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2s_tile", @@iq2s_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_witness", @@witness_gen)
 }

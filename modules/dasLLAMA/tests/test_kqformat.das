@@ -26,6 +26,7 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.iq3xxs), 9)
         t |> equal(int(KqFmt.iq4nl), 10)
         t |> equal(int(KqFmt.k2), 11)
+        t |> equal(int(KqFmt.iq2s), 12)
     }
 }
 
@@ -50,6 +51,8 @@ def test_kqfmt_predicates(t : T?) {
         t |> success(kq_sb(int(KqFmt.iq3xxs)), "the int-id predicate agrees for iq3xxs")
         t |> success(kq_sb(int(KqFmt.iq4nl)), "the int-id predicate agrees for iq4nl")
         t |> success(kq_sb(int(KqFmt.k2)), "the int-id predicate agrees for k2")
+        t |> success(kq_sb(KqFmt.iq2s), "iq2s is superblock")
+        t |> success(kq_sb(int(KqFmt.iq2s)), "the int-id predicate agrees for iq2s")
     }
 }
 
@@ -78,6 +81,8 @@ def test_kqfmt_strides(t : T?) {
         t |> equal(kq_ssb(KqFmt.iq4nl), 16l)  // q40's row: 8 x f16 d
         t |> equal(kq_qsb(KqFmt.k2), 64l)     // 64 qs bytes, verbatim
         t |> equal(kq_ssb(KqFmt.k2), 20l)     // [f16 d][f16 dmin][16 sc/min bytes]
+        t |> equal(kq_qsb(KqFmt.iq2s), 72l)   // [32 idx][32 signs][8 qh], verbatim
+        t |> equal(kq_ssb(KqFmt.iq2s), 20l)   // f16 d/8 + 16 x (1 + 2s) strips
     }
     t |> run("named constants agree with the literals") @(t : T?) {
         t |> equal(K4_QSB, 128l)
@@ -96,6 +101,8 @@ def test_kqfmt_strides(t : T?) {
         t |> equal(K3_SSB, 18l)
         t |> equal(K2_QSB, 64l)
         t |> equal(K2_SSB, 20l)
+        t |> equal(IQ2S_QSB, 72l)
+        t |> equal(IQ2S_SSB, 20l)
         t |> equal(IQ3S_QSB, 104l)
         t |> equal(IQ3S_SSB, 20l)
     }
@@ -134,9 +141,10 @@ def test_kqfmt_id_bridge(t : T?) {
         t |> equal(kq_schema_id(KqFmt.iq3xxs), 34)
         t |> equal(kq_schema_id(KqFmt.iq4nl), 45)
         t |> equal(kq_schema_id(KqFmt.k2), 2)
+        t |> equal(kq_schema_id(KqFmt.iq2s), 23)
     }
     t |> run("gemm_schema's int-id forms delegate to the same truth") @(t : T?) {
-        for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2]) {
+        for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s]) {
             t |> equal(kq_qsb(kq_schema_id(f)), kq_qsb(f))
             t |> equal(kq_ssb(kq_schema_id(f)), kq_ssb(f))
         }
@@ -156,6 +164,7 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_elems(KqFmt.iq3xxs), 256l)
         t |> equal(kq_elems(KqFmt.iq4nl), 256l)
         t |> equal(kq_elems(KqFmt.k2), 256l)
+        t |> equal(kq_elems(KqFmt.iq2s), 256l)
         t |> equal(kq_elems(KqFmt.q8), 32l)
         t |> equal(kq_elems(KqFmt.q51), 32l)
     }
@@ -172,6 +181,7 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_stream_code(KqFmt.iq3xxs), 34)
         t |> equal(kq_stream_code(KqFmt.iq4nl), 45)
         t |> equal(kq_stream_code(KqFmt.k2), 20)   // kernel id 2 = q51's stream tag
+        t |> equal(kq_stream_code(KqFmt.iq2s), 23)
     }
 }
 

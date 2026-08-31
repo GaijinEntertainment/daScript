@@ -868,6 +868,51 @@ def dequant_iq3s_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : ar
     }
 }
 
+//! Transcode one IQ2_S superblock (82 B at `bo`: f16 d, 32 idx + 32 sign bytes, 8 qh, 8 packed
+//! scale nibbles): [idx][signs][qh] verbatim to kq[kqo..+72), d EIGHTH-ed (three exact exponent
+//! decrements - ggml's (0.5+ls)*0.25 becomes (2ls+1) x d/8) + 16 strips (1+2s) to ks[kso..+20).
+def transcode_iq2s_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    for (i in range64(72l)) {
+        kq[kqo + i] = bytes[bo + 2l + i]
+    }
+    let d8 = f16_half_bits(f16_half_bits(f16_half_bits(uint(bytes[bo]) | (uint(bytes[bo + 1l]) << 8u))))
+    ks[kso] = uint8(d8 & 0xFFu)
+    ks[kso + 1l] = uint8(d8 >> 8u)
+    ks[kso + 2l] = uint8(0)
+    ks[kso + 3l] = uint8(0)
+    for (g in range64(16l)) {
+        let nib = g % 2l == 0l ? int(bytes[bo + 74l + g / 2l]) & 15 : int(bytes[bo + 74l + g / 2l]) >> 4
+        ks[kso + 4l + g] = uint8(1 + 2 * nib)
+    }
+}
+
+//! Reference dequant of one iq2s-plane superblock: w = (d8 * (1 + 2s)) * grid_byte * sign -
+//! grid entry idx[b*4+l] | ((qh[b] << (8-2l)) & 0x300) is TWO uint words (8 magnitudes), sign
+//! byte signs[b*4+l] bit j, strip = the 16-chunk 2b + l/2. ggml's dequantize_row_iq2_s order.
+def dequant_iq2s_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_iq2s_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `sso` names the 16-strip base, `dso` the f16 d8 halfword.
+def dequant_iq2s_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; sso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d8 = f16_to_f32(rd_u16(ks, dso))
+    let grid = iq2s_grid2()
+    for (b in range64(8l)) {
+        let qh = int(kq[kqo + 64l + b])
+        for (l in range64(4l)) {
+            let db = d8 * float(int(ks[sso + 2l * b + l / 2l]))
+            let sgn = int(kq[kqo + 32l + b * 4l + l])
+            let idx = int(kq[kqo + b * 4l + l]) | ((qh << int(8l - 2l * l)) & 0x300)
+            let g1 = grid[idx * 2]
+            let g2 = grid[idx * 2 + 1]
+            for (j in range64(4l)) {
+                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+            }
+        }
+    }
+}
+
 //! Transcode one Q5_1 disk block (24 bytes at `bo`: d f16, m f16, qh u32, 16 nibble bytes) into
 //! the q51 planes — verbatim splits, exact. The per-block array form the tests drive; the bulk
 //! loader (gguf_transcode_q51) runs the same split pointerized and threaded.

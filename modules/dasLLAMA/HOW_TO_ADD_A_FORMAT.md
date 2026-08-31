@@ -438,6 +438,23 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
 
 ## Per-format notes
 
+### IQ2_S Phase A (CPU, 2026-08-31) - the u64-grid tier
+
+Shape: 256-superblock grid format, the first with a u64 grid - a 10-bit index (qs byte |
+qh 2 bits) selects EIGHT magnitudes ({8, 25, 43}) from iq2s_grid[1024]; the block's own
+sign bytes flip them (bit j - no ksigns table), scales are PER-16 nibbles folded as
+(0.5+ls)*0.25 = (2ls+1) x d/8. Disk 82B: [f16 d][32 idx][32 signs][8 qh][8 scale-nibble
+bytes]. Planes: [idx][signs][qh] verbatim (IQ2S_QSB 72), scale row the k4 20B STRIDE with
+d EIGHTH-ed at transcode (three f16_half_bits) + 16 strips (1+2s) - the row fills exactly,
+no pad. Ids: KqFmt.iq2s = 12, kernel id 23, stream code 23 (clears QUIRK 25's 0/1/2). The
+grid ships as iq2s_grid2() - the per-call local at 8 KB (2048 uint words, low/high pairs) -
+plus the main-context IQ2S_GRID. Repack: 18 uniform 4-byte columns; the k4 scale interleave
+with 16 strips. Gates: test_kqformat 18/18, test_kquant 233 (216 pass, 17 env skips),
+lint 0. E2e: the mradermacher i1-IQ3_XXS vehicle (on disk since the iq3xxs phase, blocked
+on its IQ2_S attn x32) now loads and decodes FIVE formats in one graph - ids 10/64 vs
+llama.cpp with the fork a 0.040-logit near-tie (the arc's tightest; top2 IS our token),
+gen 41 t/s reference bodies. JIT emitter, Vulkan, Metal: pending.
+
 ### Q2_K Phase A (CPU, 2026-08-31)
 
 Shape: 256-superblock, the k4/k5 scale STRUCTURE at k6's granularity - 16 per-16-element
