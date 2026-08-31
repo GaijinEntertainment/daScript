@@ -7371,7 +7371,7 @@ class template MetalKqMvK2T {
     @template_constant TILED : bool = false
 
     [metal_kernel]
-    def metal_kq_mv_k2 {   // nolint:STYLE038 — the TILED twin loops are byte-identity-driven, not splittable
+    def metal_kq_mv_k2 {
         let lane = gl_SubgroupInvocationID
         let tx = lane % 8u
         let ty = lane / 8u
