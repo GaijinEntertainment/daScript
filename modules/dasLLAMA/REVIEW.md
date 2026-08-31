@@ -191,8 +191,10 @@ the file it checks - in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`, or
 is one that check does not flag. When the check licenses no names, the line says so.
 
 **An upstream mechanism is described in our own terms, not attributed** - no
-"lifted/ported verbatim from" and no upstream symbol, header, or constant names in a `.md`
-file or a `.das` comment; state what the code does and why its shape wins. Provenance is
+"lifted/ported verbatim from" and no upstream symbol, header, or constant names in any
+checked-in prose this module owns (docs and comments, any language); state what the code
+does and why its shape wins. A symbol the file's own code calls or carries as a value may be
+named - naming your own callee or data key is not attribution. Provenance is
 not attribution: a path naming where checked-in data is regenerated FROM, an env-knob row
 in `ENVIRONMENT.md` whose value locates the reference binary, and a command line or flag
 list in `METHODOLOGY.md`, `PROFILE.md`, or `BRINGUP.md`, and a follow-up ledger's board row

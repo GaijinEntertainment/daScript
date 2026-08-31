@@ -1639,6 +1639,23 @@ def asr_pybench_out_path() : string {
     return "{asr_dir()}/_pybench_rows.txt"
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
+def asr_gpu_pair_tool(tool : string) : bool {
+    return tool == "whisper-cli" || tool == "mtmd" || tool == "nemo"
+}
+
+//! The record run's exit verdict: any FAILED cell reds the run, and a run that measured
+//! ZERO cells reds too — every selected cell skipping or declining is never a green board.
+def records_run_verdict(nfailed, cells : int) : tuple<rc : int; msg : string> {
+    if (nfailed > 0) {
+        return (rc = 1, msg = "{nfailed} FAILED cell(s)")
+    }
+    if (cells == 0) {
+        return (rc = 1, msg = "ZERO cells measured - every selected cell skipped or declined; an empty run is never a green board")
+    }
+    return (rc = 0, msg = "")
+}
+
 // ===== Reference-engine version capture (B4 — never hand-typed) =====
 
 // 9-hex short commit of the git checkout containing `path`; "" when not a checkout

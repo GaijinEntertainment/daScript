@@ -6,10 +6,10 @@ doc: `../ARCHITECTURE_MEASUREMENT.md` (the benchmark rig: `#one-benchmark-rig`).
 other performance followup, `../followup_general.md` for everything else.
 
 **A diff that adds or changes an instrument whose timed body runs a forward pass through a
-pipeline the model runtime selected also calls `tune_gate()`
+pipeline the dasLLAMA engine selected also calls `tune_gate()`
 (`../performance/profile_common.das`) before that instrument's first timed rep.** A pipeline
-the instrument compiled itself is not one the runtime selected. Without the gate the instrument
-measures fallback kernels silently.
+the instrument compiled itself - or a reference tool's own runtime - is not one the engine
+selected. Without the gate the instrument measures fallback kernels silently.
 
 **A diff that adds or changes a race times both arms interleaved in one process - a Metal race
 through `race_pair_ms`.** A race is an instrument that compares two implementations. Two
@@ -52,7 +52,8 @@ is that leg's scratch - untracked, truncated before each spawn, never read by an
 tool's cell.
 
 **A diff that adds or changes an instrument that prints a number formed by subtracting one
-measured wall from another also prints both raw walls on that report line.**
+wall it also reports from another also prints both raw walls on that report line.** A plain
+elapsed-time row (one clock pair, no attribution across stages) is not one.
 
 **A diff that changes what a board cell times ships before/after rows for each affected cell
 and corpus - or withdraws the affected rows and names the withdrawal and its reason in the PR

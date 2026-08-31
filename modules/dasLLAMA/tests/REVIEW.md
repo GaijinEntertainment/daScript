@@ -75,11 +75,12 @@ a test passes or skips explicitly on every platform.** A cell that returns witho
 the module is absent, no device answered, a capability declined - registers `t |> skip` there;
 `feint` is a print, not a skip.
 
-**A skip gate keys on a device capability, a run-mode knob's value, or a stocked fixture beside
-the models (a model file, an mmproj, an oracle dump - a model gate), or on a compile-time
-module-presence check (`typeinfo builtin_module_exists`) - never on the existence of
-an artifact this repo's build or a previous test run produced (a mint, a generated binary, a
-dump a test wrote).** An artifact gate goes permanently false when its producer moves.
+**A skip gate keys on a fact the box owns - a device capability, a run-mode knob's value, a
+host toolchain's presence, a compile-time module-presence check
+(`typeinfo builtin_module_exists`) - or on a stocked fixture beside the models (a model
+file, an mmproj, an oracle dump - a model gate); never on the existence of an artifact this
+repo's build or a previous test run produced (a mint, a generated binary, a dump a test
+wrote).** An artifact gate goes permanently false when its producer moves.
 
 **A test that loads a model over 6 GiB without gating on `DASLLAMA_PARITY_FULL=1` is a
 defect** - that gate is a final pre-PR gate, not the iteration loop. In this folder the
@@ -96,8 +97,10 @@ family or carrier loaders.
 test for the new value.** The test feeds the new value and checks the result. It lives in
 this folder, and it lands in the same change. "The model still runs" is not that test.
 
-**A predicate whose value cannot differ between two runs on one machine is never tested through
-its own value; test it through the argv it gates or the mode it selects.**
+**A predicate whose value the BOX decides (a device capability, a policy default) and that
+therefore cannot differ between two runs on one machine is never tested through its own
+value; test it through the argv it gates or the mode it selects.** An argument-keyed pure
+function is outside this rule - its value pins are real tests.
 
 **A test for an added, moved, or edited registration reaches the registered thing through its
 registry, and never calls it directly.** The registries this governs: the arch registrations
@@ -177,24 +180,32 @@ and establish-only - `ARCHITECTURE_GPU.md` sec.1.5 sanctions them. The environme
 a knob either way. The mechanism (why the hooks flip legs silently) is `CLAUDE.md`'s "Metal
 fixtures" section.
 
-**A cell claiming a family serving lane that does not pin it through the family's own
-pin/reset pair - `set_<family>_q8` / `reset_<family>_q8`, canary's `set_canary_enc_q8` /
-`reset_canary_enc_q8` - or through a loader parameter that takes the lane, is a defect.** A
-runtime decline standing in for a pin measures whichever lane the box's policy picked.
+**A cell claiming a family serving lane that does not pin it through the family's own lane
+knobs - `set_<family>_q8` / `reset_<family>_q8`, canary's `set_canary_enc_q8` /
+`reset_canary_enc_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32` - or through a loader
+parameter that takes the lane, is a defect.** A family whose knob has no reset twin restores
+it to the documented default. A runtime decline standing in for a pin measures whichever
+lane the box's policy picked.
 
-**A cell that loads a media carrier under a lane pin loads it through the family's
-`stage_*` + `mint_*` pair (the in-memory image rail), never the disk loader.** A disk bake
-under a pinned lane GC-purges the serving lane's `.dlim` beside the model, and the next
-direct-image load in another suite panics on the wrong identity.
+**A cell that loads a media carrier under a lane pin - a `set_<family>_q8`-class knob or a
+tensor-crown pin - mints in memory through the family's `stage_*` + `mint_*` pair, never
+through a `.dlim`-baking loader (`load_<family>_tower` / `load_<family>_encoder` /
+`load_model*`).** A disk bake under a pinned lane GC-purges the serving lane's `.dlim`
+beside the model, and the next direct-image load in another suite panics on the wrong
+identity. The one residue: a cell whose SUBJECT is a facade lane knob (`load_asr_model`
+under `set_asr_tower_fp32`) keeps the facade loader - the image identity folds the pin, so
+minting around it would unmake the claim; the purge exposure on a cold box is followup 61's
+owed in-process image-off seam.
 
 **A CPU-vs-GPU arm that does not run a PLANAR model for its CPU stages, and that model's
 `blob_twin(t, path, seq_cap)` for override-selected stages, is a defect.** One session spans
 both models, because sessions are geometry-bound. A decline-reason cell keeps the planar
 model.
 
-**A diff that adds a model-loading block tags it with its family.** The family tag is the
-token passed to `family_on(t, name)` (`_model_tier.das`). An untagged block silently joins
-every family's gate.
+**A diff that adds a model-loading block to a `run.das` MODEL suite (every suite the
+`--family` filter reaches - not the model-free suite) tags it with its family.** The family
+tag is the token passed to `family_on(t, name)` (`_model_tier.das`). An untagged block
+silently joins every family's gate.
 
 **No CPU-control batch parity runs against the 70B.** Its batch coverage is ENGAGE-only in the
 support matrix. The batched code paths get their parity on small models, through pins.
@@ -262,5 +273,8 @@ route's to say: a twin-W route reads the baked halfword twin (`wblob`), so poiso
 plane alone is a valid control there, while a route reading both planes needs both zeroed. A
 poison the served route never reads passes on a broken kernel.
 
-**Loosening a transcript-equality assert in an ASR CPU-vs-GPU cell is a defect - convert the
-cell to the forced-feed logits-tolerance form instead.**
+**An ASR cell comparing transcripts across two serving lanes asserts TOKEN equality; the one
+exception is the crowned-lane twin, whose ruled grade is WORD equality (the tensor twins'
+rounding legitimately flips tokens - followup 60's resolution).** A cell that cannot hold
+its grade converts to the forced-feed logits-tolerance form - never to a looser text
+compare.

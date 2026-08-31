@@ -698,3 +698,19 @@
     trio's crown flags cache at prefill init, so a crown pin needs
     tower+wdec+prefill shutdowns - a single `metal_crown_flags_reset()` seam would retire
     that triple-shutdown incantation.
+
+60b. **Per-variant dispatch witnesses for the crowned word-level cell.** The cell's engage
+    witnesses prove tower + wdec service, not WHICH variant served: a garble control on the
+    tensor QK body did not move whisper-tiny's transcripts, so tiny's hs=64 attention likely
+    never takes that route and the cell gates the crowned PIPELINE, not each twin.
+    `metal_kernel_coverage()` rows (the kcov census) are the per-variant witness - assert
+    the expected crowned entries' counts moved, once the cell picks a carrier whose shapes
+    actually ready the tensor variants.
+
+61. **An in-process image-off seam for facade-knob test cells.** A cell whose subject is a
+    facade lane knob (`load_asr_model` under `set_asr_tower_fp32`) must keep the facade
+    loader, and on a cold box that load BAKES the pinned lane's `.dlim` and GC-purges the
+    serving lane's flavor (`dlim_gc_stale`) - the class that broke `test_audio_embedder`
+    once already. The tests checklist ledgers the residue; the fix is an in-process
+    equivalent of `DASLLAMA_IMAGE=0` (`g_env_engine.image` is a `let` read at load), so such
+    cells can run image-free instead of risking the purge.

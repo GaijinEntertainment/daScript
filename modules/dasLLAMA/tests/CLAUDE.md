@@ -209,7 +209,9 @@ CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas - Apple bu
 skips honestly without the qwen2audio / voxtral mmprojs.
 `test_whisper.das` - model-free suite; model-gated: the whisper/parakeet/canary/gemma4a/omni
 oracle cells, the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
-f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp), the q8-gate CPU-vs-CPU claims
+f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp; the strict token-identity cell
+pins the simdgroup lane, and its tolerance-graded twin pins the crowns ON and asserts WORD
+equality - the tensor twins' quality gate), the q8-gate CPU-vs-CPU claims
 (CPU-claim cells, wdec knob pinned OFF), and the mel state-reuse determinism cell (gemma4a +
 canary: `gemm_f32` accumulates, so a reused state's `st.reim` must start zeroed - bit-equal
 mels across calls); its ungated cells are the model-free half.
@@ -248,6 +250,11 @@ by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full e
 standalone-exe context gate. Builds `_exe_smoke_root.das` with `-jit -exe` and runs the
 artifact - the one rail where globals restore as DATA, so a function-typed global with no
 boot-restore `[init]` dies on its first invoke while every `-jit` suite stays green. ~90 s.
+`test_gen_records_args.das` - model-free: the measurement orchestrator's pure seams - the
+pybench args builder's per-tool arms (onnx carries the `--out` recovery file and never a
+device; nemo forwards `--device`), the `asr_gpu_pair_tool` roster, and the
+`records_run_verdict` ZERO-cells refusal - the branches that decide what lands on the
+public board, which no model suite reaches.
 `test_sizing_helpers.das` - model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse, `overwrite_resize` grow-only no-init) fed directly, including
 grows past the `max_unreserved_size` guard that must not panic.
