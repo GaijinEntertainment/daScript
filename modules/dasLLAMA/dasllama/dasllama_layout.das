@@ -29,7 +29,7 @@ require math
 def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
     if (off < 0l) return true
     if (fmt == KqFmt.q8) return off % 256l == 0l
-    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs) return off % 512l == 0l   // the split scale form: the (off/256)*2 d-plane bind stays 4B-aligned
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s) return off % 512l == 0l   // the split scale form: the (off/256)*2 d-plane bind stays 4B-aligned
     if (fmt == KqFmt.q51) return off % 128l == 0l   // (off/32)*20 and (off/32)*4 both 16B-aligned
     return true
 }
@@ -226,6 +226,25 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         }
         return true
     }
+    if (name == "iq2ss") {
+        // iq2s: the row IS the iq4xs 20B shape - the same split (strips = bytes 4..19, d8 = bytes 0..1), over t.iq2ss
+        if (!empty(t.iq2ss)) {
+            var @exact_size i2c : array<uint8>
+            let nsb = long_length(t.iq2ss) / IQ2S_SSB
+            i2c |> reserve_resize(nsb * 18l)
+            unsafe {
+                var dp = addr(i2c[0])
+                let sp = addr < uint8 const? >(t.iq2ss[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ2S_SSB + 4l), 16)
+                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ2S_SSB]
+                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ2S_SSB + 1l]
+                }
+            }
+            t.iq2ss <- i2c
+        }
+        return true
+    }
     if (name == "k2s") {
         // k2: the 20B row splits like k6 - the 16 pair-byte strips first, the 4B d+dmin headers as the tail
         if (!empty(t.k2s)) {
@@ -294,7 +313,7 @@ def metal_blob_commit(var t : Model) : bool {
     if (!metal_blob_eligible(t)) {
         return false
     }
-    for (nm in ["k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss", "iq3xxss", "k2s"]) {
+    for (nm in ["k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss", "iq3xxss", "k2s", "iq2ss"]) {
         metal_blob_scale_plane(t, nm)
     }
     t.metal_blob = true

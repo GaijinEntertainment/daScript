@@ -491,7 +491,37 @@ resident driver arms on the i1 vehicle: gen 233 t/s, the fork vs llama.cpp at st
 SAME 0.211-logit top-2 near-tie as the CPU-JIT tier. Rows (5060 Ti vs llama.cpp b10660
 build-vulkan -ngl 99): pp512 12099.3 / 17377.5 (0.70x - the tier class), tg128 292.4 /
 362.5 (0.81x; the gemv re-stages the 8 KB grid per 2-row workgroup - the obvious tg lever,
-same ledger class as the pp tier). Metal: pending.
+same ledger class as the pp tier).
+
+Phase D (Metal, 2026-08-31): the constant-table commit pays off - `iq2s_gw` ships the 8 KB
+grid as low/high word pairs through the 363654b0d hoisting (an all-literal fixed_array
+local lowers to a program-scope constant table), so EVERY kernel reads it DIRECT: no
+threadgroup slab anywhere (an f4-expanded slab of 1024 entries would be 32 KB, past the tg
+budget - the iq3s gridf form does not scale to u64 grids). `MetalKqGemvIq2s` = the iq3s
+GEMV geometry (4 rows/simdgroup, dispatch rows/8) with per-word `iq3s_sw`/`iq3s_sx`
+compose and per-16 UNSIGNED strips (plain byte reads, no ^128 sign trick); the B2/B4/B8
+twins split dl into dl0/dl1 per half; the mul_mm rides a new IQ2S arm (strip byte js*2+il0
+ZExt, two va words per idx byte). The "iq2ss" blob arm is iq3ss's verbatim twin ([16
+strips][2B d8 tail], 18B/sb); ladders: kq_fmt_gpu_supported, moe_site_ok / blob_off_ok %
+512, the 72B quant bind, the k6-split scale bind. Gates on the M1 Max:
+test_metal_gemv_kernels 2/2, test_metal_gemm_kernels 2/2 (iq2s gemv/mv/mul_mm rows + the
+shared fill/rowref arms); lint 0. E2e (parity --ngl 99, resident Metal decode): ids 40/64 -
+the fork at step 40 is a 0.0654-logit top-2 near-tie (the arc's DEEPEST match), on the same
+Sophia stream as the CPU-JIT tier. TRAP from the walk: a paren-safe ternary-ladder insert
+must land INSIDE the bwidth arm, not before it (three b4 lines rebuilt).
+
+Against llama.cpp b10660 (`lcpp_bench --for-debug-purposes`; zen2 = 16 threads, M1 = 8;
+the mradermacher i1 vehicle - IQ2_S attn x32 + IQ3_XXS/IQ3_S/Q4_K/Q5_K):
+
+| tier | pp512 das / llama.cpp | tg128 das / llama.cpp |
+|---|---|---|
+| zen2 CPU | 501.5 / 138.5 (3.62x) | 55.8 / 73.5 (0.76x) |
+| 5060 Ti Vulkan | 12099.3 / 17377.5 (0.70x - the tier class) | 292.4 / 362.5 (0.81x) |
+| M1 CPU | 883.3 / 413.4 (2.14x) | 53.7 / 73.9 (0.73x) |
+| M1 Metal | 3170.5 / 3427.2 (0.93x) | 205.8 / 220.7 (0.93x) |
+
+(The CPU tg tails - zen2 0.76x, M1 0.73x - are the ledgered #60/#61 class; the Vulkan tg
+0.81x adds the per-workgroup 8 KB grid re-stage to the same ledger.)
 
 ### Q2_K Phase A (CPU, 2026-08-31)
 

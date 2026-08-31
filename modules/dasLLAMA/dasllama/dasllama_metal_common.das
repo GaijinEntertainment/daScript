@@ -277,6 +277,11 @@ var g_pso_kq_mvb2_iq4nl : MetalComputePipeline?
 var g_pso_kq_mvb4_iq4nl : MetalComputePipeline?
 var g_pso_kq_mvb8_iq4nl : MetalComputePipeline?
 var g_pso_kq_mm_b45 : MetalComputePipeline?
+var g_pso_kq_iq2s : MetalComputePipeline?
+var g_pso_kq_mvb2_iq2s : MetalComputePipeline?
+var g_pso_kq_mvb4_iq2s : MetalComputePipeline?
+var g_pso_kq_mvb8_iq2s : MetalComputePipeline?
+var g_pso_kq_mm_b23 : MetalComputePipeline?
 var g_pso_kq_mvb2_iq3xxs : MetalComputePipeline?
 var g_pso_kq_mvb4_iq3xxs : MetalComputePipeline?
 var g_pso_kq_mvb8_iq3xxs : MetalComputePipeline?
@@ -888,6 +893,10 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
             return (buf = plane_buffer(dev, addr < void? >(t.k2q[0]), uint64(long_length(t.k2q)), t.image_map != null),
                     qoff = uint64(sb0 * 64l))
         }
+        if (fmt == KqFmt.iq2s) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq2sq[0]), uint64(long_length(t.iq2sq)), t.image_map != null),
+                    qoff = uint64(sb0 * 72l))
+        }
         return (buf = plane_buffer(dev, addr < void? >(t.k6q[0]), uint64(long_length(t.k6q)), t.image_map != null),
                 qoff = uint64(sb0 * 192l))
     }
@@ -937,6 +946,11 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
             let plane_sb = long_length(t.k2s) / 20l
             return (buf = plane_buffer(dev, addr < void? >(t.k2s[0]), uint64(long_length(t.k2s)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 4l))
+        }
+        if (fmt == KqFmt.iq2s) {   // the k6 split form over the 18B/sb device plane (d8 tail)
+            let plane_sb = long_length(t.iq2ss) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.iq2ss[0]), uint64(long_length(t.iq2ss)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
         }
         return (buf = plane_buffer(dev, addr < void? >(t.k5s[0]), uint64(long_length(t.k5s)), t.image_map != null),
                 soff = uint64(sb0 * 16l), doff = 0ul)
