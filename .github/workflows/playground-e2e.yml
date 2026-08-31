@@ -1,8 +1,9 @@
 name: Playground e2e (no WASM)
 
 # Fast PR gate: builds the site without WASM (skips the 5-10 min Emscripten
-# step) and runs the Playwright suite minus any specs tagged `@wasm`. The full
-# WASM suite is reserved for the master-only workflow (forthcoming).
+# step) and runs the Playwright suite minus any specs tagged `@wasm`. The
+# tagged specs run nightly against the deployed site (nightly_playground.yml,
+# job wasm_specs).
 
 on:
   pull_request:

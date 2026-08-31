@@ -207,13 +207,29 @@ set_target_properties(daslang_static PROPERTIES
     EXCLUDE_FROM_ALL FALSE
     RUNTIME_OUTPUT_DIRECTORY ${DAS_WEB_OUTPUT_DIR})
 
-# Pin the wasm32 runtime archive into web/output/lib so it doesn't collide
-# with the host build's lib/ (root CMakeLists.txt:317 resets
-# CMAKE_ARCHIVE_OUTPUT_DIRECTORY inside the subdirectory scope, so we override
-# per-target). dasLLVM (link_wasm) auto-locates the archives from this path.
+# Pin EVERY wasm archive into web/output/lib. The root CMakeLists resets
+# CMAKE_ARCHIVE_OUTPUT_DIRECTORY inside the subdirectory scope to the repo's
+# lib/ — shared with the native build, so each build silently overwrites the
+# other's archives and the loser's next link dies on foreign object format
+# ("archive member '/' not a mach-o file" natively; a wasm-ld reject here).
+# dasLLVM (link_wasm) auto-locates the runtime archive from this path.
+function(das_pin_wasm_archives dir)
+    get_property(_subdirs DIRECTORY ${dir} PROPERTY SUBDIRECTORIES)
+    foreach(_sub ${_subdirs})
+        das_pin_wasm_archives(${_sub})
+    endforeach()
+    get_property(_targets DIRECTORY ${dir} PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(_t ${_targets})
+        get_target_property(_type ${_t} TYPE)
+        if(_type STREQUAL "STATIC_LIBRARY")
+            set_target_properties(${_t} PROPERTIES
+                ARCHIVE_OUTPUT_DIRECTORY ${DAS_WEB_OUTPUT_DIR}/lib)
+        endif()
+    endforeach()
+endfunction()
+das_pin_wasm_archives(${CMAKE_CURRENT_SOURCE_DIR}/..)
 set_target_properties(libDaScript_runtime PROPERTIES
-    EXCLUDE_FROM_ALL FALSE
-    ARCHIVE_OUTPUT_DIRECTORY ${DAS_WEB_OUTPUT_DIR}/lib)
+    EXCLUDE_FROM_ALL FALSE)
 
 # Copy web UI assets to output at build time. The OpenGL deferred-shading sample
 # fetches mesh + PBR textures from tutorials/_assets/ at runtime (see its

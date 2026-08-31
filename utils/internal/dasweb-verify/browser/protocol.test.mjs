@@ -215,6 +215,13 @@ test('formatSummary escapes pipes and exitCodeFor gates on FAIL alone', () => {
     assert.equal(P.exitCodeFor([...rows, { status: 'FAIL' }]), 1);
 });
 
+test('program stderr echoed to the console is not a page error', () => {
+    assert.equal(P.isProgramStderrEcho('[das:err] EXCEPTION: join deadlock avoided'), true);
+    assert.equal(P.isProgramStderrEcho('[das:err] Blocking on the main thread is very dangerous'), true);
+    assert.equal(P.isProgramStderrEcho('WebGL: INVALID_ENUM: glBlitFramebuffer'), false);
+    assert.equal(P.isProgramStderrEcho('Blocking on the main thread is very dangerous'), false);
+});
+
 test('every expectations row resolves, and the shipped manifest is fully covered', async () => {
     const table = JSON.parse(await readFile(path.join(HERE, 'expectations.json'), 'utf8'));
     for (const name of Object.keys(table.samples)) {

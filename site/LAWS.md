@@ -16,3 +16,9 @@ compacted, or cited as rules.
   (one run's cmd covering several per-clip rows), Boris ruled the rendered cmd identifies
   the RUN, not the row - "2. agree" to amending the first rule rather than storing per-clip
   argvs.
+
+- **2026-08-31** (`REVIEW.md`): review-round flashlight items 2 and 4. Boris ruled ("yes")
+  the stated-suite-run rule is tip-pinned per PR with a restatement duty on later edits;
+  and ("yes") `site/README.md` is blessed as `site/`'s architecture doc (the skill takes a
+  carve-out rather than a doc split). The artifact-list and "page"-definition rewrites rode
+  along as auditor-identified defects.

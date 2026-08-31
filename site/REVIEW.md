@@ -2,8 +2,9 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. **A Playwright spec (`*.spec.js`), wherever the diff puts it, answers to the
-`tests/playground/` checklist.** A page is an `.html` or `.md` file under this folder, together
-with what the scripts it loads render into it.
+`tests/playground/` checklist.** A page is an `.html` or `.md` file under this folder that a
+visitor navigates to, together with what the scripts it loads render into it — not a
+machine-only harness document (`playground/run-frame.html`), and not editor content.
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
 illustration - show only a command the run actually executed.** A rendered `cmd` identifies
@@ -58,17 +59,18 @@ a defect - link every embedded sample.**
 
 **A daslang sample embedded in a page not written in gen2 is a defect.**
 
-**A diff that changes `playground/` (this folder) or `examples/_interp.html` (this folder)
-states a run of the WASM-staged Playwright suite (`tests/playground/`, this folder) in its PR
-body or commit message, naming the passes and any failures, in the same change.** The no-WASM
-lane cannot see a broken runtime path, and every sample on the page runs through that path.
+**A PR whose diff changes `playground/` (this folder) or `examples/_interp.html` (this folder)
+states, in the PR body, a run of the WASM-staged Playwright suite (`tests/playground/`, this
+folder) against the branch tip, naming the passes and any failures; a later edit to those
+files restates the run.** The no-WASM lane cannot see a broken runtime path, and a run
+recorded mid-branch describes a tree that no longer ships.
 
 **A stated Playwright run names every sample the diff changed: for each, the spec that loaded
 it, or - when no spec loads it - that it was opened and run by hand in the playground.**
 
 **A stated Playwright run names the runtime artifacts it used: built from this change when
-the diff touches `src/`, `include/`, `daslib/`, `modules/`, `dastest/`, or
-`web/CMakeLists.txt` (all repo root); the deployed ones otherwise.**
+the diff touches any source compiled into the WASM runtime (`daslang_static` — its `main()`
+lives in `utils/daslang/`) or the web build; the deployed ones otherwise.**
 
 **A diff that puts a measurement number - a rate, a duration, a size, a score some run
 produced, never a fixture or run parameter - on a page without rendering it from live data,

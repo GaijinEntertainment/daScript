@@ -18,6 +18,7 @@
     var host = null;        // element the frames live in
     var current = null;     // frame serving the run in flight (or the idle one)
     var spare = null;       // pre-warmed frame, so a Run click pays ~0 startup
+    var runSeq = 0;         // run identity for the busy-state token (see run())
     var onOutput = null;    // set by main.js: (text, color) => void
     var onExit = null;
 
@@ -244,12 +245,14 @@
         if (!rec) return;
 
         // First sign of life from the running program — output, a canvas, a drawn
-        // frame, an exit — ends the Run button's "starting…" state (main.js).
-        // The fps meter ticks from the moment the frame loads, so a bare fps
-        // message is NOT life; only one reporting actual draws (value > 0) is.
+        // frame, an exit — ends the Run button's "running…" state (main.js). The
+        // token pins the signal to the run that set the state: an OUTGOING frame
+        // stays `current` (and alive, posting) until the next run() promotes the
+        // spare, and its messages must not clear a state it did not own. A bare
+        // fps tick is not life — the meter ticks from frame load; value > 0 is.
         if (rec === current && msg.type !== "need-wasm-module" && msg.type !== "ready"
             && (msg.type !== "fps" || msg.value > 0)) {
-            if (typeof window.pgProgramActivity === "function") window.pgProgramActivity(msg.type);
+            if (typeof window.pgProgramActivity === "function") window.pgProgramActivity(msg.type, rec.runToken);
         }
 
         switch (msg.type) {
@@ -391,20 +394,28 @@
             renderBadge(null);   // the run it described is gone
             spareAborts = 0;
             ensureSpare();
+            // The destroyed frame will never post again — tell main.js so a
+            // "running…" state it owned cannot outlive it (Clear during a run
+            // used to leave the buttons latched for the life of the page).
+            if (typeof window.pgProgramStopped === "function") window.pgProgramStopped();
             if (typeof window.updateButtonStates === "function") window.updateButtonStates();
         },
 
         // files: { "main.das": "...", ... }  args: argv for callMain
         // assets: URLs fetched into MEMFS before the program starts
+        // Returns a token identifying this run; program-activity callbacks carry
+        // it so main.js can pin its busy state to the run that set it.
         run: function (files, args, assets) {
             this.reset();
             current = spare;
             spare = null;
             current.used = true;
+            current.runToken = ++runSeq;
             send(current, { type: "run", files: files, args: args, assets: assets || [] });
             // Warm the next one while this program runs, so the following Run
             // click does not pay startup either.
             ensureSpare();
+            return current.runToken;
         },
     };
 

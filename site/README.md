@@ -55,7 +55,7 @@ site/
 |   +-- samples/                # multi-file sample bundles (gitignored, mirrored from web/examples/ui/samples)
 |   +-- *.{js,css}              # other vendored bits from web/examples/ui/src/ for local-dev (gitignored)
 +-- tests/
-|   +-- playground/             # Playwright e2e suite (28 specs, ~5 s no-WASM)
+|   +-- playground/             # Playwright e2e suite (no-WASM lane per PR, @wasm nightly)
 +-- doc/                        # Sphinx HTML output (gitignored, deployed by CI)
 ```
 
@@ -318,8 +318,10 @@ The landing chart and `benchmarks.html` read them directly - no rebuild needed.
 Specs cover: dropdowns, tab strip CRUD, multi-file persistence, share-URL
 round-trip, splitter drag, hero up playground handoff, engine toggle, the
 shared runtime module, and dead-page revival. Tests that need the daslang
-runtime carry `@wasm` in their title and only run when the WASM artifacts
-are staged; the per-PR lane runs the rest with `--grep-invert '@wasm'`.
+runtime carry `@wasm` in their title; the per-PR lane runs the rest with
+`--grep-invert '@wasm'`, and `nightly_playground.yml`'s `wasm_specs` job runs
+the tagged ones against the DEPLOYED site — an `@wasm` assertion that depends
+on an undeployed runtime change stays red until the artifact ships.
 
 ```bash
 # Start the dev server from site/ (so paths resolve like prod).
@@ -335,8 +337,9 @@ npx playwright test                     # full suite, requires WASM at site/play
 
 CI runs the no-WASM subset on every PR via
 [`.github/workflows/playground-e2e.yml`](../.github/workflows/playground-e2e.yml).
-The `@wasm`-tagged specs are gated on the WASM build being present locally -
-no dedicated CI tier yet.
+The `@wasm`-tagged specs run nightly against the deployed site
+([`nightly_playground.yml`](../.github/workflows/nightly_playground.yml),
+`wasm_specs`), and locally against a staged WASM build.
 
 ## Common gotchas
 

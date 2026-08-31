@@ -36,6 +36,16 @@ export const ERROR_MARKERS = [
 ];
 
 // The output pane reports colours back as `rgb(r, g, b)`.
+// The run frame mirrors program stderr to the devtools console prefixed
+// "[das:err] " (site/playground/run-frame.html). Those lines are the PROGRAM
+// talking — the verdict already judges them through the output pane and the
+// per-sample ignore list — so the pageErrors channel, which exists for errors
+// the BROWSER generates, must not double-count them (and its ^-anchored ignore
+// patterns could never match the prefixed copy).
+export function isProgramStderrEcho(text) {
+    return String(text).startsWith('[das:err] ');
+}
+
 export function normalizeColor(color) {
     if (!color) return '';
     const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);

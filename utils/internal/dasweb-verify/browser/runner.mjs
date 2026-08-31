@@ -143,7 +143,10 @@ class Playground {
             // have one, so a 404 per run is the designed normal case. Assets
             // that fail once a run frame does want them surface as an
             // `asset <url>: …` line in the output pane, which the verdict reads.
-            if (msg.type() === 'error' && !/^Failed to load resource:/.test(msg.text())) {
+            // "[das:err] " console lines are the run frame's mirror of program
+            // stderr — already judged via the output pane, never a page error.
+            if (msg.type() === 'error' && !/^Failed to load resource:/.test(msg.text())
+                && !P.isProgramStderrEcho(msg.text())) {
                 this.pageErrors.push(msg.text());
             }
         });
@@ -314,7 +317,10 @@ class Artifacts {
             // it — including the page. --console is how a failing sample gets
             // diagnosed without reproducing it by hand.
             if (this.cfg.console) process.stderr.write(`  [${msg.type()}] ${msg.text()}\n`);
-            if (msg.type() === 'error' && !/^Failed to load resource:/.test(msg.text())) {
+            // "[das:err] " console lines are the run frame's mirror of program
+            // stderr — already judged via the output pane, never a page error.
+            if (msg.type() === 'error' && !/^Failed to load resource:/.test(msg.text())
+                && !P.isProgramStderrEcho(msg.text())) {
                 this.pageErrors.push(msg.text());
             }
         });

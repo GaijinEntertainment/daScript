@@ -46,6 +46,9 @@ namespace das {
         void Clear(uint32_t count = 1);
         int addRef( LineInfo * at = nullptr );
         int releaseRef( LineInfo * at = nullptr );
+        // live refs; <=1 (the joiner's own) means no dispatched job/thread can
+        // ever notify — waitForJob's deadlock-vs-long-job discriminator
+        int refCount() const { return mRef.load(); }
         int size() const;
         int append(int size);
         bool isValid() const { return mMagic==uint32_t(STATUS_MAGIC); }

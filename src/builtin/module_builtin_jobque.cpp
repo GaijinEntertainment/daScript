@@ -1305,6 +1305,25 @@ namespace das {
         if ( g_jobQue.use_count()==1 ) g_jobQue.reset();  // ~JobQue drains/joins the pool
     }
 
+    // Bounded drain + teardown of the global que, for an embedder about to
+    // destroy a Context that in-flight jobs still reference (the browser loop).
+    // On timeout the que stays alive and the CALLER must leak the context —
+    // freeing it under running jobs is heap corruption, joining them a frozen tab.
+    bool shutdown_job_que_bounded ( int timeoutMs ) {
+        shared_ptr<JobQue> jq;
+        {
+            lock_guard<mutex> guard(g_jobQueMutex);
+            jq = g_jobQue;
+        }
+        if ( !jq ) return true;
+        if ( !jq->drain(timeoutMs) ) return false;
+        jq.reset();
+        lock_guard<mutex> guard(g_jobQueMutex);
+        g_persistentJobQue.reset();
+        if ( g_jobQue.use_count()==1 ) g_jobQue.reset();  // idle pool — ~JobQue joins promptly
+        return true;
+    }
+
     void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "jobStatusAddRef: status is null");
         status->addRef(at);
@@ -1343,26 +1362,36 @@ namespace das {
         if ( !status ) context->throw_error_at(at, "waitForJob: status is null");
         flushPendingForkJobs();     // batched dispatch publishes at the join point
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-        // On the browser main thread an unbounded join IS the page: the thread that
-        // would repaint, deliver postMessage (the output pane) and service input is
-        // the one parked here, so a join whose jobs can never complete freezes the
-        // whole tab with no diagnostic. Join in slices and track progress — a busy
-        // join that keeps completing jobs waits as long as it needs to, while one
-        // that makes NO progress for the whole window becomes a das exception the
-        // page can report instead of a wedge.
+        // An unbounded join on the browser main thread is a frozen tab. Join in
+        // slices; on a stall, throw ONLY when nothing can ever notify: every
+        // dispatched job/thread holds a ref (capture macros add_ref), so
+        // refCount()<=1 = the wedge class. Refs held = live work — keep waiting
+        // (a throw there unwinds through noexcept with_* guard dtors =
+        // std::terminate, and a late notifier writes into a dead stack frame);
+        // log the stall to stderr instead.
         if ( emscripten_is_main_browser_thread() ) {
             const int sliceMs = 500, stallLimitMs = 10000;
             int32_t last = status->size();
             int stalledMs = 0;
+            bool warned = false;
             while ( !status->WaitFor(sliceMs) ) {
                 int32_t now = status->size();
-                if ( now != last ) {
+                if ( now < last ) {         // only completions are progress; an append is not
                     last = now;
                     stalledMs = 0;
-                } else if ( (stalledMs += sliceMs) >= stallLimitMs ) {
+                    continue;
+                }
+                last = now;
+                if ( (stalledMs += sliceMs) < stallLimitMs ) continue;
+                stalledMs = 0;
+                if ( status->refCount() <= 1 ) {
                     context->throw_error_at(at,
-                        "join deadlock avoided: %d job(s) made no progress for %ds on the browser main thread",
-                        int(now), stallLimitMs / 1000);
+                        "join deadlock avoided: %d job(s) can never complete — appended but never dispatched (no live job or thread holds this status)",
+                        int(now));
+                } else if ( !warned ) {
+                    warned = true;
+                    fprintf(stderr, "join stalled for %ds on the browser main thread: %d job(s) remaining, still held by live work — waiting\n",
+                        stallLimitMs / 1000, int(now));
                 }
             }
             return;
