@@ -36,28 +36,28 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
         : halfx
             ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl))
             : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl)))
-        : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl : MetalKqMulMmK6_metal_kq_mulmm_msl)))))))
+        : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl : MetalKqMulMmK6_metal_kq_mulmm_msl))))))))
     let entry = (tensor
         ? (tall
             ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_entry))
         : halfx
             ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry))
             : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_entry)))
-        : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_entry : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_entry : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_entry : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_entry : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_entry : MetalKqMulMmK6_metal_kq_mulmm_msl_entry)))))))
+        : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_entry : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_entry : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_entry : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_entry : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_entry : MetalKqMulMmK6_metal_kq_mulmm_msl_entry))))))))
     let fm = (tensor
         ? (tall
             ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_fastmath))
         : halfx
             ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath))
             : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_fastmath)))
-        : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath : MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath)))))))
+        : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath : MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath))))))))
     let tgm = (tensor
         ? (tall
             ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_tgmem))
         : halfx
             ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem))
             : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_tgmem)))
-        : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem : MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem)))))))
+        : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem : MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem))))))))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
@@ -2055,6 +2055,8 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 33, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 34, false, 64, 512, 64)   // iq3xxs: the base form only (no tensor / tall twins)
                 kq_mulmm_gate(t, dev, queue, 34, false, 32, 256, 128)
+                kq_mulmm_gate(t, dev, queue, 45, false, 64, 512, 64)   // iq4nl: the base form only (no tensor / tall twins)
+                kq_mulmm_gate(t, dev, queue, 45, false, 32, 256, 128)
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64)
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64, halfx = true)
                 q8_mulmm_t_gate(t, dev, queue, 64, 160, 64)               // kdim % 64 == 32: the bk=64 helper's 32-tail chunk

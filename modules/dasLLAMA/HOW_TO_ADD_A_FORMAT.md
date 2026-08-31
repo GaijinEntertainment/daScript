@@ -463,8 +463,32 @@ stride 32 words, the cm2 cell mirrors q40's with the codebook oracle. Gates: the
 78/78 (the three cm2 tiles 0-off at 89600 cells each); the resident driver arms and runs
 gen 245 t/s, greedy ids 11/64 vs `simple_ids.exe` (the near-tie class - the margin
 oracle's step-11 tie is 0.042 logits on this stream). Rows (5060 Ti vs llama.cpp b10660
-Vulkan): pp512 15027.4 vs 19177.8 (0.78x), tg128 340.7 vs 363.6 (0.94x). Metal:
-pending (q40's Metal kernels + iq4xs's LUT staging compose the same way).
+Vulkan): pp512 15027.4 vs 19177.8 (0.78x), tg128 340.7 vs 363.6 (0.94x).
+
+Metal closed the format as the promised compose - the iq4xs kernels with the scale fold
+swapped. No blob arm, no off-gate row, no split plane: q40's 16B/sb plane of 8 f16 d's IS
+the device form, bound once at soff (kq_scales_of hands doff = 0), and every kernel reads
+block bu's d at `kdh[blk*8+bu]` where iq4xs read per-sb d x strip byte. `MetalKqGemvIq4nl`,
+`MetalKqMvIq4nlT` B2/B4 + `MetalKqMvB8Iq4nl` (the iq4xs shells over the threadgroup
+codebook), and an `IQ4NL` constant on `MetalKqMulMmK45T` riding the IQ4XS arm with only the
+dsc read flipped. One checklist line this walk misses easily: the `g_pso_*` globals are
+DECLARED in dasllama_metal_common.das - the `[metal_dispatch]` pso= attribute only NAMES
+them - so five new kernels = five decl lines there, or every reference errors 30838. Gates
+on the M1 Max: test_metal_gemv_kernels 2/2, test_metal_gemm_kernels 2/2 (116 s corpus); the
+metal-blob e2e decodes the same stream at gen 285 t/s, ids 11/64 with the fork = the
+format's 0.042-logit near-tie at step 11 on every tier.
+
+Where IQ4_NL landed (vs llama.cpp b10660, the local requant):
+
+| tier | pp512 (ours / theirs) | tg128 (ours / theirs) |
+|---|---|---|
+| zen2 CPU | 618.3 / 540.6 (1.14x) | 64.2 / 62.2 (1.03x) |
+| M1 CPU | 727.1 / 724.1 (1.00x) | 134.4 / 133.7 (1.01x) |
+| 5060 Ti Vulkan | 15027.4 / 19177.8 (0.78x) | 340.7 / 363.6 (0.94x) |
+| M1 Metal | 3599.5 / 3774.6 (0.95x) | 248.4 / 250.2 (0.99x) |
+
+The nearly-free prediction held: not one new decode on any tier, no CPU tg tail (no
+gather), and the only real bug of the format was the layout copy arm QUIRK 24 caught.
 
 ### IQ3_XXS (2026-08-30)
 
