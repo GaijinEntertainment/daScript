@@ -1954,6 +1954,7 @@ def private spawn_wg_fixture(with_tgmem : bool; tag : string) : tuple<rc : int; 
     let dir = unsafe(dir_r.value)
     let path = path_join(dir, "prog.das")
     if (!fwrite(path, src)) {
+        rmdir_rec_result(dir)
         return (rc = -1, out = "fwrite failed")
     }
     let argv <- get_command_line_arguments()
