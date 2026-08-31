@@ -103,6 +103,9 @@ footer_p {
    stripe animates transform on a promoted layer, so the compositor keeps it
    moving even while the wasm compile blocks the main thread. */
 #run { position: relative; overflow: hidden; }
+/* overflow:hidden clips the default focus ring; draw it inset so keyboard
+   focus stays visible. */
+#run:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
 #run.pg-loading::before,
 #run.pg-busy::after {
     content: '';

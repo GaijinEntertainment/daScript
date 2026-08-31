@@ -13,7 +13,7 @@
 (function () {
     "use strict";
 
-    var FRAME_SRC = "run-frame.html?v=4";
+    var FRAME_SRC = "run-frame.html?v=5";
 
     var host = null;        // element the frames live in
     var current = null;     // frame serving the run in flight (or the idle one)
