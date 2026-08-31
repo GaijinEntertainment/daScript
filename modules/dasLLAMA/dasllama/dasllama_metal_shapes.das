@@ -180,7 +180,7 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
 // formats) must DECLINE kquant_native instead of falling into a wrong-layout kernel branch
 // (the dispatchers below treat "not k4/k6" as k5)
 def kq_fmt_gpu_supported(f : KqFmt) : bool {
-    return f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s
+    return f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs
 }
 
 def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {
@@ -243,7 +243,7 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.k4 || fmt == KqFmt.k5) {
         return off >= 0l && (off % 256l) == 0l && (ege % 256l) == 0l
     }
-    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s) {   // the split scale form: off % 512 keeps the d-plane bind 4B-aligned
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs) {   // the split scale form: off % 512 keeps the d-plane bind 4B-aligned
         return off >= 0l && (off % 512l) == 0l && (ege % 256l) == 0l
     }
     if (fmt == KqFmt.q51) {   // per-32 planes: off % 128 keeps the 20B/4B binds 16B-aligned

@@ -483,7 +483,32 @@ the float witness in the family cell); the resident driver arms and matches llam
 greedy ids 32/64 with the fork a 0.093-logit near-tie whose top-2 IS our token (the
 smallest margin in the window), gen 202 t/s. Rows (5060 Ti vs llama.cpp b10660 Vulkan,
 the local requant): pp512 12225.7 vs 17807.7 (0.69x), tg128 372.1 vs 389.9 (0.95x).
-Metal: pending (the constant-table hoisting from the iq3s arc carries the grid).
+Metal closed the format the same day, and the iq3s walk paid for itself twice: the blob
+"iq3xxss" arm is the iq4xs 20->18 split verbatim, `kq_quants_of` binds at sb0*96, and the
+kernels are the iq3s shapes with three deltas - `iq3xxs_gw` (the 1 KB halved grid through
+the constant-table hoisting), `ksign7m` (the parity sign byte - no ksigns table on Metal
+either), and 24-word rows with one aux word per block. The GEMV ships directly in the
+crowned iq3s form (float4 magnitude slab + sign selects, 4 rows/simdgroup, dispatch
+rows/8 - QUIRK 22's race already ran); the B2/B4/B8 twins and the `IQ3XXS` mul_mm arm (a
+gated uint[256], the chain re-nested once more) follow their iq3s siblings. One
+cross-tier find: the CPU dequant/dot strip reads went SIGNED (int8) to match the GPU
+kernels' decode - real strips are 1..31 either way, but the synthetic test fills carry
+high-bit bytes and the split-form fill is shared across formats. Gates on the M1 Max:
+`test_metal_gemv_kernels` 2/2, `test_metal_gemm_kernels` 2/2; e2e decodes the SAME story
+stream as the CPU/Vulkan tiers at gen 218 t/s (ttft 106ms).
+
+Against llama.cpp b10660 (`lcpp_bench --for-debug-purposes`; zen2 = 16 threads, M1 = 8;
+the local --tensor-type requant, iq3_xxs on attn_k/q + all ffn):
+
+| tier | pp512 das / llama.cpp | tg128 das / llama.cpp |
+|---|---|---|
+| zen2 CPU | 507.2 / 136.0 (3.73x) | 56.7 / 72.6 (0.78x) |
+| 5060 Ti Vulkan | 12225.7 / 17807.7 (0.69x - the tier class) | 372.1 / 389.9 (0.95x) |
+| M1 CPU | 906.0 / 410.5 (2.21x) | 53.5 / 74.0 (0.72x) |
+| M1 Metal | 3224.0 / 3429.9 (0.94x) | 213.5 / 227.3 (0.94x) |
+
+(The tg tails - zen2 0.78x, M1 CPU 0.72x - are the arc's ledgered CPU-decode class,
+followup_general #60/#61: the per-superblock gather never amortizes at one token.)
 
 ### IQ3_S (the third format - and the first grid format, 2026-08-30)
 

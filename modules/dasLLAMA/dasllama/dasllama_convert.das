@@ -747,7 +747,7 @@ def dequant_iq3xxs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : 
     let grid = iq3xxs_grid()
     let signs = ksigns_iq2xs()
     for (b in range64(8l)) {
-        let db = d * float(int(ks[kso + b]))
+        let db = d * float(int(int8(ks[kso + b])))
         let aux = uint(kq[kqo + 64l + b * 4l]) | (uint(kq[kqo + 64l + b * 4l + 1l]) << 8u) | (uint(kq[kqo + 64l + b * 4l + 2l]) << 16u) | (uint(kq[kqo + 64l + b * 4l + 3l]) << 24u)
         for (l in range64(4l)) {
             let sgn = int(signs[int((aux >> uint(7l * l)) & 127u)])

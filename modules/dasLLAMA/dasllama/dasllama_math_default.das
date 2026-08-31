@@ -734,7 +734,7 @@ def dot_iq3xxs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?;
                         ib += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(xqp[ab + l * 8l + 4l + j])
                     }
                 }
-                isum += int(ksrow[kso + 4l + blk]) * ib
+                isum += int(int8(ksrow[kso + 4l + blk])) * ib
             }
             acc += float(isum) * (d * xsp[sb])
         }
@@ -896,7 +896,7 @@ def private dequant_iq3xxs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr
             let sb = sbi * 20l * mr
             let d = f16_to_f32(uint(ksg[sb + 2l * r]) | (uint(ksg[sb + 2l * r + 1l]) << 8u))
             for (blk in range64(8l)) {
-                let db = d * float(int(ksg[sb + 4l * mr + blk * mr + r]))
+                let db = d * float(int(int8(ksg[sb + 4l * mr + blk * mr + r])))
                 var aux = 0u
                 for (t in range64(4l)) {
                     let ap = 64l + blk * 4l + t

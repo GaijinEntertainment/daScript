@@ -704,7 +704,7 @@ def iq3xxs_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xq
                         ib += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(xqp[(sbi * 8l + blk) * 32l + l * 8l + 4l + j])
                     }
                 }
-                isum += int(ksg[sb + 4l * mr + blk * mr + r]) * ib
+                isum += int(int8(ksg[sb + 4l * mr + blk * mr + r])) * ib
             }
             let dk = f16_to_f32(uint(ksg[sb + 2l * r]) | (uint(ksg[sb + 2l * r + 1l]) << 8u))
             acc += float(isum) * (dk * xsp[sbi])
