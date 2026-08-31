@@ -446,7 +446,23 @@ loop - and the tile gate's `packed` list wrongly held 33 (the iq3s tile reads th
 byte-expanded panel), a pre-existing red on x64 fixed in the same change. End to end
 (reference bodies - both generators decline until the emitter arc): coherent text, 22/64
 greedy ids vs llama.cpp's `simple_ids.exe` where the fork is a 0.12-logit near-tie whose
-top-2 IS our token (`simple_ids_margin`), gen 19 t/s. JIT emitter, Vulkan, Metal: pending.
+top-2 IS our token (`simple_ids_margin`), gen 19 t/s.
+
+The JIT emitter followed the same day and is the smallest arm of the arc: the TILE is free
+(the panel route widens - `emit_one_block`'s and `emit_block_iq4xs`'s `te.kq == 33` become
+`33 || 34`; stride, scale row and fold are already the panel's), and only the gemv gather is
+new. `emit_iq3xxs_gather` mirrors the iq3s gather with three changes: the aux32 sign word is
+ONE aligned i32 column load per block (the four aux bytes of a block land contiguous in the
+grp column layout), sign bytes come from a `dasllama.iq3xxs.ksigns` [128 x i32] global
+(then the SAME smask nibble expansion), and the grid index is the bare qs byte into the
+[256 x i32] HALVED grid - no 9th bit. Two probe lists must both gain the format or the gate
+silently skips it: the test-mode fixture families AND the tune loop's
+`fixed_array(4l, 5l, ...)` - the first run stamped 10 perms and gated NONE of them (grep
+`k34` in the test log to prove coverage). Gates: 11/11 k34 perms ok vs the oracle (maxdiff
+~2e-6); the tuner crowns `dot_maddubs_width256_mr8` verdict=beats (the zen2 board's usual
+winner, same as iq3s/k3). E2e stamped: prefill 6 -> 17 t/s, gen 19 -> 41 t/s; ids 17/64
+with the fork again ON the margin oracle's top-2 (0.43 logits at step 17 - stamped float
+folds move the flip point, they do not change the class). Vulkan, Metal: pending.
 
 ### IQ3_S (the third format - and the first grid format, 2026-08-30)
 

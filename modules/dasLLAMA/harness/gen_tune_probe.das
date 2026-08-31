@@ -1276,6 +1276,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     var kfxs44 <- [ <- build_kq_fixture(44l, 256l, 32l, 8l), <- build_kq_fixture(44l, 768l, 32l, 8l), <- build_kq_fixture(44l, 2048l, 32l, 8l)]
     var kfxs3 <- [ <- build_kq_fixture(3l, 256l, 32l, 8l), <- build_kq_fixture(3l, 768l, 32l, 8l), <- build_kq_fixture(3l, 2048l, 32l, 8l)]
     var kfxs33 <- [ <- build_kq_fixture(33l, 256l, 32l, 8l), <- build_kq_fixture(33l, 768l, 32l, 8l), <- build_kq_fixture(33l, 2048l, 32l, 8l)]
+    var kfxs34 <- [ <- build_kq_fixture(34l, 256l, 32l, 8l), <- build_kq_fixture(34l, 768l, 32l, 8l), <- build_kq_fixture(34l, 2048l, 32l, 8l)]
     var vs <- q8q8_tile_gen_variants()
     var mrs <- variant_mrs()
     var wbs <- variant_wbias()
@@ -1403,6 +1404,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     allok = kq_test_family(44l, kfxs44) && allok
     allok = kq_test_family(3l, kfxs3) && allok
     allok = kq_test_family(33l, kfxs33) && allok
+    allok = kq_test_family(34l, kfxs34) && allok
     delete wtab
     delete mtab
     delete gtab
@@ -1421,6 +1423,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     delete kfxs44
     delete kfxs3
     delete kfxs33
+    delete kfxs34
     return allok
 }
 
@@ -1863,7 +1866,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         print("aborting mid-run - no sidecar written\n")
         return false
     }
-    for (fmt in fixed_array(4l, 5l, 6l, 40l, 44l, 3l, 33l)) {
+    for (fmt in fixed_array(4l, 5l, 6l, 40l, 44l, 3l, 33l, 34l)) {
         interrupt_gate("k{fmt}q8_tile_gen")
         let kq_t0 = ref_time_ticks()
         let entry = kq_tile_entry(fmt)
