@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 #include "daScript/misc/string_writer.h"
 #include "misc/include_fmt.h"
+#include "daScript/misc/float2string.h"
 
 #include <stdarg.h>
 
@@ -64,8 +65,16 @@ namespace das {
     StringWriter & StringWriter::operator << (char * v)               { return write(v ? (const char*)v : ""); }
     StringWriter & StringWriter::operator << (const char * v)         { return write(v ? v : ""); }
     StringWriter & StringWriter::operator << (const string & v)       { return v.length() ? writeStr(v.c_str(), v.length()) : *this; }
-    StringWriter & StringWriter::operator << (float v)                { return fixed ? format("{:.9}", v) : format("{}", v); }
-    StringWriter & StringWriter::operator << (double v)               { return fixed ? format("{:.17}", v) : format("{}", v); }
+    StringWriter & StringWriter::operator << (float v) {
+        if ( fixed ) return format("{:.9}", v);
+        char buf[DAS_F2S_BUFFER_SIZE];
+        return writeStr(buf, size_t(float2string(buf, v) - buf));
+    }
+    StringWriter & StringWriter::operator << (double v) {
+        if ( fixed ) return format("{:.17}", v);
+        char buf[DAS_F2S_BUFFER_SIZE];
+        return writeStr(buf, size_t(double2string(buf, v) - buf));
+    }
 
     // fixed buffer string writer
 

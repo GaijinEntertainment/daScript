@@ -447,3 +447,13 @@ DAS_MOD_API inline void deleteFancyClassDummy(FancyClass& ) {  } // this one in 
 DAS_MOD_API void test_abi_lambda_and_function ( das::Lambda lambda, das::Func fn, int32_t lambdaSize, das::Context * context, das::LineInfoArg * lineinfo );
 
 DAS_MOD_API bool testBindEnumFunction ( das::Context * context, das::LineInfoArg * at );
+
+//! CRT reference twins - benchmarks/core/math A/Bs these against the math builtins.
+inline float crt_expf ( float a ) { return expf(a); }
+inline float crt_exp2f ( float a ) { return exp2f(a); }
+inline float crt_logf ( float a ) { return logf(a); }
+inline float crt_log2f ( float a ) { return log2f(a); }
+inline float crt_powf ( float a, float b ) { return powf(a, b); }
+inline float crt_sinf ( float a ) { return sinf(a); }
+inline float crt_cosf ( float a ) { return cosf(a); }
+inline float crt_tanf ( float a ) { return tanf(a); }

@@ -55,6 +55,7 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 |---|---|
 | `horizontal_reduce.das` | `hmin`/`hmax`/`hadd` over a hot float4 array - measures the JIT `llvm.vector.reduce.*` lowering vs the extern-call fallback (and interp); non-constant inputs + a global sink defeat const-fold / DCE |
 | `exp.das` | scalar `exp` (vecmath polynomial in interp/AOT, `@llvm.exp` in JIT) against `exp_std` (the C library `expf`) and `exp_est` (the 4th-order vecmath estimate) over a hot float array; same DCE defeats |
+| `scalar_crt.das` | the scalar float family (log, log2, exp2, pow, sin, cos, tan) against the CRT twins `UnitTest` binds (`crt_logf`...); log/sin/cos/tan still race the vecmath lane, while the exp2/log2/pow rows read as builtin-node-vs-extern overhead over the same CRT since the sim_policy switch; same shape as `exp.das` |
 
 ## audio/
 

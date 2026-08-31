@@ -177,3 +177,15 @@ def test_variant_format(t : T?) {
         t |> success(s |> find("variant(") != -1, "should use variant() syntax")
     }
 }
+
+[test]
+def test_float_default_spelling(t : T?) {
+    t |> run("float and double default spelling") @@(t : T?) {
+        let f = 3.14f
+        let d = 2.5e-7lf
+        t |> equal("{f}", "3.14")
+        t |> equal("{d}", "2.5e-07")
+        t |> equal(string(f), "3.14")
+        t |> equal(string(d), "2.5e-07")
+    }
+}

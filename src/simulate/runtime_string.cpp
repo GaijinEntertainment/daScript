@@ -9,6 +9,7 @@
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/sim_policy.h"
 #include "misc/include_fmt.h"
+#include "daScript/misc/float2string.h"
 
 namespace das
 {
@@ -252,19 +253,17 @@ namespace das
         return das_lexical_cast_int_T(x, hex, __context__, at);
     }
 
-    template <typename TT>
-    __forceinline char * das_lexical_cast_fp_T ( TT x, Context * __context__, LineInfoArg * at ) {
-        char buffer[128];
-        auto result = fmt::format_to(buffer,FMT_STRING("{}"),x);
+    char * das_lexical_cast_fp_f ( float x, Context * __context__, LineInfoArg * at ) {
+        char buffer[DAS_F2S_BUFFER_SIZE];
+        auto result = float2string(buffer, x);
         *result = 0;
         return __context__->allocateString(buffer,uint32_t(result-buffer),at);
     }
-
-    char * das_lexical_cast_fp_f ( float x, Context * __context__, LineInfoArg * at ) {
-        return das_lexical_cast_fp_T(x, __context__, at);
-    }
     char * das_lexical_cast_fp_d ( double x, Context * __context__, LineInfoArg * at ) {
-        return das_lexical_cast_fp_T(x, __context__, at);
+        char buffer[DAS_F2S_BUFFER_SIZE];
+        auto result = double2string(buffer, x);
+        *result = 0;
+        return __context__->allocateString(buffer,uint32_t(result-buffer),at);
     }
 
     // temp-string reclaim wrapper: the compiler inserts this around a [temp_string_result] call

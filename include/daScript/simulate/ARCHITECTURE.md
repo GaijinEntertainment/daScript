@@ -16,12 +16,22 @@ the hot set; its cost is judged against the allocate/copy/rehash it rides.
 The ledger the checklist's hot-path rule routes to. Each entry: what was added, where, why
 correctness required it, and the alternative that was rejected.
 
+- **CRT scalar transcendentals** (`sim_policy.h`) - the scalar float arms of `Exp`, `Exp2`,
+  `Log2` and `Pow` call the CRT; the `vec4f` arms stay on the vecmath polynomials, where
+  four lanes amortize the setup. The lane trick's `v_set_x`/`v_extract_x` round-trip is a
+  partial-register dependency chain scalar codegen does not break, so for these arms the
+  CRT call is cheaper than the inlined polynomial - that is the rejected alternative. `Log2`
+  is the one arm the swap does not speed up: it trades the `v_log2_est_p5` estimate for the
+  exact answer the JIT already computes, so interp, AOT and JIT agree. `log`, `sin`, `cos`
+  and `tan` stay on the lane, which is cheaper for them. The measurements behind the split:
+  `plans/benchmark_followups.md` (repo root), the scalar-exp section.
+
 - **`das_ordered2`** (`aot.h`) - a two-member aggregate the AOT emitter wraps around any
   binary op whose operands are not both side-effect-free, because braced aggregate init is
   the C++ construct that guarantees left-to-right evaluation; a plain call argument list or
   binary operator is unsequenced, and the interpreter and JIT both evaluate left-then-right.
-  Optimized builds flatten the wrapper to nothing (full-corpus A/B: regen + compile of all
-  AOT TUs is timing-neutral); an unoptimized AOT build pays a copy of both operand values
+  Optimized builds flatten the wrapper to nothing; an unoptimized AOT build pays a copy of
+  both operand values
   plus an immediately-invoked lambda frame per wrapped op. Ops whose policy operands need a
   ref cast decline the wrapper and keep the plain unordered emission. Rejected alternative:
   hoisting operands to named temporaries in the emitter, which needs statement-position
