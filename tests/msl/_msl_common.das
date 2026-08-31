@@ -692,6 +692,29 @@ class UkStride {
     }
 }
 
+// ===== hoisted constant tables =====
+// A `let` fixed-array local with all-literal elements lowers to a program-scope `constant`
+// array - the codebook/grid shape quant kernels stage from; reads index it by the local's name.
+
+def private ctb_pick(i : uint) : uint {
+    let tbl = fixed_array<uint>(0x11u, 0x22u, 0x33u, 0x44u, 0x55u, 0x66u, 0x77u, 0x88u)
+    return tbl[i & 7u]
+}
+
+class ConstTab {
+    @ssbo @binding = 0 src : array<uint>
+    @ssbo @binding = 1 dst : array<uint>
+    @ssbo @binding = 2 fdst : array<float>
+
+    [metal_kernel(name="consttab_msl"), marker(no_coverage)]
+    def consttab {
+        let i = gl_GlobalInvocationID.x
+        let sgn = fixed_array<float>(1.0, 0.5)
+        dst[i] = src[i] + ctb_pick(i)
+        fdst[i] = sgn[i & 1u] * 2.0
+    }
+}
+
 // ===== @uniform structs (the kargs form) =====
 // A kernel with a dozen scalars costs a dozen binds; one struct costs one. Fields are 4-byte
 // scalars only, so the das layout IS the MSL layout and the host writes its struct straight
@@ -1293,6 +1316,7 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "cvt.i8.f32",
         // statements
         "stmt.let",
+        "stmt.let.const_table",
         "stmt.var",
         "stmt.var.zero",
         "stmt.assign",
@@ -1336,7 +1360,7 @@ def public all_msl_censuses : array<string> {
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
         sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
-        ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, statearr_msl_census,
+        ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, consttab_msl_census, statearr_msl_census,
         tmmhw_msl_census, tmmhwh_msl_census, tmmq8u_msl_census, tmmq8uh_msl_census,
         tmmq8uh64_msl_census, tmmq8uh128_msl_census, tmmdeva_msl_census, tmmdevaf_msl_census,
         tmmnt_msl_census, tmmdevant_msl_census, sgmathalf_msl_census, sgmat_store_tg_msl_census,

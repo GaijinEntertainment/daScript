@@ -135,3 +135,19 @@ def test_msl_state_and_naming(t : T?) {
             "the emitted signature carries the derived entry name")
     }
 }
+
+def private hasq(t : T?; needle : string) {
+    t |> success(find(consttab_msl, needle) >= 0, "emitted MSL carries `{needle}`")
+    if (find(consttab_msl, needle) < 0) {
+        to_log(LOG_ERROR, "MISSING `{needle}` in:\n{consttab_msl}\n")
+    }
+}
+
+[test]
+def test_msl_const_tables(t : T?) {
+    t |> run("literal fixed-array locals hoist to program-scope constant tables") <| @(t : T?) {
+        hasq(t, "constant uint tbl[8] = \{")     // hoisted from the helper's body
+        hasq(t, "constant float sgn[2] = \{")    // hoisted from the kernel body
+        hasq(t, "tbl[")                          // reads index the hoisted table by name
+    }
+}
