@@ -1743,10 +1743,9 @@ def private emit_iq2xs_gather(var te : TileEmit; var sbi : LLVMOpaqueValue?) {
     LLVMPositionBuilderAtEnd(b, cont)
 }
 
-// iq2xxs gemv: gather superblock `sbi` off the PACKED grp planes into the alloca panel - the
-// aux32 form: block b's grid BYTES (column 2b) each double into the u64 grid's word pair, its
-// aux32 (column 2b+1) carries the four 7-bit KSIGNS indices (the per-32 scale nibble rides the
-// scale row, not the gather).
+// iq2xxs gemv: gather superblock `sbi` off the PACKED grp planes into the alloca panel - block
+// b's grid BYTES (column 2b) double into the u64 grid's word pair, its aux32 (column 2b+1)
+// carries the 7-bit KSIGNS indices (the per-32 scale nibble rides the scale row, not the gather).
 def private emit_iq2xxs_gather(var te : TileEmit; var sbi : LLVMOpaqueValue?) {
     let b = te.builder
     let mr = te.interleave
