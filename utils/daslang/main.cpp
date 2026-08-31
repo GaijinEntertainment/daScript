@@ -308,6 +308,17 @@ namespace {
     // in stop_browser_loop respects the same flag as the end-of-callMain dump.
     bool g_webloop_dump_leaks = true;
 
+    // main() returns while the browser loop still runs the program, so it must NOT
+    // tear down the module registry there: module destructors destroy live runtime
+    // state — ~Module_JobQue frees the persistent job que create_job_que() built in
+    // init(), so the first update()'s new_job threw "call create_job_que() first",
+    // and the shutdown() join then parked the browser main thread forever (the
+    // playground wedge). main() sets this instead, and the loop's NATURAL end
+    // (web_loop_tick) runs the deferred Module::Shutdown after the program's own
+    // shutdown(). The superseded path (next run's compile_and_run stops the loop)
+    // leaves modules alive on purpose — the next program is about to compile.
+    bool g_webloop_defer_module_shutdown = false;
+
     // Stop the active loop: cancel its main loop, run its shutdown() (which
     // destroys the GLFW window + glfwTerminate — without this the next program's
     // glfwCreateWindow aborts "only supports one window at a time"), free the
@@ -352,7 +363,15 @@ namespace {
         }
         // void update(): runs until the page closes or the next run stops it.
         if ( keepGoing ) loop->ctx->collectHeapIfMostlyFree();
-        if ( !keepGoing ) stop_browser_loop();
+        if ( !keepGoing ) {
+            stop_browser_loop();
+            // The program has truly ended — run the Module::Shutdown that main()
+            // deferred while the loop was live (see g_webloop_defer_module_shutdown).
+            if ( g_webloop_defer_module_shutdown ) {
+                g_webloop_defer_module_shutdown = false;
+                Module::Shutdown(g_webloop_dump_leaks);
+            }
+        }
     }
 
     // True ⇒ the program was launched as a browser loop (Context persisted, main
@@ -1025,21 +1044,21 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     // A browser main-loop (update/init/shutdown program) keeps running after
     // callMain returns — its Context, JobStatus and smart_ptrs are legitimately
     // still alive (freed when the loop ends, via stop_browser_loop, which runs its
-    // own leak check). Module::Shutdown still runs (its per-run cleanup is needed
-    // for the next program to start cleanly), but with leak reporting off; then we
-    // return before the end-of-run JobStatus/smart_ptr dump + exit(1), which assume
-    // the program is finished and would flag every in-use object as "leaked".
-    const bool browserLoopActive = ( g_activeWebLoop != nullptr );
-#else
-    const bool browserLoopActive = false;
+    // own leak check). Module::Shutdown must NOT run here: module destructors tear
+    // down live runtime state (~Module_JobQue destroys the persistent job que the
+    // program's init() created), so it is deferred to the loop's natural end in
+    // web_loop_tick. We also return before the end-of-run JobStatus/smart_ptr
+    // dump + exit(1), which assume the program is finished and would flag every
+    // in-use object as "leaked".
+    if ( g_activeWebLoop != nullptr ) {
+        g_webloop_defer_module_shutdown = true;
+        return exitCode;
+    }
 #endif
     // Handle-leak dump runs inside Module::Shutdown, between module
     // destruction (drains job threads) and DLL unload (invalidates the
     // dumpHandleLeaks<T> function pointers registered from shared modules).
-    Module::Shutdown(dumpLeaks && !browserLoopActive);
-    if ( browserLoopActive ) {
-        return exitCode;
-    }
+    Module::Shutdown(dumpLeaks);
     if ( dumpLeaks ) {
         JobStatus::DumpJobQueLeaks();
     }

@@ -236,10 +236,12 @@
         postRun: [],
         print: function (text) {
             if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(" ");
+            console.log("[das]", String(text));
             post({ type: "stdout", text: String(text) });
         },
         printErr: function (text) {
             if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(" ");
+            console.log("[das:err]", String(text));
             post({ type: "stderr", text: String(text) });
         },
         onRuntimeInitialized: function () { post({ type: "ready" }); },

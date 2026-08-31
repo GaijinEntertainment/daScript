@@ -121,6 +121,18 @@ body {
 }
 .button_header:hover { background: #f4b04a !important; }
 .button_header:disabled { opacity: 0.5; cursor: default; }
+/* Run-button progress/busy states (paintRunButton in main.js; base rules in
+   main.css). Loading shows a dim base so the amber fill reads as progress;
+   busy keeps the amber base under the sliding stripe. */
+#run.pg-loading {
+    background: rgba(232, 161, 58, 0.18) !important;
+    color: var(--fg-dim) !important;
+    opacity: 1;
+}
+#run.pg-loading::before {
+    background: rgba(232, 161, 58, 0.55);
+}
+#run.pg-busy { opacity: 1; }
 .button_header--ghost {
     background: transparent !important;
     color: var(--fg-dim) !important;

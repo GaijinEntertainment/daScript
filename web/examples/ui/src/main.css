@@ -96,6 +96,40 @@ footer_p {
     height: 35px;
 }
 
+/* Run-button progress/busy states (painted by paintRunButton in main.js).
+   pg-loading: the runtime download — a translucent left-to-right fill whose
+   width is --pg-progress, under a "loading N%" label.
+   pg-busy: a program is compiling/starting — sliding diagonal stripes. The
+   stripe animates transform on a promoted layer, so the compositor keeps it
+   moving even while the wasm compile blocks the main thread. */
+#run { position: relative; overflow: hidden; }
+#run.pg-loading::before,
+#run.pg-busy::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+#run.pg-loading::before {
+    left: 0;
+    width: var(--pg-progress, 0%);
+    background: rgba(120, 200, 120, 0.35);
+    transition: width 0.15s linear;
+}
+#run.pg-busy::after {
+    left: -48px;
+    right: -48px;
+    background: repeating-linear-gradient(105deg,
+        rgba(255, 255, 255, 0.22) 0 10px, transparent 10px 24px);
+    animation: pg-busy-slide 0.7s linear infinite;
+    will-change: transform;
+}
+@keyframes pg-busy-slide {
+    to { transform: translateX(24px); }
+}
+#run.pg-loading:disabled, #run.pg-busy:disabled { opacity: 1; }
+
 
 
 .select_header {
