@@ -40,7 +40,7 @@ def q8q8_repack_type(mr : int; wbias : int = 0; kgroup : int = 4) : Q8RepackType
 //! The mr of the REFERENCE tier's layout (q8q8_repack_type(4), the old hand arm64-laneq layout
 //! the reference stub bodies read). Non-reference mr runs the generated grp<mr> kernel/layout pair,
 //! stamped from one manifest entry so both decline in lockstep (M4).
-let GEMM_REFERENCE_MR = 4
+def GEMM_REFERENCE_MR : int => 4   // a FUNCTION, not a let global: team-mode job lanes never run global init, so a let here reads 0 on the lanes the unstamped reference layout/repack run on
 
 //! GPU-tier device-plane shape of the Q8 rail: 32-weight blocks, 32B quants + one f16 scale
 //! halfword per block. Every q8 plane sizing (gathers, arena/stack math) derives from these.
@@ -72,6 +72,7 @@ def kq_qsb(fmt : int) : int64 {
     if (fmt == 45) return kq_qsb(KqFmt.iq4nl)
     if (fmt == 2) return kq_qsb(KqFmt.k2)
     if (fmt == 23) return kq_qsb(KqFmt.iq2s)
+    if (fmt == 24) return kq_qsb(KqFmt.iq2xs)
     panic("kq_qsb: unknown kq format id {fmt}")
     return 0l
 }
@@ -91,6 +92,7 @@ def kq_ssb(fmt : int) : int64 {
     if (fmt == 45) return kq_ssb(KqFmt.iq4nl)
     if (fmt == 2) return kq_ssb(KqFmt.k2)
     if (fmt == 23) return kq_ssb(KqFmt.iq2s)
+    if (fmt == 24) return kq_ssb(KqFmt.iq2xs)
     panic("kq_ssb: unknown kq format id {fmt}")
     return 0l
 }

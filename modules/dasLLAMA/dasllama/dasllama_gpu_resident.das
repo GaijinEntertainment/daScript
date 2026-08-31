@@ -305,6 +305,11 @@ def trim_model_planes(var t : Model) : bool {   // nolint:STYLE038 — the flat 
                 t.embs |> reserve_resize(nsb * IQ2S_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq2sq[sb0 * IQ2S_QSB]), nsb * IQ2S_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq2ss[sb0 * IQ2S_SSB]), nsb * IQ2S_SSB)
+            } elif (t.emb_fmt == KqFmt.iq2xs) {
+                t.embq |> reserve_resize(nsb * IQ2XS_QSB)
+                t.embs |> reserve_resize(nsb * IQ2XS_SSB)
+                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq2xsq[sb0 * IQ2XS_QSB]), nsb * IQ2XS_QSB)
+                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq2xss[sb0 * IQ2XS_SSB]), nsb * IQ2XS_SSB)
             } elif (t.emb_fmt == KqFmt.iq3xxs) {
                 t.embq |> resize(nsb * IQ3XXS_QSB)
                 t.embs |> resize(nsb * IQ3XXS_SSB)
@@ -347,6 +352,8 @@ def trim_model_planes(var t : Model) : bool {   // nolint:STYLE038 — the flat 
     delete t.k2s
     delete t.iq2sq
     delete t.iq2ss
+    delete t.iq2xsq
+    delete t.iq2xss
     delete t.q40q
     delete t.q40s
     delete t.q51q

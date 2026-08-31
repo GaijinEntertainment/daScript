@@ -87,7 +87,7 @@ def private kgroup_of(p : TilePerm) : int => p.dotPrim == "smmla" ? 8 : 4
 struct private TilePerm {
     kstep : int = 2
     nrsplit : int = 4
-    mr : int = GEMM_REFERENCE_MR
+    mr : int = GEMM_REFERENCE_MR()
     gkstep : int = 1
     dotPrim : string = "sdot"
     width : int = 128
@@ -3038,6 +3038,13 @@ def private k2_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 2)
 def private iq2s_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 23)
 def private iq2s_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 23)
 
+// iq2xs: the grid-gather emitter arm lands with its Phase B; until then both stamps decline
+// (reference bodies serve) - a declined generator is the framework's own fallback path.
+[unused_argument(gc)]
+def private iq2xs_gemv_gen(var gc : LlvmCodeCtx) : bool => false
+[unused_argument(gc)]
+def private iq2xs_tile_gen(var gc : LlvmCodeCtx) : bool => false
+
 def private k4_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 4)
 def private k5_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 5)
 def private k6_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 6)
@@ -3129,5 +3136,7 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::k2_tile", @@k2_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq2s_gemv", @@iq2s_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq2s_tile", @@iq2s_tile_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2xs_gemv", @@iq2xs_gemv_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2xs_tile", @@iq2xs_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_witness", @@witness_gen)
 }

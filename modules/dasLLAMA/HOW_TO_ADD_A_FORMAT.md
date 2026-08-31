@@ -436,7 +436,50 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
     format's kernel id must dodge 0/1/2 in the stream space or claim a distinct code the
     same way.
 
+26. **Region `f` is the STREAM code at the repack-pointer ternaries too - an `f == 2` arm
+    there is DEAD (q51 intercepts 2 upstream), and k2 arrives as f = 20.** QUIRK 25's third
+    boundary: the big-load repack pointer pick (layout.das, the kqp/ksp ternaries beside the
+    `fk` translation) originally ended `... : k2qp`, so k2's 20 landed on the ELSE by
+    position. The iq2s walk turned that else into a keyed chain (`f == 2 ? k2qp : iq2sqp`) -
+    from that day every k2 region fell through to the NEWEST format's planes, latent until
+    the first vehicle mixing Q2_K with an i-quant (the IQ2_XS requant: llama.cpp's ftype
+    puts q2_K on blk.0/1 ffn_down). repack_k2_grp(mr 8) ground over the iq2xs planes:
+    k2-shaped scale headers, scattered garbage/NaN f16 scale reads, logits all NaN, argmax
+    token 0 forever. Every serial gate passes (fixtures repack through the fn directly) -
+    the corruption exists only in the LOADED model, and the first rows can look clean. The
+    arms key `fk` now. When a walk touches any region/stream ladder, check stream-code vs
+    kernel-id keying at EVERY boundary, and e2e a MIXED vehicle, not just a pure one.
+
+27. **Team-mode job lanes never run global init - a `let` module global reads ZERO there.**
+    (Boris's standing rule, stated during the same hunt.) Nothing reachable from a
+    team-lane kernel may read a das module global: tables ride per-call builders
+    (`iq2s_grid2()`), constants ride functions - `GEMM_REFERENCE_MR` is a function for this
+    reason. Audit a new format's whole rows/tile/dot call graph for global reads; a global
+    that happens to const-fold today is one refactor away from a lane read of zero.
+
 ## Per-format notes
+
+### IQ2_XS Phase A (CPU, 2026-08-31) - the ksigns u64 tier
+
+Shape: 256-superblock grid format - each of the 32 u16 qs words carries a 9-bit index into
+iq2xs_grid[512] (u64 entries, magnitudes {8, 25, 43}) and a 7-bit KSIGNS_IQ2XS index (bit j
+flips element j) - the iq3xxs sign machinery over the iq2s-style u64 grid. Scales are the
+IQ2_S row EXACTLY: per-16 nibbles folded (0.5+ls)*0.25 = (2ls+1) x d/8. Disk 74B: [f16 d]
+[32 u16 qs][8 scale nibble bytes]. Planes: the 64B qs region verbatim (IQ2XS_QSB 64 - 16
+uniform grp columns; a u16's two bytes always share a column), the 20B eighth-ed-d strip
+row (IQ2XS_SSB 20). Ids: KqFmt.iq2xs = 13, kernel id 24, stream code 24. Grid:
+iq2xs_grid2() (4 KB per-call local, 1024 words as low/high pairs) + IQ2XS_GRID. Vehicle: a
+local requant (llama-quantize --allow-requantize --imatrix, Q8_0 -> IQ2_XS) - census CLEAN:
+iq2_xs x94 + q4_K x16 (attn_v) + q2_K x2 (blk.0/1 ffn_down) + q5_K embd, every sibling
+already supported.
+
+The walk surfaced TWO buried defects, now QUIRKs 26/27: the DEAD `f == 2` repack-pointer
+arm (k2 regions fell through to the newest format's planes since the iq2s walk - this
+vehicle's q2_K ffn_down ground repack_k2_grp over the iq2xs planes; the arms key `fk` now),
+and Boris's team-lane global-init rule (GEMM_REFERENCE_MR is a function now). Gates:
+test_kqformat 18/18, test_kquant 250 (232 pass, 18 env skips), probe GEN TUNE TEST OK,
+lint 0. E2e: ids 64/64 vs llama.cpp - the arc's FIRST full-match greedy stream, no fork
+anywhere in the window - gen 23 t/s reference bodies. JIT emitter, Vulkan, Metal: pending.
 
 ### IQ2_S Phase A (CPU, 2026-08-31) - the u64-grid tier
 

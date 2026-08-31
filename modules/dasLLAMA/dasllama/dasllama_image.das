@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 24   // 24: the iq2s plane pair (IQ2_S native tier); 23: k2; 22: iq4nl
+let IMAGE_VERSION = 25   // 25: the iq2xs plane pair (IQ2_XS native tier); 24: iq2s; 23: k2
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -641,6 +641,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.kq_repack_mr45)
     arch |> serialize_raw(t.kq_repack_mr2)
     arch |> serialize_raw(t.kq_repack_mr23)
+    arch |> serialize_raw(t.kq_repack_mr24)
     arch |> serialize_raw(t.wcls_fmt)
     arch |> serialize_raw(t.emb_fmt)
     arch |> serialize_raw(t.ple_emb_fmt)
@@ -680,7 +681,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
 }
 
 // 67 serialized fields + 3 deliberate skips (blocks, image_map, image_bytes)
-let IMAGE_META_FIELDS = 73 + 3
+let IMAGE_META_FIELDS = 74 + 3
 
 //! Count of meta-carried fields of any struct: non-arrays plus string arrays (those cannot
 //! be raw planes — see serialize_strings). Pair with a per-type field-count constant to
@@ -964,7 +965,7 @@ def save_model_image(var t : Model; path : string; tag : string = ""; quant : st
 // streamed planes size as empty, so their bytes plus a page each are added here; over-reserve is free (dwrite_close truncates)
 def private stream_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
     var extra = 0ul
-    for (fname in ["qblob", "mblob", "k4q", "k5q", "k6q", "q40q", "q51q", "iq4xsq", "k3q", "iq3sq", "iq3xxsq", "iq4nlq", "k2q", "iq2sq"]) {
+    for (fname in ["qblob", "mblob", "k4q", "k5q", "k6q", "q40q", "q51q", "iq4xsq", "k3q", "iq3sq", "iq3xxsq", "iq4nlq", "k2q", "iq2sq", "iq2xsq"]) {
         let sb = stream_plane_bytes(t, jobs, fname)
         if (sb > 0l) {
             extra += uint64(sb) + uint64(IMAGE_PAGE)
