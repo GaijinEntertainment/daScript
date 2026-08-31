@@ -1310,6 +1310,8 @@ namespace das {
     // On timeout the que stays alive and the CALLER must leak the context —
     // freeing it under running jobs is heap corruption, joining them a frozen tab.
     bool shutdown_job_que_bounded ( int timeoutMs ) {
+        flushPendingForkJobs();     // batched closures reference the context too — publish them into the drain
+        g_batchForkJobs = false;
         shared_ptr<JobQue> jq;
         {
             lock_guard<mutex> guard(g_jobQueMutex);
