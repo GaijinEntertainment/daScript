@@ -127,6 +127,10 @@ let RIG_EXE_OUT = "modules/dasLLAMA/performance/_rig"
 let RIG_BENCH_SRC = "modules/dasLLAMA/benchmarks/lcpp_bench.das"
 let RIG_ENGINE_SRC = "modules/dasLLAMA/dasllama"
 
+// every cell that lands a row bumps this - a run that measured NOTHING exits nonzero
+// (a scoped run whose every selected cell declines would otherwise read as a green board)
+var private g_cells_measured = 0
+
 def private rig_exe_path() : string {
     // macOS ships a clickable .app; every other platform gets <out>/<name>/<name>, .exe on Windows
     if (is_apple_box()) {
@@ -405,6 +409,7 @@ def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; thr
     mint_check(models_dir(), "{file} das {tag}")
     absorb_cell(models, cell, store, note, failed, "ok")
     remove(cellPath)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {tag} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -876,6 +881,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     upsert_bench_model(models, bm)
     stamp_note(models, file, note)
     write_bench_records(store, models)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -917,6 +923,7 @@ def private image_das_cell(file, path, mm, pic : string; cfg : Args; threads : i
     mint_check(models_dir(), "{file} das {log_leg}")
     absorb_cell(models, cell, store, note, failed, "ok")
     remove(cellPath)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {log_leg} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -1003,6 +1010,7 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
     upsert_bench_model(models, bm)
     stamp_note(models, file, note)
     write_bench_records(store, models)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {file} ref image {flavor} {backend} - enc {best_enc:.1f} ms | pp {best_pp:.1f} | tg {best_tg:.1f} tok/s ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("image {flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -1038,6 +1046,7 @@ def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPat
     }
     absorb_cell(models, cell, store, "", failed)
     remove(cellPath)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} das {log_leg} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -1113,6 +1122,8 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             }
         }
         to_log(LOG_INFO, "gen_bench_records:   {ref.tool} over {length(clips)} clip(s) in one process (python model load amortized)\n")
+        fwrite(asr_pybench_out_path(), "")   //! truncate the --out sidecar first: a stale row from an
+                                             //! earlier variant would launder in through the rowless-pipe fallback
         let pyargs <- asr_pybench_args(ref.tool, ref.handle, clips, threads, cfg.asr_reps, gpu ? "mps" : "")
         rr.cmd = argv_line(pyargs)
         var out = run_capture_argv(pyargs)
@@ -1227,6 +1238,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     bm.runs |> emplace(rr)
     upsert_bench_model(models, bm)
     write_bench_records(store, models)
+    g_cells_measured++
     to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} ref {ref.tool} ({measured} clip(s), {elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr"), "clips" => JV(measured), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
@@ -1533,6 +1545,10 @@ def main : int {
     if (!empty(failed)) {
         let list = join(failed, ", ")
         to_log(LOG_ERROR, "gen_bench_records: {length(failed)} FAILED cell(s): {list}\n")
+        return 1
+    }
+    if (g_cells_measured == 0) {
+        to_log(LOG_ERROR, "gen_bench_records: ZERO cells measured - every selected cell skipped or declined; an empty run is never a green board\n")
         return 1
     }
     return 0

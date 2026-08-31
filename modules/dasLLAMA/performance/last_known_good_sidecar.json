@@ -46,7 +46,7 @@
 		"noise_probes" : "start cv 0.08%; mid1 cv 0.05%; mid2 cv 0.10%; end cv 0.10%",
 		"platform" : "darwin",
 		"noise_floor_cv_pct" : "0.10",
-		"engine_sha" : "fa67fe165",
+		"engine_sha" : "345dcd667",
 		"box" : "darwin|arm64|Mac17,6|25G72|Apple M5 Max",
 		"written" : "2026-08-31T01:12:23.099Z",
 		"validation_demoted" : "0",

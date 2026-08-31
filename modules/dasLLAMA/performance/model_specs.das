@@ -413,7 +413,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_qwen_count(),
             companions <- [
                 ProvEntry(name = "mmproj-Qwen3VL-4B-Instruct-F16.gguf", root = "llm",
-                    url = "{HF}/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-F16.gguf",
+                    url = "{HF}/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266/mmproj-Qwen3VL-4B-Instruct-F16.gguf",
                     bytes = 836180256l, sha256 = "256f3a43bd4205ffef48d6b92715e1e70b5b0e9aef06522584967513a9985331")]),
         ModelSpec(file = "Qwen3VL-8B-Instruct-Q8_0.gguf", display = "Qwen3-VL-8B",
             url = "{HF}/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/Qwen3VL-8B-Instruct-Q8_0.gguf",
@@ -433,7 +433,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_qwen_count(),
             companions <- [
                 ProvEntry(name = "mmproj-Qwen2.5-Omni-3B-f16.gguf", root = "llm",
-                    url = "{HF}/ggml-org/Qwen2.5-Omni-3B-GGUF/resolve/main/mmproj-Qwen2.5-Omni-3B-f16.gguf",
+                    url = "{HF}/ggml-org/Qwen2.5-Omni-3B-GGUF/resolve/75f1b73b657a50f5092502799457ccb4a4a1f9df/mmproj-Qwen2.5-Omni-3B-f16.gguf",
                     bytes = 2623983328l, sha256 = "f6d9276e9fa4f060c7abdbe886786cf31a8911b62770f8a54b7581b7b99fa27e")]),
         // parity-less provenance carrier: the gemma3 vision 12B pair (the same SigLIP tower at
         // projection 3840; test_vision_chat's PARITY_FULL leg is its coverage)

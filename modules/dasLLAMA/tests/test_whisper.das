@@ -22,6 +22,7 @@ require _model_tier   // model_available() presence/size-tier gate (see the file
 require dasllama/dasllama_env
 require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec — the CPU-claim cells pin the GPU cross-KV hook off
 require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the mtmd-oracle cells pin the GPU conv hook off
+require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
 // transcription tests need a whisper.cpp ggml-tiny.bin (gitignored) and skip without it.
@@ -564,6 +565,18 @@ def test_whisper_tower_fp32_knob(t : T?) {
             t |> skip("jfk.wav not present")
             return
         }
+        // token-identity between two GPU lanes is pinned to the SIMDGROUP kernel set: the
+        // envelope-verified tensor crowns (attn_qkmm here) round differently and flip
+        // whisper-tiny tokens; the crowned lane's transcription quality is the board
+        // pregate's claim, not this cell's. Pinned BEFORE the loads - the baked-image
+        // flavor and the PSO builds both key on the crown set.
+        let prev_crowns = get_metal_tensor_crowns()
+        pin_metal_tensor_crowns("")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            metal_tower_shutdown()      // earlier cells built PSOs and latched crown flags -
+            metal_wdec_shutdown()       // every driver the encode rides rebuilds under the pin
+            metal_prefill_shutdown()    // the attention trio's crown flags cache at prefill init
+        }
         set_asr_tower_fp32(true)
         var inscope mm <- load_asr_model(model_path)
         set_asr_tower_fp32(false)
@@ -603,6 +616,13 @@ def test_whisper_tower_fp32_knob(t : T?) {
                 t |> success(a.text == b.text, "q8-default/mixed text")
             }
             t |> success(mismatches == 0, "q8-default/mixed token-identical ({mismatches}/{total} flips)")
+        }
+        unpin_metal_tensor_crowns()
+        set_metal_tensor_crowns(prev_crowns)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            metal_tower_shutdown()
+            metal_wdec_shutdown()
+            metal_prefill_shutdown()
         }
         delete m
         delete mm

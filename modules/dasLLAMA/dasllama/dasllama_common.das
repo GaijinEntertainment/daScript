@@ -1367,9 +1367,11 @@ def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a f
     apply_i64_knob(rt, "metal_devw_small_panel_mb") $(v) { set_metal_devw_small_panel_mb(v) }
     apply_i64_knob(rt, "metal_cvt_min_rows") $(v) { set_metal_cvt_min_rows(v) }
     let mtc = read_json_field(rt, "metal_tensor", "")
-    if (mtc != "") {
+    if (mtc != "" && !g_tensor_crowns_pinned) {
         set_metal_tensor_crowns(mtc)
         to_log(LOG_INFO, "dasLLAMA: box profile runtime: metal_tensor crowns = {mtc}\n")
+    } elif (mtc != "") {
+        to_log(LOG_INFO, "dasLLAMA: box profile metal_tensor crowns NOT applied - pinned via pin_metal_tensor_crowns\n")
     }
     let be = read_json_field(rt, "backend", "")
     if (be != "") {
@@ -2150,6 +2152,26 @@ def public set_metal_tensor_crowns(list : string) {
 
 def public metal_tensor_crowned(family : string) : bool {
     return key_exists(g_tensor_crowns, family)
+}
+
+//! The comma-list form of the current crowns — what a cell captures to restore on exit.
+def public get_metal_tensor_crowns : string {
+    let fams <- [for (f in keys(g_tensor_crowns)); f]
+    return join(fams, ",")
+}
+
+var private g_tensor_crowns_pinned = false
+
+//! Test-cell latch: a crown set that SURVIVES loads (each load re-applies the box profile's
+//! crowns, so a bare setter cannot hold a lane across one). Pin BEFORE the load - image
+//! flavor and PSO builds key on it; `unpin_metal_tensor_crowns` + a setter restore entry state.
+def public pin_metal_tensor_crowns(list : string) {
+    set_metal_tensor_crowns(list)
+    g_tensor_crowns_pinned = true
+}
+
+def public unpin_metal_tensor_crowns {
+    g_tensor_crowns_pinned = false
 }
 
 // ===== Metal prefill raced constants (sidecar "runtime" knobs; prefill caches at its init) =====

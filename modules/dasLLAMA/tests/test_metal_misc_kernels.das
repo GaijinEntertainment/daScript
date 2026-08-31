@@ -1974,7 +1974,7 @@ def test_lens_tgmem_gate(t : T?) {
             let good = spawn_wg_fixture(true, "ok")
             t |> equal(0, good.rc, "the tgmem= twin compiles: {good.out}")
         } else {
-            feint("das_metal is not built on this platform; lens tgmem gate skipped\n")
+            t |> skip("das_metal is not built on this platform")
         }
     }
 }

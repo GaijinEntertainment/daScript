@@ -14,6 +14,15 @@ function withVisionPresent(doc) {
     return d;
 }
 
+// the capture box may stock the tower - this test's subject is the download OFFER
+function withVisionAbsent(doc) {
+    const d = JSON.parse(JSON.stringify(doc));
+    const e = d.entries.find(x => x.name === 'gemma-4-e2b');
+    e.vision_present = false;
+    e.vision_path = '';
+    return d;
+}
+
 function withAsrPresent(doc) {
     const d = JSON.parse(JSON.stringify(doc));
     d.asr.present = true;
@@ -29,7 +38,7 @@ function servingE2B() {
 }
 
 test('a downloaded vision-capable model offers its tower with the pinned size', async ({ page }) => {
-    const { posts } = await openControl(page, { catalog: fx('catalog_idle') });
+    const { posts } = await openControl(page, { catalog: withVisionAbsent(fx('catalog_idle')) });
     const row = page.locator('#cat-body tr', { hasText: 'Gemma 4 E2B' });
     const b = row.locator('button', { hasText: 'vision tower' });
     await expect(b).toHaveText('vision tower (1.0 GB)');

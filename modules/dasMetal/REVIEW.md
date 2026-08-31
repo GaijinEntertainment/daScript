@@ -22,12 +22,10 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
 
 - **A diff that makes the MSL emitter reject at compile time a construct it accepted before -
   a new rejection, or a widened condition on an existing one - ships a
-  `tests/msl/_fail_closed/` (repo root) fixture for that construct in the same change.** The
-  same change asserts that construct's error
-  needle in `tests/msl/test_msl_fail_closed.das`. An error needle is the substring of the
-  compile error that names the rejected construct. A diff that stops rejecting a construct
-  deletes that construct's `_fail_closed/` fixture and its needle assertion in
-  `test_msl_fail_closed.das`, in the same change.
+  `tests/msl/_fail_closed/` (repo root) fixture for that construct in the same change.** An
+  error needle is the substring of the compile error that names the rejected construct; the
+  fixture-and-assert pairing itself is `REVIEW.das`'s to hold (`check_fail_closed_sync`,
+  both directions, `tests/msl/test_msl_fail_closed.das` (repo root)).
 
 - **A kernel behavioral change ships a CPU-oracle test under `tests/metal/` (repo root).** A
   kernel behavioral change is a change to what a kernel computes - its emitted arithmetic,

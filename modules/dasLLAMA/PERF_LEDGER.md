@@ -1166,14 +1166,18 @@ group; wording kept.
   adopting").** The arena (yukon.org/mlxfast, repo Layr-Labs/mlxfast-gemma4-26b-a4b-engine,
   local clone ~/Work/mlxfast) runs a collective ratchet: every accepted submission lands on
   `main`, so the trunk is a continuously-updated record of what 26 solvers' search found on
-  Apple silicon. The 2026-08 delta (+30% composite in 33 commits, 100% kernel work) carries
-  three candidates for our Metal kernels, cited in ~/.claude/plans/mtp-research/mlxfast.md:
+  Apple silicon. Every figure in this entry is `external` (their arena composite scorer and
+  their `mlxfast-reports` engine.md - not our instruments; the composite is a two-commit
+  delta of their trunk on their box, `direction-grade`): the 2026-08 delta (+30% composite
+  in 33 commits, 100% kernel work) carries three candidates for our Metal kernels, surveyed
+  in the MTP research notes (local: ~/.claude/plans/mtp-research/mlxfast.md):
   (1) tight-grid dispatch - launch only causally/structurally valid threadgroups instead of
   early-returning ~75% of them (their decode step waived 158k of 211k tgs; our QK/AV grids
-  have the same triangular waste, mlxfast-reports engine.md item 4); (2) identity `scale*q`
+  have the same triangular waste, their engine.md item 4); (2) identity `scale*q`
   elision (~4.4 GB/prefill of traffic on their shapes); (3) a nine-dispatch norm/residual
-  fusion. Re-check the trunk each arc; diff since the last-read sha before every adoption
-  pass. License verified 2026-08-30: MIT top to bottom - harness + submissions (c) 2026
+  fusion. External figures ground the lead only - each candidate adopts through our own race
+  or knockout plus a re-minted cell. Re-check the trunk each arc; diff since the last-read
+  sha before every adoption pass. License verified 2026-08-30: MIT top to bottom - harness + submissions (c) 2026
   Layr Labs, vendored mlx-swift incl. Metal kernels (c) 2023 ml-explore/Apple - so adoption
   is clean with those two attribution lines (the NAX arc's steel_attention_nax credit is the
   house pattern); model weights are not in the repo and carry their own terms.

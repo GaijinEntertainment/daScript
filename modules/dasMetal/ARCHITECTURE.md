@@ -135,7 +135,8 @@ Three behavioral layers + enforcement gates:
   directions. Census-record and emit are fused in one helper so they cannot drift; the
   golden-snapshot layer catches emissions that bypass it.
 - **Gate C - fail-closed sync.** The `tests/msl/_fail_closed/` fixture list and the
-  `check_rejects` needle list in `test_msl_fail_closed.das` are both hand-maintained;
+  `check_rejects` assert list in `test_msl_fail_closed.das` (keyed by fixture name; the
+  needle text is the suite's to judge) are both hand-maintained;
   `check_fail_closed_sync` (`REVIEW.das`) holds them equal in both directions, so an unpinned
   rejection or a stranded assert cannot pass as a green suite.
 - **Leak gate.** Metal objects are invisible to the das leak detectors, so the shim counts live

@@ -86,10 +86,11 @@ defect** - that gate is a final pre-PR gate, not the iteration loop. In this fol
 spelling is `model_available` (`_model_tier.das`). A test that cannot require
 `_model_tier.das` open-codes the same env check.
 
-**A test whose subject is not the `.dlim` image rail never calls `load_model`,
-`load_model_cached`, or `load_model_image` - it loads each carrier through that carrier's own
-loader.** Decoders load through `load_model_` (`../dasllama/dasllama_load.das`). Towers,
-embedders, and union carriers load through their family or carrier loaders.
+**A test - or a program a test builds or spawns - whose subject is not the `.dlim` image
+rail never calls `load_model`, `load_model_cached`, or `load_model_image` - it loads each
+carrier through that carrier's own loader.** Decoders load through `load_model_`
+(`../dasllama/dasllama_load.das`). Towers, embedders, and union carriers load through their
+family or carrier loaders.
 
 **A function that gains a parameter, or a parameter that gains an accepted value, ships a
 test for the new value.** The test feeds the new value and checks the result. It lives in
@@ -138,8 +139,9 @@ that file's `CENSUS_NEVER_DISPATCHED`, with the reason no row can reach it. A
 `DASLLAMA_PARITY_FULL`-gated census row counts as the dispatching arm. Naming a
 class a census row could dispatch is a defect.
 
-**A kernel-unit cell missing a compare against a CPU oracle that can witness the cell's
-property is a defect.**
+**A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
+output - missing a compare against a CPU oracle that can witness the cell's property is a
+defect.** (A census row dispatches without asserting on output, so it is not one.)
 
 **A kernel-unit cell that bit-compares a buffer the GPU writes prefills its output buffers with
 a sentinel.** An unprefilled output can pass a bit compare by staying stale.
@@ -167,16 +169,23 @@ loads the dump names it.
 the backend, the flash-attention setting, and the mmproj precision the dump came from - is a
 defect.**
 
-**A cell that does not establish every driver hook and serving-lane knob its claim depends on,
-and restore each to its default before returning, is a defect.** This holds even when the
-claim needs the knob at its DEFAULT value. A hook is any process-wide setter with no
-read-back. The Vulkan tier's installs (`install_moe_gpu_tier` and the `set_moe_gpu_*_hook(s)`
-seats) are one-way and establish-only - `ARCHITECTURE_GPU.md` sec.1.5 sanctions them. The environment can carry a knob either way. The mechanism (why the hooks flip legs
-silently) is `CLAUDE.md`'s "Metal fixtures" section.
+**A cell that does not establish every process-wide driver setter and serving-lane knob its
+claim depends on, and restore each to the value it had on entry before returning, is a
+defect.** This holds even when the claim needs the knob at its DEFAULT value. The Vulkan
+tier's installs (`install_moe_gpu_tier` and the `set_moe_gpu_*_hook(s)` seats) are one-way
+and establish-only - `ARCHITECTURE_GPU.md` sec.1.5 sanctions them. The environment can carry
+a knob either way. The mechanism (why the hooks flip legs silently) is `CLAUDE.md`'s "Metal
+fixtures" section.
 
-**A cell claiming a family serving lane that does not pin it with `set_<family>_q8` and undo
-the pin with `reset_<family>_q8` is a defect.** A runtime decline standing in for a pin
-measures whichever lane the box's policy picked.
+**A cell claiming a family serving lane that does not pin it through the family's own
+pin/reset pair - `set_<family>_q8` / `reset_<family>_q8`, canary's `set_canary_enc_q8` /
+`reset_canary_enc_q8` - or through a loader parameter that takes the lane, is a defect.** A
+runtime decline standing in for a pin measures whichever lane the box's policy picked.
+
+**A cell that loads a media carrier under a lane pin loads it through the family's
+`stage_*` + `mint_*` pair (the in-memory image rail), never the disk loader.** A disk bake
+under a pinned lane GC-purges the serving lane's `.dlim` beside the model, and the next
+direct-image load in another suite panics on the wrong identity.
 
 **A CPU-vs-GPU arm that does not run a PLANAR model for its CPU stages, and that model's
 `blob_twin(t, path, seq_cap)` for override-selected stages, is a defect.** One session spans

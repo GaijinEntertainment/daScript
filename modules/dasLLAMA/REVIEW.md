@@ -1,7 +1,9 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions it indexes. Planned work:
+docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions it indexes - the rules below
+cite `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`, and
+`ARCHITECTURE_MEASUREMENT.md`. Planned work:
 `followup_general.md`, `followup_vulkan.md`, `PERF_LEDGER.md` (performance goes to the perf
 ledger, everything else to the followup ledgers).
 
@@ -22,6 +24,32 @@ fixture. A test or tool merely opening a stocked model file by name does not rou
 **A change to the sidecar-exchange client or schema answers to `performance/REVIEW.md`.** The
 sidecar exchange is the code that downloads tune winners to a box and submits that box's
 winners back.
+
+**Never add a second HTTP path to the sidecar exchange - every HTTP call (lookup, download,
+submit) goes through `dasllama/dasllama_exchange.das`.** The mechanical half (no second
+`dashv` requirer under the module) is `performance/REVIEW.das`'s to enforce.
+
+**Weakening the exchange download gate, the submission strip, or the submit rails is a
+defect.** The download gate checks content sha, schema, and `DASLLAMA_RELEASE`. The submit
+rails stop a sidecar that came from the exchange, or was minted on another box, from being
+submitted. `utils/dasllama-server/test_exchange_client.das` enforces the download gate, the
+strip, and the rails.
+
+**A diff that adds a submission path around `exchange_strip_private` is a defect, even where
+the strip itself is intact.**
+
+**A tune-boot path (`exchange_scope_resolver` / `exchange_boot_submit_check`,
+`dasllama/dasllama_exchange.das`) that fails when `exchange_lookup` fails is a defect - it
+falls through to the local sidecar and the baked winners.**
+
+**A diff that adds an outbound exchange request reachable from a tune-boot path
+(`exchange_scope_resolver` / `exchange_boot_submit_check`) without routing it through
+`exchange_may_contact` (`dasllama/dasllama_exchange.das`) is a defect.**
+
+**A diff that adds a tune-boot-path (`exchange_scope_resolver` /
+`exchange_boot_submit_check`) consent question with no terminal to ask on also emits that
+question as a `@sidecar` event, in the same change** - the watchdog dialog and the control
+page are the answer surfaces a supervised boot has.
 
 **Every `dasllama/` change applies this folder's `tests/REVIEW.md`.**
 
@@ -54,7 +82,8 @@ not thereby pick up the other modality's checklist.
 
 **`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
 a maintainer ruling that bench comparability is broken - and a bump riding any other diff is
-a defect.** Routine kernel work never bumps it: tune sidecars and board rows stay valid
+a defect. A bump whose diff carries no `LAWS.md` entry recording the ruling is a defect
+too.** Routine kernel work never bumps it: tune sidecars and board rows stay valid
 across code changes (a changed kernel keeping a stale sidecar winner is perf-only drift -
 crowns pick among envelope-verified twins), and per-change invalidation lives in the finer
 mechanisms (`IMAGE_VERSION`, the reflected layout fingerprint).
@@ -63,13 +92,14 @@ mechanisms (`IMAGE_VERSION`, the reflected layout fingerprint).
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value
 that can change between dispatches goes in a uniform, a kargs field, or an `@off` bind offset.
 
-**A function-typed global with a declaration initializer joins its file's boot-restore
-`[init]` in the same change, and weakening `REVIEW.das`'s restore check is a defect.** A
+**Weakening `REVIEW.das`'s restore check - the walk over `dasllama/` requiring every
+function-typed global with a declaration initializer to join its file's boot-restore
+`[init]` - is a defect, and so is landing such a global anywhere the walk does not reach.** A
 serialized exe restores globals as data - the function value arrives null, and the first
 invoke to reach it dies at exe runtime while every `-jit` gate stays green (script mode runs
 the declaration initializers). The restore guard (`if (g_x == null) { g_x = @@sentinel }`)
 lets a real registrar win in either `[init]` order; `test_exe_smoke` is the end-to-end
-tripwire for the class, the `REVIEW.das` check is the per-diff one.
+tripwire for the class.
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`) - keep the multiply order the code already has.** A regrouping
@@ -214,9 +244,9 @@ owns lands the sec.1 edit that keeps the charters true - in `ARCHITECTURE_ENGINE
 a file beside one that has its own sec.1 charter line lands that edit too. A module-root doc
 file - a ledger, a plan, `LAWS.md` - has no charter line and lands free.
 
-**A diff that adds an `ARCHITECTURE_*.md` companion, or moves a section between companions,
-lands `ARCHITECTURE.md`'s index line and section range and repoints every prose `sec.N` /
-file citation of the moved sections, in the same change.** The `[arch]` citations are
+**A diff that adds or removes an `ARCHITECTURE_*.md` companion, or moves a section between
+companions, lands `ARCHITECTURE.md`'s index line and section range and repoints every prose
+`sec.N` / file citation of the moved sections, in the same change.** The `[arch]` citations are
 LINT026-gated; the prose ones are not, and a prose citation of a section that left its file
 sends the reader to nothing.
 

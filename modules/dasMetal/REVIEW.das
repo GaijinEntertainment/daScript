@@ -53,7 +53,7 @@ def private check_fail_closed_sync {
     }
     for (fx in keys(fixtures)) {
         if (!key_exists(asserted, fx)) {
-            gate_finding(FC_TEST, 1, "fixture {FC_DIR}/{fx}.das has no check_rejects assert - its rejection is unpinned")
+            gate_finding("{FC_DIR}/{fx}.das", 0, "fixture has no check_rejects assert in {FC_TEST} - its rejection is unpinned")
         }
     }
     for (name, ln in keys(asserted), values(asserted)) {

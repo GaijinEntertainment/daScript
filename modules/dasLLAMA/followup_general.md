@@ -302,12 +302,10 @@
     names its reason (stale-binary with both dates / foreign-box / version / missing
     entries / absent / unreadable), `DAS_TUNE_MANIFEST` at an untuned-reading file warns
     loudly instead of silently stamping fallbacks, and `[tune_scope] version_of=` pins the
-    scope to `DASLLAMA_VERSION` so a copy-restored old sidecar (fresh mtime, old winners -
+    scope to `DASLLAMA_RELEASE` so a copy-restored old sidecar (fresh mtime, old winners -
     the trap the forensics surfaced) refuses by name. Metal-arm measurement is unblocked;
-    bringup owes the standing fresh quiet-box mint, which also refreshes
-    `performance/last_known_good_sidecar.json` and the `performance/<box>.tune.json` rig
-    sidecars - the checked-in and on-box copies predate the version pin, so until then they
-    serve fallbacks with the named warning.
+    the owed quiet-box mint landed with the release-scope re-mint
+    (`performance/last_known_good_sidecar.json` and the rig sidecars are fresh under it).
 
 23. **Uniform-bound non-causal prefill kernels for Metal and Vulkan.** The image span
     currently serves on the CPU loop by decline: `attn_gpu_prefill_ready`,
@@ -684,3 +682,19 @@
     forward). The root fix is daslang-core: serialize a function value as its mangled name
     and re-resolve at restore - the whole hazard class disappears language-wide, and the
     restore inits + the gate collapse to history. das-core scope, its own arc.
+
+60. **Crowned-lane strict parity: decide whether the tensor twins owe token-exactness, or
+    the strict gates own the simdgroup lane only.** The release re-mint armed the box's
+    crowns in the test suites for the first time in a while (the pre-remint sidecar was
+    stale, so the crown-consuming gates had been silently measuring fallback), and two
+    strict cells crossed their bars under crowned kernels: whisper's cross-lane
+    token-identity (attn_qkmm - 10/25 flips on jfk) and gemma4uv's tier-1 rung (mulmm_bf16 -
+    6e-05 past a scale-relative bar on one canvas). Both cells now pin the simdgroup lane
+    via `pin_metal_tensor_crowns` (dasllama_common - a latch `apply_box_profile_runtime`
+    respects, since every load re-applies profile crowns over a bare setter); the crowned
+    lane's serving quality stays covered by the board's parity pregate (word-level). The
+    open question: should the tensor twins' race envelope bar be tightened until the strict
+    gates pass crowned, or is per-lane gating the honest end state? Also ride-along: the
+    trio's crown flags cache at prefill init, so a crown pin needs
+    tower+wdec+prefill shutdowns - a single `metal_crown_flags_reset()` seam would retire
+    that triple-shutdown incantation.

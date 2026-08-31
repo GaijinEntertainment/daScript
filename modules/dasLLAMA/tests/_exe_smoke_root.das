@@ -1,21 +1,23 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 require dasllama/dasllama
 require daslib/jobque_boost
-require daslib/fio
+require strings
 
 // The fixture test_exe_smoke builds with `-jit -exe` and runs: one tiny load plus a 4-token
 // generate through the facade, on the serialized-globals rail no `-jit` suite can reach.
 
 [export]
 def main {
-    let path = get_env_variable("DASLLAMA_EXE_SMOKE_MODEL")
-    if (empty(path)) {
+    let cmd <- get_command_line_arguments()
+    let path = empty(cmd) ? "" : cmd[length(cmd) - 1]
+    if (!ends_with(path, ".gguf")) {
         print("EXE_SMOKE_SKIP no model\n")
         return
     }
-    var m <- load_model(path, QuantMode.q8)
+    var m <- load_model_(path, QuantMode.q8)   //! the internal loader: the image rail is not the subject, and the facade would mint a .dlim beside the stocked model
     allow_cpu_prefill()
     with_job_que() {
         setup_dasllama_jobque()

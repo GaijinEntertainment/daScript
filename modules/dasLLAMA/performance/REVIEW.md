@@ -8,21 +8,25 @@ validate through `../dasllama/dasllama_exchange_schema.das` instead.** The engin
 `dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
 that gate is a defect.
 
-**A diff that writes a row to `records/` (adds one or re-mints one in place) whose
-`hardware.remote_desktop` is anything but `off` is a defect - re-mint on a box with no
-remote-desktop session.**
+**Weakening `REVIEW.das`'s record-hygiene checks - `hardware.remote_desktop` `off` on every
+stored run, `provenance.noise` `ok` on every sidecar - is a defect; the fix for a red is a
+re-mint on a quiet, session-free box, never an edit.**
 
-**A diff that writes a sidecar to `records/` whose `provenance.noise` is not `ok` is a
-defect - re-mint on a quiet box.**
-
-**A diff that writes a commit stamp to `records/` naming a commit the branch under review
-cannot reach is a defect - re-mint, or re-stamp to a reachable commit whose
+**A diff that writes a commit stamp anywhere under this folder - `records/`,
+`last_known_good_sidecar.json`, any provenance manifest - naming a commit the branch under
+review cannot reach is a defect - re-mint, or re-stamp to a reachable commit whose
 `modules/dasLLAMA/` tree is byte-identical to the tree that was measured, with the PR body
 naming the re-stamp.** The commit stamps are a `das` row's `sha` and a sidecar's
 `provenance.engine_sha`. A stamp that resolves to no commit at all counts as unreachable.
+Re-stamping inside a content-addressed archive (`records/<box>.tune.<sha12>.json`) re-hashes
+and renames the file and repoints every row's `tune_sha` in the same change.
 
-**A diff that writes a reference-engine row to `records/` whose `sha` is not the standing ref pin
-(`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`) is a defect - re-mint.**
+**A diff that writes a reference-engine row to `records/` whose `sha` names anything but the
+standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`) is a defect -
+re-mint.** A reference row that carries no `sha` (the cli and python reference tools) is
+pinned by its builder instead - the cli tools by that same ref pin's checkout, the python
+legs by `../benchmarks/asr/requirements-*.txt` - and a diff that moves one of those pins
+re-mints every row the moved pin's tool minted, or withdraws them.
 
 **A diff that writes a sidecar to `records/` whose `provenance.dasllama_version` differs from
 `DASLLAMA_RELEASE` (`../dasllama/dasllama_version.das`) is a defect - re-mint.** Read
@@ -44,26 +48,8 @@ reference exe the ref pin builds.**
 validator ignores run keys it does not know, so an unvalidated field ships silently.
 
 **A fallback that recovers reference rows from a file on disk names the tool that writes
-that file, and reads it for no other tool - a shared recovery file read by a second tool
-copies the first tool's rows into the second's record under a matching clip name.** The
-laundered row carries the wrong engine and looks real.
-
-**Never add a second HTTP path to the sidecar exchange - every HTTP call (lookup, download,
-submit) goes through `../dasllama/dasllama_exchange.das`.** The mechanical half (no second
-`dashv` requirer under the module) is `REVIEW.das`'s to enforce.
-
-**Weakening the exchange download gate, the submission strip, or the submit rails is a
-defect.** The download gate checks content sha, schema, and `DASLLAMA_RELEASE`. The submit
-rails stop a sidecar that came from the exchange, or was minted on another box, from being
-submitted. `utils/dasllama-server/test_exchange_client.das` enforces the download gate, the
-strip, and the rails.
-
-**A diff that adds a submission path around `exchange_strip_private` is a defect, even where
-the strip itself is intact.**
-
-**A tune-boot path (`exchange_scope_resolver` / `exchange_boot_submit_check`,
-`../dasllama/dasllama_exchange.das`) that fails when `exchange_lookup` fails is a defect -
-it falls through to the local sidecar and the baked winners.**
+that file, and reads it for no other tool** - a row recovered across tools lands in the
+second tool's record carrying the wrong engine, and looks real.
 
 **Outside `model_specs()` (text, in `model_specs.das`) and `asr_catalog()` (audio, in
 `profile_common.das`), a `.das` function under this folder that lists model files, quants,
@@ -82,6 +68,11 @@ count - an accessor forwarding to another accessor, or an unnamed table lookup.
 `companions` of the row that pins its carrier, and names it from every other row that consumes
 it.** Uniqueness itself is `../tests/test_model_specs.das`'s to enforce.
 
+**A diff that adds or changes a `serve_*` field on a row of `model_specs()` lands
+`utils/dasllama-server/test_model_catalog.das` (repo root) green in the same change** - the
+serving catalog is a view over these rows, and its gates (pinned urls, unique ids, one
+default) red on a row this folder ships.
+
 **A convert, a bench, or a tune-state write reached from `fetch_models.das --fetch` is a
 defect - `--fetch` downloads only.** Each has its own home: a conversion recipe runs under
 `--convert`, a timing runs in a board cell (`gen_bench_records.das` or a
@@ -99,7 +90,7 @@ scratch dir, or a documented resolve of the pinned revision's size and content s
 the row's canonical values** - the verify never reads the url of a file already on disk.
 
 **A diff that refreshes `last_known_good_sidecar.json` replaces it with one complete mint from
-the box its provenance names, at the current `dasllama_version` - never a hand-edited copy.**
+the box its provenance names, at the current `DASLLAMA_RELEASE` - never a hand-edited copy.**
 `REVIEW.das` (beside this file) machine-checks the age-independent half (`noise` `ok`,
 `validation` `ok`, every `race` winner equal to its `kernels` value); weakening that gate is a
 defect.
@@ -111,12 +102,3 @@ the same change, and a diff that adds a copy names it here in the same change:
 `utils/dasllama-server/tests/fixtures/exchange.json` (repo root).** The console prompt and the
 control page render the served constant, so they are not copies.
 
-**A diff that adds an outbound exchange request reachable from a tune-boot path
-(`exchange_scope_resolver` / `exchange_boot_submit_check`) without routing it through
-`exchange_may_contact` (`../dasllama/dasllama_exchange.das`) is a defect.**
-
-**A diff that adds a tune-boot-path (`exchange_scope_resolver` /
-`exchange_boot_submit_check`) consent question with no terminal to ask on also emits that
-question as a `@sidecar` event, in the same change** - the watchdog dialog and the control
-page are the answer surfaces a supervised boot has. (The stdin-prompt ban itself is
-`modules/dasLLAMA/REVIEW.md`'s, which every file under the module applies.)

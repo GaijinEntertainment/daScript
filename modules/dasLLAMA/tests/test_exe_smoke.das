@@ -7,6 +7,7 @@ require daslib/fio
 require math
 require daslib/strings_boost
 require strings
+require daslib/env_registry
 require _model_tier
 
 // The standalone-exe context gate: build `_exe_smoke_root.das` with `-jit -exe` and run the
@@ -43,8 +44,10 @@ def test_exe_smoke(t : T?) {
             return
         }
         var out = ""
-        let rc = run_and_capture(["/usr/bin/env", "DASLLAMA_ALLOW_UNTUNED=1",
-                                  "DASLLAMA_EXE_SMOKE_MODEL={model}", exe], out, 300.0)
+        let prev_untuned = env_value_of("DASLLAMA_ALLOW_UNTUNED")
+        set_env_variable("DASLLAMA_ALLOW_UNTUNED", "1")   //! inherited by the child; /usr/bin/env does not exist on Windows
+        let rc = run_and_capture([exe, "--", model], out, 300.0)
+        set_env_variable("DASLLAMA_ALLOW_UNTUNED", prev_untuned)
         t |> equal(0, rc, "the exe runs clean: {slice(out, max(0, length(out) - 400))}")
         t |> success(find(out, "EXE_SMOKE_OK") >= 0, "the generate completed in the exe: {slice(out, max(0, length(out) - 400))}")
         rmdir_rec_result(dir)

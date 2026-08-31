@@ -222,9 +222,11 @@ def private census_zoo(t : T?) {
 def private cov_tower_gemma3v(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let vpath = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
-        if (model_available(t, vpath)) {
+        if (family_on(t, "gemma3v") && model_available(t, vpath)) {
             set_gemma3v_q8(false)   // the driver serves f32 planes (the lane policy picks this with the tower on; pinned for the census)
-            var inscope tw <- load_gemma3v_tower(vpath)
+            var inscope g3stg <- stage_gemma3v_tower(vpath)   // stage+mint: no .dlim written, no sibling-lane GC
+            var inscope tw = Gemma3vTower()
+            mint_gemma3v_tower(g3stg, tw)
             reset_gemma3v_q8()
             var st = Gemma3vState()
             var planes : array<float>
@@ -233,24 +235,30 @@ def private cov_tower_gemma3v(t : T?) {
                 planes[i] = sin(float(i) * 0.017) * 0.5 + 0.5
             }
             var out : array<float>
+            let prev_flash = get_metal_tower_flash()
             with_job_que() {
                 setup_dasllama_jobque()
                 gemma3v_encode(tw, st, planes, 896l, 896l, out)
                 set_metal_tower_flash(false)
                 var out2 : array<float>
                 gemma3v_encode(tw, st, planes, 896l, 896l, out2)
-                set_metal_tower_flash(true)
+                set_metal_tower_flash(prev_flash)
                 delete out2
             }
             delete out
             delete st
             // the crowned twin-W leg: a fresh load under pinned crowns bakes the halfword
-            // twin, so the f16-route kernels (cvt_half + the half GEMMs) dispatch
-            set_metal_tensor_crowns("mulmm_q8")
+            // twin, so the f16-route kernels (cvt_half + the half GEMMs) dispatch - the PIN
+            // form, since the load re-applies the box profile's crowns over a bare setter
+            let prev_crowns = get_metal_tensor_crowns()
+            let prev_tower_f16 = get_metal_tower_f16()
+            pin_metal_tensor_crowns("mulmm_q8")
             metal_prefill_shutdown()
             set_metal_tower_f16(true)
             set_gemma3v_q8(false)   // the exact lane is the one that bakes the twin
-            var twt <- load_gemma3v_tower(vpath)
+            var inscope g3stg2 <- stage_gemma3v_tower(vpath)   // in-memory: the crowned bake must not purge the serving flavor
+            var twt = Gemma3vTower()
+            mint_gemma3v_tower(g3stg2, twt)
             reset_gemma3v_q8()
             var stt = Gemma3vState()
             var outt : array<float>
@@ -258,7 +266,9 @@ def private cov_tower_gemma3v(t : T?) {
                 setup_dasllama_jobque()
                 gemma3v_encode(twt, stt, planes, 896l, 896l, outt)
             }
-            set_metal_tensor_crowns("")
+            unpin_metal_tensor_crowns()
+            set_metal_tensor_crowns(prev_crowns)
+            set_metal_tower_f16(prev_tower_f16)
             metal_prefill_shutdown()
             delete outt
             delete stt
@@ -274,8 +284,10 @@ def private cov_tower_gemma3v(t : T?) {
 def private cov_tower_qwen25v(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let vpath = path_join(models_dir(), "mmproj-Qwen2.5-Omni-3B-f16.gguf")
-        if (model_available(t, vpath)) {
-            var tw <- load_qwen25v_tower(vpath)
+        if (family_on(t, "qwen25v") && model_available(t, vpath)) {
+            var inscope q25stg <- stage_qwen25v_tower(vpath)   // stage+mint: no .dlim written, no sibling-lane GC
+            var tw = Qwen25vTower()
+            mint_qwen25v_tower(q25stg, tw)
             var st = Qwen25vState()
             var planes : array<float>
             planes |> reserve_resize(112l * 112l * 3l)
@@ -301,8 +313,12 @@ def private cov_tower_qwen25v(t : T?) {
 def private cov_tower_qwen3v(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let vpath = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
-        if (model_available(t, vpath)) {
-            var tw <- load_qwen3v_tower(vpath)
+        if (family_on(t, "qwen3v") && model_available(t, vpath)) {
+            set_qwen3v_q8(false)   // pinned for the census — the box's lane policy must not pick the row's kernel set
+            var inscope q3stg <- stage_qwen3v_tower(vpath)   // stage+mint: no .dlim written, no sibling-lane GC
+            var tw = Qwen3vTower()
+            mint_qwen3v_tower(q3stg, tw)
+            reset_qwen3v_q8()
             var st = Qwen3vState()
             var planes : array<float>
             planes |> reserve_resize(96l * 96l * 3l)
@@ -328,8 +344,12 @@ def private cov_tower_qwen3v(t : T?) {
 def private cov_tower_gemma4a(t : T?; samples : array<float>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let gpath = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-        if (model_available(t, gpath) && !empty(samples)) {
-            var inscope genc <- load_gemma4a_encoder(gpath)
+        if (family_on(t, "gemma4a") && model_available(t, gpath) && !empty(samples)) {
+            set_gemma4a_q8(false)   // pinned for the census — the box's lane policy must not pick the row's kernel set
+            var inscope gstg <- stage_gemma4a_encoder(gpath)   // stage+mint: no .dlim written, no sibling-lane GC
+            var inscope genc = Gemma4aEncoder()
+            mint_gemma4a_encoder(gstg, genc)
+            reset_gemma4a_q8()
             var gst = Gemma4aState()
             var grows : array<float>
             with_job_que() {
@@ -348,8 +368,10 @@ def private cov_tower_gemma4a(t : T?; samples : array<float>) {
 def private cov_tower_canary(t : T?; samples : array<float>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let cnpath = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
-        if (model_available(t, cnpath) && !empty(samples)) {
-            var inscope cenc <- load_canary_encoder(cnpath)
+        if (family_on(t, "canary") && model_available(t, cnpath) && !empty(samples)) {
+            var inscope cstg <- stage_canary_encoder(cnpath)   // stage+mint: no .dlim written, no sibling-lane GC
+            var inscope cenc = CanaryEncoder()
+            mint_canary_encoder(cstg, cenc)
             var cst = CanaryState()
             with_job_que() {
                 setup_dasllama_jobque()
@@ -368,7 +390,9 @@ def private cov_tower_gemma4v(t : T?) {
         let vpath = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (model_available(t, vpath)) {
             set_gemma4v_q8(false)   // the driver serves the file's planes (the lane policy picks this with the tower on; pinned for the census)
-            var inscope tw <- load_gemma4v_tower(vpath)
+            var inscope g4stg <- stage_gemma4v_tower(vpath)   // stage+mint: no .dlim written, no sibling-lane GC
+            var inscope tw = Gemma4vTower()
+            mint_gemma4v_tower(g4stg, tw)
             reset_gemma4v_q8()
             var st = Gemma4vState()
             var planes : array<float>

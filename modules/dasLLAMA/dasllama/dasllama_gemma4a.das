@@ -330,6 +330,13 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
     return <- built
 }
 
+//! Mint a served encoder from a staged read WITHOUT touching disk — the off-rail control for
+//! suites (no `.dlim` written, no sibling-lane GC).
+def mint_gemma4a_encoder(var st : Gemma4aStaging; var out : Gemma4aEncoder) {
+    // the tag is the staging's own precision — a caller-supplied flag could bake a lying tag
+    cache_via_image_staged(st, out, "", st.e.q8 ? "gemma4a-q8" : "gemma4a-f32")
+}
+
 //! META-only probe of an mmproj gguf: the gemma4a audio encoder's projection width, or 0 for no
 //! gemma4a audio tower (wrong family, vision-only, unreadable, a `.dlim`). Gates on the audio
 //! TENSOR — converters write the `clip.audio.*` keys unconditionally, tower or not.

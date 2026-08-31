@@ -2,6 +2,11 @@
 
 Companion to `ARCHITECTURE.md`; section numbers are that document's.
 
+`REVIEW.das`'s `check_exe_fn_global_restore` walks every `dasllama/` file and licenses no
+names: each `var g_x = @@fn` declaration carries an `if (g_x == null)` boot-restore guard in
+the same file - a serialized exe restores globals as data, and only a boot-restore `[init]`
+heals the null function value.
+
 ### 1.1 Engine core
 
 - **`dasllama.das`** - the public API facade and nothing else: `load_model` -> `create_session` ->

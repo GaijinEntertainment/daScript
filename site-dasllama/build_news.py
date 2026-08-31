@@ -94,6 +94,13 @@ def entry_html(e: dict, lead: bool) -> str:
     )
 
 
+def write_lf(path: Path, text: str) -> None:
+    # not Path.write_text(newline=...): that keyword needs Python 3.10+, and the checklist
+    # tells authors to re-run this script on the stock macOS interpreter (3.9)
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
+
+
 def rewrite_index(index: Path, entries: list[dict]) -> None:
     text = index.read_text(encoding='utf-8')
     if MARK_BEGIN not in text or MARK_END not in text:
@@ -107,8 +114,7 @@ def rewrite_index(index: Path, entries: list[dict]) -> None:
     if end < begin:
         sys.exit(f"{index}: news:end precedes news:begin")
     items = '\n'.join(entry_html(e, i == 0) for i, e in enumerate(entries))
-    index.write_text(text[:begin] + '\n' + items + '\n' + text[end:],
-                     encoding='utf-8', newline='\n')
+    write_lf(index, text[:begin] + '\n' + items + '\n' + text[end:])
 
 
 def write_feed(root: Path, entries: list[dict], site_url: str) -> None:
@@ -142,7 +148,7 @@ def write_feed(root: Path, entries: list[dict], site_url: str) -> None:
         + '\n'.join(items) +
         '\n</feed>\n'
     )
-    (root / 'feed.xml').write_text(feed, encoding='utf-8', newline='\n')
+    write_lf(root / 'feed.xml', feed)
 
 
 def write_sitemap(root: Path, entries: list[dict], site_url: str) -> None:
@@ -153,11 +159,11 @@ def write_sitemap(root: Path, entries: list[dict], site_url: str) -> None:
         + (f'<lastmod>{lastmod}</lastmod>' if lastmod else '')
         + '</url>'
         for page, lastmod in urls)
-    (root / 'sitemap.xml').write_text(
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        f'{body}\n'
-        '</urlset>\n', encoding='utf-8', newline='\n')
+    write_lf(root / 'sitemap.xml',
+             '<?xml version="1.0" encoding="UTF-8"?>\n'
+             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+             f'{body}\n'
+             '</urlset>\n')
 
 
 def main() -> None:

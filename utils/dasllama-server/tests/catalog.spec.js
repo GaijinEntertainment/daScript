@@ -108,7 +108,9 @@ test('serve-this-model writes the downloaded path as the roster default, then re
     await expect(page.locator('#badge')).toHaveText(/restarting/);
 
     const cfg = lastJson(posts.filter(p => p.path === '/config'));
-    expect(cfg.models).toEqual([{ path: present.path, default: true }]);
+    const expected = { path: present.path, default: true };
+    if (present.vision_present) expected.image_mmproj = present.vision_path;
+    expect(cfg.models).toEqual([expected]);
     expect(posts.some(p => p.path === '/restart')).toBe(true);
 });
 

@@ -25,7 +25,7 @@ defect - the pair belongs on the run object that produced the rows.**
 the same sweep output that regenerates those tables.
 
 **A cell in `files/performance_bench.json` differing from the same family-and-lane cell in the
-`benchmarks/sql/results.md` tables is a defect.**
+`benchmarks/sql/results.md` (repo root) tables is a defect.**
 
 **A diff that changes `files/performance_engines.json` also changes
 `examples/benchmarks/sql/results.md` (repo root), in the same change.**
