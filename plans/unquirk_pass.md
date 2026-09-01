@@ -32,24 +32,27 @@ outside this PR).
   vec16_u2, vec4_u2). With B2 they stop racing on known classes anyway; the pruned grid is
   what a new-silicon full race walks.
 
-**B2. Arch default profiles + the CPU/GPU sidecar split.**
-- The sidecar splits into a CPU tune (kernel winners + CPU runtime knobs: jobque, par
-  thresholds, chunk sizes, threads, q8_l2_budget) and a GPU tune (device knobs:
-  metal_devw_*, metal_tensor, metal_cvt_min_rows, metal_tall_floor, batch_grid_2d, lane
-  caps). CPU tunes key by CPU feature-class and are portable; GPU tunes key by device name
-  and never travel. Old flat sidecars read back as merged (compat shim in the loader).
-- Checked-in CPU profiles: `modules/dasLLAMA/performance/defaults/<class>.tune.json`,
-  classes `x86-avx2` (minted from zen2), `arm-neon` (minted from m1/m5 — provably identical
-  today). `x86-vnni512` gets minted by the zen4 trial, `arm-i8mm`/`arm-sme` exist only once
-  those kernels do.
-- Resolution order becomes: `perm=` pin > sidecar > **arch profile** > `fallback=` chain >
-  DEFAULT_PERM. Framework side (`llvm_tune.das`): a profile hit satisfies the completeness
-  rule — no race demanded.
-- Race-on-unlock: a mint races ONLY seats whose `requires=` the host passes AND whose feature
-  is not already the profile class's own (zen2: nothing; zen4: the 2 vpdpbusd seats x tile
-  families ~= 32 races; M1: nothing; M5: nothing until i8mm/SME seats exist). Bare `--tune`
-  keeps meaning "race what this box unlocks"; the honest full walk moves behind
-  `--tune-full` (new-silicon minting). `--tune-only` unchanged.
+**B2. Arch default profiles (kernels-only — the sharper form of the CPU/GPU split).**
+- Profiles carry KERNEL WINNERS ONLY. The runtime-knob section never travels: its knobs mix
+  device knobs (metal_*, batch_grid_2d, lane caps) with box-shape knobs (core counts, cache
+  budgets, thread receipts) — neither is class-portable, so nothing GPU- or box-side can
+  mis-inherit by construction. Knobs stay code-defaults on a fresh box until a deliberate
+  `--tune`; existing minted sidecars keep theirs.
+- Checked-in profiles: `modules/dasLLAMA/performance/defaults/<class>.tune-defaults.json`
+  (the extension dodges the `*.tune.json` gitignore), `x86-avx2` minted from zen2,
+  `arm-neon` from m1. `x86-vnni512` comes from the c7a trial; `arm-i8mm`/`arm-sme` exist
+  only once those kernels do. `harness/export_tune_profile.das` mints one from a sidecar;
+  the framework fn is `tune_profile_export`.
+- Adoption is FRAMEWORK-side, declared on the scope — `[tune_scope(defaults = "dir")]` —
+  and runs in the auto/restart guards ahead of the scope resolver: walk `tune_class_chain()`
+  down from `tune_cpu_class()`, adopt the first matching profile (version-pin checked) into
+  the app sidecar as a normal local write. A covered scope races NOTHING.
+- Race-on-unlock: an adopting start races ONLY families with a seat whose `requires=` the
+  host passes but the profile's minting box did not (recorded as the `features` fingerprint
+  every sidecar save now stamps) — plus families the profile predates. The residue rides the
+  existing `--tune-only` machinery (the guard arms `DAS_TUNE_ONLY` for the tuner it spawns).
+  No new flag: bare `--tune` already skips adoption entirely — it IS the full new-silicon
+  walk. `--tune-only` unchanged.
 
 **B3. `DAS_TUNE_POLICY=reference`** — a policy value that serves the original bodies outright
 (QUIRK 18's missing spelling). Small, framework-side.

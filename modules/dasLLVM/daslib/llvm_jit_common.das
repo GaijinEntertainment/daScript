@@ -633,9 +633,10 @@ def public init_jit_target_flags(target_triple : string = ""; host_features : bo
         ? get_platform_name() == "linux"
         : find(target_triple, "linux") >= 0)
     // aarch64 i8mm tier (see the g_target_arm64_i8mm declaration comment): host targets read
-    // LLVM's host-features string OR the arm force env; cross aarch64 triples the env only.
+    // LLVM's host string OR cpu_supports — macOS hands back an EMPTY host string, which left
+    // i8mm dark on every Apple M2+ — OR the arm force env; cross aarch64 triples the env only.
     g_target_arm64_i8mm = g_target_is_aarch64 && (arm64_forced_feature("i8mm")
-        || (empty(target_triple) && host_features && host_llvm_feature("i8mm")))
+        || (empty(target_triple) && host_features && (host_llvm_feature("i8mm") || cpu_supports("i8mm"))))
     // aarch64 fullfp16 (see declaration comment): darwin-arm64 == Apple Silicon == always.
     // Generic-exe builds stay off — the promote/narrow path is ARMv8.0-legal, fullfp16 is not.
     g_target_arm64_fullfp16 = g_target_is_aarch64 && (arm64_forced_feature("fullfp16")
@@ -921,6 +922,12 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
     var targetMachine : LLVMTargetMachineRef
     if (use_host_cpu && g_target_is_aarch64) {
         var feats = empty(features_msg) ? "+dotprod" : "{features_msg},+dotprod"
+        // same protection for i8mm: an Apple part this LLVM cannot name maps to "generic" where
+        // SMMLA has no instruction to select. cpu_supports reads sysctl truth, so the append is
+        // execution-safe on this host (unlike the force env, which may name absent silicon).
+        if (cpu_supports("i8mm")) {
+            feats = "{feats},+i8mm"
+        }
         // DAS_JIT_ARM64_FORCE_FEATURES (e.g. "i8mm"): the x64 rail's twin — a pre-i8mm host EMITS
         // AND LINKS an artifact for newer silicon, which the same-env run on the target box then
         // cache-hits without a linker. Executing forced instructions here SIGILLs; gate execution.

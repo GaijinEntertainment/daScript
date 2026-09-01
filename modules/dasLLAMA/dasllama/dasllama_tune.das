@@ -324,6 +324,10 @@ def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : st
     let fname = "{func.name}"
     let fb = fallback_perm(args)
     g_fallbacks[fname] = fb
+    if (tune_policy_env() == "reference") {
+        // the true kill switch, [tune]'s twin: the template's own loops, no hints stamped
+        return report_perm(fname, "plain", "reference policy")
+    }
     let av = find_arg(args, "perm")
     if (av is tString) return av as tString
     let cfg = config_perm_for(fname)

@@ -421,12 +421,13 @@ def private load_sidecar_doc(path : string) : JsonValue? {
 // version stamp, and two pinned scopes then invalidate each other (the auto policy loops)
 def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
     var prov = JV((binary = running_binary(), platform = get_platform_name(),
-        arch = get_architecture_name(), box = tune_box_identity(), written = iso8601_now()))
+        arch = get_architecture_name(), box = tune_box_identity(), written = iso8601_now(),
+        features = tune_feature_fingerprint()))
     let old = doc?["provenance"]
     if (old != null && old is _object) {
         for (k, v in keys(old as _object), values(old as _object)) {
             continue if (k == "binary" || k == "platform" || k == "arch" || k == "box" || k == "written"
-                || g_prov_notes |> key_exists(k))
+                || k == "features" || g_prov_notes |> key_exists(k))
             if (v != null && v is _string) {
                 update(prov, k, JV(v as _string))
             } elif (v != null && v is _number) {
@@ -535,6 +536,40 @@ def tune_sidecar_section_merge(section : string; var entries : table<string; Jso
         entries |> clear()   // adopted — the caller's table no longer owns them
     }
     let ok = save_sidecar_doc(path, doc)
+    delete_json(doc)
+    return ok
+}
+
+    //! Export this app's minted winners as the shipped defaults profile for CPU class `klass`:
+    //! the sidecar's `"kernels"` plus origin/class/features provenance — race tables, runtime
+    //! knobs and box identity stay behind. Check the file in under `[tune_scope(defaults=...)]`.
+def tune_profile_export(outPath : string; klass : string) : bool {
+    var doc = load_sidecar_doc(tune_manifest_path())
+    let ks = doc?["kernels"]
+    if (ks == null || !(ks.value is _object) || empty(ks as _object)) {
+        print("llvm_tune: profile export refused - no kernels in {tune_manifest_path()} (mint first, and check the sidecar is not stale)\n")
+        delete_json(doc)
+        return false
+    }
+    var kernels <- {for (k, v in keys(ks as _object), values(ks as _object)); k => JV(v as _string); where v != null && v is _string}
+    var prov : table<string; JsonValue?>
+    let old = doc?["provenance"]
+    if (old != null && old.value is _object) {
+        for (k, v in keys(old as _object), values(old as _object)) {
+            continue if (k == "binary" || k == "box" || k == "written" || k == "origin" || k == "class")
+            if (v != null && v is _string) {
+                prov[k] = JV(v as _string)
+            }
+        }
+    }
+    prov["origin"] = JV("profile")
+    prov["class"] = JV(klass)
+    prov["written"] = JV(iso8601_now())
+    var out = JV({ "kernels" => JV(kernels), "provenance" => JV(prov) })
+    let ok = fwrite(outPath, write_json(out))
+    print(ok ? "llvm_tune: profile '{klass}' exported -> {outPath} ({length(ks as _object)} kernel entries)\n"
+             : "llvm_tune: profile export FAILED writing {outPath}\n")
+    delete_json(out)
     delete_json(doc)
     return ok
 }
@@ -789,6 +824,7 @@ struct private TuneScope {
     tunerPath : string   // resolved against the declaring file; "" = no tuner declared
     versionKey : string      // provenance key the scope pins ("" = unpinned)
     versionExpected : string
+    defaultsPath : string    // resolved against the declaring file; "" = no shipped profiles
 }
 
 // `version_of = "module/CONST"` on a [tune_scope]: winners are valid only while the sidecar's
@@ -877,6 +913,46 @@ def private scope_fnames_joined(scope : TuneScope) : string {
     let joined = join(fnames, ";")
     delete wanted
     delete fnames
+    return joined
+}
+
+// the ';'-joined `fname=exprA+exprB` map of a scope's ISA-gated [tune] families (every
+// requires= its [tune_perm] rows carry), read off the AST at guard-emission time — what lets
+// the runtime guard ask which families have seats the adopted profile's box could not race
+def private scope_gated_joined(scope : TuneScope) : string {
+    var wanted : table<string>
+    wanted |> insert(scope.modName)
+    for (m in split(scope.covers, ";")) {
+        if (!empty(m)) {
+            wanted |> insert(m)
+        }
+    }
+    var rows : array<string>
+    program_for_each_module(compiling_program()) $(mod) {
+        if (wanted |> key_exists("{mod.name}")) {
+            for_each_function(mod, "") $(fn) {
+                var isTune = false
+                var exprs : array<string>
+                for (ann in fn.annotations) {
+                    if (ann.annotation.name == "tune") {
+                        isTune = true
+                    } elif (ann.annotation.name == "tune_perm") {
+                        let rv = find_arg(ann.arguments, "requires")
+                        if (rv is tString && !empty(rv as tString)) {
+                            exprs |> push(rv as tString)
+                        }
+                    }
+                }
+                if (isTune && !empty(exprs)) {
+                    rows |> push("{fn.name}={join(exprs, "+")}")
+                }
+                delete exprs
+            }
+        }
+    }
+    let joined = join(rows, ";")
+    delete wanted
+    delete rows
     return joined
 }
 
@@ -1155,6 +1231,87 @@ def tune_pick_fallback(chain : string) : string {
         }
     }
     return ""
+}
+
+// every feature name a requires= expression may query, in one place — the fingerprint and the
+// class ladder both walk it, so a new gate name added here is immediately profile-aware
+let private TUNE_KNOWN_FEATURES = "avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx512f;avx512bw;avx512vl;avx512vnni;amx-tile;amx-int8;neon;dotprod;i8mm;bf16;fullfp16;sve;lse"
+
+    //! The ';'-joined subset of the known `requires=` feature names this box passes — stamped
+    //! into every sidecar's provenance as `features`, which is what lets a shipped profile say
+    //! exactly which gated seats its minting box could and could not race.
+def tune_feature_fingerprint() : string {
+    var have <- [for (f in split(TUNE_KNOWN_FEATURES, ";")); f; where fallback_feature_ok(f)]
+    let joined = join(have, ";")
+    delete have
+    return joined
+}
+
+    //! This box's CPU feature class — the name a shipped defaults profile is keyed by. Classes
+    //! follow the seats `requires=` can gate, not box models: two boxes of one class stamp the
+    //! same winners (measured spread inside a class is noise), so one profile serves them all.
+def tune_cpu_class() : string {
+    let arch = get_architecture_name()
+    if (arch == "x86_64") {
+        if (fallback_feature_ok("avx512vnni") && fallback_feature_ok("avx512bw")) {
+            return "x86-vnni512"
+        }
+        if (fallback_feature_ok("avxvnni")) {
+            return "x86-vnni256"
+        }
+        return fallback_feature_ok("avx2") ? "x86-avx2" : "x86-base"
+    }
+    if (arch == "arm64" || arch == "aarch64") {
+        return fallback_feature_ok("i8mm") ? "arm-i8mm" : "arm-neon"
+    }
+    return "{get_platform_name()}-{arch}"   // an honest key; no profile will match, and that is correct
+}
+
+    //! Profile candidates for this box, most specific first — a box above the best shipped
+    //! profile adopts the nearest lower class and races only what that class could not.
+def tune_class_chain() : array<string> {
+    let ladder = (get_architecture_name() == "x86_64"
+        ? "x86-vnni512;x86-vnni256;x86-avx2;x86-base"
+        : "arm-i8mm;arm-neon")
+    let own = tune_cpu_class()
+    var chain : array<string>
+    var seen = false
+    for (c in split(ladder, ";")) {
+        seen ||= c == own
+        if (seen) {
+            chain |> push(c)
+        }
+    }
+    if (!seen) {
+        chain |> push(own)
+    }
+    return <- chain
+}
+
+// evaluate a requires= expression against a ';'-joined feature set instead of this box —
+// "did the PROFILE's minting box pass this gate" is what separates covered from unlocked seats
+def private expr_in_features(expr : string; featCsv : string) : bool {
+    return true if (empty(expr))
+    var have : table<string>
+    for (f in split(featCsv, ";")) {
+        if (!empty(f)) {
+            have |> insert(f)
+        }
+    }
+    var ok = true
+    for (conj in split(expr, ",")) {
+        continue if (empty(conj))
+        var anyOk = false
+        for (alt in split(conj, "|")) {
+            anyOk ||= !empty(alt) && have |> key_exists(alt)
+        }
+        if (!anyOk) {
+            ok = false
+            break
+        }
+    }
+    delete have
+    return ok
 }
 
 def private perm_requires_ok(p : TunePerm) : bool {
@@ -1456,6 +1613,20 @@ class private TuneAnnotation : AstFunctionAnnotation {
             delete comps
             return false
         }
+        // DAS_TUNE_POLICY=reference is the true kill switch: original bodies, no stamps at all —
+        // unlike `fallback`, whose chain's first viable perm can be the very stamp under test
+        if (g_env_tune.tune_policy == "reference") {
+            let noPerms : array<TunePerm>
+            var rok = emit_registry(compiling_module(), func, noPerms, errors)
+            for (c in comps) {
+                if (rok) {
+                    rok = emit_registry(compiling_module(), c.fn, noPerms, errors)
+                }
+            }
+            delete perms
+            delete comps
+            return rok
+        }
     // no entry falls back rather than dropping to reference, so a sidecar written before a kernel family landed cannot untune it
         let fname = "{func.name}"
         var manifestFound = false
@@ -1591,11 +1762,17 @@ class private TuneScopeAnnotation : AstStructureAnnotation {
                 return false
             }
         }
+        var defaults = ""
+        let dv = find_arg(args, "defaults")
+        if (dv is tString) {
+            defaults = resolve_decl_path(string(st.at.fileInfo.name), dv as tString)
+        }
         // overwrite, not error: shared-module macro state persists across compiles in one process
         g_scopes["{compiling_module().name}"] = TuneScope(scopeName = sname,
             modName = "{compiling_module().name}", covers = covers,
             manifestPath = tune_manifest_path(), tunerPath = tuner,
-            versionKey = versionKey, versionExpected = versionExpected)
+            versionKey = versionKey, versionExpected = versionExpected,
+            defaultsPath = defaults)
         return true
     }
 }
@@ -1956,15 +2133,131 @@ def public tune_suppress_mint(knob : string) {
     g_mint_suppressed = knob
 }
 
-    //! Runtime half of `[tune_policy(missing = "auto")]` / `--tune`, injected at the top of the
-    //! app's `main` and followed by `tune_auto_reexec()`. Tuning happens at RUNTIME because the
-    //! winners are compile-time stamps. An empty or corrupt sidecar reads as untuned, so it self-heals.
-def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : string; force : bool; fnames : string) {
+// ===== shipped defaults profiles ([tune_scope(defaults = "dir")]) =====
+
+// satisfy an untuned scope from a shipped class profile before any race: "" = nothing adopted,
+// "*" = fully covered, else the ','-joined families still owed a race (profile-missing plus
+// ISA-unlocked), which the caller arms as the DAS_TUNE_ONLY filter for the tuner it spawns
+def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gated : string) : string { // nolint:STYLE037,STYLE038 — one straight adopt pipeline: locate, validate, merge, diff
+    // a redirected runtime manifest path must never adopt into the wrong file
+    return "" if (empty(defaultsDir) || tune_manifest_path() != manifestPath)
+    // the version pin from the demand: the profile must record the same value or it predates this build
+    var verKey = ""
+    var verVal = ""
+    for (tok in split(fnames, ";")) {
+        if (tok |> starts_with(TUNE_VERSION_TOKEN)) {
+            let kv = slice(tok, length(TUNE_VERSION_TOKEN))
+            let eq = find(kv, "=")
+            if (eq >= 0) {
+                verKey = slice(kv, 0, eq)
+                verVal = slice(kv, eq + 1)
+            }
+        }
+    }
+    var chain <- tune_class_chain()
+    var klass = ""
+    var doc : JsonValue?
+    for (c in chain) {
+        let p = path_join(defaultsDir, "{c}.tune-defaults.json")
+        let text = fread(p)
+        continue if (empty(text))
+        var err = ""
+        var d = read_json(text, err)
+        if (d == null || !(d.value is _object)) {
+            print("llvm_tune: defaults profile {p} is not valid JSON ({err}) - skipped\n")
+            delete_json(d)
+            continue
+        }
+        if (!empty(verKey) && "{d?["provenance"]?[verKey] ?? ""}" != verVal) {
+            print("llvm_tune: defaults profile '{c}' predates this build ({verKey} != {verVal}) - skipped\n")
+            delete_json(d)
+            continue
+        }
+        klass = c
+        doc = d
+        break
+    }
+    delete chain
+    return "" if (doc == null)
+    var kernels : table<string; string>
+    let ks = doc?["kernels"]
+    if (ks != null && ks.value is _object) {
+        for (k, v in keys(ks as _object), values(ks as _object)) {
+            if (v != null && v is _string) {
+                kernels[k] = v as _string
+            }
+        }
+    }
+    if (empty(kernels)) {
+        delete_json(doc)
+        return ""
+    }
+    // owed a race: demanded-but-absent from the profile, plus gated families this box unlocks
+    var race : array<string>
+    for (tok in split(fnames, ";")) {
+        continue if (empty(tok) || tok |> starts_with(TUNE_VERSION_TOKEN))
+        if (!(kernels |> key_exists(tok))) {
+            race |> push(tok)
+        }
+    }
+    let pfeat = "{doc?["provenance"]?["features"] ?? ""}"
+    for (row in split(gated, ";")) {
+        continue if (empty(row))
+        let eq = find(row, "=")
+        continue if (eq < 0)
+        let fam = slice(row, 0, eq)
+        continue if (race |> find_index(fam) >= 0)
+        for (expr in split(slice(row, eq + 1), "+")) {
+            continue if (empty(expr))
+            if (tune_requires_ok(expr) && !expr_in_features(expr, pfeat)) {
+                race |> push(fam)
+                break
+            }
+        }
+    }
+    if (!empty(verKey)) {
+        tune_provenance_note(verKey, verVal)
+    }
+    tune_provenance_note("adopted_profile", klass)
+    var noRuntime : JsonValue?
+    let merged = tune_sidecar_merge(kernels, noRuntime)
+    if (!merged) {
+        print("llvm_tune: scope '{scopeName}' could not write adopted profile '{klass}' into {manifestPath}\n")
+        delete kernels
+        delete race
+        delete_json(doc)
+        return ""
+    }
+    let tail = empty(race) ? "" : " - racing {length(race)} unlocked/new families"
+    print("llvm_tune: scope '{scopeName}' adopted the '{klass}' defaults profile ({length(kernels)} kernel entries){tail}\n")
+    let res = empty(race) ? "*" : join(race, ",")
+    delete kernels
+    delete race
+    delete_json(doc)
+    return res
+}
+
+    //! Runtime half of `[tune_policy(missing = "auto")]` / `--tune`, injected at the top of `main`
+    //! and followed by `tune_auto_reexec()`. Adopts a declared defaults profile first, then tunes
+    //! the residue at RUNTIME (winners are compile-time stamps). A corrupt sidecar self-heals.
+def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : string; force : bool; fnames : string;
+                      defaultsDir : string = ""; gated : string = "") {
     let v = tune_sidecar_verdict(manifestPath, fnames)
     if (!force && v.complete) {
         return
     }
-    if (!force && scope_resolved_externally(scopeName, manifestPath, fnames)) {
+    var onlyFilter = ""
+    if (!force) {
+        let adopt = profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gated)
+        if (adopt == "*") {
+            g_tuned_scopes++   // fully covered by the shipped profile; the re-exec stamps it
+            return
+        }
+        if (!empty(adopt)) {
+            onlyFilter = adopt   // adopted a base; the tuner below races only what it lacked
+        }
+    }
+    if (!force && empty(onlyFilter) && scope_resolved_externally(scopeName, manifestPath, fnames)) {
         g_tuned_scopes++   // the re-exec picks the resolved sidecar up like a fresh tune
         return
     }
@@ -1974,8 +2267,14 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
         }
         return
     }
+    if (!empty(onlyFilter)) {
+        set_env_variable("DAS_TUNE_ONLY", onlyFilter)   // the spawned tuner inherits the filter
+    }
     announce_tuning(scopeName, force, true, v.detail)
     run_scope_tuner(TuneScope(scopeName = scopeName, manifestPath = manifestPath, tunerPath = tunerPath))
+    if (!empty(onlyFilter)) {
+        set_env_variable("DAS_TUNE_ONLY", "")   // the re-exec child must race unfiltered if it ever tunes
+    }
     let after = tune_sidecar_verdict(manifestPath, fnames)
     if (after.complete) {
         g_tuned_scopes++
@@ -2064,6 +2363,12 @@ def tune_interrupt_requested() : bool {
     return stat(p, fs)
 }
 
+    //! The `DAS_TUNE_POLICY` override, verbatim ("" = none) — how a sibling stamping macro
+    //! (e.g. a library's `[tuned]` loop-hint rail) honors `reference` and `fallback` too.
+def tune_policy_env() : string {
+    return g_env_tune.tune_policy
+}
+
     //! The `--tune-only` re-mint filter (`DAS_TUNE_ONLY`), verbatim: comma-separated name
     //! tokens, empty = race everything.
 def tune_only_filter() : string {
@@ -2090,12 +2395,24 @@ def tune_family_selected(name : string) : bool {
     //! Runtime half of `[tune_policy(missing = "restart")]`, injected as a guard at the top of
     //! the app's `main`: consults the scope resolver first, else runs the tuner; true = main
     //! returns immediately (winners are compile-time stamps), false = scope complete, carry on.
-def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : string; fnames : string) : bool {
+def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : string; fnames : string;
+                        defaultsDir : string = ""; gated : string = "") : bool {
     let v = tune_sidecar_verdict(manifestPath, fnames)
     if (v.complete) {
         return false
     }
-    if (scope_resolved_externally(scopeName, manifestPath, fnames)) {
+    var onlyFilter = ""
+    {
+        let adopt = profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gated)
+        if (adopt == "*") {
+            print("llvm_tune: scope '{scopeName}' adopted -> {manifestPath}\nllvm_tune: restart to apply the winners\n")
+            return true
+        }
+        if (!empty(adopt)) {
+            onlyFilter = adopt
+        }
+    }
+    if (empty(onlyFilter) && scope_resolved_externally(scopeName, manifestPath, fnames)) {
         return true   // resolved without a tune; the resolver printed its own restart marker
     }
     if (!empty(g_mint_suppressed)) {
@@ -2111,7 +2428,13 @@ def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : s
         return true
     }
     announce_tuning(scopeName, false, false, v.detail)
+    if (!empty(onlyFilter)) {
+        set_env_variable("DAS_TUNE_ONLY", onlyFilter)   // the spawned tuner inherits the filter
+    }
     run_scope_tuner(TuneScope(scopeName = scopeName, manifestPath = manifestPath, tunerPath = tunerPath))
+    if (!empty(onlyFilter)) {
+        set_env_variable("DAS_TUNE_ONLY", "")
+    }
     let after = tune_sidecar_verdict(manifestPath, fnames)
     if (after.complete) {
         print("llvm_tune: scope '{scopeName}' tuned -> {manifestPath}\nllvm_tune: restart to apply the winners\n")
@@ -2232,8 +2555,8 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
                 envNote = "llvm_tune: policy '{policy}' set by DAS_TUNE_POLICY (declared/default '{declared}')\n"
             }
         }
-        if (policy != "fallback" && policy != "warn" && policy != "error" && policy != "auto" && policy != "restart") {
-            errors = "[tune_policy] on {func.name}: missing=\"{policy}\" - use fallback | warn | error | auto | restart"
+        if (policy != "fallback" && policy != "reference" && policy != "warn" && policy != "error" && policy != "auto" && policy != "restart") {
+            errors = "[tune_policy] on {func.name}: missing=\"{policy}\" - use fallback | reference | warn | error | auto | restart"
             return false
         }
         let force = apply_cli_tune_flags()
@@ -2276,15 +2599,18 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
                     errors = "[tune_policy]: restart - {func.name} must return void or int"
                 } else {
                     var guard : ExpressionPtr
+                    let scopeGated = scope_gated_joined(scope)
                     if (func.result.baseType == Type.tInt) {
                         guard = qmacro_expr() {
-                            if (tune_restart_needed($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(scopeFnames))) {
+                            if (tune_restart_needed($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(scopeFnames),
+                                    $v(scope.defaultsPath), $v(scopeGated))) {
                                 return 3
                             }
                         }
                     } else {
                         guard = qmacro_expr() {
-                            if (tune_restart_needed($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(scopeFnames))) {
+                            if (tune_restart_needed($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(scopeFnames),
+                                    $v(scope.defaultsPath), $v(scopeGated))) {
                                 return
                             }
                         }
@@ -2310,8 +2636,10 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
                 guards |> reserve(length(autoScopes) + 1)
                 for (scope in autoScopes) {
                     let fnames = scope_fnames_joined(scope)
+                    let gated = scope_gated_joined(scope)
                     guards |> push <| qmacro_expr() {
-                        tune_auto_prepare($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(force), $v(fnames))
+                        tune_auto_prepare($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(force), $v(fnames),
+                            $v(scope.defaultsPath), $v(gated))
                     }
                 }
                 if (func.result.baseType == Type.tInt) {

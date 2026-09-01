@@ -136,7 +136,10 @@ warning **names the missing kernels**. `version_of=` (optional,
 `"module/CONST"`) pins the scope to a library version: the sidecar's
 provenance must record that int constant's current value (under the
 lowercased constant name; `version_key=` overrides), so bumping the constant
-on kernel work invalidates every box's winners. The annotation names that
+on kernel work invalidates every box's winners. `defaults=` (optional,
+resolved against the declaring file) names the directory of **shipped
+defaults profiles** — see the section below; an untuned box adopts its CPU
+class's profile instead of racing. The annotation names that
 module by string only, so the declaring module must `require` it as well
 (suppress the unused-require lint), and the scope's tuner must stamp the
 value with `tune_provenance_note` - an unstamped pin re-tunes on every
@@ -157,6 +160,42 @@ default policy. Re-export `llvm_tune` alone, not your module's whole
 public surface (a blanket `public` on a module that also re-exports
 `jobque_boost` floods requirers with name ambiguities).
 ```
+
+## Shipped defaults profiles - `[tune_scope(defaults = "dir")]`
+
+Kernel winners follow **instruction sets, not boxes**: within one CPU feature
+class the measured spread between seats is noise, so one minted answer serves
+every box of the class. A library ships those answers as checked-in profile
+files - `<dir>/<class>.tune-defaults.json`, each the `"kernels"` section of a
+reference box's full mint plus a provenance recording the minting box's
+`features` fingerprint (and any `version_of=` pin value). Runtime knobs, race
+tables and box identity never travel - knobs are per-box, devices are
+per-device.
+
+The class names follow the features `requires=` can gate: `x86-vnni512` /
+`x86-vnni256` / `x86-avx2` / `x86-base`, `arm-i8mm` / `arm-neon`
+(`tune_cpu_class()` computes this box's, `tune_class_chain()` its adoption
+ladder). An untuned auto/restart start walks the ladder from the box's own
+class downward, adopts the first profile found into the app sidecar (a normal
+local write - staleness, box identity and the JIT DLL cache re-key all behave
+as for a mint), and then races only what the profile could not answer:
+
+* families the profile has no entry for (it predates them), and
+* families with an ISA-gated seat this box unlocks that the profile's minting
+  box could not race - decided by comparing each `requires=` against the
+  profile's recorded `features`.
+
+That residue races through the ordinary tuner spawn with the `--tune-only`
+filter armed, so a zen4 box adopting the `x86-avx2` profile races only the
+vpdpbusd seats, and a box whose class profile is exact races **nothing**.
+Adoption is skipped entirely under `--tune` (a forced re-race stays a full
+local mint), when the profile's pinned version mismatches, or when no profile
+file matches any class in the ladder.
+
+A maintainer produces a profile on a reference box after a full `--tune` mint
+with `tune_profile_export(path, klass)` - it refuses an empty or stale
+sidecar. Every sidecar save also stamps the box's `features` fingerprint into
+provenance, which is what makes a future export race-on-unlock-aware.
 
 ## Application policy - `[tune_policy]` and `--tune`
 
@@ -184,6 +223,11 @@ def main {
 * - `fallback`
   - stamp `fallback=` silently (also what `DAS_TUNE_POLICY=fallback` - the
     CI kill switch - forces everywhere)
+* - `reference`
+  - serve the ORIGINAL bodies: no stamps at all, for `[tune]` families and
+    loop-hint `[tuned]` kernels alike. The A/B truth tier - `fallback` is
+    not it, because a chain's first viable perm can be the very stamp under
+    test. Usually via `DAS_TUNE_POLICY=reference`.
 * - `warn`
   - loud compile-time banner with the exact tuner command
 * - `error`
@@ -320,7 +364,8 @@ Two seams let a supervisor or a network service participate:
 
 - `tune_set_scope_resolver(fn)` - registered from an `[init]` (which must run
   before the guard at the top of `main`), consulted by
-  the auto/restart policy guards before spawning a scope's tuner. A resolver
+  the auto/restart policy guards before spawning a scope's tuner (and after
+  the shipped-defaults profiles above - local answers outrank remote ones). A resolver
   that can satisfy the scope another way (dasLLAMA's exchange client downloads
   a matching per-box sidecar from dasllama.io) returns true; completeness is
   re-checked, never trusted, and `--tune` never consults it.
@@ -513,9 +558,14 @@ tables behind each multi-variant winner under `"race"`, and `"provenance"`
 {
     "kernels" : { "gemm" : "kstep4", "gemm_gemv" : "reference" },
     "provenance" : { "binary" : "...", "platform" : "windows", "arch" : "x86_64",
+                     "features" : "avx2;f16c;fma;sse4.2",
                      "noise" : "ok", "noise_probes" : "start cv 0.40%; mid1 cv 0.14%; end cv 0.28%" }
 }
 ```
+
+`features` is the box's fingerprint over the known `requires=` feature names,
+stamped on every save - it is what a shipped defaults profile exported from
+this sidecar uses to tell covered seats from unlocked ones.
 
 It is a per-app, per-box artifact - gitignored (`*.tune.json`), and any
 change re-keys the JIT DLL cache automatically (the winning permutation's args

@@ -373,7 +373,11 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
 15. **First run on a fresh box tunes before it serves.** `run.das` on the M1 spent its first
    minutes minting `run.tune.json` (every family, the confirm pass included) before loading
    the model - the auto policy, working as designed, but a Mac session's first end-to-end
-   "hang" is that mint. Watch `@tune begin/end` lines in the log.
+   "hang" is that mint. Watch `@tune begin/end` lines in the log. UNQUIRKED for known CPU
+   classes: the scope ships defaults profiles (`performance/defaults/<class>.tune-defaults.json`),
+   and an untuned start ADOPTS its class's profile instead of racing - the mint survives only
+   on new silicon (`--tune`, or the race-on-unlock residue). `skills/tune.md`, the profiles
+   section.
 16. **A stub family fails the probe's test mode on every perm whose layout companion
    generates.** `q8q8_layout` is shared and generates for any perm `perm_declines` admits, so
    under `=> false` stubs the k3 family's `dot_maddubs_width256_mr8` perm repacked its planes
@@ -386,14 +390,16 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    entry for a demanded kernel re-tunes the whole scope (the framework's completeness rule), so
    `run.das` on the box spent minutes minting before the Q3_K_L load - and every other
    sidecar on the box (`chat.das`, the harness probes) does the same on its next run. Budget
-   for it; do not read the first end-to-end wall time as a load-time regression.
+   for it; do not read the first end-to-end wall time as a load-time regression. SOFTENED by
+   the defaults profiles: profile-covered families adopt, and only the families the profile
+   predates race (the adopt path arms `--tune-only` with exactly those) - so land the new
+   family in the checked-in profiles (re-export on the reference boxes) in the same arc.
 18. **`DAS_TUNE_POLICY=fallback` is not "the reference body".** It walks the family's
    `fallback=` chain, and on a box where the chain's first viable perm is the crowned one the
    kill switch serves the very stamp under test - the k3 stamped-vs-"reference" rows diff came
-   back bit-identical for that reason. The original body is reached only by a `"reference"`
-   sidecar entry for the family (copy the app's sidecar next to the probe as
-   `<probe>.tune.json`, edit the one entry). Unquirked: a policy value that names the reference
-   tier outright.
+   back bit-identical for that reason. UNQUIRKED: `DAS_TUNE_POLICY=reference` now serves the
+   original bodies outright - `[tune]` families and `[tuned]` loop-hint kernels alike - so an
+   A/B against the true reference tier is one env var, no sidecar editing.
 19. **The device gather's tail-row branch is a second ladder.** `moe_gpu_gather_stack_kq`
    walks grouped rows (the grp<mr> interleave) and ungrouped rows (`d % mr` tails, or an
    unrepacked load) through two different per-format ladders; the ungrouped one re-pairs k4

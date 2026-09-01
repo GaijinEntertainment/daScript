@@ -56,7 +56,8 @@ require math
 // entries for (the completeness set — drift shows up as a loud "missing:" list at startup).
 [tune_scope(name = "dasllama", tuner = "../harness/dasllama_tuner.das",
             covers = "dasllama_math;dasllama_math_default;dasllama_math_aarch64_neon;dasllama_kv_codec;dasllama_convert",
-            version_of = "dasllama_version/DASLLAMA_RELEASE", version_key = "dasllama_version")]
+            version_of = "dasllama_version/DASLLAMA_RELEASE", version_key = "dasllama_version",
+            defaults = "../performance/defaults")]
 struct private DasllamaTuneScope {}
 
 //! The layout companion (six-function stamp): the repack interleave (mr) the stamped tile reads.
