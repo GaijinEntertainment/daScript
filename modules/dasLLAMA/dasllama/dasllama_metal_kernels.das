@@ -9236,8 +9236,10 @@ class template MetalKqMvIq3xxsT {
                     let q3 = uint(h) * 2u + uint(wi) / 2u
                     let sgb = ksign7m((aux >> (7u * q3)) & 127u)
                     let nib = uint(wi) % 2u == 0u ? sgb & 15u : sgb >> 4u
-                    let sw = iq3s_sw(iq3xxs_gw(int((qsw >> (8u * uint(wi))) & 255u)), nib)
-                    w[h * 4 + wi] = float4(iq3s_sx(sw, 0u), iq3s_sx(sw, 1u), iq3s_sx(sw, 2u), iq3s_sx(sw, 3u)) * dl
+                    let gw = iq3xxs_gw(int((qsw >> (8u * uint(wi))) & 255u))
+                    let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
+                                     (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
+                    w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
                 }
             }
             let cx4 = sb * 64u + tx * 8u
@@ -9342,8 +9344,10 @@ class MetalKqMvB8Iq3xxs {
                     let q3 = uint(h) * 2u + uint(wi) / 2u
                     let sgb = ksign7m((aux >> (7u * q3)) & 127u)
                     let nib = uint(wi) % 2u == 0u ? sgb & 15u : sgb >> 4u
-                    let sw = iq3s_sw(iq3xxs_gw(int((qsw >> (8u * uint(wi))) & 255u)), nib)
-                    w[h * 4 + wi] = float4(iq3s_sx(sw, 0u), iq3s_sx(sw, 1u), iq3s_sx(sw, 2u), iq3s_sx(sw, 3u)) * dl
+                    let gw = iq3xxs_gw(int((qsw >> (8u * uint(wi))) & 255u))
+                    let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
+                                     (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
+                    w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
                 }
             }
             let cxl = tx * 8u
@@ -9367,7 +9371,7 @@ class MetalKqMvB8Iq3xxs {
 }
 
 // The iq3s B2/B4 pair: the iq4xs shell over the per-32-block lane map — lane tx owns block tx,
-// 8 grid words = 32 consecutive elems as float4s; the grid read direct (unmeasured batch shapes).
+// 8 grid words = 32 consecutive elems as float4s; the grid read direct.
 [ |> template_struct_instance]
 class template MetalKqMvIq3sT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
@@ -9403,8 +9407,10 @@ class template MetalKqMvIq3sT {
                     let b = uint(h) * 4u + uint(wi)
                     let idx = ((qsw >> (8u * uint(wi))) & 255u) | ((qh << (8u - b)) & 256u)
                     let nib = (sgw >> ((b / 2u) * 8u + (b % 2u) * 4u)) & 15u
-                    let sw = iq3s_sw(iq3s_gw(int(idx)), nib)
-                    w[h * 4 + wi] = float4(iq3s_sx(sw, 0u), iq3s_sx(sw, 1u), iq3s_sx(sw, 2u), iq3s_sx(sw, 3u)) * dl
+                    let gw = iq3s_gw(int(idx))
+                    let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
+                                     (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
+                    w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
                 }
             }
             let cx4 = sb * 64u + tx * 8u
@@ -9510,8 +9516,10 @@ class MetalKqMvB8Iq3s {
                     let b = uint(h) * 4u + uint(wi)
                     let idx = ((qsw >> (8u * uint(wi))) & 255u) | ((qh << (8u - b)) & 256u)
                     let nib = (sgw >> ((b / 2u) * 8u + (b % 2u) * 4u)) & 15u
-                    let sw = iq3s_sw(iq3s_gw(int(idx)), nib)
-                    w[h * 4 + wi] = float4(iq3s_sx(sw, 0u), iq3s_sx(sw, 1u), iq3s_sx(sw, 2u), iq3s_sx(sw, 3u)) * dl
+                    let gw = iq3s_gw(int(idx))
+                    let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
+                                     (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
+                    w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
                 }
             }
             let cxl = tx * 8u
@@ -9572,10 +9580,16 @@ class template MetalKqMvIq2sT {
                 let idx2 = (((qw >> (8u * lu)) & 255u) | ((qh << (8u - 2u * lu)) & 0x300u)) * 2u
                 let sgn = (sgw >> (8u * lu)) & 255u
                 let dl = l < 2 ? dl0 : dl1
-                let sw0 = iq3s_sw(iq2s_gw(int(idx2)), sgn & 15u)
-                let sw1 = iq3s_sw(iq2s_gw(int(idx2 + 1u)), sgn >> 4u)
-                w[l * 2] = float4(iq3s_sx(sw0, 0u), iq3s_sx(sw0, 1u), iq3s_sx(sw0, 2u), iq3s_sx(sw0, 3u)) * dl
-                w[l * 2 + 1] = float4(iq3s_sx(sw1, 0u), iq3s_sx(sw1, 1u), iq3s_sx(sw1, 2u), iq3s_sx(sw1, 3u)) * dl
+                let s0 = sgn & 15u
+                let s1 = sgn >> 4u
+                let w0 = iq2s_gw(int(idx2))
+                let w1 = iq2s_gw(int(idx2 + 1u))
+                let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+                let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                    (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
+                w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                    (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
             }
             let cx4 = sb * 64u + tx * 8u
             static_if (TILED) {
@@ -9669,10 +9683,16 @@ class MetalKqMvB8Iq2s {
                 let idx2 = (((qw >> (8u * lu)) & 255u) | ((qh << (8u - 2u * lu)) & 0x300u)) * 2u
                 let sgn = (sgw >> (8u * lu)) & 255u
                 let dl = l < 2 ? dl0 : dl1
-                let sw0 = iq3s_sw(iq2s_gw(int(idx2)), sgn & 15u)
-                let sw1 = iq3s_sw(iq2s_gw(int(idx2 + 1u)), sgn >> 4u)
-                w[l * 2] = float4(iq3s_sx(sw0, 0u), iq3s_sx(sw0, 1u), iq3s_sx(sw0, 2u), iq3s_sx(sw0, 3u)) * dl
-                w[l * 2 + 1] = float4(iq3s_sx(sw1, 0u), iq3s_sx(sw1, 1u), iq3s_sx(sw1, 2u), iq3s_sx(sw1, 3u)) * dl
+                let s0 = sgn & 15u
+                let s1 = sgn >> 4u
+                let w0 = iq2s_gw(int(idx2))
+                let w1 = iq2s_gw(int(idx2 + 1u))
+                let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+                let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                    (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
+                w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                    (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
             }
             let cxl = tx * 8u
             for [unroll_full] (b in range(8)) {
@@ -9732,10 +9752,16 @@ class template MetalKqMvIq2xsT {
                 let idx2 = (w16 & 511u) * 2u
                 let sgn = ksign7m(w16 >> 9u)
                 let dl = l < 2 ? dl0 : dl1
-                let sw0 = iq3s_sw(iq2xs_gw(int(idx2)), sgn & 15u)
-                let sw1 = iq3s_sw(iq2xs_gw(int(idx2 + 1u)), sgn >> 4u)
-                w[l * 2] = float4(iq3s_sx(sw0, 0u), iq3s_sx(sw0, 1u), iq3s_sx(sw0, 2u), iq3s_sx(sw0, 3u)) * dl
-                w[l * 2 + 1] = float4(iq3s_sx(sw1, 0u), iq3s_sx(sw1, 1u), iq3s_sx(sw1, 2u), iq3s_sx(sw1, 3u)) * dl
+                let s0 = sgn & 15u
+                let s1 = sgn >> 4u
+                let w0 = iq2xs_gw(int(idx2))
+                let w1 = iq2xs_gw(int(idx2 + 1u))
+                let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+                let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                    (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
+                w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                    (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
             }
             let cx4 = sb * 64u + tx * 8u
             static_if (TILED) {
@@ -9829,10 +9855,16 @@ class MetalKqMvB8Iq2xs {
                 let idx2 = (w16 & 511u) * 2u
                 let sgn = ksign7m(w16 >> 9u)
                 let dl = l < 2 ? dl0 : dl1
-                let sw0 = iq3s_sw(iq2xs_gw(int(idx2)), sgn & 15u)
-                let sw1 = iq3s_sw(iq2xs_gw(int(idx2 + 1u)), sgn >> 4u)
-                w[l * 2] = float4(iq3s_sx(sw0, 0u), iq3s_sx(sw0, 1u), iq3s_sx(sw0, 2u), iq3s_sx(sw0, 3u)) * dl
-                w[l * 2 + 1] = float4(iq3s_sx(sw1, 0u), iq3s_sx(sw1, 1u), iq3s_sx(sw1, 2u), iq3s_sx(sw1, 3u)) * dl
+                let s0 = sgn & 15u
+                let s1 = sgn >> 4u
+                let w0 = iq2xs_gw(int(idx2))
+                let w1 = iq2xs_gw(int(idx2 + 1u))
+                let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+                let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                    (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
+                w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                    (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
             }
             let cxl = tx * 8u
             for [unroll_full] (b in range(8)) {
@@ -9889,10 +9921,16 @@ class template MetalKqMvIq2xxsT {
                 let lu = uint(l)
                 let bidx = (gw >> (8u * lu)) & 255u
                 let sgn = ksign7m((aux >> (7u * lu)) & 127u)
-                let sw0 = iq3s_sw(iq2xxs_gw(int(bidx * 2u)), sgn & 15u)
-                let sw1 = iq3s_sw(iq2xxs_gw(int(bidx * 2u + 1u)), sgn >> 4u)
-                w[l * 2] = float4(iq3s_sx(sw0, 0u), iq3s_sx(sw0, 1u), iq3s_sx(sw0, 2u), iq3s_sx(sw0, 3u)) * dl
-                w[l * 2 + 1] = float4(iq3s_sx(sw1, 0u), iq3s_sx(sw1, 1u), iq3s_sx(sw1, 2u), iq3s_sx(sw1, 3u)) * dl
+                let s0 = sgn & 15u
+                let s1 = sgn >> 4u
+                let w0 = iq2xxs_gw(int(bidx * 2u))
+                let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
+                let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+                let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                    (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
+                w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                    (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
             }
             let cx4 = sb * 64u + tx * 8u
             static_if (TILED) {
@@ -9983,10 +10021,16 @@ class MetalKqMvB8Iq2xxs {
                 let lu = uint(l)
                 let bidx = (gw >> (8u * lu)) & 255u
                 let sgn = ksign7m((aux >> (7u * lu)) & 127u)
-                let sw0 = iq3s_sw(iq2xxs_gw(int(bidx * 2u)), sgn & 15u)
-                let sw1 = iq3s_sw(iq2xxs_gw(int(bidx * 2u + 1u)), sgn >> 4u)
-                w[l * 2] = float4(iq3s_sx(sw0, 0u), iq3s_sx(sw0, 1u), iq3s_sx(sw0, 2u), iq3s_sx(sw0, 3u)) * dl
-                w[l * 2 + 1] = float4(iq3s_sx(sw1, 0u), iq3s_sx(sw1, 1u), iq3s_sx(sw1, 2u), iq3s_sx(sw1, 3u)) * dl
+                let s0 = sgn & 15u
+                let s1 = sgn >> 4u
+                let w0 = iq2xxs_gw(int(bidx * 2u))
+                let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
+                let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+                let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                    (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
+                w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                    (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
             }
             let cxl = tx * 8u
             for [unroll_full] (b in range(8)) {

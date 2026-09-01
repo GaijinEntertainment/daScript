@@ -41,7 +41,7 @@ struct Args {
     @clarg_doc = "Substring filter over format names, comma list (empty = all)"
     fmts : string
 
-    @clarg_doc = "Tiers to race: gemv (decode) and/or mm (512-token prefill), comma list"
+    @clarg_doc = "Tiers to race: gemv (decode), mm (512-token prefill), mvb (2-column batch decode; grid formats only, no lcpp rows - their bs 2-8 runs the GEMV per column), comma list"
     tiers : string = "gemv,mm"
 
     @clarg_doc = "Substring filter over shape names, comma list (empty = all)"
@@ -146,6 +146,22 @@ def private gemv_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate GEMV sp
     } else {
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_iq2xxs_msl, entry = metal_kq_gemv_iq2xxs_msl_entry, fastmath = metal_kq_gemv_iq2xxs_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
         arms |> push(KqRaceArm(name = "f4", src = metal_kq_gemv_iq2xxs_f4_msl, entry = metal_kq_gemv_iq2xxs_f4_msl_entry, fastmath = metal_kq_gemv_iq2xxs_f4_msl_fastmath, tgmem = metal_kq_gemv_iq2xxs_f4_msl_tgmem, gdiv = 4))
+    }
+    return <- arms
+}
+
+def private mvb_arms(f : KqRaceFmt) : array<KqRaceArm> {   // the B2 batch-decode pair per grid format: prod vs the cvt-compose candidate
+    var arms : array<KqRaceArm>
+    if (f.fmt == 33) {
+        arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl, entry = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_entry, fastmath = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_fastmath, tgmem = 0ul, gdiv = 8))
+    } elif (f.fmt == 34) {
+        arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq3xxs_metal_kq_mv_iq3xxs_msl, entry = MetalKqMvB2Iq3xxs_metal_kq_mv_iq3xxs_msl_entry, fastmath = MetalKqMvB2Iq3xxs_metal_kq_mv_iq3xxs_msl_fastmath, tgmem = 0ul, gdiv = 8))
+    } elif (f.fmt == 23) {
+        arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl, entry = MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl_entry, fastmath = MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl_fastmath, tgmem = 0ul, gdiv = 8))
+    } elif (f.fmt == 24) {
+        arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq2xs_metal_kq_mv_iq2xs_msl, entry = MetalKqMvB2Iq2xs_metal_kq_mv_iq2xs_msl_entry, fastmath = MetalKqMvB2Iq2xs_metal_kq_mv_iq2xs_msl_fastmath, tgmem = 0ul, gdiv = 8))
+    } elif (f.fmt == 25) {
+        arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl, entry = MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl_entry, fastmath = MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl_fastmath, tgmem = 0ul, gdiv = 8))
     }
     return <- arms
 }
@@ -315,12 +331,13 @@ def private build_oracle(fmt, n, d, nsb : int; kq, ks : array<uint8>; xf : array
 def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : int;
                       arms : array<KqRaceArm>; args : Args; ref_tab : table<string; double>) : int {
     let is_mm = tier == "mm"
+    let is_mvb = tier == "mvb"   // 2-column batch decode: same dispatch shape as gemv at gdiv 8, ka args at binding 5
     let nb = n / 256
     let nsb = d * nb
     var kq : array<uint8>
     var ks : array<uint8>
     kq_fill_planes(f.fmt, nsb, kq, ks)
-    let xrows = is_mm ? PREFILL_M : 1
+    let xrows = is_mm ? PREFILL_M : (is_mvb ? 2 : 1)
     var xf : array<float>
     xf |> resize(xrows * n)
     for (i in range(xrows * n)) {
@@ -334,7 +351,8 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
     var bks = buf_upload(dev, ks)
     var bkq = buf_upload(dev, kq)
     var bx = buf_upload(dev, xf)
-    var b5 = buf_u32(dev, uint(n))
+    var kav <- [uint(n), uint(d), uint(d), 2u]   // KqMvArgs{ndim, ddim, ys, nr} as its raw words
+    var b5 = is_mvb ? buf_upload(dev, kav) : buf_u32(dev, uint(n))
     var b6 = buf_u32(dev, uint(d))
     let sc_off = f.split ? uint64(nsb * 16) : 0ul
     let wbytes = double(length(kq) + length(ks))
@@ -453,6 +471,7 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
     delete kq
     delete ks
     delete xf
+    delete kav
     delete want
     delete env
     delete live
@@ -484,6 +503,13 @@ def private main_apple(args : Args) {
             if (want(args.tiers, "mm")) {
                 var arms <- mm_arms(f)
                 rows += race_cell(queue, dev, f, "mm", sh._0, sh._1, sh._2, arms, args, ref_tab)
+                delete arms
+            }
+            if (want(args.tiers, "mvb")) {
+                var arms <- mvb_arms(f)
+                if (!empty(arms)) {
+                    rows += race_cell(queue, dev, f, "mvb", sh._0, sh._1, sh._2, arms, args, ref_tab)
+                }
                 delete arms
             }
         }
