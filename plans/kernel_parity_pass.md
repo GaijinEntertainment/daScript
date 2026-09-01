@@ -201,6 +201,30 @@ above parity - the M1 CPU is closed for this pass.
 
 Decode floor k5 1.06x; the grid formats 1.16-1.51x (from 0.51-0.93x before the row-pair decode). Tiles 1.92-15.2x.
 
+### M1 v4 - closing tables (2026-09-01, after the k6/k3 transposes; one thread at the engine phase, and the engine shape: 8 lanes, d=32768)
+
+| fmt | decode ours / ref us | ratio | engine 8 lanes ours / ref us | ratio |
+|---|---|---|---|---|
+| q8 | 1059 / 1537 | 1.45 | 4187 / 4519 | 1.08 |
+| k4 | 840 / 1343 | 1.60 | 2240 / 2271 | 1.01 |
+| k5 | 2068 / 2184 | 1.06 | 2757 / 2715 | 0.98 |
+| k6 | 1699 / 2405 | 1.42 | 3224 / 3284 | 1.02 |
+| q40 | 768 / 1623 | 2.11 | 2176 / 2231 | 1.03 |
+| q51 | 2075 / 2752 | 1.33 | 2922 / 3145 | 1.08 |
+| iq4xs | 987 / 1699 | 1.72 | 2234 / 2125 | 0.95 |
+| k3 | 1876 / 2621 | 1.40 | 2016 / 2831 | 1.40 |
+| iq3s | 4924 / 5714 | 1.16 | 5282 / 6096 | 1.15 |
+| iq3xxs | 3813 / 4876 | 1.28 | 3949 / 5208 | 1.32 |
+| iq4nl | 1036 / 1828 | 1.76 | 2175 / 2272 | 1.04 |
+| k2 | 1390 / 1918 | 1.38 | 1463 / 2138 | 1.46 |
+| iq2s | 3255 / 4932 | 1.52 | 3669 / 5366 | 1.46 |
+| iq2xs | 2637 / 3261 | 1.24 | 2835 / 3490 | 1.23 |
+| iq2xxs | 2913 / 3440 | 1.18 | 3112 / 3718 | 1.19 |
+| mx4 | 1272 / 1910 | 1.50 | 1990 / 2147 | 1.08 |
+
+One thread: every decode >= 1.06 (k5 the floor; k6 1.42, k3 1.40). Engine shape: every format >= 0.95 (iq4xs),
+most 1.0-1.5. The M1 CPU is closed at both shapes.
+
 ### zen2 v4 - the closing tables (2026-09-01, after the k6/k3 transposes and the fused flush)
 
 One thread at the HEAP phase (the ladder's engine-phase default came after this run; k6/k3 read 10-30%
