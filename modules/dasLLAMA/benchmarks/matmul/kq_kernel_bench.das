@@ -303,6 +303,7 @@ def time_rows_team(var stats : array<RowStat>; rounds : int; blk : block<(row : 
             invoke(blk, row, laneP)
         }
     }
+    to_log(LOG_INFO, "kq_kernel_bench: timed rounds begin\n")   // the profiler sync line, as in time_rows
     for (_r in range(rounds)) {
         for (row in range(length(stats))) {
             for (u in laneUs) {
@@ -374,6 +375,7 @@ def time_rows(var stats : array<RowStat>; rounds : int; blk : block<(row : int) 
             invoke(blk, row)
         }
     }
+    to_log(LOG_INFO, "kq_kernel_bench: timed rounds begin\n")   // external profilers key on this line to skip the JIT startup
     for (_r in range(rounds)) {
         for (row in range(length(stats))) {
             let t0 = ref_time_ticks()
