@@ -447,3 +447,23 @@ def test_cmake_copy_sources(t : T?) {
     t |> equal("$\{DAS_WEB_OUTPUT_DIR\}/a.js", srcs[1])
     t |> equal("$\{DAS_WEB_OUTPUT_DIR\}/a.wasm", srcs[2], "every source of a multi-source copy")
 }
+
+[test]
+def test_gate_web_third_party_assets_json(t : T?) {
+    let dir_r = create_temp_directory_result("review_gate_assets")
+    t |> success(dir_r is value, "temp fixture directory created")
+    if (!(dir_r is value)) {
+        return
+    }
+    let root = unsafe(dir_r.value)
+    t |> success(fwrite("{root}/demo.das.assets.json", "[\"tutorials/_assets/cat/cat.obj\",\n \"https://cdn.example/tex.jpg\"]\n"))
+    t |> success(fwrite("{root}/records.json", "[\{\"link\": \"https://tracker.example/not-a-load\"\}]\n"))
+    gate_reset()
+    let no_skipped_dirs : table<string>
+    gate_web_third_party([root], no_skipped_dirs, {"allowed.example"})
+    var inscope fs <- gate_findings()
+    gate_reset()
+    t |> success(rmdir_rec("{root}"))
+    t |> equal(1, length(fs), "an .assets.json sidecar is scanned - every entry is a fetch; any other .json is not")
+    t |> success(find(join(fs, "\n"), "demo.das.assets.json:2: reaches cdn.example") >= 0, join(fs, "\n"))
+}

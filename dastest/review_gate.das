@@ -885,10 +885,17 @@ def private is_markup_file(name : string) : bool {
     return (name |> ends_with(".html") || name |> ends_with(".rst") || name |> ends_with(".md"))
 }
 
+// an asset manifest lists what the playground fetches, so every entry in it is a load;
+// no other JSON carries that guarantee - a `link` field is a click - so no other JSON is read
+def private is_asset_manifest(name : string) : bool {
+    return name |> ends_with(".assets.json")
+}
+
 // the walker takes basenames, so the rule-document test reads a name, never a path
 def private is_scanned_file(name : string) : bool {
     return false if (is_rule_document(name))
-    return (is_markup_file(name) || name |> ends_with(".js") || name |> ends_with(".css"))
+    return (is_markup_file(name) || name |> ends_with(".js") || name |> ends_with(".css") ||
+        is_asset_manifest(name))
 }
 
 def private walk_web_files(folder : string; skip_dirs : table<string>; var out : array<string>) {
@@ -913,10 +920,11 @@ def private resource_urls_of(path : string; text : string) : array<string> {
 }
 
 //! Cookie-and-host gate for a served web tree: every markup (`.html`, `.rst`, `.md`),
-//! `.js` and `.css` file under `roots`, never descending into a directory named in
-//! `skip_dirs`, is read for `document.cookie` and for a resource host `allowed_hosts` does
-//! not name. Markup contributes its resource tags and inline script bodies, script text its
-//! URL literals, a stylesheet its `@import` and `url(...)` addresses.
+//! `.js`, `.css` and `.assets.json` file under `roots`, never descending into a directory
+//! named in `skip_dirs`, is read for `document.cookie` and for a resource host
+//! `allowed_hosts` does not name. Markup contributes its resource tags and inline script
+//! bodies, script text and an asset manifest their URL literals, a stylesheet its
+//! `@import` and `url(...)` addresses.
 def gate_web_third_party(roots : array<string>; skip_dirs : table<string>; allowed_hosts : table<string>) {
     var files : array<string>
     for (root in roots) {
