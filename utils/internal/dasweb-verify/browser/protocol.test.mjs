@@ -222,6 +222,18 @@ test('program stderr echoed to the console is not a page error', () => {
     assert.equal(P.isProgramStderrEcho('Blocking on the main thread is very dangerous'), false);
 });
 
+test('a dropped connection is retryable, every other navigation failure is not', () => {
+    assert.equal(P.isTransportDrop(
+        'page.goto: net::ERR_CONNECTION_CLOSED at https://run.daslang.io/api/build/artifact/a/b/sample.html'), true);
+    assert.equal(P.isTransportDrop('page.goto: net::ERR_CONNECTION_RESET at https://run.daslang.io/x'), true);
+    assert.equal(P.isTransportDrop('net::ERR_EMPTY_RESPONSE'), true);
+    assert.equal(P.isTransportDrop('page.goto: net::ERR_SOCKET_NOT_CONNECTED at https://run.daslang.io/x'), true);
+    assert.equal(P.isTransportDrop('page.goto: net::ERR_CONNECTION_REFUSED at https://run.daslang.io/x'), false);
+    assert.equal(P.isTransportDrop('page.goto: net::ERR_ABORTED at https://run.daslang.io/x'), false);
+    assert.equal(P.isTransportDrop('page.goto: net::ERR_NAME_NOT_RESOLVED at https://run.daslang.io/x'), false);
+    assert.equal(P.isTransportDrop('page stopped answering evaluate'), false);
+});
+
 test('every expectations row resolves, and the shipped manifest is fully covered', async () => {
     const table = JSON.parse(await readFile(path.join(HERE, 'expectations.json'), 'utf8'));
     for (const name of Object.keys(table.samples)) {
