@@ -2164,6 +2164,14 @@ def public metal_prefill_declines() : table<string; int64> {
     return clone_to_move(g_prefill_declines_by_reason)
 }
 
+// IQ4_XS codebook (kvalues_iq4nl) as four packed words, selected + byte-extracted —
+// no table memory; the k6 sign trick widens the byte. Shared by the kernels file's GEMV/mv
+// set and the prefill file's tensor twins.
+def public iq4_lut(q : uint) : float {
+    let w = q < 8u ? (q < 4u ? 3215825025u : 4142587343u) : (q < 12u ? 639175937u : 1901675829u)
+    return float((int((w >> ((q & 3u) * 8u)) & 255u) ^ 128) - 128)
+}
+
 // ===== Metal-4 tensor twin race scaffolding (shared by the per-module race sections) =====
 
 struct public MetalTensorRaceResult {

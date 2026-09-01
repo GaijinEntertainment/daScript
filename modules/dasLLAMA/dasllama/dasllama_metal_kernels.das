@@ -6296,16 +6296,9 @@ def private kmask_scales(sv : uint4; iq : uint) : uint4 {
         ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u))
 }
 
-// IQ4_XS codebook (kvalues_iq4nl) as four packed words, selected + byte-extracted —
-// no table memory; the k6 sign trick widens the byte
-def private iq4_lut(q : uint) : float {
-    let w = q < 8u ? (q < 4u ? 3215825025u : 4142587343u) : (q < 12u ? 639175937u : 1901675829u)
-    return float((int((w >> ((q & 3u) * 8u)) & 255u) ^ 128) - 128)
-}
-
 // iq3s_grid, one word per call - the GEMV/mul_mm stage it into threadgroup memory once
 // per group; the mv twins read it directly.
-def private iq3s_gw(i : int) : uint {
+def public iq3s_gw(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x01010101u, 0x01010103u, 0x01010105u, 0x0101010bu, 0x0101010fu, 0x01010301u, 0x01010303u, 0x01010305u,
         0x01010309u, 0x0101030du, 0x01010501u, 0x01010503u, 0x0101050bu, 0x01010707u, 0x01010901u, 0x01010905u,
@@ -6376,18 +6369,18 @@ def private iq3s_gw(i : int) : uint {
 
 // one signed grid word: the 4-bit sign nibble expands to a byte mask; magnitudes are odd
 // 1..15, so the negate's +1 never carries across a byte lane
-def private iq3s_sw(g, nib : uint) : uint {
+def public iq3s_sw(g, nib : uint) : uint {
     let m1 = (nib * 0x00204081u) & 0x01010101u
     return (g ^ (m1 * 255u)) + m1
 }
 
-def private iq3s_sx(sw, t : uint) : float {
+def public iq3s_sx(sw, t : uint) : float {
     return float((int((sw >> (t * 8u)) & 255u) ^ 128) - 128)
 }
 
 // the HALVED iq3xxs grid (iq3xxs_grid, every byte / 2 - the plane convention), one
 // word per call; the GEMV and mul_mm stage it, the mv twins read it directly.
-def private iq3xxs_gw(i : int) : uint {
+def public iq3xxs_gw(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x02020202u, 0x0202020au, 0x02020212u, 0x02020606u, 0x0202060eu, 0x0202061fu, 0x02020a02u, 0x02020a0au,
         0x02020e06u, 0x0202120au, 0x02021f0eu, 0x02021f16u, 0x02060206u, 0x0206020eu, 0x02060602u, 0x0206060au,
@@ -6425,7 +6418,7 @@ def private iq3xxs_gw(i : int) : uint {
 }
 
 // ksigns_iq2xs without the table: bit 7 = the even parity of the 7-bit index.
-def private ksign7m(v : uint) : uint {
+def public ksign7m(v : uint) : uint {
     var t = v ^ (v >> 4u)
     t = t ^ (t >> 2u)
     t = t ^ (t >> 1u)
@@ -6434,7 +6427,7 @@ def private ksign7m(v : uint) : uint {
 
 // iq2xxs_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word
 // 2i+1 = 4..7); the same all-literal program-scope-constant form as its grid siblings.
-def private iq2xxs_gw(i : int) : uint {
+def public iq2xxs_gw(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x08080808, 0x08080808, 0x0808082b, 0x08080808, 0x08081919, 0x08080808, 0x08082b08, 0x08080808,
         0x08082b2b, 0x08080808, 0x08190819, 0x08080808, 0x08191908, 0x08080808, 0x082b0808, 0x08080808,
@@ -6505,7 +6498,7 @@ def private iq2xxs_gw(i : int) : uint {
 
 // iq2xs_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word
 // 2i+1 = 4..7); the same all-literal program-scope-constant form as iq2s_gw below.
-def private iq2xs_gw(i : int) : uint {   // nolint:STYLE038 - a 1024-word data table, not splittable
+def public iq2xs_gw(i : int) : uint {   // nolint:STYLE038 - a 1024-word data table, not splittable
     let tbl = fixed_array<uint>(
         0x08080808, 0x08080808, 0x0808082b, 0x08080808, 0x08081919, 0x08080808, 0x08082b08, 0x08080808,
         0x08082b2b, 0x08080808, 0x08190819, 0x08080808, 0x08191908, 0x08080808, 0x0819192b, 0x08080808,
@@ -6641,7 +6634,7 @@ def private iq2xs_gw(i : int) : uint {   // nolint:STYLE038 - a 1024-word data t
 // iq2s_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word 2i+1
 // = 4..7); an all-literal fixed_array local, so it lowers to a program-scope constant table -
 // every kernel reads it DIRECT (an f4 slab of 1024 entries would be 32 KB, past the tg budget).
-def private iq2s_gw(i : int) : uint {   // nolint:STYLE038 - a 2048-word data table, not splittable
+def public iq2s_gw(i : int) : uint {   // nolint:STYLE038 - a 2048-word data table, not splittable
     let tbl = fixed_array<uint>(
         0x08080808, 0x08080808, 0x0808082b, 0x08080808, 0x08081919, 0x08080808, 0x08082b08, 0x08080808,
         0x08082b2b, 0x08080808, 0x08190819, 0x08080808, 0x08191908, 0x08080808, 0x0819192b, 0x08080808,

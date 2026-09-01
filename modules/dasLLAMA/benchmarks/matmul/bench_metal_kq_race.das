@@ -14,6 +14,7 @@ require math
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost
 require ?das_metal dasllama/dasllama_metal_kernels
+require ?das_metal dasllama/dasllama_metal_prefill   // the kq tensor mul_mm twins (Metal-4 boxes)
 require ?das_metal ../../tests/_metal_kernel_common.das
 
 // The per-format Metal KQ kernel RACE rig - rig 1 of the kernel catch-up procedure. Races the
@@ -172,6 +173,33 @@ def private mm_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate mul_mm sp
     }
     arms |> push(KqRaceArm(name = "ptrstore", src = rewrite_ta_ptr_store(arms[0].src), entry = arms[0].entry,
         fastmath = arms[0].fastmath, tgmem = arms[0].tgmem, gdiv = 0))
+    // the existing Metal-4 tensor twins (f32-X form) - the ceiling the nine formats' twins chase;
+    // the pipeline declines cleanly on a box without the tensor toolchain
+    if (f.fmt == 4) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmK4T_metal_kq_mulmm_t_msl, entry = MetalKqMulMmK4T_metal_kq_mulmm_t_msl_entry, fastmath = MetalKqMulMmK4T_metal_kq_mulmm_t_msl_fastmath, tgmem = MetalKqMulMmK4T_metal_kq_mulmm_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 5) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmK5T_metal_kq_mulmm_t_msl, entry = MetalKqMulMmK5T_metal_kq_mulmm_t_msl_entry, fastmath = MetalKqMulMmK5T_metal_kq_mulmm_t_msl_fastmath, tgmem = MetalKqMulMmK5T_metal_kq_mulmm_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 6) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl, entry = MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_entry, fastmath = MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_fastmath, tgmem = MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 44) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl, entry = MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_entry, fastmath = MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_fastmath, tgmem = MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 45) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl, entry = MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_entry, fastmath = MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_fastmath, tgmem = MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 3) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl, entry = MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_entry, fastmath = MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_fastmath, tgmem = MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 2) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl, entry = MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_entry, fastmath = MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_fastmath, tgmem = MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 33) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl, entry = MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_entry, fastmath = MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_fastmath, tgmem = MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 34) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl, entry = MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_entry, fastmath = MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_fastmath, tgmem = MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 23) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl, entry = MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_entry, fastmath = MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_fastmath, tgmem = MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 24) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl, entry = MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_entry, fastmath = MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_fastmath, tgmem = MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_tgmem, gdiv = 0))
+    } elif (f.fmt == 25) {
+        arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl, entry = MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_entry, fastmath = MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_fastmath, tgmem = MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_tgmem, gdiv = 0))
+    }
     return <- arms
 }
 

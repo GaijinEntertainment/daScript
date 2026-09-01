@@ -14,6 +14,7 @@ require daslib/typemacro_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_metal_common
+require dasllama/dasllama_metal_kernels  // the shared kq decode helpers (grid tables, ksign7m) for the tensor twins
 require dasllama/dasllama_metal_kernels
 require dasllama/dasllama_metal_lens
 
@@ -839,6 +840,442 @@ class MetalKqMulMmK6THDb : MetalKqMulMmK6DbT {
 class MetalKqMulMmK6THDb128 : MetalKqMulMmK6DbT {
     typedef XT = float16
     override MT = 128u
+}
+
+// The dense-KQ tensor mul_mm scaffold for the iquant/split-scale formats: the k6 tensor
+// shell with the per-format decode as ONE overridable stage16 (16 elements per work item -
+// the base template's own arm granularity, so an arm ports verbatim, va[] store -> twb).
+[ |> template_struct_instance]
+class template MetalKqMulMmSplitTensorBase {
+    @template_constant MT : uint = 32u
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
+    @ssbo @binding = 3 @off = "xoff" xf : array<XT> //!< raw activations (float, or the converted f16 panel)
+    @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
+    @uniform @binding = 5 kdim : uint
+    @uniform @binding = 6 ndim : uint
+    @workgroup twb : float16[6144]          //!< W chunk: 64 wrows x 72-half padded rows
+
+    def abstract stage16(work, kb, nBase, nsb : uint) : void
+
+    def run_shell {
+        let mBase = gl_WorkGroupID.x * MT
+        let nBase = gl_WorkGroupID.y * 64u
+        let nkb = kdim / 32u
+        let nsb = kdim / 256u
+        let lid = gl_LocalInvocationID.x
+        var acc : float[8192]
+        var cp = unsafe(addr(y[mBase * ndim + nBase]))
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
+        var kb = 0u
+        while (kb < nkb) {
+            var work = lid
+            while (work < 256u) {
+                stage16(work, kb, nBase, nsb)
+                work += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, MT, 64u, 64u)
+            barrier()
+            kb += 2u
+        }
+        tmm2d_tg_store(acc, cp, MT, 64u, ndim)
+    }
+}
+
+[ |> template_struct_instance]
+class template MetalKqMulMmIq4xsTensorT : MetalKqMulMmSplitTensorBase {
+    @template_constant IQ4NL : bool = false
+    @workgroup iq4lutt : float[16]   //!< kvalues_iq4nl as floats, staged once per threadgroup
+
+    [metal_kernel(float_a_ok=true)]
+    def metal_kq_mulmm_iq4xs_t {
+        if (gl_LocalInvocationID.x < 16u) {
+            iq4lutt[gl_LocalInvocationID.x] = iq4_lut(gl_LocalInvocationID.x)
+        }
+        barrier()
+        run_shell()
+    }
+
+    def override stage16(work, kb, nBase, nsb : uint) {
+        let j = work >> 2u
+        let sub = work & 3u
+        let jsl = kb + (sub >> 1u)
+        let sb = jsl / 8u
+        let js = jsl % 8u
+        let kh = (sub & 1u) * 16u
+        let blk = (nBase + j) * nsb + sb
+        var dsc : float
+        static_if (IQ4NL) {
+            dsc = float(kdh[blk * 8u + js])
+        } else {
+            let sv = ksc[blk]
+            let scw = js < 4u ? sv.x : sv.y
+            dsc = float(kdh[blk]) * float(((int(scw >> ((js & 3u) * 8u)) & 255) ^ 128) - 128)
+        }
+        let qb = blk * 32u + js * 4u
+        let nsh = (sub & 1u) * 4u
+        for [unroll_full] (k in range(4)) {
+            let u = kqu[qb + uint(k)]
+            for [unroll_full] (c in range(4)) {
+                twb[j * 72u + (sub >> 1u) * 32u + kh + uint(k) * 4u + uint(c)] = float16(dsc * iq4lutt[(u >> (8u * uint(c) + nsh)) & 15u])
+            }
+        }
+    }
+}
+
+class MetalKqMulMmIq4xsT : MetalKqMulMmIq4xsTensorT {
+    typedef XT = float
+}
+
+class MetalKqMulMmIq4xsTH : MetalKqMulMmIq4xsTensorT {
+    typedef XT = float16
+}
+
+class MetalKqMulMmIq4nlT : MetalKqMulMmIq4xsTensorT {
+    typedef XT = float
+    override IQ4NL = true
+}
+
+class MetalKqMulMmIq4nlTH : MetalKqMulMmIq4xsTensorT {
+    typedef XT = float16
+    override IQ4NL = true
+}
+
+// q3_K / q2_K: the byte-parallel compose of their base arms (masked uint-wide shifts, the
+// byte-position shift folded into exact power-of-two pre-scales).
+[ |> template_struct_instance]
+class template MetalKqMulMmK3TensorT : MetalKqMulMmSplitTensorBase {
+    [metal_kernel(float_a_ok=true)]
+    def metal_kq_mulmm_k3_t {
+        run_shell()
+    }
+
+    def override stage16(work, kb, nBase, nsb : uint) {
+        let j = work >> 2u
+        let sub = work & 3u
+        let jsl = kb + (sub >> 1u)
+        let sb = jsl / 8u
+        let js = jsl % 8u
+        let kh = (sub & 1u) * 16u
+        let ile = sub & 1u
+        let blk = (nBase + j) * nsb + sb
+        let hf3 = js / 4u
+        let gg3 = js % 4u
+        let sv = ksc[blk]
+        let si = hf3 * 8u + gg3 * 2u + ile
+        let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
+        let s3 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
+        let dsc = float(kdh[blk]) * s3
+        let dmn = dsc * 4.0
+        let dsc1 = dsc * 0.00390625
+        let dsc2 = dsc * 0.0000152587890625
+        let dsc3 = dsc * 0.000000059604644775390625
+        let qb = blk * 24u + hf3 * 8u + ile * 4u
+        let hb = blk * 24u + 16u + ile * 4u
+        let nsh = gg3 * 2u
+        let hsh = hf3 * 4u + gg3
+        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        for [unroll_full] (k in range(4)) {
+            let u = kqu[qb + uint(k)]
+            let hu = kqu[hb + uint(k)]
+            let qv = ((u >> nsh) & 0x03030303) | (((hu >> hsh) & 0x01010101) << 2u)
+            twb[tb0 + uint(k) * 4u] = float16(dsc * float(qv & 255u) - dmn)
+            twb[tb0 + uint(k) * 4u + 1u] = float16(dsc1 * float(qv & 65280u) - dmn)
+            twb[tb0 + uint(k) * 4u + 2u] = float16(dsc2 * float(qv & 16711680u) - dmn)
+            twb[tb0 + uint(k) * 4u + 3u] = float16(dsc3 * float(qv & 4278190080u) - dmn)
+        }
+    }
+}
+
+class MetalKqMulMmK3T : MetalKqMulMmK3TensorT {
+    typedef XT = float
+}
+
+class MetalKqMulMmK3TH : MetalKqMulMmK3TensorT {
+    typedef XT = float16
+}
+
+[ |> template_struct_instance]
+class template MetalKqMulMmK2TensorT : MetalKqMulMmSplitTensorBase {
+    [metal_kernel(float_a_ok=true)]
+    def metal_kq_mulmm_k2_t {
+        run_shell()
+    }
+
+    def override stage16(work, kb, nBase, nsb : uint) {
+        let j = work >> 2u
+        let sub = work & 3u
+        let jsl = kb + (sub >> 1u)
+        let sb = jsl / 8u
+        let js = jsl % 8u
+        let kh = (sub & 1u) * 16u
+        let ile = sub & 1u
+        let blk = (nBase + j) * nsb + sb
+        let hf3 = js / 4u
+        let gg3 = js % 4u
+        let sv = ksc[blk]
+        let si = hf3 * 8u + gg3 * 2u + ile
+        let pw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
+        let pb = (pw >> ((si & 3u) * 8u)) & 255u
+        let dsc = float(kdh[blk * 2u]) * float(pb & 15u)
+        let dmn = float(kdh[blk * 2u + 1u]) * float(pb >> 4u)
+        let dsc1 = dsc * 0.00390625
+        let dsc2 = dsc * 0.0000152587890625
+        let dsc3 = dsc * 0.000000059604644775390625
+        let qb = blk * 16u + hf3 * 8u + ile * 4u
+        let nsh = gg3 * 2u
+        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        for [unroll_full] (k in range(4)) {
+            let qv = (kqu[qb + uint(k)] >> nsh) & 0x03030303
+            twb[tb0 + uint(k) * 4u] = float16(dsc * float(qv & 255u) - dmn)
+            twb[tb0 + uint(k) * 4u + 1u] = float16(dsc1 * float(qv & 65280u) - dmn)
+            twb[tb0 + uint(k) * 4u + 2u] = float16(dsc2 * float(qv & 16711680u) - dmn)
+            twb[tb0 + uint(k) * 4u + 3u] = float16(dsc3 * float(qv & 4278190080u) - dmn)
+        }
+    }
+}
+
+class MetalKqMulMmK2T : MetalKqMulMmK2TensorT {
+    typedef XT = float
+}
+
+class MetalKqMulMmK2TH : MetalKqMulMmK2TensorT {
+    typedef XT = float16
+}
+
+// iq3s / iq3xxs: the staged-grid gathers of their base arms (2 KB / 1 KB threadgroup slabs).
+[ |> template_struct_instance]
+class template MetalKqMulMmIq3sTensorT : MetalKqMulMmSplitTensorBase {
+    @workgroup gridw3t : uint[512]   //!< the 2 KB iq3s grid, staged once per threadgroup
+
+    [metal_kernel(float_a_ok=true)]
+    def metal_kq_mulmm_iq3s_t {
+        for [unroll_full] (gk in range(4)) {
+            let gi = gl_LocalInvocationID.x + uint(gk) * 128u
+            gridw3t[gi] = iq3s_gw(int(gi))
+        }
+        barrier()
+        run_shell()
+    }
+
+    def override stage16(work, kb, nBase, nsb : uint) {
+        let j = work >> 2u
+        let sub = work & 3u
+        let jsl = kb + (sub >> 1u)
+        let sb = jsl / 8u
+        let js = jsl % 8u
+        let kh = (sub & 1u) * 16u
+        let ile = sub & 1u
+        let blk = (nBase + j) * nsb + sb
+        let sv = ksc[blk]
+        let scw = js < 4u ? sv.x : sv.y
+        let dsc = float(kdh[blk]) * float(((int(scw >> ((js & 3u) * 8u)) & 255) ^ 128) - 128)
+        let qsw = kqu[blk * 26u + js * 2u + ile]
+        let qh3 = (kqu[blk * 26u + 16u + js / 4u] >> ((js % 4u) * 8u)) & 255u
+        let sgw3 = kqu[blk * 26u + 18u + js]
+        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        for [unroll_full] (k in range(4)) {
+            let b3 = ile * 4u + uint(k)
+            let idx = ((qsw >> (8u * uint(k))) & 255u) | ((qh3 << (8u - b3)) & 256u)
+            let nib = (sgw3 >> ((b3 / 2u) * 8u + (b3 % 2u) * 4u)) & 15u
+            let sw = iq3s_sw(gridw3t[idx], nib)
+            for [unroll_full] (c in range(4)) {
+                twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * iq3s_sx(sw, uint(c)))
+            }
+        }
+    }
+}
+
+class MetalKqMulMmIq3sT : MetalKqMulMmIq3sTensorT {
+    typedef XT = float
+}
+
+class MetalKqMulMmIq3sTH : MetalKqMulMmIq3sTensorT {
+    typedef XT = float16
+}
+
+[ |> template_struct_instance]
+class template MetalKqMulMmIq3xxsTensorT : MetalKqMulMmSplitTensorBase {
+    @workgroup gridw3xt : uint[256]   //!< the 1 KB halved iq3xxs grid, staged once per threadgroup
+
+    [metal_kernel(float_a_ok=true)]
+    def metal_kq_mulmm_iq3xxs_t {
+        for [unroll_full] (gk in range(2)) {
+            let gi = gl_LocalInvocationID.x + uint(gk) * 128u
+            gridw3xt[gi] = iq3xxs_gw(int(gi))
+        }
+        barrier()
+        run_shell()
+    }
+
+    def override stage16(work, kb, nBase, nsb : uint) {
+        let j = work >> 2u
+        let sub = work & 3u
+        let jsl = kb + (sub >> 1u)
+        let sb = jsl / 8u
+        let js = jsl % 8u
+        let kh = (sub & 1u) * 16u
+        let ile = sub & 1u
+        let blk = (nBase + j) * nsb + sb
+        let sv = ksc[blk]
+        let scw = js < 4u ? sv.x : sv.y
+        let dsc = float(kdh[blk]) * float(((int(scw >> ((js & 3u) * 8u)) & 255) ^ 128) - 128)
+        let qsw = kqu[blk * 24u + js * 2u + ile]
+        let aux3 = kqu[blk * 24u + 16u + js]
+        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        for [unroll_full] (k in range(4)) {
+            let q3 = ile * 2u + uint(k) / 2u
+            let sgb = ksign7m((aux3 >> (7u * q3)) & 127u)
+            let nib = uint(k) % 2u == 0u ? sgb & 15u : sgb >> 4u
+            let sw = iq3s_sw(gridw3xt[(qsw >> (8u * uint(k))) & 255u], nib)
+            for [unroll_full] (c in range(4)) {
+                twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * iq3s_sx(sw, uint(c)))
+            }
+        }
+    }
+}
+
+class MetalKqMulMmIq3xxsT : MetalKqMulMmIq3xxsTensorT {
+    typedef XT = float
+}
+
+class MetalKqMulMmIq3xxsTH : MetalKqMulMmIq3xxsTensorT {
+    typedef XT = float16
+}
+
+// iq2s / iq2xs / iq2xxs: the u64-grid gathers DIRECT off the hoisted constant tables,
+// exactly their base arms' choice.
+[ |> template_struct_instance]
+class template MetalKqMulMmIq2sTensorT : MetalKqMulMmSplitTensorBase {
+    [metal_kernel(float_a_ok=true)]
+    def metal_kq_mulmm_iq2s_t {
+        run_shell()
+    }
+
+    def override stage16(work, kb, nBase, nsb : uint) {
+        let j = work >> 2u
+        let sub = work & 3u
+        let jsl = kb + (sub >> 1u)
+        let sb = jsl / 8u
+        let js = jsl % 8u
+        let kh = (sub & 1u) * 16u
+        let ile = sub & 1u
+        let blk = (nBase + j) * nsb + sb
+        let sv = ksc[blk]
+        let si2 = js * 2u + ile
+        let scw = si2 < 8u ? (si2 < 4u ? sv.x : sv.y) : (si2 < 12u ? sv.z : sv.w)
+        let dsc = float(kdh[blk]) * float((scw >> ((si2 & 3u) * 8u)) & 255u)
+        let qw2 = kqu[blk * 18u + js]
+        let sgw2 = kqu[blk * 18u + 8u + js]
+        let qh2 = (kqu[blk * 18u + 16u + js / 4u] >> ((js % 4u) * 8u)) & 255u
+        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        for [unroll_full] (k in range(4)) {
+            let l2 = ile * 2u + uint(k) / 2u
+            let idx2 = (((qw2 >> (8u * l2)) & 255u) | ((qh2 << (8u - 2u * l2)) & 0x300u)) * 2u + uint(k) % 2u
+            let sgb2 = (sgw2 >> (8u * l2)) & 255u
+            let nib = uint(k) % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u
+            let sw = iq3s_sw(iq2s_gw(int(idx2)), nib)
+            for [unroll_full] (c in range(4)) {
+                twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * iq3s_sx(sw, uint(c)))
+            }
+        }
+    }
+}
+
+class MetalKqMulMmIq2sT : MetalKqMulMmIq2sTensorT {
+    typedef XT = float
+}
+
+class MetalKqMulMmIq2sTH : MetalKqMulMmIq2sTensorT {
+    typedef XT = float16
+}
+
+[ |> template_struct_instance]
+class template MetalKqMulMmIq2xsTensorT : MetalKqMulMmSplitTensorBase {
+    [metal_kernel(float_a_ok=true)]
+    def metal_kq_mulmm_iq2xs_t {
+        run_shell()
+    }
+
+    def override stage16(work, kb, nBase, nsb : uint) {
+        let j = work >> 2u
+        let sub = work & 3u
+        let jsl = kb + (sub >> 1u)
+        let sb = jsl / 8u
+        let js = jsl % 8u
+        let kh = (sub & 1u) * 16u
+        let ile = sub & 1u
+        let blk = (nBase + j) * nsb + sb
+        let sv = ksc[blk]
+        let si2 = js * 2u + ile
+        let scw = si2 < 8u ? (si2 < 4u ? sv.x : sv.y) : (si2 < 12u ? sv.z : sv.w)
+        let dsc = float(kdh[blk]) * float((scw >> ((si2 & 3u) * 8u)) & 255u)
+        let qw2 = kqu[blk * 16u + js * 2u + ile]
+        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        for [unroll_full] (k in range(4)) {
+            let w16 = (qw2 >> (16u * (uint(k) / 2u))) & 0xFFFFu
+            let idx2 = (w16 & 511u) * 2u + uint(k) % 2u
+            let sgb2 = ksign7m(w16 >> 9u)
+            let nib = uint(k) % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u
+            let sw = iq3s_sw(iq2xs_gw(int(idx2)), nib)
+            for [unroll_full] (c in range(4)) {
+                twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * iq3s_sx(sw, uint(c)))
+            }
+        }
+    }
+}
+
+class MetalKqMulMmIq2xsT : MetalKqMulMmIq2xsTensorT {
+    typedef XT = float
+}
+
+class MetalKqMulMmIq2xsTH : MetalKqMulMmIq2xsTensorT {
+    typedef XT = float16
+}
+
+[ |> template_struct_instance]
+class template MetalKqMulMmIq2xxsTensorT : MetalKqMulMmSplitTensorBase {
+    [metal_kernel(float_a_ok=true)]
+    def metal_kq_mulmm_iq2xxs_t {
+        run_shell()
+    }
+
+    def override stage16(work, kb, nBase, nsb : uint) {
+        let j = work >> 2u
+        let sub = work & 3u
+        let jsl = kb + (sub >> 1u)
+        let sb = jsl / 8u
+        let js = jsl % 8u
+        let kh = (sub & 1u) * 16u
+        let ile = sub & 1u
+        let blk = (nBase + j) * nsb + sb
+        let sv = ksc[blk]
+        let scw = js < 4u ? sv.x : sv.y
+        let dsc = float(kdh[blk]) * float((scw >> ((js & 3u) * 8u)) & 255u)
+        let gw2 = kqu[blk * 16u + js * 2u]
+        let aux2 = kqu[blk * 16u + js * 2u + 1u]
+        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        for [unroll_full] (k in range(4)) {
+            let q3 = ile * 2u + uint(k) / 2u
+            let bidx = (gw2 >> (8u * q3)) & 255u
+            let sgb2 = ksign7m((aux2 >> (7u * q3)) & 127u)
+            let nib = uint(k) % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u
+            let sw = iq3s_sw(iq2xxs_gw(int(bidx * 2u + uint(k) % 2u)), nib)
+            for [unroll_full] (c in range(4)) {
+                twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * iq3s_sx(sw, uint(c)))
+            }
+        }
+    }
+}
+
+class MetalKqMulMmIq2xxsT : MetalKqMulMmIq2xxsTensorT {
+    typedef XT = float
+}
+
+class MetalKqMulMmIq2xxsTH : MetalKqMulMmIq2xxsTensorT {
+    typedef XT = float16
 }
 
 
