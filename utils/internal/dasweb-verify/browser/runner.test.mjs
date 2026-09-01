@@ -27,9 +27,9 @@ function stubbed(outcomes) {
 }
 
 // Every retry here prints the production line, and a nightly log is grepped for
-// exactly that string to count how often the edge dropped a connection. Test
-// output on stdout would be counted as production drops, so no case may let the
-// line escape: drive every retry through this, and assert on what it captured.
+// exactly that string to count how often the edge dropped a connection, and the
+// job log carries stderr too - so a case that lets the line escape is counted as
+// a production drop. Drive every retry through this, and assert on what it caught.
 async function captureStderr(fn) {
     const written = [];
     const real = process.stderr.write.bind(process.stderr);

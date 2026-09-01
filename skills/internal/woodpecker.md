@@ -11,13 +11,18 @@ never runs dry - so the damper below is part of the design, not a cost-saving me
 ## Invocation
 
 ```bash
+# both paths outside the repo - the session scratchpad, or logs/
+report=$SCRATCH/woodpecker.md
+log=$SCRATCH/woodpecker.log
+
 # a branch against its base (the normal PR shape)
-codex exec --sandbox read-only -o <report.md> review --base origin/master 2>&1 | tee <run.log>
+codex exec --sandbox read-only -o "$report" review --base origin/master 2>&1 | tee "$log"
 # one commit
-codex exec --sandbox read-only -o <report.md> review --commit <sha> 2>&1 | tee <run.log>
+codex exec --sandbox read-only -o "$report" review --commit "$sha" 2>&1 | tee "$log"
+
 # either of these means the round never ran - disclose it as skipped
-[ -s <report.md> ] || echo "EMPTY REPORT - no round"
-grep -q "Review was interrupted" <run.log> && echo "INTERRUPTED - no round"
+[ -s "$report" ] || echo "EMPTY REPORT - no round"
+grep -q "Review was interrupted" "$log" && echo "INTERRUPTED - no round"
 ```
 
 A round writes two sinks with different jobs: the `-o` report file holds the verdict and the
