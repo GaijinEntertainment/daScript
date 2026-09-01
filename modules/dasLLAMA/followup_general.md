@@ -793,3 +793,15 @@
     or fusing the sign flip into the staged slab per SITE via a second indexed table. Done =
     a form that clears 180 GB/s in the dispatch-loop probe (QUIRK 22's harness), or a note
     proving the ceiling is shared by llama.cpp's own kernel when isolated the same way.
+
+63. **Reasoning-trace length under quantization: a rollback-and-ban sampler feature (Boris,
+    2026-09-01).** Quantization noise raises the entropy of a reasoning model's intermediate steps,
+    and a model trained to self-verify treats its own noisier steps as suspect - the "wait, let me
+    recheck" branch fires more often and each firing adds a hundred tokens. The remedy in the field:
+    detect the reconsideration n-grams (", but wait", "Wait,", "Hmm,", "Actually," - a table of a few
+    dozen phrases) after they are emitted, rewind the KV cache to the position before the phrase and
+    resample with the phrase's first tokens banned. The trigger is multi-token, so a per-token logit
+    bias cannot express it; the rewind is what makes it exact. Ours: the decode loop owns the position
+    counter, so the rewind is "n_past back k, drop k cache rows" plus a phrase table and a ban list in
+    the sampler; expose it as a server/CLI knob. Done = the knob, a test that a forced ", but wait"
+    stream rewinds and continues, and a before/after token count on a 27B reasoning prompt.
