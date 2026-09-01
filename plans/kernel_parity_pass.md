@@ -87,6 +87,18 @@ iq3xxs 0.88, iq3s 0.81, iq2xxs 0.81, iq2xs 0.79, iq2s 0.77; every tile 2.1x-12x 
 the work, the 512-bit VNNI seat pays (k4 1.22x on zen2 -> 2.25x); the five grid formats lose ground
 because the reference's grid kernels gain ~1.5x from AVX-512 while ours are bound by the scalar per-dword
 gather (iq2s 4898 us on zen4 vs 5059 on zen2) - the ARM memo's diagnosis, on x86.
+The Intel ladder (AWS c8i.4xlarge, Xeon 6975P-C Granite Rapids, one thread, the new x86-amx class -
+its profile minted here and shipped; TEST 65/65 ok with the AMX leg; the bench with 64-byte-aligned
+planes and normal scale bytes): decode q51 5.07, mx4 3.26, q8 3.21, iq4xs 2.99, q40 2.92, iq4nl 2.88,
+k3 2.47, k2 2.20, k5 1.94, k4 1.54, iq2xs 1.15, iq3s 1.10, iq2xxs 1.10, iq3xxs 0.94, iq2s 0.91,
+k6 0.39 (bimodal on this box: 2.1 ms in two runs, 5.8-6.7 in two - allocation-dependent past 64-byte
+alignment, open); every tile 2.06x-14.2x ahead. The reference exe's own rows swung up to 2x between runs
+on the VM (q8_0 4036 -> 7487), so single-run Intel ratios carry that error bar. Two bench artifacts were
+found and fixed on this box: 16-byte-aligned planes (Intel splits a 64-byte load across a cache line -
+k6 6703 -> 2234 us) and random scale bytes (denormal math - q8 tile 1022 -> 155 ms). Open: the bench's
+tune-mode q8 tile SIGILLs on the AMX box even after invoking the witness variants; the tuner's own arming
+works (the mint raced the AMX tiles), so the bench arms AMX differently from gen_tune_probe - find how.
+
 Model level on the zen4 (Q4_K_M 1B, 16 threads, debug-jit rows): pp512 1172 vs 927 (1.26x), tg128 88.7
 vs 86.0 (1.03x). The kernel ladder's k4 2.25x is against the reference's fallback vec_dot; a model run
 uses its AVX2/AVX-512 repack 8x8 GEMV for q4_K - so the ladder's k4/k5/k6/q4_0/q8_0/iq4_nl/q2_K rows
@@ -190,6 +202,9 @@ Model: iq2xs ~2570 us = 1.27x. vqtbl gathers are impossible (1-2 KB grids vs tbl
 masked negate already beats llama.cpp's own mask expansion. Fallback if deferred: plane-carried sign
 bytes (size-neutral for iq2xxs/iq3xxs, +6% for iq2xs; touches the plane, both ISAs) -> 0.72-0.98x only.
 Also from the memo: the column-read-vs-byte-read decision was made on x86 and should be a perm seat.
+
+Bench on AMX boxes: the tune-mode q8 tile SIGILL (above) - read how gen_tune_probe reaches the grant
+(q8q8_family_live_variants + the amx cfg companion?) and do the same; k6 bimodality on Granite Rapids.
 
 Vulkan pp (gap 1):
 1. Budget split (measurement, no kernel edit) - is the GEMM the 30%? 2. `shAscales`-style scale
