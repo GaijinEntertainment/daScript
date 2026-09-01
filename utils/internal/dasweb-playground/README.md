@@ -44,6 +44,13 @@ logs is the edge dropping a connection rather than anything the artifact cache d
 forge a line), client addresses are masked to /24 and /32, and it rolls at 32 MiB keeping four
 files for a week.
 
+Validating an edit to the snippet means reassembling the fragment it is, because neither half
+is a Caddyfile on its own: wrap the loose directives in a `daslang.io { }` block with
+`root`/`file_server` after them, uncomment the `run.daslang.io` vhost, and repoint its log at a
+writable path - `caddy validate` opens the file, so `/var/log/caddy` fails anywhere but the
+box. Then `caddy validate --config <file> --adapter caddyfile` and `caddy fmt --diff <file>`,
+both clean, before the deployed Caddyfile is edited to match.
+
 `max_source_bytes` is 524288 (512 KiB). The playground POSTs a multi-file sample as one JSON
 document, so the cap is measured against the whole bundle, not the largest file in it - the
 biggest curated game serializes to roughly 267 KB. Because the deployed toml is operator-owned
