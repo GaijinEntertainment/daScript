@@ -10,14 +10,16 @@ the M-series CPU tiers are minted and raced from that box.
 `q8q8_tile_gen` ships five `dot = "smmla"` seats gated `requires = "i8mm"` (mr4/mr8 x
 kstep/nrsplit/gkstep), and NO box has ever raced them: `LLVMGetHostCPUFeatures()` returns an
 EMPTY string on macOS (llvm_jit_common.das documents it beside `g_target_arm64_i8mm`), so
-i8mm never detects on Apple Silicon and the seats gate-skip. M1 lacks i8mm; M2+ has it; the
-M5 Max additionally has FEAT_SME2p1 + BF16/EBF16. The unquirk pass's B2 adds a darwin
-host-CPU-name feature map, after which an M5 mint races smmla-vs-NEON with zero new kernel
-work. Mac-session order:
+i8mm never detected on Apple Silicon at the EMITTER tier (`g_target_arm64_i8mm`), so the
+generators declined and the seats never raced - even though `cpu_supports("i8mm")` answered
+correctly via sysctl. M1 lacks i8mm; M2+ has it; the M5 Max additionally has FEAT_SME2p1 +
+BF16/EBF16. FIXED in the unquirk pass (278b3c765): `g_target_arm64_i8mm` also consults
+`cpu_supports`, and the target machine appends `+i8mm` when the host has it - an M5 `--tune`
+now races smmla-vs-NEON with zero new kernel work. Mac-session order:
 
-1. After B2 lands: `--tune-full` on the M5, confirm the smmla seats emit (they have never
-   been exercised - treat the emitter arms as unproven, gate with the gen probe TEST mode
-   under `DAS_JIT_ARM64_FORCE_FEATURES=i8mm` first) and report the crowns.
+1. On the M5 (post PR-1): `--tune`, confirm the smmla seats EMIT (they have never been
+   exercised - treat the emitter arms as unproven, gate with the gen probe TEST mode first)
+   and report the crowns; export the `arm-i8mm` profile if they win.
 2. If smmla wins q8q8: the kq tile families have NO ARM ISA seats at all (mr8 NEON is the
    whole grid) - an smmla kq tile emitter arm is the highest-leverage CPU kernel work on
    the mac, and it transfers to Graviton3+ (c8g) verbatim.

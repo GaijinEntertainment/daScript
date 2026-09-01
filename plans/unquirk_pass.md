@@ -57,7 +57,15 @@ outside this PR).
 **B3. `DAS_TUNE_POLICY=reference`** — a policy value that serves the original bodies outright
 (QUIRK 18's missing spelling). Small, framework-side.
 
-**B4. Validation + the measurement Boris's service decision needs.**
+**B4. Validation + the measurement Boris's service decision needs.** MEASURED 2026-08-31:
+zen2 fresh full mint under the pruned grids 488 s (gen probe 414 + tuned/knobs 66; noise cv
+<= 0.33%); zen2 parity cold start against the shipped x86-avx2 profile = 0 races (the 285 s
+wall is two monolith JIT compiles, pre-adopt + re-exec), stream identical to the recorded
+stamped one; c7a.4xlarge (EPYC 9R14 zen4, 16 vCPU) full new-silicon mint **316 s** (gen probe
+253 + tuned 58, noise cv <= 0.21%) - `dot_vpdpbusd_width512_mr16` crowns EVERY tile family
+and q8q8 takes the bias128/gkstep2 vnni512 stamp; x86-vnni512 profile exported + checked in.
+m1 gen half 734 s (M1, 8 threads; mr8 everywhere) - its `tune_kernels` Metal arm had a
+macOS-only compile error (two require paths for MetalTensorRaceResult), fixed in-pass.
 - dasLLVM tune tests (test_tuned/test_grid/llvm_tune_*) extended for profile resolution +
   the split sidecar; gen probe test+tune modes; parity 40/40; one bench row vs current
   numbers (winners are unchanged by construction — prove it, don't assume it).

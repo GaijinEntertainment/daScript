@@ -2338,6 +2338,16 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
 
 // fallback: the tuner rail drives this half explicitly (DAS_TUNE_MODE=tune) — the auto
 // policy must not fire a nested tuner off this program's own missing per-app sidecar
+// one METAL_TWIN race row: log it and bank the family when the tensor twin won
+def private metal_twin_absorb(var wins : array<string>; var ran : bool&; r) {
+    ran = true
+    let mt_note = empty(r.note) ? "" : " ({r.note})"
+    tune_detail("METAL_TWIN {r.family}: base={r.base_ms}ms tensor={r.twin_ms}ms -> {r.winner}{mt_note}\n")
+    if (r.winner == "tensor") {
+        wins |> push(r.family)
+    }
+}
+
 [export, tune_policy(missing = "fallback")]
 def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail; the noise probes are its checkpoints
     if (tuner_paranoid_requested()) {
@@ -2453,23 +2463,14 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var mt_wins : array<string>
         var mt_ran = false
-        var mt_all : array<MetalTensorRaceResult>
-        var mt_dec : array<MetalTensorRaceResult>
         if (!filtered) {   // a filtered mint leaves "runtime" untouched - no crowns to record
-            mt_all <- metal_tensor_race()
-            mt_dec <- metal_tensor_race_decode()
-        }
-        mt_all |> reserve(length(mt_all) + length(mt_dec))
-        for (r in mt_dec) {
-            mt_all |> emplace(r)
-        }
-        delete mt_dec
-        for (r in mt_all) {
-            mt_ran = true
-            let mt_note = empty(r.note) ? "" : " ({r.note})"
-            tune_detail("METAL_TWIN {r.family}: base={r.base_ms}ms tensor={r.twin_ms}ms -> {r.winner}{mt_note}\n")
-            if (r.winner == "tensor") {
-                mt_wins |> push(r.family)
+            // the two race halves come through different require paths, so their result element
+            // types do not unify into one typed local - absorb each returned array where it lands
+            for (r in metal_tensor_race()) {
+                metal_twin_absorb(mt_wins, mt_ran, r)
+            }
+            for (r in metal_tensor_race_decode()) {
+                metal_twin_absorb(mt_wins, mt_ran, r)
             }
         }
         if (!mt_ran && !filtered) {
@@ -2477,7 +2478,6 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         }
         metal_crowns = join(mt_wins, ",")
         delete mt_wins
-        delete mt_all
     }
 
     // softmax_sink shares softmax's loop shape exactly (one extra scalar joins the reduction), so it
