@@ -425,3 +425,25 @@ def test_html_resource_urls_unclosed_script(t : T?) {
     t |> equal(1, length(urls), "a script with no end tag runs to end of file in a browser, so it is scanned to end of file")
     t |> equal("open.example", url_host(urls[0]))
 }
+
+[test]
+def test_shell_cp_sources(t : T?) {
+    let sh = "set -eux\ncp -r web/examples/ui/src/* _site/playground/\ncp \"web/output64/examples/$g/$g.html\" \"_site/examples/$g/\"\ncp -r site/playground/samples _site/playground/samples 2>/dev/null || true\ncp web/a.js web/b.js _site/x/\ncp web/elsewhere.js build/out/\n"
+    var inscope srcs <- shell_cp_sources(sh, "_site/")
+    t |> equal(5, length(srcs), "flags dropped, quotes removed, a shell operator ends the argument list, a non-site destination is skipped")
+    t |> equal("web/examples/ui/src/*", srcs[0])
+    t |> equal("web/output64/examples/$g/$g.html", srcs[1])
+    t |> equal("site/playground/samples", srcs[2])
+    t |> equal("web/a.js", srcs[3])
+    t |> equal("web/b.js", srcs[4], "every source of a multi-source cp")
+}
+
+[test]
+def test_cmake_copy_sources(t : T?) {
+    let cm = "add_custom_target(stage ALL\n    COMMAND $\{CMAKE_COMMAND} -E copy_directory\n        $\{CMAKE_CURRENT_SOURCE_DIR\}/examples/ui/src\n        $\{SITE_PLAYGROUND_DIR\}\n    COMMAND $\{CMAKE_COMMAND} -E copy\n        $\{DAS_WEB_OUTPUT_DIR\}/a.js\n        $\{DAS_WEB_OUTPUT_DIR\}/a.wasm\n        $\{SITE_FILES_WASM_DIR\}/\n    COMMAND $\{CMAKE_COMMAND} -E copy_directory\n        $\{CMAKE_CURRENT_SOURCE_DIR\}/examples/ui\n        $\{DAS_WEB_OUTPUT_DIR\}\n    COMMENT \"stage\"\n)\n"
+    var inscope srcs <- cmake_copy_sources(cm, "SITE_")
+    t |> equal(3, length(srcs), "a copy whose destination lacks the marker is skipped")
+    t |> equal("$\{CMAKE_CURRENT_SOURCE_DIR\}/examples/ui/src", srcs[0])
+    t |> equal("$\{DAS_WEB_OUTPUT_DIR\}/a.js", srcs[1])
+    t |> equal("$\{DAS_WEB_OUTPUT_DIR\}/a.wasm", srcs[2], "every source of a multi-source copy")
+}

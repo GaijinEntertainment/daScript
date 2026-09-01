@@ -32,3 +32,10 @@ compacted, or cited as rules.
   re-plained ("any resource a page loads from a host its allowed list does not name") and
   the disclosure rule now names `ALLOWED_HOSTS` rather than pointing at its neighbour -
   rules are unordered, so an adjacency referent points at nothing.
+
+- **2026-09-01** (`REVIEW.md`): flashlight round after PR 3920, dragon findings on this
+  checklist. Boris ruled "yes" to defining "editor content" in place (sample bundles are
+  not pages - `web/examples/ui/REVIEW.md` binds them), to dropping "under this folder" from
+  the two embedded-sample rules and the "link every embedded sample" tail, to "playground
+  sample" in the stated-run rule, and to rewrapping the one over-wide line. The run-not-row
+  tail on the first rule stays - the 2026-08-30 ruling placed it there.

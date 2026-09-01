@@ -93,8 +93,8 @@ overloads), the cookie-and-host gate for a served web tree (`gate_web_third_part
 on `html_resource_urls`, `script_urls`, `css_urls` and `url_host`), plus tree-analysis
 helpers: `das_requires`, `strip_line_comments`, `cmake_command_blocks`,
 `cmake_command_targets`, `cmake_words`, `cmake_args`, `cmake_list_entries`,
-`cmake_test_labels`, `cmake_test_commands`, `is_cmake_keyword`, `is_kebab_case`,
-`find_line`. The CMake helpers match command names case-insensitively, as CMake itself
+`cmake_test_labels`, `cmake_test_commands`, `cmake_copy_sources`, `shell_cp_sources`,
+`is_cmake_keyword`, `is_kebab_case`, `find_line`. The CMake helpers match command names case-insensitively, as CMake itself
 does. It lives under
 `dastest/` so an installed SDK carries it the same way it carries the test framework -
 dastest itself ships in the SDK as a prebuilt exe, the `DAS_UTILS_SHIPPED_EXES` entry in

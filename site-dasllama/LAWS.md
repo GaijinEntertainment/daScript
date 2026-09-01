@@ -17,3 +17,10 @@ compacted, or cited as rules.
   defect) and "adding a host" (permitted with disclosure). The weakening trigger now reads
   "with the same `ALLOWED_HOSTS`", which carves the list change out without an exception
   clause. Applied to all four served-tree checklists.
+
+- **2026-09-01** (`REVIEW.md`): flashlight round after PR 3920, dragon findings on this
+  checklist. Boris ruled "okie"/"yes" to: the page definition as the served-`.html`
+  property with no file census; the two-trigger `_news` rule and the two-trigger
+  `news:begin` rule each split in two; the entailed "implementation that does not exist"
+  sentence cut; the number-source rule in plain form with the verdict last; the `dl-*`
+  WHY tail without "chrome".

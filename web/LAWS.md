@@ -18,3 +18,8 @@ compacted, or cited as rules.
 
 - **2026-09-01** (`REVIEW.md`): the two gate rules took the site checklist's dragon wording -
   the weakening rule re-plained, the disclosure rule naming `ALLOWED_HOSTS` directly.
+
+- **2026-09-01** (`REVIEW.md`): flashlight round after PR 3920. Boris ruled "yes" on the
+  staged-path gate - `REVIEW.das` now reads the deploy's `cp` steps and the CMake stage
+  target and fails on a staged tree outside its root list - so the served-tree duty shrank
+  to the routes the gate does not read.

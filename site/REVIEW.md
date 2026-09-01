@@ -4,7 +4,9 @@
 `README.md`. **A Playwright spec (`*.spec.js`), wherever the diff puts it, answers to the
 `tests/playground/` checklist.** A page is an `.html` or `.md` file under this folder that a
 visitor navigates to, together with what the scripts it loads render into it - not a
-machine-only harness document (`playground/run-frame.html`), and not editor content.
+machine-only harness document (`playground/run-frame.html`), and not editor content - what a
+visitor types into the playground or hero editor, and the sample bundles the playground loads
+into it.
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
 illustration - show only a command the run actually executed.** A rendered `cmd` identifies
@@ -23,8 +25,8 @@ rendered rows.
 defect - the pair belongs on the run object that produced the rows.**
 
 **A diff that changes `files/performance_bench.json` also changes `benchmarks/sql/results.md`
-(repo root), in the same change.** `benchmarks/sql/_update_results.das --site-json` writes the record from
-the same sweep output that regenerates those tables.
+(repo root), in the same change.** `benchmarks/sql/_update_results.das --site-json` writes the
+record from the same sweep output that regenerates those tables.
 
 **A cell in `files/performance_bench.json` differing from the same family-and-lane cell in the
 `benchmarks/sql/results.md` (repo root) tables is a defect.**
@@ -50,12 +52,11 @@ render the claim from the record or drop it.**
 dasProfile record.** Provenance - the `das_capture` and `ext_capture` stamps - travels in the
 dasProfile files themselves.
 
-**A code sample embedded in a page under this folder shown as a partial snippet or as
-pseudo-code is a defect - show every embedded sample as a full program that compiles and runs
-with the current toolchain.**
+**A code sample embedded in a page shown as a partial snippet or as pseudo-code is a defect -
+show every embedded sample as a full program that compiles and runs with the current
+toolchain.**
 
-**A code sample embedded in a page under this folder without a "try it on playground" link is
-a defect - link every embedded sample.**
+**A code sample embedded in a page without a "try it on playground" link is a defect.**
 
 **A daslang sample embedded in a page not written in gen2 is a defect.**
 
@@ -65,8 +66,9 @@ folder) against the branch tip, naming the passes and any failures; a later edit
 files restates the run.** The no-WASM lane cannot see a broken runtime path, and a run
 recorded mid-branch describes a tree that no longer ships.
 
-**A stated Playwright run names every sample the diff changed: for each, the spec that loaded
-it, or - when no spec loads it - that it was opened and run by hand in the playground.**
+**A stated Playwright run names every playground sample the diff changed: for each, the spec
+that loaded it, or - when no spec loads it - that it was opened and run by hand in the
+playground.**
 
 **A stated Playwright run names the runtime artifacts it used: built from this change when
 the diff touches any source compiled into the WASM runtime (`daslang_static` - its `main()`

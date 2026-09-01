@@ -495,6 +495,79 @@ def cmake_list_entries(text : string; listname : string) : array<string> {
     return <- out
 }
 
+def private is_shell_operator(tok : string) : bool {
+    return (tok == "||" || tok == "&&" || tok == ";" || tok == "|" || tok |> starts_with(">") ||
+        tok |> starts_with("2>") || tok |> starts_with("&"))
+}
+
+def private unquoted(tok : string) : string {
+    var out = tok
+    if (out |> starts_with("\"") || out |> starts_with("'")) {
+        out = slice(out, 1)
+    }
+    if (out |> ends_with("\"") || out |> ends_with("'")) {
+        out = slice(out, 0, length(out) - 1)
+    }
+    return out
+}
+
+//! Sources of every `cp` in shell text whose destination starts with `dest_prefix` - one
+//! entry per source token, quotes removed, `-r`-style flags dropped, the argument list cut
+//! at the first shell operator (`||`, `2>`, ...). Line-based: a `cp` inside a YAML `run:`
+//! block is one line of shell.
+def shell_cp_sources(text : string; dest_prefix : string) : array<string> {
+    var out : array<string>
+    for (line in split(text, "\n")) {
+        var inscope toks <- [for (w in split_by_chars(line, " \t\r")); w; where !empty(w)]
+        let at = find_index(toks, "cp")
+        continue if (at < 0)
+        var args : array<string>
+        args |> reserve(length(toks))
+        for (i in range(at + 1, length(toks))) {
+            break if (is_shell_operator(toks[i]))
+            continue if (toks[i] |> starts_with("-"))
+            args |> push(unquoted(toks[i]))
+        }
+        continue if (length(args) < 2 || !(args[length(args) - 1] |> starts_with(dest_prefix)))
+        out |> reserve(length(out) + length(args) - 1)
+        for (i in range(length(args) - 1)) {
+            out |> push(args[i])
+        }
+    }
+    return <- out
+}
+
+//! Sources of every `-E copy` / `-E copy_directory` in CMake text whose destination
+//! contains `dest_marker` - one entry per source, `${...}` references verbatim. The
+//! argument list of one copy ends at the next CMake keyword or the closing paren.
+def cmake_copy_sources(text : string; dest_marker : string) : array<string> {
+    var out : array<string>
+    var inscope words <- cmake_words(text)
+    let n = length(words)
+    var i = 0
+    while (i + 1 < n) {
+        if (words[i] != "-E" || (words[i + 1] != "copy" && words[i + 1] != "copy_directory")) {
+            i++
+            continue
+        }
+        var j = i + 2
+        var args : array<string>
+        args |> reserve(8)
+        while (j < n && words[j] != ")" && words[j] != "(" && !is_cmake_keyword(words[j])) {
+            args |> push(words[j])
+            j++
+        }
+        if (length(args) >= 2 && find(args[length(args) - 1], dest_marker) >= 0) {
+            out |> reserve(length(out) + length(args) - 1)
+            for (k in range(length(args) - 1)) {
+                out |> push(args[k])
+            }
+        }
+        i = j
+    }
+    return <- out
+}
+
 //! Host of an absolute or protocol-relative URL, lowercased - "" when the URL is relative
 //! or when what follows the scheme is not host-shaped. Scheme and host are matched
 //! case-insensitively, as a browser reads them; a bracketed IPv6 literal comes back with
