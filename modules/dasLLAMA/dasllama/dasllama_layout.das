@@ -21,6 +21,11 @@ require math
 // walkers, and the GPU tier gathers. Requires dasllama_common back for Model/KqFmt; the loader
 // reaches the entry points through the hooks registered at [init] (register_model_layout).
 
+//! The pack-code version folded into every .dlim identity: bump it with ANY edit to a pack or
+//! repack walker in this file, so a cached image baked by the old code re-bakes instead of
+//! being mapped and served (an image's filename hash carries model + schema + this).
+let PACK_VERSION = 1
+
 // ===== metal-flavor blob transform (the blob-only .dlim redesign) =====
 
 // A q8 region's blob bind offset (off/32)*34 lands 16B-aligned iff off % 256 == 0; a k6

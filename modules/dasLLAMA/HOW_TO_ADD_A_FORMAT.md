@@ -358,8 +358,8 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    generator change reads as stale.
 12. **A fresh worktree has no JIT until `lib/LLVM.dll` is staged - on every platform.** The
    M1 worktree's first `-jit` run died on `can't load library LLVM.dll`; `utils/mcp/setup.das`
-   stages the codegen backend on Windows only. Copy `<main>/lib/LLVM.dll` (+ `.version`) into
-   the worktree's `lib/` by hand on macOS/Linux. Unquirked: the posix arm of `stage_jit_backend`.
+   staged the codegen backend on Windows only. UNQUIRKED: `stage_jit_backend` now stages
+   `lib/LLVM.dll` + `.version` on every platform (Windows additionally `bin/lld-link.exe`).
 13. **The Metal test ladders are nested ternaries with an `else` = k6.** `kq_gemv_gate`,
    `kq_mvb_gate`, `kq_mulmm_gate` and the fixtures pick MSL sources / entries / fastmath /
    tgmem names per format in four parallel ternary chains each; a format missing from any one
@@ -444,8 +444,10 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
     copy fix, the rerun "mapped" the stale image and kept serving the broken device planes -
     garbage text and all-zero decode logits survived a correct fix. Delete the model's
     `*.dlim` beside the GGUF after ANY `dasllama_layout.das`/pack edit and confirm the next
-    log line says "baked", not "mapped". Unquirked: fold a pack-code version into the image
-    hash, the way QUIRK 21's fix would version the JIT DLL cache.
+    log line says "baked", not "mapped". UNQUIRKED: `PACK_VERSION` (dasllama_layout.das)
+    folds into every image identity through `image_identity_of` - the ONE identity spelling
+    all consumers format through - so bumping it with a pack edit re-bakes; the discipline is
+    now "bump the constant beside the code you edited", not "remember to delete files".
 
 25. **The stream-code space is NOT the kernel-id space: q51 squats on 2.** Stream region
     tags are q8=0, mx4=1, q51=2, then the kq kernel ids - Q2_K's mnemonic id 2 collided and

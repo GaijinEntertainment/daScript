@@ -275,7 +275,7 @@ def test_image_mechanics(t : T?) {
         t |> equal(pk.identity, image_identity("img-probe"), "peek: baked identity string")
         var pcfg = DlimConfiguration()
         t |> success(dlim_config_from_json(pk.config_json, pcfg), "peek: embedded config JSON parses")
-        t |> equal(dlim_identity(pcfg, IMAGE_VERSION, "img-probe"), pk.identity, "peek: config re-derives the identity")
+        t |> equal(image_identity_of(pcfg, "img-probe"), pk.identity, "peek: config re-derives the identity")
 
         var m3 = ImgProbe()
         t |> success(!load_image(path, m3, "wrong-tag"), "identity mismatch declines")
@@ -378,7 +378,7 @@ def test_image_mechanics(t : T?) {
         t |> success(!empty(js), "config serializes")
         var back = DlimConfiguration()
         t |> success(dlim_config_from_json(js, back), "JSON parses back")
-        t |> equal(dlim_identity(back, IMAGE_VERSION), dlim_identity(dc, IMAGE_VERSION), "identity survives the round trip")
+        t |> equal(image_identity_of(back), image_identity_of(dc), "identity survives the round trip")
         var junk = DlimConfiguration()
         t |> success(!dlim_config_from_json("not a config", junk), "garbage declines")
     }

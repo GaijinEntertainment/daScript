@@ -358,7 +358,7 @@ def main() : int {
         } else {
             print("{js}\n")
         }
-        to_log(LOG_INFO, "dasllama-convert: identity {dlim_identity(dc, IMAGE_VERSION)}\n")
+        to_log(LOG_INFO, "dasllama-convert: identity {image_identity_of(dc)}\n")
         return rc0
     }
     if (cfg.model == "") {
@@ -416,8 +416,8 @@ def main() : int {
             to_log(LOG_ERROR, "dasllama-convert: --config targets '{want.cpu.backend}' and this host has no repack family to bake it with\n")
             return 2
         }
-        let want_ident = dlim_identity(want, IMAGE_VERSION)
-        let have_ident = dlim_identity(dlim_config_current(want.quant), IMAGE_VERSION)
+        let want_ident = image_identity_of(want)
+        let have_ident = image_identity_of(dlim_config_current(want.quant))
         if (have_ident != want_ident) {
             to_log(LOG_ERROR, "dasllama-convert: --config could not be fully applied on this host:\n  want {want_ident}\n  have {have_ident}\n")
             return 2

@@ -193,9 +193,6 @@ def root_from_daslang_binary(binary : string) : string {
 }
 
 def stage_jit_backend(root : string) {
-    if (get_platform_name() != "windows") {
-        return
-    }
     let src_root = get_das_root()
     var fallback_root = ""
     var fallback_source = "DASLANG is unset"
@@ -208,7 +205,12 @@ def stage_jit_backend(root : string) {
             fallback_source = "DASLANG does not name an existing binary"
         }
     }
-    let jit_files = ["lib/LLVM.dll", "bin/lld-link.exe"]
+    // the codegen backend is LLVM.dll on every platform (+ its .version stamp, which CMake's
+    // re-download check reads); only Windows also needs the lld-link.exe linker beside the binary
+    var jit_files <- ["lib/LLVM.dll", "lib/LLVM.dll.version"]
+    if (get_platform_name() == "windows") {
+        jit_files |> push("bin/lld-link.exe")
+    }
     for (rel in jit_files) {
         let dst = path_join(root, rel)
         if (fexist(dst)) {

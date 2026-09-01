@@ -57,7 +57,14 @@ struct ImgSection {
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def image_identity(tag : string = ""; quant : string = "q8") : string {
-    return dlim_identity(dlim_config_current(quant), IMAGE_VERSION, tag)
+    return image_identity_of(dlim_config_current(quant), tag)
+}
+
+//! The identity of an explicit configuration — the ONE spelling every identity consumer (the
+//! loader, the peek verdicts, the converter's want/have compare, the tests) formats through, so
+//! the schema version and the pack-code version can never be folded in two different ways.
+def image_identity_of(c : DlimConfiguration; tag : string = "") : string {
+    return dlim_identity(c, IMAGE_VERSION, tag, PACK_VERSION)
 }
 
 // a 64-bit identity hash per file: a collision would leave two identities re-saving over one path forever
@@ -775,7 +782,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                         plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
     // one config snapshot serves the meta embed AND the header hash — they must agree
     let dcfg = dlim_config_current(quant)
-    let ident = dlim_identity(dcfg, IMAGE_VERSION, tag)
+    let ident = image_identity_of(dcfg, tag)
     var fend = 0ul
     var meta_off = 0ul
     var meta_bytes = 0ul
