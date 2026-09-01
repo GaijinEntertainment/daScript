@@ -961,6 +961,14 @@ def private or_bit_x10(te : TileEmit; var w, bytes, maskv : LLVMOpaqueValue?; hi
     return LLVMBuildOr(b, w, sel, name)
 }
 
+//! a 64-byte-aligned alloca at the kernel's entry: LLVM then realigns the frame, so every ymm/zmm spill slot sits
+//! inside one cache line whatever RSP the caller arrives with (Intel splits a line-straddling 64-byte access; the
+//! per-process stack phase was k6's 4.0 / 5.4 ms draw on zen2 and its normal-vs-tune mode gap on Granite Rapids)
+def private frame_align64(b : LLVMOpaqueBuilder?; types : PrimitiveTypes?) {
+    var a = LLVMBuildAlloca(b, LLVMArrayType(types.t_int8, 64u), "frame64")
+    LLVMSetAlignment(a, 64u)
+}
+
 // One 256-weight SUPERBLOCK, K-quant grp<mr> form (te.kq set): weight vectors unpacked
 // ONCE per (sub-block, dword-group) and dotted against every token — weight-stationary,
 // bit-exact vs per-token GEMVs (tokCount=1). kq v2 folds integer sub-scales/bsums against Q8_K-form activations.
@@ -2372,6 +2380,7 @@ def private emit_amx_tile(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : boo
     var after = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "after")
 
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     var yp = LLVMGetParam(gc.impl, 0u)
     var wg = LLVMGetParam(gc.impl, 1u)
     var sg = LLVMGetParam(gc.impl, 2u)
@@ -2519,6 +2528,7 @@ def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : b
     var after = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "after")
 
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     var yp = LLVMGetParam(gc.impl, 0u)
     var wg = LLVMGetParam(gc.impl, 1u)
     var sg = LLVMGetParam(gc.impl, 2u)
@@ -2672,6 +2682,7 @@ def private tile_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
 
     // entry: per-token activation/scale bases; nb = n / 32
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = p.kstep)
     sa.yp = LLVMGetParam(gc.impl, 0u)
     te.wg = LLVMGetParam(gc.impl, 1u)
@@ -2783,6 +2794,7 @@ def private witness_gen(var gc : LlvmCodeCtx) : bool {
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     let b = gc.jit.builder
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     if (dot_kind(p.dotPrim) == DOT_AMX) {
         // TMUL executes only after the per-process XTILEDATA grant, so the arch_prctl syscall IS the witness
         let mod = LLVMGetGlobalParent(gc.impl)
@@ -2817,6 +2829,7 @@ def private cfg_gen(var gc : LlvmCodeCtx) : bool {
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     let b = gc.jit.builder
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     if (dot_kind(p.dotPrim) == DOT_AMX && p.latch != 0) {
         let mod = LLVMGetGlobalParent(gc.impl)
         var glob = LLVMGetNamedGlobal(mod, "dasllama.amx.tilecfg")
@@ -2880,6 +2893,7 @@ def private gemv_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
 
     // entry: group range off the row range; d=0/t0=0 turn emit_slice's store offset into the absolute row g*mr
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = p.gkstep)
     sa.yp = LLVMGetParam(gc.impl, 0u)
     let wp = LLVMGetParam(gc.impl, 1u)
@@ -2947,6 +2961,7 @@ def private mx4_gemv_gen(var gc : LlvmCodeCtx) : bool {
 
     // entry: group range off the row range; plane strides are nibble n/2 and exponent n/32
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = p.gkstep)
     sa.yp = LLVMGetParam(gc.impl, 0u)
     let wn = LLVMGetParam(gc.impl, 1u)
@@ -3007,6 +3022,7 @@ def private mx4_tile_gen(var gc : LlvmCodeCtx) : bool {
 
     // entry: per-token activation/scale bases; wn/we arrive pre-offset to the group
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = p.kstep)
     sa.yp = LLVMGetParam(gc.impl, 0u)
     te.wg = LLVMGetParam(gc.impl, 1u)
@@ -3066,6 +3082,7 @@ def private kq_gemv_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
 
     // entry: group range off the row range; strides are disk footprints (quants 128/160/192B, scales 20/20/18B)
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     if (fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24 || fmt == 25) {
         // iq3s/iq3xxs/iq2s/iq2xs: the gemv gathers each superblock into an alloca panel (the tile gets the runtime unpack)
         te.gfn = gc.impl
@@ -3153,6 +3170,7 @@ def private q51_gemv_gen(var gc : LlvmCodeCtx) : bool {
     var gexit = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "gexit")
 
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = 1)
     sa.yp = LLVMGetParam(gc.impl, 0u)
     let qgp = LLVMGetParam(gc.impl, 1u)
@@ -3215,6 +3233,7 @@ def private kq_tile_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
 
     // entry: per-token activation/scale/bsum bases; the block unit is a superblock (nb = n/256)
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = 1)
     sa.yp = LLVMGetParam(gc.impl, 0u)
     te.wg = LLVMGetParam(gc.impl, 1u)
@@ -3308,6 +3327,7 @@ def private q51_tile_gen(var gc : LlvmCodeCtx) : bool {
 
     // entry: per-token activation/scale/asum bases; the block unit is 32 weights (nb = n/32)
     LLVMPositionBuilderAtEnd(b, entry)
+    frame_align64(b, gc.jit.types)
     var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = 1)
     sa.yp = LLVMGetParam(gc.impl, 0u)
     te.wg = LLVMGetParam(gc.impl, 1u)
