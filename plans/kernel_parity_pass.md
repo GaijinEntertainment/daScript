@@ -299,6 +299,14 @@ mode), 3284-3448 when interleaved with ~60 ms of scalar rows (tune mode), three 
 Intel's AVX-512 frequency license (sustained 512-bit work drops the core clock; the reference's q6_K runs 256-bit);
 the seat-alone runs (each vector seat back to back at 16 lanes) decide it, and the mint's tile race (bursty per
 seat) may have crowned width 512 where the sustained gemv wants 256 - the gemv-own-crown item once more.
+The seat-alone runs said no to the license: 512 alone 3713, 256 alone 3551, maddubs alone 3541 (reference 3441) -
+back to back, all near parity - so it is the MODE: the same seat generated under the adopted profile (normal mode)
+runs 5159-5270 at 16 lanes and 1861-2244 / 1939-3622 (bimodal within a process) at one thread, where the tune-mode
+race of the same name reads 3284-3713 and 1615-1789 / 1648-2059. zen2 shows no such gap (normal 3446-4033, tune
+3657-4076). The 64-byte frame realignment (e0b3892b7) did not move it. The JIT'd body is emitted at runtime and is
+not in the cache, so the two bodies could not be diffed here. OPEN, on the Intel box: whether the adopted perm
+parses to the grid row's fields (defaults) or the runtime differs; the gemv's own in-situ race (queued) measures
+every seat the same way and stamps what is fastest, which closes it either way.
 
 
 ### M4 Pro v1 - first tables (2026-09-01, Apple M4 Pro 10P+4E, class arm-i8mm, on the arm-neon PROFILE through the chain - no arm-i8mm profile existed; TEST 90/90)
@@ -624,6 +632,17 @@ stays open.
    (4206: 1.47x), iq2xs 4582 (3975: 0.87), iq3s 7668 (6410: 0.84), k6 5013 (4878: 0.97, 77 GB/s = the
    box's DRAM). iq2s scales at 56% of its one-thread rate (147 MB in 6.4 ms = 23 GB/s, not bandwidth)
    where iq2xxs scales at 96% - the 8 KB grid table's L1 pressure is the suspect.
+   RESOLVED (the order test): the 8-9 ms slot belongs to whichever format is FIRST in a bench process - iq2s
+   first 4887 (slot 786-8747), iq2xxs first 1924 / 4063 (342-7920); the same format second is flat (iq2s
+   3257 at 2861-3377). The team arm now burns in (six warmup dispatches per row). With iq2s second, its row
+   form at 16 lanes reads 3257 against the panel's 2525 (the ladder's row; reference 2159): the one-thread
+   win does not survive the engine shape, so iq2s left the vnni512 gate and iq2xxs alone stays (1828-1924
+   against the panel's 2456). zen4's grid residue at the engine shape stands: iq2s 0.85, iq3s 0.78, iq2xs
+   0.86, iq3xxs 0.90 - the vnni512 panel form's compute.
+   The frame realignment (every generated kernel's entry gets an alloca [64 x i8] align 64, so spill slots
+   never straddle a cache line whatever RSP the caller arrives with): zen2 k6 heap phase 3344 / 3437 / 3737 /
+   4389 (was 4.0-5.4 with two of three slow), engine phase 3423 / 3593 (reference 3683: 1.03-1.08x). The draw
+   narrowed, one outlier remains - the stack phase was part of it, not all of it.
    Round four, the row form with the COLUMN signs on zen4 (one thread, engine phase; reference in
    parentheses): iq2s 3541-3578 (3757: 1.05x), iq2xxs 2737-2771 (3922: 1.42x, from 0.89 with the table),
    iq3xxs 4234-4322 (5243: 1.22x, from 0.56 with the table; the panel 0.88), iq3s 6238-6309 (6105: 0.97),
