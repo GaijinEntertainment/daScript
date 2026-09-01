@@ -117,7 +117,7 @@ def private want(filter, name : string) : bool {
     return false
 }
 
-def private gemv_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate GEMV spellings register here, after prod
+def private gemv_arms(f) : array<KqRaceArm> {   // candidate GEMV spellings register here, after prod; generic on purpose - instantiates only under main's das_metal guard, so the metal-less lint lane never resolves the msl globals
     var arms : array<KqRaceArm>
     if (f.fmt == 4) {
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_k4_msl, entry = metal_kq_gemv_k4_msl_entry, fastmath = metal_kq_gemv_k4_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
@@ -150,7 +150,7 @@ def private gemv_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate GEMV sp
     return <- arms
 }
 
-def private mvb_arms(f : KqRaceFmt) : array<KqRaceArm> {   // the B2 batch-decode arm per grid format; candidate spellings register here, after prod
+def private mvb_arms(f) : array<KqRaceArm> {   // the B2 batch-decode arm per grid format; candidate spellings register here, after prod; generic on purpose (see gemv_arms)
     var arms : array<KqRaceArm>
     if (f.fmt == 33) {
         arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl, entry = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_entry, fastmath = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_fastmath, tgmem = 0ul, gdiv = 8))
@@ -166,7 +166,7 @@ def private mvb_arms(f : KqRaceFmt) : array<KqRaceArm> {   // the B2 batch-decod
     return <- arms
 }
 
-def private mm_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate mul_mm spellings register here, after prod
+def private mm_arms(f) : array<KqRaceArm> {   // candidate mul_mm spellings register here, after prod; generic on purpose (see gemv_arms)
     var arms : array<KqRaceArm>
     if (f.fmt == 4) {
         arms |> push(KqRaceArm(name = "prod", src = MetalKqMulMmK4_metal_kq_mulmm_msl, entry = MetalKqMulMmK4_metal_kq_mulmm_msl_entry, fastmath = MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath, tgmem = MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem, gdiv = 0))
@@ -273,8 +273,8 @@ def private time_arm_us(queue; pso; arm : KqRaceArm; bks, bkq, bx, by, b5, b6; s
 }
 
 //! the whole-output dot-envelope oracle the tests trust: want/env from kq_row_ref + double dot
-def private build_oracle(fmt, n, d, nsb : int; kq, ks : array<uint8>; xf : array<float>; xstride, xrows : int;
-                         var want : array<float>; var env : array<float>) {
+def private build_oracle(fmt; n, d, nsb : int; kq, ks : array<uint8>; xf : array<float>; xstride, xrows : int;
+                         var want : array<float>; var env : array<float>) {   // fmt untyped on purpose (see gemv_arms) - kq_row_ref rides the ?das_metal require
     var wrow : array<float>
     wrow |> resize(n)
     let nb = n / 256
@@ -446,7 +446,7 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
     return rows
 }
 
-def private main_apple(args : Args) {
+def private main_apple(args) {   // generic on purpose (see gemv_arms)
     var dev = metal_create_system_default_device()
     if (dev == null) {
         panic("no Metal device on this box")
