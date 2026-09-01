@@ -1,0 +1,1 @@
+Registers the file at ``path`` as a compile-time dependency of the module being compiled, so the module cache re-parses the module when that file's size or content hash changes. A macro that reads a file at compile time (a tune sidecar, a config, a generated table) calls this before acting on the contents; outside compilation the call is a no-op.
