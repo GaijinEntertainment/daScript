@@ -167,10 +167,27 @@ for k in sorted(set(n["kernels"])|set(o["kernels"])):
 EOP
 ```
 
-A class with no shipped profile yet (Intel's `x86-amx`) needs the class first: `tune_cpu_class()` and
-the ladder in `tune_class_chain()` (`modules/dasLLVM/daslib/llvm_tune.das`), the new class above the
-one it supersedes, and every feature a `requires=` names in `TUNE_KNOWN_FEATURES` there. Then the same
-mint and export produce `<class>.tune-defaults.json`, and that one IS committed.
+A class with no shipped profile yet (Intel's `x86-amx`, born 2026-09-01) needs the class first, on the
+branch the box clones: `tune_cpu_class()` and the ladder in `tune_class_chain()`
+(`modules/dasLLVM/daslib/llvm_tune.das`), the new class above the one it supersedes, and every feature
+a `requires=` names in `TUNE_KNOWN_FEATURES` there (`amx-int8`, `amx-tile` were already listed). Until
+its profile ships, a box of the new class adopts the class below it (the chain) and races only the
+seats that class could not answer. Then the same mint and export produce `<class>.tune-defaults.json`,
+and that one IS committed - the Intel one differed from `x86-vnni512` in 15 of 49 winners, all
+`[tuned]` loop-hint kernels preferring `vec16`, while every generator tile kept the 512-bit VNNI seat
+(the AMX tiles raced and lost the q8q8 family).
+
+Three things the boxes taught that the walk now carries:
+
+- **Alignment.** Intel splits a 64-byte vector load that crosses a cache line and pays for it; AMD
+  barely does. The engine's image planes are page-aligned, but a bench that hands kernels 16-byte-aligned
+  arrays reads 2x slow on Intel and true on zen4 - `kq_kernel_bench` aligns its planes to 64 bytes.
+- **Denormals.** Random bytes in a scale plane are denormals or infinities often enough to bend a
+  table on Intel (~100 cycles a denormal op) and not on AMD: the q8/mx4 tile rows read 6x slow until the
+  bench filled scale planes with a byte that is a normal number in every scale form.
+- **AMX permission.** A tile instruction before the per-process `arch_prctl` grant is SIGILL. The
+  family's witness performs the grant; in tune mode call the witness *variants* (the AMX row does it),
+  as `gen_tune_probe` does - the unstamped base does not.
 
 ## 7. What the commit must satisfy
 
@@ -195,3 +212,6 @@ aws ec2 terminate-instances --instance-ids <id>
   (`lcpp_bench -m <gguf> -p 512 -n 128 -r 3 --for-debug-purposes --ref ~/llama.cpp/build-clean-cpu/bin/llama-bench
   --ref-flavor clean-cpu --ref-no-affinity`, 16 threads): pp512 1172 vs 927, tg128 88.7 vs 86.0.
   Wall clock from launch to terminate: about 90 minutes, of which the build is 12 and the mint 6.
+- 2026-09-01 `c8i.4xlarge` (Xeon 6975P-C Granite Rapids, class `x86-amx`), `i-0fb77cb72129e36a2`:
+  sections 1-7; the TEST gate 65/65 ok with the AMX leg; the class was added on the branch before
+  launch; the minted `x86-amx.tune-defaults.json` is the shipped one.
