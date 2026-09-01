@@ -145,6 +145,36 @@ against 8.6-8.8 for k4/k2. A flat cost independent of the format is a shared mec
 decode problems. The model-level tg rows (0.70-0.92x) are this 2x kernel gap hidden behind memory
 bandwidth; on the 1B vehicles it shows, on a 27B it mostly does not - but the kernel is the same.
 
+### zen2 v3 - the arena bench (2026-09-01, `harness/kernel_ladder.sh all`, one thread, best of 5 interleaved rounds)
+
+Every plane in ONE arena at fixed 64-byte-aligned staggered offsets; the reference is test-backend-ops at
+6c84c7d5d with the GGML_BENCH_THREADS define. k6 read 5356 us here against 4.0-4.4 ms in the arena smoke -
+its process-to-process swing is narrowed, not gone.
+
+| fmt | decode ours / ref us | ratio | tile ours / ref us | ratio |
+|---|---|---|---|---|
+| q8 | 3142 / 4220 | 1.34 | 567862 / 907771 | 1.60 |
+| k4 | 2005 / 2434 | 1.21 | 485803 / 846691 | 1.74 |
+| k5 | 3467 / 3306 | 0.95 | 514648 / 1296856 | 2.52 |
+| k6 | 5356 / 3683 | 0.69 | 634588 / 1076847 | 1.70 |
+| q40 | 1901 / 2971 | 1.56 | 374388 / 1005240 | 2.69 |
+| q51 | 2815 / 4107 | 1.46 | 662669 / 1830207 | 2.76 |
+| iq4xs | 2076 / 3375 | 1.63 | 723720 / 1684220 | 2.33 |
+| k3 | 2699 / 2700 | 1.00 | 733239 / 1245200 | 1.70 |
+| iq3s | 7593 / 10345 | 1.36 | 743364 / 5194190 | 6.99 |
+| iq3xxs | 6554 / 6524 | 1.00 | 739558 / 3293421 | 4.45 |
+| iq4nl | 2126 / 3055 | 1.44 | 581628 / 1094468 | 1.88 |
+| k2 | 1248 / 2158 | 1.73 | 636260 / 764748 | 1.20 |
+| iq2s | 5044 / 5089 | 1.01 | 778057 / 2512394 | 3.23 |
+| iq2xs | 4709 / 5320 | 1.13 | 799146 / 2692158 | 3.37 |
+| iq2xxs | 4897 / 5086 | 1.04 | 738382 / 2537062 | 3.44 |
+| mx4 | 2216 / 3113 | 1.41 | 618514 / 1441041 | 2.33 |
+
+Decode below 1.0: k6 0.69, k5 0.95; at 1.0: k3 1.00, iq3xxs 1.00, iq2s 1.01. Every tile ahead (1.20-6.99).
+
+M1 note: the ladder's reference must be `~/Work/llama.cpp/build/bin/test-backend-ops` (the fork checkout,
+98c4764b6, carries the define); `build-cpu/` does not and ran every core - the ladder now refuses such a binary.
+
 ## 3. Research memos (read before touching the kernels)
 
 - `kernel_parity_research_cpu.md` - llama.cpp's CPU vec_dot for the five grid formats + Q2_K,
@@ -230,9 +260,15 @@ Also from the memo: the column-read-vs-byte-read decision was made on x86 and sh
 LANDED 2026-09-01 (the row-pair decode under the sdot lattice, gated DOT_SDOT + decode shape + width
 128; x86 untouched): M1 one thread, us, before -> after (reference): iq2s 4932 -> 3256 (4917, 1.51x),
 iq3s 6089 -> 4937 (5682, 1.15x), iq2xs 6375 -> 4244 (3274, 0.77x), iq2xxs 6063 -> 4085 (3437, 0.84x),
-iq3xxs 6735 -> 5235 (4867, 0.93x); TEST 65/65 on the M1. Still behind on the three ksigns formats:
-the sign mask is five NEON ops per pair per 8-group where a +-1 table (keven_signs form) is two loads
-and one multiply - the next ARM step; then the per-dword scalar index math.
+iq3xxs 6735 -> 5235 (4867, 0.93x); TEST 65/65 on the M1.
+LANDED 2026-09-01, step two - signs and grid words: the ksigns formats take a +-1 table row per 7-bit
+code (keven_signs form, [128 x i64]) and the iq2 formats load the u64 grid entry whole. M1 us, after
+(reference): iq2xs 2636 (3274, 1.24x), iq2xxs 2873 (3437, 1.20x), iq3xxs 3576 (4867, 1.36x), iq2s 3260
+(4917, 1.51x), iq3s 4929 (5682, 1.15x); TEST 90 ok. All five grid decodes ahead on the M1. LESSON: the
+table for the plane-byte formats (iq3s/iq2s) REGRESSED them (iq2s 3256 -> 4167, iq3s 4937 -> 5608) -
+four scalar loads per pair replaced one 16-byte column load plus four NEON ops, and the M1 sustains 3
+loads against 4 NEON ops per cycle; those two keep the column mask. Count loads AND NEON ops per pair,
+the bound is whichever is fuller.
 
 Bench on AMX boxes: the tune-mode q8 tile SIGILL (above) - read how gen_tune_probe reaches the grant
 (q8q8_family_live_variants + the amx cfg companion?) and do the same; k6 bimodality on Granite Rapids.

@@ -39,6 +39,7 @@ echo "# kernel ladder  $(date +%F)  box=$(hostname)  daslang=$DASLANG  ref=$TBO 
 
 # ---- ours: one process, every format, the stamped winner per format ----
 [ -x "$TBO" ] || { echo "kernel_ladder: no test-backend-ops at '$TBO' (set LCPP_TBO)" >&2; exit 1; }
+grep -q GGML_BENCH_THREADS "$TBO" || { echo "kernel_ladder: '$TBO' lacks the GGML_BENCH_THREADS define - it would run every core and the ratio column would lie (harness README)" >&2; exit 1; }
 set +e
 DAS_TUNE_MODE=normal DAS_JOBQUE_THREADS=1 "$DASLANG" -jit "$ROOT/modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das" \
     -- --fmt "$FMTS" --ntok "$NTOK" --rounds "$ROUNDS" --tsv > "$WORK/ours.raw" 2> "$WORK/ours.err"
