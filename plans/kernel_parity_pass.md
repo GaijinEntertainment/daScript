@@ -321,6 +321,12 @@ other widths. One thread on the minted profile, us (reference): q8 727 (1128) 1.
 1.26, iq3s 3888 (4066) 1.05, iq3xxs 2678 (3762) 1.40, iq4nl 795 (1433) 1.80, k2 976 (1404) 1.44, iq2s 2383 (2952)
 1.24, iq2xs 1787 (2441) 1.37, iq2xxs 2224 (2616) 1.18, mx4 995 (1322) 1.33 - the same table as before, as the
 crowns say. k5 0.89 is the M4's one tail (the M1 has it at 1.06; the P-core's byte->lane deposit costs more).
+Engine shape on the minted profile (10 P-cores, d=32768), ours / reference us: q8 2178 / 2082 (0.96), k4 1116 /
+1146 (1.03), k5 1549 / 1546 (1.00), k6 1627 / 1843 (1.13), q40 1057 / 1368 (1.29), q51 1447 / 2344 (1.62), iq4xs
+1120 / 1292 (1.15), k3 1244 / 1909 (1.53), iq3s 3308 / 4059 (1.23), iq3xxs 2258 / 3735 (1.65), iq4nl 1055 / 1451
+(1.38), k2 850 / 1343 (1.58), iq2s 2242 / 2624 (1.17), iq2xs 1698 / 2343 (1.38), iq2xxs 1894 / 2416 (1.28), mx4
+983 / 1553 (1.58). The M4 CPU is at or above parity on every engine-shape row; k5 0.89 alone is the one tail,
+and the NEON per-lane byte shift for its high-bit deposit (two ops per half instead of five) is measured next.
 
 ### zen2 v4 - the closing tables (2026-09-01, after the k6/k3 transposes and the fused flush)
 
