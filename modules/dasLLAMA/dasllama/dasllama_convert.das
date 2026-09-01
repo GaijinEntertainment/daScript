@@ -561,6 +561,70 @@ def dequant_k6_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<u
     dequant_k6_plane_superblock_at(kq, kqo, ks, kso, kso + 16l, dst, doff)
 }
 
+//! One superblock of a kq plane pair dequantized into `dst[doff..]`, reading the scale plane in
+//! whichever form the carrier holds: the CPU row form, or on a Metal-blob model the split GPU
+//! form (16B strips first, d tails after; k4/k5 strips compacted, q40/iq4nl unsplit). `sb` = superblock index.
+[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
+def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | #; sb : int64; metal_blob : bool; var dst : array<float> | #; doff : int64) { // nolint:STYLE037,STYLE038 — one arm per format, two carrier forms
+    if (fmt == KqFmt.k4) {
+        dequant_k4_plane_superblock(kq, sb * K4_QSB, ks, sb * (metal_blob ? 16l : K4_SSB), dst, doff)
+    } elif (fmt == KqFmt.k5) {
+        dequant_k5_plane_superblock(kq, sb * K5_QSB, ks, sb * (metal_blob ? 16l : K5_SSB), dst, doff)
+    } elif (fmt == KqFmt.q40) {
+        dequant_q40_plane_superblock(kq, sb * Q40_QSB, ks, sb * Q40_SSB, dst, doff)
+    } elif (fmt == KqFmt.iq4nl) {
+        dequant_iq4nl_plane_superblock(kq, sb * Q40_QSB, ks, sb * Q40_SSB, dst, doff)
+    } elif (!metal_blob) {
+        if (fmt == KqFmt.k6) {
+            dequant_k6_plane_superblock(kq, sb * K6_QSB, ks, sb * K6_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq4xs) {
+            dequant_iq4xs_plane_superblock(kq, sb * IQ4XS_QSB, ks, sb * IQ4XS_SSB, dst, doff)
+        } elif (fmt == KqFmt.k3) {
+            dequant_k3_plane_superblock(kq, sb * K3_QSB, ks, sb * K3_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq3s) {
+            dequant_iq3s_plane_superblock(kq, sb * IQ3S_QSB, ks, sb * IQ3S_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq3xxs) {
+            dequant_iq3xxs_plane_superblock(kq, sb * IQ3XXS_QSB, ks, sb * IQ3XXS_SSB, dst, doff)
+        } elif (fmt == KqFmt.k2) {
+            dequant_k2_plane_superblock(kq, sb * K2_QSB, ks, sb * K2_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq2s) {
+            dequant_iq2s_plane_superblock(kq, sb * IQ2S_QSB, ks, sb * IQ2S_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq2xs) {
+            dequant_iq2xs_plane_superblock(kq, sb * IQ2XS_QSB, ks, sb * IQ2XS_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq2xxs) {
+            dequant_iq2xxs_plane_superblock(kq, sb * IQ2XXS_QSB, ks, sb * IQ2XXS_SSB, dst, doff)
+        } else {
+            panic("dequant_kq_plane_sb: '{fmt}' has no kq plane pair")
+        }
+    } else {
+        // the split GPU form: every strip region is 16B/sb, the tail 2B/sb (k2: 4B - d and dmin)
+        let tail = fmt == KqFmt.k2 ? 4l : 2l
+        let d0 = (long_length(ks) / (16l + tail)) * 16l
+        if (fmt == KqFmt.k6) {
+            dequant_k6_plane_superblock_at(kq, sb * K6_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.iq4xs) {
+            dequant_iq4xs_plane_superblock_at(kq, sb * IQ4XS_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.k3) {
+            dequant_k3_plane_superblock_at(kq, sb * K3_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.iq3s) {
+            dequant_iq3s_plane_superblock_at(kq, sb * IQ3S_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.iq3xxs) {
+            dequant_iq3xxs_plane_superblock_at(kq, sb * IQ3XXS_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.k2) {
+            dequant_k2_plane_superblock_at(kq, sb * K2_QSB, ks, sb * 16l, d0 + sb * 4l, dst, doff)
+        } elif (fmt == KqFmt.iq2s) {
+            dequant_iq2s_plane_superblock_at(kq, sb * IQ2S_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.iq2xs) {
+            dequant_iq2xs_plane_superblock_at(kq, sb * IQ2XS_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.iq2xxs) {
+            dequant_iq2xxs_plane_superblock_at(kq, sb * IQ2XXS_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } else {
+            panic("dequant_kq_plane_sb: '{fmt}' has no kq plane pair")
+        }
+    }
+}
+
+
 //! The split-layout twin: `dso` names the f16 d halfword's byte offset within ks independently
 //! of the 16B sub-scale strip at kso — metal-blob models keep k6s in the GPU split form
 //! ([nsb x 16B sub-scales][nsb x f16 d]) where d lives in the plane's tail.
@@ -611,6 +675,399 @@ def dequant_q40_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<
             let b = int(kq[kqo + blk * 16l + l])
             dst[doff + blk * 32l + l] = d * float((b & 15) - 8)
             dst[doff + blk * 32l + 16l + l] = d * float((b >> 4) - 8)
+        }
+    }
+}
+
+//! Transcode one IQ4_XS superblock (136 bytes at `bo`: f16 d, u16 scales_h, 4 scales_l bytes,
+//! 128 nibble bytes) into the iq4xs planes: nibbles verbatim (the disk k/k+16 pairing IS the
+//! q40 tiling), the scale row DECODED — f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad (exact).
+def transcode_iq4xs_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    ks[kso] = bytes[bo]
+    ks[kso + 1l] = bytes[bo + 1l]
+    ks[kso + 2l] = uint8(0)
+    ks[kso + 3l] = uint8(0)
+    let sh = uint(bytes[bo + 2l]) | (uint(bytes[bo + 3l]) << 8u)
+    for (blk in range64(8l)) {
+        let lo = (uint(bytes[bo + 4l + blk / 2l]) >> uint(4l * (blk % 2l))) & 15u
+        let ls = int(lo | (((sh >> uint(2l * blk)) & 3u) << 4u))
+        ks[kso + 4l + blk] = uint8(ls - 32)
+    }
+    for (i in range64(8l)) {
+        ks[kso + 12l + i] = uint8(0)
+    }
+    for (i in range64(128l)) {
+        kq[kqo + i] = bytes[bo + 8l + i]
+    }
+}
+
+//! The signed sub-scale of an iq4xs plane row: byte 4 + blk of the 20B row, read as int8.
+def iq4xs_sc(ks : array<uint8> | #; kso, blk : int64) : int => rd_i8(ks, kso + 4l + blk)
+
+//! Reference dequant of one iq4xs-plane superblock: w = (d * sc) * IQ4NL_LUT[q] per 32-block
+//! (ggml's own float order: dl = d * (ls - 32), then dl * kvalue), q = nibble (low = k, high =
+//! k+16 — the disk pairing, kept verbatim by the transcode).
+def dequant_iq4xs_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_iq4xs_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `dso` names the f16 d halfword's byte offset independently of the
+//! 8-byte signed sub-scale strip at kso — metal-blob models keep iq4xss in the k6 split form
+//! ([nsb x 16B strips][nsb x f16 d]); the CPU row is the same math at kso + 4 / kso.
+def dequant_iq4xs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, dso))
+    let lut = iq4nl_lut()
+    for (blk in range64(8l)) {
+        let dl = d * float(rd_i8(ks, kso + blk))
+        for (l in range64(16l)) {
+            let b = int(kq[kqo + blk * 16l + l])
+            dst[doff + blk * 32l + l] = dl * float(lut[b & 15])
+            dst[doff + blk * 32l + 16l + l] = dl * float(lut[b >> 4])
+        }
+    }
+}
+
+//! Transcode one Q2_K superblock (84 bytes at `bo`: 16 sc/min nibble-pair bytes, 64 qs, f16 d,
+//! f16 dmin) into the k2 planes: qs verbatim to kq[kqo..+64), the scale row REORDERED to
+//! [f16 d][f16 dmin][16 sc/min bytes] at ks[kso..+20) - all bytes verbatim (exact).
+def transcode_q2k_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    ks[kso] = bytes[bo + 80l]
+    ks[kso + 1l] = bytes[bo + 81l]
+    ks[kso + 2l] = bytes[bo + 82l]
+    ks[kso + 3l] = bytes[bo + 83l]
+    for (i in range64(16l)) {
+        ks[kso + 4l + i] = bytes[bo + i]
+    }
+    for (i in range64(64l)) {
+        kq[kqo + i] = bytes[bo + 16l + i]
+    }
+}
+
+//! Reference dequant of one k2-plane superblock: w = (d * sc) * q - (dmin * mn) per 16-elem group
+//! g (sc/mn = the group's nibble pair); q = the 2-bit lane of qs byte (g/8)*32 + (g%2)*16 + l at
+//! shift 2*((g%8)/2) - ggml's dequantize_row_q2_K float order (dl*q - ml).
+def dequant_k2_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_k2_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `sso` names the 16 pair-byte strip, `dso` the 4B d+dmin header -
+//! independent bases, so the metal-blob split plane reads through the same math.
+def dequant_k2_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; sso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, dso))
+    let dmin = f16_to_f32(rd_u16(ks, dso + 2l))
+    for (g in range64(16l)) {
+        let scb = int(ks[sso + g])
+        let dl = d * float(scb & 15)
+        let ml = dmin * float(scb >> 4)
+        let qb = kqo + (g / 8l) * 32l + (g % 2l) * 16l
+        let sh = int(((g % 8l) / 2l) * 2l)
+        for (l in range64(16l)) {
+            dst[doff + g * 16l + l] = dl * float((int(kq[qb + l]) >> sh) & 3) - ml
+        }
+    }
+}
+
+//! The 6-bit sub-scale i (0..15) of a Q3_K disk block off its 12 packed scale bytes at `so` —
+//! ggml's kmask unpack: low nibbles of bytes 0..7 carry scales 0..7, their high nibbles 8..15,
+//! bytes 8..11 carry every scale's top two bits at shift 2 * (i / 4).
+def q3k_scale6(bytes : array<uint8> | #; so, i : int64) : int {
+    let lo = i < 8l ? int(bytes[so + i]) & 15 : int(bytes[so + i - 8l]) >> 4
+    let hi = int(bytes[so + 8l + i % 4l]) >> int(2l * (i / 4l))
+    return lo | ((hi & 3) << 4)
+}
+
+//! Transcode one Q3_K superblock (110 bytes at `bo`: 32 hmask, 64 qs, 12 packed 6-bit scales,
+//! f16 d) into the k3 planes: [qs 64][hmask 32] verbatim to kq[kqo..+96), the 16 sub-scales
+//! DECODED to int8 (scale - 32) + the f16 d to ks[kso..+18) — the k6 row shape (exact).
+def transcode_q3k_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    for (i in range64(64l)) {
+        kq[kqo + i] = bytes[bo + 32l + i]
+    }
+    for (i in range64(32l)) {
+        kq[kqo + 64l + i] = bytes[bo + i]
+    }
+    for (i in range64(16l)) {
+        ks[kso + i] = uint8(q3k_scale6(bytes, bo + 96l, i) - 32)
+    }
+    ks[kso + 16l] = bytes[bo + 108l]
+    ks[kso + 17l] = bytes[bo + 109l]
+}
+
+//! Reference dequant of one k3-plane superblock: w = (d * sc16) * (q - 4) with q = the 2-bit lane
+//! of qs byte h*32 + l at shift 2j | hmask bit (4h + j) of byte l << 2, block 4h + j — ggml's
+//! own float order (dl = d * (scale - 32), then dl * (q3 - 4)).
+def dequant_k3_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_k3_plane_superblock_at(kq, kqo, ks, kso, kso + 16l, dst, doff)
+}
+
+//! The split-layout twin: `dso` names the f16 d halfword's byte offset independently of the
+//! 16-byte sub-scale strip at kso — the k6 split form a metal-blob model keeps.
+def dequant_k3_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, dso))
+    for (blk in range64(8l)) {
+        let qb = kqo + (blk / 4l) * 32l
+        let sh = int((blk % 4l) * 2l)
+        let dl0 = d * float(rd_i8(ks, kso + 2l * blk))
+        let dl1 = d * float(rd_i8(ks, kso + 2l * blk + 1l))
+        for (l in range64(32l)) {
+            let q2 = (int(kq[qb + l]) >> sh) & 3
+            let hb = (int(kq[kqo + 64l + l]) >> int(blk)) & 1
+            dst[doff + blk * 32l + l] = (l < 16l ? dl0 : dl1) * float((q2 | (hb << 2)) - 4)
+        }
+    }
+}
+
+//! Transcode one IQ3_S superblock (110 bytes at `bo`: f16 d, 64 qs, 8 qh, 32 signs, 4 packed
+//! 4-bit scales) into the iq3s planes: [qs][qh][signs] verbatim to kq[kqo..+104), the 8
+//! sub-scales DECODED to int8 (1 + 2s) + the f16 d to ks[kso..+20) — the k4 row shape (exact).
+def transcode_iq4nl_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    for (blk in range64(8l)) {
+        ks[kso + blk * 2l] = bytes[bo + blk * 18l]
+        ks[kso + blk * 2l + 1l] = bytes[bo + blk * 18l + 1l]
+        for (i in range64(16l)) {
+            kq[kqo + blk * 16l + i] = bytes[bo + blk * 18l + 2l + i]
+        }
+    }
+}
+
+//! Reference dequant of one iq4nl-plane superblock: w = d * IQ4NL_LUT[nibble], the q40 k/k+16
+//! pairing, per-32-block f16 d - ggml's dequantize_row_iq4_nl float order.
+def dequant_iq4nl_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    for (blk in range64(8l)) {
+        let d = f16_to_f32(rd_u16(ks, kso + blk * 2l))
+        for (l in range64(16l)) {
+            let b = int(kq[kqo + blk * 16l + l])
+            dst[doff + blk * 32l + l] = d * float(int(IQ4NL_LUT[b & 15]))
+            dst[doff + blk * 32l + 16l + l] = d * float(int(IQ4NL_LUT[b >> 4]))
+        }
+    }
+}
+
+def transcode_iq3xxs_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    for (i in range64(96l)) {
+        kq[kqo + i] = bytes[bo + 2l + i]
+    }
+    let dh = f16_half_bits(uint(bytes[bo]) | (uint(bytes[bo + 1l]) << 8u))
+    ks[kso] = uint8(dh & 0xFFu)
+    ks[kso + 1l] = uint8(dh >> 8u)
+    ks[kso + 2l] = uint8(0)
+    ks[kso + 3l] = uint8(0)
+    for (b in range64(8l)) {
+        ks[kso + 4l + b] = uint8(1 + 2 * (int(bytes[bo + 66l + b * 4l + 3l]) >> 4))
+    }
+    for (i in range64(12l, 20l)) {
+        ks[kso + i] = uint8(0)
+    }
+}
+
+//! Reference dequant of one iq3xxs-plane superblock: w = (d_halved * (2ls + 1)) * halved_grid
+//! byte * sign — ggml's 0.25 * d * (2ls+1) * grid * sign exactly (both halvings are lossless).
+//! Grid entry = one qs byte; sign byte = ksigns_iq2xs[(aux32 >> 7l) & 127], bit j (bit 7 = parity).
+def dequant_iq3xxs_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_iq3xxs_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `dso` names the f16 d halfword's byte offset independently of the
+//! 8-byte sub-scale strip at kso (the metal split form keeps them apart).
+def dequant_iq3xxs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, dso))
+    let grid = iq3xxs_grid()
+    let signs = ksigns_iq2xs()
+    for (b in range64(8l)) {
+        let db = d * float(int(int8(ks[kso + b])))
+        let aux = uint(kq[kqo + 64l + b * 4l]) | (uint(kq[kqo + 64l + b * 4l + 1l]) << 8u) | (uint(kq[kqo + 64l + b * 4l + 2l]) << 16u) | (uint(kq[kqo + 64l + b * 4l + 3l]) << 24u)
+        for (l in range64(4l)) {
+            let sgn = int(signs[int((aux >> uint(7l * l)) & 127u)])
+            let g1 = grid[int(kq[kqo + b * 8l + 2l * l])]
+            let g2 = grid[int(kq[kqo + b * 8l + 2l * l + 1l])]
+            for (j in range64(4l)) {
+                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+            }
+        }
+    }
+}
+
+def transcode_iq3s_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    for (i in range64(104l)) {
+        kq[kqo + i] = bytes[bo + 2l + i]
+    }
+    ks[kso] = bytes[bo]
+    ks[kso + 1l] = bytes[bo + 1l]
+    ks[kso + 2l] = uint8(0)
+    ks[kso + 3l] = uint8(0)
+    for (b in range64(8l)) {
+        let nib = b % 2l == 0l ? int(bytes[bo + 106l + b / 2l]) & 15 : int(bytes[bo + 106l + b / 2l]) >> 4
+        ks[kso + 4l + b] = uint8(1 + 2 * nib)
+    }
+    for (i in range64(12l, 20l)) {
+        ks[kso + i] = uint8(0)
+    }
+}
+
+//! Reference dequant of one iq3s-plane superblock: w = (d * (1 + 2s)) * grid_byte * sign, grid
+//! entry qs[b*8 + 2l + half] | (qh[b] bit (2l + half) << 8), sign byte signs[b*4 + l] bit j —
+//! ggml's own float order (dequantize_row_iq3_s: db per block, then db * grid * +-1).
+def dequant_iq3s_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_iq3s_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `dso` names the f16 d halfword's byte offset independently of the
+//! 8-byte sub-scale strip at kso (the metal split form keeps them apart).
+def dequant_iq3s_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, dso))
+    let grid = iq3s_grid()
+    for (b in range64(8l)) {
+        let db = d * float(int(int8(ks[kso + b])))
+        let qh = int(kq[kqo + 64l + b])
+        for (l in range64(4l)) {
+            let sgn = int(kq[kqo + 72l + b * 4l + l])
+            let g1 = grid[int(kq[kqo + b * 8l + 2l * l]) | ((qh << int(8l - 2l * l)) & 256)]
+            let g2 = grid[int(kq[kqo + b * 8l + 2l * l + 1l]) | ((qh << int(7l - 2l * l)) & 256)]
+            for (j in range64(4l)) {
+                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+            }
+        }
+    }
+}
+
+//! Transcode one IQ2_S superblock (82 B at `bo`: f16 d, 32 idx + 32 sign bytes, 8 qh, 8 packed
+//! scale nibbles): [idx][signs][qh] verbatim to kq[kqo..+72), d EIGHTH-ed (three exact exponent
+//! decrements - ggml's (0.5+ls)*0.25 becomes (2ls+1) x d/8) + 16 strips (1+2s) to ks[kso..+20).
+def transcode_iq2s_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    for (i in range64(72l)) {
+        kq[kqo + i] = bytes[bo + 2l + i]
+    }
+    let d8 = f16_half_bits(f16_half_bits(f16_half_bits(uint(bytes[bo]) | (uint(bytes[bo + 1l]) << 8u))))
+    ks[kso] = uint8(d8 & 0xFFu)
+    ks[kso + 1l] = uint8(d8 >> 8u)
+    ks[kso + 2l] = uint8(0)
+    ks[kso + 3l] = uint8(0)
+    for (g in range64(16l)) {
+        let nib = g % 2l == 0l ? int(bytes[bo + 74l + g / 2l]) & 15 : int(bytes[bo + 74l + g / 2l]) >> 4
+        ks[kso + 4l + g] = uint8(1 + 2 * nib)
+    }
+}
+
+//! Reference dequant of one iq2s-plane superblock: w = (d8 * (1 + 2s)) * grid_byte * sign -
+//! grid entry idx[b*4+l] | ((qh[b] << (8-2l)) & 0x300) is TWO uint words (8 magnitudes), sign
+//! byte signs[b*4+l] bit j, strip = the 16-chunk 2b + l/2. ggml's dequantize_row_iq2_s order.
+def dequant_iq2s_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_iq2s_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `sso` names the 16-strip base, `dso` the f16 d8 halfword.
+def dequant_iq2s_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; sso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d8 = f16_to_f32(rd_u16(ks, dso))
+    let grid = iq2s_grid2()
+    for (b in range64(8l)) {
+        let qh = int(kq[kqo + 64l + b])
+        for (l in range64(4l)) {
+            let db = d8 * float(int(ks[sso + 2l * b + l / 2l]))
+            let sgn = int(kq[kqo + 32l + b * 4l + l])
+            let idx = int(kq[kqo + b * 4l + l]) | ((qh << int(8l - 2l * l)) & 0x300)
+            let g1 = grid[idx * 2]
+            let g2 = grid[idx * 2 + 1]
+            for (j in range64(4l)) {
+                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+            }
+        }
+    }
+}
+
+//! Transcode one IQ2_XS superblock (74 bytes at `bo`: f16 d, 32 u16 qs words, 8 packed scale
+//! nibbles) into the iq2xs planes: the 64B qs region verbatim to kq[kqo..+64), d EIGHTH-ed
+//! (ggml's (0.5+ls)*0.25 fold becomes (2ls+1) x d/8) + the 16 strips (1 + 2s) to ks[kso..+20).
+def transcode_iq2xs_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    for (i in range64(64l)) {
+        kq[kqo + i] = bytes[bo + 2l + i]
+    }
+    let d8 = f16_half_bits(f16_half_bits(f16_half_bits(uint(bytes[bo]) | (uint(bytes[bo + 1l]) << 8u))))
+    ks[kso] = uint8(d8 & 0xFFu)
+    ks[kso + 1l] = uint8(d8 >> 8u)
+    ks[kso + 2l] = uint8(0)
+    ks[kso + 3l] = uint8(0)
+    for (g in range64(16l)) {
+        let nib = g % 2l == 0l ? int(bytes[bo + 66l + g / 2l]) & 15 : int(bytes[bo + 66l + g / 2l]) >> 4
+        ks[kso + 4l + g] = uint8(1 + 2 * nib)
+    }
+}
+
+//! Reference dequant of one iq2xs-plane superblock: w = (d8 * (1 + 2s)) * grid_byte * sign -
+//! u16 word (b*4+l)'s low 9 bits pick TWO grid words (8 magnitudes), its high 7 bits pick the
+//! ksigns sign byte (bit j), strip = the 16-chunk 2b + l/2. ggml's dequantize_row_iq2_xs order.
+def dequant_iq2xs_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_iq2xs_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `sso` names the 16-strip base, `dso` the f16 d8 halfword.
+def dequant_iq2xs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; sso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d8 = f16_to_f32(rd_u16(ks, dso))
+    let grid = iq2xs_grid2()
+    let ksg = ksigns_iq2xs()
+    for (b in range64(8l)) {
+        for (l in range64(4l)) {
+            let db = d8 * float(int(ks[sso + 2l * b + l / 2l]))
+            let w16 = uint(kq[kqo + (b * 4l + l) * 2l]) | (uint(kq[kqo + (b * 4l + l) * 2l + 1l]) << 8u)
+            let sgn = int(ksg[int(w16 >> 9u)])
+            let idx = int(w16 & 511u)
+            let g1 = grid[idx * 2]
+            let g2 = grid[idx * 2 + 1]
+            for (j in range64(4l)) {
+                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+            }
+        }
+    }
+}
+
+
+//! Transcode one IQ2_XXS superblock (66 bytes at `bo`: f16 d, 8 x [4 grid bytes][aux32]) into
+//! the iq2xxs planes: the 64B qs region verbatim to kq[kqo..+64), d EIGHTH-ed (ggml's
+//! (0.5+ls)*0.25 fold becomes (2ls+1) x d/8) + the 8 per-32 strips (1 + 2s) to ks[kso..+20).
+def transcode_iq2xxs_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    for (i in range64(64l)) {
+        kq[kqo + i] = bytes[bo + 2l + i]
+    }
+    let d8 = f16_half_bits(f16_half_bits(f16_half_bits(uint(bytes[bo]) | (uint(bytes[bo + 1l]) << 8u))))
+    ks[kso] = uint8(d8 & 0xFFu)
+    ks[kso + 1l] = uint8(d8 >> 8u)
+    ks[kso + 2l] = uint8(0)
+    ks[kso + 3l] = uint8(0)
+    for (b in range64(8l)) {
+        ks[kso + 4l + b] = uint8(1 + 2 * (int(bytes[bo + 2l + b * 8l + 7l]) >> 4))
+    }
+    for (i in range64(12l, 20l)) {
+        ks[kso + i] = uint8(0)
+    }
+}
+
+//! Reference dequant of one iq2xxs-plane superblock: w = (d8 * (1 + 2s)) * grid_byte * sign -
+//! block b's aux32[0] bytes pick u64 grid entries, its aux32[1] carries four 7-bit ksigns
+//! indices (bit j flips element j). ggml's dequantize_row_iq2_xxs order.
+def dequant_iq2xxs_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_iq2xxs_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `sso` names the 8-strip base, `dso` the f16 d8 halfword.
+def dequant_iq2xxs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; sso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d8 = f16_to_f32(rd_u16(ks, dso))
+    let grid = iq2xxs_grid2()
+    let signs = ksigns_iq2xs()
+    for (b in range64(8l)) {
+        let db = d8 * float(int(ks[sso + b]))
+        let aux = uint(kq[kqo + b * 8l + 4l]) | (uint(kq[kqo + b * 8l + 5l]) << 8u) | (uint(kq[kqo + b * 8l + 6l]) << 16u) | (uint(kq[kqo + b * 8l + 7l]) << 24u)
+        for (l in range64(4l)) {
+            let sgn = int(signs[int((aux >> uint(7l * l)) & 127u)])
+            let idx = int(kq[kqo + b * 8l + l])
+            let g1 = grid[idx * 2]
+            let g2 = grid[idx * 2 + 1]
+            for (j in range64(4l)) {
+                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+            }
         }
     }
 }

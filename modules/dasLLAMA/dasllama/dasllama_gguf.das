@@ -40,16 +40,25 @@ let private GT_U64 = 10
 let private GT_I64 = 11
 let private GT_F64 = 12
 
-// ggml tensor data types (subset we read)
+// upstream tensor data types (subset we read)
 let GGML_TYPE_F32 = 0
 let GGML_TYPE_F16 = 1
 let GGML_TYPE_Q4_0 = 2
 let GGML_TYPE_Q5_0 = 6
 let GGML_TYPE_Q5_1 = 7
 let GGML_TYPE_Q8_0 = 8
+let GGML_TYPE_Q3_K = 11
+let GGML_TYPE_Q2_K = 10
+let GGML_TYPE_IQ3_S = 21
+let GGML_TYPE_IQ2_S = 22
+let GGML_TYPE_IQ2_XS = 17
+let GGML_TYPE_IQ2_XXS = 16
+let GGML_TYPE_IQ3_XXS = 18
+let GGML_TYPE_IQ4_NL = 20
 let GGML_TYPE_Q4_K = 12
 let GGML_TYPE_Q5_K = 13
 let GGML_TYPE_Q6_K = 14
+let GGML_TYPE_IQ4_XS = 23
 let GGML_TYPE_BF16 = 30
 let GGML_TYPE_MXFP4 = 39
 
@@ -394,7 +403,7 @@ def gguf_str(m : GGUFMeta; bytes : array<uint8> | #; key : string) : string {
     return rd_str(bytes, o)
 }
 
-//! Read a string array (e.g. tokenizer.ggml.tokens).
+//! Read a string array (e.g. tokenizer.upstream.tokens).
 def gguf_str_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<string> {
     if (!key_exists(m.kv, key)) {
         panic("gguf: missing key '{key}'")
@@ -412,7 +421,7 @@ def gguf_str_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array
     return <- out
 }
 
-//! Read a float32 array (e.g. tokenizer.ggml.scores).
+//! Read a float32 array (e.g. tokenizer.upstream.scores).
 def gguf_f32_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<float> {
     if (!key_exists(m.kv, key)) {
         panic("gguf: missing key '{key}'")
@@ -431,7 +440,7 @@ def gguf_f32_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array
     return <- out
 }
 
-//! Read an int32 array (e.g. tokenizer.ggml.token_type), widened to int64.
+//! Read an int32 array (e.g. tokenizer.upstream.token_type), widened to int64.
 def gguf_i32_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<int64> {
     if (!key_exists(m.kv, key)) {
         panic("gguf: missing key '{key}'")
@@ -701,6 +710,359 @@ def gguf_transcode_q40(m : GGUFMeta; srcbytes : array<uint8> | #; name : string;
     }
 }
 
+//! Transcode an IQ4_XS tensor into the iq4xs planes (see gguf_transcode_q4k; strides 128/20,
+//! exact): the 136B disk superblock splits into the verbatim 128 nibble bytes and a DECODED
+//! 20B scale row (f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad — transcode_iq4xs_superblock).
+def gguf_transcode_iq4xs(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_IQ4_XS, "IQ4_XS", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "iq4xs quant plane", (eloff / 256l) * IQ4XS_QSB, nb * IQ4XS_QSB, long_length(kq))
+    guard_dst(name, "iq4xs scale plane", (eloff / 256l) * IQ4XS_SSB, nb * IQ4XS_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 136l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * IQ4XS_QSB])
+            var ksp = addr(ks[(eloff / 256l) * IQ4XS_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 136l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 136l
+                        var row = ksp + sb * IQ4XS_SSB
+                        row[0] = src[0]
+                        row[1] = src[1]
+                        row[2] = uint8(0)
+                        row[3] = uint8(0)
+                        let sh = uint(src[2]) | (uint(src[3]) << 8u)
+                        for (blk in range64(8l)) {
+                            let lo = (uint(src[4l + blk / 2l]) >> uint(4l * (blk % 2l))) & 15u
+                            let ls = int(lo | (((sh >> uint(2l * blk)) & 3u) << 4u))
+                            row[4l + blk] = uint8(ls - 32)
+                        }
+                        for (i in range64(8l)) {
+                            row[12l + i] = uint8(0)
+                        }
+                        bcopy(kqp + sb * IQ4XS_QSB, src + 8l, 128l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! Transcode a Q2_K tensor into the k2 planes (strides 64/20, exact): the 84B disk superblock
+//! splits into qs verbatim and the 20B scale row [f16 d][f16 dmin][16 sc/min bytes] - all
+//! bytes verbatim, header moved first (transcode_q2k_superblock).
+def gguf_transcode_q2k(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_Q2_K, "Q2_K", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "k2 quant plane", (eloff / 256l) * K2_QSB, nb * K2_QSB, long_length(kq))
+    guard_dst(name, "k2 scale plane", (eloff / 256l) * K2_SSB, nb * K2_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 84l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * K2_QSB])
+            var ksp = addr(ks[(eloff / 256l) * K2_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 84l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 84l
+                        var row = ksp + sb * K2_SSB
+                        row[0l] = src[80l]
+                        row[1l] = src[81l]
+                        row[2l] = src[82l]
+                        row[3l] = src[83l]
+                        bcopy(row + 4l, src, 16l)
+                        bcopy(kqp + sb * K2_QSB, src + 16l, 64l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! Transcode a Q3_K tensor into the k3 planes (see gguf_transcode_q4k; strides 96/18, exact): the
+//! 110B disk superblock splits into [qs][hmask] verbatim and the k6-shaped scale row with the 16
+//! packed 6-bit sub-scales DECODED to int8 (scale - 32) — transcode_q3k_superblock.
+def gguf_transcode_q3k(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_Q3_K, "Q3_K", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "k3 quant plane", (eloff / 256l) * K3_QSB, nb * K3_QSB, long_length(kq))
+    guard_dst(name, "k3 scale plane", (eloff / 256l) * K3_SSB, nb * K3_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 110l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * K3_QSB])
+            var ksp = addr(ks[(eloff / 256l) * K3_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 110l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 110l
+                        var row = ksp + sb * K3_SSB
+                        for (i in range64(16l)) {
+                            let lo = i < 8l ? int(src[96l + i]) & 15 : int(src[96l + i - 8l]) >> 4
+                            let hi = int(src[104l + i % 4l]) >> int(2l * (i / 4l))
+                            row[i] = uint8((lo | ((hi & 3) << 4)) - 32)
+                        }
+                        row[16l] = src[108l]
+                        row[17l] = src[109l]
+                        bcopy(kqp + sb * K3_QSB, src + 32l, 64l)
+                        bcopy(kqp + sb * K3_QSB + 64l, src, 32l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! Transcode an IQ3_S tensor into the iq3s planes (strides 104/20, exact): the 110B disk
+//! superblock splits into [qs 64][qh 8][signs 32] verbatim and the k4-shaped scale row with the
+//! 8 packed 4-bit sub-scales DECODED to int8 (1 + 2s) — transcode_iq3s_superblock.
+def gguf_transcode_iq3s(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_IQ3_S, "IQ3_S", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "iq3s quant plane", (eloff / 256l) * IQ3S_QSB, nb * IQ3S_QSB, long_length(kq))
+    guard_dst(name, "iq3s scale plane", (eloff / 256l) * IQ3S_SSB, nb * IQ3S_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 110l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * IQ3S_QSB])
+            var ksp = addr(ks[(eloff / 256l) * IQ3S_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 110l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 110l
+                        var row = ksp + sb * IQ3S_SSB
+                        row[0] = src[0]
+                        row[1] = src[1]
+                        row[2] = uint8(0)
+                        row[3] = uint8(0)
+                        for (b in range64(8l)) {
+                            let nib = b % 2l == 0l ? int(src[106l + b / 2l]) & 15 : int(src[106l + b / 2l]) >> 4
+                            row[4l + b] = uint8(1 + 2 * nib)
+                        }
+                        for (i in range64(12l, 20l)) {
+                            row[i] = uint8(0)
+                        }
+                        bcopy(kqp + sb * IQ3S_QSB, src + 2l, 104l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+//! Transcode an IQ3_XXS tensor into the iq3xxs planes (strides 96/20, exact): qs+aux copy
+//! verbatim off the 98B disk block, the iq3s-shaped scale row carries d HALVED (f16_half_bits)
+//! and strips (2*ls + 1) — with the halved grid this absorbs upstream's 0.25 exactly.
+def gguf_transcode_iq3xxs(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_IQ3_XXS, "IQ3_XXS", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "iq3xxs quant plane", (eloff / 256l) * IQ3XXS_QSB, nb * IQ3XXS_QSB, long_length(kq))
+    guard_dst(name, "iq3xxs scale plane", (eloff / 256l) * IQ3XXS_SSB, nb * IQ3XXS_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 98l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * IQ3XXS_QSB])
+            var ksp = addr(ks[(eloff / 256l) * IQ3XXS_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 98l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 98l
+                        var row = ksp + sb * IQ3XXS_SSB
+                        let dh = f16_half_bits(uint(src[0]) | (uint(src[1]) << 8u))
+                        row[0] = uint8(dh & 0xFFu)
+                        row[1] = uint8(dh >> 8u)
+                        row[2] = uint8(0)
+                        row[3] = uint8(0)
+                        for (b in range64(8l)) {
+                            row[4l + b] = uint8(1 + 2 * (int(src[66l + b * 4l + 3l]) >> 4))
+                        }
+                        for (i in range64(12l, 20l)) {
+                            row[i] = uint8(0)
+                        }
+                        bcopy(kqp + sb * IQ3XXS_QSB, src + 2l, 96l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+//! Transcode an IQ4_NL tensor into the iq4nl planes (q40's strides 128/16, exact): the disk
+//! bytes ARE q40's shape - per 32-block f16 d + 16 nibble bytes, split verbatim; only the
+//! nibble semantics differ (IQ4NL_LUT at decode, no -8 offset, no bsum term).
+def gguf_transcode_iq4nl(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_IQ4_NL, "IQ4_NL", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "iq4nl quant plane", (eloff / 256l) * Q40_QSB, nb * Q40_QSB, long_length(kq))
+    guard_dst(name, "iq4nl scale plane", (eloff / 256l) * Q40_SSB, nb * Q40_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 144l   // 8 x 18B disk blocks per superblock
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * Q40_QSB])
+            var ksp = addr(ks[(eloff / 256l) * Q40_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 144l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        for (blk in range64(8l)) {
+                            let src = srcp + sb * 144l + blk * 18l
+                            ksp[sb * Q40_SSB + blk * 2l] = src[0]        // f16 d
+                            ksp[sb * Q40_SSB + blk * 2l + 1l] = src[1]
+                            bcopy(kqp + sb * Q40_QSB + blk * 16l, src + 2l, 16l)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! Transcode an IQ2_S tensor into the iq2s planes (strides 72/20, exact): the 82B disk
+//! superblock splits into [idx][signs][qh] verbatim, d eighth-ed, the 16 strips decoded to
+//! (1 + 2s) - transcode_iq2s_superblock.
+def gguf_transcode_iq2s(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_IQ2_S, "IQ2_S", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "iq2s quant plane", (eloff / 256l) * IQ2S_QSB, nb * IQ2S_QSB, long_length(kq))
+    guard_dst(name, "iq2s scale plane", (eloff / 256l) * IQ2S_SSB, nb * IQ2S_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 82l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * IQ2S_QSB])
+            var ksp = addr(ks[(eloff / 256l) * IQ2S_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 82l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 82l
+                        var row = ksp + sb * IQ2S_SSB
+                        let d8 = f16_half_bits(f16_half_bits(f16_half_bits(uint(src[0l]) | (uint(src[1l]) << 8u))))
+                        row[0l] = uint8(d8 & 0xFFu)
+                        row[1l] = uint8(d8 >> 8u)
+                        row[2l] = uint8(0)
+                        row[3l] = uint8(0)
+                        for (g in range64(16l)) {
+                            let nib = g % 2l == 0l ? int(src[74l + g / 2l]) & 15 : int(src[74l + g / 2l]) >> 4
+                            row[4l + g] = uint8(1 + 2 * nib)
+                        }
+                        bcopy(kqp + sb * IQ2S_QSB, src + 2l, 72l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! Transcode an IQ2_XS tensor into the iq2xs planes (strides 64/20, exact): the 74B disk
+//! superblock's 32 u16 qs words go verbatim, d eighth-ed, the 16 strips decoded to (1 + 2s) -
+//! transcode_iq2xs_superblock.
+def gguf_transcode_iq2xs(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_IQ2_XS, "IQ2_XS", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "iq2xs quant plane", (eloff / 256l) * IQ2XS_QSB, nb * IQ2XS_QSB, long_length(kq))
+    guard_dst(name, "iq2xs scale plane", (eloff / 256l) * IQ2XS_SSB, nb * IQ2XS_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 74l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * IQ2XS_QSB])
+            var ksp = addr(ks[(eloff / 256l) * IQ2XS_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 74l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 74l
+                        var row = ksp + sb * IQ2XS_SSB
+                        let d8 = f16_half_bits(f16_half_bits(f16_half_bits(uint(src[0l]) | (uint(src[1l]) << 8u))))
+                        row[0l] = uint8(d8 & 0xFFu)
+                        row[1l] = uint8(d8 >> 8u)
+                        row[2l] = uint8(0)
+                        row[3l] = uint8(0)
+                        for (g in range64(16l)) {
+                            let nib = g % 2l == 0l ? int(src[66l + g / 2l]) & 15 : int(src[66l + g / 2l]) >> 4
+                            row[4l + g] = uint8(1 + 2 * nib)
+                        }
+                        bcopy(kqp + sb * IQ2XS_QSB, src + 2l, 64l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+//! Transcode an IQ2_XXS tensor into the iq2xxs planes (strides 64/20, exact): the 66B disk
+//! superblock's qs region goes verbatim, d eighth-ed, the 8 per-32 strips decoded to
+//! (1 + 2s) - transcode_iq2xxs_superblock.
+def gguf_transcode_iq2xxs(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_IQ2_XXS, "IQ2_XXS", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "iq2xxs quant plane", (eloff / 256l) * IQ2XXS_QSB, nb * IQ2XXS_QSB, long_length(kq))
+    guard_dst(name, "iq2xxs scale plane", (eloff / 256l) * IQ2XXS_SSB, nb * IQ2XXS_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 66l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * IQ2XXS_QSB])
+            var ksp = addr(ks[(eloff / 256l) * IQ2XXS_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 66l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 66l
+                        var row = ksp + sb * IQ2XXS_SSB
+                        let d8 = f16_half_bits(f16_half_bits(f16_half_bits(uint(src[0l]) | (uint(src[1l]) << 8u))))
+                        row[0l] = uint8(d8 & 0xFFu)
+                        row[1l] = uint8(d8 >> 8u)
+                        row[2l] = uint8(0)
+                        row[3l] = uint8(0)
+                        for (b in range64(8l)) {
+                            row[4l + b] = uint8(1 + 2 * (int(src[2l + b * 8l + 7l]) >> 4))
+                        }
+                        for (i in range64(12l, 20l)) {
+                            row[i] = uint8(0)
+                        }
+                        bcopy(kqp + sb * IQ2XXS_QSB, src + 2l, 64l)
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! Transcode a Q5_1 tensor into the q51 planes (per 32-BLOCK strides 20/4 — see Q51_QB): each
 //! 24B disk block splits into 2B d + 2B m (scale plane) and 16B nibbles + 4B qh (quant plane),
 //! all verbatim. Exact; `eloff`/`src_off`/`expect_n` are element offsets, % 32.
@@ -735,10 +1097,63 @@ def gguf_transcode_q51(m : GGUFMeta; srcbytes : array<uint8> | #; name : string;
     }
 }
 
-//! Decode tensor `name` (F32 or F16 on disk) into dst[dst_off ..] as fp32. Panics if the
-//! tensor is missing, has a different element count than expected, or uses a type we don't
-//! yet read (quantized types are wired in a later step).
-def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var dst : array<float>; dst_off, expect_n : int64; src_off : int64 = 0l) {   // nolint:STYLE038 — one arm per on-disk ggml type; each arm is a self-contained decode kernel
+//! The kq format tag of a superblock i-quant / Q2_K / Q3_K GGML type (q8 = not one of them).
+def gguf_kq_fmt_of_type(gtype : int) : KqFmt {
+    if (gtype == GGML_TYPE_IQ4_XS) return KqFmt.iq4xs
+    if (gtype == GGML_TYPE_Q3_K) return KqFmt.k3
+    if (gtype == GGML_TYPE_IQ3_S) return KqFmt.iq3s
+    if (gtype == GGML_TYPE_IQ3_XXS) return KqFmt.iq3xxs
+    if (gtype == GGML_TYPE_IQ4_NL) return KqFmt.iq4nl
+    if (gtype == GGML_TYPE_Q2_K) return KqFmt.k2
+    if (gtype == GGML_TYPE_IQ2_S) return KqFmt.iq2s
+    if (gtype == GGML_TYPE_IQ2_XS) return KqFmt.iq2xs
+    if (gtype == GGML_TYPE_IQ2_XXS) return KqFmt.iq2xxs
+    return KqFmt.q8
+}
+
+//! Disk bytes per 256-superblock of the i-quant / Q2_K / Q3_K GGML types the native tier reads
+//! (0 = not one of them). IQ4_NL is eight 18B blocks of 32.
+def gguf_kq_disk_sbb(gtype : int) : int64 {
+    if (gtype == GGML_TYPE_IQ4_XS) return 136l
+    if (gtype == GGML_TYPE_Q3_K || gtype == GGML_TYPE_IQ3_S) return 110l
+    if (gtype == GGML_TYPE_IQ3_XXS) return 98l
+    if (gtype == GGML_TYPE_IQ4_NL) return 144l
+    if (gtype == GGML_TYPE_Q2_K) return 84l
+    if (gtype == GGML_TYPE_IQ2_S) return 82l
+    if (gtype == GGML_TYPE_IQ2_XS) return 74l
+    if (gtype == GGML_TYPE_IQ2_XXS) return 66l
+    return 0l
+}
+
+//! One superblock's disk -> plane transcode, keyed by format - the array form the tests and the
+//! f32 fallback drive (the bulk loaders are the per-format `gguf_transcode_*`).
+def kq_transcode_superblock(fmt : KqFmt; bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) { // nolint:STYLE037 — the format ladder
+    if (fmt == KqFmt.iq4xs) {
+        transcode_iq4xs_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.k3) {
+        transcode_q3k_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq3s) {
+        transcode_iq3s_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq3xxs) {
+        transcode_iq3xxs_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq4nl) {
+        transcode_iq4nl_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.k2) {
+        transcode_q2k_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq2s) {
+        transcode_iq2s_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq2xs) {
+        transcode_iq2xs_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq2xxs) {
+        transcode_iq2xxs_superblock(bytes, bo, kq, kqo, ks, kso)
+    } else {
+        panic("kq_transcode_superblock: '{fmt}' has no superblock transcode")
+    }
+}
+
+//! Decode tensor `name` into dst[dst_off ..] as fp32 from any on-disk type the native tier reads.
+//! Panics if the tensor is missing, its element count differs, or its type has no decoder here.
+def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var dst : array<float>; dst_off, expect_n : int64; src_off : int64 = 0l) {   // nolint:STYLE038 — one arm per on-disk upstream type; each arm is a self-contained decode kernel
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {
         panic("gguf: tensor '{name}' not found")
@@ -752,7 +1167,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
     }
     let gtype = m.tensors[ti].ggml_type
     guard_dst(name, "f32 dst", dst_off, expect_n, long_length(dst))
-    with_tensor_view(m, srcbytes, ti) $(bytes, base) {   // nolint:STYLE037 — the ggml-type ladder; the arms share only the borrowed view
+    with_tensor_view(m, srcbytes, ti) $(bytes, base) {   // nolint:STYLE037 — the upstream-type ladder; the arms share only the borrowed view
     if (gtype == GGML_TYPE_F32) {
         unsafe {   // raw copy, threaded in u64 words (+ one odd-float tail)
             let sp = addr<uint64 const?>(bytes[base + src_off * 4l])
@@ -891,6 +1306,26 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
                 }
             }
         }
+    } elif (gguf_kq_disk_sbb(gtype) > 0l) {
+        // transcode one superblock into scratch planes + its plane dequant: the native load's own two steps, value for value
+        if (src_off % 256l != 0l || expect_n % 256l != 0l) {
+            panic("gguf: tensor '{name}' superblock slice [{src_off}, +{expect_n}) is not superblock-aligned")
+        }
+        let sbb = gguf_kq_disk_sbb(gtype)
+        let fmt = gguf_kq_fmt_of_type(gtype)
+        var kq : array<uint8>
+        var ks : array<uint8>
+        kq |> resize(int(kq_qsb(fmt)))
+        ks |> resize(int(kq_ssb(fmt)))
+        let nb = expect_n / 256l
+        for (blk in range64(nb)) {
+            let bo = base + (src_off / 256l
++ blk) * sbb
+            kq_transcode_superblock(fmt, bytes, bo, kq, 0l, ks, 0l)
+            dequant_kq_plane_sb(fmt, kq, ks, 0l, false, dst, dst_off + blk * 256l)
+        }
+        delete kq
+        delete ks
     } elif (gtype == GGML_TYPE_MXFP4) {
         // block of 32: 1 E8M0 scale byte + 16 nibble bytes (low nibbles = elems 0..15, high = 16..31);
         // x = e2m1[nibble] * scale — both sides carry the ×2/÷2 on-disk convention (see MXFP4_KVALUES)
@@ -935,7 +1370,7 @@ def gguf_transcode_bf16(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
     }
 }
 
-//! The on-disk ggml type of tensor `name` (GGML_TYPE_*), or -1 if the tensor is absent. Lets a
+//! The on-disk upstream type of tensor `name` (GGML_TYPE_*), or -1 if the tensor is absent. Lets a
 //! caller pick the direct-transcode path when the disk type already matches the target precision.
 def gguf_tensor_type(m : GGUFMeta; name : string) : int {
     let ti = gguf_find_tensor(m, name)

@@ -135,3 +135,33 @@ def test_msl_state_and_naming(t : T?) {
             "the emitted signature carries the derived entry name")
     }
 }
+
+def private hasq(t : T?; needle : string) {
+    t |> success(find(consttab_msl, needle) >= 0, "emitted MSL carries `{needle}`")
+    if (find(consttab_msl, needle) < 0) {
+        to_log(LOG_ERROR, "MISSING `{needle}` in:\n{consttab_msl}\n")
+    }
+}
+
+def private count_in_consttab(needle : string) : int {
+    var n = 0
+    var at = find(consttab_msl, needle)
+    while (at >= 0) {
+        n++
+        at = find(consttab_msl, needle, at + 1)
+    }
+    return n
+}
+
+[test]
+def test_msl_const_tables(t : T?) {
+    t |> run("literal fixed-array locals hoist to program-scope constant tables") <| @(t : T?) {
+        hasq(t, "constant uint tbl[8] = \{")     // hoisted from the helper's body
+        hasq(t, "constant uint tbl_c0[8] = \{")  // a helper's OWN table under the generated-looking name
+        hasq(t, "constant uint tbl_c1[8] = \{")  // the same-named different-content table renamed past it, not merged
+        hasq(t, "constant float sgn[2] = \{")    // hoisted from the kernel body
+        hasq(t, "tbl[")                          // reads index the hoisted table by name
+        hasq(t, "tbl_c1[")                       // the renamed table's reads follow the rename
+        t |> equal(count_in_consttab("constant uint tbl"), 3, "three distinct tables, none overwritten by a rename")
+    }
+}

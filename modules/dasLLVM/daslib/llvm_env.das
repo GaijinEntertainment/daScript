@@ -67,12 +67,16 @@ struct public TuneEnv {
     tune_verbosity : string = ""
 
     @clarg_default_doc = "declared by [tune_policy]"
-    @clarg_doc = "Override the missing-scope policy: fallback, warn, error, auto, or restart. The announce line says when the environment shaped the policy."
+    @clarg_doc = "Override the missing-scope policy: fallback, reference, warn, error, auto, or restart. The announce line says when the environment shaped the policy."
     tune_policy : string = ""
 
     @clarg_path
     @clarg_doc = "A supervisor's stop channel: while the named file exists, tune_interrupt_requested() is true and tuners abort at the next kernel-family boundary without minting. The watchdog sets it and owns the file's lifetime; the measurement in flight always completes."
     tune_control : string = ""
+
+    @clarg_default_doc = "unset (every family races)"
+    @clarg_doc = "Comma-separated re-mint filter: a tuner races only kernel families whose name contains one of these tokens, and every skipped family's sidecar entry survives the upsert. Set by --tune-only on the application; the tuner children inherit it."
+    tune_only : string = ""
 }
 
 let public g_env_tune = env_config(type<TuneEnv>)

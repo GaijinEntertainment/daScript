@@ -108,3 +108,12 @@ same math differ in float terms - while one that changes only WHEN work happens 
 a CLI flag is never an override (it is the run's own command line, visible where the run is
 launched).
 
+
+### Re-stamping inside the content-addressed archive
+
+A sidecar archived as `records/<box>.tune.<sha12>.json` is content-addressed: its filename
+carries the hash of its bytes. Re-stamping such a file's `provenance.engine_sha` to a reachable
+commit (the remedy `performance/REVIEW.md` allows when the measured `modules/dasLLAMA/` tree is
+byte-identical) therefore re-hashes and renames the file, and every `records/<box>.json` row
+whose `tune_sha` named the old file is repointed in the same change - a row left on the old
+name points at a file that no longer exists.

@@ -62,3 +62,12 @@ body.** A board cell is a timed cell of the published results board: one
 `../PROFILE.md` section. What a cell times changes when a change to its code, to its input
 corpus, or to the pinned reference build - `DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, the
 targets it builds, or a patch it applies - moves the measured quantity.
+
+**A diff that adds or moves a row in `../harness/tune_kernels.das`'s bench list keeps
+`dot_q8q8_laneq4x4` last.** That bench pins the repack backend for the rest of the process, so
+a row after it is timed against the pinned backend instead of the backend it would select.
+
+**A diff that adds or changes a timing instrument makes it exit non-zero on a run that ends
+with zero result rows - wrong flags, failed load, a device that declines.** A run that matched
+nothing and reported success leaves a sidecar or a record untouched, and its caller cannot
+tell.

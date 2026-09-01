@@ -275,7 +275,7 @@ def test_image_mechanics(t : T?) {
         t |> equal(pk.identity, image_identity("img-probe"), "peek: baked identity string")
         var pcfg = DlimConfiguration()
         t |> success(dlim_config_from_json(pk.config_json, pcfg), "peek: embedded config JSON parses")
-        t |> equal(dlim_identity(pcfg, IMAGE_VERSION, "img-probe"), pk.identity, "peek: config re-derives the identity")
+        t |> equal(image_identity_of(pcfg, "img-probe"), pk.identity, "peek: config re-derives the identity")
 
         var m3 = ImgProbe()
         t |> success(!load_image(path, m3, "wrong-tag"), "identity mismatch declines")
@@ -378,7 +378,7 @@ def test_image_mechanics(t : T?) {
         t |> success(!empty(js), "config serializes")
         var back = DlimConfiguration()
         t |> success(dlim_config_from_json(js, back), "JSON parses back")
-        t |> equal(dlim_identity(back, IMAGE_VERSION), dlim_identity(dc, IMAGE_VERSION), "identity survives the round trip")
+        t |> equal(image_identity_of(back), image_identity_of(dc), "identity survives the round trip")
         var junk = DlimConfiguration()
         t |> success(!dlim_config_from_json("not a config", junk), "garbage declines")
     }
@@ -2377,5 +2377,18 @@ def test_layout_fingerprint(t : T?) {
         delete m
         delete p
         remove(path)
+    }
+}
+
+[test]
+def test_dlim_identity_pack_version(t : T?) {
+    t |> run("the pack-code version folds into the identity and nothing else moves") <| @(t : T?) {
+        let c = DlimConfiguration()
+        let base = dlim_identity(c, IMAGE_VERSION, "", 0)
+        let packed = dlim_identity(c, IMAGE_VERSION, "", 7)
+        t |> success(base != packed, "pack_version 7 changes the identity")
+        t |> success(packed |> starts_with("v{IMAGE_VERSION}p7|"), "the pack version rides the schema version: {packed}")
+        t |> success(base |> starts_with("v{IMAGE_VERSION}|"), "pack_version 0 is the pre-versioned spelling: {base}")
+        t |> equal(image_identity_of(c), dlim_identity(c, IMAGE_VERSION, "", PACK_VERSION), "image_identity_of folds the layout's PACK_VERSION")
     }
 }

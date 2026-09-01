@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 17   // 17: merged lineages - master's 14 and this branch's 14-16 (qwen3v f16 twin plane, devwf16 bake) numbered independently
+let IMAGE_VERSION = 26   // the iq2xxs plane pair (IQ2_XXS native tier)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -57,7 +57,14 @@ struct ImgSection {
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def image_identity(tag : string = ""; quant : string = "q8") : string {
-    return dlim_identity(dlim_config_current(quant), IMAGE_VERSION, tag)
+    return image_identity_of(dlim_config_current(quant), tag)
+}
+
+//! The identity of an explicit configuration — the ONE spelling every identity consumer (the
+//! loader, the peek verdicts, the converter's want/have compare, the tests) formats through, so
+//! the schema version and the pack-code version can never be folded in two different ways.
+def image_identity_of(c : DlimConfiguration; tag : string = "") : string {
+    return dlim_identity(c, IMAGE_VERSION, tag, PACK_VERSION)
 }
 
 // a 64-bit identity hash per file: a collision would leave two identities re-saving over one path forever
@@ -634,6 +641,15 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.kq_repack_mr5)
     arch |> serialize_raw(t.kq_repack_mr6)
     arch |> serialize_raw(t.kq_repack_mr40)
+    arch |> serialize_raw(t.kq_repack_mr44)
+    arch |> serialize_raw(t.kq_repack_mr3)
+    arch |> serialize_raw(t.kq_repack_mr33)
+    arch |> serialize_raw(t.kq_repack_mr34)
+    arch |> serialize_raw(t.kq_repack_mr45)
+    arch |> serialize_raw(t.kq_repack_mr2)
+    arch |> serialize_raw(t.kq_repack_mr23)
+    arch |> serialize_raw(t.kq_repack_mr24)
+    arch |> serialize_raw(t.kq_repack_mr25)
     arch |> serialize_raw(t.wcls_fmt)
     arch |> serialize_raw(t.emb_fmt)
     arch |> serialize_raw(t.ple_emb_fmt)
@@ -672,8 +688,8 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.mtp_headnorm_off)
 }
 
-// 66 serialized fields + 3 deliberate skips (blocks, image_map, image_bytes)
-let IMAGE_META_FIELDS = 66 + 3
+// the 3 deliberate skips: blocks, image_map, image_bytes
+let IMAGE_META_FIELDS = 75 + 3
 
 //! Count of meta-carried fields of any struct: non-arrays plus string arrays (those cannot
 //! be raw planes — see serialize_strings). Pair with a per-type field-count constant to
@@ -766,7 +782,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                         plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
     // one config snapshot serves the meta embed AND the header hash — they must agree
     let dcfg = dlim_config_current(quant)
-    let ident = dlim_identity(dcfg, IMAGE_VERSION, tag)
+    let ident = image_identity_of(dcfg, tag)
     var fend = 0ul
     var meta_off = 0ul
     var meta_bytes = 0ul
@@ -957,7 +973,7 @@ def save_model_image(var t : Model; path : string; tag : string = ""; quant : st
 // streamed planes size as empty, so their bytes plus a page each are added here; over-reserve is free (dwrite_close truncates)
 def private stream_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
     var extra = 0ul
-    for (fname in ["qblob", "mblob", "k4q", "k5q", "k6q", "q40q", "q51q"]) {
+    for (fname in ["qblob", "mblob", "k4q", "k5q", "k6q", "q40q", "q51q", "iq4xsq", "k3q", "iq3sq", "iq3xxsq", "iq4nlq", "k2q", "iq2sq", "iq2xsq", "iq2xxsq"]) {
         let sb = stream_plane_bytes(t, jobs, fname)
         if (sb > 0l) {
             extra += uint64(sb) + uint64(IMAGE_PAGE)

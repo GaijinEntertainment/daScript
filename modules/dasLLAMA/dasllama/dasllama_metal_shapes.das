@@ -180,7 +180,7 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
 // formats) must DECLINE kquant_native instead of falling into a wrong-layout kernel branch
 // (the dispatchers below treat "not k4/k6" as k5)
 def kq_fmt_gpu_supported(f : KqFmt) : bool {
-    return f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6
+    return f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
 }
 
 def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {
@@ -236,6 +236,7 @@ def dn_metal_ok(t : Model) : bool {
 }
 
 // (q8 32-blocks, kq 256-superblocks — the expert shift is index math, no base multiple)
+[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
 def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.q8) {
         return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
@@ -243,7 +244,7 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.k4 || fmt == KqFmt.k5) {
         return off >= 0l && (off % 256l) == 0l && (ege % 256l) == 0l
     }
-    if (fmt == KqFmt.k6) {
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
         return off >= 0l && (off % 512l) == 0l && (ege % 256l) == 0l
     }
     if (fmt == KqFmt.q51) {   // per-32 planes: off % 128 keeps the 20B/4B binds 16B-aligned
@@ -324,9 +325,9 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         let f3 = fmt_at(t.we3_fmt, l)
         // per-site alignment + reduction dims: superblock kq kernels iterate whole 256-rows,
         // q51 whole 32-blocks (+ the mul_mm's 64-col output tiles)
-        let sb1 = f1 == KqFmt.k4 || f1 == KqFmt.k5 || f1 == KqFmt.k6
-        let sb3 = f3 == KqFmt.k4 || f3 == KqFmt.k5 || f3 == KqFmt.k6
-        let sb2 = f2 == KqFmt.k4 || f2 == KqFmt.k5 || f2 == KqFmt.k6
+        let sb1 = kq_sb(f1)
+        let sb3 = kq_sb(f3)
+        let sb2 = kq_sb(f2)
         if (!moe_site_ok(f1, t.we1_offs[l], ege) ||
                 !moe_site_ok(f2, t.we2_offs[l], ege) ||
                 !moe_site_ok(f3, t.we3_offs[l], ege) ||

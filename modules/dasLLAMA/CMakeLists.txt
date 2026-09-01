@@ -38,6 +38,14 @@ IF(NOT DAS_LLAMA_INCLUDED)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/performance/model_specs.das
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/performance
     )
+    # shipped defaults profiles ([tune_scope(defaults = ...)]): an untuned SDK box adopts its
+    # CPU class's winners instead of racing — the scope resolves this dir against the installed
+    # dasllama_math_gen.das, so the bundle must carry it
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/performance/defaults
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/performance
+        FILES_MATCHING
+        PATTERN "*.tune-defaults.json"
+    )
     # third-party notices: the ported reference implementations (MIT) + the weights terms
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/LICENSE.PARAKEET DESTINATION ${DAS_INSTALL_DOCDIR} RENAME PARAKEET.LICENSE)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/LICENSE.SILERO DESTINATION ${DAS_INSTALL_DOCDIR} RENAME SILERO.LICENSE)

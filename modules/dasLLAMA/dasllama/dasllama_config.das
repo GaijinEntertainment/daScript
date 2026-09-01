@@ -27,6 +27,15 @@ struct public DlimCpuConfig {
     kq_mr5 : int64
     kq_mr6 : int64
     kq_mr40 : int64
+    kq_mr44 : int64
+    kq_mr3 : int64
+    kq_mr33 : int64
+    kq_mr34 : int64
+    kq_mr45 : int64
+    kq_mr2 : int64
+    kq_mr23 : int64
+    kq_mr24 : int64
+    kq_mr25 : int64
     q51_mr : int64
     wscale_f16 : bool
     kquant_native : bool
@@ -135,11 +144,13 @@ def public dlim_config_current(quant : string = "q8") : DlimConfiguration {
 // ===== pure formatters (identity, tags, JSON) =====
 
 //! The identity string an image file/header is keyed by — a pure formatter of the struct.
-//! `image_version` comes from the caller (dasllama_image owns the version constant).
-def public dlim_identity(c : DlimConfiguration; image_version : int; tag : string = "") : string {
-    return ("v{image_version}|{c.quant}|{c.cpu.backend}|{c.cpu.wscale_f16 ? "s16" : "s32"}"
+//! `image_version` / `pack_version` come from the caller (dasllama_image owns the schema
+//! version, dasllama_layout the pack-code version; 0 = the pre-versioned pack spelling).
+def public dlim_identity(c : DlimConfiguration; image_version : int; tag : string = ""; pack_version : int = 0) : string {
+    let pk = pack_version > 0 ? "p{pack_version}" : ""
+    return ("v{image_version}{pk}|{c.quant}|{c.cpu.backend}|{c.cpu.wscale_f16 ? "s16" : "s32"}"
         + "|q8 mr{c.cpu.q8_mr} b{c.cpu.q8_wbias} g{c.cpu.q8_kgroup}"
-        + "|kq {c.cpu.kq_mr4}/{c.cpu.kq_mr5}/{c.cpu.kq_mr6}/{c.cpu.kq_mr40}"
+        + "|kq {c.cpu.kq_mr4}/{c.cpu.kq_mr5}/{c.cpu.kq_mr6}/{c.cpu.kq_mr40}/{c.cpu.kq_mr44}/{c.cpu.kq_mr3}/{c.cpu.kq_mr33}/{c.cpu.kq_mr34}/{c.cpu.kq_mr45}/{c.cpu.kq_mr2}/{c.cpu.kq_mr23}/{c.cpu.kq_mr24}/{c.cpu.kq_mr25}"
         + "|q51 mr{c.cpu.q51_mr}"
         + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q50_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}"
         + (tag != "" ? "|{tag}" : ""))

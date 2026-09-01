@@ -4,6 +4,7 @@ options _dasllama_internal = true
 
 module dasllama_repack shared public
 
+require dasllama/dasllama_kqformat   // iq3s_grid - the panel unpack gathers through the codebook
 require dasllama/dasllama_lint public
 require dasllama/dasllama_math_default  // k4_sc_mn — the kq 6-bit sc/mn decoder (stays there: hot in the kq dots, auto-inline is same-module-only)
 
@@ -373,13 +374,603 @@ def repack_q40_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete tq
     delete ts
 }
+
+//! iq4xs grp layout: the q40 quant gather (the disk k/k+16 pairing IS the k4 tiling) and the k4
+//! scale-row interleave over the DECODED 20B row — [mr x f16 d][mr x f16 0][8 x mr int8 sc][8 x mr 0].
+def repack_iq4xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 128l
+    let srow = nsb * 20l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 128l * mr
+                let ds = g * mr * srow + sbi * 20l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 128l
+                    let ss = (g * mr + r) * srow + sbi * 20l
+                    for (blk in range64(8l)) {
+                        for (j in range64(4l)) {
+                            for (t in range64(4l)) {
+                                kq[dq + ((blk * 4l + j) * mr + r) * 4l + t] = tqp[sq + blk * 16l + j * 4l + t]
+                            }
+                        }
+                        ks[ds + 4l * mr + blk * mr + r] = tsp[ss + 4l + blk]
+                        ks[ds + 12l * mr + blk * mr + r] = uint8(0)
+                    }
+                    ks[ds + 2l * r] = tsp[ss]
+                    ks[ds + 2l * r + 1l] = tsp[ss + 1l]
+                    ks[ds + 2l * mr + 2l * r] = uint8(0)
+                    ks[ds + 2l * mr + 2l * r + 1l] = uint8(0)
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
+//! k3 grp layout: the qs bytes as 16 four-byte columns ([h 0..1][8 l-groups]) x mr rows, then the
+//! hmask as 8 columns x mr rows at 64*mr — the 2-bit lanes and mask bits stay in place (the
+//! kernels shift per block); scales interleave as k6's row ([16 x mr int8][mr x f16 d]).
+def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 96l
+    let srow = nsb * 18l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 96l * mr
+                let ds = g * mr * srow + sbi * 18l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 96l
+                    let ss = (g * mr + r) * srow + sbi * 18l
+                    for (c in range64(16l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                        }
+                    }
+                    for (c in range64(8l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + 64l * mr + (c * mr + r) * 4l + t] = tqp[sq + 64l + c * 4l + t]
+                        }
+                    }
+                    for (idx in range64(16l)) {
+                        ks[ds + idx * mr + r] = tsp[ss + idx]
+                    }
+                    ks[ds + 16l * mr + 2l * r] = tsp[ss + 16l]
+                    ks[ds + 16l * mr + 2l * r + 1l] = tsp[ss + 17l]
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
+//! iq3s grp layout: the whole 104B row as 26 four-byte columns x mr rows — qs, qh and sign
+//! bytes stay in place per column (the kernels compose per block); scales interleave as k4's
+//! row ([d f16 x mr][pad x mr][8 sc x mr][8 pad x mr]).
+def repack_iq3s_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 104l
+    let srow = nsb * 20l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 104l * mr
+                let ds = g * mr * srow + sbi * 20l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 104l
+                    let ss = (g * mr + r) * srow + sbi * 20l
+                    for (c in range64(26l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                        }
+                    }
+                    ks[ds + 2l * r] = tsp[ss]
+                    ks[ds + 2l * r + 1l] = tsp[ss + 1l]
+                    ks[ds + 2l * mr + 2l * r] = tsp[ss + 2l]
+                    ks[ds + 2l * mr + 2l * r + 1l] = tsp[ss + 3l]
+                    for (b in range64(8l)) {
+                        ks[ds + 4l * mr + b * mr + r] = tsp[ss + 4l + b]
+                        ks[ds + 12l * mr + b * mr + r] = tsp[ss + 12l + b]
+                    }
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
+//! k2 grp layout: the qs bytes as 16 four-byte columns x mr rows (the 2-bit lanes stay in
+//! place - the kernels shift per group); scale row interleaves FIELD-MAJOR as
+//! [16 sc/min bytes x mr][mr x f16 d][mr x f16 dmin] (contiguous d rows for the emitter's f16 vector loads).
+def repack_k2_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 64l
+    let srow = nsb * 20l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 64l * mr
+                let ds = g * mr * srow + sbi * 20l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 64l
+                    let ss = (g * mr + r) * srow + sbi * 20l
+                    for (c in range64(16l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                        }
+                    }
+                    for (idx in range64(16l)) {
+                        ks[ds + idx * mr + r] = tsp[ss + 4l + idx]
+                    }
+                    ks[ds + 16l * mr + 2l * r] = tsp[ss]
+                    ks[ds + 16l * mr + 2l * r + 1l] = tsp[ss + 1l]
+                    ks[ds + 18l * mr + 2l * r] = tsp[ss + 2l]
+                    ks[ds + 18l * mr + 2l * r + 1l] = tsp[ss + 3l]
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
+//! iq2s grp layout: the whole 72B row as 18 four-byte columns x mr rows - idx, sign and qh
+//! bytes stay in place per column; scales interleave as k4's row with 16 strips
+//! ([d8 f16 x mr][pad x mr][16 strips x mr]).
+def repack_iq2s_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 72l
+    let srow = nsb * 20l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 72l * mr
+                let ds = g * mr * srow + sbi * 20l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 72l
+                    let ss = (g * mr + r) * srow + sbi * 20l
+                    for (c in range64(18l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                        }
+                    }
+                    ks[ds + 2l * r] = tsp[ss]
+                    ks[ds + 2l * r + 1l] = tsp[ss + 1l]
+                    ks[ds + 2l * mr + 2l * r] = tsp[ss + 2l]
+                    ks[ds + 2l * mr + 2l * r + 1l] = tsp[ss + 3l]
+                    for (g16 in range64(16l)) {
+                        ks[ds + 4l * mr + g16 * mr + r] = tsp[ss + 4l + g16]
+                    }
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
+//! iq2xs grp layout: the whole 64B row as 16 four-byte columns x mr rows - the u16 qs words
+//! stay in place per column (each word's two bytes share a column); scales interleave as k4's
+//! row with 16 strips ([d8 f16 x mr][pad x mr][16 strips x mr]).
+def repack_iq2xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 64l
+    let srow = nsb * 20l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 64l * mr
+                let ds = g * mr * srow + sbi * 20l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 64l
+                    let ss = (g * mr + r) * srow + sbi * 20l
+                    for (c in range64(16l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                        }
+                    }
+                    ks[ds + 2l * r] = tsp[ss]
+                    ks[ds + 2l * r + 1l] = tsp[ss + 1l]
+                    ks[ds + 2l * mr + 2l * r] = tsp[ss + 2l]
+                    ks[ds + 2l * mr + 2l * r + 1l] = tsp[ss + 3l]
+                    for (g16 in range64(16l)) {
+                        ks[ds + 4l * mr + g16 * mr + r] = tsp[ss + 4l + g16]
+                    }
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
+//! iq2xxs grp layout: the whole 64B row as 16 four-byte columns x mr rows - the u16 qs words
+//! stay in place per column (each word's two bytes share a column); scales interleave as k4's
+//! row with 16 strips ([d8 f16 x mr][pad x mr][16 strips x mr]).
+def repack_iq2xxs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 64l
+    let srow = nsb * 20l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 64l * mr
+                let ds = g * mr * srow + sbi * 20l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 64l
+                    let ss = (g * mr + r) * srow + sbi * 20l
+                    for (c in range64(16l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                        }
+                    }
+                    ks[ds + 2l * r] = tsp[ss]
+                    ks[ds + 2l * r + 1l] = tsp[ss + 1l]
+                    ks[ds + 2l * mr + 2l * r] = tsp[ss + 2l]
+                    ks[ds + 2l * mr + 2l * r + 1l] = tsp[ss + 3l]
+                    for (g16 in range64(16l)) {
+                        ks[ds + 4l * mr + g16 * mr + r] = tsp[ss + 4l + g16]
+                    }
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
 // ===== grp<mr> panel unpack (the byte-expanded tile form the kq stamps load) =====
 
 //! Unpack ONE group's packed grp<mr> k5/k6 quant panel into the BYTE-EXPANDED tile form (wlo/whi
 //! kqBytes stamps load verbatim). SWAR over uint64 lanes: k5 deposit uses an add-carry test
 //! ((x+0x7F)&0x80) to fold the high bit; k6 tops sit at a uniform shift per block.
 [hint(unsafe_range_check, noalias = kqg, noalias = dst)]
+//! iq3s panel unpack: the grid gather + sign apply, packed grp planes -> the byte-expanded
+//! signed panel. One grid word = 4 elements = ONE i32 store; the sign nibble expands through
+//! the mask table and negates byte-wise (magnitudes are odd 1..15 - no cross-byte carry).
+def unpack_iq3s_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
+    let grid = iq3s_grid()
+    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
+                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
+                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
+                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 104l * mr
+            let ob = sbi * 256l * mr
+            for (r in range64(mr)) {
+                for (blk in range64(8l)) {
+                    let hp = 64l + blk
+                    let qh = int(kqg[qb + ((hp / 4l) * mr + r) * 4l + hp % 4l])
+                    for (l in range64(4l)) {
+                        let sp = 72l + blk * 4l + l
+                        let sgn = int(kqg[qb + ((sp / 4l) * mr + r) * 4l + sp % 4l])
+                        let q1p = blk * 8l + 2l * l
+                        let q2p = q1p + 1l
+                        let i1 = int(kqg[qb + ((q1p / 4l) * mr + r) * 4l + q1p % 4l]) | ((qh << int(8l - 2l * l)) & 256)
+                        let i2 = int(kqg[qb + ((q2p / 4l) * mr + r) * 4l + q2p % 4l]) | ((qh << int(7l - 2l * l)) & 256)
+                        let m1 = smask[sgn & 15]
+                        let m2 = smask[(sgn >> 4) & 15]
+                        let w1 = (grid[i1] ^ m1) + (m1 & 0x01010101u)
+                        let w2 = (grid[i2] ^ m2) + (m2 & 0x01010101u)
+                        // element e = l*8 + half*4 + t: e < 16 lands in the lo panel half, else hi
+                        let e1 = l * 8l
+                        let e2 = l * 8l + 4l
+                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
+                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
+                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
+                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
+                        wp1[0] = w1
+                        wp2[0] = w2
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! iq3xxs grp layout: the whole 96B row as 24 four-byte columns x mr rows — qs and aux move
+//! together; the scale row keeps the iq3s interleave (d pairs, pads, strips, pads).
+def repack_iq3xxs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 96l
+    let srow = nsb * 20l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 96l * mr
+                let ds = g * mr * srow + sbi * 20l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 96l
+                    let ss = (g * mr + r) * srow + sbi * 20l
+                    for (c in range64(24l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                        }
+                    }
+                    ks[ds + 2l * r] = tsp[ss]
+                    ks[ds + 2l * r + 1l] = tsp[ss + 1l]
+                    ks[ds + 2l * mr + 2l * r] = tsp[ss + 2l]
+                    ks[ds + 2l * mr + 2l * r + 1l] = tsp[ss + 3l]
+                    for (b in range64(8l)) {
+                        ks[ds + 4l * mr + b * mr + r] = tsp[ss + 4l + b]
+                        ks[ds + 12l * mr + b * mr + r] = tsp[ss + 12l + b]
+                    }
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
+//! iq3xxs panel unpack: the halved-grid gather + ksigns sign apply, packed grp planes -> the
+//! byte-expanded signed panel (the iq3s panel form — the shared fmt-33/34 tile reads it).
+def unpack_iq3xxs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
+    let grid = iq3xxs_grid()
+    let ksg = ksigns_iq2xs()
+    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
+                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
+                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
+                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 96l * mr
+            let ob = sbi * 256l * mr
+            for (r in range64(mr)) {
+                for (blk in range64(8l)) {
+                    var aux = 0u
+                    for (t in range64(4l)) {
+                        let ap = 64l + blk * 4l + t
+                        aux |= uint(kqg[qb + ((ap / 4l) * mr + r) * 4l + ap % 4l]) << uint(8l * t)
+                    }
+                    for (l in range64(4l)) {
+                        let sgn = int(ksg[int((aux >> uint(7l * l)) & 127u)])
+                        let q1p = blk * 8l + 2l * l
+                        let q2p = q1p + 1l
+                        let i1 = int(kqg[qb + ((q1p / 4l) * mr + r) * 4l + q1p % 4l])
+                        let i2 = int(kqg[qb + ((q2p / 4l) * mr + r) * 4l + q2p % 4l])
+                        let m1 = smask[sgn & 15]
+                        let m2 = smask[(sgn >> 4) & 15]
+                        let w1 = (grid[i1] ^ m1) + (m1 & 0x01010101u)
+                        let w2 = (grid[i2] ^ m2) + (m2 & 0x01010101u)
+                        // element e = l*8 + half*4 + t: e < 16 lands in the lo panel half, else hi
+                        let e1 = l * 8l
+                        let e2 = l * 8l + 4l
+                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
+                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
+                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
+                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
+                        wp1[0] = w1
+                        wp2[0] = w2
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! iq2s panel unpack: the 10-bit qs|qh gather off the u64 grid (TWO words per index - eight
+//! magnitudes {8, 25, 43}) + the block's own sign bytes, packed grp planes -> the shared
+//! byte-expanded signed panel (the fmt-33/34 panel form; d is pre-eighth-ed at transcode).
+def unpack_iq2s_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
+    let grid = iq2s_grid2()
+    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
+                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
+                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
+                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 72l * mr
+            let ob = sbi * 256l * mr
+            for (r in range64(mr)) {
+                for (blk in range64(8l)) {
+                    let hp = 64l + blk
+                    let qh = int(kqg[qb + ((hp / 4l) * mr + r) * 4l + hp % 4l])
+                    for (l in range64(4l)) {
+                        let sp = 32l + blk * 4l + l
+                        let sgn = int(kqg[qb + ((sp / 4l) * mr + r) * 4l + sp % 4l])
+                        let ip = blk * 4l + l
+                        let ix = (int(kqg[qb + ((ip / 4l) * mr + r) * 4l + ip % 4l]) | ((qh << int(8l - 2l * l)) & 0x300)) * 2
+                        let m1 = smask[sgn & 15]
+                        let m2 = smask[(sgn >> 4) & 15]
+                        let w1 = (grid[ix] ^ m1) + (m1 & 0x01010101u)
+                        let w2 = (grid[ix + 1] ^ m2) + (m2 & 0x01010101u)
+                        // element e = l*8 + half*4 + t: e < 16 lands in the lo panel half, else hi
+                        let e1 = l * 8l
+                        let e2 = l * 8l + 4l
+                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
+                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
+                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
+                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
+                        wp1[0] = w1
+                        wp2[0] = w2
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! iq2xs panel unpack: the u16 qs word's 9-bit index doubles into the u64 grid's word pair,
+//! its high 7 bits pick the KSIGNS sign byte - packed grp planes -> the shared signed panel.
+def unpack_iq2xs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
+    let grid = iq2xs_grid2()
+    let ksgn = ksigns_iq2xs()
+    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
+                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
+                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
+                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 64l * mr
+            let ob = sbi * 256l * mr
+            for (r in range64(mr)) {
+                for (blk in range64(8l)) {
+                    for (l in range64(4l)) {
+                        let lp = (blk * 4l + l) * 2l
+                        let w16 = uint(kqg[qb + ((lp / 4l) * mr + r) * 4l + lp % 4l]) | (uint(kqg[qb + ((lp / 4l) * mr + r) * 4l + lp % 4l + 1l]) << 8u)
+                        let sgn = int(ksgn[int(w16 >> 9u)])
+                        let ix = int(w16 & 511u) * 2
+                        let m1 = smask[sgn & 15]
+                        let m2 = smask[(sgn >> 4) & 15]
+                        let w1 = (grid[ix] ^ m1) + (m1 & 0x01010101u)
+                        let w2 = (grid[ix + 1] ^ m2) + (m2 & 0x01010101u)
+                        // element e = l*8 + half*4 + t: e < 16 lands in the lo panel half, else hi
+                        let e1 = l * 8l
+                        let e2 = l * 8l + 4l
+                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
+                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
+                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
+                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
+                        wp1[0] = w1
+                        wp2[0] = w2
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! iq2xxs panel unpack: block b's grid BYTES (column 2b) each double into the u64 grid's word
+//! pair, its aux32 (column 2b+1) picks the KSIGNS sign bytes - packed grp planes -> the
+//! shared signed panel (the per-32 scale rides the strip row).
+def unpack_iq2xxs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
+    let grid = iq2xxs_grid2()
+    let ksgn = ksigns_iq2xs()
+    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
+                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
+                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
+                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 64l * mr
+            let ob = sbi * 256l * mr
+            for (r in range64(mr)) {
+                for (blk in range64(8l)) {
+                    let ac = (2l * blk + 1l) * mr + r
+                    let aux = uint(kqg[qb + ac * 4l]) | (uint(kqg[qb + ac * 4l + 1l]) << 8u) | (uint(kqg[qb + ac * 4l + 2l]) << 16u) | (uint(kqg[qb + ac * 4l + 3l]) << 24u)
+                    let gc = (2l * blk) * mr + r
+                    for (l in range64(4l)) {
+                        let sgn = int(ksgn[int((aux >> uint(7l * l)) & 127u)])
+                        let ix = int(kqg[qb + gc * 4l + l]) * 2
+                        let m1 = smask[sgn & 15]
+                        let m2 = smask[(sgn >> 4) & 15]
+                        let w1 = (grid[ix] ^ m1) + (m1 & 0x01010101u)
+                        let w2 = (grid[ix + 1] ^ m2) + (m2 & 0x01010101u)
+                        let e1 = l * 8l
+                        let e2 = l * 8l + 4l
+                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
+                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
+                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
+                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
+                        wp1[0] = w1
+                        wp2[0] = w2
+                    }
+                }
+            }
+        }
+    }
+}
+
 def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
+    if (fmt == 33l) {
+        unpack_iq3s_panel_grp(kqg, dst, mr, nsb)
+        return
+    }
+    if (fmt == 34l) {
+        unpack_iq3xxs_panel_grp(kqg, dst, mr, nsb)
+        return
+    }
+    if (fmt == 23l) {
+        unpack_iq2s_panel_grp(kqg, dst, mr, nsb)
+        return
+    }
+    if (fmt == 25l) {
+        unpack_iq2xxs_panel_grp(kqg, dst, mr, nsb)
+        return
+    }
+    if (fmt == 24l) {
+        unpack_iq2xs_panel_grp(kqg, dst, mr, nsb)
+        return
+    }
     let LO4 = 0x0F0F0F0F0F0F0F0Ful
     let SEL = 0x0804020108040201ul   // LE lane t (0..3, twice) selects high-bit t
     let C7F = 0x7F7F7F7F7F7F7F7Ful

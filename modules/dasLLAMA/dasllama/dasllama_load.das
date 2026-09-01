@@ -41,6 +41,15 @@ struct private LayoutSizes {
     k6_n : int64
     q40_n : int64
     q51_n : int64
+    iq4xs_n : int64
+    k3_n : int64
+    iq3s_n : int64
+    iq3xxs_n : int64
+    iq4nl_n : int64
+    k2_n : int64
+    iq2s_n : int64
+    iq2xs_n : int64
+    iq2xxs_n : int64
     pleq8_n : int64   // the dedicated q8 plane holding ONLY the PLE table (fp32/q4 serving)
 }
 
@@ -53,6 +62,15 @@ struct private KqCursors {
     k6 : int64
     q40 : int64
     q51 : int64
+    iq4xs : int64
+    k3 : int64
+    iq3s : int64
+    iq3xxs : int64
+    iq4nl : int64
+    k2 : int64
+    iq2s : int64
+    iq2xs : int64
+    iq2xxs : int64
 }
 
 def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
@@ -79,6 +97,51 @@ def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
     if (f == KqFmt.q51) {
         let o = cur.q51
         cur.q51 += n
+        return o
+    }
+    if (f == KqFmt.iq4xs) {
+        let o = cur.iq4xs
+        cur.iq4xs += n
+        return o
+    }
+    if (f == KqFmt.k3) {
+        let o = cur.k3
+        cur.k3 += n
+        return o
+    }
+    if (f == KqFmt.iq3s) {
+        let o = cur.iq3s
+        cur.iq3s += n
+        return o
+    }
+    if (f == KqFmt.iq3xxs) {
+        let o = cur.iq3xxs
+        cur.iq3xxs += n
+        return o
+    }
+    if (f == KqFmt.iq4nl) {
+        let o = cur.iq4nl
+        cur.iq4nl += n
+        return o
+    }
+    if (f == KqFmt.k2) {
+        let o = cur.k2
+        cur.k2 += n
+        return o
+    }
+    if (f == KqFmt.iq2s) {
+        let o = cur.iq2s
+        cur.iq2s += n
+        return o
+    }
+    if (f == KqFmt.iq2xs) {
+        let o = cur.iq2xs
+        cur.iq2xs += n
+        return o
+    }
+    if (f == KqFmt.iq2xxs) {
+        let o = cur.iq2xxs
+        cur.iq2xxs += n
         return o
     }
     let o = cur.wo
@@ -380,7 +443,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         fo += dim
     }
     return LayoutSizes(fblob_n = fo, wblob_n = cur.wo, mx_n = mx, bf16_n = bf16,
-                       k4_n = cur.k4, k5_n = cur.k5, k6_n = cur.k6, q40_n = cur.q40, q51_n = cur.q51, pleq8_n = pleq8)
+                       k4_n = cur.k4, k5_n = cur.k5, k6_n = cur.k6, q40_n = cur.q40, q51_n = cur.q51, iq4xs_n = cur.iq4xs, k3_n = cur.k3, iq3s_n = cur.iq3s, iq3xxs_n = cur.iq3xxs, iq4nl_n = cur.iq4nl, k2_n = cur.k2, iq2s_n = cur.iq2s, iq2xs_n = cur.iq2xs, iq2xxs_n = cur.iq2xxs, pleq8_n = pleq8)
 }
 
 
@@ -639,6 +702,24 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
         return "q40q"
     } elif (fmt == KqFmt.q51) {
         return "q51q"
+    } elif (fmt == KqFmt.iq4xs) {
+        return "iq4xsq"
+    } elif (fmt == KqFmt.k3) {
+        return "k3q"
+    } elif (fmt == KqFmt.iq3s) {
+        return "iq3sq"
+    } elif (fmt == KqFmt.iq3xxs) {
+        return "iq3xxsq"
+    } elif (fmt == KqFmt.iq4nl) {
+        return "iq4nlq"
+    } elif (fmt == KqFmt.k2) {
+        return "k2q"
+    } elif (fmt == KqFmt.iq2s) {
+        return "iq2sq"
+    } elif (fmt == KqFmt.iq2xs) {
+        return "iq2xsq"
+    } elif (fmt == KqFmt.iq2xxs) {
+        return "iq2xxsq"
     } elif (t.quant == QuantMode.q8) {
         // the blob flavor carries q8 as gguf-native 34B blocks in ONE plane, never the split pair
         return t.metal_blob ? "mblob" : "qblob"
@@ -755,6 +836,24 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
                 memcpy(addr<void?>(t.k6s[(j.woff / 256l) * K6_SSB]), addr<void?>(temp_s[0]), sh.sb)
             } elif (j.fmt == KqFmt.q40) {
                 memcpy(addr<void?>(t.q40s[(j.woff / 256l) * Q40_SSB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.iq4xs) {
+                memcpy(addr<void?>(t.iq4xss[(j.woff / 256l) * IQ4XS_SSB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.k3) {
+                memcpy(addr<void?>(t.k3s[(j.woff / 256l) * K3_SSB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.iq3s) {
+                memcpy(addr<void?>(t.iq3ss[(j.woff / 256l) * IQ3S_SSB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.iq3xxs) {
+                memcpy(addr<void?>(t.iq3xxss[(j.woff / 256l) * IQ3XXS_SSB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.iq4nl) {
+                memcpy(addr<void?>(t.iq4nls[(j.woff / 256l) * Q40_SSB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.k2) {
+                memcpy(addr<void?>(t.k2s[(j.woff / 256l) * K2_SSB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.iq2s) {
+                memcpy(addr<void?>(t.iq2ss[(j.woff / 256l) * IQ2S_SSB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.iq2xs) {
+                memcpy(addr<void?>(t.iq2xss[(j.woff / 256l) * IQ2XS_SSB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.iq2xxs) {
+                memcpy(addr<void?>(t.iq2xxss[(j.woff / 256l) * IQ2XXS_SSB]), addr<void?>(temp_s[0]), sh.sb)
             } elif (j.fmt == KqFmt.q51) {
                 memcpy(addr<void?>(t.q51s[(j.woff / 32l) * Q51_SB]), addr<void?>(temp_s[0]), sh.sb)
             } elif (sh.sb == 0l && j.n > 0l && !t.metal_blob) {
@@ -786,6 +885,33 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
                 } elif (r.fmt == 40) {
                     invoke(g_stream_repack, 40, addr<void?>(temp_q[((r.off - j.woff) / 256l) * Q40_QSB]),
                         addr<void?>(t.q40s[(r.off / 256l) * Q40_SSB]), r.n, r.d)
+                } elif (r.fmt == 44) {
+                    invoke(g_stream_repack, 44, addr<void?>(temp_q[((r.off - j.woff) / 256l) * IQ4XS_QSB]),
+                        addr<void?>(t.iq4xss[(r.off / 256l) * IQ4XS_SSB]), r.n, r.d)
+                } elif (r.fmt == 3) {
+                    invoke(g_stream_repack, 3, addr<void?>(temp_q[((r.off - j.woff) / 256l) * K3_QSB]),
+                        addr<void?>(t.k3s[(r.off / 256l) * K3_SSB]), r.n, r.d)
+                } elif (r.fmt == 33) {
+                    invoke(g_stream_repack, 33, addr<void?>(temp_q[((r.off - j.woff) / 256l) * IQ3S_QSB]),
+                        addr<void?>(t.iq3ss[(r.off / 256l) * IQ3S_SSB]), r.n, r.d)
+                } elif (r.fmt == 34) {
+                    invoke(g_stream_repack, 34, addr<void?>(temp_q[((r.off - j.woff) / 256l) * IQ3XXS_QSB]),
+                        addr<void?>(t.iq3xxss[(r.off / 256l) * IQ3XXS_SSB]), r.n, r.d)
+                } elif (r.fmt == 45) {
+                    invoke(g_stream_repack, 45, addr<void?>(temp_q[((r.off - j.woff) / 256l) * Q40_QSB]),
+                        addr<void?>(t.iq4nls[(r.off / 256l) * Q40_SSB]), r.n, r.d)
+                } elif (r.fmt == 20) {
+                    invoke(g_stream_repack, 20, addr<void?>(temp_q[((r.off - j.woff) / 256l) * K2_QSB]),
+                        addr<void?>(t.k2s[(r.off / 256l) * K2_SSB]), r.n, r.d)
+                } elif (r.fmt == 23) {
+                    invoke(g_stream_repack, 23, addr<void?>(temp_q[((r.off - j.woff) / 256l) * IQ2S_QSB]),
+                        addr<void?>(t.iq2ss[(r.off / 256l) * IQ2S_SSB]), r.n, r.d)
+                } elif (r.fmt == 24) {
+                    invoke(g_stream_repack, 24, addr<void?>(temp_q[((r.off - j.woff) / 256l) * IQ2XS_QSB]),
+                        addr<void?>(t.iq2xss[(r.off / 256l) * IQ2XS_SSB]), r.n, r.d)
+                } elif (r.fmt == 25) {
+                    invoke(g_stream_repack, 25, addr<void?>(temp_q[((r.off - j.woff) / 256l) * IQ2XXS_QSB]),
+                        addr<void?>(t.iq2xxss[(r.off / 256l) * IQ2XXS_SSB]), r.n, r.d)
                 }
             }
         }
@@ -998,6 +1124,33 @@ def private transcode_kq_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : s
     } elif (fmt == KqFmt.q40) {
         gguf_transcode_q40(m, bytes, name, kq, ks, eloff, n, src_off)
         return "q40 transcode (Q4_0)"
+    } elif (fmt == KqFmt.iq4xs) {
+        gguf_transcode_iq4xs(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "iq4xs transcode (IQ4_XS)"
+    } elif (fmt == KqFmt.k3) {
+        gguf_transcode_q3k(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "k3 transcode (Q3_K)"
+    } elif (fmt == KqFmt.iq3s) {
+        gguf_transcode_iq3s(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "iq3s transcode (IQ3_S)"
+    } elif (fmt == KqFmt.iq3xxs) {
+        gguf_transcode_iq3xxs(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "iq3xxs transcode (IQ3_XXS)"
+    } elif (fmt == KqFmt.iq4nl) {
+        gguf_transcode_iq4nl(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "iq4nl transcode (IQ4_NL)"
+    } elif (fmt == KqFmt.k2) {
+        gguf_transcode_q2k(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "k2 transcode (Q2_K)"
+    } elif (fmt == KqFmt.iq2s) {
+        gguf_transcode_iq2s(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "iq2s transcode (IQ2_S)"
+    } elif (fmt == KqFmt.iq2xs) {
+        gguf_transcode_iq2xs(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "iq2xs transcode (IQ2_XS)"
+    } elif (fmt == KqFmt.iq2xxs) {
+        gguf_transcode_iq2xxs(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "iq2xxs transcode (IQ2_XXS)"
     }
     gguf_transcode_q51(m, bytes, name, kq, ks, eloff, n, src_off)
     return "q51 transcode (Q5_1)"
@@ -1036,6 +1189,24 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.k6q, t.k6s, woff, n, src_off, scratch)
     } elif (fmt == KqFmt.q40) {
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.q40q, t.q40s, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.iq4xs) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq4xsq, t.iq4xss, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.k3) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.k3q, t.k3s, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.iq3s) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq3sq, t.iq3ss, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.iq3xxs) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq3xxsq, t.iq3xxss, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.iq4nl) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq4nlq, t.iq4nls, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.k2) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.k2q, t.k2s, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.iq2s) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq2sq, t.iq2ss, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.iq2xs) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq2xsq, t.iq2xss, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.iq2xxs) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq2xxsq, t.iq2xxss, woff, n, src_off, scratch)
     } elif (fmt == KqFmt.q51) {
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.q51q, t.q51s, woff, n, src_off, scratch)
     } elif (t.quant == QuantMode.q8) {
@@ -1135,8 +1306,8 @@ def private log_load_report(t : Model) {
     to_log(LOG_INFO, "dasLLAMA noisy: backend '{active_kernel_backend()}' | kquant_native {get_kquant_native()} q40_native {get_kq_q40_native()} q50_native {get_kq_q50_native()}\n")
     // the tier arms at [init], before a --noisy CLI flag can land — restate it here so the flag alone suffices
     to_log(LOG_INFO, "dasLLAMA noisy: GPU tier installed {moe_gpu_tier_installed()} | want auto {gpu_want_auto()}, moe layers {gpu_want_moe_layers()}, stream {gpu_want_moe_stream()}\n")
-    to_log(LOG_INFO, "dasLLAMA noisy: format tags - q8 {tally_fmt(t, KqFmt.q8)}, k4 {tally_fmt(t, KqFmt.k4)}, k5 {tally_fmt(t, KqFmt.k5)}, k6 {tally_fmt(t, KqFmt.k6)}, q40 {tally_fmt(t, KqFmt.q40)}, q51 {tally_fmt(t, KqFmt.q51)}\n")
-    to_log(LOG_INFO, "dasLLAMA noisy: plane MB - q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), k4 {float(long_length(t.k4q) + long_length(t.k4s)) / mb}, k5 {float(long_length(t.k5q) + long_length(t.k5s)) / mb}, k6 {float(long_length(t.k6q) + long_length(t.k6s)) / mb}, q40 {float(long_length(t.q40q) + long_length(t.q40s)) / mb}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
+    to_log(LOG_INFO, "dasLLAMA noisy: format tags - q8 {tally_fmt(t, KqFmt.q8)}, k4 {tally_fmt(t, KqFmt.k4)}, k5 {tally_fmt(t, KqFmt.k5)}, k6 {tally_fmt(t, KqFmt.k6)}, q40 {tally_fmt(t, KqFmt.q40)}, q51 {tally_fmt(t, KqFmt.q51)}, iq4xs {tally_fmt(t, KqFmt.iq4xs)}, k3 {tally_fmt(t, KqFmt.k3)}, iq3s {tally_fmt(t, KqFmt.iq3s)}, iq3xxs {tally_fmt(t, KqFmt.iq3xxs)}, iq4nl {tally_fmt(t, KqFmt.iq4nl)}, k2 {tally_fmt(t, KqFmt.k2)}, iq2s {tally_fmt(t, KqFmt.iq2s)}, iq2xs {tally_fmt(t, KqFmt.iq2xs)}, iq2xxs {tally_fmt(t, KqFmt.iq2xxs)}\n")
+    to_log(LOG_INFO, "dasLLAMA noisy: plane MB - q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), k4 {float(long_length(t.k4q) + long_length(t.k4s)) / mb}, k5 {float(long_length(t.k5q) + long_length(t.k5s)) / mb}, k6 {float(long_length(t.k6q) + long_length(t.k6s)) / mb}, q40 {float(long_length(t.q40q) + long_length(t.q40s)) / mb}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, iq4xs {float(long_length(t.iq4xsq) + long_length(t.iq4xss)) / mb}, k3 {float(long_length(t.k3q) + long_length(t.k3s)) / mb}, iq3s {float(long_length(t.iq3sq) + long_length(t.iq3ss)) / mb}, iq3xxs {float(long_length(t.iq3xxsq) + long_length(t.iq3xxss)) / mb}, iq4nl {float(long_length(t.iq4nlq) + long_length(t.iq4nls)) / mb}, k2 {float(long_length(t.k2q) + long_length(t.k2s)) / mb}, iq2s {float(long_length(t.iq2sq) + long_length(t.iq2ss)) / mb}, iq2xs {float(long_length(t.iq2xsq) + long_length(t.iq2xss)) / mb}, iq2xxs {float(long_length(t.iq2xxsq) + long_length(t.iq2xxss)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
 }
 
 // GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path)
@@ -1149,6 +1320,33 @@ def private kq_fmt_of(gt : int) : KqFmt {
     }
     if (gt == GGML_TYPE_Q6_K) {
         return KqFmt.k6
+    }
+    if (gt == GGML_TYPE_IQ4_XS) {
+        return KqFmt.iq4xs
+    }
+    if (gt == GGML_TYPE_Q3_K) {
+        return KqFmt.k3
+    }
+    if (gt == GGML_TYPE_IQ3_S) {
+        return KqFmt.iq3s
+    }
+    if (gt == GGML_TYPE_IQ3_XXS) {
+        return KqFmt.iq3xxs
+    }
+    if (gt == GGML_TYPE_IQ4_NL) {
+        return KqFmt.iq4nl
+    }
+    if (gt == GGML_TYPE_Q2_K) {
+        return KqFmt.k2
+    }
+    if (gt == GGML_TYPE_IQ2_S) {
+        return KqFmt.iq2s
+    }
+    if (gt == GGML_TYPE_IQ2_XS) {
+        return KqFmt.iq2xs
+    }
+    if (gt == GGML_TYPE_IQ2_XXS) {
+        return KqFmt.iq2xxs
     }
     if (gt == GGML_TYPE_Q4_0 && get_kq_q40_native()) {
         return KqFmt.q40
@@ -1983,6 +2181,15 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             g_stream_plane_total["k6q"] = (sz.k6_n / 256l) * K6_QSB
             g_stream_plane_total["q40q"] = (sz.q40_n / 256l) * Q40_QSB
             g_stream_plane_total["q51q"] = (sz.q51_n / 32l) * Q51_QB
+            g_stream_plane_total["iq4xsq"] = (sz.iq4xs_n / 256l) * IQ4XS_QSB
+            g_stream_plane_total["k3q"] = (sz.k3_n / 256l) * K3_QSB
+            g_stream_plane_total["iq3sq"] = (sz.iq3s_n / 256l) * IQ3S_QSB
+            g_stream_plane_total["iq3xxsq"] = (sz.iq3xxs_n / 256l) * IQ3XXS_QSB
+            g_stream_plane_total["iq4nlq"] = (sz.iq4nl_n / 256l) * Q40_QSB
+            g_stream_plane_total["k2q"] = (sz.k2_n / 256l) * K2_QSB
+            g_stream_plane_total["iq2sq"] = (sz.iq2s_n / 256l) * IQ2S_QSB
+            g_stream_plane_total["iq2xsq"] = (sz.iq2xs_n / 256l) * IQ2XS_QSB
+            g_stream_plane_total["iq2xxsq"] = (sz.iq2xxs_n / 256l) * IQ2XXS_QSB
             let wb = mode == QuantMode.q8 ? sz.wblob_n : 0l
             g_stream_plane_total[t.metal_blob ? "mblob" : "qblob"] = (t.metal_blob
                 ? (wb / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB) : wb)
@@ -2026,6 +2233,78 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             t.q51s |> reserve((sz.q51_n / 32l) * Q51_SB)
             t.q51s |> resize((sz.q51_n / 32l) * Q51_SB)
+        }
+        if (sz.iq4xs_n > 0l) {
+            if (!stream_q) {
+                t.iq4xsq |> reserve((sz.iq4xs_n / 256l) * IQ4XS_QSB)
+                t.iq4xsq |> resize((sz.iq4xs_n / 256l) * IQ4XS_QSB)
+            }
+            t.iq4xss |> reserve((sz.iq4xs_n / 256l) * IQ4XS_SSB)
+            t.iq4xss |> resize((sz.iq4xs_n / 256l) * IQ4XS_SSB)
+        }
+        if (sz.k3_n > 0l) {
+            if (!stream_q) {
+                t.k3q |> reserve((sz.k3_n / 256l) * K3_QSB)
+                t.k3q |> resize((sz.k3_n / 256l) * K3_QSB)
+            }
+            t.k3s |> reserve((sz.k3_n / 256l) * K3_SSB)
+            t.k3s |> resize((sz.k3_n / 256l) * K3_SSB)
+        }
+        if (sz.iq3s_n > 0l) {
+            if (!stream_q) {
+                t.iq3sq |> reserve((sz.iq3s_n / 256l) * IQ3S_QSB)
+                t.iq3sq |> resize((sz.iq3s_n / 256l) * IQ3S_QSB)
+            }
+            t.iq3ss |> reserve((sz.iq3s_n / 256l) * IQ3S_SSB)
+            t.iq3ss |> resize((sz.iq3s_n / 256l) * IQ3S_SSB)
+        }
+        if (sz.iq3xxs_n > 0l) {
+            if (!stream_q) {
+                t.iq3xxsq |> reserve((sz.iq3xxs_n / 256l) * IQ3XXS_QSB)
+                t.iq3xxsq |> resize((sz.iq3xxs_n / 256l) * IQ3XXS_QSB)
+            }
+            t.iq3xxss |> reserve((sz.iq3xxs_n / 256l) * IQ3XXS_SSB)
+            t.iq3xxss |> resize((sz.iq3xxs_n / 256l) * IQ3XXS_SSB)
+        }
+        if (sz.iq4nl_n > 0l) {
+            if (!stream_q) {
+                t.iq4nlq |> reserve((sz.iq4nl_n / 256l) * Q40_QSB)
+                t.iq4nlq |> resize((sz.iq4nl_n / 256l) * Q40_QSB)
+            }
+            t.iq4nls |> reserve((sz.iq4nl_n / 256l) * Q40_SSB)
+            t.iq4nls |> resize((sz.iq4nl_n / 256l) * Q40_SSB)
+        }
+        if (sz.k2_n > 0l) {
+            if (!stream_q) {
+                t.k2q |> reserve((sz.k2_n / 256l) * K2_QSB)
+                t.k2q |> resize((sz.k2_n / 256l) * K2_QSB)
+            }
+            t.k2s |> reserve((sz.k2_n / 256l) * K2_SSB)
+            t.k2s |> resize((sz.k2_n / 256l) * K2_SSB)
+        }
+        if (sz.iq2s_n > 0l) {
+            if (!stream_q) {
+                t.iq2sq |> reserve((sz.iq2s_n / 256l) * IQ2S_QSB)
+                t.iq2sq |> resize((sz.iq2s_n / 256l) * IQ2S_QSB)
+            }
+            t.iq2ss |> reserve((sz.iq2s_n / 256l) * IQ2S_SSB)
+            t.iq2ss |> resize((sz.iq2s_n / 256l) * IQ2S_SSB)
+        }
+        if (sz.iq2xs_n > 0l) {
+            if (!stream_q) {
+                t.iq2xsq |> reserve((sz.iq2xs_n / 256l) * IQ2XS_QSB)
+                t.iq2xsq |> resize((sz.iq2xs_n / 256l) * IQ2XS_QSB)
+            }
+            t.iq2xss |> reserve((sz.iq2xs_n / 256l) * IQ2XS_SSB)
+            t.iq2xss |> resize((sz.iq2xs_n / 256l) * IQ2XS_SSB)
+        }
+        if (sz.iq2xxs_n > 0l) {
+            if (!stream_q) {
+                t.iq2xxsq |> reserve((sz.iq2xxs_n / 256l) * IQ2XXS_QSB)
+                t.iq2xxsq |> resize((sz.iq2xxs_n / 256l) * IQ2XXS_QSB)
+            }
+            t.iq2xxss |> reserve((sz.iq2xxs_n / 256l) * IQ2XXS_SSB)
+            t.iq2xxss |> resize((sz.iq2xxs_n / 256l) * IQ2XXS_SSB)
         }
         if (mode == QuantMode.q8) {
             if (!stream_q) {
@@ -2333,6 +2612,15 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     t.kq_repack_mr5 = active_kq_layout_mr(5)
                     t.kq_repack_mr6 = active_kq_layout_mr(6)
                     t.kq_repack_mr40 = active_kq_layout_mr(40)
+                    t.kq_repack_mr44 = active_kq_layout_mr(44)
+                    t.kq_repack_mr3 = active_kq_layout_mr(3)
+                    t.kq_repack_mr33 = active_kq_layout_mr(33)
+                    t.kq_repack_mr34 = active_kq_layout_mr(34)
+                    t.kq_repack_mr45 = active_kq_layout_mr(45)
+                    t.kq_repack_mr2 = active_kq_layout_mr(2)
+                    t.kq_repack_mr23 = active_kq_layout_mr(23)
+                    t.kq_repack_mr24 = active_kq_layout_mr(24)
+                    t.kq_repack_mr25 = active_kq_layout_mr(25)
                 }
             } else {
                 layout_repack_q8(t)
@@ -2349,7 +2637,16 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     t.kq_repack_mr5 = active_kq_layout_mr(5)
                     t.kq_repack_mr6 = active_kq_layout_mr(6)
                     t.kq_repack_mr40 = active_kq_layout_mr(40)
-                    to_log(LOG_INFO, "dasLLAMA: K-quant planes repacked to the '{active_kernel_backend()}' layouts (k4 grp{t.kq_repack_mr4}, k5 grp{t.kq_repack_mr5}, k6 grp{t.kq_repack_mr6}, q40 grp{t.kq_repack_mr40})\n")
+                    t.kq_repack_mr44 = active_kq_layout_mr(44)
+                    t.kq_repack_mr3 = active_kq_layout_mr(3)
+                    t.kq_repack_mr33 = active_kq_layout_mr(33)
+                    t.kq_repack_mr34 = active_kq_layout_mr(34)
+                    t.kq_repack_mr45 = active_kq_layout_mr(45)
+                    t.kq_repack_mr2 = active_kq_layout_mr(2)
+                    t.kq_repack_mr23 = active_kq_layout_mr(23)
+                    t.kq_repack_mr24 = active_kq_layout_mr(24)
+                    t.kq_repack_mr25 = active_kq_layout_mr(25)
+                    to_log(LOG_INFO, "dasLLAMA: K-quant planes repacked to the '{active_kernel_backend()}' layouts (k4 grp{t.kq_repack_mr4}, k5 grp{t.kq_repack_mr5}, k6 grp{t.kq_repack_mr6}, q40 grp{t.kq_repack_mr40}, iq4xs grp{t.kq_repack_mr44}, k3 grp{t.kq_repack_mr3}, iq3s grp{t.kq_repack_mr33}, iq3xxs grp{t.kq_repack_mr34}, iq4nl grp{t.kq_repack_mr45}, k2 grp{t.kq_repack_mr2}, iq2s grp{t.kq_repack_mr23}, iq2xs grp{t.kq_repack_mr24}, iq2xxs grp{t.kq_repack_mr25})\n")
                 }
             }
         }

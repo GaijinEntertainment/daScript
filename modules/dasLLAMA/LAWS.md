@@ -66,3 +66,33 @@
   clause - a bump's diff also carries the LAWS.md entry recording the declared release; the
   declaration itself stays his call, on feel ("the intent was to bump due to major changes
   ... i go on feel on that one" - "4. agreee").
+
+- **2026-08-30** (`HOW_TO_ADD_A_FORMAT.md`, `CLAUDE.md`): Boris opened the HOW_TO document
+  series with this pilot - "document entire process on how to add new format, as well as all
+  the quirks which popped up. so that the followup arc can unquirk them (if need be)"; a
+  separate kernel per card "is fine, as long as its a similar template setup ... just another
+  cond"; the series continues with adding a model family, vision, audio, TTS. Linked from the
+  module's new `CLAUDE.md` and the root table. Arc ruling the same day: the community i-quants
+  are read as-is ("B for sure. we are not big enough for people to bother with our own fork"),
+  Qwen3.8-27B on a 16 GB card is the Vulkan arc's endgame.
+
+## 2026-08-30 - HOW_TO_ADD_A_FORMAT.md, followup_general.md (#58)
+
+Boris, on the IQ4_XS pilot's Metal section and QUIRKS 12-15: "this is exactly the kind of info
+we need for that document. once we're done with all formats - we'll unquirk all we can, but
+otherwise it'll be like step1-step2-step3 instruction - this is how to add format. like it
+should." The QUIRKS ledger stays open and honest through every format of the arc; the unquirk
+pass comes AFTER the last format lands, and the surviving document is the numbered walk. Earlier
+the same day, on the Metal portion: "we have an option of ssh m1 ... go for it. it feels right
+somehow. plus validates the how-to. and we'll ledger M5 pass on new kernels for later" - the M1
+is in the loop for every format from here, and performance work on the new Metal kernels is
+the ledgered M5 pass, not this arc.
+
+## 2026-08-30 - HOW_TO_ADD_A_FORMAT.md (section 4), followup_general.md (#60)
+
+Boris, on the IQ3_S emitter design after reading llama.cpp's AVX2 iq3_s kernel: "our CPU
+kernels typically faster - so if they map closer, perhaps worth looking at and doing side by
+side?" and then "lets make sure we do for all new CPU kernels, and if we skipped for previous
+ones - lets ledger towards the end of this arc." Every new format's CPU kernel work starts by
+reading llama.cpp's arch kernel and racing its techniques as tune perms; the formats that
+skipped this (IQ4_XS, Q3_K) get the retroactive audit at the end of the arc (#60).

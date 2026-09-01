@@ -176,13 +176,12 @@ def ensure_sgconfig(root : string) {
 
 // Stage the JIT backend files that a plain `--target daslang` build does NOT produce:
 // <root>/lib/LLVM.dll (the LLVM codegen backend, loaded by name from dasLLVM's bindings) and
-// <root>/bin/lld-link.exe (links each JIT-emitted .dll). Only the dasLLVM shared-lib CMake step
+// on Windows <root>/bin/lld-link.exe (links each JIT-emitted .dll). Only the dasLLVM shared-lib CMake step
 // stages these, and building just the `daslang` target skips it — so without this a fresh
 // worktree binary silently falls back to the interpreter (`-jit` fails: "can't load LLVM.dll").
 // Copy them from the source tree of the daslang running this setup (get_das_root()), which is a
 // JIT-capable build. When setup itself runs under the target worktree's binary, use DASLANG as a
 // fallback SDK binary: a worktree-local root cannot supply a backend file that it is missing.
-// Windows-only for now (the codegen dll name / linker differ on posix — staging there is TBD).
 def root_from_daslang_binary(binary : string) : string {
     let executable_dir = dir_name(get_full_file_name(binary))
     let leaf = base_name(executable_dir)
@@ -193,9 +192,6 @@ def root_from_daslang_binary(binary : string) : string {
 }
 
 def stage_jit_backend(root : string) {
-    if (get_platform_name() != "windows") {
-        return
-    }
     let src_root = get_das_root()
     var fallback_root = ""
     var fallback_source = "DASLANG is unset"
@@ -208,7 +204,12 @@ def stage_jit_backend(root : string) {
             fallback_source = "DASLANG does not name an existing binary"
         }
     }
-    let jit_files = ["lib/LLVM.dll", "bin/lld-link.exe"]
+    // lib/LLVM.dll is the codegen backend's name on every platform
+    // its .version stamp stages with it, or a later cmake configure refetches LLVM
+    var jit_files <- ["lib/LLVM.dll", "lib/LLVM.dll.version"]
+    if (get_platform_name() == "windows") {
+        jit_files |> push("bin/lld-link.exe")
+    }
     for (rel in jit_files) {
         let dst = path_join(root, rel)
         if (fexist(dst)) {

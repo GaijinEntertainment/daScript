@@ -82,6 +82,7 @@ struct private MslCtx {
     ustructs : table<string; string>            // @uniform struct name -> its MSL definition (preamble)
     helpers : table<string>                     // preamble helper functions referenced by lowered calls
     gen_helpers : table<string; string>         // GENERATED preamble helpers (tensor ops): mangled name -> text
+    const_tables : table<string; string>        // hoisted program-scope constant arrays: MSL name -> definition text
     scan_ptrs : table<string; string>           // scan-time pointer local -> member (write-set resolution)
     tg_accs : table<string; string>             // staged-GEMM acc local -> "m|n|sgs|kk|at" (decl suppressed on GPU)
     mpp_used : bool                             // a tile_tg/rowscale-only kernel still needs the MPP include
@@ -2961,6 +2962,83 @@ def private local_msl_name(ctx : MslCtx; name : string) : string {
     return key_exists(ctx.members, name) ? "{base}_l" : base
 }
 
+// A `let` fixed-array local with an all-literal `fixed_array<T>(...)` initializer lowers to a
+// program-scope `constant` array - the codebook/grid-table shape quant kernels stage from.
+// Anything else with an initializer stays rejected: das zero-init is the only local form.
+def private hoist_const_table(var ctx : MslCtx; v : VariablePtr) {
+    let et = v._type.firstType
+    let n = v._type.fixedDim
+    if (!v._type.flags.constant) {
+        err(ctx, v.at, "fixed-array local `{v.name}` initializer hoists to a program-scope constant table - it must be a `let` (a written table has no constant form)")
+        return
+    }
+    if (reject_cpu_only_width(ctx, v.at, et)) {
+        return
+    }
+    let ename = msl_type_name(et)
+    if (empty(ename)) {
+        err(ctx, v.at, "local array `{v.name}` element type {describe(et)} has no MSL form")
+        return
+    }
+    var mk : ExprMakeArray?
+    if (v.init is ExprMakeArray) {
+        mk = v.init as ExprMakeArray
+    } elif (v.init is ExprCall) {
+        let ec = v.init as ExprCall
+        if (length(ec.arguments) == 1 && ec.arguments[0] is ExprMakeArray) {
+            mk = ec.arguments[0] as ExprMakeArray
+        }
+    }
+    if (mk == null || length(mk.values) != n) {
+        err(ctx, v.at, "fixed-array local `{v.name}` hoists to a program-scope constant table - its initializer must be a `fixed_array<T>(...)` of exactly {n} elements")
+        return
+    }
+    var vals : array<string>
+    vals |> reserve(n)
+    for (el in mk.values) {
+        if (!(el is ExprConstInt || el is ExprConstUInt || el is ExprConstInt64 || el is ExprConstUInt64 ||
+                el is ExprConstFloat || el is ExprConstDouble || el is ExprConstInt8 || el is ExprConstUInt8 ||
+                el is ExprConstInt16 || el is ExprConstUInt16)) {
+            err(ctx, v.at, "fixed-array local `{v.name}` hoists to a program-scope constant table - every element must be an integer or float scalar literal (bool, half and vector literals do not hoist)")
+            return
+        }
+        vals |> push(emit_value(ctx, el))
+    }
+    let vtxt = build_string() $(var w) {
+        for (i in range(n)) {
+            if (i % 8 == 0) {
+                w |> write("    ")
+            }
+            w |> write(vals[i])
+            if (i != n - 1) {
+                w |> write(",")
+            }
+            if (i % 8 == 7 || i == n - 1) {
+                w |> write("\n")
+            } else {
+                w |> write(" ")
+            }
+        }
+    }
+    let aname = string(v.name)
+    var an = local_msl_name(ctx, aname)
+    var txt = "constant {ename} {an}[{n}] = \{\n{vtxt}\};"
+    if (key_exists(ctx.const_tables, an) && ctx.const_tables[an] != txt) {
+        var cand = "{an}_c{ctx.splice_seq}"   // a same-named table with different content in another helper
+        while (key_exists(ctx.const_tables, cand)) {   // a helper's own table may already hold the generated name
+            ctx.splice_seq++
+            cand = "{an}_c{ctx.splice_seq}"
+        }
+        ctx.splice_seq++
+        an = cand
+        txt = "constant {ename} {an}[{n}] = \{\n{vtxt}\};"
+        note(ctx, "stmt.let.const_table.renamed")
+    }
+    ctx.renames[aname] = an
+    ctx.const_tables[an] = txt
+    note(ctx, "stmt.let.const_table")
+}
+
 def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var lines : array<string>) {
     if (e == null) {
         return
@@ -3028,9 +3106,10 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             }
             if (v._type != null && v._type.baseType == Type.tFixedArray && v._type.firstType != null &&
                     v._type.firstType.baseType != Type.tFixedArray) {
-                // single-dim fixed-array local; das zero-init semantics, no initializer form
+                // single-dim fixed-array local; das zero-init semantics. A `let` with an
+                // all-literal initializer hoists to a program-scope `constant` table instead.
                 if (v.init != null) {
-                    err(ctx, v.at, "fixed-array local `{v.name}` takes no initializer - das zero-init is the MSL form")
+                    hoist_const_table(ctx, v)
                     continue
                 }
                 let et = v._type.firstType
@@ -3668,6 +3747,11 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         var hs <- [for (h in keys(ctx.helpers)); MSL_DOT_HELPERS?[h] ?? ""]
         hs |> sort()    // table iteration order is hash-based — pin the emitted order
         helper_text = join(hs, "\n") + "\n"
+    }
+    if (!empty(ctx.const_tables)) {
+        var cts <- [for (v in values(ctx.const_tables)); v]
+        cts |> sort()   // pinned order, same reason
+        helper_text = join(cts, "\n") + "\n" + helper_text
     }
     if (!empty(ctx.ustructs)) {
         // @uniform struct definitions come first — the kernel signature names them.

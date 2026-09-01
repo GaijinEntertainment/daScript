@@ -444,8 +444,7 @@ var public g_target_x64_amx = false
 var public g_target_os_linux = false
 
 // ARMv8.6 i8mm (SMMLA — 2×2 s8 matrix-multiply-accumulate; Apple M2/A15+, Graviton3+; M1 has
-// DotProd only). Host truth is LLVMGetHostCPUFeatures "+i8mm" — populated on Linux aarch64, EMPTY
-// on macOS where the CPU name implies features — so there the force env is the rail on both boxes.
+// DotProd only). Host truth is LLVMGetHostCPUFeatures "+i8mm" OR cpu_supports (ARCHITECTURE.md#aarch64-feature-truth).
 var public g_target_arm64_i8mm = false
 
 // ARMv8.2 fullfp16 (native half arithmetic — fadd.4h/8h etc.). Detected as i8mm, except
@@ -603,6 +602,7 @@ def public init_jit_clopts() {
 // Pure target truth, no LLVM state touched: safe and required BEFORE init_jit, whose DisableJitVisitor
 // consults these gates. init_jit re-runs it — pass the SAME host_features or pass and emission diverge.
 // host_features=false targets a GENERIC CPU: cpuid gates stay off, since leaked F16C emits libcalls.
+[arch(at = "../ARCHITECTURE.md#aarch64-feature-truth")]
 def public init_jit_target_flags(target_triple : string = ""; host_features : bool = true) {
     g_target_host_features = host_features
     g_target_is_wasm = target_triple |> starts_with("wasm")
@@ -632,14 +632,12 @@ def public init_jit_target_flags(target_triple : string = ""; host_features : bo
     g_target_os_linux = (empty(target_triple)
         ? get_platform_name() == "linux"
         : find(target_triple, "linux") >= 0)
-    // aarch64 i8mm tier (see the g_target_arm64_i8mm declaration comment): host targets read
-    // LLVM's host-features string OR the arm force env; cross aarch64 triples the env only.
     g_target_arm64_i8mm = g_target_is_aarch64 && (arm64_forced_feature("i8mm")
-        || (empty(target_triple) && host_features && host_llvm_feature("i8mm")))
+        || (empty(target_triple) && host_features && (host_llvm_feature("i8mm") || cpu_supports("i8mm"))))
     // aarch64 fullfp16 (see declaration comment): darwin-arm64 == Apple Silicon == always.
     // Generic-exe builds stay off — the promote/narrow path is ARMv8.0-legal, fullfp16 is not.
     g_target_arm64_fullfp16 = g_target_is_aarch64 && (arm64_forced_feature("fullfp16")
-        || (empty(target_triple) && host_features && (host_llvm_feature("fullfp16") || get_platform_name() == "darwin")))
+        || (empty(target_triple) && host_features && (host_llvm_feature("fullfp16") || cpu_supports("fullfp16") || get_platform_name() == "darwin")))
     // fp16 operators lower as promote-compute-narrow IR wherever half converts are hardware
     // (routing truth for isExprOp2/Op1_Func — lives in llvm_boost). aarch64 needs no feature
     // gate: f16<->f32 converts are ARMv8.0 baseline, so even generic-exe aarch64 stays native.
@@ -893,7 +891,7 @@ def public with_target_machine(triple, cpu, features : string; opt_level : uint;
     LLVMDisposeTargetMachine(targetMachine)
 }
 
-[macro_function]
+[macro_function, arch(at = "../ARCHITECTURE.md#aarch64-feature-truth")]
 def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) : LLVMTargetMachineRef {
     LLVMInitializeAllTargetInfos()
     LLVMInitializeAllTargets()
@@ -915,15 +913,13 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
     let cpu_msg = use_host_cpu ? LLVMGetHostCPUName() : ""
     let features_msg = use_host_cpu ? LLVMGetHostCPUFeatures() : ""
 
-    // JIT host artifact on aarch64: force +dotprod in. LLVMGetHostCPUFeatures is empty on macOS
-    // (the CPU name implies features), so a part an older LLVM cannot name maps to "generic",
-    // where SDOT has no instruction to select and codegen aborts. Every aarch64 host has dotprod.
     var targetMachine : LLVMTargetMachineRef
     if (use_host_cpu && g_target_is_aarch64) {
         var feats = empty(features_msg) ? "+dotprod" : "{features_msg},+dotprod"
-        // DAS_JIT_ARM64_FORCE_FEATURES (e.g. "i8mm"): the x64 rail's twin — a pre-i8mm host EMITS
-        // AND LINKS an artifact for newer silicon, which the same-env run on the target box then
-        // cache-hits without a linker. Executing forced instructions here SIGILLs; gate execution.
+        if (cpu_supports("i8mm")) {
+            feats = "{feats},+i8mm"
+        }
+        // a forced feature's artifact cache-hits on the target box without a linker there
         let forced_arm <- [for (part in split(g_env_jit.jit_arm64_force_features, ",")); "+{part}"; where !empty(part)]
         if (!empty(forced_arm)) {
             feats = "{feats},{join(forced_arm, ",")}"

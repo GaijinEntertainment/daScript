@@ -162,6 +162,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/daslang/references/queries.md` | Filter/map/sort/group/aggregate transforms - comprehension -> linq_boost -> plain `for`; avoid `daslib/functional` for new code |
 | `skills/decs.md` | Programming with `daslib/decs` / `decs_boost` - entities, components, queries, `[decs_template]`, stages |
 | `skills/internal/aot_hash_desync_debugging.md` | `error[50101]: AOT link failed` - semantic-hash desync diagnostics |
+| `modules/dasLLAMA/CLAUDE.md` | Any work under `modules/dasLLAMA/` - the module's HOW_TO series (`HOW_TO_ADD_A_FORMAT.md` for a new weight format) and its architecture/review set |
 
 Multiple skill files may apply to one task: creating a new daslib module needs `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/internal/documentation_rst.md`.
 

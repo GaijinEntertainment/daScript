@@ -40,7 +40,7 @@ var private @scratch g_pf_ids_stage : array<uint>
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_f16_feed(f : int) : bool {
-    return (f == int(KqFmt.q8) || f == int(KqFmt.k4) || f == int(KqFmt.k6)) && g_gpu.coopmat_mode == 4
+    return (f == int(KqFmt.q8) || kq_sb(f)) && g_gpu.coopmat_mode == 4
 }
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
@@ -56,14 +56,48 @@ let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds her
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def private cm2_cls_ensure(fmt : int; tc : int64) : bool {
-    verify(fmt == int(KqFmt.q8) || fmt == int(KqFmt.k4) || fmt == int(KqFmt.k6), "vk prefill: a cm2 tile for a format the f16 feed never admits")
+    verify(fmt == int(KqFmt.q8) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
     verify(tc == 256l || tc == 128l || tc == 32l, "vk prefill: a cm2 tile column the pick never returns")
     if (fmt == int(KqFmt.k4)) {
         return tc == 256l ? ensure_kq_batch_k4_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k4_cm2m_cls() : ensure_kq_batch_k4_cm2s_cls())
     }
+    if (fmt == int(KqFmt.k5)) {
+        return tc == 256l ? ensure_kq_batch_k5_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k5_cm2m_cls() : ensure_kq_batch_k5_cm2s_cls())
+    }
     if (fmt == int(KqFmt.k6)) {
         return tc == 256l ? ensure_kq_batch_k6_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k6_cm2m_cls() : ensure_kq_batch_k6_cm2s_cls())
     }
+    if (fmt == int(KqFmt.q40)) {
+        return tc == 256l ? ensure_kq_batch_q40_cm2l_cls() : (tc == 128l ? ensure_kq_batch_q40_cm2m_cls() : ensure_kq_batch_q40_cm2s_cls())
+    }
+    if (fmt == int(KqFmt.iq4xs)) {
+        return tc == 256l ? ensure_kq_batch_iq4xs_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq4xs_cm2m_cls() : ensure_kq_batch_iq4xs_cm2s_cls())
+    }
+    if (fmt == int(KqFmt.k3)) {
+        return tc == 256l ? ensure_kq_batch_k3_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k3_cm2m_cls() : ensure_kq_batch_k3_cm2s_cls())
+    }
+    if (fmt == int(KqFmt.iq3s)) {
+        return tc == 256l ? ensure_kq_batch_iq3s_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq3s_cm2m_cls() : ensure_kq_batch_iq3s_cm2s_cls())
+    }
+    if (fmt == int(KqFmt.iq3xxs)) {
+        return tc == 256l ? ensure_kq_batch_iq3xxs_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq3xxs_cm2m_cls() : ensure_kq_batch_iq3xxs_cm2s_cls())
+    }
+    if (fmt == int(KqFmt.iq4nl)) {
+        return tc == 256l ? ensure_kq_batch_iq4nl_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq4nl_cm2m_cls() : ensure_kq_batch_iq4nl_cm2s_cls())
+    }
+    if (fmt == int(KqFmt.k2)) {
+        return tc == 256l ? ensure_kq_batch_k2_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k2_cm2m_cls() : ensure_kq_batch_k2_cm2s_cls())
+    }
+    if (fmt == int(KqFmt.iq2s)) {
+        return tc == 256l ? ensure_kq_batch_iq2s_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq2s_cm2m_cls() : ensure_kq_batch_iq2s_cm2s_cls())
+    }
+    if (fmt == int(KqFmt.iq2xs)) {
+        return tc == 256l ? ensure_kq_batch_iq2xs_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq2xs_cm2m_cls() : ensure_kq_batch_iq2xs_cm2s_cls())
+    }
+    if (fmt == int(KqFmt.iq2xxs)) {
+        return tc == 256l ? ensure_kq_batch_iq2xxs_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq2xxs_cm2m_cls() : ensure_kq_batch_iq2xxs_cm2s_cls())
+    }
+    verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 ensure fell through for a kq format - a format the feed admits must own a tile arm")
     return tc == 256l ? ensure_q8_batch_cm2l_cls() : (tc == 128l ? ensure_q8_batch_cm2m_cls() : ensure_q8_batch_cm2s_cls())
 }
 
@@ -75,12 +109,79 @@ def private cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : i
         }
         return tc == 128l ? set_kq_batch_k4_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_k4_cm2s_cls(bufs, sizes, gbits)
     }
+    if (fmt == int(KqFmt.k5)) {
+        if (tc == 256l) {
+            return set_kq_batch_k5_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_k5_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_k5_cm2s_cls(bufs, sizes, gbits)
+    }
     if (fmt == int(KqFmt.k6)) {
         if (tc == 256l) {
             return set_kq_batch_k6_cm2l_cls(bufs, sizes, gbits)
         }
         return tc == 128l ? set_kq_batch_k6_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_k6_cm2s_cls(bufs, sizes, gbits)
     }
+    if (fmt == int(KqFmt.q40)) {
+        if (tc == 256l) {
+            return set_kq_batch_q40_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_q40_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_q40_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.iq4xs)) {
+        if (tc == 256l) {
+            return set_kq_batch_iq4xs_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_iq4xs_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq4xs_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.k3)) {
+        if (tc == 256l) {
+            return set_kq_batch_k3_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_k3_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_k3_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.iq3s)) {
+        if (tc == 256l) {
+            return set_kq_batch_iq3s_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_iq3s_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq3s_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.iq3xxs)) {
+        if (tc == 256l) {
+            return set_kq_batch_iq3xxs_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_iq3xxs_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq3xxs_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.iq4nl)) {
+        if (tc == 256l) {
+            return set_kq_batch_iq4nl_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_iq4nl_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq4nl_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.k2)) {
+        if (tc == 256l) {
+            return set_kq_batch_k2_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_k2_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_k2_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.iq2s)) {
+        if (tc == 256l) {
+            return set_kq_batch_iq2s_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_iq2s_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq2s_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.iq2xs)) {
+        if (tc == 256l) {
+            return set_kq_batch_iq2xs_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_iq2xs_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq2xs_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.iq2xxs)) {
+        if (tc == 256l) {
+            return set_kq_batch_iq2xxs_cm2l_cls(bufs, sizes, gbits)
+        }
+        return tc == 128l ? set_kq_batch_iq2xxs_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq2xxs_cm2s_cls(bufs, sizes, gbits)
+    }
+    verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 set fell through for a kq format - a format the feed admits must own a tile arm")
     if (tc == 256l) {
         return set_q8_batch_cm2l_cls(bufs, sizes, gbits)
     }
@@ -97,6 +198,14 @@ def private cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : Vk
         } else {
             enc_kq_batch_k4_cm2s_cls(raw, h, s, pc, groups)
         }
+    } elif (fmt == int(KqFmt.k5)) {
+        if (tc == 256l) {
+            enc_kq_batch_k5_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_k5_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_k5_cm2s_cls(raw, h, s, pc, groups)
+        }
     } elif (fmt == int(KqFmt.k6)) {
         if (tc == 256l) {
             enc_kq_batch_k6_cm2l_cls(raw, h, s, pc, groups)
@@ -105,11 +214,94 @@ def private cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : Vk
         } else {
             enc_kq_batch_k6_cm2s_cls(raw, h, s, pc, groups)
         }
+    } elif (fmt == int(KqFmt.q40)) {
+        if (tc == 256l) {
+            enc_kq_batch_q40_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_q40_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_q40_cm2s_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        if (tc == 256l) {
+            enc_kq_batch_iq4xs_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_iq4xs_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_iq4xs_cm2s_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.k3)) {
+        if (tc == 256l) {
+            enc_kq_batch_k3_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_k3_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_k3_cm2s_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.iq3s)) {
+        if (tc == 256l) {
+            enc_kq_batch_iq3s_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_iq3s_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_iq3s_cm2s_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        if (tc == 256l) {
+            enc_kq_batch_iq3xxs_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_iq3xxs_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_iq3xxs_cm2s_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        if (tc == 256l) {
+            enc_kq_batch_iq4nl_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_iq4nl_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_iq4nl_cm2s_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.k2)) {
+        if (tc == 256l) {
+            enc_kq_batch_k2_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_k2_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_k2_cm2s_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.iq2s)) {
+        if (tc == 256l) {
+            enc_kq_batch_iq2s_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_iq2s_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_iq2s_cm2s_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.iq2xs)) {
+        if (tc == 256l) {
+            enc_kq_batch_iq2xs_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_iq2xs_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_iq2xs_cm2s_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        if (tc == 256l) {
+            enc_kq_batch_iq2xxs_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            enc_kq_batch_iq2xxs_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_iq2xxs_cm2s_cls(raw, h, s, pc, groups)
+        }
     } elif (tc == 256l) {
+        verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 enc fell through for a kq format - a format the feed admits must own a tile arm")
         enc_q8_batch_cm2l_cls(raw, h, s, pc, groups)
     } elif (tc == 128l) {
+        verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 enc fell through for a kq format - a format the feed admits must own a tile arm")
         enc_q8_batch_cm2m_cls(raw, h, s, pc, groups)
     } else {
+        verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 enc fell through for a kq format - a format the feed admits must own a tile arm")
         enc_q8_batch_cm2s_cls(raw, h, s, pc, groups)
     }
 }

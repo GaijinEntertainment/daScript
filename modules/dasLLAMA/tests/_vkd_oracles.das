@@ -169,6 +169,44 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
         k = new KqGemvQ40()
     } elif (fmt == int(KqFmt.k5)) {
         k = new KqGemvK5()
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        k = new KqGemvIq4xs()
+    } elif (fmt == int(KqFmt.k3)) {
+        k = new KqGemvK3()
+    } elif (fmt == int(KqFmt.iq3s)) {
+        var ki = new KqGemvIq3s()
+        for (i in range(512)) {   // the CPU replay never runs the staging kernel head - fill the workgroup grid here
+            ki.gridw[i] = IQ3S_GRID[i]
+        }
+        k = ki
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        var kx = new KqGemvIq3xxs()
+        for (i in range(256)) {   // same replay rule: the halved grid fills here
+            kx.gridw[i] = IQ3XXS_GRID[i]
+        }
+        k = kx
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        k = new KqGemvIq4nl()   // pure-ALU codebook - no workgroup state to fill
+    } elif (fmt == int(KqFmt.k2)) {
+        k = new KqGemvK2()   // pure ALU - no workgroup state to fill
+    } elif (fmt == int(KqFmt.iq2s)) {
+        var k2s = new KqGemvIq2s()
+        for (i in range(2048)) {   // same replay rule: the u64 grid's word pairs fill here
+            k2s.gridw[i] = IQ2S_GRID[i]
+        }
+        k = k2s
+    } elif (fmt == int(KqFmt.iq2xs)) {
+        var k2x = new KqGemvIq2xs()
+        for (i in range(1024)) {   // same replay rule, the 512-entry grid's word pairs
+            k2x.gridw[i] = IQ2XS_GRID[i]
+        }
+        k = k2x
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        var k2xx = new KqGemvIq2xxs()
+        for (i in range(512)) {   // same replay rule, the 256-entry grid's word pairs
+            k2xx.gridw[i] = IQ2XXS_GRID[i]
+        }
+        k = k2xx
     } else {
         k = new KqGemvK6()
     }
@@ -205,6 +243,526 @@ def kq_gemv_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
+// IQ4_XS GEMV float oracle, INDEPENDENT of the class bit-math: w = d*sc*LUT[q] straight off the
+// plane bytes (q40 nibble tiling, the k4 row shape with signed sc), x off the Q8_K bytes — the
+// gate that a wrong codebook pack in iq4_word cannot pass while staying self-consistent
+def iq4xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                            regions : array<uint>; n, d, nreg : int) : array<float> {
+    let lut = iq4nl_lut()
+    var y : array<float>
+    y |> resize(nreg * d)
+    let nsb = n / 256
+    for (r in range(nreg)) {
+        for (row in range(d)) {
+            let w0 = int(regions[r * 2]) + row * nsb
+            let x0 = int(regions[r * 2 + 1])
+            var acc = 0.0
+            for (s in range(nsb)) {
+                let sb = w0 + s
+                let xsb = x0 + s
+                let dd = unpackHalf2x16(ws[sb * 5]).x
+                for (blk in range(8)) {
+                    let sc = byte_s8(ws, sb * 20 + 4 + blk)
+                    var bacc = 0.0
+                    for (m in range(16)) {
+                        let b = byte_u8(wq, sb * 128 + blk * 16 + m)
+                        let xlo = byte_s8(xq, xsb * 256 + blk * 32 + m)
+                        let xhi = byte_s8(xq, xsb * 256 + blk * 32 + 16 + m)
+                        bacc += float(lut[b & 15]) * float(xlo) + float(lut[b >> 4]) * float(xhi)
+                    }
+                    acc += xs[xsb] * dd * float(sc) * bacc
+                }
+            }
+            y[r * d + row] = acc
+        }
+    }
+    return <- y
+}
+
+// Q3_K GEMV float oracle, INDEPENDENT of the class bit-math: w = d * sc16 * (q - 4) straight off
+// the plane bytes (qs lane at shift 2*(blk%4), hmask bit blk, k6's 5-word scale row), x off the
+// Q8_K bytes — the witness a wrong lane/mask pick in k3_dot cannot pass while staying self-consistent
+def k3_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                         regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y : array<float>
+    y |> resize(nreg * d)
+    let nsb = n / 256
+    for (r in range(nreg)) {
+        for (row in range(d)) {
+            let w0 = int(regions[r * 2]) + row * nsb
+            let x0 = int(regions[r * 2 + 1])
+            var acc = 0.0
+            for (s in range(nsb)) {
+                let sb = w0 + s
+                let xsb = x0 + s
+                let dd = half_at(ws, sb * 10 + 8)
+                for (blk in range(8)) {
+                    let sh = 2 * (blk % 4)
+                    let s0 = byte_s8(ws, sb * 20 + 2 * blk)
+                    let s1 = byte_s8(ws, sb * 20 + 2 * blk + 1)
+                    var bacc = 0.0
+                    for (l in range(32)) {
+                        let q2 = (byte_u8(wq, sb * 96 + (blk / 4) * 32 + l) >> sh) & 3
+                        let hb = (byte_u8(wq, sb * 96 + 64 + l) >> blk) & 1
+                        let q = (q2 | (hb << 2)) - 4
+                        bacc += float(l < 16 ? s0 : s1) * float(q) * float(byte_s8(xq, xsb * 256 + blk * 32 + l))
+                    }
+                    acc += xs[xsb] * dd * bacc
+                }
+            }
+            y[r * d + row] = acc
+        }
+    }
+    return <- y
+}
+
+// IQ3_S GEMV float oracle, INDEPENDENT of the class bit-math: w = d * (1 + 2s) * grid_byte *
+// sign straight off the plane bytes ([qs 64][qh 8][signs 32], the k4-shaped scale row), x off
+// the Q8_K bytes - the witness a wrong index/sign pick in the gather cannot pass
+def iq3s_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                           regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y : array<float>
+    y |> resize(nreg * d)
+    let nsb = n / 256
+    for (r in range(nreg)) {
+        for (row in range(d)) {
+            let w0 = int(regions[r * 2]) + row * nsb
+            let x0 = int(regions[r * 2 + 1])
+            var acc = 0.0
+            for (s in range(nsb)) {
+                let sb = w0 + s
+                let xsb = x0 + s
+                let dd = half_at(ws, sb * 10)
+                for (blk in range(8)) {
+                    let sc = float(byte_s8(ws, sb * 20 + 4 + blk))   // the plane byte IS the signed (1 + 2s) sub-scale
+                    var bacc = 0.0
+                    for (e in range(32)) {
+                        let l = e / 8
+                        let hj = e % 8
+                        let qi = byte_u8(wq, sb * 104 + blk * 8 + 2 * l + hj / 4) | ((byte_u8(wq, sb * 104 + 64 + blk) << (hj < 4 ? 8 - 2 * l : 7 - 2 * l)) & 256)
+                        let g = float(int(IQ3S_GRID[qi] >> uint(8 * (hj % 4))) & 0xFF)
+                        let sgn = ((byte_u8(wq, sb * 104 + 72 + blk * 4 + l) >> hj) & 1) != 0 ? -1.0 : 1.0
+                        bacc += g * sgn * float(byte_s8(xq, xsb * 256 + blk * 32 + e))
+                    }
+                    acc += xs[xsb] * dd * sc * bacc
+                }
+            }
+            y[r * d + row] = acc
+        }
+    }
+    return <- y
+}
+
+// IQ3_XXS GEMV float oracle, INDEPENDENT of the class bit-math: w = d_halved * (2ls + 1) *
+// halved_grid_byte * sign straight off the plane bytes ([qs 64][aux 32], the iq3s-shaped
+// scale row), signs through the CPU-side ksigns table.
+def iq3xxs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                             regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y : array<float>
+    y |> resize(nreg * d)
+    let nsb = n / 256
+    for (r in range(nreg)) {
+        for (row in range(d)) {
+            let w0 = int(regions[r * 2]) + row * nsb
+            let x0 = int(regions[r * 2 + 1])
+            var acc = 0.0
+            for (s in range(nsb)) {
+                let sb = w0 + s
+                let xsb = x0 + s
+                let dd = half_at(ws, sb * 10)
+                for (blk in range(8)) {
+                    let sc = float(byte_s8(ws, sb * 20 + 4 + blk))   // the plane byte IS the (2ls + 1) sub-scale
+                    let aux = byte_u8(wq, sb * 96 + 64 + blk * 4) | (byte_u8(wq, sb * 96 + 64 + blk * 4 + 1) << 8) | (byte_u8(wq, sb * 96 + 64 + blk * 4 + 2) << 16) | (byte_u8(wq, sb * 96 + 64 + blk * 4 + 3) << 24)
+                    var bacc = 0.0
+                    for (e in range(32)) {
+                        let l = e / 8
+                        let hj = e % 8
+                        let qi = byte_u8(wq, sb * 96 + blk * 8 + 2 * l + hj / 4)
+                        let g = float(int(IQ3XXS_GRID[qi] >> uint(8 * (hj % 4))) & 0xFF)
+                        let sgn = ((int(KSIGNS_IQ2XS[(aux >> (7 * l)) & 127]) >> hj) & 1) != 0 ? -1.0 : 1.0
+                        bacc += g * sgn * float(byte_s8(xq, xsb * 256 + blk * 32 + e))
+                    }
+                    acc += xs[xsb] * dd * sc * bacc
+                }
+            }
+            y[r * d + row] = acc
+        }
+    }
+    return <- y
+}
+
+// IQ2_S GEMV float oracle, INDEPENDENT of the class bit-math: w = d8 * (1 + 2s) * grid_byte *
+// sign straight off the plane bytes ([idx 32][signs 32][qh 8], the k4-shaped scale row with
+// UNSIGNED per-16 strips and the pre-eighth-ed d).
+def iq2s_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                           regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y : array<float>
+    y |> resize(nreg * d)
+    let nsb = n / 256
+    for (r in range(nreg)) {
+        for (row in range(d)) {
+            let w0 = int(regions[r * 2]) + row * nsb
+            let x0 = int(regions[r * 2 + 1])
+            var acc = 0.0
+            for (s in range(nsb)) {
+                let sb = w0 + s
+                let xsb = x0 + s
+                let dd = half_at(ws, sb * 10)
+                for (blk in range(8)) {
+                    let qh = byte_u8(wq, sb * 72 + 64 + blk)
+                    for (hh in range(2)) {
+                        let sc = float(byte_u8(ws, sb * 20 + 4 + blk * 2 + hh))
+                        var bacc = 0.0
+                        for (e in range(16)) {
+                            let ee = hh * 16 + e
+                            let l = ee / 8
+                            let hj = ee % 8
+                            let qi = (byte_u8(wq, sb * 72 + blk * 4 + l) | ((qh << (8 - 2 * l)) & 0x300)) * 2 + hj / 4
+                            let g = float(int(IQ2S_GRID[qi] >> uint(8 * (hj % 4))) & 0xFF)
+                            let sgn = ((byte_u8(wq, sb * 72 + 32 + blk * 4 + l) >> hj) & 1) != 0 ? -1.0 : 1.0
+                            bacc += g * sgn * float(byte_s8(xq, xsb * 256 + blk * 32 + ee))
+                        }
+                        acc += xs[xsb] * dd * sc * bacc
+                    }
+                }
+            }
+            y[r * d + row] = acc
+        }
+    }
+    return <- y
+}
+
+// IQ2_XS GEMV float oracle, INDEPENDENT of the class bit-math: w = d8 * (1 + 2s) * grid_byte
+// * ksign straight off the plane words (32 u16 qs words per superblock, no sign/qh planes -
+// the 7-bit ksigns index rides bits 9..15; the k4-shaped scale row with UNSIGNED strips).
+def iq2xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                            regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y : array<float>
+    y |> resize(nreg * d)
+    let nsb = n / 256
+    for (r in range(nreg)) {
+        for (row in range(d)) {
+            let w0 = int(regions[r * 2]) + row * nsb
+            let x0 = int(regions[r * 2 + 1])
+            var acc = 0.0
+            for (s in range(nsb)) {
+                let sb = w0 + s
+                let xsb = x0 + s
+                let dd = half_at(ws, sb * 10)
+                for (wi in range(32)) {
+                    let w16 = int((wq[sb * 16 + wi / 2] >> uint((wi % 2) * 16)) & 0xFFFFu)
+                    let sidx = w16 >> 9
+                    var tt = sidx ^ (sidx >> 4)
+                    tt = tt ^ (tt >> 2)
+                    tt = tt ^ (tt >> 1)
+                    let sgb = sidx | ((tt & 1) << 7)
+                    let sc = float(byte_u8(ws, sb * 20 + 4 + wi / 2))
+                    var bacc = 0.0
+                    for (j in range(8)) {
+                        let gb = float(int(IQ2XS_GRID[(w16 & 511) * 2 + j / 4] >> uint(8 * (j % 4))) & 0xFF)
+                        let sgn = ((sgb >> j) & 1) != 0 ? -1.0 : 1.0
+                        bacc += gb * sgn * float(byte_s8(xq, xsb * 256 + wi * 8 + j))
+                    }
+                    acc += xs[xsb] * dd * sc * bacc
+                }
+            }
+            y[r * d + row] = acc
+        }
+    }
+    return <- y
+}
+
+// IQ2_XXS GEMV float oracle, INDEPENDENT of the class bit-math: w = d8 * (1 + 2s) * grid_byte
+// * ksign straight off the plane words (per block a grid word of 4 byte indices + its aux32;
+// the k4-shaped scale row with 8 UNSIGNED per-32 strips and the pre-eighth-ed d).
+def iq2xxs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                             regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y : array<float>
+    y |> resize(nreg * d)
+    let nsb = n / 256
+    for (r in range(nreg)) {
+        for (row in range(d)) {
+            let w0 = int(regions[r * 2]) + row * nsb
+            let x0 = int(regions[r * 2 + 1])
+            var acc = 0.0
+            for (s in range(nsb)) {
+                let sb = w0 + s
+                let xsb = x0 + s
+                let dd = half_at(ws, sb * 10)
+                for (b in range(8)) {
+                    let gw = wq[sb * 16 + b * 2]
+                    let aux = int(wq[sb * 16 + b * 2 + 1])
+                    let sc = float(byte_s8(ws, sb * 20 + 4 + b))   // SIGNED like the class/batch stage - real (2ls+1) strips stay positive
+                    var bacc = 0.0
+                    for (l in range(4)) {
+                        let idx = int((gw >> uint(8 * l)) & 0xFFu)
+                        let sidx = (aux >> (7 * l)) & 127
+                        var tt = sidx ^ (sidx >> 4)
+                        tt = tt ^ (tt >> 2)
+                        tt = tt ^ (tt >> 1)
+                        let sgb = sidx | ((tt & 1) << 7)
+                        for (j in range(8)) {
+                            let gb = float(int(IQ2XXS_GRID[idx * 2 + j / 4] >> uint(8 * (j % 4))) & 0xFF)
+                            let sgn = ((sgb >> j) & 1) != 0 ? -1.0 : 1.0
+                            bacc += gb * sgn * float(byte_s8(xq, xsb * 256 + b * 32 + l * 8 + j))
+                        }
+                    }
+                    acc += xs[xsb] * dd * sc * bacc
+                }
+            }
+            y[r * d + row] = acc
+        }
+    }
+    return <- y
+}
+
+// IQ3_S f16-feed GEMM reference over the device form: grid gather + sign flip per element,
+// f16-rounded per weight like its siblings ([qs 64][qh 8][signs 32] rows, the k4-shaped
+// scale row with signed (1 + 2s) sub-scales).
+def iq3sf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                        recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    for (g in range(8)) {
+                        let sc = float(int(wsu[sb * 5 + 1 + g / 4] << uint((3 - g % 4) * 8)) >> 24)
+                        for (e in range(32)) {
+                            let wj = e / 4
+                            let qi = byte_u8(wq, sb * 104 + g * 8 + wj) | ((byte_u8(wq, sb * 104 + 64 + g) << (8 - wj)) & 256)
+                            let gb = float(int(IQ3S_GRID[qi] >> uint(8 * (e % 4))) & 0xFF)
+                            let sbit = (byte_u8(wq, sb * 104 + 72 + g * 4 + e / 8) >> (((e / 4) % 2) * 4 + e % 4)) & 1
+                            let w = float(float16(dv * sc * (sbit != 0 ? -gb : gb)))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+// IQ3_XXS f16-feed GEMM reference over the device form: halved-grid gather + ksigns sign per
+// element, f16-rounded per weight like its siblings ([qs 64][aux 32] rows, the iq3s-shaped
+// scale row with (2ls + 1) sub-scales and the halved d).
+def iq3xxsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                          recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    for (g in range(8)) {
+                        let sc = float(int(wsu[sb * 5 + 1 + g / 4] << uint((3 - g % 4) * 8)) >> 24)
+                        let aux = byte_u8(wq, sb * 96 + 64 + g * 4) | (byte_u8(wq, sb * 96 + 64 + g * 4 + 1) << 8) | (byte_u8(wq, sb * 96 + 64 + g * 4 + 2) << 16) | (byte_u8(wq, sb * 96 + 64 + g * 4 + 3) << 24)
+                        for (e in range(32)) {
+                            let qi = byte_u8(wq, sb * 96 + g * 8 + e / 4)
+                            let gb = float(int(IQ3XXS_GRID[qi] >> uint(8 * (e % 4))) & 0xFF)
+                            let sbit = (int(KSIGNS_IQ2XS[(aux >> (7 * (e / 8))) & 127]) >> (e % 8)) & 1
+                            let w = float(float16(dv * sc * (sbit != 0 ? -gb : gb)))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+// IQ2_S f16-feed GEMM reference over the device form: u64-grid gather (two words per 10-bit
+// index) + the block's own sign bytes, f16-rounded per weight like its siblings ([idx 32]
+// [signs 32][qh 8] rows, the k4-shaped scale row with UNSIGNED per-16 strips, d pre-eighth-ed).
+def iq2sf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                        recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    for (g in range(8)) {
+                        let qh = byte_u8(wq, sb * 72 + 64 + g)
+                        for (e in range(32)) {
+                            let l = e / 8
+                            let si = g * 2 + e / 16
+                            let sc = float((wsu[sb * 5 + 1 + si / 4] >> uint((si % 4) * 8)) & 0xFFu)
+                            let qi = (byte_u8(wq, sb * 72 + g * 4 + l) | ((qh << (8 - 2 * l)) & 0x300)) * 2 + (e % 8) / 4
+                            let gb = float(int(IQ2S_GRID[qi] >> uint(8 * (e % 4))) & 0xFF)
+                            let sbit = (byte_u8(wq, sb * 72 + 32 + g * 4 + l) >> (e % 8)) & 1
+                            let w = float(float16(dv * sc * (sbit != 0 ? -gb : gb)))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+// IQ2_XS f16-feed GEMM reference over the device form: u64-grid gather (two words per 9-bit
+// index) + ksigns-by-parity off each u16 qs word, f16-rounded per weight like its siblings
+// (32 u16 words per superblock, the k4-shaped scale row with UNSIGNED strips, d pre-eighth-ed).
+def iq2xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    for (e in range(256)) {
+                        let wi = e / 8
+                        let j = e % 8
+                        let w16 = int((wq[sb * 16 + wi / 2] >> uint((wi % 2) * 16)) & 0xFFFFu)
+                        let sidx = w16 >> 9
+                        var tt = sidx ^ (sidx >> 4)
+                        tt = tt ^ (tt >> 2)
+                        tt = tt ^ (tt >> 1)
+                        let sgb = sidx | ((tt & 1) << 7)
+                        let si = e / 16
+                        let sc = float((wsu[sb * 5 + 1 + si / 4] >> uint((si % 4) * 8)) & 0xFFu)
+                        let gb = float(int(IQ2XS_GRID[(w16 & 511) * 2 + j / 4] >> uint(8 * (j % 4))) & 0xFF)
+                        let w = float(float16(dv * sc * (((sgb >> j) & 1) != 0 ? -gb : gb)))
+                        acc += w * half_at(xf, (row0 + r) * n + s * 256 + e)
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+// IQ2_XXS f16-feed GEMM reference over the device form: per block a grid word of 4 byte
+// indices (two u64 words each) + its aux32 (ksigns by parity), f16-rounded per weight like
+// its siblings (16 uint words per superblock, the k4-shaped scale row with 8 UNSIGNED per-32
+// strips, d pre-eighth-ed).
+def iq2xxsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                          recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    for (e in range(256)) {
+                        let g = e / 32
+                        let rr2 = e % 32
+                        let l = rr2 / 8
+                        let j = rr2 % 8
+                        let gw = wq[sb * 16 + g * 2]
+                        let aux = int(wq[sb * 16 + g * 2 + 1])
+                        let idx = int((gw >> uint(8 * l)) & 0xFFu)
+                        let sidx = (aux >> (7 * l)) & 127
+                        var tt = sidx ^ (sidx >> 4)
+                        tt = tt ^ (tt >> 2)
+                        tt = tt ^ (tt >> 1)
+                        let sgb = sidx | ((tt & 1) << 7)
+                        let sc = float(int(wsu[sb * 5 + 1 + g / 4] << uint((3 - (g % 4)) * 8)) >> 24)
+                        let gb = float(int(IQ2XXS_GRID[idx * 2 + j / 4] >> uint(8 * (j % 4))) & 0xFF)
+                        let w = float(float16(dv * sc * (((sgb >> j) & 1) != 0 ? -gb : gb)))
+                        acc += w * half_at(xf, (row0 + r) * n + s * 256 + e)
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+// IQ4_NL f16-feed GEMM reference over the device form: q40's walk with the codebook in place
+// of (q - 8), f16-rounded per weight like its siblings (q40's 32-word rows + 8 f16 d).
+def iq4nlf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    for (g in range(8)) {
+                        let dp = unpackHalf2x16(wsu[sb * 5 + g / 2])
+                        let dv = g % 2 == 0 ? dp.x : dp.y
+                        for (e in range(32)) {
+                            let by = byte_u8(wq, sb * 128 + g * 16 + e % 16)
+                            let q = (by >> ((e / 16) * 4)) & 0xF
+                            let w = float(float16(dv * float(int(IQ4NL_LUT[q]))))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+// Q2_K f16-feed GEMM reference over the device form: per-16 sc/min nibble pairs x d/dmin,
+// f16-rounded per weight like its siblings (16-word rows + [d|dmin][16 pair bytes] scales).
+def k2f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                      recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dm = unpackHalf2x16(wsu[sb * 5])
+                    for (g in range(16)) {
+                        let pb = (int(wsu[sb * 5 + 1 + g / 4]) >> ((g % 4) * 8)) & 0xFF
+                        for (l in range(16)) {
+                            let qi = (g / 8) * 32 + (g % 2) * 16 + l
+                            let by = byte_u8(wq, sb * 64 + qi)
+                            let q = (by >> (((g / 2) % 4) * 2)) & 3
+                            let w = float(float16(dm.x * float(pb & 0xF) * float(q) - dm.y * float(pb >> 4)))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 16 + l)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
 // kq batch GEMM oracle over region records — same blk_contrib per (row, col, block)
 def kq_gemm_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
                    recs : array<uint>; nrec, n, d : int; var y : array<float>) {
@@ -228,5 +786,131 @@ def kq_gemm_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
     }
     unsafe {
         delete k
+    }
+}
+
+// the four remaining kq formats' f16-feed GEMM references, over the same device forms the cm2
+// decode callbacks read (k5 = the k4 row plus the packed 5th-bit plane; q40 = 8 f16 d; iq4xs =
+// d + signed sub-scales + the iq4nl codebook; k3 = 2-bit lanes + hmask over the k6 scale row)
+def k5f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                      recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dm = unpackHalf2x16(wsu[sb * 5])
+                    for (g in range(8)) {
+                        let sc = float(int((wsu[sb * 5 + 1 + g / 4] >> uint((g % 4) * 8)) & 0xFFu))
+                        let mn = float(int((wsu[sb * 5 + 3 + g / 4] >> uint((g % 4) * 8)) & 0xFFu))
+                        for (e in range(32)) {
+                            let j = e % 16
+                            let h = e / 16
+                            let by = byte_u8(wq, sb * 160 + g * 16 + j)
+                            let hby = byte_u8(wq, sb * 160 + 128 + g * 4 + j / 4)
+                            let q = float(((by >> (h * 4)) & 0xF) | (((hby >> (j % 4 + h * 4)) & 1) << 4))
+                            let w = float(float16(dm.x * sc * q - dm.y * mn))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+def q40f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    for (g in range(8)) {
+                        let dp = unpackHalf2x16(wsu[sb * 5 + g / 2])
+                        let dv = g % 2 == 0 ? dp.x : dp.y
+                        for (e in range(32)) {
+                            let by = byte_u8(wq, sb * 128 + g * 16 + e % 16)
+                            let q = float((by >> ((e / 16) * 4)) & 0xF)
+                            let w = float(float16(dv * (q - 8.0)))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+def iq4xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    let lut = iq4nl_lut()
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    for (g in range(8)) {
+                        let sc = float(int(wsu[sb * 5 + 1 + g / 4] << uint((3 - g % 4) * 8)) >> 24)
+                        for (e in range(32)) {
+                            let by = byte_u8(wq, sb * 128 + g * 16 + e % 16)
+                            let q = (by >> ((e / 16) * 4)) & 0xF
+                            let w = float(float16(dv * sc * float(lut[q])))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+def k3f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                      recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dv = unpackHalf2x16(wsu[sb * 5 + 4]).x
+                    for (g in range(8)) {
+                        for (e in range(32)) {
+                            let sidx = g * 2 + e / 16
+                            let sc = float(int(wsu[sb * 5 + sidx / 4] << uint((3 - sidx % 4) * 8)) >> 24)
+                            let qby = byte_u8(wq, sb * 96 + (g / 4) * 32 + e)
+                            let hby = byte_u8(wq, sb * 96 + 64 + e)
+                            let q3 = float(((qby >> ((g % 4) * 2)) & 3) - (((hby >> g) & 1) == 0 ? 4 : 0))
+                            let w = float(float16(dv * sc * q3))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
     }
 }

@@ -21,15 +21,21 @@ require math
 // walkers, and the GPU tier gathers. Requires dasllama_common back for Model/KqFmt; the loader
 // reaches the entry points through the hooks registered at [init] (register_model_layout).
 
+//! The pack-code version folded into every .dlim identity: bump it with ANY edit to a pack or
+//! repack walker in this file, so a cached image baked by the old code re-bakes instead of
+//! being mapped and served (an image's filename hash carries model + schema + this).
+let PACK_VERSION = 1
+
 // ===== metal-flavor blob transform (the blob-only .dlim redesign) =====
 
 // A q8 region's blob bind offset (off/32)*34 lands 16B-aligned iff off % 256 == 0; a k6
 // region's d-plane bind (NSB*16 + (off/256)*2) needs 4B alignment iff off % 512 == 0.
 // k4/k5/q40 quant + scale binds are 16B-multiples by construction.
+[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
 def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
     if (off < 0l) return true
     if (fmt == KqFmt.q8) return off % 256l == 0l
-    if (fmt == KqFmt.k6) return off % 512l == 0l
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) return off % 512l == 0l
     if (fmt == KqFmt.q51) return off % 128l == 0l   // (off/32)*20 and (off/32)*4 both 16B-aligned
     return true
 }
@@ -154,6 +160,7 @@ def metal_blob_fill_blocks(t : Model; b0, nblk : int64; var dst : array<uint8>) 
 //! Put ONE kq scale plane into its metal device form, named by its Model field; false = not a kq
 //! scale plane. Per-plane because the streamed image walk applies each as its own turn comes,
 //! which is the only point where that plane's fills are done and its bytes are not yet written.
+[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
 def metal_blob_scale_plane(var t : Model; name : string) : bool {
     // k4/k5: the 16B verbatim disk scale block per superblock — the 4B pad is CPU-repack
     // scratch (see the plane-layout comment in dasllama_gguf) and a blob model never repacks
@@ -166,6 +173,151 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "k5s") {
         if (!empty(t.k5s)) {
             compact_kq_scale_strip(t.k5s)
+        }
+        return true
+    }
+    if (name == "iq4xss") {
+        if (!empty(t.iq4xss)) {
+            var @exact_size xc : array<uint8>
+            let nsb = long_length(t.iq4xss) / IQ4XS_SSB
+            xc |> reserve_resize(nsb * 18l)
+            unsafe {
+                var dp = addr(xc[0])
+                let sp = addr < uint8 const? >(t.iq4xss[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ4XS_SSB + 4l), 16)
+                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ4XS_SSB]
+                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ4XS_SSB + 1l]
+                }
+            }
+            t.iq4xss <- xc
+        }
+        return true
+    }
+    if (name == "iq3ss") {
+        if (!empty(t.iq3ss)) {
+            var @exact_size i3c : array<uint8>
+            let nsb = long_length(t.iq3ss) / IQ3S_SSB
+            i3c |> reserve_resize(nsb * 18l)
+            unsafe {
+                var dp = addr(i3c[0])
+                let sp = addr < uint8 const? >(t.iq3ss[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ3S_SSB + 4l), 16)
+                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ3S_SSB]
+                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ3S_SSB + 1l]
+                }
+            }
+            t.iq3ss <- i3c
+        }
+        return true
+    }
+    if (name == "iq3xxss") {
+        if (!empty(t.iq3xxss)) {
+            var @exact_size i3xc : array<uint8>
+            let nsb = long_length(t.iq3xxss) / IQ3XXS_SSB
+            i3xc |> reserve_resize(nsb * 18l)
+            unsafe {
+                var dp = addr(i3xc[0])
+                let sp = addr < uint8 const? >(t.iq3xxss[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ3XXS_SSB + 4l), 16)
+                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ3XXS_SSB]
+                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ3XXS_SSB + 1l]
+                }
+            }
+            t.iq3xxss <- i3xc
+        }
+        return true
+    }
+    if (name == "iq2ss") {
+        if (!empty(t.iq2ss)) {
+            var @exact_size i2c : array<uint8>
+            let nsb = long_length(t.iq2ss) / IQ2S_SSB
+            i2c |> reserve_resize(nsb * 18l)
+            unsafe {
+                var dp = addr(i2c[0])
+                let sp = addr < uint8 const? >(t.iq2ss[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ2S_SSB + 4l), 16)
+                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ2S_SSB]
+                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ2S_SSB + 1l]
+                }
+            }
+            t.iq2ss <- i2c
+        }
+        return true
+    }
+    if (name == "iq2xss") {
+        if (!empty(t.iq2xss)) {
+            var @exact_size i2xc : array<uint8>
+            let nsb = long_length(t.iq2xss) / IQ2XS_SSB
+            i2xc |> reserve_resize(nsb * 18l)
+            unsafe {
+                var dp = addr(i2xc[0])
+                let sp = addr < uint8 const? >(t.iq2xss[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ2XS_SSB + 4l), 16)
+                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ2XS_SSB]
+                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ2XS_SSB + 1l]
+                }
+            }
+            t.iq2xss <- i2xc
+        }
+        return true
+    }
+    if (name == "iq2xxss") {
+        if (!empty(t.iq2xxss)) {
+            var @exact_size i2xxc : array<uint8>
+            let nsb = long_length(t.iq2xxss) / IQ2XXS_SSB
+            i2xxc |> reserve_resize(nsb * 18l)
+            unsafe {
+                var dp = addr(i2xxc[0])
+                let sp = addr < uint8 const? >(t.iq2xxss[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ2XXS_SSB + 4l), 16)
+                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ2XXS_SSB]
+                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ2XXS_SSB + 1l]
+                }
+            }
+            t.iq2xxss <- i2xxc
+        }
+        return true
+    }
+    if (name == "k2s") {
+        if (!empty(t.k2s)) {
+            var @exact_size k2c : array<uint8>
+            let nsb = long_length(t.k2s) / K2_SSB
+            k2c |> reserve_resize(nsb * K2_SSB)
+            unsafe {
+                var dp = addr(k2c[0])
+                let sp = addr < uint8 const? >(t.k2s[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * K2_SSB + 4l), 16)
+                    for (h in range64(4l)) {
+                        dp[nsb * 16l + sb * 4l + h] = sp[sb * K2_SSB + h]
+                    }
+                }
+            }
+            t.k2s <- k2c
+        }
+        return true
+    }
+    if (name == "k3s") {
+        if (!empty(t.k3s)) {
+            var @exact_size k3c : array<uint8>
+            let nsb = long_length(t.k3s) / K3_SSB
+            k3c |> reserve_resize(nsb * K3_SSB)
+            unsafe {
+                var dp = addr(k3c[0])
+                let sp = addr < uint8 const? >(t.k3s[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * 18l), 16)
+                    dp[nsb * 16l + sb * 2l] = sp[sb * 18l + 16l]
+                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * 18l + 17l]
+                }
+            }
+            t.k3s <- k3c
         }
         return true
     }
@@ -198,7 +350,7 @@ def metal_blob_commit(var t : Model) : bool {
     if (!metal_blob_eligible(t)) {
         return false
     }
-    for (nm in ["k4s", "k5s", "k6s"]) {
+    for (nm in ["k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss", "iq3xxss", "k2s", "iq2ss", "iq2xss", "iq2xxss"]) {
         metal_blob_scale_plane(t, nm)
     }
     t.metal_blob = true
@@ -292,6 +444,42 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
         var q40sp : uint8? = null
         var q51qp : uint8? = null
         var q51sp : uint8? = null
+        var iq4xsqp : uint8? = null
+        var iq4xssp : uint8? = null
+        if (!empty(t.iq4xsq)) { iq4xsqp = addr(t.iq4xsq[0]) }
+        if (!empty(t.iq4xss)) { iq4xssp = addr(t.iq4xss[0]) }
+        var k3qp : uint8? = null
+        var k3sp : uint8? = null
+        if (!empty(t.k3q)) { k3qp = addr(t.k3q[0]) }
+        if (!empty(t.k3s)) { k3sp = addr(t.k3s[0]) }
+        var iq3sqp : uint8? = null
+        var iq3ssp : uint8? = null
+        if (!empty(t.iq3sq)) { iq3sqp = addr(t.iq3sq[0]) }
+        if (!empty(t.iq3ss)) { iq3ssp = addr(t.iq3ss[0]) }
+        var iq3xxsqp : uint8? = null
+        var iq3xxssp : uint8? = null
+        if (!empty(t.iq3xxsq)) { iq3xxsqp = addr(t.iq3xxsq[0]) }
+        if (!empty(t.iq3xxss)) { iq3xxssp = addr(t.iq3xxss[0]) }
+        var iq4nlqp : uint8? = null
+        var iq4nlsp : uint8? = null
+        if (!empty(t.iq4nlq)) { iq4nlqp = addr(t.iq4nlq[0]) }
+        if (!empty(t.iq4nls)) { iq4nlsp = addr(t.iq4nls[0]) }
+        var k2qp : uint8? = null
+        var k2sp : uint8? = null
+        if (!empty(t.k2q)) { k2qp = addr(t.k2q[0]) }
+        if (!empty(t.k2s)) { k2sp = addr(t.k2s[0]) }
+        var iq2sqp : uint8? = null
+        var iq2ssp : uint8? = null
+        if (!empty(t.iq2sq)) { iq2sqp = addr(t.iq2sq[0]) }
+        if (!empty(t.iq2ss)) { iq2ssp = addr(t.iq2ss[0]) }
+        var iq2xsqp : uint8? = null
+        var iq2xssp : uint8? = null
+        if (!empty(t.iq2xsq)) { iq2xsqp = addr(t.iq2xsq[0]) }
+        if (!empty(t.iq2xss)) { iq2xssp = addr(t.iq2xss[0]) }
+        var iq2xxsqp : uint8? = null
+        var iq2xxssp : uint8? = null
+        if (!empty(t.iq2xxsq)) { iq2xxsqp = addr(t.iq2xxsq[0]) }
+        if (!empty(t.iq2xxss)) { iq2xxssp = addr(t.iq2xxss[0]) }
         if (!empty(t.qblob)) { qbp = addr(t.qblob[0]) }
         if (!empty(t.qscales)) { qsp = addr(t.qscales[0]) }
         if (!empty(t.mxq)) { mxqp = addr(t.mxq[0]) }
@@ -321,11 +509,12 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                         invoke(rq51, q51qp + (rp[i].off / 32l) * Q51_QPB, q51sp + (rp[i].off / 32l) * Q51_SPB, rp[i].n, rp[i].d)
                     } else {
                         let sb = rp[i].off / 256l
-                        let qsb = kq_qsb(f)
-                        let ssb = kq_ssb(f)
-                        var kqp = f == 4 ? k4qp : (f == 5 ? k5qp : (f == 6 ? k6qp : q40qp))
-                        var ksp = f == 4 ? k4sp : (f == 5 ? k5sp : (f == 6 ? k6sp : q40sp))
-                        invoke(rkq, f, kqp + sb * qsb, ksp + sb * ssb, rp[i].n, rp[i].d)
+                        let fk = f == K2_STREAM_TAG ? 2 : f
+                        let qsb = kq_qsb(fk)
+                        let ssb = kq_ssb(fk)
+                        var kqp = f == 4 ? k4qp : (f == 5 ? k5qp : (f == 6 ? k6qp : (f == 40 ? q40qp : (f == 44 ? iq4xsqp : (f == 3 ? k3qp : (f == 33 ? iq3sqp : (f == 34 ? iq3xxsqp : (f == 45 ? iq4nlqp : (fk == 2 ? k2qp : (f == 23 ? iq2sqp : (f == 24 ? iq2xsqp : iq2xxsqp)))))))))))
+                        var ksp = f == 4 ? k4sp : (f == 5 ? k5sp : (f == 6 ? k6sp : (f == 40 ? q40sp : (f == 44 ? iq4xssp : (f == 3 ? k3sp : (f == 33 ? iq3ssp : (f == 34 ? iq3xxssp : (f == 45 ? iq4nlsp : (fk == 2 ? k2sp : (f == 23 ? iq2ssp : (f == 24 ? iq2xssp : iq2xxssp)))))))))))
+                        invoke(rkq, fk, kqp + sb * qsb, ksp + sb * ssb, rp[i].n, rp[i].d)
                     }
                 }
             }
@@ -450,6 +639,24 @@ def private push_repack_kq(var regs : array<StreamReg>; fmt : KqFmt; woff, n, d 
         push_repack(regs, 6, woff, n, d)
     } elif (fmt == KqFmt.q40) {
         push_repack(regs, 40, woff, n, d)
+    } elif (fmt == KqFmt.iq4xs) {
+        push_repack(regs, 44, woff, n, d)
+    } elif (fmt == KqFmt.k3) {
+        push_repack(regs, 3, woff, n, d)
+    } elif (fmt == KqFmt.iq3s) {
+        push_repack(regs, 33, woff, n, d)
+    } elif (fmt == KqFmt.iq3xxs) {
+        push_repack(regs, 34, woff, n, d)
+    } elif (fmt == KqFmt.iq4nl) {
+        push_repack(regs, 45, woff, n, d)
+    } elif (fmt == KqFmt.k2) {
+        push_repack(regs, 20, woff, n, d)
+    } elif (fmt == KqFmt.iq2s) {
+        push_repack(regs, 23, woff, n, d)
+    } elif (fmt == KqFmt.iq2xs) {
+        push_repack(regs, 24, woff, n, d)
+    } elif (fmt == KqFmt.iq2xxs) {
+        push_repack(regs, 25, woff, n, d)
     }
 }
 
@@ -585,6 +792,8 @@ def private stream_repack_one(fmt : int; qp, sp : void?; n, d : int64) {
             invoke(active_repack_q8q8(), reinterpret<int8?>(qp), reinterpret<float?>(sp), n, d)
         } elif (fmt == 2) {
             invoke(active_repack_q51(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
+        } elif (fmt == K2_STREAM_TAG) {
+            invoke(active_repack_kq(), 2, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
         } else {
             invoke(active_repack_kq(), fmt, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
         }
@@ -722,10 +931,16 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
         let sb0 = woff / KQ_SUPERBLOCK_ELEMS
         let qp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4q[sb0 * kq_qsb(4)])
             : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5q[sb0 * kq_qsb(5)])
-            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6q[sb0 * kq_qsb(6)]) : addr<uint8 const?>(t.q40q[sb0 * kq_qsb(40)]))))
+            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6q[sb0 * kq_qsb(6)])
+            : (fmt == KqFmt.q40 ? addr<uint8 const?>(t.q40q[sb0 * kq_qsb(40)])
+            : (fmt == KqFmt.iq4xs ? addr<uint8 const?>(t.iq4xsq[sb0 * kq_qsb(44)])
+            : (fmt == KqFmt.k3 ? addr<uint8 const?>(t.k3q[sb0 * kq_qsb(3)]) : (fmt == KqFmt.iq3s ? addr<uint8 const?>(t.iq3sq[sb0 * kq_qsb(33)]) : (fmt == KqFmt.iq3xxs ? addr<uint8 const?>(t.iq3xxsq[sb0 * kq_qsb(34)]) : (fmt == KqFmt.iq4nl ? addr<uint8 const?>(t.iq4nlq[sb0 * kq_qsb(45)]) : (fmt == KqFmt.k2 ? addr<uint8 const?>(t.k2q[sb0 * kq_qsb(2)]) : (fmt == KqFmt.iq2s ? addr<uint8 const?>(t.iq2sq[sb0 * kq_qsb(23)]) : (fmt == KqFmt.iq2xs ? addr<uint8 const?>(t.iq2xsq[sb0 * kq_qsb(24)]) : addr<uint8 const?>(t.iq2xxsq[sb0 * kq_qsb(25)])))))))))))))
         let sp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4s[sb0 * kq_ssb(4)])
             : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5s[sb0 * kq_ssb(5)])
-            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6s[sb0 * kq_ssb(6)]) : addr<uint8 const?>(t.q40s[sb0 * kq_ssb(40)]))))
+            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6s[sb0 * kq_ssb(6)])
+            : (fmt == KqFmt.q40 ? addr<uint8 const?>(t.q40s[sb0 * kq_ssb(40)])
+            : (fmt == KqFmt.iq4xs ? addr<uint8 const?>(t.iq4xss[sb0 * kq_ssb(44)])
+            : (fmt == KqFmt.k3 ? addr<uint8 const?>(t.k3s[sb0 * kq_ssb(3)]) : (fmt == KqFmt.iq3s ? addr<uint8 const?>(t.iq3ss[sb0 * kq_ssb(33)]) : (fmt == KqFmt.iq3xxs ? addr<uint8 const?>(t.iq3xxss[sb0 * kq_ssb(34)]) : (fmt == KqFmt.iq4nl ? addr<uint8 const?>(t.iq4nls[sb0 * kq_ssb(45)]) : (fmt == KqFmt.k2 ? addr<uint8 const?>(t.k2s[sb0 * kq_ssb(2)]) : (fmt == KqFmt.iq2s ? addr<uint8 const?>(t.iq2ss[sb0 * kq_ssb(23)]) : (fmt == KqFmt.iq2xs ? addr<uint8 const?>(t.iq2xss[sb0 * kq_ssb(24)]) : addr<uint8 const?>(t.iq2xxss[sb0 * kq_ssb(25)])))))))))))))
         var wqp = addr(wq[0])
         var wsp = addr(ws[0])
         let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1
@@ -745,8 +960,41 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                             if (grouped) {
                                 let gq = qp + sliceQ + g * mr * qrow + sbi * qsb * mr
                                 let gs = sp + sliceS + g * mr * srow + sbi * dssb * mr
-                                for (m in range64(128l)) {   // nibble region: verbatim per (blk, j, t)
-                                    dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                if (fmt == KqFmt.iq3s) {   // 26 uniform 4-byte columns over [qs][qh][signs]
+                                    for (m in range64(104l)) {
+                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
+                                } elif (fmt == KqFmt.iq3xxs) {   // 24 uniform 4-byte columns over [qs][aux]
+                                    for (m in range64(96l)) {
+                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
+                                } elif (fmt == KqFmt.k3) {   // 16 qs columns, then the 8 hmask columns at 64*mr
+                                    for (m in range64(64l)) {
+                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
+                                    for (m in range64(32l)) {
+                                        dq[64l + m] = gq[64l * mr + ((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
+                                } elif (fmt == KqFmt.k2) {   // 16 qs columns, nothing else
+                                    for (m in range64(64l)) {
+                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
+                                } elif (fmt == KqFmt.iq2s) {   // 18 uniform 4-byte columns over [idx][signs][qh]
+                                    for (m in range64(72l)) {
+                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
+                                } elif (fmt == KqFmt.iq2xs) {   // 16 uniform 4-byte columns over the u16 qs words
+                                    for (m in range64(64l)) {
+                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
+                                } elif (fmt == KqFmt.iq2xxs) {   // 16 uniform 4-byte columns over the u16 qs words
+                                    for (m in range64(64l)) {
+                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
+                                } else {
+                                    for (m in range64(128l)) {   // nibble region: verbatim per (blk, j, t)
+                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
                                 }
                                 if (fmt == KqFmt.k5) {
                                     for (bj in range64(32l)) {
@@ -757,7 +1005,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                         dq[128l + p] = gq[128l * mr + ((p / 4l) * mr + r) * 4l + p % 4l]
                                     }
                                 }
-                                if (fmt == KqFmt.k6) {
+                                if (fmt == KqFmt.k6 || fmt == KqFmt.k3) {
                                     for (idx in range64(16l)) {
                                         dsc[idx] = gs[idx * mr + r]
                                     }
@@ -765,13 +1013,21 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     dsc[17] = gs[16l * mr + 2l * r + 1l]
                                     dsc[18] = uint8(0)
                                     dsc[19] = uint8(0)
-                                } elif (fmt == KqFmt.q40) {
-                                    for (blk in range64(8l)) {   // 8 per-block f16 d, mr-interleaved
+                                } elif (fmt == KqFmt.q40 || fmt == KqFmt.iq4nl) {
+                                    for (blk in range64(8l)) {   // 8 per-block f16 d, mr-interleaved (iq4nl repacks with q40's interleave)
                                         dsc[blk * 2l] = gs[blk * 2l * mr + 2l * r]
                                         dsc[blk * 2l + 1l] = gs[blk * 2l * mr + 2l * r + 1l]
                                     }
                                     for (idx in range64(16l, 20l)) {
                                         dsc[idx] = uint8(0)
+                                    }
+                                } elif (fmt == KqFmt.k2) {   // the field-major grp header re-packs to [d][dmin][16 pair bytes]
+                                    dsc[0] = gs[16l * mr + 2l * r]
+                                    dsc[1] = gs[16l * mr + 2l * r + 1l]
+                                    dsc[2] = gs[18l * mr + 2l * r]
+                                    dsc[3] = gs[18l * mr + 2l * r + 1l]
+                                    for (idx in range64(16l)) {
+                                        dsc[4l + idx] = gs[idx * mr + r]
                                     }
                                 } else {
                                     dsc[0] = gs[2l * r]
@@ -786,8 +1042,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                             } else {
                                 let rq = qp + sliceQ + ri * qrow + sbi * qsb
                                 let rs = sp + sliceS + ri * srow + sbi * dssb
-                                if (fmt == KqFmt.q40) {
-                                    for (m in range64(128l)) {   // Q4_0 bytes already pair k / k+16
+                                if (fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
+                                    for (m in range64(qsb)) {   // disk bytes already in the device form (k/k+16 pairs; k3's lanes)
                                         dq[m] = rq[m]
                                     }
                                 } else {
@@ -813,7 +1069,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                         dq[128l + p] = rq[128l + p]
                                     }
                                 }
-                                if (fmt == KqFmt.k6 || fmt == KqFmt.q40) {
+                                if (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {   // rows already in the decoded device form
                                     for (idx in range64(dssb)) {
                                         dsc[idx] = rs[idx]
                                     }

@@ -714,3 +714,71 @@
     once already. The tests checklist ledgers the residue; the fix is an in-process
     equivalent of `DASLLAMA_IMAGE=0` (`g_env_engine.image` is a `let` read at load), so such
     cells can run image-free instead of risking the purge.
+
+57. **Plane types have no `long_length`.** `length(PlaneF)` / `length(PlaneU16)` return
+    `int`, so every `uint64(length(t.blob) * 4l)` spelling caps a plane at 2^31 elements
+    before the widening - headroom-only today (whisper large-v3's twin is ~632M elements).
+    Done = `long_length` overloads in `dasllama_plane` and the buffer-sizing call sites
+    moved onto them.
+
+58. **The M5 pass on the IQ4_XS Metal kernels (Boris, 2026-08-30: "we'll ledger M5 pass on
+    new kernels for later").** The format's Metal set is correctness-first: `MetalKqGemvIq4xs`,
+    the `MetalKqMvIq4xsT` B2/B4 pair, `MetalKqMvB8Iq4xs` and the `IQ4XS` arm of
+    `MetalKqMulMmK45T` copy the k4/k6 lane maps with a per-element `iq4_lut` (four packed
+    words, select + shift + sign trick) and no measurement behind them; the prefill site takes
+    the base mul_mm only - no tensor (`_t`), tall (`_th128`), double-buffered (`_thdb`) or dev-W
+    dequant twins, and no MoE GEMV / mul_mm trio for the format. Done = the twins stamped on
+    the existing templates, the LUT cost measured against a `constant` table and against a
+    byte-pair decode on the M5, and `bench_metal_gemv_kernels` / `bench_metal_kq_mm_lab` rows
+    for the format beside k4's. The same gap now covers every format this arc added: `k3`,
+    `iq3s`, `iq3xxs`, `iq4nl`, `k2`, `iq2s`, `iq2xs` and `iq2xxs` take the base `mul_mm` at the
+    prefill site - no tensor (`_t`), tall (`_th128`), double-buffered (`_thdb`) or dev-W dequant
+    twins - and `pf_devw_panel_kq` declines all nine formats outright. Done = the twins stamped
+    on the existing templates for whichever formats measure worth it, and that decline list
+    shortened to match.
+
+59. **DONE (2026-08-31, the unquirk pass): `--tune-only <family>` re-mints one family into the
+    existing sidecar, and the shipped defaults profiles adopt-then-race only the residue.**
+    Original ask - partial mint (Boris, 2026-08-30, for after the formats arc): "takes existing mint and
+    mints new kernels only. at least in debug-only mode." Today a sidecar missing ANY demanded
+    kernel re-tunes the whole scope (the completeness rule), so every new `[tune]` family - one
+    per format in this arc - re-mints every application sidecar on the box on its next start,
+    minutes each (HOW_TO_ADD_A_FORMAT.md QUIRK 17), and the same rule keeps a stub-era
+    `"reference"` pin alive after the emitter lands (QUIRK 11). The partial mint keeps the
+    existing entries and races only the families the sidecar lacks (or names as reference),
+    validating the merged file as one. Debug-only is the acceptable first form: a
+    `DAS_TUNE_PARTIAL=1` (or `--tune-partial`) rail that the auto policy does not take, so a
+    shipped box still mints whole. Done = the rail exists, a fresh family on a minted box
+    costs one family's race, and the tuner's status line names the partial mint as such.
+
+60. **Retroactive llama.cpp CPU-kernel audit for the arc's earlier formats (Boris,
+    2026-08-30: "lets make sure we do for all new CPU kernels, and if we skipped for previous
+    ones - lets ledger towards the end of this arc").** The IQ3_S CPU arm is the first written
+    against llama.cpp's arch kernel (signs-on-activation, sllv index compose, scalar grid
+    loads beating hardware gather); IQ4_XS and Q3_K were written from the disk format alone.
+    Toward the end of the arc: read the reference exe's vec-dot and the reference exe's vec-dot
+    (x86 + arm), list every technique ours does not measure, land the missing ones as
+    `[tune_perm]` spellings and let the probe judge. Done = a per-format note naming what was
+    raced and what won, beside the existing bench rows.
+
+61. **IQ3_S CPU decode: race a no-panel gemv spelling (the 0.92x tail).** The stamped gemv
+    gathers each superblock into an alloca panel and then runs the vector dot - a store/load
+    round trip per superblock that a single token never amortizes; llama.cpp's per-row form
+    (grid words composed straight into vectors, signs applied to the ACTIVATION via
+    shuffle+cmpeq/xor-sub, magnitudes kept unsigned for maddubs) edges it 57.0 vs 52.4 tg128
+    on the zen2 (pp512 is ours 4.93x - the panel amortizes across the tile). The counter to
+    race as a [tune_perm]: compose the gathered words directly into the weight vectors
+    (insertelement per i32 lane, no panel), and/or the signs-on-activation form that drops
+    the abs+psign pair. Done = a gemv perm that takes tg128 at or past llama.cpp's, crowned
+    by the probe.
+
+62. **IQ3_S Metal decode: the ~140 GB/s compose ceiling (tg 0.95x).** Eight GEMV forms raced
+    at n=2048 d=8192 - gather placement x3, gather deleted, signs deleted, llama.cpp's exact
+    1-lane-per-block geometry, row width, f4 magnitude slab - all land in 127-141 GB/s while
+    k4 does 204 and k6 287 in the same harness; the 9-bit-index + per-nibble-sign compose is
+    the cost, not any one instruction class (deleting the gather OR the signs moves it under
+    10%). The f4 slab ships (+9%, tg128 0.82x -> 0.95x same-run). Candidates beyond kernel
+    shape: emitted-MSL diffs vs llama.cpp's compiled kernel (half math, function constants),
+    or fusing the sign flip into the staged slab per SITE via a second indexed table. Done =
+    a form that clears 180 GB/s in the dispatch-loop probe (QUIRK 22's harness), or a note
+    proving the ceiling is shared by llama.cpp's own kernel when isolated the same way.

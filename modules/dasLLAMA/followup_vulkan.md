@@ -447,7 +447,14 @@ module) is independent and can land any time - it is pure structure.
     `def override decode_*` per format - the shape `harness/vk_gemm_probe.das`'s `K6PxBase`
     already proves. Gate: the nine oracle cells in `tests/test_vulkan_kernels.das` stay 0-off,
     the probe's l/m rows stay within noise. The k5/q40 stamps (item 11's NEXT) land on the
-    template, not as more copies.
+    template, not as more copies. Measured 2026-08-30 on the 1B (`lcpp_bench`, 5060 Ti): the
+    formats with no cm2 tile prefill at 5161 (iq4xs) and 5174 (k3) t/s against k4's 13144 on
+    the same box (llama.cpp 17060 / 17509 / 19719) while their decode sits at parity, so the
+    template is also the lever that puts every new format on the tile path; k4's own 0.67x is
+    the 1B-shape tier gap, a separate item. DONE 2026-08-30 (the iquant arc): `KqCm2BatchT`
+    stamps all nine originals (suite + the Q4_K_M e2e row within noise), and k5/q40/iq4xs/k3
+    joined as format templates - twelve more stamps, iq4xs pp512 15334 (0.90x llama.cpp,
+    above the k4 control), k3 14031 (0.80x). Item 11's k5/q40 stamps landed with it.
 
 25. **Try `VK_NV_cooperative_vector` for decode GEMV on real hardware (Boris, 2026-08-28).**
     cm2 has no matrix-vector op - its seven feature bits are all tile-shaped, minimum tile 16 -
@@ -529,3 +536,22 @@ module) is independent and can land any time - it is pure structure.
     (`keep_hidden`), plus an override-capability row so a whole-plane consumer can test for
     it; a cell that embeds through the vulkan override and compares against the CPU pool
     proves it.
+
+34. **END-OF-ARC: the pp512 tier class (~0.67-0.70x of llama.cpp on 1B shapes).** Every
+    sb-format cm2 tile lands in the same band (k4 control 0.67x, iq3s 0.70x on the 5060 Ti)
+    while tg and the CPU tiers hold parity or better - the gap is the shared batch-GEMM
+    tier, not any one format's decode. Boris 2026-08-30: this one bothers him at 0.7 -
+    schedule a dedicated pass at the END of the iquant-formats arc (after the last format
+    lands), not per-format. Start from the followup 29-32 streamed-layer levers and a
+    kernel-level probe of the cm2 tile vs llama.cpp's mul_mm_cm2 at matched shapes.
+
+35. **The grid-format GEMV workgroup re-stage is a fixed per-workgroup cost - amplified on
+    small models.** Every u64-grid gemv (iq2s 8 KB, iq2xs 4 KB) stages the codebook into
+    workgroup memory per 2-row workgroup, so tg pays a fixed latency the row length must
+    amortize. On the 3B i1 vehicle iq2s tg landed 0.81x llama.cpp (~350 GB/s effective);
+    the 1B IQ2_XS vehicle lands 0.54x (188.7 vs 349.9 t/s = ~84 GB/s effective - latency-
+    bound, while its cm2 pp512 sits at a healthy 0.77x). Levers, in likely order: persist
+    the staged grid across the row loop (one stage per SM residency, not per workgroup),
+    widen rows-per-workgroup for grid formats, or fold the grid into a device-buffer read
+    the L2 serves. Done = 1B-class grid-format tg within the k-format band on the same
+    vehicle.

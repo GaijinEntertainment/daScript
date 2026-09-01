@@ -170,6 +170,13 @@ than a second GPU. Cross-GPU parity of one source is secondary. Current entries:
   SPV_NV_cooperative_matrix2 tensor loads. Metal-4 tensors have no decode-callback analogue, so
   the Metal quant GEMMs stage dequant through threadgroup memory instead. Deliberate,
   target-specific - not a pending port.
+- **Literal fixed-array hoisting is Metal-only; pending, not deliberate.** `msl_emit` lowers a
+  `let` fixed-array local whose elements are all literals to a program-scope `constant` table
+  (renamed on a same-name/different-content collision); `spirv_emit` keeps such a local in
+  Function storage, where a dynamically indexed read spills to private memory - the codebook
+  and grid quant kernels on Vulkan therefore pack their tables into `uint4` words by hand.
+  Done = the SPIR-V twin (a constant-storage array for the same shape) or a lint on a
+  dynamically indexed fixed-array local inside a kernel class.
 
 ## 7. `@uniform` structs - the kargs form
 

@@ -6,7 +6,8 @@ per-box auto-tuner picks the kernel forms for *your* machine, so the same source
 code on an M1 and a Threadripper alike. Backends stack behind one registry: the portable /
 NEON / AVX CPU tiers, an Accelerate "+AMX" float tier on Apple silicon, and **Metal** or
 **Vulkan** compute for GPU-resident serving. It loads stock GGUF files (single-file or
-multi-shard splits, F32/F16/Q8_0/Q4_0/Q5_0/MXFP4 and native Q4_K/Q5_K/Q6_K
+multi-shard splits, F32/F16/Q8_0/Q4_0/Q5_0/MXFP4 and native Q2_K/Q3_K/Q4_K/Q5_K/Q6_K plus the
+i-quants IQ4_XS/IQ4_NL/IQ3_S/IQ3_XXS/IQ2_S/IQ2_XS/IQ2_XXS
 planes), runs text LLMs, audio-input "omni" chat models, speech-to-text, and voice-activity
 detection, and it is fast: consistently ahead of each model's reference C++ engine on prompt processing
 (up to ~1.7×), trading blows on generation, and up to ~6× ahead on audio/omni workloads — live
@@ -322,7 +323,7 @@ What a model needs to "just work" today:
 
 | Feature | Supported |
 |---|---|
-| GGUF weight types (read directly) | **F32, F16, Q8_0, Q4_0, MXFP4, and the K-quant planes Q4_K / Q5_K / Q6_K** — K-quant tensors keep their native format and run on dedicated kq kernels (a Q4_K_M file mixes formats per tensor); MXFP4 expert stacks stay native too (mx4·q8 kernels); bf16 audio-tower mmprojs read exactly |
+| GGUF weight types (read directly) | **F32, F16, Q8_0, Q4_0, MXFP4, the K-quant planes Q2_K / Q3_K / Q4_K / Q5_K / Q6_K, and the i-quants IQ4_XS / IQ4_NL / IQ3_S / IQ3_XXS / IQ2_S / IQ2_XS / IQ2_XXS** — K-quant and i-quant tensors keep their native format and run on dedicated kq kernels (a Q4_K_M file mixes formats per tensor); MXFP4 expert stacks stay native too (mx4·q8 kernels); bf16 audio-tower mmprojs read exactly |
 | On-the-fly self-quantization | Q8, Q4 (from an F16/F32 model) |
 | Architecture | `llama`, `mistral3`, `qwen2`, `qwen2vl`, `qwen3`, `qwen3vl`, `phi3`, `gemma2`, `gemma3`, `gemma4`, `qwen2moe`, `qwen3moe`, `qwen3vlmoe`, `qwen35`, `qwen35moe`, `qwen3next`, `glm4moe`, `gpt-oss` — a self-registering arch registry (`dasllama_arch_*.das`, `[init]`); the loader dispatches on GGUF `general.architecture`, splits Phi3's fused attn_qkv / gate_up at load, and panics with the registered list on an unknown arch |
 | Attention | MHA **and** GQA (grouped-query); sliding-window with a per-layer pattern (Gemma-2 alternating, Gemma-3 5 local : 1 global, Gemma-4 explicit per-layer bool array); heterogeneous per-layer geometry (Gemma-4: sliding vs global layers differ in head size AND kv-head count, incl. V-from-K layers with no attn_v tensor); **cross-layer KV sharing** (Gemma-4 E-series: later layers carry no K/V of their own — Q only, attending against an earlier layer's cached K/V); configurable attention-score scale (Gemma-4: 1.0); per-head attention-sink logits in the softmax denominator (gpt-oss, all three prefill cores + decode); attention + final-logit soft-capping; suppressed-token logit bias |
@@ -389,7 +390,7 @@ So there's no ambiguity about what will fail:
   `gemma4v`, gemma-3 `gemma3v`, the whole qwen family — Qwen3-Omni / dense Qwen3-VL
   `qwen3vl_merger` incl. deepstack, Qwen2.5-Omni/VL `qwen2.5o`) — vision on the remaining
   multimodal families (pixtral, minicpm-v, …) is what stays out of scope.
-- **GGUF weight types beyond F32 / F16 / Q8_0 / Q4_0 / MXFP4 / Q4_K / Q5_K / Q6_K** — no IQ
+- **GGUF weight types beyond F32 / F16 / Q8_0 / Q4_0 / MXFP4 / Q2_K-Q6_K / IQ4_XS / IQ4_NL / IQ3_S / IQ3_XXS / IQ2_S / IQ2_XS / IQ2_XXS** — no IQ1 or
   quants; BF16 is read only for the audio-tower mmprojs, not as an LLM weight format.
 - `encode(..., parse_special)` is reserved and currently a no-op — the chat renderer injects
   special-token *ids* directly (so templates work); parsing special tokens out of free text

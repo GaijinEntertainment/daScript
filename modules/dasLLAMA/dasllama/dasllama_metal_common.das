@@ -244,6 +244,8 @@ var g_pso_kq_k4 : MetalComputePipeline?
 var g_pso_kq_k5 : MetalComputePipeline?
 var g_pso_kq_k5c : MetalComputePipeline?   // the select-form nr0=1 twin — n < 3072 / small-d sites
 var g_pso_kq_k6 : MetalComputePipeline?
+var g_pso_kq_iq4xs : MetalComputePipeline?
+var g_pso_kq_k3 : MetalComputePipeline?
 var g_pso_kq_mvb2_k4 : MetalComputePipeline?   // batch B=2..8: the kq ext small-batch mv twins
 var g_pso_kq_mvb4_k4 : MetalComputePipeline?
 var g_pso_kq_mvb2_k5 : MetalComputePipeline?
@@ -253,9 +255,52 @@ var g_pso_kq_mvb4_k6 : MetalComputePipeline?
 var g_pso_kq_mvb8_k4 : MetalComputePipeline?   // B=5..8 single-pass twins (in-graph A/B vs 2 x B4 groups)
 var g_pso_kq_mvb8_k5 : MetalComputePipeline?
 var g_pso_kq_mvb8_k6 : MetalComputePipeline?
+var g_pso_kq_mvb2_iq4xs : MetalComputePipeline?
+var g_pso_kq_mvb4_iq4xs : MetalComputePipeline?
+var g_pso_kq_mvb8_iq4xs : MetalComputePipeline?
+var g_pso_kq_mvb2_k3 : MetalComputePipeline?
+var g_pso_kq_mvb4_k3 : MetalComputePipeline?
+var g_pso_kq_mvb8_k3 : MetalComputePipeline?
+var g_pso_kq_iq3s : MetalComputePipeline?
+var g_pso_kq_mvb2_iq3s : MetalComputePipeline?
+var g_pso_kq_mvb4_iq3s : MetalComputePipeline?
+var g_pso_kq_mvb8_iq3s : MetalComputePipeline?
+var g_pso_kq_mm_b33 : MetalComputePipeline?
+var g_pso_kq_iq3xxs : MetalComputePipeline?
+var g_pso_kq_iq4nl : MetalComputePipeline?
+var g_pso_kq_k2 : MetalComputePipeline?
+var g_pso_kq_mvb2_k2 : MetalComputePipeline?
+var g_pso_kq_mvb4_k2 : MetalComputePipeline?
+var g_pso_kq_mvb8_k2 : MetalComputePipeline?
+var g_pso_kq_mm_b2 : MetalComputePipeline?
+var g_pso_kq_mvb2_iq4nl : MetalComputePipeline?
+var g_pso_kq_mvb4_iq4nl : MetalComputePipeline?
+var g_pso_kq_mvb8_iq4nl : MetalComputePipeline?
+var g_pso_kq_mm_b45 : MetalComputePipeline?
+var g_pso_kq_iq2s : MetalComputePipeline?
+var g_pso_kq_mvb2_iq2s : MetalComputePipeline?
+var g_pso_kq_mvb4_iq2s : MetalComputePipeline?
+var g_pso_kq_mvb8_iq2s : MetalComputePipeline?
+var g_pso_kq_mm_b23 : MetalComputePipeline?
+var g_pso_kq_iq2xs : MetalComputePipeline?
+var g_pso_kq_mvb2_iq2xs : MetalComputePipeline?
+var g_pso_kq_mvb4_iq2xs : MetalComputePipeline?
+var g_pso_kq_mvb8_iq2xs : MetalComputePipeline?
+var g_pso_kq_mm_b24 : MetalComputePipeline?
+var g_pso_kq_iq2xxs : MetalComputePipeline?
+var g_pso_kq_mvb2_iq2xxs : MetalComputePipeline?
+var g_pso_kq_mvb4_iq2xxs : MetalComputePipeline?
+var g_pso_kq_mvb8_iq2xxs : MetalComputePipeline?
+var g_pso_kq_mm_b25 : MetalComputePipeline?
+var g_pso_kq_mvb2_iq3xxs : MetalComputePipeline?
+var g_pso_kq_mvb4_iq3xxs : MetalComputePipeline?
+var g_pso_kq_mvb8_iq3xxs : MetalComputePipeline?
+var g_pso_kq_mm_b34 : MetalComputePipeline?
 var g_pso_kq_mm_b4 : MetalComputePipeline?   // batch B>=9: the prefill-owned kq mul_mm twins
 var g_pso_kq_mm_b5 : MetalComputePipeline?
-var g_pso_kq_mm_b6 : MetalComputePipeline?     // fused W1|W3+swiglu (s16 path)
+var g_pso_kq_mm_b6 : MetalComputePipeline?
+var g_pso_kq_mm_b44 : MetalComputePipeline?
+var g_pso_kq_mm_b3 : MetalComputePipeline?
 // the batched-step set (P4): fixed-B GEMVs + the M-pad-32 GEMM twin (f32 X) + row-table kernels
 var g_pso_gemv_b2 : MetalComputePipeline?
 var g_pso_gemv_b4 : MetalComputePipeline?
@@ -828,11 +873,47 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
     unsafe {
         if (fmt == KqFmt.k4) {
             return (buf = plane_buffer(dev, addr < void? >(t.k4q[0]), uint64(long_length(t.k4q)), t.image_map != null),
-                    qoff = uint64(sb0 * 128l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         if (fmt == KqFmt.k5) {
             return (buf = plane_buffer(dev, addr < void? >(t.k5q[0]), uint64(long_length(t.k5q)), t.image_map != null),
                     qoff = uint64(sb0 * 160l))
+        }
+        if (fmt == KqFmt.iq4xs) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq4xsq[0]), uint64(long_length(t.iq4xsq)), t.image_map != null),
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
+        }
+        if (fmt == KqFmt.k3) {
+            return (buf = plane_buffer(dev, addr < void? >(t.k3q[0]), uint64(long_length(t.k3q)), t.image_map != null),
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
+        }
+        if (fmt == KqFmt.iq3s) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq3sq[0]), uint64(long_length(t.iq3sq)), t.image_map != null),
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
+        }
+        if (fmt == KqFmt.iq3xxs) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq3xxsq[0]), uint64(long_length(t.iq3xxsq)), t.image_map != null),
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
+        }
+        if (fmt == KqFmt.iq4nl) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq4nlq[0]), uint64(long_length(t.iq4nlq)), t.image_map != null),
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
+        }
+        if (fmt == KqFmt.k2) {
+            return (buf = plane_buffer(dev, addr < void? >(t.k2q[0]), uint64(long_length(t.k2q)), t.image_map != null),
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
+        }
+        if (fmt == KqFmt.iq2s) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq2sq[0]), uint64(long_length(t.iq2sq)), t.image_map != null),
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
+        }
+        if (fmt == KqFmt.iq2xs) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq2xsq[0]), uint64(long_length(t.iq2xsq)), t.image_map != null),
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
+        }
+        if (fmt == KqFmt.iq2xxs) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq2xxsq[0]), uint64(long_length(t.iq2xxsq)), t.image_map != null),
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         return (buf = plane_buffer(dev, addr < void? >(t.k6q[0]), uint64(long_length(t.k6q)), t.image_map != null),
                 qoff = uint64(sb0 * 192l))
@@ -842,6 +923,7 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 //! One kq tensor's GPU-form scale bind (the gemv lab's layouts, pre-baked by the blob
 //! transform): k4/k5 = 16B compact blocks at soff; k6 = the split plane — sub-scale strips at
 //! soff, the packed f16 d plane at doff (the kernels bind the buffer twice, once per offset).
+[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
 def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64> {
     assert(t.metal_blob)
     let sb0 = off / 256l
@@ -854,6 +936,50 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
         if (fmt == KqFmt.k4) {
             return (buf = plane_buffer(dev, addr < void? >(t.k4s[0]), uint64(long_length(t.k4s)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = 0ul)
+        }
+        if (fmt == KqFmt.k3) {
+            let plane_sb = long_length(t.k3s) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.k3s[0]), uint64(long_length(t.k3s)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
+        }
+        if (fmt == KqFmt.iq3s) {
+            let plane_sb = long_length(t.iq3ss) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.iq3ss[0]), uint64(long_length(t.iq3ss)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
+        }
+        if (fmt == KqFmt.iq3xxs) {
+            let plane_sb = long_length(t.iq3xxss) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.iq3xxss[0]), uint64(long_length(t.iq3xxss)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
+        }
+        if (fmt == KqFmt.iq4xs) {
+            let plane_sb = long_length(t.iq4xss) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.iq4xss[0]), uint64(long_length(t.iq4xss)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
+        }
+        if (fmt == KqFmt.iq4nl) {   // q40's 16B/sb plane of 8 f16 d - verbatim, one bind (doff unused)
+            return (buf = plane_buffer(dev, addr < void? >(t.iq4nls[0]), uint64(long_length(t.iq4nls)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = 0ul)
+        }
+        if (fmt == KqFmt.k2) {   // the k6 split shape with a 4B d+dmin tail per superblock
+            let plane_sb = long_length(t.k2s) / 20l
+            return (buf = plane_buffer(dev, addr < void? >(t.k2s[0]), uint64(long_length(t.k2s)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 4l))
+        }
+        if (fmt == KqFmt.iq2s) {   // the k6 split form over the 18B/sb device plane (d8 tail)
+            let plane_sb = long_length(t.iq2ss) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.iq2ss[0]), uint64(long_length(t.iq2ss)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
+        }
+        if (fmt == KqFmt.iq2xs) {
+            let plane_sb = long_length(t.iq2xss) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.iq2xss[0]), uint64(long_length(t.iq2xss)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
+        }
+        if (fmt == KqFmt.iq2xxs) {
+            let plane_sb = long_length(t.iq2xxss) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.iq2xxss[0]), uint64(long_length(t.iq2xxss)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
         }
         return (buf = plane_buffer(dev, addr < void? >(t.k5s[0]), uint64(long_length(t.k5s)), t.image_map != null),
                 soff = uint64(sb0 * 16l), doff = 0ul)

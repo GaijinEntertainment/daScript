@@ -11,5 +11,5 @@ Run the suite explicitly from the repository root, on an LLVM-enabled build
 bin/Release/daslang.exe dastest/dastest.das -jit -- --timing-outliers 10 --test modules/dasLLVM/tests
 ```
 
-Files ending in `_client`, `_client_lib`, or `_tuner` are child-process fixtures rather than
+Files ending in `_client`, `_client_lib`, `_lib`, or `_tuner` are child-process fixtures rather than
 standalone test cases.

@@ -2336,12 +2336,59 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
     return report("dot_q8q8_laneq4x4", names, best, ok)
 }
 
+// one METAL_TWIN race row: log it and bank the family when the tensor twin won
+def private metal_twin_absorb(var wins : array<string>; var ran : bool&; r) {
+    ran = true
+    let mt_note = empty(r.note) ? "" : " ({r.note})"
+    tune_detail("METAL_TWIN {r.family}: base={r.base_ms}ms tensor={r.twin_ms}ms -> {r.winner}{mt_note}\n")
+    if (r.winner == "tensor") {
+        wins |> push(r.family)
+    }
+}
+
 // fallback: the tuner rail drives this half explicitly (DAS_TUNE_MODE=tune) — the auto
 // policy must not fire a nested tuner off this program's own missing per-app sidecar
+//! Exit code of a `--tune-only` half whose filter matched nothing here: the wrapper fails the mint
+//! only when BOTH halves report it (a filter naming one half's family is not a typo).
+let TUNE_ONLY_NO_MATCH = 3
+
 [export, tune_policy(missing = "fallback")]
 def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail; the noise probes are its checkpoints
     if (tuner_paranoid_requested()) {
         tune_detail("kernel tuner: --tune-paranoid is retired - one protocol, margin-decided; running it\n")
+    }
+    // every bench by name, declared up front so the --tune-only filter can prune it before
+    // the job queue even spins up; the sweep runs the list in order, validation re-runs the
+    // changed ones
+    var benches <- [
+        ("dot", @@bench_dot), ("axpy", @@bench_axpy), ("dot_f16", @@bench_dot_f16),
+        ("axpy_f16", @@bench_axpy_f16), ("cvt_f32_to_f16", @@bench_cvt_f32_to_f16),
+        ("cvt_f16_to_f32", @@bench_cvt_f16_to_f32), ("add_inplace", @@bench_add_inplace),
+        ("mul_inplace", @@bench_mul_inplace), ("scale_inplace", @@bench_scale),
+        ("copy_floats", @@bench_copy_floats), ("softmax", @@bench_softmax), ("rmsnorm", @@bench_rmsnorm),
+        ("dot_q4", @@bench_dot_q4), ("dot_q8q8", @@bench_dot_q8q8), ("dot_q8kv", @@bench_dot_q8kv),
+        ("dot_q8q8kv", @@bench_dot_q8q8kv), ("axpy_q8kv", @@bench_axpy_q8kv),
+        ("cvt_q8kv_to_f32", @@bench_cvt_q8kv_to_f32), ("quantize_q8kv_row", @@bench_quantize_q8kv_row),
+        ("dot_mx4q8", @@bench_dot_mx4q8), ("quantize_q8_0_into_ptr", @@bench_quantize),
+        ("quantize_q8_0_bs_into_ptr", @@bench_quantize_bs), ("rope_scaled_neox_tab", @@bench_rope_tab),
+        ("gemm_f32_uk_4x16", @@bench_gemm_tile),
+        ("dot_q8q8_laneq4x4", @@bench_laneq4x4)
+    ]
+    let partialMint = !empty(tune_only_filter())
+    if (partialMint) {
+        let nb = length(benches)
+        for (k in range(nb)) {
+            let i = nb - 1 - k
+            if (!tune_family_selected(benches[i]._0)) {
+                benches |> erase(i)
+            }
+        }
+        if (empty(benches)) {
+            print("tune-only '{tune_only_filter()}': no loop-hint kernel matches - half skipped, sidecar untouched\n")
+            delete benches
+            return TUNE_ONLY_NO_MATCH
+        }
+        tune_detail("tune-only '{tune_only_filter()}': racing {length(benches)} loop-hint kernel(s); the Metal tensor race and the runtime knob snapshot sit out (previous sidecar values survive)\n")
     }
     let affinity_inherited = is_some(g_env_core.jobque_affinity)
     if (!affinity_inherited) {
@@ -2357,24 +2404,9 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     if (!noise_gate("start")) {
         return 1
     }
-    tune_progress_plan("dasllama_kernels", TUNED_KERNEL_COUNT + VALIDATE_PLAN_ALLOWANCE)
+    tune_progress_plan("dasllama_kernels", length(benches) + VALIDATE_PLAN_ALLOWANCE)
 
     load_incumbents()
-    // every bench by name: the sweep runs the list in order, validation re-runs the changed ones
-    var benches <- [
-        ("dot", @@bench_dot), ("axpy", @@bench_axpy), ("dot_f16", @@bench_dot_f16),
-        ("axpy_f16", @@bench_axpy_f16), ("cvt_f32_to_f16", @@bench_cvt_f32_to_f16),
-        ("cvt_f16_to_f32", @@bench_cvt_f16_to_f32), ("add_inplace", @@bench_add_inplace),
-        ("mul_inplace", @@bench_mul_inplace), ("scale_inplace", @@bench_scale),
-        ("copy_floats", @@bench_copy_floats), ("softmax", @@bench_softmax), ("rmsnorm", @@bench_rmsnorm),
-        ("dot_q4", @@bench_dot_q4), ("dot_q8q8", @@bench_dot_q8q8), ("dot_q8kv", @@bench_dot_q8kv),
-        ("dot_q8q8kv", @@bench_dot_q8q8kv), ("axpy_q8kv", @@bench_axpy_q8kv),
-        ("cvt_q8kv_to_f32", @@bench_cvt_q8kv_to_f32), ("quantize_q8kv_row", @@bench_quantize_q8kv_row),
-        ("dot_mx4q8", @@bench_dot_mx4q8), ("quantize_q8_0_into_ptr", @@bench_quantize),
-        ("quantize_q8_0_bs_into_ptr", @@bench_quantize_bs), ("rope_scaled_neox_tab", @@bench_rope_tab),
-        ("gemm_f32_uk_4x16", @@bench_gemm_tile),
-        ("dot_q8q8_laneq4x4", @@bench_laneq4x4)   // last: it pins the repack backend (sticks until process exit)
-    ]
     for (b in benches) {
         let kernel_t0 = kernel_begin(b._0)
         invoke(b._1)
@@ -2424,7 +2456,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         ? "\nevery kernel keeps its shipped fallback - the tuner found nothing new on this box.\n"
         : "\n{changed} kernel(s) beat their shipped fallback on this box.\n")
     // the one count still written by hand; say so rather than let the bar quietly misreport
-    if (length(g_results) != TUNED_KERNEL_COUNT) {
+    if (!partialMint && length(g_results) != TUNED_KERNEL_COUNT) {
         print("note: TUNED_KERNEL_COUNT is {TUNED_KERNEL_COUNT} but {length(g_results)} kernels ran - the progress bar was scaled wrong; update the constant\n")
     }
 
@@ -2435,27 +2467,21 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var mt_wins : array<string>
         var mt_ran = false
-        var mt_all <- metal_tensor_race()
-        var mt_dec <- metal_tensor_race_decode()
-        mt_all |> reserve(length(mt_all) + length(mt_dec))
-        for (r in mt_dec) {
-            mt_all |> emplace(r)
-        }
-        delete mt_dec
-        for (r in mt_all) {
-            mt_ran = true
-            let mt_note = empty(r.note) ? "" : " ({r.note})"
-            tune_detail("METAL_TWIN {r.family}: base={r.base_ms}ms tensor={r.twin_ms}ms -> {r.winner}{mt_note}\n")
-            if (r.winner == "tensor") {
-                mt_wins |> push(r.family)
+        if (!partialMint) {   // a filtered mint leaves "runtime" untouched - no crowns to record
+            // the two race halves come through different require paths, so their result element
+            // types do not unify into one typed local - absorb each returned array where it lands
+            for (r in metal_tensor_race()) {
+                metal_twin_absorb(mt_wins, mt_ran, r)
+            }
+            for (r in metal_tensor_race_decode()) {
+                metal_twin_absorb(mt_wins, mt_ran, r)
             }
         }
-        if (!mt_ran) {
+        if (!mt_ran && !partialMint) {
             tune_detail("METAL_TWIN: no Metal device - tensor race skipped\n")
         }
         metal_crowns = join(mt_wins, ",")
         delete mt_wins
-        delete mt_all
     }
 
     // softmax_sink shares softmax's loop shape exactly (one extra scalar joins the reduction), so it
@@ -2480,6 +2506,12 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         threads = get_total_hw_jobs() + 1, metal_tensor = metal_crowns,
     metal_tall_floor = metal_tall_floor(), metal_devw_small_panel_mb = metal_devw_small_panel_mb(),
     metal_cvt_min_rows = metal_cvt_min_rows()))   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
+    if (partialMint) {
+        // a filtered mint must not clobber the runtime knobs (hand-edited TB/L2 refinements
+        // live there): a null runtime leaves the sidecar section untouched
+        delete_json(runtime)
+        runtime = null
+    }
     // winners come from the results table (validation may have demoted one); the [tuned]
     // kernels this harness doesn't sweep yet keep their SHIPPED fallback as an explicit entry -
     // the scope completeness check demands every non-pinned [tuned] kernel
@@ -2488,6 +2520,9 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         "axpy_tq4kv" => "vec8_u2", "cvt_tq4kv_to_f32" => "vec8_u2",
         "dot_q8tq4kv" => "vec16", "quantize_tq4kv_row" => "plain",
         "dot_q8q8_f16s" => "vec16", "dot_q51e" => "vec16"
+    }
+    if (partialMint) {   // a filtered mint seeds nothing - only the raced kernels write
+        winners |> clear()
     }
     for (r in g_results) {
         winners[r.kernel] = r.winner
