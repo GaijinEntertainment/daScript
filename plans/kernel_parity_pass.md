@@ -839,5 +839,14 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
 - 2026-09-01: Intel k6 one thread, 40 rounds --each, normal mode: 3425, 1989, then steady 1637-1642 us -
   the slow reads were WARM-UP, steady state is 1.16x of the reference (1882); the ladder's 5-round
   best 1831 / median 2925 sampled the ramp. The 16-lane arm decides whether the 0.83 row is the same artifact.
+- 2026-09-01: the VBMI lattice is CORRECT and WINS (Intel c8i, first races): TEST bit-exact on all five
+  grid families (grid_vbmi maxdiff <= 2e-6); iq2xxs one thread 19334 vs the 512 row's 21823 us, 16 lanes
+  2249 vs 2599 (the reference 4254 - 1.89x); iq3xxs one thread 30438 vs ~39700 (the panel form's post-probe
+  read). The vbmi row's tile is the 512 body, so the tile race ties and the gemv's own seat crowns the
+  lattice where it wins - a plain re-mint adopts it, no framework change.
+- 2026-09-01: Intel k6 16-lane mode gap CONFIRMED mode-specific, not warm-up: same pinned seat, steady state
+  ~4900-5300 us normal vs ~3236-3400 tune over 20 rounds; one thread differs 1% (1629 vs 1616). Arena phase
+  is an 8% one-thread effect (off 64 best 1764, off 128-256 ~1920), not the 1.5x. intel_k6perf.sh counts the
+  steady loop (perf stat + record by DSO) in both modes - kernel pages vs dispatcher decides the next step.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
