@@ -98,3 +98,21 @@ def test_rmdir_rec(t : T?) {
         t |> success(!fexist(base), "directory tree should be gone")
     }
 }
+
+[test]
+def test_tilde_home(t : T?) {
+    t |> run("a macOS home anywhere in a receipt becomes ~") @(t : T?) {
+        t |> equal(tilde_home("-m /Users/boris/Work/models/x.gguf"), "-m ~/Work/models/x.gguf")
+        t |> equal(tilde_home("A=/Users/ci/m B=/home/ci/x/y"), "A=~/m B=~/x/y", "every occurrence, both unix forms")
+        t |> equal(tilde_home("\"/Users/ci/bin/tool\" -m \"/Users/ci/m/q.gguf\""), "\"~/bin/tool\" -m \"~/m/q.gguf\"", "a quote opens a path")
+    }
+    t |> run("a Windows home keeps its separator") @(t : T?) {
+        t |> equal(tilde_home("C:\\Users\\boris\\Work\\x.exe"), "~\\Work\\x.exe")
+    }
+    t |> run("what is not a home directory is left alone") @(t : T?) {
+        t |> equal(tilde_home("/Users/bob"), "/Users/bob", "a bare home with nothing after the name")
+        t |> equal(tilde_home("https://x/Users/bob/y"), "https://x/Users/bob/y", "mid-URL is not a path start")
+        t |> equal(tilde_home("plain text"), "plain text")
+        t |> equal(tilde_home(""), "")
+    }
+}

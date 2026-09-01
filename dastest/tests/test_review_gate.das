@@ -467,3 +467,22 @@ def test_gate_web_third_party_assets_json(t : T?) {
     t |> equal(1, length(fs), "an .assets.json sidecar is scanned - every entry is a fetch; any other .json is not")
     t |> success(find(join(fs, "\n"), "demo.das.assets.json:2: reaches cdn.example") >= 0, join(fs, "\n"))
 }
+
+[test]
+def test_gate_home_paths(t : T?) {
+    let fixture_r = create_temp_file_result("review_gate_home", ".json")
+    t |> success(fixture_r is value, "temp fixture file created")
+    if (!(fixture_r is value)) {
+        return
+    }
+    let fixture = unsafe(fixture_r.value)
+    t |> success(fwrite(fixture, "[\n \"cmd\": \"-m ~/models/x.gguf\",\n \"env\": \"D=/Users/ci/models\",\n \"bin\": \"C:\\\\Users\\\\ci\\\\x.exe\"\n]\n"))
+    gate_reset()
+    gate_home_paths(fixture)
+    var inscope fs <- gate_findings()
+    gate_reset()
+    t |> success(remove(fixture))
+    t |> equal(2, length(fs), "a line already spelled ~ is clean; a unix home and a drive home each report")
+    t |> success(find(fs[0], ":3: names a home directory") >= 0, fs[0])
+    t |> success(find(fs[1], ":4: names a home directory") >= 0, fs[1])
+}

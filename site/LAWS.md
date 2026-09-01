@@ -39,3 +39,9 @@ compacted, or cited as rules.
   the two embedded-sample rules and the "link every embedded sample" tail, to "playground
   sample" in the stated-run rule, and to rewrapping the one over-wide line. The run-not-row
   tail on the first rule stays - the 2026-08-30 ruling placed it there.
+
+- **2026-09-01** (`REVIEW.md`): on the bench receipts carrying his local paths - "we really
+  don't want to show my local paths. its annoying" - Boris ruled option B: the home
+  directory is spelled `~` in every recorded line, the recorder does it, a gate enforces it,
+  and the 386 existing lines are migrated once rather than re-minted. The exact-argv rule
+  gained that one clause.

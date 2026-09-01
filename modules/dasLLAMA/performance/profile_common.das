@@ -370,7 +370,9 @@ def argv_line(args : array<string>) : string {
             w |> write(find(a, " ") >= 0 ? "\"{a}\"" : a)
         }
     }
-    return "{line}"
+    // the receipt is what the run executed with the home spelled ~ - a public record names
+    // no user; run_capture_argv keeps the real argv
+    return tilde_home("{line}")
 }
 
 // Run `cmd`, return its trimmed stdout (first line only when `first_line`). fread reads a
@@ -1891,7 +1893,8 @@ def bench_env_line() : string {
         where env_is_set(name)]
     let line = join(parts, " ")
     delete parts
-    return line
+    // a public record names no user - the home is spelled ~ here as in the argv receipt
+    return tilde_home(line)
 }
 
 //! One GGUF's identity plus every run measured against it. `gguf` (the exact filename) is the

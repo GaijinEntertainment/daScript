@@ -568,6 +568,26 @@ def cmake_copy_sources(text : string; dest_marker : string) : array<string> {
     return <- out
 }
 
+//! Home-directory gate for a published record: every line of the file at `path` that
+//! `tilde_home` would change - one naming `/Users/<u>/`, `/home/<u>/` or a drive-letter
+//! `\\Users\\<u>\\` - is a finding. A receipt that reaches a reader names no user.
+def gate_home_paths(path : string) {
+    let text = fread(path)
+    if (empty(text) && stat(path).size > 0ul) {
+        gate_finding(path, "unreadable - the gate cannot pass a file it could not read")
+        return
+    }
+    var line = 0
+    for (raw in split(text, "\n")) {
+        line++
+        // a JSON record doubles its backslashes, so a drive-letter home reads `C:\\\\Users\\\\` there
+        let unescaped = replace(raw, "\\\\", "\\")
+        if (tilde_home(unescaped) != unescaped) {
+            gate_finding(path, line, "names a home directory - a published record spells it ~ (tilde_home in daslib/fio)")
+        }
+    }
+}
+
 //! Host of an absolute or protocol-relative URL, lowercased - "" when the URL is relative
 //! or when what follows the scheme is not host-shaped. Scheme and host are matched
 //! case-insensitively, as a browser reads them; a bracketed IPv6 literal comes back with

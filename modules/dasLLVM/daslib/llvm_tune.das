@@ -128,7 +128,8 @@ def sidecar_for(app : string) : string {
 def private running_binary() : string {
     // aliases a process-global Array header (locked) — do not delete
     let argv <- get_command_line_arguments()
-    return empty(argv) ? "" : replace("{argv[0]}", "\\", "/")
+    // provenance, not a lookup key - the home is spelled ~ so a shared sidecar names no user
+    return empty(argv) ? "" : tilde_home(replace("{argv[0]}", "\\", "/"))
 }
 
 // manual override for harnesses that manage their own sidecar location

@@ -90,7 +90,8 @@ contract lives in `REVIEW_COMMON.md` at the repo root, vendored by repos that ad
 provides finding accumulation and the exit verdict (`gate_finding`, `gate_findings`,
 `gate_reset`, `gate_verdict`), the descriptor census (`gate_descriptor_census`, two
 overloads), the cookie-and-host gate for a served web tree (`gate_web_third_party`, built
-on `html_resource_urls`, `script_urls`, `css_urls` and `url_host`), plus tree-analysis
+on `html_resource_urls`, `script_urls`, `css_urls` and `url_host`), the home-directory gate
+for a published record (`gate_home_paths`), plus tree-analysis
 helpers: `das_requires`, `strip_line_comments`, `cmake_command_blocks`,
 `cmake_command_targets`, `cmake_words`, `cmake_args`, `cmake_list_entries`,
 `cmake_test_labels`, `cmake_test_commands`, `cmake_copy_sources`, `shell_cp_sources`,

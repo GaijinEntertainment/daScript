@@ -347,6 +347,67 @@ def match_glob(pattern : string; path : string) : bool {
     return result
 }
 
+def private is_path_start_byte(b : int) : bool {
+    return (is_white_space(b) || b == '=' || b == '"' || b == '\'' || b == '(' || b == '[' ||
+        b == ',' || b == ';' || b == ':')
+}
+
+//! Every home directory in `text` - `/Users/<name>/`, `/home/<name>/`, `<drive>:\\Users\\<name>\\` -
+//! rewritten as `~/` (`~\\` on the drive form) wherever it starts a path: a receipt keeps
+//! everything under the home and drops the user. A bare home with no separator after the name stays.
+def tilde_home(text : string) : string {
+    return build_string() $(var b : StringBuilderWriter) {
+        peek_data(text) $(d) {
+            let n = length(d)
+            var start = 0
+            var i = 0
+            while (i < n) {
+                var hit = -1
+                var plen = 0
+                var sep = '/'
+                for (needle, len, sp in ["/Users/", "/home/", ":\\Users\\"], [7, 6, 8], ['/', '/', '\\']) {
+                    let k = find(d, needle, i)
+                    if (k >= 0 && (hit < 0 || k < hit)) {
+                        hit = k
+                        plen = len
+                        sep = sp
+                    }
+                }
+                break if (hit < 0)
+                var mstart = hit
+                if (sep == '\\') {
+                    // the drive letter before the colon is part of the match
+                    if (hit == 0 || !is_alpha(int(d[hit - 1]))) {
+                        i = hit + 1
+                        continue
+                    }
+                    mstart = hit - 1
+                }
+                // a home directory starts a path: at the start of the text, or after a
+                // separator such as a space, `=`, a quote or a bracket - never mid-word or
+                // mid-URL (`https://x/Users/bob/` names no home)
+                if (mstart > 0 && !is_path_start_byte(int(d[mstart - 1]))) {
+                    i = hit + 1
+                    continue
+                }
+                var e = hit + plen
+                while (e < n && int(d[e]) != sep && !is_white_space(int(d[e])) && int(d[e]) != '"' && int(d[e]) != '\'') {
+                    e++
+                }
+                if (e == hit + plen || e >= n || int(d[e]) != sep) {
+                    i = hit + 1
+                    continue
+                }
+                b |> write(slice(d, start, mstart))
+                b |> write(sep == '/' ? "~/" : "~\\")
+                i = e + 1
+                start = i
+            }
+            b |> write(slice(d, start, n))
+        }
+    }
+}
+
 //! Convert a path to use forward slashes regardless of host OS.
 [temp_string_result]
 def to_generic_path(s : string) : string {

@@ -15,7 +15,7 @@ rows), each row's receipt is the run's command.
 
 **A diff that writes a `cmd` field in `files/dasllama/bench_records.json` that is not the
 exact argv `modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it
-spawns) ran is a defect.**
+spawns) ran, with the home directory spelled `~`, is a defect.**
 
 **A row that `files/dasllama.js` renders without its run's `cmd` + `date` line is a defect -
 render that line on every row the run produced.** One run's `cmd` + `date` covers several

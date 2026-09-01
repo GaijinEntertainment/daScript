@@ -9,7 +9,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --ngl 99",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m ~/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --ngl 99",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -41,7 +41,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m ~/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -73,7 +73,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --accel",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m ~/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --accel",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -105,7 +105,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 99 -t 4 -p 512 -n 128 -r 5 -o json",
+        "cmd":"\"~/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"~/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 99 -t 4 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -136,7 +136,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 0 -t 4 -p 512 -n 128 -r 5 -o json",
+        "cmd":"\"~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"~/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 0 -t 4 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -167,7 +167,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 0 -nopo 1 -t 4 -p 512 -n 128 -r 5 -o json",
+        "cmd":"\"~/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"~/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 0 -nopo 1 -t 4 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -208,7 +208,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --ngl 99",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m ~/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --ngl 99",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -240,7 +240,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m ~/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -272,7 +272,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --accel",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m ~/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --accel",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -304,7 +304,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 99 -t 4 -p 512 -n 128 -r 5 -o json",
+        "cmd":"\"~/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"~/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 99 -t 4 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -335,7 +335,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 0 -t 4 -p 512 -n 128 -r 5 -o json",
+        "cmd":"\"~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"~/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 0 -t 4 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -366,7 +366,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/irinabatkina/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 0 -nopo 1 -t 4 -p 512 -n 128 -r 5 -o json",
+        "cmd":"\"~/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"~/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 0 -nopo 1 -t 4 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -407,7 +407,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m ~/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -439,7 +439,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/irinabatkina/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --accel",
+        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m ~/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 4 -o json --json-path modules/dasLLAMA/performance/records/_cell_m3air.json --accel",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -471,7 +471,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/irinabatkina/models/gpt-oss-20b-mxfp4.gguf\" -ngl 0 -t 4 -p 512 -n 128 -r 5 -o json",
+        "cmd":"\"~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"~/models/gpt-oss-20b-mxfp4.gguf\" -ngl 0 -t 4 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",
@@ -502,7 +502,7 @@
         "box":"m3air",
         "threads":4,
         "date":"2026-07-26",
-        "cmd":"\"/Users/irinabatkina/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/irinabatkina/models/gpt-oss-20b-mxfp4.gguf\" -ngl 0 -nopo 1 -t 4 -p 512 -n 128 -r 5 -o json",
+        "cmd":"\"~/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"~/models/gpt-oss-20b-mxfp4.gguf\" -ngl 0 -nopo 1 -t 4 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M3",
           "arch":"arm64",

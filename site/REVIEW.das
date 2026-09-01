@@ -11,6 +11,7 @@ require dastest/review_gate
 
 let private TABLE_CSS = "site/files/dasllama-table.css"
 let private PAGE_HTML = "site/dasllama.html"
+let private RECORDS_DIR = "site/files/dasllama"
 
 // Hosts a page under this folder may reach without a click. daslang.io is the site itself;
 // the rest are the reviewed third parties - jsDelivr serves the DocSearch bundle, gc.zgo.at
@@ -97,6 +98,16 @@ def private check_dl_selector_parity {
     }
 }
 
+// every record the dasllama page renders is a receipt a visitor reads; a home directory in
+// it is a user's name on a public page
+def private check_records_name_no_user {
+    dir(RECORDS_DIR) $(name) {
+        if (name |> ends_with(".json")) {
+            gate_home_paths("{RECORDS_DIR}/{name}")
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist(TABLE_CSS)) {
@@ -104,6 +115,7 @@ def main() : int {
         return 2
     }
     check_dl_selector_parity()
+    check_records_name_no_user()
     gate_web_third_party(["site"], SKIP_DIRS, ALLOWED_HOSTS)
     return gate_verdict("site")
 }

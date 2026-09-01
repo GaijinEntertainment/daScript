@@ -9,7 +9,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m ~/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -35,7 +35,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -52,7 +52,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "cmd": "~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -101,7 +101,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m ~/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -127,7 +127,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -144,7 +144,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "cmd": "~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -193,7 +193,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m ~/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -219,7 +219,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "weights k4/q51/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -236,7 +236,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "cmd": "~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -285,7 +285,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m ~/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -311,7 +311,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "weights k4/k6/q8 native; q8 activations; f32 scales; planar x64-gen (repacked)",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -328,7 +328,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "cmd": "~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -377,7 +377,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m ~/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -403,7 +403,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "weights q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -420,7 +420,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "cmd": "~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -469,7 +469,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m ~/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -495,7 +495,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "weights mxfp4/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -512,7 +512,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/gpt-oss-20b-mxfp4.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "cmd": "~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/models/gpt-oss-20b-mxfp4.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -561,7 +561,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m ~/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -587,7 +587,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "weights k4/k6/q8 native; q8 activations; f32 scales; planar x64-gen (repacked)",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -604,7 +604,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "cmd": "~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -653,7 +653,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m ~/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -679,7 +679,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "weights k4/k6 native; q8 activations; f32 scales; planar x64-gen (repacked)",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -696,7 +696,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "cmd": "~/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -789,7 +789,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "q8",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -836,7 +836,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/whisper.cpp/build/bin/parakeet-cli -m /home/boris/models/ggml-parakeet-tdt-0.6b-v2-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -ng",
+    "cmd": "~/whisper.cpp/build/bin/parakeet-cli -m ~/models/ggml-parakeet-tdt-0.6b-v2-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -ng",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -1030,7 +1030,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "q8",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -1077,7 +1077,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/whisper.cpp/build/bin/parakeet-cli -m /home/boris/models/ggml-parakeet-tdt-0.6b-v3-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -ng",
+    "cmd": "~/whisper.cpp/build/bin/parakeet-cli -m ~/models/ggml-parakeet-tdt-0.6b-v3-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -ng",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -1276,7 +1276,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "q8/q8",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -1323,7 +1323,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/whisper.cpp/build/bin/whisper-cli -m /home/boris/models/ggml-tiny-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -bs 1 -bo 1 -nf -ng",
+    "cmd": "~/whisper.cpp/build/bin/whisper-cli -m ~/models/ggml-tiny-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -bs 1 -bo 1 -nf -ng",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -1492,7 +1492,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "q8/q8",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -1539,7 +1539,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/whisper.cpp/build/bin/whisper-cli -m /home/boris/models/ggml-large-v3-turbo-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -bs 1 -bo 1 -nf -ng",
+    "cmd": "~/whisper.cpp/build/bin/whisper-cli -m ~/models/ggml-large-v3-turbo-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -bs 1 -bo 1 -nf -ng",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -1696,7 +1696,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "q8/q8",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -1839,7 +1839,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "f32/q8",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -1886,7 +1886,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /home/boris/models/gemma-4-E2B-it-Q8_0.gguf --mmproj /home/boris/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
+    "cmd": "~/llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m ~/models/gemma-4-E2B-it-Q8_0.gguf --mmproj ~/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
@@ -2005,7 +2005,7 @@
     "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
     "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
     "exec_fmt": "f32/q8",
-    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=~/models/",
     "files": [
      {
       "role": "weights",
@@ -2058,7 +2058,7 @@
     "box": "zen4",
     "threads": 8,
     "date": "2026-08-04",
-    "cmd": "/home/boris/llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /home/boris/models/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf --mmproj /home/boris/models/mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
+    "cmd": "~/llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m ~/models/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf --mmproj ~/models/mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
     "hardware": {
      "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
      "arch": "x86_64",
