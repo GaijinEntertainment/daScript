@@ -307,12 +307,14 @@ def LLVMAddIncoming(phi : LLVMOpaqueValue?; var phi_vals : array<LLVMOpaqueValue
     LLVMAddIncoming(phi, array_data_ptr(phi_vals), array_data_ptr(phi_blocks), uint(length(phi_vals)))
 }
 
+//! inbounds goes through the builder's own in-bounds form: a GEP over a global with a constant index folds
+//! into a ConstantExpr, and LLVMSetIsInBounds casts its operand to GetElementPtrInst - on a ConstantExpr
+//! that is a wild write into LLVM's constant object (a cold-start SIGSEGV in LLVMContextDispose)
 def LLVMBuildGEP2(builder : LLVMOpaqueBuilder?; ty : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; var index : LLVMOpaqueValue?; name : string; inbounds : bool = true) {
-    var gep = LLVMBuildGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)
     if (inbounds) {
-        LLVMSetIsInBounds(gep, 1)
+        return LLVMBuildInBoundsGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)
     }
-    return gep
+    return LLVMBuildGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)
 }
 
 def LLVMFunctionType(ret_type : LLVMTypeRef; var param_types : LLVMTypeRef[]; isVariadic : bool = false) {
