@@ -358,7 +358,9 @@ def run_capture_argv(args : array<string>) : string {
     return strip(acc)
 }
 
-//! The display form of an argv for receipts — one line, elements with spaces quoted.
+//! The display form of an argv for receipts — one line, elements with spaces quoted, every
+//! home directory spelled `~`.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def argv_line(args : array<string>) : string {
     let line = build_string() $(w) {
         var first = true
@@ -370,8 +372,6 @@ def argv_line(args : array<string>) : string {
             w |> write(find(a, " ") >= 0 ? "\"{a}\"" : a)
         }
     }
-    // the receipt is what the run executed with the home spelled ~ - a public record names
-    // no user; run_capture_argv keeps the real argv
     return tilde_home("{line}")
 }
 
@@ -1879,21 +1879,29 @@ def private shell_quote(s : string) : string {
 //! alike. Not a reconstruction: a rebuilt `-- {parsed args}` string loses the binary actually used
 //! and silently drops anything the arg parser did not model.
 def bench_cmd_line() : string {
-    var parts <- [for (a in get_command_line_arguments()); shell_quote(a)]
+    return argv_receipt(get_command_line_arguments())
+}
+
+//! One argv as the receipt a public row carries: every element shell-quoted, every home
+//! directory spelled `~` - the same rule [[argv_line]] and [[bench_env_line]] apply.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+def argv_receipt(args : array<string>) : string {
+    var parts <- [for (a in args); shell_quote(a)]
     let line = join(parts, " ")
     delete parts
-    return line
+    return tilde_home(line)
 }
 
 //! The set members of [[BENCH_ENV_VARS]] that are actually set, as a copy-pasteable `K=V ...`
-//! prefix. Pair with [[bench_cmd_line]] and the row reproduces exactly.
+//! prefix with every home directory spelled `~`. Pair with [[bench_cmd_line]] and the row
+//! reproduces exactly.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def bench_env_line() : string {
     var parts <- [for (name in BENCH_ENV_VARS);
         "{name}={shell_quote(env_value_of(name))}";
         where env_is_set(name)]
     let line = join(parts, " ")
     delete parts
-    // a public record names no user - the home is spelled ~ here as in the argv receipt
     return tilde_home(line)
 }
 

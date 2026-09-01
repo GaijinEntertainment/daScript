@@ -108,6 +108,7 @@ def test_tilde_home(t : T?) {
     }
     t |> run("a Windows home keeps its separator") @(t : T?) {
         t |> equal(tilde_home("C:\\Users\\boris\\Work\\x.exe"), "~\\Work\\x.exe")
+        t |> equal(tilde_home("C:/Users/boris/Work/x.exe"), "~/Work/x.exe", "a Windows argv normalized to forward slashes")
     }
     t |> run("what is not a home directory is left alone") @(t : T?) {
         t |> equal(tilde_home("/Users/bob"), "/Users/bob", "a bare home with nothing after the name")

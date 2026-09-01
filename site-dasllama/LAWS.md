@@ -37,3 +37,9 @@ compacted, or cited as rules.
 - **2026-09-01** (`REVIEW.das` dl-* census, first run): the census found `dl-row--noted`
   emitted by both record renderers and styled nowhere since the ASR commit. Boris ruled
   "okie" to removing the class rather than inventing a style for it or allow-listing it.
+
+- **2026-09-01** (`REVIEW.md`, round 2): the dragon showed the per-PR news step covers a
+  hand-edit inside the markers too (the generator rewrites the whole span), so that rule
+  went with its neighbour; the `dio-` tail hung off a ban the gate replaced and went with
+  it; "today" became "before the change" in the weakening rule, same word in all four
+  served-tree checklists.

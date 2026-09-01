@@ -24,12 +24,10 @@ let private ALLOWED_HOSTS <- {
 
 let private SKIP_DIRS : table<string>
 
-// the dl-* measurement-table language belongs to the shared sheet; a name used here that the
-// sheet does not define renders unstyled, and a style of this directory's own takes dio-
 let private SHARED_SHEET = "site/files/dasllama-table.css"
 let private DL_PREFIX = "dl-"
 
-def private check_dl_names_are_the_sheets {
+def private check_dl_names_come_from_shared_sheet {
     let defined <- prefixed_tokens(fread(SHARED_SHEET), DL_PREFIX)
     if (empty(defined)) {
         gate_finding(SHARED_SHEET, "missing, unreadable, or defines no dl-* selector")
@@ -63,7 +61,7 @@ def main() : int {
         to_log(LOG_ERROR, "site-dasllama/REVIEW.das: run from the repo root\n")
         return 2
     }
-    check_dl_names_are_the_sheets()
+    check_dl_names_come_from_shared_sheet()
     gate_web_third_party(["site-dasllama"], SKIP_DIRS, ALLOWED_HOSTS)
     return gate_verdict("site-dasllama")
 }

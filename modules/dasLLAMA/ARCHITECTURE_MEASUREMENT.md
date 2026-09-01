@@ -16,10 +16,9 @@ writes `performance/records/<box>.json`. `gen_site_records.das` merges those int
 site renders. A stored row carries its own command, sha, version, tune stamp and exec format, so
 a number is self-describing rather than a bare figure in a table. The command, its environment
 line and a sidecar's `binary` spell the home directory `~` (`tilde_home`, `daslib/fio`): a
-public row names no user and still reproduces on any box. The rows minted before that rule
-were rewritten in place under it - the one edit the re-mint rule sanctions, since no
-measurement changed; the archived tune sidecars were not, their sha256 being what ties a row
-to the exe it shipped with.
+public row names no user and still reproduces on any box. The re-mint rule sanctions one edit
+to a stored row - spelling its home directory `~` - since no measurement changes; an archived
+tune sidecar is never edited, its sha256 being what ties a row to the exe it shipped with.
 
 **Regression checking inverts the same rig:** `gen_bench_records.das --oracle --legs metal`
 takes the store's das rows as the work list, re-measures each once, and gates one-sided against

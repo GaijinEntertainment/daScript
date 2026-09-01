@@ -580,7 +580,7 @@ def gate_home_paths(path : string) {
     var line = 0
     for (raw in split(text, "\n")) {
         line++
-        // a JSON record doubles its backslashes, so a drive-letter home reads `C:\\\\Users\\\\` there
+        //! a JSON record doubles its backslashes, so a drive-letter home only matches un-doubled
         let unescaped = replace(raw, "\\\\", "\\")
         if (tilde_home(unescaped) != unescaped) {
             gate_finding(path, line, "names a home directory - a published record spells it ~ (tilde_home in daslib/fio)")
@@ -599,7 +599,6 @@ def prefixed_tokens(text : string; prefix : string) : table<string> {
         while (i < n) {
             let at = find(d, prefix, i)
             break if (at < 0)
-            // a prefix glued to the tail of a longer token is not a token of its own
             if (at > 0 && is_token_byte(int(d[at - 1]))) {
                 i = at + 1
                 continue
@@ -640,10 +639,9 @@ def markdown_table_rows(text : string; section : string) : array<array<string>> 
         }
         in_table = true
         continue if (line |> starts_with("|---") || line |> starts_with("| ---"))
-        var inscope cells <- [for (cell in split(line, "|")); strip(replace(cell, "`", ""))]
-        // a pipe row splits to an empty first and last cell - the outer bars
-        continue if (length(cells) < 3)
-        var row <- [for (k in range(1, length(cells) - 1)); cells[k]]
+        var inscope cells_with_bars <- [for (cell in split(line, "|")); strip(replace(cell, "`", ""))]
+        continue if (length(cells_with_bars) < 3)
+        var row <- [for (k in range(1, length(cells_with_bars) - 1)); cells_with_bars[k]]
         out |> emplace(row)
     }
     return <- out
@@ -966,8 +964,7 @@ def private is_markup_file(name : string) : bool {
     return (name |> ends_with(".html") || name |> ends_with(".rst") || name |> ends_with(".md"))
 }
 
-// an asset manifest lists what the playground fetches, so every entry in it is a load;
-// no other JSON carries that guarantee - a `link` field is a click - so no other JSON is read
+[arch(at="README.md#web-gate-scanned-set")]
 def private is_asset_manifest(name : string) : bool {
     return name |> ends_with(".assets.json")
 }

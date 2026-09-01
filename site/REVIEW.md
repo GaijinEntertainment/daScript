@@ -6,7 +6,7 @@
 visitor navigates to, together with what the scripts it loads render into it - not a
 machine-only harness document (`playground/run-frame.html`), and not editor content - what a
 visitor types into the playground or hero editor, and the sample bundles the playground loads
-into it.
+into that editor.
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
 illustration - show only a command the run actually executed.** A rendered `cmd` identifies
@@ -15,15 +15,17 @@ rows), each row's receipt is the run's command.
 
 **A diff that writes a `cmd` field in `files/dasllama/bench_records.json` that is not the
 exact argv `modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it
-spawns) ran, with the home directory spelled `~`, is a defect.**
+spawns) ran is a defect.**
 
 **A row that `files/dasllama.js` renders without its run's `cmd` + `date` line is a defect -
-render that line on every row the run produced.** One run's `cmd` + `date` covers several
-rendered rows.
+render that line on every row the run produced.**
 
 **Weakening `REVIEW.das`'s receipt check - the gate that requires `cmd` and `date` on every
 run object of `files/dasllama/bench_records.json` and reports either inside a `tests` entry -
 is a defect.**
+
+**Weakening `REVIEW.das`'s home-path check - the gate that reports a home directory spelled
+out, instead of `~`, in any `.json` under `files/dasllama/` - is a defect.**
 
 **A diff that changes `files/performance_bench.json` also changes `benchmarks/sql/results.md`
 (repo root), in the same change.** `benchmarks/sql/_update_results.das --site-json` writes the
@@ -72,7 +74,7 @@ playground.**
 
 **A stated Playwright run names the runtime artifacts it used: built from this change when
 the diff touches any source compiled into the WASM runtime (`daslang_static` - its `main()`
-lives in `utils/daslang/`) or the web build; the deployed ones otherwise.**
+lives in `utils/daslang/`) or `web/` (repo root); the deployed ones otherwise.**
 
 **A diff that puts a measurement number - a rate, a duration, a size, a score some run
 produced, never a fixture or run parameter - on a page without rendering it from live data,
@@ -83,7 +85,7 @@ comment is a defect.**
 placeholder on the page itself.**
 
 **A diff that makes `REVIEW.das`'s cookie-and-host check read fewer files, or report less
-than it does today with the same `ALLOWED_HOSTS`, is a defect** - the gate bans
+than it did before the change with the same `ALLOWED_HOSTS`, is a defect** - the gate bans
 `document.cookie` and reports any resource a page loads from a host the list does not
 name.
 

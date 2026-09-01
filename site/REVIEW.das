@@ -102,9 +102,7 @@ def private check_dl_selector_parity {
     }
 }
 
-// every record the dasllama page renders is a receipt a visitor reads; a home directory in
-// it is a user's name on a public page
-def private check_records_name_no_user {
+def private check_published_records_no_home_paths {
     dir(RECORDS_DIR) $(name) {
         if (name |> ends_with(".json")) {
             gate_home_paths("{RECORDS_DIR}/{name}")
@@ -112,8 +110,6 @@ def private check_records_name_no_user {
     }
 }
 
-// a rendered row's receipt is its run's cmd + date; the pair lives on the run object, never
-// inside a tests entry, so every row of one run shares one receipt
 def private check_record_receipts {
     let text = fread(BENCH_RECORDS)
     if (empty(text)) {
@@ -155,8 +151,7 @@ def private check_record_receipts {
     }
 }
 
-// the column of a results.md lane: the bench table spells the id in parentheses
-// ("SQLite (m1)"), the engines table spells the name alone ("SQLite")
+//! a lane's column in a results.md table: the bench table heads it "<name> (<id>)", the engines table "<name>"
 def private lane_column(header : array<string>; id, name : string) : int {
     for (k in range(length(header))) {
         return k if (header[k] |> find("({id})") >= 0 || header[k] == name)
@@ -164,8 +159,6 @@ def private lane_column(header : array<string>; id, name : string) : int {
     return -1
 }
 
-// a site record and the results.md it was written from carry the same cells: every family
-// row's interp and jit value, keyed by lane, against the INTERP and JIT tables
 def private check_bench_cell_parity(record_path, results_path : string) {
     let text = fread(record_path)
     let md = fread(results_path)
@@ -214,8 +207,7 @@ def private check_bench_cell_parity(record_path, results_path : string) {
                     continue
                 }
                 let md_cell = rows[row][col]
-                // a JSON integer literal lands in the _longint arm, a decimal in _number - the
-                // coercion reads both; null is the missing cell
+                //! ?? reads both number arms - _longint for an integer literal, _number for a decimal; null is the missing cell
                 let json_value = cell ?? -1.0lf
                 let recorded = json_value < 0.0lf ? "-" : "{json_value}"
                 let md_value = md_cell == "-" ? -1.0lf : to_double(md_cell)
@@ -234,7 +226,7 @@ def main() : int {
         return 2
     }
     check_dl_selector_parity()
-    check_records_name_no_user()
+    check_published_records_no_home_paths()
     check_record_receipts()
     check_bench_cell_parity("site/files/performance_bench.json", "benchmarks/sql/results.md")
     check_bench_cell_parity("site/files/performance_engines.json", "examples/benchmarks/sql/results.md")

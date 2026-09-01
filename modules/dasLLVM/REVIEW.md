@@ -65,3 +65,9 @@
   `env_value_of("NAME")` / `env_is_set("NAME")`, or declare it as an `[EnvConfig]` field in
   `daslib/llvm_env.das` and read the `g_env_*` field, instead** (the literal-name forms are
   scanner-enforced by `tests/llvm_env_registry.das`; weakening that test is a defect).
+
+**A host path a diff writes into the tune sidecar (`<app>.tune.json`, written by
+`daslib/llvm_tune.das`) goes through `tilde_home` (`daslib/fio.das`, repo root); a host path a
+diff passes to `fopen`, `stat`, or any other filesystem call stays raw.** A recorded path is
+read by other people and must not name the user who minted it, and no filesystem call
+resolves `~`.

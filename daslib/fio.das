@@ -347,14 +347,14 @@ def match_glob(pattern : string; path : string) : bool {
     return result
 }
 
-def private is_path_start_byte(b : int) : bool {
+def private is_path_start_delimiter(b : int) : bool {
     return (is_white_space(b) || b == '=' || b == '"' || b == '\'' || b == '(' || b == '[' ||
         b == ',' || b == ';' || b == ':')
 }
 
-//! Every home directory in `text` - `/Users/<name>/`, `/home/<name>/`, `<drive>:\\Users\\<name>\\` -
-//! rewritten as `~/` (`~\\` on the drive form) wherever it starts a path: a receipt keeps
-//! everything under the home and drops the user. A bare home with no separator after the name stays.
+//! Every home directory in `text` - `/Users/<name>/`, `/home/<name>/`, `<drive>:\\Users\\<name>\\`,
+//! `<drive>:/Users/<name>/` - rewritten as `~/` (`~\\` on the drive form) wherever it starts a
+//! path: the path under the home survives, the user name does not; a bare home stays.
 def tilde_home(text : string) : string {
     return build_string() $(var b : StringBuilderWriter) {
         peek_data(text) $(d) {
@@ -365,7 +365,7 @@ def tilde_home(text : string) : string {
                 var hit = -1
                 var plen = 0
                 var sep = '/'
-                for (needle, len, sp in ["/Users/", "/home/", ":\\Users\\"], [7, 6, 8], ['/', '/', '\\']) {
+                for (needle, len, sp in ["/Users/", "/home/", ":\\Users\\", ":/Users/"], [7, 6, 8, 8], ['/', '/', '\\', '/']) {
                     let k = find(d, needle, i)
                     if (k >= 0 && (hit < 0 || k < hit)) {
                         hit = k
@@ -375,18 +375,14 @@ def tilde_home(text : string) : string {
                 }
                 break if (hit < 0)
                 var mstart = hit
-                if (sep == '\\') {
-                    // the drive letter before the colon is part of the match
+                if (int(d[hit]) == ':') {
                     if (hit == 0 || !is_alpha(int(d[hit - 1]))) {
                         i = hit + 1
                         continue
                     }
                     mstart = hit - 1
                 }
-                // a home directory starts a path: at the start of the text, or after a
-                // separator such as a space, `=`, a quote or a bracket - never mid-word or
-                // mid-URL (`https://x/Users/bob/` names no home)
-                if (mstart > 0 && !is_path_start_byte(int(d[mstart - 1]))) {
+                if (mstart > 0 && !is_path_start_delimiter(int(d[mstart - 1]))) {
                     i = hit + 1
                     continue
                 }

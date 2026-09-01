@@ -12,3 +12,10 @@
   was removed with the pinned-value arm it routed (dragon duplicate finding; Boris: "okie").
   The `[tune]` tail of the codegen-version rule was re-mooded from an exemption to
   trigger-narrowing (dragon REMOVE EXCEPTIONS; wording applied verbatim).
+
+- **2026-09-01** (`REVIEW.md`, the sidecar home-path rule): the tune provenance spells the
+  home directory `~` at the source, per Boris's ruling recorded in
+  `modules/dasLLAMA/performance/LAWS.md` - "we really don't want to show my local paths.
+  its annoying". The harvest of that change found the tilde had been put inside
+  `running_binary()`, which three filesystem lookups also read; the rule draws the line the
+  bug crossed.

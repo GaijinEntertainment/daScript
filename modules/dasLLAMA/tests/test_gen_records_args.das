@@ -109,3 +109,9 @@ def test_zero_cells_refusal(t : T?) {
         t |> equal(0, good.rc, "one measured cell with no failures is green")
     }
 }
+
+[test]
+def test_argv_receipt_spells_home_as_tilde(t : T?) {
+    let line = argv_receipt(["/Users/ci/Work/bin/daslang", "-jit", "lcpp_bench.das", "--", "-m", "/Users/ci/models/q.gguf", "a b"])
+    t |> equal(line, "~/Work/bin/daslang -jit lcpp_bench.das -- -m ~/models/q.gguf \"a b\"", "every argv element shell-quoted, every home spelled ~")
+}

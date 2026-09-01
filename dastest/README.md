@@ -100,3 +100,10 @@ does. It lives under
 `dastest/` so an installed SDK carries it the same way it carries the test framework -
 dastest itself ships in the SDK as a prebuilt exe, the `DAS_UTILS_SHIPPED_EXES` entry in
 `utils/CMakeLists.txt` (repo root).
+
+### The web gate's scanned set {#web-gate-scanned-set}
+
+`gate_web_third_party` reads one JSON shape and no other: an asset manifest (a
+`.assets.json` sidecar) lists what the playground fetches, so every entry in it is a load.
+Any other JSON can spell an address as a `link` - a click, not a load - so scanning it would
+report hosts no page ever reaches.

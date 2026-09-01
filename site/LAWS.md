@@ -54,3 +54,10 @@ compacted, or cited as rules.
   cell-parity rules are now one `REVIEW.das` check (JSON record against the INTERP and JIT
   tables, both pairs) and the checklist keeps one weakening residue; the two same-change
   duties above them stay.
+
+- **2026-09-01** (`REVIEW.md`, round 2): the dragon caught the `~` clause on the exact-argv
+  rule duplicating the new home-path gate (the other three gates got residues, this one
+  kept a duty) - the clause went and the residue joined the others; the opening's last
+  "it" now says "that editor"; the row rule lost its third-copy tail (the 2026-08-30 tail on
+  the first rule stays); "the web build" names `web/` (repo root); "today" became "before
+  the change".

@@ -23,3 +23,10 @@ compacted, or cited as rules.
   staged-path gate - `REVIEW.das` now reads the deploy's `cp` steps and the CMake stage
   target and fails on a staged tree outside its root list - so the served-tree duty shrank
   to the routes the gate does not read.
+
+- **2026-09-01** (`REVIEW.md`, round 2): the dragon found the opening's route list and the
+  served-tree rule naming different routes, "today" as a moment pin, "root list" naming no
+  API, and a gate blind spot - a CMake stage target spelling `site/` outright with no
+  `SITE_*` variable. Boris's standing rule for this branch is discuss-implement, so: the
+  gate now parses both destination shapes, the rule names the shapes, the weakening rule
+  covers both checks and names `DEPLOYED_ROOTS`.

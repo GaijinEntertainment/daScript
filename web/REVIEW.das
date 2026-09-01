@@ -14,21 +14,19 @@ require dastest/review_gate
 // output that no diff hand-edits.
 let private DEPLOYED_ROOTS <- ["web/examples/ui/src", "web/examples/ui/samples", "web/templates"]
 
-// The two routes that stage a tree under this folder into a served page: the deploy's
-// shell steps copy into _site/, and the CMake stage target copies into site/ (its
-// destinations name SITE_*). A build output is not an authored tree - what it is built
-// from is gated where it lives - so a source under an output dir is skipped.
 let private PAGES_YML = ".github/workflows/pages.yml"
 let private WEB_CMAKE = "web/CMakeLists.txt"
+
+//! A staged source under this prefix is a build output and is skipped: the tree it is built
+//! from is gated where that tree lives.
 let private GENERATED_PREFIX = "web/output"
 
 // Empty on purpose: neither shell fetches anything off-site, and a browser opening a page
 // built from them contacts only the host that served it.
 let private ALLOWED_HOSTS : table<string>
 
-// A staged source, reduced to the authored tree it names: `${CMAKE_CURRENT_SOURCE_DIR}/x`
-// is `web/x`, a shell variable, glob or quote ends the path, a trailing separator goes. "" for a
-// source outside this folder or one only a build variable names.
+//! The authored `web/` tree a staged source names, truncated at the first shell variable,
+//! glob or quote; "" when the source is outside this folder or only a build variable names it.
 def private staged_web_tree(source : string) : string {
     var path = source
     if (path |> starts_with("$\{CMAKE_CURRENT_SOURCE_DIR\}/")) {
@@ -72,9 +70,14 @@ def private check_staged_sources(file : string; sources : array<string>) {
     }
 }
 
+//! The deploy's cp steps land in `_site/`; the CMake stage target names its copy
+//! destinations `SITE_*`.
 def private check_staged_trees_gated {
     check_staged_sources(PAGES_YML, shell_cp_sources(fread(PAGES_YML), "_site/"))
-    check_staged_sources(WEB_CMAKE, cmake_copy_sources(fread(WEB_CMAKE), "SITE_"))
+    // a stage target names its destination through a SITE_* variable or spells site/ outright
+    let cmake = fread(WEB_CMAKE)
+    check_staged_sources(WEB_CMAKE, cmake_copy_sources(cmake, "SITE_"))
+    check_staged_sources(WEB_CMAKE, cmake_copy_sources(cmake, "/site/"))
 }
 
 [export]
