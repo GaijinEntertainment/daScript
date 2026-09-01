@@ -26,19 +26,36 @@ function stubbed(outcomes) {
     return { artifacts, calls };
 }
 
+// Every retry here prints the production line, and a nightly log is grepped for
+// exactly that string to count how often the edge dropped a connection. Test
+// output on stdout would be counted as production drops, so no case may let the
+// line escape: drive every retry through this, and assert on what it captured.
+async function captureStderr(fn) {
+    const written = [];
+    const real = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk) => { written.push(String(chunk)); return true; };
+    try {
+        await fn();
+    } finally {
+        process.stderr.write = real;
+    }
+    return written;
+}
+
 const ARTIFACT_URL = 'https://run.daslang.io/api/build/artifact/a/b/sample.html';
 const drop = () => new Error(`page.goto: net::ERR_CONNECTION_CLOSED at ${ARTIFACT_URL}`);
 const refused = () => new Error(`page.goto: net::ERR_CONNECTION_REFUSED at ${ARTIFACT_URL}`);
 
 test('a dropped navigation is retried, and the retry asks for the same url', async () => {
     const { artifacts, calls } = stubbed([drop(), {}]);
-    await artifacts.load(ARTIFACT_URL);
+    await captureStderr(() => artifacts.load(ARTIFACT_URL));
     assert.deepEqual(calls, [ARTIFACT_URL, ARTIFACT_URL]);
 });
 
 test('the retry is spent once — a second drop fails the row', async () => {
     const { artifacts, calls } = stubbed([drop(), drop(), {}]);
-    await assert.rejects(artifacts.load(ARTIFACT_URL), /ERR_CONNECTION_CLOSED/);
+    await captureStderr(() =>
+        assert.rejects(artifacts.load(ARTIFACT_URL), /ERR_CONNECTION_CLOSED/));
     assert.equal(calls.length, 2);
 });
 
@@ -67,7 +84,7 @@ test('page errors from the dropped attempt do not survive into the retry', async
             return {};
         },
     };
-    await artifacts.load(ARTIFACT_URL);
+    await captureStderr(() => artifacts.load(ARTIFACT_URL));
     assert.deepEqual(artifacts.pageErrors, ['error from attempt 2']);
 });
 
@@ -75,14 +92,8 @@ test('page errors from the dropped attempt do not survive into the retry', async
 // losing it, or losing the net error inside it, must fail something.
 test('the retry names the sample and the net error on stderr', async () => {
     const { artifacts } = stubbed([drop(), {}]);
-    const written = [];
-    const real = process.stderr.write.bind(process.stderr);
-    process.stderr.write = (chunk) => { written.push(String(chunk)); return true; };
-    try {
-        await artifacts.load(ARTIFACT_URL, 'OpenGL: cube swarm (instancing)');
-    } finally {
-        process.stderr.write = real;
-    }
+    const written = await captureStderr(() =>
+        artifacts.load(ARTIFACT_URL, 'OpenGL: cube swarm (instancing)'));
     assert.equal(written.length, 1);
     assert.match(written[0], /OpenGL: cube swarm \(instancing\).*artifact navigation dropped.*ERR_CONNECTION_CLOSED/);
 });
@@ -92,7 +103,7 @@ test('the retry waits before asking again', async () => {
     let attempt = 0;
     artifacts.page = { async goto() { attempt++; if (attempt === 1) throw drop(); return {}; } };
     const t0 = Date.now();
-    await artifacts.load(ARTIFACT_URL);
+    await captureStderr(() => artifacts.load(ARTIFACT_URL));
     assert.ok(Date.now() - t0 >= 100, `retried after ${Date.now() - t0}ms, expected a wait`);
 });
 
