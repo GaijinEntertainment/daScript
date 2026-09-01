@@ -44,9 +44,9 @@ proven fact per push; research before any kernel edit (the two memos below).
 |---|---|---|---|---|---|
 | k4 | 1969 (8.6 ns/sb) | 2421 | 1.23x | 120.9 GFLOP/s | 71.1 GFLOP/s (1.70x) |
 | k2 | 2017 (8.8 ns/sb) | 2132 | 1.06x | - | - |
-| iq3s | 11406 (49.7 ns/sb) | 10340 | 0.91x | - | - |
+| iq3s | 11406 (49.7 ns/sb); sign=vec 7732 (33.7) | 10340 | 0.91x -> 1.34x | - | - |
 | iq3xxs | 11578 (50.5) | 6590 | 0.57x | - | - |
-| iq2s | 11732 (51.1) | 5074 | 0.43x | - | - |
+| iq2s | 11732 (51.1); sign=vec 7076 (30.8) | 5074 | 0.43x -> 0.72x | - | - |
 | iq2xs | 11490 (50.1) | 5386 | 0.47x | - | - |
 | iq2xxs | 11061 (48.2) | 5124 | 0.46x | - | - |
 
@@ -86,9 +86,12 @@ bandwidth; on the 1B vehicles it shows, on a 27B it mostly does not - but the ke
 ## 4. Work queue (one item at a time; a row is done at >= 1.0x on rig 2's shape AND the vehicle)
 
 CPU decode (gap 2):
-1. `gather="reg"` spelling on the shared gather emitter - one change, five formats; race in rig 1.
-2. `psign="mask"`; 3. the IQ2_XXS / IQ2_XS load waste; 4. repack-baked parity sign; 5. retro
-   audit of IQ4_XS/Q3_K per followup 60 (already >= 1.0x; low priority).
+1. DONE-KILLED `gather="reg"` (measured 1.85x slower - see the ledger).
+2. DONE for iq3s/iq2s: `sign="vec"` (the plane-resident sign column, one masked negate per vector).
+3. Repack-baked sign bytes for iq3xxs/iq2xs/iq2xxs (the memo's tier 4) so they join `sign="vec"`;
+   PACK_VERSION bump. 4. The iq2 word-pair index work - a u64 grid entry decoded as two dwords is
+   twice llama.cpp's index work per 8 weights (the remaining iq2s gap). 5. retro audit of
+   IQ4_XS/Q3_K per followup 60 (already >= 1.0x; low priority).
 
 Vulkan pp (gap 1):
 1. Budget split (measurement, no kernel edit) - is the GEMM the 30%? 2. `shAscales`-style scale
@@ -98,5 +101,15 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
 
 ## 5. Ledger
 
+- 2026-09-01: CPU item 1 measured and killed - `gather="reg"` (compose the weight vector with
+  insertelement, no panel) ran iq3s decode at 90.6 ns/sb against the panel's 49.1; the emitted IR
+  had 1025 insertelement chains and a 9904-instruction straight-line body against the panel loop's
+  1893 (every load unique, so CSE was not the problem). The panel round trip is not the bottleneck.
+- 2026-09-01: CPU item 2 landed as `sign="vec"` on iq3s and iq2s, the two formats whose sign bytes
+  sit in the plane at row stride 4: the panel holds raw grid words, one 32-byte column load per
+  block, a constant shuffle + and + cmpeq builds the byte mask, xor + sub negates the vector.
+  One thread, m=4096 k=14336: iq3s 11581 -> 7732 us (1.34x of the reference's 10340), iq2s 12413
+  -> 7076 us (0.72x of 5074, was 0.41x). Every variant bit-exact in gen_tune_probe TEST mode. The
+  five gather emitters collapsed into one gather over per-format decode functions (-110 lines).
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.

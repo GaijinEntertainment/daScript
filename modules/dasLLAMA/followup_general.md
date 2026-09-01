@@ -775,6 +775,9 @@
     vector sign mask replacing GPR sign math + abs), a `vpdpbssd` seat for AVX-VNNI-INT8 hosts, a
     repack-baked parity sign byte. Done = each of the five at or past the reference row at one thread,
     crowned by the probe; plan and fact base: `plans/kernel_parity_pass.md`.
+    2026-09-01: `gather="reg"` measured 1.85x SLOWER (insertelement chains, 5x the code) and was
+    dropped; `sign="vec"` landed for iq3s (7732 us = 1.34x the reference) and iq2s (7076 us =
+    0.72x). iq3xxs/iq2xs/iq2xxs join once the repack bakes their sign bytes into the plane.
 
 62. **IQ3_S Metal decode: the ~140 GB/s compose ceiling (tg 0.95x).** Eight GEMV forms raced
     at n=2048 d=8192 - gather placement x3, gather deleted, signs deleted, llama.cpp's exact

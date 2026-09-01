@@ -126,8 +126,12 @@ def layout_mrs(f : KqFmt) : table<string; int64> {
     return <- mrs
 }
 
+//! the five grid formats' TILE reads a caller-unpacked panel (256 bytes per row per superblock), not the packed plane the gemv gathers from
+def tile_kq_bytes_per_sb(f : KqFmt) : int64 => (f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs) ? 256l : kq_qsb(f)
+
 struct Planes {
     kq : array<uint8>
+    tkq : array<uint8>   // the tile arm's weight plane (the unpacked panel form where the format has one)
     ks : array<uint8>
     xq : array<int8>
     xs : array<float>
@@ -143,6 +147,7 @@ def sized(var a : array<auto(numT)>; n : int64) {
 def fill_planes(var p : Planes; f : KqFmt; n, d, ntok : int64) {
     let nsb = n / 256l
     p.kq |> sized(d * nsb * kq_qsb(f))
+    p.tkq |> sized(d * nsb * tile_kq_bytes_per_sb(f))
     p.ks |> sized(d * nsb * kq_ssb(f))
     p.xq |> sized(ntok * n)
     p.xs |> sized(ntok * n / 32l)
@@ -150,6 +155,10 @@ def fill_planes(var p : Planes; f : KqFmt; n, d, ntok : int64) {
     p.y |> sized(ntok * d)
     var seed = 0x1234u
     for (b in p.kq) {
+        seed = seed * 1664525u + 1013904223u
+        b = uint8(seed >> 24u)
+    }
+    for (b in p.tkq) {
         seed = seed * 1664525u + 1013904223u
         b = uint8(seed >> 24u)
     }
@@ -212,13 +221,13 @@ def bench_tile(var rows : int&; cfg : BenchArgs; f : KqFmt; var p : Planes) {
     let d = int64(cfg.d)
     let ntok = int64(cfg.ntok)
     let nsb = n / 256l
-    let qsb = kq_qsb(f)
+    let qsb = tile_kq_bytes_per_sb(f)
     let ssb = kq_ssb(f)
-    let plane_bytes = long_length(p.kq) + long_length(p.ks)
+    let plane_bytes = long_length(p.tkq) + long_length(p.ks)
     var mrs <- layout_mrs(f)
     var vs <- tile_variants(f)
     unsafe {
-        let kqp = addr<uint8 const?>(p.kq[0])
+        let kqp = addr<uint8 const?>(p.tkq[0])
         let ksp = addr<uint8 const?>(p.ks[0])
         let xqp = addr<int8 const?>(p.xq[0])
         let xsp = addr<float const?>(p.xs[0])
