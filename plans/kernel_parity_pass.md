@@ -752,5 +752,24 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
 - 2026-09-01: sign=vec for iq3xxs/iq2xs/iq2xxs via the parity-synthesized column (no layout
   change) and the u64 grid pair load for the three iq2 formats: iq2s 5152 us (0.98x), iq2xxs 5209
   (0.98x), iq2xs 6297 (0.86x), iq3xxs 7893 (0.83x), iq3s 7562 (1.37x); 85 variants ok in TEST mode.
+- 2026-09-01: re-mint round on the shipping emitter (commit 11f69493e). zen4 c7a (x86-vnni512, 50
+  entries, TEST 103/103): the k3 tile crown moved 512_mr16 -> maddubs_width256_mr8 (tile race 51347
+  vs 52840 us; the transposed k3 planes made the 256 maddubs seat the tile winner) and the k3 gemv
+  took its own same-layout seat vpdpbusd_width256_mr8 (374 vs the tile seat's 401 us) - the first
+  entry the gemv's own crown wrote; q51 tile 512_mr16 -> vpdpbusd_width256_mr8; axpy_q8kv plain ->
+  vec8_u2, rope_scaled_neox_tab vec8_u2 -> plain. Intel c8i (x86-amx, 49 entries, TEST 103/103):
+  every crown holds (k3 41768 vs 57342, k6 33760 vs 53832 for the 512 tile), axpy_f16 vec16 ->
+  vec16_u2, no gemv seat - so the Intel k6 normal-mode 5.2 ms gap stays open.
+- 2026-09-01: the new dot_vpdpbusd_width256_mr16 row was a dud on both boxes - its tile time equalled
+  the reference row's (zen4 3168491 vs 3167365 us): perm_declines budgeted 16 ymm registers at width
+  256, so a two-vectors-per-group row (nrsplit 4: 2*4*2+6 = 22) declined into the reference body. A
+  row that requires AVX-512 runs where EVEX encodes ymm16-31; the budget is 32 there (461edda72,
+  LLVM_JIT_CODEGEN_VERSION 0x66). The row is un-raced until the next mint.
+- 2026-09-01: the qpanel spelling (DASLLAMA_GRID_QPANEL=1: eight qword stores into the alloca panel +
+  one width load instead of the insert chain, commit eec5ce80c) measured on zen2 with the row form
+  forced, one thread at the engine phase, qpanel 0 -> 1: iq2xs 8797 -> 8776, iq2s 6733 -> 7435, iq3s
+  11886 -> 11647, iq3xxs 7212 -> 7262, iq2xxs 4624 -> 5841 us. A loss or a wash on zen2 (where the row
+  form itself loses to the panel form: iq2xs 4565 panel); the zen4 A/B is the one that matters
+  (iq2xxs's crown there IS the row form) - queued behind the box's ladder.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
