@@ -1481,9 +1481,7 @@ def private emit_kq_gather(var te : TileEmit; var sbi : LLVMOpaqueValue?) {
     LLVMPositionBuilderAtEnd(b, cont)
 }
 
-// The iq3xxs gemv gather globals: the HALVED grid as a [256 x i32] private constant, ksigns
-// as a [128 x i32] (7-bit index -> sign byte, bit 7 = parity), plus the shared smask table
-// (the same nibble -> byte-mask expansion; magnitudes 2..31 are nonzero, so no carry).
+// The iq3xxs gemv gather global: the HALVED grid as a [256 x i32] private constant.
 def private iq3xxs_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
     var grid = LLVMGetNamedGlobal(mod, "dasllama.iq3xxs.grid")
     if (grid == null) {
@@ -1503,9 +1501,7 @@ def private iq3xxs_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
 }
 
 
-// The iq2s gemv gather globals: the u64 grid as a [2048 x i32] private constant (1024 entries
-// as low/high word pairs), plus the shared smask table (magnitudes {8, 25, 43} are nonzero -
-// no carry crosses a byte lane on negation).
+// The iq2s gemv gather global: the u64 grid as a [2048 x i32] private constant (low/high word pairs).
 def private iq2s_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
     var grid = LLVMGetNamedGlobal(mod, "dasllama.iq2s.grid")
     if (grid == null) {
@@ -1525,8 +1521,7 @@ def private iq2s_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
 }
 
 
-// The iq2xs gemv gather globals: the u64 grid as a [1024 x i32] private constant (512 entries
-// as low/high word pairs), the shared ksigns table, and the shared smask.
+// The iq2xs gemv gather global: the u64 grid as a [1024 x i32] private constant (low/high word pairs).
 def private iq2xs_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
     var grid = LLVMGetNamedGlobal(mod, "dasllama.iq2xs.grid")
     if (grid == null) {
@@ -1545,8 +1540,7 @@ def private iq2xs_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
     te.iq3s_grid_g = grid
 }
 
-// The iq2xxs gemv gather globals: the u64 grid as a [512 x i32] private constant (256 entries
-// as low/high word pairs), the shared ksigns table, and the shared smask.
+// The iq2xxs gemv gather global: the u64 grid as a [512 x i32] private constant (low/high word pairs).
 def private iq2xxs_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
     var grid = LLVMGetNamedGlobal(mod, "dasllama.iq2xxs.grid")
     if (grid == null) {

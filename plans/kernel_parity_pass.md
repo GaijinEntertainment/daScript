@@ -158,9 +158,19 @@ CPU decode, the grid formats (done):
    16-thread stamp on the vehicles (needs `--for-debug-purposes` on lcpp_bench, or the released
    exe). 8. retro audit of IQ4_XS/Q3_K per followup 60.
 
-CPU decode on ARM (the M1 ladder): iq2xs 0.51x, iq2xxs 0.57x, iq3xxs 0.72x, iq3s 0.93x - the grid
-decode under the sdot lattice (width 128, two vectors per dword group). Untouched so far; a memo on
-llama.cpp's NEON grid kernels vs our width-128 arms is the first step.
+CPU decode on ARM (the M1 ladder): iq2xs 0.51x, iq2xxs 0.57x, iq3xxs 0.72x, iq3s 0.93x. The memo
+(`kernel_parity_research_arm.md`): the sdot count is at parity (2 per 32 weights per row, both sides);
+the gap is the surrounding work - the parity chain that rebuilds the 8th sign bit for the three ksigns
+formats (+3.25 cycles per row per 32 weights: exactly iq2xs/iq2xxs/iq3xxs), the u32 grids' doubled
+loads, and the alloca panel, which in decode (tokCount 1) buys back nothing; a port model reproduces
+all five M1 numbers within 10%. THE FIX: a 2-rows x 8-weights-per-vector decode form under the sdot
+lattice - non-indexed sdot with the activation as `ld1r {v.2d}`, one `addp` per row pair recovers the
+`<4 x i32>` accumulator the fold already takes; zero x86 exposure (inside the gather branch, gated on
+DOT_SDOT), and it makes llama.cpp's +-1 sign table (`keven_signs`) reachable, retiring the parity chain.
+Model: iq2xs ~2570 us = 1.27x. vqtbl gathers are impossible (1-2 KB grids vs tbl's 64 bytes); our
+masked negate already beats llama.cpp's own mask expansion. Fallback if deferred: plane-carried sign
+bytes (size-neutral for iq2xxs/iq3xxs, +6% for iq2xs; touches the plane, both ISAs) -> 0.72-0.98x only.
+Also from the memo: the column-read-vs-byte-read decision was made on x86 and should be a perm seat.
 
 Vulkan pp (gap 1):
 1. Budget split (measurement, no kernel edit) - is the GEMM the 30%? 2. `shAscales`-style scale
