@@ -191,4 +191,7 @@ aws ec2 terminate-instances --instance-ids <id>
 
 - 2026-09-01 `c7a.4xlarge` (EPYC 9R14 zen4, class `x86-vnni512`), `i-043725feb25086523`: sections 1-6
   as written; the TEST gate 65/65 ok; the re-mint agreed with the shipped profile on every format tile
-  and flipped four tie seats, so nothing was committed from it.
+  and flipped four tie seats, so nothing was committed from it. Model-level sanity on the vehicle
+  (`lcpp_bench -m <gguf> -p 512 -n 128 -r 3 --for-debug-purposes --ref ~/llama.cpp/build-clean-cpu/bin/llama-bench
+  --ref-flavor clean-cpu --ref-no-affinity`, 16 threads): pp512 1172 vs 927, tg128 88.7 vs 86.0.
+  Wall clock from launch to terminate: about 90 minutes, of which the build is 12 and the mint 6.
