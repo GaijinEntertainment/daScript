@@ -643,6 +643,9 @@ stays open.
    never straddle a cache line whatever RSP the caller arrives with): zen2 k6 heap phase 3344 / 3437 / 3737 /
    4389 (was 4.0-5.4 with two of three slow), engine phase 3423 / 3593 (reference 3683: 1.03-1.08x). The draw
    narrowed, one outlier remains - the stack phase was part of it, not all of it.
+   Verified after the burn-in (8693a5b47), zen4 16 lanes with iq2s FIRST: iq2s 2535 (the ladder's 2525; reference
+   2159 -> 0.85), iq2xxs 1696 (row form; 2134 -> 1.26x), iq2xs 2309 (2000 -> 0.87). Gate final: x86-vnni512 ->
+   iq2xxs; x86-amx -> iq2xxs, iq3xxs; everything else the panel; the knob forces either.
    Round four, the row form with the COLUMN signs on zen4 (one thread, engine phase; reference in
    parentheses): iq2s 3541-3578 (3757: 1.05x), iq2xxs 2737-2771 (3922: 1.42x, from 0.89 with the table),
    iq3xxs 4234-4322 (5243: 1.22x, from 0.56 with the table; the panel 0.88), iq3s 6238-6309 (6105: 0.97),
