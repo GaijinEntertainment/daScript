@@ -48,6 +48,24 @@ the arc plan; the research is the evidence.
   | gemma-4-26B-A4B-it (MoE) | `mtp-gemma-4-26B-A4B-it-{BF16,Q8_0,Q4_0}.gguf` | 462 MB | arch `gemma4-assistant`: 4 layers (sliding,sliding,sliding,full), Q-only - NO k_proj/v_proj anywhere; hidden 1024, backbone 2816, tied embed 262144 |
 
   Local: Qwen3.8-27B-Q4_K_M (0 nextn tensors), gemma-4-26B-A4B-it Q4_K_M + Q8_0; 2.7 TB free.
+  **Head files pulled 2026-09-01** (`.sha` beside each, Q8_0 + Q4_0 twins of both). Header facts:
+  - qwen head: `block_count=65` (includes the block), 18 tensors = the blk.64 full-attention
+    block (attn_q 5120x12288 gated, k/v 4 heads x 256, ffn 17408) + the 4 nextn extras + COPIES
+    of the trunk's `token_embd.weight` / `output.weight` / `output_norm.weight` (2 x 1.3 GB) -
+    the loader skips the copies and binds the trunk's own tables.
+  - gemma head: arch `gemma4-assistant`, 49 tensors, `nextn_predict_layers=4`,
+    `embedding_length_out=2816`, `shared_kv_layers=4`, 16 q heads (kv 8 sliding / 2 global per
+    the HF config), key_length 512 global / 256 swa, its OWN tied `token_embd` 1024 x 262144
+    (268 MB of the 462), `nextn.pre_projection` 5632->1024, `nextn.post_projection` 1024->2816
+    (the feedback hidden for the next chain step), `blk.N.layer_output_scale`, no k/v anywhere.
+  - **No centroid tensors in ANY conversion** (ggml-org GGUF, mlx-community qat-4bit): the
+    official `google/gemma-4-26B-A4B-it-assistant` checkpoint is gated (no HF token on this box)
+    and carries `num_centroids=2048`, `centroid_intermediate_top_k=32`. The centroid mask needs
+    either the token (pull the centroid tensors as our own sidecar) or self-computed centroids
+    (k-means over the drafter's embed table - legal, the target verifies every token). The HF
+    tensor names contain `masked_embedding` (llama.cpp's converter filters exactly that
+    substring); vLLM auto-enables the mask only for E2B/E4B, so on 26B it is a measured
+    question, not a given. Recon in S3.
   The llama.cpp PR #27836 is Qwen3.8-**Flash-Next** (`qwen4exp`, hyper-connections, 512-expert
   MoE) - a different architecture, NOT this arc's carrier.
 - **mlxfast.** gemma repo clone `~/Work/mlxfast` (5439915, 08-28; upstream fedabc7 09-01);
@@ -220,10 +238,48 @@ watermark only (no recurrent layers) - recon the sliding-window ring rows.
   settle by OUR M-curve on the gemma trunk, not by either report.
 - Measurement discipline: one process per box, cv > 3% void, never `-r 1`, Parsec off.
 
-## mlxfast trunk delta since 08-28 (Opus survey) - PENDING
+## mlxfast gemma trunk delta since 08-28 (Opus survey, 2026-09-01)
 
-(filled when the survey lands: per-class mechanism table, MTP verdict, top-5 adoption
-candidates, regressions the ratchet corrected)
+69 commits 08-28 -> 09-01 (21 solvers, +15,246/-719 across 38 files; tip moved on to 3bcf827).
+Composite delta not derivable from the repo (no leaderboard file); formula
+`prefill_gain^0.25 * decode_gain^0.75`, token fidelity a **10% divergence budget, not
+equality** (`docs/participant-contract.md:492-497`) - the research memory's "sealed by
+bit-exactness" reading was wrong.
+
+**MTP verdict: one commit, a two-line constant flip.** `938df76` (08-30) set
+`CBv2MTPRoundDriver.submissionDraftDepth` 0 -> 3 + `"arm": "mtp"` in the manifest. No drafter,
+verify, acceptance-packet or depth-controller code changed anywhere in the range; speculation
+was OFF for the repo's whole prior history. The arena's MTP lane is open and unexploited - 68 of
+69 submissions were kernels. So mlxfast-gemma is a KERNEL intel source; the MTP design reference
+stays the (closed) qwen38 track.
+
+Per class: (a) GEMM/matmul 19 - batch-8 quantized GEMV promoted to `simdgroup_float8x8` MMA
+with 4-bit codes unpacked straight into fragments (`gemma4_qmv_mma8_affine4_g64_impl`,
+`quantized.cpp:2244-2420`; the ONE non-bit-exact tier, <=1 bf16 ulp, 0 argmax flips/400 rows) -
+**this is the verify-leg shape at M=k+1**; (b) attention 16 - batch-wide two-pass split-K decode
+attention (partition count solved for the BATCH: 128 -> 32 -> 16), GQA head pairing on one
+simdgroup, xor-butterfly reductions; (c) fusion 13 - per-layer glue 9 -> 3 dispatches, RoPE into
+QKV-norm, the norm emits the next GEMV's activation-sum table from registers; (d) dispatch 12 -
+tight grids (211,200 -> 52,800 threadgroups on the dense MLP; LM head 262,144 -> 65,536 live),
+early graph submission; (f) residency 6 - KV ring bf16 -> q8 -> q4-g64 authoritative,
+`MLX_MAX_OPS_PER_BUFFER` 50 -> 512.
+
+Adoption candidates (external figures, their box; each adopts only through our own race):
+1. Tight-grid dispatch - identical kernel text on a hand-sized grid; zero numerical risk.
+2. Batch-M quantized GEMV on the matrix units - the verify at M=2..9 is exactly this shape.
+3. Delete the MoE route sort - one-dispatch simd rank-scatter for the [8,8] decode table
+   (`SwitchLayers.swift:383-415`), 392.6 of 5508 ms on their M4 and latency-bound.
+4. Split-K partition for the batch + GQA pairing + butterfly reduce (`RaggedTwoPass...:55-87`).
+5. Command-buffer op budget; never materialize `scale*q` at scale 1; causal mask folded into
+   the QK^T epilogue with a NEGATIVE zero bias (`x + (-0.0)` is identity for every float).
+
+Traps the ratchet corrected (do not port the earlier version): `bc05fe4` pass-B lane guard
+(silent wrong answer below 32 blocks, fixed `8fbf2f3`); two-deep weight prefetch on o_proj
+landed and reverted twice - a measured LOSS there, survives only on QKV; two rails shipped then
+disarmed at the tip (`..._EXPERT_PREFIX_BOUNDS`, `..._MLP_MMA8_DOWN_LANE_SUMS`); PREFILL-SOFTMAX-
+SHAPE submitted and deleted three times (JIT compile inside the scored window); the arena
+rewards resubmitting unchanged trees to re-roll noise - several per-commit claims sit at the
+A/A floor (-0.09%).
 
 ## Open for Boris
 
