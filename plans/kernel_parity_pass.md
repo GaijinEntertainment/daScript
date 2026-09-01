@@ -848,5 +848,10 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   ~4900-5300 us normal vs ~3236-3400 tune over 20 rounds; one thread differs 1% (1629 vs 1616). Arena phase
   is an 8% one-thread effect (off 64 best 1764, off 128-256 ~1920), not the 1.5x. intel_k6perf.sh counts the
   steady loop (perf stat + record by DSO) in both modes - kernel pages vs dispatcher decides the next step.
+- 2026-09-01: the lattice's full Intel race (tune mode, d=32768; vbmi / old 512 seat / the reference at
+  16 threads): 16 lanes iq2xxs 2249 / 2599 / 4255, iq3xxs 3376 / 4536 / 6704, iq3s 3726 / 7212 / 7413,
+  iq2xs 2815 / 3951 / 4610, iq2s 3316 / 5706 / 3848; one thread iq2xxs 19334 / 21823, iq3xxs 30438 / 39773,
+  iq3s 36485 / 72793, iq2xs 23533 / 32658, iq2s 28428 / 36371 us. Every Intel grid row clears 0.95 with the
+  lattice - iq2s (the 0.90 row) reads 1.16x. The zen4 half runs next; then the re-mints adopt the seats.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
