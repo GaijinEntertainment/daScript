@@ -249,6 +249,7 @@ struct private TileEmit {
     iq3s_panel : LLVMOpaqueValue?        // iq3s/iq3xxs gemv: the per-superblock alloca panel (null = tile mode, the caller unpacked)
     iq3s_grid_g : LLVMOpaqueValue?       // iq3s gemv: the [512 x i32] grid global (iq3xxs: its [256 x i32] halved grid)
     sign_code_pm1_g : LLVMOpaqueValue?   // the row-group grid decode: ksigns code -> eight +-1 bytes, [128 x i64], parity bit folded in
+    gridRows : bool                      // set while the row-group grid decode emits: the column dword read (a panel-form win) reverts to byte loads
     gfn : LLVMOpaqueValue?               // the function under emit (block creation for emitted inner loops)
     gctx : LLVMOpaqueContext?
     psign_ty : LLVMOpaqueType?
@@ -1344,6 +1345,7 @@ def private wg_col(mr, pos : int) : int => (pos / 4) * mr * 4 + pos % 4
 //! the byte at packed position `pos`, read as one dword load of its column with the byte split off in
 //! registers - the four positions of a column share the load through CSE
 def private wg_col_byte(var te : TileEmit; var base : LLVMOpaqueValue?; pos : int) : LLVMOpaqueValue? {
+    if (te.gridRows) return wg_byte(te, base, wg_col(te.interleave, pos))   // the row form measured 1.8x slower on the dword read (zen4 iq2xs / iq3xxs)
     let b = te.builder
     var col = wg_i32(te, base, (pos / 4) * te.interleave * 4)
     let sh = 8 * (pos % 4)
@@ -1850,7 +1852,9 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
             }
         }
         if (pairs) {
+            te.gridRows = true
             emit_grid_rows_blk(te, wbP, xb, blk, signCol, a, a1, iq2)
+            te.gridRows = false
         }
         for (j in range(pairs ? 0 : 4)) {
             for (qd in range(rq)) {
@@ -3064,7 +3068,7 @@ def private kq_gemv_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
         }
         sign_pm1_emit_globals(te, LLVMGetGlobalParent(gc.impl))
         te.iq3s_panel = LLVMBuildAlloca(b, LLVMArrayType(gc.jit.types.t_int8, uint(256 * te.interleave)), "iq3s.panel")
-        LLVMSetAlignment(te.iq3s_panel, 32u)
+        LLVMSetAlignment(te.iq3s_panel, 64u)   // a cache line: at 32 half the width-512 panel loads straddled one
     }
     var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = 1)
     sa.yp = LLVMGetParam(gc.impl, 0u)
