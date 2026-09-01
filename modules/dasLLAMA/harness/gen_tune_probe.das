@@ -1453,13 +1453,17 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
     }
     with_job_que() {   // the lane count and the team dispatch both need the live jobque
         if (get_total_hw_jobs() > 1) {
-            let TILES = 48l   // 393216 rows at n=2048: 200-660 MB per format, past any server L3
-            var ktfx = KqFixture(fmt = kgfx.fmt, n = kgfx.n, d = kgfx.d * TILES, ntok = 1l, nsb = kgfx.nsb)
-            ktfx.xq := kgfx.xq
-            ktfx.xs := kgfx.xs
-            ktfx.xbs := kgfx.xbs
+            // the engine's row length matters (k3 on Granite Rapids: 256_mr16 wins at n=2048, loses at 14336), so the
+            // seat fixture is a short one at the ffn width, tiled: 512 rows transcode in a blink, 96 tiles make 49152
+            var kefx <- build_kq_fixture(fmt, 14336l, 512l, 1l)
+            let TILES = 96l
+            var ktfx = KqFixture(fmt = kefx.fmt, n = kefx.n, d = kefx.d * TILES, ntok = 1l, nsb = kefx.nsb)
+            ktfx.xq := kefx.xq
+            ktfx.xs := kefx.xs
+            ktfx.xbs := kefx.xbs
             var tbuf : KqBuf
-            tile_kq_planes(kgfx, TILES, tbuf)
+            tile_kq_planes(kefx, TILES, tbuf)
+            delete kefx
             unsafe {
                 repack_kq_grp_fmt(fmt, addr(tbuf.q[0]), addr(tbuf.s[0]), ktfx.n, ktfx.d, vmr[winner])
             }
