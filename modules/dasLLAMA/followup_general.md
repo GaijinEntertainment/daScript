@@ -761,16 +761,20 @@
     `[tune_perm]` spellings and let the probe judge. Done = a per-format note naming what was
     raced and what won, beside the existing bench rows.
 
-61. **IQ3_S CPU decode: race a no-panel gemv spelling (the 0.92x tail).** The stamped gemv
-    gathers each superblock into an alloca panel and then runs the vector dot - a store/load
-    round trip per superblock that a single token never amortizes; llama.cpp's per-row form
-    (grid words composed straight into vectors, signs applied to the ACTIVATION via
-    shuffle+cmpeq/xor-sub, magnitudes kept unsigned for maddubs) edges it 57.0 vs 52.4 tg128
-    on the zen2 (pp512 is ours 4.93x - the panel amortizes across the tile). The counter to
-    race as a [tune_perm]: compose the gathered words directly into the weight vectors
-    (insertelement per i32 lane, no panel), and/or the signs-on-activation form that drops
-    the abs+psign pair. Done = a gemv perm that takes tg128 at or past llama.cpp's, crowned
-    by the probe.
+61. **Grid-format CPU decode: the panel round trip, one shared cost (kernel-level 0.43x-0.91x).**
+    Measured 2026-09-01 at one thread, m=4096 k=14336 (`benchmarks/matmul/kq_kernel_bench.das` vs
+    the reference exe's `test-backend-ops perf`): iq3s 11406 us vs 10340 (0.91x), iq3xxs 11578 vs
+    6590 (0.57x), iq2s 11732 vs 5074 (0.43x), iq2xs 11490 vs 5386 (0.47x), iq2xxs 11061 vs 5124
+    (0.46x) - all five at 48-51 ns per superblock against k4/k2's 8.6-8.8, a flat cost independent
+    of the format. Every one of the five gathers ends each decoded dword with a 4-byte store into the
+    alloca panel and the dot reloads 32 bytes spanning eight such stores - a wide load over narrow
+    stores, which x86 does not forward; llama.cpp composes grid words into registers on both arches
+    (`plans/kernel_parity_research_cpu.md`). Signs-on-activation does NOT port to our 8-rows-per-vector
+    layout (llama.cpp's own arm64 arms sign the weights for the same reason). The spellings, in
+    order: `gather="reg"` (group-major compose, insertelement per row, no panel), `psign="mask"` (a
+    vector sign mask replacing GPR sign math + abs), a `vpdpbssd` seat for AVX-VNNI-INT8 hosts, a
+    repack-baked parity sign byte. Done = each of the five at or past the reference row at one thread,
+    crowned by the probe; plan and fact base: `plans/kernel_parity_pass.md`.
 
 62. **IQ3_S Metal decode: the ~140 GB/s compose ceiling (tg 0.95x).** Eight GEMV forms raced
     at n=2048 d=8192 - gather placement x3, gather deleted, signs deleted, llama.cpp's exact

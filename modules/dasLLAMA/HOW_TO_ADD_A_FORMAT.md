@@ -260,6 +260,15 @@ loses cross-module inlining); the first run after a cache write pays one cold co
 deser re-key); QUIRK 21 still applies to emitter edits. Numbers, caveats and the
 invalidation ledger: `plans/jit_compile_time.md`.
 
+**Kernel-loop invocation (adopted 2026-09-01):** a kernel spelling is raced without a model in
+`benchmarks/matmul/kq_kernel_bench.das` - `DAS_TUNE_MODE=tune bin/Release/daslang.exe -jit
+modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das -- --fmt <fmt> --perm <substr>` times every
+row of the tile's and gemv's `_variants()` registries at one thread on synthetic planes (seconds
+per try), and the reference row at the same shape is the reference exe's `test-backend-ops perf
+-o MUL_MAT -p "type_a=<type>,type_b=f32,m=4096,n=1,"` under `GGML_BENCH_THREADS=1`. The app run
+comes only after a spelling wins there. Procedure, fact base and work queue:
+`plans/kernel_parity_pass.md`.
+
 A real file whose every tensor type is now loadable (the header census script in the session
 scratchpad, or `harness/gguf_dump.das`), through `examples/dasLLAMA/run.das` against
 `simple_ids.exe` from the llama.cpp reference build for the same prompt; then `test_model_image`
