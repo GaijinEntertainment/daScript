@@ -152,4 +152,7 @@ hint.
 
 The per-format isolated rig is `benchmarks/matmul/bench_metal_kq_race.das`: synthetic planes,
 no model, no tuner, every arm gated against a CPU plane-dequant oracle before it is timed, and
-`--burn-ms` (default 150) spent on GPU work before each cell's first timed round.
+`--burn-ms` (default 150) spent on GPU work before each cell's first timed round. Its cells
+chain every dispatch through ONE shared output buffer on purpose - the serialized regime is
+the instrument's probe shape, imitating the reference tool it is compared against - and its
+numbers reach the engine only through a human porting decision, never a minted crown.

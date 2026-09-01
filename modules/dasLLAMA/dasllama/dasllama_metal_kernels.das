@@ -4800,26 +4800,6 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
     var bd = race_uniform_u32(dev, uint(ndim))
     let doff = uint64(nblk * 16)
     let tg = uint3(64u, 1u, 1u)
-    var burn_ms = 0.0lf   // clock: control — GPU burn budget, ramps the clock governor
-    var burn_err = ""
-    while (burn_ms < 150.0lf) {
-        var g = 0.0lf
-        let okb = with_compute_encoder_timed(queue, burn_err, g) $(enc) {
-            kn_pipeline(enc, base_pso)
-            kn_buffer(enc, bs, doff, 0)
-            kn_buffer(enc, bs, 0ul, 1)
-            kn_buffer(enc, bq, 0ul, 2)
-            kn_buffer(enc, bxa, 0ul, 3)
-            kn_buffer(enc, bn, 0ul, 5)
-            kn_buffer(enc, bd, 0ul, 6)
-            for (r in range(32)) {
-                kn_buffer(enc, (r & 1) == 0 ? by_base : by_base2, 0ul, 4)
-                kn_dispatch(enc, uint3(uint(ndim / base_gdiv), 1u, 1u), tg)
-            }
-        }
-        break if (!okb)
-        burn_ms += g
-    }
     race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
         kn_pipeline(enc, base_pso)
         kn_buffer(enc, bs, doff, 0)

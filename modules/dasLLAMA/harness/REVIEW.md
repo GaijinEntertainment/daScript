@@ -7,6 +7,6 @@ the Metal backend, `../followup_vulkan.md` for anything about the Vulkan backend
 everything else.
 
 **A diff that adds or moves a row in `tune_kernels.das`'s `benches` list - the name/function
-pairs `main` declares up front - keeps `dot_q8q8_laneq4x4` last.** Running that bench pins one
-matmul backend for the rest of the process, so a row after it is timed against the pinned
-backend instead of the one it would have picked.
+pairs `main` declares up front, or any later mutation of that list - keeps `dot_q8q8_laneq4x4`
+last.** Running that bench pins one matmul backend for the rest of the process, so a row after
+it is timed against the pinned backend instead of the one it would have picked.

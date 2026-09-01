@@ -87,3 +87,21 @@ id -> still-emitting module); message-literal starts with a registered id + colo
 style_lint candidate: raw string-loop char indexing a byte-class table without
 `uint(uint8(ch))`. At 262/300 lines - when LINT027 fires, the split seams are the lint /
 CppAot-emit / flatten_opt clusters.
+
+## harness/REVIEW.md (review-md auditor, same round)
+
+Trigger repair landed in the PR (the benches-last rule now also catches runtime mutation of
+the list). RECOMMEND LINT: a `harness/REVIEW.das` asserting the last `benches` row is
+`dot_q8q8_laneq4x4`, retiring the prose rule per REVIEW_COMMON's automation clause.
+
+## REVIEW_GPU_RACE.md round 2 (review-md auditor, same round; verdicts APPLIED in the PR)
+
+Applied: mis-numbering criterion re-keyed to the gate's property (a number the class does
+not declare for that field); scaffolding rule states the shared-by-two-sites property; the
+crown rules' trigger re-keyed decidable ("mints a runtime crown or a tune-sidecar row" -
+the serialized per-format rig is sanctioned in ARCHITECTURE_MEASUREMENT.md sec.2.21); the
+port-deletion duty keyed on the variant's own code; the invisible-arm PR attestation widened
+to kargs word layout; title + Planned-work pointer normalized. Code: race_gemv_f4_twin's
+local 150ms burn deleted (race_pair_ms's burn phase covers both arms). Backlog: sec.2.2b is
+titled "Tensor-GEMM shapes that measured out" while two rules cite it as the retained-
+reference ledger - move that ledger to its own anchor or retitle.
