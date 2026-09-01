@@ -414,6 +414,16 @@ def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
                 invoke(fns[row], yp, kqp, ksp, xqp, xsp, xbsp, n, 0l, d)
             }
         }
+        if (cfg.tsv) {   // the row's answer, one solo call each: modes and seats must agree here before their times are compared
+            for (row in range(length(fns))) {
+                invoke(fns[row], yp, kqp, ksp, xqp, xsp, xbsp, n, 0l, d)
+                var acc = 0.0lf
+                for (i in range64(d)) {
+                    acc += double(yp[i])
+                }
+                print("# ysum\t{name}\t{stats[row].perm}\t{acc}\t{yp[0]}\t{yp[d - 1l]}\n")
+            }
+        }
     }
     for (st in stats) {
         emit_row(rows, name, "gemv", st, n, d, 1l, nsb, plane_bytes)
