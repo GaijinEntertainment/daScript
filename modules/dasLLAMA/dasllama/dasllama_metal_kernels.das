@@ -4756,8 +4756,11 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
                               twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
                               qu_per_sb : int; base_gdiv, twin_gdiv : int) : MetalTensorRaceResult {
     var res = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
-    let kdim = 3072
-    let ndim = 4096
+    //! the dominant decode site shape (ffn-up class) - the crown must be minted on what the
+    //! served graph dispatches; a mid-size square fixture crowned the M4 iq2xxs twin that
+    //! the real shapes reject
+    let kdim = 2048
+    let ndim = 8192
     let nsb = kdim / 256
     let nblk = ndim * nsb
     var err = ""
