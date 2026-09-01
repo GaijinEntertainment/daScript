@@ -4798,6 +4798,10 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
     var bxa = race_buf(dev, uint64(kdim * 4), unsafe(addr<void?>(xa[0])))
     var by_base = race_buf(dev, uint64(ndim * 4), null)
     var by_twin = race_buf(dev, uint64(ndim * 4), null)
+    //! overlap ys: the served graph's consecutive gemvs write DIFFERENT buffers and overlap;
+    //! a same-y serialized chain misjudged the M4 iq2xxs slab twin (+9% raced, -8.6% e2e)
+    var by_base2 = race_buf(dev, uint64(ndim * 4), null)
+    var by_twin2 = race_buf(dev, uint64(ndim * 4), null)
     var bn = race_uniform_u32(dev, uint(kdim))
     var bd = race_uniform_u32(dev, uint(ndim))
     let doff = uint64(nblk * 16)
@@ -4815,10 +4819,10 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
             kn_buffer(enc, bs, 0ul, 1)
             kn_buffer(enc, bq, 0ul, 2)
             kn_buffer(enc, bxa, 0ul, 3)
-            kn_buffer(enc, by_base, 0ul, 4)
             kn_buffer(enc, bn, 0ul, 5)
             kn_buffer(enc, bd, 0ul, 6)
             for (_r in range(32)) {
+                kn_buffer(enc, (_r & 1) == 0 ? by_base : by_base2, 0ul, 4)
                 kn_dispatch(enc, uint3(uint(ndim / base_gdiv), 1u, 1u), tg)
             }
         }
@@ -4831,10 +4835,10 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_buffer(enc, bs, 0ul, 1)
         kn_buffer(enc, bq, 0ul, 2)
         kn_buffer(enc, bxa, 0ul, 3)
-        kn_buffer(enc, by_base, 0ul, 4)
         kn_buffer(enc, bn, 0ul, 5)
         kn_buffer(enc, bd, 0ul, 6)
         for (_r in range(32)) {   //! back-to-back dispatches keep the clock governor ramped - a single sparse dispatch reads idle-clock times and can flip the verdict
+            kn_buffer(enc, (_r & 1) == 0 ? by_base : by_base2, 0ul, 4)
             kn_dispatch(enc, uint3(uint(ndim / base_gdiv), 1u, 1u), tg)
         }
     }, $(enc) {
@@ -4844,10 +4848,10 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_buffer(enc, bs, 0ul, 1)
         kn_buffer(enc, bq, 0ul, 2)
         kn_buffer(enc, bxa, 0ul, 3)
-        kn_buffer(enc, by_twin, 0ul, 4)
         kn_buffer(enc, bn, 0ul, 5)
         kn_buffer(enc, bd, 0ul, 6)
         for (_r in range(32)) {
+            kn_buffer(enc, (_r & 1) == 0 ? by_twin : by_twin2, 0ul, 4)
             kn_dispatch(enc, uint3(uint(ndim / twin_gdiv), 1u, 1u), tg)
         }
     })
@@ -4864,6 +4868,8 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
     metal_release(bxa)
     metal_release(by_base)
     metal_release(by_twin)
+    metal_release(by_base2)
+    metal_release(by_twin2)
     metal_release(bn)
     metal_release(bd)
     metal_release(base_pso)
