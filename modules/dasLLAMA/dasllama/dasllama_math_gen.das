@@ -404,14 +404,12 @@ def k3_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : 
             var bsum = 0
             for (blk in range64(8l)) {
                 let b = sbi * 8l + blk
-                let h = blk / 4l
-                let sh = int((blk % 4l) * 2l)
                 var ilo = 0
                 var ihi = 0
                 for (l4 in range64(8l)) {
                     for (t in range64(4l)) {
-                        let q2 = (int(kqg[qb + ((h * 8l + l4) * mr + r) * 4l + t]) >> sh) & 3
-                        let hb = (int(kqg[qb + 64l * mr + (l4 * mr + r) * 4l + t]) >> int(blk)) & 1
+                        let q2 = (int(kqg[qb + ((blk * 2l + l4 / 4l) * mr + r) * 4l + t]) >> int((l4 % 4l) * 2l)) & 3
+                        let hb = (int(kqg[qb + 64l * mr + (blk * mr + r) * 4l + t]) >> int(l4)) & 1
                         let q = q2 | (hb << 2)
                         if (l4 < 4l) {
                             ilo += q * int(xqp[b * 32l + l4 * 4l + t])

@@ -1066,14 +1066,12 @@ def private dequant_k3_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, ns
             let d = f16_to_f32(uint(ksg[sb + 16l * mr + 2l * r]) | (uint(ksg[sb + 16l * mr + 2l * r + 1l]) << 8u))
             for (blk in range64(8l)) {
                 let kb = sbi * 256l + blk * 32l
-                let h = blk / 4l
-                let sh = int((blk % 4l) * 2l)
                 let s0 = d * float(int(int8(ksg[sb + 2l * blk * mr + r])))
                 let s1 = d * float(int(int8(ksg[sb + (2l * blk + 1l) * mr + r])))
                 for (l4 in range64(8l)) {
                     for (t in range64(4l)) {
-                        let q2 = (int(kqg[qb + ((h * 8l + l4) * mr + r) * 4l + t]) >> sh) & 3
-                        let hb = (int(kqg[qb + 64l * mr + (l4 * mr + r) * 4l + t]) >> int(blk)) & 1
+                        let q2 = (int(kqg[qb + ((blk * 2l + l4 / 4l) * mr + r) * 4l + t]) >> int((l4 % 4l) * 2l)) & 3
+                        let hb = (int(kqg[qb + 64l * mr + (blk * mr + r) * 4l + t]) >> int(l4)) & 1
                         dst[kb + l4 * 4l + t] = (l4 < 4l ? s0 : s1) * float((q2 | (hb << 2)) - 4)
                     }
                 }

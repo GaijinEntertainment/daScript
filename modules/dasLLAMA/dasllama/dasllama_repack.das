@@ -448,14 +448,23 @@ def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
                 for (r in range64(mr)) {
                     let sq = (g * mr + r) * qrow + sbi * 96l
                     let ss = (g * mr + r) * srow + sbi * 18l
-                    for (c in range64(16l)) {
-                        for (t in range64(4l)) {
-                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                    for (blk in range64(8l)) {   // qs: column 2blk + half holds the sub-block's four j sites at 2j; hmask: column blk, its eight sites at bit s (lo j, hi 4 + j)
+                        for (half in range64(2l)) {
+                            for (t in range64(4l)) {
+                                var qbyte = 0u
+                                for (j in range64(4l)) {
+                                    let l = (blk / 4l) * 32l + half * 16l + j * 4l + t
+                                    qbyte |= ((uint(tqp[sq + l]) >> uint(2l * (blk % 4l))) & 3u) << uint(2l * j)
+                                }
+                                kq[dq + ((blk * 2l + half) * mr + r) * 4l + t] = uint8(qbyte)
+                            }
                         }
-                    }
-                    for (c in range64(8l)) {
                         for (t in range64(4l)) {
-                            kq[dq + 64l * mr + (c * mr + r) * 4l + t] = tqp[sq + 64l + c * 4l + t]
+                            var hbyte = 0u
+                            for (sidx in range64(8l)) {
+                                hbyte |= ((uint(tqp[sq + 64l + sidx * 4l + t]) >> uint(blk)) & 1u) << uint(sidx)
+                            }
+                            kq[dq + 64l * mr + (blk * mr + r) * 4l + t] = uint8(hbyte)
                         }
                     }
                     for (idx in range64(16l)) {

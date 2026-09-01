@@ -931,16 +931,6 @@ def private or_bit_x10(te : TileEmit; var w, bytes, maskv : LLVMOpaqueValue?; na
     return LLVMBuildOr(b, w, sel, name)
 }
 
-//! k3's decode re-loads the 24 shared qs/hmask column vectors where each sub-block uses them (L1 hits)
-//! instead of CSE keeping them live against 16 ymm registers and spilling (3198 -> 2691 us). Volatile is
-//! LLVM's "load here"; it also forbids reordering, so the tile shape (token reuse, ILP) keeps CSE.
-def private pin_reload(var a, b, c, d : LLVMOpaqueValue?) {
-    LLVMSetVolatile(a, 1)
-    LLVMSetVolatile(b, 1)
-    LLVMSetVolatile(c, 1)
-    LLVMSetVolatile(d, 1)
-}
-
 // One 256-weight SUPERBLOCK, K-quant grp<mr> form (te.kq set): weight vectors unpacked
 // ONCE per (sub-block, dword-group) and dotted against every token — weight-stationary,
 // bit-exact vs per-token GEMVs (tokCount=1). kq v2 folds integer sub-scales/bsums against Q8_K-form activations.
@@ -1043,20 +1033,14 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                 var wlo : LLVMOpaqueValue?
                 var whi : LLVMOpaqueValue?
                 if (k3) {
-                    // k3: qs column (blk/4)*8 + j (lo) / + 4 (hi), 2-bit lane at shift 2*(blk%4); hmask column j / j+4, bit blk
-                    let c0 = (blk / 4) * 8 + j
-                    let sh = (blk % 4) * 2
-                    var q3l = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(c0 * 4 * mr + qd * w8)), ""), "q3l{blk}_{j * rq + qd}")
-                    var q3h = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((c0 + 4) * 4 * mr + qd * w8)), ""), "q3h{blk}_{j * rq + qd}")
-                    var h3l = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((64 + j * 4) * mr + qd * w8)), ""), "h3l{blk}_{j * rq + qd}")
-                    var h3h = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((64 + (j + 4) * 4) * mr + qd * w8)), ""), "h3h{blk}_{j * rq + qd}")
-                    if (tokCount == 1 && rq == 1) {   // the decode shape only: the tile's token reuse wants the columns kept live
-                        pin_reload(q3l, q3h, h3l, h3h)
-                    }
-                    var lo2 = LLVMBuildAnd(b, LLVMBuildLShr(b, q3l, splat_i8w(te, sh), ""), splat_i8w(te, 3), "")
-                    var hi2 = LLVMBuildAnd(b, LLVMBuildLShr(b, q3h, splat_i8w(te, sh), ""), splat_i8w(te, 3), "")
-                    var lob = LLVMBuildShl(b, LLVMBuildAnd(b, LLVMBuildLShr(b, h3l, splat_i8w(te, blk), ""), splat_i8w(te, 1), ""), splat_i8w(te, 2), "")
-                    var hib = LLVMBuildShl(b, LLVMBuildAnd(b, LLVMBuildLShr(b, h3h, splat_i8w(te, blk), ""), splat_i8w(te, 1), ""), splat_i8w(te, 2), "")
+                    // k3: qs columns 2blk / 2blk + 1 hold this sub-block's four j sites at 2j, hmask column blk its eight sites (lo at j, hi at 4 + j) - three loads per sub-block, nothing lives past it
+                    var q3l = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((blk * 2) * 4 * mr + qd * w8)), ""), "q3l{blk}_{qd}")
+                    var q3h = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((blk * 2 + 1) * 4 * mr + qd * w8)), ""), "q3h{blk}_{qd}")
+                    var h3 = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((64 + blk * 4) * mr + qd * w8)), ""), "h3{blk}_{qd}")
+                    var lo2 = LLVMBuildAnd(b, LLVMBuildLShr(b, q3l, splat_i8w(te, 2 * j), ""), splat_i8w(te, 3), "")
+                    var hi2 = LLVMBuildAnd(b, LLVMBuildLShr(b, q3h, splat_i8w(te, 2 * j), ""), splat_i8w(te, 3), "")
+                    var lob = LLVMBuildShl(b, LLVMBuildAnd(b, LLVMBuildLShr(b, h3, splat_i8w(te, j), ""), splat_i8w(te, 1), ""), splat_i8w(te, 2), "")
+                    var hib = LLVMBuildShl(b, LLVMBuildAnd(b, LLVMBuildLShr(b, h3, splat_i8w(te, 4 + j), ""), splat_i8w(te, 1), ""), splat_i8w(te, 2), "")
                     wlo = LLVMBuildOr(b, lo2, lob, "wlo3{blk}_{j * rq + qd}")
                     whi = LLVMBuildOr(b, hi2, hib, "whi3{blk}_{j * rq + qd}")
                 } elif (k2) {

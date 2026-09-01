@@ -968,12 +968,23 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     for (m in range64(96l)) {
                                         dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                     }
-                                } elif (fmt == KqFmt.k3) {   // 16 qs columns, then the 8 hmask columns at 64*mr
+                                } elif (fmt == KqFmt.k3) {   // qs columns 2blk + half carry a sub-block's four j sites at 2j; hmask column blk its eight sites at bit s
                                     for (m in range64(64l)) {
-                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                        let half = (m % 32l) / 16l
+                                        let j = (m % 16l) / 4l
+                                        var qbyte = 0u
+                                        for (bb in range64(4l)) {
+                                            let col = ((m / 32l) * 4l + bb) * 2l + half
+                                            qbyte |= ((uint(gq[(col * mr + r) * 4l + m % 4l]) >> uint(2l * j)) & 3u) << uint(2l * bb)
+                                        }
+                                        dq[m] = uint8(qbyte)
                                     }
                                     for (m in range64(32l)) {
-                                        dq[64l + m] = gq[64l * mr + ((m / 4l) * mr + r) * 4l + m % 4l]
+                                        var hbyte = 0u
+                                        for (blk in range64(8l)) {
+                                            hbyte |= ((uint(gq[64l * mr + (blk * mr + r) * 4l + m % 4l]) >> uint(m / 4l)) & 1u) << uint(blk)
+                                        }
+                                        dq[64l + m] = uint8(hbyte)
                                     }
                                 } elif (fmt == KqFmt.k2) {   // 16 qs columns, nothing else
                                     for (m in range64(64l)) {
