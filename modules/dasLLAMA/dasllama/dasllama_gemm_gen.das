@@ -945,9 +945,17 @@ def private splat_lane_i32(var te : TileEmit; var v : LLVMOpaqueValue?; lane : i
 }
 
 // or-in of a masked bit test as the nibble's 0x10: w |= (bytes & mask) != 0 ? 0x10 : 0
-// (pcmpeqb+pand shape after lowering — the k5 high-bit deposit)
-def private or_bit_x10(te : TileEmit; var w, bytes, maskv : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
+// (pcmpeqb+pand shape after lowering — the k5 high-bit deposit). NEON shifts bytes per lane, so the sdot
+// lattice moves bit t (lo) / 4 + t (hi) straight onto bit 4: one ushl / ushr and one and
+def private or_bit_x10(te : TileEmit; var w, bytes, maskv : LLVMOpaqueValue?; hi : bool; name : string) : LLVMOpaqueValue? {
     let b = te.builder
+    if (te.dotKind == DOT_SDOT) {
+        let w8 = te.width / 8
+        var shifts <- [for (i in range(w8)); LLVMConstInt(te.types.t_int8, uint64(hi ? i % 4 : 4 - i % 4), 0)]
+        var shv = LLVMConstVector(array_data_ptr(shifts), uint(w8))
+        var moved = hi ? LLVMBuildLShr(b, bytes, shv, "") : LLVMBuildShl(b, bytes, shv, "")
+        return LLVMBuildOr(b, w, LLVMBuildAnd(b, moved, splat_i8w(te, 16), ""), name)
+    }
     var hit = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntNE, LLVMBuildAnd(b, bytes, maskv, ""), LLVMConstNull(te.vwi8), "")
     var sel = LLVMBuildSelect(b, hit, splat_i8w(te, 16), LLVMConstNull(te.vwi8), name)
     return LLVMBuildOr(b, w, sel, name)
@@ -1098,8 +1106,8 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                 if (te.kq == 5 && !te.kqBytes) {
                     var hoff = LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(128 * mr + (blk * 4 + j) * mr + qd * te.rv)), "")
                     var hb = load_row_bytes_x4(te, te.wg, hoff, "qh{blk}_{j * rq + qd}")
-                    wlo = or_bit_x10(te, wlo, hb, maskLo, "wlo5{blk}_{j * rq + qd}")
-                    whi = or_bit_x10(te, whi, hb, maskHi, "whi5{blk}_{j * rq + qd}")
+                    wlo = or_bit_x10(te, wlo, hb, maskLo, false, "wlo5{blk}_{j * rq + qd}")
+                    whi = or_bit_x10(te, whi, hb, maskHi, true, "whi5{blk}_{j * rq + qd}")
                 } elif (k6 && !te.kqBytes) {
                     // the plane's qh columns 2blk / 2blk + 1 hold this sub-block's four j sites at 2j: two loads per sub-block, nothing lives past it
                     let hbase = 128 * mr + blk * 2 * 4 * mr
@@ -1456,7 +1464,10 @@ def private grid_rows_path(te : TileEmit) : bool {
     let knob = get_env_variable("DASLLAMA_GRID_ROWS_X86")
     if (knob == "1") return true
     if (knob == "0") return false
-    return tune_cpu_class() == "x86-vnni512" && (te.kq == 23 || te.kq == 25)
+    let cls = tune_cpu_class()
+    if (cls == "x86-vnni512") return te.kq == 23 || te.kq == 25   // zen4: iq2s, iq2xxs (iq3xxs wins alone, loses at 16 SMT lanes)
+    if (cls == "x86-amx") return te.kq == 25 || te.kq == 34       // Granite Rapids: iq2xxs 1.47x, iq3xxs 1.36x at the engine shape
+    return false
 }
 
 //! eight +-1 bytes for sign byte `sb`, lane k negative when bit k is set
