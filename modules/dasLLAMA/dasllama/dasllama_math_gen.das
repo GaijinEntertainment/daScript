@@ -695,6 +695,7 @@ def iq3sq8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, grid = "vbmi", requires = "avx512vnni,avx512bw,avx512vbmi"),   // the gemv through the VBMI symbol lattice; the tile is the 512 row's
  tune_companion(fn = "iq3sq8_gemv_gen", gen = "dasllama_gemm_gen::iq3s_gemv"),
  tune_companion(fn = "iq3sq8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::iq3s_tile",
@@ -979,6 +980,7 @@ def iq2sq8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, grid = "vbmi", requires = "avx512vnni,avx512bw,avx512vbmi"),   // the gemv through the VBMI symbol lattice; the tile is the 512 row's
  tune_companion(fn = "iq2sq8_gemv_gen", gen = "dasllama_gemm_gen::iq2s_gemv"),
  tune_companion(fn = "iq2sq8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::iq2s_tile",
@@ -1051,6 +1053,7 @@ def iq2xsq8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xq
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, grid = "vbmi", requires = "avx512vnni,avx512bw,avx512vbmi"),   // the gemv through the VBMI symbol lattice; the tile is the 512 row's
  tune_companion(fn = "iq2xsq8_gemv_gen", gen = "dasllama_gemm_gen::iq2xs_gemv"),
  tune_companion(fn = "iq2xsq8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::iq2xs_tile",
