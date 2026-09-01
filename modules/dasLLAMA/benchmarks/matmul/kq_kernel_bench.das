@@ -38,7 +38,7 @@ struct BenchArgs {
     @clarg_doc = "Skip the GEMV (decode) arm"
     no_gemv : bool
     @clarg_short = "p"
-    @clarg_doc = "Registry rows to time - comma-separated substrings of the perm suffix (default: every row, the reference body included)"
+    @clarg_doc = "Registry rows to time - comma-separated substrings of the perm suffix, =name for an exact row (default: every row, the reference body included)"
     perm : string
     @clarg_doc = "TSV rows only, no banner"
     tsv : bool
@@ -270,7 +270,10 @@ def perm_wanted(spec, suffix : string) : bool {
     }
     for (tok in split(spec, ",")) {
         let tk = strip(tok)
-        if (!empty(tk) && find(suffix, tk) >= 0) {
+        if (empty(tk)) {
+            continue
+        }
+        if (starts_with(tk, "=") ? suffix == slice(tk, 1) : find(suffix, tk) >= 0) {
             return true
         }
     }
