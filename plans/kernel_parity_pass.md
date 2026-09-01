@@ -884,5 +884,13 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   base, so nothing ever folded. The wrapper now builds inbounds GEPs through LLVMBuildInBoundsGEP2. Cold
   SOLO and cold 16-lane team both pass on zen4. Dead ends on the way: startup race path (T1/T2), frame size
   (five by-value grid tables), constant folding of the loads, split partitions, lane count.
+- 2026-09-01: Intel re-mint on the lattice emitter (x86-amx, 60 entries, provenance ok/ok, fingerprint carries
+  avx512vbmi): the gemv seats took grid_vbmi for all five grid families and 256_mr16 for iq4xs. The goal
+  ladders after it: one thread every row >= 1.18 (k6 1.19, iq2s 1.18, iq3s 2.19, iq3xxs 2.04, iq2xs 1.56,
+  iq2xxs 1.65); 16 lanes every row >= 0.95 (q8 exactly 0.95, iq3s 1.95, iq3xxs 2.48, iq2s 1.19, iq2xs 1.65,
+  iq2xxs 1.65) EXCEPT k6 0.68 (5346 vs 3635 us) - the normal-mode stall gap, Intel's last open row.
+- 2026-09-01: cold-start cost is LLVM, not the das compile: the mint's JIT line reads optimize 60 s + emit+link
+  72 s for the whole dasLLAMA module - the lattice bodies are fully unrolled over the 8 blocks (a called block
+  loop would cut it); -module-cache trims the das side only.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
