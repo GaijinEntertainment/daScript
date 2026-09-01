@@ -3142,6 +3142,13 @@ var private g_env_batch_mm = false
 var private g_env_attn_d = true
 var private g_env_mtp_debug = ""
 
+//! Test lever over the DASLLAMA_MTP_DEBUG bisect modes ("reject" forces every speculative round
+//! down the reject path - one committed token per round, row 0 promoted to s.logits - which is
+//! what a forced-feed parity cell needs; "cold" logs the failing engagement gate; "" restores).
+def public set_metal_mtp_debug(mode : string) {
+    g_env_mtp_debug = mode
+}
+
 [cold_path]   // one-time env resolution for the batched decode knobs; the caller tests one global
 def private load_batch_knobs() {
     g_bgemm_min = int64(max(g_env_metal.batch_gemm_min, 2))

@@ -27,7 +27,7 @@ struct RunArgs {
     full : bool
 
     @clarg_short = "s"
-    @clarg_doc = "Suite: decode | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all (default all; all excludes image-vulkan and model-free)"
+    @clarg_doc = "Suite: decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all (default all; all excludes image-vulkan and model-free)"
     suite : string = "all"
 
     @clarg_doc = "Family filter — comma-separated family tokens (the full list lives in tests/CLAUDE.md, EXACT match); only blocks of these model families run (model-free blocks always run); sets DASLLAMA_TEST_FAMILY"
@@ -49,6 +49,8 @@ struct RunArgs {
 def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat suite table, one file per line
     if (name == "decode") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das" ]
+    } elif (name == "mtp") {
+        return <- [ "modules/dasLLAMA/tests/test_metal_mtp_parity.das" ]
     } elif (name == "prefill") {
         return <- [ "modules/dasLLAMA/tests/test_metal_prefill_parity.das" ]
     } elif (name == "matrix") {
@@ -152,6 +154,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_whisper.das" ]
     } elif (name == "all") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
+                    "modules/dasLLAMA/tests/test_metal_mtp_parity.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_parity.das",
                     "modules/dasLLAMA/tests/test_metal_support_matrix.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
@@ -265,7 +268,7 @@ def main() : int {
     }
     var files <- suite_files(cfg.suite)
     if (empty(files)) {
-        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all)\n")
+        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all)\n")
         return 2
     }
     var tmp = g_env_test.tmpdir

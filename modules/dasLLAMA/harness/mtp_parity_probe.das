@@ -28,8 +28,11 @@ require math
 //                  (row 0 = the truth for tok@pos; row 1 = the accepted draft's continuation);
 //   pass 2 (plain): replay the SAME committed tokens on a plain session, finish_pending_step
 //                  after each forward so s.logits is landed, and compare per position.
-// KV content matches by construction (identical tokens), so any delta is the verify path's own:
-// batched-B=2 kernels vs single-row decode kernels. A drift that flips an argmax changes emitted
+// This probe measures free-running TRAJECTORY divergence: each session advances on its own path,
+// so its per-position delta compounds the verify's per-step kernel difference with the KV/state
+// the verify writes. The isolated per-step gate lives in tests/test_metal_mtp_parity.das
+// (forced-feed, identical tokens, logits tolerance) - that is the one to trust for correctness;
+// this probe is the acceptance/quality lens. A drift that flips an argmax changes emitted
 // tokens; drift below the flip line still eats acceptance silently, so both the flip count and
 // the logit distance are reported, each flip tagged with the plain top-2 margin it crossed (a
 // near-tie flip is benign; a wide-margin flip is a kernel defect).
@@ -63,6 +66,7 @@ struct Args {
 
     @clarg_doc = "Negative control: pass 1 also steps plainly (no speculation) - every compared row must read 0.0"
     control : bool
+
 
     @clarg_doc = "Print every flip as it happens (position, ids, margin, drift)"
     verbose : bool
