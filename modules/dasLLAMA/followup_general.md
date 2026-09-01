@@ -833,3 +833,13 @@
     once already. The tests checklist ledgers the residue; the fix is an in-process
     equivalent of `DASLLAMA_IMAGE=0` (`g_env_engine.image` is a `let` read at load), so such
     cells can run image-free instead of risking the purge.
+
+66. **x86 hybrid core detection for the lane policy.** `get_num_perf_cores` / `is_slow_tier_compute`
+    are Apple-only (`job_que.cpp`), so `dasllama_jobque_threads_cap` applies its split - every core
+    for prefill, perf cores for the decode lanes - on darwin alone. A hybrid Intel client (12th-15th
+    gen) runs its E-cores as decode team lanes and the join waits on their last chunk; prefill is
+    fine there (homogeneous ISA, extra compute). Detection is small: Linux counts
+    `/sys/devices/cpu_core/cpus` against `/sys/devices/cpu_atom/cpus` (hybrid Intel, kernel 5.13+),
+    Windows reads `EfficiencyClass` from `GetLogicalProcessorInformationEx(RelationProcessorCore)`;
+    the darwin branch then applies unchanged. No EC2 instance has such a part (server Xeons only);
+    a Hetzner EX44 (i5-13500, 6P+8E) or EX101 (i9-13900) rents by the hour for the check.

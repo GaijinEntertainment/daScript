@@ -930,10 +930,7 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   matters for balance: at --chunks-per-lane 16 iq4xs 2978 (0.96 of 2856) and q51 4132 (0.99 of 4093) with
   balanced lanes; q8 stays ~6700 at every grain (0.90) with every lane busy the whole wall - 70 GB/s against
   the reference's 82 on q8 while our k4 streams at 91 on the same box: memory-level parallelism, not bandwidth.
-- 2026-09-01: FOLLOW-UP (Boris): x86 hybrid core detection. get_num_perf_cores / is_slow_tier_compute are Apple-only
-  (job_que.cpp), so on hybrid Intel clients (12th-15th gen) tg runs E-cores as team lanes and the join waits on
-  their last chunk; pp is fine (homogeneous ISA, extra compute). Detection: Linux /sys/devices/cpu_core/cpus vs
-  cpu_atom/cpus; Windows GetLogicalProcessorInformationEx EfficiencyClass. The darwin policy then applies as is.
-  Not a factor on the goal boxes (c7a EPYC 9R14 and c8i Xeon 6975P-C are homogeneous - verified, no cpu_atom).
+- 2026-09-01: x86 hybrid core detection (Apple-only today) is LEDGERED as followup_general.md entry 66, not an arc
+  follow-up; the goal boxes are homogeneous (c7a EPYC 9R14, c8i Xeon 6975P-C - no cpu_atom PMU).
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
