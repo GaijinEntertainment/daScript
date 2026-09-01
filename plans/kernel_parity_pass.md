@@ -269,8 +269,16 @@ k6 0.90x, k5 0.91x):
    4708 (was 4862-6364), heap phase 4749 / 4729 / 5427 (was 4040-5804); spills 72 + 95 -> 36 + 67;
    TEAM=16 wall 715 / 759 (unchanged, balance-bound); tile 659 ms (unchanged). The engine's k6 goes
    ~0.61x -> ~0.80x for free; the 4.0 ms mode is not reached - the remaining spills are the i16
-   chains and broadcasts. NEXT: the same transpose for k5's qh and k3's hmask (eight sites per byte,
-   `lshr s` + `and 1`, retires the k3 pin) - the memo's other two high-bit-plane losers.
+   chains and broadcasts.
+   LANDED k3 (a387ed230): qs per sub-block at 2j (two loads) and hmask one column per sub-block at bit
+   s (one load) - three loads per sub-block, the volatile pin gone, same 96 bytes; IMAGE_VERSION 28, JIT
+   0x5c; TEST 90/90 + the three module tests green. zen2 one thread, us: decode 2590 / 2925 / 3012
+   heap phase, 2555 / 2825 / 3504 page-aligned, against 2648-2850 with the pin (reference 2701) -
+   equal at one thread with a wider draw; the TILE 733 -> 686 ms (the pin was decode-only, the layout
+   is not). Body 1027 instructions, 41 + 39 spill ops (was 1152, 42 + 13 with the pin). k5 is already
+   site-major (one qh byte per row per site) - its cost is the byte -> lane expansion (shuffle + two
+   masked tests per site); the k3 hmask shape fits it bit for bit: one column per sub-block, deposit
+   `(hb << (4 - j)) & 0x10` / `(hb >> j) & 0x10` - six ops per site against ten plus a shuffle. NEXT.
 3. Noise: the one-thread bench and the reference both drift ~5-8% run to run; interleaved rounds hold
    ours steady, the reference is re-run per table. iq3xxs/iq2s/iq2xxs tie at 1.00; k2 now clear.
 
