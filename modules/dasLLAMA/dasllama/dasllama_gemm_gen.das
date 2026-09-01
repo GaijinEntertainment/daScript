@@ -100,6 +100,9 @@ struct private TilePerm {
                           // ldtilecfg/tilerelease — the cfg companion owns per-chunk config
     grid : string = ""    // "vbmi": the grid formats' gemv decodes through the VBMI symbol lattice
                           // (the row form; the tile and the planes are the plain row's)
+    pf : int = 0          // software prefetch distance in bytes along the gemv's weight stream (0 = none):
+                          // one llvm.prefetch per weight line, pf bytes ahead - memory-level parallelism at
+                          // many lanes, where the hardware prefetcher alone leaves DRAM bandwidth unused
 }
 
 def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
@@ -124,6 +127,8 @@ def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
     if (lv is tInt) { p.latch = lv as tInt }
     let grv = find_arg(gc.ann.arguments, "grid")
     if (grv is tString) { p.grid = grv as tString }
+    let pfv = find_arg(gc.ann.arguments, "pf")
+    if (pfv is tInt) { p.pf = pfv as tInt }
     return p
 }
 
@@ -140,7 +145,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
             || (p.bias != 0 && p.bias != 128)
             || (p.pipe != 0 && p.pipe != 1)
             || (p.latch != 0 && p.latch != 1)
-            || (p.grid != "")
+            || (p.grid != "") || (p.pf != 0)
             || (!g_target_is_x64) || (!g_target_x64_amx)
             || (!g_target_x64_avx512vnni)     // the companions' busd512 lattice + zmm fold
             || (!g_target_os_linux)) return true
@@ -177,12 +182,13 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
         || (p.gkstep != 1 && p.gkstep != 2 && p.gkstep != 4)
         || (p.mr < 4) || (p.pipe != 0) || (p.latch != 0)
         || (p.grid != "" && p.grid != "vbmi")
+        || (p.pf != 0 && p.pf != 1024 && p.pf != 2048 && p.pf != 4096)
         || (p.bias != 0 && (p.bias != 128 || p.dotPrim != "vpdpbusd"))) return true
     let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
     if (rt.interleave != p.mr || !rt.f32_scales) return true
     if (p.dotPrim == "smmla") {
         // the i8mm MMA leg: NEON widths, row-quad geometry, same q-reg budget as sdot, and the i8mm tier flag (M1 is dotprod-only)
-        if ((!g_target_is_aarch64) || (!g_target_arm64_i8mm) || (p.width != 128) || (p.grid != "")
+        if ((!g_target_is_aarch64) || (!g_target_arm64_i8mm) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
             || (p.mr % 4 != 0)
             || (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)) return true
         let mod = LLVMGetGlobalParent(gc.impl)
@@ -200,7 +206,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     }
     if (p.dotPrim == "sdot") {
         // the NEON leg (M2 shape): 128-bit q-regs, 4-row sdot lanes; mr>=8 budgets the FUSED-acc shape (kq shares one lo+hi acc there — half the mr4 formula's int-acc bank)
-        if ((!g_target_is_aarch64) || (p.width != 128) || (p.grid != "")
+        if ((!g_target_is_aarch64) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
             || (p.mr % 4 != 0)
             || (p.mr >= 8 ? (p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)
                           : (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32))) return true
@@ -259,6 +265,9 @@ struct private TileEmit {
     sign_code_pm1_g : LLVMOpaqueValue?   // the row-group grid decode: ksigns code -> eight +-1 bytes, [128 x i64], parity bit folded in
     gridRows : bool                      // set while the row-group grid decode emits: the column dword read (a panel-form win) reverts to byte loads
     vbmi : bool                          // grid = "vbmi": the grid gemv decodes through the VBMI symbol lattice (row form)
+    pf : int                             // software prefetch distance along the weight stream (bytes; 0 = none)
+    prefetch_decl : LLVMOpaqueValue?     // llvm.prefetch.p0
+    prefetch_ty : LLVMOpaqueType?
     vb_plane : LLVMOpaqueValue? [2]      // the grid's compact code planes, [256 x i8] each: the entry's low / high symbols
     vb_alpha : LLVMOpaqueValue?          // the symbol alphabet as a vpshufb table (16 bytes per lane, [64 x i8])
     vb_ksigns : LLVMOpaqueValue?         // ksigns_iq2xs as [128 x i8] - one VPERMI2B turns 7-bit codes into sign bytes, parity in
@@ -444,6 +453,14 @@ def private bias_acc_init(var te : TileEmit; var bi, xlo, xhi : LLVMOpaqueValue?
 // One 32-k block for tokens [tokBase, tokBase+tokCount): 8*rq shared weight vectors x tokens
 // lane-dots at full width, then the per-block scale fold — the exact op order of
 // dot_q8q8_laneq4x4_template, so fast-math contraction sees the same input across emitters.
+//! llvm.prefetch(read, high locality, data) of the weight plane at byte offset `off`
+def private prefetch_wg(var te : TileEmit; var off : LLVMOpaqueValue?) {
+    let b = te.builder
+    var p = LLVMBuildGEP2(b, te.types.t_int8, te.wg, off, "")
+    var args <- [p, te.types->ConstI32(0ul), te.types->ConstI32(3ul), te.types->ConstI32(1ul)]
+    LLVMBuildCall2(b, te.prefetch_ty, te.prefetch_decl, args, "")
+}
+
 def private emit_block(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
     let b = te.builder
     let rq = te.rq
@@ -477,6 +494,9 @@ def private emit_block(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLV
                 var off = boff == 0 ? wb : LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(boff)), "")
                 wv[kg * rq + qd] = load_vec(te, te.vwi8, te.wg, off, "wv{kg * rq + qd}")
                 uw[kg * rq + qd] = abs_w(te, wv[kg * rq + qd], "uw{kg * rq + qd}")
+                if (te.pf != 0 && tokCount == 1) {   // the gemv's weight stream: the same line, pf bytes ahead
+                    prefetch_wg(te, LLVMBuildAdd(b, off, te.types->ConstI64(uint64(te.pf)), ""))
+                }
             }
         }
     }
@@ -2541,6 +2561,15 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
             if (te.reduce_decl == null) return false
             var redArgTypes <- [te.vni32]
             te.reduce_ty = LLVMFunctionType(te.types.t_int32, redArgTypes)
+        }
+        te.pf = p.pf
+        if (te.pf != 0) {
+            var pty = LLVMPointerType(te.types.t_int8, 0u)
+            var pfTypes <- [pty]
+            te.prefetch_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.prefetch"), pfTypes)
+            if (te.prefetch_decl == null) return false
+            var pfArgTypes <- [pty, te.types.t_int32, te.types.t_int32, te.types.t_int32]
+            te.prefetch_ty = LLVMFunctionType(te.types.t_void, pfArgTypes)
         }
         te.vbmi = p.grid == "vbmi"
         if (te.vbmi) {
