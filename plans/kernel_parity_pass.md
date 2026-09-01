@@ -278,7 +278,14 @@ k6 0.90x, k5 0.91x):
    is not). Body 1027 instructions, 41 + 39 spill ops (was 1152, 42 + 13 with the pin). k5 is already
    site-major (one qh byte per row per site) - its cost is the byte -> lane expansion (shuffle + two
    masked tests per site); the k3 hmask shape fits it bit for bit: one column per sub-block, deposit
-   `(hb << (4 - j)) & 0x10` / `(hb >> j) & 0x10` - six ops per site against ten plus a shuffle. NEXT.
+   `(hb << (4 - j)) & 0x10` / `(hb >> j) & 0x10` - six ops per site against ten plus a shuffle.
+   DONE-KILLED k5 (2026-09-01): the transpose was correct (TEST 90/90, the three tests green) and
+   SLOWER - decode 4378 / 4414 / 4556 us heap phase, 4007 / 4664 / 5212 page-aligned, against
+   3590-3760 before (reference 3307); tile 515 -> 559 ms. x86 has no byte-vector shift: `shl` /
+   `lshr` on <32 x i8> lower to word shifts plus masks, so the per-lane mask test (no shift) was the
+   cheaper deposit all along; k5's site-major byte and its shuffle stay. Reverted, nothing committed.
+   The transposes are done: k6 and k3 landed, k5 was already right. On the M1 (sdot lattice, same
+   IR): k6 1777 -> 1701, k3 1925 -> 1873 us, TEST 90/90.
 3. Noise: the one-thread bench and the reference both drift ~5-8% run to run; interleaved rounds hold
    ours steady, the reference is re-run per table. iq3xxs/iq2s/iq2xxs tie at 1.00; k2 now clear.
 
