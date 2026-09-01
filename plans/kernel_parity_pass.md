@@ -50,6 +50,38 @@ proven fact per push; research before any kernel edit (the two memos below).
 | iq2xs | 11490 (50.1); sign column + u64 pair + column read 4831 (21.1) | 5386 | 0.47x -> 1.11x | - | - |
 | iq2xxs | 11061 (48.2); sign column + u64 pair 5121-5487 (noise band) | 5124 | 0.46x -> 0.93-1.00x | - | - |
 
+The full ladder (`harness/kernel_ladder.sh`, 2026-09-01, zen2 one thread, the stamped seat per format,
+best of 5 interleaved rounds; ratio = reference / ours, >= 1.00 = ours faster):
+
+| format | gemv ours us | gemv ref us | ratio | tile ours us | tile ref us | ratio |
+|---|---|---|---|---|---|---|
+| q8 | 3324 | 4186.70 | 1.26 | 698131 | 896060.00 | 1.28 |
+| k4 | 2089 | 2539.11 | 1.22 | 493006 | 830068.50 | 1.68 |
+| k5 | 3628 | 3286.40 | 0.91 | 512129 | 1344947.00 | 2.63 |
+| k6 | 4203 | 3785.47 | 0.90 | 640544 | 1080212.00 | 1.69 |
+| q40 | 1928 | 2918.57 | 1.51 | 380774 | 1004920.00 | 2.64 |
+| q51 | 2816 | 4208.36 | 1.49 | 664024 | 1843932.00 | 2.78 |
+| iq4xs | 2100 | 3396.72 | 1.62 | 721313 | 1682846.00 | 2.33 |
+| k3 | 3317 | 2638.26 | 0.80 | 775632 | 1267418.00 | 1.63 |
+| iq3s | 7671 | 10154.70 | 1.32 | 738713 | 5220515.00 | 7.07 |
+| iq3xxs | 6622 | 6564.89 | 0.99 | 741832 | 3395150.00 | 4.58 |
+| iq4nl | 2120 | 3134.77 | 1.48 | 599955 | 1076032.00 | 1.79 |
+| k2 | 2146 | 2120.78 | 0.99 | 670297 | 783419.00 | 1.17 |
+| iq2s | 5059 | 5083.57 | 1.00 | 790327 | 2545281.00 | 3.22 |
+| iq2xs | 4554 | 5372.16 | 1.18 | 778490 | 2734115.00 | 3.51 |
+| iq2xxs | 5143 | 5157.27 | 1.00 | 745463 | 2534210.00 | 3.40 |
+| mx4 | 2572 | 3106.12 | 1.21 | 776635 | 1443088.00 | 1.86 |
+
+Every tile row is ahead (1.17x-7.07x). Decode tails: k3 0.80x, k6 0.90x, k5 0.91x; iq3xxs, k2, iq2s,
+iq2xxs at 0.99-1.00 (inside the noise band). The 4-bit class (q40, q51, iq4xs, iq4nl, k4, q8, mx4)
+sits at 1.2x-1.6x.
+
+Model level, zen2 16 threads, 1B vehicles, tg128 ours vs the clean-CPU llama-bench (before the pass):
+IQ3_M (iq3s) 69.9 vs 56.5 = 1.24x (0.92x); IQ3_XXS-local 74.9 vs 74.3 = 1.01x (0.78x); IQ2_XS-local
+93.8 vs 85.9 = 1.09x (0.70x); IQ2_XXS-local 88.6 vs 86.2 = 1.03x (0.70x); i1-IQ3_XXS (the mixed
+iq2s/iq3xxs/iq3s vehicle) 71.9 +-4.2 vs 74.5 = 0.97x (0.76x). pp512 3.6x-5.0x throughout. Debug-jit
+rows (`--for-debug-purposes`), 3 reps; the record-grade rows come with the released exe at arc end.
+
 Reading: the five grid formats cost 48-51 ns per superblock regardless of what each decodes,
 against 8.6-8.8 for k4/k2. A flat cost independent of the format is a shared mechanism, not five
 decode problems. The model-level tg rows (0.70-0.92x) are this 2x kernel gap hidden behind memory
@@ -85,7 +117,10 @@ bandwidth; on the 1B vehicles it shows, on a 27B it mostly does not - but the ke
 
 ## 4. Work queue (one item at a time; a row is done at >= 1.0x on rig 2's shape AND the vehicle)
 
-CPU decode (gap 2):
+CPU decode (gap 2) - the k-quant decode kernels are the tails the full ladder exposed: k3 0.80x,
+k6 0.90x, k5 0.91x (next, k3 first); then the noise round on the 0.99-1.00 rows.
+
+CPU decode, the grid formats (done):
 1. DONE-KILLED `gather="reg"` (measured 1.85x slower - see the ledger).
 2. DONE all five: `sign="vec"` - the sign-byte column negates whole vectors; iq3s/iq2s load it
    off the plane, iq3xxs/iq2xs/iq2xxs synthesize it from the 7-bit codes (parity = the 8th bit),
@@ -124,6 +159,12 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   One thread, m=4096 k=14336: iq3s 11581 -> 7732 us (1.34x of the reference's 10340), iq2s 12413
   -> 7076 us (0.72x of 5074, was 0.41x). Every variant bit-exact in gen_tune_probe TEST mode. The
   five gather emitters collapsed into one gather over per-format decode functions (-110 lines).
+- 2026-09-01: the lab completes - kq_kernel_bench carries all 16 formats (q8 + mx4 on the q8q8
+  grid, q51 on its per-32 planes; the tile arm hands k5/k6 and the grid formats their byte-expanded
+  panel per kq_reads_packed_planes), rows interleaved round-robin with best + median;
+  harness/kernel_ladder.sh joins both sides into the per-box table (above).
+- 2026-09-01: the 16-thread vehicle stamps (above) - every grid-format vehicle at or past the
+  reference on tg except the mixed i1-IQ3_XXS at 0.97x with a +-6% error bar.
 - 2026-09-01: the column dword read lands for iq3xxs and iq2xs only (measured per format, see the
   queue); zen2 one thread now: iq3s 7673, iq3xxs 6641, iq2s 5039-5174, iq2xs 4831, iq2xxs
   5281-5487 us; 65 variants ok in TEST mode.

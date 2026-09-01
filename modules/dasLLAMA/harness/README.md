@@ -8,6 +8,7 @@ instruments - each carries its purpose in its header comment.
 |---|---|
 | `parity.das` | dasLLAMA side of the token-for-token oracle check: prompt IDs in -> greedy generated IDs out (`GEN_IDS: ...`). Arch-agnostic - routes through `load_gguf` + `generate`. |
 | `parity.sh` | Runs the reference oracle and `parity.das` on the same prompt and diffs the two ID streams. |
+| `kernel_ladder.sh` | The per-box kernel table: every format's stamped kernel (`benchmarks/matmul/kq_kernel_bench.das`, one thread, no model) against the reference exe's `test-backend-ops perf` at the same shape, decode and prefill rows, joined with the ratio. The reference binary carries the `GGML_BENCH_THREADS` define (a three-line edit of its `N_THREADS`; `backend_ops_shapes.patch` is the older, wider form). |
 | `oracle/simple_ids.cpp` | The reference oracle - links against a reference-engine build and prints greedy token IDs (CPU, no EOG break) rather than decoded text. |
 | `quant_eval.das` / `quant_eval_q4.das` | Q8 / Q4 reconstruction-error stats vs the fp32 weights. |
 | `bpe_test.das` | BPE tokenizer corpus gate against the in-repo `ggml-vocab-llama-bpe` fixtures (no model needed). |

@@ -5,27 +5,30 @@ options _dasllama_internal = true
 
 require daslib/clargs
 require daslib/enum_trait
+require daslib/fio
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_math
 require dasllama/dasllama_kqformat
-require daslib/fio
+require dasllama/dasllama_gemm_schema
 require math
 require strings
 require daslib/strings_boost
 
-//! The kq kernel microbench - the inner loop of kernel work. Raw kernels, one thread, no jobque,
+//! The kernel microbench - the inner loop of kernel work. Raw kernels, one thread, no jobque,
 //! no model; synthetic planes, because the timing is data-independent. GEMV is the decode shape
-//! (one token), TILE the prefill batch. Every row of a kernel's `_variants()` registry is timed:
-//! under DAS_TUNE_MODE=tune that is the whole [tune_perm] grid, under normal mode the stamped
-//! winner alone. Timing only - a spelling's correctness is gen_tune_probe's TEST mode.
+//! (one token), TILE the prefill batch. Every row of a kernel's `_variants()` registry is timed,
+//! the rows of one format interleaved round-robin so frequency drift cancels: under
+//! DAS_TUNE_MODE=tune that is the whole [tune_perm] grid, under normal mode the stamped winner
+//! alone. Timing only - a spelling's correctness is gen_tune_probe's TEST mode.
 //! Run: DAS_TUNE_MODE=tune bin/daslang -jit modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das -- --fmt iq3s
 //! The reference row at the same shape: GGML_BENCH_THREADS=1 test-backend-ops perf -o MUL_MAT -p "type_a=iq3_s"
-//! (its default MUL_MAT perf case is m=4096 rows, k=14336, n in {1, 512} tokens - this bench's defaults).
+//! (its default MUL_MAT perf case is m=4096 rows, k=14336, n in {1, 512} tokens - this bench's defaults);
+//! harness/kernel_ladder.sh runs both sides for every format and joins the table.
 
 [CommandLineArgs]
 struct BenchArgs {
     @clarg_short = "f"
-    @clarg_doc = "KqFmt names, comma-separated (k4,k5,k6,q40,iq4xs,k3,iq3s,iq3xxs,iq4nl,k2,iq2s,iq2xs,iq2xxs), or all"
+    @clarg_doc = "KqFmt names, comma-separated (q8,k4,k5,k6,q40,q51,iq4xs,k3,iq3s,iq3xxs,iq4nl,k2,iq2s,iq2xs,iq2xxs; mx4 = mxfp4), or all"
     fmt : string = "all"
     @clarg_doc = "Reduction length - the weight row length (k in test-backend-ops terms)"
     n : int = 14336
@@ -33,7 +36,7 @@ struct BenchArgs {
     d : int = 4096
     @clarg_doc = "Tokens for the TILE arm (the prefill batch); 0 skips the arm"
     ntok : int = 512
-    @clarg_doc = "Timed repetitions per row; the best one is reported"
+    @clarg_doc = "Timed rounds per row, interleaved across the format's rows; best and median are reported"
     rounds : int = 5
     @clarg_doc = "Skip the GEMV (decode) arm"
     no_gemv : bool
@@ -46,9 +49,13 @@ struct BenchArgs {
 
 typedef GemvFn = function<(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void>
 typedef TileFn = function<(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void>
+typedef GemvQ8Fn = function<(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) : void>
+typedef TileQ8Fn = function<(var yp : float?; wg : int8 const?; sg : float const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void>
+typedef GemvMx4Fn = function<(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) : void>
 typedef LayoutFn = function<() : int>
 
-let TILE_TOKENS = 4l   // tokens one kq tile call covers
+let TILE_TOKENS = 4l   // tokens one kq / q51 / mx4 tile call covers (q8's tokstep companion says its own)
+let MX4_NAME = "mx4"   // mxfp4 has no KqFmt row; it rides the q8q8 grid as a companion
 
 def fmt_of_name(name : string) : KqFmt {
     for (f in type<KqFmt>) {
@@ -74,6 +81,7 @@ def gemv_variants(f : KqFmt) : array<tuple<string; GemvFn>> {
     if (f == KqFmt.iq2s) return <- iq2sq8_gemv_gen_variants()
     if (f == KqFmt.iq2xs) return <- iq2xsq8_gemv_gen_variants()
     if (f == KqFmt.iq2xxs) return <- iq2xxsq8_gemv_gen_variants()
+    if (f == KqFmt.q51) return <- q51q8_gemv_gen_variants()
     var none : array<tuple<string; GemvFn>>
     return <- none
 }
@@ -92,6 +100,7 @@ def tile_variants(f : KqFmt) : array<tuple<string; TileFn>> {
     if (f == KqFmt.iq2s) return <- iq2sq8_tile_gen_variants()
     if (f == KqFmt.iq2xs) return <- iq2xsq8_tile_gen_variants()
     if (f == KqFmt.iq2xxs) return <- iq2xxsq8_tile_gen_variants()
+    if (f == KqFmt.q51) return <- q51q8_tile_gen_variants()
     var none : array<tuple<string; TileFn>>
     return <- none
 }
@@ -110,24 +119,41 @@ def layout_variants(f : KqFmt) : array<tuple<string; LayoutFn>> {
     if (f == KqFmt.iq2s) return <- iq2sq8_layout_gen_variants()
     if (f == KqFmt.iq2xs) return <- iq2xsq8_layout_gen_variants()
     if (f == KqFmt.iq2xxs) return <- iq2xxsq8_layout_gen_variants()
-    var none : array<tuple<string; LayoutFn>>
-    return <- none
+    if (f == KqFmt.q51) return <- q51q8_layout_gen_variants()
+    return <- q8q8_layout_gen_variants()   // q8 and its mx4 companion share the q8q8 layout
 }
 
-//! mr per registry suffix; the layout companion is stamped in lockstep with the tile, so a tile
-//! row and the layout row of the same suffix belong together
-def layout_mrs(f : KqFmt) : table<string; int64> {
-    var mrs : table<string; int64>
-    var lvs <- layout_variants(f)
-    for (v in lvs) {
-        mrs[v._0] = int64(invoke(v._1))
-    }
+//! an int-valued companion registry (layout mr, q8's tokstep) keyed by suffix; the companion is
+//! stamped in lockstep with its tile, so the row of the same suffix belongs to it
+def companion_ints(var lvs : array<tuple<string; LayoutFn>>) : table<string; int64> {
+    var vals <- {for (v in lvs); v._0 => int64(invoke(v._1))}
     delete lvs
-    return <- mrs
+    return <- vals
 }
 
-//! the five grid formats' TILE reads a caller-unpacked panel (256 bytes per row per superblock), not the packed plane the gemv gathers from
-def tile_kq_bytes_per_sb(f : KqFmt) : int64 => (f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs) ? 256l : kq_qsb(f)
+//! a TILE reads either the packed quant plane or a caller-unpacked byte panel (256 bytes per row per superblock: k5, k6 and the five grid formats) - kq_reads_packed_planes is the truth
+def tile_kq_bytes_per_sb(f : KqFmt) : int64 => kq_reads_packed_planes(int64(kq_schema_id(f))) ? kq_qsb(f) : 256l
+
+//! plane bytes per row: kq formats per 256-superblock, q51 per 32-block (20 + 4), q8 n int8 + n/32 f32, mx4 n/2 nibbles + n/32 e8m0
+struct PlaneShape {
+    wq_row : int64   // the gemv's weight plane bytes per row
+    tq_row : int64   // the tile's weight plane bytes per row
+    ws_row : int64   // scale plane bytes per row
+}
+
+def plane_shape(f : KqFmt; mx4 : bool; n : int64) : PlaneShape {
+    if (mx4) {
+        return PlaneShape(wq_row = n / 2l, tq_row = n / 2l, ws_row = n / 32l)
+    }
+    if (f == KqFmt.q8) {
+        return PlaneShape(wq_row = n, tq_row = n, ws_row = (n / 32l) * 4l)
+    }
+    if (f == KqFmt.q51) {
+        return PlaneShape(wq_row = (n / 32l) * 20l, tq_row = (n / 32l) * 20l, ws_row = (n / 32l) * 4l)
+    }
+    let nsb = n / 256l
+    return PlaneShape(wq_row = nsb * kq_qsb(f), tq_row = nsb * tile_kq_bytes_per_sb(f), ws_row = nsb * kq_ssb(f))
+}
 
 struct Planes {
     kq : array<uint8>
@@ -144,11 +170,10 @@ def sized(var a : array<auto(numT)>; n : int64) {
     a |> resize(n)
 }
 
-def fill_planes(var p : Planes; f : KqFmt; n, d, ntok : int64) {
-    let nsb = n / 256l
-    p.kq |> sized(d * nsb * kq_qsb(f))
-    p.tkq |> sized(d * nsb * tile_kq_bytes_per_sb(f))
-    p.ks |> sized(d * nsb * kq_ssb(f))
+def fill_planes(var p : Planes; sh : PlaneShape; n, d, ntok : int64) {
+    p.kq |> sized(d * sh.wq_row)
+    p.tkq |> sized(d * sh.tq_row)
+    p.ks |> sized(d * sh.ws_row)
     p.xq |> sized(ntok * n)
     p.xs |> sized(ntok * n / 32l)
     p.xbs |> sized(ntok * n / 16l)
@@ -178,90 +203,34 @@ def fill_planes(var p : Planes; f : KqFmt; n, d, ntok : int64) {
     }
 }
 
-def emit_row(var rows : int&; f : KqFmt; tier, perm : string; n, d, ntok, best_us : int64; nsb : int64; plane_bytes : int64) {
-    let ns_per_sb = float(best_us) * 1000.0 / float(d * nsb * ntok)
-    let gbs = float(plane_bytes) / (float(best_us) * 1000.0)
-    let gflops = 2.0 * float(n) * float(d) * float(ntok) / (float(best_us) * 1000.0)
-    print("{f}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best_us}\t{ns_per_sb}\t{gbs}\t{gflops}\n")
+//! one timed row: the samples of every round; best and median are reported
+struct RowStat {
+    perm : string
+    us : array<int64>
+}
+
+def median_us(var us : array<int64>) : int64 {
+    var s := us
+    sort(s)
+    let m = length(s) / 2
+    let r = length(s) % 2 == 1 ? s[m] : (s[m - 1] + s[m]) / 2l
+    delete s
+    return r
+}
+
+def emit_row(var rows : int&; name, tier : string; var st : RowStat; n, d, ntok, nsb : int64; plane_bytes : int64) {
+    var best = 999999999l
+    for (u in st.us) {
+        best = min(best, u)
+    }
+    let med = median_us(st.us)
+    let ns_per_sb = float(best) * 1000.0 / float(d * nsb * ntok)
+    let gbs = float(plane_bytes) / (float(best) * 1000.0)
+    let gflops = 2.0 * float(n) * float(d) * float(ntok) / (float(best) * 1000.0)
+    let mode = get_env_variable("DAS_TUNE_MODE")
+    let perm = (st.perm == "reference" && mode != "tune" && mode != "test") ? "stamped" : st.perm   // normal mode: the registry's one row IS the stamped winner
+    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}\n")
     rows++
-}
-
-def bench_gemv(var rows : int&; cfg : BenchArgs; f : KqFmt; var p : Planes) {
-    let n = int64(cfg.n)
-    let d = int64(cfg.d)
-    let nsb = n / 256l
-    let plane_bytes = long_length(p.kq) + long_length(p.ks)
-    var vs <- gemv_variants(f)
-    unsafe {
-        let kqp = addr<uint8 const?>(p.kq[0])
-        let ksp = addr<uint8 const?>(p.ks[0])
-        let xqp = addr<int8 const?>(p.xq[0])
-        let xsp = addr<float const?>(p.xs[0])
-        let xbsp = addr<int const?>(p.xbs[0])
-        var yp = addr(p.y[0])
-        for (v in vs) {
-            if (!perm_wanted(cfg.perm, v._0)) {
-                continue
-            }
-            invoke(v._1, yp, kqp, ksp, xqp, xsp, xbsp, n, 0l, d)   // warmup + codegen
-            var best_us = 999999999l
-            for (_r in range(cfg.rounds)) {
-                let t0 = ref_time_ticks()
-                invoke(v._1, yp, kqp, ksp, xqp, xsp, xbsp, n, 0l, d)
-                best_us = min(best_us, int64(get_time_usec(t0)))
-            }
-            emit_row(rows, f, "gemv", v._0, n, d, 1l, best_us, nsb, plane_bytes)
-        }
-    }
-    delete vs
-}
-
-def bench_tile(var rows : int&; cfg : BenchArgs; f : KqFmt; var p : Planes) {
-    let n = int64(cfg.n)
-    let d = int64(cfg.d)
-    let ntok = int64(cfg.ntok)
-    let nsb = n / 256l
-    let qsb = tile_kq_bytes_per_sb(f)
-    let ssb = kq_ssb(f)
-    let plane_bytes = long_length(p.tkq) + long_length(p.ks)
-    var mrs <- layout_mrs(f)
-    var vs <- tile_variants(f)
-    unsafe {
-        let kqp = addr<uint8 const?>(p.tkq[0])
-        let ksp = addr<uint8 const?>(p.ks[0])
-        let xqp = addr<int8 const?>(p.xq[0])
-        let xsp = addr<float const?>(p.xs[0])
-        let xbsp = addr<int const?>(p.xbs[0])
-        var yp = addr(p.y[0])
-        for (v in vs) {
-            if (!perm_wanted(cfg.perm, v._0)) {
-                continue
-            }
-            let mr = mrs?[v._0] ?? (mrs?["reference"] ?? 0l)
-            if (mr <= 0l || d % mr != 0l) {
-                to_log(LOG_WARNING, "kq_kernel_bench: {f} tile '{v._0}' has no layout row (mr={mr}) - skipped\n")
-                continue
-            }
-            let ngroups = d / mr
-            var best_us = 999999999l
-            for (r in range(cfg.rounds + 1)) {   // the first pass is warmup + codegen
-                let t0 = ref_time_ticks()
-                for (g in range64(ngroups)) {
-                    var t0k = 0l
-                    while (t0k < ntok) {
-                        invoke(v._1, yp, kqp + g * mr * nsb * qsb, ksp + g * mr * nsb * ssb, xqp, xsp, xbsp, n, d, g, t0k)
-                        t0k += TILE_TOKENS
-                    }
-                }
-                if (r > 0) {
-                    best_us = min(best_us, int64(get_time_usec(t0)))
-                }
-            }
-            emit_row(rows, f, "tile", v._0, n, d, ntok, best_us, nsb, plane_bytes)
-        }
-    }
-    delete vs
-    delete mrs
 }
 
 def perm_wanted(spec, suffix : string) : bool {
@@ -280,20 +249,247 @@ def perm_wanted(spec, suffix : string) : bool {
     return false
 }
 
-def formats_of(spec : string) : array<KqFmt> {
-    var fs : array<KqFmt>
-    if (spec == "all") {
-        for (f in type<KqFmt>) {
-            if (kq_sb(f)) {
-                fs |> push(f)
+//! interleaved timing: round r calls every selected row once before round r + 1 starts
+def time_rows(var stats : array<RowStat>; rounds : int; blk : block<(row : int) : void>) {
+    for (row in range(length(stats))) {
+        stats[row].us |> reserve(rounds)
+        invoke(blk, row)   // warmup + codegen, unmeasured
+    }
+    for (_r in range(rounds)) {
+        for (row in range(length(stats))) {
+            let t0 = ref_time_ticks()
+            invoke(blk, row)
+            stats[row].us |> push(int64(get_time_usec(t0)))
+        }
+    }
+}
+
+def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64) {
+    let n = int64(cfg.n)
+    let d = int64(cfg.d)
+    let plane_bytes = long_length(p.kq) + long_length(p.ks)
+    var vs <- gemv_variants(f)
+    var stats : array<RowStat>
+    var fns : array<GemvFn>
+    for (v in vs) {
+        if (perm_wanted(cfg.perm, v._0)) {
+            stats |> emplace(RowStat(perm = v._0))
+            fns |> push(v._1)
+        }
+    }
+    unsafe {
+        let kqp = addr<uint8 const?>(p.kq[0])
+        let ksp = addr<uint8 const?>(p.ks[0])
+        let xqp = addr<int8 const?>(p.xq[0])
+        let xsp = addr<float const?>(p.xs[0])
+        let xbsp = addr<int const?>(p.xbs[0])
+        var yp = addr(p.y[0])
+        time_rows(stats, cfg.rounds) $(row : int) {
+            invoke(fns[row], yp, kqp, ksp, xqp, xsp, xbsp, n, 0l, d)
+        }
+    }
+    for (st in stats) {
+        emit_row(rows, name, "gemv", st, n, d, 1l, nsb, plane_bytes)
+    }
+    delete stats
+    delete fns
+    delete vs
+}
+
+def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape) {
+    let n = int64(cfg.n)
+    let d = int64(cfg.d)
+    let ntok = int64(cfg.ntok)
+    let qrow = sh.tq_row
+    let srow = sh.ws_row
+    let plane_bytes = long_length(p.tkq) + long_length(p.ks)
+    var mrs <- companion_ints(layout_variants(f))
+    var vs <- tile_variants(f)
+    var stats : array<RowStat>
+    var fns : array<TileFn>
+    var mrOf : array<int64>
+    for (v in vs) {
+        if (!perm_wanted(cfg.perm, v._0)) {
+            continue
+        }
+        let mr = mrs?[v._0] ?? (mrs?["reference"] ?? 0l)
+        if (mr <= 0l || d % mr != 0l) {
+            to_log(LOG_WARNING, "kq_kernel_bench: {name} tile '{v._0}' has no layout row (mr={mr}) - skipped\n")
+            continue
+        }
+        stats |> emplace(RowStat(perm = v._0))
+        fns |> push(v._1)
+        mrOf |> push(mr)
+    }
+    unsafe {
+        let kqp = addr<uint8 const?>(p.tkq[0])
+        let ksp = addr<uint8 const?>(p.ks[0])
+        let xqp = addr<int8 const?>(p.xq[0])
+        let xsp = addr<float const?>(p.xs[0])
+        let xbsp = addr<int const?>(p.xbs[0])
+        var yp = addr(p.y[0])
+        time_rows(stats, cfg.rounds) $(row : int) {
+            let mr = mrOf[row]
+            for (g in range64(d / mr)) {
+                var t0k = 0l
+                while (t0k < ntok) {
+                    invoke(fns[row], yp, kqp + g * mr * qrow, ksp + g * mr * srow, xqp, xsp, xbsp, n, d, g, t0k)
+                    t0k += TILE_TOKENS
+                }
             }
         }
+    }
+    for (st in stats) {
+        emit_row(rows, name, "tile", st, n, d, ntok, nsb, plane_bytes)
+    }
+    delete stats
+    delete fns
+    delete mrOf
+    delete vs
+    delete mrs
+}
+
+//! the q8q8 grid's gemv rows (q8 or its mx4 companion) into stats + typed function lists
+def q8_gemv_rows(cfg : BenchArgs; mx4 : bool; var stats : array<RowStat>; var fnsQ : array<GemvQ8Fn>; var fnsM : array<GemvMx4Fn>) {
+    if (mx4) {
+        var vs <- mx4q8_gemv_gen_variants()
+        for (v in vs) {
+            if (perm_wanted(cfg.perm, v._0)) {
+                stats |> emplace(RowStat(perm = v._0))
+                fnsM |> push(v._1)
+            }
+        }
+        delete vs
+    } else {
+        var vs <- q8q8_gemv_gen_variants()
+        for (v in vs) {
+            if (perm_wanted(cfg.perm, v._0)) {
+                stats |> emplace(RowStat(perm = v._0))
+                fnsQ |> push(v._1)
+            }
+        }
+        delete vs
+    }
+}
+
+//! the q8q8 grid's tile rows with each row's mr and tokens-per-call; skips rows whose mr the row count does not divide
+def q8_tile_rows(cfg : BenchArgs; mx4 : bool; d : int64; var stats : array<RowStat>; var fnsQ : array<TileQ8Fn>; var fnsM : array<TileFn>; var mrOf, stepOf : array<int64>) {
+    var mrs <- companion_ints(q8q8_layout_gen_variants())
+    var steps <- companion_ints(q8q8_tokstep_gen_variants())
+    if (mx4) {
+        var vs <- mx4q8_tile_gen_variants()
+        for (v in vs) {
+            let mr = mrs?[v._0] ?? (mrs?["reference"] ?? 0l)
+            if (perm_wanted(cfg.perm, v._0) && mr > 0l && d % mr == 0l) {
+                stats |> emplace(RowStat(perm = v._0))
+                fnsM |> push(v._1)
+                mrOf |> push(mr)
+                stepOf |> push(TILE_TOKENS)
+            }
+        }
+        delete vs
+    } else {
+        var vs <- q8q8_tile_gen_variants()
+        for (v in vs) {
+            let mr = mrs?[v._0] ?? (mrs?["reference"] ?? 0l)
+            if (perm_wanted(cfg.perm, v._0) && mr > 0l && d % mr == 0l) {
+                stats |> emplace(RowStat(perm = v._0))
+                fnsQ |> push(v._1)
+                mrOf |> push(mr)
+                stepOf |> push(steps?[v._0] ?? (steps?["reference"] ?? TILE_TOKENS))
+            }
+        }
+        delete vs
+    }
+    delete mrs
+    delete steps
+}
+
+//! q8 (the q8q8 grid) and its mx4 companion: int8 / nibble weight planes with f32 / e8m0 scales
+def bench_q8_family(var rows : int&; cfg : BenchArgs; mx4 : bool; var p : Planes; nsb : int64; sh : PlaneShape) {
+    let n = int64(cfg.n)
+    let d = int64(cfg.d)
+    let ntok = int64(cfg.ntok)
+    let name = mx4 ? MX4_NAME : "q8"
+    let plane_bytes = long_length(p.kq) + long_length(p.ks)
+    unsafe {
+        let kqp = addr<uint8 const?>(p.kq[0])
+        let ksp = addr<uint8 const?>(p.ks[0])
+        let xqp = addr<int8 const?>(p.xq[0])
+        let xsp = addr<float const?>(p.xs[0])
+        let xbsp = addr<int const?>(p.xbs[0])
+        var yp = addr(p.y[0])
+        if (!cfg.no_gemv) {
+            var stats : array<RowStat>
+            var fnsQ : array<GemvQ8Fn>
+            var fnsM : array<GemvMx4Fn>
+            q8_gemv_rows(cfg, mx4, stats, fnsQ, fnsM)
+            time_rows(stats, cfg.rounds) $(row : int) {
+                if (mx4) {
+                    invoke(fnsM[row], yp, kqp, ksp, xqp, xsp, n, 0l, d)
+                } else {
+                    invoke(fnsQ[row], yp, reinterpret<int8 const?>(kqp), reinterpret<float const?>(ksp), xqp, xsp, n, 0l, d)
+                }
+            }
+            for (st in stats) {
+                emit_row(rows, name, "gemv", st, n, d, 1l, nsb, plane_bytes)
+            }
+            delete stats
+            delete fnsQ
+            delete fnsM
+        }
+        if (ntok > 0l) {
+            var stats : array<RowStat>
+            var fnsQ : array<TileQ8Fn>
+            var fnsM : array<TileFn>
+            var mrOf : array<int64>
+            var stepOf : array<int64>
+            q8_tile_rows(cfg, mx4, d, stats, fnsQ, fnsM, mrOf, stepOf)
+            time_rows(stats, cfg.rounds) $(row : int) {
+                let mr = mrOf[row]
+                for (g in range64(d / mr)) {
+                    var t0k = 0l
+                    while (t0k < ntok) {
+                        if (mx4) {
+                            invoke(fnsM[row], yp, kqp + g * mr * sh.tq_row, ksp + g * mr * sh.ws_row, xqp, xsp, xbsp, n, d, g, t0k)
+                        } else {
+                            invoke(fnsQ[row], yp, reinterpret<int8 const?>(kqp + g * mr * sh.tq_row), reinterpret<float const?>(ksp + g * mr * sh.ws_row), xqp, xsp, xbsp, n, d, g, t0k)
+                        }
+                        t0k += stepOf[row]
+                    }
+                }
+            }
+            for (st in stats) {
+                emit_row(rows, name, "tile", st, n, d, ntok, nsb, plane_bytes)
+            }
+            delete stats
+            delete fnsQ
+            delete fnsM
+            delete mrOf
+            delete stepOf
+        }
+    }
+}
+
+//! the requested formats as (name, KqFmt, is_mx4); "all" = every KqFmt row plus mx4
+def formats_of(spec : string) : array<tuple<string; KqFmt; bool>> {
+    var fs : array<tuple<string; KqFmt; bool>>
+    if (spec == "all") {
+        for (f in type<KqFmt>) {
+            fs |> emplace(("{f}", f, false))
+        }
+        fs |> emplace((MX4_NAME, KqFmt.q8, true))
         return <- fs
     }
     for (tok in split(spec, ",")) {
         let name = strip(tok)
-        if (!empty(name)) {
-            fs |> push(fmt_of_name(name))
+        if (empty(name)) {
+            continue
+        }
+        if (name == MX4_NAME) {
+            fs |> emplace((MX4_NAME, KqFmt.q8, true))
+        } else {
+            fs |> emplace((name, fmt_of_name(name), false))
         }
     }
     return <- fs
@@ -315,23 +511,29 @@ def main : int {
     var fs <- formats_of(cfg.fmt)
     if (!cfg.tsv) {
         print("kq_kernel_bench: n={cfg.n} d={cfg.d} ntok={cfg.ntok} rounds={cfg.rounds} tune_mode={get_env_variable("DAS_TUNE_MODE")}\n")
-        print("fmt\ttier\tperm\tn\td\tntok\tbest_us\tns_per_sb\tGB/s\tGFLOP/s\n")
+        print("fmt\ttier\tperm\tn\td\tntok\tbest_us\tmedian_us\tns_per_sb\tGB/s\tGFLOP/s\n")
     }
     var rows = 0
-    for (f in fs) {
+    let nsb = int64(cfg.n) / 256l
+    for (fe in fs) {
+        let sh = plane_shape(fe._1, fe._2, int64(cfg.n))
         var p : Planes
-        fill_planes(p, f, int64(cfg.n), int64(cfg.d), int64(max(cfg.ntok, 1)))
-        if (!cfg.no_gemv) {
-            bench_gemv(rows, cfg, f, p)
-        }
-        if (cfg.ntok > 0) {
-            bench_tile(rows, cfg, f, p)
+        fill_planes(p, sh, int64(cfg.n), int64(cfg.d), int64(max(cfg.ntok, 1)))
+        if (fe._2 || fe._1 == KqFmt.q8) {
+            bench_q8_family(rows, cfg, fe._2, p, nsb, sh)
+        } else {
+            if (!cfg.no_gemv) {
+                bench_gemv_kq(rows, cfg, fe._0, fe._1, p, nsb)
+            }
+            if (cfg.ntok > 0) {
+                bench_tile_kq(rows, cfg, fe._0, fe._1, p, nsb, sh)
+            }
         }
         delete p
     }
     delete fs
     if (rows == 0) {
-        to_log(LOG_ERROR, "kq_kernel_bench: no rows - nothing matched --fmt '{cfg.fmt}' or every arm was skipped\n")
+        to_log(LOG_ERROR, "kq_kernel_bench: no rows - nothing matched --fmt '{cfg.fmt}' / --perm '{cfg.perm}' or every arm was skipped\n")
         return 1
     }
     return 0
