@@ -370,7 +370,9 @@ def perm_wanted(spec, suffix : string) : bool {
 def time_rows(var stats : array<RowStat>; rounds : int; blk : block<(row : int) : void>) {
     for (row in range(length(stats))) {
         stats[row].us |> reserve(rounds)
-        invoke(blk, row)   // warmup + codegen, unmeasured
+        for (_w in range(3)) {   // codegen + warm-up, unmeasured: Intel k6 ramps for ~3 rounds (3425, 1989, then steady 1637 us) - one warm call is not enough
+            invoke(blk, row)
+        }
     }
     for (_r in range(rounds)) {
         for (row in range(length(stats))) {
