@@ -50,8 +50,33 @@ proven fact per push; research before any kernel edit (the two memos below).
 | iq2xs | 11490 (50.1); sign column + u64 pair + column read 4831 (21.1) | 5386 | 0.47x -> 1.11x | - | - |
 | iq2xxs | 11061 (48.2); sign column + u64 pair 5121-5487 (noise band) | 5124 | 0.46x -> 0.93-1.00x | - | - |
 
-The full ladder (`harness/kernel_ladder.sh`, 2026-09-01, zen2 one thread, the stamped seat per format,
-best of 5 interleaved rounds; ratio = reference / ours, >= 1.00 = ours faster):
+The zen2 ladder after the k3/k2 step and the bench fixes (64-byte-aligned planes, normal scale bytes;
+`harness/kernel_ladder.sh`, 2026-09-01, one thread, the stamped seat per format, best of 5 interleaved
+rounds; ratio = reference / ours, >= 1.00 = ours faster):
+
+| format | gemv ours us | gemv ref us | ratio | tile ours us | tile ref us | ratio |
+|---|---|---|---|---|---|---|
+| q8 | 3179 | 4325.63 | 1.36 | 576089 | 923211.00 | 1.60 |
+| k4 | 1948 | 2391.08 | 1.23 | 547996 | 821706.50 | 1.50 |
+| k5 | 3700 | 3264.03 | 0.88 | 583516 | 1311611.00 | 2.25 |
+| k6 | 4204 | 3647.44 | 0.87 | 679148 | 1083505.00 | 1.60 |
+| q40 | 1865 | 2839.84 | 1.52 | 387002 | 1018999.00 | 2.63 |
+| q51 | 2824 | 4152.78 | 1.47 | 677326 | 1915920.00 | 2.83 |
+| iq4xs | 2101 | 3357.24 | 1.60 | 671645 | 1645997.00 | 2.45 |
+| k3 | 3092 | 2630.86 | 0.85 | 766074 | 1284702.00 | 1.68 |
+| iq3s | 7668 | 10103.66 | 1.32 | 673687 | 5115105.00 | 7.59 |
+| iq3xxs | 6601 | 6547.02 | 0.99 | 679775 | 3281595.00 | 4.83 |
+| iq4nl | 2208 | 3027.06 | 1.37 | 592394 | 1125061.00 | 1.90 |
+| k2 | 1370 | 1973.20 | 1.44 | 692253 | 770237.50 | 1.11 |
+| iq2s | 5052 | 5069.15 | 1.00 | 711298 | 2513290.00 | 3.53 |
+| iq2xs | 4506 | 5265.71 | 1.17 | 724580 | 2738442.00 | 3.78 |
+| iq2xxs | 4859 | 5119.28 | 1.05 | 659785 | 2542052.00 | 3.85 |
+| mx4 | 2205 | 3009.07 | 1.36 | 623427 | 1421391.00 | 2.28 |
+
+k3 decode is the one row that disagrees with its own history (2445 us after its fix, 3092 here) - a
+run-to-run spread like Intel's bimodal k6, under investigation.
+
+The first zen2 ladder (before the k3/k2 step, unaligned planes, random scales):
 
 | format | gemv ours us | gemv ref us | ratio | tile ours us | tile ref us | ratio |
 |---|---|---|---|---|---|---|
