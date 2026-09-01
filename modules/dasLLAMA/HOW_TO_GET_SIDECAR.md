@@ -112,23 +112,65 @@ into `plans/kernel_parity_pass.md`'s fact base (and the records store once the k
 
 ## 6. The mint
 
-(The steps below are being run on the zen4 box as this document is written; they are filled in as
-they prove out.)
+The vehicle is a public 1B GGUF pulled straight to the box - nothing copies from the dev box:
 
-- The vehicle: a public 1B GGUF pulled straight to the box, no copying from the dev box -
-  `curl -L -o Llama-3.2-1B-Instruct-Q4_K_M.gguf https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf`
-  (808 MB).
-- The mint: `bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <gguf> --tune` - the
-  full race of every family on this box (about 316 s on a c7a.4xlarge), writing
-  `modules/dasLLAMA/benchmarks/lcpp_bench.tune.json`. Read the noise verdict it prints.
-- The export: `bin/daslang -jit modules/dasLLAMA/harness/export_tune_profile.das -- --sidecar
-  modules/dasLLAMA/benchmarks/lcpp_bench.tune.json` writes
-  `modules/dasLLAMA/performance/defaults/<class>.tune-defaults.json` for this box's
-  `tune_cpu_class()`; `--class <name>` overrides the name.
-- A class that does not exist yet (Intel's `x86-amx`): the chain lives in
-  `modules/dasLLVM/daslib/llvm_tune.das` (`tune_cpu_class`, `tune_class_chain`) and every feature a
-  `requires=` names sits in `TUNE_KNOWN_FEATURES` there; the new class goes above the class it
-  supersedes so a host resolves to the highest class it satisfies that has a shipped profile.
+```
+mkdir -p ~/models && cd ~/models
+curl -L -o Llama-3.2-1B-Instruct-Q4_K_M.gguf https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf
+cd ~/daScript
+DAS_JOBQUE_THREADS=16 bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m ~/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf --tune > ~/mint.log 2>&1
+```
+
+808 MB, about a minute to fetch. `--tune` is the full race: every generator family
+(`@tune begin name=<fmt>q8_tile_gen ... @tune end ... winner=<seat> verdict=beats`), then the
+`[tuned]` loop-hint kernels (`axpy`, `dot`, `rope_*`, `quantize_*`...), then
+`confirm_e2e_prefill`; on the c7a.4xlarge the whole walk took 5-6 minutes. It writes
+`modules/dasLLAMA/benchmarks/lcpp_bench.tune.json` beside the app and then re-launches the app to
+apply it. The bench rows the re-launch would print are refused without `--for-debug-purposes` (a `-jit`
+script run is not record-grade) - that refusal is expected here; the mint is done.
+
+Read the sidecar's provenance before anything else:
+
+```
+python3 -c 'import json;d=json.load(open("modules/dasLLAMA/benchmarks/lcpp_bench.tune.json"));p=d["provenance"];print(p["noise"],p["validation"],p["features"],len(d["kernels"]))'
+```
+
+`ok ok <features> 49` is the pass: `noise` is the tuner's own drift verdict (a busy or thermally
+unstable box says otherwise - re-mint, never edit), `validation` is every winner checked against its
+fallback, `features` is the box's fingerprint of `TUNE_KNOWN_FEATURES` (zen4:
+`avx2;f16c;fma;sse4.2;avx512f;avx512bw;avx512vl;avx512vnni`), 49 the kernel count the scope demands.
+
+The export:
+
+```
+bin/daslang -jit modules/dasLLAMA/harness/export_tune_profile.das -- --sidecar modules/dasLLAMA/benchmarks/lcpp_bench.tune.json
+git status --short modules/dasLLAMA/performance/defaults/
+```
+
+It writes `performance/defaults/<class>.tune-defaults.json` for this box's `tune_cpu_class()`
+(`--class <name>` overrides, `--out <dir>` relocates) with the box, engine sha and timing rows
+stripped - a profile is kernel winners plus the provenance the adopt path checks.
+
+Compare before committing. A class that already ships a profile will differ in a few winners every
+time - two mints of one class on two boxes disagree on the tie-class seats (the zen4 re-mint of
+2026-09-01 flipped 4 of 49: `axpy` vec8_u2 -> vec8, `axpy_f16` -> plain, `rope_scaled_neox_tab` ->
+plain, `q51q8_tile_gen` 512 -> 256-bit; the format tiles agreed). Commit a re-mint only when a seat
+that carries a kernel family changed or new families exist; a tie flip is not a reason.
+
+```
+python3 - <<'EOP'
+import json
+n=json.load(open("modules/dasLLAMA/performance/defaults/x86-vnni512.tune-defaults.json"))
+import subprocess; o=json.loads(subprocess.check_output(["git","show","HEAD:modules/dasLLAMA/performance/defaults/x86-vnni512.tune-defaults.json"]))
+for k in sorted(set(n["kernels"])|set(o["kernels"])):
+    if n["kernels"].get(k)!=o["kernels"].get(k): print(k, o["kernels"].get(k), "->", n["kernels"].get(k))
+EOP
+```
+
+A class with no shipped profile yet (Intel's `x86-amx`) needs the class first: `tune_cpu_class()` and
+the ladder in `tune_class_chain()` (`modules/dasLLVM/daslib/llvm_tune.das`), the new class above the
+one it supersedes, and every feature a `requires=` names in `TUNE_KNOWN_FEATURES` there. Then the same
+mint and export produce `<class>.tune-defaults.json`, and that one IS committed.
 
 ## 7. What the commit must satisfy
 
@@ -147,4 +189,6 @@ aws ec2 terminate-instances --instance-ids <id>
 
 ## Boxes this walk ran on
 
-- 2026-09-01 `c7a.4xlarge` (EPYC 9R14 zen4), `i-043725feb25086523`: sections 1-5 as written.
+- 2026-09-01 `c7a.4xlarge` (EPYC 9R14 zen4, class `x86-vnni512`), `i-043725feb25086523`: sections 1-6
+  as written; the TEST gate 65/65 ok; the re-mint agreed with the shipped profile on every format tile
+  and flipped four tie seats, so nothing was committed from it.
