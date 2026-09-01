@@ -225,6 +225,63 @@ Decode floor k5 1.06x; the grid formats 1.16-1.51x (from 0.51-0.93x before the r
 One thread: every decode >= 1.06 (k5 the floor; k6 1.42, k3 1.40). Engine shape: every format >= 0.95 (iq4xs),
 most 1.0-1.5. The M1 CPU is closed at both shapes.
 
+### Intel v2 - Granite Rapids (2026-09-01, c8i.4xlarge Xeon 6975P-C, class x86-amx, branch 095f4030c; TEST 90/90)
+
+The bootstrap's two ladders both ran the new default (engine shape: 16 lanes, d=32768) - the one-thread table and
+the knob A/B run in round two.
+
+| fmt | engine 16 lanes ours / ref us | ratio |
+|---|---|---|
+| q8 | 4539 / 4835 | 1.07 |
+| k4 | 2332 / 2849 | 1.22 |
+| k5 | 3073 / 3862 | 1.26 |
+| k6 | 5230 / 3587 | 0.69 |
+| q40 | 2345 / 4923 | 2.10 |
+| q51 | 3196 / 5238 | 1.64 |
+| iq4xs | 2367 / 4355 | 1.84 |
+| k3 | 2703 / 2579 | 0.95 |
+| iq3s | 7310 / 7575 | 1.04 |
+| iq3xxs | 5396 / 6121 | 1.13 |
+| iq4nl | 2359 / 5928 | 2.51 |
+| k2 | 1229 / 1598 | 1.30 |
+| iq2s | 4283 / 3786 | 0.88 |
+| iq2xs | 3962 / 4579 | 1.16 |
+| iq2xxs | 3805 / 3853 | 1.01 |
+| mx4 | 2467 / 5802 | 2.35 |
+
+The reference does not reach this box's DRAM on most formats (q4_0 4.9 ms for 264 MB = 54 GB/s) where ours does
+(2.3 ms = 115 GB/s) - hence 2.1-2.5x on q40/iq4nl/mx4. Tails: k6 0.69 (5.2 ms against 3.5 - the reference
+saturates DRAM on q6_K, our k6 stays compute-bound; the vpdpbusd512 seat has no i16 chain for the fused flush),
+iq2s 0.88, k3 0.95.
+
+### M4 Pro v1 - first tables (2026-09-01, Apple M4 Pro 10P+4E, class arm-i8mm, on the arm-neon PROFILE through the chain - no arm-i8mm profile existed; TEST 90/90)
+
+One thread at the engine phase; the engine shape = 10 performance cores, d=32768. The SMMLA lattice's first real race is
+the tile column.
+
+| fmt | decode ours / ref us | ratio | tile ours / ref us | ratio | engine 10 lanes ours / ref us | ratio |
+|---|---|---|---|---|---|---|
+| q8 | 693 / 1125 | 1.62 | 184237 / 425873 | 2.31 | 2179 / 2078 | 0.95 |
+| k4 | 649 / 916 | 1.41 | 210798 / 458459 | 2.17 | 1107 / 1132 | 1.02 |
+| k5 | 1625 / 1464 | 0.90 | 201095 / 766460 | 3.81 | 1556 / 1521 | 0.98 |
+| k6 | 1304 / 1731 | 1.33 | 329965 / 732022 | 2.22 | 1611 / 1824 | 1.13 |
+| q40 | 596 / 1262 | 2.12 | 218731 / 516770 | 2.36 | 1055 / 1342 | 1.27 |
+| q51 | 1637 / 1996 | 1.22 | 356194 / 1035551 | 2.91 | 1445 / 2306 | 1.60 |
+| iq4xs | 780 / 1308 | 1.68 | 208597 / 670258 | 3.21 | 1091 / 1269 | 1.16 |
+| k3 | 1435 / 1824 | 1.27 | 368506 / 955375 | 2.59 | 1257 / 1864 | 1.48 |
+| iq3s | 3904 / 4061 | 1.04 | 155531 / 2102599 | 13.52 | 3298 / 3841 | 1.16 |
+| iq3xxs | 2661 / 3755 | 1.41 | 155576 / 1927299 | 12.39 | 2263 / 3539 | 1.56 |
+| iq4nl | 788 / 1430 | 1.81 | 231408 / 734682 | 3.17 | 1047 / 1387 | 1.32 |
+| k2 | 969 / 1395 | 1.44 | 279559 / 710512 | 2.54 | 854 / 1302 | 1.52 |
+| iq2s | 2386 / 2975 | 1.25 | 183660 / 1504690 | 8.19 | 2233 / 2572 | 1.15 |
+| iq2xs | 1786 / 2435 | 1.36 | 184119 / 1250945 | 6.79 | 1530 / 2240 | 1.46 |
+| iq2xxs | 2226 / 2623 | 1.18 | 155669 / 1336029 | 8.58 | 1892 / 2328 | 1.23 |
+| mx4 | 966 / 1322 | 1.37 | 263140 / 679457 | 2.58 | 982 / 1521 | 1.55 |
+
+One thread: every decode >= 1.04 except k5 0.90; tiles 2.2-13.5x. Engine shape: everything >= 0.95 (q8), k5 0.98,
+the rest 1.02-1.60. The arm-i8mm mint (the 1B vehicle, --tune, export) runs next on this box and the tables re-run
+on the minted profile.
+
 ### zen2 v4 - the closing tables (2026-09-01, after the k6/k3 transposes and the fused flush)
 
 One thread at the HEAP phase (the ladder's engine-phase default came after this run; k6/k3 read 10-30%
