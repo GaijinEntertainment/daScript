@@ -59,7 +59,7 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_uniform_written", "@uniform member `n` is written")
         check_rejects(t, "_fc_nan_literal", "non-finite float literal has no MSL form")
         check_rejects(t, "_fc_uniform_array", "array members are @ssbo buffers")
-        check_rejects(t, "_fc_array_init_nonconst", "every element must be a literal")
+        check_rejects(t, "_fc_array_init_nonconst", "must be an integer or float scalar literal")
         check_rejects(t, "_fc_return_value", "kernels return void")
         check_rejects(t, "_fc_recursion", "is recursive - MSL forbids recursion")
         check_rejects(t, "_fc_ufn_param", "type has no MSL form")

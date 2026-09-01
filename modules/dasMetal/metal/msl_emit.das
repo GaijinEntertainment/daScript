@@ -2990,7 +2990,7 @@ def private hoist_const_table(var ctx : MslCtx; v : VariablePtr) {
         }
     }
     if (mk == null || length(mk.values) != n) {
-        err(ctx, v.at, "fixed-array local `{v.name}` initializer hoists to a program-scope constant table - every element must be a literal")
+        err(ctx, v.at, "fixed-array local `{v.name}` hoists to a program-scope constant table - its initializer must be a `fixed_array<T>(...)` of exactly {n} elements")
         return
     }
     var vals : array<string>
@@ -2999,7 +2999,7 @@ def private hoist_const_table(var ctx : MslCtx; v : VariablePtr) {
         if (!(el is ExprConstInt || el is ExprConstUInt || el is ExprConstInt64 || el is ExprConstUInt64 ||
                 el is ExprConstFloat || el is ExprConstDouble || el is ExprConstInt8 || el is ExprConstUInt8 ||
                 el is ExprConstInt16 || el is ExprConstUInt16)) {
-            err(ctx, v.at, "fixed-array local `{v.name}` initializer hoists to a program-scope constant table - every element must be a literal")
+            err(ctx, v.at, "fixed-array local `{v.name}` hoists to a program-scope constant table - every element must be an integer or float scalar literal (bool, half and vector literals do not hoist)")
             return
         }
         vals |> push(emit_value(ctx, el))
