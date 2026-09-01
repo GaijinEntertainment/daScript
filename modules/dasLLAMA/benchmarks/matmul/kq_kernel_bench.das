@@ -56,7 +56,6 @@ typedef LayoutFn = function<() : int>
 
 let TILE_TOKENS = 4l   // tokens one kq / q51 / mx4 tile call covers (q8's tokstep companion says its own)
 let MX4_NAME = "mx4"   // mxfp4 has no KqFmt row; it rides the q8q8 grid as a companion
-let SCALE_BYTE = uint8(0x3C)   // as f16 0x3C3C = 1.06, as f32 0x3C3C3C3C = 0.0115, as e8m0 2^-67, as a 6-bit sub-scale 60 - normal in every scale form
 
 def fmt_of_name(name : string) : KqFmt {
     for (f in type<KqFmt>) {
@@ -156,55 +155,81 @@ def plane_shape(f : KqFmt; mx4 : bool; n : int64) : PlaneShape {
     return PlaneShape(wq_row = nsb * kq_qsb(f), tq_row = nsb * tile_kq_bytes_per_sb(f), ws_row = nsb * kq_ssb(f))
 }
 
-struct Planes {
-    kq : array<uint8>
-    tkq : array<uint8>   // the tile arm's weight plane (the unpacked panel form where the format has one)
-    ks : array<uint8>
-    xq : array<int8>
-    xs : array<float>
-    xbs : array<int>
-    y : array<float>
-}
-
 let ALIGN = 64l   // the image's planes are page-aligned (ARCHITECTURE_IMAGE.md, image-page-alignment); a 64-byte load split across cache lines is what Intel penalizes 2x
+let STAGGER = 1088l   // plane starts differ in their low 12 address bits (1088 = 1024 + 64 keeps six starts distinct mod 4096): planes that alias in the L1/L2 set logic make a run's time depend on where the heap put them
+let SCALE_BYTE = uint8(0x3C)   // as f16 0x3C3C = 1.06, as f32 0x3C3C3C3C = 0.0115, as e8m0 2^-67, as a 6-bit sub-scale 60 - normal in every scale form
 
-def sized(var a : array<auto(numT)>; n : int64) {
-    a |> reserve(n + ALIGN)
-    a |> resize(n + ALIGN)
+//! every plane of one format in ONE arena at fixed offsets: the heap places separate arrays at
+//! run-dependent relative addresses, and k6 decode read 3.9-6.0 ms across identical runs from that alone
+struct Planes {
+    arena : array<uint8>
+    kq : int64    // the gemv's weight plane
+    tkq : int64   // the tile's weight plane (the unpacked panel form where the format has one)
+    ks : int64    // scale plane
+    xq : int64    // int8 activations
+    xs : int64    // f32 activation scales
+    xbs : int64   // int per-16 activation sums
+    y : int64     // f32 outputs
 }
 
-//! the first 64-byte-aligned element of an over-allocated plane
-def aligned_start(p : void?) : int64 => (ALIGN - int64(intptr(p) & uint64(ALIGN - 1l))) & (ALIGN - 1l)
+//! the next plane start: 64-byte aligned, `slot` staggers past the running end
+def next_plane(var end : int64&; bytes : int64; slot : int) : int64 {
+    let start = ((end + ALIGN - 1l) / ALIGN) * ALIGN + int64(slot) * STAGGER
+    end = start + bytes
+    return start
+}
+
+//! the arena's first 64-byte-aligned byte
+def arena_base(var p : Planes) : int64 {
+    unsafe {
+        return (ALIGN - int64(intptr(addr<void?>(p.arena[0])) & uint64(ALIGN - 1l))) & (ALIGN - 1l)
+    }
+}
 
 def fill_planes(var p : Planes; sh : PlaneShape; n, d, ntok : int64) {
-    p.kq |> sized(d * sh.wq_row)
-    p.tkq |> sized(d * sh.tq_row)
-    p.ks |> sized(d * sh.ws_row)
-    p.xq |> sized(ntok * n)
-    p.xs |> sized(ntok * n / 32l)
-    p.xbs |> sized(ntok * n / 16l)
-    p.y |> sized(ntok * d)
+    var end = 0l
+    p.kq = next_plane(end, d * sh.wq_row, 0)
+    p.tkq = next_plane(end, d * sh.tq_row, 1)
+    p.ks = next_plane(end, d * sh.ws_row, 2)
+    p.xq = next_plane(end, ntok * n, 3)
+    p.xs = next_plane(end, ntok * n / 32l * 4l, 4)
+    p.xbs = next_plane(end, ntok * n / 16l * 4l, 5)
+    p.y = next_plane(end, ntok * d * 4l, 6)
+    p.arena |> reserve(end + ALIGN)
+    p.arena |> resize(end + ALIGN)
+    let base = arena_base(p)
+    p.kq += base
+    p.tkq += base
+    p.ks += base
+    p.xq += base
+    p.xs += base
+    p.xbs += base
+    p.y += base
     var seed = 0x1234u
-    for (b in p.kq) {
+    for (i in range64(p.kq, p.kq + d * sh.wq_row)) {
         seed = seed * 1664525u + 1013904223u
-        b = uint8(seed >> 24u)
+        p.arena[i] = uint8(seed >> 24u)
     }
-    for (b in p.tkq) {
+    for (i in range64(p.tkq, p.tkq + d * sh.tq_row)) {
         seed = seed * 1664525u + 1013904223u
-        b = uint8(seed >> 24u)
+        p.arena[i] = uint8(seed >> 24u)
     }
-    for (b in p.ks) {
-        b = SCALE_BYTE   // scale planes hold normal numbers in every scale form, never random bytes: Intel runs denormal math ~100x slower, AMD does not, and a random byte pattern is a denormal or an infinity often enough to bend a table
+    for (i in range64(p.ks, p.ks + d * sh.ws_row)) {
+        p.arena[i] = SCALE_BYTE   // scale planes hold normal numbers in every scale form, never random bytes: Intel runs denormal math ~100x slower
     }
-    for (q in p.xq) {
+    for (i in range64(p.xq, p.xq + ntok * n)) {
         seed = seed * 1664525u + 1013904223u
-        q = int8(seed >> 24u)
+        p.arena[i] = uint8(seed >> 24u)
     }
-    for (s in p.xs) {
-        s = 0.01
-    }
-    for (bsum in p.xbs) {
-        bsum = 128
+    unsafe {
+        var xs = addr<float?>(p.arena[p.xs])
+        for (i in range64(ntok * n / 32l)) {
+            xs[i] = 0.01
+        }
+        var xbs = addr<int?>(p.arena[p.xbs])
+        for (i in range64(ntok * n / 16l)) {
+            xbs[i] = 128
+        }
     }
 }
 
@@ -269,10 +294,10 @@ def time_rows(var stats : array<RowStat>; rounds : int; blk : block<(row : int) 
     }
 }
 
-def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64) {
+def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape) {
     let n = int64(cfg.n)
     let d = int64(cfg.d)
-    let plane_bytes = long_length(p.kq) + long_length(p.ks) - 2l * ALIGN
+    let plane_bytes = int64(cfg.d) * (sh.wq_row + sh.ws_row)
     var vs <- gemv_variants(f)
     var stats : array<RowStat>
     var fns : array<GemvFn>
@@ -283,12 +308,12 @@ def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         }
     }
     unsafe {
-        let kqp = addr<uint8 const?>(p.kq[aligned_start(addr<void?>(p.kq[0]))])
-        let ksp = addr<uint8 const?>(p.ks[aligned_start(addr<void?>(p.ks[0]))])
-        let xqp = addr<int8 const?>(p.xq[aligned_start(addr<void?>(p.xq[0]))])
-        let xsp = addr<float const?>(p.xs[aligned_start(addr<void?>(p.xs[0])) / 4l])
-        let xbsp = addr<int const?>(p.xbs[aligned_start(addr<void?>(p.xbs[0])) / 4l])
-        var yp = addr(p.y[aligned_start(addr<void?>(p.y[0])) / 4l])
+        let kqp = addr<uint8 const?>(p.arena[p.kq])
+        let ksp = addr<uint8 const?>(p.arena[p.ks])
+        let xqp = addr<int8 const?>(p.arena[p.xq])
+        let xsp = addr<float const?>(p.arena[p.xs])
+        let xbsp = addr<int const?>(p.arena[p.xbs])
+        var yp = addr<float?>(p.arena[p.y])
         time_rows(stats, cfg.rounds) $(row : int) {
             invoke(fns[row], yp, kqp, ksp, xqp, xsp, xbsp, n, 0l, d)
         }
@@ -307,7 +332,7 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
     let ntok = int64(cfg.ntok)
     let qrow = sh.tq_row
     let srow = sh.ws_row
-    let plane_bytes = long_length(p.tkq) + long_length(p.ks) - 2l * ALIGN
+    let plane_bytes = int64(cfg.d) * (sh.tq_row + sh.ws_row)
     var mrs <- companion_ints(layout_variants(f))
     var vs <- tile_variants(f)
     var stats : array<RowStat>
@@ -327,12 +352,12 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         mrOf |> push(mr)
     }
     unsafe {
-        let kqp = addr<uint8 const?>(p.tkq[aligned_start(addr<void?>(p.tkq[0]))])
-        let ksp = addr<uint8 const?>(p.ks[aligned_start(addr<void?>(p.ks[0]))])
-        let xqp = addr<int8 const?>(p.xq[aligned_start(addr<void?>(p.xq[0]))])
-        let xsp = addr<float const?>(p.xs[aligned_start(addr<void?>(p.xs[0])) / 4l])
-        let xbsp = addr<int const?>(p.xbs[aligned_start(addr<void?>(p.xbs[0])) / 4l])
-        var yp = addr(p.y[aligned_start(addr<void?>(p.y[0])) / 4l])
+        let kqp = addr<uint8 const?>(p.arena[p.tkq])
+        let ksp = addr<uint8 const?>(p.arena[p.ks])
+        let xqp = addr<int8 const?>(p.arena[p.xq])
+        let xsp = addr<float const?>(p.arena[p.xs])
+        let xbsp = addr<int const?>(p.arena[p.xbs])
+        var yp = addr<float?>(p.arena[p.y])
         time_rows(stats, cfg.rounds) $(row : int) {
             let mr = mrOf[row]
             for (g in range64(d / mr)) {
@@ -416,19 +441,19 @@ def bench_q8_family(var rows : int&; cfg : BenchArgs; mx4 : bool; var p : Planes
     let d = int64(cfg.d)
     let ntok = int64(cfg.ntok)
     let name = mx4 ? MX4_NAME : "q8"
-    let plane_bytes = long_length(p.kq) + long_length(p.ks) - 2l * ALIGN
+    let plane_bytes = int64(cfg.d) * (sh.wq_row + sh.ws_row)
     var wvs <- q8q8_family_live_variants()   // the family's witness rows: the amx one takes the per-process tile permission its tiles need (SIGILL without it), as the probe does
     for (w in wvs) {
         invoke(w._1)
     }
     delete wvs
     unsafe {
-        let kqp = addr<uint8 const?>(p.kq[aligned_start(addr<void?>(p.kq[0]))])
-        let ksp = addr<uint8 const?>(p.ks[aligned_start(addr<void?>(p.ks[0]))])
-        let xqp = addr<int8 const?>(p.xq[aligned_start(addr<void?>(p.xq[0]))])
-        let xsp = addr<float const?>(p.xs[aligned_start(addr<void?>(p.xs[0])) / 4l])
-        let xbsp = addr<int const?>(p.xbs[aligned_start(addr<void?>(p.xbs[0])) / 4l])
-        var yp = addr(p.y[aligned_start(addr<void?>(p.y[0])) / 4l])
+        let kqp = addr<uint8 const?>(p.arena[p.kq])
+        let ksp = addr<uint8 const?>(p.arena[p.ks])
+        let xqp = addr<int8 const?>(p.arena[p.xq])
+        let xsp = addr<float const?>(p.arena[p.xs])
+        let xbsp = addr<int const?>(p.arena[p.xbs])
+        var yp = addr<float?>(p.arena[p.y])
         if (!cfg.no_gemv) {
             var stats : array<RowStat>
             var fnsQ : array<GemvQ8Fn>
@@ -533,7 +558,7 @@ def main : int {
             bench_q8_family(rows, cfg, fe._2, p, nsb, sh)
         } else {
             if (!cfg.no_gemv) {
-                bench_gemv_kq(rows, cfg, fe._0, fe._1, p, nsb)
+                bench_gemv_kq(rows, cfg, fe._0, fe._1, p, nsb, sh)
             }
             if (cfg.ntok > 0) {
                 bench_tile_kq(rows, cfg, fe._0, fe._1, p, nsb, sh)
