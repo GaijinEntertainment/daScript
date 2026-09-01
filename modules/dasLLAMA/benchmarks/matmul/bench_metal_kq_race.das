@@ -137,6 +137,7 @@ def private gemv_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate GEMV sp
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_iq3xxs_msl, entry = metal_kq_gemv_iq3xxs_msl_entry, fastmath = metal_kq_gemv_iq3xxs_msl_fastmath, tgmem = metal_kq_gemv_iq3xxs_msl_tgmem, gdiv = f.gemv_gdiv))
     } elif (f.fmt == 2) {
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_k2_msl, entry = metal_kq_gemv_k2_msl_entry, fastmath = metal_kq_gemv_k2_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
+        arms |> push(KqRaceArm(name = "d1", src = lab_kq_gemv_k2_d1_msl, entry = lab_kq_gemv_k2_d1_msl_entry, fastmath = lab_kq_gemv_k2_d1_msl_fastmath, tgmem = 0ul, gdiv = 8))
     } elif (f.fmt == 23) {
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_iq2s_msl, entry = metal_kq_gemv_iq2s_msl_entry, fastmath = metal_kq_gemv_iq2s_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
     } elif (f.fmt == 24) {
@@ -208,6 +209,87 @@ def private mm_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate mul_mm sp
 }
 
 let PREFILL_M = 512   // the mm tier's token batch
+
+// k2 on llama.cpp's q2_K shape: the k4 lane map (4 superblock streams, 32 elem/thread over
+// the four sub-blocks of a 128-half), u16 SHIFT-FREE masked compose with power-of-two
+// prefolds, the dmin fold on unshifted high nibbles, 4 rows/simdgroup x 2 sg (dispatch rows/8).
+class LabKqGemvK2D1 {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="lab_kq_gemv_k2_d1_msl")]
+    def lab_kq_gemv_k2_d1 {
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let iq = it / 4u
+        let ir = it % 4u
+        let isb = ir / 2u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 4u
+        var yl : float[32]
+        var sumf : float[4]
+        var ib = ix
+        while (ib < nb) {
+            let yb = ib * 256u + iq * 128u + ir * 8u
+            var sumy : float[4]
+            for [unroll_full] (i in range(8)) {
+                yl[i] = x[yb + uint(i)]
+                sumy[0] += yl[i]
+                yl[i + 8] = x[yb + 32u + uint(i)]
+                sumy[1] += yl[i + 8]
+                yl[i + 16] = x[yb + 64u + uint(i)]
+                sumy[2] += yl[i + 16]
+                yl[i + 24] = x[yb + 96u + uint(i)]
+                sumy[3] += yl[i + 24]
+            }
+            for [unroll_full] (r in range(4)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                let qb = blk * 16u + iq * 8u + ir * 2u
+                let qa = kqu[qb]
+                let qc = kqu[qb + 1u]
+                var acc1 : float[4]
+                var acc2 : float[4]
+                for [unroll_full] (i in range(4)) {
+                    let q16 = ((i < 2 ? qa : qc) >> (16u * (uint(i) & 1u))) & 0xFFFF
+                    acc1[0] += yl[2 * i] * float(q16 & 0x0003)
+                    acc2[0] += yl[2 * i + 1] * float(q16 & 0x0300)
+                    acc1[1] += yl[2 * i + 8] * float(q16 & 0x000C)
+                    acc2[1] += yl[2 * i + 9] * float(q16 & 0x0C00)
+                    acc1[2] += yl[2 * i + 16] * float(q16 & 0x0030)
+                    acc2[2] += yl[2 * i + 17] * float(q16 & 0x3000)
+                    acc1[3] += yl[2 * i + 24] * float(q16 & 0x00C0)
+                    acc2[3] += yl[2 * i + 25] * float(q16 & 0xC000)
+                }
+                let sb = blk * 16u + iq * 8u + isb
+                let b0 = uint(kscb[sb])
+                let b2 = uint(kscb[sb + 2u])
+                let b4 = uint(kscb[sb + 4u])
+                let b6 = uint(kscb[sb + 6u])
+                let dall = float(kdh[blk * 2u])
+                let dmn = float(kdh[blk * 2u + 1u]) * 0.0625
+                sumf[r] += dall * ((acc1[0] + 0.00390625 * acc2[0]) * float(b0 & 15u)
+                    + (acc1[1] + 0.00390625 * acc2[1]) * float(b2 & 15u) * 0.25
+                    + (acc1[2] + 0.00390625 * acc2[2]) * float(b4 & 15u) * 0.0625
+                    + (acc1[3] + 0.00390625 * acc2[3]) * float(b6 & 15u) * 0.015625)
+                sumf[r] -= dmn * (sumy[0] * float(b0 & 0xF0) + sumy[1] * float(b2 & 0xF0)
+                    + sumy[2] * float(b4 & 0xF0) + sumy[3] * float(b6 & 0xF0))
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(4)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
 
 // Rewrite every threadgroup A-tile subscript store `ta[IDX] = RHS;` into the pointer form
 // `*(ta + (IDX)) = RHS;` - llama.cpp's mul_mm carries the subscript form commented out as
