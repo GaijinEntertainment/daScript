@@ -28,8 +28,7 @@ winners back.
 tune-boot path that reaches it, applies `REVIEW_EXCHANGE.md`.**
 
 **Every `dasllama/` change applies this folder's `tests/REVIEW.md`.** The folder walk surfaces
-that checklist only for diffs under `tests/`; its census, kargs and new-value duties trigger
-on `dasllama/`.
+that checklist only for diffs under `tests/`.
 
 **A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
 
@@ -189,16 +188,17 @@ the file it checks - in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`, or
 `ARCHITECTURE_GPU.md`.** The line names the check and the names it licenses. A licensed name
 is one that check does not flag. When the check licenses no names, the line says so.
 
-**Checked-in prose this module owns - docs and comments, any language - describes an upstream
-mechanism in our own terms: no "lifted/ported verbatim from", and no upstream symbol, header,
-or constant name; write "the reference exe" or "upstream" instead.** A symbol this file's own
-code calls or carries as a value is its own name, not attribution.
+**Checked-in prose this module owns - docs and comments, any language - that is not locating
+or reproducing work against the reference build describes an upstream mechanism in our own
+terms: no "lifted/ported verbatim from", and no upstream symbol, header, constant, or binary
+name - write "the reference exe" or "upstream" instead.** A symbol the file carrying that
+prose calls or holds as a value is its own name, not attribution.
 
-**A line whose job is to locate or reproduce work against the reference build names the
-binary outright** - a path naming where checked-in data is regenerated FROM, an env-knob row
-whose value locates the reference binary, a command line or flag list in a methodology,
-profile, bring-up, or how-to document, and a follow-up ledger's board row naming the build it
-compares against.
+**A line whose job is to locate or reproduce work against the reference build names that
+build's binary outright** - a path naming where checked-in data is regenerated FROM, an
+env-knob row whose value locates the reference binary, a command line or flag list in a
+methodology, profile, bring-up, or how-to document, and a follow-up ledger's board row naming
+the build it compares against.
 
 **Legal attribution never appears in prose - it lives in `THIRD_PARTY_NOTICES.md` and the
 `LICENSE.*` files.**
@@ -241,7 +241,7 @@ that list, so a name outside it is never recorded and a box adopting a shipped p
 the tuning the profile was meant to save.
 
 **A value that a team-lane kernel reads - anything reachable from a `team_parallel_for` /
-`team_parallel_for_indexed` / `team_parallel_stages` body (`dasllama/dasllama_par.das`) - is a `def`
-returning it, never a module global with a declaration initializer (`let` or `var`).** A team
-lane never runs global initializers, so the global reads zero there while every
-single-threaded run reads the right value.
+`team_parallel_for_indexed` / `team_parallel_stages` body (`daslib/jobque_boost.das`, repo
+root) - is a `def` returning it, never a module global with a declaration initializer (`let`
+or `var`).** A team lane never runs global initializers, so the global reads zero there while
+every single-threaded run reads the right value.

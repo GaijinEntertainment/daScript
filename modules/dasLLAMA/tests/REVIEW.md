@@ -14,8 +14,7 @@ what the runner arms for `model-free`. The listing lands in the same change that
 file, and the file skips honestly when its models are absent.
 
 **Listing a test file that `DASLLAMA_CPU_PREFILL=1` disarms in any `run.das` suite is a defect,
-and so is leaving that fact out of the file's header.** `DASLLAMA_CPU_PREFILL=1` is what the
-runner arms for `model-free`.
+and so is leaving that fact out of the file's header.**
 
 **Invoking dastest directly on a test file in a `run.das` model suite (every suite but
 `model-free`) is a defect; such a file runs only through `run.das`. A `model-free` file runs
@@ -188,13 +187,13 @@ it to the documented default. A runtime decline standing in for a pin measures w
 lane the box's policy picked.
 
 **A cell that loads a media carrier under a lane pin - a `set_<family>_q8`-class knob or a
-tensor-crown pin - mints in memory through the family's `stage_*` + `mint_*` pair, never
-through a `.dlim`-baking loader (`load_<family>_tower` / `load_<family>_encoder` /
-`load_model*`).** A disk bake under a pinned lane GC-purges the serving lane's `.dlim`
-beside the model, and the next direct-image load in another suite panics on the wrong
-identity. The one residue: a cell whose SUBJECT is a facade lane knob (`load_asr_model`
-under `set_asr_tower_fp32`) keeps the facade loader - the image identity folds the pin, so
-minting around it would unmake the claim.
+tensor-crown pin - and whose subject is not that lane knob itself mints in memory through the
+family's `stage_*` + `mint_*` pair, never through a `.dlim`-baking loader
+(`load_<family>_tower` / `load_<family>_encoder` / `load_model*`).** A disk bake under a
+pinned lane GC-purges the serving lane's `.dlim` beside the model, and the next direct-image
+load in another suite panics on the wrong identity. A cell whose subject is the lane knob
+(`load_asr_model` under `set_asr_tower_fp32`) keeps the facade loader: the image identity
+folds the pin, so minting around it would unmake the claim.
 
 **A CPU-vs-GPU arm that does not run a PLANAR model for its CPU stages, and that model's
 `blob_twin(t, path, seq_cap)` for override-selected stages, is a defect.** One session spans
@@ -274,9 +273,8 @@ route's to say: a twin-W route reads the baked halfword twin (`wblob`), so poiso
 plane alone is a valid control there, while a route reading both planes needs both zeroed. A
 poison the served route never reads passes on a broken kernel.
 
-**An ASR cell comparing transcripts across two serving lanes asserts TOKEN equality; the one
-cell comparing a crowned lane - the raced kernel form a tune sidecar arms as the serving one -
+**An ASR cell comparing transcripts across two serving lanes asserts TOKEN equality; a cell
+comparing a crowned lane - the raced kernel form a tune sidecar arms as the serving one -
 against its tensor twin asserts WORD equality, because the twins' rounding legitimately flips
-tokens.** A cell that cannot hold
-its grade converts to the forced-feed logits-tolerance form - never to a looser text
-compare.
+tokens.** A cell that cannot hold its grade converts to the forced-feed logits-tolerance form -
+never to a looser text compare.

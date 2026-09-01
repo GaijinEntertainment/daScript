@@ -176,7 +176,7 @@ def ensure_sgconfig(root : string) {
 
 // Stage the JIT backend files that a plain `--target daslang` build does NOT produce:
 // <root>/lib/LLVM.dll (the LLVM codegen backend, loaded by name from dasLLVM's bindings) and
-// <root>/bin/lld-link.exe (links each JIT-emitted .dll). Only the dasLLVM shared-lib CMake step
+// on Windows <root>/bin/lld-link.exe (links each JIT-emitted .dll). Only the dasLLVM shared-lib CMake step
 // stages these, and building just the `daslang` target skips it — so without this a fresh
 // worktree binary silently falls back to the interpreter (`-jit` fails: "can't load LLVM.dll").
 // Copy them from the source tree of the daslang running this setup (get_das_root()), which is a
@@ -204,7 +204,8 @@ def stage_jit_backend(root : string) {
             fallback_source = "DASLANG does not name an existing binary"
         }
     }
-    //! lib/LLVM.dll is the codegen backend's name on every platform; its .version stamp stages with it or a later cmake refetches LLVM.
+    // lib/LLVM.dll is the codegen backend's name on every platform
+    // its .version stamp stages with it, or a later cmake configure refetches LLVM
     var jit_files <- ["lib/LLVM.dll", "lib/LLVM.dll.version"]
     if (get_platform_name() == "windows") {
         jit_files |> push("bin/lld-link.exe")

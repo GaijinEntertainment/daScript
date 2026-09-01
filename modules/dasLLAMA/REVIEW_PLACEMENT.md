@@ -16,11 +16,12 @@ per-file list. A rule naming what KIND of code lands in which file is the checkl
 **A disk-order -> compute-order transform lands per scope: kernel-layout in
 `dasllama/dasllama_repack.das`, load-scope in `dasllama/dasllama_layout.das`.**
 
-**A CPU KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`,
-its format family kept whole.** GPU twins land in their backend kernel file.
+**A CPU KV-cache store, read, score dot, or V-accumulate lands in
+`dasllama/dasllama_kv_codec.das`, its format family kept whole.** GPU twins land in their
+backend kernel file.
 
-**A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its backend file
-(`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
+**A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its
+backend file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
 **A kernel body lands in its owner's backend file.** A GPU kernel body lands in the file where
 its PSO is compiled and released. A CPU-tier kernel body lands in that tier's
@@ -50,14 +51,14 @@ file** - a single-caller helper sanctioned as tower-worthy is ledgered on
 **Tool wire text (the text of a model's tool/function call, built or parsed) is produced only
 in `dasllama/dasllama_tools.das`.**
 
-**No engine file (`dasllama/`) other than `dasllama/dasllama_audio_io.das` requires `audio` (the
-miniaudio decode module).**
+**No engine file (`dasllama/`) other than `dasllama/dasllama_audio_io.das` requires `audio`
+(the miniaudio decode module).**
 
-**No engine file (`dasllama/`) other than `dasllama/dasllama_vision_io.das` requires `stbimage`.**
-Benchmarks, harnesses, and tests decode their own fixtures.
+**No engine file (`dasllama/`) other than `dasllama/dasllama_vision_io.das` requires
+`stbimage`.** Benchmarks, harnesses, and tests decode their own fixtures.
 
-**Engine, HTTP, or writer logic never lands in `dasllama/dasllama_scheduler.das`** - engine logic in
-engine files, HTTP in the server, writer logic in the writer's own file.
+**Engine, HTTP, or writer logic never lands in `dasllama/dasllama_scheduler.das`** - engine
+logic in engine files, HTTP in the server, writer logic in the writer's own file.
 
 **An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
 `dasllama/dasllama_transformer.das`** - arch registrations, GPU tiers, every module requiring

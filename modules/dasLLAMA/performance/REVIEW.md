@@ -8,10 +8,9 @@ validate through `../dasllama/dasllama_exchange_schema.das` instead.** The engin
 `dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
 that gate is a defect.
 
-**Weakening `REVIEW.das`'s record-hygiene checks - `hardware.remote_desktop` `off` on every
-stored run, `provenance.noise` `ok` on every checked-in JSON under this folder that carries a
-`provenance` block, no `engine_sha` in a `defaults/` profile - is a defect; the fix for a red
-is a re-mint on a quiet, session-free box, never an edit.**
+**Weakening `REVIEW.das`'s record-hygiene checks is a defect; the fix for a red is a re-mint
+on a quiet, session-free box, never an edit.** What each check enforces is read from the gate
+itself; each check's finding text states its own rule.
 
 **A diff that writes a commit stamp anywhere under this folder naming a commit the branch
 under review cannot reach is a defect - re-mint, or re-stamp to a reachable commit whose
@@ -35,10 +34,9 @@ legs by `../benchmarks/asr/requirements-*.txt`.
 `requirements-*.txt` - re-mints every row the moved pin's tool minted, or withdraws them.**
 
 **A diff that writes a provenance manifest under this folder whose `provenance.dasllama_version`
-differs from the `DASLLAMA_RELEASE` string (`../dasllama/dasllama_version.das`; the JSON key
-stays `dasllama_version` across constant renames) is a defect - re-mint.** For a sidecar
-with an `engine_sha`, read the value at that commit; a `defaults/` profile compares against
-the branch under review.
+differs from the `DASLLAMA_RELEASE` string (`../dasllama/dasllama_version.das`) is a defect -
+re-mint.** For a sidecar with an `engine_sha`, read the value at that commit; a `defaults/`
+profile compares against the branch under review.
 
 **A diff that writes a row to `records/<box>.json` mints that row from a board cell.** A board
 cell is one `gen_bench_records.das` spawns, or a manual `../benchmarks/lcpp_bench.das` cell
@@ -99,9 +97,6 @@ the row's canonical values** - the verify never reads the url of a file already 
 
 **A diff that refreshes `last_known_good_sidecar.json` replaces it with one complete mint from
 the box its provenance names, at the current `DASLLAMA_RELEASE` - never a hand-edited copy.**
-`REVIEW.das` (beside this file) machine-checks the age-independent half (`noise` `ok`,
-`validation` `ok`, every `race` winner equal to its `kernels` value); weakening that gate is a
-defect.
 
 **A diff that changes the exchange consent notice wording updates every checked-in copy in
 the same change, and a diff that adds a copy names it here in the same change:

@@ -67,6 +67,7 @@ targets it builds, or a patch it applies - moves the measured quantity.
 `dot_q8q8_laneq4x4` last.** That bench pins the repack backend for the rest of the process,
 so a row after it races against the pinned backend instead of the one it selects.
 
-**A harness whose run can end with zero result rows exits non-zero when it does - wrong
-flags, failed load, a device that declines.** A run that matched nothing and reported success
-leaves a sidecar or a record untouched and a caller none the wiser.
+**A timing instrument this checklist governs whose run can end with zero result rows exits
+non-zero when it does - wrong flags, failed load, a device that declines.** A run that matched
+nothing and reported success leaves a sidecar or a record untouched and a caller none the
+wiser.

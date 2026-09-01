@@ -43,12 +43,6 @@ test, added in the same change if no row already covers it.** A row that only co
 the test (`dastest --compile-only`) does not execute them. A test whose assertions no row
 executes never runs again.
 
-**A test the diff adds or changes that covers a change under `utils/`, whose only executing
-row runs against an already-deployed artifact (a nightly lane driving the live site), takes
-the same obligation as a compile-only row: the PR description
-records an executed local run of those assertions against the change.** A lane that tests
-production after merge proves nothing about the diff under review.
-
 **A test the diff adds or changes that covers a change under `utils/`, whose load-bearing
 assertions no CI lane can run, ships with a CI row that compile-checks it.**
 

@@ -61,5 +61,3 @@
   `has_env_variable(expr)` outside `daslib/llvm_env.das`. Spell the name as a literal through
   the declared forms, or declare the knob, instead** (the literal-name forms are
   scanner-enforced by `tests/llvm_env_registry.das`; weakening that test is a defect).
-
-
