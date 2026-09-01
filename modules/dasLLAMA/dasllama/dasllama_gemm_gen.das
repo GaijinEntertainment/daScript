@@ -1718,17 +1718,6 @@ def private concat_rows(var te : TileEmit; var rows : array<LLVMOpaqueValue?>; l
     return concat_rows(te, nxt, 2 * lanes)
 }
 
-//! the row group's weight vector through the gather panel instead of the insert chain: one 8-byte store per row into
-//! the (otherwise idle) alloca, one width-wide load - the memo's "qpanel"; x86 only, DASLLAMA_GRID_QPANEL=1 (lab knob)
-def private concat_rows_qpanel(var te : TileEmit; var rows : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    let b = te.builder
-    for (i, r in count(), rows) {
-        var slot = LLVMBuildGEP2(b, te.types.t_int8, te.iq3s_panel, te.types->ConstI64(uint64(i * 8)), "")
-        LLVMBuildStore(b, LLVMBuildBitCast(b, r, te.types.t_int64, ""), slot)
-    }
-    return LLVMBuildLoad2Aligned(b, te.vwi8, te.iq3s_panel, 64u, "wq")
-}
-
 //! one row group's dot with its +-1 sign bytes: the signed-weight lattices (sdot, vpdpbssd) multiply them
 //! into the magnitudes; the unsigned-weight ones (maddubs, vpdpbusd) put them on the activation copy
 def private grid_rows_dot(var te : TileEmit; var acc, w, sg, xv : LLVMOpaqueValue?) : LLVMOpaqueValue? {
@@ -1776,7 +1765,6 @@ def private emit_grid_rows_blk(var te : TileEmit; var wbP, xb : LLVMOpaqueValue?
     let b = te.builder
     let n = te.width / 64
     let colSigns = te.kq == 33 || te.kq == 23 || te.dotKind != DOT_SDOT   // x86: the sign column's mask beats four table loads + three inserts per group; the sdot lattice keeps the table for the ksigns formats
-    let qpanel = te.dotKind != DOT_SDOT && te.iq3s_panel != null && get_env_variable("DASLLAMA_GRID_QPANEL") == "1"
     for (qd in range(te.rq)) {
         var acc : LLVMOpaqueValue? [2]    // per row group; the lo strip (l < 2) when iq2
         var acc1 : LLVMOpaqueValue? [2]   // iq2: the hi strip (l >= 2)
@@ -1799,7 +1787,7 @@ def private emit_grid_rows_blk(var te : TileEmit; var wbP, xb : LLVMOpaqueValue?
                         sgs |> push(sign_pm1_row(te, kq_row_sign_code(te, base, blk, l)))
                     }
                 }
-                var w = qpanel ? concat_rows_qpanel(te, rows) : concat_rows(te, rows)
+                var w = concat_rows(te, rows)
                 var sg = colSigns ? sign_col_pm1(te, signCol[qd], r0, l, "sp{blk}_{l}_{qd}_{g}") : concat_rows(te, sgs)
                 let hi = iq2 && l >= 2
                 var d = grid_rows_dot(te, hi ? acc1[g] : acc[g], w, sg, xv)

@@ -823,5 +823,12 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   11886 -> 11647, iq3xxs 7212 -> 7262, iq2xxs 4624 -> 5841 us. A loss or a wash on zen2 (where the row
   form itself loses to the panel form: iq2xs 4565 panel); the zen4 A/B is the one that matters
   (iq2xxs's crown there IS the row form) - queued behind the box's ladder.
+- 2026-09-01: qpanel killed - the zen4 and Intel A/Bs (row form forced, one thread, d=32768, qpanel 0 -> 1):
+  zen4 iq2xs 33680 -> 40895, iq2s 47037 -> 44739, iq3s 68550 -> 70264, iq3xxs 43468 -> 46495, iq2xxs 22687 ->
+  23111 us; Intel iq2xs 44067 -> 43923, iq2s 44660 -> 56802, iq3s 84893 -> 86998, iq3xxs 39726 -> 39662, iq2xxs
+  22041 -> 21450. A loss or a wash on all three boxes; the helper and the knob are gone from the emitter.
+  Same run, a find: on zen4 the row form beats the panel form for iq2xs at 16 lanes (2194 vs the ladder's panel
+  2559 us - 0.91x of the reference instead of 0.78x) where the class gate picks the panel; the forms probe
+  (zen4_forms.sh, both forms x five grids x two shapes) decides the gate.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
