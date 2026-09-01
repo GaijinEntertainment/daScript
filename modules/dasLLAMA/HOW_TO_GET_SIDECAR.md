@@ -64,6 +64,16 @@ ls -la bin/daslang lib/LLVM.dll
 downloads the prebuilt `lib/LLVM.dll` for the platform (that name on every OS) - if `ls` does not show it,
 nothing below runs. Only `daslang` needs building: dasLLAMA is das, its native needs are builtins.
 
+### A macOS box you do not own (the M4 Pro walk)
+
+Homebrew there may belong to another user (`/opt/homebrew` not writable) - do not chown it. CMake and
+Ninja come as user-local binaries instead: the Kitware `cmake-<v>-macos-universal.tar.gz` and the
+ninja-build `ninja-mac.zip` unpacked under `~/tools`, prepended to `PATH`. Apple's `/usr/bin/bison` is
+2.3 and cannot read `ds2_parser.ypp`, so configure with `-DDAS_FLEX_BISON_DISABLED=ON` (the committed
+generated parser is current); no OpenSSL means `-DDAS_HV_DISABLED=ON`. The reference builds with
+`-DGGML_METAL=OFF -DGGML_BLAS=OFF` (CPU only). On a P+E chip give the ladder the performance cores
+(`TEAM=10` on the M4 Pro), not `nproc`.
+
 ## 3. The reference exe
 
 The kernel ladder's other side. Pin the same tip the dev box's tables use (`6c84c7d5d` for the

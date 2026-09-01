@@ -11,6 +11,7 @@ require llvm/daslib/llvm_jit_code
 require llvm/daslib/llvm_jit_common
 require daslib/ast_boost
 require dasllama/dasllama_gemm_schema
+require daslib/fio
 
 // The perm-parameterized Q8 GEMM tile generator (gemm_generator_plan.md part 3, promoted from
 // the M2 hand perm): emits the mr-row x 4-token register tile as LLVM IR — the loop nest,
@@ -1444,8 +1445,13 @@ def private sign_col_pm1(var te : TileEmit; var col : LLVMOpaqueValue?; r0, l : 
 }
 
 //! the sdot lattice's grid decode composes row groups straight from the grid words; x86 keeps the panel (the
-//! insert form measured 1.2-1.5x slower on zen2 - the ledger, followup 61)
-def private grid_rows_path(te : TileEmit) : bool => te.dotKind == DOT_SDOT && te.rv == 4
+//! insert form measured 1.2-1.5x slower on zen2 - the ledger, followup 61) unless DASLLAMA_GRID_ROWS_X86=1,
+//! the lab knob for boxes where the panel's latency chain, not the vector width, bounds the decode
+def private grid_rows_path(te : TileEmit) : bool {
+    if (te.dotKind == DOT_SDOT) return te.rv == 4
+    if (te.dotKind != DOT_MADDUBS && te.dotKind != DOT_VPDPBUSD && te.dotKind != DOT_VPDPBSSD) return false
+    return get_env_variable("DASLLAMA_GRID_ROWS_X86") == "1"
+}
 
 //! eight +-1 bytes for sign byte `sb`, lane k negative when bit k is set
 def private pm1_of(sb : int) : uint64 {
@@ -1687,11 +1693,30 @@ def private concat_rows(var te : TileEmit; var rows : array<LLVMOpaqueValue?>; l
     return concat_rows(te, nxt, 2 * lanes)
 }
 
-//! one row group's sdot with its +-1 sign bytes multiplied into the magnitudes
+//! one row group's dot with its +-1 sign bytes: the signed-weight lattices (sdot, vpdpbssd) multiply them
+//! into the magnitudes; the unsigned-weight ones (maddubs, vpdpbusd) put them on the activation copy
 def private grid_rows_dot(var te : TileEmit; var acc, w, sg, xv : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let b = te.builder
-    var args <- [acc, LLVMBuildMul(b, w, sg, "ws"), xv]
-    return LLVMBuildCall2(b, te.sdot_ty, te.sdot_decl, args, "dot")
+    if (te.dotKind == DOT_SDOT || te.dotKind == DOT_VPDPBSSD) {
+        var args <- [acc, LLVMBuildMul(b, w, sg, "ws"), xv]
+        return LLVMBuildCall2(b, te.dotKind == DOT_SDOT ? te.sdot_ty : te.dp_ty, te.dotKind == DOT_SDOT ? te.sdot_decl : te.dp_decl, args, "dot")
+    }
+    var xs : LLVMOpaqueValue?
+    if (te.width == 256) {
+        var pargs <- [xv, sg]
+        xs = LLVMBuildCall2(b, te.psign_ty, te.psign_decl, pargs, "signx")
+    } else {
+        var neg = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, sg, LLVMConstNull(te.vwi8), "sneg")
+        xs = LLVMBuildSelect(b, neg, LLVMBuildSub(b, LLVMConstNull(te.vwi8), xv, ""), xv, "signx")
+    }
+    if (te.dotKind == DOT_VPDPBUSD) {
+        var dargs <- [acc, w, xs]
+        return LLVMBuildCall2(b, te.dp_ty, te.dp_decl, dargs, "dot")
+    }
+    var margs <- [w, xs]
+    var pairs = LLVMBuildCall2(b, te.madd_ty, te.madd_decl, margs, "pairs")
+    var wargs <- [pairs, ones_i16(te)]
+    return LLVMBuildAdd(b, acc, LLVMBuildCall2(b, te.maddwd_ty, te.maddwd_decl, wargs, "quads"), "dot")
 }
 
 //! row `base`'s 8 raw grid weights for (blk, l) as <8 x i8>: the iq2 formats' u64 grid entry in one

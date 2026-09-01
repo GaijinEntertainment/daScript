@@ -285,6 +285,34 @@ the x86 tail, unchanged. Engine shape: k5/q51/iq4xs/k2 1.00-1.04, q40/iq4nl 0.98
 at one thread). Round two on the same box: SOLO at the engine phase, the corrected team rows, a tune-mode race
 of k4/k6/iq2s through the team arm, perf stat on iq2s.
 
+Round two (the branch at 6d75a0956):
+
+| fmt | one thread, engine phase ours / ref us | ratio | engine 16 lanes ours / ref us | ratio |
+|---|---|---|---|---|
+| q8 | 1874 / 3657 | 1.95 | 6575 / 6058 | 0.92 |
+| k4 | 833 / 1906 | 2.29 | 3067 / 3022 | 0.99 |
+| k5 | 2046 / 2885 | 1.41 | 4043 / 3794 | 0.94 |
+| k6 | 2866 / 2686 | 0.94 | 4861 / 4600 | 0.95 |
+| q40 | 737 / 2794 | 3.79 | 3163 / 2996 | 0.95 |
+| q51 | 1690 / 4630 | 2.74 | 3940 / 4172 | 1.06 |
+| iq4xs | 1176 / 2438 | 2.07 | 3036 / 2834 | 0.93 |
+| k3 | 837 / 2016 | 2.41 | 2268 / 2209 | 0.97 |
+| iq3s | 7571 / 6104 | 0.81 | 4128 / 3213 | 0.78 |
+| iq3xxs | 5973 / 5242 | 0.88 | 3113 / 2802 | 0.90 |
+| iq4nl | 1092 / 3055 | 2.80 | 2915 / 3025 | 1.04 |
+| k2 | 623 / 1289 | 2.07 | 1461 / 1596 | 1.09 |
+| iq2s | 4918 / 3763 | 0.77 | 2525 / 2129 | 0.84 |
+| iq2xs | 4562 / 3633 | 0.80 | 2319 / 2001 | 0.86 |
+| iq2xxs | 4857 / 3920 | 0.81 | 2461 / 2127 | 0.86 |
+| mx4 | 1090 / 2763 | 2.54 | 2787 / 2844 | 1.02 |
+
+Engine shape: q51 1.06, iq4nl 1.04, k2 1.09, mx4 1.02, k4 0.99 (the 0.77 above was a one-off), k3 0.97, k6 0.95,
+q40 0.95, k5 0.94, iq4xs 0.93, q8 0.92 - and the grid formats iq3xxs 0.90, iq2xs/iq2xxs 0.86, iq2s 0.84, iq3s
+0.78: compute-bound even at 16 lanes (iq3s pulls 49 GB/s of the box's 87). The tune race through the team arm
+(d=32768, 16 lanes): k4 maddubs256 3084 / vpdpbusd256 3030 / vpdpbusd512 2969 and k6 4630 / 4611 / 4532 confirm
+the crowns; iq2s 2528 / 2383 / 2530 - the crowned width-512 seat loses 6% to vpdpbusd256 at the engine shape,
+the gemv inheriting the tile's crown (tune_companion). perf stat gave nothing (no PMU in the VM).
+
 ## 3. Research memos (read before touching the kernels)
 
 - `kernel_parity_research_cpu.md` - llama.cpp's CPU vec_dot for the five grid formats + Q2_K,
@@ -447,6 +475,13 @@ stays open.
    at 1.00-1.36x there - it must not lose), then zen4 (rent) where the gap lives.
 3. NEXT x86 zen4 grid 0.77-0.88x: rent the c7a again with `perf stat` (uops per port, store-forwarding
    stalls) on iq2xs/iq3xxs decode against the reference exe's same shape - one proven fact before any form.
+   2026-09-01, the fact the two boxes give for free: zen2 -> zen4 sped every kernel up 1.5-3x (k4 2337 ->
+   833 us, k6 3460 -> 2866) EXCEPT the grid decodes (iq2xs 4645 -> 4562, iq2s 5058 -> 4918, iq3s 7603 ->
+   7571) - a wider, faster core buys them nothing, so they are bound by a latency chain (index -> grid
+   load -> panel store -> reload), not by vector throughput. That is the case for the register compose
+   on zen4 even though zen2 killed it: `DASLLAMA_GRID_ROWS_X86=1` re-arms the x86 row-group arms as a
+   lab knob (env, read at emit time - clear `.jitted_scripts` between A/B runs, the JIT cache does not
+   key on it). A/B on zen4 next; if it wins there and loses on zen2 the gate becomes the tune class.
 
 CPU decode on ARM (the M1 ladder): iq2xs 0.51x, iq2xxs 0.57x, iq3xxs 0.72x, iq3s 0.93x. The memo
 (`kernel_parity_research_arm.md`): the sdot count is at parity (2 per 32 weights per row, both sides);
