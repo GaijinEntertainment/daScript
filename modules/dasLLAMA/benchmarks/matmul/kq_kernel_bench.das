@@ -45,6 +45,10 @@ struct BenchArgs {
     perm : string
     @clarg_doc = "TSV rows only, no banner"
     tsv : bool
+    @clarg_doc = "Arena base alignment in bytes (64; 4096 fixes the planes' phase against page boundaries, which the heap otherwise draws per process)"
+    base_align : int = 64
+    @clarg_doc = "Bytes added past the aligned arena base (with --base-align 4096: the planes' phase inside the page)"
+    base_offset : int = 0
 }
 
 typedef GemvFn = function<(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void>
@@ -155,6 +159,8 @@ def plane_shape(f : KqFmt; mx4 : bool; n : int64) : PlaneShape {
     return PlaneShape(wq_row = nsb * kq_qsb(f), tq_row = nsb * tile_kq_bytes_per_sb(f), ws_row = nsb * kq_ssb(f))
 }
 
+var BASE_ALIGN = 64l   // the arena's start alignment - --base-align; the planes' phase against 4 KB pages follows it
+var BASE_OFFSET = 0l   // --base-offset, added past the aligned start
 let ALIGN = 64l   // the image's planes are page-aligned (ARCHITECTURE_IMAGE.md, image-page-alignment); a 64-byte load split across cache lines is what Intel penalizes 2x
 let STAGGER = 1088l   // plane starts differ in their low 12 address bits (1088 = 1024 + 64 keeps six starts distinct mod 4096): planes that alias in the L1/L2 set logic make a run's time depend on where the heap put them
 let SCALE_BYTE = uint8(0x3C)   // as f16 0x3C3C = 1.06, as f32 0x3C3C3C3C = 0.0115, as e8m0 2^-67, as a 6-bit sub-scale 60 - normal in every scale form
@@ -179,10 +185,10 @@ def next_plane(var end : int64&; bytes : int64; slot : int) : int64 {
     return start
 }
 
-//! the arena's first 64-byte-aligned byte
+//! the arena's first BASE_ALIGN-aligned byte
 def arena_base(var p : Planes) : int64 {
     unsafe {
-        return (ALIGN - int64(intptr(addr<void?>(p.arena[0])) & uint64(ALIGN - 1l))) & (ALIGN - 1l)
+        return ((BASE_ALIGN - int64(intptr(addr<void?>(p.arena[0])) & uint64(BASE_ALIGN - 1l))) & (BASE_ALIGN - 1l)) + BASE_OFFSET
     }
 }
 
@@ -195,8 +201,8 @@ def fill_planes(var p : Planes; sh : PlaneShape; n, d, ntok : int64) {
     p.xs = next_plane(end, ntok * n / 32l * 4l, 4)
     p.xbs = next_plane(end, ntok * n / 16l * 4l, 5)
     p.y = next_plane(end, ntok * d * 4l, 6)
-    p.arena |> reserve(end + ALIGN)
-    p.arena |> resize(end + ALIGN)
+    p.arena |> reserve(end + BASE_ALIGN + BASE_OFFSET)
+    p.arena |> resize(end + BASE_ALIGN + BASE_OFFSET)
     let base = arena_base(p)
     p.kq += base
     p.tkq += base
@@ -534,6 +540,8 @@ def formats_of(spec : string) : array<tuple<string; KqFmt; bool>> {
 def main : int {
     var cfg = BenchArgs()
     let rc = parse_args_with_help(cfg, "kq_kernel_bench")
+    BASE_ALIGN = int64(cfg.base_align)
+    BASE_OFFSET = int64(cfg.base_offset)
     return rc if (rc >= 0)
     if (!jit_enabled()) {
         to_log(LOG_ERROR, "run with -jit: the kq generators only fire under the JIT\n")

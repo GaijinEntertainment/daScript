@@ -269,6 +269,9 @@ per try), and the reference row at the same shape is the reference exe's `test-b
 `harness/kernel_ladder.sh` runs both sides for every format and prints the box's ratio table. The
 app run comes only after a spelling wins there. Procedure, fact base and work queue:
 `plans/kernel_parity_pass.md`.
+2026-09-01: the pass closed the M1 CPU at kernel level - all 32 ladder rows at or above the
+reference (the grid decodes 1.16-1.51x, from 0.51-0.93x) - so the per-format M1 CPU tg tails stamped
+below (0.51x-0.73x) predate the ARM row-group decode; re-stamp the vehicles before quoting them.
 
 A real file whose every tensor type is now loadable (the header census script in the session
 scratchpad, or `harness/gguf_dump.das`), through `examples/dasLLAMA/run.das` against

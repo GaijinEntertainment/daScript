@@ -240,6 +240,24 @@ k6 0.90x, k5 0.91x):
    1109 ms) so it is decode-only; the principled form is the memo's D1 group-major reorder.
 2. OPEN k6 0.87-0.90x, k5 0.87-0.91x: the pin gained nothing on k6; the memo (research_cpu_kquant.md)
    sees no clean lever for k5 (D4) and offers a sub-block unroll knob (D5) for both.
+   2026-09-01, the k6 swing dissected (zen2, one thread, fresh process each, us): alone 4153 / 4225 /
+   5468 / 4711; pinned to ONE core (start /affinity) 4040 / 5804 / 4220 / 4252 and 4138 / 4368 / 5632 /
+   5200 - it follows the process, not the core. k4 (1999-2005), k5 (3590-3760), k3 (2648-2850) and the
+   reference q6_K (3664-3768) do not swing. Arena base page-aligned (`--base-align 4096`): 4862 / 5971
+   / 6052 / 5916, at 65536: 6024 / 6364 / 5607 / 5567 - eight of eight slow, where the heap's 64-byte
+   draws run 4.0-4.3 two times in three. The sub-page phase sweep (`--base-offset` 0..3840 by 256, one
+   process each) reads 4383-6305 with no band (3840 -> 4383, 3584 -> 6231). Reading: the per-process
+   draw is the L1-set phase of k6's spill slots (the native stack, ASLR) against the planes; k6 has the
+   largest live set of the four (memo: 2 qh + 4 ql + 8 chains). The engine's image planes start on 16 KiB
+   boundaries (ARCHITECTURE_IMAGE.md 2.1a), i.e. the slow phase - the engine's k6 decode is ~0.61x, not
+   the ladder's 0.69-0.87. Spills counted in the cached JIT DLL (`objdump -d` over the `.map` range of
+   the `implementation` symbol): k6 72 ymm spill stores + 95 stack ymm reloads per superblock body (1224
+   instructions, 64 maddubs) against k5 20 + 8 and k3 42 + 13. Pinning the qh column loads (volatile, the
+   k3 cure) cut the stores to 27 but left 90 reloads and made k6 uniformly SLOW - engine phase 5537-5895,
+   heap phase 5574-6078 (the 4.0-4.3 mode gone), tile 634 -> 669 ms - so it was reverted; the memo's
+   "the pin gained nothing on k6" stands, and the fast mode is not the spill count. NEXT (its own session,
+   with counters - AMD uProf on this box): what the 4.0 and 6.0 modes differ in, at `--base-align 4096`
+   with `--base-offset` as the phase knob; only then D2's hoist / D5's unroll.
 3. Noise: the one-thread bench and the reference both drift ~5-8% run to run; interleaved rounds hold
    ours steady, the reference is re-run per table. iq3xxs/iq2s/iq2xxs tie at 1.00; k2 now clear.
 
