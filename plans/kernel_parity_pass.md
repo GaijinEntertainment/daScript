@@ -875,5 +875,14 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   LLVMContextImpl::~LLVMContextImpl, fault at a small offset), not the lattice IR. Correctness is unaffected
   (TEST bit-exact, all races produced numbers). A focused C++ session owns the fix; the parity numbers come
   from warm/tune runs meanwhile.
+- 2026-09-01: the cold-start crash FOUND and FIXED (17e664e7f). Cuts on zen4: L1 (permi2b calls, no table
+  loads) clean vs L2 (table loads, no permi2b) crash pinned the lattice's 64-byte table-part loads; the core
+  showed glibc's malloc_consolidate under ~LLVMContextImpl - heap corruption at compile time. Cause: the
+  llvm_boost LLVMBuildGEP2 wrapper's `inbounds = true` default called LLVMSetIsInBounds on the result, and a
+  GEP over a global with a constant index folds into a ConstantExpr - the cast to GetElementPtrInst wrote a
+  flag into the constant's memory. Every emitter GEP before the lattice had a variable index or a parameter
+  base, so nothing ever folded. The wrapper now builds inbounds GEPs through LLVMBuildInBoundsGEP2. Cold
+  SOLO and cold 16-lane team both pass on zen4. Dead ends on the way: startup race path (T1/T2), frame size
+  (five by-value grid tables), constant folding of the loads, split partitions, lane count.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
