@@ -38,11 +38,12 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 
 - `ARCHITECTURE_IMAGE.md` - sec.2.1-2.1i: the prepared-image rail, the baked dev-W f16 plane,
   and the baked tower twin-W plane.
-- `ARCHITECTURE_GPU.md` - sec.2.2b, 2.2w-2.2y: the tensor-GEMM and fused-attention shapes that
-  measured out, the tower attention routes, and the tower driver's encode chains.
-- `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2i, 2.2u-2.2v: the Metal prefill driver's GEMM form
-  ladder, dev-W knee map, attention slab, MoE bucket rail, chunked submission, the f16 twin
-  dual-store, and the last-layer FFN tail.
+- `ARCHITECTURE_GPU.md` - sec.2.2b, 2.2w-2.2z: the tensor-GEMM and fused-attention shapes that
+  measured out, the tower attention routes, the tower driver's encode chains, and the iquant
+  GEMV grid read with its f4-slab twin.
+- `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2i, 2.2u-2.2v, 2.2aa: the Metal prefill driver's
+  GEMM form ladder, dev-W knee map, attention slab, MoE bucket rail, chunked submission, the
+  f16 twin dual-store, the last-layer FFN tail, and the dense-KQ tensor mul_mm scaffold.
 - `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j-2.2q: the Vulkan resident driver - the prefill window
   chain, the cm2 decode lanes and tile pick, the class-pipeline build seat, the residency plan,
   the GPU-slot marks swap, the Q8 requant byte store, and the MoE expert chain on the cm2 tiles.

@@ -1691,11 +1691,9 @@ namespace das
         CodeOfPolicies              policies;
         vector<tuple<Module *,string,string,bool,LineInfo>> allRequireDecl;
         das_hash_map<uint64_t,TypeDecl *> astTypeInfo;
-        // compile-time file inputs a macro consumed beyond the sources (a tune sidecar, a config):
-        // (path, size, content hash) captured at registration via add_module_cache_dependency. The
-        // module cache stores and re-validates them, so a changed input invalidates the cached
-        // record instead of serving stamps minted against the old file. Content-hashed, not
-        // mtime'd: apps that rewrite their sidecar byte-identically on exit must not churn the cache.
+        // compile-time file inputs a macro pinned via add_module_cache_dependency: (path, byte
+        // size, content hash). The module cache stores and re-validates them, so a changed input
+        // invalidates the cached record instead of serving stamps minted against the old file.
         vector<tuple<string,int64_t,uint64_t>> moduleCacheDependencies;
     };
 

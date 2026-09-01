@@ -353,13 +353,13 @@ def tune_sidecar_stale(path : string) : bool {
 // the sidecar's "kernels" section as a flat { function name : perm suffix } map;
 // found = the file existed, parsed to an object, and is NOT stale vs the running binary
 // (a "kernels"-less but fresh sidecar counts as found-empty: runtime-knob-only files)
+[arch(at="../ARCHITECTURE.md#tune-sidecar-cache-pin")]
 def private read_manifest(path : string; var found : bool&) : table<string; string> {
     found = false
     var tab : table<string; string>
     if (empty(path)) {
         return <- tab
     }
-    // pins the sidecar into the module cache record BEFORE the staleness gate (no-op at runtime): a re-mint or a first mint must invalidate cached [tuned]/[tune_policy] stamps
     add_module_cache_dependency(path)
     if (tune_sidecar_stale(path)) {
         return <- tab

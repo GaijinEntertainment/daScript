@@ -22,9 +22,8 @@ require ?das_metal ../../tests/_metal_kernel_common.das
 // against a pinned llama.cpp test-backend-ops reference row, on synthetic planes, no model, no
 // tuner, seconds per cell. The dispatch-loop probe shape (HOW_TO_ADD_A_FORMAT.md QUIRK 22):
 // `reps` back-to-back dispatches per timed encoder (the shared y buffer's hazard serializes
-// them), best-of `rounds` encoders, arms interleaved round-robin per round so box drift cannot
-// crown a phantom winner. The metric is weight-plane GB/s for GEMV (decode is weight-bound) and
-// GMAC/s for mul_mm, plus us/dispatch for the reference ratio.
+// them), best-of `rounds` encoders. The metric is weight-plane GB/s for GEMV (decode is
+// weight-bound) and GMAC/s for mul_mm, plus us/dispatch for the reference ratio.
 //
 // Correctness before timing, per arm: one dispatch vs the CPU plane-dequant oracle
 // (kq_row_ref + double dot) over EVERY output element on the dot-envelope bar
@@ -67,9 +66,9 @@ struct Args {
 
 struct KqRaceFmt {
     name : string
-    fmt : int           // the kernel id (kq_fill_planes / kq_row_ref key)
-    gemv_gdiv : int     // GEMV rows per threadgroup (dispatch groups = ceil(d / gdiv))
-    split : bool        // split-scale form: the f16 d tail binds at nsb*16
+    fmt : int           //!< the kernel id (kq_fill_planes / kq_row_ref key)
+    gemv_gdiv : int     //!< GEMV rows per threadgroup (dispatch groups = ceil(d / gdiv))
+    split : bool        //!< split-scale form: the f16 d tail binds at nsb*16
 }
 
 struct KqRaceArm {
@@ -78,7 +77,7 @@ struct KqRaceArm {
     entry : string
     fastmath : bool
     tgmem : uint64
-    gdiv : int          // GEMV only; a candidate arm may change the row map
+    gdiv : int          //!< GEMV only; a candidate arm may change the row map
 }
 
 def race_formats : array<KqRaceFmt> {
@@ -98,11 +97,12 @@ def race_formats : array<KqRaceFmt> {
     ]
 }
 
-// (name, n = reduction dim, d = output rows); n % 256, d % 64. The 1B set carries the vehicle
-// GGUFs' geometry, the 3B pair the bigger DRAM-honest shapes.
-def race_shapes : array<tuple<string; int; int>> {
-    return <- [("kv1b", 2048, 512), ("q1b", 2048, 2048), ("w13_1b", 2048, 8192),
-        ("w2_1b", 8192, 2048), ("q3b", 3072, 3072), ("w13_3b", 3072, 8192)]
+//! every shape keeps n % 256 (the kq superblock) and d % 64 (the mul_mm n-tile); the 1B set is
+//! the vehicle GGUFs' geometry, the 3B pair the DRAM-honest ones
+def race_shapes : array<tuple<name : string; n : int; d : int>> {
+    return <- [(name = "kv1b", n = 2048, d = 512), (name = "q1b", n = 2048, d = 2048),
+        (name = "w13_1b", n = 2048, d = 8192), (name = "w2_1b", n = 8192, d = 2048),
+        (name = "q3b", n = 3072, d = 3072), (name = "w13_3b", n = 3072, d = 8192)]
 }
 
 def private want(filter, name : string) : bool {
@@ -150,7 +150,7 @@ def private gemv_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate GEMV sp
     return <- arms
 }
 
-def private mvb_arms(f : KqRaceFmt) : array<KqRaceArm> {   // the B2 batch-decode pair per grid format: prod vs the cvt-compose candidate
+def private mvb_arms(f : KqRaceFmt) : array<KqRaceArm> {   // the B2 batch-decode arm per grid format; candidate spellings register here, after prod
     var arms : array<KqRaceArm>
     if (f.fmt == 33) {
         arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl, entry = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_entry, fastmath = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_fastmath, tgmem = 0ul, gdiv = 8))
@@ -193,8 +193,7 @@ def private mm_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate mul_mm sp
     } else {
         arms |> push(KqRaceArm(name = "prod", src = MetalKqMulMmIq2xxs_metal_kq_mulmm_msl, entry = MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_entry, fastmath = MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_fastmath, tgmem = MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_tgmem, gdiv = 0))
     }
-    // the existing Metal-4 tensor twins (f32-X form) - the ceiling the nine formats' twins chase;
-    // the pipeline declines cleanly on a box without the tensor toolchain
+    //! the Metal-4 tensor twins (f32-X form) are the ceiling the per-format twins chase; their pipeline build declines cleanly on a box with no tensor toolchain
     if (f.fmt == 4) {
         arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmK4T_metal_kq_mulmm_t_msl, entry = MetalKqMulMmK4T_metal_kq_mulmm_t_msl_entry, fastmath = MetalKqMulMmK4T_metal_kq_mulmm_t_msl_fastmath, tgmem = MetalKqMulMmK4T_metal_kq_mulmm_t_msl_tgmem, gdiv = 0))
     } elif (f.fmt == 5) {
@@ -223,7 +222,7 @@ def private mm_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate mul_mm sp
     return <- arms
 }
 
-let PREFILL_M = 512   // the mm tier's token batch
+let PREFILL_M = 512
 
 def private load_ref_table(path : string; var tab : table<string; double>) {
     return if (empty(path))
@@ -246,7 +245,7 @@ def private load_ref_table(path : string; var tab : table<string; double>) {
     }
 }
 
-// one timed encoder: bind once, `reps` back-to-back dispatches; per-dispatch GPU us, <0 on failure
+//! one timed encoder: bind once, `reps` back-to-back dispatches; per-dispatch GPU us, <0 on failure
 def private time_arm_us(queue; pso; arm : KqRaceArm; bks, bkq, bx, by, b5, b6; sc_off : uint64; groups : uint3; tgsz, reps : int) : double {
     var err = ""
     var gpu_ms = 0.0lf
@@ -273,7 +272,7 @@ def private time_arm_us(queue; pso; arm : KqRaceArm; bks, bkq, bx, by, b5, b6; s
     return gpu_ms * 1000.0lf / double(reps)
 }
 
-// the whole-output dot-envelope oracle the tests trust: want/env from kq_row_ref + double dot
+//! the whole-output dot-envelope oracle the tests trust: want/env from kq_row_ref + double dot
 def private build_oracle(fmt, n, d, nsb : int; kq, ks : array<uint8>; xf : array<float>; xstride, xrows : int;
                          var want : array<float>; var env : array<float>) {
     var wrow : array<float>
@@ -296,10 +295,11 @@ def private build_oracle(fmt, n, d, nsb : int; kq, ks : array<uint8>; xf : array
     delete wrow
 }
 
+[arch(at="../../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
 def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : int;
                       arms : array<KqRaceArm>; args : Args; ref_tab : table<string; double>) : int {
     let is_mm = tier == "mm"
-    let is_mvb = tier == "mvb"   // 2-column batch decode: same dispatch shape as gemv at gdiv 8, ka args at binding 5
+    let is_mvb = tier == "mvb"   //! 2-column batch decode: gemv's dispatch shape at gdiv 8, ka args at binding 5
     let nb = n / 256
     let nsb = d * nb
     var kq : array<uint8>
@@ -319,14 +319,14 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
     var bks = buf_upload(dev, ks)
     var bkq = buf_upload(dev, kq)
     var bx = buf_upload(dev, xf)
-    var kav <- [uint(n), uint(d), uint(d), 2u]   // KqMvArgs{ndim, ddim, ys, nr} as its raw words
+    var kav <- [uint(n), uint(d), uint(d), 2u]   //! KqMvArgs{ndim, ddim, ys, nr} as its raw words
     var b5 = is_mvb ? buf_upload(dev, kav) : buf_u32(dev, uint(n))
     var b6 = buf_u32(dev, uint(d))
     let sc_off = f.split ? uint64(nsb * 16) : 0ul
     let wbytes = double(length(kq) + length(ks))
     var rows = 0
     print("--- {f.name} {tier} {shname} (n={n} d={d}, weights {wbytes / 1048576.0lf} MB)\n")
-    // compile + correctness gate, one y per arm
+    //! compile + correctness gate, one y buffer per arm
     var psos : array<MetalComputePipeline?>
     var bys : array<MetalBuffer?>
     var live : array<bool>
@@ -358,8 +358,6 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
             lv = false
         }
     }
-    // clock ramp: burn GPU time on arm 0 until the budget is spent, so the first timed
-    // encoder runs at sustained clocks even in a sparse (few-cell) invocation
     var burned = 0.0lf
     while (burned < double(args.burn_ms) * 1000.0lf) {
         var did = false
@@ -374,7 +372,6 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
         }
         break if (!did)
     }
-    // interleaved timing: round-robin per round, best-of (round 0 discarded as warmup)
     var best : array<double>
     best |> resize(length(arms))
     for (i in range(length(arms))) {
@@ -401,7 +398,7 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
         if (i == 0) {
             base_us = us
         }
-        let gbs = wbytes / (us * 1000.0lf)   // us * 1e3 = ns; bytes/ns = GB/s
+        let gbs = wbytes / (us * 1000.0lf)   //! us * 1e3 = ns; bytes/ns = GB/s
         var line = "  {arm.name}: {us:.2f} us/dispatch  {gbs:.1f} wGB/s"
         if (is_mm) {
             let gmac = double(PREFILL_M) * double(n) * double(d) / (us * 1000.0lf)
@@ -430,7 +427,7 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
     metal_release(bx)
     metal_release(b5)
     metal_release(b6)
-    psos |> clear()   // borrowed pointers - clear before delete (delete would free pointees)
+    psos |> clear()   //! borrowed pointers - clear before delete (delete would free the pointees)
     bys |> clear()
     unsafe {
         delete psos
@@ -462,21 +459,21 @@ def private main_apple(args : Args) {
     for (f in fmts) {
         continue if (!want(args.fmts, f.name))
         for (sh in shapes) {
-            continue if (!want(args.shapes, sh._0))
+            continue if (!want(args.shapes, sh.name))
             if (want(args.tiers, "gemv")) {
                 var arms <- gemv_arms(f)
-                rows += race_cell(queue, dev, f, "gemv", sh._0, sh._1, sh._2, arms, args, ref_tab)
+                rows += race_cell(queue, dev, f, "gemv", sh.name, sh.n, sh.d, arms, args, ref_tab)
                 delete arms
             }
             if (want(args.tiers, "mm")) {
                 var arms <- mm_arms(f)
-                rows += race_cell(queue, dev, f, "mm", sh._0, sh._1, sh._2, arms, args, ref_tab)
+                rows += race_cell(queue, dev, f, "mm", sh.name, sh.n, sh.d, arms, args, ref_tab)
                 delete arms
             }
             if (want(args.tiers, "mvb")) {
                 var arms <- mvb_arms(f)
                 if (!empty(arms)) {
-                    rows += race_cell(queue, dev, f, "mvb", sh._0, sh._1, sh._2, arms, args, ref_tab)
+                    rows += race_cell(queue, dev, f, "mvb", sh.name, sh.n, sh.d, arms, args, ref_tab)
                 }
                 delete arms
             }

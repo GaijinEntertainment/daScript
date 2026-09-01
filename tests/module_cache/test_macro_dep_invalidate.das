@@ -6,14 +6,14 @@ require dastest/testing_boost public
 require strings
 require daslib/fio
 
-// argv[0] is the running interpreter; dastest is invoked as
-// `daslang(.exe) dastest/dastest.das ...`, so argv[0] is the daslang binary to spawn.
+//! the daslang binary to spawn - dastest runs as `daslang(.exe) dastest/dastest.das ...`,
+//! so argv[0] is the interpreter, not the test script
 def das_exe() : string {
     let args <- get_command_line_arguments()
     return empty(args) ? "" : args[0]
 }
 
-// child env rides the command string (the portable set/prefix split popen_argv cannot carry)
+//! child env rides the command string (the portable set/prefix split popen_argv cannot carry)
 def env_run(dep, cmd : string; var output : string&) : int {
     let win = get_platform_name() == "windows"
     let full = win ? "set MC_DEP_FILE={dep}&& {cmd}" : "MC_DEP_FILE={dep} {cmd}"
@@ -33,11 +33,9 @@ def report_child(t : T?; phase : string; rc : int; out : string; marker : string
     return ok
 }
 
-// A macro-registered file dependency (add_module_cache_dependency - the tune-sidecar shape)
-// must gate the module cache by CONTENT: an untouched or byte-identically rewritten input
-// serves from cache, a content change invalidates the record and reparses - otherwise the
-// cache serves macro output minted against the old file (stale tune stamps, empty
-// tune_status, winners nobody raced).
+//! the module cache must gate a macro-registered file input by CONTENT, not mtime: a tune
+//! sidecar is rewritten byte-identically on every exit, and a record served stale replays
+//! macro output minted against the old file - stale stamps, empty tune_status, unraced winners.
 [test]
 def test_macro_dep_invalidate(t : T?) {
     var terr : string
@@ -60,13 +58,10 @@ def test_macro_dep_invalidate(t : T?) {
     var warm : string
     let warmRc = env_run(dep, cmd, warm)
     t |> success(report_child(t, "warm", warmRc, warm, "deser: clean"), "warm run served every module from the cache")
-    // byte-identical rewrite (fresh mtime): content gating must keep the cache warm - the
-    // bench sidecar is rewritten on every exit, and mtime gating would repay the parse each run
     fwrite(dep, "content v1")
     var rewrite : string
     let rewriteRc = env_run(dep, cmd, rewrite)
     t |> success(report_child(t, "rewrite", rewriteRc, rewrite, "deser: clean"), "byte-identical rewrite stays cached")
-    // content change: the record must invalidate, name the file, and the reparse still pass
     fwrite(dep, "content v2 - re-minted")
     var changed : string
     let changedRc = env_run(dep, cmd, changed)

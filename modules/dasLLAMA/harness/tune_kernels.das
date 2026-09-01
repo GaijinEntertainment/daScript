@@ -2349,17 +2349,9 @@ def private metal_twin_absorb(var wins : array<string>; var ran : bool&; r) {
     }
 }
 
-// half a percent, best-of-3: the crown's real serving win where it wins is small (+0.6% M5)
-// and its real serving loss where it loses is large (-8.6% M4) - the margin only has to
-// separate those from run noise, and a spuriously minted crown costs a re-mint, not a board
 let CONFIRM_TG_MARGIN = 1.005lf
 
-// The serving-truth crown confirm: some GEMV crowns are UNDECIDABLE by any isolated kernel
-// race (kq_gemv_iq2xxs_f4: every raced regime crowns the M4-class twin that serving rejects -
-// a mixed-stream occupancy effect only the real decode graph shows). Those crowns are minted
-// HERE, on the real shapes: two temp manifests differing only in runtime.metal_tensor
-// membership, lcpp_bench tg128 per arm under DAS_TUNE_MANIFEST, margin-decided. No vehicle
-// on the box = no crown (the base kernel is the safe side) with a provision hint.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
 def private confirm_serving_crown(crown : string; var wins : array<string>) {
     let model = confirm_decode_model()
     if (empty(model)) {
@@ -2397,10 +2389,7 @@ def private confirm_decode_model() : string {
     return empty(best) ? "" : "{md}{best}"
 }
 
-// one confirm arm: a minimal manifest (empty kernels - both arms stamp identical fallbacks,
-// so the tg DELTA isolates the crown) whose runtime.metal_tensor carries the raced wins plus
-// optionally the crown under test; lcpp_bench serves it via DAS_TUNE_MANIFEST and its tg128
-// line is the verdict
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
 def private confirm_tg_run(model : string; wins : array<string>; extra : string) : double {
     var crowns = join(wins, ",")
     if (!empty(extra)) {
@@ -2583,7 +2572,6 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
                 metal_twin_absorb(mt_wins, mt_ran, r)
             }
             if (mt_ran) {
-                // the crown no isolated race can decide - minted on the real shapes instead
                 confirm_serving_crown("kq_gemv_iq2xxs_f4", mt_wins)
             }
         }

@@ -7,9 +7,8 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/fio
 
-// The module-cache dependency gate's fixture macro: [dep_probe] registers the file named by
-// MC_DEP_FILE as a compile-time input of the compiling module, exactly the way a tune-sidecar
-// read does (add_module_cache_dependency in llvm_tune's read_manifest).
+//! the module-cache dependency gate's fixture macro - it pins MC_DEP_FILE exactly the way a
+//! tune-sidecar read does (llvm_tune's read_manifest calls add_module_cache_dependency)
 [function_macro(name = "dep_probe")]
 class private DepProbe : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {

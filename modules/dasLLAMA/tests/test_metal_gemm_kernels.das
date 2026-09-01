@@ -2065,7 +2065,7 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 24, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 25, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 25, false, 32, 256, 128)
-                // the iquant tensor twins (T + TH stamps; twins feint without Metal-4)
+                //! the iquant tensor twins (T + TH stamps; twins feint without Metal-4)
                 for (fmt in [44, 45, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64, halfx = true)

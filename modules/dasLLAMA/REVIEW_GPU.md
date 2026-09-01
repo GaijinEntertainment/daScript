@@ -177,6 +177,15 @@ times both kernels on one queue and compares their outputs.
 small enough to sit in cache ranks the kernels by an effect production never sees, and the
 race then picks the slower kernel.
 
+**A race arm that dispatches a chain of one kernel binds a DIFFERENT output buffer for
+consecutive dispatches - never one shared output across the chain.** One shared output
+serializes the chain on its write-after-read hazard while the served graph overlaps
+consecutive dispatches, so the race ranks the arms on a shape production never runs.
+
+**A Metal race spends GPU work on its own arms before its first timed round, and keeps the
+dispatches inside each timed encoder back to back.** The arms alternate, so a first round on
+an idle clock bills the governor's ramp to one side.
+
 **A string-typed Metal decline reason is a defect - a Metal decline reason is an enum value in
 `dasllama/dasllama_metal_shapes.das`, one enum per driver.**
 

@@ -588,6 +588,7 @@ namespace das {
     // sanity bound on a record's macro-dependency count: a real program registers a handful
     // (one per consumed sidecar/config); anything past this reads as stream corruption
     static constexpr uint32_t SER_MAX_MACRO_DEPS = 4096u;
+    static constexpr uint64_t FNV64A_SEED = 14695981039346656037ul;   // an EXISTING empty file must hash unlike an absent one (hash 0)
 
     void statAndHashFileDependency ( const string & path, int64_t & size, uint64_t & hash ) {
         size = -1;
@@ -604,7 +605,7 @@ namespace das {
             size_t got = fsize ? fread(bytes.data(), 1, size_t(fsize), f) : 0;
             if ( got == size_t(fsize) ) {
                 size = int64_t(fsize);
-                hash = fsize ? hash_block64(bytes.data(), size_t(fsize)) : 14695981039346656037ul; // fnv64a seed for the empty file
+                hash = fsize ? hash_block64(bytes.data(), size_t(fsize)) : FNV64A_SEED;
             }
         }
         fclose(f);
@@ -677,10 +678,9 @@ namespace das {
             return false;
         }
 
-        // a compile-time input a macro consumed (a tune sidecar) changed since the record was
-        // written: the cached stamps were minted against the old file - same prefix cutoff as a
-        // changed source. Compared by CONTENT (size + hash), not mtime: apps rewrite their
-        // sidecar byte-identically on exit, and that must not churn the cache.
+        // a compile-time input a macro consumed (a tune sidecar) changed since this record was
+        // written, so its cached stamps are stale. Compared by CONTENT (size + hash), not mtime:
+        // apps rewrite their sidecar byte-identically on exit, and that must not churn the cache.
         for ( auto & dep : savedDeps ) {
             int64_t depSize = -1;
             uint64_t depHash = 0;
@@ -1437,7 +1437,6 @@ namespace das {
             *serializer_write << fileMtime;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
-            // macro file dependencies: header-resident, validated by the reader before the payload
             uint32_t depCount = uint32_t(program->moduleCacheDependencies.size());
             *serializer_write << depCount;
             for ( auto & dep : program->moduleCacheDependencies ) {

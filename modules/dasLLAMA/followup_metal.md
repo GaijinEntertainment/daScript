@@ -82,3 +82,12 @@ Measured ceiling of ALL remaining converts (`DASLLAMA_METAL_PREFILL_SKIP=act_cvt
   every elementwise kernel, attention, the CPU-fallback paths, logits/readback - and
   re-opens the numerics bars across the parity and prefill suites. ITS OWN ARC, planned;
   the acceptance bar is the existing parity suites plus a pp/tg board A/B per class.
+
+## 5. The dense-KQ tensor twins' missing stamps
+
+The nine iquant/split-scale tensor mul_mm twins stamp `T` and `TH` only. k4/k5/k6 additionally
+carry the tall (`TH128`) and double-buffered (`THDb`, `THDb128`) stamps, and that is where the
+tall in-kernel-dequant win lives (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2c form 1). Race a tall
+stamp for the iquant scaffold before assuming the k6 result transfers; the arc-end matrix's
+soft spot is the deep-K w2 column (k6 0.91x / iq3s 0.88x / iq3xxs 0.92x vs llama.cpp on m5),
+which is exactly the column a tall stamp serves.

@@ -267,11 +267,9 @@ namespace das {
         return program;
     }
 
-    // Pin an extra compile-time file input (a tune sidecar, a config a macro read) into the
-    // module cache: the record stores (path, mtime, size) and the reader re-validates them, so
-    // a change to the file invalidates the cached module instead of serving stale macro output.
-    // Deliberately a NO-OP outside compilation - manifest readers run at runtime too, and the
-    // call site stays unconditional.
+    // pins a file a macro read (a tune sidecar) as a compile-time input of the compiling module,
+    // so a change to it invalidates the cached record. A deliberate NO-OP outside compilation -
+    // manifest readers also run at runtime, and their call site stays unconditional.
     void addModuleCacheDependency ( const char * path, Context *, LineInfoArg * ) {
         auto program = daScriptEnvironment::getBound()->g_Program;
         if ( !program || !path || !path[0] ) return;

@@ -6,7 +6,7 @@ require dasllama/dasllama_tune
 require daslib/fio
 require daslib/module_path
 require strings
-require llvm/daslib/llvm_tune   // tune_box_identity - the stale-sidecar cell's manifest must pass the box gate
+require llvm/daslib/llvm_tune
 
 // Part 2 (final assembly): one source of truth, reconstituted into the real symbol.
 def template sample_dot_template(a, b : array<float>) : float {
@@ -24,7 +24,7 @@ def sample_dot(a, b : array<float>) : float {}
 
 // `fallback=` supplies a kernel's own hand hints when they aren't the global vec8_u2; the box
 // profile still overrides it (precedence: perm > profile > fallback > vec8_u2). Validation proof:
-// an unknown fallback name fails the compile with "tuned: unknown perm" (negative-probed), so this
+// an unknown fallback name fails the compile with "tuned: fallback perm ... not in grid", so this
 // compiling proves the fallback names a valid grid perm — the one consulted whenever no profile
 // entry / perm pin applies (and no profile carries this test-local kernel's key).
 [tuned(fallback = "u2", src = "sample_dot_template")]
@@ -46,13 +46,10 @@ def test_tuned_reconstitutes(t : T?) {
     t |> equal(sample_dot_u2(a, b), reference(a, b), "tuned default=u2 sample_dot_u2 == reference")
 }
 
-// The sidecar is measured data, not law: a manifest entry naming a perm the grid no longer
-// offers (a grid rework since the mint) must not brick the compile - the macro stamps the
-// fallback and says so, so the tuner that would re-race the entry can always run. The hard
-// refusal survives only for an explicit perm= pin (cant_tuned_bad_pin.das).
+//! the sidecar arm: an out-of-grid sidecar perm stamps the fallback instead of failing the compile - the explicit perm= pin twin is cant_tuned_bad_pin.das
 [test]
 def test_tuned_stale_sidecar_perm(t : T?) {
-    let args <- get_command_line_arguments()  // locked view - do not delete
+    let args <- get_command_line_arguments()
     let bin = args[0]
     let tmpRes = create_temp_file_result("tuned_stale_perm_", ".json")
     if (tmpRes is error) {

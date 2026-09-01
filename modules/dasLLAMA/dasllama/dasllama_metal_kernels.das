@@ -3753,6 +3753,7 @@ def enc_gemv(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64; bx, b
 // K-quant site GEMV — the per-format twin of enc_gemv over the kq plane pair
 // (kq_upload_quants + kq_upload_scales). k6 binds the scale buffer twice: the trailing packed
 // f16 d plane at byte nsb*16, the 16B sub-scale blocks at 0. Geometry: 64-thread tg, 4 rows.
+[arch(at="../ARCHITECTURE_GPU.md#metal-iquant-gemv-grid")]
 def enc_kq_gemv(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64;
                 bs : MetalBuffer?; soff, doff : uint64; bx, by, bn, bd : MetalBuffer?;
                 rows, n : int64; yoff : uint64 = 0ul; xoff : uint64 = 0ul) {
@@ -4703,6 +4704,7 @@ def private race_decode_family(dev : MetalDevice?; queue : MetalCommandQueue?; f
 }
 
 //! Decode-side tuner entry (the runtime.metal_tensor crown): the batch q8 GEMM families.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
 def metal_tensor_race_decode : array<MetalTensorRaceResult> {
     var results : array<MetalTensorRaceResult>
     var dev = metal_create_system_default_device()
@@ -4734,9 +4736,6 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
         64, kdim, ndim, 64 * ndim, uint3(uint(2 * (ndim / 64)), 1u, 1u), rka) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
     })
-    //! kq_gemv_iq2xxs_f4 is NOT auto-raced (every isolated regime crowns the M4-class twin
-    //! that serving rejects at -8.6% - a mixed-stream occupancy effect no kernel race sees);
-    //! the mint's real-model tg A/B decides it instead (tune_kernels' confirm_serving_crown).
     results |> emplace(race_gemv_f4_twin(dev, queue, "kq_gemv_iq3s_f4",
         metal_kq_gemv_iq3s_msl, metal_kq_gemv_iq3s_msl_entry, metal_kq_gemv_iq3s_msl_fastmath,
         metal_kq_gemv_iq3s_f4_msl, metal_kq_gemv_iq3s_f4_msl_entry, metal_kq_gemv_iq3s_f4_msl_fastmath, metal_kq_gemv_iq3s_f4_msl_tgmem, 26, 4, 8))
@@ -4748,17 +4747,14 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
     return <- results
 }
 
-//! A GEMV f4-slab twin race over the split-scale fixture: base (constant-table, rows/4)
-//! vs the f4-slab twin. The slab wins on M5-class GPUs and REGRESSES on M1/M4-class - a
-//! per-box crown, not a heuristic. Winner "tensor" = the twin takes the family crown.
+//! A GEMV f4-slab twin race over the split-scale fixture: base (constant-table, rows/4) vs
+//! the f4-slab twin. Winner "tensor" = the twin takes the family crown.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
 def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;   // nolint:STYLE038 - one-shot A/B race harness; buffers + PSOs stay live to the release tail
                               base_src, base_entry : string; base_fm : bool;
                               twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
                               qu_per_sb : int; base_gdiv, twin_gdiv : int) : MetalTensorRaceResult {
     var res = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
-    //! the dominant decode site shape (ffn-up class) - the crown must be minted on what the
-    //! served graph dispatches; a mid-size square fixture crowned the M4 iq2xxs twin that
-    //! the real shapes reject
     let kdim = 2048
     let ndim = 8192
     let nsb = kdim / 256
@@ -4798,17 +4794,12 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
     var bxa = race_buf(dev, uint64(kdim * 4), unsafe(addr<void?>(xa[0])))
     var by_base = race_buf(dev, uint64(ndim * 4), null)
     var by_twin = race_buf(dev, uint64(ndim * 4), null)
-    //! overlap ys: the served graph's consecutive gemvs write DIFFERENT buffers and overlap;
-    //! a same-y serialized chain misjudged the M4 iq2xxs slab twin (+9% raced, -8.6% e2e)
     var by_base2 = race_buf(dev, uint64(ndim * 4), null)
     var by_twin2 = race_buf(dev, uint64(ndim * 4), null)
     var bn = race_uniform_u32(dev, uint(kdim))
     var bd = race_uniform_u32(dev, uint(ndim))
     let doff = uint64(nblk * 16)
     let tg = uint3(64u, 1u, 1u)
-    //! clock-governor burn: race_pair runs base-then-twin per round, so on a ramp-prone GPU
-    //! the first side pays the ramp the second rides - ~150ms of GPU work first makes the
-    //! alternation fair (the M4 iq2xxs crown flipped on exactly this bias)
     var burn_ms = 0.0lf
     var burn_err = ""
     while (burn_ms < 150.0lf) {
@@ -4837,7 +4828,7 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_buffer(enc, bxa, 0ul, 3)
         kn_buffer(enc, bn, 0ul, 5)
         kn_buffer(enc, bd, 0ul, 6)
-        for (r in range(32)) {   //! back-to-back dispatches keep the clock governor ramped - a single sparse dispatch reads idle-clock times and can flip the verdict
+        for (r in range(32)) {
             kn_buffer(enc, (r & 1) == 0 ? by_base : by_base2, 0ul, 4)
             kn_dispatch(enc, uint3(uint(ndim / base_gdiv), 1u, 1u), tg)
         }
@@ -8685,9 +8676,8 @@ class MetalKqGemvIq4nl {
     }
 }
 
-// IQ3_S: w = d*sc*(+-grid byte); constant-grid words float-expanded in place, sign nibbles
-// from the block's sign plane, 2 rows per simdgroup, dispatch rows/4. Scale plane = the
-// iq4xs/k6 split form.
+// IQ3_S: w = d*sc*(+-grid byte), the sign nibbles from the block's own sign plane;
+// 2 rows per simdgroup.
 [metal_dispatch(name = "enc_kq_iq3s_c", pso = "g_pso_kq_iq3s", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq3s {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
@@ -8744,8 +8734,6 @@ class MetalKqGemvIq3s {
     }
 }
 
-// The f4-slab twin (the shipped pre-d1 form verbatim) - crowns "kq_gemv_iq3s_f4" where the
-// box race prefers it (M5-class); M1/M4-class regress on the slab and keep the d1 base.
 [metal_dispatch(name = "enc_kq_iq3s_f4_c", pso = "g_pso_kq_iq3s_f4", tgmem = "metal_kq_gemv_iq3s_f4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
 class MetalKqGemvIq3sF4 {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
@@ -8755,7 +8743,7 @@ class MetalKqGemvIq3sF4 {
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
-    @workgroup gridf : float4[512]   // magnitudes pre-expanded at stage time: the inner loop reads one float4 and flips signs, no byte extracts (the best of the eight raced forms, the reference exe's geometry included)
+    @workgroup gridf : float4[512]   // magnitudes pre-expanded at stage time: the inner loop reads one float4 and flips signs, no byte extracts
 
     [metal_kernel(name="metal_kq_gemv_iq3s_f4_msl")]
     def metal_kq_gemv_iq3s_f4 {
@@ -8810,9 +8798,9 @@ class MetalKqGemvIq3sF4 {
     }
 }
 
-// IQ2_S: the iq3s GEMV geometry (2 rows per simdgroup, dispatch rows/4) over the u64 grid pair
-// read DIRECT off the constant table and float-expanded in place; per-16 UNSIGNED strips scale
-// each 16-element half, d pre-eighth-ed at transcode - the fold is d8 * strip * signed_grid_byte.
+// IQ2_S: the iq3s GEMV geometry over the u64 grid pair; per-16 UNSIGNED strips scale each
+// 16-element half and d is pre-eighth-ed at transcode, so the fold is
+// d8 * strip * signed_grid_byte.
 [metal_dispatch(name = "enc_kq_iq2s_c", pso = "g_pso_kq_iq2s", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq2s {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
@@ -8879,8 +8867,8 @@ class MetalKqGemvIq2s {
 }
 
 // IQ2_XS: the iq2s GEMV geometry over the parity-signed u16 words - one u32 = two u16 qs
-// words; 9-bit index doubles into the constant grid pair (float-expanded in place, no slab),
-// ksign7m recomputes the sign byte (no sign plane, no qh); per-16 UNSIGNED strips, d eighth-ed.
+// words, the 9-bit index doubles into the grid pair, and ksign7m recomputes the sign byte
+// (no sign plane, no qh); per-16 UNSIGNED strips, d eighth-ed.
 [metal_dispatch(name = "enc_kq_iq2xs_c", pso = "g_pso_kq_iq2xs", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq2xs {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
@@ -9008,8 +8996,7 @@ class MetalKqGemvIq2xxs {
 }
 
 // The f4-slab twin: the same lane map with the 2 KB grid pre-expanded to float4 magnitudes
-// (8 KB threadgroup) and signs applied by select - crowns "kq_gemv_iq2xxs_f4" where the box
-// race prefers it (M5-class GPUs; M1/M4-class regress on the slab).
+// (8 KB threadgroup) and signs applied by select.
 [metal_dispatch(name = "enc_kq_iq2xxs_f4_c", pso = "g_pso_kq_iq2xxs_f4", tgmem = "metal_kq_gemv_iq2xxs_f4_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq2xxsF4 {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
@@ -9076,9 +9063,8 @@ class MetalKqGemvIq2xxsF4 {
     }
 }
 
-// IQ3_XXS: the iq3s GEMV shape verbatim over the 24-word rows - constant-grid words
-// float-expanded in place, signs from the block's aux32 through the parity helper (no table),
-// the same (2ls+1)-strip x halved-d fold. 2 rows per simdgroup, dispatch rows/4.
+// IQ3_XXS: the iq3s GEMV shape over the 24-word rows - signs from the block's aux32 through
+// the parity helper (no table), the same (2ls+1)-strip x halved-d fold.
 [metal_dispatch(name = "enc_kq_iq3xxs_c", pso = "g_pso_kq_iq3xxs", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq3xxs {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
@@ -9134,8 +9120,6 @@ class MetalKqGemvIq3xxs {
     }
 }
 
-// The f4-slab twin (the shipped pre-d1 form verbatim) - crowns "kq_gemv_iq3xxs_f4" where the
-// box race prefers it (M5-class); M1/M4-class regress on the slab and keep the d1 base.
 [metal_dispatch(name = "enc_kq_iq3xxs_f4_c", pso = "g_pso_kq_iq3xxs_f4", tgmem = "metal_kq_gemv_iq3xxs_f4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
 class MetalKqGemvIq3xxsF4 {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
@@ -9371,7 +9355,7 @@ class MetalKqMvB8Iq3xxs {
 }
 
 // The iq3s B2/B4 pair: the iq4xs shell over the per-32-block lane map — lane tx owns block tx,
-// 8 grid words = 32 consecutive elems as float4s; the grid read direct.
+// 8 grid words = 32 consecutive elems as float4s.
 [ |> template_struct_instance]
 class template MetalKqMvIq3sT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
