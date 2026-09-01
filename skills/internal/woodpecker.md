@@ -11,18 +11,24 @@ never runs dry - so the damper below is part of the design, not a cost-saving me
 ## Invocation
 
 ```bash
+# both paths outside the repo - the session scratchpad, or logs/
+report=${SCRATCH:-/tmp}/woodpecker.md
+log=${SCRATCH:-/tmp}/woodpecker.log
+
 # a branch against its base (the normal PR shape)
-codex exec --sandbox read-only -o <report.md> review --base origin/master 2>&1 | tee <run.log>
+codex exec --sandbox read-only -o "$report" review --base origin/master 2>&1 | tee "$log"
 # one commit
-codex exec --sandbox read-only -o <report.md> review --commit <sha> 2>&1 | tee <run.log>
-# an empty report is not a skip - it moves the harvest to the log
-[ -s <report.md> ] || echo "empty report - harvest from <run.log>"
-# this one means the round never ran
-grep -q "Review was interrupted" <run.log> && echo "ROUND DID NOT RUN - disclose as skipped"
+sha=$(git rev-parse HEAD)
+codex exec --sandbox read-only -o "$report" review --commit "$sha" 2>&1 | tee "$log"
+
+# either of these means the round never ran - disclose it as skipped
+[ -s "$report" ] || echo "EMPTY REPORT - no round"
+grep -q "Review was interrupted" "$log" && echo "INTERRUPTED - no round"
 ```
 
-A round writes two sinks: the `-o` report file and the tee'd run log. Either can hold the
-findings, and the report file can come back empty on a round that succeeded.
+A round writes two sinks with different jobs: the `-o` report file holds the verdict and the
+findings, and the tee'd run log holds the exec trace - what the round actually read and ran.
+The report answers "what did it find", the log answers "did it look".
 
 - Global flags go BEFORE the `review` subcommand. `--base` / `--commit` cannot be combined
   with a custom prompt - a custom prompt runs the generic agent, not the native reviewer;
@@ -32,17 +38,15 @@ findings, and the report file can come back empty on a round that succeeded.
   unrelated upstream commits into the review.
 - Write both sinks outside the repo (the session scratchpad) or under `logs/` (gitignored) -
   a bare in-tree filename is exactly the untracked debris the preflight gate rejects.
-- Run it in a tree checked out at the tip you want reviewed, and pin that sha beside the sink
-  you keep - findings are claims about exact bytes, and re-reviews only mean anything against
-  a pinned commit. The pinned sha does not freeze what codex reads: the tree must not change
+- Run it in a tree checked out at the tip you want reviewed, and pin that sha beside both
+  sinks - findings are claims about exact bytes, and re-reviews only mean anything against a
+  pinned commit. The pinned sha does not freeze what codex reads: the tree must not change
   until harvest - launch after the last mutating step, or give the run its own worktree at
   that sha.
-- **Harvest from whichever sink holds the findings; when the report is empty the run log is
-  the record.**
 - **Never read the exit status as the verdict: codex exits 0 on a round that never ran.**
-  Expired auth exits 0 having printed `Review was interrupted` and token-refresh errors and
-  nothing else. A round counts as run only when a sink holds P-ranked
-  findings (P1 highest) or an exec trace over the diff's files; anything else is a skip.
+  Expired auth exits 0 having printed `Review was interrupted` and token-refresh errors, and
+  leaves the report file empty - so an empty report is a round that did not happen, never a
+  round that found nothing. A round that found nothing still writes its verdict there.
 - No `codex` on PATH, or a round that did not run? The round is skipped, and the PR body says
   so - the gate is the disclosure, never a silent pass.
 - A round can finish in under a minute or run for tens of minutes - run it in a background
