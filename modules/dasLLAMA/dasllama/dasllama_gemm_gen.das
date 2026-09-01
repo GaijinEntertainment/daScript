@@ -1745,7 +1745,7 @@ def private row_weights8(var te : TileEmit; var base : LLVMOpaqueValue?; blk, l 
 def private emit_grid_rows_blk(var te : TileEmit; var wbP, xb : LLVMOpaqueValue?; blk : int; var signCol : LLVMOpaqueValue? [2]; var a, a1 : LLVMOpaqueValue? [8]; iq2 : bool) {
     let b = te.builder
     let n = te.width / 64
-    let colSigns = te.kq == 33 || te.kq == 23
+    let colSigns = te.kq == 33 || te.kq == 23 || te.dotKind != DOT_SDOT   // x86: the sign column's mask beats four table loads + three inserts per group; the sdot lattice keeps the table for the ksigns formats
     for (qd in range(te.rq)) {
         var acc : LLVMOpaqueValue? [2]    // per row group; the lo strip (l < 2) when iq2
         var acc1 : LLVMOpaqueValue? [2]   // iq2: the hi strip (l >= 2)
@@ -1850,7 +1850,7 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
             a1[i] = LLVMConstNull(te.vni32)
         }
         var signCol : LLVMOpaqueValue? [2]   // this block's sign bytes, rows qd*rv.. at stride 4 - the gemv negates per vector, the tile's panel arrives signed
-        if (gather && (!pairs || te.kq == 33 || te.kq == 23)) {
+        if (gather && (!pairs || te.kq == 33 || te.kq == 23 || te.dotKind != DOT_SDOT)) {
             for (qd in range(rq)) {
                 signCol[qd] = kq_sign_bytes(te, wbP, blk, qd, "sgc{blk}_{qd}")
             }
