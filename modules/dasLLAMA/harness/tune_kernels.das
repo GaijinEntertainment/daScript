@@ -2403,6 +2403,7 @@ def private confirm_tg_run(model : string; wins : array<string>; extra : string)
     }
     let tmpm = tmpmRes as value
     if (!fwrite(tmpm, "\{\"kernels\": \{\}, \"runtime\": \{\"metal_tensor\": \"{crowns}\"\}, \"provenance\": \{\"box\": \"{tune_box_identity()}\"\}\}")) {
+        remove(tmpm)
         print("confirm: cannot write {tmpm}\n")
         return 0.0lf
     }
@@ -2417,11 +2418,14 @@ def private confirm_tg_run(model : string; wins : array<string>; extra : string)
     }
     let tmpo = tmpoRes as value
     let cmd = "{envp}\"{get_das_exe()}\" -jit \"{get_das_root()}/modules/dasLLAMA/benchmarks/lcpp_bench.das\" -dasroot \"{get_das_root()}\" -- --for-debug-purposes -m \"{model}\" --ngl 99 -p 32 -n 128 -r 3 > \"{tmpo}\" 2>&1"
-    unsafe(popen(cmd) $(f) {
+    let crc = unsafe(popen_timeout(cmd, 1800.0, $(f) {
         if (f != null) {
             fread(f)
         }
-    })
+    }))
+    if (crc != 0) {
+        print("confirm arm ({empty(extra) ? "base" : extra}): child exited {crc}\n")
+    }
     var outp = ""
     if (fexist(tmpo)) {
         fopen(tmpo, "rb") $(f) {
