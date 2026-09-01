@@ -1162,12 +1162,12 @@ def private metal_mtp_verify_ok(t : Model; s : Session) : bool {
 // one verify-B=2 weight site: a q8 plane rides the batched q8 GEMV, a kq plane the small-batch
 // mvb twins (the batch rail's dispatch at nrows=2). ycol = flat element offset into by
 def private enc_verify_site(t : Model; enc : MetalComputeEncoder?; fmt : KqFmt;
-                            woff, rows, n, ys : int64; bx, by, bn, bd, bys : MetalBuffer?; ycol : int64 = 0l) {
+                            woff, rows, n, ys : int64; bx, by, bn, bd, bys : MetalBuffer?; ycol : int64 = 0l; nrows : int64 = 2l) {
     if (fmt == KqFmt.q8) {
         let bw = blob_of(g_dev, t, woff)
-        enc_gemv_b(enc, false, bw.buf, bw.boff, bx, by, bn, bd, bys, rows, uint64(ycol * 4l))
+        enc_gemv_b(enc, nrows > 2l, bw.buf, bw.boff, bx, by, bn, bd, bys, rows, uint64(ycol * 4l))
     } else {
-        enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, n, by, ys, ycol, bn, bd, bys, 2l, 2l)
+        enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, n, by, ys, ycol, bn, bd, bys, nrows, nrows)
     }
 }
 
@@ -1182,28 +1182,28 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
     let qd = n_heads * head_size
     let kv_dim = c.n_kv_heads * head_size
     let qkvd = qd + 2l * kv_dim
-    let nchunks = (pos + 2l + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
+    let nchunks = (pos + r.nrows + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
     unsafe {
-        let rtoff = uint64(l * 32l)
+        let rtoff = uint64(l * 16l * r.nrows)
         if (layer_is_recurrent(c, l)) {
             let cd = dn_conv_dim(c)
             let di = c.ssm_d_inner
             let nvh = c.ssm_dt_rank
             let bdnq = blob_of(g_dev, t, t.dnqkv_offs[l])
-            enc_gemv_b(enc, false, bdnq.buf, bdnq.boff, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd, r.u_cd, cd)
+            enc_gemv_b(enc, r.nrows > 2l, bdnq.buf, bdnq.boff, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd, r.u_cd, cd)
             let bdng = blob_of(g_dev, t, t.dngate_offs[l])
-            enc_gemv_b(enc, false, bdng.buf, bdng.boff, r.bxb, r.bdn_z, r.u_dim, r.u_di, r.u_di, di)
+            enc_gemv_b(enc, r.nrows > 2l, bdng.buf, bdng.boff, r.bxb, r.bdn_z, r.u_dim, r.u_di, r.u_di, di)
             if (t.dn_ba_f32) {
                 // F32-on-disk β/α: the router-slab f32 GEMV, one stream per verify row
                 var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-                enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, 2l)
+                enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, r.nrows)
                 var bw_al = upload_region(addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-                enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, 2l)
+                enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, r.nrows)
             } else {
                 let bdnb = blob_of(g_dev, t, t.dnbeta_offs[l])
-                enc_gemv_b(enc, false, bdnb.buf, bdnb.boff, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_nvh, nvh)
+                enc_gemv_b(enc, r.nrows > 2l, bdnb.buf, bdnb.boff, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_nvh, nvh)
                 let bdna = blob_of(g_dev, t, t.dnalpha_offs[l])
-                enc_gemv_b(enc, false, bdna.buf, bdna.boff, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_nvh, nvh)
+                enc_gemv_b(enc, r.nrows > 2l, bdna.buf, bdna.boff, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_nvh, nvh)
             }
             // dual-store: post-row0 state/hist land in the shadow region — reject flips to it
             let sslice = uint64(dnli * nvh * c.ssm_d_state * c.ssm_d_state * 4l)
@@ -1211,18 +1211,18 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
             let soff = r.dn_state_base + sslice
             let hoff = r.dn_conv_base + hslice
             var bw_cv = upload_region(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd]), uint64(c.ssm_d_conv * cd * 4l))
-            var dka = dn_args(c, 2l, true)
-            enc_dn_conv(enc, r.bdn_qkv, r.bdn_state, hoff, bw_cv, r.bdn_cv, dka, cd, 2l)
+            var dka = dn_args(c, r.nrows, true)
+            enc_dn_conv(enc, r.bdn_qkv, r.bdn_state, hoff, bw_cv, r.bdn_cv, dka, cd, r.nrows)
             enc_dn_conv_hist(enc, r.bdn_qkv, r.bdn_state, hoff, r.bdn_state, r.dn_conv_alt + hslice, dka, cd)
-            enc_dn_l2norm(enc, r.bdn_cv, dka, 2l * c.ssm_n_group, 2l)
+            enc_dn_l2norm(enc, r.bdn_cv, dka, 2l * c.ssm_n_group, r.nrows)
             var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh]), uint64(nvh * 4l))
             var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh]), uint64(nvh * 4l))
             enc_dn_scan(enc, r.bdn_cv, r.bdn_state, soff, r.bdn_b, r.bdn_g, baa, bdt, r.bdn_o,
                 r.bdn_state, r.dn_state_alt + sslice, dka, c.ssm_d_state, nvh)
             var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
-            enc_dn_gate(enc, r.bdn_o, r.bdn_z, bwn, dka, nvh, 2l)
+            enc_dn_gate(enc, r.bdn_o, r.bdn_z, bwn, dka, nvh, r.nrows)
             let bdno = blob_of(g_dev, t, t.dnout_offs[l])
-            enc_gemv_b(enc, false, bdno.buf, bdno.boff, r.bdn_o, r.bxb2, r.u_di, r.u_dim, r.u_dim, dim)
+            enc_gemv_b(enc, r.nrows > 2l, bdno.buf, bdno.boff, r.bdn_o, r.bxb2, r.u_di, r.u_dim, r.u_dim, dim)
             dnli++
         } else {
             var bbias = r.bqkv
@@ -1234,62 +1234,62 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
             }
             if (c.q_gated) {
                 enc_verify_site(t, enc, fmt_at(t.wq_fmt, l), t.wq_offs[l], 2l * qd, dim, 2l * qd,
-                    r.bxb, r.bdn_qg, r.u_dim, r.u_dn_qd2, r.u_dn_qd2)
+                    r.bxb, r.bdn_qg, r.u_dim, r.u_dn_qd2, r.u_dn_qd2, [nrows = r.nrows])
                 enc_dn_deint(enc, r.bdn_qg, r.bqkv, r.bdn_gate,
-                    DnDeintArgs(hs = r.k_hs, qd = r.k_qd, qs = uint(qkvd)), qd, 2l)
+                    DnDeintArgs(hs = r.k_hs, qd = r.k_qd, qs = uint(qkvd)), qd, r.nrows)
             } else {
                 enc_verify_site(t, enc, fmt_at(t.wq_fmt, l), t.wq_offs[l], qd, dim, qkvd,
-                    r.bxb, r.bqkv, r.u_dim, r.u_qd, r.u_qkvd)
+                    r.bxb, r.bqkv, r.u_dim, r.u_qd, r.u_qkvd, [nrows = r.nrows])
             }
             enc_verify_site(t, enc, fmt_at(t.wk_fmt, l), t.wk_offs[l], kv_dim, dim, qkvd,
-                r.bxb, r.bqkv, r.u_dim, r.u_kvd, r.u_qkvd, [ycol = qd])
+                r.bxb, r.bqkv, r.u_dim, r.u_kvd, r.u_qkvd, [ycol = qd, nrows = r.nrows])
             enc_verify_site(t, enc, fmt_at(t.wv_fmt, l), t.wv_offs[l], kv_dim, dim, qkvd,
-                r.bxb, r.bqkv, r.u_dim, r.u_kvd, r.u_qkvd, [ycol = qd + kv_dim])
+                r.bxb, r.bqkv, r.u_dim, r.u_kvd, r.u_qkvd, [ycol = qd + kv_dim, nrows = r.nrows])
             if (c.qk_norm) {
                 var bqkw = upload_region_cat3(
                     addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
                     addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l), null, 0ul)
                 var qka = QkNormArgs(nq = r.k_nh, koffe = r.k_qd, rstride = r.k_qkvd,
                     hs = r.k_hs, woffe = r.k_hs, eps = r.k_eps, soffe = r.k_qd)
-                enc_qk_norm(enc, r.bqkv, 0ul, bqkw, qka, n_heads + kv_dim / head_size, 2l, head_size)
+                enc_qk_norm(enc, r.bqkv, 0ul, bqkw, qka, n_heads + kv_dim / head_size, r.nrows, head_size)
             }
             var vrka = RopeStoreBArgs(lay = 0u, kv_dim = r.k_kvd, qd = r.k_qd, head_size = r.k_hs,
                 npairs_q = r.k_npq, npairs = r.k_npall, qstride = uint(qkvd), neox = r.k_neox,
                 has_bias = r.k_hasb, rot = r.k_rot != 0u ? r.k_rot : r.k_hs)
             enc_rope_store_b(enc, true, r.bqkv, r.bcos, r.bsin, brt, bbias, vrka,
-                (qd + kv_dim) / 2l, 2l, [rtoff = rtoff])
+                (qd + kv_dim) / 2l, r.nrows, [rtoff = rtoff])
             // the verify pass runs the base (non-sliding) geometry over layer 0's slab
             let vscale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
             if (r.chunked) {
                 var pka = SqAttnPartBArgs(lay = 0u, kstride = uint(kv_dim), nheads = uint(n_heads),
                     kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
                     qstride = uint(qkvd), nchmax = uint(nchunks), softcap = c.attn_logit_softcap, window = 0u)
-                enc_attn_part_b(enc, KVDtype.f16, r.bqkv, r.bpart, brt, pka, 2l, nchunks, n_heads, head_size, [rtoff = rtoff])
+                enc_attn_part_b(enc, KVDtype.f16, r.bqkv, r.bpart, brt, pka, r.nrows, nchunks, n_heads, head_size, [rtoff = rtoff])
                 var cka = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(n_heads),
                     hs = uint(head_size), window = 0u, hass = 0u)
-                enc_attn_comb_b(enc, r.bpart, r.bxb, cka, brt, rtoff, null, n_heads * 2l, head_size)
+                enc_attn_comb_b(enc, r.bpart, r.bxb, cka, brt, rtoff, null, n_heads * r.nrows, head_size)
             } else {
                 var bka = SqAttnBArgs(lay = 0u, kstride = uint(kv_dim), nheads = uint(n_heads),
                     kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
                     qstride = uint(qkvd), softcap = c.attn_logit_softcap, hass = 0u)
-                enc_attn_b(enc, KVDtype.f16, r.bqkv, r.bxb, brt, bka, 2l, n_heads, head_size, [rtoff = rtoff])
+                enc_attn_b(enc, KVDtype.f16, r.bqkv, r.bxb, brt, bka, r.nrows, n_heads, head_size, [rtoff = rtoff])
             }
             if (c.q_gated) {
-                enc_sigmul(enc, r.bxb, 0ul, r.bdn_gate, 0ul, r.u_total_qd, 2l * qd)
+                enc_sigmul(enc, r.bxb, 0ul, r.bdn_gate, 0ul, r.u_total_qd, r.nrows * qd)
             }
             enc_verify_site(t, enc, fmt_at(t.wo_fmt, l), t.wo_offs[l], dim, qd, dim,
-                r.bxb, r.bxb2, r.u_qd, r.u_dim, r.u_dim)
+                r.bxb, r.bxb2, r.u_qd, r.u_dim, r.u_dim, [nrows = r.nrows])
             if (c.attn_out_bias) {
                 var bwo_b = upload_region(addr < void? >(t.bo[l * dim]), uint64(dim * 4l))
-                enc_add(enc, r.bxb2, 0ul, bwo_b, 0ul, r.u_total_dim, 2l * dim)
+                enc_add(enc, r.bxb2, 0ul, bwo_b, 0ul, r.u_total_dim, r.nrows * dim)
             }
         }
         var bw_ffn = upload_region(addr < void? >(t.fblob[t.rms_ffn_off + l * dim]), uint64(dim * 4l))
         if (dim <= ADD_RMS_MAX_DIM) {
-            enc_add_rms_b(enc, r.bx, r.bxb2, bw_ffn, r.bxb, r.u_dim, r.u_eps, 2l)
+            enc_add_rms_b(enc, r.bx, r.bxb2, bw_ffn, r.bxb, r.u_dim, r.u_eps, r.nrows)
         } else {
-            enc_add(enc, r.bx, 0ul, r.bxb2, 0ul, r.u_total_dim, 2l * dim)
-            enc_rms_b(enc, r.bx, 0ul, bw_ffn, r.bxb, r.u_dim, r.u_eps, 2l)
+            enc_add(enc, r.bx, 0ul, r.bxb2, 0ul, r.u_total_dim, r.nrows * dim)
+            enc_rms_b(enc, r.bx, 0ul, bw_ffn, r.bxb, r.u_dim, r.u_eps, r.nrows)
         }
         if (r.moe) {
             // router -> select -> experts -> combine at two streams; shexp rides the fixed-B2 q8 forms
@@ -1304,35 +1304,35 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
                 brb = upload_region(addr < void? >(t.fblob[t.router_b_off + l * c.n_expert]), uint64(c.n_expert * 4l))
                 bhrb = r.u_moe_gmode
             }
-            enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, 2l)
-            enc_moe_select(enc, r.bmoe_lg, r.bmoe_sel, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, 2l)
+            enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, r.nrows)
+            enc_moe_select(enc, r.bmoe_lg, r.bmoe_sel, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, r.nrows)
             if (r.u_moe_nsh != null) {
                 var bw_shg = upload_region(addr < void? >(t.fblob[t.shexp_gate_off + l * dim]), uint64(dim * 4l))
-                enc_moe_router(enc, bw_shg, r.bxb, r.bmoe_lg, r.u_dim, r.u_one32, r.u_dim, g_one, g_zero, 1l, 2l)
+                enc_moe_router(enc, bw_shg, r.bxb, r.bmoe_lg, r.u_dim, r.u_one32, r.u_dim, g_one, g_zero, 1l, r.nrows)
             }
             var v1a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
                             xs = 0u, ss = r.k_moe_ss, bxs = r.k_dim, bys = r.k_moe_knfe, hasb = 0u)
-            enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, 2l, r.bxb, r.bh12, r.bmoe_sel, v1a)
+            enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, r.nrows, r.bxb, r.bh12, r.bmoe_sel, v1a)
             var v3a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe3 == KqFmt.q8 || fe3 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
                             xs = 0u, ss = r.k_moe_ss, bxs = r.k_dim, bys = r.k_moe_knfe, hasb = 0u)
-            enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, 2l, r.bxb, r.bh12, r.bmoe_sel, v3a, uint64(2l * knfe * 4l))
-            enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(2l * knfe * 4l), r.u_moe_tot, 2l * knfe)
+            enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, r.nrows, r.bxb, r.bh12, r.bmoe_sel, v3a, uint64(r.nrows * knfe * 4l))
+            enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(r.nrows * knfe * 4l), r.u_moe_tot, r.nrows * knfe)
             var v2a = MoeGemvArgs(ndim = r.k_moe_nfe, ddim = r.k_dim, eplane = fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
                             xs = r.k_moe_xs_dn, ss = r.k_moe_ss, bxs = r.k_moe_knfe, bys = r.k_moe_kdim, hasb = 0u)
-            enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, 2l, r.bh12, r.bmoe_dn, r.bmoe_sel, v2a)
+            enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, r.nrows, r.bh12, r.bmoe_dn, r.bmoe_sel, v2a)
             if (r.u_moe_nsh != null) {
                 // shexp FFN reads bxb BEFORE combine overwrites it; bh12 is free after expert W2
                 let nsh = c.n_ff_shexp
                 let she = dim * nsh
                 let bwsh1 = blob_of(g_dev, t, t.wsh1_off + l * she)
-                enc_gemv_w13sw_b(enc, false, bwsh1.buf, bwsh1.boff, uint64(((t.wsh3_off + l * she) / 32l) * 34l),
+                enc_gemv_w13sw_b(enc, r.nrows > 2l, bwsh1.buf, bwsh1.boff, uint64(((t.wsh3_off + l * she) / 32l) * 34l),
                     r.bxb, r.bh12, r.u_dim, r.u_moe_nsh, nsh)
                 let bwsh2 = blob_of(g_dev, t, t.wsh2_off + l * she)
-                enc_gemv_b(enc, false, bwsh2.buf, bwsh2.boff, r.bh12, r.bxb2, r.u_moe_nsh, r.u_dim, r.u_dim, dim)
+                enc_gemv_b(enc, r.nrows > 2l, bwsh2.buf, bwsh2.boff, r.bh12, r.bxb2, r.u_moe_nsh, r.u_dim, r.u_dim, dim)
             }
-            enc_moe_combine(enc, r.bmoe_dn, r.bmoe_sel, r.bxb, r.u_dim, r.u_moe_k, dim, 2l)
+            enc_moe_combine(enc, r.bmoe_dn, r.bmoe_sel, r.bxb, r.u_dim, r.u_moe_k, dim, r.nrows)
             if (r.u_moe_nsh != null) {
-                enc_axpy_sig(enc, r.bxb, r.bxb2, r.bmoe_lg, r.u_total_dim, r.u_dim, 2l * dim)
+                enc_axpy_sig(enc, r.bxb, r.bxb2, r.bmoe_lg, r.u_total_dim, r.u_dim, r.nrows * dim)
             }
         } else {
             let f1 = fmt_at(t.w1_fmt, l)
@@ -1341,27 +1341,27 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
             if (f1 == KqFmt.q8 && f2 == KqFmt.q8 && f3 == KqFmt.q8) {
                 let bw1 = blob_of(g_dev, t, t.w1_offs[l])
                 let bw3 = blob_of(g_dev, t, t.w3_offs[l])
-                enc_gemv_w13sw_b(enc, false, bw1.buf, bw1.boff, bw3.boff, r.bxb, r.bh12, r.u_dim, r.u_hidden, hidden)
+                enc_gemv_w13sw_b(enc, r.nrows > 2l, bw1.buf, bw1.boff, bw3.boff, r.bxb, r.bh12, r.u_dim, r.u_hidden, hidden)
                 let bw2 = blob_of(g_dev, t, t.w2_offs[l])
-                enc_gemv_b(enc, false, bw2.buf, bw2.boff, r.bh12, r.bxb, r.u_hidden, r.u_dim, r.u_dim, dim)
+                enc_gemv_b(enc, r.nrows > 2l, bw2.buf, bw2.boff, r.bh12, r.bxb, r.u_hidden, r.u_dim, r.u_dim, dim)
             } else {
                 // gate rows land at 0, up rows at 2*hidden (bh12 is nrows * 2*hidden); swiglu fuses in place
-                enc_verify_site(t, enc, f1, t.w1_offs[l], hidden, dim, hidden, r.bxb, r.bh12, r.u_dim, r.u_hidden, r.u_hidden)
-                enc_verify_site(t, enc, f3, t.w3_offs[l], hidden, dim, hidden, r.bxb, r.bh12, r.u_dim, r.u_hidden, r.u_hidden, [ycol = 2l * hidden])
-                enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(2l * hidden * 4l), r.u_total_h, 2l * hidden)
-                enc_verify_site(t, enc, f2, t.w2_offs[l], dim, hidden, dim, r.bh12, r.bxb, r.u_hidden, r.u_dim, r.u_dim)
+                enc_verify_site(t, enc, f1, t.w1_offs[l], hidden, dim, hidden, r.bxb, r.bh12, r.u_dim, r.u_hidden, r.u_hidden, [nrows = r.nrows])
+                enc_verify_site(t, enc, f3, t.w3_offs[l], hidden, dim, hidden, r.bxb, r.bh12, r.u_dim, r.u_hidden, r.u_hidden, [ycol = r.nrows * hidden, nrows = r.nrows])
+                enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(r.nrows * hidden * 4l), r.u_total_h, r.nrows * hidden)
+                enc_verify_site(t, enc, f2, t.w2_offs[l], dim, hidden, dim, r.bh12, r.bxb, r.u_hidden, r.u_dim, r.u_dim, [nrows = r.nrows])
             }
         }
         if (l + 1l < c.n_layers) {
             var bw_attn = upload_region(addr < void? >(t.fblob[t.rms_att_off + (l + 1l) * dim]), uint64(dim * 4l))
             if (dim <= ADD_RMS_MAX_DIM) {
-                enc_add_rms_b(enc, r.bx, r.bxb, bw_attn, r.bxb, r.u_dim, r.u_eps, 2l)
+                enc_add_rms_b(enc, r.bx, r.bxb, bw_attn, r.bxb, r.u_dim, r.u_eps, r.nrows)
             } else {
-                enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_total_dim, 2l * dim)
-                enc_rms_b(enc, r.bx, 0ul, bw_attn, r.bxb, r.u_dim, r.u_eps, 2l)
+                enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_total_dim, r.nrows * dim)
+                enc_rms_b(enc, r.bx, 0ul, bw_attn, r.bxb, r.u_dim, r.u_eps, r.nrows)
             }
         } else {
-            enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_total_dim, 2l * dim)
+            enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_total_dim, r.nrows * dim)
         }
     }
 }
@@ -1372,22 +1372,22 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
 def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     let c = t.config
     let dim = c.dim
+    let nr = r.nrows
     let esz = uint64(kv_row_bytes(r.kdt, 1l))   // nolint:LINT021 — divides uint64 arena offsets; only the quotient narrows
-    // per-layer same-slab route entries (elements); the +nextn entry = the warm's draft slab
-    g_vrt |> resize((c.n_layers + c.n_layer_nextn) * 8l)
+    // per-layer same-slab route entries (elements), one per verify row; the +nextn entry = the warm's draft slab
+    g_vrt |> resize((c.n_layers + c.n_layer_nextn) * 4l * nr)
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
         let lb = uint((r.koff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
         let vb = uint((r.voff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
-        g_vrt[l * 8l] = lb
-        g_vrt[l * 8l + 1l] = vb
-        g_vrt[l * 8l + 2l] = uint(r.cap)
-        g_vrt[l * 8l + 3l] = uint(pos + 1l)
-        g_vrt[l * 8l + 4l] = lb
-        g_vrt[l * 8l + 5l] = vb
-        g_vrt[l * 8l + 6l] = uint(r.cap)
-        g_vrt[l * 8l + 7l] = uint(pos + 2l)
+        for (i in range64(nr)) {
+            let e = (l * nr + i) * 4l
+            g_vrt[e] = lb
+            g_vrt[e + 1l] = vb
+            g_vrt[e + 2l] = uint(r.cap)
+            g_vrt[e + 3l] = uint(pos + 1l + i)
+        }
     }
-    let bytes_rt = uint64((c.n_layers + c.n_layer_nextn) * 32l)
+    let bytes_rt = uint64((c.n_layers + c.n_layer_nextn) * 16l * nr)
     var brt = pool_acquire_untracked(g_upool, g_dev, bytes_rt)
     unsafe {
         memcpy(metal_buffer_contents(brt), addr < void? >(g_vrt[0]), bytes_rt)
@@ -1396,36 +1396,40 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     var enc = metal_new_compute_encoder(cb)
     unsafe {
         var bw_att0 = upload_region(addr < void? >(t.fblob[t.rms_att_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps, 2l)
+        enc_rms_b(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps, nr)
     }
     var dnli = 0l
     for (l in range64(c.n_layers)) {
         encode_verify_layer(t, r, enc, brt, l, pos, dnli)
     }
-    // both rows norm+classify: row0 = the verify truth, row1 = the accept-path continuation
+    // every row norms + classifies: row 0 = the verify truth for tok, row i = the truth for draft i
     unsafe {
         var bwfin = upload_region(addr < void? >(t.fblob[t.rms_final_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps, 2l)
+        enc_rms_b(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
     }
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     enc_verify_site(t, enc, cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size,
-        r.bxf, r.blog, r.u_dim, r.u_vocab, r.u_vocab)
-    // draft-slab warm: the draft block at B=2, no cls — future drafts need contiguous slab rows
+        r.bxf, r.blog, r.u_dim, r.u_vocab, r.u_vocab, [nrows = nr])
+    // draft-slab warm (committed history): head block at nr rows, h_0 = the saved pre-draft mtp_h at bcat row nr, h_i = verify post-norm row i-1
     unsafe {
-        enc_copy_row(enc, r.bcat, uint64(2l * dim * 4l), r.bxb, 0ul, r.u_dim, dim)
-        enc_copy_row(enc, r.bxf, 0ul, r.bxb, uint64(dim * 4l), r.u_dim, dim)
+        let rowb = uint64(dim * 4l)
+        enc_copy_row(enc, r.bcat, uint64(nr) * rowb, r.bxb, 0ul, r.u_dim, dim)
+        for (i in range64(1l, nr)) {
+            enc_copy_row(enc, r.bxf, uint64(i - 1l) * rowb, r.bxb, uint64(i) * rowb, r.u_dim, dim)
+        }
         var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bxb, 0ul, bw_hn, r.bxb2, r.u_dim, r.u_eps, 2l)
+        enc_rms_b(enc, r.bxb, 0ul, bw_hn, r.bxb2, r.u_dim, r.u_eps, nr)
         var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bcat, 0ul, bw_en, r.bh12, r.u_dim, r.u_eps, 2l)
-        enc_copy_row(enc, r.bh12, 0ul, r.bcat, 0ul, r.u_dim, dim)
-        enc_copy_row(enc, r.bxb2, 0ul, r.bcat, uint64(dim * 4l), r.u_dim, dim)
-        enc_copy_row(enc, r.bh12, uint64(dim * 4l), r.bcat, uint64(2l * dim * 4l), r.u_dim, dim)
-        enc_copy_row(enc, r.bxb2, uint64(dim * 4l), r.bcat, uint64(3l * dim * 4l), r.u_dim, dim)
+        enc_rms_b(enc, r.bcat, 0ul, bw_en, r.bh12, r.u_dim, r.u_eps, nr)
+        // interleave [enorm(embed_i) ; hnorm(h_i)] per row into the cat image
+        for (i in range64(nr)) {
+            enc_copy_row(enc, r.bh12, uint64(i) * rowb, r.bcat, uint64(2l * i) * rowb, r.u_dim, dim)
+            enc_copy_row(enc, r.bxb2, uint64(i) * rowb, r.bcat, uint64(2l * i + 1l) * rowb, r.u_dim, dim)
+        }
         enc_verify_site(t, enc, t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, 2l * dim, dim,
-            r.bcat, r.bx, r.u_dim2, r.u_dim, r.u_dim)
+            r.bcat, r.bx, r.u_dim2, r.u_dim, r.u_dim, [nrows = nr])
         var bw_att = upload_region(addr < void? >(t.fblob[t.rms_att_off + c.n_layers * dim]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bx, 0ul, bw_att, r.bxb, r.u_dim, r.u_eps, 2l)
+        enc_rms_b(enc, r.bx, 0ul, bw_att, r.bxb, r.u_dim, r.u_eps, nr)
     }
     var dnw = 0l
     encode_verify_layer(t, r, enc, brt, c.n_layers, pos, dnw)
@@ -1437,19 +1441,21 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     pool_release(g_upool, brt, bytes_rt)
 }
 
-// land the verify: KV rows + row0 logits -> s.mtp_logits, row1 -> s.logits; accept/reject bookkeeping is the caller's
+// land the verify: nrows KV rows + every row's logits into s.mtp_logits_b (row 0 also into
+// s.mtp_logits); accept/reject bookkeeping is the caller's
 def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : int64) : bool {
     metal_wait_until_completed(r.cb)
     let ok = !metal_command_buffer_failed(r.cb)
     if (ok) {
         let c = t.config
+        let nr = r.nrows
         unsafe {
             var kmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.koff
             var vmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.voff
             for (l in range64(c.n_layers + c.n_layer_nextn)) {   // + the warmed draft-slab rows
                 let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
                 let lb = mirror_lbase(t, s.kv_dtype_k, r.cap, l)
-                for (i in range64(2l)) {
+                for (i in range64(nr)) {
                     let prow = kv_phys_row(s, pos + i)
                     memcpy(reinterpret<void?>(kv_layer_kbase(s, l, c.seq_len) + prow * rowb),
                         reinterpret<void?>(kmp + lb + (pos + i) * rowb), rowb)
@@ -1457,9 +1463,13 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
                         reinterpret<void?>(vmp + lb + (pos + i) * rowb), rowb)
                 }
             }
+            let vb = c.vocab_size * 4l
+            if (long_length(s.mtp_logits_b) < nr * c.vocab_size) {
+                s.mtp_logits_b |> resize(nr * c.vocab_size)
+            }
             var lg = reinterpret<uint8?>(metal_buffer_contents(r.blog))
-            memcpy(addr < void? >(s.mtp_logits[0]), reinterpret<void?>(lg), c.vocab_size * 4l)
-            memcpy(addr < void? >(s.logits[0]), reinterpret<void?>(lg + c.vocab_size * 4l), c.vocab_size * 4l)
+            memcpy(addr < void? >(s.mtp_logits_b[0]), reinterpret<void?>(lg), uint64(nr * vb))
+            memcpy(addr < void? >(s.mtp_logits[0]), reinterpret<void?>(lg), uint64(vb))
         }
     } else {
         to_log(LOG_ERROR, "dasLLAMA metal MTP verify: dispatch failed ({cb_error_text(r.cb)})\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
@@ -1468,15 +1478,33 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
     return ok
 }
 
-//! mtp_spec_eval's GPU twin: draft + B=2 same-slab verify, wholly on the metal decode path.
-//! Cold/decline paths fall back to one plain (GPU) forward — output-invariant either way.
-//! Reject is ~free: row0 IS the truth decode, the dn shadow region flips in — no re-forward.
+// argmax over row `row` of a [rows x n] flat logits image
+def private argmax_row(v : array<float>; row, n : int64) : int64 {
+    let off = row * n
+    var best = 0l
+    var bv = v[off]
+    for (i in range64(1l, n)) {
+        if (v[off + i] > bv) {
+            bv = v[off + i]
+            best = i
+        }
+    }
+    return best
+}
+
+//! The speculative ROUND on the metal decode path: k chained drafts, ONE same-slab verify at k+1
+//! rows, the accept walk, the commit. Returns a (0..k); the accepted drafts are s.mtp_vbatch[1..a],
+//! `tok` is always committed; a refused round takes one plain GPU step and returns 0 undrafted.
 [hot_path]
-def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {   // nolint:STYLE038 — draft/verify/accept is one sequential protocol on shared locals
+def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {   // nolint:STYLE037,STYLE038 — draft chain / verify / accept walk / commit is one sequential protocol on shared locals
     let c = t.config
     let pos = s.n_past
+    var k = clamp(k_req, 1l, 8l)
+    if (c.recr_mask != 0ul && k > 1l) {
+        k = 1l   // step 2 lifts this
+    }
     var cold = (g_dev == null || !t.metal_blob || c.n_layer_nextn <= 0l || pos < 1l ||
-        s.mtp_h_pos1 != pos || pos + 2l > c.seq_len || !metal_mtp_verify_ok(t, s))
+        s.mtp_h_pos1 != pos || pos + k + 1l > c.seq_len || !metal_mtp_verify_ok(t, s))
     if (!cold && c.recr_mask != 0ul) {
         // the verify scans the decode DnMirror's live region — it must be resident and current
         cold = !key_exists(g_dn_mirrors, s.uid) || g_dn_mirrors[s.uid].pos != pos
@@ -1486,7 +1514,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
             cold = true
         } else {
             let kmr = g_mirrors[s.uid]
-            cold = kmr.watermark < pos || kmr.cap_rows < pos + 2l
+            cold = kmr.watermark < pos || kmr.cap_rows < pos + k + 1l
         }
     }
     if (cold && g_env_mtp_debug == "cold") {   // bring-up bisect: log the failing gate
@@ -1495,36 +1523,46 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
         let wm = key_exists(g_mirrors, s.uid) ? g_mirrors[s.uid].watermark : -1l
         to_log(LOG_INFO, "mtp cold: pos={pos} h_pos1={s.mtp_h_pos1} seq={c.seq_len} verify_ok={vok_g} dn_pos={dnp} watermark={wm}\n")   // nolint:PERF028,PERF026 — behind the DASLLAMA_MTP_DEBUG=cold bring-up gate
     }
+    // the draft chain into the verify batch: vbatch[0] = tok, vbatch[i] = d_i from (d_{i-1}, the
+    // head's own h) - d_1 from (tok, the trunk's stashed h)
+    s.mtp_vbatch[0] = tok
     if (!cold) {
-        // the warm's row-pos h input is the PRE-draft trunk hidden — the draft overwrites mtp_h
+        // the warm's row-pos h input is the PRE-draft trunk hidden — the chain overwrites mtp_h
         s.mtp_xb_save |> resize(c.dim)
         unsafe {
             memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), c.dim * 4l)
         }
-        cold = !metal_mtp_draft_forward(t, s, tok, pos)
-        if (cold && g_env_mtp_debug == "cold") {
-            to_log(LOG_INFO, "mtp cold: draft declined at pos={pos}\n")   // nolint:PERF028,PERF026 — behind the DASLLAMA_MTP_DEBUG=cold bring-up gate
+        for (i in range64(k)) {
+            if (!metal_mtp_draft_forward(t, s, s.mtp_vbatch[i], pos + i)) {
+                cold = true
+                if (g_env_mtp_debug == "cold") {
+                    to_log(LOG_INFO, "mtp cold: draft {i} declined at pos={pos + i}\n")   // nolint:PERF028,PERF026 — behind the DASLLAMA_MTP_DEBUG=cold bring-up gate
+                }
+                break
+            }
+            var d = parallel_argmax(s.logits, c.vocab_size)
+            if (g_env_mtp_debug == "reject") {   // bring-up bisect: force the reject path
+                d = 0l
+            }
+            s.mtp_vbatch[i + 1l] = d
         }
     }
     if (cold) {
         forward(t, s, tok, pos)
         s.n_past = pos + 1l
-        return false
+        return 0l
     }
-    var d = parallel_argmax(s.logits, c.vocab_size)
-    if (g_env_mtp_debug == "reject") {   // bring-up bisect: force the reject path
-        d = 0l
-    }
-    s.mtp_drafted++
-    mtp_verify_prep(t, s, tok, d, pos)
+    s.mtp_drafted += k
+    let nr = k + 1l
+    mtp_verify_prep_n(t, s, s.mtp_vbatch, nr, pos)
     finish_pending_step()
     let mr = g_mirrors[s.uid]
-    var r = acquire_step(t, s, pos + 1l, mr.koff, mr.voff, mr.cap_rows, [nrows = 2l])
+    var r = acquire_step(t, s, pos + 1l, mr.koff, mr.voff, mr.cap_rows, [nrows = nr])
     if (!r.gpu_logits) {   // verify has no CPU classifier fallback (blog/bxf live under gpu_logits)
         release_step(r)
         forward(t, s, tok, pos)
         s.n_past = pos + 1l
-        return false
+        return 0l
     }
     if (r.dn) {
         var dm = dn_mirror_prepare(s, pos, dn_mirror_regions(t))
@@ -1532,7 +1570,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
             release_step(r)
             forward(t, s, tok, pos)
             s.n_past = pos + 1l
-            return false
+            return 0l
         }
         r.bdn_state = dm.buf
         r.dn_state_base = dm.state_off
@@ -1541,60 +1579,65 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
         r.dn_conv_alt = dm.conv_alt
     }
     unsafe {
+        let rowb = c.dim * 4l
         memcpy(metal_buffer_contents(r.bx), addr < void? >(s.mtp_cat[0]), r.bytes_x)
         memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), r.bytes_tab)
         memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), r.bytes_tab)
-        // warm inputs: embed pair + the saved pre-draft h — bcat is untouched by the trunk pass
+        // warm inputs: the nr embeds + the saved pre-draft h at row nr — bcat is untouched by the trunk pass
         var bc = reinterpret<uint8?>(metal_buffer_contents(r.bcat))
-        memcpy(reinterpret<void?>(bc), addr < void? >(s.mtp_cat[0]), 2l * c.dim * 4l)
-        memcpy(reinterpret<void?>(bc + 2l * c.dim * 4l), addr < void? >(s.mtp_xb_save[0]), c.dim * 4l)
+        memcpy(reinterpret<void?>(bc), addr < void? >(s.mtp_cat[0]), uint64(nr * rowb))
+        memcpy(reinterpret<void?>(bc + nr * rowb), addr < void? >(s.mtp_xb_save[0]), uint64(rowb))
     }
     encode_verify_step(t, r, pos)
     let vok = finish_verify_step(t, s, r, pos)
-    let truth = vok ? parallel_argmax(s.mtp_logits, c.vocab_size) : -1l
-    if (vok && truth == d) {
-        unsafe {
-            var hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))
-            memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx + c.dim * 4l), c.dim * 4l)
-        }
+    if (!vok) {
         release_step(r)
-        s.mtp_h_pos1 = pos + 2l
-        g_mirrors[s.uid].watermark = pos + 2l
-        if (c.recr_mask != 0ul) {
-            dn_mirror_advance(s.uid, pos + 1l)
+        if (c.recr_mask != 0ul && key_exists(g_dn_mirrors, s.uid)) {
+            // verify dispatch failed mid-scan — the mirror state is unreliable and not re-derivable
+            dn_mirror_release(g_dn_mirrors[s.uid])
+            g_dn_mirrors |> erase(s.uid)
         }
-        s.mtp_accepted++
-        accepted = d
-        s.n_past = pos + 2l
-        return true
-    }
-    if (vok) {
-        // reject: row0 already IS tok@pos's plain decode — its logits, hidden, and the shadow
-        // dn region (post-row0) stand in for the re-forward; the garbage draft row sits above
-        // the watermark and the next step rewrites it
-        unsafe {
-            var hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))
-            memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx), c.dim * 4l)
-            memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits[0]), c.vocab_size * 4l)
-        }
-        release_step(r)
-        s.mtp_h_pos1 = pos + 1l
-        g_mirrors[s.uid].watermark = pos + 1l
-        if (c.recr_mask != 0ul) {
-            dn_mirror_flip(s.uid, pos + 1l)
-        }
+        forward(t, s, tok, pos)
         s.n_past = pos + 1l
-        return false
+        return 0l
+    }
+    // the accept walk: row i is the truth for draft i+1
+    var a = 0l
+    while (a < k && argmax_row(s.mtp_logits_b, a, c.vocab_size) == s.mtp_vbatch[a + 1l]) {
+        a++
+    }
+    // commit rows 0..a (row a = the truth decode of the last committed token); the rows above the watermark are garbage the next round rewrites
+    unsafe {
+        var hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))
+        memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx + a * c.dim * 4l), c.dim * 4l)
+        memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits_b[a * c.vocab_size]), c.vocab_size * 4l)
     }
     release_step(r)
-    if (c.recr_mask != 0ul && key_exists(g_dn_mirrors, s.uid)) {
-        // verify dispatch failed mid-scan — the mirror state is unreliable and not re-derivable
-        dn_mirror_release(g_dn_mirrors[s.uid])
-        g_dn_mirrors |> erase(s.uid)
+    if (c.recr_mask != 0ul) {
+        // depth 1: a full accept keeps the live post-row-k state, a reject flips to the post-row-0 shadow (step 2: the pre-verify replay serves every a)
+        if (a == k) {
+            dn_mirror_advance(s.uid, pos + k)
+        } else {
+            dn_mirror_flip(s.uid, pos + 1l)
+        }
     }
-    forward(t, s, tok, pos)
-    s.n_past = pos + 1l
-    return false
+    s.mtp_h_pos1 = pos + a + 1l
+    g_mirrors[s.uid].watermark = pos + a + 1l
+    s.mtp_accepted += a
+    s.n_past = pos + a + 1l
+    return a
+}
+
+//! mtp_spec_eval's GPU twin — the depth-1 wrapper over the round (the scheduler and the CPU
+//! rail keep this shape). Cold/decline paths fall back to one plain (GPU) forward — output-
+//! invariant either way.
+[hot_path]
+def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {
+    let a = metal_mtp_spec_round(t, s, tok, 1l)
+    if (a > 0l) {
+        accepted = s.mtp_vbatch[1]
+    }
+    return a > 0l
 }
 
 // DASLLAMA_METAL_DECODE_CONCURRENT (default ON): concurrent encoder for the single-stream step,

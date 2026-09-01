@@ -238,6 +238,19 @@ watermark only (no recurrent layers) - recon the sliding-window ring rows.
   `set_metal_mtp_debug("reject:i")`); (3) API + callers; (4) `lcpp_bench --mtp-ab` depth sweep on
   the 0.8B / 27B / 3.8-27B / 35B for the k curve.
 
+#### S2 step 1 DONE (2026-09-01): the general round at k=1 is bit-identical
+`metal_mtp_spec_round(t, s, tok, k)` (draft chain into `s.mtp_vbatch[1..k]`, `acquire_step` at
+nrows = k+1, `encode_verify_step`/`encode_verify_layer` fully on `r.nrows` - per-row route table,
+per-row cls, the warm's cat image assembled per row - `finish_verify_step` landing k+1 KV rows and
+k+1 logits rows into `s.mtp_logits_b`, the accept walk, commit of rows 0..a). `metal_mtp_spec_eval`
+is the depth-1 wrapper. Levers: `set_mtp_depth`/`get_mtp_depth` (`MTP_MAX_ROWS = 9`). No hot-path
+allocations (the batch and the logits image live on the Session). The forced-feed suite reads the
+SAME digits as before the rewrite (0.8B maxd 0.0016374588 / 0.00065612793). k > 1 clamps to 1 on
+recurrent trunks until step 2 (the pre-verify replay); attention-only trunks would serve k > 1
+already (KV rollback is the watermark). The qwen38 memo (`~/.claude/plans/mtp-research/
+qwen38_design.md`) rules for step 2: replay rows 0..a from the PRE-verify state with a store-only
+scan variant, conv state = a slice of the verify's conv inputs, no per-row checkpoints.
+
 ### S3 - gemma assistant drafter
 
 - Loader for arch `gemma4-assistant` (embed tied to the trunk's, pre/post projections, 4

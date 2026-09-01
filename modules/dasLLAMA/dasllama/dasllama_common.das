@@ -1528,7 +1528,7 @@ def dlim_config_sources_register() {
 }
 
 //! The Model's plane pair for a kq format - the dispatcher every plane-form consumer keys on.
-def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks : array<uint8> const?&) {   // nolint:STYLE037 — the format ladder
+def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks : array<uint8> const?&) {
     unsafe {
         if (fmt == KqFmt.k4) {
             kq = addr(t.k4q)
@@ -2002,7 +2002,7 @@ struct Session {
     mtp_logits : array<float>      // verify-batch row-0 logits (vocab; the draft check reads its argmax)
     mtp_vbatch : array<int64>      // the 2-row verify batch [tok, draft] (persistent — no per-step alloc)
     mtp_norm_b : array<float>      // verify-batch final-normed rows (npos x dim), input to the batched classifier
-    mtp_logits_b : array<float>    // verify-batch logits (npos x vocab) — ONE classifier pass covers every row
+    @scratch mtp_logits_b : array<float>   // verify-batch logits (rows x vocab) — ONE classifier pass covers every row; grows once to the round's width
     mtp_drafted : int64            // session-lifetime telemetry: drafts attempted / accepted
     mtp_accepted : int64
     // deltanet rollback for a rejected verify batch (sized lazily on first snapshot)
@@ -2125,9 +2125,9 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
     if (c.n_layer_nextn > 0l) {   // MTP/NextN: h_nextn handoff + eh_proj concat input + verify row-0 outputs
         s.mtp_h |> resize(c.dim)
         s.mtp_h0 |> resize(c.dim)
-        s.mtp_cat |> resize(2l * c.dim)
+        s.mtp_cat |> resize(2l * MTP_MAX_ROWS * c.dim)   // the verify's embeds (row per verify row) and the warm's cat image
         s.mtp_logits |> resize(c.vocab_size)
-        s.mtp_vbatch |> resize(2)
+        s.mtp_vbatch |> resize(MTP_MAX_ROWS)
     }
     s.ffn_offs |> resize(4)
     s.ffn_gu |> resize(2l * ffw)
@@ -4339,6 +4339,17 @@ def get_mtp_spec() : bool => g_mtp_spec
 
 var private g_mtp_batch_cls = true
 
+// the speculative depth k: drafts per round (the verify runs k+1 rows). 1 = the shipped depth-1
+// rail; the metal round serves 1..MTP_MAX_ROWS-1, the CPU rail stays at 1.
+let MTP_MAX_ROWS = 9l
+var private g_mtp_depth = 1l
+
+def set_mtp_depth(k : int64) {
+    g_mtp_depth = clamp(k, 1l, MTP_MAX_ROWS - 1l)
+}
+
+def get_mtp_depth() : int64 => g_mtp_depth
+
 //! One batched classifier pass over the whole MTP verify window instead of a per-row GEMV each —
 //! the plane (vocab x dim) is a step's largest weight read. Pure perf lever; A/B only.
 def set_mtp_batch_cls(on : bool) {
@@ -4399,13 +4410,23 @@ def mtp_draft_prep(t : Model; var s : Session; token, pos : int64) {
 //! CPU-side input prep for a GPU 2-row verify: embed rows for [tok@pos, d@pos+1] into s.mtp_cat
 //! (2*dim scratch — row-major) and the 2-row rope table, for the metal MTP arm
 def mtp_verify_prep(t : Model; var s : Session; tok, d, pos : int64) {
+    s.mtp_vbatch |> resize(2)
+    s.mtp_vbatch[0] = tok
+    s.mtp_vbatch[1] = d
+    mtp_verify_prep_n(t, s, s.mtp_vbatch, 2l, pos)
+}
+
+//! The verify batch's inputs for n rows [tok, d_1..d_{n-1}] at pos..pos+n-1: their embeddings
+//! land in mtp_cat rows [0, n) and the rope tables cover the n positions.
+def mtp_verify_prep_n(t : Model; var s : Session; toks : array<int64>; n, pos : int64) {
     let c = t.config
-    embed_row(t, tok, unsafe(addr(s.mtp_cat[0])))
-    embed_row(t, d, unsafe(addr(s.mtp_cat[c.dim])))
-    if (c.embed_scale != 1.0) {
-        scale_inplace(unsafe(addr(s.mtp_cat[0])), c.embed_scale, 2l * c.dim)
+    for (i in range64(n)) {
+        embed_row(t, toks[i], unsafe(addr(s.mtp_cat[i * c.dim])))
     }
-    build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, pos, 2l,
+    if (c.embed_scale != 1.0) {
+        scale_inplace(unsafe(addr(s.mtp_cat[0])), c.embed_scale, n * c.dim)
+    }
+    build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, pos, n,
                      c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
 }
 
