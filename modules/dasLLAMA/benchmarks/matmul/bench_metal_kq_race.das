@@ -185,7 +185,6 @@ def private mm_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate mul_mm sp
         arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmK4T_metal_kq_mulmm_t_msl, entry = MetalKqMulMmK4T_metal_kq_mulmm_t_msl_entry, fastmath = MetalKqMulMmK4T_metal_kq_mulmm_t_msl_fastmath, tgmem = MetalKqMulMmK4T_metal_kq_mulmm_t_msl_tgmem, gdiv = 0))
     } elif (f.fmt == 5) {
         arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmK5T_metal_kq_mulmm_t_msl, entry = MetalKqMulMmK5T_metal_kq_mulmm_t_msl_entry, fastmath = MetalKqMulMmK5T_metal_kq_mulmm_t_msl_fastmath, tgmem = MetalKqMulMmK5T_metal_kq_mulmm_t_msl_tgmem, gdiv = 0))
-        arms |> push(KqRaceArm(name = "tbyte", src = lab_kq_mm_k5t_byte_msl, entry = lab_kq_mm_k5t_byte_msl_entry, fastmath = lab_kq_mm_k5t_byte_msl_fastmath, tgmem = lab_kq_mm_k5t_byte_msl_tgmem, gdiv = 0))
     } elif (f.fmt == 6) {
         arms |> push(KqRaceArm(name = "tensor", src = MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl, entry = MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_entry, fastmath = MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_fastmath, tgmem = MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_tgmem, gdiv = 0))
     } elif (f.fmt == 44) {
@@ -211,77 +210,6 @@ def private mm_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate mul_mm sp
 }
 
 let PREFILL_M = 512   // the mm tier's token batch
-
-// k5 tensor mul_mm with the BYTE-PARALLEL QH compose (the k2/k3/k6 mul_mv trick): one masked
-// uint-wide qv per 4 elements + prescaled per-byte extracts, vs the shipped per-element
-// bit-compose (its tensor twin is the one mm form still at 0.78-0.82x vs llama.cpp on M5).
-class LabKqMmK5TByte {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16>
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
-    @ssbo @binding = 3 @off = "xoff" xf : array<float>
-    @ssbo @binding = 4 @off = "yoff" y : array<float>
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
-    @workgroup twb : float16[6144]
-
-    [metal_kernel(name="lab_kq_mm_k5t_byte_msl", float_a_ok=true)]
-    def lab_kq_mm_k5t_byte {
-        let mBase = gl_WorkGroupID.x * 32u
-        let nBase = gl_WorkGroupID.y * 64u
-        let nkb = kdim / 32u
-        let nsb = kdim / 256u
-        let lid = gl_LocalInvocationID.x
-        var acc : float[8192]
-        var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), 32u, 64u, 4u, 64u)
-        var kb = 0u
-        while (kb < nkb) {
-            var work = lid
-            while (work < 256u) {
-                let j = work >> 2u
-                let sub = work & 3u
-                let jsl = kb + (sub >> 1u)
-                let sb = jsl / 8u
-                let js = jsl % 8u
-                let kh = (sub & 1u) * 16u
-                let blk = (nBase + j) * nsb + sb
-                let sv = ks4[blk]
-                var sc = 0u
-                var mn = 0u
-                if (js < 4u) {
-                    sc = (sv.y >> (8u * js)) & 63u
-                    mn = (sv.z >> (8u * js)) & 63u
-                } else {
-                    let j2 = js - 4u
-                    let hi = sv.w >> (8u * j2)
-                    sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
-                    mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
-                }
-                let dsc = float(ksh[blk * 8u]) * float(sc)
-                let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-                let nsh = (js & 1u) * 4u
-                let qb = blk * 40u + (js / 2u) * 8u + kh / 4u
-                let hb = blk * 40u + 32u + kh / 4u
-                let tb0 = j * 72u + (sub >> 1u) * 32u + kh
-                for [unroll_full] (k in range(4)) {
-                    let u = kqu[qb + uint(k)]
-                    let hu = kqu[hb + uint(k)]
-                    let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> js) & 0x01010101) << 4u)
-                    for [unroll_full] (c in range(4)) {
-                        twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * float((qv >> (8u * uint(c))) & 255u) - dmn)
-                    }
-                }
-                work += gl_WorkGroupSize.x
-            }
-            barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, 32u, 64u, 64u)
-            barrier()
-            kb += 2u
-        }
-        tmm2d_tg_store(acc, cp, 32u, 64u, ndim)
-    }
-}
 
 // Rewrite every threadgroup A-tile subscript store `ta[IDX] = RHS;` into the pointer form
 // `*(ta + (IDX)) = RHS;` - llama.cpp's mul_mm ships the pointer form and rejects the

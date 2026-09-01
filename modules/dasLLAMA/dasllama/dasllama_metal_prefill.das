@@ -518,14 +518,24 @@ class template MetalKqMulMmK45TensorT {
                 }
                 let dsc = float(ksh[blk * 8u]) * float(sc)
                 let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-                for [unroll_full] (t in range(16)) {
-                    let e = kh + uint(t)
-                    static_if (QH) {
-                        let u = kqu[blk * BLK + (js / 2u) * 8u + e / 4u]
-                        let hu = kqu[blk * BLK + 32u + e / 4u]
-                        let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
-                        twb[j * 72u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
-                    } else {
+                static_if (QH) {
+                    //! byte-parallel q5 compose: one masked uint-wide qv per 4 elements
+                    //! (1.4x the per-element bit-compose it replaced, raced in the kq lab)
+                    let nsh = (js & 1u) * 4u
+                    let qb = blk * BLK + (js / 2u) * 8u + kh / 4u
+                    let hb = blk * BLK + 32u + kh / 4u
+                    let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+                    for [unroll_full] (k in range(4)) {
+                        let u = kqu[qb + uint(k)]
+                        let hu = kqu[hb + uint(k)]
+                        let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> js) & 0x01010101) << 4u)
+                        for [unroll_full] (c in range(4)) {
+                            twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * float((qv >> (8u * uint(c))) & 255u) - dmn)
+                        }
+                    }
+                } else {
+                    for [unroll_full] (t in range(16)) {
+                        let e = kh + uint(t)
                         let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
                         twb[j * 72u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
                     }
@@ -619,14 +629,22 @@ class template MetalKqMulMmK45DbT {
             }
             let dsc = float(ksh[blk * 8u]) * float(sc)
             let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-            for [unroll_full] (t in range(16)) {
-                let e = kh + uint(t)
-                static_if (QH) {
-                    let u = kqu[blk * BLK + (js / 2u) * 8u + e / 4u]
-                    let hu = kqu[blk * BLK + 32u + e / 4u]
-                    let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
-                    twb[tbase + j * 72u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
-                } else {
+            static_if (QH) {
+                let nsh = (js & 1u) * 4u
+                let qb = blk * BLK + (js / 2u) * 8u + kh / 4u
+                let hb = blk * BLK + 32u + kh / 4u
+                let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
+                for [unroll_full] (k in range(4)) {
+                    let u = kqu[qb + uint(k)]
+                    let hu = kqu[hb + uint(k)]
+                    let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> js) & 0x01010101) << 4u)
+                    for [unroll_full] (c in range(4)) {
+                        twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * float((qv >> (8u * uint(c))) & 255u) - dmn)
+                    }
+                }
+            } else {
+                for [unroll_full] (t in range(16)) {
+                    let e = kh + uint(t)
                     let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
                     twb[tbase + j * 72u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
                 }
