@@ -836,19 +836,27 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
 // crowns, recompile the PSOs, and assert the model still produces the CPU's tokens with twins in
 // the graph. A new tensor family joins CROWNED below.
 [unused_argument(t, path)]   // off-Apple the gated body is empty
-def private tensor_twin_row(t : T?; path, tag : string) {   // nolint:LINT012,LINT019 — tag is read by the das_metal arm
+def private tensor_twin_row(t : T?; path, tag : string; optional : bool = false) {   // nolint:LINT012,LINT019 — tag is read by the das_metal arm
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!family_on(t, "llama") || !arm_on(t, "tensor")) {
             return
         }
         // the carriers are provisioned (fetch_models.das), so absence is a RED, never a skip -
-        // a box that skips here ships every tensor twin unexercised
+        // a box that skips here ships every tensor twin unexercised. An `optional` carrier is a
+        // LOCAL requant no fetch can provision - absence skips loudly instead
         if (!stat(path).is_valid) {
-            t |> success(false, "tensor twin carrier missing: {path} - bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --fetch")
+            if (optional) {
+                t |> skip("{tag}: local requant vehicle absent ({path}) - the iquant crown witness runs only where it is minted")
+            } else {
+                t |> success(false, "tensor twin carrier missing: {path} - bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --fetch")
+            }
             return
         }
         let CROWNED = ("attn_avmm,attn_qkmm,gemm64b_q8,gemmb_q8,gemmb_sk_q8,kq_mulmm_k4," +
-            "kq_mulmm_k5,kq_mulmm_k6,moe_mulmm_mx4,moe_mulmm_q8,mulmm_bf16,mulmm_q8")
+            "kq_mulmm_k5,kq_mulmm_k6,moe_mulmm_mx4,moe_mulmm_q8,mulmm_bf16,mulmm_q8," +
+            "kq_mulmm_iq4xs,kq_mulmm_iq4nl,kq_mulmm_k3,kq_mulmm_iq3s,kq_mulmm_iq3xxs," +
+            "kq_mulmm_k2,kq_mulmm_iq2s,kq_mulmm_iq2xs,kq_mulmm_iq2xxs," +
+            "kq_gemv_iq3s_f4,kq_gemv_iq3xxs_f4,kq_gemv_iq2xxs_f4")
         var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         var trg <- blob_twin(t, path, 512l)
@@ -1831,6 +1839,9 @@ def test_metal_family_matrix(t : T?) {
             // q8 drives the mulmm/attn twins, the K-quant row drives the kq mulmm twins
             tensor_twin_row(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "tensor-twins/q8")
             tensor_twin_row(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_K_M.gguf"), "tensor-twins/k5")
+            //! the iquant crown witness: the arc vehicle carries iq2xxs planes, so this row
+            //! proves the new crown names reach a served twin (mulmm + the f4 gemv crown)
+            tensor_twin_row(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf"), "tensor-twins/iq2xxs", true)
             metal_decode_shutdown()
             metal_prefill_shutdown()
             t |> equal(metal_log_leaks_if_any(), 0l)

@@ -2282,7 +2282,8 @@ def race_envelope_ok(ba, bb : MetalBuffer?; count : int; var note : string&) : b
 }
 
 // interleaved adjacent A/B pair — separate per-side blocks read the box's thermal/clock ramp
-// as a phantom winner (reds-dig2; sequential blocks INVERTED m4's kq verdicts). Best-of/side.
+// as a phantom winner (reds-dig2; sequential blocks INVERTED m4's kq verdicts). Best-of/side;
+// ~150ms of burn first, else round 1 bills the governor's ramp to the base side alone.
 def race_pair_ms(queue : MetalCommandQueue?; reps : int; var base_ms, twin_ms : double&;
                  base_blk : block<(enc : MetalComputeEncoder?) : void>;
                  twin_blk : block<(enc : MetalComputeEncoder?) : void>) {
@@ -2291,6 +2292,19 @@ def race_pair_ms(queue : MetalCommandQueue?; reps : int; var base_ms, twin_ms : 
     var err = ""
     var best_b = -1.0lf
     var best_t = -1.0lf
+    var burn_ms = 0.0lf   // clock: control — GPU burn budget, ramps the clock governor before round 1
+    while (burn_ms < 150.0lf) {
+        var gb = 0.0lf
+        let okb = with_compute_encoder_timed(queue, err, gb) $(enc) {
+            invoke(base_blk, enc)
+        }
+        var gt = 0.0lf
+        let okt = okb && with_compute_encoder_timed(queue, err, gt) $(enc) {
+            invoke(twin_blk, enc)
+        }
+        return if (!okb || !okt)
+        burn_ms += gb + gt
+    }
     for (r in range(reps + 1)) {
         var g1 = 0.0lf
         var g2 = 0.0lf

@@ -3670,7 +3670,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mvb4_iq2xs = compile_pso(MetalKqMvB4Iq2xs_metal_kq_mv_iq2xs_msl, MetalKqMvB4Iq2xs_metal_kq_mv_iq2xs_msl_entry, MetalKqMvB4Iq2xs_metal_kq_mv_iq2xs_msl_fastmath, ok)
     g_pso_kq_mvb8_iq2xs = compile_pso(metal_kq_mvb8_iq2xs_msl, metal_kq_mvb8_iq2xs_msl_entry, metal_kq_mvb8_iq2xs_msl_fastmath, ok)
     g_pso_kq_mm_b24 = compile_pso(MetalKqMulMmIq2xs_metal_kq_mulmm_msl, MetalKqMulMmIq2xs_metal_kq_mulmm_msl_entry, MetalKqMulMmIq2xs_metal_kq_mulmm_msl_fastmath, ok)
-    g_pso_kq_iq2xxs = compile_pso(metal_kq_gemv_iq2xxs_msl, metal_kq_gemv_iq2xxs_msl_entry, metal_kq_gemv_iq2xxs_msl_fastmath, ok)
+    g_pso_kq_iq2xxs = compile_pso(MetalKqGemvIq2xxs_metal_kq_gemv_iq2xxs_msl, MetalKqGemvIq2xxs_metal_kq_gemv_iq2xxs_msl_entry, MetalKqGemvIq2xxs_metal_kq_gemv_iq2xxs_msl_fastmath, ok)
     if (metal_tensor_crowned("kq_gemv_iq3s_f4")) {
         g_pso_kq_iq3s_f4 = compile_pso(metal_kq_gemv_iq3s_f4_msl, metal_kq_gemv_iq3s_f4_msl_entry, metal_kq_gemv_iq3s_f4_msl_fastmath, ok)
     }
@@ -3678,7 +3678,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         g_pso_kq_iq3xxs_f4 = compile_pso(metal_kq_gemv_iq3xxs_f4_msl, metal_kq_gemv_iq3xxs_f4_msl_entry, metal_kq_gemv_iq3xxs_f4_msl_fastmath, ok)
     }
     if (metal_tensor_crowned("kq_gemv_iq2xxs_f4")) {
-        g_pso_kq_iq2xxs_f4 = compile_pso(metal_kq_gemv_iq2xxs_f4_msl, metal_kq_gemv_iq2xxs_f4_msl_entry, metal_kq_gemv_iq2xxs_f4_msl_fastmath, ok)
+        g_pso_kq_iq2xxs_f4 = compile_pso(MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl, MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl_entry, MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl_fastmath, ok)
     }
     g_pso_kq_mvb2_iq2xxs = compile_pso(MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl, MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl_entry, MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl_fastmath, ok)
     g_pso_kq_mvb4_iq2xxs = compile_pso(MetalKqMvB4Iq2xxs_metal_kq_mv_iq2xxs_msl, MetalKqMvB4Iq2xxs_metal_kq_mv_iq2xxs_msl_entry, MetalKqMvB4Iq2xxs_metal_kq_mv_iq2xxs_msl_fastmath, ok)
@@ -4800,7 +4800,7 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
     var bd = race_uniform_u32(dev, uint(ndim))
     let doff = uint64(nblk * 16)
     let tg = uint3(64u, 1u, 1u)
-    var burn_ms = 0.0lf
+    var burn_ms = 0.0lf   // clock: control — GPU burn budget, ramps the clock governor
     var burn_err = ""
     while (burn_ms < 150.0lf) {
         var g = 0.0lf
@@ -8932,11 +8932,11 @@ class MetalKqGemvIq2xs {
     }
 }
 
-// IQ2_XXS: the iq2xs GEMV geometry over the aux32 form - per (block, half) the block's grid
-// word supplies two BYTE indices (each doubling into the u64 grid pair), its aux32 the
-// parity ksigns; ONE per-32 UNSIGNED strip scales the whole block on the eighth-ed d.
-[metal_dispatch(name = "enc_kq_iq2xxs_c", pso = "g_pso_kq_iq2xxs", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
-class MetalKqGemvIq2xxs {
+// IQ2_XXS over the aux32 form: grid-word byte indices double into the u64 grid pair, aux32
+// carries the parity ksigns, ONE per-32 UNSIGNED strip scales the block on the eighth-ed d.
+// Two stamps on the F4 axis: in-place constant expand vs the crown-gated threadgroup slab.
+[ |> template_struct_instance]
+class template MetalKqGemvIq2xxsFam {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // strip region: 8 UNSIGNED per-32 sub-scales + 8 pad, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2xxs quant plane, uint view (16 words per superblock: [grid bytes][aux32] per block)
@@ -8944,9 +8944,20 @@ class MetalKqGemvIq2xxs {
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
+    @template_constant F4 : bool = false
+    @workgroup @template_gate = F4 gridf : float4[512]   // pre-expanded magnitudes, one float4 per grid word (8 KB)
 
-    [metal_kernel(name="metal_kq_gemv_iq2xxs_msl")]
+    [metal_kernel]
     def metal_kq_gemv_iq2xxs {
+        static_if (F4) {
+            let lid = gl_LocalInvocationID.x
+            for [unroll_full] (gk in range(8)) {
+                let gi = lid + uint(gk) * 64u
+                let w = iq2xxs_gw(int(gi))
+                gridf[gi] = float4(float(w & 255u), float((w >> 8u) & 255u), float((w >> 16u) & 255u), float(w >> 24u))
+            }
+            barrier()
+        }
         let lane = gl_SubgroupInvocationID
         let ix = lane / 8u
         let it = lane % 8u
@@ -8970,10 +8981,17 @@ class MetalKqGemvIq2xxs {
                     let sgn = ksign7m((aux >> (7u * uint(q3))) & 127u)
                     let s0 = sgn & 15u
                     let s1 = sgn >> 4u
-                    let w0 = iq2xxs_gw(int(bidx * 2u))
-                    let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
-                    let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-                    let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                    var m0 : float4
+                    var m1 : float4
+                    static_if (F4) {
+                        m0 = gridf[bidx * 2u]
+                        m1 = gridf[bidx * 2u + 1u]
+                    } else {
+                        let w0 = iq2xxs_gw(int(bidx * 2u))
+                        let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
+                        m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+                        m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                    }
                     let f0 = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
                         (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w)
                     let f1 = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
@@ -8995,72 +9013,14 @@ class MetalKqGemvIq2xxs {
     }
 }
 
-// The f4-slab twin: the same lane map with the 2 KB grid pre-expanded to float4 magnitudes
-// (8 KB threadgroup) and signs applied by select.
-[metal_dispatch(name = "enc_kq_iq2xxs_f4_c", pso = "g_pso_kq_iq2xxs_f4", tgmem = "metal_kq_gemv_iq2xxs_f4_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
-class MetalKqGemvIq2xxsF4 {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // strip region: 8 UNSIGNED per-32 sub-scales + 8 pad, byte view (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2xxs quant plane, uint view (16 words per superblock: [grid bytes][aux32] per block)
-    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @workgroup gridf : float4[512]   // pre-expanded magnitudes, one float4 per grid word (8 KB)
+[metal_dispatch(name = "enc_kq_iq2xxs_c", pso = "g_pso_kq_iq2xxs", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+class MetalKqGemvIq2xxs : MetalKqGemvIq2xxsFam {
+}
 
-    [metal_kernel(name="metal_kq_gemv_iq2xxs_f4_msl")]
-    def metal_kq_gemv_iq2xxs_f4 {
-        let lid = gl_LocalInvocationID.x
-        for [unroll_full] (gk in range(8)) {
-            let gi = lid + uint(gk) * 64u
-            let w = iq2xxs_gw(int(gi))
-            gridf[gi] = float4(float(w & 255u), float((w >> 8u) & 255u), float((w >> 16u) & 255u), float(w >> 24u))
-        }
-        barrier()
-        let lane = gl_SubgroupInvocationID
-        let ix = lane / 8u
-        let it = lane % 8u
-        let nb = ndim / 256u
-        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var sumf : float[2]
-        var ib = ix
-        while (ib < nb) {
-            let yb4 = ib * 64u + it * 8u
-            var yv : float4[8]
-            for [unroll_full] (i in range(8)) {
-                yv[i] = x[yb4 + uint(i)]
-            }
-            for [unroll_full] (r in range(2)) {
-                let blk = (first_row + uint(r)) * nb + ib
-                let gw = kqu[blk * 16u + it * 2u]
-                let aux = kqu[blk * 16u + it * 2u + 1u]
-                var accv = float4(0.0)
-                for [unroll_full] (q3 in range(4)) {
-                    let bidx = (gw >> (8u * uint(q3))) & 255u
-                    let sgn = ksign7m((aux >> (7u * uint(q3))) & 127u)
-                    let s0 = sgn & 15u
-                    let s1 = sgn >> 4u
-                    let m0 = gridf[bidx * 2u]
-                    let m1 = gridf[bidx * 2u + 1u]
-                    let f0 = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                        (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w)
-                    let f1 = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                        (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w)
-                    accv += yv[q3 * 2] * f0
-                    accv += yv[q3 * 2 + 1] * f1
-                }
-                let sc = float(kscb[blk * 16u + it])
-                sumf[r] += float(kdh[blk]) * sc * (accv.x + accv.y + accv.z + accv.w)
-            }
-            ib += 4u
-        }
-        for [unroll_full] (r in range(2)) {
-            let s = simd_sum(sumf[r])
-            if (lane == 0u && first_row + uint(r) < ddim) {
-                y[first_row + uint(r)] = s
-            }
-        }
-    }
+// the F4 twin serves only under the box's serving-confirm crown (ARCHITECTURE_MEASUREMENT.md sec.2.21)
+[metal_dispatch(name = "enc_kq_iq2xxs_f4_c", pso = "g_pso_kq_iq2xxs_f4", tgmem = "MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+class MetalKqGemvIq2xxsF4 : MetalKqGemvIq2xxsFam {
+    override F4 = true
 }
 
 // IQ3_XXS: the iq3s GEMV shape over the 24-word rows - signs from the block's aux32 through

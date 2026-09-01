@@ -588,7 +588,7 @@ namespace das {
     // sanity bound on a record's macro-dependency count: a real program registers a handful
     // (one per consumed sidecar/config); anything past this reads as stream corruption
     static constexpr uint32_t SER_MAX_MACRO_DEPS = 4096u;
-    static constexpr uint64_t FNV64A_SEED = 14695981039346656037ul;   // an EXISTING empty file must hash unlike an absent one (hash 0)
+    static constexpr uint64_t FNV64A_SEED = 14695981039346656037ul;   // any nonzero constant serves: size (-1 absent vs 0 empty) already separates the states
 
     void statAndHashFileDependency ( const string & path, int64_t & size, uint64_t & hash ) {
         size = -1;

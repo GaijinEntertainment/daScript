@@ -11,11 +11,9 @@
   `get_architecture_name()`, or `cpu_supports()` - runs the module-owned suite on a machine
   matching that condition.**
 
-- **A diff whose new behavior runs only under a set target triple - a cross-compile, not the
-  host - names in its PR body the cross-compile (`write_exe`) for that target that exercised
-  the behavior.** This holds whether the diff adds that code path or finds it already there;
-  the suite runs on the host, so a target-triple branch is checked only by the artifact built
-  for that target.
+- **A diff that adds or changes a branch on the target triple names in its PR body the
+  cross-compile (`write_exe`) for that target that exercised the behavior.** The suite runs on
+  the host, so a target-triple branch is checked only by the artifact built for that target.
 
 - **A diff that adds work to, or moves work within, what `run_jit`
   (`daslib/llvm_jit_run.das`) executes - its own body or any callee - also prints an
@@ -29,11 +27,16 @@
   the `[tune]` stamping - is not such a change: stamped arguments fold into the cache keys
   per function.
 
-- **A diff that adds an environment or config input to the cache key folds it inside
-  `jit_env_salt` (`daslib/llvm_jit_run.das`), never directly into either cache key - the DLL
+- **A diff that adds an environment or config input to a JIT cache key folds it inside
+  `jit_env_salt` (`daslib/llvm_jit_run.das`), never directly into either JIT key - the DLL
   key or the split-obj key (`ARCHITECTURE.md` sec.2)** - salt feeds both keys, and a config
   folded into one but not the other links stale objects. Inputs that vary per function set
   (AOT hashes) are key material, not salt.
+
+- **A macro under `daslib/` that reads a file at compile time registers it with
+  `add_module_cache_dependency` before any early return, in the same change**
+  (`ARCHITECTURE.md` sec.5). An unpinned compile-time file read serves stale macro output
+  from the module cache until an unrelated source file changes - silently.
 
 - **A change to a `[tune]`-family annotation is reviewed with `skills/tune.md`.** A change to
   the framework itself - `daslib/llvm_tune.das` or its tests - is reviewed with

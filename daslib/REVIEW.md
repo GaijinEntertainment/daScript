@@ -1,8 +1,8 @@
 # daslib Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`daslib/ARCHITECTURE.md` and its companions `ARCHITECTURE_LINT.md`, `ARCHITECTURE_EMIT.md`,
-`ARCHITECTURE_LINQ.md`. Planned work: `plans/daslib_comment_sweep.md` (repo root).
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_LINT.md`, `ARCHITECTURE_EMIT.md`, `ARCHITECTURE_LINQ.md`.
+Planned work: `plans/daslib_comment_sweep.md` (repo root).
 A diff touching the linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too.
 
 **A diff that adds or changes a lint report path (`perf_warning` / `style_warning` /
@@ -20,7 +20,8 @@ the actionable line is an intermediate call site.
 inside a lint visitor method is a defect.** The guard's position decides which rules apply
 inside a lambda; the per-rule policy is in `ARCHITECTURE_LINT.md` sec. 1.
 
-**Never move `add_ptr_ref`'s depth tracking behind the `in_closure` gate.** The rules block
+**Never move perf_lint's PERF023 `add_ptr_ref` splice-depth tracking (`perf_lint.das`) behind
+the `in_closure` gate.** The rules block
 is itself a closure, so a gated tracker never sees the splice.
 
 **A lint warning that anchors anywhere but the code its fix rewrites is a defect.** A remedy
@@ -34,9 +35,9 @@ construct's visit.
 **Never keep per-loop visitor state in a bare scalar - keep it in a stack.** A scalar
 survives into the sibling loop's exit path and unbalances its counter.
 
-**A diff that makes a daslib predicate or emitted identifier depend on a C++-side
-definition records the pair in the architecture doc, in its module's section, naming both
-sides.** Nothing catches it when one side later moves alone.
+**A diff that adds or changes a daslib fact - code or a `//!` contract - whose truth is
+decided by a C++-side definition records the pair in the architecture doc, in its module's
+section, naming both sides.** Nothing catches it when one side later moves alone.
 
 **When a diff changes one side of a recorded daslib/C++ pair so the two no longer match,
 it changes the other side and updates the pair's architecture-doc entry in the same
@@ -45,12 +46,11 @@ diff.**
 **A diff that adds an architecture-doc entry adds it only where no name, shape, or test can
 carry the fact.**
 
-**Weakening `tests/lint/test_nolint_suppression.das` is a defect** - it pins that a string
+**A diff that changes daslib's nolint scanning - suppression parsing, staleness detection, or
+the header window - keeps `tests/lint/test_nolint_suppression.das` and
+`tests/lint/test_stale_nolint.das` green without weakening them.** They pin that a string
 literal, a URL, and a mid-comment `nolint:` do not suppress while a first-token directive
-after `//` or `//!` does.
-
-**Weakening `tests/lint/test_stale_nolint.das` is a defect** - it pins that a
-`lint-skip-file` past the header window is prose.
+after `//` or `//!` does, and that a `lint-skip-file` past the header window is prose.
 
 **A diff that changes `build_lint_macro_disabled` keeps its four sources layered in this
 order: defaults, repo `off`, repo `on`, environment.** Env last lets a one-run
@@ -60,12 +60,10 @@ order: defaults, repo `off`, repo `on`, environment.** Env last lets a one-run
 seeding and the repo `off` directives.** Repo policy must not silence the rule a fixture
 exists to exercise.
 
-**Weakening `tests/lint/test_lint_config.das` is a defect** - it pins that each `[format]`
-key resolves nearest-wins independently up to the `.git` root, so a nearer `.lint_config`
-declaring one key does not reset the other.
-
-**Weakening the kept-comment cases in `utils/mcp/test_tools.das` is a defect** - they pin
-the formatter's kept set.
+**A diff that changes daslib's `.lint_config` resolution keeps `tests/lint/test_lint_config.das`
+green without weakening it** - it pins that each `[format]` key resolves nearest-wins
+independently up to the `.git` root, so a nearer `.lint_config` declaring one key does not
+reset the other.
 
 **A daslib module that emits a lint rule id joins `RULE_MODULES` in `utils/lint/REVIEW.das`
 in the same change.** An unlisted module's ids are never scanned, so its fixture-and-rst

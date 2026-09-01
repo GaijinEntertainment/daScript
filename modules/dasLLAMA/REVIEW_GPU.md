@@ -119,6 +119,12 @@ an `upload_region` upload never written after arming - is a defect unless it car
 defect; a per-encode field either omits `@role` or names the access its body performs.**
 `weight` drops the hazard staging.
 
+**A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
+`[vk_dispatch]` declaration, or a new instance of a template carrying one - covers that class
+in `tests/test_kernel_coverage.das`, one of two ways.** Either a census row there dispatches
+the class, or the diff names it in that file's `CENSUS_NEVER_DISPATCHED` with the reason no
+row can reach it - an unledgered class turns the census's blind-spot list into a lie.
+
 **A new kernel class declared in `dasllama/` carries `[metal_dispatch]` / `[vk_dispatch]`
 with every annotation that backend's generated builder reads - per-field `@binding` /
 `@role` / `@off` / `@default`.** A field carrying none of them is dropped from the bind list
@@ -138,13 +144,17 @@ default-filling wrapper, or a composite over generated builders.**
 dispatch through the kernel's `enc_*` builder instead.** A race or knockout arm hand-binds by
 construction and answers to the hand-binding-arm rules instead.
 
-**A hand-binding arm that binds a field at another field's declared number is a defect - and
-so is any bind in an arm the machine check cannot see.** The undeclared-number half is
-`REVIEW.das`'s `check_race_bind_numbers` where the arm names its kernel class (a `kn_tgmem`
-constant or an in-function `pipeline_from_source`); an arm binding through a pso or tgmem
-passed as a function parameter is invisible to it, so BOTH halves of that arm stay the
-reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and its timing crowns the
-wrong kernel silently.
+**A hand-binding arm that binds a field at another field's declared number is a defect.**
+A mis-numbered arm dispatches, reads the wrong buffer, and its timing crowns the wrong
+kernel silently.
+
+**A hand-binding arm whose diff cannot be checked by `REVIEW.das`'s `check_race_bind_numbers`
+- its pipeline source or threadgroup-memory size arrives as a function parameter instead of a
+literal MSL global near the binds - states in the PR that its bind numbers were verified by
+hand against the class declaration.** The machine check resolves the kernel class only from a
+literal global (a `kn_tgmem` constant or an in-function `pipeline_from_source`); a
+parameter-shaped arm is invisible to it, and an unverified invisible arm is the mis-numbered
+crown's front door.
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
 and as a kargs field - is a defect.** A `params=` value that the `grid=`/`tg=` spec consumes
@@ -177,14 +187,19 @@ times both kernels on one queue and compares their outputs.
 small enough to sit in cache ranks the kernels by an effect production never sees, and the
 race then picks the slower kernel.
 
-**A race arm that dispatches a chain of one kernel binds a DIFFERENT output buffer for
-consecutive dispatches - never one shared output across the chain.** One shared output
-serializes the chain on its write-after-read hazard while the served graph overlaps
-consecutive dispatches, so the race ranks the arms on a shape production never runs.
+**A kernel A/B race arm whose verdict crowns or ships a kernel - wherever the race lives -
+binds a DIFFERENT output buffer for consecutive dispatches of its chain, never one shared
+output.** One shared output serializes the chain on its write-after-read hazard while the
+served graph overlaps consecutive dispatches, so the race ranks the arms on a shape
+production never runs. A comparison rig that deliberately matches a serialized reference
+instrument's shape is the exception, and it says so where `ARCHITECTURE_MEASUREMENT.md`
+sec.2.21 ledgers it - its verdicts never crown alone.
 
-**A Metal race spends GPU work on its own arms before its first timed round, and keeps the
-dispatches inside each timed encoder back to back.** The arms alternate, so a first round on
-an idle clock bills the governor's ramp to one side.
+**Weakening `race_pair_ms`'s burn phase is a defect, and a diff that adds a crowning race arm
+OUTSIDE `race_pair_ms` burns GPU work on its own arms before its first timed round, in the
+same change.** The arms alternate, so a first round on an idle clock bills the governor's
+ramp to one side. The dispatches inside each timed encoder stay back to back - a sparse
+encoder reads idle-clock times.
 
 **A string-typed Metal decline reason is a defect - a Metal decline reason is an enum value in
 `dasllama/dasllama_metal_shapes.das`, one enum per driver.**

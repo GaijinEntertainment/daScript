@@ -30,12 +30,7 @@ re-mint.** A reference row that carries no `sha` (the cli and python reference t
 pinned by its builder instead - the cli tools by that same ref pin's checkout, the python
 legs by `../benchmarks/asr/requirements-*.txt`.
 
-**A diff that changes a reference-tool pin - `DEFAULT_REF_SHA` in
-`../benchmarks/setup_lcpp_ref.das`, or a python leg's
-`../benchmarks/asr/requirements-*.txt` - re-mints every row that pin's tool minted, or
-withdraws them.**
-
-**A diff that writes a provenance manifest under this folder whose `provenance.dasllama_version`
+**A diff that writes a records row, sidecar archive, or `defaults/` profile under this folder whose `provenance.dasllama_version`
 differs from the `DASLLAMA_RELEASE` string (`../dasllama/dasllama_version.das`) is a defect -
 re-mint.** For a sidecar with an `engine_sha`, read the value at that commit; a `defaults/`
 profile compares against the branch under review.
@@ -100,9 +95,3 @@ the row's canonical values** - the verify never reads the url of a file already 
 **A diff that refreshes `last_known_good_sidecar.json` replaces it with one complete mint from
 the box its provenance names, at the current `DASLLAMA_RELEASE` - never a hand-edited copy.**
 
-**A diff that changes the exchange consent notice wording updates every checked-in copy in
-the same change, and a diff that adds a copy names it here in the same change:
-`EXCHANGE_CONSENT_NOTICE` (`../dasllama/dasllama_exchange.das`), `CONSENT_TITLE` /
-`CONSENT_TEXT` (`utils/watchdog/watchdog.py`, repo root), and the captured
-`utils/dasllama-server/tests/fixtures/exchange.json` (repo root).** The console prompt and the
-control page render the served constant, so they are not copies.

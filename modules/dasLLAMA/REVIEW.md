@@ -32,6 +32,14 @@ opens that checklist on its own.
 
 **A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
 
+**A `harness/` instrument that times or measures applies `../benchmarks/`'s instrument rules
+(`benchmarks/REVIEW.md`) as if it lived there.** The harness folder carries no checklist of
+its own, and a timing rig is the same instrument wherever it parks.
+
+**A diff that adds or moves a row in `harness/tune_kernels.das`'s bench list keeps
+`dot_q8q8_laneq4x4` last.** That bench pins the repack backend for the rest of the process, so
+a row after it is timed against the pinned backend instead of the backend it would select.
+
 **A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it,
 a `.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a
 flavor (the backend-and-layout variant an image is baked for, one part of its identity) -
@@ -197,11 +205,11 @@ third-party engine this module measures itself against - the checkout
 `benchmarks/setup_lcpp_ref.das` pins. A symbol the file carrying that prose calls or holds as
 a value is its own name, not attribution.
 
-**A line whose job is to locate or reproduce work against the reference build names that
-build's binary outright** - a path naming where checked-in data is regenerated FROM, an
-env-knob row whose value locates the reference binary, a command line or flag list in a
-methodology, profile, bring-up, or how-to document, and a follow-up ledger's row naming the
-build its numbers compare against.
+**A file or line whose job is to locate, patch, or reproduce work against the reference build
+names that build's binaries and symbols outright.** The job decides, not the artifact kind - a
+regeneration path, an env-knob row, a command line in a methodology or how-to document, a
+ledger row naming the compared build, and a source patch applied TO the reference build all
+qualify.
 
 **Legal attribution never appears in prose - it lives in `THIRD_PARTY_NOTICES.md` and the
 `LICENSE.*` files.**

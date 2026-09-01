@@ -2374,8 +2374,9 @@ def private confirm_serving_crown(crown : string; var wins : array<string>) {
 }
 
 def private confirm_decode_model() : string {
-    let envm = get_env_variable("DASLLAMA_CONFIRM_IQ2XXS")
+    let envm = g_env_harness.confirm_iq2xxs
     if (!empty(envm)) {
+        print("confirm: DASLLAMA_CONFIRM_IQ2XXS={envm} - the operator pins the crown-confirm vehicle\n")
         return envm
     }
     let md = models_dir_resolved()

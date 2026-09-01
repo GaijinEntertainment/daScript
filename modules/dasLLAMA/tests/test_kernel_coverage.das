@@ -83,7 +83,17 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalKqGemvIq3xxs", "MetalKqMvB2Iq3xxs", "MetalKqMvB4Iq3xxs", "MetalKqMvB8Iq3xxs", "MetalKqMulMmIq3xxs",
     "MetalKqGemvIq2s", "MetalKqMvB2Iq2s", "MetalKqMvB4Iq2s", "MetalKqMvB8Iq2s", "MetalKqMulMmIq2s",
     "MetalKqGemvIq2xs", "MetalKqMvB2Iq2xs", "MetalKqMvB4Iq2xs", "MetalKqMvB8Iq2xs", "MetalKqMulMmIq2xs",
-    "MetalKqGemvIq2xxs", "MetalKqMvB2Iq2xxs", "MetalKqMvB4Iq2xxs", "MetalKqMvB8Iq2xxs", "MetalKqMulMmIq2xxs"
+    "MetalKqGemvIq2xxs", "MetalKqMvB2Iq2xxs", "MetalKqMvB4Iq2xxs", "MetalKqMvB8Iq2xxs", "MetalKqMulMmIq2xxs",
+    // the same nine formats' crown-gated forms (the metal-kq-race arc): the f4-slab GEMV twins
+    // and the tensor mul_mm T/TH stamps compile only behind a box crown and dispatch only on
+    // planes the zoo does not stock. Their coverage is the same kernel-unit gates plus the
+    // tensor-twins/iq2xxs matrix row and the mint's METAL_TWIN race rows
+    "MetalKqGemvIq3sF4", "MetalKqGemvIq3xxsF4", "MetalKqGemvIq2xxsF4",
+    "MetalKqMulMmIq4xsT", "MetalKqMulMmIq4xsTH", "MetalKqMulMmIq4nlT", "MetalKqMulMmIq4nlTH",
+    "MetalKqMulMmK3T", "MetalKqMulMmK3TH", "MetalKqMulMmK2T", "MetalKqMulMmK2TH",
+    "MetalKqMulMmIq3sT", "MetalKqMulMmIq3sTH", "MetalKqMulMmIq3xxsT", "MetalKqMulMmIq3xxsTH",
+    "MetalKqMulMmIq2sT", "MetalKqMulMmIq2sTH", "MetalKqMulMmIq2xsT", "MetalKqMulMmIq2xsTH",
+    "MetalKqMulMmIq2xxsT", "MetalKqMulMmIq2xxsTH"
 ]
 
 def private counting_prompt(start, last : int) : string {

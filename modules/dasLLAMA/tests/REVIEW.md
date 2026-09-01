@@ -29,8 +29,9 @@ defect.** Out-of-folder instances are ledgered in `CLAUDE.md`'s "Out-of-folder t
 
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect.**
 
-**A diff that adds, removes or re-lanes a gate in a file with a `CLAUDE.md` entry updates that
-entry in the same change.**
+**A diff that adds, removes or re-lanes a gate in a file whose `CLAUDE.md` paragraph LISTS
+its gates updates that paragraph in the same change.** A paragraph that only names the file
+(a brace list, a suite roster) carries nothing to update and does not fire this rule.
 
 **A new test file listed in `run.das`'s `model-free` suite, or in no `run.das` suite at all,
 whose name does not say what it covers, gets a `CLAUDE.md` entry in the same change** -
@@ -42,31 +43,19 @@ partial.
 filter mechanics" section in the same change** - an arm the census does not name is
 unreachable to whoever is choosing what to run.
 
-**Weakening `test_program_roots.das` - dropping a directory from its `ROOT_DIRS` sweep,
-loosening its `options stack = 524288` assert, or relaxing its prefill-intent assert - is a
-defect.**
-
-**Weakening `test_env_registry.das` is a defect.** It enforces the knob contract that
-`../ENVIRONMENT.md` describes.
-
-**Weakening `test_model_specs.das` is a defect.** It is the gate on the model-set table
-(`../performance/model_specs.das`).
-
-**Weakening the softcap, sink and span cells of `test_metal_prefill_kernels.das` - dropping
-or loosening a softcap, sink (`hass`) or span arm, or dropping a span shape - is a defect** -
-they are what fails when `pf_p_weight` and `metal_attn_rowstat` drift apart.
-
-**Weakening `test_site_records.das` - the gate that byte-compares
+**Weakening a contract-pinning gate - dropping an assert, loosening a bound, or narrowing the
+corpus or sweep it covers - is a defect.** The pinned set, each with what its gate holds:
+`test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill intent);
+`test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das` (the
+model-set table, `../performance/model_specs.das`); the softcap/sink (`hass`)/span cells of
+`test_metal_prefill_kernels.das` (what fails when `pf_p_weight` and `metal_attn_rowstat`
+drift apart); `test_site_records.das` (the byte-compare of
 `site/files/dasllama/bench_records.json` (repo root) against a fresh `merge_site_records`
-run - is a defect.**
-
-**Weakening `test_exchange_schema.das` or `test_bench_records_schema.das` - loosening an
-assert, dropping one, or narrowing the corpus either one sweeps - is a defect** - they gate
-the real `write_bench_records` output.
-
-**Weakening `test_scheduler.das`'s media-stream bypass check - a media stream attaches no
-cached hit at admit (`prefix_attach`) and donates no pages at reap (`donate_stream`) - is a
-defect.** Cache keys are token ids, and the KV past the splice does not follow from them.
+run); `test_exchange_schema.das` and `test_bench_records_schema.das` (the real
+`write_bench_records` output, corpus sweeps included); `test_scheduler.das`'s media-stream
+bypass check (a media stream attaches no cached hit at admit (`prefix_attach`) and donates no
+pages at reap (`donate_stream`) - cache keys are token ids, and the KV past the splice does
+not follow from them).
 
 **A test that silently vanishes on one platform is a defect, and so is a zero-assertion pass -
 a test passes or skips explicitly on every platform.** A cell that returns without asserting -
@@ -106,11 +95,14 @@ registry, and never calls it directly.** The registries this governs: the arch r
 registry, and the format/backend dispatch tables. A new registry joins that list in the same
 change. A `[metal_dispatch]` declaration is not one of them.
 
-**A diff that changes anything a kernel dispatches with, binds, or reads from its kargs - the
-kernel's kernel-argument struct - updates every gate that hand-binds that kernel, in the same
-change.** A hand-bound gate dispatches the geometry and threadgroup memory its production
-encoder does. The mechanism - why a missed threadgroup-memory length fails silently - is
-`CLAUDE.md`'s "Metal kernel gates" section.
+**A diff that changes a kernel's dispatch geometry - its grid divisor, threadgroup size, or
+threadgroup-memory length - updates every gate that hand-dispatches that kernel, in the same
+change.** A hand-dispatched gate encodes the geometry itself, so a moved divisor leaves it
+racing the wrong shape silently.
+
+**A diff that changes a kernel's kargs - the kernel-argument struct, or any buffer binding -
+updates every gate that hand-binds that kernel, in the same change.** A stale hand bind reads
+the wrong buffer and passes on garbage that happens to compare.
 
 **A kernel that gains an in-body branch keyed on a kargs field ships, in the same change, a
 gate cell that sets that field to the value selecting the new branch.**
@@ -132,13 +124,6 @@ a defect.** A resize cap is not evidence.
 
 **A freeform token-parity cell is a defect.** Freeform coverage uses the forced-feed
 logits-tolerance form. Counting cells stay token-exact.
-
-**A diff that adds a GPU kernel class under `../dasllama/` - a `[metal_kernel]` def, a
-`[vk_dispatch]` declaration, or a new instance of a template carrying one - covers that class
-in `test_kernel_coverage.das`, one of two ways.** Either a census row there dispatches the
-class, or the diff names it in that file's `CENSUS_NEVER_DISPATCHED`, with the reason no row
-can reach it. A `DASLLAMA_PARITY_FULL`-gated census row counts as the dispatching arm. Naming
-a class a census row could dispatch is a defect.
 
 **A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
 output - missing a compare against a CPU oracle that can witness the cell's property is a
@@ -243,8 +228,8 @@ exact fixtures.
 **An embedding-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A new gate, or a new or loosened tolerance bar, ships a control that reds it in the same
-change.** A control is a run of the same gate that must RED - a poisoned input, a poisoned
+**A kernel-unit cell that dispatches a kernel class no cell dispatched before, or a new or
+loosened tolerance bar, ships a control that reds it in the same change.** A control is a run of the same gate that must RED - a poisoned input, a poisoned
 expectation, a disconnected mechanism, or a second independent lane; a gate's own reference is
 never its control. A bar nothing has ever exceeded is not known to discriminate, and a gate
 that reads state the same code path wrote can be a tautology - only the control proves either
@@ -256,7 +241,7 @@ smallest GGUF that runs on the small tier (the file homes are `CLAUDE.md`'s "Mod
 no-arm tests" and "Out-of-folder test files" notes). A family whose vocab lacks the markers
 has no format to test.
 
-**A kernel-unit gate that compares a GPU attention kernel against a wider-precision CPU oracle
+**A kernel-unit gate whose kernel reads f16 operands and whose oracle is wider-precision
 feeds inputs that are exact in f16.** Otherwise the compare measures input rounding, and the
 bar has to be loosened until it no longer discriminates.
 

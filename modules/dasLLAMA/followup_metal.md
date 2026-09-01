@@ -12,10 +12,13 @@ The five `dot = "smmla"` seats of `q8q8_tile_gen` (mr4/mr8 x kstep/nrsplit/gkste
 PR-1 detection fix (`g_target_arm64_i8mm` consults `cpu_supports`, `+i8mm` appended to the
 target machine). The `harness/smmla_probe.das` gate passed first: correctness OK, 2.02x
 register-resident MAC throughput over sdot4 - the nominal ceiling. In the tile race that
-ceiling does not survive the memory traffic plus the kg8 re-layout: best smmla seat
+ceiling does not survive the memory traffic plus the kg8 re-layout (the tile race:
+`DAS_TUNE_MODE=tune harness/dasllama_tuner.das`'s q8q8_tile_gen family bench, m5): best smmla seat
 `mr8_kstep2_nrsplit2` at 25893 us vs NEON `mr8_budget` at 21349 us (~21% behind; full table
-in the m5 sidecar's race section and `~/.tune-history/m5/`). No `arm-i8mm` defaults export -
-the export was conditional on a win.
+in the m5 sidecar's race section and `~/.tune-history/m5/`). The `arm-i8mm` defaults profile
+SHIPS regardless (`performance/defaults/arm-i8mm.tune-defaults.json`, exported from the full
+m5 mint): its winners are the NEON ones, and its `i8mm` features fingerprint marks the smmla
+seats raced-and-covered, so no M2+ box re-races them at adoption.
 
 Consequences: an smmla kq tile emitter arm is NOT mac-leverage (the q8q8 verdict transfers -
 the kq tiles are more memory-bound, not less); it remains a Graviton3+/c8g candidate raced on
@@ -55,16 +58,21 @@ followup_general #58, the Q22 dispatch-loop probe method) consolidate here in Ph
 
 ## 4. The elementwise / activation-precision lane (the last M5 pp residual)
 
-Attribution (M5, 1B iq2xxs, pp512 = 31 ms encode): mm 27.7 ms at measured tensor-twin rates,
-attention 0.16 ms - the ~3 ms remainder is every non-matmul pass over the activation planes
-(norms, residual adds, rope, swiglu, activation converts, glue). llama.cpp's slice: ~1.7 ms.
+Attribution (M5, 1B iq2xxs, pp512 = 31 ms encode; `benchmarks/lcpp_bench.das
+--for-debug-purposes --ngl 99 -p 512`, the prefill stage log line + per-kernel lab rates from
+`benchmarks/matmul/bench_metal_kq_race.das`; the llama.cpp slice from its `llama-bench -p 512`
+wall minus the same mm/attention accounting at test-backend-ops rates): mm 27.7 ms at measured
+tensor-twin rates, attention 0.16 ms - the ~3 ms remainder is every non-matmul pass over the
+activation planes (norms, residual adds, rope, swiglu, activation converts, glue). llama.cpp's
+slice: ~1.7 ms.
 
 **What already exists** - the producer-fused f16 twin family (`_hx`): `pf_enc_rms_hx`,
 `pf_enc_add_rms_bhx` (add+norm+half-emit in one), `enc_swiglu_hx`/`enc_geglu_hx`,
 `enc_qk_rope_hx`. On the dense path these cover the norm and activation producers; the
 standalone `enc_cvt_half` fires only through `pf_cvt_panel` fallbacks and at the sites below.
-Measured ceiling of ALL remaining converts (`DASLLAMA_METAL_PREFILL_SKIP=act_cvt` knockout):
-**+0.65% pp512 on M5** (15334 vs 15235 tok/s) - the fusion rung is mostly banked already.
+Measured ceiling of ALL remaining converts (`DASLLAMA_METAL_PREFILL_SKIP=act_cvt` knockout on
+`benchmarks/lcpp_bench.das --for-debug-purposes --ngl 99 -p 512 -n 16 -r 3`, m5):
+**+0.65% pp512** (15334 vs 15235 tok/s) - the fusion rung is mostly banked already.
 
 - **4a. The attention-out `_hx`** (the one live dense-path cvt): the AV kernels
   (`MetalAttnAV`, `MetalAttnAVMm`, the tensor `MetalAttnAVMmTensorT`) write only f32 `xb`;

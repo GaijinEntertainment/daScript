@@ -1,9 +1,10 @@
 # dasLLAMA benchmarks Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../ARCHITECTURE_MEASUREMENT.md` (the benchmark rig: `#one-benchmark-rig`). Planned work:
-`../followup_vulkan.md` for anything about the Vulkan backend, `../PERF_LEDGER.md` for any
-other performance followup, `../followup_general.md` for everything else.
+doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_metal.md` for anything about
+the Metal backend, `../followup_vulkan.md` for anything about the Vulkan backend,
+`../PERF_LEDGER.md` for any other performance followup, `../followup_general.md` for
+everything else.
 
 **A diff that adds or changes an instrument whose timed body runs a forward pass through a
 pipeline the dasLLAMA engine selected also calls `tune_gate()`
@@ -11,17 +12,20 @@ pipeline the dasLLAMA engine selected also calls `tune_gate()`
 the instrument compiled itself - or a reference tool's own runtime - is not one the engine
 selected. Without the gate the instrument measures fallback kernels silently.
 
-**A diff that adds or changes a race times both arms interleaved in one process - a Metal race
-through `race_pair_ms`.** A race is an instrument that compares two implementations. Two
-separate runs measure the box's drift between them as much as they measure the arms.
+**A diff that adds or changes a race alternates its arms within one process - one timed round
+per arm, best-of across rounds, GPU work burned before the first timed round.** A race is an
+instrument that compares two implementations. Two separate runs measure the box's drift
+between them as much as they measure the arms; `race_pair_ms`
+(`../dasllama/dasllama_metal_common.das`) is the engine-side helper that carries all three
+properties.
 
 **A diff that adds or changes a race arm offered as the reason to adopt a change proves the
 arm's output on its report line, by what the arm computes:** an arm producing no comparable
-output carries the literal token `timing-only`; an arm computing the baseline's result in a
-different precision prints a bounded-difference compare (against the baseline arm or the CPU
-reference) plus the bound it passed; an arm computing it in the same precision prints the
-bit-exact compare over the sampled region - the set of output elements the run compares - on
-the report's "bit-exact vs ..." line.
+output carries the literal token `timing-only`; an arm whose result is bit-identical to the
+baseline's prints the bit-exact compare over the sampled region - the set of output elements
+the run compares - on the report's "bit-exact vs ..." line; every other arm prints a
+bounded-difference compare (against the baseline arm or the CPU reference) plus the bound it
+passed. Reduction order and fma contraction decide bit-identity, not declared precision.
 
 **A diff that adds or changes a race also checks the race's baseline arm against a CPU
 reference.** The baseline arm is the arm running the implementation already in use. The
@@ -34,10 +38,12 @@ is one whose arms attribute cost across stages instead of selecting between two
 implementations. The same header line also names what its arms attribute. Without that text a
 reader takes the sweep's arms for an adoption decision it never made.
 
-**A new instrument that times a served turn is a defect - add a board cell to
-`../performance/gen_bench_records.das`, or a `lcpp_bench.das` cell with its own
-`../PROFILE.md` section, instead.** A served turn is a whole prefill-plus-decode run. A
-second instrument's numbers cannot be compared to any row the board already carries.
+**A new instrument that times a served turn - wherever it lives under this module - is a
+defect: add a board cell to `../performance/gen_bench_records.das`, or a `lcpp_bench.das`
+cell with its own `../PROFILE.md` section, instead.** A served turn is a whole
+prefill-plus-decode run. A second instrument's numbers cannot be compared to any row the
+board already carries. A tuner confirm that SPAWNS `lcpp_bench.das` and reads its standard
+report line adds no instrument and conforms (`../ARCHITECTURE_MEASUREMENT.md` sec.2.21).
 
 **An out-of-process observer never measures what the benchmark process can measure about
 itself - that measurement goes inside the process instead.** An out-of-process observer is a
@@ -45,11 +51,14 @@ script that measures a benchmark process from outside.
 
 **A timing instrument this checklist governs never writes the wall time of a binary this
 repository does not build - a third-party reference tool - into
-`../performance/records/<box>.json` or `../PERF_LEDGER.md`.** Such walls enter only through
-the reference cells of `../performance/gen_bench_records.das`, the cells that time such a
-tool on a board workload. A recovery file a reference leg writes (`asr/_pybench_rows.txt`)
-is that leg's scratch - untracked, truncated before each spawn, never read by any other
-tool's cell.
+`../performance/records/<box>.json` or `../PERF_LEDGER.md`.** Board walls for such a tool
+enter only through the reference cells of `../performance/gen_bench_records.das`, the cells
+that time it on a board workload.
+
+**A file holding third-party walls outside those two - a reference leg's recovery file, a
+pinned reference tsv an instrument reads back - is scratch: untracked, owned by exactly one
+instrument, re-derivable from a documented command, and never an input to a board cell.** A
+tracked or shared copy of a third-party wall becomes a stale baseline nobody re-derives.
 
 **A diff that adds or changes an instrument that prints a number formed by subtracting one
 wall it also reports from another also prints both raw walls on that report line.** A plain
@@ -61,11 +70,9 @@ body.** A board cell is a timed cell of the published results board: one
 `../performance/gen_bench_records.das` spawns, or a manual `lcpp_bench.das` cell with its own
 `../PROFILE.md` section. What a cell times changes when a change to its code, to its input
 corpus, or to the pinned reference build - `DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, the
-targets it builds, or a patch it applies - moves the measured quantity.
-
-**A diff that adds or moves a row in `../harness/tune_kernels.das`'s bench list keeps
-`dot_q8q8_laneq4x4` last.** That bench pins the repack backend for the rest of the process, so
-a row after it is timed against the pinned backend instead of the backend it would select.
+targets it builds, a patch it applies, or a python reference leg's
+`asr/requirements-*.txt` - moves the measured quantity. The re-mint or withdrawal lands in
+`../performance/records/<box>.json`, the file the affected rows live in.
 
 **A diff that adds or changes a timing instrument makes it exit non-zero on a run that ends
 with zero result rows - wrong flags, failed load, a device that declines.** A run that matched

@@ -27,7 +27,7 @@ require ?das_metal ../../tests/_metal_kernel_common.das
 //
 // Correctness before timing, per arm: one dispatch vs the CPU plane-dequant oracle
 // (kq_row_ref + double dot) over EVERY output element on the dot-envelope bar
-// |gpu-cpu| <= 2e-4 * env + 1e-3 - the report line carries that bound.
+// |gpu-cpu| <= max(2e-4 * env, 1e-3) - the report line carries the relative factor.
 //
 //   bin/daslang -jit modules/dasLLAMA/benchmarks/matmul/bench_metal_kq_race.das -- [--fmts iq3s,iq2]
 //     [--tiers gemv,mm] [--shapes w13_1b] [--rounds 3] [--reps 50] [--ref _kq_race_ref.tsv]
@@ -144,8 +144,8 @@ def private gemv_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate GEMV sp
     } elif (f.fmt == 24) {
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_iq2xs_msl, entry = metal_kq_gemv_iq2xs_msl_entry, fastmath = metal_kq_gemv_iq2xs_msl_fastmath, tgmem = metal_kq_gemv_iq2xs_msl_tgmem, gdiv = f.gemv_gdiv))
     } else {
-        arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_iq2xxs_msl, entry = metal_kq_gemv_iq2xxs_msl_entry, fastmath = metal_kq_gemv_iq2xxs_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
-        arms |> push(KqRaceArm(name = "f4", src = metal_kq_gemv_iq2xxs_f4_msl, entry = metal_kq_gemv_iq2xxs_f4_msl_entry, fastmath = metal_kq_gemv_iq2xxs_f4_msl_fastmath, tgmem = metal_kq_gemv_iq2xxs_f4_msl_tgmem, gdiv = 4))
+        arms |> push(KqRaceArm(name = "prod", src = MetalKqGemvIq2xxs_metal_kq_gemv_iq2xxs_msl, entry = MetalKqGemvIq2xxs_metal_kq_gemv_iq2xxs_msl_entry, fastmath = MetalKqGemvIq2xxs_metal_kq_gemv_iq2xxs_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
+        arms |> push(KqRaceArm(name = "f4", src = MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl, entry = MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl_entry, fastmath = MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl_fastmath, tgmem = MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl_tgmem, gdiv = 4))
     }
     return <- arms
 }

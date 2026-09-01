@@ -14,3 +14,7 @@ adds it to the `install(FILES ...)` block that lists `utils/mcp/main.das` in `CM
 (repo root), in the same change.** `tools/` and `subtools/` are globbed; a top-level file left
 out of the list dies in the shipped SDK on `error[20605] missing prerequisite` while the
 in-tree server keeps working.
+
+**Weakening the kept-comment cases in `test_tools.das` is a defect** - they pin the
+formatter's kept set (the leading header block, `//!` docs, `//fmt:` directives, `nolint:`
+suppressions).

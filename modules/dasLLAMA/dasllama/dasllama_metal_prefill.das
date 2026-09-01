@@ -15,7 +15,6 @@ require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_kernels  // the shared kq decode helpers (grid tables, ksign7m) for the tensor twins
-require dasllama/dasllama_metal_kernels
 require dasllama/dasllama_metal_lens
 
 // Phase-6 dasMetal: the full-GPU-resident prefill kernel set — everything between the GEMMs:

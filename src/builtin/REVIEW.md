@@ -5,10 +5,9 @@
 
 - **A diff that adds or changes an `addExtern...`/`addInterop` registration under this folder
   uses, for a plain-value bind, `addExternInline` or
-  `addExternInlineEx` when its module is an Inline module, and an `addExtern...` entry point
+  `addExternInlineEx` when the name its file passes to `Module(...)` is an Inline module, and an `addExtern...` entry point
   whose name does not contain `Inline` in every other module.** A bind is a C++ function
-  registered into a module with an `addExtern...` or `addInterop` entry point; annotation,
-  type, and structure registrations are not binds. The Inline modules are `$`
+  registered into a module with an `addExtern...` or `addInterop` entry point. The Inline modules are `$`
   (builtin), `math`, `strings` and `jit`. A plain-value bind returns nothing at all, or a value
   that is neither a reference nor a result the callee writes into the caller's result slot; it
   is not an interop bind (`addInterop`), and not a generic container or equality helper

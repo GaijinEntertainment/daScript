@@ -71,6 +71,26 @@ def test_macro_dep_invalidate(t : T?) {
         chOk = false
     }
     t |> success(chOk, "content change invalidated the cached record and the reparse passed")
+    // absent -> present, through a RELATIVE dep path: the case the architecture doc calls the
+    // one that matters most (a first mint has no sidecar), plus the builtin's cwd-absolutize
+    // arm - a relative registration must still validate from the reader's cwd
+    let depRel = "._mc_dep_probe_rel.txt"
+    remove(depRel)
+    // a FRESH cache: the phase-1 cache still validates its own (existing) dep and would serve clean
+    let cmd2 = "\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc2.bin\" \"{root}/tests/module_cache/_fixtures/mc_dep_drv.das\""
+    var absent : string
+    let absentRc = env_run(depRel, cmd2, absent)
+    t |> success(report_child(t, "absent", absentRc, absent, "ser: wrote"), "cold run with an ABSENT dep wrote the cache")
+    fwrite(depRel, "now it exists")
+    var appeared : string
+    let appearedRc = env_run(depRel, cmd2, appeared)
+    var apOk = report_child(t, "appeared", appearedRc, appeared, "ser: macro dependency changed")
+    if (find(appeared, "deser: clean") >= 0) {
+        t |> failure("the appearing dep did not invalidate the cached record")
+        apOk = false
+    }
+    t |> success(apOk, "a dep that APPEARS invalidates the record minted against its absence")
+    remove(depRel)
     var err : string
     rmdir_rec(tmp, err)
 }
