@@ -932,5 +932,18 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   the reference's 82 on q8 while our k4 streams at 91 on the same box: memory-level parallelism, not bandwidth.
 - 2026-09-01: x86 hybrid core detection (Apple-only today) is LEDGERED as followup_general.md entry 66, not an arc
   follow-up; the goal boxes are homogeneous (c7a EPYC 9R14, c8i Xeon 6975P-C - no cpu_atom PMU).
+- 2026-09-01: the q8 ladder row was a byte handicap: the bench's q8 plane carries f32 group scales (9 bits/weight)
+  against llama.cpp's q8_0 f16 d (8.5) - at equal streaming rate it can never pass 0.944. The engine runs GGUF
+  q8_0 tensors on the wscale_f16 twins, so the bench got a q8s16 arm (2ad5b9980): zen4 16 lanes 6277 vs the
+  reference 5985 = 0.95 (f32 row 6673 = 0.90), both at ~79.5 GB/s. The pf=2048 software prefetch was a null
+  (6712 / 6722 / 6712 for pf / crown / 256_mr8).
+- 2026-09-01: zen4 lane sweep at d=32768, 8 vs 16 lanes: iq4xs 3004 / 3116, iq4nl 2946 / 3049, q8s16 6120 / 6339,
+  k4 2891 / 3169 (streaming formats gain 3.5-9% at one lane per core - issue width at two SMT lanes, not DRAM),
+  k5 3997 / 3949 (flat), iq2xs 2714 / 1412 (the lattice grids halve without the SMT lanes). The Mac decode policy
+  transfers to SMT x86 PER FORMAT; a tuner-minted per-family decode lane cap is the proposed closing move for
+  zen4's iq4xs (0.92) / iq4nl (0.94); k5 sits at 0.93-0.97 across runs regardless.
+- 2026-09-01: Intel v6 (rebased, seat race at the engine shape but n=2048): every row >= 0.97 except k3 0.89 -
+  the tiled fixture's row length flipped the k3 seat to 256_mr16 again; the seat fixture is now built at n=14336
+  (29dc0b35f). Intel v7 and zen4 v7 re-mints running.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
