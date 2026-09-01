@@ -1795,38 +1795,36 @@ def private vbmi_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
     } else {
         alpha <- [8, 25, 43]
     }
-    let bits = iq3 ? 3 : 2
     let entries = vbmi_entries(te.kq)
     var p0 : array<LLVMOpaqueValue?>
     var p1 : array<LLVMOpaqueValue?>
     p0 |> reserve(entries)
     p1 |> reserve(entries)
-    if (iq3) {   // an entry is one word of 4 weights: weights 0-1 and 2-3 per plane
-        var g : array<uint>
-        if (te.kq == 34) {
-            g <- [for (w in iq3xxs_grid()); w]
-        } else {
-            g <- [for (w in iq3s_grid()); w]
-        }
+    if (te.kq == 34) {          // an iq3 entry is one word of 4 weights: weights 0-1 and 2-3 per plane
+        let g = iq3xxs_grid()
         for (e in range(entries)) {
-            p0 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[e], alpha, bits, 2)), 0))
-            p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[e] >> 16u, alpha, bits, 2)), 0))
+            vbmi_push_iq3(te, p0, p1, g[e], alpha)
         }
-        delete g
-    } else {     // an entry is two words: weights 0-3, 4-7 - one plane each
-        var g : array<uint>
-        if (te.kq == 25) {
-            g <- [for (w in iq2xxs_grid2()); w]
-        } elif (te.kq == 24) {
-            g <- [for (w in iq2xs_grid2()); w]
-        } else {
-            g <- [for (w in iq2s_grid2()); w]
-        }
+    } elif (te.kq == 33) {
+        let g = iq3s_grid()
         for (e in range(entries)) {
-            p0 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[2 * e], alpha, bits, 4)), 0))
-            p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[2 * e + 1], alpha, bits, 4)), 0))
+            vbmi_push_iq3(te, p0, p1, g[e], alpha)
         }
-        delete g
+    } elif (te.kq == 25) {      // an iq2 entry is two words: weights 0-3, 4-7 - one plane each
+        let g = iq2xxs_grid2()
+        for (e in range(entries)) {
+            vbmi_push_iq2(te, p0, p1, g[2 * e], g[2 * e + 1], alpha)
+        }
+    } elif (te.kq == 24) {
+        let g = iq2xs_grid2()
+        for (e in range(entries)) {
+            vbmi_push_iq2(te, p0, p1, g[2 * e], g[2 * e + 1], alpha)
+        }
+    } else {
+        let g = iq2s_grid2()
+        for (e in range(entries)) {
+            vbmi_push_iq2(te, p0, p1, g[2 * e], g[2 * e + 1], alpha)
+        }
     }
     te.vb_plane[0] = vbmi_const_bytes(te, mod, "dasllama.vbmi.{tag}.p0", p0)
     te.vb_plane[1] = vbmi_const_bytes(te, mod, "dasllama.vbmi.{tag}.p1", p1)
@@ -1845,6 +1843,16 @@ def private vbmi_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
         }
         te.vb_ksigns = vbmi_const_bytes(te, mod, "dasllama.vbmi.ksigns", kv)
     }
+}
+
+def private vbmi_push_iq3(var te : TileEmit; var p0, p1 : array<LLVMOpaqueValue?>; word : uint; alpha : array<int>) {
+    p0 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(word, alpha, 3, 2)), 0))
+    p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(word >> 16u, alpha, 3, 2)), 0))
+}
+
+def private vbmi_push_iq2(var te : TileEmit; var p0, p1 : array<LLVMOpaqueValue?>; w0, w1 : uint; alpha : array<int>) {
+    p0 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(w0, alpha, 2, 4)), 0))
+    p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(w1, alpha, 2, 4)), 0))
 }
 
 def private vbmi_tag(kq : int) : string => kq == 25 ? "iq2xxs" : (kq == 24 ? "iq2xs" : (kq == 23 ? "iq2s" : (kq == 34 ? "iq3xxs" : "iq3s")))
@@ -1911,9 +1919,14 @@ def private vbmi_lookup(var te : TileEmit; var tbl : LLVMOpaqueValue?; entries :
     var depth = 0
     while (length(level) > 1) {
         var sel = depth == 0 ? high : masks[depth - 1]
-        var nxt <- [for (j in range(length(level) / 2)); LLVMBuildSelect(b, sel, level[2 * j + 1], level[2 * j], "{name}.s{depth}_{j}")]
+        var nxt : array<LLVMOpaqueValue?>
+        for (j in range(length(level) / 2)) {
+            nxt |> push(LLVMBuildSelect(b, sel, level[2 * j + 1], level[2 * j], "{name}.s{depth}_{j}"))
+        }
         level |> clear()
-        level <- nxt
+        for (v in nxt) {
+            level |> push(v)
+        }
         depth++
     }
     return level[0]
@@ -1940,13 +1953,13 @@ def private vbmi_col(var te : TileEmit; var wbP : LLVMOpaqueValue?; col, qd : in
 }
 
 //! the row's qh byte for this block (packed byte position 64 + blk: column 16 + blk/4, byte blk%4) broadcast
-//! over its four lanes, then bit `bitOf(lane%4)` as a lane mask - the iq3s / iq2s index bits above the qs byte
-def private vbmi_qh_mask(var te : TileEmit; var qhCol : LLVMOpaqueValue?; blk : int; bitOf : block<(p : int) : int>; name : string) : LLVMOpaqueValue? {
+//! over its four lanes, then bit `bit0 + stride * (lane % 4)` as a lane mask - the iq3s / iq2s index bits above the qs byte
+def private vbmi_qh_mask(var te : TileEmit; var qhCol : LLVMOpaqueValue?; blk, bit0, stride : int; name : string) : LLVMOpaqueValue? {
     let b = te.builder
     let w8 = te.width / 8
     let idx <- [for (k in range(w8)); (k / 4) * 4 + blk % 4]
     var bytes = LLVMBuildShuffleVector(b, te.types, qhCol, qhCol, idx, "{name}.q")
-    var bits <- [for (k in range(w8)); LLVMConstInt(te.types.t_int8, uint64(1 << invoke(bitOf, k % 4)), 0)]
+    var bits <- [for (k in range(w8)); LLVMConstInt(te.types.t_int8, uint64(1 << (bit0 + stride * (k % 4))), 0)]
     var bitsv = LLVMConstVector(array_data_ptr(bits), uint(w8))
     return LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntNE, LLVMBuildAnd(b, bytes, bitsv, ""), LLVMConstNull(te.vwi8), name)
 }
@@ -1985,12 +1998,12 @@ def private emit_grid_rows_blk_vbmi(var te : TileEmit; var wbP, xb : LLVMOpaqueV
             } elif (te.kq == 33) {
                 idx = vbmi_col(te, wbP, 2 * blk + c, qd, "gi{blk}_{c}")
                 var qh = vbmi_col(te, wbP, 16 + blk / 4, qd, "qh{blk}")
-                masks |> push(vbmi_qh_mask(te, qh, blk, $(p : int) : int => 4 * c + p, "qm{blk}_{c}"))
+                masks |> push(vbmi_qh_mask(te, qh, blk, 4 * c, 1, "qm{blk}_{c}"))
             } elif (te.kq == 23) {
                 idx = vbmi_col(te, wbP, blk, qd, "gi{blk}")
                 var qh = vbmi_col(te, wbP, 16 + blk / 4, qd, "qh{blk}")
-                masks |> push(vbmi_qh_mask(te, qh, blk, $(p : int) : int => 2 * p, "qm{blk}_0"))
-                masks |> push(vbmi_qh_mask(te, qh, blk, $(p : int) : int => 2 * p + 1, "qm{blk}_1"))
+                masks |> push(vbmi_qh_mask(te, qh, blk, 0, 2, "qm{blk}_0"))
+                masks |> push(vbmi_qh_mask(te, qh, blk, 1, 2, "qm{blk}_1"))
                 sgn = vbmi_col(te, wbP, 8 + blk, qd, "sg{blk}")
             } else {   // 24: u16 words - columns 2blk (l 0, 1) and 2blk+1 (l 2, 3), lane r*4+l takes word l's low then high byte
                 var ca = vbmi_col(te, wbP, 2 * blk, qd, "wa{blk}")
