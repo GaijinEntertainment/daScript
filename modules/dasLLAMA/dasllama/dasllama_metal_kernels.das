@@ -4734,9 +4734,9 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
         64, kdim, ndim, 64 * ndim, uint3(uint(2 * (ndim / 64)), 1u, 1u), rka) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
     })
-    //! kq_gemv_iq2xxs_f4 is NOT auto-raced: every isolated regime tried crowns the twin on
-    //! M4-class (+9%) while serving loses 8.6% with it (a mixed-stream occupancy effect no
-    //! kernel race sees); M5 serving gains +12.6%. That crown is minted by an e2e tg A/B only.
+    //! kq_gemv_iq2xxs_f4 is NOT auto-raced (every isolated regime crowns the M4-class twin
+    //! that serving rejects at -8.6% - a mixed-stream occupancy effect no kernel race sees);
+    //! the mint's real-model tg A/B decides it instead (tune_kernels' confirm_serving_crown).
     results |> emplace(race_gemv_f4_twin(dev, queue, "kq_gemv_iq3s_f4",
         metal_kq_gemv_iq3s_msl, metal_kq_gemv_iq3s_msl_entry, metal_kq_gemv_iq3s_msl_fastmath,
         metal_kq_gemv_iq3s_f4_msl, metal_kq_gemv_iq3s_f4_msl_entry, metal_kq_gemv_iq3s_f4_msl_fastmath, metal_kq_gemv_iq3s_f4_msl_tgmem, 26, 4, 8))

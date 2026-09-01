@@ -1,5 +1,13 @@
 #include "daScript/misc/platform.h"
 
+#if defined(_MSC_VER)
+    #include <direct.h>
+    #define das_dep_getcwd _getcwd
+#else
+    #include <unistd.h>
+    #define das_dep_getcwd getcwd
+#endif
+
 #include "module_builtin_rtti.h"
 
 #include "daScript/simulate/simulate_visit_op.h"
@@ -257,6 +265,39 @@ namespace das {
         auto program = daScriptEnvironment::getBound()->g_Program;
         if ( !program ) context->throw_error_at(at, "compileProgram only available during compilation");
         return program;
+    }
+
+    // Pin an extra compile-time file input (a tune sidecar, a config a macro read) into the
+    // module cache: the record stores (path, mtime, size) and the reader re-validates them, so
+    // a change to the file invalidates the cached module instead of serving stale macro output.
+    // Deliberately a NO-OP outside compilation - manifest readers run at runtime too, and the
+    // call site stays unconditional.
+    void addModuleCacheDependency ( const char * path, Context *, LineInfoArg * ) {
+        auto program = daScriptEnvironment::getBound()->g_Program;
+        if ( !program || !path || !path[0] ) return;
+        // absolutize: the validating reader may run from a different cwd, and a relative
+        // path there would stat the wrong (or no) file
+        string fullPath = path;
+#if !defined(DAS_NO_FILEIO)
+        bool isAbs = path[0]=='/' || path[0]=='\\' || (path[0] && path[1]==':');
+        if ( !isAbs ) {
+            char cwd[4096];
+            if ( das_dep_getcwd(cwd, sizeof(cwd)) ) {
+                fullPath = string(cwd) + "/" + path;
+            }
+        }
+#endif
+        int64_t size = -1;
+        uint64_t hash = 0;
+        statAndHashFileDependency(fullPath, size, hash);
+        for ( auto & dep : program->moduleCacheDependencies ) {
+            if ( get<0>(dep) == fullPath ) {
+                get<1>(dep) = size;
+                get<2>(dep) = hash;
+                return;
+            }
+        }
+        program->moduleCacheDependencies.emplace_back(fullPath, size, hash);
     }
 
     char * ast_describe_typedecl ( TypeDecl * t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at ) {
@@ -1389,6 +1430,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(compileProgram)>(*this, lib,  "compiling_program",
             SideEffects::accessExternal, "compileProgram")
                 ->args({"context","at"});
+        addExtern<DAS_BIND_FUN(addModuleCacheDependency)>(*this, lib,  "add_module_cache_dependency",
+            SideEffects::modifyExternal, "addModuleCacheDependency")
+                ->args({"path","context","at"});
         addExtern<DAS_BIND_FUN(compileModule)>(*this, lib,  "compiling_module",
             SideEffects::accessExternal, "compileModule")
                 ->args({"context","at"});

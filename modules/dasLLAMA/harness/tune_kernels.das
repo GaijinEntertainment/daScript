@@ -33,6 +33,9 @@ require daslib/json
 require daslib/json_boost
 require daslib/fio
 require daslib/strings_boost   // nolint:STYLE030,LINT019 — join for the metal_tensor crown list, only inside the das_metal static_if half
+require daslib/strings_convert   // try_to_double - the serving-confirm tg parse
+require daslib/command_line      // get_das_exe - the serving-confirm child spawn
+require strings
 require dasllama/dasllama_env
 
 // The shipped-fallback registry: dasllama_tuned_fallbacks() maps every [tuned] kernel to the
@@ -2346,6 +2349,109 @@ def private metal_twin_absorb(var wins : array<string>; var ran : bool&; r) {
     }
 }
 
+// half a percent, best-of-3: the crown's real serving win where it wins is small (+0.6% M5)
+// and its real serving loss where it loses is large (-8.6% M4) - the margin only has to
+// separate those from run noise, and a spuriously minted crown costs a re-mint, not a board
+let CONFIRM_TG_MARGIN = 1.005lf
+
+// The serving-truth crown confirm: some GEMV crowns are UNDECIDABLE by any isolated kernel
+// race (kq_gemv_iq2xxs_f4: every raced regime crowns the M4-class twin that serving rejects -
+// a mixed-stream occupancy effect only the real decode graph shows). Those crowns are minted
+// HERE, on the real shapes: two temp manifests differing only in runtime.metal_tensor
+// membership, lcpp_bench tg128 per arm under DAS_TUNE_MANIFEST, margin-decided. No vehicle
+// on the box = no crown (the base kernel is the safe side) with a provision hint.
+def private confirm_serving_crown(crown : string; var wins : array<string>) {
+    let model = confirm_decode_model()
+    if (empty(model)) {
+        print("METAL_TWIN {crown}: serving confirm SKIPPED - no IQ2_XXS vehicle in '{models_dir_resolved()}' (DASLLAMA_CONFIRM_IQ2XXS=<gguf> provisions one) - the base kernel serves\n")
+        return
+    }
+    print("METAL_TWIN {crown}: serving confirm on {model}\n")
+    let base_tg = confirm_tg_run(model, wins, "")
+    let twin_tg = confirm_tg_run(model, wins, crown)
+    if (base_tg <= 0.0lf || twin_tg <= 0.0lf) {
+        print("METAL_TWIN {crown}: a serving confirm arm produced no tg number (base {base_tg}, twin {twin_tg}) - the base kernel serves\n")
+        return
+    }
+    if (twin_tg > base_tg * CONFIRM_TG_MARGIN) {
+        print("METAL_TWIN {crown}: serving {twin_tg} tok/s BEATS base {base_tg} tok/s - crowned\n")
+        wins |> push(crown)
+    } else {
+        print("METAL_TWIN {crown}: serving {twin_tg} tok/s does not beat base {base_tg} tok/s x{CONFIRM_TG_MARGIN} - the base kernel serves\n")
+    }
+}
+
+def private confirm_decode_model() : string {
+    let envm = get_env_variable("DASLLAMA_CONFIRM_IQ2XXS")
+    if (!empty(envm)) {
+        return envm
+    }
+    let md = models_dir_resolved()
+    var best = ""
+    dir(md) $(name : string) {
+        return if (find(name, "IQ2_XXS") < 0 || !ends_with(name, ".gguf") || find(name, "mmproj") >= 0)
+        if (empty(best) || name < best) {
+            best = name
+        }
+    }
+    return empty(best) ? "" : "{md}{best}"
+}
+
+// one confirm arm: a minimal manifest (empty kernels - both arms stamp identical fallbacks,
+// so the tg DELTA isolates the crown) whose runtime.metal_tensor carries the raced wins plus
+// optionally the crown under test; lcpp_bench serves it via DAS_TUNE_MANIFEST and its tg128
+// line is the verdict
+def private confirm_tg_run(model : string; wins : array<string>; extra : string) : double {
+    var crowns = join(wins, ",")
+    if (!empty(extra)) {
+        crowns = empty(crowns) ? extra : "{crowns},{extra}"
+    }
+    let tmpm = "{get_das_root()}/_tune_confirm_decode_manifest.json"
+    if (!fwrite(tmpm, "\{\"kernels\": \{\}, \"runtime\": \{\"metal_tensor\": \"{crowns}\"\}, \"provenance\": \{\"box\": \"{tune_box_identity()}\"\}\}")) {
+        print("confirm: cannot write {tmpm} - is das_root writable?\n")
+        return 0.0lf
+    }
+    let envp = (get_platform_name() == "windows"
+        ? "set DAS_TUNE_MANIFEST={tmpm}&& "
+        : "DAS_TUNE_MANIFEST={tmpm} ")
+    let tmpo = "{get_das_root()}/_tune_confirm_decode_out.txt"
+    let cmd = "{envp}\"{get_das_exe()}\" -jit \"{get_das_root()}/modules/dasLLAMA/benchmarks/lcpp_bench.das\" -dasroot \"{get_das_root()}\" -- --for-debug-purposes -m \"{model}\" --ngl 99 -p 32 -n 128 -r 3 > \"{tmpo}\" 2>&1"
+    unsafe(popen(cmd) $(f) {
+        if (f != null) {
+            fread(f)
+        }
+    })
+    var outp = ""
+    if (fexist(tmpo)) {
+        fopen(tmpo, "rb") $(f) {
+            if (f != null) {
+                outp = fread(f)
+            }
+        }
+        remove(tmpo)
+    }
+    remove(tmpm)
+    let tag = "tg128: "
+    for (ln in split(outp, "\n")) {
+        let ix = find(ln, tag)
+        if (ix >= 0) {
+            let rest = slice(ln, ix + length(tag))
+            let sp = find(rest, " ")
+            return try_to_double(sp > 0 ? slice(rest, 0, sp) : rest) ?? 0.0lf
+        }
+    }
+    print("confirm arm ({empty(extra) ? "base" : extra}): no tg128 line - child output tail:\n")
+    var lns <- split(outp, "\n")
+    let n = length(lns)
+    for (i in range(max(0, n - 5), n)) {
+        if (!empty(lns[i])) {
+            print("confirm:   | {lns[i]}\n")
+        }
+    }
+    delete lns
+    return 0.0lf
+}
+
 // fallback: the tuner rail drives this half explicitly (DAS_TUNE_MODE=tune) — the auto
 // policy must not fire a nested tuner off this program's own missing per-app sidecar
 //! Exit code of a `--tune-only` half whose filter matched nothing here: the wrapper fails the mint
@@ -2475,6 +2581,10 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
             }
             for (r in metal_tensor_race_decode()) {
                 metal_twin_absorb(mt_wins, mt_ran, r)
+            }
+            if (mt_ran) {
+                // the crown no isolated race can decide - minted on the real shapes instead
+                confirm_serving_crown("kq_gemv_iq2xxs_f4", mt_wins)
             }
         }
         if (!mt_ran && !partialMint) {

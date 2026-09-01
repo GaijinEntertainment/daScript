@@ -585,6 +585,31 @@ namespace das {
     // reader reject a cache written by a different protocol/version cleanly, instead of
     // desyncing on a layout difference mid-record.
     static constexpr uint32_t SER_MODULE_STREAM_MAGIC = 0x4D534144u;    // 'DASM'
+    // sanity bound on a record's macro-dependency count: a real program registers a handful
+    // (one per consumed sidecar/config); anything past this reads as stream corruption
+    static constexpr uint32_t SER_MAX_MACRO_DEPS = 4096u;
+
+    void statAndHashFileDependency ( const string & path, int64_t & size, uint64_t & hash ) {
+        size = -1;
+        hash = 0;
+#if !defined(DAS_NO_FILEIO)
+        FILE * f = fopen(path.c_str(), "rb");
+        if ( !f ) return;
+        fseek(f, 0, SEEK_END);
+        long fsize = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if ( fsize >= 0 ) {
+            vector<uint8_t> bytes;
+            bytes.resize(size_t(fsize));
+            size_t got = fsize ? fread(bytes.data(), 1, size_t(fsize), f) : 0;
+            if ( got == size_t(fsize) ) {
+                size = int64_t(fsize);
+                hash = fsize ? hash_block64(bytes.data(), size_t(fsize)) : 14695981039346656037ul; // fnv64a seed for the empty file
+            }
+        }
+        fclose(f);
+#endif
+    }
 
     bool trySerializeProgramModule (
             ProgramPtr          & program,
@@ -627,17 +652,46 @@ namespace das {
         int64_t saved_size = -1;
         string saved_filename{};
         uint64_t payload_size = 0;
+        uint32_t depCount = 0;
+        vector<tuple<string,int64_t,uint64_t>> savedDeps;
         if ( !serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer << saved_mtime;
             serializer << saved_size;
             serializer << saved_filename;
+            // macro file dependencies (Program::moduleCacheDependencies) ride the record
+            // header, not the payload: they must be validated BEFORE the payload is trusted
+            serializer << depCount;
+            if ( depCount <= SER_MAX_MACRO_DEPS ) {
+                savedDeps.resize(depCount);
+                for ( auto & dep : savedDeps ) {
+                    serializer << get<0>(dep);
+                    serializer << get<1>(dep);
+                    serializer << get<2>(dep);
+                }
+            }
             serializer << payload_size;
-        }) ) {
+        }) || depCount > SER_MAX_MACRO_DEPS ) {
             serializer_read->seenNewModule = true;
+            serializer_read->failed = depCount > SER_MAX_MACRO_DEPS;
             logs << "ser: read failed '" << fileName << "'\n";
             return false;
         }
 
+        // a compile-time input a macro consumed (a tune sidecar) changed since the record was
+        // written: the cached stamps were minted against the old file - same prefix cutoff as a
+        // changed source. Compared by CONTENT (size + hash), not mtime: apps rewrite their
+        // sidecar byte-identically on exit, and that must not churn the cache.
+        for ( auto & dep : savedDeps ) {
+            int64_t depSize = -1;
+            uint64_t depHash = 0;
+            statAndHashFileDependency(get<0>(dep), depSize, depHash);
+            if ( depSize != get<1>(dep) || depHash != get<2>(dep) ) {
+                serializer_read->seenNewModule = true;
+                serializer_read->failed = true;
+                logs << "ser: macro dependency changed '" << get<0>(dep) << "' (e.g. a re-minted tune sidecar)\n";
+                return false;
+            }
+        }
         // mtime alone is 1-second granular - a same-second rewrite would serve the stale
         // AST with no diagnostic, so the size rides beside it in the header
         if ( saved_filename != fileName || file_mtime != saved_mtime || file_size != saved_size ) {
@@ -668,6 +722,9 @@ namespace das {
 
         if ( read_ok && !program->failed() && !serializer_read->failed ) {
             program->thisModuleGroup = &libGroup;
+            // the stream is rewritten every run from parsedModules, so a kept record's deps
+            // must round-trip through the deserialized program or the next write drops them
+            program->moduleCacheDependencies = das::move(savedDeps);
             if ( serializer_write != nullptr ) {
                 serializer_write->parsedModules.push_back({fileName, file_mtime, file_size, program, program->thisModule.get()});
             }
@@ -1380,6 +1437,14 @@ namespace das {
             *serializer_write << fileMtime;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
+            // macro file dependencies: header-resident, validated by the reader before the payload
+            uint32_t depCount = uint32_t(program->moduleCacheDependencies.size());
+            *serializer_write << depCount;
+            for ( auto & dep : program->moduleCacheDependencies ) {
+                *serializer_write << get<0>(dep);
+                *serializer_write << get<1>(dep);
+                *serializer_write << get<2>(dep);
+            }
             // record length, backpatched after the payload: lets the reader skip a record
             // that fails to deserialize for an UNCHANGED file and keep serving later ones.
             // Fixed-width u64 on purpose - an adaptive size could not be patched in place.
