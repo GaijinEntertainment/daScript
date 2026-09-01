@@ -147,7 +147,9 @@ def private hasq(t : T?; needle : string) {
 def test_msl_const_tables(t : T?) {
     t |> run("literal fixed-array locals hoist to program-scope constant tables") <| @(t : T?) {
         hasq(t, "constant uint tbl[8] = \{")     // hoisted from the helper's body
+        hasq(t, "constant uint tbl_c0[8] = \{")  // the same-named different-content table renamed, not merged
         hasq(t, "constant float sgn[2] = \{")    // hoisted from the kernel body
         hasq(t, "tbl[")                          // reads index the hoisted table by name
+        hasq(t, "tbl_c0[")                       // the renamed table's reads follow the rename
     }
 }

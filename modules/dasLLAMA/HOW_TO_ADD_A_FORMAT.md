@@ -128,7 +128,7 @@ add the arm next to `q40`'s. The compiler does not find these - a missing arm fa
   repack at mr 4/8/16 (dots and row dequants bit-exact), 4-token tile vs per-token GEMVs,
   groupn (disk + grp slices), batch groupn.
 
-Gate: `test_kqformat` + `test_kquant` on the interpreter binary (the stubs' reference bodies).
+Gate: `test_kqformat` + `test_kquant` under `-jit` (the stubs decline, so their reference bodies run either way; every dasLLAMA test run is a `-jit` run).
 
 ## 5. The JIT emitter - `dasllama_gemm_gen.das`
 
@@ -339,7 +339,7 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
 10. **The worktree session sees a stale binder.** LSP/MCP diagnostics in a fresh worktree come
    from the main tree's binary and report the new enum member as "not inferred" and every
    dasllama file as broken (`get_total_perf_cores` missing). Trust only the worktree binary:
-   `bin/Release/daslang.exe dastest/dastest.das -- --test <file>`. Run the session inside the
+   `bin/Release/daslang.exe -jit dastest/dastest.das -- --test <file>`. Run the session inside the
    worktree once it is bootstrapped.
 11. **A sidecar minted while the stubs declined pins the family to `"reference"`.** The app's
    auto-policy tune ran during the first end-to-end (QUIRK 4's stubs in place), every perm of

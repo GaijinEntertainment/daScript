@@ -36,7 +36,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x58ul   // [hint(unsafe_division_check)] drops the sdiv/srem guards (0x57: INT_MIN / -1 and % -1 guards on sdiv/srem)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x59ul   // aarch64 hosts append +i8mm when cpu_supports says so (0x58: [hint(unsafe_division_check)] drops the sdiv/srem guards)
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
@@ -176,7 +176,7 @@ def private has_generated_kernel(prog : Program?; jit_all_functions : bool) : bo
 // The environment/config salt shared by the whole-DLL key AND the per-partition obj cache key.
 // ONE helper on purpose: a salt component folded into the DLL key but not the partition key
 // would let a config change reuse stale cached partition objects.
-def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool;
+def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool; // nolint:STYLE037 - one flat fold per emission input; a split would hide which inputs key the cache
                  target_triple : string; split : bool; use_host_cpu : bool) : uint64 {
     var h = LLVM_JIT_CODEGEN_VERSION
     // host/binary identity: object format follows the triple (COFF vs ELF on one checkout), and the emitting binary bakes its Context offsets into every global access - neither is in any AST hash
@@ -243,6 +243,8 @@ def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_
     if (!empty(forced_arm)) {
         h = (h ^ hash(forced_arm)) * JIT_FNV_PRIME
     }
+    // aarch64 i8mm is an emission input (the +i8mm append): a warm pre-i8mm cache must not serve an i8mm host
+    h = (h ^ (cpu_supports("i8mm") ? 64ul : 0ul)) * JIT_FNV_PRIME
     // Cross-compile artifacts key on their triple — a --jit-target DLL must not cache-hit a host run (foreign-arch dlopen)
     if (!empty(target_triple)) {
         h = (h ^ hash(target_triple)) * JIT_FNV_PRIME

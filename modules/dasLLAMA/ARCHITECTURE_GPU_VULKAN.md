@@ -79,7 +79,7 @@ indexed by a runtime value (a byte4 dynamic select) drops the whole kernel off t
 path, to about a third of the rate. Every cm2 decode - q8 and the six kq superblock formats -
 is spelled the 16-bit way, which is why the block structs are `int16` arrays over the same
 bytes. The IQ4_XS codebook is the one runtime-indexed read a decode makes: it is staged into a
-16-entry `@workgroup` f16 table ahead of the tile loop (llama.cpp's `init_iq_shmem` form),
+16-entry `@workgroup` f16 table ahead of the tile loop (the reference exe's shared-memory table-staging form),
 never selected out of a register vector per element.
 
 ### 2.2l The cm2 tile pick and the coopmat default ladder {#cm2-tile-pick-and-default}

@@ -6426,8 +6426,8 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
 }
 
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).
-// The ten formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
-// ten pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
+// Every kq format shares family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves every
+// pipeline (identical inherited members), each leaf keeping its own ensure_/enc_ names.
 [vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4 : KqGemvBase {
     def override blk_contrib(wsb, blk, xsb : uint) : float {

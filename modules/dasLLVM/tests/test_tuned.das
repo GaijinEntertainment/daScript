@@ -23,8 +23,8 @@ def sample_dot(a, b : array<float>) : float {}
 // an unknown fallback name fails the compile with "tuned: unknown perm" (negative-probed), so this
 // compiling proves the fallback names a valid grid perm — the one consulted whenever no profile
 // entry / perm pin applies (and no profile carries this test-local kernel's key).
-[tuned(fallback = "u4", src = "sample_dot_template")]
-def sample_dot_u4(a, b : array<float>) : float {}
+[tuned(fallback = "u2", src = "sample_dot_template")]
+def sample_dot_u2(a, b : array<float>) : float {}
 
 def private reference(a, b : array<float>) : float {
     var s = 0f
@@ -39,5 +39,5 @@ def test_tuned_reconstitutes(t : T?) {
     let a = [for (i in range(64)); float(i)]
     let b = [for (_i in range(64)); 1.0f]
     t |> equal(sample_dot(a, b), reference(a, b), "tuned sample_dot == reference")
-    t |> equal(sample_dot_u4(a, b), reference(a, b), "tuned default=u4 sample_dot_u4 == reference")
+    t |> equal(sample_dot_u2(a, b), reference(a, b), "tuned default=u2 sample_dot_u2 == reference")
 }

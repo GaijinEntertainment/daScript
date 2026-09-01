@@ -379,10 +379,10 @@ def private attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kb
 
 [test]
 def test_vkd_kq_gemv_family(t0 : T?) {
-    t0 |> run("kq GEMV class family == the CPU oracle (all 6 formats)") <| @(t : T?) {
+    t0 |> run("kq GEMV class family == the CPU oracle (all 13 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_kq_gemv_k4_cls() && ensure_kq_gemv_q40_cls() && ensure_kq_gemv_k5_cls() && ensure_kq_gemv_k6_cls() && ensure_kq_gemv_iq4xs_cls() && ensure_kq_gemv_k3_cls() && ensure_kq_gemv_iq3s_cls() && ensure_kq_gemv_iq3xxs_cls() && ensure_kq_gemv_iq4nl_cls() && ensure_kq_gemv_k2_cls() && ensure_kq_gemv_iq2s_cls() && ensure_kq_gemv_iq2xs_cls() && ensure_kq_gemv_iq2xxs_cls())) {
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device, or a kq GEMV class pipeline failed to build")
                 return
             }
             let nsb = 2      // superblocks per row reduction (n = 512)
@@ -1051,10 +1051,10 @@ def test_vkd_q8_batch_tile(t0 : T?) {
 
 [test]
 def test_vkd_kq_batch_family(t0 : T?) {
-    t0 |> run("kq batch tile class family == the CPU oracle (all 6 formats)") <| @(t : T?) {
+    t0 |> run("kq batch tile class family == the CPU oracle (all 13 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_kq_batch_k4_cls() && ensure_kq_batch_q40_cls() && ensure_kq_batch_k5_cls() && ensure_kq_batch_k6_cls() && ensure_kq_batch_iq4xs_cls() && ensure_kq_batch_k3_cls() && ensure_kq_batch_iq3s_cls() && ensure_kq_batch_iq3xxs_cls() && ensure_kq_batch_iq4nl_cls() && ensure_kq_batch_k2_cls() && ensure_kq_batch_iq2s_cls() && ensure_kq_batch_iq2xs_cls() && ensure_kq_batch_iq2xxs_cls())) {
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device, or a kq batch class pipeline failed to build")
                 return
             }
             let n = 512               // nsb = 2 superblocks
@@ -1821,6 +1821,10 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 k5 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 k5 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the k5 bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -1945,6 +1949,10 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 q40 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 q40 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the q40 bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -2068,6 +2076,10 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 k2 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 k2 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the k2 bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -2192,6 +2204,10 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 iq4nl {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 iq4nl {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the iq4nl bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -2316,6 +2332,10 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 iq4xs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 iq4xs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the iq4xs bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -2439,6 +2459,10 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 k3 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 k3 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the k3 bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -2563,6 +2587,10 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 iq3s {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 iq3s {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the iq3s bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -2687,6 +2715,10 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 iq2s {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 iq2s {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the iq2s bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -2811,6 +2843,10 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 iq2xs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 iq2xs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the iq2xs bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -2935,6 +2971,10 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 iq2xxs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 iq2xxs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the iq2xxs bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -3059,6 +3099,10 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 iq3xxs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 iq3xxs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the iq3xxs bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref

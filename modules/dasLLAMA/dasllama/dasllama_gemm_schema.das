@@ -58,7 +58,7 @@ let Q51_QPB = 20l
 let Q51_SPB = 4l
 
 //! Quant-plane bytes per 256-weight superblock per row for a kq format id (4/5/6 = Q4_K/Q5_K/
-//! Q6_K, 40 = Q4_0, 44 = IQ4_XS, 3 = Q3_K, 33 = IQ3_S, 34 = IQ3_XXS, 45 = IQ4_NL). The ONE stride source for every fmt-branched kq walker/
+//! Q6_K, 40 = Q4_0, 44 = IQ4_XS, 3 = Q3_K, 33 = IQ3_S, 34 = IQ3_XXS, 45 = IQ4_NL, 2 = Q2_K, 23 = IQ2_S, 24 = IQ2_XS, 25 = IQ2_XXS). The ONE stride source for every fmt-branched kq walker/
 //! kernel/repack — an unknown id panics instead of silently walking another format's stride.
 def kq_qsb(fmt : int) : int64 {
     if (fmt == 4) return kq_qsb(KqFmt.k4)
@@ -97,4 +97,10 @@ def kq_ssb(fmt : int) : int64 {
     if (fmt == 25) return kq_ssb(KqFmt.iq2xxs)
     panic("kq_ssb: unknown kq format id {fmt}")
     return 0l
+}
+
+//! True for the kq ids whose tile reads the packed quant plane directly; the others (k5/k6 and
+//! the grid formats) read a byte-expanded panel unpacked once per (group, token-block).
+def kq_reads_packed_planes(fmt : int64) : bool {
+    return fmt == 4l || fmt == 40l || fmt == 44l || fmt == 3l || fmt == 45l || fmt == 2l
 }

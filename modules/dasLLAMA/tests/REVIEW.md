@@ -8,11 +8,10 @@ the whole directory.** A change reaches a test when it alters anything the test'
 depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture or
 corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
-**Leaving a test file that no `run.das` model suite lists out of the `model-free` suite is a
-defect, when its cells still assert what they claim under `DASLLAMA_CPU_PREFILL=1`.** The model
-suites are every suite but `model-free`, and that variable is what the runner arms for
-`model-free`. The listing lands in the same change that adds the file, and the file skips
-honestly when its models are absent.
+**Leaving a test file out of every `run.das` suite is a defect, unless the file's header
+states why its cells cannot hold under `DASLLAMA_CPU_PREFILL=1`.** `DASLLAMA_CPU_PREFILL=1` is
+what the runner arms for `model-free`. The listing lands in the same change that adds the
+file, and the file skips honestly when its models are absent.
 
 **Listing a test file that `DASLLAMA_CPU_PREFILL=1` disarms in any `run.das` suite is a defect,
 and so is leaving that fact out of the file's header.** `DASLLAMA_CPU_PREFILL=1` is what the
@@ -146,8 +145,9 @@ class a census row could dispatch is a defect.
 output - missing a compare against a CPU oracle that can witness the cell's property is a
 defect.** (A census row dispatches without asserting on output, so it is not one.)
 
-**A kernel-unit cell that bit-compares a buffer the GPU writes prefills its output buffers with
-a sentinel.** An unprefilled output can pass a bit compare by staying stale.
+**A kernel-unit cell fills a GPU output buffer with a sentinel before every dispatch whose
+output it then reads.** An unprefilled output can pass by staying stale - the previous
+dispatch's values, or garbage that happens to sit inside the tolerance bar.
 
 **A cross-dispatch bit-identity compare - comparing the outputs of two dispatches - runs GPU
 against GPU.** No CPU oracle can witness that property.
@@ -194,8 +194,7 @@ through a `.dlim`-baking loader (`load_<family>_tower` / `load_<family>_encoder`
 beside the model, and the next direct-image load in another suite panics on the wrong
 identity. The one residue: a cell whose SUBJECT is a facade lane knob (`load_asr_model`
 under `set_asr_tower_fp32`) keeps the facade loader - the image identity folds the pin, so
-minting around it would unmake the claim; the purge exposure on a cold box is followup 61's
-owed in-process image-off seam.
+minting around it would unmake the claim.
 
 **A CPU-vs-GPU arm that does not run a PLANAR model for its CPU stages, and that model's
 `blob_twin(t, path, seq_cap)` for override-selected stages, is a defect.** One session spans
@@ -207,8 +206,8 @@ model.
 tag is the token passed to `family_on(t, name)` (`_model_tier.das`). An untagged block
 silently joins every family's gate.
 
-**No CPU-control batch parity runs against the 70B.** Its batch coverage is ENGAGE-only in the
-support matrix. The batched code paths get their parity on small models, through pins.
+**No CPU-control batch parity runs against the 70B.** The batched code paths get their parity
+on small models, through pins.
 
 **Setting a knob a cell can reach only through the environment after the process that reads it
 starts is a defect - set it before that process starts.** That process is a child the cell
@@ -245,10 +244,12 @@ exact fixtures.
 **An embedding-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A new gate, or a new or loosened tolerance bar, ships a control that reds it - a poison, a
-knockout, a disconnected mechanism, or a cross-lane witness - in the same change.** A bar
-nothing has ever exceeded is not known to discriminate, and a gate that reads state the same
-code path wrote can be a tautology - only the control proves either can fail.
+**A new gate, or a new or loosened tolerance bar, ships a control that reds it in the same
+change.** A control is a run of the same gate that must RED - a poisoned input, a poisoned
+expectation, a disconnected mechanism, or a second independent lane; a gate's own reference is
+never its control. A bar nothing has ever exceeded is not known to discriminate, and a gate
+that reads state the same code path wrote can be a tautology - only the control proves either
+can fail.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server leg gated on the family's
@@ -274,7 +275,8 @@ plane alone is a valid control there, while a route reading both planes needs bo
 poison the served route never reads passes on a broken kernel.
 
 **An ASR cell comparing transcripts across two serving lanes asserts TOKEN equality; the one
-exception is the crowned-lane twin, whose ruled grade is WORD equality (the tensor twins'
-rounding legitimately flips tokens - followup 60's resolution).** A cell that cannot hold
+cell comparing a crowned lane - the raced kernel form a tune sidecar arms as the serving one -
+against its tensor twin asserts WORD equality, because the twins' rounding legitimately flips
+tokens.** A cell that cannot hold
 its grade converts to the forced-feed logits-tolerance form - never to a looser text
 compare.

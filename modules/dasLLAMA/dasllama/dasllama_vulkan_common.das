@@ -1742,19 +1742,19 @@ def arena_local_blk(blk : int64) : int64 => blk & ((1l << 32l) - 1l)
 // Mirrors stack_plane_bytes: it computes the same totals as count * these strides.
 // the tier's stack fmt space is int(KqFmt) — bridge to the gemm_schema kq id space
 def vk_kq_schema_id(fmt : int) : int {
-    if (fmt == 1) return 4
-    if (fmt == 2) return 5
-    if (fmt == 3) return 6
-    if (fmt == 4) return 40
-    if (fmt == 6) return 44
-    if (fmt == 7) return 3
-    if (fmt == 8) return 33
-    if (fmt == 9) return 34
-    if (fmt == 10) return 45
-    if (fmt == 11) return 2
-    if (fmt == 12) return 23
-    if (fmt == 13) return 24
-    if (fmt == 14) return 25
+    if (fmt == int(KqFmt.k4)) return 4
+    if (fmt == int(KqFmt.k5)) return 5
+    if (fmt == int(KqFmt.k6)) return 6
+    if (fmt == int(KqFmt.q40)) return 40
+    if (fmt == int(KqFmt.iq4xs)) return 44
+    if (fmt == int(KqFmt.k3)) return 3
+    if (fmt == int(KqFmt.iq3s)) return 33
+    if (fmt == int(KqFmt.iq3xxs)) return 34
+    if (fmt == int(KqFmt.iq4nl)) return 45
+    if (fmt == int(KqFmt.k2)) return 2
+    if (fmt == int(KqFmt.iq2s)) return 23
+    if (fmt == int(KqFmt.iq2xs)) return 24
+    if (fmt == int(KqFmt.iq2xxs)) return 25
     panic("vk_kq_schema_id: not a kq stack fmt")
     return 0
 }

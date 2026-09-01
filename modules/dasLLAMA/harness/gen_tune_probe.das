@@ -93,6 +93,9 @@ def private gen_round_step(r : int; keep : array<bool>) {
 // the previous sidecar's seat for `entry`, read raw (a stale sidecar still names the seats) —
 // a re-mint's crown only moves when it beats the incumbent by gen_margin()
 var private g_incumbent : table<string; string>
+// the --tune-only filter matched no generator family here: exit 3, so the wrapper can tell a
+// half-that-sat-out from a typo'd token (both halves reporting it fails the mint)
+var private g_tune_only_no_match = false
 var private g_incumbent_loaded = false
 
 def private gen_incumbent(entry : string) : string {
@@ -948,7 +951,7 @@ def kq_layout_mrs(fmt : int64) : table<string; int> {   // nolint:STYLE037,STYLE
 def run_kq_tile(tile; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr : int64; var y : array<float>) {
     let ng = fx.d / mr
     verify(fx.ntok % 4l == 0l)
-    let packed = fx.fmt == 4l || fx.fmt == 40l || fx.fmt == 44l || fx.fmt == 3l || fx.fmt == 45l || fx.fmt == 2l   // packed planes: the tile reads them directly (iq3s/iq3xxs/iq2s unpack their panels per group)
+    let packed = kq_reads_packed_planes(fx.fmt)
     var panel : array<uint8>
     if (!packed) {
         panel |> resize(int(mr * fx.nsb * 256l))
@@ -2056,6 +2059,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     if (planTotal == 0) {
         print("tune-only '{tune_only_filter()}': no generator family matches - half skipped, sidecar untouched\n")
         delete kqSel
+        g_tune_only_no_match = true
         return true
     }
     if (!empty(tune_only_filter())) {
@@ -2205,7 +2209,7 @@ def main : int {
     if (mode == "tune") {
         let rok = tune_mode_run()
         print(rok ? "GEN TUNE RUN OK\n" : "GEN TUNE RUN FAIL\n")
-        return rok ? 0 : 1
+        return rok ? (g_tune_only_no_match ? 3 : 0) : 1
     }
     print("set DAS_TUNE_MODE=test or =tune (compile-time env: it stamps the variant grid)\n")
     return 1

@@ -1527,11 +1527,59 @@ def dlim_config_sources_register() {
     set_dlim_metal_source(@@dlim_metal_source_impl)
 }
 
-// Dense-position demotion: q40/k5-from-Q5_0 need % 256 rows (superblock walkers); q51 always
-// demotes — dense positions have no q51 dispatch (v1 is expert stacks — kq_fmt_expert_ok).
+//! The Model's plane pair for a kq format - the dispatcher every plane-form consumer keys on.
+def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const? &; var ks : array<uint8> const? &) { // nolint:STYLE037 — the format ladder
+    unsafe {
+        if (fmt == KqFmt.k4) {
+            kq = addr(t.k4q)
+            ks = addr(t.k4s)
+        } elif (fmt == KqFmt.k5) {
+            kq = addr(t.k5q)
+            ks = addr(t.k5s)
+        } elif (fmt == KqFmt.k6) {
+            kq = addr(t.k6q)
+            ks = addr(t.k6s)
+        } elif (fmt == KqFmt.q40) {
+            kq = addr(t.q40q)
+            ks = addr(t.q40s)
+        } elif (fmt == KqFmt.iq4xs) {
+            kq = addr(t.iq4xsq)
+            ks = addr(t.iq4xss)
+        } elif (fmt == KqFmt.k3) {
+            kq = addr(t.k3q)
+            ks = addr(t.k3s)
+        } elif (fmt == KqFmt.iq3s) {
+            kq = addr(t.iq3sq)
+            ks = addr(t.iq3ss)
+        } elif (fmt == KqFmt.iq3xxs) {
+            kq = addr(t.iq3xxsq)
+            ks = addr(t.iq3xxss)
+        } elif (fmt == KqFmt.iq4nl) {
+            kq = addr(t.iq4nlq)
+            ks = addr(t.iq4nls)
+        } elif (fmt == KqFmt.k2) {
+            kq = addr(t.k2q)
+            ks = addr(t.k2s)
+        } elif (fmt == KqFmt.iq2s) {
+            kq = addr(t.iq2sq)
+            ks = addr(t.iq2ss)
+        } elif (fmt == KqFmt.iq2xs) {
+            kq = addr(t.iq2xsq)
+            ks = addr(t.iq2xss)
+        } elif (fmt == KqFmt.iq2xxs) {
+            kq = addr(t.iq2xxsq)
+            ks = addr(t.iq2xxss)
+        } else {
+            panic("kq_planes_of: '{fmt}' has no kq plane pair")
+        }
+    }
+}
+
+// Dense-position demotion: q40/iq4nl/k5-from-Q5_0 need % 256 rows (superblock walkers over
+// 32-block disk formats); q51 always demotes — dense positions have no q51 dispatch (v1 is expert stacks — kq_fmt_expert_ok).
 def kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
     if (f == KqFmt.q51) return KqFmt.q8
-    return (f == KqFmt.q40 || f == KqFmt.k5) && n % 256l != 0l ? KqFmt.q8 : f
+    return (f == KqFmt.q40 || f == KqFmt.iq4nl || f == KqFmt.k5) && n % 256l != 0l ? KqFmt.q8 : f
 }
 
 // Expert-stack tag rule: q51 serves natively off per-32 planes (its whole reason to exist — the
@@ -4043,9 +4091,6 @@ def embed_row(t : Model; token : int64; var dst : float?) {   // nolint:STYLE037
                 var row = temp_array(dst, dim, type<float>)
                 // trimmed: embq/embs hold the region's plane pair verbatim, rebased to 0
                 let sb0 = t.planes_trimmed ? (token * dim) / 256l : (t.wcls_off + token * dim) / 256l
-                // metal-blob planes: k4/k5 strips are 16B, k6 is the split GPU form (d in the tail)
-                let ssb45 = t.metal_blob ? 16l : K4_SSB
-                let k6d0 = t.metal_blob ? (long_length(t.k6s) / K6_SSB) * 16l : 0l
                 for (s in range64(dim / 256l)) {
                     if (t.planes_trimmed) {
                         if (t.emb_fmt == KqFmt.k4) {
@@ -4077,38 +4122,11 @@ def embed_row(t : Model; token : int64; var dst : float?) {   // nolint:STYLE037
                         } else {
                             panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
                         }
-                    } elif (t.emb_fmt == KqFmt.k4) {
-                        dequant_k4_plane_superblock(t.k4q, (sb0 + s) * K4_QSB, t.k4s, (sb0 + s) * ssb45, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.k5) {
-                        dequant_k5_plane_superblock(t.k5q, (sb0 + s) * K5_QSB, t.k5s, (sb0 + s) * ssb45, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.k6) {
-                        if (t.metal_blob) {
-                            dequant_k6_plane_superblock_at(t.k6q, (sb0 + s) * K6_QSB, t.k6s, (sb0 + s) * 16l, k6d0 + (sb0 + s) * 2l, row, s * 256l)
-                        } else {
-                            dequant_k6_plane_superblock(t.k6q, (sb0 + s) * K6_QSB, t.k6s, (sb0 + s) * K6_SSB, row, s * 256l)
-                        }
-                    } elif (t.emb_fmt == KqFmt.q40) {
-                        dequant_q40_plane_superblock(t.q40q, (sb0 + s) * Q40_QSB, t.q40s, (sb0 + s) * Q40_SSB, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.iq4xs) {
-                        dequant_iq4xs_plane_superblock(t.iq4xsq, (sb0 + s) * IQ4XS_QSB, t.iq4xss, (sb0 + s) * IQ4XS_SSB, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.k3) {
-                        dequant_k3_plane_superblock(t.k3q, (sb0 + s) * K3_QSB, t.k3s, (sb0 + s) * K3_SSB, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.iq3s) {
-                        dequant_iq3s_plane_superblock(t.iq3sq, (sb0 + s) * IQ3S_QSB, t.iq3ss, (sb0 + s) * IQ3S_SSB, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.iq3xxs) {
-                        dequant_iq3xxs_plane_superblock(t.iq3xxsq, (sb0 + s) * IQ3XXS_QSB, t.iq3xxss, (sb0 + s) * IQ3XXS_SSB, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.iq4nl) {
-                        dequant_iq4nl_plane_superblock(t.iq4nlq, (sb0 + s) * Q40_QSB, t.iq4nls, (sb0 + s) * Q40_SSB, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.k2) {
-                        dequant_k2_plane_superblock(t.k2q, (sb0 + s) * K2_QSB, t.k2s, (sb0 + s) * K2_SSB, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.iq2s) {
-                        dequant_iq2s_plane_superblock(t.iq2sq, (sb0 + s) * IQ2S_QSB, t.iq2ss, (sb0 + s) * IQ2S_SSB, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.iq2xs) {
-                        dequant_iq2xs_plane_superblock(t.iq2xsq, (sb0 + s) * IQ2XS_QSB, t.iq2xss, (sb0 + s) * IQ2XS_SSB, row, s * 256l)
-                    } elif (t.emb_fmt == KqFmt.iq2xxs) {
-                        dequant_iq2xxs_plane_superblock(t.iq2xxsq, (sb0 + s) * IQ2XXS_QSB, t.iq2xxss, (sb0 + s) * IQ2XXS_SSB, row, s * 256l)
                     } else {
-                        panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
+                        var kqp : array<uint8> const?
+                        var ksp : array<uint8> const?
+                        kq_planes_of(t, t.emb_fmt, kqp, ksp)
+                        dequant_kq_plane_sb(t.emb_fmt, *kqp, *ksp, sb0 + s, t.metal_blob, row, s * 256l)
                     }
                 }
             }

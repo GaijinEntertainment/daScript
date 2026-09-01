@@ -2071,7 +2071,7 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let nb16 = n / 16l
-    let packed = fmt == 4 || fmt == 40 || fmt == 44 || fmt == 3 || fmt == 45 || fmt == 2   // packed planes: the tile reads them directly (iq3s/iq3xxs/iq2s expand their grid gathers into the panel)
+    let packed = kq_reads_packed_planes(int64(fmt))
     var scratch : array<uint8>
     if (!packed) {
         scratch |> resize(mr * nsb * 256l)

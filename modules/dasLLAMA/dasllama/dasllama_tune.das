@@ -30,7 +30,7 @@ struct TunePerm {
 }
 
 def private build_grid() : array<TunePerm> {
-    // pruned to seats that win beyond noise (the 20-seat walk never spread >1.4% winner-vs-runner-up in any box's sidecar race tables); unroll=1 omits unroll_count (rows byte-identical to the hand hints); vec4_u4 = dot_q4's pinned NEON nibble-widening winner
+    // pruned to the seats that win beyond noise (the full 20-seat walk never spread >1.4% winner-vs-runner-up in any box's sidecar race tables - zen2 lcpp_bench/parity, m1, m4, m5); unroll=1 omits unroll_count so rows stay byte-identical to the hand hints
     let WIDTHS = fixed_array(8, 16)
     let UNROLLS = fixed_array(2)   // unroll-only rows; u1 == plain
     var grid : array<TunePerm>
@@ -46,7 +46,7 @@ def private build_grid() : array<TunePerm> {
                 hints <- [TuneHint(tune = 1, vectorize = true, width = w, unroll = u)]))
         }
     }
-    grid |> emplace(TunePerm(suffix = "vec4_u4", hints <- [TuneHint(tune = 1, vectorize = true, width = 4, unroll = 4)]))
+    grid |> emplace(TunePerm(suffix = "vec4_u4", hints <- [TuneHint(tune = 1, vectorize = true, width = 4, unroll = 4)]))   // dot_q4's pinned NEON nibble-widening winner
     return <- grid
 }
 

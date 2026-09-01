@@ -3,10 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `PERF_LEDGER.md`.
 
-The two figure rules below bind the surfaces this module owns - its ledgers, docs, code
-comments, and the PR body of a diff under it. A number on a served page answers to the site
-checklists (`site/REVIEW.md`, `site-dasllama/REVIEW.md`), which carry their own provenance
-duty.
+Figure rules here bind the surfaces this module owns - its ledgers, docs, code comments, and
+the PR body of a diff under it. A number on a served page answers to `site/REVIEW.md` or
+`site-dasllama/REVIEW.md` (repo root) instead.
 
 **A self-measured served-turn time entering `PERF_LEDGER.md` comes from the released
 `lcpp_bench` exe, never from the `-jit` script.** A served-turn time is a tok/s figure or a
@@ -43,7 +42,10 @@ whole-turn model or engine comparison - is a defect wherever this module writes 
 no cell behind it: a checked-in doc, a ledger, a code comment, or a PR description.** The
 cell states its quant mode and stamps box and engine provenance, so a number can never
 silently describe a format nobody serves or a kernel set nobody ships. A figure labeled as a
-prediction is not a reading - the prediction log is mandated and needs no cell.
+prediction is not a reading - the prediction log is mandated and needs no cell. A bring-up
+log in a how-to or ledger that names harness, flags, box, and the exe or script that ran it,
+at section level, is a stage figure, not a served-turn measurement; the cell it owes is its
+format's board row.
 
 **A figure measuring one engine stage inside a served turn, or any other measured margin -
 a lab margin, a kernel-form delta, a gate knee - names the harness and flags that

@@ -509,7 +509,7 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                         invoke(rq51, q51qp + (rp[i].off / 32l) * Q51_QPB, q51sp + (rp[i].off / 32l) * Q51_SPB, rp[i].n, rp[i].d)
                     } else {
                         let sb = rp[i].off / 256l
-                        let fk = f == 20 ? 2 : f
+                        let fk = f == K2_STREAM_TAG ? 2 : f
                         let qsb = kq_qsb(fk)
                         let ssb = kq_ssb(fk)
                         var kqp = f == 4 ? k4qp : (f == 5 ? k5qp : (f == 6 ? k6qp : (f == 40 ? q40qp : (f == 44 ? iq4xsqp : (f == 3 ? k3qp : (f == 33 ? iq3sqp : (f == 34 ? iq3xxsqp : (f == 45 ? iq4nlqp : (fk == 2 ? k2qp : (f == 23 ? iq2sqp : (f == 24 ? iq2xsqp : iq2xxsqp)))))))))))
@@ -792,7 +792,7 @@ def private stream_repack_one(fmt : int; qp, sp : void?; n, d : int64) {
             invoke(active_repack_q8q8(), reinterpret<int8?>(qp), reinterpret<float?>(sp), n, d)
         } elif (fmt == 2) {
             invoke(active_repack_q51(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
-        } elif (fmt == 20) {   // k2's stream tag - the kq repack runs under its kernel id 2
+        } elif (fmt == K2_STREAM_TAG) {
             invoke(active_repack_kq(), 2, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
         } else {
             invoke(active_repack_kq(), fmt, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)

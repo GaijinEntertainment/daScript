@@ -45,6 +45,9 @@ file is only what maintaining the implementation needs on top of it.
 - `cpu_supports` must answer on arm64 as well as x86 (sysctl / `AT_HWCAP` /
   `IsProcessorFeaturePresent`, LLVM target-feature spellings). An x86-only probe that fails
   closed leaves every arm `requires=` gate silently never firing.
+- `DAS_TUNE_POLICY=reference` is env-only by construction: the `[tune]` stamps in required
+  libraries compile before the root that would declare it, so `missing = "reference"` is
+  rejected at the annotation.
 
 ## The gates
 
@@ -85,4 +88,28 @@ tuner is a seconds-fast fake that upserts through `tune_manifest_set`. Two scope
 sidecar prove the upsert preserves the other's keys, and that tuned-ness is per-key
 completeness. `llvm_tune_manifest.das` covers the write->stamp round trip and the staleness
 rail (back-dating with `set_mtime` + `mktime`). Both run under `-jit` and short-circuit to
-pass when `!jit_enabled()`.
+pass when `!jit_enabled()`. The defaults-profile rail is `llvm_tune_profiles.das` (+ its
+`_client` / `_lib` / `_tuner` fixtures): it writes its profile files at runtime under the
+untracked `llvm_tune_profiles_defaults/`, named by this box's own `tune_cpu_class()`, and fakes
+a less-capable minting box with an empty `features` field to force the unlocked-seat race.
+
+## Shipped defaults profiles - where the pieces live
+
+- `defaults=` resolves against the declaring file at `[tune_scope]` apply and rides
+  `TuneScope.defaultsPath`; the guard emission bakes it, together with the scope's
+  `scope_gated_families_joined` string - `family=requires+requires` rows, `;`-joined, only for
+  families with a gated row, read off the AST - into the `tune_auto_prepare` /
+  `tune_restart_needed` call, because the runtime has no AST.
+- Adoption is runtime-side (`profile_try_adopt`): walk `tune_class_chain()` from
+  `tune_cpu_class()`, skip a profile whose version pin differs (the walk continues down),
+  `tune_sidecar_merge` the kernels into the app sidecar as a normal local write, then diff the
+  gated string against the profile's `features` fingerprint. It returns adopted-or-not and
+  hands the residue back in its `onlyFilter` out-param; the two signals read together - true
+  with an empty filter means fully covered, true with a filter means adopted-and-owing, and
+  an owing adoption skips the scope resolver and rides `run_scope_tuner(scope, onlyFilter)`,
+  which arms `DAS_TUNE_ONLY` for that one spawn. It declines outright when
+  `tune_manifest_path()` no longer equals the `manifestPath` the guard was compiled for.
+- `tune_profile_export` carries `kernels` plus the string provenance that survives, dropping
+  `binary` / `box` / `engine_sha` and re-stamping `origin` = `profile`, `class` = the export's
+  class argument, and `written`: a profile's identity is class + version pin + features, never
+  a commit.

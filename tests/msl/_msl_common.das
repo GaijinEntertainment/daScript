@@ -701,6 +701,12 @@ def private ctb_pick(i : uint) : uint {
     return tbl[i & 7u]
 }
 
+// the same local name with different content: the hoist renames the second table (tbl_c<n>)
+def private ctb_pick2(i : uint) : uint {
+    let tbl = fixed_array<uint>(0x1u, 0x2u, 0x4u, 0x8u, 0x10u, 0x20u, 0x40u, 0x80u)
+    return tbl[i & 7u]
+}
+
 class ConstTab {
     @ssbo @binding = 0 src : array<uint>
     @ssbo @binding = 1 dst : array<uint>
@@ -710,7 +716,7 @@ class ConstTab {
     def consttab {
         let i = gl_GlobalInvocationID.x
         let sgn = fixed_array<float>(1.0, 0.5)
-        dst[i] = src[i] + ctb_pick(i)
+        dst[i] = src[i] + ctb_pick(i) + ctb_pick2(i)
         fdst[i] = sgn[i & 1u] * 2.0
     }
 }
@@ -1317,6 +1323,7 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         // statements
         "stmt.let",
         "stmt.let.const_table",
+        "stmt.let.const_table.renamed",
         "stmt.var",
         "stmt.var.zero",
         "stmt.assign",

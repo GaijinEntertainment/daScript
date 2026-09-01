@@ -3027,6 +3027,7 @@ def private hoist_const_table(var ctx : MslCtx; v : VariablePtr) {
         an = "{an}_c{ctx.splice_seq}"   // a same-named table with different content in another helper
         ctx.splice_seq++
         txt = "constant {ename} {an}[{n}] = \{\n{vtxt}\};"
+        note(ctx, "stmt.let.const_table.renamed")
     }
     ctx.renames[aname] = an
     ctx.const_tables[an] = txt

@@ -119,7 +119,7 @@ let IQ2XXS_SSB = 20l   // IQ2_XXS scale plane: the iq3xxs row shape - f16 d EIGH
 // IQ4_NL reuses Q40_QSB/Q40_SSB outright: the disk bytes are q40's (f16 d + 16 nibble bytes
 // per 32-block, the k/k+16 pairing) — only the nibble SEMANTICS differ (IQ4NL_LUT, no -8).
 
-//! The IQ4_NL / IQ4_XS nibble codebook: weight = scale x IQ4NL_LUT[nibble] (ggml's kvalues_iq4nl).
+//! The IQ4_NL / IQ4_XS nibble codebook: weight = scale x IQ4NL_LUT[nibble] (upstream's kvalues_iq4nl).
 //! Main-context use only (tests, oracles, the emitter's constant bake): a kernel that can run on a
 //! forked worker reads a module global as zeros - kernels take `iq4nl_lut()` as a local instead.
 let IQ4NL_LUT = fixed_array<int8>(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
@@ -128,7 +128,7 @@ let IQ4NL_LUT = fixed_array<int8>(-127, -104, -83, -65, -49, -35, -22, -10, 1, 1
 //! worker-run kernel reads.
 def iq4nl_lut() : int8[16] => fixed_array<int8>(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
 
-//! The IQ3_S grid (ggml's iq3s_grid): entry qs | (qh bit << 8) packs FOUR weight magnitudes as
+//! The IQ3_S grid (upstream's iq3s_grid): entry qs | (qh bit << 8) packs FOUR weight magnitudes as
 //! bytes; the per-element sign rides the block's own sign bytes. Per-call local (2 KB on the
 //! caller's frame) - the form every worker-run kernel reads; IQ3S_GRID is the main-context copy.
 def iq3s_grid() : uint[512] {
@@ -203,8 +203,8 @@ def iq3s_grid() : uint[512] {
 //! a module global as zeros; kernels take `iq3s_grid()` instead.
 let IQ3S_GRID = iq3s_grid()
 
-//! The IQ3_XXS grid, every byte HALVED (ggml levels are even, 4..62 -> 2..31): one qs byte =
-//! FOUR magnitudes; the halved grid + halved stored d absorb ggml's 0.25 exactly, so the fold
+//! The IQ3_XXS grid, every byte HALVED (upstream levels are even, 4..62 -> 2..31): one qs byte =
+//! FOUR magnitudes; the halved grid + halved stored d absorb upstream's 0.25 exactly, so the fold
 //! is iq3s's d x strip x byte. Per-call local (1 KB) - the worker-safe form kernels read.
 def iq3xxs_grid() : uint[256] {
     return fixed_array<uint>(
@@ -245,7 +245,7 @@ def iq3xxs_grid() : uint[256] {
 //! Main-context copy of the halved IQ3_XXS grid (tests, oracles, emitter bakes).
 let IQ3XXS_GRID = iq3xxs_grid()
 
-//! ggml's ksigns_iq2xs: 7-bit sign index -> 8 sign bits (bit 7 = even parity). Shared by the
+//! upstream's ksigns_iq2xs: 7-bit sign index -> 8 sign bits (bit 7 = even parity). Shared by the
 //! IQ3_XXS and IQ2 families. Per-call local - the worker-safe form.
 def ksigns_iq2xs() : uint8[128] {
     return fixed_array<uint8>(
@@ -263,7 +263,7 @@ def ksigns_iq2xs() : uint8[128] {
 let KSIGNS_IQ2XS = ksigns_iq2xs()
 
 //! Halve an f16 bit pattern exactly (exponent decrement; subnormal results truncate-halve).
-//! The IQ3_XXS transcode folds ggml's 0.25 into the stored d (one half) and the grid (the other).
+//! The IQ3_XXS transcode folds upstream's 0.25 into the stored d (one half) and the grid (the other).
 def f16_half_bits(u : uint) : uint {
     let e = (u >> 10u) & 0x1Fu
     if (e >= 2u) {
@@ -276,7 +276,7 @@ def f16_half_bits(u : uint) : uint {
 }
 
 
-//! The IQ2_S grid (ggml's iq2s_grid, 1024 u64 entries as low/high uint pairs): a 10-bit index
+//! The IQ2_S grid (upstream's iq2s_grid, 1024 u64 entries as low/high uint pairs): a 10-bit index
 //! (qs byte | qh 2 bits) selects EIGHT magnitudes ({8, 25, 43}); signs ride the block's own
 //! sign bytes. Per-call local (8 KB) - the worker-safe form; IQ2S_GRID is the main-context copy.
 def iq2s_grid2() : uint[2048] {   // nolint:STYLE038 - a 2048-word data table, not splittable
@@ -544,7 +544,7 @@ def iq2s_grid2() : uint[2048] {   // nolint:STYLE038 - a 2048-word data table, n
 let IQ2S_GRID = iq2s_grid2()
 
 
-//! The IQ2_XS grid (ggml's iq2xs_grid, 512 u64 entries as low/high uint pairs): the u16 word's
+//! The IQ2_XS grid (upstream's iq2xs_grid, 512 u64 entries as low/high uint pairs): the u16 word's
 //! low 9 bits select EIGHT magnitudes ({8, 25, 43}), its high 7 bits the KSIGNS_IQ2XS sign
 //! byte (bit j flips element j). Per-call local (4 KB), worker-safe; IQ2XS_GRID = main-context copy.
 def iq2xs_grid2() : uint[1024] {   // nolint:STYLE038 - a 1024-word data table, not splittable
@@ -684,7 +684,7 @@ def iq2xs_grid2() : uint[1024] {   // nolint:STYLE038 - a 1024-word data table, 
 let IQ2XS_GRID = iq2xs_grid2()
 
 
-//! The IQ2_XXS grid (ggml's iq2xxs_grid, 256 u64 entries as low/high uint pairs): a block's
+//! The IQ2_XXS grid (upstream's iq2xxs_grid, 256 u64 entries as low/high uint pairs): a block's
 //! aux32[0] BYTES each select EIGHT magnitudes ({8, 25, 43}), flipped through the shared
 //! ksigns_iq2xs table. Per-call local (2 KB), worker-safe; IQ2XXS_GRID = main-context copy.
 def iq2xxs_grid2() : uint[512] {
@@ -823,6 +823,10 @@ def kq_ssb(f : KqFmt) : int64 {
 def kq_elems(f : KqFmt) : int64 => kq_sb(f) ? 256l : 32l
 
 //! The loader's stream/repack region tag for a format (stream_repack_one / push_repack codes).
+//! k2's stream-region code: kernel id 2 IS q51's stream tag, so k2 streams under 20 and the
+//! repack dispatchers translate it back to kernel id 2.
+let K2_STREAM_TAG = 20
+
 def kq_stream_code(f : KqFmt) : int {
     if (f == KqFmt.q8) {
         return 0
@@ -831,7 +835,7 @@ def kq_stream_code(f : KqFmt) : int {
         return 2
     }
     if (f == KqFmt.k2) {
-        return 20   // kernel id 2 IS q51's stream tag - k2 streams under 20, translated back at the repack dispatchers
+        return K2_STREAM_TAG
     }
     return kq_schema_id(f)
 }

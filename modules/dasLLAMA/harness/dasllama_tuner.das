@@ -151,6 +151,10 @@ def private run_half(name : string; paranoid : bool) : bool {
     }
     let elapsed_ms = get_time_usec(t0) / 1000
     print("dasllama_tuner: {name} finished in {elapsed_ms} ms (rc={rc})\n")
+    if (rc == TUNE_ONLY_NO_MATCH) {
+        g_no_match_halves++
+        return true   // the filter named nothing here; main fails the mint only when BOTH halves say so
+    }
     if (rc != 0) {
         // the refusal detail scrolled by minutes ago mid-stream — the closing line carries the
         // WHY and the escape hatches so a nonzero exit is self-diagnosing where you look.
@@ -164,6 +168,10 @@ def private run_half(name : string; paranoid : bool) : bool {
     }
     return rc == 0
 }
+
+// exit code of a half whose --tune-only filter matched nothing (tune_kernels / gen_tune_probe)
+let TUNE_ONLY_NO_MATCH = 3
+var private g_no_match_halves = 0
 
 [export]
 def main : int {
@@ -193,6 +201,10 @@ def main : int {
     }
     let ok1 = run_half("gen_tune_probe.das", paranoid)
     let ok2 = run_half("tune_kernels.das", paranoid)
+    if (g_no_match_halves == 2) {
+        print("dasllama_tuner: --tune-only '{tune_only_filter()}' matched no family in either half - a typo'd token; sidecar untouched\n")
+        return 1
+    }
     if (!empty(sidecar)) {
         if (ok1 && ok2) {
             if (!empty(oldText)) {

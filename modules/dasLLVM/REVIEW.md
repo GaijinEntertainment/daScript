@@ -7,12 +7,14 @@
   `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
   covers it.
 
-- **A change gated on the host platform - a `get_platform_name()` test - runs the
-  module-owned suite on that platform.**
+- **A change whose behavior depends on the host - a branch on `get_platform_name()`,
+  `get_architecture_name()`, or `cpu_supports()` - runs the module-owned suite on a machine
+  matching that condition.**
 
-- **A diff whose new behavior sits under a target-triple branch - one it adds or one already
-  there - states in its PR body the cross-compile (`write_exe`) for that target that exercised
-  the new behavior.** The suite runs on the host; a target-triple branch is checked only by
+- **A diff whose new behavior sits under a code path taken only when a target triple is set -
+  a cross-compile, not the host - whether the diff adds the path or finds it there, states
+  in its PR body the cross-compile (`write_exe`) for that target that exercised the new
+  behavior.** The suite runs on the host; a target-triple branch is checked only by
   the artifact built for that target.
 
 - **A diff that adds work to, or moves work within, what `run_jit`
@@ -60,11 +62,4 @@
   the declared forms, or declare the knob, instead** (the literal-name forms are
   scanner-enforced by `tests/llvm_env_registry.das`; weakening that test is a defect).
 
-- **A diff that lets a `requires=` expression name a new CPU feature adds that name to
-  `TUNE_KNOWN_FEATURES` (`daslib/llvm_tune.das`) in the same change.** Every sidecar save
-  stamps this box's pass/fail over that list as the `features` fingerprint, so a name
-  missing from it makes a shipped defaults profile claim a seat its minting box never raced.
 
-- **A diff that arms `DAS_TUNE_ONLY` for a single tuner spawn clears it immediately after
-  that spawn.** The auto/restart policy guard re-execs the process, and a filter left armed
-  makes the re-exec's own mint partial.

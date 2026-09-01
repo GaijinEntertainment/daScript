@@ -275,7 +275,7 @@ struct private TileEmit {
     mx4 : bool                           // block emitter: mx4 LUT-dequant instead of Q8 loads
     q51 : bool                           // block emitter: q51 nibble+qh unpack (32-weight blocks,
                                          // per-block f16 d/m scale pairs + xbs min-term)
-    kq : int                             // 3/4/5/6/40 = K-quant superblock emitter, 44 = IQ4_XS (0 = not kq): the
+    kq : int                             // the gemm_schema kq id (0 = not kq): the
                                          // block unit is a 256-weight superblock over the grp<mr>
                                          // kq planes; dots run unsigned-q (kq_dot_lane)
     kqBytes : bool                       // kq weights are a BYTE-EXPANDED panel (the tile's
@@ -932,7 +932,7 @@ def private or_bit_x10(te : TileEmit; var w, bytes, maskv : LLVMOpaqueValue?; na
     return LLVMBuildOr(b, w, sel, name)
 }
 
-// One 256-weight SUPERBLOCK, K-quant grp<mr> form (te.kq = 3/4/5/6/40): weight vectors unpacked
+// One 256-weight SUPERBLOCK, K-quant grp<mr> form (te.kq set): weight vectors unpacked
 // ONCE per (sub-block, dword-group) and dotted against every token — weight-stationary,
 // bit-exact vs per-token GEMVs (tokCount=1). kq v2 folds integer sub-scales/bsums against Q8_K-form activations.
 def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) { // nolint:STYLE037,STYLE038 — one register-coupled superblock loop nest; the k-quant decode arms share live values
@@ -1840,7 +1840,7 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
     var xb = LLVMBuildMul(b, sbi, te.types->ConstI64(0x100ul), "xb")
     var vri8 = LLVMVectorType(te.types.t_int8, uint(te.rv))
     var dv : LLVMOpaqueValue? [2]
-    if (!nl) {   // 44/33/34: one superblock d per row lane; iq4nl loads its per-block d inside the walk
+    if (!nl) {   // one superblock d per row lane; iq4nl loads its per-block d inside the walk
         for (qd in range(rq)) {
             dv[qd] = load_f16_vec_at(te, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(2 * (qd * te.rv))), ""), "d{qd}")
         }
@@ -3203,7 +3203,7 @@ def private kq_tile_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     if (perm_declines(gc, p0)) return false
     let p = companion_perm(p0)
 
-    var te = TileEmit(kq = fmt, kqBytes = fmt == 5 || fmt == 6)   // k4/q40/iq4xs/k3/iq4nl tiles read the packed planes
+    var te = TileEmit(kq = fmt, kqBytes = fmt == 5 || fmt == 6)   // only the k5/k6 tiles get the byte-expanded panel
     if (!setup_tile_emit(te, gc, p, fmt == 44 || fmt == 45)) return false
 
     let b = gc.jit.builder

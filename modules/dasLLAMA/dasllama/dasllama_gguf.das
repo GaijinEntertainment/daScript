@@ -40,7 +40,7 @@ let private GT_U64 = 10
 let private GT_I64 = 11
 let private GT_F64 = 12
 
-// ggml tensor data types (subset we read)
+// upstream tensor data types (subset we read)
 let GGML_TYPE_F32 = 0
 let GGML_TYPE_F16 = 1
 let GGML_TYPE_Q4_0 = 2
@@ -403,7 +403,7 @@ def gguf_str(m : GGUFMeta; bytes : array<uint8> | #; key : string) : string {
     return rd_str(bytes, o)
 }
 
-//! Read a string array (e.g. tokenizer.ggml.tokens).
+//! Read a string array (e.g. tokenizer.upstream.tokens).
 def gguf_str_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<string> {
     if (!key_exists(m.kv, key)) {
         panic("gguf: missing key '{key}'")
@@ -421,7 +421,7 @@ def gguf_str_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array
     return <- out
 }
 
-//! Read a float32 array (e.g. tokenizer.ggml.scores).
+//! Read a float32 array (e.g. tokenizer.upstream.scores).
 def gguf_f32_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<float> {
     if (!key_exists(m.kv, key)) {
         panic("gguf: missing key '{key}'")
@@ -440,7 +440,7 @@ def gguf_f32_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array
     return <- out
 }
 
-//! Read an int32 array (e.g. tokenizer.ggml.token_type), widened to int64.
+//! Read an int32 array (e.g. tokenizer.upstream.token_type), widened to int64.
 def gguf_i32_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<int64> {
     if (!key_exists(m.kv, key)) {
         panic("gguf: missing key '{key}'")
@@ -870,7 +870,7 @@ def gguf_transcode_iq3s(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
 
 //! Transcode an IQ3_XXS tensor into the iq3xxs planes (strides 96/20, exact): qs+aux copy
 //! verbatim off the 98B disk block, the iq3s-shaped scale row carries d HALVED (f16_half_bits)
-//! and strips (2*ls + 1) — with the halved grid this absorbs ggml's 0.25 exactly.
+//! and strips (2*ls + 1) — with the halved grid this absorbs upstream's 0.25 exactly.
 def gguf_transcode_iq3xxs(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
     let ti = kq_transcode_check(m, name, GGML_TYPE_IQ3_XXS, "IQ3_XXS", src_off, expect_n)
     let nb = expect_n / 256l
@@ -1097,10 +1097,63 @@ def gguf_transcode_q51(m : GGUFMeta; srcbytes : array<uint8> | #; name : string;
     }
 }
 
-//! Decode tensor `name` (F32 or F16 on disk) into dst[dst_off ..] as fp32. Panics if the
-//! tensor is missing, has a different element count than expected, or uses a type we don't
-//! yet read (quantized types are wired in a later step).
-def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var dst : array<float>; dst_off, expect_n : int64; src_off : int64 = 0l) {   // nolint:STYLE038 — one arm per on-disk ggml type; each arm is a self-contained decode kernel
+//! The kq format tag of a superblock i-quant / Q2_K / Q3_K GGML type (q8 = not one of them).
+def gguf_kq_fmt_of_type(gtype : int) : KqFmt {
+    if (gtype == GGML_TYPE_IQ4_XS) return KqFmt.iq4xs
+    if (gtype == GGML_TYPE_Q3_K) return KqFmt.k3
+    if (gtype == GGML_TYPE_IQ3_S) return KqFmt.iq3s
+    if (gtype == GGML_TYPE_IQ3_XXS) return KqFmt.iq3xxs
+    if (gtype == GGML_TYPE_IQ4_NL) return KqFmt.iq4nl
+    if (gtype == GGML_TYPE_Q2_K) return KqFmt.k2
+    if (gtype == GGML_TYPE_IQ2_S) return KqFmt.iq2s
+    if (gtype == GGML_TYPE_IQ2_XS) return KqFmt.iq2xs
+    if (gtype == GGML_TYPE_IQ2_XXS) return KqFmt.iq2xxs
+    return KqFmt.q8
+}
+
+//! Disk bytes per 256-superblock of the i-quant / Q2_K / Q3_K GGML types the native tier reads
+//! (0 = not one of them). IQ4_NL is eight 18B blocks of 32.
+def gguf_kq_disk_sbb(gtype : int) : int64 {
+    if (gtype == GGML_TYPE_IQ4_XS) return 136l
+    if (gtype == GGML_TYPE_Q3_K || gtype == GGML_TYPE_IQ3_S) return 110l
+    if (gtype == GGML_TYPE_IQ3_XXS) return 98l
+    if (gtype == GGML_TYPE_IQ4_NL) return 144l
+    if (gtype == GGML_TYPE_Q2_K) return 84l
+    if (gtype == GGML_TYPE_IQ2_S) return 82l
+    if (gtype == GGML_TYPE_IQ2_XS) return 74l
+    if (gtype == GGML_TYPE_IQ2_XXS) return 66l
+    return 0l
+}
+
+//! One superblock's disk -> plane transcode, keyed by format - the array form the tests and the
+//! f32 fallback drive (the bulk loaders are the per-format `gguf_transcode_*`).
+def kq_transcode_superblock(fmt : KqFmt; bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) { // nolint:STYLE037 — the format ladder
+    if (fmt == KqFmt.iq4xs) {
+        transcode_iq4xs_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.k3) {
+        transcode_q3k_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq3s) {
+        transcode_iq3s_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq3xxs) {
+        transcode_iq3xxs_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq4nl) {
+        transcode_iq4nl_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.k2) {
+        transcode_q2k_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq2s) {
+        transcode_iq2s_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq2xs) {
+        transcode_iq2xs_superblock(bytes, bo, kq, kqo, ks, kso)
+    } elif (fmt == KqFmt.iq2xxs) {
+        transcode_iq2xxs_superblock(bytes, bo, kq, kqo, ks, kso)
+    } else {
+        panic("kq_transcode_superblock: '{fmt}' has no superblock transcode")
+    }
+}
+
+//! Decode tensor `name` into dst[dst_off ..] as fp32 from any on-disk type the native tier reads.
+//! Panics if the tensor is missing, its element count differs, or its type has no decoder here.
+def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var dst : array<float>; dst_off, expect_n : int64; src_off : int64 = 0l) {   // nolint:STYLE038 — one arm per on-disk upstream type; each arm is a self-contained decode kernel
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {
         panic("gguf: tensor '{name}' not found")
@@ -1114,7 +1167,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
     }
     let gtype = m.tensors[ti].ggml_type
     guard_dst(name, "f32 dst", dst_off, expect_n, long_length(dst))
-    with_tensor_view(m, srcbytes, ti) $(bytes, base) {   // nolint:STYLE037 — the ggml-type ladder; the arms share only the borrowed view
+    with_tensor_view(m, srcbytes, ti) $(bytes, base) {   // nolint:STYLE037 — the upstream-type ladder; the arms share only the borrowed view
     if (gtype == GGML_TYPE_F32) {
         unsafe {   // raw copy, threaded in u64 words (+ one odd-float tail)
             let sp = addr<uint64 const?>(bytes[base + src_off * 4l])
@@ -1253,6 +1306,26 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
                 }
             }
         }
+    } elif (gguf_kq_disk_sbb(gtype) > 0l) {
+        // transcode one superblock into scratch planes + its plane dequant: the native load's own two steps, value for value
+        if (src_off % 256l != 0l || expect_n % 256l != 0l) {
+            panic("gguf: tensor '{name}' superblock slice [{src_off}, +{expect_n}) is not superblock-aligned")
+        }
+        let sbb = gguf_kq_disk_sbb(gtype)
+        let fmt = gguf_kq_fmt_of_type(gtype)
+        var kq : array<uint8>
+        var ks : array<uint8>
+        kq |> resize(int(kq_qsb(fmt)))
+        ks |> resize(int(kq_ssb(fmt)))
+        let nb = expect_n / 256l
+        for (blk in range64(nb)) {
+            let bo = base + (src_off / 256l
++ blk) * sbb
+            kq_transcode_superblock(fmt, bytes, bo, kq, 0l, ks, 0l)
+            dequant_kq_plane_sb(fmt, kq, ks, 0l, false, dst, dst_off + blk * 256l)
+        }
+        delete kq
+        delete ks
     } elif (gtype == GGML_TYPE_MXFP4) {
         // block of 32: 1 E8M0 scale byte + 16 nibble bytes (low nibbles = elems 0..15, high = 16..31);
         // x = e2m1[nibble] * scale — both sides carry the ×2/÷2 on-disk convention (see MXFP4_KVALUES)
@@ -1297,7 +1370,7 @@ def gguf_transcode_bf16(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
     }
 }
 
-//! The on-disk ggml type of tensor `name` (GGML_TYPE_*), or -1 if the tensor is absent. Lets a
+//! The on-disk upstream type of tensor `name` (GGML_TYPE_*), or -1 if the tensor is absent. Lets a
 //! caller pick the direct-transcode path when the disk type already matches the target precision.
 def gguf_tensor_type(m : GGUFMeta; name : string) : int {
     let ti = gguf_find_tensor(m, name)

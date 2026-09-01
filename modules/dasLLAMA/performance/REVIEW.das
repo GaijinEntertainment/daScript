@@ -105,6 +105,47 @@ def private check_last_known_good {
 // historical rows legitimately carry older pins and shas - so they stay out of this sweep;
 // reachability runs in make-pr's chain, where the orphan hazard appears.)
 let private RECORDS_DIR = "modules/dasLLAMA/performance/records"
+let private DEFAULTS_DIR = "modules/dasLLAMA/performance/defaults"
+
+// the shipped defaults profiles: a quiet mint, a version pin, and NO commit stamp (a
+// profile's validity is its pin + feature class; an engine_sha would be an orphan after
+// every rebase and says nothing a reader can act on)
+def private check_defaults_profiles {
+    dir(DEFAULTS_DIR) $(name) {
+        return if (!(name |> ends_with(".tune-defaults.json")))
+        let full = "{DEFAULTS_DIR}/{name}"
+        let text = fread(full)
+        if (empty(text)) {
+            gate_finding(full, "missing or unreadable")
+            return
+        }
+        var jerr = ""
+        var doc = read_json(text, jerr)
+        defer() {
+            unsafe {
+                delete doc
+            }
+        }
+        if (doc == null) {
+            gate_finding(full, "does not parse as JSON: {jerr}")
+            return
+        }
+        let noise = "{doc?["provenance"]?["noise"] ?? ""}"
+        if (noise != "ok") {
+            gate_finding(full, "provenance.noise is '{noise}' - a shipped profile carries a quiet mint (noise ok)")
+        }
+        if (empty("{doc?["provenance"]?["dasllama_version"] ?? ""}")) {
+            gate_finding(full, "no provenance.dasllama_version - a profile with no version pin adopts on every build")
+        }
+        if (!empty("{doc?["provenance"]?["engine_sha"] ?? ""}")) {
+            gate_finding(full, "carries provenance.engine_sha - a profile ships no commit stamp (tune_profile_export strips it)")
+        }
+        let kernels = doc?["kernels"]
+        if (kernels == null || !(kernels.value is _object) || empty(kernels.value as _object)) {
+            gate_finding(full, "no kernels section - not a profile")
+        }
+    }
+}
 
 def private check_records_corpus {
     dir(RECORDS_DIR) $(name) {
@@ -156,6 +197,7 @@ def main() : int {
         return 2
     }
     check_last_known_good()
+    check_defaults_profiles()
     check_schema_engine_free()
     check_single_exchange_client()
     check_records_corpus()

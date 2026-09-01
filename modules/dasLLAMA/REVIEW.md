@@ -1,11 +1,10 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions it indexes - the rules below
-cite `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`, and
-`ARCHITECTURE_MEASUREMENT.md`. Planned work:
-`followup_general.md`, `followup_vulkan.md`, `PERF_LEDGER.md` (performance goes to the perf
-ledger, everything else to the followup ledgers).
+docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions it indexes. Planned work:
+`followup_general.md`, `followup_vulkan.md`, `followup_metal.md` (the Metal tier, and CPU work
+measured on macOS), `PERF_LEDGER.md` (performance goes to the perf ledger, everything else to
+the followup ledgers).
 
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
@@ -28,7 +27,9 @@ winners back.
 **A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`), or to a
 tune-boot path that reaches it, applies `REVIEW_EXCHANGE.md`.**
 
-**Every `dasllama/` change applies this folder's `tests/REVIEW.md`.**
+**Every `dasllama/` change applies this folder's `tests/REVIEW.md`.** The folder walk surfaces
+that checklist only for diffs under `tests/`; its census, kargs and new-value duties trigger
+on `dasllama/`.
 
 **A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
 
@@ -53,6 +54,10 @@ schedules such a stream, applies `REVIEW_VISION.md`.**
 **A `dasllama/dasllama_tower.das` change - the shared encoder-tower home - applies
 `REVIEW_AUDIO.md` and `REVIEW_VISION.md`;** a family file that only CALLS a shared rail does
 not thereby pick up the other modality's checklist.
+
+**A diff that adds a file under `dasllama/`, moves code between files, or lands a kernel,
+codec, transform, tokenizer, tool-wire, media-IO or registration concern in a new place
+applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
 
 **A routed file applies BOTH the checklist it routes to and this one; every other file under
 `modules/dasLLAMA/` applies this one.**
@@ -98,12 +103,6 @@ and shape, is a defect - call that twin instead.** Weights with no faster twin (
 planes) are out of scope; a site that must stay f32 for another reason is ledgered on its own
 file's sec.1 charter line in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, or
 `ARCHITECTURE_MEDIA.md`, not commented into compliance.
-
-**Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
-file.**
-
-**A diff that adds a new engine concern that is not `Model`/`Session`/`Config` state to
-`dasllama/dasllama_common.das` is a defect - give the concern its own file.**
 
 **A boot-path prompt (code that runs at startup, before the first request) that reads stdin
 without first proving both stdin and stdout are terminals is a defect - emit the question as
@@ -190,18 +189,19 @@ the file it checks - in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`, or
 `ARCHITECTURE_GPU.md`.** The line names the check and the names it licenses. A licensed name
 is one that check does not flag. When the check licenses no names, the line says so.
 
-**An upstream mechanism is described in our own terms, not attributed** - no
-"lifted/ported verbatim from" and no upstream symbol, header, or constant names in any
-checked-in prose this module owns (docs and comments, any language); state what the code
-does and why its shape wins. A symbol the file's own code calls or carries as a value may be
-named - naming your own callee or data key is not attribution. Provenance is
-not attribution: a path naming where checked-in data is regenerated FROM, an env-knob row
-in `ENVIRONMENT.md` whose value locates the reference binary, and a command line or flag
-list in `METHODOLOGY.md`, `PROFILE.md`, or `BRINGUP.md`, and a follow-up ledger's board row
-naming the build it compares against, all name the binary outright;
-every other `.md` line and `.das` comment writes "the reference exe" or "upstream". Legal
-attribution lives in `THIRD_PARTY_NOTICES.md` and the `LICENSE.*` files, so prose never
-carries it.
+**Checked-in prose this module owns - docs and comments, any language - describes an upstream
+mechanism in our own terms: no "lifted/ported verbatim from", and no upstream symbol, header,
+or constant name; write "the reference exe" or "upstream" instead.** A symbol this file's own
+code calls or carries as a value is its own name, not attribution.
+
+**A line whose job is to locate or reproduce work against the reference build names the
+binary outright** - a path naming where checked-in data is regenerated FROM, an env-knob row
+whose value locates the reference binary, a command line or flag list in a methodology,
+profile, bring-up, or how-to document, and a follow-up ledger's board row naming the build it
+compares against.
+
+**Legal attribution never appears in prose - it lives in `THIRD_PARTY_NOTICES.md` and the
+`LICENSE.*` files.**
 
 **A def of `dasllama/dasllama.das` - and a new OVERLOAD of one - is TAUGHT: demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
@@ -229,76 +229,19 @@ companions, lands `ARCHITECTURE.md`'s index line and section range and repoints 
 LINT026-gated; the prose ones are not, and a prose citation of a section that left its file
 sends the reader to nothing.
 
-**A per-file inventory restated in this checklist is a defect of the checklist.** The sec.1
-charters - `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md` - own the
-per-file list. A rule naming what KIND of code lands in which file is the checklist's own.
-
-**A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
-
-**A disk-order -> compute-order transform lands per scope: kernel-layout in
-`dasllama/dasllama_repack.das`, load-scope in `dasllama/dasllama_layout.das`.**
-
-**A CPU KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`,
-its format family kept whole.** GPU twins land in their backend kernel file.
-
-**A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its backend file
-(`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
-
-**A kernel body lands in its owner's backend file.** A GPU kernel body lands in the file where
-its PSO is compiled and released. A CPU-tier kernel body lands in that tier's
-`dasllama/dasllama_math_<tier>.das`. A kernel body never lands in
-`dasllama/dasllama_math.das` or in a lens/dispatch macro file.
-
-**A family quirk lands in the family file; a piece two families need moves UP into the
-concern's shared file (its own file when none exists)** - never sideways into a sibling.
-
-**A family gaining an arm for a media kind adds that kind's span markers to that family's chat
-template, never to a second renderer.** Span markers are the template text that opens and
-closes the media rows. A family whose template or vocab lacks them has no arm for that media
-kind - `create_chat_` panics at create, not at render.
-
-**No signature in `dasllama/dasllama_tower.das` takes a type that
-`dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file declares.**
-`dasllama/dasllama_tower.das` is the shared encoder-tower home, and it requires none of those
-files. A doc comment naming the family a helper was built for is fine.
-
-**A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's
-file** - a single-caller helper sanctioned as tower-worthy is ledgered on
-`ARCHITECTURE_MEDIA.md` sec.1.7's tower charter line, not argued in review.
-
-**A harness whose run can end with zero result rows exits non-zero when it does - wrong
-flags, failed load, a device that declines.**
-
-**Tool wire text (the text of a model's tool/function call, built or parsed) is produced only
-in `dasllama/dasllama_tools.das`.**
-
-**No engine file (`dasllama/`) other than `dasllama/dasllama_audio_io.das` requires `audio` (the
-miniaudio decode module).**
-
-**No engine file (`dasllama/`) other than `dasllama/dasllama_vision_io.das` requires `stbimage`.**
-Benchmarks, harnesses, and tests decode their own fixtures.
-
-**Engine, HTTP, or writer logic never lands in `dasllama/dasllama_scheduler.das`** - engine logic in
-engine files, HTTP in the server, writer logic in the writer's own file.
-
-**An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
-`dasllama/dasllama_transformer.das`** - arch registrations, GPU tiers, every module requiring
-the engine back; it sits in `dasllama/dasllama_common.das` only if engine code needs it. A
-program root (test, harness, benchmark, tool) requires the registration module it needs
-directly.
-
-**An architecture file (`dasllama/dasllama_arch_*.das`) that changes a forward loop, or tests a
-family name on a shared path, is a defect - it carries declarative registration only.**
-
 **A diff that moves a family encode stage onto a GPU hook leaves the CPU form in place and
 changes none of its arithmetic - deleting or rewriting the CPU form in the same change is a
 defect.** The hook returns a decline value (`false`, or `-1` for the chunk hooks), and the CPU
 form serves every box with no driver.
 
-**A constant that a team-mode job lane reads is declared as a `def` returning the value, never
-as a `let` global.** A team lane never runs global initializers, so a `let` reads zero there
-while every single-threaded run reads the right value.
+**A diff that writes a CPU feature name in a `requires=` argument that `TUNE_KNOWN_FEATURES`
+(`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it there in the same
+change.** The `features` fingerprint saved with every sidecar is this box's pass/fail over
+that list, so a name outside it is never recorded and a box adopting a shipped profile re-runs
+the tuning the profile was meant to save.
 
-**A diff that adds a row to `harness/tune_kernels.das`'s bench list puts it ahead of
-`dot_q8q8_laneq4x4`, which stays last.** That bench pins the repack backend for the rest of the
-process, so a row after it races against the pinned backend instead of the one it selects.
+**A value that a team-lane kernel reads - anything reachable from a `team_parallel_for` /
+`team_parallel_for_indexed` / `team_parallel_stages` body (`dasllama/dasllama_par.das`) - is a `def`
+returning it, never a module global with a declaration initializer (`let` or `var`).** A team
+lane never runs global initializers, so the global reads zero there while every
+single-threaded run reads the right value.

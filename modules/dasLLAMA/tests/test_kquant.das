@@ -1,13 +1,14 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // the layout arm loads a multi-GB model; explicit delete below
-options _cyclomatic_complexity = 76   // every gate here is the same flat fmt == 4/5/6/40/44/3 ladder repeated per stage
+options _cyclomatic_complexity = 76   // every gate here is the same flat per-format ladder (thirteen formats) repeated per stage
 options _function_length = 300        // and each gate carries its whole fixture build + oracle inline
 options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _model_tier
 require dasllama/dasllama_gguf
+require dasllama/dasllama_common   // dequant_kq_plane_sb - the carrier-form dispatcher
 require dasllama/dasllama_convert
 require dasllama/dasllama_math   // pin_kernel_backend — the layout arm needs disk-order planes
 require dasllama/dasllama_math_default   // dot_k4q8/k5/k6/q40q8 — the kernel arms gate them vs the plane dequant
@@ -517,7 +518,7 @@ def test_kq_transcode_planes(t : T?) {
         dequant_iq4xs_plane_superblock(kq, 0l, ks, 0l, dst, 0l)
         for (k in range(256)) {
             let expected = (SYNTH_D * float(SYNTH_SC[k / 32] - 32)) * float(IQ4NL_LUT[q4_pat(k)])
-            t |> success(dst[k] == expected, "iq4xs plane element must match the ggml dequant exactly")
+            t |> success(dst[k] == expected, "iq4xs plane element must match the upstream dequant exactly")
         }
     }
     t |> run("k3 planes decode the packed 6-bit sub-scales and compose the 3-bit quants exactly") @(t : T?) {
@@ -535,7 +536,7 @@ def test_kq_transcode_planes(t : T?) {
         dequant_k3_plane_superblock(kq, 0l, ks, 0l, dst, 0l)
         for (k in range(256)) {
             let expected = (SYNTH_D * float(SYNTH_SC[(k / 16) % 8] - 32)) * float(q3_pat(k) - 4)
-            t |> success(dst[k] == expected, "k3 plane element must match the ggml dequant exactly")
+            t |> success(dst[k] == expected, "k3 plane element must match the upstream dequant exactly")
         }
     }
     t |> run("iq3s planes decode the 4-bit sub-scales and gather the grid exactly") @(t : T?) {
@@ -559,7 +560,7 @@ def test_kq_transcode_planes(t : T?) {
             let g = int((IQ3S_GRID[qi] >> uint(8 * (hj % 4))) & 0xFFu)
             let sgn = ((iq3s_sg_pat(b * 4 + l) >> hj) & 1) != 0 ? -1.0 : 1.0
             let expected = (SYNTH_D * float(1 + 2 * (SYNTH_SC[b] & 15))) * float(g) * sgn
-            t |> success(dst[k] == expected, "iq3s plane element must match the ggml dequant exactly")
+            t |> success(dst[k] == expected, "iq3s plane element must match the upstream dequant exactly")
         }
     }
     t |> run("k2 planes reorder the header and compose the 2-bit quants exactly") @(t : T?) {
@@ -575,7 +576,7 @@ def test_kq_transcode_planes(t : T?) {
         for (k in range(256)) {
             let g = k / 16
             let expected = SYNTH_D * float(SYNTH_SC[g % 8] & 15) * float(q2_pat(k)) - SYNTH_DMIN * float(SYNTH_MN[g % 8] & 15)
-            t |> success(dst[k] == expected, "k2 plane element must match the ggml dequant exactly")
+            t |> success(dst[k] == expected, "k2 plane element must match the upstream dequant exactly")
         }
     }
     t |> run("iq2xs planes eighth the d, decode the strips, and gather the 512-entry grid + ksigns exactly") @(t : T?) {
@@ -601,7 +602,7 @@ def test_kq_transcode_planes(t : T?) {
             let g = int((gw >> uint(8 * (j % 4))) & 0xFFu)
             let sgn = ((int(KSIGNS_IQ2XS[iq2xs_sg7_pat(b * 4 + l)]) >> j) & 1) != 0 ? -1.0 : 1.0
             let expected = (d8 * float(1 + 2 * (SYNTH_SC[(2 * b + l / 2) % 8] & 15))) * float(g) * sgn
-            t |> success(dst[k] == expected, "iq2xs plane element must match the ggml dequant exactly")
+            t |> success(dst[k] == expected, "iq2xs plane element must match the upstream dequant exactly")
         }
     }
     t |> run("iq2xxs planes eighth the d, decode the per-32 strips, and gather the 256-entry grid + ksigns exactly") @(t : T?) {
@@ -627,7 +628,7 @@ def test_kq_transcode_planes(t : T?) {
             let g = int((gw >> uint(8 * (j % 4))) & 0xFFu)
             let sgn = ((int(KSIGNS_IQ2XS[iq2xxs_sg7_pat(b * 4 + l)]) >> j) & 1) != 0 ? -1.0 : 1.0
             let expected = (d8 * float(1 + 2 * (SYNTH_SC[b % 8] & 15))) * float(g) * sgn
-            t |> success(dst[k] == expected, "iq2xxs plane element must match the ggml dequant exactly")
+            t |> success(dst[k] == expected, "iq2xxs plane element must match the upstream dequant exactly")
         }
     }
     t |> run("iq2s planes eighth the d, decode the strips, and gather the u64 grid exactly") @(t : T?) {
@@ -653,7 +654,7 @@ def test_kq_transcode_planes(t : T?) {
             let g = int((gw >> uint(8 * (j % 4))) & 0xFFu)
             let sgn = ((iq2s_sg_pat(b * 4 + l) >> j) & 1) != 0 ? -1.0 : 1.0
             let expected = (d8 * float(1 + 2 * (SYNTH_SC[(2 * b + l / 2) % 8] & 15))) * float(g) * sgn
-            t |> success(dst[k] == expected, "iq2s plane element must match the ggml dequant exactly")
+            t |> success(dst[k] == expected, "iq2s plane element must match the upstream dequant exactly")
         }
     }
     t |> run("q51 planes unpack the hand-packed Q5_1 blocks exactly") @(t : T?) {
@@ -1528,7 +1529,7 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
     // k5/k6 tiles read the byte-expanded panel the batch cell unpacks per (group, token-block)
     // — the gate covers unpack_kq_panel_grp too (tile-over-panel vs gemv-over-packed planes);
     // k4/q40 tiles read the packed planes directly
-    let packed = fmt == 4 || fmt == 40 || fmt == 44 || fmt == 3 || fmt == 45 || fmt == 2   // iq3s/iq3xxs/iq2s/iq2xs tiles read the byte-expanded panel (the batch cell's shape)
+    let packed = kq_reads_packed_planes(int64(fmt))
     var panel : array<uint8>
     if (!packed) {
         panel |> resize(mr * nsb * 256l)
@@ -2491,5 +2492,75 @@ def test_iq4nl_planes(t : T?) {
         delete kq
         delete ks
         delete dst
+    }
+}
+
+// the Metal-blob carrier splits a format's scale plane into [16B strips of every superblock]
+// [the d tails] (ARCHITECTURE_GPU.md sec.2.2y); this rebuilds that form from the CPU row form
+// the way metal_blob_scale_plane does for the 20B rows: [f16 d][2 pad][16B strips]
+def private split_scale_plane(ks : array<uint8>; ssb : int64) : array<uint8> {
+    let nsb = long_length(ks) / ssb
+    var out : array<uint8>
+    out |> resize(int(nsb * 18l))
+    for (sb in range64(nsb)) {
+        for (i in range64(16l)) {
+            out[sb * 16l + i] = ks[sb * ssb + 4l + i]
+        }
+        out[nsb * 16l + sb * 2l] = ks[sb * ssb]
+        out[nsb * 16l + sb * 2l + 1l] = ks[sb * ssb + 1l]
+    }
+    return <- out
+}
+
+[test]
+def test_kq_plane_sb_metal_blob_form(t : T?) {
+    t |> run("dequant_kq_plane_sb reads the Metal-blob split scale plane to the same values as the row form") <| @(t : T?) {
+        // one superblock per format from random disk bytes: transcode, dequant the row form, then
+        // dequant the split form through the metal_blob arm - the values must agree exactly
+        let gtypes <- [GGML_TYPE_IQ2_XXS, GGML_TYPE_IQ2_XS, GGML_TYPE_IQ2_S, GGML_TYPE_IQ3_XXS, GGML_TYPE_IQ3_S, GGML_TYPE_IQ4_XS]
+        var seed = 11
+        for (gtype in gtypes) {
+            let fmt = gguf_kq_fmt_of_type(gtype)
+            let sbb = gguf_kq_disk_sbb(gtype)
+            var bytes : array<uint8>
+            bytes |> reserve(int(sbb * 3l))
+            var x = uint(seed) * 2654435761u
+            for (i in range(int(sbb * 3l))) {
+                x = x * 1664525u + 1013904223u
+                bytes |> push(uint8((x >> 24u) & 0xFFu))
+            }
+            let qsb = kq_qsb(fmt)
+            let ssb = kq_ssb(fmt)
+            var kq : array<uint8>
+            var ks : array<uint8>
+            kq |> resize(int(qsb * 3l))
+            ks |> resize(int(ssb * 3l))
+            for (sb in range64(3l)) {
+                kq_transcode_superblock(fmt, bytes, sb * sbb, kq, sb * qsb, ks, sb * ssb)
+            }
+            var rowform : array<float>
+            var blobform : array<float>
+            rowform |> resize(768)
+            blobform |> resize(768)
+            let split <- split_scale_plane(ks, ssb)
+            for (sb in range64(3l)) {
+                dequant_kq_plane_sb(fmt, kq, ks, sb, false, rowform, sb * 256l)
+                dequant_kq_plane_sb(fmt, kq, split, sb, true, blobform, sb * 256l)
+            }
+            var bad = 0
+            for (i in range(768)) {
+                // random f16 scale bits can be NaN on both sides - a NaN pair is agreement
+                if (rowform[i] != blobform[i] && !(rowform[i] != rowform[i] && blobform[i] != blobform[i])) {
+                    bad++
+                }
+            }
+            t |> equal(bad, 0, "{fmt}: split form == row form ({bad} of 768 differ)")
+            delete bytes
+            delete kq
+            delete ks
+            delete rowform
+            delete blobform
+            seed++
+        }
     }
 }

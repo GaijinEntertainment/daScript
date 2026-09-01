@@ -96,44 +96,12 @@ def private ple_gather_row(t : Model; row : int64; var dst : array<float>; doff 
         dequant_q8_row(t, eloff, all, unsafe(addr(dst[doff])))
         return
     }
-    // metal-blob carriers compact k4/k5 scale strips to 16B and split k6 (embed_row's strides)
-    let ssb45 = t.metal_blob ? 16l : K4_SSB
-    let k6d0 = t.metal_blob ? (long_length(t.k6s) / K6_SSB) * 16l : 0l
+    var kqp : array<uint8> const?
+    var ksp : array<uint8> const?
+    kq_planes_of(t, t.ple_emb_fmt, kqp, ksp)
     for (blk in range64(all / 256l)) {
         let sb = (eloff + blk * 256l) / 256l
-        if (t.ple_emb_fmt == KqFmt.k4) {
-            dequant_k4_plane_superblock(t.k4q, sb * K4_QSB, t.k4s, sb * ssb45, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.k5) {
-            dequant_k5_plane_superblock(t.k5q, sb * K5_QSB, t.k5s, sb * ssb45, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.k6) {
-            if (t.metal_blob) {
-                dequant_k6_plane_superblock_at(t.k6q, sb * K6_QSB, t.k6s, sb * 16l, k6d0 + sb * 2l, dst, doff + blk * 256l)
-            } else {
-                dequant_k6_plane_superblock(t.k6q, sb * K6_QSB, t.k6s, sb * K6_SSB, dst, doff + blk * 256l)
-            }
-        } elif (t.ple_emb_fmt == KqFmt.q40) {
-            dequant_q40_plane_superblock(t.q40q, sb * Q40_QSB, t.q40s, sb * Q40_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.iq4xs) {
-            dequant_iq4xs_plane_superblock(t.iq4xsq, sb * IQ4XS_QSB, t.iq4xss, sb * IQ4XS_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.k3) {
-            dequant_k3_plane_superblock(t.k3q, sb * K3_QSB, t.k3s, sb * K3_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.iq3s) {
-            dequant_iq3s_plane_superblock(t.iq3sq, sb * IQ3S_QSB, t.iq3ss, sb * IQ3S_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.iq3xxs) {
-            dequant_iq3xxs_plane_superblock(t.iq3xxsq, sb * IQ3XXS_QSB, t.iq3xxss, sb * IQ3XXS_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.iq4nl) {
-            dequant_iq4nl_plane_superblock(t.iq4nlq, sb * Q40_QSB, t.iq4nls, sb * Q40_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.k2) {
-            dequant_k2_plane_superblock(t.k2q, sb * K2_QSB, t.k2s, sb * K2_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.iq2s) {
-            dequant_iq2s_plane_superblock(t.iq2sq, sb * IQ2S_QSB, t.iq2ss, sb * IQ2S_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.iq2xs) {
-            dequant_iq2xs_plane_superblock(t.iq2xsq, sb * IQ2XS_QSB, t.iq2xss, sb * IQ2XS_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.iq2xxs) {
-            dequant_iq2xxs_plane_superblock(t.iq2xxsq, sb * IQ2XXS_QSB, t.iq2xxss, sb * IQ2XXS_SSB, dst, doff + blk * 256l)
-        } else {
-            panic("ple_gather_row: '{t.ple_emb_fmt}' has no kq plane pair")
-        }
+        dequant_kq_plane_sb(t.ple_emb_fmt, *kqp, *ksp, sb, t.metal_blob, dst, doff + blk * 256l)
     }
 }
 

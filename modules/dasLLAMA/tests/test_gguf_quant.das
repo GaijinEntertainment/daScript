@@ -4,6 +4,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_convert  // the codec layer under test — direct require pins the new module API
 require dasllama/dasllama_gguf
+require dasllama/dasllama_common    // dequant_kq_plane_sb - the plane dequant the f32 fallback must match
 require math
 
 // Byte-level GGUF quant-format gates on a synthetic in-memory file: the dequant arm must match an
@@ -208,5 +209,65 @@ def test_q5k_encoder(t : T?) {
         delete y
         delete kq
         delete ks
+    }
+}
+
+// the superblock disk types the native tier reads: the f32 fallback decodes every one of them,
+// value for value the way the native load does (transcode, then plane dequant). Random bytes
+// are valid input for all nine (grid indices, sign bits and scale nibbles have no invalid values).
+def private synth_sb_bytes(sbb : int64; seed : int) : array<uint8> {
+    var b : array<uint8>
+    b |> reserve(int(sbb * 2l))
+    var x = uint(seed) * 2654435761u + 12345u
+    for (i in range(int(sbb * 2l))) {
+        x = x * 1664525u + 1013904223u
+        b |> push(uint8((x >> 24u) & 0xFFu))
+    }
+    return <- b
+}
+
+[test]
+def test_gguf_f32_reader_superblock_types(t : T?) {
+    t |> run("gguf_read_tensor_f32 decodes every superblock i-quant / K-quant the native tier reads") <| @(t : T?) {
+        let types <- [GGML_TYPE_IQ4_XS, GGML_TYPE_Q3_K, GGML_TYPE_IQ3_S, GGML_TYPE_IQ3_XXS, GGML_TYPE_IQ4_NL,
+                      GGML_TYPE_Q2_K, GGML_TYPE_IQ2_S, GGML_TYPE_IQ2_XS, GGML_TYPE_IQ2_XXS]
+        var ti = 0
+        for (gtype in types) {
+            let sbb = gguf_kq_disk_sbb(gtype)
+            t |> success(sbb > 0l, "type {gtype} has a disk stride")
+            let fmt = gguf_kq_fmt_of_type(gtype)
+            let data <- synth_sb_bytes(sbb, 7 + ti)
+            let gg <- synth_gguf(gtype, 512l, data)
+            var m <- parse_gguf_meta(gg)
+            var deq : array<float>
+            deq |> resize(512)
+            gguf_read_tensor_f32(m, gg, "t", deq, 0l, 512l)
+            // the oracle: the native two-step over the same bytes
+            var kq : array<uint8>
+            var ks : array<uint8>
+            kq |> resize(int(kq_qsb(fmt)))
+            ks |> resize(int(kq_ssb(fmt)))
+            var want : array<float>
+            want |> resize(512)
+            let base = long_length(gg) - sbb * 2l
+            for (blk in range64(2l)) {
+                kq_transcode_superblock(fmt, gg, base + blk * sbb, kq, 0l, ks, 0l)
+                dequant_kq_plane_sb(fmt, kq, ks, 0l, false, want, blk * 256l)
+            }
+            var bad = 0
+            for (i in range(512)) {
+                // random f16 scale bits can be NaN on both sides - a NaN pair is agreement
+                if (deq[i] != want[i] && !(deq[i] != deq[i] && want[i] != want[i])) {
+                    bad++
+                }
+            }
+            t |> equal(bad, 0, "type {gtype}: reader == transcode+dequant ({bad} of 512 differ)")
+            delete m
+            delete deq
+            delete want
+            delete kq
+            delete ks
+            ti++
+        }
     }
 }

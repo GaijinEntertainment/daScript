@@ -106,7 +106,9 @@ The backend's override knobs - the escapes that change what a run compiles, tune
 beyond its defaults - are: `DAS_TUNE_POLICY` (replaces the declared/injected tune policy),
 `DAS_TUNE_MODE` (grid/tuner compile modes), `DAS_TUNE_MANIFEST` (pins the sidecar),
 `DAS_TUNE_NOISE_CV` (recalibrates the tuner noise gate), `DAS_TUNE_NOISE_OVERRIDE` (mints
-through a failing gate), `--tune` (forced re-mint), `--jit-obj-cache=0` (forces every split
+through a failing gate), `--tune` (forced re-mint), `--tune-only` / `DAS_TUNE_ONLY` (re-mints
+only the named families; the policy guard arms it itself for a profile's residue),
+`DAS_TUNE_CONTROL` (a supervisor's stop request - tuners abort between families), `--jit-obj-cache=0` (forces every split
 partition to re-emit, bypassing the obj cache), `DAS_JIT_PROBE_LTO` (split partitions emit
 bitcode and the link runs lld LTO - a dev probe artifact), `DAS_JIT_X64_FORCE_FEATURES` /
 `DAS_JIT_ARM64_FORCE_FEATURES` (force CPU features past detection - emission, the cache keys,
@@ -135,7 +137,8 @@ have no instruction to select and codegen aborts. `cpu_supports` reads the opera
 instead (sysctl / `AT_HWCAP` / `IsProcessorFeaturePresent`), so it answers for silicon LLVM has
 never heard of. Both the tier gates (`init_jit_target_flags`) and the target machine's feature
 string (`create_default_target_machine`) therefore take the union of the two: an LLVM host-string
-hit OR a `cpu_supports` hit. A cross-compile triple takes neither - only the force env.
+hit OR a `cpu_supports` hit (fullfp16 additionally reads darwin-arm64 as always-on - every
+Apple Silicon part has it). A cross-compile triple takes neither - only the force env.
 
 The two ways a feature reaches the target machine's string license different things. A
 detection-derived append - `+dotprod` always, `+i8mm` when `cpu_supports` confirms it - is

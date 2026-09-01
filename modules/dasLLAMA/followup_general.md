@@ -756,7 +756,7 @@
     ones - lets ledger towards the end of this arc").** The IQ3_S CPU arm is the first written
     against llama.cpp's arch kernel (signs-on-activation, sllv index compose, scalar grid
     loads beating hardware gather); IQ4_XS and Q3_K were written from the disk format alone.
-    Toward the end of the arc: read `ggml_vec_dot_iq4_xs_q8_K` and `ggml_vec_dot_q3_K_q8_K`
+    Toward the end of the arc: read the reference exe's vec-dot and the reference exe's vec-dot
     (x86 + arm), list every technique ours does not measure, land the missing ones as
     `[tune_perm]` spellings and let the probe judge. Done = a per-format note naming what was
     raced and what won, beside the existing bench rows.

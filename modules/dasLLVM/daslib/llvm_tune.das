@@ -556,7 +556,8 @@ def tune_profile_export(outPath : string; klass : string) : bool {
     let old = doc?["provenance"]
     if (old != null && old.value is _object) {
         for (k, v in keys(old as _object), values(old as _object)) {
-            continue if (k == "binary" || k == "box" || k == "written" || k == "origin" || k == "class")
+            // a profile's validity is its version pin + feature class, never a commit: engine_sha stays behind with the box identity
+            continue if (k == "binary" || k == "box" || k == "written" || k == "origin" || k == "class" || k == "engine_sha")
             if (v != null && v is _string) {
                 prov[k] = JV(v as _string)
             }
@@ -916,8 +917,8 @@ def private scope_fnames_joined(scope : TuneScope) : string {
     return joined
 }
 
-//! the ';'-joined `fname=exprA+exprB` map of a scope's ISA-gated [tune] families - every `requires=` its [tune_perm] rows carry, read off the AST for the runtime guard
-def private scope_gated_joined(scope : TuneScope) : string {
+// every `requires=` a scope's [tune_perm] rows carry, read off the AST for the runtime guard
+def private scope_gated_families_joined(scope : TuneScope) : string {
     var wanted : table<string>
     wanted |> insert(scope.modName)
     for (m in split(scope.covers, ";")) {
@@ -1245,7 +1246,7 @@ def tune_feature_fingerprint() : string {
 
     //! This box's CPU feature class — the name a shipped defaults profile is keyed by. Classes
     //! follow the seats `requires=` can gate, not box models: two boxes of one class stamp the
-    //! same winners (measured spread inside a class is noise), so one profile serves them all.
+    //! same winners, so one profile serves them all; an arch with no ladder gets a key no profile matches.
 def tune_cpu_class() : string {
     let arch = get_architecture_name()
     if (arch == "x86_64") {
@@ -1260,7 +1261,7 @@ def tune_cpu_class() : string {
     if (arch == "arm64" || arch == "aarch64") {
         return fallback_feature_ok("i8mm") ? "arm-i8mm" : "arm-neon"
     }
-    return "{get_platform_name()}-{arch}"   //! an arch with no ladder: a key no shipped profile can match, deliberately
+    return "{get_platform_name()}-{arch}"
 }
 
     //! Profile candidates for this box, most specific first — a box above the best shipped
@@ -1284,7 +1285,6 @@ def tune_class_chain() : array<string> {
     return <- chain
 }
 
-// evaluate a requires= expression against a ';'-joined feature set instead of this box —
 // "did the PROFILE's minting box pass this gate" is what separates covered from unlocked seats
 def private requires_ok_in_fingerprint(requires : string; fingerprint : string) : bool {
     return true if (empty(requires))
@@ -1613,9 +1613,8 @@ class private TuneAnnotation : AstFunctionAnnotation {
             let noPerms : array<TunePerm>
             var rok = emit_registry(compiling_module(), func, noPerms, errors)
             for (c in comps) {
-                if (rok) {
-                    rok = emit_registry(compiling_module(), c.fn, noPerms, errors)
-                }
+                break if (!rok)
+                rok = emit_registry(compiling_module(), c.fn, noPerms, errors)
             }
             delete perms
             delete comps
@@ -1792,9 +1791,9 @@ struct private TuneCliArgs {
     tune_only : string
 }
 
-// Adopts --tune-quiet/--tune-verbose and answers whether --tune was passed. Runs at MACRO
-// time, so the verbosity has to travel by env: the runtime guard is a different context and
-// would not see this context's global. get_user_args also gets the standalone-exe slice right.
+// Adopts --tune-quiet/--tune-verbose/--tune-only and answers whether a forced tune was asked for
+// (--tune, or --tune-only alone). Runs at MACRO time, so the verbosity travels by env - the runtime
+// guard is another context; get_user_args also gets the standalone-exe slice right.
 def private apply_cli_tune_flags() : bool {
     var r <- parse_args(type<TuneCliArgs>, get_user_args())
     if (r |> is_err) {
@@ -2085,16 +2084,19 @@ def private announce_tuning(scopeName : string; force, selfRestarts : bool; deta
     print("llvm_tune: scope '{scopeName}' {why} - tuning now. This takes a while; {tail}.\n")
 }
 
-// spawn the scope's tuner, relaying its output LIVE — RUNTIME only (the auto and restart
-// guards); never from macro context. Streaming is load-bearing: a tune is minutes of work, and
-// buffering it to a file left us and any supervisor with no signal until the child exited.
-def private run_scope_tuner(scope : TuneScope) : bool {
+// spawn the scope's tuner, relaying its output LIVE — RUNTIME only (the auto and restart guards).
+// Streaming is load-bearing: buffering minutes of tune output leaves every supervisor blind.
+// `onlyFilter` arms DAS_TUNE_ONLY for this one spawn and clears it after (the re-exec child must not inherit it).
+def private run_scope_tuner(scope : TuneScope; onlyFilter : string = "") : bool {
     let cmd = "{tuner_cmd(scope)} 2>&1"
     if (tune_verbosity() != "silent") {
         print("llvm_tune: tuning scope '{scope.scopeName}' -> {scope.manifestPath}\n")
     }
     if (tune_verbosity() == "verbose") {
         print("llvm_tune: {cmd}\n")
+    }
+    if (!empty(onlyFilter)) {
+        set_env_variable("DAS_TUNE_ONLY", onlyFilter)
     }
     var rc : int
     unsafe {
@@ -2105,6 +2107,9 @@ def private run_scope_tuner(scope : TuneScope) : bool {
                 }
             }
         }
+    }
+    if (!empty(onlyFilter)) {
+        set_env_variable("DAS_TUNE_ONLY", "")
     }
     finish_progress()
     if (rc != 0 && tune_verbosity() != "silent") {
@@ -2129,10 +2134,11 @@ def public tune_suppress_mint(knob : string) {
 
 // ===== shipped defaults profiles ([tune_scope(defaults = "dir")]) =====
 
-//! Adopt a shipped class profile into an untuned scope before any race. True = adopted; `raceCsv` is then the ','-joined families the caller still owes a race ("" = fully covered).
-def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gated : string; var raceCsv : string&) : bool { // nolint:STYLE037,STYLE038 — one straight adopt pipeline: locate, validate, merge, diff
-    raceCsv = ""
-    //! a runtime-redirected manifest path declines - adoption never lands in a file this guard was not compiled for
+// adopt a shipped class profile into an untuned scope before any race: true = adopted, and
+// `onlyFilter` is then the ','-joined families the caller still owes a race ("" = fully covered)
+def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gatedFamilies : string; var onlyFilter : string&) : bool { // nolint:STYLE037,STYLE038 — one straight adopt pipeline: locate, validate, merge, diff
+    onlyFilter = ""
+    // a runtime-redirected manifest path declines - adoption never lands in a file this guard was not compiled for
     return false if (empty(defaultsDir) || tune_manifest_path() != manifestPath)
     var verKey = ""
     var verVal = ""
@@ -2181,6 +2187,7 @@ def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gate
         }
     }
     if (empty(kernels)) {
+        print("llvm_tune: defaults profile '{klass}' has no kernel entries - skipped\n")
         delete_json(doc)
         return false
     }
@@ -2192,7 +2199,7 @@ def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gate
         }
     }
     let pfeat = "{doc?["provenance"]?["features"] ?? ""}"
-    for (row in split(gated, ";")) {
+    for (row in split(gatedFamilies, ";")) {
         continue if (empty(row))
         let eq = find(row, "=")
         continue if (eq < 0)
@@ -2221,7 +2228,7 @@ def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gate
     }
     let tail = empty(race) ? "" : " - racing {length(race)} unlocked/new families"
     print("llvm_tune: scope '{scopeName}' adopted the '{klass}' defaults profile ({length(kernels)} kernel entries){tail}\n")
-    raceCsv = join(race, ",")
+    onlyFilter = join(race, ",")
     delete kernels
     delete race
     delete_json(doc)
@@ -2232,14 +2239,14 @@ def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gate
     //! and followed by `tune_auto_reexec()`. Adopts a declared defaults profile first, then tunes
     //! the residue at RUNTIME (winners are compile-time stamps). A corrupt sidecar self-heals.
 def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : string; force : bool; fnames : string;
-                      defaultsDir : string = ""; gated : string = "") {
+                      defaultsDir : string = ""; gatedFamilies : string = "") {
     let v = tune_sidecar_verdict(manifestPath, fnames)
     if (!force && v.complete) {
         return
     }
     var onlyFilter = ""
-    if (!force && profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gated, onlyFilter) && empty(onlyFilter)) {
-        g_tuned_scopes++   //! nothing raced, yet counted: the re-exec is what stamps the adopted winners
+    if (!force && profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gatedFamilies, onlyFilter) && empty(onlyFilter)) {
+        g_tuned_scopes++   // nothing raced, yet counted: the re-exec is what stamps the adopted winners
         return
     }
     if (!force && empty(onlyFilter) && scope_resolved_externally(scopeName, manifestPath, fnames)) {
@@ -2252,14 +2259,8 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
         }
         return
     }
-    if (!empty(onlyFilter)) {
-        set_env_variable("DAS_TUNE_ONLY", onlyFilter)
-    }
     announce_tuning(scopeName, force, true, v.detail)
-    run_scope_tuner(TuneScope(scopeName = scopeName, manifestPath = manifestPath, tunerPath = tunerPath))
-    if (!empty(onlyFilter)) {
-        set_env_variable("DAS_TUNE_ONLY", "")
-    }
+    run_scope_tuner(TuneScope(scopeName = scopeName, manifestPath = manifestPath, tunerPath = tunerPath), onlyFilter)
     let after = tune_sidecar_verdict(manifestPath, fnames)
     if (after.complete) {
         g_tuned_scopes++
@@ -2281,7 +2282,7 @@ def tune_auto_reexec() : bool {
     args |> reserve(length(argv))
     var skipTuneOnlyValue = false
     for (a in argv) {
-        if (skipTuneOnlyValue) {   // the value token of a `--tune-only <tokens>` pair
+        if (skipTuneOnlyValue) {
             skipTuneOnlyValue = false
             continue
         }
@@ -2381,13 +2382,13 @@ def tune_family_selected(name : string) : bool {
     //! the app's `main`: adopts a declared defaults profile, then consults the scope resolver, else runs the tuner; true = main
     //! returns immediately (winners are compile-time stamps), false = scope complete, carry on.
 def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : string; fnames : string;
-                        defaultsDir : string = ""; gated : string = "") : bool {
+                        defaultsDir : string = ""; gatedFamilies : string = "") : bool {
     let v = tune_sidecar_verdict(manifestPath, fnames)
     if (v.complete) {
         return false
     }
     var onlyFilter = ""
-    if (profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gated, onlyFilter) && empty(onlyFilter)) {
+    if (profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gatedFamilies, onlyFilter) && empty(onlyFilter)) {
         print("llvm_tune: scope '{scopeName}' adopted -> {manifestPath}\nllvm_tune: restart to apply the winners\n")
         return true
     }
@@ -2407,13 +2408,7 @@ def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : s
         return true
     }
     announce_tuning(scopeName, false, false, v.detail)
-    if (!empty(onlyFilter)) {
-        set_env_variable("DAS_TUNE_ONLY", onlyFilter)
-    }
-    run_scope_tuner(TuneScope(scopeName = scopeName, manifestPath = manifestPath, tunerPath = tunerPath))
-    if (!empty(onlyFilter)) {
-        set_env_variable("DAS_TUNE_ONLY", "")
-    }
+    run_scope_tuner(TuneScope(scopeName = scopeName, manifestPath = manifestPath, tunerPath = tunerPath), onlyFilter)
     let after = tune_sidecar_verdict(manifestPath, fnames)
     if (after.complete) {
         print("llvm_tune: scope '{scopeName}' tuned -> {manifestPath}\nllvm_tune: restart to apply the winners\n")
@@ -2526,16 +2521,20 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
     var policy = declared
     {
         let penv = g_env_tune.tune_policy
-        // announce deferred to the first INCOMPLETE scope - a fully-tuned start stays silent
-        var envNote = ""
         if (!empty(penv)) {
             policy = penv
+            // the announce fires where the override changes the outcome - `reference` alters every stamp even on a fully tuned box
             if (tune_verbosity() != "silent") {
-                envNote = "llvm_tune: policy '{policy}' set by DAS_TUNE_POLICY (declared/default '{declared}')\n"
+                print("llvm_tune: policy '{policy}' set by DAS_TUNE_POLICY (declared/default '{declared}')\n")
             }
         }
         if (policy != "fallback" && policy != "reference" && policy != "warn" && policy != "error" && policy != "auto" && policy != "restart") {
             errors = "[tune_policy] on {func.name}: missing=\"{policy}\" - use fallback | reference | warn | error | auto | restart"
+            return false
+        }
+        if (declared == "reference" && penv != "reference") {
+            // the [tune] stamps in required libraries compile before this root exists and read the env only
+            errors = "[tune_policy] on {func.name}: missing=\"reference\" is an environment override (DAS_TUNE_POLICY=reference), not a declarable value"
             return false
         }
         let force = apply_cli_tune_flags()
@@ -2553,10 +2552,6 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             let scopeFnames = scope_fnames_joined(scope)
             let v = tune_sidecar_verdict(scope.manifestPath, scopeFnames)
             continue if (!force && v.complete)
-            if (!empty(envNote)) {
-                print(envNote)
-                envNote = ""
-            }
             if (force || policy == "auto") {
     // a runtime guard tunes and RE-EXECS: restamping a required module's compiled function is a cross-module mutation re-infer cannot survive
                 if (empty(scope.tunerPath)) {
@@ -2578,7 +2573,7 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
                     errors = "[tune_policy]: restart - {func.name} must return void or int"
                 } else {
                     var guard : ExpressionPtr
-                    let scopeGated = scope_gated_joined(scope)
+                    let scopeGated = scope_gated_families_joined(scope)
                     if (func.result.baseType == Type.tInt) {
                         guard = qmacro_expr() {
                             if (tune_restart_needed($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(scopeFnames),
@@ -2615,7 +2610,7 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
                 guards |> reserve(length(autoScopes) + 1)
                 for (scope in autoScopes) {
                     let fnames = scope_fnames_joined(scope)
-                    let gated = scope_gated_joined(scope)
+                    let gated = scope_gated_families_joined(scope)
                     guards |> push <| qmacro_expr() {
                         tune_auto_prepare($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(force), $v(fnames),
                             $v(scope.defaultsPath), $v(gated))

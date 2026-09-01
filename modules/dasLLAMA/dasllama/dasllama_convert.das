@@ -561,6 +561,70 @@ def dequant_k6_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<u
     dequant_k6_plane_superblock_at(kq, kqo, ks, kso, kso + 16l, dst, doff)
 }
 
+//! One superblock of a kq plane pair dequantized into `dst[doff..]`, reading the scale plane in
+//! whichever form the carrier holds: the CPU row form, or on a Metal-blob model the split GPU
+//! form (16B strips first, d tails after; k4/k5 strips compacted, q40/iq4nl unsplit). `sb` = superblock index.
+[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
+def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | #; sb : int64; metal_blob : bool; var dst : array<float> | #; doff : int64) { // nolint:STYLE037,STYLE038 — one arm per format, two carrier forms
+    if (fmt == KqFmt.k4) {
+        dequant_k4_plane_superblock(kq, sb * K4_QSB, ks, sb * (metal_blob ? 16l : K4_SSB), dst, doff)
+    } elif (fmt == KqFmt.k5) {
+        dequant_k5_plane_superblock(kq, sb * K5_QSB, ks, sb * (metal_blob ? 16l : K5_SSB), dst, doff)
+    } elif (fmt == KqFmt.q40) {
+        dequant_q40_plane_superblock(kq, sb * Q40_QSB, ks, sb * Q40_SSB, dst, doff)
+    } elif (fmt == KqFmt.iq4nl) {
+        dequant_iq4nl_plane_superblock(kq, sb * Q40_QSB, ks, sb * Q40_SSB, dst, doff)
+    } elif (!metal_blob) {
+        if (fmt == KqFmt.k6) {
+            dequant_k6_plane_superblock(kq, sb * K6_QSB, ks, sb * K6_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq4xs) {
+            dequant_iq4xs_plane_superblock(kq, sb * IQ4XS_QSB, ks, sb * IQ4XS_SSB, dst, doff)
+        } elif (fmt == KqFmt.k3) {
+            dequant_k3_plane_superblock(kq, sb * K3_QSB, ks, sb * K3_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq3s) {
+            dequant_iq3s_plane_superblock(kq, sb * IQ3S_QSB, ks, sb * IQ3S_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq3xxs) {
+            dequant_iq3xxs_plane_superblock(kq, sb * IQ3XXS_QSB, ks, sb * IQ3XXS_SSB, dst, doff)
+        } elif (fmt == KqFmt.k2) {
+            dequant_k2_plane_superblock(kq, sb * K2_QSB, ks, sb * K2_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq2s) {
+            dequant_iq2s_plane_superblock(kq, sb * IQ2S_QSB, ks, sb * IQ2S_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq2xs) {
+            dequant_iq2xs_plane_superblock(kq, sb * IQ2XS_QSB, ks, sb * IQ2XS_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq2xxs) {
+            dequant_iq2xxs_plane_superblock(kq, sb * IQ2XXS_QSB, ks, sb * IQ2XXS_SSB, dst, doff)
+        } else {
+            panic("dequant_kq_plane_sb: '{fmt}' has no kq plane pair")
+        }
+    } else {
+        // the split GPU form: every strip region is 16B/sb, the tail 2B/sb (k2: 4B - d and dmin)
+        let tail = fmt == KqFmt.k2 ? 4l : 2l
+        let d0 = (long_length(ks) / (16l + tail)) * 16l
+        if (fmt == KqFmt.k6) {
+            dequant_k6_plane_superblock_at(kq, sb * K6_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.iq4xs) {
+            dequant_iq4xs_plane_superblock_at(kq, sb * IQ4XS_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.k3) {
+            dequant_k3_plane_superblock_at(kq, sb * K3_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.iq3s) {
+            dequant_iq3s_plane_superblock_at(kq, sb * IQ3S_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.iq3xxs) {
+            dequant_iq3xxs_plane_superblock_at(kq, sb * IQ3XXS_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.k2) {
+            dequant_k2_plane_superblock_at(kq, sb * K2_QSB, ks, sb * 16l, d0 + sb * 4l, dst, doff)
+        } elif (fmt == KqFmt.iq2s) {
+            dequant_iq2s_plane_superblock_at(kq, sb * IQ2S_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.iq2xs) {
+            dequant_iq2xs_plane_superblock_at(kq, sb * IQ2XS_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } elif (fmt == KqFmt.iq2xxs) {
+            dequant_iq2xxs_plane_superblock_at(kq, sb * IQ2XXS_QSB, ks, sb * 16l, d0 + sb * 2l, dst, doff)
+        } else {
+            panic("dequant_kq_plane_sb: '{fmt}' has no kq plane pair")
+        }
+    }
+}
+
+
 //! The split-layout twin: `dso` names the f16 d halfword's byte offset within ks independently
 //! of the 16B sub-scale strip at kso — metal-blob models keep k6s in the GPU split form
 //! ([nsb x 16B sub-scales][nsb x f16 d]) where d lives in the plane's tail.

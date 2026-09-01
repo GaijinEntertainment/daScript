@@ -1,7 +1,6 @@
 options gen2
 
 require llvm/daslib/llvm_tune
-require daslib/fio
 
 // Instant fake tuner for llvm_tune_profiles.das (no [test] on purpose): prints the
 // DAS_TUNE_ONLY filter the guard armed (the race-on-unlock proof) and records k2 — a winner
@@ -9,7 +8,7 @@ require daslib/fio
 // fingerprints which path stamped.
 [export]
 def main {
-    print("FAKE TUNER -> {tune_manifest_path()} ONLY='{get_env_variable("DAS_TUNE_ONLY")}'\n")
+    print("FAKE TUNER -> {tune_manifest_path()} ONLY='{tune_only_filter()}'\n")
     if (tune_family_selected("prof_add")) {
         tune_manifest_set("prof_add", "k2")
     }

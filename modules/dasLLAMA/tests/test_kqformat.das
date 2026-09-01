@@ -9,6 +9,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_common   // kq_fmt_row_ok - the dense-row demotion
 require dasllama/dasllama_gemm_schema   // the int-id delegation under test
 
 [test]
@@ -120,7 +121,7 @@ def test_kqfmt_strides(t : T?) {
         t |> equal(IQ3S_QSB, 104l)
         t |> equal(IQ3S_SSB, 20l)
     }
-    t |> run("the IQ4_NL codebook is ggml's kvalues_iq4nl") @(t : T?) {
+    t |> run("the IQ4_NL codebook is upstream's kvalues_iq4nl") @(t : T?) {
         t |> equal(int(IQ4NL_LUT[0]), -127)
         t |> equal(int(IQ4NL_LUT[7]), -10)
         t |> equal(int(IQ4NL_LUT[8]), 1)
@@ -133,7 +134,7 @@ def test_kqfmt_strides(t : T?) {
 
 [test]
 def test_kqfmt_grid(t : T?) {
-    t |> run("the IQ3_S grid is ggml's iq3s_grid, and the worker-safe local agrees") @(t : T?) {
+    t |> run("the IQ3_S grid is upstream's iq3s_grid, and the worker-safe local agrees") @(t : T?) {
         t |> equal(IQ3S_GRID[0], 0x01010101u)
         t |> equal(IQ3S_GRID[511], 0x0f0f0101u)
         let lut = iq3s_grid()
@@ -231,5 +232,19 @@ def test_iq3xxs_tables(t : T?) {
         t |> equal(f16_half_bits(0x3400u), 0x3000u)
         t |> equal(f16_half_bits(0xB400u), 0xB000u)
         t |> equal(f16_half_bits(0x0400u), 0x0200u)
+    }
+}
+
+[test]
+def test_kq_fmt_row_demotion(t : T?) {
+    t |> run("the 32-block disk formats demote to q8 on rows the superblock walkers cannot tile") <| @(t : T?) {
+        // 704 = 22 blocks of 32, not a 256-multiple: q40, iq4nl and Q5_0-born k5 all fall to q8
+        t |> equal(kq_fmt_row_ok(KqFmt.q40, 704l), KqFmt.q8)
+        t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 704l), KqFmt.q8)
+        t |> equal(kq_fmt_row_ok(KqFmt.k5, 704l), KqFmt.q8)
+        t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 768l), KqFmt.iq4nl)
+        t |> equal(kq_fmt_row_ok(KqFmt.q40, 768l), KqFmt.q40)
+        // the 256-superblock disk formats never see a non-multiple row (the file cannot hold one)
+        t |> equal(kq_fmt_row_ok(KqFmt.iq2xxs, 768l), KqFmt.iq2xxs)
     }
 }

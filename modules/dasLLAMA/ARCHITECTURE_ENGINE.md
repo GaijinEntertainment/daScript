@@ -78,7 +78,10 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   image plus its element count; the image owns the bytes, a carrier owns nothing but its backing.
   Requires nothing in dasllama - the image rail binds planes, every carrier holds them.
 - **`dasllama_kqformat.das`** - format IDENTITY: the `KqFmt` enum, the per-format descriptor table
-  (plane strides, block geometry, stream codes), format predicates. It requires nothing else in
+  (plane strides, block geometry, stream codes), format predicates, and the shared decode
+  tables the grid and codebook formats key off - each as a builder function (`iq3s_grid()`,
+  `iq4nl_lut()`) for kernels that may run on a team lane, plus a global twin for tests,
+  oracles and the emitter's constant bake. It requires nothing else in
   dasllama, because it is the taxonomy everything keys off. ONE id space - the enum; integer ids
   exist only at the IR/kernel-param boundary. `kq_sb` is the superblock-lattice predicate: a
   `fmt != q8` test does not imply the lattice, so branch on the predicate.

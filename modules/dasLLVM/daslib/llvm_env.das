@@ -67,7 +67,7 @@ struct public TuneEnv {
     tune_verbosity : string = ""
 
     @clarg_default_doc = "declared by [tune_policy]"
-    @clarg_doc = "Override the missing-scope policy: fallback, warn, error, auto, or restart. The announce line says when the environment shaped the policy."
+    @clarg_doc = "Override the missing-scope policy: fallback, reference, warn, error, auto, or restart. The announce line says when the environment shaped the policy."
     tune_policy : string = ""
 
     @clarg_path

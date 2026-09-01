@@ -873,7 +873,7 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
     unsafe {
         if (fmt == KqFmt.k4) {
             return (buf = plane_buffer(dev, addr < void? >(t.k4q[0]), uint64(long_length(t.k4q)), t.image_map != null),
-                    qoff = uint64(sb0 * 128l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         if (fmt == KqFmt.k5) {
             return (buf = plane_buffer(dev, addr < void? >(t.k5q[0]), uint64(long_length(t.k5q)), t.image_map != null),
@@ -881,39 +881,39 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
         }
         if (fmt == KqFmt.iq4xs) {
             return (buf = plane_buffer(dev, addr < void? >(t.iq4xsq[0]), uint64(long_length(t.iq4xsq)), t.image_map != null),
-                    qoff = uint64(sb0 * 128l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         if (fmt == KqFmt.k3) {
             return (buf = plane_buffer(dev, addr < void? >(t.k3q[0]), uint64(long_length(t.k3q)), t.image_map != null),
-                    qoff = uint64(sb0 * 96l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         if (fmt == KqFmt.iq3s) {
             return (buf = plane_buffer(dev, addr < void? >(t.iq3sq[0]), uint64(long_length(t.iq3sq)), t.image_map != null),
-                    qoff = uint64(sb0 * 104l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         if (fmt == KqFmt.iq3xxs) {
             return (buf = plane_buffer(dev, addr < void? >(t.iq3xxsq[0]), uint64(long_length(t.iq3xxsq)), t.image_map != null),
-                    qoff = uint64(sb0 * 96l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         if (fmt == KqFmt.iq4nl) {
             return (buf = plane_buffer(dev, addr < void? >(t.iq4nlq[0]), uint64(long_length(t.iq4nlq)), t.image_map != null),
-                    qoff = uint64(sb0 * 128l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         if (fmt == KqFmt.k2) {
             return (buf = plane_buffer(dev, addr < void? >(t.k2q[0]), uint64(long_length(t.k2q)), t.image_map != null),
-                    qoff = uint64(sb0 * 64l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         if (fmt == KqFmt.iq2s) {
             return (buf = plane_buffer(dev, addr < void? >(t.iq2sq[0]), uint64(long_length(t.iq2sq)), t.image_map != null),
-                    qoff = uint64(sb0 * 72l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         if (fmt == KqFmt.iq2xs) {
             return (buf = plane_buffer(dev, addr < void? >(t.iq2xsq[0]), uint64(long_length(t.iq2xsq)), t.image_map != null),
-                    qoff = uint64(sb0 * 64l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         if (fmt == KqFmt.iq2xxs) {
             return (buf = plane_buffer(dev, addr < void? >(t.iq2xxsq[0]), uint64(long_length(t.iq2xxsq)), t.image_map != null),
-                    qoff = uint64(sb0 * 64l))
+                    qoff = uint64(sb0 * kq_qsb(fmt)))
         }
         return (buf = plane_buffer(dev, addr < void? >(t.k6q[0]), uint64(long_length(t.k6q)), t.image_map != null),
                 qoff = uint64(sb0 * 192l))
