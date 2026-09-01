@@ -325,8 +325,11 @@ Engine shape on the minted profile (10 P-cores, d=32768), ours / reference us: q
 1146 (1.03), k5 1549 / 1546 (1.00), k6 1627 / 1843 (1.13), q40 1057 / 1368 (1.29), q51 1447 / 2344 (1.62), iq4xs
 1120 / 1292 (1.15), k3 1244 / 1909 (1.53), iq3s 3308 / 4059 (1.23), iq3xxs 2258 / 3735 (1.65), iq4nl 1055 / 1451
 (1.38), k2 850 / 1343 (1.58), iq2s 2242 / 2624 (1.17), iq2xs 1698 / 2343 (1.38), iq2xxs 1894 / 2416 (1.28), mx4
-983 / 1553 (1.58). The M4 CPU is at or above parity on every engine-shape row; k5 0.89 alone is the one tail,
-and the NEON per-lane byte shift for its high-bit deposit (two ops per half instead of five) is measured next.
+983 / 1553 (1.58). The M4 CPU is at or above parity on every engine-shape row; k5 0.89 alone was the one tail.
+LANDED: the NEON per-lane byte shift for k5's high-bit deposit (`ushl` / `ushr` + `and` per half, where the mask
+test took five ops; sdot lattice only - x86 has no byte shift): M4 k5 decode 1625-1643 -> 1357 us (reference
+1466: 1.08x), engine shape 1549 -> 1360 (1.14x), tile unchanged, k4 unchanged; TEST 90/90 on the M4 and zen2.
+The M4 is closed on every row at both shapes.
 
 ### zen2 v4 - the closing tables (2026-09-01, after the k6/k3 transposes and the fused flush)
 
