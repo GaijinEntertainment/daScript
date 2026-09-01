@@ -552,6 +552,15 @@ stays open.
    plus panel plus x, twice per core, against a 32 KB L1 is the suspect (8-lane run next); the zen4 grid
    residue at the engine shape is iq3s 0.78, iq2xs 0.86, iq3xxs 0.90 - the panel form's compute, kernel
    work on the vnni512 lattice (a session of its own).
+   Round four, the row form with the COLUMN signs on zen4 (one thread, engine phase; reference in
+   parentheses): iq2s 3541-3578 (3757: 1.05x), iq2xxs 2737-2771 (3922: 1.42x, from 0.89 with the table),
+   iq3xxs 4234-4322 (5243: 1.22x, from 0.56 with the table; the panel 0.88), iq3s 6238-6309 (6105: 0.97),
+   iq2xs 5381-5398 (3624: 0.67 - the panel's 0.80 stays). At 16 lanes on this 8-core x 2 SMT VM: iq2xxs
+   1670 (panel 2456), iq3xxs 3415 (panel 3123 - loses), iq3s 4590 (panel 4145 - loses), iq2xs 2742 (panel
+   2320), iq2s the 8.7 ms-slot anomaly. The one-thread wins that lose at 16 lanes point at SMT sharing
+   (two lanes' instruction streams per core); the 8-lane run decides what the class gate should say for
+   iq3xxs and iq3s. Tiles with the 64-aligned panel and scratch on zen4: unchanged (k5 178623, k6 225455,
+   iq3s 258990, iq2s 283977, iq2xs 284079 us).
 
 CPU decode on ARM (the M1 ladder): iq2xs 0.51x, iq2xxs 0.57x, iq3xxs 0.72x, iq3s 0.93x. The memo
 (`kernel_parity_research_arm.md`): the sdot count is at parity (2 per 32 weights per row, both sides);
