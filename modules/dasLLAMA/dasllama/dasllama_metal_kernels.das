@@ -4808,7 +4808,9 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_buffer(enc, by_base, 0ul, 4)
         kn_buffer(enc, bn, 0ul, 5)
         kn_buffer(enc, bd, 0ul, 6)
-        kn_dispatch(enc, uint3(uint(ndim / base_gdiv), 1u, 1u), tg)
+        for (_r in range(32)) {   //! back-to-back dispatches keep the clock governor ramped - a single sparse dispatch reads idle-clock times and can flip the verdict
+            kn_dispatch(enc, uint3(uint(ndim / base_gdiv), 1u, 1u), tg)
+        }
     }, $(enc) {
         kn_pipeline(enc, twin_pso)
         kn_tgmem(enc, twin_tgmem, 0)
@@ -4819,7 +4821,9 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_buffer(enc, by_twin, 0ul, 4)
         kn_buffer(enc, bn, 0ul, 5)
         kn_buffer(enc, bd, 0ul, 6)
-        kn_dispatch(enc, uint3(uint(ndim / twin_gdiv), 1u, 1u), tg)
+        for (_r in range(32)) {
+            kn_dispatch(enc, uint3(uint(ndim / twin_gdiv), 1u, 1u), tg)
+        }
     })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
         res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
