@@ -866,5 +866,14 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
 - 2026-09-01: cold-start SIGSEGV at 0xc0 right after "Library linked - ok" (normal mode, 16-lane team k6
   d=32768, Intel; reproduced 3x cold, never warm, earlier bootstrap ladders passed) - a post-link rebind
   bug to chase before the PR.
+- 2026-09-01: the cold-start SIGSEGV bisected. It needs only the PRESENCE of the five grid="vbmi"
+  tune_perm rows in dasllama_math_gen.das - not the emitter body, globals, or intrinsic decls (zen4 B1/B2/B3
+  disable each in turn, all still crash), and not the startup race (zen4 T1: fingerprint patched so nothing
+  races, rows present -> crash; T2: rows removed, k6's own row made to race -> clean). It fires only cold +
+  normal mode + --team; warm run 2 and every tune-mode race are clean, and the crashing format is k6, not a
+  grid format - so it is a whole-module codegen/teardown effect of the extra generated variants (backtrace
+  LLVMContextImpl::~LLVMContextImpl, fault at a small offset), not the lattice IR. Correctness is unaffected
+  (TEST bit-exact, all races produced numbers). A focused C++ session owns the fix; the parity numbers come
+  from warm/tune runs meanwhile.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
