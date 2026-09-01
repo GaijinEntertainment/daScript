@@ -201,6 +201,43 @@ watermark only (no recurrent layers) - recon the sliding-window ring rows.
   (`DASLLAMA_MTP_DEBUG=reject` generalized to a position); 27B invariance; kernels suite;
   arm2 decode; fam-qwen35 matrix.
 
+#### S2 design (recon 2026-09-01) - what generalizes, what is new
+
+- **Chain** = k calls of the existing `metal_mtp_draft_forward(d_{i-1}, pos+i-1)`
+  (dasllama_metal_decode.das:1100): each drafts at slab row `pos+i-2` from `(embed(d_{i-1}),
+  s.mtp_h)`, and `finish_draft_step` leaves `s.mtp_h` = the head's OWN output hidden with
+  `mtp_h_pos1 = 0` - exactly the chain input for step i. No new kernel; k cb waits until S5's
+  in-graph argmax folds the chain into one cb.
+- **Verify** = `acquire_step(..., nrows = k+1)` (:295; every buffer already scales by nrows) +
+  `encode_verify_step`/`encode_verify_layer` (:1372/:1176) with the ~60 `2l` row literals
+  replaced by `r.nrows`: the route table gets one entry per row (`pos+1..pos+k+1`), the kq sites
+  already take `nrows` (`enc_kq_site_b` -> `enc_kq_mvb` serves live rows 2..8 via the B2/B4/B8
+  ladder), the q8 sites (`enc_gemv_b`/`enc_gemv_w13sw_b`: fixed B2/B4 via `four`) need the row
+  count threaded (B8 form or a 2xB4 tile), attention/rope/dn/moe encoders take `nrows`/`npos`
+  already. The warm runs at the same width over the k+1 trunk hiddens (the cat assembly of 4
+  `enc_copy_row`s per pair becomes a batched interleave - `MetalPfCat2` from the prefill warm).
+  `finish_verify_step` (:1441) lands k+1 KV rows and k+1 logits rows.
+- **Recurrent rollback** (option A): `MetalDnScan` stores the post-row-p state into slot p for
+  every p < npos-1 (today: only p+2 == npos into the one shadow region, kernels.das:11177);
+  `DnMirror.regions = kmax+1` (dn_mirror_regions), `dn_mirror_prepare` returns the slot bases;
+  commit with `a` accepted: a == k -> the live region stands (advance to pos+a+1); else `cur` =
+  slot a (flip generalized to `dn_mirror_select(uid, slot, pos)`). Cost: k x ~2 MB/layer x 48
+  layers of extra writes per round at 27B (~1 ms) - measured against the replay variant (B)
+  before S5 decides.
+- **Accept walk + commit**: `a` = leading rows with `argmax(row i) == d_{i+1}`; commit
+  `d_1..d_a`, bonus = `argmax(row a)`; KV watermark -> `pos+a+1`; `mtp_h` = row a's `bxf`;
+  `mtp_h_pos1 = pos+a+1`; counters `mtp_drafted += k`, `mtp_accepted += a`, plus the per-position
+  survival counters (`mtp_pos_acc[i]` = rounds where row i accepted).
+- **API**: new `mtp_spec_round(t, s, tok, var out : array<int64>&) : int64` (returns a, pushes the
+  accepted drafts) behind a new override registry; `mtp_spec_eval` stays as the depth-1 wrapper
+  (the scheduler and the CPU rail keep it); `generate_mtp_greedy`, the bench tg-real arm and the
+  parity test move to the round. Lever: `set_mtp_depth(k)` / `DASLLAMA_MTP_DEPTH` (default 4 per
+  ruling; k=1 must reproduce today's rail bit for bit - the forced-feed test is the proof).
+- **Order**: (1) lever + `nrows` plumbing at k=1, bit-identical (test green unchanged);
+  (2) dn slot ring + accept walk at k=2..4 (tests at each k incl. forced reject at EACH position:
+  `set_metal_mtp_debug("reject:i")`); (3) API + callers; (4) `lcpp_bench --mtp-ab` depth sweep on
+  the 0.8B / 27B / 3.8-27B / 35B for the k curve.
+
 ### S3 - gemma assistant drafter
 
 - Loader for arch `gemma4-assistant` (embed tied to the trunk's, pre/post projections, 4
