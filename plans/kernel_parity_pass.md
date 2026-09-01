@@ -92,9 +92,11 @@ CPU decode (gap 2):
    so no plane layout change (the repack-baked byte was killed by the plane map: grp bytes are the
    disk bytes, ~30 CPU/Vulkan/Metal sites read them).
 3. DONE: the iq2 formats' u64 grid pair as one 8-byte load, half split in registers.
-4. OPEN: the tuner cannot crown a gemv-only spelling - it races the TILE, where sign=vec is inert
-   (--tune-only iq3sq8_tile_gen crowned the old seat by a tie). Decision pending the M1 numbers:
-   make sign=vec THE gemv path (delete the knob and its 20 seats) if it wins on ARM too.
+4. DONE: the vector sign column IS the gemv path - the `sign` knob and its 20 seats are gone. The
+   tuner races the TILE (a gemv-only spelling ties there; `--tune-only iq3sq8_tile_gen` crowned the
+   old seat), and the M1 (sdot lattice, one thread) showed no losses: iq3s 7383 -> 6105 us, iq2s
+   7161 -> 5012, iq2xxs 7602 -> 6293, iq2xs 7878 -> 7081, iq3xxs 7516 -> 7452. Shipped profiles
+   stay valid (same seat names); LLVM_JIT_CODEGEN_VERSION 0x5a re-keys the JIT caches.
 5. iq2xs 0.86x / iq3xxs 0.83x residue: the per-dword qs byte loads (a 4-byte column load with
    in-register byte extraction is the next candidate); the u16 single load for iq2xs measured
    SLOWER (6991 vs 6306 us) and was dropped. 6. retro audit of IQ4_XS/Q3_K per followup 60.
@@ -117,6 +119,9 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   One thread, m=4096 k=14336: iq3s 11581 -> 7732 us (1.34x of the reference's 10340), iq2s 12413
   -> 7076 us (0.72x of 5074, was 0.41x). Every variant bit-exact in gen_tune_probe TEST mode. The
   five gather emitters collapsed into one gather over per-format decode functions (-110 lines).
+- 2026-09-01: the sign knob collapsed into the one gemv path (-268/+58 lines in the emitter, the
+  smask/ksigns globals gone); the plain seats now measure iq3s 7537, iq3xxs 7862, iq2s 5202, iq2xs
+  6501, iq2xxs 5121 us; 65 variants ok in TEST mode; test_kquant 265 passed.
 - 2026-09-01: sign=vec for iq3xxs/iq2xs/iq2xxs via the parity-synthesized column (no layout
   change) and the u64 grid pair load for the three iq2 formats: iq2s 5152 us (0.98x), iq2xxs 5209
   (0.98x), iq2xs 6297 (0.86x), iq3xxs 7893 (0.83x), iq3s 7562 (1.37x); 85 variants ok in TEST mode.

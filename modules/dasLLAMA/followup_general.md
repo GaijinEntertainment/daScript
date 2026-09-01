@@ -777,7 +777,11 @@
     crowned by the probe; plan and fact base: `plans/kernel_parity_pass.md`.
     2026-09-01: `gather="reg"` measured 1.85x SLOWER (insertelement chains, 5x the code) and was
     dropped; `sign="vec"` landed for iq3s (7732 us = 1.34x the reference) and iq2s (7076 us =
-    0.72x). iq3xxs/iq2xs/iq2xxs join once the repack bakes their sign bytes into the plane.
+    0.72x). Then all five: the sign column synthesized from the 7-bit codes (parity = the 8th bit,
+    no plane change), the iq2 formats' u64 grid pair as one load, and the knob collapsed into the
+    one gemv path (the tuner races the tile, where a gemv-only spelling ties). Kernel-level, one
+    thread: iq3s 1.37x, iq2s 0.98x, iq2xxs 0.98x, iq2xs 0.86x, iq3xxs 0.83x of the reference.
+    Open residue: the per-dword qs byte loads of iq2xs/iq3xxs.
 
 62. **IQ3_S Metal decode: the ~140 GB/s compose ceiling (tg 0.95x).** Eight GEMV forms raced
     at n=2048 d=8192 - gather placement x3, gather deleted, signs deleted, llama.cpp's exact
