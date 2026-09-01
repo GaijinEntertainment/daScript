@@ -165,10 +165,15 @@ struct Planes {
     y : array<float>
 }
 
+let ALIGN = 64l   // the image's planes are page-aligned (ARCHITECTURE_IMAGE.md, image-page-alignment); a 64-byte load split across cache lines is what Intel penalizes 2x
+
 def sized(var a : array<auto(numT)>; n : int64) {
-    a |> reserve(n)
-    a |> resize(n)
+    a |> reserve(n + ALIGN)
+    a |> resize(n + ALIGN)
 }
+
+//! the first 64-byte-aligned element of an over-allocated plane
+def aligned_start(p : void?) : int64 => (ALIGN - int64(intptr(p) & uint64(ALIGN - 1l))) & (ALIGN - 1l)
 
 def fill_planes(var p : Planes; sh : PlaneShape; n, d, ntok : int64) {
     p.kq |> sized(d * sh.wq_row)
@@ -267,7 +272,7 @@ def time_rows(var stats : array<RowStat>; rounds : int; blk : block<(row : int) 
 def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64) {
     let n = int64(cfg.n)
     let d = int64(cfg.d)
-    let plane_bytes = long_length(p.kq) + long_length(p.ks)
+    let plane_bytes = long_length(p.kq) + long_length(p.ks) - 2l * ALIGN
     var vs <- gemv_variants(f)
     var stats : array<RowStat>
     var fns : array<GemvFn>
@@ -278,12 +283,12 @@ def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         }
     }
     unsafe {
-        let kqp = addr<uint8 const?>(p.kq[0])
-        let ksp = addr<uint8 const?>(p.ks[0])
-        let xqp = addr<int8 const?>(p.xq[0])
-        let xsp = addr<float const?>(p.xs[0])
-        let xbsp = addr<int const?>(p.xbs[0])
-        var yp = addr(p.y[0])
+        let kqp = addr<uint8 const?>(p.kq[aligned_start(addr<void?>(p.kq[0]))])
+        let ksp = addr<uint8 const?>(p.ks[aligned_start(addr<void?>(p.ks[0]))])
+        let xqp = addr<int8 const?>(p.xq[aligned_start(addr<void?>(p.xq[0]))])
+        let xsp = addr<float const?>(p.xs[aligned_start(addr<void?>(p.xs[0])) / 4l])
+        let xbsp = addr<int const?>(p.xbs[aligned_start(addr<void?>(p.xbs[0])) / 4l])
+        var yp = addr(p.y[aligned_start(addr<void?>(p.y[0])) / 4l])
         time_rows(stats, cfg.rounds) $(row : int) {
             invoke(fns[row], yp, kqp, ksp, xqp, xsp, xbsp, n, 0l, d)
         }
@@ -302,7 +307,7 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
     let ntok = int64(cfg.ntok)
     let qrow = sh.tq_row
     let srow = sh.ws_row
-    let plane_bytes = long_length(p.tkq) + long_length(p.ks)
+    let plane_bytes = long_length(p.tkq) + long_length(p.ks) - 2l * ALIGN
     var mrs <- companion_ints(layout_variants(f))
     var vs <- tile_variants(f)
     var stats : array<RowStat>
@@ -322,12 +327,12 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         mrOf |> push(mr)
     }
     unsafe {
-        let kqp = addr<uint8 const?>(p.tkq[0])
-        let ksp = addr<uint8 const?>(p.ks[0])
-        let xqp = addr<int8 const?>(p.xq[0])
-        let xsp = addr<float const?>(p.xs[0])
-        let xbsp = addr<int const?>(p.xbs[0])
-        var yp = addr(p.y[0])
+        let kqp = addr<uint8 const?>(p.tkq[aligned_start(addr<void?>(p.tkq[0]))])
+        let ksp = addr<uint8 const?>(p.ks[aligned_start(addr<void?>(p.ks[0]))])
+        let xqp = addr<int8 const?>(p.xq[aligned_start(addr<void?>(p.xq[0]))])
+        let xsp = addr<float const?>(p.xs[aligned_start(addr<void?>(p.xs[0])) / 4l])
+        let xbsp = addr<int const?>(p.xbs[aligned_start(addr<void?>(p.xbs[0])) / 4l])
+        var yp = addr(p.y[aligned_start(addr<void?>(p.y[0])) / 4l])
         time_rows(stats, cfg.rounds) $(row : int) {
             let mr = mrOf[row]
             for (g in range64(d / mr)) {
@@ -411,14 +416,15 @@ def bench_q8_family(var rows : int&; cfg : BenchArgs; mx4 : bool; var p : Planes
     let d = int64(cfg.d)
     let ntok = int64(cfg.ntok)
     let name = mx4 ? MX4_NAME : "q8"
-    let plane_bytes = long_length(p.kq) + long_length(p.ks)
+    let plane_bytes = long_length(p.kq) + long_length(p.ks) - 2l * ALIGN
+    q8q8_family_live()   // the family's witness: on an AMX box it takes the per-process tile permission the amx seats need (SIGILL without it)
     unsafe {
-        let kqp = addr<uint8 const?>(p.kq[0])
-        let ksp = addr<uint8 const?>(p.ks[0])
-        let xqp = addr<int8 const?>(p.xq[0])
-        let xsp = addr<float const?>(p.xs[0])
-        let xbsp = addr<int const?>(p.xbs[0])
-        var yp = addr(p.y[0])
+        let kqp = addr<uint8 const?>(p.kq[aligned_start(addr<void?>(p.kq[0]))])
+        let ksp = addr<uint8 const?>(p.ks[aligned_start(addr<void?>(p.ks[0]))])
+        let xqp = addr<int8 const?>(p.xq[aligned_start(addr<void?>(p.xq[0]))])
+        let xsp = addr<float const?>(p.xs[aligned_start(addr<void?>(p.xs[0])) / 4l])
+        let xbsp = addr<int const?>(p.xbs[aligned_start(addr<void?>(p.xbs[0])) / 4l])
+        var yp = addr(p.y[aligned_start(addr<void?>(p.y[0])) / 4l])
         if (!cfg.no_gemv) {
             var stats : array<RowStat>
             var fnsQ : array<GemvQ8Fn>
