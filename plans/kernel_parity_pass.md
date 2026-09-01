@@ -254,6 +254,32 @@ The reference does not reach this box's DRAM on most formats (q4_0 4.9 ms for 26
 saturates DRAM on q6_K, our k6 stays compute-bound; the vpdpbusd512 seat has no i16 chain for the fused flush),
 iq2s 0.88, k3 0.95.
 
+Round two, one thread at the engine phase (branch eb94f1d9a):
+
+| fmt | decode ours / ref us | ratio | tile ours / ref us | ratio |
+|---|---|---|---|---|
+| q8 | 2224 / 2687 | 1.21 | 145999 / 578161 | 3.96 |
+| k4 | 1140 / 1748 | 1.53 | 263222 / 787687 | 2.99 |
+| k5 | 1525 / 2447 | 1.60 | 175535 / 1133333 | 6.46 |
+| k6 | 1840 / 2040 | 1.11 | 239252 / 834122 | 3.49 |
+| q40 | 1108 / 2288 | 2.06 | 175513 / 651009 | 3.71 |
+| q51 | 1488 / 2946 | 1.98 | 214319 / 1410780 | 6.58 |
+| iq4xs | 1126 / 2380 | 2.11 | 272987 / 1144376 | 4.19 |
+| k3 | 1277 / 2266 | 1.77 | 331164 / 1115864 | 3.37 |
+| iq3s | 5207 / 6783 | 1.30 | 252732 / 3499939 | 13.85 |
+| iq3xxs | 4505 / 5053 | 1.12 | 252332 / 2480068 | 9.83 |
+| iq4nl | 1122 / 2686 | 2.39 | 263188 / 717486 | 2.73 |
+| k2 | 716 / 1468 | 2.05 | 356125 / 688367 | 1.93 |
+| iq2s | 3996 / 3709 | 0.93 | 272607 / 1851295 | 6.79 |
+| iq2xs | 3955 / 4342 | 1.10 | 272793 / 2184555 | 8.01 |
+| iq2xxs | 3675 / 3760 | 1.02 | 252192 / 1799256 | 7.13 |
+| mx4 | 1285 / 2990 | 2.33 | 273869 / 1247422 | 4.55 |
+
+One thread: every decode >= 1.02 except iq2s 0.93; k6 is 1.11 ALONE - its 0.69 at 16 lanes is a many-lane
+effect on this 8-core x 2 SMT VM (two instruction streams per core), the same shape as zen4's iq3s/iq3xxs.
+Tiles 1.9-13.9x. The knob A/B and the k6/k3/iq2s seat races follow in the same round.
+
+
 ### M4 Pro v1 - first tables (2026-09-01, Apple M4 Pro 10P+4E, class arm-i8mm, on the arm-neon PROFILE through the chain - no arm-i8mm profile existed; TEST 90/90)
 
 One thread at the engine phase; the engine shape = 10 performance cores, d=32768. The SMMLA lattice's first real race is
