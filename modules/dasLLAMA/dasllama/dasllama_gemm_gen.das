@@ -226,8 +226,8 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     let vq = p.mr / rv
     if ((vq > 2)                                  // the weight bank is 8 dword-groups x vq
         || (p.nrsplit * vq > 8)) return true      // accumulator bank (emit_slice phi arrays)
-    // vreg budget: float + int acc tiles + x splat/sign scratch + weight/|weight| in flight
-    return 2 * p.nrsplit * vq + 6 > (p.width == 512 ? 32 : 16)
+    // vreg budget: float + int acc tiles + x splat/sign scratch + weight/|weight| in flight; EVEX targets have 32 ymm too
+    return 2 * p.nrsplit * vq + 6 > (p.width == 512 || g_target_x64_avx512bw ? 32 : 16)
 }
 
 // emission context threaded through the helpers: builder/types + the per-function value handles
