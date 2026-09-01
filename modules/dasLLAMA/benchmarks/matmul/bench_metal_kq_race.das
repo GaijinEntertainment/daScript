@@ -193,8 +193,6 @@ def private mm_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate mul_mm sp
     } else {
         arms |> push(KqRaceArm(name = "prod", src = MetalKqMulMmIq2xxs_metal_kq_mulmm_msl, entry = MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_entry, fastmath = MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_fastmath, tgmem = MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_tgmem, gdiv = 0))
     }
-    arms |> push(KqRaceArm(name = "ptrstore", src = rewrite_ta_ptr_store(arms[0].src), entry = arms[0].entry,
-        fastmath = arms[0].fastmath, tgmem = arms[0].tgmem, gdiv = 0))
     // the existing Metal-4 tensor twins (f32-X form) - the ceiling the nine formats' twins chase;
     // the pipeline declines cleanly on a box without the tensor toolchain
     if (f.fmt == 4) {
@@ -226,36 +224,6 @@ def private mm_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate mul_mm sp
 }
 
 let PREFILL_M = 512   // the mm tier's token batch
-
-// Rewrite every threadgroup A-tile subscript store `ta[IDX] = RHS;` into the pointer form
-// `*(ta + (IDX)) = RHS;` - llama.cpp's mul_mm ships the pointer form and rejects the
-// subscript form as much slower; this arm races that claim on our own template
-// (M5 verdict: flat - the claim does not reproduce on this compiler).
-def private rewrite_ta_ptr_store(src : string) : string {
-    var out : array<string>
-    var n = 0
-    for (ln in split(src, "\n")) {
-        let at = find(ln, "ta[")
-        var done = false
-        if (at >= 0 && empty(strip(slice(ln, 0, at)))) {
-            let eq = find(ln, "] = ")
-            if (eq > at) {
-                let idxe = slice(ln, at + 3, eq)
-                let rhs = slice(ln, eq + 4)
-                out |> push("{slice(ln, 0, at)}*(ta + ({idxe})) = {rhs}")
-                n++
-                done = true
-            }
-        }
-        if (!done) {
-            out |> push(ln)
-        }
-    }
-    if (n == 0) {
-        panic("rewrite_ta_ptr_store: no ta[...] = store found - the template spelling moved")
-    }
-    return join(out, "\n")
-}
 
 def private load_ref_table(path : string; var tab : table<string; double>) {
     return if (empty(path))
