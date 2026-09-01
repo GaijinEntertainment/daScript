@@ -1454,9 +1454,11 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
     with_job_que() {   // the lane count and the team dispatch both need the live jobque
         if (get_total_hw_jobs() > 1) {
             // the engine's row length matters (k3 on Granite Rapids: 256_mr16 wins at n=2048, loses at 14336), so the
-            // seat fixture is a short one at the ffn width, tiled: 512 rows transcode in a blink, 96 tiles make 49152
+            // seat fixture is a short one at the ffn width, tiled: 512 rows transcode in a blink; 320 tiles make 163840
+            // rows - 600 MB for the 2-bit grids, 1.9 GB for k6 - past the 504 MB L3 a Granite Rapids socket lends a
+            // slice (a 300 MB plane came back L3-resident in some rounds and the seat went to the cached-mode winner)
             var kefx <- build_kq_fixture(fmt, 14336l, 512l, 1l)
-            let TILES = 96l
+            let TILES = 320l
             var ktfx = KqFixture(fmt = kefx.fmt, n = kefx.n, d = kefx.d * TILES, ntok = 1l, nsb = kefx.nsb)
             ktfx.xq := kefx.xq
             ktfx.xs := kefx.xs
@@ -1472,7 +1474,9 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
             for (i in range(nv)) {
                 tbest[i] = 1.0e30lf
             }
-            for (r in range(5)) {
+            var tsamples : array<array<double>>
+            tsamples |> resize(nv)
+            for (r in range(7)) {   // the seat takes the MEDIAN: a round that finds the plane in L3 must not crown it
                 for (vi in range(nv)) {
                     continue if (vmr[vi] != vmr[winner] || best[vi] >= 1.0e29lf)
                     for (_w in range(r == 0 ? 3 : 0)) {
@@ -1480,12 +1484,16 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
                     }
                     let t0 = ref_time_ticks()
                     run_kq_gemv_team(gtab[tvs[vi]._0], ktfx, tbuf.q, tbuf.s, vmr[vi], kyt)
-                    let us = double(get_time_usec(t0))
-                    if (us < tbest[vi]) {
-                        tbest[vi] = us
-                    }
+                    tsamples[vi] |> push(double(get_time_usec(t0)))
                 }
             }
+            for (vi in range(nv)) {
+                if (length(tsamples[vi]) > 0) {
+                    sort(tsamples[vi])
+                    tbest[vi] = tsamples[vi][length(tsamples[vi]) / 2]
+                }
+            }
+            delete tsamples
             for (vi in range(nv)) {
                 if (vmr[vi] == vmr[winner] && best[vi] < 1.0e29lf) {
                     tune_detail("k{fmt} {tvs[vi]._0}: decode at the engine shape {tbest[vi]} us ({get_total_hw_jobs()} lanes, d={ktfx.d} n={ktfx.n})\n")
