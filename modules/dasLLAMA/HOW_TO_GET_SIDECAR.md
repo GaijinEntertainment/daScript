@@ -116,6 +116,12 @@ LCPP_TBO=~/llama.cpp/build-clean-cpu/bin/test-backend-ops NTOK=512 ROUNDS=5 \
     bash modules/dasLLAMA/harness/kernel_ladder.sh all > ladder.tsv 2> ladder.err
 ```
 
+Then the engine's shape - every lane, a weight above the box's L3 (needs the m=32768 perf row, section 3):
+
+```
+LCPP_TBO=~/llama.cpp/build-clean-cpu/bin/test-backend-ops NTOK=0 ROUNDS=5 TEAM=16 BIG=1 bash modules/dasLLAMA/harness/kernel_ladder.sh all > ladder_big16.tsv 2> ladder_big16.err
+```
+
 One thread, no model: every format's stamped kernel against the reference exe's `test-backend-ops perf`
 at the same shape, decode and prefill rows, ratio = reference / ours. This is the box's table; it goes
 into `plans/kernel_parity_pass.md`'s fact base (and the records store once the kernel board exists).

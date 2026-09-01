@@ -286,6 +286,13 @@ k6 0.90x, k5 0.91x):
    cheaper deposit all along; k5's site-major byte and its shuffle stay. Reverted, nothing committed.
    The transposes are done: k6 and k3 landed, k5 was already right. On the M1 (sdot lattice, same
    IR): k6 1777 -> 1701, k3 1925 -> 1873 us, TEST 90/90.
+   LANDED the fused scale flush (x86 maddubs lattice, k6/k3): the per-16 sub-scale rides the chain's
+   widening - `pmaddwd(chain_i16, scale_i16_pair_splat)` straight into iacc, exact in i32 (|chain| <=
+   32004 x |scale| <= 128) - instead of pmaddwd(ones) + i32 vpmulld into a0/a1 and a second add. 32 ->
+   16 vpmulld, a0/a1 gone from the live set, k6 spills 36 + 67 -> 31 + 52. zen2 k6 decode at the
+   engine phase 3527 / 3636 / 3851 us against the reference's 3683 (was 4444-4708): PARITY; heap 3808 /
+   4007. k3 engine phase 2488 / 2613 / 2893 (reference 2701, was 2555-3504). Tiles unchanged within
+   noise (k6 588-702 across runs, k3 660). TEST 90/90. The M1 is untouched (sdot has no i16 chain).
 
 The 16-lane row and what it measures (2026-09-01, `--team`, the engine's own splitter: 64 self-served
 chunks of 64 rows): k4 wall against the reference at the same thread count - 8 lanes 648 vs 675 us

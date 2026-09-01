@@ -886,6 +886,24 @@ def private madd16_flush(var te : TileEmit; var acc, chain : LLVMOpaqueValue?) :
     return LLVMBuildAdd(b, acc, quads, "a32")
 }
 
+//! the rows' int8 sub-scales as an i16 pair splat (lanes 2r, 2r + 1 = row r): pmaddwd against a chain widens AND scales in one op
+def private scale16_dup(var te : TileEmit; var off : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
+    let b = te.builder
+    var vri8 = LLVMVectorType(te.types.t_int8, uint(te.rv))
+    var p = LLVMBuildGEP2(b, te.types.t_int8, te.sg, off, "")
+    var s16 = LLVMBuildSExt(b, LLVMBuildLoad2Aligned(b, vri8, p, 1u, ""), te.vni16, "")
+    let dup <- [for (i in range(2 * te.rv)); i / 2]
+    return LLVMBuildShuffleVector(b, te.types, s16, s16, dup, name)
+}
+
+//! the chain flush with the sub-scale folded in - exact in i32 (|chain| <= 32004, |scale| <= 128, 16 flushes per superblock)
+def private madd16_flush_scaled(var te : TileEmit; var acc, chain, s16 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let b = te.builder
+    var wargs <- [chain, s16]
+    var quads = LLVMBuildCall2(b, te.maddwd_ty, te.maddwd_decl, wargs, "squads")
+    return LLVMBuildAdd(b, acc, quads, "a32s")
+}
+
 // one <rv x i8> row-byte load at BYTE offset, each byte splatted across its row's 4 lanes to
 // vwi8 (constant shufflevector — the backend picks tbl/pshufb itself; no intrinsic needed)
 def private load_row_bytes_x4(var te : TileEmit; var base, off : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
@@ -959,6 +977,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
     // x64 dot kinds take the activation dword straight from memory (vpbroadcastd, see kq_dot_mem); NEON keeps chunk loads
     let memBcast = te.dotKind != DOT_SDOT && te.dotKind != DOT_SMMLA
     let madd16 = memBcast && te.dotKind == DOT_MADDUBS
+    let fuseScale = madd16 && k63   // k6/k3 decode: the per-16 sub-scale rides the chain flush (pmaddwd), no i32 multiply, no a0/a1
     var vri8 = LLVMVectorType(te.types.t_int8, uint(te.rv))
     // weight-side superblock scale rows: k4/k5 f16 d/dmin; k6/k3 f16 d only; q40 has none (per-32 d loads live below)
     var dv : LLVMOpaqueValue? [2]
@@ -1025,6 +1044,14 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
         for (i in range(tokCount * rq)) {
             p16lo[i] = null
             p16hi[i] = null
+        }
+        var s16lo : LLVMOpaqueValue? [2]   // fuseScale: this sub-block's two sub-scales as i16 pair splats
+        var s16hi : LLVMOpaqueValue? [2]
+        if (fuseScale) {
+            for (qd in range(rq)) {
+                s16lo[qd] = scale16_dup(te, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(2 * blk * mr + qd * te.rv)), ""), "s16{blk}_{qd}a")
+                s16hi[qd] = scale16_dup(te, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64((2 * blk + 1) * mr + qd * te.rv)), ""), "s16{blk}_{qd}b")
+            }
         }
         for (j in range(4)) {
             for (qd in range(rq)) {
@@ -1110,23 +1137,35 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
             // i16 chain flushes at the format's overflow bound: k5 after 4 madds, k6 after 2 (2 x 16002); wholeSub formats run the sub-block
             if (madd16 && (j == 1 || j == 3) && !wholeSub) {
                 for (k in range(tokCount * rq)) {
-                    a0[k] = madd16_flush(te, a0[k], p16lo[k])
-                    p16lo[k] = null
-                    if (per16) {
-                        a1[k] = madd16_flush(te, a1[k], p16hi[k])
+                    if (fuseScale) {
+                        iacc[k] = madd16_flush_scaled(te, iacc[k], p16lo[k], s16lo[k % rq])
+                        iacc[k] = madd16_flush_scaled(te, iacc[k], p16hi[k], s16hi[k % rq])
                         p16hi[k] = null
+                    } else {
+                        a0[k] = madd16_flush(te, a0[k], p16lo[k])
+                        if (per16) {
+                            a1[k] = madd16_flush(te, a1[k], p16hi[k])
+                            p16hi[k] = null
+                        }
                     }
+                    p16lo[k] = null
                 }
             }
         }
         if (madd16 && wholeSub) {   // one widen per (token, qd, chain) for the whole sub-block
             for (k in range(tokCount * rq)) {
-                a0[k] = madd16_flush(te, a0[k], p16lo[k])
-                p16lo[k] = null
-                if (per16) {
-                    a1[k] = madd16_flush(te, a1[k], p16hi[k])
+                if (fuseScale) {
+                    iacc[k] = madd16_flush_scaled(te, iacc[k], p16lo[k], s16lo[k % rq])
+                    iacc[k] = madd16_flush_scaled(te, iacc[k], p16hi[k], s16hi[k % rq])
                     p16hi[k] = null
+                } else {
+                    a0[k] = madd16_flush(te, a0[k], p16lo[k])
+                    if (per16) {
+                        a1[k] = madd16_flush(te, a1[k], p16hi[k])
+                        p16hi[k] = null
+                    }
                 }
+                p16lo[k] = null
             }
         }
         // the integer fold — no float ops per block, except q40 (its per-32 f16 d admits no cross-block integer fold)
@@ -1191,9 +1230,11 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                 var bs0v = splat_i32(te, bs0, "bs0v{tk}_{blk}")
                 var bs1v = splat_i32(te, bs1, "bs1v{tk}_{blk}")
                 for (qd in range(rq)) {
-                    var ia = LLVMBuildAdd(b, LLVMBuildMul(b, scv[qd], a0[i * rq + qd], ""), LLVMBuildMul(b, mnv[qd], a1[i * rq + qd], ""), "ia6{tk}_{blk}_{qd}")
+                    if (!fuseScale) {   // the fused flushes already scaled the dots into iacc
+                        var ia = LLVMBuildAdd(b, LLVMBuildMul(b, scv[qd], a0[i * rq + qd], ""), LLVMBuildMul(b, mnv[qd], a1[i * rq + qd], ""), "ia6{tk}_{blk}_{qd}")
+                        iacc[i * rq + qd] = LLVMBuildAdd(b, iacc[i * rq + qd], ia, "ia{tk}_{blk}_{qd}")
+                    }
                     var ba = LLVMBuildAdd(b, LLVMBuildMul(b, scv[qd], bs0v, ""), LLVMBuildMul(b, mnv[qd], bs1v, ""), "ba6{tk}_{blk}_{qd}")
-                    iacc[i * rq + qd] = LLVMBuildAdd(b, iacc[i * rq + qd], ia, "ia{tk}_{blk}_{qd}")
                     bacc[i * rq + qd] = LLVMBuildAdd(b, bacc[i * rq + qd], ba, "ba{tk}_{blk}_{qd}")
                 }
             } elif (k2) {
