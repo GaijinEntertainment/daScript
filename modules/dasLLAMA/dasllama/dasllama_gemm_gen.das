@@ -12,6 +12,7 @@ require llvm/daslib/llvm_jit_common
 require daslib/ast_boost
 require dasllama/dasllama_gemm_schema
 require daslib/fio
+require llvm/daslib/llvm_tune
 
 // The perm-parameterized Q8 GEMM tile generator (gemm_generator_plan.md part 3, promoted from
 // the M2 hand perm): emits the mr-row x 4-token register tile as LLVM IR — the loop nest,
@@ -1446,13 +1447,19 @@ def private sign_col_pm1(var te : TileEmit; var col : LLVMOpaqueValue?; r0, l : 
     return LLVMBuildOr(b, m, splat_i8w(te, 1), name)
 }
 
-//! the sdot lattice's grid decode composes row groups straight from the grid words; x86 keeps the panel (the
-//! insert form measured 1.2-1.5x slower on zen2 - the ledger, followup 61) unless DASLLAMA_GRID_ROWS_X86=1,
-//! the lab knob for boxes where the panel's latency chain, not the vector width, bounds the decode
+//! the sdot lattice's grid decode composes row groups straight from the grid words. x86: the panel's latency
+//! chain (index -> grid load -> panel store -> reload) does not scale with the core, so on the x86-vnni512
+//! class iq2s and iq2xxs take the row form (zen4: iq2s 4918 -> 3600 us, iq2xxs 4866 -> 4300, both shapes);
+//! iq3s is mixed there (+17% alone, -10% at 16 lanes) and iq2xs / iq3xxs lose 1.8x, zen2 loses on all five -
+//! those keep the panel. DASLLAMA_GRID_ROWS_X86=1 / 0 forces the form (a lab knob: clear .jitted_scripts
+//! between runs, the JIT cache does not key on it)
 def private grid_rows_path(te : TileEmit) : bool {
     if (te.dotKind == DOT_SDOT) return te.rv == 4
     if (te.dotKind != DOT_MADDUBS && te.dotKind != DOT_VPDPBUSD && te.dotKind != DOT_VPDPBSSD) return false
-    return get_env_variable("DASLLAMA_GRID_ROWS_X86") == "1"
+    let knob = get_env_variable("DASLLAMA_GRID_ROWS_X86")
+    if (knob == "1") return true
+    if (knob == "0") return false
+    return tune_cpu_class() == "x86-vnni512" && (te.kq == 23 || te.kq == 25)
 }
 
 //! eight +-1 bytes for sign byte `sb`, lane k negative when bit k is set
