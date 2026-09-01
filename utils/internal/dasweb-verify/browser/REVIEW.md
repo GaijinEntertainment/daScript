@@ -37,6 +37,8 @@ its line here, with its tests, in the same change.**
 - `protocol.mjs` - pure data in, pure data out: expectations lookup, output classification,
   verdicts, the report. No playwright, no network, no DOM.
 - `protocol.test.mjs` - the `node:test` suite over the pure helpers. No browser.
+- `runner.test.mjs` - the `node:test` suite over `runner.mjs`'s recovery paths, driven by a
+  stubbed page. No browser, and no assertion about a verdict - `protocol.test.mjs` owns those.
 - `probe.mjs` - browser-side only, installed via `addInitScript`. Self-contained, no node
   API.
 - `expectations.json` - the per-sample table. Data only.

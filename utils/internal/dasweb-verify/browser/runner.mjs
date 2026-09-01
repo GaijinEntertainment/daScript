@@ -116,7 +116,7 @@ async function evaluateIn(target, fn, arg, ms = EVALUATE_MS) {
     return r.value;
 }
 
-class WedgeError extends Error {
+export class WedgeError extends Error {
     constructor() {
         super('page stopped answering evaluate');
         this.wedge = true;
@@ -305,7 +305,7 @@ class Playground {
 // installed there and only there: run-frame.html already polls glGetError on
 // the playground side, and getError CLEARS the flag, so a second poller would
 // steal half the errors.
-class Artifacts {
+export class Artifacts {
     constructor(browser, cfg) {
         this.browser = browser;
         this.cfg = cfg;
@@ -592,7 +592,14 @@ async function main() {
     return P.exitCodeFor(rows);
 }
 
-main().then((code) => process.exit(code), (e) => {
-    process.stderr.write(`dasweb-verify: ${e && e.stack ? e.stack : e}\n`);
-    process.exit(1);
-});
+// Importing this module must not drive a browser: `node --test` imports every
+// file it discovers, and runner.test.mjs drives the recovery paths with a stub.
+const INVOKED_DIRECTLY = process.argv[1] !== undefined
+    && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (INVOKED_DIRECTLY) {
+    main().then((code) => process.exit(code), (e) => {
+        process.stderr.write(`dasweb-verify: ${e && e.stack ? e.stack : e}\n`);
+        process.exit(1);
+    });
+}
