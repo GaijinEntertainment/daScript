@@ -67,9 +67,13 @@ def image_identity_of(c : DlimConfiguration; tag : string = "") : string {
     return dlim_identity(c, IMAGE_VERSION, tag, PACK_VERSION)
 }
 
-// a 64-bit identity hash per file: a collision would leave two identities re-saving over one path forever
+// a 64-bit identity hash per file: a collision would leave two identities re-saving over one path forever.
+// A split NextN head riding the load folds its name+size in, so the trunk-only image and the
+// trunk+head image never share a path (the head is inside the minted image: one file serves)
 def image_path_for(gguf_path : string; tag : string = ""; quant : string = "q8") : string {
-    return "{gguf_path}.{hash(image_identity(tag, quant))}.dlim"
+    let side = mtp_head_sidecar(gguf_path)
+    let fold = empty(side) ? "" : "|mtp:{base_name(side)}:{stat(side).size}"
+    return "{gguf_path}.{hash(image_identity(tag, quant) + fold)}.dlim"
 }
 
 //! What list/GC tooling reads from an image WITHOUT loading it: the header fields plus the

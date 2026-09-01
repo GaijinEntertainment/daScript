@@ -171,6 +171,24 @@ watermark only (no recurrent layers) - recon the sliding-window ring rows.
   path and `image_peek` shows which one a dlim is. The mint itself needs nothing: the image is
   written from the loaded Model, so the head is inside it - one dlim, as ruled.
 
+#### S1 status (2026-09-01) - IMPLEMENTED, gating in flight
+
+- `DASLLAMA_MTP_HEAD` (EngineEnv `mtp_head`) + `set_mtp_head_path`/`clear_mtp_head_path`
+  (dasllama_gguf.das); `mtp_head_sidecar(path)` resolves override > `mtp-<trunk basename>` sibling
+  > none, never on a head loaded alone; `gguf_shard_paths` appends it as the LAST shard (both load
+  paths and `model_available`'s size tier inherit it); `parse_gguf_meta_shards` promotes the head
+  shard's `<arch>.nextn_predict_layers` onto `GGUFMeta.nextn_sidecar` when shard 0 lacks the key;
+  `load_gguf_parsed` takes nextn from the sidecar and keeps `layers = block_count - nextn_in` (a
+  split trunk's block_count counts only itself); `image_path_for` folds `|mtp:<name>:<size>` into
+  the path hash. ENVIRONMENT.md regenerated; ARCHITECTURE_ENGINE.md 1.3 carries the statement.
+- Gates: `tests/test_gguf_shards.das` +4 model-free arms (adjacency, override, missing override
+  attaches nothing, a head alone never recurses) GREEN; `test_metal_mtp_parity.das` fixture
+  `3.8-27b` (Qwen3.8-27B-Q4_K_M trunk + mtp-Qwen3.8-27B-Q8_0 head via the override) - large tier:
+  **GREEN** (M5, 2026-09-01) - head attached on both the planar and the image load, ONE 23 GB
+  image minted under its own path hash (`...gguf.0x4f944f603502a56b.dlim`), forced-feed maxd
+  0.00088 / 0.0011, zero flips, 48/48 rounds drafted, counting exact, no leaked Metal objects.
+  Qwen3.8-27B's MTP head serves on this engine.
+
 ### S2 - depth N on the native-head rail
 
 - Generalize `nrows=2` -> `k+1` through `acquire_step` / `encode_verify_step` /

@@ -47,7 +47,7 @@ not degrade a later forced-feed decode - Qwen2.5-0.5B, its own `[test]` block),
 batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`, `batch-ff` (real-text forced feed,
 GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance). MTP parity
 (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ctrl-<tag> mtp-ff-<tag> mtp-count-<tag>` per
-fixture tag `0.8b 27b 35b` (ctrl = plain-vs-plain forced feed must be bit-identical; ff = the
+fixture tag `0.8b 27b 35b 3.8-27b` (3.8-27b = the Qwen3.8-27B trunk + its split Q8_0 head; ctrl = plain-vs-plain forced feed must be bit-identical; ff = the
 verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose openers; count =
 speculative free-run == plain free-run, token-exact, counting prompt). Prefill parity: `base mm-tail s16
 kq cont span span-fused span-mrope span-ds dim qkv` (mm-tail = the GEMV-tail residue peel -

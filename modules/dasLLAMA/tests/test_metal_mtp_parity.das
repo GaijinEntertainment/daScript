@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — engine + arch registrations + (on Apple) the metal overrides
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
 require dasllama/dasllama_image   // load_model_cached — the served (image) flavor for the GPU twin
+require dasllama/dasllama_gguf   // set_mtp_head_path — the split-head fixture names its head explicitly
 require ?das_metal dasllama/dasllama_metal_decode   // stats + the forced-reject lever + shutdown
 require ?das_metal metal/das_metal_boost   // metal_live_object_count for the leak gate
 require daslib/jobque_boost
@@ -340,5 +341,23 @@ def test_metal_mtp_parity_27b(t : T?) {
 def test_metal_mtp_parity_35b(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-MTP-UD-Q4_K_M (large tier)") <| @(t : T?) {
         run_fixture(t, "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", "35b")
+    }
+}
+
+// The split-head carrier: ggml-org ships Qwen3.8-27B's NextN head as its own file (the trunk is
+// converted --no-mtp), and the served pair here is the Q4_K_M trunk with the Q8_0 head - a
+// mixed-quant pair the mtp-<trunk basename> adjacency cannot name, so the fixture sets the
+// override knob (restored on exit) and the head rides the load as the last shard.
+[test]
+def test_metal_mtp_parity_qwen38_split_head(t : T?) {
+    t |> run("metal MTP rail vs plain GPU decode - Qwen3.8-27B-Q4_K_M + split head mtp-Qwen3.8-27B-Q8_0 (large tier)") <| @(t : T?) {
+        let head = path_join(models_dir(), "mtp-Qwen3.8-27B-Q8_0.gguf")
+        if (!stat(head).is_valid) {
+            t |> skip("mtp-Qwen3.8-27B-Q8_0.gguf not present")
+            return
+        }
+        set_mtp_head_path(head)
+        run_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "3.8-27b")
+        clear_mtp_head_path()
     }
 }

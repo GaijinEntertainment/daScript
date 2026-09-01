@@ -21,6 +21,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_IMAGE_SAVE` | flag | on | Persist the prepared image beside the source; 0 builds it in memory and serves that, leaving no .dlim behind. |
 | `DASLLAMA_CPU_PREFILL` | flag | off | Allow the CPU prefill path even when a GPU prefill override is registered. |
 | `DASLLAMA_PIN_PREFILL` | text | unset | Pin prefill to one registered override by name (e.g. metal, vulkan); anything else declines before upload. |
+| `DASLLAMA_MTP_HEAD` | path | unset | Split NextN/MTP head GGUF to attach to the trunk being loaded (the ggml-org mtp-<model>.gguf form: its blk.<n_layers>.* tensors become the draft block; its copies of the trunk's tables are ignored). Default: the mtp-<trunk basename> sibling beside the trunk when present. The head rides the split-shard walk, so one prepared image carries trunk and head. |
 | `DASLLAMA_PIN_BACKEND` | text | unset | Pin the matmul backend by name, bypassing the measured auto-selection. |
 | `DASLLAMA_PIN_BATCH_BACKEND` | text | unset | Pin the batched (prefill) matmul backend independently of the decode one. |
 | `DASLLAMA_EXPERT_REUSE` | flag | off | Arm the MoE expert-reuse counter (probes and servers; benches use set_expert_reuse instead). |

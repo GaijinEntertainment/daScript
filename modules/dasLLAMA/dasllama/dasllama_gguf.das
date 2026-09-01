@@ -11,6 +11,7 @@ require math                        // sqrt/abs/clamp — the Q5_K encoder's per
 require daslib/fio                  // shard-path expansion + mapping (split GGUF)
 require daslib/strings_boost        // trim_suffix / pad_left (split shard names)
 require daslib/strings_convert     // try_to_int (validating shard-index parse)
+require dasllama/dasllama_env       // g_env_engine.mtp_head — the split NextN head sidecar override
 require llvm/daslib/f16_cvt public  // f16_to_f32 / f32_to_f16 (re-export: whisper/vad/parakeet/audio callers)
 require dasllama/dasllama_convert public   // the pure codec layer (readers/dequants/transcodes/encoder) — split out 2026-07-29
 require dasllama/dasllama_par       // maybe_parallel_for (+ its emitted dispatch counters) — the transcode hot loops thread when a jobque is up
@@ -123,6 +124,7 @@ struct GGUFMeta {
     @do_not_delete shard_base : array<void?>   // borrowed mapped base per shard (owned by gguf_map_shards)
     shard_size : array<int64>
     shard_data_off : array<int64>              // per-shard data-blob offset (each shard pads independently)
+    nextn_sidecar : int64                      // nextn_predict_layers carried by a head shard (0 = the trunk's own KVs rule)
 }
 
 def private gguf_scalar_size(gtype : int) : int64 {
@@ -243,10 +245,52 @@ def private with_tensor_view(m : GGUFMeta; srcbytes : array<uint8> | #; ti : int
     }
 }
 
-//! Expand a model path into its shard list. A GGUF split name ("<prefix>-00001-of-00003.gguf")
-//! yields every sibling shard (any shard index normalizes); anything else yields [path]. A missing
-//! sibling panics (partial split must not run), or yields [] with `missing_ok` (presence gates).
+// the in-process override of DASLLAMA_MTP_HEAD (tests and tools that pair a trunk with a head
+// whose name the adjacency rule cannot derive); unset = the env knob rules
+var private g_mtp_head_override = ""
+var private g_mtp_head_override_set = false
+
+def public set_mtp_head_path(path : string) {
+    g_mtp_head_override = path
+    g_mtp_head_override_set = true
+}
+
+def public clear_mtp_head_path() {
+    g_mtp_head_override = ""
+    g_mtp_head_override_set = false
+}
+
+//! The split NextN/MTP head that rides `path`'s shard walk: the override / `DASLLAMA_MTP_HEAD` when
+//! set, else the `mtp-<trunk basename>` sibling beside the trunk (the ggml-org layout), else "".
+def mtp_head_sidecar(path : string) : string {
+    let name = base_name(path)
+    if (name |> starts_with("mtp-")) {   // a head loaded on its own never recurses onto itself
+        return ""
+    }
+    let over = g_mtp_head_override_set ? g_mtp_head_override : g_env_engine.mtp_head
+    if (!empty(over)) {
+        return fexist(over) ? over : ""
+    }
+    let side = path_join(dir_name(path), "mtp-{name}")
+    return fexist(side) ? side : ""
+}
+
+//! Expand a model path into its shard list: a GGUF split name ("<prefix>-00001-of-00003.gguf") yields
+//! every sibling (any index normalizes), anything else [path]; a split NextN head rides LAST. A
+//! missing sibling panics (a partial split must not run), or yields [] with `missing_ok` (presence gates).
 def gguf_shard_paths(path : string; missing_ok : bool = false) : array<string> {
+    var res <- gguf_split_paths(path, missing_ok)
+    if (!empty(res)) {
+        let side = mtp_head_sidecar(path)
+        if (!empty(side)) {
+            res |> push(side)   // the head is the LAST shard: first-match lookups keep the trunk's tables
+        }
+    }
+    return <- res
+}
+
+// the GGUF split-name expansion proper ("<prefix>-NNNNN-of-NNNNN.gguf" -> every sibling)
+def private gguf_split_paths(path : string; missing_ok : bool) : array<string> {
     var res : array<string>
     let name = base_name(path)
     let stem_part = trim_suffix(name, ".gguf")
@@ -334,6 +378,16 @@ def parse_gguf_meta_shards(bases : array<void?>; sizes : array<int64>) : GGUFMet
         for (i in range(length(mk.tensors))) {
             mk.tensors[i].shard = k
             m.tensors |> emplace(mk.tensors[i])
+        }
+        // a head shard carries the nextn count the trunk file dropped (ggml-org converts the trunk
+        // --no-mtp and the head --mtp); shard-0 KVs otherwise rule, so promote it only when absent there
+        unsafe {
+            let kb <- temp_array(reinterpret<uint8?>(bases[k]), sizes[k], type<uint8>)
+            let arch = gguf_has(mk, "general.architecture") ? gguf_str(mk, kb, "general.architecture") : ""
+            let key = "{arch}.nextn_predict_layers"
+            if (!empty(arch) && gguf_has(mk, key) && !gguf_has(m, key)) {
+                m.nextn_sidecar = gguf_int(mk, kb, key)
+            }
         }
         delete mk
     }
@@ -1127,7 +1181,7 @@ def gguf_kq_disk_sbb(gtype : int) : int64 {
 
 //! One superblock's disk -> plane transcode, keyed by format - the array form the tests and the
 //! f32 fallback drive (the bulk loaders are the per-format `gguf_transcode_*`).
-def kq_transcode_superblock(fmt : KqFmt; bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) { // nolint:STYLE037 — the format ladder
+def kq_transcode_superblock(fmt : KqFmt; bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
     if (fmt == KqFmt.iq4xs) {
         transcode_iq4xs_superblock(bytes, bo, kq, kqo, ks, kso)
     } elif (fmt == KqFmt.k3) {

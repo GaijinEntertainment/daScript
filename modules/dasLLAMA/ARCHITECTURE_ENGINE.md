@@ -146,6 +146,15 @@ breaks the cycle. That re-export is what keeps every consumer on the facade.
   through the single release path in `dasllama_common` that the carrier finalizers call - never
   an ad-hoc unmap.
 
+A split NextN/MTP head (the ggml-org `mtp-<model>.gguf` form, the trunk converted without its
+head) rides the load as the LAST shard of the trunk's shard walk: `gguf_shard_paths` appends the
+`mtp-<trunk basename>` sibling, or the `DASLLAMA_MTP_HEAD` file, and `parse_gguf_meta_shards`
+promotes the head shard's `nextn_predict_layers` onto the meta when the trunk's KVs lack it. The
+head's `blk.<n_layers>.*` tensors are the draft block; its copies of the trunk's embedding,
+classifier and final norm are dead by construction (tensor lookup is first-match and the head
+is last). The prepared image folds the head's name and size into its path hash, so the
+trunk-only and trunk+head images never collide and one image file serves both trunk and head.
+
 ### 1.4 CPU kernel tiers
 
 - **`dasllama_math.das`** - the numeric ABSTRACTION: typedefs, active backend pointers, public

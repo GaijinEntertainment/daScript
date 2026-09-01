@@ -42,6 +42,10 @@ struct public EngineEnv {
     @clarg_doc = "Pin prefill to one registered override by name (e.g. metal, vulkan); anything else declines before upload."
     pin_prefill : string = ""
 
+    @clarg_path
+    @clarg_doc = "Split NextN/MTP head GGUF to attach to the trunk being loaded (the ggml-org mtp-<model>.gguf form: its blk.<n_layers>.* tensors become the draft block; its copies of the trunk's tables are ignored). Default: the mtp-<trunk basename> sibling beside the trunk when present. The head rides the split-shard walk, so one prepared image carries trunk and head."
+    mtp_head : string = ""
+
     @clarg_doc = "Pin the matmul backend by name, bypassing the measured auto-selection."
     pin_backend : string = ""
 
