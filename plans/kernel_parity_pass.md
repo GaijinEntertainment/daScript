@@ -853,5 +853,18 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   iq2xs 2815 / 3951 / 4610, iq2s 3316 / 5706 / 3848; one thread iq2xxs 19334 / 21823, iq3xxs 30438 / 39773,
   iq3s 36485 / 72793, iq2xs 23533 / 32658, iq2s 28428 / 36371 us. Every Intel grid row clears 0.95 with the
   lattice - iq2s (the 0.90 row) reads 1.16x. The zen4 half runs next; then the re-mints adopt the seats.
+- 2026-09-01: the lattice's zen4 race (tune mode, d=32768; vbmi / old 512 seat / the reference): one thread
+  iq2xxs 17571 / 22402 / 32946, iq3xxs 27384 / 48023 / 43551, iq3s 26120 / 61810 / 49870, iq2xs 20518 /
+  36590 / 30978, iq2s 26909 / 39628 / 32855; 16 lanes best iq2xxs 1551 / 1666 / 2106, iq3xxs 2520 / 3108 /
+  2810, iq3s 2778 / 3882 / 3231, iq2xs 1618 / 2334 / 2006, iq2s 1935 / 2516 / 2113 us. TEST bit-exact.
+  Every zen4 grid row clears 0.95 with the lattice - the four 0.76-0.90 one-thread rows read 1.2-1.9x.
+- 2026-09-01: the Intel mode gap narrowed to the memory system: warm cache, both modes 96%+ of cycles in
+  the kernel DLL, same clock, same THP rollup, and the instruction rate ratio equals the wall ratio exactly
+  (identical instructions per gemv) - the normal body just stalls 1.54x more, 16 lanes only. Tune streams
+  385 MB at 127 GB/s (partial cache residency), normal at 82.8. Round 5 sweeps d (8k/32k/64k), adds q8, and
+  reads the arena VMA's own AnonHugePages plus LLC counters per mode.
+- 2026-09-01: cold-start SIGSEGV at 0xc0 right after "Library linked - ok" (normal mode, 16-lane team k6
+  d=32768, Intel; reproduced 3x cold, never warm, earlier bootstrap ladders passed) - a post-link rebind
+  bug to chase before the PR.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
