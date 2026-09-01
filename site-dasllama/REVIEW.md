@@ -32,10 +32,10 @@ name.
 **A diff that adds a host to `REVIEW.das`'s `ALLOWED_HOSTS` states, in the PR body, what a
 visitor sends that host and whether the host sets cookies.**
 
-**A `dl-*` selector that `site/files/dasllama-table.css` (repo root) does not already
-define, declared in any file under this directory, is a defect** - `dl-*` names belong to
-that shared sheet; styles this directory defines for its own pages use the `dio-` prefix in
-`files/dasllama-io.css`.
+**Weakening `REVIEW.das`'s `dl-*` census - the gate that reports a `dl-*` name used in a
+page, script or stylesheet here that `site/files/dasllama-table.css` (repo root) does not
+define - is a defect.** Styles this directory defines for its own pages use the `dio-`
+prefix in `files/dasllama-io.css`.
 
 **A statement on a page here about what a shipped tool does is a defect unless it matches
 the current code.**
@@ -49,16 +49,13 @@ claim about what a page here renders - check that one against the page's markup 
 **A hand-edit between the `news:begin` and `news:end` markers in index.html is a defect -
 edit `_news/` and re-run `build_news.py` instead.**
 
-**A diff that changes `_news/` also lands the regenerated index.html, feed.xml and
-sitemap.xml, in the same change.**
-
 **A value `files/dasllama-io.js` takes from `/api/*` and puts into markup without the
 context-correct escape is a defect: `esc()` (which escapes `< > & " '`) for text and for
 quoted-attribute values, `Number(...)` for anything numeric, and `safeApiHref()` (an
 `^/api/...` allow-list) for anything landing in `href`/`src` or fed to `fetch`.**
 
-**A page that lacks `<title>`, a meta description, OpenGraph tags, or the Atom `<link>` is a
-defect - a new or renamed page included.**
+**Weakening `test_metadata.py`'s per-page assertions - the test that fails a page without a
+`<title>`, a meta description, the OpenGraph tags, or the Atom `<link>` - is a defect.**
 
 **A diff that adds a file under `files/` also verifies the dasllama.io deploy step
 (`.github/workflows/pages.yml`, "Stage dasllama.io for deployment") stages it, in the same

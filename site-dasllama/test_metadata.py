@@ -13,6 +13,11 @@ class MetadataParser(HTMLParser):
         super().__init__()
         self.canonical = None
         self.hrefs = []
+        self.title = ""
+        self.description = None
+        self.og = {}
+        self.atom = None
+        self._in_title = False
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
@@ -20,6 +25,22 @@ class MetadataParser(HTMLParser):
             self.hrefs.append(values["href"])
         if tag == "link" and values.get("rel") == "canonical":
             self.canonical = values.get("href")
+        if tag == "link" and values.get("rel") == "alternate" and values.get("type") == "application/atom+xml":
+            self.atom = values.get("href")
+        if tag == "meta" and values.get("name") == "description":
+            self.description = values.get("content")
+        if tag == "meta" and str(values.get("property", "")).startswith("og:"):
+            self.og[values["property"]] = values.get("content")
+        if tag == "title":
+            self._in_title = True
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self._in_title = False
+
+    def handle_data(self, data):
+        if self._in_title:
+            self.title += data
 
 
 class SiteMetadataTest(unittest.TestCase):
@@ -35,6 +56,20 @@ class SiteMetadataTest(unittest.TestCase):
                 parser.feed((ROOT / filename).read_text(encoding="utf-8"))
                 self.assertEqual(parser.canonical, expected)
                 self.assertNotIn("index.html", parser.hrefs)
+
+    def test_pages_carry_head_metadata(self):
+        # the per-page metadata the site checklist requires: a title, a description, the
+        # OpenGraph quartet, and the Atom link - a new or renamed page included
+        for filename in ("index.html", "ladder.html", "sidecars.html"):
+            with self.subTest(filename=filename):
+                parser = MetadataParser()
+                parser.feed((ROOT / filename).read_text(encoding="utf-8"))
+                self.assertTrue(parser.title.strip(), "empty <title>")
+                self.assertTrue(parser.description, "no meta description")
+                for key in ("og:url", "og:type", "og:title", "og:description"):
+                    self.assertTrue(parser.og.get(key), f"missing {key}")
+                self.assertEqual(parser.og["og:url"], parser.canonical)
+                self.assertEqual(parser.atom, "/feed.xml")
 
     def test_sitemap_uses_the_canonical_urls(self):
         tree = ET.parse(ROOT / "sitemap.xml")

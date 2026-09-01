@@ -573,6 +573,17 @@ jobs:
         set -eux
         $BIN/daslang ./utils/internal/review-md/all.das
 
+    - name: "dasllama.io: the news region is regenerated and every page carries its metadata"
+      # the deploy runs the same generator; this is the per-PR half - a committed
+      # index.html/feed.xml/sitemap.xml that the generator would rewrite is a red lane,
+      # and so is a page missing its title, description, OpenGraph tags or Atom link
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        python3 site-dasllama/build_news.py --root site-dasllama
+        git diff --exit-code -- site-dasllama/index.html site-dasllama/feed.xml site-dasllama/sitemap.xml
+        python3 site-dasllama/test_metadata.py
+
     - name: "Test pr-babysit verdict core"
       if: matrix.target == 'linux'
       run: |

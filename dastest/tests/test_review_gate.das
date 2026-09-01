@@ -486,3 +486,32 @@ def test_gate_home_paths(t : T?) {
     t |> success(find(fs[0], ":3: names a home directory") >= 0, fs[0])
     t |> success(find(fs[1], ":4: names a home directory") >= 0, fs[1])
 }
+
+[test]
+def test_prefixed_tokens(t : T?) {
+    let text = "<tr class=\"dl-row dl-row--noted\">.dl-table--bench tbody tr.dl-row--flat \{ \} var x = 'dl-win'; model-dl-x"
+    var inscope toks <- prefixed_tokens(text, "dl-")
+    t |> equal(5, length(toks), "a prefix glued to a longer token (model-dl-x) is not a token")
+    t |> success(key_exists(toks, "dl-row"))
+    t |> success(key_exists(toks, "dl-row--noted"), "a double-dash modifier is one token")
+    t |> success(key_exists(toks, "dl-table--bench"))
+    t |> success(key_exists(toks, "dl-row--flat"))
+    t |> success(key_exists(toks, "dl-win"))
+}
+
+[test]
+def test_markdown_table_rows(t : T?) {
+    let md = "# title\n\n## INTERP\n\nprose\n\n| Benchmark | A (m1) | B (m2) |\n|---|---:|---:|\n| `fam_one` | 1.5 | - |\n| `fam_two` | 2.0 | 3.5 |\n\ntrailing prose\n\n## JIT\n\n| Benchmark | A (m1) |\n|---|---:|\n| `fam_one` | 0.5 |\n"
+    var inscope rows <- markdown_table_rows(md, "INTERP")
+    t |> equal(3, length(rows), "header plus two body rows; the alignment row is dropped")
+    t |> equal("Benchmark", rows[0][0])
+    t |> equal("B (m2)", rows[0][2])
+    t |> equal("fam_one", rows[1][0], "backticks removed")
+    t |> equal("-", rows[1][2])
+    t |> equal("3.5", rows[2][2])
+    var inscope jit <- markdown_table_rows(md, "JIT")
+    t |> equal(2, length(jit), "a second section has its own table")
+    t |> equal("0.5", jit[1][1])
+    var inscope none <- markdown_table_rows(md, "ABSENT")
+    t |> equal(0, length(none))
+}

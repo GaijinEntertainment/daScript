@@ -21,23 +21,23 @@ spawns) ran, with the home directory spelled `~`, is a defect.**
 render that line on every row the run produced.** One run's `cmd` + `date` covers several
 rendered rows.
 
-**A `cmd` or `date` inside a run's `tests` entry in `files/dasllama/bench_records.json` is a
-defect - the pair belongs on the run object that produced the rows.**
+**Weakening `REVIEW.das`'s receipt check - the gate that requires `cmd` and `date` on every
+run object of `files/dasllama/bench_records.json` and reports either inside a `tests` entry -
+is a defect.**
 
 **A diff that changes `files/performance_bench.json` also changes `benchmarks/sql/results.md`
 (repo root), in the same change.** `benchmarks/sql/_update_results.das --site-json` writes the
 record from the same sweep output that regenerates those tables.
-
-**A cell in `files/performance_bench.json` differing from the same family-and-lane cell in the
-`benchmarks/sql/results.md` (repo root) tables is a defect.**
 
 **A diff that changes `files/performance_engines.json` also changes
 `examples/benchmarks/sql/results.md` (repo root), in the same change.**
 `examples/benchmarks/sql/_update_results.das --site-json` writes the record from the same sweep
 output that regenerates those tables.
 
-**A cell in `files/performance_engines.json` differing from the same family-and-lane cell in
-the `examples/benchmarks/sql/results.md` (repo root) tables is a defect.**
+**Weakening `REVIEW.das`'s bench-cell parity check - the gate that compares every
+family-and-lane cell of `files/performance_bench.json` and `files/performance_engines.json`
+with the `benchmarks/sql/results.md` and `examples/benchmarks/sql/results.md` (repo root)
+tables - is a defect.**
 
 **A benchmark number hand-carried into a page that renders dasProfile numbers is a defect -
 render every such number only from the vendored dasProfile records, the

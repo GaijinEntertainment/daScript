@@ -588,6 +588,67 @@ def gate_home_paths(path : string) {
     }
 }
 
+//! Every identifier-shaped token in `text` that starts with `prefix` - `[A-Za-z0-9_-]` runs,
+//! so `dl-row--flat` is one token and `dl-row` inside it is not. A class-name census for a
+//! prefix a stylesheet owns, from markup, script or stylesheet text alike.
+def prefixed_tokens(text : string; prefix : string) : table<string> {
+    var out : table<string>
+    peek_data(text) $(d) {
+        let n = length(d)
+        var i = 0
+        while (i < n) {
+            let at = find(d, prefix, i)
+            break if (at < 0)
+            // a prefix glued to the tail of a longer token is not a token of its own
+            if (at > 0 && is_token_byte(int(d[at - 1]))) {
+                i = at + 1
+                continue
+            }
+            var e = at
+            while (e < n && is_token_byte(int(d[e]))) {
+                e++
+            }
+            out |> insert(slice(d, at, e))
+            i = e
+        }
+    }
+    return <- out
+}
+
+def private is_token_byte(b : int) : bool {
+    return is_alnum(b) || b == '_' || b == '-'
+}
+
+//! The rows of the first markdown pipe table under the `## <section>` heading: one entry
+//! per body row, each the cell strings in column order with surrounding spaces and any
+//! backticks removed. The header row comes first; the `|---|` alignment row is dropped.
+def markdown_table_rows(text : string; section : string) : array<array<string>> {
+    var out : array<array<string>>
+    var in_section = false
+    var in_table = false
+    for (raw in split(text, "\n")) {
+        let line = strip(raw)
+        if (line |> starts_with("## ")) {
+            break if (in_table)
+            in_section = line == "## {section}"
+            continue
+        }
+        continue if (!in_section)
+        if (!(line |> starts_with("|"))) {
+            break if (in_table)
+            continue
+        }
+        in_table = true
+        continue if (line |> starts_with("|---") || line |> starts_with("| ---"))
+        var inscope cells <- [for (cell in split(line, "|")); strip(replace(cell, "`", ""))]
+        // a pipe row splits to an empty first and last cell - the outer bars
+        continue if (length(cells) < 3)
+        var row <- [for (k in range(1, length(cells) - 1)); cells[k]]
+        out |> emplace(row)
+    }
+    return <- out
+}
+
 //! Host of an absolute or protocol-relative URL, lowercased - "" when the URL is relative
 //! or when what follows the scheme is not host-shaped. Scheme and host are matched
 //! case-insensitively, as a browser reads them; a bracketed IPv6 literal comes back with

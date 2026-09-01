@@ -45,3 +45,12 @@ compacted, or cited as rules.
   directory is spelled `~` in every recorded line, the recorder does it, a gate enforces it,
   and the 386 existing lines are migrated once rather than re-minted. The exact-argv rule
   gained that one clause.
+
+- **2026-09-01** (`REVIEW.md`): flashlight round, lint candidate (a) ruled "yes" - the
+  tests-entry receipt rule is now `REVIEW.das`'s check and the checklist keeps the
+  weakening residue; the row rule keeps its renderer half.
+
+- **2026-09-01** (`REVIEW.md`): flashlight round, lint candidate (b) ruled "yes" - the two
+  cell-parity rules are now one `REVIEW.das` check (JSON record against the INTERP and JIT
+  tables, both pairs) and the checklist keeps one weakening residue; the two same-change
+  duties above them stay.

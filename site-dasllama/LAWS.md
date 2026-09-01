@@ -24,3 +24,16 @@ compacted, or cited as rules.
   `news:begin` rule each split in two; the entailed "implementation that does not exist"
   sentence cut; the number-source rule in plain form with the verdict last; the `dl-*`
   WHY tail without "chrome".
+
+- **2026-09-01** (`REVIEW.md`): two rules retired to automation, ruled "yes" in the flashlight
+  round. The regenerated-news duty is now a per-PR step in `extended_checks.yml` (the
+  workflows checklist owns its weakening), so the rule went; the page-metadata rule became
+  the weakening residue over `test_metadata.py`, which now asserts all four items.
+
+- **2026-09-01** (`REVIEW.md`): flashlight round, lint candidate (c) ruled "yes" - the dl-*
+  rule is now `REVIEW.das`'s census (every dl-* name used here must be one the shared sheet
+  defines) and the checklist keeps the weakening residue.
+
+- **2026-09-01** (`REVIEW.das` dl-* census, first run): the census found `dl-row--noted`
+  emitted by both record renderers and styled nowhere since the ASR commit. Boris ruled
+  "okie" to removing the class rather than inventing a style for it or allow-listing it.

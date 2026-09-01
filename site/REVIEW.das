@@ -1,8 +1,11 @@
 options gen2
 
 require strings
+require math
 require daslib/fio
 require daslib/strings_boost
+require daslib/json_boost
+require daslib/defer
 require dastest/review_gate
 
 // The mechanical half of site/REVIEW.md (contract: REVIEW_COMMON.md at the repo root).
@@ -12,6 +15,7 @@ require dastest/review_gate
 let private TABLE_CSS = "site/files/dasllama-table.css"
 let private PAGE_HTML = "site/dasllama.html"
 let private RECORDS_DIR = "site/files/dasllama"
+let private BENCH_RECORDS = "site/files/dasllama/bench_records.json"
 
 // Hosts a page under this folder may reach without a click. daslang.io is the site itself;
 // the rest are the reviewed third parties - jsDelivr serves the DocSearch bundle, gc.zgo.at
@@ -108,6 +112,121 @@ def private check_records_name_no_user {
     }
 }
 
+// a rendered row's receipt is its run's cmd + date; the pair lives on the run object, never
+// inside a tests entry, so every row of one run shares one receipt
+def private check_record_receipts {
+    let text = fread(BENCH_RECORDS)
+    if (empty(text)) {
+        gate_finding(BENCH_RECORDS, "missing or unreadable")
+        return
+    }
+    var jerr = ""
+    var doc = read_json(text, jerr)
+    defer() {
+        unsafe {
+            delete doc
+        }
+    }
+    if (doc == null) {
+        gate_finding(BENCH_RECORDS, "does not parse as JSON: {jerr}")
+        return
+    }
+    return if (!(doc.value is _array))
+    for (model in doc.value as _array) {
+        let gguf = "{model?["gguf"] ?? "?"}"
+        let runs = model?["runs"]
+        continue if (runs == null || !(runs.value is _array))
+        for (r in runs.value as _array) {
+            for (field in ["cmd", "date"]) {
+                if (empty("{r?[field] ?? ""}")) {
+                    gate_finding(BENCH_RECORDS, "{gguf}: a run carries no {field} - every run object holds its cmd and date, the receipt its rows render")
+                }
+            }
+            let tests = r?["tests"]
+            continue if (tests == null || !(tests.value is _object))
+            for (tname, entry in keys(tests.value as _object), values(tests.value as _object)) {
+                for (field in ["cmd", "date"]) {
+                    if (!empty("{entry?[field] ?? ""}")) {
+                        gate_finding(BENCH_RECORDS, "{gguf}/{tname}: a tests entry carries {field} - the pair belongs on the run object that produced the rows")
+                    }
+                }
+            }
+        }
+    }
+}
+
+// the column of a results.md lane: the bench table spells the id in parentheses
+// ("SQLite (m1)"), the engines table spells the name alone ("SQLite")
+def private lane_column(header : array<string>; id, name : string) : int {
+    for (k in range(length(header))) {
+        return k if (header[k] |> find("({id})") >= 0 || header[k] == name)
+    }
+    return -1
+}
+
+// a site record and the results.md it was written from carry the same cells: every family
+// row's interp and jit value, keyed by lane, against the INTERP and JIT tables
+def private check_bench_cell_parity(record_path, results_path : string) {
+    let text = fread(record_path)
+    let md = fread(results_path)
+    if (empty(text) || empty(md)) {
+        gate_finding(empty(text) ? record_path : results_path, "missing or unreadable")
+        return
+    }
+    var jerr = ""
+    var doc = read_json(text, jerr)
+    defer() {
+        unsafe {
+            delete doc
+        }
+    }
+    if (doc == null) {
+        gate_finding(record_path, "does not parse as JSON: {jerr}")
+        return
+    }
+    let lanes = doc?["lanes"]
+    let families = doc?["families"]
+    return if (lanes == null || families == null || !(lanes.value is _array) || !(families.value is _array))
+    for (section, arm in ["INTERP", "JIT"], ["interp", "jit"]) {
+        var inscope rows <- markdown_table_rows(md, section)
+        if (length(rows) < 2) {
+            gate_finding(results_path, "has no `## {section}` table for {record_path} to agree with")
+            continue
+        }
+        var inscope by_family <- {for (k in range(1, length(rows))); rows[k][0] => k}
+        for (fam in families.value as _array) {
+            let name = "{fam?["name"] ?? ""}"
+            let row = by_family?[name] ?? -1
+            if (row < 0) {
+                gate_finding(record_path, "family {name} has no `## {section}` row in {results_path}")
+                continue
+            }
+            let cells = fam?[arm]
+            continue if (cells == null || !(cells.value is _array))
+            var li = 0
+            for (lane in lanes.value as _array) {
+                let id = "{lane?["id"] ?? ""}"
+                let col = lane_column(rows[0], id, "{lane?["name"] ?? ""}")
+                let cell = (cells.value as _array)[li]
+                li++
+                if (col < 0 || col >= length(rows[row])) {
+                    gate_finding(results_path, "`## {section}` has no column for lane {id}")
+                    continue
+                }
+                let md_cell = rows[row][col]
+                // a JSON integer literal lands in the _longint arm, a decimal in _number - the
+                // coercion reads both; null is the missing cell
+                let json_value = cell ?? -1.0lf
+                let recorded = json_value < 0.0lf ? "-" : "{json_value}"
+                let md_value = md_cell == "-" ? -1.0lf : to_double(md_cell)
+                if ((md_cell == "-") != (recorded == "-") || abs(md_value - json_value) > 0.051lf) {
+                    gate_finding(record_path, "{name} / {id} / {arm}: {recorded} but {results_path} shows {md_cell} - both come from one sweep; regenerate the pair")
+                }
+            }
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist(TABLE_CSS)) {
@@ -116,6 +235,9 @@ def main() : int {
     }
     check_dl_selector_parity()
     check_records_name_no_user()
+    check_record_receipts()
+    check_bench_cell_parity("site/files/performance_bench.json", "benchmarks/sql/results.md")
+    check_bench_cell_parity("site/files/performance_engines.json", "examples/benchmarks/sql/results.md")
     gate_web_third_party(["site"], SKIP_DIRS, ALLOWED_HOSTS)
     return gate_verdict("site")
 }
