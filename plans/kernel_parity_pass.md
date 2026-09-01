@@ -201,6 +201,66 @@ above parity - the M1 CPU is closed for this pass.
 
 Decode floor k5 1.06x; the grid formats 1.16-1.51x (from 0.51-0.93x before the row-pair decode). Tiles 1.92-15.2x.
 
+### zen2 v4 - the closing tables (2026-09-01, after the k6/k3 transposes and the fused flush)
+
+One thread at the HEAP phase (the ladder's engine-phase default came after this run; k6/k3 read 10-30%
+better at the engine phase - k6 3527-3851, k3 2488-2893) and the engine shape (16 lanes, d=32768,
+DRAM-bound; q8/mx4/k4 from the q8-family arm's validation run).
+
+| fmt | decode ours / ref us | ratio | tile ours / ref us | ratio | engine 16 lanes ours / ref us | ratio |
+|---|---|---|---|---|---|---|
+| q8 | 3348 / 4260 | 1.27 | 565887 / 890979 | 1.57 | 8906 / 9248 | 1.04 |
+| k4 | 2337 / 2528 | 1.08 | 518533 / 839960 | 1.62 | 4472 / 4425 | 0.99 |
+| k5 | 3553 / 3327 | 0.94 | 540857 / 1325657 | 2.45 | 5400 / 5475 | 1.01 |
+| k6 | 3460 / 3652 | 1.06 | 630854 / 1083547 | 1.72 | 6477 / 6402 | 0.99 |
+| q40 | 1973 / 2868 | 1.45 | 387611 / 1003869 | 2.59 | 4275 / 4575 | 1.07 |
+| q51 | 2866 / 4118 | 1.44 | 656416 / 1844397 | 2.81 | 5842 / 6235 | 1.07 |
+| iq4xs | 2097 / 3349 | 1.60 | 675053 / 1674064 | 2.48 | 4577 / 4119 | 0.90 |
+| k3 | 3080 / 2601 | 0.84 | 678487 / 1255396 | 1.85 | 3662 / 3605 | 0.98 |
+| iq3s | 7603 / 10242 | 1.35 | 660738 / 5179767 | 7.84 | 3934 / 5300 | 1.35 |
+| iq3xxs | 6650 / 6573 | 0.99 | 659839 / 3308544 | 5.01 | 3854 / 3509 | 0.91 |
+| iq4nl | 2117 / 3078 | 1.45 | 589114 / 1090653 | 1.85 | 4542 / 4533 | 1.00 |
+| k2 | 1261 / 2083 | 1.65 | 658936 / 779599 | 1.18 | 2555 / 2711 | 1.06 |
+| iq2s | 5058 / 5022 | 0.99 | 721269 / 2510375 | 3.48 | 3070 / 2887 | 0.94 |
+| iq2xs | 4645 / 5354 | 1.15 | 735654 / 2706628 | 3.68 | 2749 / 2886 | 1.05 |
+| iq2xxs | 5192 / 5103 | 0.98 | 655125 / 2526484 | 3.86 | 2994 / 2751 | 0.92 |
+| mx4 | 2193 / 3004 | 1.37 | 621096 / 1433680 | 2.31 | 4143 / 4364 | 1.05 |
+
+Engine shape: every format 0.90-1.35 - q8 1.04, mx4 1.05, k4 0.99, k5 1.01, k6 0.99, q40 1.07, q51 1.07,
+k3 0.98, iq3s 1.35, iq4nl 1.00, k2 1.06, iq2xs 1.05, iq2s 0.94, iq2xxs 0.92, iq3xxs 0.91, iq4xs 0.90. zen2
+is closed for this pass: k5 0.94 at one thread is the one row under the bar, and it is 1.01 at the engine shape.
+
+### zen4 v2 - after the transposes and the fused flush (2026-09-01, c7a.4xlarge EPYC 9R14, class x86-vnni512)
+
+TEST 90/90. One thread at the heap phase (the bootstrap ran before the ladder's engine-phase default) and the
+engine shape (16 lanes, d=32768, DRAM-bound). The q8/mx4 engine rows here predate the q8 family's team arm
+(one raw thread against 16) - round two re-measures them.
+
+| fmt | decode ours / ref us | ratio | tile ours / ref us | ratio | engine 16 lanes ours / ref us | ratio |
+|---|---|---|---|---|---|---|
+| q8 | 1614 / 3409 | 2.11 | 167078 / 500478 | 3.00 | 15344 / 6101 | 0.40 |
+| k4 | 805 / 1865 | 2.32 | 328569 / 753160 | 2.29 | 3954 / 3028 | 0.77 |
+| k5 | 2126 / 2615 | 1.23 | 178594 / 1120210 | 6.27 | 3788 / 3802 | 1.00 |
+| k6 | 3045 / 2872 | 0.94 | 226619 / 782510 | 3.45 | 4840 / 4609 | 0.95 |
+| q40 | 653 / 2743 | 4.20 | 172935 / 588322 | 3.40 | 3028 / 2963 | 0.98 |
+| q51 | 1864 / 4607 | 2.47 | 239601 / 1431282 | 5.97 | 4149 / 4165 | 1.00 |
+| iq4xs | 1180 / 2418 | 2.05 | 286066 / 1153787 | 4.03 | 2809 / 2848 | 1.01 |
+| k3 | 833 / 2031 | 2.44 | 362356 / 978906 | 2.70 | 2318 / 2207 | 0.95 |
+| iq3s | 7527 / 6087 | 0.81 | 259660 / 3089555 | 11.90 | 3903 / 3226 | 0.83 |
+| iq3xxs | 5953 / 5234 | 0.88 | 260765 / 2664217 | 10.22 | 3122 / 2839 | 0.91 |
+| iq4nl | 1066 / 3103 | 2.91 | 283855 / 625809 | 2.20 | 3084 / 3026 | 0.98 |
+| k2 | 630 / 1276 | 2.03 | 429374 / 641108 | 1.49 | 1541 / 1605 | 1.04 |
+| iq2s | 4917 / 3748 | 0.76 | 283651 / 1903473 | 6.71 | 2778 / 2116 | 0.76 |
+| iq2xs | 4549 / 3616 | 0.80 | 283584 / 1844309 | 6.50 | 2312 / 2001 | 0.87 |
+| iq2xxs | 4834 / 3915 | 0.81 | 260122 / 1991565 | 7.66 | 2464 / 2238 | 0.91 |
+| mx4 | 1049 / 2740 | 2.61 | 293620 / 1348460 | 4.59 | 9599 / 2849 | 0.30 |
+
+One thread: every non-grid decode 0.94-4.20x (k6 0.94), tiles 1.5-11.9x; the grid formats 0.76-0.88x -
+the x86 tail, unchanged. Engine shape: k5/q51/iq4xs/k2 1.00-1.04, q40/iq4nl 0.98, k6/k3 0.95, iq3xxs/iq2xxs
+0.91, iq2xs 0.87, iq3s 0.83, iq2s 0.76 - and k4 0.77 (67 GB/s where the reference and our k5 pull 86; 2.32x
+at one thread). Round two on the same box: SOLO at the engine phase, the corrected team rows, a tune-mode race
+of k4/k6/iq2s through the team arm, perf stat on iq2s.
+
 ## 3. Research memos (read before touching the kernels)
 
 - `kernel_parity_research_cpu.md` - llama.cpp's CPU vec_dot for the five grid formats + Q2_K,
