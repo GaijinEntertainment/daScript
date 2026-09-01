@@ -67,6 +67,35 @@ handle /api/build/* {
 # sets the CORP/COEP headers that embedding under COEP requires.
 #
 #	run.daslang.io {
+#		# The service logs every request it answers, so a navigation missing
+#		# from BOTH logs is the edge closing the connection rather than
+#		# anything the artifact cache did — without this log that case is
+#		# indistinguishable from a request the service simply never got.
+#		# json is the format so a crafted header cannot forge a line, and
+#		# ip_mask keeps a full client address out of the file: this origin is
+#		# public, and nothing here needs to identify a viewer.
+#		log {
+#			output file /var/log/caddy/run.daslang.io.log {
+#				roll_size 32MiB
+#				roll_keep 4
+#				roll_keep_for 168h
+#			}
+#			format filter {
+#				wrap json
+#				fields {
+#					request>remote_ip ip_mask {
+#						ipv4 24
+#						ipv6 32
+#					}
+#					# Neither reaches this origin — the bearer routes live on the
+#					# daslang.io vhost and this one is deliberately cookie-less — so
+#					# dropping them states the property instead of resting on a
+#					# default, and a future route cannot quietly start logging one.
+#					request>headers>Authorization delete
+#					request>headers>Cookie delete
+#				}
+#			}
+#		}
 #		handle /api/build/artifact/* {
 #			# Same reason as every other proxied route: libhv buffers a body in
 #			# full before any handler runs, and the service only registers GET

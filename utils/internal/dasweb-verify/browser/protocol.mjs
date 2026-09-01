@@ -46,6 +46,24 @@ export function isProgramStderrEcho(text) {
     return String(text).startsWith('[das:err] ');
 }
 
+// Chromium net errors that mean the connection died with NO response delivered,
+// so the request never reached the origin and nothing about the artifact is in
+// question. An artifact URL is immutable (source hash x toolchain id), so asking
+// again asks for the same bytes. Every other navigation failure says something
+// real and stays a FAIL: a refused connection is an origin that is down, an
+// aborted one is a navigation superseded, and a timeout is already a wedge.
+export const TRANSPORT_DROPS = [
+    'net::ERR_CONNECTION_CLOSED',
+    'net::ERR_CONNECTION_RESET',
+    'net::ERR_EMPTY_RESPONSE',
+    'net::ERR_SOCKET_NOT_CONNECTED',
+];
+
+export function isTransportDrop(text) {
+    const s = String(text);
+    return TRANSPORT_DROPS.some((code) => s.includes(code));
+}
+
 export function normalizeColor(color) {
     if (!color) return '';
     const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);

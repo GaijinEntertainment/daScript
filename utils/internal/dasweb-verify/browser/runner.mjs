@@ -40,6 +40,14 @@ const EVALUATE_MS = 20000;
 const EVALUATE_FLOOR_MS = 5000;
 // The playground tab itself must come up well inside this or the run is moot.
 const PAGE_READY_MS = 90000;
+// A keep-alive connection the origin closes exactly as Chromium reuses it fails
+// the navigation before any request reaches the service — it appears in no
+// server log, and one such drop out of ~41 wasm navigations reds the whole
+// nightly. The artifact URL is content-addressed and immutable, so the second
+// attempt asks for the same bytes; only P.TRANSPORT_DROPS is retried, and a
+// genuinely broken artifact fails both attempts identically.
+const ARTIFACT_NAV_ATTEMPTS = 2;
+const ARTIFACT_NAV_RETRY_MS = 1000;
 
 function parseArgs(argv) {
     const cfg = {
@@ -339,10 +347,23 @@ class Artifacts {
 
     async load(url) {
         if (!this.page) await this.open();
-        this.pageErrors.length = 0;
-        const nav = await withDeadline(
-            this.page.goto(url, { waitUntil: 'commit', timeout: 120000 }), 130000, 'artifact-goto');
-        if (nav.wedge) throw new WedgeError();
+        for (let attempt = 1; ; attempt++) {
+            this.pageErrors.length = 0;
+            try {
+                const nav = await withDeadline(
+                    this.page.goto(url, { waitUntil: 'commit', timeout: 120000 }), 130000, 'artifact-goto');
+                if (nav.wedge) throw new WedgeError();
+                return;
+            } catch (e) {
+                const why = String(e && e.message ? e.message : e);
+                if (attempt >= ARTIFACT_NAV_ATTEMPTS || !P.isTransportDrop(why)) throw e;
+                // Retries stay on stdout/stderr rather than in the report: a
+                // silent retry would hide the edge losing connections, and the
+                // rate is the only measurement we have of it.
+                process.stderr.write(`  artifact navigation dropped, retrying: ${why.split('\n')[0]}\n`);
+            }
+            await new Promise((r) => setTimeout(r, ARTIFACT_NAV_RETRY_MS));
+        }
     }
 
     async readProbe(ms) {

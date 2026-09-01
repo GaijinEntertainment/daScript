@@ -37,6 +37,13 @@ The public route boundary is `caddy.snippet`, the authoritative copy of what the
 vhost forwards here. It also carries the transport body cap: the service can only bounds-check
 a body already buffered in full, so that limit cannot live in this process.
 
+The `run.daslang.io` block in that snippet turns on an access log, which the daslang.io vhost
+does not need: this service records every request it answers, so a navigation absent from both
+logs is the edge dropping a connection rather than anything the artifact cache did. Caddy needs
+`/var/log/caddy` to exist and be writable by its user; the log is json (a crafted header cannot
+forge a line), client addresses are masked to /24 and /32, and it rolls at 32 MiB keeping four
+files for a week.
+
 `max_source_bytes` is 524288 (512 KiB). The playground POSTs a multi-file sample as one JSON
 document, so the cap is measured against the whole bundle, not the largest file in it - the
 biggest curated game serializes to roughly 267 KB. Because the deployed toml is operator-owned
