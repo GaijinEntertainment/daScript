@@ -1798,16 +1798,16 @@ def private vbmi_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
     p0 |> reserve(256)
     p1 |> reserve(256)
     if (te.kq == 25) {
-        let g = iq2xxs_grid2()
+        let g = iq2xxs_grid2()   // an entry is two words: weights 0-3, 4-7 - one plane each, 4 x 2 bits
         for (e in range(256)) {
-            p0 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[2 * e], alpha, bits)), 0))
-            p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[2 * e + 1], alpha, bits)), 0))
+            p0 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[2 * e], alpha, bits, 4)), 0))
+            p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[2 * e + 1], alpha, bits, 4)), 0))
         }
     } else {
-        let g = iq3xxs_grid()
+        let g = iq3xxs_grid()    // an entry is one word of 4 weights: weights 0-1 and 2-3 per plane, 2 x 3 bits
         for (e in range(256)) {
-            p0 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[e], alpha, bits) & 255), 0))
-            p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[e] >> 16u, alpha, bits) & 255), 0))
+            p0 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[e], alpha, bits, 2)), 0))
+            p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[e] >> 16u, alpha, bits, 2)), 0))
         }
     }
     te.vb_plane[0] = vbmi_const_bytes(te, mod, "dasllama.vbmi.{tag}.p0", p0)
@@ -1827,10 +1827,10 @@ def private vbmi_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
     te.vb_ksigns = vbmi_const_bytes(te, mod, "dasllama.vbmi.ksigns", kv)
 }
 
-//! a grid word's four weight bytes as packed symbols (weight t at bits t*bits); a byte outside the alphabet is a broken table
-def private vbmi_pack_word(word : uint; alpha : array<int>; bits : int) : int {
+//! a grid word's low `nbytes` weight bytes as packed symbols (weight t at bits t*bits); a byte outside the alphabet is a broken table
+def private vbmi_pack_word(word : uint; alpha : array<int>; bits, nbytes : int) : int {
     var code = 0
-    for (t in range(4)) {
+    for (t in range(nbytes)) {
         let wb = int((word >> uint(8 * t)) & 0xFFu)
         let si = alpha |> find_index(wb)
         if (si < 0) {
