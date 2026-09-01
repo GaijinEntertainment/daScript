@@ -13,7 +13,7 @@
 		"iq4xsq8_tile_gen" : "dot_vpdpbusd_width512_mr16",
 		"iq4nlq8_tile_gen" : "dot_vpdpbusd_width512_mr16",
 		"quantize_q8kv_row" : "plain",
-		"axpy_f16" : "vec16",
+		"axpy_f16" : "vec16_u2",
 		"q40q8_tile_gen" : "dot_vpdpbusd_width512_mr16",
 		"axpy_tq4kv" : "vec8_u2",
 		"cvt_tq4kv_to_f32" : "vec8_u2",
@@ -52,18 +52,18 @@
 	},
 	"provenance" : {
 		"validation" : "ok",
-		"noise_probes" : "start cv 0.20%; mid1 cv 0.06%; mid2 cv 0.09%; end cv 0.19%",
+		"noise_probes" : "start cv 0.08%; mid1 cv 0.05%; mid2 cv 0.14%; end cv 0.05%",
 		"platform" : "linux",
-		"noise_floor_cv_pct" : "0.20",
+		"noise_floor_cv_pct" : "0.14",
 		"features" : "avx2;f16c;fma;sse4.2;avxvnni;avx512f;avx512bw;avx512vl;avx512vnni;amx-tile;amx-int8",
 		"class" : "x86-amx",
-		"written" : "2026-09-01T11:02:47.521Z",
+		"written" : "2026-09-01T17:51:26.103Z",
 		"validation_demoted" : "0",
 		"mode" : "normal",
 		"dasllama_version" : "15",
 		"origin" : "profile",
 		"noise" : "ok",
 		"arch" : "x86_64",
-		"validation_max_drift_pct" : "1.97"
+		"validation_max_drift_pct" : "4.97"
 	}
 }
