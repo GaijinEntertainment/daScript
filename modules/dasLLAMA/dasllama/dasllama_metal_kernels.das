@@ -3671,6 +3671,12 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mvb8_iq2xs = compile_pso(metal_kq_mvb8_iq2xs_msl, metal_kq_mvb8_iq2xs_msl_entry, metal_kq_mvb8_iq2xs_msl_fastmath, ok)
     g_pso_kq_mm_b24 = compile_pso(MetalKqMulMmIq2xs_metal_kq_mulmm_msl, MetalKqMulMmIq2xs_metal_kq_mulmm_msl_entry, MetalKqMulMmIq2xs_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_iq2xxs = compile_pso(metal_kq_gemv_iq2xxs_msl, metal_kq_gemv_iq2xxs_msl_entry, metal_kq_gemv_iq2xxs_msl_fastmath, ok)
+    if (metal_tensor_crowned("kq_gemv_iq3s_f4")) {
+        g_pso_kq_iq3s_f4 = compile_pso(metal_kq_gemv_iq3s_f4_msl, metal_kq_gemv_iq3s_f4_msl_entry, metal_kq_gemv_iq3s_f4_msl_fastmath, ok)
+    }
+    if (metal_tensor_crowned("kq_gemv_iq3xxs_f4")) {
+        g_pso_kq_iq3xxs_f4 = compile_pso(metal_kq_gemv_iq3xxs_f4_msl, metal_kq_gemv_iq3xxs_f4_msl_entry, metal_kq_gemv_iq3xxs_f4_msl_fastmath, ok)
+    }
     if (metal_tensor_crowned("kq_gemv_iq2xxs_f4")) {
         g_pso_kq_iq2xxs_f4 = compile_pso(metal_kq_gemv_iq2xxs_f4_msl, metal_kq_gemv_iq2xxs_f4_msl_entry, metal_kq_gemv_iq2xxs_f4_msl_fastmath, ok)
     }
@@ -3755,9 +3761,17 @@ def enc_kq_gemv(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff
     } elif (fmt == KqFmt.k3) {
         enc_kq_k3_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     } elif (fmt == KqFmt.iq3s) {
-        enc_kq_iq3s_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
+        if (g_pso_kq_iq3s_f4 != null) {
+            enc_kq_iq3s_f4_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
+        } else {
+            enc_kq_iq3s_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
+        }
     } elif (fmt == KqFmt.iq3xxs) {
-        enc_kq_iq3xxs_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
+        if (g_pso_kq_iq3xxs_f4 != null) {
+            enc_kq_iq3xxs_f4_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
+        } else {
+            enc_kq_iq3xxs_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
+        }
     } elif (fmt == KqFmt.iq4nl) {
         enc_kq_iq4nl_c(enc, bs, soff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     } elif (fmt == KqFmt.k2) {
@@ -4389,6 +4403,8 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     release_pso(g_pso_kq_mm_b24)
     release_pso(g_pso_kq_iq2xxs)
     release_pso(g_pso_kq_iq2xxs_f4)
+    release_pso(g_pso_kq_iq3s_f4)
+    release_pso(g_pso_kq_iq3xxs_f4)
     release_pso(g_pso_kq_mvb2_iq2xxs)
     release_pso(g_pso_kq_mvb4_iq2xxs)
     release_pso(g_pso_kq_mvb8_iq2xxs)
@@ -4718,28 +4734,39 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
         64, kdim, ndim, 64 * ndim, uint3(uint(2 * (ndim / 64)), 1u, 1u), rka) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
     })
-    results |> emplace(race_gemv_iq2xxs_f4(dev, queue))
+    results |> emplace(race_gemv_f4_twin(dev, queue, "kq_gemv_iq2xxs_f4",
+        metal_kq_gemv_iq2xxs_msl, metal_kq_gemv_iq2xxs_msl_entry, metal_kq_gemv_iq2xxs_msl_fastmath,
+        metal_kq_gemv_iq2xxs_f4_msl, metal_kq_gemv_iq2xxs_f4_msl_entry, metal_kq_gemv_iq2xxs_f4_msl_fastmath, metal_kq_gemv_iq2xxs_f4_msl_tgmem, 16, 4, 4))
+    results |> emplace(race_gemv_f4_twin(dev, queue, "kq_gemv_iq3s_f4",
+        metal_kq_gemv_iq3s_msl, metal_kq_gemv_iq3s_msl_entry, metal_kq_gemv_iq3s_msl_fastmath,
+        metal_kq_gemv_iq3s_f4_msl, metal_kq_gemv_iq3s_f4_msl_entry, metal_kq_gemv_iq3s_f4_msl_fastmath, metal_kq_gemv_iq3s_f4_msl_tgmem, 26, 4, 8))
+    results |> emplace(race_gemv_f4_twin(dev, queue, "kq_gemv_iq3xxs_f4",
+        metal_kq_gemv_iq3xxs_msl, metal_kq_gemv_iq3xxs_msl_entry, metal_kq_gemv_iq3xxs_msl_fastmath,
+        metal_kq_gemv_iq3xxs_f4_msl, metal_kq_gemv_iq3xxs_f4_msl_entry, metal_kq_gemv_iq3xxs_f4_msl_fastmath, metal_kq_gemv_iq3xxs_f4_msl_tgmem, 24, 4, 8))
     metal_release(queue)
     metal_release(dev)
     return <- results
 }
 
-//! The iq2xxs GEMV twin race: the base (constant-table) form vs the f4-slab twin. The slab
-//! wins on M5-class GPUs and REGRESSES on M1/M4-class - a per-box crown, not a heuristic.
-//! Winner "tensor" = the twin takes the "kq_gemv_iq2xxs_f4" crown (the absorb convention).
-def private race_gemv_iq2xxs_f4(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {   // nolint:STYLE038 - one-shot A/B race harness; buffers + PSOs stay live to the release tail
-    var res = MetalTensorRaceResult(family = "kq_gemv_iq2xxs_f4", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+//! A GEMV f4-slab twin race over the split-scale fixture: base (constant-table, rows/4)
+//! vs the f4-slab twin. The slab wins on M5-class GPUs and REGRESSES on M1/M4-class - a
+//! per-box crown, not a heuristic. Winner "tensor" = the twin takes the family crown.
+def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;   // nolint:STYLE038 - one-shot A/B race harness; buffers + PSOs stay live to the release tail
+                              base_src, base_entry : string; base_fm : bool;
+                              twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
+                              qu_per_sb : int; base_gdiv, twin_gdiv : int) : MetalTensorRaceResult {
+    var res = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let kdim = 3072
     let ndim = 4096
     let nsb = kdim / 256
     let nblk = ndim * nsb
     var err = ""
-    var base_pso = pipeline_from_source(dev, metal_kq_gemv_iq2xxs_msl, metal_kq_gemv_iq2xxs_msl_entry, metal_kq_gemv_iq2xxs_msl_fastmath, err)
+    var base_pso = pipeline_from_source(dev, base_src, base_entry, base_fm, err)
     if (base_pso == null) {
         res.note = "base pso: {err}"
         return res
     }
-    var twin_pso = pipeline_from_source(dev, metal_kq_gemv_iq2xxs_f4_msl, metal_kq_gemv_iq2xxs_f4_msl_entry, metal_kq_gemv_iq2xxs_f4_msl_fastmath, err)
+    var twin_pso = pipeline_from_source(dev, twin_src, twin_entry, twin_fm, err)
     if (twin_pso == null) {
         res.winner = "simdgroup"
         res.note = "twin pso: {err}"
@@ -4747,8 +4774,8 @@ def private race_gemv_iq2xxs_f4(dev : MetalDevice?; queue : MetalCommandQueue?) 
         return res
     }
     var qplane : array<uint>
-    qplane |> resize(nblk * 16)
-    for (i in range(nblk * 16)) {
+    qplane |> resize(nblk * qu_per_sb)
+    for (i in range(nblk * qu_per_sb)) {
         qplane[i] = uint(i) * 2654435761u
     }
     var splane : array<uint8>
@@ -4763,7 +4790,7 @@ def private race_gemv_iq2xxs_f4(dev : MetalDevice?; queue : MetalCommandQueue?) 
         }
     }
     var xa <- race_x_f32(kdim)
-    var bq = race_buf(dev, uint64(nblk * 64), unsafe(addr<void?>(qplane[0])))
+    var bq = race_buf(dev, uint64(nblk * qu_per_sb * 4), unsafe(addr<void?>(qplane[0])))
     var bs = race_buf(dev, uint64(nblk * 18), unsafe(addr<void?>(splane[0])))
     var bxa = race_buf(dev, uint64(kdim * 4), unsafe(addr<void?>(xa[0])))
     var by_base = race_buf(dev, uint64(ndim * 4), null)
@@ -4771,7 +4798,6 @@ def private race_gemv_iq2xxs_f4(dev : MetalDevice?; queue : MetalCommandQueue?) 
     var bn = race_uniform_u32(dev, uint(kdim))
     var bd = race_uniform_u32(dev, uint(ndim))
     let doff = uint64(nblk * 16)
-    let grid = uint3(uint(ndim / 4), 1u, 1u)
     let tg = uint3(64u, 1u, 1u)
     race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
         kn_pipeline(enc, base_pso)
@@ -4782,10 +4808,10 @@ def private race_gemv_iq2xxs_f4(dev : MetalDevice?; queue : MetalCommandQueue?) 
         kn_buffer(enc, by_base, 0ul, 4)
         kn_buffer(enc, bn, 0ul, 5)
         kn_buffer(enc, bd, 0ul, 6)
-        kn_dispatch(enc, grid, tg)
+        kn_dispatch(enc, uint3(uint(ndim / base_gdiv), 1u, 1u), tg)
     }, $(enc) {
         kn_pipeline(enc, twin_pso)
-        kn_tgmem(enc, metal_kq_gemv_iq2xxs_f4_msl_tgmem, 0)
+        kn_tgmem(enc, twin_tgmem, 0)
         kn_buffer(enc, bs, doff, 0)
         kn_buffer(enc, bs, 0ul, 1)
         kn_buffer(enc, bq, 0ul, 2)
@@ -4793,7 +4819,7 @@ def private race_gemv_iq2xxs_f4(dev : MetalDevice?; queue : MetalCommandQueue?) 
         kn_buffer(enc, by_twin, 0ul, 4)
         kn_buffer(enc, bn, 0ul, 5)
         kn_buffer(enc, bd, 0ul, 6)
-        kn_dispatch(enc, grid, tg)
+        kn_dispatch(enc, uint3(uint(ndim / twin_gdiv), 1u, 1u), tg)
     })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
         res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
@@ -8626,8 +8652,64 @@ class MetalKqGemvIq4nl {
 // IQ3_S: w = d*sc*(+-grid byte); the 2 KB grid in threadgroup memory, a
 // 16-lane half-simdgroup per superblock, lane (bu, il) = block bu's half il: one qs word = 4
 // grid words = 16 elems = 4 CONSECUTIVE float4 x loads. Scale plane = the iq4xs/k6 split form.
-[metal_dispatch(name = "enc_kq_iq3s_c", pso = "g_pso_kq_iq3s", tgmem = "metal_kq_gemv_iq3s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
+[metal_dispatch(name = "enc_kq_iq3s_c", pso = "g_pso_kq_iq3s", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq3s {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales + 8 pad, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq3s quant plane, uint view (26 words per superblock: 16 qs, 2 qh, 8 signs)
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="metal_kq_gemv_iq3s_msl")]
+    def metal_kq_gemv_iq3s {
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let yb4 = ib * 64u + it * 8u
+            var yv : float4[8]
+            for [unroll_full] (i in range(8)) {
+                yv[i] = x[yb4 + uint(i)]
+            }
+            for [unroll_full] (r in range(2)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                let qh = (kqu[blk * 26u + 16u + it / 4u] >> ((it % 4u) * 8u)) & 255u
+                let sgw = kqu[blk * 26u + 18u + it]
+                var accv = float4(0.0)
+                for [unroll_full] (h in range(2)) {
+                    let qsw = kqu[blk * 26u + it * 2u + uint(h)]
+                    for [unroll_full] (k in range(4)) {
+                        let b3 = uint(h) * 4u + uint(k)
+                        let idx = ((qsw >> (8u * uint(k))) & 255u) | ((qh << (8u - b3)) & 256u)
+                        let nib = (sgw >> ((b3 / 2u) * 8u + (b3 % 2u) * 4u)) & 15u
+                        let sw = iq3s_sw(iq3s_gw(int(idx)), nib)
+                        accv += yv[h * 4 + k] * float4(iq3s_sx(sw, 0u), iq3s_sx(sw, 1u), iq3s_sx(sw, 2u), iq3s_sx(sw, 3u))
+                    }
+                }
+                let sc = float(((int(kscb[blk * 16u + it]) & 255) ^ 128) - 128)
+                sumf[r] += float(kdh[blk]) * sc * (accv.x + accv.y + accv.z + accv.w)
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
+
+// The f4-slab twin (the shipped pre-d1 form verbatim) - crowns "kq_gemv_iq3s_f4" where the
+// box race prefers it (M5-class); M1/M4-class regress on the slab and keep the d1 base.
+[metal_dispatch(name = "enc_kq_iq3s_f4_c", pso = "g_pso_kq_iq3s_f4", tgmem = "metal_kq_gemv_iq3s_f4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
+class MetalKqGemvIq3sF4 {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales + 8 pad, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq3s quant plane, uint view (26 words per superblock: 16 qs, 2 qh, 8 signs)
@@ -8637,8 +8719,8 @@ class MetalKqGemvIq3s {
     @uniform @binding = 6 ddim : uint
     @workgroup gridf : float4[512]   // magnitudes pre-expanded at stage time: the inner loop reads one float4 and flips signs, no byte extracts (the best of the eight raced forms, the reference exe's geometry included)
 
-    [metal_kernel(name="metal_kq_gemv_iq3s_msl")]
-    def metal_kq_gemv_iq3s {
+    [metal_kernel(name="metal_kq_gemv_iq3s_f4_msl")]
+    def metal_kq_gemv_iq3s_f4 {
         let lid = gl_LocalInvocationID.x
         for [unroll_full] (k in range(8)) {
             let gi = lid + uint(k) * 64u
@@ -8949,8 +9031,63 @@ class MetalKqGemvIq2xxsF4 {
 // IQ3_XXS: the iq3s GEMV shape verbatim over the 24-word rows - the 1 KB halved grid as a
 // float4 magnitude slab, signs from the block's aux32 through the parity helper (no table),
 // the same (2ls+1)-strip x halved-d fold. 4 rows per simdgroup, dispatch rows/8.
-[metal_dispatch(name = "enc_kq_iq3xxs_c", pso = "g_pso_kq_iq3xxs", tgmem = "metal_kq_gemv_iq3xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
+[metal_dispatch(name = "enc_kq_iq3xxs_c", pso = "g_pso_kq_iq3xxs", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq3xxs {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 sub-scale bytes (2ls+1) + 8 pad, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq3xxs quant plane, uint view (24 words per superblock: 16 qs, 8 aux)
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="metal_kq_gemv_iq3xxs_msl")]
+    def metal_kq_gemv_iq3xxs {
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let yb4 = ib * 64u + it * 8u
+            var yv : float4[8]
+            for [unroll_full] (i in range(8)) {
+                yv[i] = x[yb4 + uint(i)]
+            }
+            for [unroll_full] (r in range(2)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                let aux = kqu[blk * 24u + 16u + it]
+                var accv = float4(0.0)
+                for [unroll_full] (h in range(2)) {
+                    let qsw = kqu[blk * 24u + it * 2u + uint(h)]
+                    for [unroll_full] (k in range(4)) {
+                        let e8 = uint(h) * 2u + uint(k) / 2u
+                        let sgb = ksign7m((aux >> (7u * e8)) & 127u)
+                        let nib = uint(k) % 2u == 0u ? sgb & 15u : sgb >> 4u
+                        let sw = iq3s_sw(iq3xxs_gw(int((qsw >> (8u * uint(k))) & 255u)), nib)
+                        accv += yv[h * 4 + k] * float4(iq3s_sx(sw, 0u), iq3s_sx(sw, 1u), iq3s_sx(sw, 2u), iq3s_sx(sw, 3u))
+                    }
+                }
+                let sc = float(((int(kscb[blk * 16u + it]) & 255) ^ 128) - 128)
+                sumf[r] += float(kdh[blk]) * sc * (accv.x + accv.y + accv.z + accv.w)
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
+
+// The f4-slab twin (the shipped pre-d1 form verbatim) - crowns "kq_gemv_iq3xxs_f4" where the
+// box race prefers it (M5-class); M1/M4-class regress on the slab and keep the d1 base.
+[metal_dispatch(name = "enc_kq_iq3xxs_f4_c", pso = "g_pso_kq_iq3xxs_f4", tgmem = "metal_kq_gemv_iq3xxs_f4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
+class MetalKqGemvIq3xxsF4 {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 sub-scale bytes (2ls+1) + 8 pad, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq3xxs quant plane, uint view (24 words per superblock: 16 qs, 8 aux)
@@ -8960,8 +9097,8 @@ class MetalKqGemvIq3xxs {
     @uniform @binding = 6 ddim : uint
     @workgroup gridf : float4[256]   // magnitudes pre-expanded at stage time (the iq3s GEMV's winning form)
 
-    [metal_kernel(name="metal_kq_gemv_iq3xxs_msl")]
-    def metal_kq_gemv_iq3xxs {
+    [metal_kernel(name="metal_kq_gemv_iq3xxs_f4_msl")]
+    def metal_kq_gemv_iq3xxs_f4 {
         let lid = gl_LocalInvocationID.x
         for [unroll_full] (k in range(4)) {
             let gi = lid + uint(k) * 64u

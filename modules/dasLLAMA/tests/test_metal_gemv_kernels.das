@@ -23,12 +23,12 @@ require math
 // ===== single-stream kq GEMV (MetalKqGemvK4 / K5 / K5C / K6) =====
 
 def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
-    let fmt = vform == "k4" ? 4 : (vform == "k6" ? 6 : (vform == "iq4xs" ? 44 : (vform == "k3" ? 3 : (vform == "iq3s" ? 33 : (vform == "iq3xxs" ? 34 : (vform == "iq4nl" ? 45 : (vform == "iq2s" ? 23 : (vform == "iq2xs" ? 24 : (vform == "iq2xxs" || vform == "iq2xxsf4" ? 25 : (vform == "k2" ? 2 : 5))))))))))
+    let fmt = vform == "k4" ? 4 : (vform == "k6" ? 6 : (vform == "iq4xs" ? 44 : (vform == "k3" ? 3 : (vform == "iq3s" || vform == "iq3sf4" ? 33 : (vform == "iq3xxs" || vform == "iq3xxsf4" ? 34 : (vform == "iq4nl" ? 45 : (vform == "iq2s" ? 23 : (vform == "iq2xs" ? 24 : (vform == "iq2xxs" || vform == "iq2xxsf4" ? 25 : (vform == "k2" ? 2 : 5))))))))))
     let tag = "kq_gemv_{vform} n={n} d={d}"
     var err : string
-    let src = vform == "iq2xxsf4" ? metal_kq_gemv_iq2xxs_f4_msl : (vform == "iq2xxs" ? metal_kq_gemv_iq2xxs_msl : (vform == "iq2xs" ? metal_kq_gemv_iq2xs_msl : (vform == "iq2s" ? metal_kq_gemv_iq2s_msl : (vform == "k2" ? metal_kq_gemv_k2_msl : (vform == "iq4nl" ? metal_kq_gemv_iq4nl_msl : (vform == "iq3xxs" ? metal_kq_gemv_iq3xxs_msl : (vform == "iq3s" ? metal_kq_gemv_iq3s_msl : (vform == "k3" ? metal_kq_gemv_k3_msl : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl : (vform == "k4" ? metal_kq_gemv_k4_msl : (vform == "k5" ? metal_kq_gemv_k5_msl : (vform == "k5c" ? metal_kq_gemv_k5c_msl : metal_kq_gemv_k6_msl))))))))))))
-    let entry = vform == "iq2xxsf4" ? metal_kq_gemv_iq2xxs_f4_msl_entry : (vform == "iq2xxs" ? metal_kq_gemv_iq2xxs_msl_entry : (vform == "iq2xs" ? metal_kq_gemv_iq2xs_msl_entry : (vform == "iq2s" ? metal_kq_gemv_iq2s_msl_entry : (vform == "k2" ? metal_kq_gemv_k2_msl_entry : (vform == "iq4nl" ? metal_kq_gemv_iq4nl_msl_entry : (vform == "iq3xxs" ? metal_kq_gemv_iq3xxs_msl_entry : (vform == "iq3s" ? metal_kq_gemv_iq3s_msl_entry : (vform == "k3" ? metal_kq_gemv_k3_msl_entry : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl_entry : (vform == "k4" ? metal_kq_gemv_k4_msl_entry : (vform == "k5" ? metal_kq_gemv_k5_msl_entry : (vform == "k5c" ? metal_kq_gemv_k5c_msl_entry : metal_kq_gemv_k6_msl_entry))))))))))))
-    let fm = vform == "iq2xxsf4" ? metal_kq_gemv_iq2xxs_f4_msl_fastmath : (vform == "iq2xxs" ? metal_kq_gemv_iq2xxs_msl_fastmath : (vform == "iq2xs" ? metal_kq_gemv_iq2xs_msl_fastmath : (vform == "iq2s" ? metal_kq_gemv_iq2s_msl_fastmath : (vform == "k2" ? metal_kq_gemv_k2_msl_fastmath : (vform == "iq4nl" ? metal_kq_gemv_iq4nl_msl_fastmath : (vform == "iq3xxs" ? metal_kq_gemv_iq3xxs_msl_fastmath : (vform == "iq3s" ? metal_kq_gemv_iq3s_msl_fastmath : (vform == "k3" ? metal_kq_gemv_k3_msl_fastmath : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl_fastmath : (vform == "k4" ? metal_kq_gemv_k4_msl_fastmath : (vform == "k5" ? metal_kq_gemv_k5_msl_fastmath : (vform == "k5c" ? metal_kq_gemv_k5c_msl_fastmath : metal_kq_gemv_k6_msl_fastmath))))))))))))
+    let src = vform == "iq2xxsf4" ? metal_kq_gemv_iq2xxs_f4_msl : (vform == "iq2xxs" ? metal_kq_gemv_iq2xxs_msl : (vform == "iq2xs" ? metal_kq_gemv_iq2xs_msl : (vform == "iq2s" ? metal_kq_gemv_iq2s_msl : (vform == "k2" ? metal_kq_gemv_k2_msl : (vform == "iq4nl" ? metal_kq_gemv_iq4nl_msl : (vform == "iq3xxsf4" ? metal_kq_gemv_iq3xxs_f4_msl : (vform == "iq3sf4" ? metal_kq_gemv_iq3s_f4_msl : (vform == "iq3xxs" ? metal_kq_gemv_iq3xxs_msl : (vform == "iq3s" ? metal_kq_gemv_iq3s_msl : (vform == "k3" ? metal_kq_gemv_k3_msl : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl : (vform == "k4" ? metal_kq_gemv_k4_msl : (vform == "k5" ? metal_kq_gemv_k5_msl : (vform == "k5c" ? metal_kq_gemv_k5c_msl : metal_kq_gemv_k6_msl))))))))))))))
+    let entry = vform == "iq2xxsf4" ? metal_kq_gemv_iq2xxs_f4_msl_entry : (vform == "iq2xxs" ? metal_kq_gemv_iq2xxs_msl_entry : (vform == "iq2xs" ? metal_kq_gemv_iq2xs_msl_entry : (vform == "iq2s" ? metal_kq_gemv_iq2s_msl_entry : (vform == "k2" ? metal_kq_gemv_k2_msl_entry : (vform == "iq4nl" ? metal_kq_gemv_iq4nl_msl_entry : (vform == "iq3xxsf4" ? metal_kq_gemv_iq3xxs_f4_msl_entry : (vform == "iq3sf4" ? metal_kq_gemv_iq3s_f4_msl_entry : (vform == "iq3xxs" ? metal_kq_gemv_iq3xxs_msl_entry : (vform == "iq3s" ? metal_kq_gemv_iq3s_msl_entry : (vform == "k3" ? metal_kq_gemv_k3_msl_entry : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl_entry : (vform == "k4" ? metal_kq_gemv_k4_msl_entry : (vform == "k5" ? metal_kq_gemv_k5_msl_entry : (vform == "k5c" ? metal_kq_gemv_k5c_msl_entry : metal_kq_gemv_k6_msl_entry))))))))))))))
+    let fm = vform == "iq2xxsf4" ? metal_kq_gemv_iq2xxs_f4_msl_fastmath : (vform == "iq2xxs" ? metal_kq_gemv_iq2xxs_msl_fastmath : (vform == "iq2xs" ? metal_kq_gemv_iq2xs_msl_fastmath : (vform == "iq2s" ? metal_kq_gemv_iq2s_msl_fastmath : (vform == "k2" ? metal_kq_gemv_k2_msl_fastmath : (vform == "iq4nl" ? metal_kq_gemv_iq4nl_msl_fastmath : (vform == "iq3xxsf4" ? metal_kq_gemv_iq3xxs_f4_msl_fastmath : (vform == "iq3sf4" ? metal_kq_gemv_iq3s_f4_msl_fastmath : (vform == "iq3xxs" ? metal_kq_gemv_iq3xxs_msl_fastmath : (vform == "iq3s" ? metal_kq_gemv_iq3s_msl_fastmath : (vform == "k3" ? metal_kq_gemv_k3_msl_fastmath : (vform == "iq4xs" ? metal_kq_gemv_iq4xs_msl_fastmath : (vform == "k4" ? metal_kq_gemv_k4_msl_fastmath : (vform == "k5" ? metal_kq_gemv_k5_msl_fastmath : (vform == "k5c" ? metal_kq_gemv_k5c_msl_fastmath : metal_kq_gemv_k6_msl_fastmath))))))))))))))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
@@ -66,17 +66,17 @@ def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
     var by = buf_fill(dev, d, -1000.0)
     var bn = buf_u32(dev, uint(n))
     var bd = buf_u32(dev, uint(d))
-    let groups = vform == "k5c" ? (d + 1) / 2 : (vform == "iq3s" || vform == "iq3xxs" || vform == "k2" ? (d + 7) / 8 : (d + 3) / 4)
+    let groups = vform == "k5c" ? (d + 1) / 2 : (vform == "iq3sf4" || vform == "iq3xxsf4" || vform == "k2" ? (d + 7) / 8 : (d + 3) / 4)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         if (vform == "iq4xs") {
             metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq4xs_msl_tgmem, 0)   // the codebook slab
         }
-        if (vform == "iq3s") {
-            metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq3s_msl_tgmem, 0)   // the grid slab
+        if (vform == "iq3sf4") {
+            metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq3s_f4_msl_tgmem, 0)   // the grid slab
         }
-        if (vform == "iq3xxs") {
-            metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq3xxs_msl_tgmem, 0)   // the halved-grid slab
+        if (vform == "iq3xxsf4") {
+            metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq3xxs_f4_msl_tgmem, 0)   // the halved-grid slab
         }
         if (vform == "iq4nl") {
             metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq4nl_msl_tgmem, 0)   // the codebook slab
@@ -747,6 +747,10 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 kq_gemv_gate(t, dev, queue, "iq3s", 512, 30)
                 kq_gemv_gate(t, dev, queue, "iq3xxs", 1280, 11)
                 kq_gemv_gate(t, dev, queue, "iq3xxs", 512, 30)
+                kq_gemv_gate(t, dev, queue, "iq3sf4", 1280, 11)
+                kq_gemv_gate(t, dev, queue, "iq3sf4", 512, 30)
+                kq_gemv_gate(t, dev, queue, "iq3xxsf4", 1280, 11)
+                kq_gemv_gate(t, dev, queue, "iq3xxsf4", 512, 30)
                 kq_gemv_gate(t, dev, queue, "iq4nl", 1280, 11)
                 kq_gemv_gate(t, dev, queue, "iq4nl", 512, 30)
                 kq_gemv_gate(t, dev, queue, "k2", 1280, 11)

@@ -289,6 +289,8 @@ var g_pso_kq_mvb8_iq2xs : MetalComputePipeline?
 var g_pso_kq_mm_b24 : MetalComputePipeline?
 var g_pso_kq_iq2xxs : MetalComputePipeline?
 var g_pso_kq_iq2xxs_f4 : MetalComputePipeline?   //!< the f4-slab twin, compiled only behind its crown
+var g_pso_kq_iq3s_f4 : MetalComputePipeline?     //!< the iq3s f4-slab twin (crown "kq_gemv_iq3s_f4")
+var g_pso_kq_iq3xxs_f4 : MetalComputePipeline?   //!< the iq3xxs f4-slab twin (crown "kq_gemv_iq3xxs_f4")
 var g_pso_kq_mvb2_iq2xxs : MetalComputePipeline?
 var g_pso_kq_mvb4_iq2xxs : MetalComputePipeline?
 var g_pso_kq_mvb8_iq2xxs : MetalComputePipeline?

@@ -5342,9 +5342,17 @@ def private pf_enc_kq_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; w
     } elif (fmt == KqFmt.k3) {
         enc_kq_k3_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
     } elif (fmt == KqFmt.iq3s) {
-        enc_kq_iq3s_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+        if (g_pso_kq_iq3s_f4 != null) {
+            enc_kq_iq3s_f4_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+        } else {
+            enc_kq_iq3s_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+        }
     } elif (fmt == KqFmt.iq3xxs) {
-        enc_kq_iq3xxs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+        if (g_pso_kq_iq3xxs_f4 != null) {
+            enc_kq_iq3xxs_f4_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+        } else {
+            enc_kq_iq3xxs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+        }
     } elif (fmt == KqFmt.iq2s) {
         enc_kq_iq2s_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
     } elif (fmt == KqFmt.iq2xs) {
