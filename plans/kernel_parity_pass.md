@@ -830,5 +830,14 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   Same run, a find: on zen4 the row form beats the panel form for iq2xs at 16 lanes (2194 vs the ladder's panel
   2559 us - 0.91x of the reference instead of 0.78x) where the class gate picks the panel; the forms probe
   (zen4_forms.sh, both forms x five grids x two shapes) decides the gate.
+- 2026-09-01: the width256_mr16 row raced alone on both boxes (post probes, d=32768, tune mode; full tables
+  tmp zen4_post.log / intel_post.log). At 16 lanes every seat of every format sits within ~5% on both boxes -
+  the minted crowns stand at the engine shape. One-thread streamed decode: on Intel 256_mr16 beats the 512
+  gemv for k3 (12214 vs 16462), k5 (18972 vs 21184) and k6 (27321 vs 31723) while its tile loses ~14%, so
+  the gemv's own seat is expected to take it at the next Intel mint; on zen4 it loses everywhere (k3 16193
+  vs 7280). Intel iq2s: ALL seats ~0.90-0.94 of the reference at 16 lanes - the seat is not iq2s's lever.
+- 2026-09-01: Intel k6 one thread, 40 rounds --each, normal mode: 3425, 1989, then steady 1637-1642 us -
+  the slow reads were WARM-UP, steady state is 1.16x of the reference (1882); the ladder's 5-round
+  best 1831 / median 2925 sampled the ramp. The 16-lane arm decides whether the 0.83 row is the same artifact.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
