@@ -780,6 +780,9 @@
     iq2xs 1.24x, iq2xxs 1.20x, iq3xxs 1.36x, iq2s 1.51x, iq3s 1.15x, all five ahead. x86 is untouched
     (zen2 v3: iq3s 1.36x, iq2xs 1.13x, iq2xxs 1.04x, iq2s 1.01x, iq3xxs 1.00x) - its residue stays
     the qs byte loads; the M1 lesson (3 loads against 4 NEON ops per cycle, count both) is in the plan.
+    2026-09-01, x86: the same row-group form measured 1.2-1.5x SLOWER than the panel on zen2 (iq2xs
+    4646 -> 6785 us; llama.cpp's AVX2 insert form does 5320 there) - killed for x86, kept for the sdot
+    lattice; zen4's 0.77-0.88x waits on a port profile (`plans/kernel_parity_pass.md`, queue).
 
 62. **IQ3_S Metal decode: the ~140 GB/s compose ceiling (tg 0.95x).** Eight GEMV forms raced
     at n=2048 d=8192 - gather placement x3, gather deleted, signs deleted, llama.cpp's exact

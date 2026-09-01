@@ -175,6 +175,32 @@ Decode below 1.0: k6 0.69, k5 0.95; at 1.0: k3 1.00, iq3xxs 1.00, iq2s 1.01. Eve
 M1 note: the ladder's reference must be `~/Work/llama.cpp/build/bin/test-backend-ops` (the fork checkout,
 98c4764b6, carries the define); `build-cpu/` does not and ran every core - the ladder now refuses such a binary.
 
+### M1 v3 - the full ladder after the ARM grid landing (2026-09-01, one thread, best of 5 interleaved rounds)
+
+`~/Work/llama.cpp/build/bin/test-backend-ops` (the fork checkout at 98c4764b6, the define in). EVERY row at or
+above parity - the M1 CPU is closed for this pass.
+
+| fmt | decode ours / ref us | ratio | tile ours / ref us | ratio |
+|---|---|---|---|---|
+| q8 | 1059 / 1562 | 1.48 | 214129 / 434961 | 2.03 |
+| k4 | 839 / 1343 | 1.60 | 268955 / 703992 | 2.62 |
+| k5 | 2067 / 2185 | 1.06 | 252434 / 1129322 | 4.47 |
+| k6 | 1777 / 2401 | 1.35 | 401658 / 1243030 | 3.09 |
+| q40 | 863 / 1612 | 1.87 | 276856 / 531679 | 1.92 |
+| q51 | 2075 / 2749 | 1.33 | 453329 / 1436227 | 3.17 |
+| iq4xs | 988 / 1680 | 1.70 | 262229 / 870313 | 3.32 |
+| k3 | 1925 / 2619 | 1.36 | 486461 / 1348956 | 2.77 |
+| iq3s | 4914 / 5680 | 1.16 | 192154 / 2922617 | 15.21 |
+| iq3xxs | 3572 / 4902 | 1.37 | 192186 / 2492096 | 12.97 |
+| iq4nl | 1008 / 1847 | 1.83 | 290154 / 949701 | 3.27 |
+| k2 | 1348 / 1915 | 1.42 | 357321 / 986778 | 2.76 |
+| iq2s | 3259 / 4915 | 1.51 | 255732 / 2516761 | 9.84 |
+| iq2xs | 2635 / 3249 | 1.23 | 255582 / 1669316 | 6.53 |
+| iq2xxs | 2871 / 3435 | 1.20 | 192075 / 1765362 | 9.19 |
+| mx4 | 1271 / 1900 | 1.50 | 331361 / 978109 | 2.95 |
+
+Decode floor k5 1.06x; the grid formats 1.16-1.51x (from 0.51-0.93x before the row-pair decode). Tiles 1.92-15.2x.
+
 ## 3. Research memos (read before touching the kernels)
 
 - `kernel_parity_research_cpu.md` - llama.cpp's CPU vec_dot for the five grid formats + Q2_K,
@@ -246,7 +272,14 @@ stays open.
 1. DONE ARM (2026-09-01, two commits): the row-pair decode under the sdot lattice + the ksigns +-1
    table rows + the whole-u64 grid load - M1 iq2xs 1.24x, iq2xxs 1.20x, iq3xxs 1.36x, iq2s 1.51x,
    iq3s 1.15x (section 2, the LANDED notes). The x86 emission is byte-identical (gated DOT_SDOT).
-2. NEXT x86, the row-QUAD twin for zen4's 0.77-0.88x: four rows x 8 weights per 256-bit vector
+2. DONE-KILLED x86 (2026-09-01): the row-QUAD form measured on zen2, us, panel -> rows: iq2xs 4646 ->
+   6785, iq2s 5056 -> 6826, iq3s 7612 -> 11576, iq3xxs 6589 -> 7995, iq2xxs 5144 -> 7142 (TEST 90 ok, the
+   form is correct). llama.cpp's own AVX2 grid path IS this insert form and runs iq2xs at 5320 there - so
+   the insert shape loses to the panel on zen2 AND ours is slower than theirs in the same shape (the sign
+   table's four scalar loads + inserts where theirs shuffles; the per-row index math). It cannot close
+   zen4's 0.77-0.88x by being the reference's shape; the emitter keeps it for the sdot lattice only
+   (`grid_rows_path`). zen4 needs a profile first (which port saturates) - item 3.
+   The plan that was: four rows x 8 weights per 256-bit vector
    (four u64 grid loads, vmovq/vpinsrq/vinserti128), the activation's 8 bytes broadcast per lane
    (vpbroadcastq) and SIGNED per row by `vpsignb` against the same +-1 table rows - maddubs needs
    its unsigned operand, so on x86 the signs go on the activation copy, which the 4-rows-per-vector
@@ -254,6 +287,8 @@ stays open.
    fold. The zen2 `gather="reg"` that measured 1.85x slower was insertelement PER DWORD with GPR
    sign math; this is four qword inserts and no sign arithmetic. Measure on zen2 first (all five
    at 1.00-1.36x there - it must not lose), then zen4 (rent) where the gap lives.
+3. NEXT x86 zen4 grid 0.77-0.88x: rent the c7a again with `perf stat` (uops per port, store-forwarding
+   stalls) on iq2xs/iq3xxs decode against the reference exe's same shape - one proven fact before any form.
 
 CPU decode on ARM (the M1 ladder): iq2xs 0.51x, iq2xxs 0.57x, iq3xxs 0.72x, iq3s 0.93x. The memo
 (`kernel_parity_research_arm.md`): the sdot count is at parity (2 per 32 weights per row, both sides);
