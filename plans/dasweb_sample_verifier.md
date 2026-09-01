@@ -195,6 +195,11 @@ with the just-built binary and catches sample rot per-PR. Currently tier 1 runs 
 - **The browser leg's `node --test` runs in no per-PR lane** - only
   `nightly_playground.yml`, so a case the checklist demands is first executed the night after
   merge. Ruled: CI catches it, no per-PR lane added.
+- **NEEDS RULING: the woodpecker damper's two past-the-defaults gates.** One bullet arms a
+  round "only when it materially rewrote logic", the next keeps going "only where failure is
+  silent". A caller who materially rewrote logic in a loud-failure area gets opposite answers.
+  AND or OR is a policy call about how many rounds an arc pays for - Boris's to make, then
+  the two bullets collapse into one.
 - **The woodpecker damper is stated in two places.** `skills/internal/woodpecker.md` says
   "this file owns only the budget", but `skills/internal/make_pr.md` step 0a3 restates it in
   spirit ("Every arc, trivial or not; non-trivial arcs re-round on the fixed tip"). One copy
