@@ -5,9 +5,6 @@ doc: `../ARCHITECTURE_MEASUREMENT.md` (the benchmark rig: `#one-benchmark-rig`).
 `../followup_vulkan.md` for anything about the Vulkan backend, `../PERF_LEDGER.md` for any
 other performance followup, `../followup_general.md` for everything else.
 
-**Routed from `../REVIEW.md`: a timing rig - a script whose output is a measured wall or rate -
-wherever the diff puts it, applies this list together with `../REVIEW.md`.**
-
 **A diff that adds or changes an instrument whose timed body runs a forward pass through a
 pipeline the dasLLAMA engine selected also calls `tune_gate()`
 (`../performance/profile_common.das`) before that instrument's first timed rep.** A pipeline
@@ -67,10 +64,10 @@ corpus, or to the pinned reference build - `DEFAULT_REF_SHA` in `setup_lcpp_ref.
 targets it builds, or a patch it applies - moves the measured quantity.
 
 **A diff that adds or moves a row in `../harness/tune_kernels.das`'s bench list keeps
-`dot_q8q8_laneq4x4` last.** That bench pins the repack backend for the rest of the process,
-so a row after it races against the pinned backend instead of the one it selects.
+`dot_q8q8_laneq4x4` last.** That bench pins the repack backend for the rest of the process, so
+a row after it is timed against the pinned backend instead of the backend it would select.
 
-**A timing instrument this checklist governs whose run can end with zero result rows exits
-non-zero when it does - wrong flags, failed load, a device that declines.** A run that matched
-nothing and reported success leaves a sidecar or a record untouched and a caller none the
-wiser.
+**A diff that adds or changes a timing instrument makes it exit non-zero on a run that ends
+with zero result rows - wrong flags, failed load, a device that declines.** A run that matched
+nothing and reported success leaves a sidecar or a record untouched, and its caller cannot
+tell.
