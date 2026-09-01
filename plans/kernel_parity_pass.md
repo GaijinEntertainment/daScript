@@ -294,6 +294,11 @@ and iq3xxs; the default verified on the box - TEST 90/90, iq2xxs 2473-2496 alone
 1.48x), iq3xxs 4390 / 4531 (1.16x / 1.35x), iq2s 3965-3991 / 4280 (0.93 / 0.88), iq2xs 3927-3973 / 3926 (1.10 /
 1.17), iq3s 5081-5182 / 7254 (1.30 / 1.05), k6 at 16 lanes 5316 in normal mode against 3419-3489 for the same
 stamped seat in the tune-mode race - a mode difference, not the kernel (the back-to-back probe runs next).
+The probe: same 16 lanes, same 128 x 256-row split, same seat - 5270 us when its calls run back to back (normal
+mode), 3284-3448 when interleaved with ~60 ms of scalar rows (tune mode), three times over. That is the shape of
+Intel's AVX-512 frequency license (sustained 512-bit work drops the core clock; the reference's q6_K runs 256-bit);
+the seat-alone runs (each vector seat back to back at 16 lanes) decide it, and the mint's tile race (bursty per
+seat) may have crowned width 512 where the sustained gemv wants 256 - the gemv-own-crown item once more.
 
 
 ### M4 Pro v1 - first tables (2026-09-01, Apple M4 Pro 10P+4E, class arm-i8mm, on the arm-neon PROFILE through the chain - no arm-i8mm profile existed; TEST 90/90)
@@ -615,6 +620,10 @@ stays open.
    plus panel plus x, twice per core, against a 32 KB L1 is the suspect (8-lane run next); the zen4 grid
    residue at the engine shape is iq3s 0.78, iq2xs 0.86, iq3xxs 0.90 - the panel form's compute, kernel
    work on the vnni512 lattice (a session of its own).
+   zen4 at 8 lanes (one per core, d=32768; reference at 8 threads): iq2s 6398 (4236: 0.66), iq2xxs 2852
+   (4206: 1.47x), iq2xs 4582 (3975: 0.87), iq3s 7668 (6410: 0.84), k6 5013 (4878: 0.97, 77 GB/s = the
+   box's DRAM). iq2s scales at 56% of its one-thread rate (147 MB in 6.4 ms = 23 GB/s, not bandwidth)
+   where iq2xxs scales at 96% - the 8 KB grid table's L1 pressure is the suspect.
    Round four, the row form with the COLUMN signs on zen4 (one thread, engine phase; reference in
    parentheses): iq2s 3541-3578 (3757: 1.05x), iq2xxs 2737-2771 (3922: 1.42x, from 0.89 with the table),
    iq3xxs 4234-4322 (5243: 1.22x, from 0.56 with the table; the panel 0.88), iq3s 6238-6309 (6105: 0.97),
