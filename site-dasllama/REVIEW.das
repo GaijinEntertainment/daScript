@@ -44,13 +44,38 @@ def private check_dl_names_come_from_shared_sheet {
             files |> push("site-dasllama/files/{name}")
         }
     }
-    for (path in files) {
-        let text = fread(path)
-        var inscope used <- prefixed_tokens(text, DL_PREFIX)
-        for (name in keys(used)) {
-            continue if (key_exists(defined, name))
-            gate_finding(path, find_line(text, name),
-                "uses {name}, which {SHARED_SHEET} does not define - dl-* names are that sheet's; a style of this directory's own takes the dio- prefix")
+    gate_prefixed_names_defined(files, DL_PREFIX, defined, SHARED_SHEET)
+}
+
+// three censuses know the served pages - the deploy's copy lines, build_news.py's sitemap
+// list and test_metadata.py's page list - and a page in none of them deploys unlisted,
+// uncrawled and unchecked
+let private PAGES_YML = ".github/workflows/pages.yml"
+let private BUILD_NEWS = "site-dasllama/build_news.py"
+let private TEST_METADATA = "site-dasllama/test_metadata.py"
+
+def private check_page_census {
+    var inscope staged <- shell_cp_sources(fread(PAGES_YML), "_site_dasllama/")
+    var inscope staged_set : table<string>
+    for (src in staged) {
+        staged_set |> insert(src)
+    }
+    let news = fread(BUILD_NEWS)
+    let meta = fread(TEST_METADATA)
+    dir("site-dasllama") $(name) {
+        let served = name |> ends_with(".html") || name |> ends_with(".xml") || name |> ends_with(".txt")
+        return if (!served)
+        let path = "site-dasllama/{name}"
+        if (!key_exists(staged_set, path)) {
+            gate_finding(path, "has no copy line in {PAGES_YML}'s dasllama.io deploy step - the step names each top-level file, so an unlisted one never reaches the site")
+        }
+        return if (!(name |> ends_with(".html")))
+        // index.html is the sitemap's root entry, spelled as the empty path
+        if (name != "index.html" && find(news, "'{name}'") < 0) {
+            gate_finding(path, "is not in {BUILD_NEWS}'s sitemap page list - the page deploys uncrawled")
+        }
+        if (find(meta, "\"{name}\"") < 0) {
+            gate_finding(path, "is not in {TEST_METADATA}'s page list - the page deploys unchecked")
         }
     }
 }
@@ -62,6 +87,7 @@ def main() : int {
         return 2
     }
     check_dl_names_come_from_shared_sheet()
+    check_page_census()
     gate_web_third_party(["site-dasllama"], SKIP_DIRS, ALLOWED_HOSTS)
     return gate_verdict("site-dasllama")
 }

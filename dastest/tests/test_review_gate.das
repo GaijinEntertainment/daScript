@@ -515,3 +515,32 @@ def test_markdown_table_rows(t : T?) {
     var inscope none <- markdown_table_rows(md, "ABSENT")
     t |> equal(0, length(none))
 }
+
+[test]
+def test_html_ids(t : T?) {
+    var inscope ids <- html_ids("<span id=\"dl-hero-x\">6</span> <div data-id=\"not-one\" uid=\"nor-this\"><b id=\"plain\">")
+    t |> equal(2, length(ids), "only a bare id attribute counts")
+    t |> success(key_exists(ids, "dl-hero-x"))
+    t |> success(key_exists(ids, "plain"))
+}
+
+[test]
+def test_html_code_blocks(t : T?) {
+    let page = "<pre><code class=\"language-daslang\">if (a &lt; b &amp;&amp; c) \{ \}</code></pre>\n<a href=\"/playground/\">try</a>\n<code class=\"language-js\">x</code>\n<code class=\"language-daslang\" data-playground=\"none\">second</code>"
+    var inscope blocks <- html_code_blocks(page, "language-daslang")
+    t |> equal(2, length(blocks), "only blocks of the named class")
+    t |> equal("if (a < b && c) \{ \}", blocks[0].source, "entities decoded")
+    t |> success(find(slice(page, blocks[0].after), "playground") >= 0, "the offset lands after the block's close tag")
+    t |> equal("second", blocks[1].source, "a block with an extra attribute is still a block")
+    t |> success(find(blocks[1].tag, "data-playground=\"none\"") >= 0, "the opening tag is carried whole")
+}
+
+[test]
+def test_markdown_fences(t : T?) {
+    let md = "prose\n```das\nlet x = 1\n```\nmore\n```dasx\nnot this\n```\n```das\nlet y = 2\n```\n"
+    var inscope fences <- markdown_fences(md, "das")
+    t |> equal(2, length(fences), "a longer language tag is another language")
+    t |> equal("let x = 1\n", fences[0].source)
+    t |> equal("let y = 2\n", fences[1].source)
+    t |> success(find(slice(md, fences[0].after), "more") >= 0, "the offset lands after the closing fence")
+}

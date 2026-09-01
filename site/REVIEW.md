@@ -54,13 +54,11 @@ render the claim from the record or drop it.**
 dasProfile record.** Provenance - the `das_capture` and `ext_capture` stamps - travels in the
 dasProfile files themselves.
 
-**A code sample embedded in a page shown as a partial snippet or as pseudo-code is a defect -
-show every embedded sample as a full program that compiles and runs with the current
-toolchain.**
-
-**A code sample embedded in a page without a "try it on playground" link is a defect.**
-
-**A daslang sample embedded in a page not written in gen2 is a defect.**
+**Weakening `REVIEW.das`'s embedded-sample check - the gate that compiles every
+`language-daslang` block of a page outside `blog/` with the running binary, requires an
+exported `main` in each, and requires a playground link in the block's section - is a
+defect.** The compile settles gen2: the toolchain accepts no other syntax. A block marked
+`data-playground="none"` is compiled and owes no link; `README.md` ledgers each such block.
 
 **A PR whose diff changes `playground/` (this folder) or `examples/_interp.html` (this folder)
 states, in the PR body, a run of the WASM-staged Playwright suite (`tests/playground/`, this
@@ -96,9 +94,9 @@ visitor sends that host and whether the host sets cookies.**
 selector body defined in BOTH `files/dasllama-table.css` and `dasllama.html`'s inline
 `<style>` - is a defect.**
 
-**A diff that adds or moves a `dl-*` selector defines it in `dasllama.html` when
-`dasllama.html`'s markup uses it, and in `files/dasllama-table.css` when a page under
-`site-dasllama/` (repo root - the dasllama.io site) uses it.** Markup counts what
-`files/dasllama.js` injects.
+**Weakening `REVIEW.das`'s `dl-*` census - the gate that reports a `dl-*` name `dasllama.html`
+or `files/dasllama.js` uses that neither the page's inline `<style>` nor
+`files/dasllama-table.css` defines - is a defect.** The `site-dasllama/` (repo root) pages
+carry the same census against the shared sheet in their own gate.
 
 **An entry in `_news/*.md` for something not shipped at publish time is a defect.**

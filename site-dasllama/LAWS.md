@@ -43,3 +43,9 @@ compacted, or cited as rules.
   went with its neighbour; the `dio-` tail hung off a ban the gate replaced and went with
   it; "today" became "before the change" in the weakening rule, same word in all four
   served-tree checklists.
+
+- **2026-09-01** (`REVIEW.md`, round 2 rulings, "all as suggested"): the files/ staging rule
+  could never fire (the step copies files/ whole) and a new page was registered nowhere;
+  both became one `REVIEW.das` census over the deploy copy lines, the sitemap list and the
+  metadata test's page list. The comparative-claim tail and the "not raced" metaphor took
+  their plain forms.

@@ -18,11 +18,10 @@ and date and what was measured, or the word placeholder. A number with none of t
 defect.**
 
 **A comparative superiority claim made in words rather than as side-by-side figures, on any
-page, is a defect.** Figures copied from a checked-in record may stand side by side, ours
-and another engine's - the arithmetic a reader does is not the page's claim.
+page, is a defect** - the arithmetic a reader does over two figures is not the page's claim.
 
-**Copy or rendering that lets a row with no reference engine's figure imply parity with a
-reference engine is a defect - an empty ratio cell reads "not raced".**
+**Copy or rendering that lets a row with no reference engine's figure imply parity is a
+defect - an empty ratio cell means the comparison was never run.**
 
 **A diff that makes `REVIEW.das`'s cookie-and-host check read fewer files, or report less
 than it did before the change with the same `ALLOWED_HOSTS`, is a defect** - the gate bans
@@ -53,6 +52,8 @@ quoted-attribute values, `Number(...)` for anything numeric, and `safeApiHref()`
 **Weakening `test_metadata.py`'s per-page assertions - the test that fails a page without a
 `<title>`, a meta description, the OpenGraph tags, or the Atom `<link>` - is a defect.**
 
-**A diff that adds a file under `files/` also verifies the dasllama.io deploy step
-(`.github/workflows/pages.yml`, "Stage dasllama.io for deployment") stages it, in the same
-change.** Local preview serves the tree directly, so a staging miss is invisible until deploy.
+**Weakening `REVIEW.das`'s page census - the gate that reports a top-level served file with
+no copy line in the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root), or a
+page missing from `build_news.py`'s sitemap list or `test_metadata.py`'s page list - is a
+defect.** Local preview serves the tree directly, so every one of those misses is invisible
+until deploy.

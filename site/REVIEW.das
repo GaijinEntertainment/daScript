@@ -219,6 +219,98 @@ def private check_bench_cell_parity(record_path, results_path : string) {
     }
 }
 
+// the dl-* names dasllama.html and its script use are defined in the page's inline <style>
+// or in the shared sheet; one defined in neither renders unstyled
+def private check_dl_names_are_defined {
+    let html = fread(PAGE_HTML)
+    var defined <- prefixed_tokens(fread(TABLE_CSS), "dl-")
+    let s0 = html |> find("<style>")
+    let s1 = html |> find("</style>")
+    if (s0 >= 0 && s1 > s0) {
+        var inscope inline_defined <- prefixed_tokens(slice(html, s0, s1), "dl-")
+        for (name in keys(inline_defined)) {
+            defined |> insert(name)
+        }
+    }
+    gate_prefixed_names_defined([PAGE_HTML, "site/files/dasllama.js"], "dl-", defined, "{PAGE_HTML}'s inline style or {TABLE_CSS}")
+}
+
+// every sample a page shows is a full program the current toolchain compiles, with a way
+// into the playground beside it; the gate compiles each block with the binary running it.
+// A blog post is prose, not a page here; a block marked data-playground="none" is compiled
+// but owes no link (the ledgered case: a sample of an engine the wasm build does not carry)
+def private check_embedded_samples {
+    let argv <- get_command_line_arguments()
+    let self_binary = argv[0]
+    var pages : array<string>
+    dir("site") $(name) {
+        if (name |> ends_with(".html")) {
+            pages |> push("site/{name}")
+        }
+    }
+    dir("site/_news") $(name) {
+        if (name |> ends_with(".md")) {
+            pages |> push("site/_news/{name}")
+        }
+    }
+    for (page in pages) {
+        let text = fread(page)
+        let is_post = page |> ends_with(".md")
+        var inscope blocks <- is_post ? markdown_fences(text, "daslang") : html_code_blocks(text, "language-daslang")
+        var k = 0
+        for (blk in blocks) {
+            k++
+            let line = find_line(text, slice(blk.source, 0, min(40, length(blk.source))))
+            if (find(blk.source, "[export]") < 0 || find(blk.source, "def main") < 0) {
+                gate_finding(page, line, "sample {k} is not a full program - no exported main; show every embedded sample as a program that compiles and runs")
+            }
+            let tmp_r = create_temp_file_result("site_sample", ".das")
+            if (!(tmp_r is value)) {
+                gate_finding(page, line, "sample {k}: could not create a temp file to compile it")
+                continue
+            }
+            let tmp = unsafe(tmp_r.value)
+            fwrite(tmp, blk.source)
+            var output = ""
+            let rc = unsafe(popen_argv([self_binary, "-compile-only", tmp], 0.0) $(f) {
+                if (f != null) {
+                    output = fread(f)
+                }
+            })
+            remove(tmp)
+            if (rc != 0) {
+                let first_error = find_first_error_line(output)
+                gate_finding(page, line, "sample {k} does not compile with the current toolchain: {first_error}")
+            }
+            // the link belongs beside the sample: in the page section that holds the block, or
+            // anywhere in a post, which has no sections
+            var linked = false
+            peek_data(text) $(d) {
+                var lo = 0
+                var hi = length(d)
+                if (!is_post) {
+                    let sec = rfind(d, "<section", blk.at)
+                    let sec_end = find(d, "</section>", blk.after)
+                    lo = max(sec, 0)
+                    hi = sec_end < 0 ? length(d) : sec_end
+                }
+                linked = find(slice(d, lo, hi), "playground") >= 0
+            }
+            let opted_out = !is_post && find(blk.tag, "data-playground=\"none\"") >= 0
+            if (!linked && !opted_out) {
+                gate_finding(page, line, "sample {k} has no playground link beside it - every embedded sample links to the playground")
+            }
+        }
+    }
+}
+
+def private find_first_error_line(output : string) : string {
+    for (raw in split(output, "\n")) {
+        return strip(raw) if (find(raw, "error") >= 0)
+    }
+    return "(no error line captured)"
+}
+
 [export]
 def main() : int {
     if (!fexist(TABLE_CSS)) {
@@ -226,6 +318,8 @@ def main() : int {
         return 2
     }
     check_dl_selector_parity()
+    check_dl_names_are_defined()
+    check_embedded_samples()
     check_published_records_no_home_paths()
     check_record_receipts()
     check_bench_cell_parity("site/files/performance_bench.json", "benchmarks/sql/results.md")

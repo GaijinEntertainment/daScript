@@ -618,6 +618,110 @@ def private is_token_byte(b : int) : bool {
     return is_alnum(b) || b == '_' || b == '-'
 }
 
+//! Every `id="..."` value in markup. A class census subtracts these: an element id shares
+//! the class namespace in a stylesheet's eyes but is a script hook, not a style.
+def html_ids(text : string) : table<string> {
+    var out : table<string>
+    peek_data(text) $(d) {
+        let n = length(d)
+        var i = 0
+        while (i < n) {
+            let at = find(d, "id=\"", i)
+            break if (at < 0)
+            // `data-id="` or `uuid="` carry the same four bytes; only a bare attribute counts
+            if (at > 0 && is_token_byte(int(d[at - 1]))) {
+                i = at + 4
+                continue
+            }
+            var e = at + 4
+            while (e < n && int(d[e]) != '"') {
+                e++
+            }
+            out |> insert(slice(d, at + 4, e))
+            i = e + 1
+        }
+    }
+    return <- out
+}
+
+//! Prefix census: every `prefix`-token a file in `files` uses that `defined` does not name is
+//! a finding, the element ids declared across `files` left out. The stylesheet that owns the prefix decides
+//! `defined`; `what_defines` names it in the finding.
+def gate_prefixed_names_defined(files : array<string>; prefix : string; defined : table<string>; what_defines : string) {
+    // a script addresses an id the markup declares, so the ids of every file in the set are
+    // subtracted from every file's census
+    var ids : table<string>
+    for (path in files) {
+        var inscope file_ids <- html_ids(fread(path))
+        for (id in keys(file_ids)) {
+            ids |> insert(id)
+        }
+    }
+    for (path in files) {
+        let text = fread(path)
+        var inscope used <- prefixed_tokens(text, prefix)
+        for (name in keys(used)) {
+            continue if (key_exists(defined, name) || key_exists(ids, name))
+            gate_finding(path, find_line(text, name),
+                "uses {name}, which {what_defines} does not define - a {prefix}* name is that stylesheet's; an element renders unstyled under a name it does not know")
+        }
+    }
+}
+
+//! Every `<code class="<cls>" ...>` block in markup, in order, HTML entities decoded - the
+//! source a page shows. Each entry carries the block's source, its whole opening tag (so a
+//! caller can read a `data-*` attribute on it), and the byte offsets of that tag and of the
+//! end of its `</code>`.
+def html_code_blocks(text : string; cls : string) : array<tuple<source : string; tag : string; at : int; after : int>> {
+    var out : array<tuple<source : string; tag : string; at : int; after : int>>
+    let opener = "<code class=\"{cls}\""
+    peek_data(text) $(d) {
+        var i = 0
+        while (true) {
+            let at = find(d, opener, i)
+            break if (at < 0)
+            let tag_end = find(d, ">", at)
+            break if (tag_end < 0)
+            let close = find(d, "</code>", tag_end)
+            break if (close < 0)
+            let decoded = replace_multiple(slice(d, tag_end + 1, close), [(text = "&lt;", replacement = "<"),
+                (text = "&gt;", replacement = ">"), (text = "&quot;", replacement = "\""), (text = "&#39;", replacement = "'"),
+                (text = "&nbsp;", replacement = " "), (text = "&amp;", replacement = "&")])
+            out |> push((source = decoded, tag = slice(d, at, tag_end + 1), at = at, after = close + length("</code>")))
+            i = close + 1
+        }
+    }
+    return <- out
+}
+
+//! Every fenced code block of language `lang` in markdown, in order - the lines between a
+//! "```<lang>" line and the next "```" line. Each entry carries the block's source, its
+//! opening fence line as `tag`, and the byte offsets of that fence and of the end of the
+//! closing one - the shape [[html_code_blocks]] returns, so one caller reads both.
+def markdown_fences(text : string; lang : string) : array<tuple<source : string; tag : string; at : int; after : int>> {
+    var out : array<tuple<source : string; tag : string; at : int; after : int>>
+    let opener = "```{lang}"
+    peek_data(text) $(d) {
+        var i = 0
+        while (true) {
+            let at = find(d, opener, i)
+            break if (at < 0)
+            let line_end = find(d, "\n", at)
+            break if (line_end < 0)
+            // the opener must be the whole fence line: "```das" is not "```dasx"
+            if (strip(slice(d, at + 3, line_end)) != lang) {
+                i = line_end + 1
+                continue
+            }
+            let close = find(d, "\n```", line_end)
+            break if (close < 0)
+            out |> push((source = slice(d, line_end + 1, close + 1), tag = slice(d, at, line_end), at = at, after = close + 4))
+            i = close + 4
+        }
+    }
+    return <- out
+}
+
 //! The rows of the first markdown pipe table under the `## <section>` heading: one entry
 //! per body row, each the cell strings in column order with surrounding spaces and any
 //! backticks removed. The header row comes first; the `|---|` alignment row is dropped.
