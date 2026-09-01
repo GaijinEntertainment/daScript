@@ -917,5 +917,18 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
 - 2026-09-01: cold-start cost is LLVM, not the das compile: the mint's JIT line reads optimize 60 s + emit+link
   72 s for the whole dasLLAMA module - the lattice bodies are fully unrolled over the 8 blocks (a called block
   loop would cut it); -module-cache trims the das side only.
+- 2026-09-01: the Intel k6 16-lane mode gap VANISHED after the rebase onto master (d76d86fe0 + binary
+  rebuild): normal 3434 us vs tune 3287 / 3119 (was 5323 vs 3698 for the identical 512 body); answers
+  bit-identical across modes (the bench's new '# ysum' line). Two facts changed at once on the pre-rebase
+  tree: the stamped gemv companion carried the TILE's 512_mr16 body although the profile named the 256_mr16
+  seat (the disassembly: outlined 491-insn EVEX body called from the das thunk), and the same 512 body ran
+  1.44x slower in normal mode than as a tune-mode clone - both gone now (normal stamps the VEX 256 seat).
+  Not isolated to a master commit; if the gap ever returns, bisect llvm_tune.das between
+  bbatkin/kernel-parity-pre-rebase and the rebased tip. Ruled out along the way: alignment/arena phase,
+  THP, L3 residency, dispatch grain, thread placement, per-call interop cost, outlined-vs-inlined body.
+- 2026-09-01: zen4 16-lane rows are NOT a mode gap (tune == normal: q8 6715 / 6733, iq4xs 3077 / 3008). Grain
+  matters for balance: at --chunks-per-lane 16 iq4xs 2978 (0.96 of 2856) and q51 4132 (0.99 of 4093) with
+  balanced lanes; q8 stays ~6700 at every grain (0.90) with every lane busy the whole wall - 70 GB/s against
+  the reference's 82 on q8 while our k4 streams at 91 on the same box: memory-level parallelism, not bandwidth.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
