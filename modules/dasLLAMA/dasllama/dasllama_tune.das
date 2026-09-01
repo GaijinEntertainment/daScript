@@ -30,11 +30,11 @@ struct TunePerm {
 }
 
 def private build_grid() : array<TunePerm> {
-    // unroll=1 OMITS unroll_count so each row stays byte-identical to the original hand hints (DEFAULT_PERM vec8_u2 included); width 4/32 rarely win on M1 but x64 AVX-512 picks them.
-    let WIDTHS = fixed_array(4, 8, 16, 32)
-    let UNROLLS = fixed_array(2, 4, 8)   // unroll-only rows; u1 == plain
+    // pruned to seats that win beyond noise (the 20-seat walk never spread >1.4% on any box); unroll=1 omits unroll_count (rows byte-identical to the hand hints); vec4_u4 = dot_q4's pinned NEON nibble-widening winner
+    let WIDTHS = fixed_array(8, 16)
+    let UNROLLS = fixed_array(2)   // unroll-only rows; u1 == plain
     var grid : array<TunePerm>
-    grid |> reserve(1 + length(UNROLLS) + length(WIDTHS) * (1 + length(UNROLLS)))
+    grid |> reserve(2 + length(UNROLLS) + length(WIDTHS) * (1 + length(UNROLLS)))
     grid |> emplace(TunePerm(suffix = "plain"))
     for (u in UNROLLS) {
         grid |> emplace(TunePerm(suffix = "u{u}", hints <- [TuneHint(tune = 1, unroll = u)]))
@@ -46,6 +46,7 @@ def private build_grid() : array<TunePerm> {
                 hints <- [TuneHint(tune = 1, vectorize = true, width = w, unroll = u)]))
         }
     }
+    grid |> emplace(TunePerm(suffix = "vec4_u4", hints <- [TuneHint(tune = 1, vectorize = true, width = 4, unroll = 4)]))
     return <- grid
 }
 

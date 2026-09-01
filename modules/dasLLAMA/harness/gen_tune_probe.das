@@ -21,8 +21,8 @@ options _dasllama_internal = true
 //         equality: variants run under full fast-math, so the backend may legally regroup a
 //         fold per loop shape (~1e-6 relative; the reference holds no cross-kernel bit-parity
 //         either) — real generator bugs (wrong stride/lane/scale) are orders louder and
-//         still die here. Declining perms (mr8_budget / mr2_lanes / dot_vpdpbusd) run the
-//         reference bodies.
+//         still die here. Declining perms (mr8_budget, and every ISA-gated row the box
+//         fails) run the reference bodies.
 //   tune: iso-bench every variant (interleaved best-of) on its own repacked buffers — the
 //         tile on a batch shape, the gemv core on a single-token decode shape — print both
 //         tables, and tune_manifest_set the merged winner: the row whose TILE knobs win the
