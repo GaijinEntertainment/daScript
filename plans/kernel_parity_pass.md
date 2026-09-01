@@ -285,6 +285,15 @@ seat loses 3% to vpdpbusd256 at the engine shape, as on zen4: the gemv inherits 
 (tune_companion), and the tile and the gemv do not agree on width. The knob A/B (the table-sign row form):
 iq2s 5345, iq2xs 5033, iq2xxs 3754-3820, iq3s 9763, iq3xxs 5606 against the panel's 3956 / 3902 / 3904 /
 5276 / 4601 - the panel everywhere but iq2xxs (marginal); the column-sign form is round three's question.
+Round three (f68534c06, the column-sign row form), one thread panel -> rows: iq2xxs 3678 -> 2518 (reference 3708:
+1.47x), iq3xxs 4504 -> 4392 (5092: 1.16x); iq2s 3994 -> 5428, iq2xs 3962 -> 5504, iq3s 5209 -> 9785 stay panel.
+At 16 lanes: iq2xxs 3811 -> 2614 (3853: 1.47x), iq3xxs 5448 -> 4515 (6121: 1.36x), the other three worse. Eight
+lanes (one per core) against 16: k6 6562 -> 3420-5219, k3 3720 -> 2723, iq2s 4431 -> 4287, iq3s 9278 -> 7339 -
+more lanes help every format here, 16 stands. LANDED (d9928f985): the x86-amx class takes the row form for iq2xxs
+and iq3xxs; the default verified on the box - TEST 90/90, iq2xxs 2473-2496 alone / 2606 at 16 lanes (1.49x /
+1.48x), iq3xxs 4390 / 4531 (1.16x / 1.35x), iq2s 3965-3991 / 4280 (0.93 / 0.88), iq2xs 3927-3973 / 3926 (1.10 /
+1.17), iq3s 5081-5182 / 7254 (1.30 / 1.05), k6 at 16 lanes 5316 in normal mode against 3419-3489 for the same
+stamped seat in the tune-mode race - a mode difference, not the kernel (the back-to-back probe runs next).
 
 
 ### M4 Pro v1 - first tables (2026-09-01, Apple M4 Pro 10P+4E, class arm-i8mm, on the arm-neon PROFILE through the chain - no arm-i8mm profile existed; TEST 90/90)
