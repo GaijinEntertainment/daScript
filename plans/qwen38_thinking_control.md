@@ -32,7 +32,7 @@ everything here applies to both without change.
 
 ## (a) The mechanisms that actually exist
 
-### A1. `enable_thinking` — a trained-in on/off switch, not an amount
+### A1. `enable_thinking` - a trained-in on/off switch, not an amount
 
 Template spelling (`Qwen/Qwen3.8-27B/chat_template.jinja`, lines 163-170):
 
@@ -51,7 +51,7 @@ Two things to notice.
 
 1. With thinking **on** (the default), the template itself writes the opening `<think>\n` into
    the generation prompt. The model never emits `<think>`; it starts already inside the thought
-   block and only has to emit `</think>` to leave it. This matters for any budget mechanism —
+   block and only has to emit `</think>` to leave it. This matters for any budget mechanism -
    see A6 and B3.
 2. With thinking **off**, the template writes an already-closed empty block
    `<think>\n\n</think>\n\n`. This is the same "prefill an empty closed block" trick Qwen3 used.
@@ -68,7 +68,7 @@ wrapped in `chat_template_kwargs`.
 Source: <https://huggingface.co/Qwen/Qwen3.8-27B> and the raw template at
 <https://huggingface.co/Qwen/Qwen3.8-27B/raw/main/chat_template.jinja>.
 
-### A2. `reasoning_effort` — the amount knob. It is a system-prompt sentence.
+### A2. `reasoning_effort` - the amount knob. It is a system-prompt sentence.
 
 This is the only first-party control over *how much* the model thinks. Template lines 45-56,
 verbatim:
@@ -92,17 +92,17 @@ Five facts follow directly from that code, and they are the most useful things i
 
 1. **The whole mechanism is one sentence of English prepended to the system turn.** There is no
    special token, no logits change, no counter. The `reasoning_instructions` string is spliced
-   in ahead of the user's system content (template lines 58-86) — and if the request carries no
+   in ahead of the user's system content (template lines 58-86) - and if the request carries no
    system message at all, the template *creates* a system turn holding only that sentence
    (lines 81-85).
 2. **`medium` injects nothing.** Only `xhigh` and `low` set the string; `medium` leaves it
    empty. So a request with `reasoning_effort="medium"` renders to a prompt that is
    byte-identical to a request with thinking on and no effort field. `medium` is the neutral
    baseline; `xhigh` and `low` are the two deviations from it.
-3. **The default is the expensive end.** `reasoning_effort|default('xhigh')` — omitting the
+3. **The default is the expensive end.** `reasoning_effort|default('xhigh')` - omitting the
    field gets you the "think carefully, validate assumptions, consider alternatives" sentence.
-4. **Only three values are legal.** `low`, `medium`, `xhigh`. Anything else — including
-   OpenAI's own standard `"high"` — makes the template raise, and the request fails. This is a
+4. **Only three values are legal.** `low`, `medium`, `xhigh`. Anything else - including
+   OpenAI's own standard `"high"` - makes the template raise, and the request fails. This is a
    sharp trap for an OpenAI-compatible front end, because `high` is the value most clients send.
 5. Because it is only a prompt sentence, it is **advisory**. The model was post-trained to obey
    it, but nothing enforces it, and there is no upper bound on the trace length at any level.
@@ -139,7 +139,7 @@ completion = client.chat.completions.create(
 vLLM's own recipe page for this model agrees on all of the above:
 <https://recipes.vllm.ai/Qwen/Qwen3.8-27B>.
 
-### A3. `preserve_thinking` — history retention, which is an amount knob at second hand
+### A3. `preserve_thinking` - history retention, which is an amount knob at second hand
 
 Template lines 111-119:
 
@@ -157,7 +157,7 @@ Template lines 111-119:
 ```
 
 Defaults to true. Note the retention is driven by a `reasoning_content` field on each historical
-assistant message — so a client that strips reasoning before storing history silently gets
+assistant message - so a client that strips reasoning before storing history silently gets
 `preserve_thinking` behaviour with empty thoughts (an empty `<think>\n\n</think>` per turn),
 which is neither of the two documented modes. The card claims retention improves KV-cache reuse
 and agent consistency (`README.md` line 472). Turning it off shortens the prompt but the card
@@ -179,7 +179,7 @@ Checked directly against the downloaded files, all negative:
 - **No `/think` or `/no_think` soft switch.** Those were Qwen3-generation features documented on
   the Qwen3 model cards (<https://huggingface.co/Qwen/Qwen3-8B>). `grep -n "no_think\|/think"`
   finds no handling in the 3.8 template and no mention in either 3.8 model card. Whether the 3.8
-  weights still react to those strings as plain prompt text is untested — see (c).
+  weights still react to those strings as plain prompt text is untested - see (c).
 - **No special reasoning-length token.** Nothing in the vocab named for effort or budget.
 
 ### A5. Token-level facts you need for any sampler-side work
@@ -201,7 +201,7 @@ they are not stripped by `skip_special_tokens`; they are still atomic added toke
 
 `generation_config.json`: `temperature 1.0`, `top_k 20`, `top_p 0.95`, `eos_token_id [248046, 248044]`.
 
-Recommended sampling per the card (`README.md` lines 252-253) — worth quoting because it differs
+Recommended sampling per the card (`README.md` lines 252-253) - worth quoting because it differs
 between modes:
 - Thinking: `temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=0.0, repetition_penalty=1.0`
 - Non-thinking: `temperature=0.7, top_p=0.80, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0`
@@ -218,7 +218,7 @@ The Flash-Next card says the same thing in prose (`README.md` line 350): *"Qwen3
 supports controlling thinking behavior via `enable_thinking`, `preserve_thinking`, and
 `reasoning_effort`."* Same three effort levels, same `xhigh` default (line 384).
 
-The llama.cpp commit `6c84c7d5d` that added `qwen4exp` is purely architectural — hyper-connections,
+The llama.cpp commit `6c84c7d5d` that added `qwen4exp` is purely architectural - hyper-connections,
 gated delta net, MoE, PLE n-gram embeddings, UINT64 GGUF arrays. It touches no chat, template, or
 reasoning code. `grep -rn "xhigh"` across the whole llama.cpp tree hits exactly one line, the help
 text of `--reasoning-effort` (`common/arg.cpp:3711`). There is no Qwen3.8 template fixture under
@@ -227,7 +227,7 @@ text of `--reasoning-effort` (`common/arg.cpp:3711`). There is no Qwen3.8 templa
 
 ### A6. What serving stacks bolt on
 
-#### llama.cpp — a real reasoning-budget sampler (the most complete implementation seen)
+#### llama.cpp - a real reasoning-budget sampler (the most complete implementation seen)
 
 `D:\Work\llama.cpp`, HEAD `6c84c7d5d`.
 
@@ -241,12 +241,12 @@ IDLE -> COUNTING -> WAITING_UTF8 -> FORCING -> DONE
 - `COUNTING`: decrement per token, watching for a natural end sequence.
 - `WAITING_UTF8`: budget spent, but let the current multi-byte character finish.
 - `FORCING`: emit the forced sequence token by token. `common/reasoning-budget.cpp:166-186` is
-  the whole enforcement — every logit except the one forced token is set to `-INFINITY`.
+  the whole enforcement - every logit except the one forced token is set to `-INFINITY`.
 - `DONE`: passthrough. It **re-arms** on a new start tag (`reasoning-budget.cpp:147-161`),
   because some models open several `<think>` blocks in one reply.
 
 **The forced sequence** is `reasoning_budget_message` tokens followed by the first end tag
-(`tools/server/server-schema.cpp:415-427`). That is exactly the "Considering the limited time…"
+(`tools/server/server-schema.cpp:415-427`). That is exactly the "Considering the limited time..."
 pattern: you supply the sentence, the server prepends it to `</think>` and forces the lot.
 
 **CLI flags** (`common/arg.cpp`):
@@ -265,14 +265,14 @@ Environment aliases exist for each (`LLAMA_ARG_REASONING`, `LLAMA_ARG_REASONING_
 
 **Per-request HTTP fields** (`tools/server/server-common.cpp:1313-1378`):
 
-- `chat_template_kwargs: {"enable_thinking": bool, ...}` — merged over the server defaults.
-- `reasoning_effort: "<level>"` — the OpenAI field. `"none"` is special-cased to
+- `chat_template_kwargs: {"enable_thinking": bool, ...}` - merged over the server defaults.
+- `reasoning_effort: "<level>"` - the OpenAI field. `"none"` is special-cased to
   `enable_thinking = false` (line 1326-1328); any other non-empty string is forwarded as the
   template kwarg (line 1330).
 - `reasoning_budget_tokens`, alias `thinking_budget_tokens` (line 1365-1366), falling back to the
   server default.
 - `reasoning_budget_message` (line 1375).
-- `reasoning_control: bool` (line 1376) — arms the sampler so it can be forced later at runtime.
+- `reasoning_control: bool` (line 1376) - arms the sampler so it can be forced later at runtime.
 
 **Runtime early-stop.** `POST /v1/chat/completions/control` with
 `{"id": <completion id>, "action": "reasoning_end"}` forces the in-flight completion out of its
@@ -283,7 +283,7 @@ This is a "stop thinking, answer now" button for a UI.
 **Two llama.cpp findings that bear on Qwen 3.8 specifically:**
 
 1. **The budget arms correctly despite the template pre-filling `<think>`.** Recall from A1 that
-   the model never emits `<think>` — the template does. llama.cpp handles this: the generation
+   the model never emits `<think>` - the template does. llama.cpp handles this: the generation
    prompt is re-tokenized into `prefill_tokens` (`common/sampling.cpp:279-292`) and those tokens
    are fed through `llama_sampler_accept` on the budget sampler at construction
    (`common/sampling.cpp:318-322`), so the `<think>` in the prompt moves the state machine
@@ -314,12 +314,12 @@ supported.
 
 #### vLLM
 
-- Sampling parameter `thinking_token_budget` — per-request reasoning token limit.
+- Sampling parameter `thinking_token_budget` - per-request reasoning token limit.
 - `--reasoning-parser qwen3` is required for Qwen 3.8, because the template opens every assistant
   turn with `<think>` and without the parser the whole thought block lands in `content`
   (<https://recipes.vllm.ai/Qwen/Qwen3.8-27B>).
 - `--reasoning-config '{"reasoning_start_str": "<think>", "reasoning_end_str": "I have to give the
-  solution based on the reasoning directly now.</think>"}'` — this is where the "limited time"
+  solution based on the reasoning directly now.</think>"}'` - this is where the "limited time"
   style closer comes from. The docs say putting transitional language in `reasoning_end_str`
   makes the termination "more natural".
 - `--default-chat-template-kwargs '{"enable_thinking": false}'` for a server-wide default;
@@ -331,7 +331,7 @@ supported.
 
 Exposes `chat_template_kwargs` and `separate_reasoning: true` (which populates
 `reasoning_content`), plus a `thinking_budget`. The budget is reported **not enforced** on this
-model generation: sgl-project/sglang issue #25536, "thinking_budget not enforced for Qwen3.6 —
+model generation: sgl-project/sglang issue #25536, "thinking_budget not enforced for Qwen3.6 -
 reasoning consumes all max_tokens", where `thinking_budget: 200` still produced roughly 1400
 reasoning tokens and left nothing for the answer
 (<https://github.com/sgl-project/sglang/issues/25536>). Treat SGLang's budget as unreliable.
@@ -350,14 +350,14 @@ This is directly relevant to us because we run this model quantized.
 
 - *"Quantized Reasoning Models Think They Need to Think Longer, but They Do Not"*
   (<https://arxiv.org/abs/2606.00206>). Abstract, verbatim in the load-bearing part: *"aggressive
-  PTQ reduces accuracy while increasing chain-of-thought (CoT) length… in up to 52% of the
+  PTQ reduces accuracy while increasing chain-of-thought (CoT) length... in up to 52% of the
   quantized models' failures, models reach the right answer in intermediate reasoning steps but do
-  not output it as a final answer… Positions with high KL divergence correlate strongly with high
+  not output it as a final answer... Positions with high KL divergence correlate strongly with high
   next-token entropy, and at these positions quantized models disproportionately sample
   overthinking markers such as "wait", "but", and "alternatively". We show that simply introducing
   a training-free logit penalty on a curated set of overthinking markers can reduce CoT length by
   12--23% while preserving or improving accuracy across 5 models (1.5B-32B parameters), 3
-  quantization methods, and 5 benchmarks… Overthinking errors produced by quantized models are
+  quantization methods, and 5 benchmarks... Overthinking errors produced by quantized models are
   particularly reduced by up to 58%."*
 - *"Quantization Inflates Reasoning: Token Inflation as a Hidden Cost of Low-Bit Reasoning Models"*
   (<https://arxiv.org/abs/2606.25519>). INT4/INT3 can preserve accuracy while inflating reasoning
@@ -370,7 +370,7 @@ same `reasoning_effort`, and the extra length is disproportionately made of "wai
 is the paper's own remedy and it is cheap.
 
 **Banning reconsideration phrases outright.** *"Wait, We Don't Need to 'Wait'! Removing Thinking
-Tokens Improves Reasoning Efficiency"* (NoWait), <https://arxiv.org/abs/2506.08343> — suppresses
+Tokens Improves Reasoning Efficiency"* (NoWait), <https://arxiv.org/abs/2506.08343> - suppresses
 explicit self-reflection tokens (`Wait`, `Hmm`) at decode time and reports a 27%-51% shorter
 chain of thought across five R1-style model series and ten benchmarks with utility preserved.
 
@@ -379,10 +379,10 @@ chain of thought across five R1-style model series and ten benchmarks with utili
 <https://www.emergentmind.com/topics/antislop-sampler>). Unlike a logit ban it works on
 *multi-token phrases*: it keeps the inference trace, and when a banned pattern completes it
 backtracks to the token where the pattern began, downweights the offending continuation, and
-resamples. The suppression is soft — `p_new = p_old * 10^(-10s)` with ban strength `s` in `[0,1]`,
+resamples. The suppression is soft - `p_new = p_old * 10^(-10s)` with ban strength `s` in `[0,1]`,
 `s=1` being a hard ban. It scales to 8000+ patterns (direct token banning caps out near 2000) and
 accepts regexes. The cost is real: 69%-96% output slowdown in the bad cases. This is the only
-mechanism in the set that can ban a phrase like `", but wait"` precisely — a plain logit ban on
+mechanism in the set that can ban a phrase like `", but wait"` precisely - a plain logit ban on
 the `wait` token cannot distinguish `", but wait"` from a legitimate `wait`.
 
 For comparison, llama.cpp itself has **no** backtracking sampler (`grep -rni "antislop\|backtrack"`
@@ -398,7 +398,7 @@ Our stack, for reference: chat rendering is `modules/dasLLAMA/dasllama/dasllama_
 per-family `ChatTemplate` data declared in `dasllama_arch_*.das` /
 `dasllama_common.das:1120-1150`; sampling is
 `modules/dasLLAMA/dasllama/dasllama_sampling.das:23-32` (`SamplingParams`: temp, top_k, top_p,
-min_p, repetition/presence/frequency penalties — no logit bias, no forced tokens, no phrase ban);
+min_p, repetition/presence/frequency penalties - no logit bias, no forced tokens, no phrase ban);
 the OpenAI server is `utils/dasllama-server/openai_server.das`. The design overview is
 `modules/dasLLAMA/THINKING.md`. We already carry a Qwen3.8-27B GGUF spec
 (`modules/dasLLAMA/performance/model_specs.das:346-351`, `Qwen3.8-27B-UD-Q4_K_M.gguf`,
@@ -422,13 +422,13 @@ Map the three rungs straight onto Qwen's three levels:
 Concrete steps:
 
 1. **Add an effort field to `ChatTemplate`.** The cleanest shape given our existing data-driven
-   design is a three-slot string set — e.g. `effort_low : string`, `effort_high : string`, with
+   design is a three-slot string set - e.g. `effort_low : string`, `effort_high : string`, with
    empty meaning "inject nothing", which is literally how Qwen encodes `medium`. Render it into
    the system turn ahead of the user's system content, matching template lines 58-86, including
    the case where there is no user system prompt and we must synthesize a system turn holding only
    the sentence.
 2. **Add a `reasoning_effort` field to the server.** Add `"reasoning_effort"` to `CHAT_FIELDS`
-   (`utils/dasllama-server/openai_server.das:1556-1559`) — today it is silently warned about as an
+   (`utils/dasllama-server/openai_server.das:1556-1559`) - today it is silently warned about as an
    unsupported field. Also accept it inside `chat_template_kwargs` (the loop at line 2521-2527
    currently warns on every key but `enable_thinking`).
 3. **Decide the out-of-range policy, and do not copy Qwen's.** Qwen's template hard-fails on
@@ -437,7 +437,7 @@ Concrete steps:
    `server-common.cpp:1326`), and reject the rest with a 400 naming the legal set. This is a
    deliberate divergence from llama.cpp, which passes the string through and lets the template
    blow up.
-4. **Keep it a per-family declaration, not a Qwen special case** — some families have no effort
+4. **Keep it a per-family declaration, not a Qwen special case** - some families have no effort
    sentence at all and should render nothing regardless of the request.
 
 Caveat to state in the UI: this is a *request*, not a cap. It has no worst case.
@@ -451,19 +451,19 @@ Concrete steps:
 
 1. **Add to `SamplingParams`:** `reason_budget : int64` (`-1` off, `0` = end immediately,
    `N` = token cap), plus the forced-token list and the optional closer message.
-2. **Count inside the block.** The generation loop knows whether it is inside the thought span —
+2. **Count inside the block.** The generation loop knows whether it is inside the thought span -
    `dasllama_chat.das` already has the reply-side matcher (`ThinkStream` /
    `make_think_stream_`/`think_feed_`, `dasllama_chat.das:1054-1057`) for exactly this. Arm the
    counter when the block opens. **Critical**: with the Qwen 3.8 shape the block is opened by the
    *prompt*, not by a sampled token, so the counter has to be armed at prompt-render time when
-   `think_open` was prefilled — this is the same bug llama.cpp avoids by feeding the prefill
+   `think_open` was prefilled - this is the same bug llama.cpp avoids by feeding the prefill
    tokens through the sampler (`common/sampling.cpp:318-322`).
 3. **Force on exhaustion.** Set every logit but the forced token to `-inf` for as many steps as
    the forced sequence is long. If a closer message is configured, force its tokens first and
-   `</think>` (248069) last — this is what makes the transition read naturally rather than as an
+   `</think>` (248069) last - this is what makes the transition read naturally rather than as an
    abrupt cut. Mirror llama.cpp's UTF-8 grace state (`reasoning-budget.h:14`) so we do not sever
    a multi-byte character.
-4. **Re-arm on a second `<think>`** (`reasoning-budget.cpp:147-161`) — the model can open more
+4. **Re-arm on a second `<think>`** (`reasoning-budget.cpp:147-161`) - the model can open more
    than one block per reply.
 5. **Server field:** accept `reasoning_budget_tokens` with alias `thinking_budget_tokens`
    (llama.cpp's spelling, `server-common.cpp:1365-1366`) plus `reasoning_budget_message`.
@@ -497,15 +497,15 @@ penalty gets most of the benefit at no throughput cost.
 
 - **`dasllama_arch_qwen38.das` does not exist.** Qwen 3.8 is ChatML-shaped so `chatml_chat` is
   the right base, but three things differ from our Qwen3/3.5 wiring: (i) the generation prompt
-  must prefill `<think>\n` when thinking is on — our `chatml_chat` does not
+  must prefill `<think>\n` when thinking is on - our `chatml_chat` does not
   (`dasllama_common.das:4642-4643`), and `ChatTemplate` already has the field for it,
   `assistant_open_think`, added for gemma-4 (`dasllama_common.das:1135`); (ii) the tool block is
-  Qwen3-Coder XML (`<tool_call><function=…><parameter=…>`), **not** the Hermes JSON our
+  Qwen3-Coder XML (`<tool_call><function=...><parameter=...>`), **not** the Hermes JSON our
   `dasllama_arch_qwen35.das:44` installs; (iii) the effort sentence from B1.
 - **History retention conflicts with Qwen's default.** `THINKING.md` records that our `respond_`
   stores history **reasoning-stripped**. Qwen 3.8 defaults to `preserve_thinking = true` and
   renders `<think>\n{reasoning_content}\n</think>` for every historical assistant turn. Stripping
-  leaves us rendering empty thought blocks — neither documented mode. We should either carry
+  leaves us rendering empty thought blocks - neither documented mode. We should either carry
   `reasoning_content` in history and honour `preserve_thinking`, or render the non-preserving
   branch (template line 119) deliberately. Right now we do neither on purpose.
 
@@ -530,8 +530,8 @@ penalty gets most of the benefit at no throughput cost.
 
 3. **`medium` being prompt-identical to "no instruction" is my reading of the template, not a
    documented claim.** It follows directly from lines 45-56 (the string is only set for `xhigh`
-   and `low`), but Qwen never says it. It implies the model's *trained* default behaviour — what
-   it does with no effort sentence — is the `medium` behaviour, and that `xhigh` being the
+   and `low`), but Qwen never says it. It implies the model's *trained* default behaviour - what
+   it does with no effort sentence - is the `medium` behaviour, and that `xhigh` being the
    template default means the shipped default is deliberately above the trained baseline. That
    inference is untested.
 
@@ -549,7 +549,7 @@ penalty gets most of the benefit at no throughput cost.
 6. **Qwen's own agentic sizing advice assumes a feature most stacks lack.** "Set reasoning to
    262,144 and the final response to 131,072" presupposes *separate* caps for reasoning and
    answer. Neither our server nor llama.cpp's has two caps; there is one `max_tokens`. This is
-   the failure mode SGLang issue #25536 describes — reasoning eats the whole budget and the
+   the failure mode SGLang issue #25536 describes - reasoning eats the whole budget and the
    answer gets zero. **A budget mechanism (B2) is what makes a single `max_tokens` safe.**
 
 7. **The llama.cpp `preserve_reasoning` / `preserve_thinking` name mismatch** (A6) is stated
@@ -572,26 +572,26 @@ penalty gets most of the benefit at no throughput cost.
 
 ## Sources
 
-- <https://huggingface.co/Qwen/Qwen3.8-27B> — model card
-- <https://huggingface.co/Qwen/Qwen3.8-27B/raw/main/chat_template.jinja> — the template
+- <https://huggingface.co/Qwen/Qwen3.8-27B> - model card
+- <https://huggingface.co/Qwen/Qwen3.8-27B/raw/main/chat_template.jinja> - the template
 - <https://huggingface.co/Qwen/Qwen3.8-27B/raw/main/tokenizer_config.json>
 - <https://huggingface.co/Qwen/Qwen3.8-27B/raw/main/generation_config.json>
-- <https://huggingface.co/Qwen/Qwen3.8-Flash-Next> — Flash-Next / `qwen4exp` model card
-- <https://huggingface.co/Qwen/Qwen3.8-27B/discussions/113> — "This model cannot stop thinking"
-- <https://huggingface.co/Qwen/Qwen3.8-27B/discussions/97> — "A crazy thinking model"
-- <https://recipes.vllm.ai/Qwen/Qwen3.8-27B> — vLLM recipe
-- <https://docs.vllm.ai/en/latest/features/reasoning_outputs/> — vLLM reasoning outputs
-- <https://github.com/sgl-project/sglang/issues/25536> — SGLang thinking_budget not enforced
-- <https://huggingface.co/Qwen/Qwen3-8B> — Qwen3 card, for the `/think` `/no_think` history
-- <https://arxiv.org/abs/2606.00206> — Quantized Reasoning Models Think They Need to Think Longer
-- <https://arxiv.org/abs/2606.25519> — Quantization Inflates Reasoning
-- <https://arxiv.org/abs/2506.08343> — NoWait
-- <https://github.com/sam-paech/auto-antislop> and <https://www.emergentmind.com/topics/antislop-sampler> — Antislop rollback sampler
-- `D:\Work\llama.cpp` @ `6c84c7d5d` — `common/arg.cpp`, `common/common.h`,
+- <https://huggingface.co/Qwen/Qwen3.8-Flash-Next> - Flash-Next / `qwen4exp` model card
+- <https://huggingface.co/Qwen/Qwen3.8-27B/discussions/113> - "This model cannot stop thinking"
+- <https://huggingface.co/Qwen/Qwen3.8-27B/discussions/97> - "A crazy thinking model"
+- <https://recipes.vllm.ai/Qwen/Qwen3.8-27B> - vLLM recipe
+- <https://docs.vllm.ai/en/latest/features/reasoning_outputs/> - vLLM reasoning outputs
+- <https://github.com/sgl-project/sglang/issues/25536> - SGLang thinking_budget not enforced
+- <https://huggingface.co/Qwen/Qwen3-8B> - Qwen3 card, for the `/think` `/no_think` history
+- <https://arxiv.org/abs/2606.00206> - Quantized Reasoning Models Think They Need to Think Longer
+- <https://arxiv.org/abs/2606.25519> - Quantization Inflates Reasoning
+- <https://arxiv.org/abs/2506.08343> - NoWait
+- <https://github.com/sam-paech/auto-antislop> and <https://www.emergentmind.com/topics/antislop-sampler> - Antislop rollback sampler
+- `D:\Work\llama.cpp` @ `6c84c7d5d` - `common/arg.cpp`, `common/common.h`,
   `common/reasoning-budget.{h,cpp}`, `common/sampling.cpp`, `common/chat.cpp`,
   `common/jinja/caps.cpp`, `tools/server/server-common.cpp`, `tools/server/server-schema.cpp`,
   `tools/server/server-context.cpp`, `tools/server/README.md`
-- `D:\Work\daScript` — `modules/dasLLAMA/THINKING.md`,
+- `D:\Work\daScript` - `modules/dasLLAMA/THINKING.md`,
   `modules/dasLLAMA/dasllama/dasllama_common.das`, `dasllama_chat.das`,
   `dasllama_sampling.das`, `dasllama_arch_qwen35.das`,
   `modules/dasLLAMA/performance/model_specs.das`, `utils/dasllama-server/openai_server.das`
