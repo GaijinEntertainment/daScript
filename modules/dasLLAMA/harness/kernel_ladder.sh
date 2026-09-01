@@ -11,6 +11,8 @@
 #   LCPP_TBO   test-backend-ops (default: $HOME/Work/llama.cpp/build-clean-cpu/bin/Release/test-backend-ops.exe)
 #   NTOK       prefill tokens (default 512; 0 = decode rows only)
 #   ROUNDS     interleaved rounds per row (default 5)
+#   TEAM       lanes: the bench dispatches the GEMV the engine's way (--team N, DAS_JOBQUE_THREADS=N)
+#              and the reference runs GGML_BENCH_THREADS=N; unset = one thread, one raw call
 # Output: a TSV table on stdout - fmt tier perm ours_us ours_med_us ref_us ratio - plus the box line.
 set -e -o pipefail   # a failing daslang must not hide behind the join
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)   # the tree this script lives in, whatever the env says
@@ -22,6 +24,9 @@ TBO=${LCPP_TBO:-$HOME/Work/llama.cpp/build-clean-cpu/bin/Release/test-backend-op
 FMTS=${1:-all}
 NTOK=${NTOK:-512}
 ROUNDS=${ROUNDS:-5}
+TEAM=${TEAM:-0}
+THREADS=$(( TEAM > 0 ? TEAM : 1 ))
+TEAM_ARGS=""; [ "$TEAM" -gt 0 ] && TEAM_ARGS="--team $TEAM"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -41,8 +46,8 @@ echo "# kernel ladder  $(date +%F)  box=$(hostname)  daslang=$DASLANG  ref=$TBO 
 [ -x "$TBO" ] || { echo "kernel_ladder: no test-backend-ops at '$TBO' (set LCPP_TBO)" >&2; exit 1; }
 grep -q GGML_BENCH_THREADS "$TBO" || { echo "kernel_ladder: '$TBO' lacks the GGML_BENCH_THREADS define - it would run every core and the ratio column would lie (harness README)" >&2; exit 1; }
 set +e
-DAS_TUNE_MODE=normal DAS_JOBQUE_THREADS=1 "$DASLANG" -jit "$ROOT/modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das" \
-    -- --fmt "$FMTS" --ntok "$NTOK" --rounds "$ROUNDS" --tsv > "$WORK/ours.raw" 2> "$WORK/ours.err"
+DAS_TUNE_MODE=normal DAS_JOBQUE_THREADS=$THREADS "$DASLANG" -jit "$ROOT/modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das" \
+    -- --fmt "$FMTS" --ntok "$NTOK" --rounds "$ROUNDS" --tsv $TEAM_ARGS > "$WORK/ours.raw" 2> "$WORK/ours.err"
 rc=$?
 set -e
 awk -F'\t' 'NF >= 11' "$WORK/ours.raw" > "$WORK/ours.tsv" || true   # the TSV rows; engine and tune notes fall away
@@ -57,7 +62,7 @@ fi
 for f in $(cut -f1 "$WORK/ours.tsv" | sort -u); do
     t=$(ggml_type "$f")
     [ -n "$t" ] || { echo "kernel_ladder: no ggml type for '$f'" >&2; continue; }
-    GGML_BENCH_THREADS=1 "$TBO" perf -b CPU -o MUL_MAT -p "type_a=$t,type_b=f32,m=4096,n=(1|512)," 2>/dev/null \
+    GGML_BENCH_THREADS=$THREADS "$TBO" perf -b CPU -o MUL_MAT -p "type_a=$t,type_b=f32,m=4096,n=(1|512)," 2>/dev/null \
         | sed 's/\x1b\[[0-9;]*m//g' | awk -v f="$f" '
             /MUL_MAT\(/ {
                 n = $0; sub(/.*,n=/, "", n); sub(/,.*/, "", n)

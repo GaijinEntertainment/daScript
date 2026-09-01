@@ -6,6 +6,7 @@ options _dasllama_internal = true
 require daslib/clargs
 require daslib/enum_trait
 require daslib/fio
+require daslib/jobque_boost
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_math
 require dasllama/dasllama_kqformat
@@ -49,6 +50,8 @@ struct BenchArgs {
     base_align : int = 64
     @clarg_doc = "Bytes added past the aligned arena base (with --base-align 4096: the planes' phase inside the page)"
     base_offset : int = 0
+    @clarg_doc = "GEMV the engine's way: N row chunks self-served by the jobque team (DAS_JOBQUE_THREADS lanes), wall = the slowest lane, the lanes' fastest and slowest call in two extra columns; 0 = one raw call on this thread"
+    team : int = 0
 }
 
 typedef GemvFn = function<(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void>
@@ -243,6 +246,22 @@ def fill_planes(var p : Planes; sh : PlaneShape; n, d, ntok : int64) {
 struct RowStat {
     perm : string
     us : array<int64>
+    lane_lo : int64   // --team: the fastest single lane call seen across the rounds
+    lane_hi : int64   // --team: the slowest
+}
+
+let TEAM_UNIT = 32l   // --team chunk edges land on 32-row boundaries - every registry mr divides them
+
+//! the engine's dispatch shape: `chunks` row ranges self-served by the team's lanes, each lane adding its call time to laneP[slot]
+def team_gemv(fn : GemvFn; units, chunks : int; var yp : float?; kqp, ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; var laneP : int64?) {
+    team_parallel_for_indexed(0, units, chunks) <| @(slot : int; jb : int; je : int) {
+        let l0 = ref_time_ticks()
+        var y = yp
+        invoke(fn, y, kqp, ksp, xqp, xsp, xbsp, n, int64(jb) * TEAM_UNIT, int64(je) * TEAM_UNIT)
+        unsafe {
+            laneP[slot] += int64(get_time_usec(l0))
+        }
+    }
 }
 
 def median_us(var us : array<int64>) : int64 {
@@ -265,7 +284,8 @@ def emit_row(var rows : int&; name, tier : string; var st : RowStat; n, d, ntok,
     let gflops = 2.0 * float(n) * float(d) * float(ntok) / (float(best) * 1000.0)
     let mode = get_env_variable("DAS_TUNE_MODE")
     let perm = (st.perm == "reference" && mode != "tune" && mode != "test") ? "stamped" : st.perm   // normal mode: the registry's one row IS the stamped winner
-    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}\n")
+    let lanes = st.lane_hi > 0l ? "\t{st.lane_lo}\t{st.lane_hi}" : ""
+    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}{lanes}\n")
     rows++
 }
 
@@ -320,8 +340,36 @@ def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         let xsp = addr<float const?>(p.arena[p.xs])
         let xbsp = addr<int const?>(p.arena[p.xbs])
         var yp = addr<float?>(p.arena[p.y])
-        time_rows(stats, cfg.rounds) $(row : int) {
-            invoke(fns[row], yp, kqp, ksp, xqp, xsp, xbsp, n, 0l, d)
+        if (cfg.team > 0) {
+            let units = int(d / TEAM_UNIT)
+            var laneUs : array<int64>
+            laneUs |> resize(get_total_hw_jobs() + 1)
+            var laneP = addr(laneUs[0])
+            for (st, fn in stats, fns) {
+                st.us |> reserve(cfg.rounds)
+                st.lane_lo = 999999999l
+                team_gemv(fn, units, cfg.team, yp, kqp, ksp, xqp, xsp, xbsp, n, laneP)   // warmup + codegen, unmeasured
+            }
+            for (_r in range(cfg.rounds)) {
+                for (st, fn in stats, fns) {
+                    for (u in laneUs) {
+                        u = 0l
+                    }
+                    let t0 = ref_time_ticks()
+                    team_gemv(fn, units, cfg.team, yp, kqp, ksp, xqp, xsp, xbsp, n, laneP)
+                    st.us |> push(int64(get_time_usec(t0)))
+                    for (u in laneUs) {
+                        if (u > 0l) {
+                            st.lane_lo = min(st.lane_lo, u)
+                            st.lane_hi = max(st.lane_hi, u)
+                        }
+                    }
+                }
+            }
+        } else {
+            time_rows(stats, cfg.rounds) $(row : int) {
+                invoke(fns[row], yp, kqp, ksp, xqp, xsp, xbsp, n, 0l, d)
+            }
         }
     }
     for (st in stats) {
@@ -553,9 +601,28 @@ def main : int {
     }
     var fs <- formats_of(cfg.fmt)
     if (!cfg.tsv) {
-        print("kq_kernel_bench: n={cfg.n} d={cfg.d} ntok={cfg.ntok} rounds={cfg.rounds} tune_mode={get_env_variable("DAS_TUNE_MODE")}\n")
-        print("fmt\ttier\tperm\tn\td\tntok\tbest_us\tmedian_us\tns_per_sb\tGB/s\tGFLOP/s\n")
+        print("kq_kernel_bench: n={cfg.n} d={cfg.d} ntok={cfg.ntok} rounds={cfg.rounds} team={cfg.team} tune_mode={get_env_variable("DAS_TUNE_MODE")}\n")
+        print("fmt\ttier\tperm\tn\td\tntok\tbest_us\tmedian_us\tns_per_sb\tGB/s\tGFLOP/s{cfg.team > 0 ? "\tlane_lo\tlane_hi" : ""}\n")
     }
+    var rows = 0
+    if (cfg.team > 0) {
+        with_job_que() {
+            setup_dasllama_jobque_()
+            rows = run_formats(cfg, fs)
+        }
+    } else {
+        rows = run_formats(cfg, fs)
+    }
+    delete fs
+    if (rows == 0) {
+        to_log(LOG_ERROR, "kq_kernel_bench: no rows - nothing matched --fmt '{cfg.fmt}' / --perm '{cfg.perm}' or every arm was skipped\n")
+        return 1
+    }
+    return 0
+}
+
+//! every selected format's arms; the row count printed
+def run_formats(cfg : BenchArgs; fs : array<tuple<string; KqFmt; bool>>) : int {
     var rows = 0
     let nsb = int64(cfg.n) / 256l
     for (fe in fs) {
@@ -574,10 +641,5 @@ def main : int {
         }
         delete p
     }
-    delete fs
-    if (rows == 0) {
-        to_log(LOG_ERROR, "kq_kernel_bench: no rows - nothing matched --fmt '{cfg.fmt}' / --perm '{cfg.perm}' or every arm was skipped\n")
-        return 1
-    }
-    return 0
+    return rows
 }
