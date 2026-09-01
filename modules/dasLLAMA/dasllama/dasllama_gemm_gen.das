@@ -1447,12 +1447,9 @@ def private sign_col_pm1(var te : TileEmit; var col : LLVMOpaqueValue?; r0, l : 
     return LLVMBuildOr(b, m, splat_i8w(te, 1), name)
 }
 
-//! the sdot lattice's grid decode composes row groups straight from the grid words. x86: the panel's latency
-//! chain (index -> grid load -> panel store -> reload) does not scale with the core, so on the x86-vnni512
-//! class iq2s and iq2xxs take the row form (zen4: iq2s 4918 -> 3600 us, iq2xxs 4866 -> 4300, both shapes);
-//! iq3s is mixed there (+17% alone, -10% at 16 lanes) and iq2xs / iq3xxs lose 1.8x, zen2 loses on all five -
-//! those keep the panel. DASLLAMA_GRID_ROWS_X86=1 / 0 forces the form (a lab knob: clear .jitted_scripts
-//! between runs, the JIT cache does not key on it)
+//! the sdot lattice composes row groups straight from the grid words; on x86 the panel's latency chain does not
+//! scale with the core, so x86-vnni512 takes the row form for iq2s and iq2xxs (zen4: 4918 -> 3600, 4866 -> 4300 us)
+//! and the panel elsewhere (iq2xs / iq3xxs lose 1.8x, zen2 loses on all five); DASLLAMA_GRID_ROWS_X86=1 / 0 forces it (clear .jitted_scripts between runs)
 def private grid_rows_path(te : TileEmit) : bool {
     if (te.dotKind == DOT_SDOT) return te.rv == 4
     if (te.dotKind != DOT_MADDUBS && te.dotKind != DOT_VPDPBUSD && te.dotKind != DOT_VPDPBSSD) return false
