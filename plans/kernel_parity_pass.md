@@ -293,6 +293,11 @@ k6 0.90x, k5 0.91x):
    engine phase 3527 / 3636 / 3851 us against the reference's 3683 (was 4444-4708): PARITY; heap 3808 /
    4007. k3 engine phase 2488 / 2613 / 2893 (reference 2701, was 2555-3504). Tiles unchanged within
    noise (k6 588-702 across runs, k3 660). TEST 90/90. The M1 is untouched (sdot has no i16 chain).
+   Extended to k4/k5 (one 6-bit scale per sub-block, zero-extended): TEST 90/90; k5 decode at the engine
+   phase 3399 / 3474 / 3511 (reference 3307, 0.94-0.97x; ~3600 before), k4 2030-2151 (reference 2435),
+   tiles unchanged (k5 505, k4 482 ms). k5's last ~4% is the high-bit deposit itself (shuffle + two
+   masked tests per site) - the per-sub-block layout lost to byte-shift emulation, the memo's D4 stands:
+   k5 closes at 0.95x on zen2, 1.06x on the M1.
 
 The 16-lane row and what it measures (2026-09-01, `--team`, the engine's own splitter: 64 self-served
 chunks of 64 rows): k4 wall against the reference at the same thread count - 8 lanes 648 vs 675 us
