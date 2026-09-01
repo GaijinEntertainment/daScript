@@ -83,10 +83,19 @@ handle /api/build/* {
 #			format filter {
 #				wrap json
 #				fields {
+#					# BOTH addresses, not just remote_ip: Caddy writes client_ip
+#					# beside it in the same record, and X-Forwarded-For carries a
+#					# third copy in the header map - masking one of the three
+#					# leaves the full address in the file anyway.
 #					request>remote_ip ip_mask {
 #						ipv4 24
 #						ipv6 32
 #					}
+#					request>client_ip ip_mask {
+#						ipv4 24
+#						ipv6 32
+#					}
+#					request>headers>X-Forwarded-For delete
 #					# Neither reaches this origin — the bearer routes live on the
 #					# daslang.io vhost and this one is deliberately cookie-less — so
 #					# dropping them states the property instead of resting on a

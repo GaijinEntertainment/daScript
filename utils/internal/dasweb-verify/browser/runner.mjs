@@ -345,7 +345,7 @@ export class Artifacts {
         await this.open();
     }
 
-    async load(url) {
+    async load(url, name = '') {
         if (!this.page) await this.open();
         for (let attempt = 1; ; attempt++) {
             this.pageErrors.length = 0;
@@ -360,7 +360,7 @@ export class Artifacts {
                 // Retries stay on stdout/stderr rather than in the report: a
                 // silent retry would hide the edge losing connections, and the
                 // rate is the only measurement we have of it.
-                process.stderr.write(`  artifact navigation dropped, retrying: ${why.split('\n')[0]}\n`);
+                process.stderr.write(`  ${name}: artifact navigation dropped, retrying: ${why.split('\n')[0]}\n`);
             }
             await new Promise((r) => setTimeout(r, ARTIFACT_NAV_RETRY_MS));
         }
@@ -452,7 +452,7 @@ async function verifyWasm(pg, artifacts, row, index) {
     }
 
     await pg.dropArtifactFrame();
-    await artifacts.load(artifactUrl);
+    await artifacts.load(artifactUrl, row.name);
     const startedAt = Date.now();
     const deadline = startedAt + spec.budget_ms;
     while (Date.now() < deadline) {

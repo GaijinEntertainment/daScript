@@ -185,3 +185,23 @@ with the just-built binary and catches sample rot per-PR. Currently tier 1 runs 
 - Runtime bugs: jobque-on-wasm-interpreter wedge; arcanoid threaded strudel -> tick port.
 - imgui-UI-presence checking (the discarded-draw-list blind spot) - needs a structured
   snapshot rail in the web harness, not v1.
+
+## Ledgered by the artifact-nav-retry arc
+
+- **A `REVIEW.das` gate over `browser/REVIEW.md`'s placement block.** "Every tracked file in
+  the folder has a line, every line names an existing file" is decidable from tree state
+  alone, so a gate retires the manual inventory pass permanently. Ruled out of the retry PR
+  as scope.
+- **The browser leg's `node --test` runs in no per-PR lane** - only
+  `nightly_playground.yml`, so a case the checklist demands is first executed the night after
+  merge. Ruled: CI catches it, no per-PR lane added.
+- **Self-review findings on three checklists this arc did not otherwise touch**, left for
+  whoever next edits them: `dasweb-playground/REVIEW.md` - the dastest-coverage rule's trigger
+  is unsatisfiable for a `caddy.snippet` edit (no dastest can observe a Caddy directive), the
+  five-file placement line leaves `caddy.snippet`'s role to inference, and the structured-line
+  rule names no log surface now that the vhost has one. `dasweb-verify/REVIEW.md` - "answers
+  to `browser/REVIEW.md`" does not say instead-of or in-addition-to, "failure line" is
+  undefined, and "core behavior" names no API. `utils/REVIEW.md` - the local-run-evidence
+  rule enumerates two cases where one property unites them, and a suite no per-PR lane runs
+  is a third case it misses; that trigger was ruled on recently, so widening it is a question,
+  not a fix.

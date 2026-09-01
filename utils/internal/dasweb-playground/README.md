@@ -41,8 +41,9 @@ The `run.daslang.io` block in that snippet turns on an access log, which the das
 does not need: this service records every request it answers, so a navigation absent from both
 logs is the edge dropping a connection rather than anything the artifact cache did. Caddy needs
 `/var/log/caddy` to exist and be writable by its user; the log is json (a crafted header cannot
-forge a line), client addresses are masked to /24 and /32, and it rolls at 32 MiB keeping four
-files for a week.
+forge a line), both addresses Caddy records are masked to /24 and /32 with `Authorization`,
+`Cookie` and `X-Forwarded-For` dropped outright, and it rolls at 32 MiB keeping four files for
+a week.
 
 Validating an edit to the snippet means reassembling the fragment it is, because neither half
 is a Caddyfile on its own: wrap the loose directives in a `daslang.io { }` block with
