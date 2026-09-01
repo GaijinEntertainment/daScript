@@ -430,6 +430,7 @@ var public g_target_x64_f16c = false
 var public g_target_x64_vnni256 = false
 var public g_target_x64_avx512bw = false
 var public g_target_x64_avx512vnni = false
+var public g_target_x64_avx512vbmi = false   // zmm byte permutes across two registers (VPERMI2B) + VPMULTISHIFTQB: the grid formats' symbol lattice
 // AVX-VNNI-INT8 (VEX vpdpbssd — native s8×s8, no sign trick). No shipped silicon in the fleet
 // yet; lights up via cpuid on future boxes and via DAS_JIT_X64_FORCE_FEATURES for emission-only
 // verification today.
@@ -626,6 +627,7 @@ def public init_jit_target_flags(target_triple : string = ""; host_features : bo
         || (x64_tier_feature("avx512vnni", forced_only) && x64_tier_feature("avx512vl", forced_only)))
     g_target_x64_avx512bw = g_target_x64_avx2 && x64_tier_feature("avx512f", forced_only) && x64_tier_feature("avx512bw", forced_only)
     g_target_x64_avx512vnni = g_target_x64_avx512bw && x64_tier_feature("avx512vnni", forced_only)
+    g_target_x64_avx512vbmi = g_target_x64_avx512bw && x64_tier_feature("avx512vbmi", forced_only)
     g_target_x64_vnniint8 = g_target_x64_avx2 && x64_tier_feature("avxvnniint8", forced_only)
     g_target_x64_amx = g_target_is_x64 && x64_tier_feature("amx-tile", forced_only) && x64_tier_feature("amx-int8", forced_only)
     // target OS truth (native = host platform; cross = the triple's OS field)

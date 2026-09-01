@@ -1237,7 +1237,7 @@ def tune_pick_fallback(chain : string) : string {
     return ""
 }
 
-let private TUNE_KNOWN_FEATURES = "avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx512f;avx512bw;avx512vl;avx512vnni;amx-tile;amx-int8;neon;dotprod;i8mm;bf16;fullfp16;sve;lse"
+let private TUNE_KNOWN_FEATURES = "avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx512f;avx512bw;avx512vl;avx512vnni;avx512vbmi;amx-tile;amx-int8;neon;dotprod;i8mm;bf16;fullfp16;sve;lse"
 
     //! The ';'-joined subset of the known `requires=` feature names this box passes — stamped
     //! into every sidecar's provenance as `features`, which is what lets a shipped profile say

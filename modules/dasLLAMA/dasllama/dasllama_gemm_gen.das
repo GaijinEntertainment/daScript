@@ -98,6 +98,8 @@ struct private TilePerm {
                           // scratch, block i−1's scale fold interleaved with block i's TMUL ops
     latch : int = 0       // 1 = raw immediate-tmm amx ops (slice K I1): no per-call
                           // ldtilecfg/tilerelease — the cfg companion owns per-chunk config
+    grid : string = ""    // "vbmi": the grid formats' gemv decodes through the VBMI symbol lattice
+                          // (the row form; the tile and the planes are the plain row's)
 }
 
 def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
@@ -120,6 +122,8 @@ def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
     if (pv is tInt) { p.pipe = pv as tInt }
     let lv = find_arg(gc.ann.arguments, "latch")
     if (lv is tInt) { p.latch = lv as tInt }
+    let grv = find_arg(gc.ann.arguments, "grid")
+    if (grv is tString) { p.grid = grv as tString }
     return p
 }
 
@@ -136,6 +140,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
             || (p.bias != 0 && p.bias != 128)
             || (p.pipe != 0 && p.pipe != 1)
             || (p.latch != 0 && p.latch != 1)
+            || (p.grid != "")
             || (!g_target_is_x64) || (!g_target_x64_amx)
             || (!g_target_x64_avx512vnni)     // the companions' busd512 lattice + zmm fold
             || (!g_target_os_linux)) return true
@@ -171,12 +176,13 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
         || (p.nrsplit != 2 && p.nrsplit != 4)
         || (p.gkstep != 1 && p.gkstep != 2 && p.gkstep != 4)
         || (p.mr < 4) || (p.pipe != 0) || (p.latch != 0)
+        || (p.grid != "" && p.grid != "vbmi")
         || (p.bias != 0 && (p.bias != 128 || p.dotPrim != "vpdpbusd"))) return true
     let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
     if (rt.interleave != p.mr || !rt.f32_scales) return true
     if (p.dotPrim == "smmla") {
         // the i8mm MMA leg: NEON widths, row-quad geometry, same q-reg budget as sdot, and the i8mm tier flag (M1 is dotprod-only)
-        if ((!g_target_is_aarch64) || (!g_target_arm64_i8mm) || (p.width != 128)
+        if ((!g_target_is_aarch64) || (!g_target_arm64_i8mm) || (p.width != 128) || (p.grid != "")
             || (p.mr % 4 != 0)
             || (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)) return true
         let mod = LLVMGetGlobalParent(gc.impl)
@@ -194,7 +200,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     }
     if (p.dotPrim == "sdot") {
         // the NEON leg (M2 shape): 128-bit q-regs, 4-row sdot lanes; mr>=8 budgets the FUSED-acc shape (kq shares one lo+hi acc there — half the mr4 formula's int-acc bank)
-        if ((!g_target_is_aarch64) || (p.width != 128)
+        if ((!g_target_is_aarch64) || (p.width != 128) || (p.grid != "")
             || (p.mr % 4 != 0)
             || (p.mr >= 8 ? (p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)
                           : (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32))) return true
@@ -213,6 +219,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
         || (!g_target_is_x64)
         || (p.width != 256 && p.width != 512)
         || (p.dotPrim == "vpdpbssd" && p.width != 256)) return true    // 512-bit bssd is AVX10 — unproven
+    if (p.grid == "vbmi" && (p.width != 512 || p.dotPrim == "vpdpbssd" || !g_target_x64_avx512vbmi)) return true   // the lattice is zmm VBMI
     if (p.width == 256) {
         if ((p.dotPrim == "maddubs" && !g_target_x64_avx2)
             || (p.dotPrim == "vpdpbusd" && !g_target_x64_vnni256)
@@ -251,6 +258,16 @@ struct private TileEmit {
     iq3s_grid_g : LLVMOpaqueValue?       // iq3s gemv: the [512 x i32] grid global (iq3xxs: its [256 x i32] halved grid)
     sign_code_pm1_g : LLVMOpaqueValue?   // the row-group grid decode: ksigns code -> eight +-1 bytes, [128 x i64], parity bit folded in
     gridRows : bool                      // set while the row-group grid decode emits: the column dword read (a panel-form win) reverts to byte loads
+    vbmi : bool                          // grid = "vbmi": the grid gemv decodes through the VBMI symbol lattice (row form)
+    vb_plane : LLVMOpaqueValue? [2]      // the grid's compact code planes, [256 x i8] each: the entry's low / high symbols
+    vb_alpha : LLVMOpaqueValue?          // the symbol alphabet as a vpshufb table (16 bytes per lane, [64 x i8])
+    vb_ksigns : LLVMOpaqueValue?         // ksigns_iq2xs as [128 x i8] - one VPERMI2B turns 7-bit codes into sign bytes, parity in
+    permi2b_decl : LLVMOpaqueValue?      // llvm.x86.avx512.vpermi2var.qi.512
+    permi2b_ty : LLVMOpaqueType?
+    mshift_decl : LLVMOpaqueValue?       // llvm.x86.avx512.pmultishift.qb.512
+    mshift_ty : LLVMOpaqueType?
+    shufb_decl : LLVMOpaqueValue?        // llvm.x86.avx512.pshuf.b.512 (the lattice's alphabet lookup)
+    shufb_ty : LLVMOpaqueType?
     gfn : LLVMOpaqueValue?               // the function under emit (block creation for emitted inner loops)
     gctx : LLVMOpaqueContext?
     psign_ty : LLVMOpaqueType?
@@ -1467,6 +1484,7 @@ def private sign_col_pm1(var te : TileEmit; var col : LLVMOpaqueValue?; r0, l : 
 //! scale with the core, so x86-vnni512 takes the row form for iq2s and iq2xxs (zen4: 4918 -> 3600, 4866 -> 4300 us)
 //! and the panel elsewhere (iq2xs / iq3xxs lose 1.8x, zen2 loses on all five); DASLLAMA_GRID_ROWS_X86=1 / 0 forces it (clear .jitted_scripts between runs)
 def private grid_rows_path(te : TileEmit) : bool {
+    if (te.vbmi) return true
     if (te.dotKind == DOT_SDOT) return te.rv == 4
     if (te.dotKind != DOT_MADDUBS && te.dotKind != DOT_VPDPBUSD && te.dotKind != DOT_VPDPBSSD) return false
     let knob = get_env_variable("DASLLAMA_GRID_ROWS_X86")
@@ -1758,6 +1776,199 @@ def private row_weights8(var te : TileEmit; var base : LLVMOpaqueValue?; blk, l 
     return LLVMBuildBitCast(b, v, v8i8, "")
 }
 
+//! the lattice's constant tables, emitted once per module: the grid's two compact code planes (entry e's
+//! low / high symbols, 2 bits each for the iq2 alphabet, 3 for iq3), the alphabet as a per-lane vpshufb
+//! table, and ksigns_iq2xs whole (128 bytes: exactly the two registers one VPERMI2B indexes)
+def private vbmi_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
+    let tag = te.kq == 25 ? "iq2xxs" : "iq3xxs"
+    te.vb_plane[0] = LLVMGetNamedGlobal(mod, "dasllama.vbmi.{tag}.p0")
+    te.vb_plane[1] = LLVMGetNamedGlobal(mod, "dasllama.vbmi.{tag}.p1")
+    te.vb_alpha = LLVMGetNamedGlobal(mod, "dasllama.vbmi.{tag}.alpha")
+    te.vb_ksigns = LLVMGetNamedGlobal(mod, "dasllama.vbmi.ksigns")
+    if (te.vb_plane[0] != null && te.vb_plane[1] != null && te.vb_alpha != null && te.vb_ksigns != null) return
+    var alpha : array<int>
+    if (te.kq == 25) {
+        alpha <- [8, 25, 43]
+    } else {
+        alpha <- [2, 6, 10, 14, 18, 22, 26, 31]
+    }
+    let bits = te.kq == 25 ? 2 : 3
+    var p0 : array<LLVMOpaqueValue?>
+    var p1 : array<LLVMOpaqueValue?>
+    p0 |> reserve(256)
+    p1 |> reserve(256)
+    if (te.kq == 25) {
+        let g = iq2xxs_grid2()
+        for (e in range(256)) {
+            p0 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[2 * e], alpha, bits)), 0))
+            p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[2 * e + 1], alpha, bits)), 0))
+        }
+    } else {
+        let g = iq3xxs_grid()
+        for (e in range(256)) {
+            p0 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[e], alpha, bits) & 255), 0))
+            p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(g[e] >> 16u, alpha, bits) & 255), 0))
+        }
+    }
+    te.vb_plane[0] = vbmi_const_bytes(te, mod, "dasllama.vbmi.{tag}.p0", p0)
+    te.vb_plane[1] = vbmi_const_bytes(te, mod, "dasllama.vbmi.{tag}.p1", p1)
+    var al : array<LLVMOpaqueValue?>
+    al |> reserve(64)
+    for (k in range(64)) {
+        al |> push(LLVMConstInt(te.types.t_int8, uint64(k % 16 < length(alpha) ? alpha[k % 16] : 0), 0))
+    }
+    te.vb_alpha = vbmi_const_bytes(te, mod, "dasllama.vbmi.{tag}.alpha", al)
+    let ks = ksigns_iq2xs()
+    var kv : array<LLVMOpaqueValue?>
+    kv |> reserve(128)
+    for (k in range(128)) {
+        kv |> push(LLVMConstInt(te.types.t_int8, uint64(ks[k]), 0))
+    }
+    te.vb_ksigns = vbmi_const_bytes(te, mod, "dasllama.vbmi.ksigns", kv)
+}
+
+//! a grid word's four weight bytes as packed symbols (weight t at bits t*bits); a byte outside the alphabet is a broken table
+def private vbmi_pack_word(word : uint; alpha : array<int>; bits : int) : int {
+    var code = 0
+    for (t in range(4)) {
+        let wb = int((word >> uint(8 * t)) & 0xFFu)
+        let si = alpha |> find_index(wb)
+        if (si < 0) {
+            panic("vbmi lattice: grid byte {wb} is outside the alphabet")
+        }
+        code |= si << (bits * t)
+    }
+    return code
+}
+
+def private vbmi_const_bytes(var te : TileEmit; mod : LLVMOpaqueModule?; name : string; var elems : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    var g = LLVMAddGlobal(mod, LLVMArrayType(te.types.t_int8, uint(length(elems))), name)
+    LLVMSetInitializer(g, LLVMConstArray(te.types.t_int8, array_data_ptr(elems), uint(length(elems))))
+    LLVMSetGlobalConstant(g, 1)
+    LLVMSetLinkage(g, LLVMLinkage.LLVMPrivateLinkage)
+    LLVMSetAlignment(g, 64u)
+    return g
+}
+
+//! one 64-byte slice of a constant byte table (the lattice's register operands; loop-invariant, LLVM hoists them)
+def private vbmi_table_part(var te : TileEmit; var tbl : LLVMOpaqueValue?; part : int; name : string) : LLVMOpaqueValue? {
+    let b = te.builder
+    var p = LLVMBuildGEP2(b, te.types.t_int8, tbl, te.types->ConstI64(uint64(part * 64)), "")
+    return LLVMBuildLoad2Aligned(b, te.vwi8, p, 64u, name)
+}
+
+def private vbmi_permi2b(var te : TileEmit; var lo, idx, hi : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
+    var args <- [lo, idx, hi]
+    return LLVMBuildCall2(te.builder, te.permi2b_ty, te.permi2b_decl, args, name)
+}
+
+//! VPMULTISHIFTQB: byte j of each qword = the 8 bits of the source qword starting at bit ctrl[j]
+def private vbmi_mshift(var te : TileEmit; var v : LLVMOpaqueValue?; ctrl : array<int>; name : string) : LLVMOpaqueValue? {
+    var cs : array<LLVMOpaqueValue?>
+    cs |> reserve(64)
+    for (k in range(64)) {
+        cs |> push(LLVMConstInt(te.types.t_int8, uint64(ctrl[k % 8]), 0))
+    }
+    var args <- [LLVMConstVector(array_data_ptr(cs), 64u), v]
+    return LLVMBuildCall2(te.builder, te.mshift_ty, te.mshift_decl, args, name)
+}
+
+//! 64 byte indices through a 256-entry byte table: two VPERMI2B (128 entries each) and one blend on index bit 7
+def private vbmi_lookup256(var te : TileEmit; var tbl, idx : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
+    let b = te.builder
+    var t0 = vbmi_permi2b(te, vbmi_table_part(te, tbl, 0, "{name}.t0"), idx, vbmi_table_part(te, tbl, 1, "{name}.t1"), "{name}.lo")
+    var t1 = vbmi_permi2b(te, vbmi_table_part(te, tbl, 2, "{name}.t2"), idx, vbmi_table_part(te, tbl, 3, "{name}.t3"), "{name}.hi")
+    var high = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, idx, LLVMConstNull(te.vwi8), "{name}.b7")
+    return LLVMBuildSelect(b, high, t1, t0, name)
+}
+
+//! the unsigned-weight dot with the signs as a byte mask on the activation copy: x' = (x ^ m) - m
+def private rows_dot_masked(var te : TileEmit; var acc, w, m, xv : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let b = te.builder
+    var xs = LLVMBuildSub(b, LLVMBuildXor(b, xv, m, ""), m, "signx")
+    if (te.dotKind == DOT_VPDPBUSD) {
+        var dargs <- [acc, w, xs]
+        return LLVMBuildCall2(b, te.dp_ty, te.dp_decl, dargs, "dot")
+    }
+    var margs <- [w, xs]
+    var pairs = LLVMBuildCall2(b, te.madd_ty, te.madd_decl, margs, "pairs")
+    var wargs <- [pairs, ones_i16(te)]
+    return LLVMBuildAdd(b, acc, LLVMBuildCall2(b, te.maddwd_ty, te.maddwd_decl, wargs, "quads"), "dot")
+}
+
+//! One block of iq2xxs / iq3xxs as ROW GROUPS through the VBMI symbol lattice: the block's index column
+//! (16 rows x 4 bytes) looks its compact codes up in one shot (vbmi_lookup256 per plane), the aux column's
+//! four 7-bit codes per row become sign bytes through one ksigns VPERMI2B; per row group and weight octet a
+//! constant two-source shuffle places each row's code bytes in its qword, VPMULTISHIFTQB spreads the symbols
+//! into bytes, one vpshufb maps them to magnitudes; the signs ride the activation copy as a mask
+def private emit_grid_rows_blk_vbmi(var te : TileEmit; var wbP, xb : LLVMOpaqueValue?; blk : int; var a, a1 : LLVMOpaqueValue? [8]; iq2 : bool) {
+    let b = te.builder
+    let n = te.width / 64
+    let colBytes = uint64(te.interleave * 4)
+    let w8 = te.width / 8
+    var ks0 = vbmi_table_part(te, te.vb_ksigns, 0, "ks0")
+    var ks1 = vbmi_table_part(te, te.vb_ksigns, 1, "ks1")
+    var alpha = LLVMBuildLoad2Aligned(b, te.vwi8, te.vb_alpha, 64u, "alpha")
+    for (qd in range(te.rq)) {
+        let rowsOff = uint64(qd * w8)
+        let ncol = te.kq == 25 ? 1 : 2
+        var plo : LLVMOpaqueValue? [2]
+        var phi : LLVMOpaqueValue? [2]
+        for (c in range(ncol)) {
+            var idx = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wbP, te.types->ConstI64(uint64(2 * blk + c) * colBytes + rowsOff), ""), "gi{blk}_{c}")
+            plo[c] = vbmi_lookup256(te, te.vb_plane[0], idx, "plo{blk}_{c}")
+            phi[c] = vbmi_lookup256(te, te.vb_plane[1], idx, "phi{blk}_{c}")
+        }
+        let auxCol = te.kq == 34 ? 16 + blk : 2 * blk + 1
+        var aux = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wbP, te.types->ConstI64(uint64(auxCol) * colBytes + rowsOff), ""), "aux{blk}")
+        var codes = LLVMBuildAnd(b, vbmi_mshift(te, aux, [0, 7, 14, 21, 32, 39, 46, 53], "sc{blk}"), splat_i8w(te, 127), "")
+        var sgn = vbmi_permi2b(te, ks0, codes, ks1, "sg{blk}")
+        var acc : LLVMOpaqueValue? [2]
+        var acc1 : LLVMOpaqueValue? [2]
+        for (g in range(2)) {
+            acc[g] = LLVMConstNull(te.vni32)
+            acc1[g] = LLVMConstNull(te.vni32)
+        }
+        for (l in range(4)) {
+            var xv = bcast_qword_x(te, LLVMBuildAdd(b, xb, te.types->ConstI64(uint64(blk * 32 + l * 8)), ""), "x8{blk}_{l}")
+            for (g in range(2)) {
+                let r0 = g * n
+                var w : LLVMOpaqueValue?
+                if (te.kq == 25) {
+                    let sel <- [for (k in range(w8)); (k % 8 == 1 ? w8 : 0) + (r0 + k / 8) * 4 + l]
+                    var q = LLVMBuildShuffleVector(b, te.types, plo[0], phi[0], sel, "wq{blk}_{l}_{g}")
+                    q = LLVMBuildAnd(b, vbmi_mshift(te, q, [0, 2, 4, 6, 8, 10, 12, 14], "ws{blk}_{l}_{g}"), splat_i8w(te, 3), "")
+                    var sargs <- [alpha, q]
+                    w = LLVMBuildCall2(b, te.shufb_ty, te.shufb_decl, sargs, "w{blk}_{l}_{g}")
+                } else {
+                    let c = l / 2
+                    let p0 = (2 * l) % 4
+                    let sel <- [for (k in range(w8)); (k % 8 == 1 || k % 8 == 3 ? w8 : 0) + (r0 + k / 8) * 4 + p0 + (k % 8 == 2 || k % 8 == 3 ? 1 : 0)]
+                    var q = LLVMBuildShuffleVector(b, te.types, plo[c], phi[c], sel, "wq{blk}_{l}_{g}")
+                    q = LLVMBuildAnd(b, vbmi_mshift(te, q, [0, 3, 8, 11, 16, 19, 24, 27], "ws{blk}_{l}_{g}"), splat_i8w(te, 7), "")
+                    var sargs <- [alpha, q]
+                    w = LLVMBuildCall2(b, te.shufb_ty, te.shufb_decl, sargs, "w{blk}_{l}_{g}")
+                }
+                let ssel <- [for (k in range(w8)); (r0 + k / 8) * 4 + l]
+                var sq = LLVMBuildShuffleVector(b, te.types, sgn, sgn, ssel, "sq{blk}_{l}_{g}")
+                sq = LLVMBuildAnd(b, vbmi_mshift(te, sq, [0, 1, 2, 3, 4, 5, 6, 7], "sb{blk}_{l}_{g}"), splat_i8w(te, 1), "")
+                var m = LLVMBuildSub(b, LLVMConstNull(te.vwi8), sq, "sm{blk}_{l}_{g}")
+                let hi = iq2 && l >= 2
+                var d = rows_dot_masked(te, hi ? acc1[g] : acc[g], w, m, xv)
+                if (hi) {
+                    acc1[g] = d
+                } else {
+                    acc[g] = d
+                }
+            }
+        }
+        a[qd] = LLVMBuildAdd(b, a[qd], pairwise_add_i32(te, acc[0], acc[1], "ap{blk}_{qd}"), "")
+        if (iq2) {
+            a1[qd] = LLVMBuildAdd(b, a1[qd], pairwise_add_i32(te, acc1[0], acc1[1], "ap1{blk}_{qd}"), "")
+        }
+    }
+}
+
 //! One block of a grid format's decode as ROW GROUPS: a weight-width vector is width/64 rows x 8 weights
 //! straight from the grid words (one u64 grid entry per iq2 row), signed by +-1 bytes - the ksigns table row
 //! per code or the plane's sign column (iq3s/iq2s); one pairwise add per group pair yields the fold's per-row lanes.
@@ -1869,12 +2080,14 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
             a1[i] = LLVMConstNull(te.vni32)
         }
         var signCol : LLVMOpaqueValue? [2]   // this block's sign bytes, rows qd*rv.. at stride 4 - the gemv negates per vector, the tile's panel arrives signed
-        if (gather && (!pairs || te.kq == 33 || te.kq == 23 || te.dotKind != DOT_SDOT)) {
+        if (gather && !(pairs && te.vbmi) && (!pairs || te.kq == 33 || te.kq == 23 || te.dotKind != DOT_SDOT)) {
             for (qd in range(rq)) {
                 signCol[qd] = kq_sign_bytes(te, wbP, blk, qd, "sgc{blk}_{qd}")
             }
         }
-        if (pairs) {
+        if (pairs && te.vbmi) {
+            emit_grid_rows_blk_vbmi(te, wbP, xb, blk, a, a1, iq2)
+        } elif (pairs) {
             te.gridRows = true
             emit_grid_rows_blk(te, wbP, xb, blk, signCol, a, a1, iq2)
             te.gridRows = false
@@ -2204,6 +2417,17 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
             if (te.reduce_decl == null) return false
             var redArgTypes <- [te.vni32]
             te.reduce_ty = LLVMFunctionType(te.types.t_int32, redArgTypes)
+        }
+        te.vbmi = p.grid == "vbmi"
+        if (te.vbmi) {
+            var b3Types <- [te.vwi8, te.vwi8, te.vwi8]
+            te.permi2b_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.x86.avx512.vpermi2var.qi.512"), noTypes)
+            te.mshift_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.x86.avx512.pmultishift.qb.512"), noTypes)
+            te.shufb_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.x86.avx512.pshuf.b.512"), noTypes)
+            if (te.permi2b_decl == null || te.mshift_decl == null || te.shufb_decl == null) return false
+            te.permi2b_ty = LLVMFunctionType(te.vwi8, b3Types)
+            te.mshift_ty = LLVMFunctionType(te.vwi8, b2Types)
+            te.shufb_ty = LLVMFunctionType(te.vwi8, b2Types)
         }
         if (te.dotKind == DOT_MADDUBS) {
             let maddId = LLVMLookupIntrinsicID(te.width == 256 ? "llvm.x86.avx2.pmadd.ub.sw" : "llvm.x86.avx512.pmaddubs.w.512")
@@ -3099,6 +3323,9 @@ def private kq_gemv_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
             iq3xxs_emit_globals(te, LLVMGetGlobalParent(gc.impl))
         }
         sign_pm1_emit_globals(te, LLVMGetGlobalParent(gc.impl))
+        if (te.vbmi) {
+            vbmi_emit_globals(te, LLVMGetGlobalParent(gc.impl))
+        }
         te.iq3s_panel = LLVMBuildAlloca(b, LLVMArrayType(gc.jit.types.t_int8, uint(256 * te.interleave)), "iq3s.panel")
         LLVMSetAlignment(te.iq3s_panel, 64u)   // a cache line: at 32 half the width-512 panel loads straddled one
     }
