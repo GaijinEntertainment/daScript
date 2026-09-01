@@ -1473,7 +1473,7 @@ def private grid_rows_path(te : TileEmit) : bool {
     if (knob == "1") return true
     if (knob == "0") return false
     let cls = tune_cpu_class()
-    if (cls == "x86-vnni512") return te.kq == 23 || te.kq == 25   // zen4: iq2s, iq2xxs (iq3xxs wins alone, loses at 16 SMT lanes)
+    if (cls == "x86-vnni512") return te.kq == 25   // zen4: iq2xxs (iq2s and iq3xxs win alone, lose at 16 lanes)
     if (cls == "x86-amx") return te.kq == 25 || te.kq == 34       // Granite Rapids: iq2xxs 1.47x, iq3xxs 1.36x at the engine shape
     return false
 }

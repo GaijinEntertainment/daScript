@@ -251,6 +251,8 @@ struct RowStat {
     lane_hi : int64   // --team: the slowest
 }
 
+let TEAM_BURN = 6   // warmup dispatches per row before the team arm times anything
+
 //! the engine's decode dispatch, verbatim (dasllama_math's matmul shape): the splitter's chunk count over the
 //! rows, the team self-serving them; each lane adds its call time to laneP[slot]
 def team_gemv(fn : GemvFn; var yp : float?; kqp, ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64; var laneP : int64?) {
@@ -292,7 +294,9 @@ def time_rows_team(var stats : array<RowStat>; rounds : int; blk : block<(row : 
     for (row in range(length(stats))) {
         stats[row].us |> reserve(rounds)
         stats[row].lane_lo = 999999999l
-        invoke(blk, row, laneP)   // warmup + codegen, unmeasured
+        for (_w in range(TEAM_BURN)) {   // codegen, then a burn: the first format's team rows read one slot at 8 ms without it
+            invoke(blk, row, laneP)
+        }
     }
     for (_r in range(rounds)) {
         for (row in range(length(stats))) {
