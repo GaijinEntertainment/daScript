@@ -1325,6 +1325,21 @@ def private signed_grid_word(var te : TileEmit; var gidx, sgn : LLVMOpaqueValue?
     let b = te.builder
     var gp = LLVMBuildGEP2(b, te.types.t_int32, te.iq3s_grid_g, gidx, "")
     var gw = LLVMBuildLoad2Aligned(b, te.types.t_int32, gp, 4u, "")
+    return sign_grid_word(te, gw, sgn, h)
+}
+
+//! the u64 grid's word pair at even index `idx2`: one 8-byte load, half `h` split off in registers
+//! (the load is shared by the h = 0 and h = 1 decodes through CSE)
+def private signed_grid_pair_half(var te : TileEmit; var idx2, sgn : LLVMOpaqueValue?; h : int) : LLVMOpaqueValue? {
+    let b = te.builder
+    var gp = LLVMBuildGEP2(b, te.types.t_int64, te.iq3s_grid_g, LLVMBuildLShr(b, idx2, LLVMConstInt(te.types.t_int32, 1ul, 0), ""), "")
+    var g64 = LLVMBuildLoad2Aligned(b, te.types.t_int64, gp, 4u, "")
+    var gw = LLVMBuildTrunc(b, h == 0 ? g64 : LLVMBuildLShr(b, g64, LLVMConstInt(te.types.t_int64, 32ul, 0), ""), te.types.t_int32, "")
+    return sign_grid_word(te, gw, sgn, h)
+}
+
+def private sign_grid_word(var te : TileEmit; var gw, sgn : LLVMOpaqueValue?; h : int) : LLVMOpaqueValue? {
+    let b = te.builder
     if (te.signVec) {
         return gw
     }
@@ -1421,8 +1436,7 @@ def private decode_iq2s_dword(var te : TileEmit; var base : LLVMOpaqueValue?; bl
     var iv0 = wg_byte(te, base, wg_col(mr, blk * 4 + l))
     var hb = LLVMBuildAnd(b, LLVMBuildShl(b, qh, LLVMConstInt(te.types.t_int32, uint64(8 - 2 * l), 0), ""), LLVMConstInt(te.types.t_int32, 0x300ul, 0), "")
     var idx2 = LLVMBuildShl(b, LLVMBuildOr(b, iv0, hb, ""), LLVMConstInt(te.types.t_int32, 1ul, 0), "")
-    var gi = h == 0 ? idx2 : LLVMBuildAdd(b, idx2, LLVMConstInt(te.types.t_int32, 1ul, 0), "")
-    return signed_grid_word(te, gi, sgn, h)
+    return signed_grid_pair_half(te, idx2, sgn, h)
 }
 
 //! iq2xs: the u16 word's low 9 bits index the u64 grid's word pair, its high 7 bits the ksigns code
@@ -1435,8 +1449,7 @@ def private decode_iq2xs_dword(var te : TileEmit; var base : LLVMOpaqueValue?; b
     var w16 = LLVMBuildOr(b, qlo, LLVMBuildShl(b, qhi, LLVMConstInt(te.types.t_int32, 8ul, 0), ""), "")
     var idx2 = LLVMBuildShl(b, LLVMBuildAnd(b, w16, LLVMConstInt(te.types.t_int32, 511ul, 0), ""), LLVMConstInt(te.types.t_int32, 1ul, 0), "")
     var sgn = ksigns_word(te, LLVMBuildLShr(b, w16, LLVMConstInt(te.types.t_int32, 9ul, 0), ""))
-    var gi = h == 0 ? idx2 : LLVMBuildAdd(b, idx2, LLVMConstInt(te.types.t_int32, 1ul, 0), "")
-    return signed_grid_word(te, gi, sgn, h)
+    return signed_grid_pair_half(te, idx2, sgn, h)
 }
 
 //! iq2xxs: block b's grid bytes (column 2b) index the u64 grid's word pair; its aux32 (column 2b+1) carries the ksigns codes
@@ -1449,8 +1462,7 @@ def private decode_iq2xxs_dword(var te : TileEmit; var base : LLVMOpaqueValue?; 
     }
     var idx2 = LLVMBuildShl(b, wg_byte(te, base, 2 * blk * mr * 4 + l), LLVMConstInt(te.types.t_int32, 1ul, 0), "")
     var sidx = LLVMBuildAnd(b, LLVMBuildLShr(b, aux, LLVMConstInt(te.types.t_int32, uint64(7 * l), 0), ""), LLVMConstInt(te.types.t_int32, 127ul, 0), "")
-    var gi = h == 0 ? idx2 : LLVMBuildAdd(b, idx2, LLVMConstInt(te.types.t_int32, 1ul, 0), "")
-    return signed_grid_word(te, gi, ksigns_word(te, sidx), h)
+    return signed_grid_pair_half(te, idx2, ksigns_word(te, sidx), h)
 }
 
 def private decode_kq_dword(var te : TileEmit; var base : LLVMOpaqueValue?; blk, l, h : int) : LLVMOpaqueValue? {

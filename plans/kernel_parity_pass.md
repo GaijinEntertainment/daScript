@@ -44,11 +44,11 @@ proven fact per push; research before any kernel edit (the two memos below).
 |---|---|---|---|---|---|
 | k4 | 1969 (8.6 ns/sb) | 2421 | 1.23x | 120.9 GFLOP/s | 71.1 GFLOP/s (1.70x) |
 | k2 | 2017 (8.8 ns/sb) | 2132 | 1.06x | - | - |
-| iq3s | 11406 (49.7 ns/sb); sign=vec 7732 (33.7) | 10340 | 0.91x -> 1.34x | - | - |
-| iq3xxs | 11578 (50.5) | 6590 | 0.57x | - | - |
-| iq2s | 11732 (51.1); sign=vec 7076 (30.8) | 5074 | 0.43x -> 0.72x | - | - |
-| iq2xs | 11490 (50.1) | 5386 | 0.47x | - | - |
-| iq2xxs | 11061 (48.2) | 5124 | 0.46x | - | - |
+| iq3s | 11406 (49.7 ns/sb); sign=vec 7562 (33.0) | 10340 | 0.91x -> 1.37x | - | - |
+| iq3xxs | 11578 (50.5); sign=vec 7893 (34.4) | 6590 | 0.57x -> 0.83x | - | - |
+| iq2s | 11732 (51.1); sign=vec + u64 pair 5152 (22.5) | 5074 | 0.43x -> 0.98x | - | - |
+| iq2xs | 11490 (50.1); sign=vec + u64 pair 6297 (27.5) | 5386 | 0.47x -> 0.86x | - | - |
+| iq2xxs | 11061 (48.2); sign=vec + u64 pair 5209 (22.7) | 5124 | 0.46x -> 0.98x | - | - |
 
 Reading: the five grid formats cost 48-51 ns per superblock regardless of what each decodes,
 against 8.6-8.8 for k4/k2. A flat cost independent of the format is a shared mechanism, not five
@@ -87,11 +87,17 @@ bandwidth; on the 1B vehicles it shows, on a 27B it mostly does not - but the ke
 
 CPU decode (gap 2):
 1. DONE-KILLED `gather="reg"` (measured 1.85x slower - see the ledger).
-2. DONE for iq3s/iq2s: `sign="vec"` (the plane-resident sign column, one masked negate per vector).
-3. Repack-baked sign bytes for iq3xxs/iq2xs/iq2xxs (the memo's tier 4) so they join `sign="vec"`;
-   PACK_VERSION bump. 4. The iq2 word-pair index work - a u64 grid entry decoded as two dwords is
-   twice llama.cpp's index work per 8 weights (the remaining iq2s gap). 5. retro audit of
-   IQ4_XS/Q3_K per followup 60 (already >= 1.0x; low priority).
+2. DONE all five: `sign="vec"` - the sign-byte column negates whole vectors; iq3s/iq2s load it
+   off the plane, iq3xxs/iq2xs/iq2xxs synthesize it from the 7-bit codes (parity = the 8th bit),
+   so no plane layout change (the repack-baked byte was killed by the plane map: grp bytes are the
+   disk bytes, ~30 CPU/Vulkan/Metal sites read them).
+3. DONE: the iq2 formats' u64 grid pair as one 8-byte load, half split in registers.
+4. OPEN: the tuner cannot crown a gemv-only spelling - it races the TILE, where sign=vec is inert
+   (--tune-only iq3sq8_tile_gen crowned the old seat by a tie). Decision pending the M1 numbers:
+   make sign=vec THE gemv path (delete the knob and its 20 seats) if it wins on ARM too.
+5. iq2xs 0.86x / iq3xxs 0.83x residue: the per-dword qs byte loads (a 4-byte column load with
+   in-register byte extraction is the next candidate); the u16 single load for iq2xs measured
+   SLOWER (6991 vs 6306 us) and was dropped. 6. retro audit of IQ4_XS/Q3_K per followup 60.
 
 Vulkan pp (gap 1):
 1. Budget split (measurement, no kernel edit) - is the GEMM the 30%? 2. `shAscales`-style scale
@@ -111,5 +117,8 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   One thread, m=4096 k=14336: iq3s 11581 -> 7732 us (1.34x of the reference's 10340), iq2s 12413
   -> 7076 us (0.72x of 5074, was 0.41x). Every variant bit-exact in gen_tune_probe TEST mode. The
   five gather emitters collapsed into one gather over per-format decode functions (-110 lines).
+- 2026-09-01: sign=vec for iq3xxs/iq2xs/iq2xxs via the parity-synthesized column (no layout
+  change) and the u64 grid pair load for the three iq2 formats: iq2s 5152 us (0.98x), iq2xxs 5209
+  (0.98x), iq2xs 6297 (0.86x), iq3xxs 7893 (0.83x), iq3s 7562 (1.37x); 85 variants ok in TEST mode.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
