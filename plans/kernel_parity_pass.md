@@ -940,8 +940,9 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
 - 2026-09-01: zen4 lane sweep at d=32768, 8 vs 16 lanes: iq4xs 3004 / 3116, iq4nl 2946 / 3049, q8s16 6120 / 6339,
   k4 2891 / 3169 (streaming formats gain 3.5-9% at one lane per core - issue width at two SMT lanes, not DRAM),
   k5 3997 / 3949 (flat), iq2xs 2714 / 1412 (the lattice grids halve without the SMT lanes). The Mac decode policy
-  transfers to SMT x86 PER FORMAT; a tuner-minted per-family decode lane cap is the proposed closing move for
-  zen4's iq4xs (0.92) / iq4nl (0.94); k5 sits at 0.93-0.97 across runs regardless.
+  transfers to SMT x86 PER FORMAT. RULED (Boris, 2026-09-01): ledgered as followup_general.md entry 67, not built
+  this arc - zen4's iq4xs 0.92 / iq4nl 0.94 / k5 0.93-0.97 are accepted; pinned affinity is normally faster and
+  this may be the one case it is not.
 - 2026-09-01: Intel v6 (rebased, seat race at the engine shape but n=2048): every row >= 0.97 except k3 0.89 -
   the tiled fixture's row length flipped the k3 seat to 256_mr16 again; the seat fixture is now built at n=14336
   (29dc0b35f). Intel v7 and zen4 v7 re-mints running.

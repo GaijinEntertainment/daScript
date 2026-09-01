@@ -843,3 +843,16 @@
     Windows reads `EfficiencyClass` from `GetLogicalProcessorInformationEx(RelationProcessorCore)`;
     the darwin branch then applies unchanged. No EC2 instance has such a part (server Xeons only);
     a Hetzner EX44 (i5-13500, 6P+8E) or EX101 (i9-13900) rents by the hour for the check.
+
+67. **Per-format decode lane cap on SMT x86.** zen4 (8 cores x 2 SMT) at the engine's decode shape
+    (d=32768, DRAM-streamed): the light formats gain at one lane per core - iq4xs 3116 -> 3004 us,
+    iq4nl 3049 -> 2946, q8s16 6339 -> 6120, k4 3169 -> 2891 - while the lattice grids halve without
+    the SMT lanes (iq2xs 1412 -> 2714) and k5 does not move. Two siblings split one core's issue
+    width on a kernel that is not ALU-bound; the reference streams the same bytes at 84-91 GB/s
+    where ours sit at 79-82 with every lane busy. The darwin policy (`dasllama_jobque_threads_cap`:
+    every core for prefill, perf cores for decode) is the right shape but one global cap; here it
+    has to be per family: the tuner races the gemv seat at physical-core lanes beside the all-lane
+    race it already runs, stores `decode_lanes` per family in the sidecar, and `matmul_chunks_gemv`
+    applies the format's cap (its callers know the tensor's KqFmt). Ruled 2026-09-01: zen4's iq4xs
+    0.92 / iq4nl 0.94 / k5 0.93-0.97 are accepted as they stand; pinned affinity is normally the
+    faster arrangement and this may be the one case it is not - decide with a second SMT box in hand.
