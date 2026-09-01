@@ -254,6 +254,44 @@ Two findings that feed S0's remaining items:
   This is the silent-verify-drift trap's signature - the parity harness's first target is the
   dense B=2 verify's row-0 logits against the plain step's at the same position.
 
+### Parity harness (2026-09-01) - `harness/mtp_parity_probe.das`
+
+Two decoupled passes over ONE token stream (the metal single-stream decode is one-deep pipelined,
+so a lockstep A/B read of `s.logits` compares a stale row): pass 1 runs the spec rail and
+records every committed token plus the verify's row logits; pass 2 replays the SAME tokens on a
+plain session with the pipelined step landed and compares per position. Plus a direct diff of
+the spec-committed stream against pure plain greedy. Negative control (spec-off pass vs plain
+replay): **0.0000 on every row** - two plain sessions are bit-identical, so what follows is
+deterministic, not noise.
+
+| model | acceptance | row0 argmax flips | row1 flips | mean/max abs delta | spec-vs-plain TEXT |
+|---|---|---|---|---|---|
+| 0.8B Q8 (4 prompts, 64 rounds) | 93.3% | 7.8% (max margin crossed 6.07) | 4.7% | 1.03 / 19.3 | **98.6% of tokens differ, first at offset 1** |
+| 27B-MTP Q4_K_M (3 prompts, 48) | 85.1% | 21.5% (max 3.28) | 24.2% | 1.10 / 21.2 | **98.1% differ, first at offset 1** |
+
+Same with the GPU greedy chain off (`DASLLAMA_METAL_SPEC=0`) and in forced-reject mode (row0
+flips 16% with the draft pinned to token 0 - the deviation is row 0's own, not a row-1 leak).
+Every compared row sits in the `>= 0.1` bucket: the verify-path state (KV rows + dn state
+written by the B=2 path) differs from the plain path's systematically, and on real text the
+near-tie flips (mean crossed margin 0.5-0.9) fork the greedy stream from the second token. Both
+continuations are coherent text - which is why nobody saw it: the July metal probes used a
+near-tie-free counting prompt (24 tokens, "stream exact"), and every token-for-token MTP test
+(`tests/test_mtp.das`, `test_scheduler_mtp`) runs the CPU rail. **The metal spec rail has no
+output-invariance gate, and it is not output-invariant.** The verify path itself barely changed
+since July (last relevant commit 2026-08-08, the attention encoder collapse), so the suspects
+are the kernel crowns the kq-race/deep-dense arcs changed under it, or a defect present since
+July that the counting fixture could not see. Either way S2 cannot build depth N on this verify
+until the per-step difference is isolated (K-row writes vs dn state vs attention) and gated.
+
+Coverage map for the batched shapes (Boris's question): the BATCH rail (B sessions x 1
+position) has stream-equality gates vs the CPU control on metal - `test_metal_batch_decode_parity`
+arms B=2 (B2 GEMV form), B=3 ragged+shrink (B4 form), B=6 (M-pad-32 GEMM path), mixed
+batch/single, plus a one-step logits/KV-row tolerance gate per mirror dtype - on ONE model
+(Llama-3.2-1B Q8) and COUNTING prompts; the K-quant mvb2/4/8 widths are gated at kernel level
+only (`test_metal_gemv_kernels`). The SAME-SLAB verify (1 session x 2 positions) that MTP rides
+has none. Whether the batch rail also forks real-text streams is untested for the same reason
+(counting prompts hide near-ties) - a real-text arm of the batch parity test is owed.
+
 ## Predictions (logged BEFORE each measurement)
 
 - t(M): the mv family near-flat to M=4 (weights-bound), knee at 8; whole-step verify at
