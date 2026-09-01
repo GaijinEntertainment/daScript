@@ -1106,10 +1106,14 @@ class template MetalKqMulMmIq3sTensorT : MetalKqMulMmSplitTensorBase {
             let b3 = ile * 4u + uint(k)
             let idx = ((qsw >> (8u * uint(k))) & 255u) | ((qh3 << (8u - b3)) & 256u)
             let nib = (sgw3 >> ((b3 / 2u) * 8u + (b3 % 2u) * 4u)) & 15u
-            let sw = iq3s_sw(gridw3t[idx], nib)
-            for [unroll_full] (c in range(4)) {
-                twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * iq3s_sx(sw, uint(c)))
-            }
+            let gw = gridw3t[idx]
+            let fsd = float4((nib & 1u) != 0u ? -dsc : dsc, (nib & 2u) != 0u ? -dsc : dsc,
+                             (nib & 4u) != 0u ? -dsc : dsc, (nib & 8u) != 0u ? -dsc : dsc)
+            let mv = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
+            twb[tb0 + uint(k) * 4u] = float16(mv.x)
+            twb[tb0 + uint(k) * 4u + 1u] = float16(mv.y)
+            twb[tb0 + uint(k) * 4u + 2u] = float16(mv.z)
+            twb[tb0 + uint(k) * 4u + 3u] = float16(mv.w)
         }
     }
 }
@@ -1157,10 +1161,14 @@ class template MetalKqMulMmIq3xxsTensorT : MetalKqMulMmSplitTensorBase {
             let q3 = ile * 2u + uint(k) / 2u
             let sgb = ksign7m((aux3 >> (7u * q3)) & 127u)
             let nib = uint(k) % 2u == 0u ? sgb & 15u : sgb >> 4u
-            let sw = iq3s_sw(gridw3xt[(qsw >> (8u * uint(k))) & 255u], nib)
-            for [unroll_full] (c in range(4)) {
-                twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * iq3s_sx(sw, uint(c)))
-            }
+            let gw = gridw3xt[(qsw >> (8u * uint(k))) & 255u]
+            let fsd = float4((nib & 1u) != 0u ? -dsc : dsc, (nib & 2u) != 0u ? -dsc : dsc,
+                             (nib & 4u) != 0u ? -dsc : dsc, (nib & 8u) != 0u ? -dsc : dsc)
+            let mv = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
+            twb[tb0 + uint(k) * 4u] = float16(mv.x)
+            twb[tb0 + uint(k) * 4u + 1u] = float16(mv.y)
+            twb[tb0 + uint(k) * 4u + 2u] = float16(mv.z)
+            twb[tb0 + uint(k) * 4u + 3u] = float16(mv.w)
         }
     }
 }
