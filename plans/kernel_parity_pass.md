@@ -243,6 +243,17 @@ the bound; the fix is the vectorized u64-lane compose (2 rows x 8 weights per NE
 8 per 512-bit) with one pairwise add recovering the accumulator layout - one emitter change under the
 gather branch, no plane change, retires the panel and the parity chain. k6 0.90-0.91 on both x86 boxes
 stays open.
+1. DONE ARM (2026-09-01, two commits): the row-pair decode under the sdot lattice + the ksigns +-1
+   table rows + the whole-u64 grid load - M1 iq2xs 1.24x, iq2xxs 1.20x, iq3xxs 1.36x, iq2s 1.51x,
+   iq3s 1.15x (section 2, the LANDED notes). The x86 emission is byte-identical (gated DOT_SDOT).
+2. NEXT x86, the row-QUAD twin for zen4's 0.77-0.88x: four rows x 8 weights per 256-bit vector
+   (four u64 grid loads, vmovq/vpinsrq/vinserti128), the activation's 8 bytes broadcast per lane
+   (vpbroadcastq) and SIGNED per row by `vpsignb` against the same +-1 table rows - maddubs needs
+   its unsigned operand, so on x86 the signs go on the activation copy, which the 4-rows-per-vector
+   layout allows where the 8-rows-per-vector panel layout did not. Then vpmaddubsw + the existing
+   fold. The zen2 `gather="reg"` that measured 1.85x slower was insertelement PER DWORD with GPR
+   sign math; this is four qword inserts and no sign arithmetic. Measure on zen2 first (all five
+   at 1.00-1.36x there - it must not lose), then zen4 (rent) where the gap lives.
 
 CPU decode on ARM (the M1 ladder): iq2xs 0.51x, iq2xxs 0.57x, iq3xxs 0.72x, iq3s 0.93x. The memo
 (`kernel_parity_research_arm.md`): the sdot count is at parity (2 per 32 weights per row, both sides);

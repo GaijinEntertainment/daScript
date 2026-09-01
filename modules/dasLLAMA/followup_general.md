@@ -707,14 +707,6 @@
     the expected crowned entries' counts moved, once the cell picks a carrier whose shapes
     actually ready the tensor variants.
 
-61. **An in-process image-off seam for facade-knob test cells.** A cell whose subject is a
-    facade lane knob (`load_asr_model` under `set_asr_tower_fp32`) must keep the facade
-    loader, and on a cold box that load BAKES the pinned lane's `.dlim` and GC-purges the
-    serving lane's flavor (`dlim_gc_stale`) - the class that broke `test_audio_embedder`
-    once already. The tests checklist ledgers the residue; the fix is an in-process
-    equivalent of `DASLLAMA_IMAGE=0` (`g_env_engine.image` is a `let` read at load), so such
-    cells can run image-free instead of risking the purge.
-
 57. **Plane types have no `long_length`.** `length(PlaneF)` / `length(PlaneU16)` return
     `int`, so every `uint64(length(t.blob) * 4l)` spelling caps a plane at 2^31 elements
     before the widening - headroom-only today (whisper large-v3's twin is ~632M elements).
@@ -782,6 +774,12 @@
     one gemv path (the tuner races the tile, where a gemv-only spelling ties). Kernel-level, one
     thread: iq3s 1.37x, iq2s 0.98x, iq2xxs 0.98x, iq2xs 0.86x, iq3xxs 0.83x of the reference.
     Open residue: the per-dword qs byte loads of iq2xs/iq3xxs.
+    2026-09-01, ARM: the sdot lattice's decode composes row PAIRS straight from the grid words (two
+    rows x 8 weights per vector, one u64 grid entry per iq2 row, the ksigns formats signed by a +-1
+    table row per 7-bit code, iq3s/iq2s by the mask off the plane's sign column) - M1 one thread:
+    iq2xs 1.24x, iq2xxs 1.20x, iq3xxs 1.36x, iq2s 1.51x, iq3s 1.15x, all five ahead. x86 is untouched
+    (zen2 v3: iq3s 1.36x, iq2xs 1.13x, iq2xxs 1.04x, iq2s 1.01x, iq3xxs 1.00x) - its residue stays
+    the qs byte loads; the M1 lesson (3 loads against 4 NEON ops per cycle, count both) is in the plan.
 
 62. **IQ3_S Metal decode: the ~140 GB/s compose ceiling (tg 0.95x).** Eight GEMV forms raced
     at n=2048 d=8192 - gather placement x3, gather deleted, signs deleted, llama.cpp's exact
@@ -825,3 +823,10 @@
     through the sampler's state; (3) the single-token reconsideration penalty of entry 63. Nobody
     publishes what the effort levels cost; measure our three rungs on the 27B before naming them.
 
+65. **An in-process image-off seam for facade-knob test cells.** A cell whose subject is a
+    facade lane knob (`load_asr_model` under `set_asr_tower_fp32`) must keep the facade
+    loader, and on a cold box that load BAKES the pinned lane's `.dlim` and GC-purges the
+    serving lane's flavor (`dlim_gc_stale`) - the class that broke `test_audio_embedder`
+    once already. The tests checklist ledgers the residue; the fix is an in-process
+    equivalent of `DASLLAMA_IMAGE=0` (`g_env_engine.image` is a `let` read at load), so such
+    cells can run image-free instead of risking the purge.

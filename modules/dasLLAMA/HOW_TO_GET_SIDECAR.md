@@ -88,6 +88,10 @@ cmake --build build-clean-cpu --target test-backend-ops llama-bench -j 16
 `build-clean-cpu` is the flavor the tables name: no GPU backend, no BLAS - a GPU build's
 `llama-bench -ngl 0` is not CPU-only.
 
+Confirm the define is in the binary the ladder gets: `grep -c GGML_BENCH_THREADS
+build-clean-cpu/bin/test-backend-ops` prints 1. A box with several llama.cpp builds is where this
+bites - a binary that prints 0 runs every core and the ratio column lies; `kernel_ladder.sh` refuses it.
+
 ## 4. Correctness before any number
 
 ```
