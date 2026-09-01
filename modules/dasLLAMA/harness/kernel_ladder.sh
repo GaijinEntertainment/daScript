@@ -44,7 +44,7 @@ trap 'rm -rf "$WORK"' EXIT
 # KqFmt name -> ggml type name (the reference's type_a)
 ggml_type() {
     case "$1" in
-        q8) echo q8_0;; k4) echo q4_K;; k5) echo q5_K;; k6) echo q6_K;; q40) echo q4_0;; q51) echo q5_1;;
+        q8) echo q8_0;; q8s16) echo q8_0;; k4) echo q4_K;; k5) echo q5_K;; k6) echo q6_K;; q40) echo q4_0;; q51) echo q5_1;;
         iq4xs) echo iq4_xs;; k3) echo q3_K;; iq3s) echo iq3_s;; iq3xxs) echo iq3_xxs;; iq4nl) echo iq4_nl;;
         k2) echo q2_K;; iq2s) echo iq2_s;; iq2xs) echo iq2_xs;; iq2xxs) echo iq2_xxs;; mx4) echo mxfp4;;
         *) echo "";;
