@@ -30,9 +30,9 @@ re-mint.** A reference row that carries no `sha` (the cli and python reference t
 pinned by its builder instead - the cli tools by that same ref pin's checkout, the python
 legs by `../benchmarks/asr/requirements-*.txt`.
 
-**A diff that writes a records row, sidecar archive, or `defaults/` profile under this folder whose `provenance.dasllama_version`
-differs from the `DASLLAMA_RELEASE` string (`../dasllama/dasllama_version.das`) is a defect -
-re-mint.** For a sidecar with an `engine_sha`, read the value at that commit; a `defaults/`
+**A diff that writes a records row, sidecar archive, or `defaults/` profile under this
+folder whose `provenance.dasllama_version` differs from the `DASLLAMA_RELEASE` string
+(`../dasllama/dasllama_version.das`) is a defect - re-mint.** For a sidecar with an `engine_sha`, read the value at that commit; a `defaults/`
 profile compares against the branch under review.
 
 **A diff that writes a row to `records/<box>.json` mints that row from a board cell.** A board
@@ -94,4 +94,3 @@ the row's canonical values** - the verify never reads the url of a file already 
 
 **A diff that refreshes `last_known_good_sidecar.json` replaces it with one complete mint from
 the box its provenance names, at the current `DASLLAMA_RELEASE` - never a hand-edited copy.**
-

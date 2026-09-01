@@ -35,7 +35,7 @@ page are the answer surfaces a supervised boot has.
 
 **A diff that changes the exchange consent notice wording updates every checked-in copy in
 the same change, and a diff that adds a copy names it here in the same change:
-`EXCHANGE_CONSENT_NOTICE` (`../dasllama/dasllama_exchange.das`), `CONSENT_TITLE` /
+`EXCHANGE_CONSENT_NOTICE` (`dasllama/dasllama_exchange.das`), `CONSENT_TITLE` /
 `CONSENT_TEXT` (`utils/watchdog/watchdog.py`, repo root), and the captured
 `utils/dasllama-server/tests/fixtures/exchange.json` (repo root).** The console prompt and the
 control page render the served constant, so they are not copies.

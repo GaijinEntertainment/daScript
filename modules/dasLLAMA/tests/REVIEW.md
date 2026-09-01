@@ -44,18 +44,16 @@ filter mechanics" section in the same change** - an arm the census does not name
 unreachable to whoever is choosing what to run.
 
 **Weakening a contract-pinning gate - dropping an assert, loosening a bound, or narrowing the
-corpus or sweep it covers - is a defect.** The pinned set, each with what its gate holds:
+corpus or sweep it covers - is a defect.** The pinned set, each with what it pins:
 `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill intent);
-`test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das` (the
-model-set table, `../performance/model_specs.das`); the softcap/sink (`hass`)/span cells of
-`test_metal_prefill_kernels.das` (what fails when `pf_p_weight` and `metal_attn_rowstat`
-drift apart); `test_site_records.das` (the byte-compare of
+`test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`
+(`../performance/model_specs.das`'s model-set table); `test_metal_prefill_kernels.das`'s
+softcap, sink (`hass`) and span cells; `test_site_records.das` (the byte-compare of
 `site/files/dasllama/bench_records.json` (repo root) against a fresh `merge_site_records`
-run); `test_exchange_schema.das` and `test_bench_records_schema.das` (the real
+run); `test_exchange_schema.das` and `test_bench_records_schema.das` (the
 `write_bench_records` output, corpus sweeps included); `test_scheduler.das`'s media-stream
-bypass check (a media stream attaches no cached hit at admit (`prefix_attach`) and donates no
-pages at reap (`donate_stream`) - cache keys are token ids, and the KV past the splice does
-not follow from them).
+bypass check (no cached hit at `prefix_attach`, no donated pages at `donate_stream`). A gate
+that pins a contract joins this list in the same change.
 
 **A test that silently vanishes on one platform is a defect, and so is a zero-assertion pass -
 a test passes or skips explicitly on every platform.** A cell that returns without asserting -
@@ -80,10 +78,6 @@ carrier through that carrier's own loader.** Decoders load through `load_model_`
 (`../dasllama/dasllama_load.das`). Towers, embedders, and union carriers load through their
 family or carrier loaders.
 
-**A function that gains a parameter, or a parameter that gains an accepted value, ships a
-test for the new value.** The test feeds the new value and checks the result. It lives in
-this folder, and it lands in the same change. "The model still runs" is not that test.
-
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
 value; test it through the argv it gates or the mode it selects.** An argument-keyed pure
@@ -97,8 +91,8 @@ change. A `[metal_dispatch]` declaration is not one of them.
 
 **A diff that changes a kernel's dispatch geometry - its grid divisor, threadgroup size, or
 threadgroup-memory length - updates every gate that hand-dispatches that kernel, in the same
-change.** A hand-dispatched gate encodes the geometry itself, so a moved divisor leaves it
-racing the wrong shape silently.
+change.** A hand-dispatched gate encodes the geometry itself, so a moved divisor leaves the
+gate dispatching the wrong shape with no error.
 
 **A diff that changes a kernel's kargs - the kernel-argument struct, or any buffer binding -
 updates every gate that hand-binds that kernel, in the same change.** A stale hand bind reads
@@ -127,7 +121,7 @@ logits-tolerance form. Counting cells stay token-exact.
 
 **A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
 output - missing a compare against a CPU oracle that can witness the cell's property is a
-defect.** (A census row dispatches without asserting on output, so it is not one.)
+defect.**
 
 **A kernel-unit cell fills a GPU output buffer with a sentinel before every dispatch whose
 output it then reads.** An unprefilled output can pass by staying stale - the previous
@@ -228,8 +222,9 @@ exact fixtures.
 **An embedding-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A kernel-unit cell that dispatches a kernel class no cell dispatched before, or a new or
-loosened tolerance bar, ships a control that reds it in the same change.** A control is a run of the same gate that must RED - a poisoned input, a poisoned
+**A kernel-unit cell that dispatches a kernel class no cell dispatched before, and a cell
+that adds or loosens a tolerance bar, each ship a control that reds them in the same
+change.** A control is a run of the same gate that must RED - a poisoned input, a poisoned
 expectation, a disconnected mechanism, or a second independent lane; a gate's own reference is
 never its control. A bar nothing has ever exceeded is not known to discriminate, and a gate
 that reads state the same code path wrote can be a tautology - only the control proves either

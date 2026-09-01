@@ -10,14 +10,13 @@ everything else.
 pipeline the dasLLAMA engine selected also calls `tune_gate()`
 (`../performance/profile_common.das`) before that instrument's first timed rep.** A pipeline
 the instrument compiled itself - or a reference tool's own runtime - is not one the engine
-selected. Without the gate the instrument measures fallback kernels silently.
+selected. Without the gate the instrument measures fallback kernels silently. An instrument is a script whose output is a measured wall or rate.
 
 **A diff that adds or changes a race alternates its arms within one process - one timed round
-per arm, best-of across rounds, GPU work burned before the first timed round.** A race is an
-instrument that compares two implementations. Two separate runs measure the box's drift
-between them as much as they measure the arms; `race_pair_ms`
-(`../dasllama/dasllama_metal_common.das`) is the engine-side helper that carries all three
-properties.
+per arm, best-of across rounds.** A race is an instrument that compares two implementations.
+Two separate runs measure how the machine changed between them as much as they measure the
+arms; `race_pair_ms` (`../dasllama/dasllama_metal_common.das`) is the engine-side helper that
+carries both properties, and `../REVIEW_GPU_RACE.md` binds the clock burn.
 
 **A diff that adds or changes a race arm offered as the reason to adopt a change proves the
 arm's output on its report line, by what the arm computes:** an arm producing no comparable
@@ -25,7 +24,7 @@ output carries the literal token `timing-only`; an arm whose result is bit-ident
 baseline's prints the bit-exact compare over the sampled region - the set of output elements
 the run compares - on the report's "bit-exact vs ..." line; every other arm prints a
 bounded-difference compare (against the baseline arm or the CPU reference) plus the bound it
-passed. Reduction order and fma contraction decide bit-identity, not declared precision.
+passed. How the arm orders its sums, and whether its multiply-adds fuse, decide bit-identity - not the declared precision.
 
 **A diff that adds or changes a race also checks the race's baseline arm against a CPU
 reference.** The baseline arm is the arm running the implementation already in use. The
@@ -38,40 +37,38 @@ is one whose arms attribute cost across stages instead of selecting between two
 implementations. The same header line also names what its arms attribute. Without that text a
 reader takes the sweep's arms for an adoption decision it never made.
 
-**A new instrument that times a served turn - wherever it lives under this module - is a
-defect: add a board cell to `../performance/gen_bench_records.das`, or a `lcpp_bench.das`
-cell with its own `../PROFILE.md` section, instead.** A served turn is a whole
-prefill-plus-decode run. A second instrument's numbers cannot be compared to any row the
-board already carries. A tuner confirm that SPAWNS `lcpp_bench.das` and reads its standard
-report line adds no instrument and conforms (`../ARCHITECTURE_MEASUREMENT.md` sec.2.21).
+**A new instrument that puts its own clock around a served turn is a defect: add a board cell
+to `../performance/gen_bench_records.das`, or a `lcpp_bench.das` cell with its own
+`../PROFILE.md` section, instead.** A served turn is a whole prefill-plus-decode run. A
+second instrument's numbers cannot be compared to any row the board already carries.
 
 **An out-of-process observer never measures what the benchmark process can measure about
 itself - that measurement goes inside the process instead.** An out-of-process observer is a
 script that measures a benchmark process from outside.
 
-**A timing instrument this checklist governs never writes the wall time of a binary this
-repository does not build - a third-party reference tool - into
-`../performance/records/<box>.json` or `../PERF_LEDGER.md`.** Board walls for such a tool
-enter only through the reference cells of `../performance/gen_bench_records.das`, the cells
-that time it on a board workload.
+**Only the reference cells of `../performance/gen_bench_records.das` - the cells that time a
+binary this repository does not build on a board workload - write such a binary's wall time
+into `../performance/records/<box>.json` or `../PERF_LEDGER.md`.**
 
-**A file holding third-party walls outside those two - a reference leg's recovery file, a
-pinned reference tsv an instrument reads back - is scratch: untracked, owned by exactly one
-instrument, re-derivable from a documented command, and never an input to a board cell.** A
+**A file holding a third-party wall outside `../performance/records/<box>.json` and
+`../PERF_LEDGER.md` - a reference leg's recovery file, a pinned reference tsv an instrument
+reads back - is scratch: untracked, owned by exactly one instrument, re-derivable from a
+command written where the owning instrument documents its flags, and never an input to a
+board cell.** A
 tracked or shared copy of a third-party wall becomes a stale baseline nobody re-derives.
 
-**A diff that adds or changes an instrument that prints a number formed by subtracting one
-wall it also reports from another also prints both raw walls on that report line.** A plain
-elapsed-time row (one clock pair, no attribution across stages) is not one.
+**A diff that adds or changes an instrument that prints the difference of two walls also
+prints both of those walls on that report line.** A plain elapsed-time row - one clock pair,
+no attribution across stages - is not a difference.
 
 **A diff that changes what a board cell times ships before/after rows for each affected cell
 and corpus - or withdraws the affected rows and names the withdrawal and its reason in the PR
 body.** A board cell is a timed cell of the published results board: one
 `../performance/gen_bench_records.das` spawns, or a manual `lcpp_bench.das` cell with its own
 `../PROFILE.md` section. What a cell times changes when a change to its code, to its input
-corpus, or to the pinned reference build - `DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, the
-targets it builds, a patch it applies, or a python reference leg's
-`asr/requirements-*.txt` - moves the measured quantity. The re-mint or withdrawal lands in
+corpus, or to the pinned reference build - anything that decides which reference binary or
+reference environment the run measures, `DEFAULT_REF_SHA` in `setup_lcpp_ref.das` included -
+moves the measured quantity. The re-mint or withdrawal lands in
 `../performance/records/<box>.json`, the file the affected rows live in.
 
 **A diff that adds or changes a timing instrument makes it exit non-zero on a run that ends

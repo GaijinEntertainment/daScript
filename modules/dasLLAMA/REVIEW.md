@@ -30,15 +30,8 @@ tune-boot path that reaches it, applies `REVIEW_EXCHANGE.md`.**
 **Every `dasllama/` change applies this folder's `tests/REVIEW.md`.** A `dasllama/` diff never
 opens that checklist on its own.
 
-**A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
-
-**A `harness/` instrument that times or measures applies `../benchmarks/`'s instrument rules
-(`benchmarks/REVIEW.md`) as if it lived there.** The harness folder carries no checklist of
-its own, and a timing rig is the same instrument wherever it parks.
-
-**A diff that adds or moves a row in `harness/tune_kernels.das`'s bench list keeps
-`dot_q8q8_laneq4x4` last.** That bench pins the repack backend for the rest of the process, so
-a row after it is timed against the pinned backend instead of the backend it would select.
+**A GPU kernel, driver, dispatch-class, or K/V-mirror change - and a GPU kernel A/B race,
+knockout, or hand-binding arm, wherever the diff puts it - applies `REVIEW_GPU.md`.**
 
 **A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it,
 a `.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a
@@ -197,7 +190,7 @@ the file it checks - in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`, or
 `ARCHITECTURE_GPU.md`.** The line names the check and the names it licenses. A licensed name
 is one that check does not flag. When the check licenses no names, the line says so.
 
-**Checked-in prose this module owns - docs and comments, any language - that is not locating
+**Checked-in prose this module owns - docs and comments, any language - that is not locating, patching,
 or reproducing work against the reference build describes an upstream mechanism in our own
 terms: no "lifted/ported verbatim from", and no upstream symbol, header, constant, or binary
 name - write "the reference exe" or "upstream" instead.** The reference build is the

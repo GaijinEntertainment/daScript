@@ -20,9 +20,9 @@ the actionable line is an intermediate call site.
 inside a lint visitor method is a defect.** The guard's position decides which rules apply
 inside a lambda; the per-rule policy is in `ARCHITECTURE_LINT.md` sec. 1.
 
-**Never move perf_lint's PERF023 `add_ptr_ref` splice-depth tracking (`perf_lint.das`) behind
-the `in_closure` gate.** The rules block
-is itself a closure, so a gated tracker never sees the splice.
+**Never move PERF023's `add_ptr_ref` splice-depth tracking (`perf_lint.das`) behind the
+`in_closure` gate.** The rules block is itself a closure, so a gated tracker never sees the
+splice.
 
 **A lint warning that anchors anywhere but the code its fix rewrites is a defect.** A remedy
 that deletes a statement reports the statement; a remedy that edits one variable's
@@ -39,9 +39,8 @@ survives into the sibling loop's exit path and unbalances its counter.
 decided by a C++-side definition records the pair in the architecture doc, in its module's
 section, naming both sides.** Nothing catches it when one side later moves alone.
 
-**When a diff changes one side of a recorded daslib/C++ pair so the two no longer match,
-it changes the other side and updates the pair's architecture-doc entry in the same
-diff.**
+**When a diff changes one side of a recorded daslib/C++ pair so the two no longer match, it
+changes the other side and updates the pair's architecture-doc entry in the same diff.**
 
 **A diff that adds an architecture-doc entry adds it only where no name, shape, or test can
 carry the fact.**
@@ -113,11 +112,10 @@ set without the cap is a silently missed finding; raising a cap without the over
 suggestion that does not compile.
 
 **A diff that adds or changes an emit entry point - a function that runs the emit visitor
-(`CppAot` or any subclass of it - the visitors that write C++) and then
-returns or writes the generated C++ - keeps the error check ahead of that return
-or write.** The error check is the program's `macroException`/`failToCompile` state, read
-directly or through `log_aot_emit_errors`; a codegen exception mid-visit leaves partial
-C++.
+(`CppAot` or any subclass of it) and then returns or writes the generated C++ - keeps the
+error check ahead of that return or write.** The error check is the program's
+`macroException`/`failToCompile` state, read directly or through `log_aot_emit_errors`; a
+codegen exception mid-visit leaves partial C++.
 
 **Never gate a visitor override in `CppAot` or any subclass of it on
 `macroException`/`failToCompile` - the function that runs the visitor owns that check.** An
