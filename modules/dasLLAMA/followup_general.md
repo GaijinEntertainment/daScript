@@ -805,3 +805,23 @@
     counter, so the rewind is "n_past back k, drop k cache rows" plus a phrase table and a ban list in
     the sampler; expose it as a server/CLI knob. Done = the knob, a test that a forced ", but wait"
     stream rewinds and continues, and a before/after token count on a 27B reasoning prompt.
+    2026-09-01 research (`plans/qwen38_thinking_control.md`): the phrase-level rollback is what
+    Antislop does and costs 69-96% of throughput; the cheap form that the two 2026 papers measure is a
+    SINGLE-TOKEN logit penalty on the reconsideration tokens ("wait", "but", "alternatively") at
+    12-51% shorter traces with equal or better accuracy - build that first, the rollback only if the
+    single-token penalty measures short.
+
+64. **Qwen 3.8 thinking control: expose quick / normal / high (Boris, 2026-09-01).** The model's one
+    first-party knob is `reasoning_effort` with exactly three legal values - `xhigh` (default),
+    `medium`, `low` - which the chat template turns into one system-prompt sentence (`medium` injects
+    nothing; anything else, OpenAI's usual `high` included, raises in the template). No budget exists in
+    the model; `<think>` and `</think>` are single vocab tokens (248068 / 248069), so an early stop is a
+    one-token force. What our stack lacks (`plans/qwen38_thinking_control.md`): a `dasllama_arch_qwen38.das`
+    (the GGUF spec exists), the template's `<think>` prefill in `chatml_chat`, and the server drops
+    `reasoning_effort`. The three levers, in order: (1) map quick/normal/high -> low/medium/xhigh in the
+    template's effort sentence and accept `reasoning_effort` in the server (translate `high` to `xhigh`
+    instead of raising); (2) a reasoning token budget in `SamplingParams` that forces `</think>` - the
+    counter must see the PROMPT-side `<think>` (the template opens the block), so prefill tokens pass
+    through the sampler's state; (3) the single-token reconsideration penalty of entry 63. Nobody
+    publishes what the effort levels cost; measure our three rungs on the 27B before naming them.
+
