@@ -493,6 +493,31 @@ one thread shows it as best 1831 / median 2925 inside ONE process, so the slow m
 flips between rounds, not between processes) and iq2s 0.90 (0.93 one thread). No gemv seat was written on
 this box, so the k6 gemv still rides the 512 tile crown here.
 
+### zen4 v4 and Intel v4 - the goal ladders on the lattice re-mints (2026-09-01; SOLO one thread d=4096, TEAM 16 lanes d=32768; ratio = reference / ours)
+
+| fmt | zen4 gemv 1T | zen4 tile 1T | zen4 gemv 16L | Intel gemv 1T | Intel tile 1T | Intel gemv 16L |
+|---|---|---|---|---|---|---|
+| q8 | 1.81 | 3.01 | 0.89 | 1.25 | 4.00 | 0.95 |
+| k4 | 2.45 | 2.19 | 1.05 | 1.52 | 3.88 | 1.47 |
+| k5 | 1.26 | 6.33 | 1.00 | 1.69 | 6.78 | 1.48 |
+| k6 | 1.10 | 3.43 | 1.01 | 1.19 | 4.14 | 0.68 |
+| q40 | 4.31 | 3.39 | 1.00 | 2.07 | 3.84 | 2.55 |
+| q51 | 2.84 | 5.03 | 0.94 | 2.51 | 7.01 | 1.84 |
+| iq4xs | 2.13 | 4.03 | 0.92 | 2.14 | 4.26 | 2.32 |
+| k3 | 2.18 | 2.75 | 0.99 | 1.85 | 4.11 | 1.01 |
+| iq3s | 2.20 | 11.87 | 1.23 | 2.19 | 14.07 | 1.95 |
+| iq3xxs | 2.18 | 10.22 | 1.25 | 2.04 | 10.39 | 2.48 |
+| iq4nl | 2.78 | 2.20 | 0.95 | 2.42 | 2.73 | 3.03 |
+| k2 | 2.06 | 1.49 | 1.14 | 2.28 | 2.66 | 1.70 |
+| iq2s | 1.33 | 6.70 | 1.21 | 1.18 | 6.90 | 1.19 |
+| iq2xs | 1.43 | 6.50 | 1.31 | 1.56 | 8.08 | 1.65 |
+| iq2xxs | 1.79 | 7.64 | 1.44 | 1.65 | 7.26 | 1.65 |
+| mx4 | 2.60 | 4.57 | 1.00 | 2.52 | 4.80 | 2.60 |
+
+Reading: every one-thread row on both boxes is past the reference (zen4 >= 1.10, Intel >= 1.18); every grid row at 16 lanes is 1.19-2.48x.
+Under 0.95 at 16 lanes: zen4 q8 0.89, iq4xs 0.92, q51 0.94 (the DRAM-bound rows; iq4nl exactly 0.95) and Intel k6 0.68 (the normal-mode stall gap).
+Both minted profiles committed; the gemv seats took grid_vbmi for all five grid families on both boxes.
+
 ## 3. Research memos (read before touching the kernels)
 
 - `kernel_parity_research_cpu.md` - llama.cpp's CPU vec_dot for the five grid formats + Q2_K,
