@@ -26,7 +26,7 @@ NTOK=${NTOK:-512}
 ROUNDS=${ROUNDS:-5}
 TEAM=${TEAM:-0}
 THREADS=$(( TEAM > 0 ? TEAM : 1 ))
-TEAM_ARGS=""; [ "$TEAM" -gt 0 ] && TEAM_ARGS="--team $TEAM"
+TEAM_ARGS=""; [ "$TEAM" -gt 0 ] && TEAM_ARGS="--team"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
