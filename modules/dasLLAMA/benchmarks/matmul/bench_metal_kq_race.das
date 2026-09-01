@@ -53,6 +53,9 @@ struct Args {
     @clarg_doc = "Dispatches per timed encoder"
     reps : int = 50
 
+    @clarg_doc = "GPU burn before each cell's timing, in ms - ramps the idle-clock governor (a sparse run's encoders otherwise start at sunk clocks and read 2-3x slow; the dense full sweep never idles)"
+    burn_ms : int = 150
+
     @clarg_doc = "Pinned llama.cpp reference table (tsv: fmt tier shape us_per_dispatch)"
     ref : string
 
@@ -365,6 +368,22 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
             print("  {arm.name}: ORACLE MISMATCH ({bad} of {xrows * d}) - arm disqualified\n")
             lv = false
         }
+    }
+    // clock ramp: burn GPU time on arm 0 until the budget is spent, so the first timed
+    // encoder runs at sustained clocks even in a sparse (few-cell) invocation
+    var burned = 0.0lf
+    while (burned < double(args.burn_ms) * 1000.0lf) {
+        var did = false
+        for (arm, lv, pso, by in arms, live, psos, bys) {
+            continue if (!lv)
+            let groups = is_mm ? uint3(uint(PREFILL_M / 32), uint(d / 64), 1u) : uint3(uint((d + arm.gdiv - 1) / arm.gdiv), 1u, 1u)
+            let us = time_arm_us(queue, pso, arm, bks, bkq, bx, by, b5, b6, sc_off, groups, is_mm ? 128 : 64, args.reps)
+            break if (us < 0.0lf)
+            burned += us * double(args.reps)
+            did = true
+            break
+        }
+        break if (!did)
     }
     // interleaved timing: round-robin per round, best-of (round 0 discarded as warmup)
     var best : array<double>
