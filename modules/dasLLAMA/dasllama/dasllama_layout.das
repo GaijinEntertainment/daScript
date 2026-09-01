@@ -1000,9 +1000,16 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     for (bj in range64(32l)) {
                                         dq[128l + bj] = gq[128l * mr + bj * mr + r]
                                     }
-                                } elif (fmt == KqFmt.k6) {
+                                } elif (fmt == KqFmt.k6) {   // qh columns 2blk + half carry one sub-block's four j sites at 2j; the disk byte h*32 + half*16 + j*4 + t carries sub-blocks 4h.. at 2b
                                     for (p in range64(64l)) {
-                                        dq[128l + p] = gq[128l * mr + ((p / 4l) * mr + r) * 4l + p % 4l]
+                                        let half = (p % 32l) / 16l
+                                        let j = (p % 16l) / 4l
+                                        var byte = 0u
+                                        for (bb in range64(4l)) {
+                                            let col = ((p / 32l) * 4l + bb) * 2l + half
+                                            byte |= ((uint(gq[128l * mr + (col * mr + r) * 4l + p % 4l]) >> uint(2l * j)) & 3u) << uint(2l * bb)
+                                        }
+                                        dq[128l + p] = uint8(byte)
                                     }
                                 }
                                 if (fmt == KqFmt.k6 || fmt == KqFmt.k3) {

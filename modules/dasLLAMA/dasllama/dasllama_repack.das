@@ -314,10 +314,15 @@ def repack_k6_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
                             }
                         }
                     }
-                    for (h in range64(2l)) {   // qh bytes verbatim, row-interleaved by 4-byte columns
-                        for (jj in range64(8l)) {
+                    for (blk in range64(8l)) {   // qh re-packed per sub-block: column 2blk + half holds the four j sites' 2-bit fields at 2j
+                        for (half in range64(2l)) {
                             for (t in range64(4l)) {
-                                kq[dq + 128l * mr + ((h * 8l + jj) * mr + r) * 4l + t] = tqp[sq + 128l + h * 32l + jj * 4l + t]
+                                var byte = 0u
+                                for (j in range64(4l)) {
+                                    let l = (blk / 4l) * 32l + half * 16l + j * 4l + t
+                                    byte |= ((uint(tqp[sq + 128l + l]) >> uint(2l * (blk % 4l))) & 3u) << uint(2l * j)
+                                }
+                                kq[dq + 128l * mr + ((blk * 2l + half) * mr + r) * 4l + t] = uint8(byte)
                             }
                         }
                     }
@@ -981,9 +986,9 @@ def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, n
             let qb = sbi * (fmt == 5l ? 160l : 192l) * mr
             let ob = sbi * 256l * mr
             for (blk in range64(8l)) {
-                let g2 = uint64((blk % 4l) * 2l)
-                let hbase = qb + 128l * mr + (blk / 4l) * 32l * mr   // k6 high plane (k5 ignores)
+                let hbase = qb + 128l * mr + blk * 2l * mr * 4l   // k6 high plane: columns 2blk (lo half) and 2blk + 1 (hi); k5 ignores
                 for (j in range64(4l)) {
+                    let sj = uint64(2l * j)
                     let gcol = ((blk * 4l + j) * mr) * 4l
                     var r4 = 0l
                     while (r4 < mr) {
@@ -1007,12 +1012,12 @@ def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, n
                                 hiw[w] = ((n >> 4ul) & LO4) | dh
                             }
                         } else {
-                            let h0w = reinterpret<uint64 const?>(kqg + (hbase + (j * mr + r4) * 4l))
-                            let h1w = reinterpret<uint64 const?>(kqg + (hbase + ((j + 4l) * mr + r4) * 4l))
+                            let h0w = reinterpret<uint64 const?>(kqg + (hbase + r4 * 4l))
+                            let h1w = reinterpret<uint64 const?>(kqg + (hbase + (mr + r4) * 4l))
                             for (w in range64(2l)) {
                                 let n = nw[w]
-                                low[w] = (n & LO4) | (((h0w[w] >> g2) & TOP2) << 4ul)
-                                hiw[w] = ((n >> 4ul) & LO4) | (((h1w[w] >> g2) & TOP2) << 4ul)
+                                low[w] = (n & LO4) | (((h0w[w] >> sj) & TOP2) << 4ul)
+                                hiw[w] = ((n >> 4ul) & LO4) | (((h1w[w] >> sj) & TOP2) << 4ul)
                             }
                         }
                         r4 += 4l

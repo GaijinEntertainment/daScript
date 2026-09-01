@@ -258,6 +258,19 @@ k6 0.90x, k5 0.91x):
    "the pin gained nothing on k6" stands, and the fast mode is not the spill count. NEXT (its own session,
    with counters - AMD uProf on this box): what the 4.0 and 6.0 modes differ in, at `--base-align 4096`
    with `--base-offset` as the phase knob; only then D2's hoist / D5's unroll.
+   2026-09-01, Boris's ruling - the .dlim is hardware-specific (Vulkan and Metal bake their own; the
+   flavors never co-exist), so the CPU flavor's planes are the CPU kernels' to lay out. k6's qh half
+   was GGUF's packing copied verbatim (four SUB-BLOCKS per byte), which is why the kernel kept eight qh
+   columns live across four sub-blocks or reloaded them. LANDED: the qh plane re-packed per sub-block
+   (column 2blk + half holds that sub-block's four j sites at 2j) - same 64 bytes, two qh loads per
+   sub-block, uniform shift, nothing lives past its sub-block; six readers moved (repack, tile unpack,
+   gemv arm, row dequant, generic tail dot, layout inverse), IMAGE_VERSION 27, JIT 0x5b. TEST 90/90,
+   test_gguf_quant / test_repack / test_kquant green. zen2 k6 decode, us: engine phase 4444 / 4619 /
+   4708 (was 4862-6364), heap phase 4749 / 4729 / 5427 (was 4040-5804); spills 72 + 95 -> 36 + 67;
+   TEAM=16 wall 715 / 759 (unchanged, balance-bound); tile 659 ms (unchanged). The engine's k6 goes
+   ~0.61x -> ~0.80x for free; the 4.0 ms mode is not reached - the remaining spills are the i16
+   chains and broadcasts. NEXT: the same transpose for k5's qh and k3's hmask (eight sites per byte,
+   `lshr s` + `and 1`, retires the k3 pin) - the memo's other two high-bit-plane losers.
 3. Noise: the one-thread bench and the reference both drift ~5-8% run to run; interleaved rounds hold
    ours steady, the reference is re-run per table. iq3xxs/iq2s/iq2xxs tie at 1.00; k2 now clear.
 

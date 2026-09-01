@@ -1082,14 +1082,14 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                     wlo = or_bit_x10(te, wlo, hb, maskLo, "wlo5{blk}_{j * rq + qd}")
                     whi = or_bit_x10(te, whi, hb, maskHi, "whi5{blk}_{j * rq + qd}")
                 } elif (k6 && !te.kqBytes) {
-                    let g2 = (blk % 4) * 2
-                    let hbase = 128 * mr + ((blk / 4) * 8) * 4 * mr
-                    var hloOff = LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(hbase + j * 4 * mr + qd * w8)), "")
-                    var hhiOff = LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(hbase + (j + 4) * 4 * mr + qd * w8)), "")
-                    var qhlo = load_vec(te, te.vwi8, te.wg, hloOff, "qhl{blk / 4}_{j * rq + qd}")
-                    var qhhi = load_vec(te, te.vwi8, te.wg, hhiOff, "qhh{blk / 4}_{j * rq + qd}")
-                    var dlo = LLVMBuildAnd(b, LLVMBuildLShr(b, qhlo, splat_i8w(te, g2), ""), splat_i8w(te, 3), "")
-                    var dhi = LLVMBuildAnd(b, LLVMBuildLShr(b, qhhi, splat_i8w(te, g2), ""), splat_i8w(te, 3), "")
+                    // the plane's qh columns 2blk / 2blk + 1 hold this sub-block's four j sites at 2j: two loads per sub-block, nothing lives past it
+                    let hbase = 128 * mr + blk * 2 * 4 * mr
+                    var hloOff = LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(hbase + qd * w8)), "")
+                    var hhiOff = LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(hbase + 4 * mr + qd * w8)), "")
+                    var qhlo = load_vec(te, te.vwi8, te.wg, hloOff, "qhl{blk}_{qd}")
+                    var qhhi = load_vec(te, te.vwi8, te.wg, hhiOff, "qhh{blk}_{qd}")
+                    var dlo = LLVMBuildAnd(b, LLVMBuildLShr(b, qhlo, splat_i8w(te, 2 * j), ""), splat_i8w(te, 3), "")
+                    var dhi = LLVMBuildAnd(b, LLVMBuildLShr(b, qhhi, splat_i8w(te, 2 * j), ""), splat_i8w(te, 3), "")
                     wlo = LLVMBuildOr(b, wlo, LLVMBuildShl(b, dlo, splat_i8w(te, 4), ""), "wlo6{blk}_{j * rq + qd}")
                     whi = LLVMBuildOr(b, whi, LLVMBuildShl(b, dhi, splat_i8w(te, 4), ""), "whi6{blk}_{j * rq + qd}")
                 }

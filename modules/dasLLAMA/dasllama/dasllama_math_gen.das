@@ -179,7 +179,7 @@ def kq_grp_row_dot(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr : 
                 var ihi = 0
                 for (j in range64(4l)) {
                     let hb = fmt == 5l ? int(kqg[qb + 128l * mr + (blk * 4l + j) * mr + r]) : 0
-                    let g2 = uint((blk % 4l) * 2l)
+                    let sj = uint(2l * j)
                     for (t in range64(4l)) {
                         let nib = uint(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
                         var qlo = int(nib & 15u)
@@ -188,11 +188,11 @@ def kq_grp_row_dot(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr : 
                             qlo |= ((hb >> int(t)) & 1) << 4
                             qhi |= ((hb >> int(4l + t)) & 1) << 4
                         } elif (fmt == 6l) {
-                            let hbase = qb + 128l * mr + (blk / 4l) * 32l * mr
-                            let h0 = uint(kqg[hbase + (j * mr + r) * 4l + t])
-                            let h1 = uint(kqg[hbase + ((j + 4l) * mr + r) * 4l + t])
-                            qlo |= int(((h0 >> g2) & 3u) << 4u)
-                            qhi |= int(((h1 >> g2) & 3u) << 4u)
+                            let hbase = qb + 128l * mr + blk * 2l * mr * 4l   // qh columns 2blk / 2blk + 1 hold this sub-block's four j sites at 2j
+                            let h0 = uint(kqg[hbase + r * 4l + t])
+                            let h1 = uint(kqg[hbase + (mr + r) * 4l + t])
+                            qlo |= int(((h0 >> sj) & 3u) << 4u)
+                            qhi |= int(((h1 >> sj) & 3u) << 4u)
                         }
                         ilo += qlo * int(xqp[b * 32l + j * 4l + t])
                         ihi += qhi * int(xqp[b * 32l + 16l + j * 4l + t])
