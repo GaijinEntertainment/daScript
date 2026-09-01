@@ -228,6 +228,32 @@ watermark only (no recurrent layers) - recon the sliding-window ring rows.
   `PERF_LEDGER.md` entries; `followup_*` for the ledgered fat; site rows per the ruling at
   arc end; LAWS.md for the rulings; memory.
 
+## S0 results
+
+### M5 re-baseline of the shipped depth-1 rail (2026-09-01, `lcpp_bench --mtp-ab -n 128 -r 5
+--ngl 99`, debug-jit, wikitext2 8 prompts, HEAD c0ca624f9 + plan commits)
+
+| model | off t/s | on t/s | ratio | accept | July M1 |
+|---|---|---|---|---|---|
+| 0.8B Q8 | 357.9 ± 0.5 | 454.6 ± 1.7 | **1.27x** | 87.9% | 1.26x @ 92.8 |
+| 27B-MTP Q4_K_M | 23.5 ± 2.1 (VOID, cv 9%) | 28.1 ± 0.3 | 1.19x nominal, ~1.25-1.3x settled | 81.5% | 1.26x @ 85.3 |
+| 35B-A3B Q4_K_M | 103.1 ± 1.5 | 127.0 ± 0.3 | **1.23x** | 81.7% | 1.19x @ 81.7 |
+
+Prediction check: dense 1.2-1.4x HELD; "MoE < 1.15x" MISSED - the MoE cell improved to 1.23x
+(the plain MoE step nearly doubled on M5 and the B=2 expert-union verify kept pace).
+
+Two findings that feed S0's remaining items:
+- **Sustained-load GPU regime on the 27B.** Per-prompt GPU prefill climbs ~1.0 s (first pass)
+  -> ~1.7 s (third pass) then plateaus; the 0.8B stays flat. Not a leak (plateau), not
+  thermal (no pmset warning). The bench runs the OFF arm fully before ON, so OFF rides the
+  fast first pass - a bias AGAINST spec. S6 duty: per-rep arm interleaving (the July ladder's
+  shape) or a burn-in before the timed reps; the 27B off row is void until then.
+- **Acceptance dropped 4-5 points on the DENSE cells only** (0.8B 92.8 -> 87.9, 27B 85.3 ->
+  81.5) while the MoE cell is identical to July (81.7 = 81.7). Same corpus. The dense verify
+  rides the kq mvb/gemv kernels the kq-race arc rewrote; the MoE verify rides enc_moe_gemv.
+  This is the silent-verify-drift trap's signature - the parity harness's first target is the
+  dense B=2 verify's row-0 logits against the plain step's at the same position.
+
 ## Predictions (logged BEFORE each measurement)
 
 - t(M): the mv family near-flat to M=4 (weights-bound), knee at 8; whole-step verify at
