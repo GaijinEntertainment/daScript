@@ -66,7 +66,7 @@ def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
     var by = buf_fill(dev, d, -1000.0)
     var bn = buf_u32(dev, uint(n))
     var bd = buf_u32(dev, uint(d))
-    let groups = vform == "k5c" ? (d + 1) / 2 : (vform == "iq3s" || vform == "iq3xxs" ? (d + 7) / 8 : (d + 3) / 4)
+    let groups = vform == "k5c" ? (d + 1) / 2 : (vform == "iq3s" || vform == "iq3xxs" || vform == "k2" ? (d + 7) / 8 : (d + 3) / 4)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         if (vform == "iq4xs") {

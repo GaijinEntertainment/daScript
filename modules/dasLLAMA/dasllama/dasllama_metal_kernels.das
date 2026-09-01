@@ -7995,11 +7995,11 @@ class MetalKqGemvK6 {
 // Q2_K: the k3 GEMV's lane map minus the hmask - unsigned 2-bit lanes, per-16 sc/min NIBBLE
 // pairs off the split strips (sc scales the dot, mn folds on the lane's x sums against dmin),
 // d + dmin off the 4B tail plane.
-[metal_dispatch(name = "enc_kq_k2_c", pso = "g_pso_kq_k2", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+[metal_dispatch(name = "enc_kq_k2_c", pso = "g_pso_kq_k2", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
 class MetalKqGemvK2 {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d+dmin tail - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B pair-byte strips, byte view (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k2 quant plane, byte view (qs at 64*blk)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k2 quant plane, uint view (qs at 16*blk)
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
@@ -8008,54 +8008,64 @@ class MetalKqGemvK2 {
     [metal_kernel(name="metal_kq_gemv_k2_msl")]
     def metal_kq_gemv_k2 {
         let lane = gl_SubgroupInvocationID
-        let tid = lane / 2u
-        let ix = lane % 2u
-        let ip = tid / 8u
-        let il = tid % 8u
-        let l0 = il * 4u
-        let is0 = ip * 8u + l0 / 16u
+        let ix = lane / 8u
+        let it = lane % 8u
+        let iq = it / 4u
+        let ir = it % 4u
+        let isb = ir / 2u
         let nb = ndim / 256u
-        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var sumf : float[2]
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 4u
+        var yl : float[32]
+        var sumf : float[4]
         var ib = ix
         while (ib < nb) {
-            let yb = ib * 256u + ip * 128u + l0
-            var ysum : float[4]
-            for [unroll_full] (l in range(4)) {
-                yl[4 * l] = x[yb + uint(l)]
-                yl[4 * l + 1] = x[yb + 32u + uint(l)]
-                yl[4 * l + 2] = x[yb + 64u + uint(l)]
-                yl[4 * l + 3] = x[yb + 96u + uint(l)]
-                ysum[0] += yl[4 * l]
-                ysum[1] += yl[4 * l + 1]
-                ysum[2] += yl[4 * l + 2]
-                ysum[3] += yl[4 * l + 3]
+            let yb = ib * 256u + iq * 128u + ir * 8u
+            var sumy : float[4]
+            for [unroll_full] (i in range(8)) {
+                yl[i] = x[yb + uint(i)]
+                sumy[0] += yl[i]
+                yl[i + 8] = x[yb + 32u + uint(i)]
+                sumy[1] += yl[i + 8]
+                yl[i + 16] = x[yb + 64u + uint(i)]
+                sumy[2] += yl[i + 16]
+                yl[i + 24] = x[yb + 96u + uint(i)]
+                sumy[3] += yl[i + 24]
             }
-            for [unroll_full] (r in range(2)) {
+            for [unroll_full] (r in range(4)) {
                 let blk = (first_row + uint(r)) * nb + ib
-                let qs0 = blk * 64u + ip * 32u + l0
-                let sb = blk * 16u + is0
-                var sums : float[4]
-                for [unroll_full] (l in range(4)) {
-                    let q = uint(kqb[qs0 + uint(l)])
-                    sums[0] += yl[4 * l] * float(q & 3u)
-                    sums[1] += yl[4 * l + 1] * float((q >> 2u) & 3u)
-                    sums[2] += yl[4 * l + 2] * float((q >> 4u) & 3u)
-                    sums[3] += yl[4 * l + 3] * float(q >> 6u)
+                let qb = blk * 16u + iq * 8u + ir * 2u
+                let qa = kqu[qb]
+                let qc = kqu[qb + 1u]
+                var acc1 : float[4]
+                var acc2 : float[4]
+                for [unroll_full] (i in range(4)) {
+                    let q16 = ((i < 2 ? qa : qc) >> (16u * (uint(i) & 1u))) & 0xFFFF
+                    acc1[0] += yl[2 * i] * float(q16 & 0x0003)
+                    acc2[0] += yl[2 * i + 1] * float(q16 & 0x0300)
+                    acc1[1] += yl[2 * i + 8] * float(q16 & 0x000C)
+                    acc2[1] += yl[2 * i + 9] * float(q16 & 0x0C00)
+                    acc1[2] += yl[2 * i + 16] * float(q16 & 0x0030)
+                    acc2[2] += yl[2 * i + 17] * float(q16 & 0x3000)
+                    acc1[3] += yl[2 * i + 24] * float(q16 & 0x00C0)
+                    acc2[3] += yl[2 * i + 25] * float(q16 & 0xC000)
                 }
+                let sb = blk * 16u + iq * 8u + isb
                 let b0 = uint(kscb[sb])
                 let b2 = uint(kscb[sb + 2u])
                 let b4 = uint(kscb[sb + 4u])
                 let b6 = uint(kscb[sb + 6u])
-                let dd = float(kdh[blk * 2u])
-                let dmn = float(kdh[blk * 2u + 1u])
-                sumf[r] += dd * (sums[0] * float(b0 & 15u) + sums[1] * float(b2 & 15u) + sums[2] * float(b4 & 15u) + sums[3] * float(b6 & 15u))
-                sumf[r] -= dmn * (ysum[0] * float(b0 >> 4u) + ysum[1] * float(b2 >> 4u) + ysum[2] * float(b4 >> 4u) + ysum[3] * float(b6 >> 4u))
+                let dall = float(kdh[blk * 2u])
+                let dmn = float(kdh[blk * 2u + 1u]) * 0.0625
+                sumf[r] += dall * ((acc1[0] + 0.00390625 * acc2[0]) * float(b0 & 15u)
+                    + (acc1[1] + 0.00390625 * acc2[1]) * float(b2 & 15u) * 0.25
+                    + (acc1[2] + 0.00390625 * acc2[2]) * float(b4 & 15u) * 0.0625
+                    + (acc1[3] + 0.00390625 * acc2[3]) * float(b6 & 15u) * 0.015625)
+                sumf[r] -= dmn * (sumy[0] * float(b0 & 0xF0) + sumy[1] * float(b2 & 0xF0)
+                    + sumy[2] * float(b4 & 0xF0) + sumy[3] * float(b6 & 0xF0))
             }
-            ib += 2u
+            ib += 4u
         }
-        for [unroll_full] (r in range(2)) {
+        for [unroll_full] (r in range(4)) {
             let s = simd_sum(sumf[r])
             if (lane == 0u && first_row + uint(r) < ddim) {
                 y[first_row + uint(r)] = s
