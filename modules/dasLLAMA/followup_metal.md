@@ -52,3 +52,33 @@ every format: `harness/parity.das -- -m <gguf> -n 40 --ids 128000,12805,5304,264
 Placeholder - the per-format Metal notes (tg 0.78-0.93x tails, the IQ4_XS lane-map gap of
 followup_general #58, the Q22 dispatch-loop probe method) consolidate here in Phase E of
 `plans/unquirk_pass.md`; until then they live in `HOW_TO_ADD_A_FORMAT.md`'s per-format notes.
+
+## 4. The elementwise / activation-precision lane (the last M5 pp residual)
+
+Attribution (M5, 1B iq2xxs, pp512 = 31 ms encode): mm 27.7 ms at measured tensor-twin rates,
+attention 0.16 ms - the ~3 ms remainder is every non-matmul pass over the activation planes
+(norms, residual adds, rope, swiglu, activation converts, glue). llama.cpp's slice: ~1.7 ms.
+
+**What already exists** - the producer-fused f16 twin family (`_hx`): `pf_enc_rms_hx`,
+`pf_enc_add_rms_bhx` (add+norm+half-emit in one), `enc_swiglu_hx`/`enc_geglu_hx`,
+`enc_qk_rope_hx`. On the dense path these cover the norm and activation producers; the
+standalone `enc_cvt_half` fires only through `pf_cvt_panel` fallbacks and at the sites below.
+Measured ceiling of ALL remaining converts (`DASLLAMA_METAL_PREFILL_SKIP=act_cvt` knockout):
+**+0.65% pp512 on M5** (15334 vs 15235 tok/s) - the fusion rung is mostly banked already.
+
+- **4a. The attention-out `_hx`** (the one live dense-path cvt): the AV kernels
+  (`MetalAttnAV`, `MetalAttnAVMm`, the tensor `MetalAttnAVMmTensorT`) write only f32 `xb`;
+  wo's X half twin comes from `pf_cvt_panel` at the `bxh_av` site. An HX store beside the
+  simdgroup/tensor stores kills that pass. Caveat: `q_gated` models rewrite `bxb` through
+  `enc_sigmul` AFTER attention - there the twin must come from sigmul (give it an `_hx`),
+  or the site keeps the cvt. Prize: ~0.3% pp on M5, larger on M1/M4-class (same bytes,
+  a third of the bandwidth). Three kernel variants + the gated ordering = half a day.
+- **4b. Per-model cvt arms** still on `pf_cvt_panel`: the deltanet out (`bdno`), the MoE
+  hidden (`bxh_mg`) and shexp, PLE gather/project (gemma4e), the embedder/cat legs. Same
+  `_hx` pattern where the producer is ours; size per model class before building.
+- **4c. THE BIG RUNG - f16 activation planes end-to-end for prefill.** The remaining ~1 ms/
+  prefill vs llama.cpp is the f32 elementwise traffic itself (their graph moves half the
+  bytes through every norm/add/act pass and needs no cvt at all). Touches plane formats,
+  every elementwise kernel, attention, the CPU-fallback paths, logits/readback - and
+  re-opens the numerics bars across the parity and prefill suites. ITS OWN ARC, planned;
+  the acceptance bar is the existing parity suites plus a pp/tg board A/B per class.
