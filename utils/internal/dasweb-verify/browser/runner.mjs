@@ -116,7 +116,7 @@ async function evaluateIn(target, fn, arg, ms = EVALUATE_MS) {
     return r.value;
 }
 
-export class WedgeError extends Error {
+class WedgeError extends Error {
     constructor() {
         super('page stopped answering evaluate');
         this.wedge = true;
@@ -362,7 +362,9 @@ export class Artifacts {
                 // rate is the only measurement we have of it.
                 process.stderr.write(`  ${name}: artifact navigation dropped, retrying: ${why.split('\n')[0]}\n`);
             }
-            await new Promise((r) => setTimeout(r, ARTIFACT_NAV_RETRY_MS));
+            // Injectable so the stub suite does not pay the real wait; production
+            // cfg carries no such key, so the default is what the nightly uses.
+            await new Promise((r) => setTimeout(r, this.cfg.navRetryMs ?? ARTIFACT_NAV_RETRY_MS));
         }
     }
 

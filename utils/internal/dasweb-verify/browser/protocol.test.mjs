@@ -227,6 +227,7 @@ test('a dropped connection is retryable, every other navigation failure is not',
         'page.goto: net::ERR_CONNECTION_CLOSED at https://run.daslang.io/api/build/artifact/a/b/sample.html'), true);
     assert.equal(P.isTransportDrop('page.goto: net::ERR_CONNECTION_RESET at https://run.daslang.io/x'), true);
     assert.equal(P.isTransportDrop('net::ERR_EMPTY_RESPONSE'), true);
+    assert.equal(P.isTransportDrop('page.goto: net::ERR_SOCKET_NOT_CONNECTED at https://run.daslang.io/x'), true);
     assert.equal(P.isTransportDrop('page.goto: net::ERR_CONNECTION_REFUSED at https://run.daslang.io/x'), false);
     assert.equal(P.isTransportDrop('page.goto: net::ERR_ABORTED at https://run.daslang.io/x'), false);
     assert.equal(P.isTransportDrop('page.goto: net::ERR_NAME_NOT_RESOLVED at https://run.daslang.io/x'), false);
