@@ -227,6 +227,12 @@ Model: iq2xs ~2570 us = 1.27x. vqtbl gathers are impossible (1-2 KB grids vs tbl
 masked negate already beats llama.cpp's own mask expansion. Fallback if deferred: plane-carried sign
 bytes (size-neutral for iq2xxs/iq3xxs, +6% for iq2xs; touches the plane, both ISAs) -> 0.72-0.98x only.
 Also from the memo: the column-read-vs-byte-read decision was made on x86 and should be a perm seat.
+LANDED 2026-09-01 (the row-pair decode under the sdot lattice, gated DOT_SDOT + decode shape + width
+128; x86 untouched): M1 one thread, us, before -> after (reference): iq2s 4932 -> 3256 (4917, 1.51x),
+iq3s 6089 -> 4937 (5682, 1.15x), iq2xs 6375 -> 4244 (3274, 0.77x), iq2xxs 6063 -> 4085 (3437, 0.84x),
+iq3xxs 6735 -> 5235 (4867, 0.93x); TEST 65/65 on the M1. Still behind on the three ksigns formats:
+the sign mask is five NEON ops per pair per 8-group where a +-1 table (keven_signs form) is two loads
+and one multiply - the next ARM step; then the per-dword scalar index math.
 
 Bench on AMX boxes: the tune-mode q8 tile SIGILL (above) - read how gen_tune_probe reaches the grant
 (q8q8_family_live_variants + the amx cfg companion?) and do the same; k6 bimodality on Granite Rapids.

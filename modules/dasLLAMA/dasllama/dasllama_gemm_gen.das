@@ -1561,6 +1561,83 @@ def private iq2xxs_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
 
 
 
+//! the 8 activation bytes at byte offset `off` of token 0, replicated into both 64-bit lanes
+//! (ld1r {v.2d} after lowering): the non-indexed sdot's operand for a [rowA 8w | rowB 8w] weight vector
+def private bcast_qword_x(var te : TileEmit; var off : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
+    let b = te.builder
+    var p = LLVMBuildGEP2(b, te.types.t_int8, te.x[0], off, "")
+    var q = LLVMBuildLoad2Aligned(b, te.types.t_int64, p, 1u, "")
+    var v2 = LLVMVectorType(te.types.t_int64, 2u)
+    var v = LLVMBuildInsertElement(b, LLVMGetUndef(v2), q, LLVMConstInt(te.types.t_int32, 0ul, 0), "")
+    var spl = LLVMBuildShuffleVector(b, te.types, v, v, [0, 0], "")
+    return LLVMBuildBitCast(b, spl, te.v16i8, name)
+}
+
+//! row `r`'s 8 raw grid weights for (blk, l) as <8 x i8> - the two dword decodes side by side
+def private compose_row8(var te : TileEmit; var wbP : LLVMOpaqueValue?; r, blk, l : int) : LLVMOpaqueValue? {
+    let b = te.builder
+    var base = LLVMBuildAdd(b, wbP, te.types->ConstI64(uint64(r * 4)), "")
+    var w0 = decode_kq_dword(te, base, blk, l, 0)
+    var w1 = decode_kq_dword(te, base, blk, l, 1)
+    var v2 = LLVMVectorType(te.types.t_int32, 2u)
+    var v = LLVMBuildInsertElement(b, LLVMGetUndef(v2), w0, LLVMConstInt(te.types.t_int32, 0ul, 0), "")
+    v = LLVMBuildInsertElement(b, v, w1, LLVMConstInt(te.types.t_int32, 1ul, 0), "")
+    return LLVMBuildBitCast(b, v, LLVMVectorType(te.types.t_int8, 8u), "")
+}
+
+//! the row pair's sign mask off the sign column (byte r*4 + l per row): lanes 0-7 take row rA's byte,
+//! 8-15 row rB's, bit k of the byte selects lane k - then (w ^ m) - m negates the masked weights
+def private negate_pair(var te : TileEmit; var w, col : LLVMOpaqueValue?; rA, rB, l : int; name : string) : LLVMOpaqueValue? {
+    let b = te.builder
+    let idx <- [for (i in range(16)); (i < 8 ? rA : rB) * 4 + l]
+    var bytes = LLVMBuildShuffleVector(b, te.types, col, col, idx, "sgp")
+    var bits : array<LLVMOpaqueValue?>
+    bits |> reserve(16)
+    for (i in range(16)) {
+        bits |> push(LLVMConstInt(te.types.t_int8, uint64(1 << (i % 8)), 0))
+    }
+    var bitsv = LLVMConstVector(array_data_ptr(bits), 16u)
+    var m = LLVMBuildSExt(b, LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntEQ, LLVMBuildAnd(b, bytes, bitsv, ""), bitsv, ""), te.v16i8, "sgpm")
+    return LLVMBuildSub(b, LLVMBuildXor(b, w, m, ""), m, name)
+}
+
+//! One block of a grid format's decode under the sdot lattice as row PAIRS: a <16 x i8> weight vector is
+//! two rows x 8 weights (one u64 grid entry per row for iq2), the activation's 8 bytes replicated, the
+//! non-indexed sdot's lanes [A lo, A hi, B lo, B hi]; one pairwise add per row quad yields the fold's [A, B, C, D].
+def private emit_grid_pairs_blk(var te : TileEmit; var wbP, xb : LLVMOpaqueValue?; blk : int; var signCol : LLVMOpaqueValue? [2]; var a, a1 : LLVMOpaqueValue? [8]; iq2 : bool) {
+    let b = te.builder
+    for (qd in range(te.rq)) {
+        var acc : LLVMOpaqueValue? [2]    // per row pair; the lo strip (l < 2) when iq2
+        var acc1 : LLVMOpaqueValue? [2]   // iq2: the hi strip (l >= 2)
+        for (pr in range(2)) {
+            acc[pr] = LLVMConstNull(te.vni32)
+            acc1[pr] = LLVMConstNull(te.vni32)
+        }
+        for (l in range(4)) {
+            var xv = bcast_qword_x(te, LLVMBuildAdd(b, xb, te.types->ConstI64(uint64(blk * 32 + l * 8)), ""), "x8{blk}_{l}")
+            for (pr in range(2)) {
+                let rA = qd * te.rv + 2 * pr
+                let rB = rA + 1
+                var gA = compose_row8(te, wbP, rA, blk, l)
+                var gB = compose_row8(te, wbP, rB, blk, l)
+                var w = LLVMBuildShuffleVector(b, te.types, gA, gB, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], "wp{blk}_{l}_{qd}_{pr}")
+                var ws = negate_pair(te, w, signCol[qd], 2 * pr, 2 * pr + 1, l, "wps{blk}_{l}_{qd}_{pr}")
+                var args <- [(iq2 && l >= 2) ? acc1[pr] : acc[pr], ws, xv]
+                var d = LLVMBuildCall2(b, te.sdot_ty, te.sdot_decl, args, "sdotp")
+                if (iq2 && l >= 2) {
+                    acc1[pr] = d
+                } else {
+                    acc[pr] = d
+                }
+            }
+        }
+        a[qd] = LLVMBuildAdd(b, a[qd], pairwise_add_i32(te, acc[0], acc[1], "ap{blk}_{qd}"), "")
+        if (iq2) {
+            a1[qd] = LLVMBuildAdd(b, a1[qd], pairwise_add_i32(te, acc1[0], acc1[1], "ap1{blk}_{qd}"), "")
+        }
+    }
+}
+
 // One 256-weight SUPERBLOCK, IQ4_XS/iq3s grp<mr> form (te.kq = 44/33): mx4's LUT decode (44)
 // or the byte-expanded signed panel (33; the gemv gathers it per superblock, the tile gets the
 // runtime unpack) — dot_lane's sign-trick lattice, k4's fold with no min term.
@@ -1573,12 +1650,16 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
     let iq2 = te.kq == 23 || te.kq == 24     // iq2s/iq2xs: per-16 UNSIGNED strips - lo/hi halves keep split accumulators
     let nl = te.kq == 45                     // iq4nl: the 44 LUT decode with q40's PER-BLOCK f16 d fold (no sub-scales, no min term)
     let gather = panel && te.iq3s_panel != null   // gemv mode: gather this superblock off the packed planes first
+    // the sdot lattice's decode shape composes row PAIRS straight from the grid words (emit_grid_pairs_blk) - no panel
+    let pairs = gather && te.dotKind == DOT_SDOT && tokCount == 1 && te.rv == 4
     var wbase = te.wg
     var wb : LLVMOpaqueValue?
     var wbP : LLVMOpaqueValue?
     if (gather) {
         wbP = LLVMBuildMul(b, sbi, te.types->ConstI64(uint64(mr) * uint64(kq_gather_stride(te.kq))), "kq.wb")
-        emit_kq_gather(te, sbi)
+        if (!pairs) {
+            emit_kq_gather(te, sbi)
+        }
         wbase = te.iq3s_panel
         wb = te.types->ConstI64(0ul)
     } else {
@@ -1626,7 +1707,10 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
                 signCol[qd] = kq_sign_bytes(te, wbP, blk, qd, "sgc{blk}_{qd}")
             }
         }
-        for (j in range(4)) {
+        if (pairs) {
+            emit_grid_pairs_blk(te, wbP, xb, blk, signCol, a, a1, iq2)
+        }
+        for (j in range(pairs ? 0 : 4)) {
             for (qd in range(rq)) {
                 var noff = LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((blk * 16 + j * 4) * mr + qd * w8)), "")
                 var wlo : LLVMOpaqueValue?
