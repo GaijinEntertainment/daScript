@@ -307,6 +307,13 @@ the tile column.
 One thread: every decode >= 1.04 except k5 0.90; tiles 2.2-13.5x. Engine shape: everything >= 0.95 (q8), k5 0.98,
 the rest 1.02-1.60. The arm-i8mm mint (the 1B vehicle, --tune, export) runs next on this box and the tables re-run
 on the minted profile.
+MINTED (fd8e490f1: provenance ok / ok / neon;dotprod;i8mm;bf16;fullfp16;lse, 49 kernels): the kq tile crowns are
+the neon profile's (`mr8` everywhere), q8q8_tile_gen moves mr8_budget -> kstep2, seven [tuned] loop kernels pick
+other widths. One thread on the minted profile, us (reference): q8 727 (1128) 1.55, k4 666 (916) 1.38, k5 1643
+(1466) 0.89, k6 1312 (1732) 1.32, q40 605 (1263) 2.09, q51 1651 (1994) 1.21, iq4xs 815 (1311) 1.61, k3 1454 (1829)
+1.26, iq3s 3888 (4066) 1.05, iq3xxs 2678 (3762) 1.40, iq4nl 795 (1433) 1.80, k2 976 (1404) 1.44, iq2s 2383 (2952)
+1.24, iq2xs 1787 (2441) 1.37, iq2xxs 2224 (2616) 1.18, mx4 995 (1322) 1.33 - the same table as before, as the
+crowns say. k5 0.89 is the M4's one tail (the M1 has it at 1.06; the P-core's byte->lane deposit costs more).
 
 ### zen2 v4 - the closing tables (2026-09-01, after the k6/k3 transposes and the fused flush)
 
