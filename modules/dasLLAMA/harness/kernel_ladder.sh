@@ -11,6 +11,8 @@
 #              Windows - never the global DASLANG, which names another tree's binary on dev boxes)
 #   LCPP_TBO   test-backend-ops (default: $HOME/Work/llama.cpp/build-clean-cpu/bin/Release/test-backend-ops.exe)
 #   NTOK       prefill tokens (default 512; 0 = decode rows only)
+#   KL_MODULE_CACHE  a -module-cache path for the bench start (the AST cache: a cold dasLLAMA compile is
+#              minutes; keep it outside .jitted_scripts, which measurement scripts wipe)
 #   ROUNDS     interleaved rounds per row (default 5)
 #   TEAM       lanes for the decode rows: the bench dispatches the GEMV the engine's way (--team,
 #              DAS_JOBQUE_THREADS=N) and the reference runs GGML_BENCH_THREADS=N. Default: the box's
@@ -55,7 +57,9 @@ echo "# kernel ladder  $(date +%F)  box=$(hostname)  daslang=$DASLANG  ref=$TBO 
 [ -x "$TBO" ] || { echo "kernel_ladder: no test-backend-ops at '$TBO' (set LCPP_TBO)" >&2; exit 1; }
 grep -q GGML_BENCH_THREADS "$TBO" || { echo "kernel_ladder: '$TBO' lacks the GGML_BENCH_THREADS define - it would run every core and the ratio column would lie (harness README)" >&2; exit 1; }
 set +e
-DAS_TUNE_MODE=normal DAS_JOBQUE_THREADS=$THREADS "$DASLANG" -jit "$ROOT/modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das" \
+MC_ARGS=""
+if [ -n "${KL_MODULE_CACHE:-}" ]; then mkdir -p "$(dirname "$KL_MODULE_CACHE")"; MC_ARGS="-module-cache $KL_MODULE_CACHE"; fi
+DAS_TUNE_MODE=normal DAS_JOBQUE_THREADS=$THREADS "$DASLANG" -jit $MC_ARGS "$ROOT/modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das" \
     -- --fmt "$FMTS" --d "$ROWS" --ntok "$NTOK" --rounds "$ROUNDS" --tsv --base-align 4096 $TEAM_ARGS > "$WORK/ours.raw" 2> "$WORK/ours.err"
 rc=$?
 set -e
