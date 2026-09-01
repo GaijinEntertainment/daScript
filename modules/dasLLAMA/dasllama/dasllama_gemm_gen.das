@@ -978,7 +978,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
     // x64 dot kinds take the activation dword straight from memory (vpbroadcastd, see kq_dot_mem); NEON keeps chunk loads
     let memBcast = te.dotKind != DOT_SDOT && te.dotKind != DOT_SMMLA
     let madd16 = memBcast && te.dotKind == DOT_MADDUBS
-    let fuseScale = madd16 && (k63 || te.kq == 4 || te.kq == 5)   // the sub-scale rides the chain flush (pmaddwd), no i32 multiply, no a0/a1
+    let fuseScale = madd16 && (k63 || te.kq == 5)   // the sub-scale rides the chain flush (pmaddwd), no i32 multiply, no a0/a1; k4 measured 4% slower fused (one flush per sub-block)
     var vri8 = LLVMVectorType(te.types.t_int8, uint(te.rv))
     // weight-side superblock scale rows: k4/k5 f16 d/dmin; k6/k3 f16 d only; q40 has none (per-32 d loads live below)
     var dv : LLVMOpaqueValue? [2]
@@ -1053,7 +1053,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                 s16lo[qd] = scale16_dup(te, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(2 * blk * mr + qd * te.rv)), ""), true, "s16{blk}_{qd}a")
                 s16hi[qd] = scale16_dup(te, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64((2 * blk + 1) * mr + qd * te.rv)), ""), true, "s16{blk}_{qd}b")
             }
-        } elif (fuseScale) {   // k4/k5: one 6-bit scale per sub-block, one chain
+        } elif (fuseScale) {   // k5: one 6-bit scale per sub-block, one chain
             for (qd in range(rq)) {
                 s16lo[qd] = scale16_dup(te, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(4 * mr + blk * mr + qd * te.rv)), ""), false, "s16{blk}_{qd}")
             }

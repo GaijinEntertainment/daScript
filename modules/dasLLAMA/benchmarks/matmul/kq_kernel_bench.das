@@ -252,13 +252,62 @@ struct RowStat {
 }
 
 //! the engine's decode dispatch, verbatim (dasllama_math's matmul shape): the splitter's chunk count over the
-//! rows, the team self-serving them; each lane adds its call time to laneUs[slot]
+//! rows, the team self-serving them; each lane adds its call time to laneP[slot]
 def team_gemv(fn : GemvFn; var yp : float?; kqp, ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64; var laneP : int64?) {
     maybe_parallel_for_indexed(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(slot : int; rb : int; re : int) {
         let l0 = ref_time_ticks()
         invoke(fn, yp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         unsafe {
             laneP[slot] += int64(get_time_usec(l0))
+        }
+    }
+}
+
+def team_gemv_q8(fn : GemvQ8Fn; var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64; var laneP : int64?) {
+    maybe_parallel_for_indexed(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(slot : int; rb : int; re : int) {
+        let l0 = ref_time_ticks()
+        invoke(fn, yp, wp, sp, xqp, xsp, n, int64(rb), int64(re))
+        unsafe {
+            laneP[slot] += int64(get_time_usec(l0))
+        }
+    }
+}
+
+def team_gemv_mx4(fn : GemvMx4Fn; var yp : float?; wn, we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d : int64; var laneP : int64?) {
+    maybe_parallel_for_indexed(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(slot : int; rb : int; re : int) {
+        let l0 = ref_time_ticks()
+        invoke(fn, yp, wn, we, xqp, xsp, n, int64(rb), int64(re))
+        unsafe {
+            laneP[slot] += int64(get_time_usec(l0))
+        }
+    }
+}
+
+//! the team arm's interleaved timing: the block dispatches row `row` the engine's way and every lane adds its
+//! call time to laneP[slot]; the row keeps the wall (best, median) and the lanes' fastest and slowest sums
+def time_rows_team(var stats : array<RowStat>; rounds : int; blk : block<(row : int; var laneP : int64?) : void>) {
+    var laneUs : array<int64>
+    laneUs |> resize(get_total_hw_jobs() + 1)
+    var laneP = unsafe(addr(laneUs[0]))
+    for (row in range(length(stats))) {
+        stats[row].us |> reserve(rounds)
+        stats[row].lane_lo = 999999999l
+        invoke(blk, row, laneP)   // warmup + codegen, unmeasured
+    }
+    for (_r in range(rounds)) {
+        for (row in range(length(stats))) {
+            for (u in laneUs) {
+                u = 0l
+            }
+            let t0 = ref_time_ticks()
+            invoke(blk, row, laneP)
+            stats[row].us |> push(int64(get_time_usec(t0)))
+            for (u in laneUs) {
+                if (u > 0l) {
+                    stats[row].lane_lo = min(stats[row].lane_lo, u)
+                    stats[row].lane_hi = max(stats[row].lane_hi, u)
+                }
+            }
         }
     }
 }
@@ -340,29 +389,8 @@ def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         let xbsp = addr<int const?>(p.arena[p.xbs])
         var yp = addr<float?>(p.arena[p.y])
         if (cfg.team) {
-            var laneUs : array<int64>
-            laneUs |> resize(get_total_hw_jobs() + 1)
-            var laneP = addr(laneUs[0])
-            for (st, fn in stats, fns) {
-                st.us |> reserve(cfg.rounds)
-                st.lane_lo = 999999999l
-                team_gemv(fn, yp, kqp, ksp, xqp, xsp, xbsp, n, d, laneP)   // warmup + codegen, unmeasured
-            }
-            for (_r in range(cfg.rounds)) {
-                for (st, fn in stats, fns) {
-                    for (u in laneUs) {
-                        u = 0l
-                    }
-                    let t0 = ref_time_ticks()
-                    team_gemv(fn, yp, kqp, ksp, xqp, xsp, xbsp, n, d, laneP)
-                    st.us |> push(int64(get_time_usec(t0)))
-                    for (u in laneUs) {
-                        if (u > 0l) {
-                            st.lane_lo = min(st.lane_lo, u)
-                            st.lane_hi = max(st.lane_hi, u)
-                        }
-                    }
-                }
+            time_rows_team(stats, cfg.rounds) $(row : int; var laneP : int64?) {
+                team_gemv(fns[row], yp, kqp, ksp, xqp, xsp, xbsp, n, d, laneP)
             }
         } else {
             time_rows(stats, cfg.rounds) $(row : int) {
@@ -511,11 +539,21 @@ def bench_q8_family(var rows : int&; cfg : BenchArgs; mx4 : bool; var p : Planes
             var fnsQ : array<GemvQ8Fn>
             var fnsM : array<GemvMx4Fn>
             q8_gemv_rows(cfg, mx4, stats, fnsQ, fnsM)
-            time_rows(stats, cfg.rounds) $(row : int) {
-                if (mx4) {
-                    invoke(fnsM[row], yp, kqp, ksp, xqp, xsp, n, 0l, d)
-                } else {
-                    invoke(fnsQ[row], yp, reinterpret<int8 const?>(kqp), reinterpret<float const?>(ksp), xqp, xsp, n, 0l, d)
+            if (cfg.team) {
+                time_rows_team(stats, cfg.rounds) $(row : int; var laneP : int64?) {
+                    if (mx4) {
+                        team_gemv_mx4(fnsM[row], yp, kqp, ksp, xqp, xsp, n, d, laneP)
+                    } else {
+                        team_gemv_q8(fnsQ[row], yp, reinterpret<int8 const?>(kqp), reinterpret<float const?>(ksp), xqp, xsp, n, d, laneP)
+                    }
+                }
+            } else {
+                time_rows(stats, cfg.rounds) $(row : int) {
+                    if (mx4) {
+                        invoke(fnsM[row], yp, kqp, ksp, xqp, xsp, n, 0l, d)
+                    } else {
+                        invoke(fnsQ[row], yp, reinterpret<int8 const?>(kqp), reinterpret<float const?>(ksp), xqp, xsp, n, 0l, d)
+                    }
                 }
             }
             for (st in stats) {
