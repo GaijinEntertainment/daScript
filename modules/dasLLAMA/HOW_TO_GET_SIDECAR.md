@@ -161,7 +161,8 @@ Read the sidecar's provenance before anything else:
 python3 -c 'import json;d=json.load(open("modules/dasLLAMA/benchmarks/lcpp_bench.tune.json"));p=d["provenance"];print(p["noise"],p["validation"],p["features"],len(d["kernels"]))'
 ```
 
-`ok ok <features> 49` is the pass: `noise` is the tuner's own drift verdict (a busy or thermally
+`ok ok <features> 49` is the pass (a few more when the harness gave a kq gemv its own seat - those entries are
+named `<fmt>q8_gemv_gen` and ride into the profile like any other): `noise` is the tuner's own drift verdict (a busy or thermally
 unstable box says otherwise - re-mint, never edit), `validation` is every winner checked against its
 fallback, `features` is the box's fingerprint of `TUNE_KNOWN_FEATURES` (zen4:
 `avx2;f16c;fma;sse4.2;avx512f;avx512bw;avx512vl;avx512vnni`), 49 the kernel count the scope demands.

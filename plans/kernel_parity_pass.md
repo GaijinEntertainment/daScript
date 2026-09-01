@@ -480,6 +480,15 @@ more"); `x86-amx` stays a class of its own, split from `x86-vnni512` ("for sure"
 the emitter it ships with: x86-avx2 on zen2, x86-vnni512 and x86-amx rented (aws_bootstrap.sh, 35 min each),
 arm-i8mm on the M4, arm-neon on the M1. After that: the zen4 grid kernels (the vnni512 panel form's compute), then
 Vulkan gap 1. The CPU PR follows the Metal PR's merge (the make_pr chain on this branch).
+LANDED (0251e8b2d): the kq grids gain `dot=vpdpbusd width=256 mr=16` (the same-layout alternative to the 512 tile
+crown - the layout companion pins the plane mr, so only same-mr rows can differ); the harness picks the gemv among the
+tile winner's same-mr rows, the two best by tile time, by the streamed-decode time past the margin over the tile
+seat's own gemv (incumbent keeps a tie) and writes it under `<fmt>q8_gemv_gen`; llvm_tune stamps a companion from
+its own entry when it names an eligible perm of the grid. TEST 90 -> 103 rows on zen2 (the new rows decline there).
+The arm classes and x86-avx2 have no same-mr alternative (their grids collapse to one eligible row), so only
+x86-vnni512 and x86-amx need the re-mint: two rentals with `aws_bootstrap_mint.sh` (build, TEST, the 1B vehicle's
+--tune, export, both ladders) - running. The export copies every kernels entry, so the gemv seats ride into the
+class profiles; the profile adoption merges them as ordinary entries.
 
 CPU decode (gap 2) - the k-quant decode kernels were the tails the full ladder exposed (k3 0.80x,
 k6 0.90x, k5 0.91x):
