@@ -930,6 +930,16 @@ def private or_bit_x10(te : TileEmit; var w, bytes, maskv : LLVMOpaqueValue?; na
     return LLVMBuildOr(b, w, sel, name)
 }
 
+//! k3's decode re-loads the 24 shared qs/hmask column vectors where each sub-block uses them (L1 hits)
+//! instead of CSE keeping them live against 16 ymm registers and spilling (3198 -> 2691 us). Volatile is
+//! LLVM's "load here"; it also forbids reordering, so the tile shape (token reuse, ILP) keeps CSE.
+def private pin_reload(var a, b, c, d : LLVMOpaqueValue?) {
+    LLVMSetVolatile(a, 1)
+    LLVMSetVolatile(b, 1)
+    LLVMSetVolatile(c, 1)
+    LLVMSetVolatile(d, 1)
+}
+
 // One 256-weight SUPERBLOCK, K-quant grp<mr> form (te.kq set): weight vectors unpacked
 // ONCE per (sub-block, dword-group) and dotted against every token — weight-stationary,
 // bit-exact vs per-token GEMVs (tokCount=1). kq v2 folds integer sub-scales/bsums against Q8_K-form activations.
@@ -943,6 +953,7 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
     let k2 = te.kq == 2
     let k63 = k6 || k3          // k3 rides k6's scale row and fold; only the quant compose and the offset differ
     let per16 = k63 || k2       // per-16 scale granularity: split lo/hi accumulators, unsummed bs0/bs1
+    let wholeSub = te.kq == 4 || te.kq == 40 || k3 || k2   // the i16 chains run the whole sub-block before one widen (k5: 4 madds, k6: 2)
     let koff = k3 ? 4 : 32      // the signed-lattice offset the bsum fold removes
     let q40 = te.kq == 40
     let qsb = (te.kq == 4 || q40) ? 128 : (k3 ? 96 : (k2 ? 64 : (te.kqBytes ? 256 : (te.kq == 5 ? 160 : 192))))
@@ -1038,6 +1049,9 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                     var q3h = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((c0 + 4) * 4 * mr + qd * w8)), ""), "q3h{blk}_{j * rq + qd}")
                     var h3l = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((64 + j * 4) * mr + qd * w8)), ""), "h3l{blk}_{j * rq + qd}")
                     var h3h = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, te.types->ConstI64(uint64((64 + (j + 4) * 4) * mr + qd * w8)), ""), "h3h{blk}_{j * rq + qd}")
+                    if (tokCount == 1 && rq == 1) {   // the decode shape only: the tile's token reuse wants the columns kept live
+                        pin_reload(q3l, q3h, h3l, h3h)
+                    }
                     var lo2 = LLVMBuildAnd(b, LLVMBuildLShr(b, q3l, splat_i8w(te, sh), ""), splat_i8w(te, 3), "")
                     var hi2 = LLVMBuildAnd(b, LLVMBuildLShr(b, q3h, splat_i8w(te, sh), ""), splat_i8w(te, 3), "")
                     var lob = LLVMBuildShl(b, LLVMBuildAnd(b, LLVMBuildLShr(b, h3l, splat_i8w(te, blk), ""), splat_i8w(te, 1), ""), splat_i8w(te, 2), "")
@@ -1108,8 +1122,8 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                     }
                 }
             }
-            // i16 chain flushes at the format's overflow bound: k5 after 4 madds, k6 (and k3, conservatively) after 2; k4/q40 run the full 8
-            if (madd16 && (j == 1 || j == 3) && te.kq != 4 && !q40) {
+            // i16 chain flushes at the format's overflow bound: k5 after 4 madds, k6 after 2 (2 x 16002); wholeSub formats run the sub-block
+            if (madd16 && (j == 1 || j == 3) && !wholeSub) {
                 for (k in range(tokCount * rq)) {
                     a0[k] = madd16_flush(te, a0[k], p16lo[k])
                     p16lo[k] = null
@@ -1120,10 +1134,14 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
                 }
             }
         }
-        if (madd16 && (te.kq == 4 || q40)) {   // one widen per (token, qd) for the whole sub-block
+        if (madd16 && wholeSub) {   // one widen per (token, qd, chain) for the whole sub-block
             for (k in range(tokCount * rq)) {
                 a0[k] = madd16_flush(te, a0[k], p16lo[k])
                 p16lo[k] = null
+                if (per16) {
+                    a1[k] = madd16_flush(te, a1[k], p16hi[k])
+                    p16hi[k] = null
+                }
             }
         }
         // the integer fold — no float ops per block, except q40 (its per-32 f16 d admits no cross-block integer fold)

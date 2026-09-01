@@ -117,8 +117,17 @@ bandwidth; on the 1B vehicles it shows, on a 27B it mostly does not - but the ke
 
 ## 4. Work queue (one item at a time; a row is done at >= 1.0x on rig 2's shape AND the vehicle)
 
-CPU decode (gap 2) - the k-quant decode kernels are the tails the full ladder exposed: k3 0.80x,
-k6 0.90x, k5 0.91x (next, k3 first); then the noise round on the 0.99-1.00 rows.
+CPU decode (gap 2) - the k-quant decode kernels were the tails the full ladder exposed (k3 0.80x,
+k6 0.90x, k5 0.91x):
+1. DONE k3 + k2: one i16 flush per sub-block (the per-16 chains are bounded at 4 x 1778 / 4 x 762) -
+   k2 decode 2061 -> 1286-1423 us (reference 1951-2121); and k3's decode re-loads its 24 shared
+   qs/hmask columns per sub-block (volatile loads, decode shape only) instead of CSE keeping them live
+   and spilling - k3 2828-3198 -> 2445 us (reference 2638-2773). The pin hurt the tiles (k3 776 ->
+   1109 ms) so it is decode-only; the principled form is the memo's D1 group-major reorder.
+2. OPEN k6 0.87-0.90x, k5 0.87-0.91x: the pin gained nothing on k6; the memo (research_cpu_kquant.md)
+   sees no clean lever for k5 (D4) and offers a sub-block unroll knob (D5) for both.
+3. Noise: the one-thread bench and the reference both drift ~5-8% run to run; interleaved rounds hold
+   ours steady, the reference is re-run per table. iq3xxs/iq2s/iq2xxs tie at 1.00; k2 now clear.
 
 CPU decode, the grid formats (done):
 1. DONE-KILLED `gather="reg"` (measured 1.85x slower - see the ledger).
@@ -159,6 +168,11 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   One thread, m=4096 k=14336: iq3s 11581 -> 7732 us (1.34x of the reference's 10340), iq2s 12413
   -> 7076 us (0.72x of 5074, was 0.41x). Every variant bit-exact in gen_tune_probe TEST mode. The
   five gather emitters collapsed into one gather over per-format decode functions (-110 lines).
+- 2026-09-01: research_cpu_kquant.md (llama.cpp q3_K/q5_K/q6_K vs ours): op counts are at parity; what
+  tracks the losses is the high-bit plane's column vectors staying live across the superblock after
+  CSE (k3 24 vectors, k6 16) against 16 ymm - the plane cannot be register-resident in our
+  8-rows-per-vector layout the way it is in llama.cpp's row-major loop. Also: llama.cpp's q4_K has an
+  AVX2 repack GEMV that test-backend-ops perf does not run, so the k4 1.22x is against its fallback.
 - 2026-09-01: the lab completes - kq_kernel_bench carries all 16 formats (q8 + mx4 on the q8q8
   grid, q51 on its per-32 planes; the tile arm hands k5/k6 and the grid formats their byte-expanded
   panel per kq_reads_packed_planes), rows interleaved round-robin with best + median;
