@@ -16,7 +16,7 @@ def das_exe() : string {
 //! child env rides the command string (the portable set/prefix split popen_argv cannot carry)
 def env_run(dep, cmd : string; var output : string&) : int {
     let win = get_platform_name() == "windows"
-    let full = win ? "set MC_DEP_FILE={dep}&& {cmd}" : "MC_DEP_FILE={dep} {cmd}"
+    let full = win ? "set \"MC_DEP_FILE={dep}\"&& {cmd}" : "MC_DEP_FILE='{dep}' {cmd}"
     return unsafe(popen_timeout(full, 300.0, $(f) {
         if (f != null) {
             output = fread(f)

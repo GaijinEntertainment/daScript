@@ -60,8 +60,8 @@ def test_tuned_stale_sidecar_perm(t : T?) {
     fwrite(manifest, "\{\"kernels\": \{\"stale_probe_dot\": \"no_such_perm\"\}, \"provenance\": \{\"box\": \"{tune_box_identity()}\"\}\}")
     let client = "{get_this_module_dir()}/tuned_stale_perm_client.das"
     let env = (get_platform_name() == "windows"
-        ? "set DAS_TUNE_MANIFEST={manifest}&& "
-        : "DAS_TUNE_MANIFEST={manifest} ")
+        ? "set \"DAS_TUNE_MANIFEST={manifest}\"&& "
+        : "DAS_TUNE_MANIFEST='{manifest}' ")
     let cmd = "{env}\"{bin}\" \"{client}\""
     var outp = ""
     var rc : int
@@ -116,8 +116,8 @@ def test_tuned_sidecar_invalidates_module_cache(t : T?) {
     fwrite(manifest, "\{\"kernels\": \{\}, \"provenance\": \{\"box\": \"{tune_box_identity()}\"\}\}")
     let client = "{get_this_module_dir()}/tuned_stale_perm_client.das"
     let env = (get_platform_name() == "windows"
-        ? "set DAS_TUNE_MANIFEST={manifest}&& "
-        : "DAS_TUNE_MANIFEST={manifest} ")
+        ? "set \"DAS_TUNE_MANIFEST={manifest}\"&& "
+        : "DAS_TUNE_MANIFEST='{manifest}' ")
     let cmd = "{env}\"{bin}\" -module-cache \"{mc}\" \"{client}\""
     var run_out = ""
     var rc = spawn_capture(cmd, run_out)

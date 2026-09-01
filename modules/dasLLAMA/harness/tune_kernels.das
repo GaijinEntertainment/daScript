@@ -2396,15 +2396,26 @@ def private confirm_tg_run(model : string; wins : array<string>; extra : string)
     if (!empty(extra)) {
         crowns = empty(crowns) ? extra : "{crowns},{extra}"
     }
-    let tmpm = "{get_das_root()}/_tune_confirm_decode_manifest.json"
+    let tmpmRes = create_temp_file_result("tune_confirm_manifest_", ".json")
+    if (tmpmRes is error) {
+        print("confirm: cannot create a temp manifest: {tmpmRes as error}\n")
+        return 0.0lf
+    }
+    let tmpm = tmpmRes as value
     if (!fwrite(tmpm, "\{\"kernels\": \{\}, \"runtime\": \{\"metal_tensor\": \"{crowns}\"\}, \"provenance\": \{\"box\": \"{tune_box_identity()}\"\}\}")) {
-        print("confirm: cannot write {tmpm} - is das_root writable?\n")
+        print("confirm: cannot write {tmpm}\n")
         return 0.0lf
     }
     let envp = (get_platform_name() == "windows"
-        ? "set DAS_TUNE_MANIFEST={tmpm}&& "
-        : "DAS_TUNE_MANIFEST={tmpm} ")
-    let tmpo = "{get_das_root()}/_tune_confirm_decode_out.txt"
+        ? "set \"DAS_TUNE_MANIFEST={tmpm}\"&& "
+        : "DAS_TUNE_MANIFEST='{tmpm}' ")
+    let tmpoRes = create_temp_file_result("tune_confirm_out_", ".txt")
+    if (tmpoRes is error) {
+        remove(tmpm)
+        print("confirm: cannot create a temp capture file: {tmpoRes as error}\n")
+        return 0.0lf
+    }
+    let tmpo = tmpoRes as value
     let cmd = "{envp}\"{get_das_exe()}\" -jit \"{get_das_root()}/modules/dasLLAMA/benchmarks/lcpp_bench.das\" -dasroot \"{get_das_root()}\" -- --for-debug-purposes -m \"{model}\" --ngl 99 -p 32 -n 128 -r 3 > \"{tmpo}\" 2>&1"
     unsafe(popen(cmd) $(f) {
         if (f != null) {
