@@ -12,29 +12,44 @@ never runs dry - so the damper below is part of the design, not a cost-saving me
 
 ```bash
 # a branch against its base (the normal PR shape)
-codex exec --sandbox read-only -o <report.md> review --base origin/master
+codex exec --sandbox read-only -o <report.md> review --base origin/master 2>&1 | tee <run.log>
 # one commit
-codex exec --sandbox read-only -o <report.md> review --commit <sha>
+codex exec --sandbox read-only -o <report.md> review --commit <sha> 2>&1 | tee <run.log>
+# the round is a skip unless BOTH of these stay quiet
+[ -s <report.md> ] || echo "empty report - harvest from <run.log>"
+grep -q "Review was interrupted" <run.log> && echo "ROUND DID NOT RUN - disclose as skipped"
 ```
+
+A round writes two sinks: the `-o` report file and the tee'd run log. Either can hold the
+findings, and the report file can come back empty on a round that succeeded.
 
 - Global flags go BEFORE the `review` subcommand. `--base` / `--commit` exclude a custom
   prompt - a custom prompt runs the generic agent, not the native reviewer; prefer native.
 - The base is `origin/master`, never local `master` - the checklist rebases branches onto
   `origin/master` and leaves local `master` stale, so a stale base sweeps unrelated
   upstream commits into the review.
-- Write the report outside the repo (the session scratchpad) or under `logs/`
-  (gitignored) - a bare in-tree filename is exactly the untracked debris the preflight
-  gate rejects.
-- Run it in a tree checked out at the tip you want reviewed, and record that sha with the
-  report - findings are claims about exact bytes, and re-reviews only mean anything
-  against a pinned commit. The recorded sha does not freeze what codex reads: the tree
-  must not change until harvest - launch after the last mutating step, or give the run
-  its own worktree at that sha.
-- No `codex` on PATH? The round is skipped, and the PR body says so - the gate is the
-  disclosure, never a silent pass.
-- A round runs tens of minutes (~25 measured 2026-08): run it in a background Bash and
-  keep working; never sit idle waiting on it. Launch and harvest points are the
+- Write both sinks outside the repo (the session scratchpad) or under `logs/` (gitignored) -
+  a bare in-tree filename is exactly the untracked debris the preflight gate rejects.
+- Run it in a tree checked out at the tip you want reviewed, and pin that sha beside the sink
+  you keep - findings are claims about exact bytes, and re-reviews only mean anything against
+  a pinned commit. The pinned sha does not freeze what codex reads: the tree must not change
+  until harvest - launch after the last mutating step, or give the run its own worktree at
+  that sha.
+- **Harvest from whichever sink holds the findings; when the report is empty the run log is
+  the record.**
+- **Never read the exit status as the verdict: codex exits 0 on a round that never ran.**
+  Expired auth exits 0 having printed `Review was interrupted` and token-refresh errors and
+  nothing else. A round counts as run only when a sink holds P-ranked findings or codex's
+  explicit no-issues line; anything else is a skip.
+- No `codex` on PATH, or a round that did not run? The round is skipped, and the PR body says
+  so - the gate is the disclosure, never a silent pass.
+- A round can finish in under a minute or run for tens of minutes - run it in a background
+  Bash and keep working; never sit idle waiting on it. Launch and harvest points are the
   caller's (see the damper).
+- **Before reporting a round as no-findings, confirm the sink shows it reading the files the
+  diff changed.** Duration says nothing about depth - a one-minute round can read every
+  changed file and run the suite. A truncated capture leaves only the verdict, which reads
+  exactly like a round that did nothing; the exec trace is what tells them apart.
 
 ## The findings loop
 

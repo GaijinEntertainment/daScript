@@ -195,6 +195,10 @@ with the just-built binary and catches sample rot per-PR. Currently tier 1 runs 
 - **The browser leg's `node --test` runs in no per-PR lane** - only
   `nightly_playground.yml`, so a case the checklist demands is first executed the night after
   merge. Ruled: CI catches it, no per-PR lane added.
+- **The woodpecker damper is stated in two places.** `skills/internal/woodpecker.md` says
+  "this file owns only the budget", but `skills/internal/make_pr.md` step 0a3 restates it in
+  spirit ("Every arc, trivial or not; non-trivial arcs re-round on the fixed tip"). One copy
+  should survive - the woodpecker's - and the make_pr cell drop to a pointer.
 - **Self-review findings on three checklists this arc did not otherwise touch**, left for
   whoever next edits them: `dasweb-playground/REVIEW.md` - the dastest-coverage rule's trigger
   is unsatisfiable for a `caddy.snippet` edit (no dastest can observe a Caddy directive), the
