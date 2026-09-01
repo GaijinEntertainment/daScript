@@ -80,6 +80,14 @@ reference / ours): decode q8 1.46, k4 1.60, k5 1.06, k6 1.35, q40 1.96, q51 1.32
 every tile 1.9x-15.3x ahead. On ARM the grid formats are the tails - the reference exe's NEON grid
 kernels run iq2xs/iq2xxs at 3.3-3.4 ms against our 6.0-6.4 ms while the k-quants are 1.06x-1.60x.
 
+The zen4 ladder (AWS c7a.4xlarge, EPYC 9R14, one thread, the x86-vnni512 profile's seats =
+dot_vpdpbusd_width512_mr16; gen_tune_probe TEST 65/65 ok on the first run of those seats): decode q40
+3.87, iq4nl 2.82, q51 2.65, mx4 2.51, k4 2.25, iq4xs 2.13, k2 2.04, k3 1.88, q8 1.70, k5 1.28, k6 0.91,
+iq3xxs 0.88, iq3s 0.81, iq2xxs 0.81, iq2xs 0.79, iq2s 0.77; every tile 2.1x-12x ahead. Where the dot is
+the work, the 512-bit VNNI seat pays (k4 1.22x on zen2 -> 2.25x); the five grid formats lose ground
+because the reference's grid kernels gain ~1.5x from AVX-512 while ours are bound by the scalar per-dword
+gather (iq2s 4898 us on zen4 vs 5059 on zen2) - the ARM memo's diagnosis, on x86.
+
 zen2 reading: every tile row is ahead (1.17x-7.07x). Decode tails were k3 0.80x, k6 0.90x, k5 0.91x; iq3xxs, k2, iq2s,
 iq2xxs at 0.99-1.00 (inside the noise band). The 4-bit class (q40, q51, iq4xs, iq4nl, k4, q8, mx4)
 sits at 1.2x-1.6x.
@@ -157,6 +165,12 @@ CPU decode, the grid formats (done):
    1-thread bench is ~7%; a longer run or the 16-thread engine shape decides the last 2%). 7. the
    16-thread stamp on the vehicles (needs `--for-debug-purposes` on lcpp_bench, or the released
    exe). 8. retro audit of IQ4_XS/Q3_K per followup 60.
+
+CPU decode, grid formats, BOTH ISAs (M1 0.51-0.93x, zen4 0.77-0.88x): the scalar per-dword gather is
+the bound; the fix is the vectorized u64-lane compose (2 rows x 8 weights per NEON vector, 4 per 256-bit,
+8 per 512-bit) with one pairwise add recovering the accumulator layout - one emitter change under the
+gather branch, no plane change, retires the panel and the parity chain. k6 0.90-0.91 on both x86 boxes
+stays open.
 
 CPU decode on ARM (the M1 ladder): iq2xs 0.51x, iq2xxs 0.57x, iq3xxs 0.72x, iq3s 0.93x. The memo
 (`kernel_parity_research_arm.md`): the sdot count is at parity (2 per 32 weights per row, both sides);
