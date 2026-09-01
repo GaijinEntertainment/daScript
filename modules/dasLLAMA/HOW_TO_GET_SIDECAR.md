@@ -88,6 +88,12 @@ cmake --build build-clean-cpu --target test-backend-ops llama-bench -j 16
 `build-clean-cpu` is the flavor the tables name: no GPU backend, no BLAS - a GPU build's
 `llama-bench -ngl 0` is not CPU-only.
 
+The perf list has no decode row above 4096 x 14336, and on a box with a large L3 that op stays cached
+between the repeated runs (the 3990X reads it at 295 GB/s with 32 threads, three times its DRAM) - a
+many-lane ratio taken there flatters the reference. For the DRAM-bound row (`BIG=1` in the ladder,
+d=32768) add, inside the same `for (int bs ...)` loop in `make_test_cases_perf`, after the 4096 line:
+`if (bs == 1) test_cases.emplace_back(new test_mul_mat(type_a, type_b, 32768, bs, 14336, {1, 1}, {1, 1}));`
+
 Confirm the define is in the binary the ladder gets: `grep -c GGML_BENCH_THREADS
 build-clean-cpu/bin/test-backend-ops` prints 1. A box with several llama.cpp builds is where this
 bites - a binary that prints 0 runs every core and the ratio column lies; `kernel_ladder.sh` refuses it.

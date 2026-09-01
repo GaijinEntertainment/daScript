@@ -286,6 +286,22 @@ k6 0.90x, k5 0.91x):
    cheaper deposit all along; k5's site-major byte and its shuffle stay. Reverted, nothing committed.
    The transposes are done: k6 and k3 landed, k5 was already right. On the M1 (sdot lattice, same
    IR): k6 1777 -> 1701, k3 1925 -> 1873 us, TEST 90/90.
+
+The 16-lane row and what it measures (2026-09-01, `--team`, the engine's own splitter: 64 self-served
+chunks of 64 rows): k4 wall against the reference at the same thread count - 8 lanes 648 vs 675 us
+(1.04x), 16 lanes 469 vs 341 (0.73x), 32 lanes 342 vs 112 (0.33x); k6 at 8 lanes 1165 vs 1041
+(0.89x). The reference at 32 threads moves 33 MB in 112 us = 295 GB/s, three times this box's DRAM:
+`test-backend-ops perf` repeats one small op and its row -> thread mapping is stable, so the weights
+stay in the 3990X's 256 MB of L3 (16 MB per CCX); our self-served chunks move rows between CCX slices
+every call and pay DRAM. At 8 lanes, where neither side gets the L3, we are at parity. A model's
+weights (4-30 GB) never stay in L3 between tokens, so the fair many-lane comparison is a working set
+above L3 - d=32768 (k4 264 MB) - measured next. If parity holds there, the many-lane gap seen at
+m=4096 is the microbench's artifact, not the dispatch.
+MEASURED (the reference given the m=32768 perf row - HOW_TO_GET_SIDECAR; the ladder's `BIG=1`):
+k4 16 lanes 4560 vs 4549 us (1.00x), 32 lanes 4117 vs 5147 (1.25x); k6 16 lanes 6534 vs 6474
+(0.99x) - both sides at the box's ~58-64 GB/s DRAM rate. PARITY at the engine's shape; the
+"dispatch grain" question is closed - nothing to fix in the splitter. The m=4096 many-lane rows
+stay in the ladder as a kernel-in-L3 view only; the BIG row is the one that speaks for decode.
 3. Noise: the one-thread bench and the reference both drift ~5-8% run to run; interleaved rounds hold
    ours steady, the reference is re-run per table. iq3xxs/iq2s/iq2xxs tie at 1.00; k2 now clear.
 
