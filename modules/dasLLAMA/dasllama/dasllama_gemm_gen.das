@@ -90,7 +90,7 @@ struct private TilePerm {
     mr : int = GEMM_REFERENCE_MR()
     gkstep : int = 1
     dotPrim : string = "sdot"
-    sign : string = "scalar"    // iq3s/iq2s gemv: "scalar" = signs applied per grid dword in the gather, "vec" = raw words in the panel, one masked negate per weight vector off the plane's sign column
+    sign : string = "scalar"    // the grid formats' gemv: "scalar" = signs applied per grid dword in the gather, "vec" = raw words in the panel, one masked negate per weight vector off a sign-byte column
     width : int = 128
     bias : int = 0        // 128 = bias128: grp<mr> bytes baked as w^0x80, plain vpdpbusd dots
     pipe : int = 0        // 1 = software-pipelined amx fold (slice K I4): double-buffered C
@@ -1335,11 +1335,44 @@ def private signed_grid_word(var te : TileEmit; var gidx, sgn : LLVMOpaqueValue?
     return LLVMBuildAdd(b, LLVMBuildXor(b, gw, mw, ""), LLVMBuildAnd(b, mw, LLVMConstInt(te.types.t_int32, 0x01010101ul, 0), ""), "")
 }
 
-//! sign="vec" needs the 8-weight sign bytes plane-resident at row stride 4: iq3s and iq2s only
-def private sign_vec_declines(p : TilePerm; fmt : int) : bool => p.sign == "vec" && fmt != 33 && fmt != 23
-
-//! the grp<mr> column (4 bytes per row) holding block `blk`'s four sign bytes
-def private kq_sign_col(kq, blk : int) : int => (kq == 33 ? 18 : 8) + blk
+//! sign="vec": block `blk`'s sign bytes for rows qd*rv.., byte (r, l) at r*4 + l - the column
+//! itself for iq3s/iq2s, synthesized from the 7-bit ksigns codes for the other three (the 8th
+//! bit is the code's parity, ksigns[i] == i | parity(i) << 7)
+def private kq_sign_bytes(var te : TileEmit; var wbP : LLVMOpaqueValue?; blk, qd : int; name : string) : LLVMOpaqueValue? {
+    let b = te.builder
+    let mr = te.interleave
+    let w8 = te.width / 8
+    let colBytes = uint64(mr * 4)
+    if (te.kq == 33 || te.kq == 23) {
+        let col = (te.kq == 33 ? 18 : 8) + blk
+        return load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wbP, te.types->ConstI64(uint64(col) * colBytes + uint64(qd * w8)), ""), name)
+    }
+    var codesCol : LLVMOpaqueValue? [2]   // iq2xs: columns 2blk (l = 0, 1) and 2blk+1 (l = 2, 3) of u16 words; else one aux32 column
+    if (te.kq == 24) {
+        for (c in range(2)) {
+            codesCol[c] = load_vec(te, te.vni32, te.wg, LLVMBuildAdd(b, wbP, te.types->ConstI64(uint64(2 * blk + c) * colBytes + uint64(qd * w8)), ""), "sgw{blk}_{c}")
+        }
+    } else {
+        let col = te.kq == 34 ? 16 + blk : 2 * blk + 1
+        codesCol[0] = load_vec(te, te.vni32, te.wg, LLVMBuildAdd(b, wbP, te.types->ConstI64(uint64(col) * colBytes + uint64(qd * w8)), ""), "sga{blk}")
+    }
+    var bytes = LLVMConstNull(te.vni32)
+    for (l in range(4)) {
+        var code : LLVMOpaqueValue?
+        if (te.kq == 24) {
+            var word = l % 2 == 0 ? LLVMBuildAnd(b, codesCol[l / 2], splat_i32n(te, 65535), "") : LLVMBuildLShr(b, codesCol[l / 2], splat_i32n(te, 16), "")
+            code = LLVMBuildLShr(b, word, splat_i32n(te, 9), "")
+        } else {
+            code = LLVMBuildAnd(b, l == 0 ? codesCol[0] : LLVMBuildLShr(b, codesCol[0], splat_i32n(te, 7 * l), ""), splat_i32n(te, 127), "")
+        }
+        var par = LLVMBuildXor(b, code, LLVMBuildLShr(b, code, splat_i32n(te, 4), ""), "")
+        par = LLVMBuildXor(b, par, LLVMBuildLShr(b, par, splat_i32n(te, 2), ""), "")
+        par = LLVMBuildXor(b, par, LLVMBuildLShr(b, par, splat_i32n(te, 1), ""), "")
+        var sb = LLVMBuildOr(b, code, LLVMBuildShl(b, LLVMBuildAnd(b, par, splat_i32n(te, 1), ""), splat_i32n(te, 7), ""), "")
+        bytes = LLVMBuildOr(b, bytes, l == 0 ? sb : LLVMBuildShl(b, sb, splat_i32n(te, 8 * l), ""), "")
+    }
+    return LLVMBuildBitCast(b, bytes, te.vwi8, name)
+}
 
 //! one masked negate per weight vector: byte (r, k) of the mask is 0xFF when bit (h*4 + k) of row r's
 //! sign byte for group `l` is set - a constant shuffle broadcasts each row's byte to its four lanes
@@ -1746,7 +1779,7 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
         var signCol : LLVMOpaqueValue? [2]   // sign="vec": this block's sign bytes, rows qd*rv.. at stride 4, one column load per vector row-band
         if (gather && te.signVec) {
             for (qd in range(rq)) {
-                signCol[qd] = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wbP, te.types->ConstI64(uint64(kq_sign_col(te.kq, blk)) * uint64(mr * 4) + uint64(qd * w8)), ""), "sgc{blk}_{qd}")
+                signCol[qd] = kq_sign_bytes(te, wbP, blk, qd, "sgc{blk}_{qd}")
             }
         }
         for (j in range(4)) {
@@ -2932,7 +2965,7 @@ def private is_kq_gemv_signature(fn : Function const?) : bool {
 def private kq_gemv_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     if (!is_kq_gemv_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
-    if (perm_declines(gc, p0) || sign_vec_declines(p0, fmt)) return false
+    if (perm_declines(gc, p0)) return false
     let p = companion_perm(p0)
 
     var te = TileEmit(kq = fmt)
@@ -3082,7 +3115,7 @@ def private q51_gemv_gen(var gc : LlvmCodeCtx) : bool {
 def private kq_tile_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     if (!is_tile_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
-    if (perm_declines(gc, p0) || sign_vec_declines(p0, fmt)) return false
+    if (perm_declines(gc, p0)) return false
     let p = companion_perm(p0)
 
     var te = TileEmit(kq = fmt, kqBytes = fmt == 5 || fmt == 6)   // only the k5/k6 tiles get the byte-expanded panel
