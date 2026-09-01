@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — engine + arch registrations + (on Apple) the metal overrides
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
-require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
+require dasllama/dasllama_image   // load_model_cached — the served (image) flavor for the GPU twin
 require ?das_metal dasllama/dasllama_metal_decode   // stats + the forced-reject lever + shutdown
 require ?das_metal metal/das_metal_boost   // metal_live_object_count for the leak gate
 require daslib/jobque_boost
@@ -203,11 +203,16 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
     return served
 }
 
-// The blob twin of a planar fixture (see test_metal_decode_parity.das): CPU stages run the planar
-// model, GPU stages its twin; sessions are geometry-bound so one session spans both.
-def private blob_twin(t : T?; path : string; seq_cap : int64) : Model {
-    var tg <- load_model_(path, QuantMode.q8)
-    t |> success(convert_model_to_metal_blob(tg), "metal-blob transform")
+// The GPU twin of a planar fixture: the SERVED flavor - the metal-blob image the load walk mints
+// (`load_model_cached` under metal mode), not a direct transform of the owned load. The direct
+// transform declines on the 27B-MTP (an owned-load weight offset misses the GPU bind alignment
+// the image builder pads), and the image is what serves anyway. CPU stages run the planar
+// model, GPU stages the twin; sessions are geometry-bound so one session spans both.
+def private served_twin(path : string; seq_cap : int64) : Model {
+    let prior = get_metal_mode()
+    set_metal_mode(MetalMode.required)
+    var tg <- load_model_cached(path, QuantMode.q8)
+    set_metal_mode(prior)
     tg.config.seq_len = min(tg.config.seq_len, seq_cap)
     return <- tg
 }
@@ -232,6 +237,13 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
     }
 }
 
+// the process-wide knobs every exit path of run_fixture puts back
+def private restore_knobs(prior_backend : string; prior_wscale : bool) {
+    clear_kernel_backend_pin()
+    select_kernel_backend(prior_backend)
+    set_wscale_f16(prior_wscale)
+}
+
 def private run_fixture(t : T?; file, tag : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)
@@ -249,12 +261,18 @@ def private run_fixture(t : T?; file, tag : string) {
             t |> failure("{file}: no NextN draft head - wrong fixture")
             delete tr
             set_mtp_spec(false)
-            clear_kernel_backend_pin()
-            select_kernel_backend(prior_backend)
-            set_wscale_f16(prior_wscale)
+            restore_knobs(prior_backend, prior_wscale)
             return
         }
-        var trg <- blob_twin(t, path, 512l)
+        var trg <- served_twin(path, 512l)
+        if (!trg.metal_blob) {
+            t |> skip("{file}: the served image is not the metal-blob flavor on this box - GPU arms have nothing to run")
+            set_mtp_spec(false)
+            restore_knobs(prior_backend, prior_wscale)
+            delete tr
+            delete trg
+            return
+        }
         var prose_a <- encode(tr, PROSE_A, true, false)
         var prose_b <- encode(tr, PROSE_B, true, false)
         var count <- encode(tr, counting_prompt(1, 40), true, false)
@@ -292,9 +310,7 @@ def private run_fixture(t : T?; file, tag : string) {
 
         metal_decode_shutdown()
         set_mtp_spec(false)
-        clear_kernel_backend_pin()
-        select_kernel_backend(prior_backend)
-        set_wscale_f16(prior_wscale)
+        restore_knobs(prior_backend, prior_wscale)
         delete prose_a
         delete prose_b
         delete count

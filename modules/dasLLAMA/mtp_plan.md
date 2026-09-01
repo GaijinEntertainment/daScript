@@ -251,8 +251,11 @@ Two findings that feed S0's remaining items:
 - **Acceptance dropped 4-5 points on the DENSE cells only** (0.8B 92.8 -> 87.9, 27B 85.3 ->
   81.5) while the MoE cell is identical to July (81.7 = 81.7). Same corpus. The dense verify
   rides the kq mvb/gemv kernels the kq-race arc rewrote; the MoE verify rides enc_moe_gemv.
-  This is the silent-verify-drift trap's signature - the parity harness's first target is the
-  dense B=2 verify's row-0 logits against the plain step's at the same position.
+  RESOLVED by the forced-feed test below: the verify's row 0 matches the plain step to 1e-3, so
+  the drop is NOT verify drift. Remaining suspects: the DRAFT side (the head's GPU forward on the
+  current kernel crowns vs July's - a GPU-draft-vs-CPU-draft argmax parity probe, S2 recon), and
+  the window (128-token tg-real rows vs the July ladder's 256). Acceptance is proposal-side
+  quality; it moves speed, never correctness.
 
 ### Parity harness + the metal MTP test corpus (2026-09-01)
 
@@ -267,6 +270,16 @@ Two instruments, and the distinction is the whole story:
   asserted 0.0), a counting free-run token-exact arm, and a leak gate. Arms `mtp-ctrl/ff/count`
   x tags `0.8b/27b/35b`; the large tiers run under `DASLLAMA_PARITY_FULL`. Per the tests/REVIEW.md
   contract, freeform text uses the forced-feed logits form, never token equality.
+  **All three fixtures green** (M5, 2026-09-01): 0.8B maxd 0.0016/0.0007; 27B-MTP Q4_K_M
+  0.00034/0.00023 (368 s, the planar CPU prefill dominates); 35B-A3B 0.0013/0.0005 - zero flips,
+  48/48 rounds drafted, counting exact, no leaked Metal objects. The GPU twin is the SERVED image
+  flavor (`load_model_cached` under metal mode): the direct owned-load transform declines on the
+  27B (an offset misses the GPU bind alignment the image builder pads) - a test-route limitation,
+  not a serving one.
+- **`test_metal_decode_parity.das` arm `batch-ff`** (new) - the batch rail on REAL text: GPU
+  single-step vs GPU batched step on identical fed tokens, B=2 (B2 GEMV form) and B=4 (B4 form),
+  32 steps x 4 prose openers on Llama-3.2-1B Q8: **maxd 0.0029 / 0.0037, zero flips.** The batch
+  rail is per-step clean on near-tie text too; whole batch test green (208 s).
 - **`harness/mtp_parity_probe.das`** - the ACCEPTANCE/QUALITY lens, not a correctness gate. It
   measures free-running TRAJECTORY divergence: two sessions each advance on their own path, so
   its per-position delta compounds the (negligible) per-step kernel difference with the KV/state
@@ -285,8 +298,6 @@ arms B=2/3/6, mixed, per-dtype one-step tolerance - but on ONE model (Llama-3.2-
 COUNTING prompts only; the same-slab B=2 VERIFY that MTP rides (1 session x 2 pos) had NO
 end-to-end test on any model, any fixture (full matrix in the coverage audit). AFTER: the metal
 MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
-- a real-text forced-feed ARM of the batch rail (`test_metal_batch_decode_parity` is counting-only;
-  near-ties are invisible there for the same reason);
 - the split-head carriers (`mtp-Qwen3.8-27B`, `mtp-gemma-4-26B-A4B` arch gemma4-assistant) gates,
   once S1/S3 make them loadable;
 - CPU batch B=2/4/6/8 (only B=3 + B=1-delegation + shrink are gated today).
