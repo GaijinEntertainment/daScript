@@ -157,6 +157,19 @@ watermark only (no recurrent layers) - recon the sliding-window ring rows.
   a path; the minted image carries the head - one file at serve time (ruled).
 - Gates: `test_mtp_loader` for the split form; draft argmax parity vs the CPU rail on
   Qwen3.8-27B; the existing `-MTP-` in-file fixtures unchanged.
+- **Design (recon 2026-09-01) - the head rides the SHARD mechanism.** Both load paths
+  (`load_gguf_impl` dasllama_load.das:1580, `load_gguf_streaming` :1492) already resolve
+  `gguf_shard_paths(path)` (dasllama_gguf.das) and merge shard tensor directories through
+  `parse_gguf_meta_shards`; `gguf_find_tensor` is first-match, so appending the head file as the
+  LAST shard makes its `token_embd`/`output`/`output_norm` copies dead by construction (the
+  trunk's win). Three additions: (1) `gguf_shard_paths` also appends `mtp-<trunk>.gguf` when it
+  sits beside the trunk (or the explicit override path); (2) shard KVs are shard-0-only, so the
+  merge promotes the head shard's `<arch>.nextn_predict_layers` (and block_count) onto the meta
+  (a sidecar field on `GGUFMeta`, read where :1652 reads the key); (3) `image_path_for`
+  (dasllama_image.das:71, 20 call sites) folds the sidecar's basename+size into the hashed
+  identity by the same adjacency discovery, so trunk-only and trunk+head images never share a
+  path and `image_peek` shows which one a dlim is. The mint itself needs nothing: the image is
+  written from the loaded Model, so the head is inside it - one dlim, as ruled.
 
 ### S2 - depth N on the native-head rail
 
