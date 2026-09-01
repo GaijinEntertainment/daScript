@@ -53,6 +53,8 @@ struct BenchArgs {
     base_offset : int = 0
     @clarg_doc = "GEMV the engine's way: the engine's own splitter (matmul_chunks_gemv) and dispatcher (maybe_parallel_for_indexed) over DAS_JOBQUE_THREADS lanes, wall = the slowest lane, the lanes' fastest and slowest summed call time in two extra columns; 0 = one raw call on this thread"
     team : bool
+    @clarg_doc = "Append every round's sample (us, in round order) as one more column - the per-round view of a bimodal row"
+    each : bool
 }
 
 typedef GemvFn = function<(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void>
@@ -252,6 +254,7 @@ struct RowStat {
 }
 
 let TEAM_BURN = 6   // warmup dispatches per row before the team arm times anything
+var g_each_round = false   // --each
 
 //! the engine's decode dispatch, verbatim (dasllama_math's matmul shape): the splitter's chunk count over the
 //! rows, the team self-serving them; each lane adds its call time to laneP[slot]
@@ -337,7 +340,11 @@ def emit_row(var rows : int&; name, tier : string; var st : RowStat; n, d, ntok,
     let mode = get_env_variable("DAS_TUNE_MODE")
     let perm = (st.perm == "reference" && mode != "tune" && mode != "test") ? "stamped" : st.perm   // normal mode: the registry's one row IS the stamped winner
     let lanes = st.lane_hi > 0l ? "\t{st.lane_lo}\t{st.lane_hi}" : ""
-    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}{lanes}\n")
+    var each = ""
+    if (g_each_round) {
+        each = "\t" + join(st.us, ",")
+    }
+    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}{lanes}{each}\n")
     rows++
 }
 
@@ -630,6 +637,7 @@ def main : int {
     let rc = parse_args_with_help(cfg, "kq_kernel_bench")
     BASE_ALIGN = int64(cfg.base_align)
     BASE_OFFSET = int64(cfg.base_offset)
+    g_each_round = cfg.each
     return rc if (rc >= 0)
     if (!jit_enabled()) {
         to_log(LOG_ERROR, "run with -jit: the kq generators only fire under the JIT\n")
