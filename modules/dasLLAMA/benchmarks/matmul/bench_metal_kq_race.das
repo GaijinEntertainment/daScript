@@ -136,10 +136,16 @@ def private gemv_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate GEMV sp
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_k2_msl, entry = metal_kq_gemv_k2_msl_entry, fastmath = metal_kq_gemv_k2_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
     } elif (f.fmt == 23) {
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_iq2s_msl, entry = metal_kq_gemv_iq2s_msl_entry, fastmath = metal_kq_gemv_iq2s_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
+        arms |> push(KqRaceArm(name = "d1", src = lab_kq_gemv_iq2s_d1_msl, entry = lab_kq_gemv_iq2s_d1_msl_entry, fastmath = lab_kq_gemv_iq2s_d1_msl_fastmath, tgmem = 0ul, gdiv = 4))
     } elif (f.fmt == 24) {
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_iq2xs_msl, entry = metal_kq_gemv_iq2xs_msl_entry, fastmath = metal_kq_gemv_iq2xs_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
+        arms |> push(KqRaceArm(name = "d1f4", src = lab_kq_gemv_iq2xs_d1f4_msl, entry = lab_kq_gemv_iq2xs_d1f4_msl_entry, fastmath = lab_kq_gemv_iq2xs_d1f4_msl_fastmath, tgmem = lab_kq_gemv_iq2xs_d1f4_msl_tgmem, gdiv = 4))
     } else {
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_iq2xxs_msl, entry = metal_kq_gemv_iq2xxs_msl_entry, fastmath = metal_kq_gemv_iq2xxs_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
+        arms |> push(KqRaceArm(name = "d1r2", src = lab_kq_gemv_iq2xxs_d1r2_msl, entry = lab_kq_gemv_iq2xxs_d1r2_msl_entry, fastmath = lab_kq_gemv_iq2xxs_d1r2_msl_fastmath, tgmem = 0ul, gdiv = 4))
+        arms |> push(KqRaceArm(name = "d1r4", src = lab_kq_gemv_iq2xxs_d1r4_msl, entry = lab_kq_gemv_iq2xxs_d1r4_msl_entry, fastmath = lab_kq_gemv_iq2xxs_d1r4_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        arms |> push(KqRaceArm(name = "d1sg", src = lab_kq_gemv_iq2xxs_d1sg_msl, entry = lab_kq_gemv_iq2xxs_d1sg_msl_entry, fastmath = lab_kq_gemv_iq2xxs_d1sg_msl_fastmath, tgmem = lab_kq_gemv_iq2xxs_d1sg_msl_tgmem, gdiv = 4))
+        arms |> push(KqRaceArm(name = "d1f4", src = lab_kq_gemv_iq2xxs_d1f4_msl, entry = lab_kq_gemv_iq2xxs_d1f4_msl_entry, fastmath = lab_kq_gemv_iq2xxs_d1f4_msl_fastmath, tgmem = lab_kq_gemv_iq2xxs_d1f4_msl_tgmem, gdiv = 4))
     }
     return <- arms
 }
@@ -204,6 +210,367 @@ def private mm_arms(f : KqRaceFmt) : array<KqRaceArm> {   // candidate mul_mm sp
 }
 
 let PREFILL_M = 512   // the mm tier's token batch
+
+// D1 candidate: the iq2xxs decode GEMV on the q4_K lane map - 8 lanes per superblock (one
+// whole 32-block per thread: ONE grid-word/aux/strip load serves 32 elements where the
+// shipped 16-lane form pays two), 4 superblock streams, ib += 4. llama.cpp runs all five
+// iq2/iq3 grid formats on this map; our at-parity k4 GEMV already uses it. Two row-count
+// stamps: 2 rows/simdgroup (the k4 choice) and 4 (the shipped iq2xxs choice).
+class LabKqGemvIq2xxsD1R2 {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="lab_kq_gemv_iq2xxs_d1r2_msl")]
+    def lab_kq_gemv_iq2xxs_d1r2 {
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let yb4 = ib * 64u + it * 8u
+            var yv : float4[8]
+            for [unroll_full] (i in range(8)) {
+                yv[i] = x[yb4 + uint(i)]
+            }
+            for [unroll_full] (r in range(2)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                let gw = kqu[blk * 16u + it * 2u]
+                let aux = kqu[blk * 16u + it * 2u + 1u]
+                var accv = float4(0.0)
+                for [unroll_full] (q3 in range(4)) {
+                    let bidx = (gw >> (8u * uint(q3))) & 255u
+                    let sgn = ksign7m((aux >> (7u * uint(q3))) & 127u)
+                    let w0 = iq3s_sw(iq2xxs_gw(int(bidx * 2u)), sgn & 15u)
+                    let w1 = iq3s_sw(iq2xxs_gw(int(bidx * 2u + 1u)), sgn >> 4u)
+                    accv += yv[q3 * 2] * float4(iq3s_sx(w0, 0u), iq3s_sx(w0, 1u), iq3s_sx(w0, 2u), iq3s_sx(w0, 3u))
+                    accv += yv[q3 * 2 + 1] * float4(iq3s_sx(w1, 0u), iq3s_sx(w1, 1u), iq3s_sx(w1, 2u), iq3s_sx(w1, 3u))
+                }
+                let sc = float(kscb[blk * 16u + it])
+                sumf[r] += float(kdh[blk]) * sc * (accv.x + accv.y + accv.z + accv.w)
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
+
+// D1 + D2: the lane-map winner with the 2 KB grid staged into threadgroup memory (llama.cpp's
+// choice for iq2_xxs - our two worst tg ratios are exactly the two grids they stage).
+class LabKqGemvIq2xxsD1Sg {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+    @workgroup gws : uint[512]   // the 2 KB iq2xxs grid (u64 low/high word pairs), staged per tg
+
+    [metal_kernel(name="lab_kq_gemv_iq2xxs_d1sg_msl")]
+    def lab_kq_gemv_iq2xxs_d1sg {
+        let lid = gl_LocalInvocationID.x
+        for [unroll_full] (gk in range(8)) {
+            let gi = lid + uint(gk) * 64u
+            gws[gi] = iq2xxs_gw(int(gi))
+        }
+        barrier()
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let yb4 = ib * 64u + it * 8u
+            var yv : float4[8]
+            for [unroll_full] (i in range(8)) {
+                yv[i] = x[yb4 + uint(i)]
+            }
+            for [unroll_full] (r in range(2)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                let gw = kqu[blk * 16u + it * 2u]
+                let aux = kqu[blk * 16u + it * 2u + 1u]
+                var accv = float4(0.0)
+                for [unroll_full] (q3 in range(4)) {
+                    let bidx = (gw >> (8u * uint(q3))) & 255u
+                    let sgn = ksign7m((aux >> (7u * uint(q3))) & 127u)
+                    let w0 = iq3s_sw(gws[bidx * 2u], sgn & 15u)
+                    let w1 = iq3s_sw(gws[bidx * 2u + 1u], sgn >> 4u)
+                    accv += yv[q3 * 2] * float4(iq3s_sx(w0, 0u), iq3s_sx(w0, 1u), iq3s_sx(w0, 2u), iq3s_sx(w0, 3u))
+                    accv += yv[q3 * 2 + 1] * float4(iq3s_sx(w1, 0u), iq3s_sx(w1, 1u), iq3s_sx(w1, 2u), iq3s_sx(w1, 3u))
+                }
+                let sc = float(kscb[blk * 16u + it])
+                sumf[r] += float(kdh[blk]) * sc * (accv.x + accv.y + accv.z + accv.w)
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
+
+// D1 + the f4 magnitude slab (the crowned iq3s GEMV form): 512 float4 = 8 KB, signs by select.
+class LabKqGemvIq2xxsD1F4 {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+    @workgroup gridf : float4[512]   // pre-expanded magnitudes, one float4 per grid word (8 KB)
+
+    [metal_kernel(name="lab_kq_gemv_iq2xxs_d1f4_msl")]
+    def lab_kq_gemv_iq2xxs_d1f4 {
+        let lid = gl_LocalInvocationID.x
+        for [unroll_full] (gk in range(8)) {
+            let gi = lid + uint(gk) * 64u
+            let w = iq2xxs_gw(int(gi))
+            gridf[gi] = float4(float(w & 255u), float((w >> 8u) & 255u), float((w >> 16u) & 255u), float(w >> 24u))
+        }
+        barrier()
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let yb4 = ib * 64u + it * 8u
+            var yv : float4[8]
+            for [unroll_full] (i in range(8)) {
+                yv[i] = x[yb4 + uint(i)]
+            }
+            for [unroll_full] (r in range(2)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                let gw = kqu[blk * 16u + it * 2u]
+                let aux = kqu[blk * 16u + it * 2u + 1u]
+                var accv = float4(0.0)
+                for [unroll_full] (q3 in range(4)) {
+                    let bidx = (gw >> (8u * uint(q3))) & 255u
+                    let sgn = ksign7m((aux >> (7u * uint(q3))) & 127u)
+                    let s0 = sgn & 15u
+                    let s1 = sgn >> 4u
+                    let m0 = gridf[bidx * 2u]
+                    let m1 = gridf[bidx * 2u + 1u]
+                    let f0 = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                        (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w)
+                    let f1 = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                        (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w)
+                    accv += yv[q3 * 2] * f0
+                    accv += yv[q3 * 2 + 1] * f1
+                }
+                let sc = float(kscb[blk * 16u + it])
+                sumf[r] += float(kdh[blk]) * sc * (accv.x + accv.y + accv.z + accv.w)
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
+
+// iq2xs on the d1 map + the f4 magnitude slab (512 grid entries x 2 words = 1024 float4,
+// 16 KB): thread = one 32-block = two per-16 halves, each one uint (2 u16 words).
+class LabKqGemvIq2xsD1F4 {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+    @workgroup gridf : float4[1024]   // pre-expanded magnitudes, one float4 per grid word (16 KB)
+
+    [metal_kernel(name="lab_kq_gemv_iq2xs_d1f4_msl")]
+    def lab_kq_gemv_iq2xs_d1f4 {
+        let lid = gl_LocalInvocationID.x
+        for [unroll_full] (gk in range(16)) {
+            let gi = lid + uint(gk) * 64u
+            let w = iq2xs_gw(int(gi))
+            gridf[gi] = float4(float(w & 255u), float((w >> 8u) & 255u), float((w >> 16u) & 255u), float(w >> 24u))
+        }
+        barrier()
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let yb4 = ib * 64u + it * 8u
+            var yv : float4[8]
+            for [unroll_full] (i in range(8)) {
+                yv[i] = x[yb4 + uint(i)]
+            }
+            for [unroll_full] (r in range(2)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                var half_sum : float[2]
+                for [unroll_full] (h in range(2)) {
+                    let qw = kqu[blk * 16u + it * 2u + uint(h)]
+                    var accv = float4(0.0)
+                    for [unroll_full] (wi in range(2)) {
+                        let w16 = (qw >> (16u * uint(wi))) & 0xFFFFu
+                        let idx2 = (w16 & 511u) * 2u
+                        let sgn = ksign7m(w16 >> 9u)
+                        let s0 = sgn & 15u
+                        let s1 = sgn >> 4u
+                        let m0 = gridf[idx2]
+                        let m1 = gridf[idx2 + 1u]
+                        let f0 = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                            (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w)
+                        let f1 = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                            (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w)
+                        accv += yv[h * 4 + wi * 2] * f0
+                        accv += yv[h * 4 + wi * 2 + 1] * f1
+                    }
+                    half_sum[h] = float(kscb[blk * 16u + it * 2u + uint(h)]) * (accv.x + accv.y + accv.z + accv.w)
+                }
+                sumf[r] += float(kdh[blk]) * (half_sum[0] + half_sum[1])
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
+
+// iq2s on the d1 map, grid DIRECT off the hoisted constant table (its f4 slab would be 32 KB;
+// llama.cpp deliberately skips staging this one too).
+class LabKqGemvIq2sD1 {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="lab_kq_gemv_iq2s_d1_msl")]
+    def lab_kq_gemv_iq2s_d1 {
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let yb4 = ib * 64u + it * 8u
+            var yv : float4[8]
+            for [unroll_full] (i in range(8)) {
+                yv[i] = x[yb4 + uint(i)]
+            }
+            for [unroll_full] (r in range(2)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                let qwi = kqu[blk * 18u + it]
+                let sgw = kqu[blk * 18u + 8u + it]
+                let qh = (kqu[blk * 18u + 16u + it / 4u] >> ((it % 4u) * 8u)) & 255u
+                var half_sum : float[2]
+                for [unroll_full] (h in range(2)) {
+                    var accv = float4(0.0)
+                    for [unroll_full] (li in range(2)) {
+                        let l = uint(h) * 2u + uint(li)
+                        let idx2 = (((qwi >> (8u * l)) & 255u) | ((qh << (8u - 2u * l)) & 0x300u)) * 2u
+                        let sgb = (sgw >> (8u * l)) & 255u
+                        let w0 = iq3s_sw(iq2s_gw(int(idx2)), sgb & 15u)
+                        let w1 = iq3s_sw(iq2s_gw(int(idx2 + 1u)), sgb >> 4u)
+                        accv += yv[l * 2u] * float4(iq3s_sx(w0, 0u), iq3s_sx(w0, 1u), iq3s_sx(w0, 2u), iq3s_sx(w0, 3u))
+                        accv += yv[l * 2u + 1u] * float4(iq3s_sx(w1, 0u), iq3s_sx(w1, 1u), iq3s_sx(w1, 2u), iq3s_sx(w1, 3u))
+                    }
+                    half_sum[h] = float(kscb[blk * 16u + it * 2u + uint(h)]) * (accv.x + accv.y + accv.z + accv.w)
+                }
+                sumf[r] += float(kdh[blk]) * (half_sum[0] + half_sum[1])
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
+
+class LabKqGemvIq2xxsD1R4 {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="lab_kq_gemv_iq2xxs_d1r4_msl")]
+    def lab_kq_gemv_iq2xxs_d1r4 {
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let nb = ndim / 256u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 4u
+        var sumf : float[4]
+        var ib = ix
+        while (ib < nb) {
+            let yb4 = ib * 64u + it * 8u
+            var yv : float4[8]
+            for [unroll_full] (i in range(8)) {
+                yv[i] = x[yb4 + uint(i)]
+            }
+            for [unroll_full] (r in range(4)) {
+                let blk = (first_row + uint(r)) * nb + ib
+                let gw = kqu[blk * 16u + it * 2u]
+                let aux = kqu[blk * 16u + it * 2u + 1u]
+                var accv = float4(0.0)
+                for [unroll_full] (q3 in range(4)) {
+                    let bidx = (gw >> (8u * uint(q3))) & 255u
+                    let sgn = ksign7m((aux >> (7u * uint(q3))) & 127u)
+                    let w0 = iq3s_sw(iq2xxs_gw(int(bidx * 2u)), sgn & 15u)
+                    let w1 = iq3s_sw(iq2xxs_gw(int(bidx * 2u + 1u)), sgn >> 4u)
+                    accv += yv[q3 * 2] * float4(iq3s_sx(w0, 0u), iq3s_sx(w0, 1u), iq3s_sx(w0, 2u), iq3s_sx(w0, 3u))
+                    accv += yv[q3 * 2 + 1] * float4(iq3s_sx(w1, 0u), iq3s_sx(w1, 1u), iq3s_sx(w1, 2u), iq3s_sx(w1, 3u))
+                }
+                let sc = float(kscb[blk * 16u + it])
+                sumf[r] += float(kdh[blk]) * sc * (accv.x + accv.y + accv.z + accv.w)
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(4)) {
+            let s = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = s
+            }
+        }
+    }
+}
 
 // Rewrite every threadgroup A-tile subscript store `ta[IDX] = RHS;` into the pointer form
 // `*(ta + (IDX)) = RHS;` - llama.cpp's mul_mm carries the subscript form commented out as
