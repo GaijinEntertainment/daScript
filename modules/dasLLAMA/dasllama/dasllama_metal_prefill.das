@@ -5350,7 +5350,11 @@ def private pf_enc_kq_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; w
     } elif (fmt == KqFmt.iq2xs) {
         enc_kq_iq2xs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
     } elif (fmt == KqFmt.iq2xxs) {
-        enc_kq_iq2xxs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+        if (g_pso_kq_iq2xxs_f4 != null) {
+            enc_kq_iq2xxs_f4_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+        } else {
+            enc_kq_iq2xxs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+        }
     } elif (fmt == KqFmt.iq4nl) {
         enc_kq_iq4nl_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
     } elif (fmt == KqFmt.k2) {
