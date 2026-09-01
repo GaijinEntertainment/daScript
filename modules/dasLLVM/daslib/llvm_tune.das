@@ -1256,7 +1256,7 @@ def tune_cpu_class() : string {
     let arch = get_architecture_name()
     if (arch == "x86_64") {
         if (fallback_feature_ok("avx512vnni") && fallback_feature_ok("avx512bw")) {
-            return "x86-vnni512"
+            return (fallback_feature_ok("amx-int8") && fallback_feature_ok("amx-tile")) ? "x86-amx" : "x86-vnni512"
         }
         if (fallback_feature_ok("avxvnni")) {
             return "x86-vnni256"
@@ -1273,7 +1273,7 @@ def tune_cpu_class() : string {
     //! profile adopts the nearest lower class and races only what that class could not.
 def tune_class_chain() : array<string> {
     let ladder = (get_architecture_name() == "x86_64"
-        ? "x86-vnni512;x86-vnni256;x86-avx2;x86-base"
+        ? "x86-amx;x86-vnni512;x86-vnni256;x86-avx2;x86-base"
         : "arm-i8mm;arm-neon")
     let own = tune_cpu_class()
     var chain : array<string>

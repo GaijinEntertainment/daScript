@@ -174,8 +174,9 @@ fingerprint (and any `version_of=` pin value). Runtime knobs, race tables and
 box identity never travel - all three are properties of the box that measured
 them, not of its class.
 
-The class names follow the features `requires=` can gate: `x86-vnni512` /
-`x86-vnni256` / `x86-avx2` / `x86-base`, `arm-i8mm` / `arm-neon`; any other
+The class names follow the features `requires=` can gate: `x86-amx` (AMX-INT8 +
+AMX-TILE over the 512-bit VNNI gate) / `x86-vnni512` / `x86-vnni256` / `x86-avx2` /
+`x86-base`, `arm-i8mm` / `arm-neon`; any other
 architecture gets `<platform>-<arch>`, a key no shipped profile matches, so
 such a box always races (`tune_cpu_class()` computes this box's,
 `tune_class_chain()` its adoption ladder). An untuned auto/restart start walks the ladder from the box's own
