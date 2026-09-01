@@ -80,6 +80,14 @@ comment is a defect.**
 **A placeholder number a page reader could take for a fact is a defect - mark it as a
 placeholder on the page itself.**
 
+**A diff that makes `REVIEW.das`'s cookie-and-host check read fewer files, or report less
+than it does today with the same `ALLOWED_HOSTS`, is a defect** - the gate bans
+`document.cookie` and reports any resource a page loads from a host the list does not
+name.
+
+**A diff that adds a host to `REVIEW.das`'s `ALLOWED_HOSTS` states, in the PR body, what a
+visitor sends that host and whether the host sets cookies.**
+
 **Weakening `REVIEW.das`'s `dl-*` selector-parity check - the gate that compares each
 selector body defined in BOTH `files/dasllama-table.css` and `dasllama.html`'s inline
 `<style>` - is a defect.**

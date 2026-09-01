@@ -24,6 +24,14 @@ and another engine's - the arithmetic a reader does is not the page's claim.
 **Copy or rendering that lets a row with no reference engine's figure imply parity with a
 reference engine is a defect - an empty ratio cell reads "not raced".**
 
+**A diff that makes `REVIEW.das`'s cookie-and-host check read fewer files, or report less
+than it does today with the same `ALLOWED_HOSTS`, is a defect** - the gate bans
+`document.cookie` and reports any resource a page loads from a host the list does not
+name.
+
+**A diff that adds a host to `REVIEW.das`'s `ALLOWED_HOSTS` states, in the PR body, what a
+visitor sends that host and whether the host sets cookies.**
+
 **A `dl-*` selector that `site/files/dasllama-table.css` (repo root) does not already
 define, declared in any file under this directory, is a defect** - site chrome here uses the
 `dio-` prefix in `files/dasllama-io.css`, and the `dl-*` measurement-table language is that

@@ -22,3 +22,13 @@ compacted, or cited as rules.
   and ("yes") `site/README.md` is blessed as `site/`'s architecture doc (the skill takes a
   carve-out rather than a doc split). The artifact-list and "page"-definition rewrites rode
   along as auditor-identified defects.
+
+- **2026-09-01** (`REVIEW.md`): after a cookie audit of daslang.io and dasllama.io found
+  both sites cookie-free but nothing gating a re-introduction, Boris ruled "lets just land
+  review gate" - the checklist keeps only the weakening ban and the allowed-host disclosure
+  duty; the check itself lives in `REVIEW.das`.
+
+- **2026-09-01** (`REVIEW.md`): dragon round on the two gate rules. The weakening rule was
+  re-plained ("any resource a page loads from a host its allowed list does not name") and
+  the disclosure rule now names `ALLOWED_HOSTS` rather than pointing at its neighbour -
+  rules are unordered, so an adjacency referent points at nothing.
