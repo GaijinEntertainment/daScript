@@ -55,6 +55,8 @@ struct BenchArgs {
     team : bool
     @clarg_doc = "Append every round's sample (us, in round order) as one more column - the per-round view of a bimodal row"
     each : bool
+    @clarg_doc = "--team: gemv chunks per lane for the engine's splitter (0 = the engine default, 8; 1 = one equal chunk per lane)"
+    chunks_per_lane : int = 0
 }
 
 typedef GemvFn = function<(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void>
@@ -638,6 +640,9 @@ def main : int {
     BASE_ALIGN = int64(cfg.base_align)
     BASE_OFFSET = int64(cfg.base_offset)
     g_each_round = cfg.each
+    if (cfg.chunks_per_lane > 0) {
+        set_gemv_chunks_per_lane(cfg.chunks_per_lane)
+    }
     return rc if (rc >= 0)
     if (!jit_enabled()) {
         to_log(LOG_ERROR, "run with -jit: the kq generators only fire under the JIT\n")
