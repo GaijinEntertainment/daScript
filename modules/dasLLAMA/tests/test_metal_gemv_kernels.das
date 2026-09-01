@@ -81,9 +81,6 @@ def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
         if (vform == "iq4nl") {
             metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq4nl_msl_tgmem, 0)   // the codebook slab
         }
-        if (vform == "iq2xs") {
-            metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq2xs_msl_tgmem, 0)   // the f4 magnitude slab
-        }
         if (vform == "iq2xxsf4") {
             metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq2xxs_f4_msl_tgmem, 0)   // the f4 magnitude slab
         }

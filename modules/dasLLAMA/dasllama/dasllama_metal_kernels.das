@@ -3816,7 +3816,7 @@ def private kq_b8_on : bool {
     return g_kq_b8_mode == 1
 }
 
-def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64;   // nolint:STYLE037 — the flat per-format ladder (one arm per kq format) is the honest shape
+def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64;   // nolint:STYLE037,STYLE038 — the flat per-format ladder (one arm per kq format) is the honest shape
                bs : MetalBuffer ?; soff, doff : uint64; bx, by : MetalBuffer?; yoff : uint64;
                var ka : KqMvArgs; rows, nlive : int64) {
     let two = nlive == 2l
@@ -4821,8 +4821,8 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
             kn_buffer(enc, bxa, 0ul, 3)
             kn_buffer(enc, bn, 0ul, 5)
             kn_buffer(enc, bd, 0ul, 6)
-            for (_r in range(32)) {
-                kn_buffer(enc, (_r & 1) == 0 ? by_base : by_base2, 0ul, 4)
+            for (r in range(32)) {
+                kn_buffer(enc, (r & 1) == 0 ? by_base : by_base2, 0ul, 4)
                 kn_dispatch(enc, uint3(uint(ndim / base_gdiv), 1u, 1u), tg)
             }
         }
@@ -4837,8 +4837,8 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_buffer(enc, bxa, 0ul, 3)
         kn_buffer(enc, bn, 0ul, 5)
         kn_buffer(enc, bd, 0ul, 6)
-        for (_r in range(32)) {   //! back-to-back dispatches keep the clock governor ramped - a single sparse dispatch reads idle-clock times and can flip the verdict
-            kn_buffer(enc, (_r & 1) == 0 ? by_base : by_base2, 0ul, 4)
+        for (r in range(32)) {   //! back-to-back dispatches keep the clock governor ramped - a single sparse dispatch reads idle-clock times and can flip the verdict
+            kn_buffer(enc, (r & 1) == 0 ? by_base : by_base2, 0ul, 4)
             kn_dispatch(enc, uint3(uint(ndim / base_gdiv), 1u, 1u), tg)
         }
     }, $(enc) {
@@ -4850,8 +4850,8 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_buffer(enc, bxa, 0ul, 3)
         kn_buffer(enc, bn, 0ul, 5)
         kn_buffer(enc, bd, 0ul, 6)
-        for (_r in range(32)) {
-            kn_buffer(enc, (_r & 1) == 0 ? by_twin : by_twin2, 0ul, 4)
+        for (r in range(32)) {
+            kn_buffer(enc, (r & 1) == 0 ? by_twin : by_twin2, 0ul, 4)
             kn_dispatch(enc, uint3(uint(ndim / twin_gdiv), 1u, 1u), tg)
         }
     })
@@ -8685,9 +8685,9 @@ class MetalKqGemvIq4nl {
     }
 }
 
-// IQ3_S: w = d*sc*(+-grid byte); the 2 KB grid in threadgroup memory, a
-// 16-lane half-simdgroup per superblock, lane (bu, il) = block bu's half il: one qs word = 4
-// grid words = 16 elems = 4 CONSECUTIVE float4 x loads. Scale plane = the iq4xs/k6 split form.
+// IQ3_S: w = d*sc*(+-grid byte); constant-grid words float-expanded in place, sign nibbles
+// from the block's sign plane, 2 rows per simdgroup, dispatch rows/4. Scale plane = the
+// iq4xs/k6 split form.
 [metal_dispatch(name = "enc_kq_iq3s_c", pso = "g_pso_kq_iq3s", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq3s {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
@@ -8724,8 +8724,10 @@ class MetalKqGemvIq3s {
                         let b3 = uint(h) * 4u + uint(k)
                         let idx = ((qsw >> (8u * uint(k))) & 255u) | ((qh << (8u - b3)) & 256u)
                         let nib = (sgw >> ((b3 / 2u) * 8u + (b3 % 2u) * 4u)) & 15u
-                        let sw = iq3s_sw(iq3s_gw(int(idx)), nib)
-                        accv += yv[h * 4 + k] * float4(iq3s_sx(sw, 0u), iq3s_sx(sw, 1u), iq3s_sx(sw, 2u), iq3s_sx(sw, 3u))
+                        let gw = iq3s_gw(int(idx))
+                        let fs = float4((nib & 1u) != 0u ? -1.0 : 1.0, (nib & 2u) != 0u ? -1.0 : 1.0,
+                                        (nib & 4u) != 0u ? -1.0 : 1.0, (nib & 8u) != 0u ? -1.0 : 1.0)
+                        accv += yv[h * 4 + k] * (float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fs)
                     }
                 }
                 let sc = float(((int(kscb[blk * 16u + it]) & 255) ^ 128) - 128)
@@ -8808,9 +8810,9 @@ class MetalKqGemvIq3sF4 {
     }
 }
 
-// IQ2_S: the iq3s GEMV geometry (4 rows per simdgroup, dispatch rows/8) over the u64 grid read
-// DIRECT off the hoisted constant table; per-16 UNSIGNED strips scale each 16-element half,
-// d pre-eighth-ed at transcode - the fold is d8 * strip * signed_grid_byte.
+// IQ2_S: the iq3s GEMV geometry (2 rows per simdgroup, dispatch rows/4) over the u64 grid pair
+// read DIRECT off the constant table and float-expanded in place; per-16 UNSIGNED strips scale
+// each 16-element half, d pre-eighth-ed at transcode - the fold is d8 * strip * signed_grid_byte.
 [metal_dispatch(name = "enc_kq_iq2s_c", pso = "g_pso_kq_iq2s", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq2s {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
@@ -8848,10 +8850,18 @@ class MetalKqGemvIq2s {
                         let l = uint(h) * 2u + uint(li)
                         let idx2 = (((qwi >> (8u * l)) & 255u) | ((qh << (8u - 2u * l)) & 0x300u)) * 2u
                         let sgb = (sgw >> (8u * l)) & 255u
-                        let w0 = iq3s_sw(iq2s_gw(int(idx2)), sgb & 15u)
-                        let w1 = iq3s_sw(iq2s_gw(int(idx2 + 1u)), sgb >> 4u)
-                        accv += yv[l * 2u] * float4(iq3s_sx(w0, 0u), iq3s_sx(w0, 1u), iq3s_sx(w0, 2u), iq3s_sx(w0, 3u))
-                        accv += yv[l * 2u + 1u] * float4(iq3s_sx(w1, 0u), iq3s_sx(w1, 1u), iq3s_sx(w1, 2u), iq3s_sx(w1, 3u))
+                        let s0 = sgb & 15u
+                        let s1 = sgb >> 4u
+                        let w0 = iq2s_gw(int(idx2))
+                        let w1 = iq2s_gw(int(idx2 + 1u))
+                        let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+                        let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                        let f0 = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                            (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w)
+                        let f1 = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                            (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w)
+                        accv += yv[l * 2u] * f0
+                        accv += yv[l * 2u + 1u] * f1
                     }
                     half_sum[h] = float(kscb[blk * 16u + it * 2u + uint(h)]) * (accv.x + accv.y + accv.z + accv.w)
                 }
@@ -8868,10 +8878,10 @@ class MetalKqGemvIq2s {
     }
 }
 
-// IQ2_XS: the iq2s GEMV geometry over the parity-signed u16 words - per (block, half) one u32
-// carries two u16 qs words; 9-bit index doubles into the grid pair, ksign7m recomputes the
-// sign byte (no sign plane, no qh); per-16 UNSIGNED strips, d pre-eighth-ed.
-[metal_dispatch(name = "enc_kq_iq2xs_c", pso = "g_pso_kq_iq2xs", tgmem = "metal_kq_gemv_iq2xs_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+// IQ2_XS: the iq2s GEMV geometry over the parity-signed u16 words - one u32 = two u16 qs
+// words; 9-bit index doubles into the constant grid pair (float-expanded in place, no slab),
+// ksign7m recomputes the sign byte (no sign plane, no qh); per-16 UNSIGNED strips, d eighth-ed.
+[metal_dispatch(name = "enc_kq_iq2xs_c", pso = "g_pso_kq_iq2xs", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq2xs {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 16 UNSIGNED per-16 sub-scales, byte view (same buffer at 0)
@@ -8880,17 +8890,9 @@ class MetalKqGemvIq2xs {
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
-    @workgroup gridf : float4[1024]   // pre-expanded magnitudes, one float4 per grid word (16 KB)
 
     [metal_kernel(name="metal_kq_gemv_iq2xs_msl")]
     def metal_kq_gemv_iq2xs {
-        let lid = gl_LocalInvocationID.x
-        for [unroll_full] (gk in range(16)) {
-            let gi = lid + uint(gk) * 64u
-            let w = iq2xs_gw(int(gi))
-            gridf[gi] = float4(float(w & 255u), float((w >> 8u) & 255u), float((w >> 16u) & 255u), float(w >> 24u))
-        }
-        barrier()
         let lane = gl_SubgroupInvocationID
         let ix = lane / 8u
         let it = lane % 8u
@@ -8916,8 +8918,10 @@ class MetalKqGemvIq2xs {
                         let sgn = ksign7m(w16 >> 9u)
                         let s0 = sgn & 15u
                         let s1 = sgn >> 4u
-                        let m0 = gridf[idx2]
-                        let m1 = gridf[idx2 + 1u]
+                        let w0 = iq2xs_gw(int(idx2))
+                        let w1 = iq2xs_gw(int(idx2 + 1u))
+                        let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+                        let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
                         let f0 = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
                             (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w)
                         let f1 = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
@@ -8976,10 +8980,18 @@ class MetalKqGemvIq2xxs {
                 for [unroll_full] (q3 in range(4)) {
                     let bidx = (gw >> (8u * uint(q3))) & 255u
                     let sgn = ksign7m((aux >> (7u * uint(q3))) & 127u)
-                    let w0 = iq3s_sw(iq2xxs_gw(int(bidx * 2u)), sgn & 15u)
-                    let w1 = iq3s_sw(iq2xxs_gw(int(bidx * 2u + 1u)), sgn >> 4u)
-                    accv += yv[q3 * 2] * float4(iq3s_sx(w0, 0u), iq3s_sx(w0, 1u), iq3s_sx(w0, 2u), iq3s_sx(w0, 3u))
-                    accv += yv[q3 * 2 + 1] * float4(iq3s_sx(w1, 0u), iq3s_sx(w1, 1u), iq3s_sx(w1, 2u), iq3s_sx(w1, 3u))
+                    let s0 = sgn & 15u
+                    let s1 = sgn >> 4u
+                    let w0 = iq2xxs_gw(int(bidx * 2u))
+                    let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
+                    let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+                    let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                    let f0 = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                        (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w)
+                    let f1 = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                        (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w)
+                    accv += yv[q3 * 2] * f0
+                    accv += yv[q3 * 2 + 1] * f1
                 }
                 let sc = float(kscb[blk * 16u + it])
                 sumf[r] += float(kdh[blk]) * sc * (accv.x + accv.y + accv.z + accv.w)
@@ -9064,9 +9076,9 @@ class MetalKqGemvIq2xxsF4 {
     }
 }
 
-// IQ3_XXS: the iq3s GEMV shape verbatim over the 24-word rows - the 1 KB halved grid as a
-// float4 magnitude slab, signs from the block's aux32 through the parity helper (no table),
-// the same (2ls+1)-strip x halved-d fold. 4 rows per simdgroup, dispatch rows/8.
+// IQ3_XXS: the iq3s GEMV shape verbatim over the 24-word rows - constant-grid words
+// float-expanded in place, signs from the block's aux32 through the parity helper (no table),
+// the same (2ls+1)-strip x halved-d fold. 2 rows per simdgroup, dispatch rows/4.
 [metal_dispatch(name = "enc_kq_iq3xxs_c", pso = "g_pso_kq_iq3xxs", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq3xxs {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
@@ -9102,8 +9114,10 @@ class MetalKqGemvIq3xxs {
                         let e8 = uint(h) * 2u + uint(k) / 2u
                         let sgb = ksign7m((aux >> (7u * e8)) & 127u)
                         let nib = uint(k) % 2u == 0u ? sgb & 15u : sgb >> 4u
-                        let sw = iq3s_sw(iq3xxs_gw(int((qsw >> (8u * uint(k))) & 255u)), nib)
-                        accv += yv[h * 4 + k] * float4(iq3s_sx(sw, 0u), iq3s_sx(sw, 1u), iq3s_sx(sw, 2u), iq3s_sx(sw, 3u))
+                        let gw = iq3xxs_gw(int((qsw >> (8u * uint(k))) & 255u))
+                        let fs = float4((nib & 1u) != 0u ? -1.0 : 1.0, (nib & 2u) != 0u ? -1.0 : 1.0,
+                                        (nib & 4u) != 0u ? -1.0 : 1.0, (nib & 8u) != 0u ? -1.0 : 1.0)
+                        accv += yv[h * 4 + k] * (float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fs)
                     }
                 }
                 let sc = float(((int(kscb[blk * 16u + it]) & 255) ^ 128) - 128)
