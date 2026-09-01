@@ -72,7 +72,15 @@ best of 5 interleaved rounds; ratio = reference / ours, >= 1.00 = ours faster):
 | iq2xxs | 5143 | 5157.27 | 1.00 | 745463 | 2534210.00 | 3.40 |
 | mx4 | 2572 | 3106.12 | 1.21 | 776635 | 1443088.00 | 1.86 |
 
-Every tile row is ahead (1.17x-7.07x). Decode tails: k3 0.80x, k6 0.90x, k5 0.91x; iq3xxs, k2, iq2s,
+After the k3/k2 step (c720aea95): k3 decode 2445 us (1.08-1.13x), k2 1286-1423 (1.37-1.65x).
+
+The M1 ladder (Apple M1 Max, one thread, the sdot lattice at width 128, tip b88fc4100; ratio =
+reference / ours): decode q8 1.46, k4 1.60, k5 1.06, k6 1.35, q40 1.96, q51 1.32, iq4xs 1.71, k3
+1.37, iq4nl 1.82, k2 1.42, mx4 1.50, iq2s 1.00, iq3s 0.93, iq3xxs 0.72, iq2xxs 0.57, iq2xs 0.51;
+every tile 1.9x-15.3x ahead. On ARM the grid formats are the tails - the reference exe's NEON grid
+kernels run iq2xs/iq2xxs at 3.3-3.4 ms against our 6.0-6.4 ms while the k-quants are 1.06x-1.60x.
+
+zen2 reading: every tile row is ahead (1.17x-7.07x). Decode tails were k3 0.80x, k6 0.90x, k5 0.91x; iq3xxs, k2, iq2s,
 iq2xxs at 0.99-1.00 (inside the noise band). The 4-bit class (q40, q51, iq4xs, iq4nl, k4, q8, mx4)
 sits at 1.2x-1.6x.
 
@@ -149,6 +157,10 @@ CPU decode, the grid formats (done):
    1-thread bench is ~7%; a longer run or the 16-thread engine shape decides the last 2%). 7. the
    16-thread stamp on the vehicles (needs `--for-debug-purposes` on lcpp_bench, or the released
    exe). 8. retro audit of IQ4_XS/Q3_K per followup 60.
+
+CPU decode on ARM (the M1 ladder): iq2xs 0.51x, iq2xxs 0.57x, iq3xxs 0.72x, iq3s 0.93x - the grid
+decode under the sdot lattice (width 128, two vectors per dword group). Untouched so far; a memo on
+llama.cpp's NEON grid kernels vs our width-128 arms is the first step.
 
 Vulkan pp (gap 1):
 1. Budget split (measurement, no kernel edit) - is the GEMM the 30%? 2. `shAscales`-style scale
