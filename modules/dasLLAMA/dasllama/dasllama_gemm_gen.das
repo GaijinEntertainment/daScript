@@ -1800,31 +1800,19 @@ def private vbmi_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
     var p1 : array<LLVMOpaqueValue?>
     p0 |> reserve(entries)
     p1 |> reserve(entries)
-    if (te.kq == 34) {          // an iq3 entry is one word of 4 weights: weights 0-1 and 2-3 per plane
-        let g = iq3xxs_grid()
-        for (e in range(entries)) {
-            vbmi_push_iq3(te, p0, p1, g[e], alpha)
-        }
+    // one grid table per helper frame: a das frame holds every local of its function, and five by-value grid
+    // tables in one frame (~17 KB) overflowed the codegen context's stack into the heap (cold-start SIGSEGV
+    // in LLVMContextDispose); the existing global builders hold one 8 KB table each, and so do these
+    if (te.kq == 34) {
+        vbmi_planes_iq3xxs(te, p0, p1, alpha)
     } elif (te.kq == 33) {
-        let g = iq3s_grid()
-        for (e in range(entries)) {
-            vbmi_push_iq3(te, p0, p1, g[e], alpha)
-        }
-    } elif (te.kq == 25) {      // an iq2 entry is two words: weights 0-3, 4-7 - one plane each
-        let g = iq2xxs_grid2()
-        for (e in range(entries)) {
-            vbmi_push_iq2(te, p0, p1, g[2 * e], g[2 * e + 1], alpha)
-        }
+        vbmi_planes_iq3s(te, p0, p1, alpha)
+    } elif (te.kq == 25) {
+        vbmi_planes_iq2xxs(te, p0, p1, alpha)
     } elif (te.kq == 24) {
-        let g = iq2xs_grid2()
-        for (e in range(entries)) {
-            vbmi_push_iq2(te, p0, p1, g[2 * e], g[2 * e + 1], alpha)
-        }
+        vbmi_planes_iq2xs(te, p0, p1, alpha)
     } else {
-        let g = iq2s_grid2()
-        for (e in range(entries)) {
-            vbmi_push_iq2(te, p0, p1, g[2 * e], g[2 * e + 1], alpha)
-        }
+        vbmi_planes_iq2s(te, p0, p1, alpha)
     }
     te.vb_plane[0] = vbmi_const_bytes(te, mod, "dasllama.vbmi.{tag}.p0", p0)
     te.vb_plane[1] = vbmi_const_bytes(te, mod, "dasllama.vbmi.{tag}.p1", p1)
@@ -1842,6 +1830,43 @@ def private vbmi_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
             kv |> push(LLVMConstInt(te.types.t_int8, uint64(ks[k]), 0))
         }
         te.vb_ksigns = vbmi_const_bytes(te, mod, "dasllama.vbmi.ksigns", kv)
+    }
+}
+
+//! an iq3 entry is one word of 4 weights: weights 0-1 and 2-3 per plane
+def private vbmi_planes_iq3xxs(var te : TileEmit; var p0, p1 : array<LLVMOpaqueValue?>; alpha : array<int>) {
+    let g = iq3xxs_grid()
+    for (e in range(256)) {
+        vbmi_push_iq3(te, p0, p1, g[e], alpha)
+    }
+}
+
+def private vbmi_planes_iq3s(var te : TileEmit; var p0, p1 : array<LLVMOpaqueValue?>; alpha : array<int>) {
+    let g = iq3s_grid()
+    for (e in range(512)) {
+        vbmi_push_iq3(te, p0, p1, g[e], alpha)
+    }
+}
+
+//! an iq2 entry is two words: weights 0-3, 4-7 - one plane each
+def private vbmi_planes_iq2xxs(var te : TileEmit; var p0, p1 : array<LLVMOpaqueValue?>; alpha : array<int>) {
+    let g = iq2xxs_grid2()
+    for (e in range(256)) {
+        vbmi_push_iq2(te, p0, p1, g[2 * e], g[2 * e + 1], alpha)
+    }
+}
+
+def private vbmi_planes_iq2xs(var te : TileEmit; var p0, p1 : array<LLVMOpaqueValue?>; alpha : array<int>) {
+    let g = iq2xs_grid2()
+    for (e in range(512)) {
+        vbmi_push_iq2(te, p0, p1, g[2 * e], g[2 * e + 1], alpha)
+    }
+}
+
+def private vbmi_planes_iq2s(var te : TileEmit; var p0, p1 : array<LLVMOpaqueValue?>; alpha : array<int>) {
+    let g = iq2s_grid2()
+    for (e in range(1024)) {
+        vbmi_push_iq2(te, p0, p1, g[2 * e], g[2 * e + 1], alpha)
     }
 }
 
