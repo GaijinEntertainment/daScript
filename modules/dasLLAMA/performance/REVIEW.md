@@ -30,8 +30,10 @@ re-mint.** A reference row that carries no `sha` (the cli and python reference t
 pinned by its builder instead - the cli tools by that same ref pin's checkout, the python
 legs by `../benchmarks/asr/requirements-*.txt`.
 
-**A diff that moves a reference-tool pin - the ref pin's checkout, or a python leg's
-`requirements-*.txt` - re-mints every row the moved pin's tool minted, or withdraws them.**
+**A diff that changes a reference-tool pin - `DEFAULT_REF_SHA` in
+`../benchmarks/setup_lcpp_ref.das`, or a python leg's
+`../benchmarks/asr/requirements-*.txt` - re-mints every row that pin's tool minted, or
+withdraws them.**
 
 **A diff that writes a provenance manifest under this folder whose `provenance.dasllama_version`
 differs from the `DASLLAMA_RELEASE` string (`../dasllama/dasllama_version.das`) is a defect -
@@ -104,4 +106,3 @@ the same change, and a diff that adds a copy names it here in the same change:
 `CONSENT_TEXT` (`utils/watchdog/watchdog.py`, repo root), and the captured
 `utils/dasllama-server/tests/fixtures/exchange.json` (repo root).** The console prompt and the
 control page render the served constant, so they are not copies.
-

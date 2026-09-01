@@ -5,6 +5,9 @@ doc: `../ARCHITECTURE_MEASUREMENT.md` (the benchmark rig: `#one-benchmark-rig`).
 `../followup_vulkan.md` for anything about the Vulkan backend, `../PERF_LEDGER.md` for any
 other performance followup, `../followup_general.md` for everything else.
 
+**Routed from `../REVIEW.md`: a timing rig - a script whose output is a measured wall or rate -
+wherever the diff puts it, applies this list together with `../REVIEW.md`.**
+
 **A diff that adds or changes an instrument whose timed body runs a forward pass through a
 pipeline the dasLLAMA engine selected also calls `tune_gate()`
 (`../performance/profile_common.das`) before that instrument's first timed rep.** A pipeline

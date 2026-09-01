@@ -2501,7 +2501,7 @@ def test_iq4nl_planes(t : T?) {
 def private split_scale_plane(ks : array<uint8>; ssb : int64) : array<uint8> {
     let nsb = long_length(ks) / ssb
     var out : array<uint8>
-    out |> resize(int(nsb * 18l))
+    out |> resize(nsb * 18l)
     for (sb in range64(nsb)) {
         for (i in range64(16l)) {
             out[sb * 16l + i] = ks[sb * ssb + 4l + i]
@@ -2523,9 +2523,9 @@ def test_kq_plane_sb_metal_blob_form(t : T?) {
             let fmt = gguf_kq_fmt_of_type(gtype)
             let sbb = gguf_kq_disk_sbb(gtype)
             var bytes : array<uint8>
-            bytes |> reserve(int(sbb * 3l))
+            bytes |> reserve(sbb * 3l)
             var x = uint(seed) * 2654435761u
-            for (i in range(int(sbb * 3l))) {
+            for (_i in range64(sbb * 3l)) {
                 x = x * 1664525u + 1013904223u
                 bytes |> push(uint8((x >> 24u) & 0xFFu))
             }

@@ -696,6 +696,12 @@ class UkStride {
 // A `let` fixed-array local with all-literal elements lowers to a program-scope `constant`
 // array - the codebook/grid shape quant kernels stage from; reads index it by the local's name.
 
+// a helper's own table already carries a generated-looking name: the rename below must probe past it
+def private ctb_pick0(i : uint) : uint {
+    let tbl_c0 = fixed_array<uint>(0x100u, 0x200u, 0x300u, 0x400u, 0x500u, 0x600u, 0x700u, 0x800u)
+    return tbl_c0[i & 7u]
+}
+
 def private ctb_pick(i : uint) : uint {
     let tbl = fixed_array<uint>(0x11u, 0x22u, 0x33u, 0x44u, 0x55u, 0x66u, 0x77u, 0x88u)
     return tbl[i & 7u]
@@ -716,7 +722,7 @@ class ConstTab {
     def consttab {
         let i = gl_GlobalInvocationID.x
         let sgn = fixed_array<float>(1.0, 0.5)
-        dst[i] = src[i] + ctb_pick(i) + ctb_pick2(i)
+        dst[i] = src[i] + ctb_pick0(i) + ctb_pick(i) + ctb_pick2(i)
         fdst[i] = sgn[i & 1u] * 2.0
     }
 }

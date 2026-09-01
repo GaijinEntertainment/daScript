@@ -217,9 +217,9 @@ def test_q5k_encoder(t : T?) {
 // are valid input for all nine (grid indices, sign bits and scale nibbles have no invalid values).
 def private synth_sb_bytes(sbb : int64; seed : int) : array<uint8> {
     var b : array<uint8>
-    b |> reserve(int(sbb * 2l))
+    b |> reserve(sbb * 2l)
     var x = uint(seed) * 2654435761u + 12345u
-    for (i in range(int(sbb * 2l))) {
+    for (_i in range64(sbb * 2l)) {
         x = x * 1664525u + 1013904223u
         b |> push(uint8((x >> 24u) & 0xFFu))
     }

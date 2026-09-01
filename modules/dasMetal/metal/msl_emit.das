@@ -3024,8 +3024,13 @@ def private hoist_const_table(var ctx : MslCtx; v : VariablePtr) {
     var an = local_msl_name(ctx, aname)
     var txt = "constant {ename} {an}[{n}] = \{\n{vtxt}\};"
     if (key_exists(ctx.const_tables, an) && ctx.const_tables[an] != txt) {
-        an = "{an}_c{ctx.splice_seq}"   // a same-named table with different content in another helper
+        var cand = "{an}_c{ctx.splice_seq}"   // a same-named table with different content in another helper
+        while (key_exists(ctx.const_tables, cand)) {   // a helper's own table may already hold the generated name
+            ctx.splice_seq++
+            cand = "{an}_c{ctx.splice_seq}"
+        }
         ctx.splice_seq++
+        an = cand
         txt = "constant {ename} {an}[{n}] = \{\n{vtxt}\};"
         note(ctx, "stmt.let.const_table.renamed")
     }

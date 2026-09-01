@@ -27,8 +27,8 @@ winners back.
 **A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`), or to a
 tune-boot path that reaches it, applies `REVIEW_EXCHANGE.md`.**
 
-**Every `dasllama/` change applies this folder's `tests/REVIEW.md`.** The folder walk surfaces
-that checklist only for diffs under `tests/`.
+**Every `dasllama/` change applies this folder's `tests/REVIEW.md`.** A `dasllama/` diff never
+opens that checklist on its own.
 
 **A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
 
@@ -133,13 +133,14 @@ the name in the same change).
 
 **A change to code or data of `encode`/`bpe_encode` or anything they reach in
 `dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`
-ships before/after `--tok` rows (this folder's `benchmarks/lcpp_bench.das`) for the affected backend** - the
-instrument is the scaling ratio across the size ladder, and superlinear is a defect.
+ships before/after `--tok` rows (this folder's `benchmarks/lcpp_bench.das`) for the affected
+backend** - the instrument is the scaling ratio across the size ladder, and superlinear is a
+defect.
 
 **A change to code or data in `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
-template strings any of them look up, records a run of this folder's `tests/test_tokenizer.das` with its cases
-EXECUTED, not skipped.**
+template strings any of them look up, records a run of this folder's
+`tests/test_tokenizer.das` with its cases EXECUTED, not skipped.**
 
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.**
 An override is an environment knob, an exported runtime setter, or an on-disk state file that
@@ -191,14 +192,16 @@ is one that check does not flag. When the check licenses no names, the line says
 **Checked-in prose this module owns - docs and comments, any language - that is not locating
 or reproducing work against the reference build describes an upstream mechanism in our own
 terms: no "lifted/ported verbatim from", and no upstream symbol, header, constant, or binary
-name - write "the reference exe" or "upstream" instead.** A symbol the file carrying that
-prose calls or holds as a value is its own name, not attribution.
+name - write "the reference exe" or "upstream" instead.** The reference build is the
+third-party engine this module measures itself against - the checkout
+`benchmarks/setup_lcpp_ref.das` pins. A symbol the file carrying that prose calls or holds as
+a value is its own name, not attribution.
 
 **A line whose job is to locate or reproduce work against the reference build names that
 build's binary outright** - a path naming where checked-in data is regenerated FROM, an
 env-knob row whose value locates the reference binary, a command line or flag list in a
-methodology, profile, bring-up, or how-to document, and a follow-up ledger's board row naming
-the build it compares against.
+methodology, profile, bring-up, or how-to document, and a follow-up ledger's row naming the
+build its numbers compare against.
 
 **Legal attribution never appears in prose - it lives in `THIRD_PARTY_NOTICES.md` and the
 `LICENSE.*` files.**

@@ -134,11 +134,11 @@ a defect.** A resize cap is not evidence.
 logits-tolerance form. Counting cells stay token-exact.
 
 **A diff that adds a GPU kernel class under `../dasllama/` - a `[metal_kernel]` def, a
-`[vk_dispatch]` declaration, or a new instance of a template carrying one - covers that class in
-`test_kernel_coverage.das`, one of two ways.** Either a census row there dispatches the class, or the diff names it in
-that file's `CENSUS_NEVER_DISPATCHED`, with the reason no row can reach it. A
-`DASLLAMA_PARITY_FULL`-gated census row counts as the dispatching arm. Naming a
-class a census row could dispatch is a defect.
+`[vk_dispatch]` declaration, or a new instance of a template carrying one - covers that class
+in `test_kernel_coverage.das`, one of two ways.** Either a census row there dispatches the
+class, or the diff names it in that file's `CENSUS_NEVER_DISPATCHED`, with the reason no row
+can reach it. A `DASLLAMA_PARITY_FULL`-gated census row counts as the dispatching arm. Naming
+a class a census row could dispatch is a defect.
 
 **A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
 output - missing a compare against a CPU oracle that can witness the cell's property is a
@@ -186,14 +186,14 @@ parameter that takes the lane, is a defect.** A family whose knob has no reset t
 it to the documented default. A runtime decline standing in for a pin measures whichever
 lane the box's policy picked.
 
-**A cell that loads a media carrier under a lane pin - a `set_<family>_q8`-class knob or a
-tensor-crown pin - and whose subject is not that lane knob itself mints in memory through the
-family's `stage_*` + `mint_*` pair, never through a `.dlim`-baking loader
-(`load_<family>_tower` / `load_<family>_encoder` / `load_model*`).** A disk bake under a
-pinned lane GC-purges the serving lane's `.dlim` beside the model, and the next direct-image
-load in another suite panics on the wrong identity. A cell whose subject is the lane knob
-(`load_asr_model` under `set_asr_tower_fp32`) keeps the facade loader: the image identity
-folds the pin, so minting around it would unmake the claim.
+**A cell that loads a media carrier under a lane pin - a `set_<family>_q8`-class knob, or a
+`set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - and whose subject is not that lane
+knob itself mints in memory through the family's `stage_*` + `mint_*` pair, never through a
+`.dlim`-baking loader (`load_<family>_tower` / `load_<family>_encoder` / `load_model*`).** A
+disk bake under a pinned lane GC-purges the serving lane's `.dlim` beside the model, and the
+next direct-image load in another suite panics on the wrong identity. A cell whose subject is
+the lane knob (`load_asr_model` under `set_asr_tower_fp32`) keeps the facade loader: the image
+identity folds the pin, so minting around it would unmake the claim.
 
 **A CPU-vs-GPU arm that does not run a PLANAR model for its CPU stages, and that model's
 `blob_twin(t, path, seq_cap)` for override-selected stages, is a defect.** One session spans
@@ -274,7 +274,8 @@ plane alone is a valid control there, while a route reading both planes needs bo
 poison the served route never reads passes on a broken kernel.
 
 **An ASR cell comparing transcripts across two serving lanes asserts TOKEN equality; a cell
-comparing a crowned lane - the raced kernel form a tune sidecar arms as the serving one -
-against its tensor twin asserts WORD equality, because the twins' rounding legitimately flips
-tokens.** A cell that cannot hold its grade converts to the forced-feed logits-tolerance form -
-never to a looser text compare.
+comparing a crowned lane against its tensor twin asserts WORD equality, because the twins'
+rounding legitimately flips tokens.** A crowned lane is the raced kernel form a tune sidecar
+arms as the serving one; its tensor twin is the same kernel written on Metal's tensor
+primitives. A cell that cannot hold its grade converts to the forced-feed logits-tolerance
+form - never to a looser text compare.

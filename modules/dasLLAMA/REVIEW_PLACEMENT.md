@@ -8,8 +8,8 @@ or lands a kernel, codec, transform, tokenizer, tool-wire, media-IO or registrat
 in a new place applies this list together with `REVIEW.md`.**
 
 **A per-file inventory restated in this checklist is a defect of the checklist.** The sec.1
-charters - `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md` - own the
-per-file list. A rule naming what KIND of code lands in which file is the checklist's own.
+charters own the per-file list; a rule naming what KIND of code lands in which file is the
+checklist's own.
 
 **A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
@@ -24,9 +24,9 @@ backend kernel file.
 backend file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
 **A kernel body lands in its owner's backend file.** A GPU kernel body lands in the file where
-its PSO is compiled and released. A CPU-tier kernel body lands in that tier's
-`dasllama/dasllama_math_<tier>.das`. A kernel body never lands in
-`dasllama/dasllama_math.das` or in a lens/dispatch macro file.
+its pipeline state object (PSO) is compiled and released. A CPU-tier kernel body lands in that
+tier's `dasllama/dasllama_math_<tier>.das`. A kernel body never lands in
+`dasllama/dasllama_math.das` or in a file whose job is declaring kernels and routing dispatch.
 
 **A family quirk lands in the family file; a piece two families need moves UP into the
 concern's shared file (its own file when none exists)** - never sideways into a sibling.
@@ -62,7 +62,8 @@ logic in engine files, HTTP in the server, writer logic in the writer's own file
 
 **An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
 `dasllama/dasllama_transformer.das`** - arch registrations, GPU tiers, every module requiring
-the engine back; it sits in `dasllama/dasllama_common.das` only if engine code needs it. A
+the engine back. It lives in `dasllama/dasllama_common.das` instead when code in
+`dasllama/dasllama_common.das` itself depends on that module's registration having run. A
 program root (test, harness, benchmark, tool) requires the registration module it needs
 directly.
 

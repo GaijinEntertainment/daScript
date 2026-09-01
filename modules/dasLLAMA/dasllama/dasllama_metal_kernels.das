@@ -3796,7 +3796,7 @@ def private kq_b8_on : bool {
 }
 
 def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64;   // nolint:STYLE037 — the flat per-format ladder (one arm per kq format) is the honest shape
-               bs : MetalBuffer?; soff, doff : uint64; bx, by : MetalBuffer?; yoff : uint64;
+               bs : MetalBuffer ?; soff, doff : uint64; bx, by : MetalBuffer?; yoff : uint64;
                var ka : KqMvArgs; rows, nlive : int64) {
     let two = nlive == 2l
     let b8 = nlive >= 5l && kq_b8_on()

@@ -1528,7 +1528,7 @@ def dlim_config_sources_register() {
 }
 
 //! The Model's plane pair for a kq format - the dispatcher every plane-form consumer keys on.
-def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const? &; var ks : array<uint8> const? &) { // nolint:STYLE037 — the format ladder
+def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks : array<uint8> const?&) {   // nolint:STYLE037 — the format ladder
     unsafe {
         if (fmt == KqFmt.k4) {
             kq = addr(t.k4q)

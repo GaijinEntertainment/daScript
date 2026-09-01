@@ -18,6 +18,11 @@ def private ct_pick(i : uint) : uint {
     return tbl[i & 7u]
 }
 
+def private ct_pick0(i : uint) : uint {   // its own table carries the name the rename would generate
+    let tbl_c0 = fixed_array<uint>(0x100u, 0x200u, 0x300u, 0x400u, 0x500u, 0x600u, 0x700u, 0x800u)
+    return tbl_c0[i & 7u]
+}
+
 // the same local name with different content: the emitter renames the hoisted twin
 def private ct_pick2(i : uint) : uint {
     let tbl = fixed_array<uint>(0x1u, 0x2u, 0x4u, 0x8u, 0x10u, 0x20u, 0x40u, 0x80u)
@@ -33,7 +38,7 @@ class ConstTabGpu {
     def consttab {
         let i = gl_GlobalInvocationID.x
         let sgn = fixed_array<float>(1.0, 0.5)
-        dst[i] = src[i] + ct_pick(i) + ct_pick2(i)
+        dst[i] = src[i] + ct_pick0(i) + ct_pick(i) + ct_pick2(i)
         fdst[i] = sgn[i & 1u] * 2.0
     }
 }
@@ -52,7 +57,7 @@ def test_consttab_gpu_vs_cpu(t : T?) {
             gl_GlobalInvocationID = uint3(uint(k), 0u, 0u)
             oracle->consttab()
         }
-        t |> equal(oracle.dst[1], 3u + 0x22u + 0x2u)   // the oracle itself: src 3, tbl[1], tbl_c0[1]
+        t |> equal(oracle.dst[1], 3u + 0x200u + 0x22u + 0x2u)   // the oracle itself: src 3, the helper's own tbl_c0[1], tbl[1], the renamed tbl_c1[1]
         t |> equal(oracle.fdst[1], 1.0)                 // sgn[1] * 2
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1

@@ -2383,7 +2383,7 @@ def test_layout_fingerprint(t : T?) {
 [test]
 def test_dlim_identity_pack_version(t : T?) {
     t |> run("the pack-code version folds into the identity and nothing else moves") <| @(t : T?) {
-        var c = DlimConfiguration()
+        let c = DlimConfiguration()
         let base = dlim_identity(c, IMAGE_VERSION, "", 0)
         let packed = dlim_identity(c, IMAGE_VERSION, "", 7)
         t |> success(base != packed, "pack_version 7 changes the identity")

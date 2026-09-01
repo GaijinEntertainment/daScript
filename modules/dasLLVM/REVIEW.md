@@ -11,11 +11,11 @@
   `get_architecture_name()`, or `cpu_supports()` - runs the module-owned suite on a machine
   matching that condition.**
 
-- **A diff whose new behavior sits under a code path taken only when a target triple is set -
-  a cross-compile, not the host - whether the diff adds the path or finds it there, states
-  in its PR body the cross-compile (`write_exe`) for that target that exercised the new
-  behavior.** The suite runs on the host; a target-triple branch is checked only by
-  the artifact built for that target.
+- **A diff whose new behavior runs only under a set target triple - a cross-compile, not the
+  host - names in its PR body the cross-compile (`write_exe`) for that target that exercised
+  the behavior.** This holds whether the diff adds that code path or finds it already there;
+  the suite runs on the host, so a target-triple branch is checked only by the artifact built
+  for that target.
 
 - **A diff that adds work to, or moves work within, what `run_jit`
   (`daslib/llvm_jit_run.das`) executes - its own body or any callee - also prints an
