@@ -275,9 +275,16 @@ Round two, one thread at the engine phase (branch eb94f1d9a):
 | iq2xxs | 3675 / 3760 | 1.02 | 252192 / 1799256 | 7.13 |
 | mx4 | 1285 / 2990 | 2.33 | 273869 / 1247422 | 4.55 |
 
-One thread: every decode >= 1.02 except iq2s 0.93; k6 is 1.11 ALONE - its 0.69 at 16 lanes is a many-lane
-effect on this 8-core x 2 SMT VM (two instruction streams per core), the same shape as zen4's iq3s/iq3xxs.
-Tiles 1.9-13.9x. The knob A/B and the k6/k3/iq2s seat races follow in the same round.
+One thread: every decode >= 1.02 except iq2s 0.93; k6 1.11. Tiles 1.9-13.9x.
+The seat races (tune mode, every registry row; us): k6 one thread maddubs256 1648 / vpdpbusd256 1636 /
+vpdpbusd512 1615 (reference 1952), at 16 lanes d=32768 3489 / 3424 / 3419 against the reference's 3587 -
+0.98-1.05x, so the bootstrap ladder's k6 0.69 was that first run's artifact, not the kernel (round three
+re-measures it cold). k3: 1246 / 1125 / 922 alone (reference 2258), 1780 / 1797 / 1525 at 16 lanes
+(2579). iq2s: 4060 / 3855 / 3957 alone (3702), 4242 / 4090 / 4208 at 16 lanes (3786) - the crowned width-512
+seat loses 3% to vpdpbusd256 at the engine shape, as on zen4: the gemv inherits the tile's crown
+(tune_companion), and the tile and the gemv do not agree on width. The knob A/B (the table-sign row form):
+iq2s 5345, iq2xs 5033, iq2xxs 3754-3820, iq3s 9763, iq3xxs 5606 against the panel's 3956 / 3902 / 3904 /
+5276 / 4601 - the panel everywhere but iq2xxs (marginal); the column-sign form is round three's question.
 
 
 ### M4 Pro v1 - first tables (2026-09-01, Apple M4 Pro 10P+4E, class arm-i8mm, on the arm-neon PROFILE through the chain - no arm-i8mm profile existed; TEST 90/90)
@@ -432,6 +439,11 @@ the gemv inheriting the tile's crown (tune_companion). perf stat gave nothing (n
   waiting to happen.
 
 ## 4. Work queue (one item at a time; a row is done at >= 1.0x on rig 2's shape AND the vehicle)
+
+QUEUED (from the three-box rounds of 2026-09-01): the gemv's own crown. The tuner races the TILE and the gemv
+follows (`tune_companion`); on zen4 and Intel the gemv prefers `vpdpbusd_width256` where the tile crowns
+width 512 (iq2s 3-6%, k4 similar) - the mint should race the gemv seats at n=1 in the same walk and stamp
+them separately. A tune-framework change (llvm_tune + the seat declarations), a mint per class after it.
 
 CPU decode (gap 2) - the k-quant decode kernels were the tails the full ladder exposed (k3 0.80x,
 k6 0.90x, k5 0.91x):
