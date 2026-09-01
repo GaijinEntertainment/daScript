@@ -22,14 +22,14 @@ Measured (us per call, ours vs llama.cpp `test-backend-ops perf -b CPU`):
 
 **The M1 takes the plain `__ARM_NEON` + dotprod path; there is no i8mm arm for any of the
 five.** `__ARM_FEATURE_MATMUL_INT8` appears in `arch/arm/quants.c` only at lines 302, 315,
-595, 608, 1155, 1168, 2336, 2360, 2569, 2966, 2984, 3175 — all inside the q4_0/q8_0/q4_K/q5_K
+595, 608, 1155, 1168, 2336, 2360, 2569, 2966, 2984, 3175 - all inside the q4_0/q8_0/q4_K/q5_K
 family. The five grid dots start at 3631 (iq2_xxs), 3693 (iq2_xs), 3767 (iq2_s), 3864
 (iq3_xxs), 3926 (iq3_s) and each has exactly two arms: `#if defined(__ARM_NEON)` and the
 scalar generic fallback. `ggml_vdotq_s32` is the native `vdotq_s32` when
 `__ARM_FEATURE_DOTPROD` is set (`ggml/src/ggml-cpu/ggml-cpu-impl.h:319`), else a
 `vmull_s8`+`vpaddlq_s16` emulation (`ggml-cpu-impl.h:310-316`). Our stamped M1 profile
 records `"features": "neon;dotprod;fullfp16;lse"`
-(`modules/dasLLAMA/performance/defaults/arm-neon.tune-defaults.json`, provenance block) —
+(`modules/dasLLAMA/performance/defaults/arm-neon.tune-defaults.json`, provenance block) -
 dotprod yes, i8mm no. So both sides run the same primitive: `sdot`.
 
 **Grid table element widths** (`ggml/src/ggml-common.h`):
@@ -66,12 +66,12 @@ byte-products = 2 sdot for llama.cpp (`quants.c:3747-3750` etc.). Ours: per bloc
 surrounding work.**
 
 **Our GEMV re-uses nothing.** `kq_gemv_gen_impl` drives `emit_slice(te, sa, ghead, 0, 1, "")`
-(`dasllama_gemm_gen.das:2880`) — tokCount = 1. Every decoded weight is consumed by exactly
+(`dasllama_gemm_gen.das:2880`) - tokCount = 1. Every decoded weight is consumed by exactly
 one sdot. The alloca panel (`LLVMBuildAlloca(..., 256 * te.interleave, "iq3s.panel")`, line
-2845 — 2048 bytes at mr=8) therefore buys **no reuse whatsoever in decode**; it exists only
+2845 - 2048 bytes at mr=8) therefore buys **no reuse whatsoever in decode**; it exists only
 to separate the rolled gather loop from the unrolled dot body. The prefill/tile path is the
 one that benefits, and there the panel is produced once per group by
-`unpack_kq_panel_grp` (`dasllama_repack.das:953`) and amortized over 4 tokens — which is
+`unpack_kq_panel_grp` (`dasllama_repack.das:953`) and amortized over 4 tokens - which is
 exactly why every prefill tile is 1.9x-15x ahead while decode is behind.
 
 ---
@@ -142,7 +142,7 @@ indeed its slowest but one.
   (3986, 3991) = **0.5 mem + ~6 NEON per 32w**
 - **the `vec_index_t` union (3941-3944)**: `idx.vec_index` is written as a vector and then
   read back as `idx.index[0..7]` scalars (3987-3990, 3992-3995). That is a store-forwarding
-  round trip through the stack — 1 vector store + 8 `ldrh` per half, **~9 mem per 32w**
+  round trip through the stack - 1 vector store + 8 `ldrh` per half, **~9 mem per 32w**
 - grid: 8 x `ldr w` + 6 lane inserts per 32w = **8 mem + 6 int**
 - signs: the mask1/mask2 expansion (3998-4002, 4007-4011) = **7 NEON**, plus `vmulq_s8` x2
   (4004-4005, 4015-4016) = **2 NEON**
@@ -155,13 +155,13 @@ its 5682 us.
 
 Two loops per superblock, both walked per row group of mr = 8:
 
-**(A) `emit_kq_gather` (`dasllama_gemm_gen.das:1451-1486`)** — a rolled loop over the mr
+**(A) `emit_kq_gather` (`dasllama_gemm_gen.das:1451-1486`)** - a rolled loop over the mr
 rows; each iteration emits **64 straight-line dword decodes** (`for blk in 0..7`,
 `for l in 0..3`, `for h in 0..1`, line 1470-1477), each decoding **4 weights of one row**
 and storing them with `LLVMBuildStore` into the panel at `panel_group_off` (1443-1449,
 1478-1479).
 
-**(B) the dot body inside `emit_block_iq4xs` (1573-1712)** — per block: 2 activation
+**(B) the dot body inside `emit_block_iq4xs` (1573-1712)** - per block: 2 activation
 `v16i8` loads shared across all 8 rows (1620-1621); per (blk, qd) one `kq_sign_bytes`
 (1632); per (blk, j, qd) two panel `v16i8` loads (1642-1643), two `apply_sign_col`
 (1645-1646), two `dot_lane` (1659-1662).
@@ -240,7 +240,7 @@ Each entry is tagged **emitter change** / **repack change** / **seat**, with its
 exposure. Zen2 is at 0.99x-1.32x on these five, so nothing here may touch the AVX2 lattice
 without a re-measure.
 
-### D1 — the gather decodes one dword per scalar step and round-trips 32 B/row/block through an alloca
+### D1 - the gather decodes one dword per scalar step and round-trips 32 B/row/block through an alloca
 
 **Payoff: the largest. Tag: emitter change (GEMV-only, sdot-leg-only). x86: none.**
 
@@ -259,28 +259,28 @@ formats one grid entry is 8 consecutive weights `l*8 .. l*8+7`, but
 `lsr #32` to split it (`grid_pair_half`, 1324-1330).
 
 llama.cpp never splits: `vcombine_s8(vld1_s8(grid+i), vld1_s8(grid+j))` (3735) puts two
-whole u64 entries — 16 consecutive weights of one row — into one q register with two loads
+whole u64 entries - 16 consecutive weights of one row - into one q register with two loads
 and no store at all.
 
-### D2 — the three ksigns formats synthesize the eighth sign bit with a 3-step parity chain, per group, per block, per row
+### D2 - the three ksigns formats synthesize the eighth sign bit with a 3-step parity chain, per group, per block, per row
 
 **Payoff: 3.25 cyc/row/32w, ~29% of iq2_xs's time. Tag: emitter change (if D1 lands) or
 repack change (standalone). x86: shared code, must re-measure zen2.**
 
 `kq_sign_bytes` lines 1400-1412: `code` -> `par = code ^ (code>>4)`, `par ^= par>>2`,
 `par ^= par>>1`, `sb = code | ((par&1)<<7)`, then a 4-way byte pack. 13 vector ops per sign
-group, 4 groups per block, on `<4 x i32>` — 53 NEON uops per (4 rows, 32 weights).
+group, 4 groups per block, on `<4 x i32>` - 53 NEON uops per (4 rows, 32 weights).
 
-llama.cpp: `vld1_s8(signs64 + code)` — one load of a pre-expanded +/-1 vector
+llama.cpp: `vld1_s8(signs64 + code)` - one load of a pre-expanded +/-1 vector
 (`quants.c:3739-3742`, table at 3595), then one `vmulq_s8`. The parity is baked into the
 table.
 
 Note the comment drift here: lines 1484-1485, 1507, 1529 and 1549 all describe "the shared
 ksigns table" and "the shared smask table" as emitted globals, but the `*_emit_globals`
-functions only create the grid global — no ksigns or smask constant is emitted, and
+functions only create the grid global - no ksigns or smask constant is emitted, and
 `kq_sign_bytes` reads none. Those four comment fragments are stale.
 
-### D3 — the u64 grid's 8 weights are decoded as two separate 4-weight steps
+### D3 - the u64 grid's 8 weights are decoded as two separate 4-weight steps
 
 **Payoff: it is what makes D1's 8 stores 8 instead of 4, and it doubles the index work for
 iq2_xs. Tag: emitter change. x86: same code path, gated by the same `gather` flag.**
@@ -290,7 +290,7 @@ per call. LLVM's CSE folds the two calls onto one load, but the *consumers* are 
 independent 4-byte stores at unrelated panel offsets, so the pair can never become a single
 8-byte store.
 
-### D4 — the packed plane's 4-byte column layout costs a dword load plus shift and mask per index byte
+### D4 - the packed plane's 4-byte column layout costs a dword load plus shift and mask per index byte
 
 **Payoff: ~2 cyc/row/32w on iq2_xs specifically. Tag: repack change or seat. x86: the
 current shape was chosen ON x86.**
@@ -307,7 +307,7 @@ than two bytes"). Those figures are from the x86 development box, and the same c
 1342 already admits the column read *lost* for iq3s/iq2s/iq2xxs. **The decode shape is
 currently one global decision made on one ISA.** It should be a seat.
 
-### D5 — the sign application is a 5-op masked negate rather than one multiply
+### D5 - the sign application is a 5-op masked negate rather than one multiply
 
 **Payoff: small on its own (~1 cyc/row/32w), large once D1 lands. Tag: emitter change.**
 
@@ -334,26 +334,26 @@ iq2_s measures 1.00x.
 **Verdict: this is the fix. Adopt it.**
 
 Layout: vector `W = [ row A weights e..e+7 | row B weights e..e+7 ]`, one 16-byte register
-from two 8-byte grid loads (`ldr d` into lane 0, `ld1 {v.d}[1]` into lane 1 — in LLVM, a
+from two 8-byte grid loads (`ldr d` into lane 0, `ld1 {v.d}[1]` into lane 1 - in LLVM, a
 load plus an `insertelement` into a `<2 x i64>`).
 
 The dot then uses the **non-indexed** `sdot Vd.4S, Vn.16B, Vm.16B`, whose lane i is
 `Vn[4i..4i+3] . Vm[4i..4i+3]`. Feed it `X = [ x(e..e+3) | x(e+4..e+7) | x(e..e+3) |
-x(e+4..e+7) ]`, i.e. the 8 activation bytes replicated — exactly `ld1r {v.2d}, [xp]`, one
+x(e+4..e+7) ]`, i.e. the 8 activation bytes replicated - exactly `ld1r {v.2d}, [xp]`, one
 instruction, no lane-splat shuffle at all. Then:
 
 - lane 0 = row A . x(e..e+3), lane 1 = row A . x(e+4..e+7)
 - lane 2 = row B . x(e..e+3), lane 3 = row B . x(e+4..e+7)
 
 Accumulate all 4 element-groups of a block into **one** `<4 x i32>` per row pair; at block
-end, one `addp` of two row-pair accumulators yields `[rowA, rowB, rowC, rowD]` — **the exact
+end, one `addp` of two row-pair accumulators yields `[rowA, rowB, rowC, rowD]` - **the exact
 `<4 x i32>` shape `a[]` already has** (line 1659-1662), so the entire scale/fold epilogue
 (1683-1711) is untouched. `pairwise_add_i32` (909-917) already emits that `addp`.
 
 Products per sdot: 2 rows x 8 weights = 16, identical to today's 4 x 4. **No dot regression.**
 
 Same intrinsic as today (`llvm.aarch64.neon.sdot`, `<4 x i32>`/`<16 x i8>`, declared at
-1911-1918) — only the operand construction changes, so no new decline rail.
+1911-1918) - only the operand construction changes, so no new decline rail.
 
 Projected budget per **2 rows x 32 weights** for iq2_xs, keeping the panel:
 
@@ -380,13 +380,13 @@ combined dot body (~900) plus gather body. Worth trying second.
 Notes and caveats:
 
 - **The +/-1 sign table replaces D2 entirely.** Under this layout the sign vector for a row
-  pair is two 8-byte loads from a `keven_signs`-equivalent global indexed by the 7-bit code —
+  pair is two 8-byte loads from a `keven_signs`-equivalent global indexed by the 7-bit code -
   no parity chain, no plane change, no repack. D2 becomes unnecessary if (a) lands.
 - **For iq2_s / iq3_s** (signs are plane *bits*, not codes) emit a 256-entry x 8-byte +/-1
   table indexed by the raw sign byte (2 KB private constant, same shape as the grid globals
   at 1273-1291) so all five formats share one sign path.
 - **For the u32-grid formats** (iq3_xxs, iq3_s) a row's 8 weights are two grid entries, so
-  building the half costs 2 loads (`ldr s` + `ld1 {v.s}[1]`) instead of 1 — 16 grid loads per
+  building the half costs 2 loads (`ldr s` + `ld1 {v.s}[1]`) instead of 1 - 16 grid loads per
   (2 rows, 32w) instead of 8. Projected ~5 cyc/row/32w, still ~2.3x better than today and
   ahead of llama.cpp, which pays the same 8 u32 loads per row plus 6 lane inserts
   (`quants.c:3896-3899`, `ggml-cpu-impl.h:84`).
@@ -404,9 +404,9 @@ Notes and caveats:
 
 **Verdict: impossible for the grid. Not worth an experiment.**
 
-NEON `TBL`/`TBX` index into 1 to 4 *consecutive V registers* — a 16, 32, 48 or 64-byte
+NEON `TBL`/`TBX` index into 1 to 4 *consecutive V registers* - a 16, 32, 48 or 64-byte
 table, with out-of-range indices producing zero. The smallest grid here is `iq3xxs_grid`,
-256 x `uint32_t` = **1024 bytes** (`ggml-common.h:1017`) — 64 V registers, 16x the ISA
+256 x `uint32_t` = **1024 bytes** (`ggml-common.h:1017`) - 64 V registers, 16x the ISA
 maximum. `iq2xxs_grid` is 2048 bytes (`ggml-common.h:560`). There is no NEON gather
 instruction of any kind, and the M1 has no SVE (profile features string:
 `neon;dotprod;fullfp16;lse`). So the grid must be read with scalar loads on this ISA, and
@@ -414,9 +414,9 @@ llama.cpp does exactly that (`vld1_s8`/`ldr w` per entry) for the same reason.
 
 Where `tbl` *is* the right tool, and where both sides already use it:
 
-- the 16-entry nibble codebook for iq4_nl/iq4_xs — we already emit `llvm.aarch64.neon.tbl1`
+- the 16-entry nibble codebook for iq4_nl/iq4_xs - we already emit `llvm.aarch64.neon.tbl1`
   (`dasllama_gemm_gen.das:1929-1936`, `lut_lookup` 632-642)
-- broadcasting a sign byte across its four lanes — `apply_sign_col`'s constant
+- broadcasting a sign byte across its four lanes - `apply_sign_col`'s constant
   `shufflevector` (1421-1422) lowers to `tbl`, and llama.cpp's `mask1` shuffle
   (`quants.c:3822`, `4000`) is the same instruction
 
@@ -455,9 +455,9 @@ Two ways to kill it:
      bytes, and the scale already lives in the scale plane (`IQ2XXS_SSB` comment,
      `dasllama_kqformat.das:118`), so 4 sign bytes fit in the same 4 bytes.
      **Size-neutral** (`IQ2XXS_QSB` stays 64, line 117).
-   - **iq3_xxs**: identical — 8 blocks x 4 aux bytes -> 8 x 4 sign bytes.
+   - **iq3_xxs**: identical - 8 blocks x 4 aux bytes -> 8 x 4 sign bytes.
      **Size-neutral** (`IQ3XXS_QSB` stays 96, line 111).
-   - **iq2_xs**: the 9-bit index does not fit a byte. Restructure to iq2_s's shape —
+   - **iq2_xs**: the 9-bit index does not fit a byte. Restructure to iq2_s's shape -
      32 index low bytes + 4 high-bit bytes + 32 sign bytes = 68 B against today's 64
      (`IQ2XS_QSB`, line 116). **+6%.**
    Projected under this alone: iq2_xs 6375 -> ~4520 (0.72x), iq2_xxs 6063 -> ~4390 (0.78x),
@@ -466,9 +466,9 @@ Two ways to kill it:
 
    **x86 caution for option 2**: it changes the on-disk plane, the repack, the tile unpack
    (`dasllama_repack.das:874-949`) and both ISAs. The +6% on iq2_xs is affordable on
-   bandwidth grounds — the decode moves 16 MB per call in 6375 us = 2.5 GB/s against M1
+   bandwidth grounds - the decode moves 16 MB per call in 6375 us = 2.5 GB/s against M1
    Max's tens of GB/s single-core, so both implementations are ~15-25x off the memory roof
-   and firmly compute-bound — but zen2's iq2_xs must be re-measured before it lands. iq2_xxs
+   and firmly compute-bound - but zen2's iq2_xs must be re-measured before it lands. iq2_xxs
    and iq3_xxs being size-neutral carry no bandwidth risk on either ISA.
 
 ---
