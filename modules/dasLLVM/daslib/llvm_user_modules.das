@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options _dasllama_internal = true
+options no_global_variables = false
 
 module llvm_user_modules shared private
 

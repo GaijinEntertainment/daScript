@@ -7,6 +7,7 @@ options unsafe_table_lookup = false
 // intrinsic emitters carry per-function lowering contracts (gates, exactness preconditions,
 // saturation bounds) that don't compress to the 3-line cap — keep them at the emitters
 options _comment_hygiene = false
+options no_global_variables = false
 
 module llvm_jit_intrin shared private
 
