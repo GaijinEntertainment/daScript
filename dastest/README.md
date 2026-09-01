@@ -89,11 +89,13 @@ Not part of the test runner: `dastest/review_gate.das` is the support library fo
 contract lives in `REVIEW_COMMON.md` at the repo root, vendored by repos that adopt it). It
 provides finding accumulation and the exit verdict (`gate_finding`, `gate_findings`,
 `gate_reset`, `gate_verdict`), the descriptor census (`gate_descriptor_census`, two
-overloads), plus tree-analysis helpers: `das_requires`, `strip_line_comments`,
-`cmake_command_blocks`, `cmake_command_targets`, `cmake_words`, `cmake_args`,
-`cmake_list_entries`, `cmake_test_labels`, `cmake_test_commands`, `is_cmake_keyword`,
-`is_kebab_case`, `find_line`. The CMake helpers match command names case-insensitively, as
-CMake itself does. It lives under
+overloads), the cookie-and-host gate for a served web tree (`gate_web_third_party`, built
+on `html_resource_urls`, `script_urls`, `css_urls` and `url_host`), plus tree-analysis
+helpers: `das_requires`, `strip_line_comments`, `cmake_command_blocks`,
+`cmake_command_targets`, `cmake_words`, `cmake_args`, `cmake_list_entries`,
+`cmake_test_labels`, `cmake_test_commands`, `is_cmake_keyword`, `is_kebab_case`,
+`find_line`. The CMake helpers match command names case-insensitively, as CMake itself
+does. It lives under
 `dastest/` so an installed SDK carries it the same way it carries the test framework -
 dastest itself ships in the SDK as a prebuilt exe, the `DAS_UTILS_SHIPPED_EXES` entry in
 `utils/CMakeLists.txt` (repo root).

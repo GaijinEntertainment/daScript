@@ -3,6 +3,7 @@ options gen2
 require dastest/testing_boost public
 require strings
 require daslib/fio
+require daslib/strings_boost
 require dastest/review_gate
 
 [test]
@@ -223,4 +224,204 @@ def test_cmake_list_entries(t : T?) {
 
     var inscope shouty <- cmake_list_entries("SET(CAPS a)\nLIST(APPEND CAPS b)\n", "CAPS")
     t |> equal(2, length(shouty), "an uppercase command is read once, not twice")
+}
+
+[test]
+def test_url_host(t : T?) {
+    t |> equal(url_host("https://gc.zgo.at/count.js"), "gc.zgo.at")
+    t |> equal(url_host("http://example.com"), "example.com")
+    t |> equal(url_host("//gc.zgo.at/count.js"), "gc.zgo.at")
+    t |> equal(url_host("https://example.com:8443/x"), "example.com", "port is dropped")
+    t |> equal(url_host("https://user@example.com/x"), "example.com", "userinfo is dropped")
+    t |> equal(url_host("https://example.com?q=1"), "example.com")
+    t |> equal(url_host("https://example.com#frag"), "example.com")
+    t |> equal(url_host("files/github-star.js"), "", "a relative URL has no host")
+    t |> equal(url_host("/doc/index.html"), "", "a rooted path is not protocol-relative")
+    t |> equal(url_host("// a trailing comment"), "", "a comment is not host-shaped")
+    t |> equal(url_host(""), "")
+}
+
+[test]
+def test_script_urls(t : T?) {
+    let src = "var A = 'https://api.github.com/repos/x';\nvar B = \"//gc.zgo.at/count.js\";\n// var C = 'https://commented.example/x';\nfetch(\"http://plain.example/y\");\nvar D = 'files/local.js';\n"
+    var inscope urls <- script_urls(src)
+    t |> equal(3, length(urls), "the commented address and the relative path do not count")
+    t |> equal("https://api.github.com/repos/x", urls[0])
+    t |> equal("//gc.zgo.at/count.js", urls[1])
+    t |> equal("http://plain.example/y", urls[2])
+}
+
+[test]
+def test_html_resource_urls(t : T?) {
+    let page = "<link rel=\"stylesheet\" href=\"https://cdn.example/a.css\" />\n<a href=\"https://clicked.example/page\">link</a>\n<meta property=\"og:image\" content=\"https://meta.example/i.png\" />\n<script data-goatcounter=\"https://beacon.example/count\"\n        async src=\"//gc.zgo.at/count.js\"></script>\n<img src=\"files/local.png\" />\n<script>fetch(\"https://inline.example/x\");</script>\n"
+    var inscope urls <- html_resource_urls(page)
+    var inscope hosts : array<string>
+    hosts |> reserve(length(urls))
+    for (u in urls) {
+        hosts |> push(url_host(u))
+    }
+    t |> equal(4, length(hosts), "an <a> link and a <meta> address are not loads")
+    t |> equal("cdn.example", hosts[0])
+    t |> equal("beacon.example", hosts[1], "a beacon endpoint travels in a data-* attribute")
+    t |> equal("gc.zgo.at", hosts[2])
+    t |> equal("inline.example", hosts[3], "an inline script body is scanned too")
+}
+
+[test]
+def test_gate_web_third_party(t : T?) {
+    let dir_r = create_temp_directory_result("review_gate_web")
+    t |> success(dir_r is value, "temp fixture directory created")
+    if (!(dir_r is value)) {
+        return
+    }
+    let root = unsafe(dir_r.value)
+    t |> success(mkdir("{root}/skipped"))
+    t |> success(fwrite("{root}/ok.html", "<script src=\"https://allowed.example/a.js\"></script>\n"))
+    t |> success(fwrite("{root}/bad.html", "<x>\n<script src=\"https://tracker.example/t.js\"></script>\n"))
+    t |> success(fwrite("{root}/bad.js", "\ndocument.cookie = 'a=1';\n"))
+    t |> success(fwrite("{root}/skipped/ignored.js", "var u = 'https://tracker.example/t.js';\n"))
+    t |> success(fwrite("{root}/notes.txt", "https://tracker.example/t.js\n"))
+    gate_reset()
+    gate_web_third_party([root], {"skipped"}, {"allowed.example"})
+    var inscope fs <- gate_findings()
+    gate_reset()
+    t |> equal(2, length(fs), "only the two scanned files with a defect report")
+    let joined = join(fs, "\n")
+    t |> success(find(joined, "bad.html:2: reaches tracker.example") >= 0, joined)
+    t |> success(find(joined, "bad.js:2: uses document.cookie") >= 0, joined)
+    t |> success(rmdir_rec("{root}"))
+}
+
+[test]
+def test_css_urls(t : T?) {
+    let sheet = "@import url(\"https://fonts.googleapis.com/css2?family=Inter\");\n@font-face \{ src: url(//cdn.example/a.woff2) format('woff2'); \}\nbody \{ background: url('files/local.png'); \}\n/* see http://ie.microsoft.com/testdrive/ for the prefix history */\n"
+    var inscope urls <- css_urls(sheet)
+    t |> equal(2, length(urls), "a local path and an address inside a /* */ comment do not count")
+    t |> equal("https://fonts.googleapis.com/css2?family=Inter", urls[0])
+    t |> equal("//cdn.example/a.woff2", urls[1], "a bare protocol-relative url() counts")
+}
+
+[test]
+def test_gate_web_third_party_file_kinds(t : T?) {
+    let dir_r = create_temp_directory_result("review_gate_kinds")
+    t |> success(dir_r is value, "temp fixture directory created")
+    if (!(dir_r is value)) {
+        return
+    }
+    let root = unsafe(dir_r.value)
+    t |> success(fwrite("{root}/page.rst", ".. raw:: html\n\n   <script src=\"https://tracker.example/t.js\"></script>\n"))
+    t |> success(fwrite("{root}/post.md", "text\n<img src=\"https://tracker.example/pixel.png\" />\n"))
+    t |> success(fwrite("{root}/theme.css", "@import url(\"https://tracker.example/f.css\");\n"))
+    t |> success(fwrite("{root}/REVIEW.md", "**A page that writes document.cookie is a defect.**\n"))
+    t |> success(fwrite("{root}/README.md", "<script src=\"https://tracker.example/t.js\"></script>\n"))
+    gate_reset()
+    let no_skipped_dirs : table<string>
+    gate_web_third_party([root], no_skipped_dirs, {"allowed.example"})
+    var inscope fs <- gate_findings()
+    gate_reset()
+    t |> equal(3, length(fs), "rst, md and css are scanned; a rule document is not a page")
+    let joined = join(fs, "\n")
+    t |> success(find(joined, "page.rst:3: reaches tracker.example") >= 0, joined)
+    t |> success(find(joined, "post.md:2: reaches tracker.example") >= 0, joined)
+    t |> success(find(joined, "theme.css:1: reaches tracker.example") >= 0, joined)
+    t |> success(rmdir_rec("{root}"))
+}
+
+[test]
+def test_html_resource_urls_edges(t : T?) {
+    let page = "<script src=https://bare.example/a.js></script>\n<source srcset=\"https://first.example/a 1x, https://second.example/b 2x\" />\n<img src='https://quoted.example/c.png' />\n"
+    var inscope urls <- html_resource_urls(page)
+    var inscope hosts : array<string>
+    hosts |> reserve(length(urls))
+    for (u in urls) {
+        hosts |> push(url_host(u))
+    }
+    t |> equal(4, length(hosts), "an unquoted value and every entry of a srcset count")
+    t |> equal("bare.example", hosts[0], "HTML permits an unquoted attribute value")
+    t |> equal("first.example", hosts[1])
+    t |> equal("second.example", hosts[2], "a srcset carries more than one address")
+    t |> equal("quoted.example", hosts[3])
+}
+
+[test]
+def test_script_urls_template_literal(t : T?) {
+    let src = "fetch(`//tpl.example/a`);\nfetch(`https://tpl2.example/b`);\n"
+    var inscope urls <- script_urls(src)
+    t |> equal(2, length(urls), "a template literal opens a protocol-relative address too")
+    t |> equal("//tpl.example/a", urls[0])
+    t |> equal("https://tpl2.example/b", urls[1])
+}
+
+[test]
+def test_url_host_is_case_insensitive(t : T?) {
+    t |> equal(url_host("HTTPS://Tracker.Example/x.js"), "tracker.example", "a scheme is case-insensitive")
+    t |> equal(url_host("HtTp://EXAMPLE.COM"), "example.com", "a host is case-insensitive")
+}
+
+[test]
+def test_html_resource_urls_uppercase_script(t : T?) {
+    let page = "<SCRIPT>fetch(\"https://inline.example/x\");</SCRIPT>\n"
+    var inscope urls <- html_resource_urls(page)
+    t |> equal(1, length(urls), "an uppercase closing tag still bounds the inline body")
+    t |> equal("inline.example", url_host(urls[0]))
+}
+
+[test]
+def test_url_host_ipv6_literal(t : T?) {
+    t |> equal(url_host("http://[::1]/t.js"), "[::1]", "a bracketed IPv6 literal is a host")
+    t |> equal(url_host("https://[2001:DB8::1]:8443/x"), "[2001:db8::1]", "the port after the bracket is dropped")
+    t |> equal(url_host("http://[::1"), "", "an unclosed bracket is not host-shaped")
+}
+
+[test]
+def test_script_urls_multiline_template_literal(t : T?) {
+    let src = "const s = `//tpl.example/a\nhttps://tpl2.example/b\n`;\nconst u = \"x\"; // https://commented.example/c\n"
+    var inscope urls <- script_urls(src)
+    t |> equal(2, length(urls), "the second line of a template literal is still inside it; a plain comment still does not count")
+    t |> equal("//tpl.example/a", urls[0])
+    t |> equal("https://tpl2.example/b", urls[1])
+}
+
+[test]
+def test_html_resource_urls_script_end_tag_exact(t : T?) {
+    let page = "<script>var a = \"</scriptx>\"; fetch(\"https://after.example/x\");</script >\n"
+    var inscope urls <- html_resource_urls(page)
+    t |> equal(1, length(urls), "only a real end tag - `</script` then whitespace, `/` or `>` - closes the body")
+    t |> equal("after.example", url_host(urls[0]))
+}
+
+[test]
+def test_gate_web_third_party_unreadable_file(t : T?) {
+    let dir_r = create_temp_directory_result("review_gate_unreadable")
+    t |> success(dir_r is value, "temp fixture directory created")
+    if (!(dir_r is value)) {
+        return
+    }
+    let root = unsafe(dir_r.value)
+    t |> success(fwrite("{root}/empty.js", ""))
+    t |> success(fwrite("{root}/locked.js", "var u = 'https://tracker.example/t.js';\n"))
+    unsafe(system("chmod 000 {root}/locked.js"))
+    if (!empty(fread("{root}/locked.js"))) {
+        unsafe(system("chmod 644 {root}/locked.js"))
+        t |> success(rmdir_rec("{root}"))
+        t |> skip("this platform or user reads a file whose permission bits say no")
+        return
+    }
+    gate_reset()
+    let no_skipped_dirs : table<string>
+    gate_web_third_party([root], no_skipped_dirs, {"allowed.example"})
+    var inscope fs <- gate_findings()
+    gate_reset()
+    unsafe(system("chmod 644 {root}/locked.js"))
+    t |> success(rmdir_rec("{root}"))
+    t |> equal(1, length(fs), "an empty file is scanned and clean; an unreadable one is a finding, never a silent pass")
+    t |> success(find(join(fs, "\n"), "locked.js: unreadable") >= 0, join(fs, "\n"))
+}
+
+[test]
+def test_html_resource_urls_unclosed_script(t : T?) {
+    let page = "<p>x</p>\n<script>fetch(\"https://open.example/x\");\n"
+    var inscope urls <- html_resource_urls(page)
+    t |> equal(1, length(urls), "a script with no end tag runs to end of file in a browser, so it is scanned to end of file")
+    t |> equal("open.example", url_host(urls[0]))
 }

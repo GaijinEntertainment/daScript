@@ -120,37 +120,57 @@ def private matches_lowered(d; at : int; lowered : array<int>) : bool {
     return true
 }
 
-//! `text` with every // comment cut to end-of-line (string-literal-aware, so a "//" inside
-//! a quoted URL survives). Use before scanning sources or descriptors: a name mentioned
-//! only in a comment must not count.
-def strip_line_comments(text : string) : string {
+// `script_quotes` widens what opens a string literal from `"` alone to all three script
+// quote styles - the one axis the two comment strippers differ on. A quoted string ends at
+// the line it started on; only a template literal spans lines, so only a backtick carries.
+// Every newline survives, so a line count taken on the result matches the source.
+def private strip_to_line_comment(text : string; script_quotes : bool) : string {
     return build_string() $(var b : StringBuilderWriter) {
-        for (line in split(text, "\n")) {
-            var cut = -1
-            peek_data(line) $(d) {
-                var in_str = false
-                var i = 0
-                while (i < length(d)) {
-                    let c = int(d[i])
-                    if (in_str) {
-                        if (c == '\\') {
-                            i++
-                        } elif (c == '"') {
-                            in_str = false
-                        }
-                    } elif (c == '"') {
-                        in_str = true
-                    } elif (c == '/' && i + 1 < length(d) && int(d[i + 1]) == '/') {
-                        cut = i
-                        break
+        peek_data(text) $(d) {
+            let n = length(d)
+            var quote = 0
+            var in_comment = false
+            var i = 0
+            while (i < n) {
+                let c = int(d[i])
+                if (c == '\n') {
+                    in_comment = false
+                    if (quote != '`') {
+                        quote = 0
                     }
-                    i++
+                    b |> write("\n")
+                } elif (in_comment) {
+                    // dropped
+                } elif (quote != 0) {
+                    if (c == '\\' && i + 1 < n) {
+                        b |> write(slice(d, i, i + 2))
+                        i++
+                    } else {
+                        if (c == quote) {
+                            quote = 0
+                        }
+                        b |> write(slice(d, i, i + 1))
+                    }
+                } elif (c == '"' || (script_quotes && (c == '\'' || c == '`'))) {
+                    quote = c
+                    b |> write(slice(d, i, i + 1))
+                } elif (c == '/' && i + 1 < n && int(d[i + 1]) == '/') {
+                    in_comment = true
+                } else {
+                    b |> write(slice(d, i, i + 1))
                 }
+                i++
             }
-            b |> write(cut >= 0 ? slice(line, 0, cut) : line)
-            b |> write("\n")
         }
     }
+}
+
+//! `text` with every // comment cut to end-of-line (string-literal-aware, so a "//" inside
+//! a quoted URL survives). Use before scanning sources or descriptors: a name mentioned
+//! only in a comment must not count. Only `"` opens a literal - for script text, where a
+//! single quote does too, `script_urls` is the scanner that reads it correctly.
+def strip_line_comments(text : string) : string {
+    return strip_to_line_comment(text, false)
 }
 
 def private quoted_ident_tokens(text : string) : array<string> {
@@ -473,4 +493,381 @@ def cmake_list_entries(text : string; listname : string) : array<string> {
         }
     }
     return <- out
+}
+
+//! Host of an absolute or protocol-relative URL, lowercased - "" when the URL is relative
+//! or when what follows the scheme is not host-shaped. Scheme and host are matched
+//! case-insensitively, as a browser reads them; a bracketed IPv6 literal comes back with
+//! its brackets. Userinfo and port are dropped: an allow-list names hosts.
+def url_host(url : string) : string {
+    var rest = ""
+    peek_data(url) $(u) {
+        if (byte_run_at_ci(u, 0, "https://")) {
+            rest = slice(u, 8, length(u))
+        } elif (byte_run_at_ci(u, 0, "http://")) {
+            rest = slice(u, 7, length(u))
+        } elif (byte_run_at(u, 0, "//")) {
+            rest = slice(u, 2, length(u))
+        }
+    }
+    return "" if (empty(rest))
+    var authority = rest
+    peek_data(rest) $(d) {
+        for (i in range(length(d))) {
+            let c = int(d[i])
+            if (c == '/' || c == '?' || c == '#') {
+                authority = slice(d, 0, i)
+                break
+            }
+        }
+    }
+    let at = authority |> find("@")
+    var host = at >= 0 ? slice(authority, at + 1) : authority
+    if (host |> starts_with("[")) {
+        // a bracketed IPv6 literal carries colons of its own - the port is the one after `]`
+        let close = host |> find("]")
+        return "" if (close < 0)
+        host = slice(host, 0, close + 1)
+    } else {
+        let colon = host |> find(":")
+        if (colon >= 0) {
+            host = slice(host, 0, colon)
+        }
+    }
+    return is_host_shaped(host) ? to_lower(host) : ""
+}
+
+def private is_host_shaped(host : string) : bool {
+    var ok = !empty(host)
+    let bracketed = host |> starts_with("[")
+    peek_data(host) $(d) {
+        for (i in range(length(d))) {
+            let c = int(d[i])
+            continue if (bracketed && (c == '[' || c == ']' || c == ':'))
+            if (!is_alnum(c) && c != '-' && c != '.' && c != '_') {
+                ok = false
+                break
+            }
+        }
+    }
+    return ok
+}
+
+// a URL scheme and an HTML tag name are both case-insensitive to a browser
+def private byte_run_at_ci(d; at : int; lit : string) : bool {
+    var ok = true
+    peek_data(lit) $(l) {
+        let m = length(l)
+        if (at + m > length(d)) {
+            ok = false
+        } else {
+            for (i in range(m)) {
+                if (to_lower_byte(int(d[at + i])) != to_lower_byte(int(l[i]))) {
+                    ok = false
+                    break
+                }
+            }
+        }
+    }
+    return ok
+}
+
+def private byte_run_at(d; at : int; lit : string) : bool {
+    var ok = true
+    peek_data(lit) $(l) {
+        let m = length(l)
+        if (at + m > length(d)) {
+            ok = false
+        } else {
+            for (i in range(m)) {
+                if (int(d[at + i]) != int(l[i])) {
+                    ok = false
+                    break
+                }
+            }
+        }
+    }
+    return ok
+}
+
+def private is_resource_tag(name : string) : bool {
+    return (name == "script" || name == "link" || name == "iframe" || name == "img" ||
+        name == "source" || name == "video" || name == "audio" || name == "embed" ||
+        name == "object")
+}
+
+def private is_url_break_byte(b : int) : bool {
+    return (is_white_space(b) || b == '"' || b == '\'' || b == '`' || b == '<' || b == '>' ||
+        b == ')' || b == ',' || b == ';')
+}
+
+//! Absolute and protocol-relative URLs written as string literals in script text, `//`
+//! comments cut first so a commented-out address does not count. A protocol-relative
+//! literal is recognized by the quote that opens it.
+def script_urls(text : string) : array<string> {
+    var out : array<string>
+    let src = strip_to_line_comment(text, true)
+    peek_data(src) $(d) {
+        let n = length(d)
+        var i = 0
+        while (i < n) {
+            let c = int(d[i])
+            var start = -1
+            if ((c == '"' || c == '\'' || c == '`') && byte_run_at(d, i + 1, "//")) {
+                start = i + 1
+            } elif (byte_run_at_ci(d, i, "http://") || byte_run_at_ci(d, i, "https://")) {
+                start = i
+            }
+            if (start < 0) {
+                i++
+                continue
+            }
+            var e = start
+            while (e < n && !is_url_break_byte(int(d[e]))) {
+                e++
+            }
+            let url = slice(d, start, e)
+            if (!empty(url_host(url))) {
+                out |> push(url)
+            }
+            i = e + 1
+        }
+    }
+    return <- out
+}
+
+def private strip_block_comments(text : string) : string {
+    return build_string() $(var b : StringBuilderWriter) {
+        peek_data(text) $(d) {
+            let n = length(d)
+            var i = 0
+            while (i < n) {
+                let open = d |> find("/*", i)
+                if (open < 0) {
+                    b |> write(slice(d, i, n))
+                    break
+                }
+                b |> write(slice(d, i, open))
+                let close = d |> find("*/", open + 2)
+                break if (close < 0)
+                i = close + 2
+            }
+        }
+    }
+}
+
+//! Absolute and protocol-relative URLs a stylesheet fetches - the address of an `@import`
+//! and of every `url(...)`, quoted or bare, with `/* */` comments cut first so a reference
+//! written in prose does not count. CSS has no `//` comment, so a `//` opened by `(` or a
+//! quote is a protocol-relative address.
+def css_urls(text : string) : array<string> {
+    var out : array<string>
+    peek_data(strip_block_comments(text)) $(d) {
+        let n = length(d)
+        var i = 0
+        while (i < n) {
+            let c = int(d[i])
+            var start = -1
+            if ((c == '(' || c == '"' || c == '\'') && byte_run_at(d, i + 1, "//")) {
+                start = i + 1
+            } elif (byte_run_at_ci(d, i, "http://") || byte_run_at_ci(d, i, "https://")) {
+                start = i
+            }
+            if (start < 0) {
+                i++
+                continue
+            }
+            var e = start
+            while (e < n && !is_url_break_byte(int(d[e]))) {
+                e++
+            }
+            let url = slice(d, start, e)
+            if (!empty(url_host(url))) {
+                out |> push(url)
+            }
+            i = e + 1
+        }
+    }
+    return <- out
+}
+
+// HTML closes script data at `</script` followed by whitespace, `/` or `>` - `</scriptx`
+// is ordinary text, so it must not end the scanned body
+def private is_script_end_tag_at(d; at : int) : bool {
+    return false if (!byte_run_at_ci(d, at, "</script"))
+    let after = at + 8
+    return true if (after >= length(d))
+    let c = int(d[after])
+    return is_white_space(c) || c == '/' || c == '>'
+}
+
+// every attribute value between `from` and `to` - HTML permits an unquoted one, so the
+// value runs to whitespace when no quote opens it
+def private push_tag_urls(d; from : int; to : int; var out : array<string>) {
+    var p = from
+    while (p < to) {
+        if (int(d[p]) != '=') {
+            p++
+            continue
+        }
+        var v = p + 1
+        while (v < to && is_white_space(int(d[v]))) {
+            v++
+        }
+        break if (v >= to)
+        let opener = int(d[v])
+        var vs = v
+        var ve = v
+        if (opener == '"' || opener == '\'') {
+            vs = v + 1
+            ve = vs
+            while (ve < to && int(d[ve]) != opener) {
+                ve++
+            }
+            p = ve + 1
+        } else {
+            while (ve < to && !is_white_space(int(d[ve]))) {
+                ve++
+            }
+            p = ve
+        }
+        push_attribute_urls(slice(d, vs, ve), out)
+    }
+}
+
+// one attribute can carry several addresses - `srcset` writes them comma-separated, each
+// followed by a descriptor (`1x`, `640w`) that is not a URL and drops out on its own
+def private push_attribute_urls(value : string; var out : array<string>) {
+    for (token in split_by_chars(value, " \t\r\n,")) {
+        continue if (empty(token))
+        if (!empty(url_host(token))) {
+            out |> push(token)
+        }
+    }
+}
+
+//! Absolute and protocol-relative URLs a page's markup makes a browser fetch without a
+//! click: every attribute value of a resource tag (script, link, iframe, img, source,
+//! video, audio, embed, object) - quoted or bare, and split so a multi-address `srcset`
+//! yields all of them - plus the URL literals of every inline script body. An
+//! `<a>` or `<meta>` address is left out - a link is a click, not a load. Markup-level on
+//! purpose: a resource tag inside an HTML comment is still reported.
+def html_resource_urls(text : string) : array<string> {
+    var out : array<string>
+    peek_data(text) $(d) {
+        let n = length(d)
+        var i = 0
+        while (i < n) {
+            if (int(d[i]) != '<') {
+                i++
+                continue
+            }
+            var j = i + 1
+            while (j < n && is_alpha(int(d[j]))) {
+                j++
+            }
+            let tag = to_lower(slice(d, i + 1, j))
+            var k = j
+            var quote = 0
+            while (k < n) {
+                let c = int(d[k])
+                if (quote != 0) {
+                    if (c == quote) {
+                        quote = 0
+                    }
+                } elif (c == '"' || c == '\'') {
+                    quote = c
+                } elif (c == '>') {
+                    break
+                }
+                k++
+            }
+            if (is_resource_tag(tag)) {
+                push_tag_urls(d, j, k, out)
+            }
+            if (tag == "script" && k < n) {
+                // no end tag: a browser runs the script to end of file, so the scan does too
+                var close = k + 1
+                while (close < n && !is_script_end_tag_at(d, close)) {
+                    close++
+                }
+                for (url in script_urls(slice(d, k + 1, close))) {
+                    out |> push(url)
+                }
+            }
+            i = k + 1
+        }
+    }
+    return <- out
+}
+
+//! True for a repository rule or architecture document - a `.md` the document system owns,
+//! which no site serves (the SDK bundle gate bans every one of them from an install).
+def private is_rule_document(name : string) : bool {
+    return (name |> starts_with("REVIEW") || name |> starts_with("ARCHITECTURE") ||
+        name == "LAWS.md" || name == "README.md")
+}
+
+def private is_markup_file(name : string) : bool {
+    return (name |> ends_with(".html") || name |> ends_with(".rst") || name |> ends_with(".md"))
+}
+
+// the walker takes basenames, so the rule-document test reads a name, never a path
+def private is_scanned_file(name : string) : bool {
+    return false if (is_rule_document(name))
+    return (is_markup_file(name) || name |> ends_with(".js") || name |> ends_with(".css"))
+}
+
+def private walk_web_files(folder : string; skip_dirs : table<string>; var out : array<string>) {
+    dir(folder) $(name) {
+        return if (name == "." || name == "..")
+        let full = "{folder}/{name}"
+        if (stat(full).is_dir) {
+            if (!key_exists(skip_dirs, name)) {
+                walk_web_files(full, skip_dirs, out)
+            }
+        } elif (is_scanned_file(name)) {
+            out |> push(full)
+        }
+    }
+}
+
+def private resource_urls_of(path : string; text : string) : array<string> {
+    if (is_markup_file(path)) {
+        return <- html_resource_urls(text)
+    }
+    return <- path |> ends_with(".css") ? css_urls(text) : script_urls(text)
+}
+
+//! Cookie-and-host gate for a served web tree: every markup (`.html`, `.rst`, `.md`),
+//! `.js` and `.css` file under `roots`, never descending into a directory named in
+//! `skip_dirs`, is read for `document.cookie` and for a resource host `allowed_hosts` does
+//! not name. Markup contributes its resource tags and inline script bodies, script text its
+//! URL literals, a stylesheet its `@import` and `url(...)` addresses.
+def gate_web_third_party(roots : array<string>; skip_dirs : table<string>; allowed_hosts : table<string>) {
+    var files : array<string>
+    for (root in roots) {
+        walk_web_files(root, skip_dirs, files)
+    }
+    for (path in files) {
+        let text = fread(path)
+        if (empty(text) && stat(path).size > 0ul) {
+            // fread returns "" for both an empty file and a failed read - a gate that cannot
+            // read a file must say so, never pass it
+            gate_finding(path, "unreadable - the gate cannot pass a file it could not read")
+            continue
+        }
+        let cookie_line = find_line(text, "document.cookie")
+        if (cookie_line > 0) {
+            gate_finding(path, cookie_line,
+                "uses document.cookie - this site sets none; keep per-visitor state in localStorage instead")
+        }
+        var inscope urls <- resource_urls_of(path, text)
+        for (url in urls) {
+            let host = url_host(url)
+            continue if (key_exists(allowed_hosts, host))
+            gate_finding(path, find_line(text, url),
+                "reaches {host}, which the gate's allowed-host list does not name - add the host only once its data handling is reviewed")
+        }
+    }
 }

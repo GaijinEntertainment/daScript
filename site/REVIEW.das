@@ -6,10 +6,29 @@ require daslib/strings_boost
 require dastest/review_gate
 
 // The mechanical half of site/REVIEW.md (contract: REVIEW_COMMON.md at the repo root).
-// Run from the repo root: bin/daslang site/REVIEW.das - exit 0 clean, 1 with findings.
+// Run from the repo root: bin/daslang site/REVIEW.das - exit 0 clean, 1 with findings, 2 when
+// not run from the repo root.
 
 let private TABLE_CSS = "site/files/dasllama-table.css"
 let private PAGE_HTML = "site/dasllama.html"
+
+// Hosts a page under this folder may reach without a click. daslang.io is the site itself;
+// the rest are the reviewed third parties - jsDelivr serves the DocSearch bundle, gc.zgo.at
+// and the goatcounter endpoint are the cookieless hit counter, and the github hosts serve the
+// star count, the package index and the source links the pages build.
+let private ALLOWED_HOSTS <- {
+    "daslang.io",
+    "cdn.jsdelivr.net",
+    "gc.zgo.at",
+    "borisbat.goatcounter.com",
+    "api.github.com",
+    "raw.githubusercontent.com",
+    "github.com"
+}
+
+// tests/ is the Playwright harness and doc/ is generated Sphinx output - neither is a page
+// this folder authors, and neither ships from this tree
+let private SKIP_DIRS <- { "tests", "doc", "node_modules" }
 
 //! one top-level selector -> its normalized body. An at-rule (`@media ...`) block is skipped
 //! whole: its nested rules are responsive OVERRIDES of the same selectors by design
@@ -85,5 +104,6 @@ def main() : int {
         return 2
     }
     check_dl_selector_parity()
+    gate_web_third_party(["site"], SKIP_DIRS, ALLOWED_HOSTS)
     return gate_verdict("site")
 }
