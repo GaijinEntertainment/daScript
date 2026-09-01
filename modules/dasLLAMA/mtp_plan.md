@@ -281,9 +281,8 @@ SHAPE submitted and deleted three times (JIT compile inside the scored window); 
 rewards resubmitting unchanged trees to re-roll noise - several per-commit claims sit at the
 A/A floor (-0.09%).
 
-## Open for Boris
+## Ruled 2026-09-01 (was "Open for Boris")
 
-- Default depth cap for the fixed-k lever (proposal: measured from t(M), likely 3-4).
-- Adaptive controller in THIS PR or fixed-k ships first (proposal: both, controller behind
-  a lever).
-- N-wide experiment: after S4, only if t(M) says a width-2 verify is near-free.
+- Default depth cap for the fixed-k lever: **4**.
+- The adaptive controller lands in THIS PR (fixed-k stays the fallback lever).
+- N-wide: decided after S4, from where we land and what t(M) says a wider verify costs.
