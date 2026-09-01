@@ -56,6 +56,7 @@ typedef LayoutFn = function<() : int>
 
 let TILE_TOKENS = 4l   // tokens one kq / q51 / mx4 tile call covers (q8's tokstep companion says its own)
 let MX4_NAME = "mx4"   // mxfp4 has no KqFmt row; it rides the q8q8 grid as a companion
+let SCALE_BYTE = uint8(0x3C)   // as f16 0x3C3C = 1.06, as f32 0x3C3C3C3C = 0.0115, as e8m0 2^-67, as a 6-bit sub-scale 60 - normal in every scale form
 
 def fmt_of_name(name : string) : KqFmt {
     for (f in type<KqFmt>) {
@@ -193,8 +194,7 @@ def fill_planes(var p : Planes; sh : PlaneShape; n, d, ntok : int64) {
         b = uint8(seed >> 24u)
     }
     for (b in p.ks) {
-        seed = seed * 1664525u + 1013904223u
-        b = uint8(seed >> 24u)
+        b = SCALE_BYTE   // scale planes hold normal numbers in every scale form, never random bytes: Intel runs denormal math ~100x slower, AMD does not, and a random byte pattern is a denormal or an infinity often enough to bend a table
     }
     for (q in p.xq) {
         seed = seed * 1664525u + 1013904223u
@@ -417,7 +417,11 @@ def bench_q8_family(var rows : int&; cfg : BenchArgs; mx4 : bool; var p : Planes
     let ntok = int64(cfg.ntok)
     let name = mx4 ? MX4_NAME : "q8"
     let plane_bytes = long_length(p.kq) + long_length(p.ks) - 2l * ALIGN
-    q8q8_family_live()   // the family's witness: on an AMX box it takes the per-process tile permission the amx seats need (SIGILL without it)
+    var wvs <- q8q8_family_live_variants()   // the family's witness rows: the amx one takes the per-process tile permission its tiles need (SIGILL without it), as the probe does
+    for (w in wvs) {
+        invoke(w._1)
+    }
+    delete wvs
     unsafe {
         let kqp = addr<uint8 const?>(p.kq[aligned_start(addr<void?>(p.kq[0]))])
         let ksp = addr<uint8 const?>(p.ks[aligned_start(addr<void?>(p.ks[0]))])
