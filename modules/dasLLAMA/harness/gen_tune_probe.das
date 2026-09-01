@@ -1018,6 +1018,24 @@ def run_kq_gemv(gemv; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr :
     }
 }
 
+//! the streamed fixture's master planes repeated `times` over into a repack buffer: a DRAM-bound plane at the
+//! same n (byte-identical row groups), x reused, no reference - a fresh build at that size would transcode
+//! millions of superblocks and run a scalar reference gemv over them, minutes per family
+def tile_kq_planes(fx : KqFixture; times : int64; var buf : KqBuf) {
+    let qrow = length(fx.kq)
+    let srow = length(fx.ks)
+    buf.q |> reserve(qrow * int(times))
+    buf.q |> resize(qrow * int(times))
+    buf.s |> reserve(srow * int(times))
+    buf.s |> resize(srow * int(times))
+    unsafe {
+        for (t in range64(times)) {
+            memcpy(addr(buf.q[int(t) * qrow]), addr(fx.kq[0]), qrow)
+            memcpy(addr(buf.s[int(t) * srow]), addr(fx.ks[0]), srow)
+        }
+    }
+}
+
 //! the engine's decode dispatch over the fixture: the engine's own splitter and every lane streaming its share
 def run_kq_gemv_team(gemv; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr : int64; var y : array<float>) {
     let d = (fx.d / mr) * mr
@@ -1433,20 +1451,23 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
     for (i in range(nv)) {
         tbest[i] = gbest[i]
     }
-    if (get_total_hw_jobs() > 1) {
-        var ktfx <- build_kq_fixture(fmt, 14336l, 32768l, 1l)
-        var tbuf : KqBuf
-        tbuf.q := ktfx.kq
-        tbuf.s := ktfx.ks
-        unsafe {
-            repack_kq_grp_fmt(fmt, addr(tbuf.q[0]), addr(tbuf.s[0]), ktfx.n, ktfx.d, vmr[winner])
-        }
-        var kyt : array<float>
-        kyt |> resize(ktfx.d)
-        for (i in range(nv)) {
-            tbest[i] = 1.0e30lf
-        }
-        with_job_que() {
+    with_job_que() {   // the lane count and the team dispatch both need the live jobque
+        if (get_total_hw_jobs() > 1) {
+            let TILES = 48l   // 393216 rows at n=2048: 200-660 MB per format, past any server L3
+            var ktfx = KqFixture(fmt = kgfx.fmt, n = kgfx.n, d = kgfx.d * TILES, ntok = 1l, nsb = kgfx.nsb)
+            ktfx.xq := kgfx.xq
+            ktfx.xs := kgfx.xs
+            ktfx.xbs := kgfx.xbs
+            var tbuf : KqBuf
+            tile_kq_planes(kgfx, TILES, tbuf)
+            unsafe {
+                repack_kq_grp_fmt(fmt, addr(tbuf.q[0]), addr(tbuf.s[0]), ktfx.n, ktfx.d, vmr[winner])
+            }
+            var kyt : array<float>
+            kyt |> resize(ktfx.d)
+            for (i in range(nv)) {
+                tbest[i] = 1.0e30lf
+            }
             for (r in range(5)) {
                 for (vi in range(nv)) {
                     continue if (vmr[vi] != vmr[winner] || best[vi] >= 1.0e29lf)
@@ -1461,15 +1482,15 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
                     }
                 }
             }
-        }
-        for (vi in range(nv)) {
-            if (vmr[vi] == vmr[winner] && best[vi] < 1.0e29lf) {
-                tune_detail("k{fmt} {tvs[vi]._0}: decode at the engine shape {tbest[vi]} us ({get_total_hw_jobs()} lanes, d={ktfx.d} n={ktfx.n})\n")
+            for (vi in range(nv)) {
+                if (vmr[vi] == vmr[winner] && best[vi] < 1.0e29lf) {
+                    tune_detail("k{fmt} {tvs[vi]._0}: decode at the engine shape {tbest[vi]} us ({get_total_hw_jobs()} lanes, d={ktfx.d} n={ktfx.n})\n")
+                }
             }
+            delete kyt
+            delete tbuf
+            delete ktfx
         }
-        delete kyt
-        delete tbuf
-        delete ktfx
     }
     gemv_out = kq_gemv_seat(fmt, winner, tnames, vmr, best, tbest)
     if (!empty(gemv_out)) {

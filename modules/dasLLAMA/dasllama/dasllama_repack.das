@@ -56,7 +56,9 @@ def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : i
     let ncg = n / kgroup
     var tw : array<int8>
     var ts : array<float>
+    tw |> reserve(d * n)   // the plane-size scratch: reserve first, a bare resize past 64 MB trips max_unreserved_size
     tw |> resize(d * n)
+    ts |> reserve(d * nb)
     ts |> resize(d * nb)
     unsafe {
         var twp = addr(tw[0])
@@ -102,7 +104,9 @@ def repack_mx4_grp(var np : uint8?; var ep : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tn : array<uint8>
     var te : array<uint8>
+    tn |> reserve(d * nrow)
     tn |> resize(d * nrow)
+    te |> reserve(d * nbb)
     te |> resize(d * nbb)
     unsafe {
         var tnp = addr(tn[0])
@@ -144,7 +148,9 @@ def repack_q51_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * nb * 20l)
     tq |> resize(d * nb * 20l)
+    ts |> reserve(d * nb * 4l)
     ts |> resize(d * nb * 4l)
     unsafe {
         var tqp = addr(tq[0])
@@ -194,7 +200,9 @@ def repack_k4_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -240,7 +248,9 @@ def repack_k5_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -290,7 +300,9 @@ def repack_k6_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -349,7 +361,9 @@ def repack_q40_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -389,7 +403,9 @@ def repack_iq4xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -434,7 +450,9 @@ def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -490,7 +508,9 @@ def repack_iq3s_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -535,7 +555,9 @@ def repack_k2_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -579,7 +601,9 @@ def repack_iq2s_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -623,7 +647,9 @@ def repack_iq2xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -667,7 +693,9 @@ def repack_iq2xxs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -760,7 +788,9 @@ def repack_iq3xxs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
