@@ -446,6 +446,34 @@ def kq_ssb(fmt : int64) : int64 => dasllama_gemm_schema::kq_ssb(int(fmt))
 // the family's sidecar entry = its [tune] function name (the K-quants by bit width - k3 included - q40/iq4xs by tag)
 def kq_tile_entry(fmt : int64) : string => fmt == 40l ? "q40q8_tile_gen" : (fmt == 44l ? "iq4xsq8_tile_gen" : (fmt == 33l ? "iq3sq8_tile_gen" : (fmt == 34l ? "iq3xxsq8_tile_gen" : (fmt == 45l ? "iq4nlq8_tile_gen" : (fmt == 23l ? "iq2sq8_tile_gen" : (fmt == 24l ? "iq2xsq8_tile_gen" : (fmt == 25l ? "iq2xxsq8_tile_gen" : "k{fmt}q8_tile_gen")))))))
 
+//! the gemv companion's own manifest entry: the tile's name with the tier swapped
+def kq_gemv_entry(fmt : int64) : string => replace(kq_tile_entry(fmt), "_tile_gen", "_gemv_gen")
+
+//! the gemv's seat: among the rows sharing the tile winner's layout (mr), the two best by tile time, the one
+//! with the best streamed-decode time takes the gemv - only by the margin over the tile winner's own gemv,
+//! and the incumbent keeps a tie; "" when the tile winner keeps it (no separate entry, the companion follows)
+def private kq_gemv_seat(fmt : int64; winner : int; names : array<string>; vmr : array<int64>; tile, gemv : array<double>) : string {
+    var cand <- [for (i in range(length(names))); i; where vmr[i] == vmr[winner] && tile[i] < 1.0e29lf]
+    cand |> sort() $(a, b) => tile[a] < tile[b]
+    if (length(cand) > 2) {
+        cand |> resize(2)
+    }
+    var pick = winner
+    for (c in cand) {
+        if (gemv[c] < gemv[pick]) {
+            pick = c
+        }
+    }
+    let m = gen_margin()
+    if (pick != winner && gemv[winner] <= gemv[pick] * m) {
+        tune_detail("{kq_gemv_entry(fmt)}: {names[pick]} does not beat the tile seat {names[winner]} on the gemv by x{m:0.3f} - the gemv follows the tile\n")
+        pick = winner
+    }
+    pick = gen_sticky(kq_gemv_entry(fmt), names, gemv, pick)
+    delete cand
+    return pick == winner ? "" : names[pick]
+}
+
 // synthetic disk superblocks, varied per (row, superblock) so no two blocks repeat: any byte
 // is a legal quant, and the small d/dmin keep the f16 (s, o) pairs finite and row sums tame
 def pack_kq_scale_header(var blkb : array<uint8>; base : int) {
@@ -1253,7 +1281,7 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
 // and the gemv (streamed + hot decode shapes), print the table, and return the tile-best
 // suffix ("" = a gate failed). The kq gemv is nrsplit-independent — same-mr rows share the
 // plane and the gemv shape — so the tile bench decides the family entry.
-def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : string { // nolint:STYLE038 — one family race: shared repacked buffers couple gate, bench and pick
+def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var gemv_out : string&) : string { // nolint:STYLE037,STYLE038 — one family race: shared repacked buffers couple gate, bench and the two picks
     // batch shape: fat STREAMING ffn (weights > the L2 budget, multi-token-block walk) — the shape
     // class that carries ~90% of prefill time. The old 2048x512x64 kv-projection probe was L2-hot
     // and crowned hot-shape winners that lose double-digit % at model scale (mr4 vs mr8, M1).
@@ -1379,6 +1407,10 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : stri
     }
     var tnames <- [for (t in tvs); t._0]
     winner = gen_sticky(kq_tile_entry(fmt), tnames, best, winner)
+    gemv_out = kq_gemv_seat(fmt, winner, tnames, vmr, best, gbest)
+    if (!empty(gemv_out)) {
+        rows_out["gemv_seat"] = JV((seat = gemv_out, tile_seat = tvs[winner]._0, gemv_us = gbest[winner]))
+    }
     delete tnames
     let wname = tvs[winner]._0
     delete keep
@@ -2088,8 +2120,9 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         print("aborting mid-run - no sidecar written\n")
         return false
     }
-    // the kq families tune separately — one manifest entry per format, tile-best wins (the
-    // gemv is nrsplit-independent, so same-mr rows share its plane and kernel shape). No
+    // the kq families tune separately — the tile-best row is the format's entry, and the gemv gets its
+    // own entry when a same-layout row beats the tile seat on the streamed decode shape (the layout
+    // companion pins the plane mr, so only same-mr rows can differ; the two best by tile time race). No
     // child-process confirm gate here: the kq stamp only moves the kq planes' interleave,
     // and the e2e exposure (a tile-optimal mr shaving decode kernel rate) is bounded by the
     // decode path staying DRAM-bound — validated end-to-end when the entries first landed.
@@ -2099,13 +2132,18 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         let entry = kq_tile_entry(fmt)
         tune_progress_kernel_begin(entry, ROUNDS)
         var krows : table<string; JsonValue?>
-        let w = kq_tune_family(fmt, krows)
+        var gw = ""
+        let w = kq_tune_family(fmt, krows, gw)
         tune_detail("TUNE_GEN_TIME {entry} family {get_time_usec(kq_t0) / 1000} ms\n")
         tune_progress_kernel_end(entry, w, empty(w) ? "rejected" : "beats")
         // gate failure (the broken perm is named above): queue the always-correct reference
         // body so the scope still COMPLETES — a missing key re-tunes every start
         pending[entry] = empty(w) ? "reference" : w
         print("{entry} winner: {empty(w) ? "reference (gate-failure fallback)" : w}\n")
+        if (!empty(gw)) {   // the gemv's own seat (same layout as the tile's); absent = the companion follows the tile
+            pending[kq_gemv_entry(fmt)] = gw
+            print("{kq_gemv_entry(fmt)} winner: {gw} (the tile seat {w} keeps the tile)\n")
+        }
         g_rows[entry] = JV(krows)
     }
     if (!noise_gate("mid2")) {

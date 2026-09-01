@@ -532,6 +532,7 @@ def q40q8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp 
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "k4q8_gemv_gen", gen = "dasllama_gemm_gen::k4_gemv"),
  tune_companion(fn = "k4q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::k4_tile",
@@ -552,6 +553,7 @@ def k4q8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp :
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "k5q8_gemv_gen", gen = "dasllama_gemm_gen::k5_gemv"),
  tune_companion(fn = "k5q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::k5_tile",
@@ -572,6 +574,7 @@ def k5q8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp :
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "k6q8_gemv_gen", gen = "dasllama_gemm_gen::k6_gemv"),
  tune_companion(fn = "k6q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::k6_tile",
@@ -592,6 +595,7 @@ def k6q8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp :
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "q40q8_gemv_gen", gen = "dasllama_gemm_gen::q40_gemv"),
  tune_companion(fn = "q40q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::q40_tile",
@@ -624,6 +628,7 @@ def iq4xsq8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xq
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "iq4xsq8_gemv_gen", gen = "dasllama_gemm_gen::iq4xs_gemv"),
  tune_companion(fn = "iq4xsq8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::iq4xs_tile",
@@ -656,6 +661,7 @@ def k3q8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp :
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "k3q8_gemv_gen", gen = "dasllama_gemm_gen::k3_gemv"),
  tune_companion(fn = "k3q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::k3_tile",
@@ -688,6 +694,7 @@ def iq3sq8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "iq3sq8_gemv_gen", gen = "dasllama_gemm_gen::iq3s_gemv"),
  tune_companion(fn = "iq3sq8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::iq3s_tile",
@@ -763,6 +770,7 @@ def iq3xxsq8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; x
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "iq3xxsq8_gemv_gen", gen = "dasllama_gemm_gen::iq3xxs_gemv"),
  tune_companion(fn = "iq3xxsq8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::iq3xxs_tile",
@@ -826,6 +834,7 @@ def iq4nlq8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xq
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "iq4nlq8_gemv_gen", gen = "dasllama_gemm_gen::iq4nl_gemv"),
  tune_companion(fn = "iq4nlq8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::iq4nl_tile",
@@ -895,6 +904,7 @@ def k2q8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp :
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "k2q8_gemv_gen", gen = "dasllama_gemm_gen::k2_gemv"),
  tune_companion(fn = "k2q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::k2_tile",
@@ -967,6 +977,7 @@ def iq2sq8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "iq2sq8_gemv_gen", gen = "dasllama_gemm_gen::iq2s_gemv"),
  tune_companion(fn = "iq2sq8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::iq2s_tile",
@@ -1038,6 +1049,7 @@ def iq2xsq8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xq
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "iq2xsq8_gemv_gen", gen = "dasllama_gemm_gen::iq2xs_gemv"),
  tune_companion(fn = "iq2xsq8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::iq2xs_tile",
@@ -1111,6 +1123,7 @@ def iq2xxsq8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; x
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "iq2xxsq8_gemv_gen", gen = "dasllama_gemm_gen::iq2xxs_gemv"),
  tune_companion(fn = "iq2xxsq8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::iq2xxs_tile",
@@ -1307,6 +1320,7 @@ def q51q8_gemv_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; xqp 
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),   // the gemv's same-layout alternative to the 512 tile crown
  tune_companion(fn = "q51q8_gemv_gen", gen = "dasllama_gemm_gen::q51_gemv"),
  tune_companion(fn = "q51q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
  tune(gen = "dasllama_gemm_gen::q51_tile",

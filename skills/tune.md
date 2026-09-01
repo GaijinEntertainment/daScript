@@ -89,6 +89,14 @@ two-function stamp, so a kernel and (say) its repack-layout query can never
 desync, JIT-time declines included. The sibling is a plain function declared
 earlier in the same module, with an explicit return type.
 
+A companion may carry its **own** manifest entry, keyed by its function name:
+when that entry names a permutation of the same grid that this box can run,
+the companion stamps it instead of the main entry's. The harness writes one
+only where it measured a different winner for the sibling - the dasLLAMA tuner
+gives the kq gemv its own seat among the rows sharing the tile winner's plane
+layout - and never for a companion whose choice must follow the main (the
+layout query). No entry = the companion follows, as before.
+
 ## The mode contract
 
 The `DAS_TUNE_MODE` environment variable selects the compile-time behavior:
