@@ -441,6 +441,58 @@ q40 0.95, k5 0.94, iq4xs 0.93, q8 0.92 - and the grid formats iq3xxs 0.90, iq2xs
 the crowns; iq2s 2528 / 2383 / 2530 - the crowned width-512 seat loses 6% to vpdpbusd256 at the engine shape,
 the gemv inheriting the tile's crown (tune_companion). perf stat gave nothing (no PMU in the VM).
 
+### zen4 v3 - the re-minted x86-vnni512 profile (2026-09-01, c7a.4xlarge EPYC 9R14, commit 11f69493e; `SOLO=1 NTOK=512` one thread at d=4096 for gemv/tile, then the team ladder: 16 lanes, d=32768, best of 5)
+
+| fmt | gemv 1T ours / ref | ratio | tile 1T ours / ref | ratio | gemv 16 lanes ours / ref | ratio |
+|---|---|---|---|---|---|---|
+| q8 | 1983 / 3650 | 1.84 | 167509 / 501447 | 2.99 | 6671 / 5995 | 0.90 |
+| k4 | 843 / 1878 | 2.23 | 350323 / 753000 | 2.15 | 2914 / 3049 | 1.05 |
+| k5 | 2160 / 2685 | 1.24 | 178164 / 1124541 | 6.31 | 3873 / 3824 | 0.99 |
+| k6 | 2478 / 2992 | 1.21 | 226354 / 787084 | 3.48 | 4637 / 4682 | 1.01 |
+| q40 | 693 / 2726 | 3.93 | 173654 / 588905 | 3.39 | 3027 / 2940 | 0.97 |
+| q51 | 1559 / 4640 | 2.98 | 285388 / 1428594 | 5.01 | 4327 / 4300 | 0.99 |
+| iq4xs | 1129 / 2449 | 2.17 | 286750 / 1155395 | 4.03 | 3225 / 2856 | 0.89 |
+| k3 | 942 / 2022 | 2.15 | 355086 / 979214 | 2.76 | 2212 / 2161 | 0.98 |
+| iq3s | 7556 / 6092 | 0.81 | 261572 / 3093452 | 11.83 | 3896 / 3260 | 0.84 |
+| iq3xxs | 5964 / 5226 | 0.88 | 260290 / 2660673 | 10.22 | 3176 / 2818 | 0.89 |
+| iq4nl | 1075 / 3083 | 2.87 | 284054 / 624404 | 2.20 | 3115 / 2882 | 0.93 |
+| k2 | 622 / 1281 | 2.06 | 430224 / 641204 | 1.49 | 1433 / 1611 | 1.12 |
+| iq2s | 4915 / 3756 | 0.76 | 283819 / 1903444 | 6.71 | 2524 / 2124 | 0.84 |
+| iq2xs | 4555 / 3621 | 0.79 | 283489 / 1845848 | 6.51 | 2559 / 2003 | 0.78 |
+| iq2xxs | 2854 / 3916 | 1.37 | 260753 / 1992837 | 7.64 | 1657 / 2116 | 1.28 |
+| mx4 | 1059 / 2746 | 2.59 | 292052 / 1349795 | 4.62 | 2895 / 2864 | 0.99 |
+
+Reading: one thread, everything is past the reference except the four panel-form grids (iq3s 0.81, iq3xxs
+0.88, iq2s 0.76, iq2xs 0.79; iq2xxs on the row form 1.37) - the compute-bound gap the zen4 memo targets. At
+16 lanes the box is DRAM-bound (k4 ours 235 MB / 2.9 ms = 81 GB/s, the reference 77): the 0.89-0.99 rows
+there are within the shared box's bandwidth noise, the grids repeat their one-thread losses (0.78-0.89).
+
+### Intel v3 - the re-minted x86-amx profile (2026-09-01, c8i.4xlarge Xeon 6975P-C, commit 11f69493e; same ladders)
+
+| fmt | gemv 1T ours / ref | ratio | tile 1T ours / ref | ratio | gemv 16 lanes ours / ref | ratio |
+|---|---|---|---|---|---|---|
+| q8 | 2226 / 2813 | 1.26 | 153424 / 578235 | 3.77 | 4414 / 4319 | 0.98 |
+| k4 | 1138 / 1704 | 1.50 | 234490 / 847640 | 3.61 | 2057 / 3083 | 1.50 |
+| k5 | 1567 / 2471 | 1.58 | 176873 / 1185485 | 6.70 | 2807 / 4063 | 1.45 |
+| k6 | 1831 / 1883 | 1.03 | 218123 / 912830 | 4.18 | 5227 / 4353 | 0.83 |
+| q40 | 1107 / 2289 | 2.07 | 168018 / 649524 | 3.87 | 2065 / 5143 | 2.49 |
+| q51 | 1472 / 2915 | 1.98 | 227348 / 1462531 | 6.43 | 2907 / 5406 | 1.86 |
+| iq4xs | 1109 / 2378 | 2.14 | 280699 / 1158466 | 4.13 | 2169 / 4817 | 2.22 |
+| k3 | 1272 / 2269 | 1.78 | 297557 / 1143046 | 3.84 | 2642 / 2687 | 1.02 |
+| iq3s | 5152 / 7079 | 1.37 | 251684 / 3550699 | 14.11 | 7426 / 7413 | 1.00 |
+| iq3xxs | 4386 / 5073 | 1.16 | 250846 / 2597215 | 10.35 | 4533 / 6704 | 1.48 |
+| iq4nl | 1113 / 2710 | 2.44 | 264126 / 714114 | 2.70 | 2079 / 6320 | 3.04 |
+| k2 | 660 / 1470 | 2.23 | 287013 / 699910 | 2.44 | 957 / 1729 | 1.81 |
+| iq2s | 3963 / 3690 | 0.93 | 275657 / 1885050 | 6.84 | 4266 / 3848 | 0.90 |
+| iq2xs | 3914 / 4326 | 1.11 | 275710 / 2206824 | 8.00 | 3931 / 4610 | 1.17 |
+| iq2xxs | 2505 / 3666 | 1.46 | 251397 / 1828919 | 7.28 | 2589 / 4255 | 1.64 |
+| mx4 | 1207 / 3038 | 2.52 | 275059 / 1311864 | 4.77 | 2488 / 6361 | 2.56 |
+
+Reading: 16 lanes at or past the reference except k6 0.83 (5227 us - the normal-mode gap, see the queue;
+one thread shows it as best 1831 / median 2925 inside ONE process, so the slow mode is the common one and
+flips between rounds, not between processes) and iq2s 0.90 (0.93 one thread). No gemv seat was written on
+this box, so the k6 gemv still rides the 512 tile crown here.
+
 ## 3. Research memos (read before touching the kernels)
 
 - `kernel_parity_research_cpu.md` - llama.cpp's CPU vec_dot for the five grid formats + Q2_K,
