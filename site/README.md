@@ -78,8 +78,9 @@ sniffing, no JS feature-detection. Viewport-width is the only signal. Open
 Chrome DevTools -> device toolbar (Cmd+Shift+M) and reload to test, or browse
 from a phone on the same WiFi using your LAN IP (`ipconfig getifaddr en0`).
 
-A `language-daslang` block that carries `data-playground="none"` is compiled by `REVIEW.das`
-like any other sample but links nowhere. One block carries it: the `dasllama.html` hero
+Every daslang sample on a page is compiled by `REVIEW.das` with the running binary, which
+settles gen2 - the toolchain accepts no other syntax. A `language-daslang` block that carries
+`data-playground="none"` is compiled like any other sample but links nowhere. One block carries it: the `dasllama.html` hero
 sample, which requires `dasllama/dasllama` - the wasm build has no dasLLAMA, so the
 playground cannot run it.
 

@@ -9,7 +9,7 @@ require dastest/review_gate
 // Run from the repo root: bin/daslang web/REVIEW.das - exit 0 clean, 1 with findings, 2 when
 // not run from the repo root.
 
-// Every authored tree under this folder that the deploy or `daspkg release --web` copies
+// Every authored tree under this folder that the deploy or `daspkg release wasm` copies
 // into a page a visitor loads. Everything else here is emsdk, a build tree, or a generated
 // output that no diff hand-edits.
 let private DEPLOYED_ROOTS <- ["web/examples/ui/src", "web/examples/ui/samples", "web/templates"]
@@ -48,6 +48,10 @@ def private staged_web_tree(source : string) : string {
         }
         tree = slice(d, 0, cut)
     }
+    // a step that copies one file names that file; the tree the gate walks is its folder
+    if (fexist(tree) && !stat(tree).is_dir) {
+        tree = dir_name(tree)
+    }
     return tree
 }
 
@@ -60,6 +64,10 @@ def private is_under_deployed_root(tree : string) : bool {
 
 def private check_staged_sources(file : string; sources : array<string>) {
     let text = fread(file)
+    if (empty(text)) {
+        gate_finding(file, "missing or unreadable - the staged-tree check read nothing, which is not a pass")
+        return
+    }
     for (src in sources) {
         let tree = staged_web_tree(src)
         continue if (empty(tree) || tree |> starts_with(GENERATED_PREFIX))
@@ -72,9 +80,11 @@ def private check_staged_sources(file : string; sources : array<string>) {
 
 //! The deploy's cp steps land in `_site/`; the CMake stage target names its copy
 //! destinations `SITE_*`.
+//! The three staging shapes the gate parses: a `cp` whose destination starts with `_site/`
+//! in the deploy, and a `-E copy` / `copy_directory` whose destination contains `SITE_` or
+//! `/site/` in the CMake stage target. A step of another shape is one the gate does not read.
 def private check_staged_trees_gated {
     check_staged_sources(PAGES_YML, shell_cp_sources(fread(PAGES_YML), "_site/"))
-    // a stage target names its destination through a SITE_* variable or spells site/ outright
     let cmake = fread(WEB_CMAKE)
     check_staged_sources(WEB_CMAKE, cmake_copy_sources(cmake, "SITE_"))
     check_staged_sources(WEB_CMAKE, cmake_copy_sources(cmake, "/site/"))

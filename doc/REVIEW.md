@@ -7,8 +7,8 @@ here.
 
 **A diff that makes `REVIEW.das`'s cookie-and-host check read fewer files, or report less
 than it did before the change with the same `ALLOWED_HOSTS`, is a defect** - the gate bans
-`document.cookie` and reports any resource loaded from a host the list does not name, both
-in what `source/` serves and in the absolute URLs `source/conf.py` declares.
+`document.cookie` in what `source/` serves, and reports - there and in the URLs
+`source/conf.py` declares - any resource host the list does not name.
 
 **A diff that adds a host to `REVIEW.das`'s `ALLOWED_HOSTS` states, in the PR body, what a
 reader sends that host and whether the host sets cookies.**

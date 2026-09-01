@@ -105,6 +105,8 @@ def test_tilde_home(t : T?) {
         t |> equal(tilde_home("-m /Users/boris/Work/models/x.gguf"), "-m ~/Work/models/x.gguf")
         t |> equal(tilde_home("A=/Users/ci/m B=/home/ci/x/y"), "A=~/m B=~/x/y", "every occurrence, both unix forms")
         t |> equal(tilde_home("\"/Users/ci/bin/tool\" -m \"/Users/ci/m/q.gguf\""), "\"~/bin/tool\" -m \"~/m/q.gguf\"", "a quote opens a path")
+        t |> equal(tilde_home("(/Users/ci/a),/Users/ci/b;/Users/ci/c:/Users/ci/d ['/Users/ci/e']"), "(~/a),~/b;~/c:~/d ['~/e']", "a bracket, comma, semicolon, colon and single quote open a path")
+        t |> equal(tilde_home("x/Users/ci/a"), "x/Users/ci/a", "mid-word is not a path start")
     }
     t |> run("a Windows home keeps its separator") @(t : T?) {
         t |> equal(tilde_home("C:\\Users\\boris\\Work\\x.exe"), "~\\Work\\x.exe")

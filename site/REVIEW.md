@@ -9,13 +9,14 @@ visitor types into the playground or hero editor, and the sample bundles the pla
 into that editor.
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
-illustration - show only a command the run actually executed.** A rendered `cmd` identifies
+illustration - show only a command the run actually executed, with every home directory
+spelled `~`.** A rendered `cmd` identifies
 the RUN, not the row: where one run produced several rendered rows (an ASR run's per-clip
 rows), each row's receipt is the run's command.
 
 **A diff that writes a `cmd` field in `files/dasllama/bench_records.json` that is not the
-exact argv `modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it
-spawns) ran is a defect.**
+argv `modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it
+spawns) ran, with every home directory spelled `~` outside the quotes, is a defect.**
 
 **A row that `files/dasllama.js` renders without its run's `cmd` + `date` line is a defect -
 render that line on every row the run produced.**
@@ -27,19 +28,11 @@ is a defect.**
 **Weakening `REVIEW.das`'s home-path check - the gate that reports a home directory spelled
 out, instead of `~`, in any `.json` under `files/dasllama/` - is a defect.**
 
-**A diff that changes `files/performance_bench.json` also changes `benchmarks/sql/results.md`
-(repo root), in the same change.** `benchmarks/sql/_update_results.das --site-json` writes the
-record from the same sweep output that regenerates those tables.
-
-**A diff that changes `files/performance_engines.json` also changes
-`examples/benchmarks/sql/results.md` (repo root), in the same change.**
-`examples/benchmarks/sql/_update_results.das --site-json` writes the record from the same sweep
-output that regenerates those tables.
-
 **Weakening `REVIEW.das`'s bench-cell parity check - the gate that compares every
 family-and-lane cell of `files/performance_bench.json` and `files/performance_engines.json`
 with the `benchmarks/sql/results.md` and `examples/benchmarks/sql/results.md` (repo root)
-tables - is a defect.**
+tables - is a defect.** `_update_results.das --site-json` beside each table writes the record
+from the sweep that regenerates it, so the pair moves together.
 
 **A benchmark number hand-carried into a page that renders dasProfile numbers is a defect -
 render every such number only from the vendored dasProfile records, the
@@ -54,11 +47,14 @@ render the claim from the record or drop it.**
 dasProfile record.** Provenance - the `das_capture` and `ext_capture` stamps - travels in the
 dasProfile files themselves.
 
-**Weakening `REVIEW.das`'s embedded-sample check - the gate that compiles every
-`language-daslang` block of a page outside `blog/` with the running binary, requires an
-exported `main` in each, and requires a playground link in the block's section - is a
-defect.** The compile settles gen2: the toolchain accepts no other syntax. A block marked
-`data-playground="none"` is compiled and owes no link; `README.md` ledgers each such block.
+**Weakening `REVIEW.das`'s embedded-sample check - the gate that compiles every daslang
+sample of a page outside `blog/` with the running binary (a `language-daslang` block on an
+`.html` page, a ```` ```daslang ```` fence in a `_news/` post), requires an exported `main` in
+each, and requires a playground link beside it (in its `<section>` on a page, anywhere in a
+post) - is a defect.**
+
+**A diff that marks a sample `data-playground="none"` also ledgers the block in `README.md`,
+in the same change.** The gate still compiles such a block; it owes no link.
 
 **A PR whose diff changes `playground/` (this folder) or `examples/_interp.html` (this folder)
 states, in the PR body, a run of the WASM-staged Playwright suite (`tests/playground/`, this
@@ -95,8 +91,7 @@ selector body defined in BOTH `files/dasllama-table.css` and `dasllama.html`'s i
 `<style>` - is a defect.**
 
 **Weakening `REVIEW.das`'s `dl-*` census - the gate that reports a `dl-*` name `dasllama.html`
-or `files/dasllama.js` uses that neither the page's inline `<style>` nor
-`files/dasllama-table.css` defines - is a defect.** The `site-dasllama/` (repo root) pages
-carry the same census against the shared sheet in their own gate.
+or `files/dasllama.js` uses that no selector of the page's inline `<style>` or of
+`files/dasllama-table.css` defines and no `id="..."` declares - is a defect.**
 
 **An entry in `_news/*.md` for something not shipped at publish time is a defect.**

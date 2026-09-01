@@ -92,8 +92,8 @@ provides finding accumulation and the exit verdict (`gate_finding`, `gate_findin
 overloads), the cookie-and-host gate for a served web tree (`gate_web_third_party`, built
 on `html_resource_urls`, `script_urls`, `css_urls` and `url_host`), the home-directory gate
 for a published record (`gate_home_paths`), the prefix census (`gate_prefixed_names_defined`,
-built on `prefixed_tokens` and `html_ids`), the page-source extractors (`html_code_blocks`,
-`markdown_fences`), plus tree-analysis
+built on `prefixed_tokens`, `css_selector_tokens` and `html_ids`), the page-source extractors
+(`html_code_blocks`, `markdown_fences`), plus tree-analysis
 helpers: `das_requires`, `strip_line_comments`, `cmake_command_blocks`,
 `cmake_command_targets`, `cmake_words`, `cmake_args`, `cmake_list_entries`,
 `cmake_test_labels`, `cmake_test_commands`, `cmake_copy_sources`, `shell_cp_sources`,

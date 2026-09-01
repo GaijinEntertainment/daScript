@@ -49,3 +49,8 @@ compacted, or cited as rules.
   both became one `REVIEW.das` census over the deploy copy lines, the sitemap list and the
   metadata test's page list. The comparative-claim tail and the "not raced" metaphor took
   their plain forms.
+
+- **2026-09-01** (`REVIEW.md`, round 3): the number-source rule leads with its verdict again
+  (the round-2 form had become a statement); the dl-* residue names the id subtraction and
+  the selector-only definition; the page-census WHY says what each miss costs. The metadata
+  test's three page lists became one `PAGES` census the gate reads.

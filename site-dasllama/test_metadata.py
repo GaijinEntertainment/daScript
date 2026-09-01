@@ -7,6 +7,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 REPO_ROOT = ROOT.parent
 
+# the one page census every test here iterates - a page missing from it is checked by nothing,
+# and REVIEW.das reads this list to hold each served .html to it
+PAGES = {
+    "index.html": "https://dasllama.io/",
+    "ladder.html": "https://dasllama.io/ladder.html",
+    "sidecars.html": "https://dasllama.io/sidecars.html",
+}
+
 
 class MetadataParser(HTMLParser):
     def __init__(self):
@@ -45,12 +53,7 @@ class MetadataParser(HTMLParser):
 
 class SiteMetadataTest(unittest.TestCase):
     def test_pages_have_one_canonical_home_identity(self):
-        pages = {
-            "index.html": "https://dasllama.io/",
-            "ladder.html": "https://dasllama.io/ladder.html",
-            "sidecars.html": "https://dasllama.io/sidecars.html",
-        }
-        for filename, expected in pages.items():
+        for filename, expected in PAGES.items():
             with self.subTest(filename=filename):
                 parser = MetadataParser()
                 parser.feed((ROOT / filename).read_text(encoding="utf-8"))
@@ -60,7 +63,7 @@ class SiteMetadataTest(unittest.TestCase):
     def test_pages_carry_head_metadata(self):
         # the per-page metadata the site checklist requires: a title, a description, the
         # OpenGraph quartet, and the Atom link - a new or renamed page included
-        for filename in ("index.html", "ladder.html", "sidecars.html"):
+        for filename in PAGES:
             with self.subTest(filename=filename):
                 parser = MetadataParser()
                 parser.feed((ROOT / filename).read_text(encoding="utf-8"))
@@ -75,14 +78,7 @@ class SiteMetadataTest(unittest.TestCase):
         tree = ET.parse(ROOT / "sitemap.xml")
         namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
         urls = [node.text for node in tree.findall("sm:url/sm:loc", namespace)]
-        self.assertEqual(
-            urls,
-            [
-                "https://dasllama.io/",
-                "https://dasllama.io/ladder.html",
-                "https://dasllama.io/sidecars.html",
-            ],
-        )
+        self.assertEqual(urls, list(PAGES.values()))
 
     def test_feed_links_to_home_page_anchors(self):
         feed = (ROOT / "feed.xml").read_text(encoding="utf-8")

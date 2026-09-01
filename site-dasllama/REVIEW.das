@@ -28,7 +28,7 @@ let private SHARED_SHEET = "site/files/dasllama-table.css"
 let private DL_PREFIX = "dl-"
 
 def private check_dl_names_come_from_shared_sheet {
-    let defined <- prefixed_tokens(fread(SHARED_SHEET), DL_PREFIX)
+    let defined <- css_selector_tokens(fread(SHARED_SHEET), DL_PREFIX)
     if (empty(defined)) {
         gate_finding(SHARED_SHEET, "missing, unreadable, or defines no dl-* selector")
         return
@@ -62,6 +62,17 @@ def private check_page_census {
     }
     let news = fread(BUILD_NEWS)
     let meta = fread(TEST_METADATA)
+    var sitemap_list = ""
+    for (line in split(news, "\n")) {
+        if (find(line, "urls = [") >= 0) {
+            sitemap_list = line
+            break
+        }
+    }
+    if (empty(sitemap_list)) {
+        gate_finding(BUILD_NEWS, "has no `urls = [` sitemap list line - the page census read no list, which is not a pass")
+        return
+    }
     dir("site-dasllama") $(name) {
         let served = name |> ends_with(".html") || name |> ends_with(".xml") || name |> ends_with(".txt")
         return if (!served)
@@ -70,8 +81,9 @@ def private check_page_census {
             gate_finding(path, "has no copy line in {PAGES_YML}'s dasllama.io deploy step - the step names each top-level file, so an unlisted one never reaches the site")
         }
         return if (!(name |> ends_with(".html")))
-        // index.html is the sitemap's root entry, spelled as the empty path
-        if (name != "index.html" && find(news, "'{name}'") < 0) {
+        // the sitemap list is the `urls = [...]` line; the home page is its empty path
+        let listed = name == "index.html" ? find(sitemap_list, "('',") >= 0 : find(sitemap_list, "'{name}'") >= 0
+        if (!listed) {
             gate_finding(path, "is not in {BUILD_NEWS}'s sitemap page list - the page deploys uncrawled")
         }
         if (find(meta, "\"{name}\"") < 0) {

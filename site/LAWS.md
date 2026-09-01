@@ -77,3 +77,10 @@ compacted, or cited as rules.
   blog posts are out of the sample check; and "lets opt out dasllama hero sample. one day
   we'll get dasLLAMA to work on playground, maybe. until then out" - the block carries
   `data-playground="none"`, is still compiled, and owes no link.
+
+- **2026-09-01** (`REVIEW.md`, round 3): the review-md auditor showed the round-2 cut of the
+  `~` clause left the exact-argv rule contradicting the home-path residue - the clause was a
+  boundary, not a duplicate - so it returned, with "outside the quotes" after the dasLLAMA
+  auditor found 116 quoted tildes no shell expands; the two record-to-table duties went to
+  the parity gate that enforces them; the sample residue split into the residue and a ledger
+  duty; the dl-* residue lost its cross-site sentence and names the id subtraction.

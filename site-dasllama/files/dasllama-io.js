@@ -120,7 +120,6 @@
         tg_das: tok(das, 'tg128'), tg_ref: ref ? tok(ref, 'tg128') : 0,
         pp_ratio: ref ? ratio(tok(das, 'pp512'), tok(ref, 'pp512')) : null,
         tg_ratio: ref ? ratio(tok(das, 'tg128'), tok(ref, 'tg128')) : null,
-        noted: !!((das && das.comment) || (ref && ref.comment)),
         das: das, ref: ref
       });
     });

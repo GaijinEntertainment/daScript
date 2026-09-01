@@ -102,10 +102,14 @@ def private check_dl_selector_parity {
     }
 }
 
-def private check_published_records_no_home_paths {
-    dir(RECORDS_DIR) $(name) {
-        if (name |> ends_with(".json")) {
-            gate_home_paths("{RECORDS_DIR}/{name}")
+def private check_published_records_no_home_paths(folder : string) {
+    dir(folder) $(name) {
+        return if (name == "." || name == "..")
+        let full = "{folder}/{name}"
+        if (stat(full).is_dir) {
+            check_published_records_no_home_paths(full)
+        } elif (name |> ends_with(".json")) {
+            gate_home_paths(full)
         }
     }
 }
@@ -127,7 +131,10 @@ def private check_record_receipts {
         gate_finding(BENCH_RECORDS, "does not parse as JSON: {jerr}")
         return
     }
-    return if (!(doc.value is _array))
+    if (!(doc.value is _array)) {
+        gate_finding(BENCH_RECORDS, "is not a top-level array of models - the receipt check read no run; regenerate the record")
+        return
+    }
     for (model in doc.value as _array) {
         let gguf = "{model?["gguf"] ?? "?"}"
         let runs = model?["runs"]
@@ -159,6 +166,25 @@ def private lane_column(header : array<string>; id, name : string) : int {
     return -1
 }
 
+// the header and every body row of one results.md table, cloned out of the nested array
+// once: a double index into array<array<string>> leaks an array lock in some interpreter
+// permutations, and the scoped delete then fails (issue 3923). False when the section
+// holds no table.
+def private load_results_table(md, section : string; var header : array<string>; var by_family : table<string; array<string>>) : bool {
+    var inscope rows <- markdown_table_rows(md, section)
+    return false if (length(rows) < 2)
+    var k = 0
+    for (row in rows) {
+        if (k == 0) {
+            header := row
+        } else {
+            by_family[row[0]] := row
+        }
+        k++
+    }
+    return true
+}
+
 def private check_bench_cell_parity(record_path, results_path : string) {
     let text = fread(record_path)
     let md = fread(results_path)
@@ -179,34 +205,45 @@ def private check_bench_cell_parity(record_path, results_path : string) {
     }
     let lanes = doc?["lanes"]
     let families = doc?["families"]
-    return if (lanes == null || families == null || !(lanes.value is _array) || !(families.value is _array))
+    if (lanes == null || families == null || !(lanes.value is _array) || !(families.value is _array)) {
+        gate_finding(record_path, "has no lanes or families array - the parity check compared no cell; regenerate the record")
+        return
+    }
     for (section, arm in ["INTERP", "JIT"], ["interp", "jit"]) {
-        var inscope rows <- markdown_table_rows(md, section)
-        if (length(rows) < 2) {
+        var header : array<string>
+        var by_family : table<string; array<string>>
+        if (!load_results_table(md, section, header, by_family)) {
             gate_finding(results_path, "has no `## {section}` table for {record_path} to agree with")
             continue
         }
-        var inscope by_family <- {for (k in range(1, length(rows))); rows[k][0] => k}
         for (fam in families.value as _array) {
             let name = "{fam?["name"] ?? ""}"
-            let row = by_family?[name] ?? -1
-            if (row < 0) {
+            if (!key_exists(by_family, name)) {
                 gate_finding(record_path, "family {name} has no `## {section}` row in {results_path}")
                 continue
             }
+            let md_row := by_family[name]
             let cells = fam?[arm]
-            continue if (cells == null || !(cells.value is _array))
+            if (cells == null || !(cells.value is _array)) {
+                gate_finding(record_path, "{name} / {arm}: no cell array - the parity check compared nothing for this family; regenerate the pair")
+                continue
+            }
             var li = 0
             for (lane in lanes.value as _array) {
                 let id = "{lane?["id"] ?? ""}"
-                let col = lane_column(rows[0], id, "{lane?["name"] ?? ""}")
+                let col = lane_column(header, id, "{lane?["name"] ?? ""}")
+                if (li >= length(cells.value as _array)) {
+                    gate_finding(record_path, "{name} / {id} / {arm}: no cell for this lane - the record has fewer cells than lanes; regenerate the pair")
+                    li++
+                    continue
+                }
                 let cell = (cells.value as _array)[li]
                 li++
-                if (col < 0 || col >= length(rows[row])) {
+                if (col < 0 || col >= length(md_row)) {
                     gate_finding(results_path, "`## {section}` has no column for lane {id}")
                     continue
                 }
-                let md_cell = rows[row][col]
+                let md_cell = md_row[col]
                 //! ?? reads both number arms - _longint for an integer literal, _number for a decimal; null is the missing cell
                 let json_value = cell ?? -1.0lf
                 let recorded = json_value < 0.0lf ? "-" : "{json_value}"
@@ -223,11 +260,11 @@ def private check_bench_cell_parity(record_path, results_path : string) {
 // or in the shared sheet; one defined in neither renders unstyled
 def private check_dl_names_are_defined {
     let html = fread(PAGE_HTML)
-    var defined <- prefixed_tokens(fread(TABLE_CSS), "dl-")
+    var defined <- css_selector_tokens(fread(TABLE_CSS), "dl-")
     let s0 = html |> find("<style>")
     let s1 = html |> find("</style>")
     if (s0 >= 0 && s1 > s0) {
-        var inscope inline_defined <- prefixed_tokens(slice(html, s0, s1), "dl-")
+        var inscope inline_defined <- css_selector_tokens(slice(html, s0 + length("<style>"), s1), "dl-")
         for (name in keys(inline_defined)) {
             defined |> insert(name)
         }
@@ -255,6 +292,10 @@ def private check_embedded_samples {
     }
     for (page in pages) {
         let text = fread(page)
+        if (empty(text) && stat(page).size > 0ul) {
+            gate_finding(page, "unreadable - the sample check compiled nothing from it, which is not a pass")
+            continue
+        }
         let is_post = page |> ends_with(".md")
         var inscope blocks <- is_post ? markdown_fences(text, "daslang") : html_code_blocks(text, "language-daslang")
         var k = 0
@@ -320,7 +361,7 @@ def main() : int {
     check_dl_selector_parity()
     check_dl_names_are_defined()
     check_embedded_samples()
-    check_published_records_no_home_paths()
+    check_published_records_no_home_paths(RECORDS_DIR)
     check_record_receipts()
     check_bench_cell_parity("site/files/performance_bench.json", "benchmarks/sql/results.md")
     check_bench_cell_parity("site/files/performance_engines.json", "examples/benchmarks/sql/results.md")

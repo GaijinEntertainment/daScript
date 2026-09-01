@@ -19,3 +19,7 @@
   its annoying". The harvest of that change found the tilde had been put inside
   `running_binary()`, which three filesystem lookups also read; the rule draws the line the
   bug crossed.
+
+- **2026-09-01** (`REVIEW.md`, dragon round): the sidecar home-path rule took the list shape
+  every other rule here has and lost its example enumeration; the mint test now asserts the
+  property, so the rule names it.

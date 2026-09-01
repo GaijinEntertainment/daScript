@@ -489,9 +489,9 @@ def test_gate_home_paths(t : T?) {
 
 [test]
 def test_prefixed_tokens(t : T?) {
-    let text = "<tr class=\"dl-row dl-row--noted\">.dl-table--bench tbody tr.dl-row--flat \{ \} var x = 'dl-win'; model-dl-x"
+    let text = "<tr class=\"dl-row dl-row--noted\">.dl-table--bench tbody tr.dl-row--flat \{ \} var x = 'dl-win'; model-dl-x; the dl-* names"
     var inscope toks <- prefixed_tokens(text, "dl-")
-    t |> equal(5, length(toks), "a prefix glued to a longer token (model-dl-x) is not a token")
+    t |> equal(5, length(toks), "a prefix glued to a longer token (model-dl-x) and the bare prefix in prose (dl-*) are not tokens")
     t |> success(key_exists(toks, "dl-row"))
     t |> success(key_exists(toks, "dl-row--noted"), "a double-dash modifier is one token")
     t |> success(key_exists(toks, "dl-table--bench"))
@@ -504,14 +504,15 @@ def test_markdown_table_rows(t : T?) {
     let md = "# title\n\n## INTERP\n\nprose\n\n| Benchmark | A (m1) | B (m2) |\n|---|---:|---:|\n| `fam_one` | 1.5 | - |\n| `fam_two` | 2.0 | 3.5 |\n\ntrailing prose\n\n## JIT\n\n| Benchmark | A (m1) |\n|---|---:|\n| `fam_one` | 0.5 |\n"
     var inscope rows <- markdown_table_rows(md, "INTERP")
     t |> equal(3, length(rows), "header plus two body rows; the alignment row is dropped")
-    t |> equal("Benchmark", rows[0][0])
-    t |> equal("B (m2)", rows[0][2])
-    t |> equal("fam_one", rows[1][0], "backticks removed")
-    t |> equal("-", rows[1][2])
-    t |> equal("3.5", rows[2][2])
+    let header = join(rows[0], "|")
+    let first = join(rows[1], "|")
+    let second = join(rows[2], "|")
+    t |> equal("Benchmark|A (m1)|B (m2)", header)
+    t |> equal("fam_one|1.5|-", first, "backticks removed")
+    t |> equal("fam_two|2.0|3.5", second)
     var inscope jit <- markdown_table_rows(md, "JIT")
     t |> equal(2, length(jit), "a second section has its own table")
-    t |> equal("0.5", jit[1][1])
+    t |> equal("fam_one|0.5", join(jit[1], "|"))
     var inscope none <- markdown_table_rows(md, "ABSENT")
     t |> equal(0, length(none))
 }
@@ -543,4 +544,63 @@ def test_markdown_fences(t : T?) {
     t |> equal("let x = 1\n", fences[0].source)
     t |> equal("let y = 2\n", fences[1].source)
     t |> success(find(slice(md, fences[0].after), "more") >= 0, "the offset lands after the closing fence")
+}
+
+[test]
+def test_css_selector_tokens(t : T?) {
+    let sheet = "/* dl-ghost is only mentioned here */\n.dl-row, .dl-table--bench tbody tr.dl-row--flat \{ content: \"dl-value\"; \}\n@media (max-width: 600px) \{ .dl-narrow \{ color: red; \} @supports (gap: 1px) \{ .dl-gapped \{ gap: 1px; \} \} \}\n@font-face \{ font-family: dl-face; src: url(x.woff); \}\n@keyframes dl-spin \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}\n.dl-after \{ color: blue; \}\n"
+    var inscope defined <- css_selector_tokens(sheet, "dl-")
+    t |> equal(6, length(defined), "a comment mention, a property value and a descriptor inside @font-face define nothing; a selector under @media or @supports does")
+    t |> success(key_exists(defined, "dl-row"))
+    t |> success(key_exists(defined, "dl-table--bench"))
+    t |> success(key_exists(defined, "dl-row--flat"))
+    t |> success(key_exists(defined, "dl-narrow"), "a rule nested in @media styles the narrow viewport")
+    t |> success(key_exists(defined, "dl-gapped"), "nesting goes as deep as the group at-rules do")
+    t |> success(key_exists(defined, "dl-after"), "the census resumes after a group at-rule closes")
+    t |> success(!key_exists(defined, "dl-face"), "@font-face holds descriptors, not rules")
+}
+
+[test]
+def test_shell_cp_sources_comments_and_quotes(t : T?) {
+    let sh = "cp web/a.js _site/   # a trailing comment names no destination\ncp \"web/my dir/b.js\" _site/x/\n# cp web/c.js _site/\n"
+    var inscope srcs <- shell_cp_sources(sh, "_site/")
+    t |> equal(2, length(srcs), "a # comment ends the argument list and a commented-out cp is no cp")
+    t |> equal("web/a.js", srcs[0])
+    t |> equal("web/my dir/b.js", srcs[1], "a quoted source with a space is one token")
+}
+
+[test]
+def test_gate_home_paths_unreadable_file(t : T?) {
+    let fixture_r = create_temp_file_result("review_gate_home_locked", ".json")
+    t |> success(fixture_r is value, "temp fixture file created")
+    if (!(fixture_r is value)) {
+        return
+    }
+    let fixture = unsafe(fixture_r.value)
+    t |> success(fwrite(fixture, "\{\"cmd\": \"-m /Users/ci/x\"\}\n"))
+    unsafe(system("chmod 000 {fixture}"))
+    if (!empty(fread(fixture))) {
+        unsafe(system("chmod 644 {fixture}"))
+        t |> success(remove(fixture))
+        t |> skip("this platform or user reads a file whose permission bits say no")
+        return
+    }
+    gate_reset()
+    gate_home_paths(fixture)
+    var inscope fs <- gate_findings()
+    gate_reset()
+    unsafe(system("chmod 644 {fixture}"))
+    t |> success(remove(fixture))
+    t |> equal(1, length(fs), "a file the gate could not read is a finding, never a pass")
+    t |> success(find(fs[0], "unreadable") >= 0, fs[0])
+}
+
+[test]
+def test_gate_home_paths_missing_file(t : T?) {
+    gate_reset()
+    gate_home_paths("/nonexistent/review_gate_probe/records.json")
+    var inscope fs <- gate_findings()
+    gate_reset()
+    t |> equal(1, length(fs), "a path that does not exist is a finding, never a pass")
+    t |> success(find(fs[0], "missing or unreadable") >= 0, fs[0])
 }

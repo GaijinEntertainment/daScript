@@ -12,3 +12,6 @@ compacted, or cited as rules.
   rewritten once in place - the one edit the "re-mint, never an edit" rule sanctions, since
   no measurement changed. The 22 archived tune sidecars stay byte-exact: their sha256 is
   what ties a row to the exe it shipped with.
+
+- **2026-09-01** (`REVIEW.md`, opening): the architecture doc split long ago and the re-mint
+  rule's sanction lives in the measurement companion, so the opening names both docs.

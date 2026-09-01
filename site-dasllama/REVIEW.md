@@ -12,10 +12,10 @@ verbatim and produces the result the page shows.**
 **A code sample shown on a page that does not compile and run with the current toolchain is
 a defect.**
 
-**A number shown on a page carries its source on the page itself - rendered from live data,
-or named in a page comment or prose clause: the checked-in measurement record, or the box
-and date and what was measured, or the word placeholder. A number with none of these is a
-defect.**
+**A number shown on a page with no source named on the page is a defect** - the source is
+live data the page renders it from, or a page comment or prose clause naming the checked-in
+measurement record, or naming the box and date and what was measured, or the word
+placeholder.
 
 **A comparative superiority claim made in words rather than as side-by-side figures, on any
 page, is a defect** - the arithmetic a reader does over two figures is not the page's claim.
@@ -32,8 +32,8 @@ name.
 visitor sends that host and whether the host sets cookies.**
 
 **Weakening `REVIEW.das`'s `dl-*` census - the gate that reports a `dl-*` name used in a
-page, script or stylesheet here that `site/files/dasllama-table.css` (repo root) does not
-define - is a defect.**
+page, script or stylesheet here that no selector of `site/files/dasllama-table.css` (repo
+root) defines and no `id="..."` in those files declares - is a defect.**
 
 **A statement on a page here about what a shipped tool does is a defect unless it matches
 the current code.**
@@ -55,5 +55,5 @@ quoted-attribute values, `Number(...)` for anything numeric, and `safeApiHref()`
 **Weakening `REVIEW.das`'s page census - the gate that reports a top-level served file with
 no copy line in the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root), or a
 page missing from `build_news.py`'s sitemap list or `test_metadata.py`'s page list - is a
-defect.** Local preview serves the tree directly, so every one of those misses is invisible
-until deploy.
+defect.** Local preview serves the tree directly, so no miss shows there: the page deploys
+unlisted, uncrawled, or unchecked.

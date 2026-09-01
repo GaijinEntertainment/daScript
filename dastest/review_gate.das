@@ -500,25 +500,16 @@ def private is_shell_operator(tok : string) : bool {
         tok |> starts_with("2>") || tok |> starts_with("&"))
 }
 
-def private unquoted(tok : string) : string {
-    var out = tok
-    if (out |> starts_with("\"") || out |> starts_with("'")) {
-        out = slice(out, 1)
-    }
-    if (out |> ends_with("\"") || out |> ends_with("'")) {
-        out = slice(out, 0, length(out) - 1)
-    }
-    return out
-}
-
 //! Sources of every `cp` in shell text whose destination starts with `dest_prefix` - one
-//! entry per source token, quotes removed, `-r`-style flags dropped, the argument list cut
-//! at the first shell operator (`||`, `2>`, ...). Line-based: a `cp` inside a YAML `run:`
-//! block is one line of shell.
+//! entry per source, quotes removed (a quoted run is one source), `-r`-style flags dropped,
+//! a `#` comment dropped, the argument list cut at the first shell operator (`||`, `2>`,
+//! ...). Line-based: a `cp` inside a YAML `run:` block is one line of shell.
 def shell_cp_sources(text : string; dest_prefix : string) : array<string> {
     var out : array<string>
     for (line in split(text, "\n")) {
-        var inscope toks <- [for (w in split_by_chars(line, " \t\r")); w; where !empty(w)]
+        // cmake_words reads a shell line well enough here: a `#` comment is dropped and a
+        // quoted run is one word, which is what a cp argument needs
+        var inscope toks <- cmake_words(line)
         let at = find_index(toks, "cp")
         continue if (at < 0)
         var args : array<string>
@@ -526,7 +517,7 @@ def shell_cp_sources(text : string; dest_prefix : string) : array<string> {
         for (i in range(at + 1, length(toks))) {
             break if (is_shell_operator(toks[i]))
             continue if (toks[i] |> starts_with("-"))
-            args |> push(unquoted(toks[i]))
+            args |> push(toks[i])
         }
         continue if (length(args) < 2 || !(args[length(args) - 1] |> starts_with(dest_prefix)))
         out |> reserve(length(out) + length(args) - 1)
@@ -573,8 +564,9 @@ def cmake_copy_sources(text : string; dest_marker : string) : array<string> {
 //! `\\Users\\<u>\\` - is a finding. A receipt that reaches a reader names no user.
 def gate_home_paths(path : string) {
     let text = fread(path)
-    if (empty(text) && stat(path).size > 0ul) {
-        gate_finding(path, "unreadable - the gate cannot pass a file it could not read")
+    let st = stat(path)
+    if (empty(text) && (!st.is_valid || st.size > 0ul)) {
+        gate_finding(path, "missing or unreadable - the gate cannot pass a file it could not read")
         return
     }
     var line = 0
@@ -607,7 +599,10 @@ def prefixed_tokens(text : string; prefix : string) : table<string> {
             while (e < n && is_token_byte(int(d[e]))) {
                 e++
             }
-            out |> insert(slice(d, at, e))
+            // the bare prefix in prose ("dl-* names") is not a name
+            if (e > at + length(prefix)) {
+                out |> insert(slice(d, at, e))
+            }
             i = e
         }
     }
@@ -616,6 +611,61 @@ def prefixed_tokens(text : string; prefix : string) : table<string> {
 
 def private is_token_byte(b : int) : bool {
     return is_alnum(b) || b == '_' || b == '-'
+}
+
+//! Every `prefix`-token that appears in a stylesheet's SELECTORS - the text outside rule
+//! bodies, block comments stripped, the rules nested in a group at-rule (`@media`,
+//! `@supports`, ...) included. A name in a comment, a property value, an at-rule prelude or
+//! a `@font-face` descriptor is not a definition; only a selector styles anything.
+def css_selector_tokens(text : string; prefix : string) : table<string> {
+    let selectors = build_string() $(var b : StringBuilderWriter) {
+        peek_data(strip_block_comments(text)) $(d) {
+            var groups : array<bool>
+            var opaque = 0
+            var start = 0
+            for (i in range(length(d))) {
+                let c = int(d[i])
+                if (c == '{') {
+                    let prelude = strip(slice(d, start, i))
+                    let group = opaque == 0 && is_css_group_at_rule(prelude)
+                    if (opaque == 0 && !(prelude |> starts_with("@"))) {
+                        b |> write(prelude)
+                        b |> write(" ")
+                    }
+                    groups |> push(group)
+                    if (!group) {
+                        opaque++
+                    }
+                    start = i + 1
+                } elif (c == '}') {
+                    if (!empty(groups)) {
+                        if (!groups[length(groups) - 1]) {
+                            opaque--
+                        }
+                        groups |> pop()
+                    }
+                    start = i + 1
+                } elif (c == ';' && opaque == 0) {
+                    start = i + 1
+                }
+            }
+        }
+    }
+    return <- prefixed_tokens(selectors, prefix)
+}
+
+//! A group at-rule's block holds rules, so the selectors inside it define names; every other
+//! at-rule's block holds descriptors or keyframe steps.
+def private is_css_group_at_rule(prelude : string) : bool {
+    return false if (!(prelude |> starts_with("@")))
+    var e = 1
+    peek_data(prelude) $(d) {
+        while (e < length(d) && is_token_byte(int(d[e]))) {
+            e++
+        }
+    }
+    let name = slice(prelude, 1, e)
+    return name == "media" || name == "supports" || name == "container" || name == "layer" || name == "scope" || name == "document" || name == "starting-style"
 }
 
 //! Every `id="..."` value in markup. A class census subtracts these: an element id shares
@@ -729,26 +779,50 @@ def markdown_table_rows(text : string; section : string) : array<array<string>> 
     var out : array<array<string>>
     var in_section = false
     var in_table = false
+    var done = false
+    // no `break` out of the loop over the temporary split array and no scoped array inside
+    // it: both leave a lock behind in some interpreter permutations (issue 3923)
     for (raw in split(text, "\n")) {
+        continue if (done)
         let line = strip(raw)
         if (line |> starts_with("## ")) {
-            break if (in_table)
+            done = in_table
             in_section = line == "## {section}"
             continue
         }
         continue if (!in_section)
         if (!(line |> starts_with("|"))) {
-            break if (in_table)
+            done = in_table
             continue
         }
         in_table = true
         continue if (line |> starts_with("|---") || line |> starts_with("| ---"))
-        var inscope cells_with_bars <- [for (cell in split(line, "|")); strip(replace(cell, "`", ""))]
-        continue if (length(cells_with_bars) < 3)
-        var row <- [for (k in range(1, length(cells_with_bars) - 1)); cells_with_bars[k]]
+        let n_cells = count_cells(line)
+        continue if (n_cells < 3)
+        var row : array<string>
+        row |> reserve(n_cells - 2)
+        var idx = 0
+        for (cell in split(line, "|")) {
+            if (idx > 0 && idx < n_cells - 1) {
+                row |> push(strip(replace(cell, "`", "")))
+            }
+            idx++
+        }
         out |> emplace(row)
     }
     return <- out
+}
+
+def private count_cells(line : string) : int {
+    var n = 1
+    peek_data(line) $(d) {
+        for (i in range(length(d))) {
+            if (int(d[i]) == '|') {
+                n++
+            }
+        }
+    }
+    return n
 }
 
 //! Host of an absolute or protocol-relative URL, lowercased - "" when the URL is relative

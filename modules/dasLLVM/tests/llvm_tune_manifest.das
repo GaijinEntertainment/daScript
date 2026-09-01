@@ -118,6 +118,9 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     var jerr = ""
     var jdoc = read_json(sidecarText, jerr)
     t |> success(jdoc != null, "sidecar parses: {jerr}")
+    // asserted on the parsed value, not the JSON text: a Windows home is escaped there
+    let recorded_binary = "{jdoc?["provenance"]?["binary"] ?? ""}"
+    t |> success(!empty(recorded_binary) && tilde_home(recorded_binary) == recorded_binary, "a minted sidecar names no home directory - the binary path is spelled ~: {recorded_binary}")
     unsafe {
         var prov = jdoc?["provenance"]
         if (prov != null) {

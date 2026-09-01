@@ -1,7 +1,7 @@
 # dasLLAMA performance Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
+docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`.
 
 **Never add a second validator for exchange submissions (record stores and tune sidecars) -
 validate through `../dasllama/dasllama_exchange_schema.das` instead.** The engine-free half (no
