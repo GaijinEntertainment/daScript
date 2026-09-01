@@ -263,3 +263,32 @@ takes it. `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail.
 A caller that consumes the whole `x_b` plane afterwards - embedding pooling, a plane-compare
 probe - sets `Session.keep_hidden` and the prefill keeps every row; the flag is zero-init, so
 narrowing is the default.
+
+### 2.2aa The dense-KQ tensor mul_mm scaffold {#prefill-kq-tensor-scaffold}
+
+Nine iquant and split-scale formats - iq4xs, iq4nl, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs -
+share ONE tensor mul_mm body, `MetalKqMulMmSplitTensorBase`. The base holds the k6 tensor
+shell: the `tmm2d_tg_*` accumulate loop, the 6144-half `twb` W chunk, the store. It exposes
+exactly one overridable stage, `stage16` - 16 elements per work item, decoded into `twb`. A
+format derives, binds its own weight views, and overrides `stage16` alone. 16 is not an
+arbitrary granularity: it is the base GEMV arm's own granularity, so each format's decode ports
+into its `stage16` verbatim, the arm's `va[]` store becoming a `twb` store. This is the shape
+sec.2.2g's MoE tensor twins ride, applied to the dense sites; as there, the q8 twin stays its
+own template because its body is a different staging mechanism.
+
+Each format's `stage16` takes one of three forms, inherited from that format's base GEMV arm:
+
+- **byte-parallel compose** (k3, k2, and the q5 arm of k45) - masked uint-wide shifts produce
+  one `qv` per four elements, with the byte-position shift folded into exact power-of-two
+  pre-scales. It replaced a per-element bit compose and measures 1.4x it
+  (`benchmarks/matmul/bench_metal_kq_race.das --tiers mm`, m5).
+- **staged-grid slab** (iq3s, iq3xxs) - the 2 KB / 1 KB grid staged into threadgroup memory
+  once per threadgroup.
+- **direct constant-table gather** (iq2s, iq2xs, iq2xxs) - the u64 grid pair read straight off
+  the hoisted tables, no slab.
+
+Each format stamps two instances, `T` (`XT = float`) and `TH` (`XT = float16`); this family has
+no tall or double-buffered twins. Every stamp compiles only behind its own crown
+(`metal_tensor_crowned("kq_mulmm_<fmt>")`) in `pf_compile_kq_iquant_tensor_twins`, and
+`pf_enc_kq_site_mm` dispatches a twin only when both the crown flag and the PSO are live, so a
+box with no tensor toolchain never leaves the base kernels.

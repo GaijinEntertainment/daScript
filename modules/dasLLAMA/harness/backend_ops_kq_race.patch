@@ -1,0 +1,31 @@
+diff --git a/tests/test-backend-ops.cpp b/tests/test-backend-ops.cpp
+index df0b9aa66..06f94d51e 100644
+--- a/tests/test-backend-ops.cpp
++++ b/tests/test-backend-ops.cpp
+@@ -10151,6 +10151,26 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
+ static std::vector<std::unique_ptr<test_case>> make_test_cases_perf() {
+     std::vector<std::unique_ptr<test_case>> test_cases;
+ 
++    // dasLLAMA Metal kq-race ladder: (m = output rows, k = reduction dim) mirroring
++    // bench_metal_kq_race.das's shapes, every kq format, bs 1 (decode GEMV) and 512 (prefill).
++    // Enabled by GGML_KQ_RACE_LADDER=1 so the stock perf sweep stays untouched.
++    if (getenv("GGML_KQ_RACE_LADDER")) {
++        const std::array<int, 2> kq_shapes[] = {
++            // kv1b q1b w13_1b w2_1b q3b w13_3b
++            {512, 2048}, {2048, 2048}, {8192, 2048}, {2048, 8192}, {3072, 3072}, {8192, 3072},
++        };
++        for (int bs : {1, 512}) {
++            for (ggml_type ta : {GGML_TYPE_Q4_K, GGML_TYPE_Q5_K, GGML_TYPE_Q6_K, GGML_TYPE_IQ4_XS,
++                                 GGML_TYPE_IQ4_NL, GGML_TYPE_Q3_K, GGML_TYPE_IQ3_S, GGML_TYPE_IQ3_XXS,
++                                 GGML_TYPE_Q2_K, GGML_TYPE_IQ2_S, GGML_TYPE_IQ2_XS, GGML_TYPE_IQ2_XXS}) {
++                for (const auto & s : kq_shapes) {
++                    test_cases.emplace_back(new test_mul_mat(ta, GGML_TYPE_F32, s[0], bs, s[1], {1, 1}, {1, 1}));
++                }
++            }
++        }
++        return test_cases;
++    }
++
+     // SWIGLU at a 27B-class FFN width, fused [gate|up] vs split operands
+     // note: same bytes either way, so a backend that indexes them differently shows it here
+     for (ggml_type type : {GGML_TYPE_F16, GGML_TYPE_F32}) {

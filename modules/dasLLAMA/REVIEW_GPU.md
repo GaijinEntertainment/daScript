@@ -6,6 +6,11 @@ docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_PREFILL.md`, `ARCHITECTURE_GPU_VU
 **Routed from `REVIEW.md`: a diff touching a GPU kernel, driver, dispatch class, or the K/V
 mirrors applies this list together with `REVIEW.md`.**
 
+**A diff touching a GPU kernel A/B race, knockout, or hand-binding arm - or changing a
+kernel class such an arm mirrors (binding numbers, kargs layout, threadgroup memory, staging
+shape, grid or threadgroup geometry) - wherever the diff puts it - applies
+`REVIEW_GPU_RACE.md` too.**
+
 **A diff touching the tower driver (`dasllama/dasllama_metal_tower.das`), a kernel class or
 builder the tower dispatches, or the Metal ASR decoder applies `REVIEW_TOWER.md` too.**
 
@@ -57,7 +62,7 @@ threadgroup-uniform value instead.** A per-thread exit leaves the threadgroup un
 complete the op.
 
 **An encoder that picks a kernel form whose loop carries no bounds or tail guard - stamped
-without it, or monomorphized with none - shows that every address the form touches stays
+without one, or generated from a template instance that has none - shows that every address the form touches stays
 inside its buffers' allocations.** One extent dividing evenly is not that showing. A padded
 chunk's walk can run past the live extent, and one poisoned read in a shared tile corrupts
 real rows; a deliberate tail over-read conforms only where the allocation carries the slack.
@@ -78,8 +83,9 @@ wider-row site passes the full stride or dispatches the padded tile.** A split r
 them.
 
 **A scratch buffer a dispatch writes is never rebound for a new write before the reader of
-its previous write is encoded; a flip set smaller than the chain's encode-overlap depth is a
-defect.** One shared scratch serializes the whole chain through its write-after-read hazards.
+its previous write is encoded - rotate through as many buffers as the chain has dispatches in
+flight between a write and its read.** One shared scratch serializes the whole chain through
+its write-after-read hazards.
 
 **A diff that adds dispatches to an encoder path to save bandwidth also gates that path on
 work size, in the same change.** The gate's threshold is measured at both ends of the size
@@ -108,8 +114,8 @@ overridden method spliced flat at emission.
 `@template_gate` instead.**
 
 **A diff that forks a kernel class out of a shared template shows that the bodies no longer
-differ on a single stamp axis.** The same diff names the axis that is gone, in the surviving
-template's comment.
+differ on the compile-time choice the template carried, and names that choice in the
+surviving template's comment.**
 
 **A `[metal_dispatch]` / `[vk_dispatch]` field whose memory is load-once - a model plane, or
 an `upload_region` upload never written after arming - is a defect unless it carries
@@ -119,12 +125,19 @@ an `upload_region` upload never written after arming - is a defect unless it car
 defect; a per-encode field either omits `@role` or names the access its body performs.**
 `weight` drops the hazard staging.
 
+**A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
+`[vk_dispatch]` declaration, or a new instance of a template carrying one - covers that class
+in `tests/test_kernel_coverage.das`, one of two ways.** Either a census row there dispatches
+the class, or the diff names it in that file's `CENSUS_NEVER_DISPATCHED` with the reason no
+row can reach it - a class in neither place leaves `CENSUS_NEVER_DISPATCHED` claiming coverage the census does not have.
+
 **A new kernel class declared in `dasllama/` carries `[metal_dispatch]` / `[vk_dispatch]`
 with every annotation that backend's generated builder reads - per-field `@binding` /
 `@role` / `@off` / `@default`.** A field carrying none of them is dropped from the bind list
-with no error. (A source-text fixture a test spawns to compile is outside this rule.) The
-`@workgroup`/`tgmem=` half is a lens compile refusal now - weakening that refusal, or its
-gate `test_lens_tgmem_gate`, is a defect.
+with no error.
+
+**Weakening the lens's `@workgroup`/`tgmem=` compile refusal, or its gate
+`test_lens_tgmem_gate` (`tests/test_metal_misc_kernels.das`), is a defect.**
 
 **A kernel field carries `@span` only when every caller binds whole output rows.** A caller
 binding a column tile of a wider row passes the tile width as the kernel's n while its rows
@@ -134,17 +147,9 @@ every row outside the tracked hazard range.
 **A NEW hand-written `enc_*` body is a defect unless it is a wrapper - a format or twin pick, a
 default-filling wrapper, or a composite over generated builders.**
 
-**A hand-rolled bind list on a SERVED dispatch in `dasllama/` or `performance/` is a defect -
-dispatch through the kernel's `enc_*` builder instead.** A race or knockout arm hand-binds by
-construction and answers to the hand-binding-arm rules instead.
-
-**A hand-binding arm that binds a field at another field's declared number is a defect - and
-so is any bind in an arm the machine check cannot see.** The undeclared-number half is
-`REVIEW.das`'s `check_race_bind_numbers` where the arm names its kernel class (a `kn_tgmem`
-constant or an in-function `pipeline_from_source`); an arm binding through a pso or tgmem
-passed as a function parameter is invisible to it, so BOTH halves of that arm stay the
-reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and its timing crowns the
-wrong kernel silently.
+**A hand-rolled bind list on a dispatch that serves a user call - not a race or knockout
+timing arm - in `dasllama/` or `performance/` is a defect: dispatch through the kernel's
+`enc_*` builder instead.** Timing arms answer to `REVIEW_GPU_RACE.md`.
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
 and as a kargs field - is a defect.** A `params=` value that the `grid=`/`tg=` spec consumes
@@ -167,15 +172,6 @@ device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
 **Never compile or release a Metal PSO (pipeline state object) from an engine file
 (`dasllama/`) other than the one that owns its kernel class** - it goes through that file's
 own init/release pair.
-
-**Never put race code outside the file that owns the kernel family - the shared scaffolding
-(`race_buf`, `race_envelope_ok`, `race_pair_ms`) belongs to
-`dasllama/dasllama_<gpu>_common.das`.** Race code is the in-engine base-vs-twin check that
-times both kernels on one queue and compares their outputs.
-
-**Race code sizes its operands at a real model shape - never at a small square slab.** A slab
-small enough to sit in cache ranks the kernels by an effect production never sees, and the
-race then picks the slower kernel.
 
 **A string-typed Metal decline reason is a defect - a Metal decline reason is an enum value in
 `dasllama/dasllama_metal_shapes.das`, one enum per driver.**
@@ -243,23 +239,6 @@ cache.
 **Never cache a descriptor set across dispatches in state that `vk_drop_model_state` does not
 clear** - put it in a `*_ready` latch, or in a holder that function already clears in
 `dasllama/dasllama_vulkan_common.das`: `g_rd`, `g_gpu`, the weight arena.
-
-**A diff that changes anything a hand-binding arm must mirror to dispatch a kernel - binding
-numbers, kargs layout, threadgroup memory, grid or threadgroup geometry - fixes or deletes,
-in the same change, every arm of a hand-binding lab that binds it** - a hand-binding lab is a
-kernel A/B or knockout timing script, wherever it lives, that hand-lists its bindings
-instead of dispatching through the `enc_*` builder. A lab left dispatching stale geometry
-measures the wrong kernel silently.
-
-**A diff that ports an A/B lab's winning variant into a kernel deletes the ported arm in the
-same change - its variant class and any variants-module code that exists only for it; when
-the lab exists only for that decision, its driver and remaining arm go too.** An A/B lab is a
-timing script whose output SELECTS between implementations of the same compute, wherever it
-lives (`benchmarks/`, `harness/`); a decided arm that outlives its decision degrades into an
-unmaintained duplicate of the kernel it seeded. An arm `ARCHITECTURE_GPU.md` sec.2.2b ledgers
-as a retained reference is the sanctioned survivor - and a retained arm that reimplements a
-shipped kernel is resynced or deleted in the same change that moves that kernel's staging
-shape or geometry.
 
 **Never read a `[spirv_decode]` callback's quant bytes by indexing `unpack8` of a 32-bit word
 with a runtime value - read them as 16-bit lanes instead: an `int16[N]` block member selected

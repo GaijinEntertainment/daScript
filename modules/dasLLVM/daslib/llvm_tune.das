@@ -353,10 +353,15 @@ def tune_sidecar_stale(path : string) : bool {
 // the sidecar's "kernels" section as a flat { function name : perm suffix } map;
 // found = the file existed, parsed to an object, and is NOT stale vs the running binary
 // (a "kernels"-less but fresh sidecar counts as found-empty: runtime-knob-only files)
+[arch(at="../ARCHITECTURE.md#tune-sidecar-cache-pin")]
 def private read_manifest(path : string; var found : bool&) : table<string; string> {
     found = false
     var tab : table<string; string>
-    if (empty(path) || tune_sidecar_stale(path)) {
+    if (empty(path)) {
+        return <- tab
+    }
+    add_module_cache_dependency(path)
+    if (tune_sidecar_stale(path)) {
         return <- tab
     }
     let text = fread(path)

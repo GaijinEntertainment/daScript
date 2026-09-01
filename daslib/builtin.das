@@ -2123,6 +2123,8 @@ def add_ptr_ref(src : smart_ptr<auto(TT)>) : smart_ptr<TT> {
     }
 }
 
+//! The process argv as an array of strings. The result is a LOCKED VIEW over the host's own
+//! argv storage - keep it in a `let` and never `delete` it or move elements out of it.
 [generic]
 def get_command_line_arguments : array<string> {
     var args : array<string>

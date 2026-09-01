@@ -1691,7 +1691,15 @@ namespace das
         CodeOfPolicies              policies;
         vector<tuple<Module *,string,string,bool,LineInfo>> allRequireDecl;
         das_hash_map<uint64_t,TypeDecl *> astTypeInfo;
+        // compile-time file inputs a macro pinned via add_module_cache_dependency: (path, byte
+        // size, content hash). The module cache stores and re-validates them, so a changed input
+        // invalidates the cached record instead of serving stamps minted against the old file.
+        vector<tuple<string,int64_t,uint64_t>> moduleCacheDependencies;
     };
+
+    // the shared capture/validate stat for Program::moduleCacheDependencies: size -1 + hash 0
+    // when the file is absent or unreadable, else (byte size, hash_block64 of the content)
+    DAS_API void statAndHashFileDependency ( const string & path, int64_t & size, uint64_t & hash );
 
     // access function from class adapter
     DAS_API int adapt_field_offset ( const char * fName, const StructInfo * info );

@@ -34,33 +34,33 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
         ? (tall
             ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl))
         : halfx
-            ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl))
-            : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl)))
+            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl)))))))))))
+            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl))))))))))))
         : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl : MetalKqMulMmK6_metal_kq_mulmm_msl))))))))))))
     let entry = (tensor
         ? (tall
             ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_entry))
         : halfx
-            ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry))
-            : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_entry)))
+            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_entry : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry)))))))))))
+            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_entry : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_entry))))))))))))
         : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_entry : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_entry : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_entry : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_entry : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_entry : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_entry : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_entry : MetalKqMulMmK6_metal_kq_mulmm_msl_entry))))))))))))
     let fm = (tensor
         ? (tall
             ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_fastmath))
         : halfx
-            ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath))
-            : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_fastmath)))
+            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath)))))))))))
+            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_fastmath))))))))))))
         : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath : MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath))))))))))))
     let tgm = (tensor
         ? (tall
             ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_tgmem))
         : halfx
-            ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem))
-            : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_tgmem)))
+            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem)))))))))))
+            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_tgmem))))))))))))
         : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem : MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem))))))))))))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -147,6 +147,12 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
         t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
+        //! the control: the same compare must RED on a poisoned expectation (one element off by
+        //! an env-scaled-plus-absolute delta) - proves the bar can fail for this arm
+        var wantp := want
+        wantp[0] += env[0] * 0.1 + 1.0
+        t |> success(buf_mismatch_env(by, wantp, env, 2e-4, "{tag} CONTROL(expected-red)") != 0, "{tag}: poison control reds")
+        delete wantp
     }
     metal_release(bks)
     metal_release(bkq)
@@ -1006,7 +1012,7 @@ def private bf16_mulmm_gate(t : T?; dev, queue; tensor : bool; m, kdim, ndim : i
                 : pipeline_from_source(dev, MetalBf16MulMmT_metal_bf16_mulmm_t_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_fastmath, err))
             : pipeline_from_source(dev, metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, err)))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
         return
     }
     // the simdgroup BASE asserts — production compiles it unconditionally, and this arm is its
@@ -1097,7 +1103,7 @@ def private q8_gemm_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim, 
         ? pipeline_from_source(dev, MetalQ8GemmBT_metal_q8_gemm_b_t_msl, MetalQ8GemmBT_metal_q8_gemm_b_t_msl_entry, MetalQ8GemmBT_metal_q8_gemm_b_t_msl_fastmath, err)
         : pipeline_from_source(dev, MetalQ8GemmB_metal_q8_gemm_b_msl, MetalQ8GemmB_metal_q8_gemm_b_msl_entry, MetalQ8GemmB_metal_q8_gemm_b_msl_fastmath, err))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -1168,7 +1174,7 @@ def private q8_gemm_sk_gate(t : T?; dev, queue; tensor : bool; kdim, ndim, kspli
         ? pipeline_from_source(dev, MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl, MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_entry, MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_fastmath, err)
         : pipeline_from_source(dev, MetalQ8GemmBSk_metal_q8_gemm_b_msl, MetalQ8GemmBSk_metal_q8_gemm_b_msl_entry, MetalQ8GemmBSk_metal_q8_gemm_b_msl_fastmath, err))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -1266,7 +1272,7 @@ def private q8_gemm64_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim
         ? pipeline_from_source(dev, MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl, MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_entry, MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_fastmath, err)
         : pipeline_from_source(dev, metal_q8_gemm64_b_msl, metal_q8_gemm64_b_msl_entry, metal_q8_gemm64_b_msl_fastmath, err))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -1609,7 +1615,7 @@ def private moe_mulmm_q8_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : in
             : pipeline_from_source(dev, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_entry, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_fastmath, err))
         : pipeline_from_source(dev, metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath, err))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -1699,7 +1705,7 @@ def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : i
             : pipeline_from_source(dev, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_entry, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_fastmath, err))
         : pipeline_from_source(dev, metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath, err))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -1833,7 +1839,7 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
             ? pipeline_from_source(dev, MetalAttnQKMmT_metal_attn_qk_mm_t_msl, MetalAttnQKMmT_metal_attn_qk_mm_t_msl_entry, MetalAttnQKMmT_metal_attn_qk_mm_t_msl_fastmath, err)
             : pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -1934,7 +1940,7 @@ def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
             ? pipeline_from_source(dev, MetalAttnAVMmP_metal_attn_av_mm_msl, MetalAttnAVMmP_metal_attn_av_mm_msl_entry, MetalAttnAVMmP_metal_attn_av_mm_msl_fastmath, err)
             : pipeline_from_source(dev, MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, err)))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -2065,6 +2071,11 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 24, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 25, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 25, false, 32, 256, 128)
+                //! the iquant tensor twins (T + TH stamps; twins feint without Metal-4)
+                for (fmt in [44, 45, 3, 33, 34, 2, 23, 24, 25]) {
+                    kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64)
+                    kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64, halfx = true)
+                }
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64)
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64, halfx = true)
                 q8_mulmm_t_gate(t, dev, queue, 64, 160, 64)               // kdim % 64 == 32: the bk=64 helper's 32-tail chunk

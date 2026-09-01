@@ -30,7 +30,8 @@ tune-boot path that reaches it, applies `REVIEW_EXCHANGE.md`.**
 **Every `dasllama/` change applies this folder's `tests/REVIEW.md`.** A `dasllama/` diff never
 opens that checklist on its own.
 
-**A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
+**A GPU kernel, driver, dispatch-class, or K/V-mirror change - and a GPU kernel A/B race,
+knockout, or hand-binding arm, wherever the diff puts it - applies `REVIEW_GPU.md`.**
 
 **A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it,
 a `.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a
@@ -189,7 +190,7 @@ the file it checks - in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`, or
 `ARCHITECTURE_GPU.md`.** The line names the check and the names it licenses. A licensed name
 is one that check does not flag. When the check licenses no names, the line says so.
 
-**Checked-in prose this module owns - docs and comments, any language - that is not locating
+**Checked-in prose this module owns - docs and comments, any language - that is not locating, patching,
 or reproducing work against the reference build describes an upstream mechanism in our own
 terms: no "lifted/ported verbatim from", and no upstream symbol, header, constant, or binary
 name - write "the reference exe" or "upstream" instead.** The reference build is the
@@ -197,11 +198,11 @@ third-party engine this module measures itself against - the checkout
 `benchmarks/setup_lcpp_ref.das` pins. A symbol the file carrying that prose calls or holds as
 a value is its own name, not attribution.
 
-**A line whose job is to locate or reproduce work against the reference build names that
-build's binary outright** - a path naming where checked-in data is regenerated FROM, an
-env-knob row whose value locates the reference binary, a command line or flag list in a
-methodology, profile, bring-up, or how-to document, and a follow-up ledger's row naming the
-build its numbers compare against.
+**A file or line whose job is to locate, patch, or reproduce work against the reference build
+names that build's binaries and symbols outright.** The job decides, not the artifact kind - a
+regeneration path, an env-knob row, a command line in a methodology or how-to document, a
+ledger row naming the compared build, and a source patch applied TO the reference build all
+qualify.
 
 **Legal attribution never appears in prose - it lives in `THIRD_PARTY_NOTICES.md` and the
 `LICENSE.*` files.**

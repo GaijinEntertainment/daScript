@@ -288,6 +288,9 @@ var g_pso_kq_mvb4_iq2xs : MetalComputePipeline?
 var g_pso_kq_mvb8_iq2xs : MetalComputePipeline?
 var g_pso_kq_mm_b24 : MetalComputePipeline?
 var g_pso_kq_iq2xxs : MetalComputePipeline?
+var g_pso_kq_iq2xxs_f4 : MetalComputePipeline?   //!< the f4-slab twin, compiled only behind its crown
+var g_pso_kq_iq3s_f4 : MetalComputePipeline?     //!< the iq3s f4-slab twin (crown "kq_gemv_iq3s_f4")
+var g_pso_kq_iq3xxs_f4 : MetalComputePipeline?   //!< the iq3xxs f4-slab twin (crown "kq_gemv_iq3xxs_f4")
 var g_pso_kq_mvb2_iq2xxs : MetalComputePipeline?
 var g_pso_kq_mvb4_iq2xxs : MetalComputePipeline?
 var g_pso_kq_mvb8_iq2xxs : MetalComputePipeline?
@@ -2164,6 +2167,14 @@ def public metal_prefill_declines() : table<string; int64> {
     return clone_to_move(g_prefill_declines_by_reason)
 }
 
+//! The IQ4_XS codebook (kvalues_iq4nl) as four packed words, selected + byte-extracted - no
+//! table memory, the k6 sign trick widens the byte. Shared by the kernels file's GEMV/mv set
+//! and the prefill file's tensor twins, which is why it lives here.
+def public iq4_lut(q : uint) : float {
+    let w = q < 8u ? (q < 4u ? 3215825025u : 4142587343u) : (q < 12u ? 639175937u : 1901675829u)
+    return float((int((w >> ((q & 3u) * 8u)) & 255u) ^ 128) - 128)
+}
+
 // ===== Metal-4 tensor twin race scaffolding (shared by the per-module race sections) =====
 
 struct public MetalTensorRaceResult {
@@ -2271,7 +2282,8 @@ def race_envelope_ok(ba, bb : MetalBuffer?; count : int; var note : string&) : b
 }
 
 // interleaved adjacent A/B pair — separate per-side blocks read the box's thermal/clock ramp
-// as a phantom winner (reds-dig2; sequential blocks INVERTED m4's kq verdicts). Best-of/side.
+// as a phantom winner (reds-dig2; sequential blocks INVERTED m4's kq verdicts). Best-of/side;
+// ~150ms of burn first, else round 1 bills the governor's ramp to the base side alone.
 def race_pair_ms(queue : MetalCommandQueue?; reps : int; var base_ms, twin_ms : double&;
                  base_blk : block<(enc : MetalComputeEncoder?) : void>;
                  twin_blk : block<(enc : MetalComputeEncoder?) : void>) {
@@ -2280,6 +2292,21 @@ def race_pair_ms(queue : MetalCommandQueue?; reps : int; var base_ms, twin_ms : 
     var err = ""
     var best_b = -1.0lf
     var best_t = -1.0lf
+    var burn_ms = 0.0lf   // clock: control — GPU burn budget, ramps the clock governor before round 1
+    var burn_rounds = 0   //! round cap: a device whose timestamps read 0.0 must not spin the budget loop forever
+    while (burn_ms < 150.0lf && burn_rounds < 2048) {
+        var gb = 0.0lf
+        let okb = with_compute_encoder_timed(queue, err, gb) $(enc) {
+            invoke(base_blk, enc)
+        }
+        var gt = 0.0lf
+        let okt = okb && with_compute_encoder_timed(queue, err, gt) $(enc) {
+            invoke(twin_blk, enc)
+        }
+        return if (!okb || !okt)
+        burn_ms += gb + gt
+        burn_rounds++
+    }
     for (r in range(reps + 1)) {
         var g1 = 0.0lf
         var g2 = 0.0lf

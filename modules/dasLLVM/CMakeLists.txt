@@ -149,6 +149,10 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 			DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/daslib
 	)
 	file(GLOB DASLLVM_BINDINGS ${DAS_LLVM_DIR}/bindings/*.das)
+	# daslib/ carries [arch] citations; the bundle gets generated excerpts of the cited
+	# sections (registry processed by the root CMakeLists)
+	set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
+		"modules/dasLLVM/daslib|modules/dasLLVM|${DAS_INSTALL_MODULESDIR}/dasLLVM")
 	install(FILES ${DASLLVM_BINDINGS} DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/bindings)
 	install(FILES ${DAS_LLVM_DIR}/.das_module DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/)
 	install(FILES ${DAS_LLVM_DIR}/ENVIRONMENT.md DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/)

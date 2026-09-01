@@ -375,7 +375,23 @@ class private TunedMacro : AstFunctionAnnotation {
                 return true
             }
         }
-        errors := "tuned: unknown perm '{suffix}' (not in grid)"
+        //! an explicit `perm=` pin names the row the author wants - a miss is an authoring error
+        let av = find_arg(args, "perm")
+        if (av is tString) {
+            errors := "tuned: unknown perm '{suffix}' (not in grid)"
+            return false
+        }
+        //! a sidecar perm is measured data, not law - one the grid dropped falls back rather than brick the tuner that would re-race it
+        let fname = "{func.name}"
+        let fb = g_fallbacks?[fname] ?? DEFAULT_PERM
+        print("dasllama_tune: {fname}: sidecar perm '{suffix}' is not in the grid (stale mint?) - stamping the fallback '{fb}'\n")
+        for (perm in grid) {
+            if (perm.suffix == fb) {
+                apply_perm(func, perm)
+                return true
+            }
+        }
+        errors := "tuned: fallback perm '{fb}' not in grid"
         return false
     }
 }

@@ -145,3 +145,19 @@ detection-derived append - `+dotprod` always, `+i8mm` when `cpu_supports` confir
 EXECUTION-safe: the silicon running this process really has the instruction. A
 `DAS_JIT_ARM64_FORCE_FEATURES` append is EMISSION-only: it may name silicon this box does not
 have, so the artifact is for another machine and executing it here traps.
+
+## 5. The tune sidecar is a module-cache dependency {#tune-sidecar-cache-pin}
+
+`[tuned]` and `[tune_policy]` stamp a function's hints at macro time out of the tune sidecar,
+and the module cache stores the stamped AST. A re-mint therefore has to invalidate the cached
+record, or a later run serves stamps minted against the old sidecar until some source file
+changes. `read_manifest` (`daslib/llvm_tune.das`) registers the sidecar path with
+`add_module_cache_dependency` on every read; the record carries the path with the file's byte
+size and content hash, and the reader re-validates both before it trusts the payload. Content,
+not mtime: an app that rewrites its sidecar byte-identically on exit must not churn the cache.
+
+The registration runs before the staleness gate, and for a path that does not exist yet,
+because the mints that matter most produce no successful read - the first mint has no sidecar,
+and a re-mint replaces one the gate rejected. An absent file registers as size -1 and hash 0,
+which the next run's re-validation sees change. Registering is a no-op outside compilation, so
+the manifest's runtime readers reach the same call unconditionally.

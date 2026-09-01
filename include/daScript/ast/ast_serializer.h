@@ -252,7 +252,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 117;   // 117: Function::fromGeneric round-trips (generic-instance origin)
+            return 118;   // 118: per-record macro file dependencies (module cache re-validates them)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
