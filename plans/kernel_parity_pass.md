@@ -471,10 +471,15 @@ the gemv inheriting the tile's crown (tune_companion). perf stat gave nothing (n
 
 ## 4. Work queue (one item at a time; a row is done at >= 1.0x on rig 2's shape AND the vehicle)
 
-QUEUED (from the three-box rounds of 2026-09-01): the gemv's own crown. The tuner races the TILE and the gemv
-follows (`tune_companion`); on zen4 and Intel the gemv prefers `vpdpbusd_width256` where the tile crowns
-width 512 (iq2s 3-6%, k4 similar) - the mint should race the gemv seats at n=1 in the same walk and stamp
-them separately. A tune-framework change (llvm_tune + the seat declarations), a mint per class after it.
+NEXT SESSION (Boris's rulings, 2026-09-01 evening): the gemv's own crown. The tuner races the TILE and the gemv
+follows (`tune_companion`); on zen4 and Intel the gemv prefers `vpdpbusd_width256` where the tile crowns width
+512 (iq2s 3-6%, k4 similar), and on Intel the stamped k6 gemv runs 1.5x slower than the same seat raced. The mint
+races the gemv at decode shape between the TILE'S TOP TWO seats only (not the whole grid - "i don't see the point
+of racing anything but top 2") and stamps the gemv separately; more mint time is fine ("performance matters
+more"); `x86-amx` stays a class of its own, split from `x86-vnni512` ("for sure"). Then re-mint every class on
+the emitter it ships with: x86-avx2 on zen2, x86-vnni512 and x86-amx rented (aws_bootstrap.sh, 35 min each),
+arm-i8mm on the M4, arm-neon on the M1. After that: the zen4 grid kernels (the vnni512 panel form's compute), then
+Vulkan gap 1. The CPU PR follows the Metal PR's merge (the make_pr chain on this branch).
 
 CPU decode (gap 2) - the k-quant decode kernels were the tails the full ladder exposed (k3 0.80x,
 k6 0.90x, k5 0.91x):
