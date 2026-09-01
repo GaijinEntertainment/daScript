@@ -359,7 +359,9 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
         }
     }
     var burned = 0.0lf
-    while (burned < double(args.burn_ms) * 1000.0lf) {
+    var burn_rounds = 0   //! round cap: a device whose timestamps read 0.0 must not spin the budget loop forever
+    while (burned < double(args.burn_ms) * 1000.0lf && burn_rounds < 2048) {
+        burn_rounds++
         var did = false
         for (arm, lv, pso, by in arms, live, psos, bys) {
             continue if (!lv)

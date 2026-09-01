@@ -2293,7 +2293,8 @@ def race_pair_ms(queue : MetalCommandQueue?; reps : int; var base_ms, twin_ms : 
     var best_b = -1.0lf
     var best_t = -1.0lf
     var burn_ms = 0.0lf   // clock: control — GPU burn budget, ramps the clock governor before round 1
-    while (burn_ms < 150.0lf) {
+    var burn_rounds = 0   //! round cap: a device whose timestamps read 0.0 must not spin the budget loop forever
+    while (burn_ms < 150.0lf && burn_rounds < 2048) {
         var gb = 0.0lf
         let okb = with_compute_encoder_timed(queue, err, gb) $(enc) {
             invoke(base_blk, enc)
@@ -2304,6 +2305,7 @@ def race_pair_ms(queue : MetalCommandQueue?; reps : int; var base_ms, twin_ms : 
         }
         return if (!okb || !okt)
         burn_ms += gb + gt
+        burn_rounds++
     }
     for (r in range(reps + 1)) {
         var g1 = 0.0lf
