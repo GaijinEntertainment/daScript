@@ -454,6 +454,18 @@ the gemv inheriting the tile's crown (tune_companion). perf stat gave nothing (n
   (3) a `vpdpbssd` seat (AVX-VNNI-INT8 hosts, no generator change); (4) repack-baked parity sign
   byte (free for IQ2_XXS/IQ3_XXS). Incidental waste: IQ2_XXS reads its aux word as four i8 loads
   + shifts where IQ3_XXS uses one i32 load; IQ2_XS builds a u16 from two i8 loads.
+- `kernel_parity_research_zen4.md` - why llama.cpp's five grid kernels beat ours on zen4 while losing on zen2.
+  Headline: the reference has NO AVX-512 path for them - a znver4 build runs the same AVX2 body as zen2 (256-bit
+  vpmaddubsw, never vpdpbusd) and its 1.4-1.9x zen2 -> zen4 gain is the core alone; ours gained 1.14-1.26x because
+  we are stall-bound (fewer instructions, more cycles): the panel round trip (1024 scattered 4-byte stores per
+  superblock-group re-read as 64-byte vectors) is the one structure we have and they do not. Ranked: the row form
+  for iq3xxs on vnni512 (measured; loses at 16 SMT lanes - needs bare metal), `gather="qpanel"` (u64 grid entries
+  stored whole, est 1.2-1.4x on the iq2 three), the parity-completed sign byte baked at repack (5-8%, free for
+  iq2xxs/iq3xxs), mask-register signs at width 512 (vptestmb + merge-masked vpsubb), the 256-bit gemv seat (the
+  harness's own crown now), and the VBMI symbol lattice - the grids are a 3-symbol (iq2) / 8-symbol (iq3)
+  alphabet, so an entry is 12-16 bits and the decode is vpermi2b plus a few widen/shuffle ops, est 2-3x, needs
+  avx512vbmi in TUNE_KNOWN_FEATURES. Do not seat hardware gathers (llama.cpp measured them losing on a 7950X)
+  nor vpdpbssd (zen4 has no AVX-VNNI-INT8).
 - `kernel_parity_research_vk.md` - llama.cpp's cm2 `mul_mm` against our cm2 tile. Headline: the
   same kernel design (tile geometry, workgroup, decode-in-load callback, one coopMatMulAdd per
   k-step, zero barriers in the k loop, the same split-k heuristic) - the gap is not the tile.
@@ -489,6 +501,9 @@ The arm classes and x86-avx2 have no same-mr alternative (their grids collapse t
 x86-vnni512 and x86-amx need the re-mint: two rentals with `aws_bootstrap_mint.sh` (build, TEST, the 1B vehicle's
 --tune, export, both ladders) - running. The export copies every kernels entry, so the gemv seats ride into the
 class profiles; the profile adoption merges them as ordinary entries.
+zen2 smoke of the new harness path (the 1B vehicle, --tune, 16 lanes): provenance ok / ok / avx2;f16c;fma;sse4.2,
+49 kernels, every crown unchanged (maddubs256_mr8), no gemv seat written - correct for a class with no same-layout
+rival. The x86-avx2 profile stands.
 
 CPU decode (gap 2) - the k-quant decode kernels were the tails the full ladder exposed (k3 0.80x,
 k6 0.90x, k5 0.91x):
