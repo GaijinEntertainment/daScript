@@ -45,10 +45,10 @@ proven fact per push; research before any kernel edit (the two memos below).
 | k4 | 1969 (8.6 ns/sb) | 2421 | 1.23x | 120.9 GFLOP/s | 71.1 GFLOP/s (1.70x) |
 | k2 | 2017 (8.8 ns/sb) | 2132 | 1.06x | - | - |
 | iq3s | 11406 (49.7 ns/sb); sign=vec 7562 (33.0) | 10340 | 0.91x -> 1.37x | - | - |
-| iq3xxs | 11578 (50.5); sign=vec 7893 (34.4) | 6590 | 0.57x -> 0.83x | - | - |
-| iq2s | 11732 (51.1); sign=vec + u64 pair 5152 (22.5) | 5074 | 0.43x -> 0.98x | - | - |
-| iq2xs | 11490 (50.1); sign=vec + u64 pair 6297 (27.5) | 5386 | 0.47x -> 0.86x | - | - |
-| iq2xxs | 11061 (48.2); sign=vec + u64 pair 5209 (22.7) | 5124 | 0.46x -> 0.98x | - | - |
+| iq3xxs | 11578 (50.5); sign column + column read 6641 (29.0) | 6590 | 0.57x -> 0.99x | - | - |
+| iq2s | 11732 (51.1); sign column + u64 pair 5039-5202 | 5074 | 0.43x -> 0.98-1.01x | - | - |
+| iq2xs | 11490 (50.1); sign column + u64 pair + column read 4831 (21.1) | 5386 | 0.47x -> 1.11x | - | - |
+| iq2xxs | 11061 (48.2); sign column + u64 pair 5121-5487 (noise band) | 5124 | 0.46x -> 0.93-1.00x | - | - |
 
 Reading: the five grid formats cost 48-51 ns per superblock regardless of what each decodes,
 against 8.6-8.8 for k4/k2. A flat cost independent of the format is a shared mechanism, not five
@@ -97,9 +97,14 @@ CPU decode (gap 2):
    old seat), and the M1 (sdot lattice, one thread) showed no losses: iq3s 7383 -> 6105 us, iq2s
    7161 -> 5012, iq2xxs 7602 -> 6293, iq2xs 7878 -> 7081, iq3xxs 7516 -> 7452. Shipped profiles
    stay valid (same seat names); LLVM_JIT_CODEGEN_VERSION 0x5a re-keys the JIT caches.
-5. iq2xs 0.86x / iq3xxs 0.83x residue: the per-dword qs byte loads (a 4-byte column load with
-   in-register byte extraction is the next candidate); the u16 single load for iq2xs measured
-   SLOWER (6991 vs 6306 us) and was dropped. 6. retro audit of IQ4_XS/Q3_K per followup 60.
+5. DONE where it won: the column dword read with in-register byte extraction - iq3xxs 7862 ->
+   6602 us and iq2xs 6501 -> 4702; it LOST on iq3s (7537 -> 8671), iq2s (5202 -> 6187) and iq2xxs
+   (5121 -> 5574), which keep byte loads. The u16 single load for iq2xs measured slower (6991 vs
+   6306) and was dropped.
+6. Residue at one thread: iq3xxs 0.99x, iq2s 0.98-1.01x, iq2xxs 0.93-1.00x (the noise band of the
+   1-thread bench is ~7%; a longer run or the 16-thread engine shape decides the last 2%). 7. the
+   16-thread stamp on the vehicles (needs `--for-debug-purposes` on lcpp_bench, or the released
+   exe). 8. retro audit of IQ4_XS/Q3_K per followup 60.
 
 Vulkan pp (gap 1):
 1. Budget split (measurement, no kernel edit) - is the GEMM the 30%? 2. `shAscales`-style scale
@@ -119,6 +124,9 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   One thread, m=4096 k=14336: iq3s 11581 -> 7732 us (1.34x of the reference's 10340), iq2s 12413
   -> 7076 us (0.72x of 5074, was 0.41x). Every variant bit-exact in gen_tune_probe TEST mode. The
   five gather emitters collapsed into one gather over per-format decode functions (-110 lines).
+- 2026-09-01: the column dword read lands for iq3xxs and iq2xs only (measured per format, see the
+  queue); zen2 one thread now: iq3s 7673, iq3xxs 6641, iq2s 5039-5174, iq2xs 4831, iq2xxs
+  5281-5487 us; 65 variants ok in TEST mode.
 - 2026-09-01: the sign knob collapsed into the one gemv path (-268/+58 lines in the emitter, the
   smask/ksigns globals gone); the plain seats now measure iq3s 7537, iq3xxs 7862, iq2s 5202, iq2xs
   6501, iq2xxs 5121 us; 65 variants ok in TEST mode; test_kquant 265 passed.

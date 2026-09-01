@@ -1285,6 +1285,16 @@ def private wg_i32(var te : TileEmit; var base : LLVMOpaqueValue?; off : int) : 
 //! a packed-plane byte position to its grp<mr> column offset (4-byte columns, mr rows each)
 def private wg_col(mr, pos : int) : int => (pos / 4) * mr * 4 + pos % 4
 
+//! the byte at packed position `pos`, read as one dword load of its column with the byte split off in
+//! registers - the four positions of a column share the load through CSE
+def private wg_col_byte(var te : TileEmit; var base : LLVMOpaqueValue?; pos : int) : LLVMOpaqueValue? {
+    let b = te.builder
+    var col = wg_i32(te, base, (pos / 4) * te.interleave * 4)
+    let sh = 8 * (pos % 4)
+    var v = sh == 0 ? col : LLVMBuildLShr(b, col, LLVMConstInt(te.types.t_int32, uint64(sh), 0), "")
+    return sh == 24 ? v : LLVMBuildAnd(b, v, LLVMConstInt(te.types.t_int32, 255ul, 0), "")
+}
+
 //! grid[gidx] - a raw magnitude word; the block emitter applies the signs per vector
 def private grid_word(var te : TileEmit; var gidx : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     var gp = LLVMBuildGEP2(te.builder, te.types.t_int32, te.iq3s_grid_g, gidx, "")
@@ -1310,9 +1320,9 @@ def private decode_iq3s_dword(var te : TileEmit; var base : LLVMOpaqueValue?; bl
     return grid_word(te, LLVMBuildOr(b, qv, hb, ""))
 }
 
-//! iq3xxs: an 8-bit index into the halved grid
+//! iq3xxs: an 8-bit index into the halved grid (the column read measured 7862 -> 6602 us; byte loads stay for iq3s/iq2s/iq2xxs, where it lost)
 def private decode_iq3xxs_dword(var te : TileEmit; var base : LLVMOpaqueValue?; blk, l, h : int) : LLVMOpaqueValue? {
-    return grid_word(te, wg_byte(te, base, wg_col(te.interleave, blk * 8 + 2 * l + h)))
+    return grid_word(te, wg_col_byte(te, base, blk * 8 + 2 * l + h))
 }
 
 //! iq2s: qs byte | the qh 0x300 window = the 10-bit index, doubled into the u64 grid's word pair
@@ -1326,13 +1336,12 @@ def private decode_iq2s_dword(var te : TileEmit; var base : LLVMOpaqueValue?; bl
     return grid_pair_half(te, idx2, h)
 }
 
-//! iq2xs: the u16 word's low 9 bits index the u64 grid's word pair (two byte loads: one u16 load measured slower)
+//! iq2xs: the u16 word's low 9 bits index the u64 grid's word pair (the column read measured 6501 -> 4702 us; one u16 load measured slower than two bytes)
 def private decode_iq2xs_dword(var te : TileEmit; var base : LLVMOpaqueValue?; blk, l, h : int) : LLVMOpaqueValue? {
     let b = te.builder
-    let mr = te.interleave
     let lp = (blk * 4 + l) * 2
-    var qlo = wg_byte(te, base, wg_col(mr, lp))
-    var qhi = wg_byte(te, base, wg_col(mr, lp) + 1)
+    var qlo = wg_col_byte(te, base, lp)
+    var qhi = wg_col_byte(te, base, lp + 1)
     var w16 = LLVMBuildOr(b, qlo, LLVMBuildShl(b, qhi, LLVMConstInt(te.types.t_int32, 8ul, 0), ""), "")
     var idx2 = LLVMBuildShl(b, LLVMBuildAnd(b, w16, LLVMConstInt(te.types.t_int32, 511ul, 0), ""), LLVMConstInt(te.types.t_int32, 1ul, 0), "")
     return grid_pair_half(te, idx2, h)
