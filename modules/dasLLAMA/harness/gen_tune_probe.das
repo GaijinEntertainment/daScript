@@ -32,6 +32,8 @@ options _dasllama_internal = true
 //         first).
 
 require dasllama/dasllama_math
+require dasllama/dasllama_par   // maybe_parallel_for_indexed - the gemv seat races at the engine's decode shape
+require daslib/jobque_boost
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen
@@ -1016,6 +1018,23 @@ def run_kq_gemv(gemv; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr :
     }
 }
 
+//! the engine's decode dispatch over the fixture: the engine's own splitter and every lane streaming its share
+def run_kq_gemv_team(gemv; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr : int64; var y : array<float>) {
+    let d = (fx.d / mr) * mr
+    let n = fx.n
+    unsafe {
+        var yp = addr(y[0])
+        let kqp = addr(kq[0])
+        let ksp = addr(ks[0])
+        let xqp = addr(fx.xq[0])
+        let xsp = addr(fx.xs[0])
+        let xbsp = addr(fx.xbs[0])
+        maybe_parallel_for_indexed(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(slot : int; rb : int; re : int) {
+            invoke(gemv, yp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
+        }
+    }
+}
+
 // k6's signed sub-scales cancel within a row, so element-relative tolerance is too strict at
 // production shapes (intermediate terms are large, the sum is small) — gate against the
 // fixture's magnitude instead; a real generator bug (wrong stride/lane/scale) is orders louder
@@ -1407,10 +1426,56 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
     }
     var tnames <- [for (t in tvs); t._0]
     winner = gen_sticky(kq_tile_entry(fmt), tnames, best, winner)
-    gemv_out = kq_gemv_seat(fmt, winner, tnames, vmr, best, gbest)
-    if (!empty(gemv_out)) {
-        rows_out["gemv_seat"] = JV((seat = gemv_out, tile_seat = tvs[winner]._0, gemv_us = gbest[winner]))
+    // the seat is decided at the engine's decode shape - a DRAM-bound plane (the streamed fixture fits L3 on
+    // server parts) streamed by every lane through the engine's splitter; the one-lane box keeps the streamed time
+    var tbest : array<double>
+    tbest |> resize(nv)
+    for (i in range(nv)) {
+        tbest[i] = gbest[i]
     }
+    if (get_total_hw_jobs() > 1) {
+        var ktfx <- build_kq_fixture(fmt, 14336l, 32768l, 1l)
+        var tbuf : KqBuf
+        tbuf.q := ktfx.kq
+        tbuf.s := ktfx.ks
+        unsafe {
+            repack_kq_grp_fmt(fmt, addr(tbuf.q[0]), addr(tbuf.s[0]), ktfx.n, ktfx.d, vmr[winner])
+        }
+        var kyt : array<float>
+        kyt |> resize(ktfx.d)
+        for (i in range(nv)) {
+            tbest[i] = 1.0e30lf
+        }
+        with_job_que() {
+            for (r in range(5)) {
+                for (vi in range(nv)) {
+                    continue if (vmr[vi] != vmr[winner] || best[vi] >= 1.0e29lf)
+                    for (_w in range(r == 0 ? 3 : 0)) {
+                        run_kq_gemv_team(gtab[tvs[vi]._0], ktfx, tbuf.q, tbuf.s, vmr[vi], kyt)
+                    }
+                    let t0 = ref_time_ticks()
+                    run_kq_gemv_team(gtab[tvs[vi]._0], ktfx, tbuf.q, tbuf.s, vmr[vi], kyt)
+                    let us = double(get_time_usec(t0))
+                    if (us < tbest[vi]) {
+                        tbest[vi] = us
+                    }
+                }
+            }
+        }
+        for (vi in range(nv)) {
+            if (vmr[vi] == vmr[winner] && best[vi] < 1.0e29lf) {
+                tune_detail("k{fmt} {tvs[vi]._0}: decode at the engine shape {tbest[vi]} us ({get_total_hw_jobs()} lanes, d={ktfx.d} n={ktfx.n})\n")
+            }
+        }
+        delete kyt
+        delete tbuf
+        delete ktfx
+    }
+    gemv_out = kq_gemv_seat(fmt, winner, tnames, vmr, best, tbest)
+    if (!empty(gemv_out)) {
+        rows_out["gemv_seat"] = JV((seat = gemv_out, tile_seat = tvs[winner]._0, gemv_us = gbest[winner], team_us = tbest[winner]))
+    }
+    delete tbest
     delete tnames
     let wname = tvs[winner]._0
     delete keep
