@@ -107,11 +107,11 @@ let K3_SSB = 18l    // Q3_K scale plane: 16 x int8 (6-bit scale - 32, decoded at
 let IQ3S_QSB = 104l   // IQ3_S quant plane: [64 grid-index qs][8 qh ninth bits][32 sign bytes], verbatim disk order
 let IQ3S_SSB = 20l    // IQ3_S scale plane: f16 d, 2 pad, 8 x int8 (1 + 2s), 8 pad — the iq4xs/k4 row shape
 let IQ3XXS_QSB = 96l  // IQ3_XXS quant plane: [64 grid-index qs][32 aux bytes: per block 4x7-bit sign indices + 4-bit scale], verbatim disk order
-let IQ3XXS_SSB = 20l  // IQ3_XXS scale plane: f16 d HALVED, 2 pad, 8 x uint8 (2*ls + 1), 8 pad — the iq3s row shape and fold (ggml's global 0.25 = the halved d x the halved grid)
+let IQ3XXS_SSB = 20l  // IQ3_XXS scale plane: f16 d HALVED, 2 pad, 8 x uint8 (2*ls + 1), 8 pad — the iq3s row shape and fold (the format's global 0.25 = the halved d x the halved grid)
 let K2_QSB = 64l    // Q2_K quant plane: 64 qs bytes (four 2-bit lanes each), verbatim disk order
 let K2_SSB = 20l    // Q2_K scale plane: [f16 d][f16 dmin][16 sc/min nibble-pair bytes] - the disk scale block, header first
 let IQ2S_QSB = 72l    // IQ2_S quant plane: [32 grid-index low bytes][32 sign bytes][8 qh], verbatim disk order
-let IQ2S_SSB = 20l    // IQ2_S scale plane: f16 d EIGHTH-ed (ggml's (0.5+ls)*0.25 = (2ls+1)/8), 2 pad, 16 x uint8 (2ls+1) - per-16 strips in the 20B row
+let IQ2S_SSB = 20l    // IQ2_S scale plane: f16 d EIGHTH-ed (the disk (0.5+ls)*0.25 = (2ls+1)/8), 2 pad, 16 x uint8 (2ls+1) - per-16 strips in the 20B row
 let IQ2XS_QSB = 64l   // IQ2_XS quant plane: 32 u16 words ([9-bit grid index][7-bit ksigns index]), verbatim disk order
 let IQ2XS_SSB = 20l   // IQ2_XS scale plane: the iq2s row exactly - f16 d EIGHTH-ed, 2 pad, 16 x uint8 (2ls+1) per-16 strips
 let IQ2XXS_QSB = 64l   // IQ2_XXS quant plane: 8 blocks x [4 iq2xxs_grid byte indices][aux32: 4 x 7-bit ksigns + 4-bit ls], verbatim disk order

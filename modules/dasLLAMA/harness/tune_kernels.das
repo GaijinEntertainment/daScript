@@ -2336,8 +2336,6 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
     return report("dot_q8q8_laneq4x4", names, best, ok)
 }
 
-// fallback: the tuner rail drives this half explicitly (DAS_TUNE_MODE=tune) — the auto
-// policy must not fire a nested tuner off this program's own missing per-app sidecar
 // one METAL_TWIN race row: log it and bank the family when the tensor twin won
 def private metal_twin_absorb(var wins : array<string>; var ran : bool&; r) {
     ran = true
@@ -2348,6 +2346,8 @@ def private metal_twin_absorb(var wins : array<string>; var ran : bool&; r) {
     }
 }
 
+// fallback: the tuner rail drives this half explicitly (DAS_TUNE_MODE=tune) — the auto
+// policy must not fire a nested tuner off this program's own missing per-app sidecar
 [export, tune_policy(missing = "fallback")]
 def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail; the noise probes are its checkpoints
     if (tuner_paranoid_requested()) {
@@ -2368,7 +2368,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         ("dot_mx4q8", @@bench_dot_mx4q8), ("quantize_q8_0_into_ptr", @@bench_quantize),
         ("quantize_q8_0_bs_into_ptr", @@bench_quantize_bs), ("rope_scaled_neox_tab", @@bench_rope_tab),
         ("gemm_f32_uk_4x16", @@bench_gemm_tile),
-        ("dot_q8q8_laneq4x4", @@bench_laneq4x4)   // last: it pins the repack backend (sticks until process exit)
+        ("dot_q8q8_laneq4x4", @@bench_laneq4x4)
     ]
     let filtered = !empty(tune_only_filter())
     if (filtered) {

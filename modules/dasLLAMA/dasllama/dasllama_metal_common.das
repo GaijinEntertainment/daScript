@@ -300,7 +300,7 @@ var g_pso_kq_mm_b4 : MetalComputePipeline?   // batch B>=9: the prefill-owned kq
 var g_pso_kq_mm_b5 : MetalComputePipeline?
 var g_pso_kq_mm_b6 : MetalComputePipeline?
 var g_pso_kq_mm_b44 : MetalComputePipeline?
-var g_pso_kq_mm_b3 : MetalComputePipeline?     // fused W1|W3+swiglu (s16 path)
+var g_pso_kq_mm_b3 : MetalComputePipeline?
 // the batched-step set (P4): fixed-B GEMVs + the M-pad-32 GEMM twin (f32 X) + row-table kernels
 var g_pso_gemv_b2 : MetalComputePipeline?
 var g_pso_gemv_b4 : MetalComputePipeline?
@@ -923,6 +923,7 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 //! One kq tensor's GPU-form scale bind (the gemv lab's layouts, pre-baked by the blob
 //! transform): k4/k5 = 16B compact blocks at soff; k6 = the split plane — sub-scale strips at
 //! soff, the packed f16 d plane at doff (the kernels bind the buffer twice, once per offset).
+[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
 def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64> {
     assert(t.metal_blob)
     let sb0 = off / 256l
@@ -936,22 +937,22 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
             return (buf = plane_buffer(dev, addr < void? >(t.k4s[0]), uint64(long_length(t.k4s)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = 0ul)
         }
-        if (fmt == KqFmt.k3) {   // the k6 split form over the 18B/sb device plane
+        if (fmt == KqFmt.k3) {
             let plane_sb = long_length(t.k3s) / 18l
             return (buf = plane_buffer(dev, addr < void? >(t.k3s[0]), uint64(long_length(t.k3s)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
         }
-        if (fmt == KqFmt.iq3s) {   // the k6 split form over the 18B/sb device plane
+        if (fmt == KqFmt.iq3s) {
             let plane_sb = long_length(t.iq3ss) / 18l
             return (buf = plane_buffer(dev, addr < void? >(t.iq3ss[0]), uint64(long_length(t.iq3ss)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
         }
-        if (fmt == KqFmt.iq3xxs) {   // the k6 split form over the 18B/sb device plane
+        if (fmt == KqFmt.iq3xxs) {
             let plane_sb = long_length(t.iq3xxss) / 18l
             return (buf = plane_buffer(dev, addr < void? >(t.iq3xxss[0]), uint64(long_length(t.iq3xxss)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
         }
-        if (fmt == KqFmt.iq4xs) {   // the k6 split form over the 18B/sb device plane
+        if (fmt == KqFmt.iq4xs) {
             let plane_sb = long_length(t.iq4xss) / 18l
             return (buf = plane_buffer(dev, addr < void? >(t.iq4xss[0]), uint64(long_length(t.iq4xss)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
@@ -970,12 +971,12 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
             return (buf = plane_buffer(dev, addr < void? >(t.iq2ss[0]), uint64(long_length(t.iq2ss)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
         }
-        if (fmt == KqFmt.iq2xs) {   // the same split 18B/sb plane over t.iq2xss
+        if (fmt == KqFmt.iq2xs) {
             let plane_sb = long_length(t.iq2xss) / 18l
             return (buf = plane_buffer(dev, addr < void? >(t.iq2xss[0]), uint64(long_length(t.iq2xss)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
         }
-        if (fmt == KqFmt.iq2xxs) {   // the same split 18B/sb plane over t.iq2xxss
+        if (fmt == KqFmt.iq2xxs) {
             let plane_sb = long_length(t.iq2xxss) / 18l
             return (buf = plane_buffer(dev, addr < void? >(t.iq2xxss[0]), uint64(long_length(t.iq2xxss)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))

@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 26   // 26: the iq2xxs plane pair (IQ2_XXS native tier); 25: iq2xs; 24: iq2s
+let IMAGE_VERSION = 26   // 26: the iq2xxs plane pair (IQ2_XXS native tier)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -688,7 +688,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.mtp_headnorm_off)
 }
 
-// 67 serialized fields + 3 deliberate skips (blocks, image_map, image_bytes)
+// the 3 deliberate skips: blocks, image_map, image_bytes
 let IMAGE_META_FIELDS = 75 + 3
 
 //! Count of meta-carried fields of any struct: non-arrays plus string arrays (those cannot

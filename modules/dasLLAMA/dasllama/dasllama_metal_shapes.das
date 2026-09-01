@@ -236,6 +236,7 @@ def dn_metal_ok(t : Model) : bool {
 }
 
 // (q8 32-blocks, kq 256-superblocks — the expert shift is index math, no base multiple)
+[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
 def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.q8) {
         return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
@@ -243,7 +244,7 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.k4 || fmt == KqFmt.k5) {
         return off >= 0l && (off % 256l) == 0l && (ege % 256l) == 0l
     }
-    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {   // the split scale form: off % 512 keeps the d-plane bind 4B-aligned
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
         return off >= 0l && (off % 512l) == 0l && (ege % 256l) == 0l
     }
     if (fmt == KqFmt.q51) {   // per-32 planes: off % 128 keeps the 20B/4B binds 16B-aligned

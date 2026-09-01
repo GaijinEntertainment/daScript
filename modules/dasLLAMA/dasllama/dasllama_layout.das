@@ -31,10 +31,11 @@ let PACK_VERSION = 1
 // A q8 region's blob bind offset (off/32)*34 lands 16B-aligned iff off % 256 == 0; a k6
 // region's d-plane bind (NSB*16 + (off/256)*2) needs 4B alignment iff off % 512 == 0.
 // k4/k5/q40 quant + scale binds are 16B-multiples by construction.
+[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
 def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
     if (off < 0l) return true
     if (fmt == KqFmt.q8) return off % 256l == 0l
-    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) return off % 512l == 0l   // the split scale form: the (off/256)*2 d-plane bind stays 4B-aligned
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) return off % 512l == 0l
     if (fmt == KqFmt.q51) return off % 128l == 0l   // (off/32)*20 and (off/32)*4 both 16B-aligned
     return true
 }
@@ -159,6 +160,7 @@ def metal_blob_fill_blocks(t : Model; b0, nblk : int64; var dst : array<uint8>) 
 //! Put ONE kq scale plane into its metal device form, named by its Model field; false = not a kq
 //! scale plane. Per-plane because the streamed image walk applies each as its own turn comes,
 //! which is the only point where that plane's fills are done and its bytes are not yet written.
+[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
 def metal_blob_scale_plane(var t : Model; name : string) : bool {
     // k4/k5: the 16B verbatim disk scale block per superblock — the 4B pad is CPU-repack
     // scratch (see the plane-layout comment in dasllama_gguf) and a blob model never repacks
@@ -175,7 +177,6 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         return true
     }
     if (name == "iq4xss") {
-        // iq4xs: the k6 split form — strips = bytes 4..19 of the 20B row ([8 signed sc][8 pad]), d = bytes 0..1
         if (!empty(t.iq4xss)) {
             var @exact_size xc : array<uint8>
             let nsb = long_length(t.iq4xss) / IQ4XS_SSB
@@ -194,7 +195,6 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         return true
     }
     if (name == "iq3ss") {
-        // iq3s: the row IS the iq4xs 20B shape — the same split (strips = bytes 4..19, d = bytes 0..1), over t.iq3ss
         if (!empty(t.iq3ss)) {
             var @exact_size i3c : array<uint8>
             let nsb = long_length(t.iq3ss) / IQ3S_SSB
@@ -213,7 +213,6 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         return true
     }
     if (name == "iq3xxss") {
-        // iq3xxs: the row IS the iq4xs 20B shape — the same split (strips = bytes 4..19, d = bytes 0..1), over t.iq3xxss
         if (!empty(t.iq3xxss)) {
             var @exact_size i3xc : array<uint8>
             let nsb = long_length(t.iq3xxss) / IQ3XXS_SSB
@@ -232,7 +231,6 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         return true
     }
     if (name == "iq2ss") {
-        // iq2s: the row IS the iq4xs 20B shape - the same split (strips = bytes 4..19, d8 = bytes 0..1), over t.iq2ss
         if (!empty(t.iq2ss)) {
             var @exact_size i2c : array<uint8>
             let nsb = long_length(t.iq2ss) / IQ2S_SSB
@@ -251,7 +249,6 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         return true
     }
     if (name == "iq2xss") {
-        // iq2xs: the identical 20B row over t.iq2xss - same split, d8 tail
         if (!empty(t.iq2xss)) {
             var @exact_size i2xc : array<uint8>
             let nsb = long_length(t.iq2xss) / IQ2XS_SSB
@@ -270,7 +267,6 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         return true
     }
     if (name == "iq2xxss") {
-        // iq2xxs: the identical 20B row over t.iq2xxss (8 strips + 8 pad ride the 16B region)
         if (!empty(t.iq2xxss)) {
             var @exact_size i2xxc : array<uint8>
             let nsb = long_length(t.iq2xxss) / IQ2XXS_SSB
@@ -289,7 +285,6 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         return true
     }
     if (name == "k2s") {
-        // k2: the 20B row splits like k6 - the 16 pair-byte strips first, the 4B d+dmin headers as the tail
         if (!empty(t.k2s)) {
             var @exact_size k2c : array<uint8>
             let nsb = long_length(t.k2s) / K2_SSB
@@ -309,7 +304,6 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         return true
     }
     if (name == "k3s") {
-        // k3: the CPU row IS the k6 form ([16 int8][f16 d]) — the same split, over t.k3s
         if (!empty(t.k3s)) {
             var @exact_size k3c : array<uint8>
             let nsb = long_length(t.k3s) / K3_SSB

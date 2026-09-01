@@ -13,3 +13,13 @@ compacted, or cited as rules.
 - 2026-08-31 - `review_md.md`: review-round flashlight item 4. Boris ruled ("yes") to bless a
   charter-carrying `README.md` as an architecture doc rather than splitting one out -
   `site/README.md` is the precedent; both playground checklists keep their pointers.
+
+## 2026-08-31 - skills/tune.md (shipped defaults profiles, DAS_TUNE_POLICY=reference)
+
+Boris, on the tune mint being the workflow blocker (20+ minutes per app per box): "we prune the
+families. we save M1/zen2 defaults. and if winners are available (vnni), some magic M5 stuff ...
+then there is a race. if nothing available - no race." Profiles are keyed by CPU feature class
+("profile classes key by the feature set that gates seats" - he asked to elaborate and accepted
+it), and separate CPU from GPU: "do u want to separate CPU and GPU tunes?" - resolved as
+kernels-only profiles, runtime knobs never travel. He will remove the dasllama.io tune service
+if the new-silicon race drops to a couple of minutes.

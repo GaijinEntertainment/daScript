@@ -81,7 +81,7 @@ def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
         if (vform == "iq4nl") {
             metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq4nl_msl_tgmem, 0)   // the codebook slab
         }
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs/k3: the f16 d tail
+        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // the split-scale formats: the f16 d tail at nsb*16
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -174,7 +174,7 @@ def private kq_mvb_gate(t : T?; dev, queue; fmt, bwidth, n, d, nr, ys : int) {
             metal_set_threadgroup_memory_length(enc,
                 fmt == 25 ? metal_kq_mvb8_iq2xxs_msl_tgmem : (fmt == 24 ? metal_kq_mvb8_iq2xs_msl_tgmem : (fmt == 23 ? metal_kq_mvb8_iq2s_msl_tgmem : (fmt == 2 ? metal_kq_mvb8_k2_msl_tgmem : (fmt == 45 ? metal_kq_mvb8_iq4nl_msl_tgmem : (fmt == 34 ? metal_kq_mvb8_iq3xxs_msl_tgmem : (fmt == 33 ? metal_kq_mvb8_iq3s_msl_tgmem : (fmt == 3 ? metal_kq_mvb8_k3_msl_tgmem : (fmt == 44 ? metal_kq_mvb8_iq4xs_msl_tgmem : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl_tgmem : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl_tgmem : metal_kq_mvb8_k6_msl_tgmem)))))))))), 0)
         }
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs/k3: the f16 d tail
+        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // the split-scale formats: the f16 d tail at nsb*16
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -263,7 +263,7 @@ def private moe_kq_gemv_gate(t : T?; dev, queue; fmt, n, d, net, k, nst : int; p
         bxs = uint((perslot ? k : 1) * n), bys = uint(k * d), hasb = 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs/k3: the f16 d tail
+        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // the split-scale formats: the f16 d tail at nsb*16
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)
         metal_set_buffer(enc, bx, 0ul, 3)

@@ -5972,19 +5972,16 @@ class MetalKqMulMmK6 : MetalKqMulMmK45T {
     override SIXBIT = true
 }
 
-// iq4xs rides the IQ4XS arm; the split scale plane binds twice like k6 (d plane at s0off = doff)
 [metal_dispatch(name = "enc_kq_mm_iq4xs_c", pso = "g_pso_kq_mm_b44", tgmem = "MetalKqMulMmIq4xs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmIq4xs : MetalKqMulMmK45T {
     override IQ4XS = true
 }
 
-// q3_K rides the K3 arm; the split scale plane binds twice like k6 (d plane at s0off = doff)
 [metal_dispatch(name = "enc_kq_mm_k3_c", pso = "g_pso_kq_mm_b3", tgmem = "MetalKqMulMmK3_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmK3 : MetalKqMulMmK45T {
     override K3 = true
 }
 
-// iq3s rides the IQ3S arm; the split scale plane binds twice like k6 (d plane at s0off = doff)
 [metal_dispatch(name = "enc_kq_mm_iq3s_c", pso = "g_pso_kq_mm_b33", tgmem = "MetalKqMulMmIq3s_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmIq3s : MetalKqMulMmK45T {
     override IQ3S = true
@@ -5995,31 +5992,27 @@ class MetalKqMulMmIq3xxs : MetalKqMulMmK45T {
     override IQ3XXS = true
 }
 
-// q2_K rides its own K2 arm; the split scale plane binds twice like k6 (the 4B tail at s0off = doff)
 [metal_dispatch(name = "enc_kq_mm_k2_c", pso = "g_pso_kq_mm_b2", tgmem = "MetalKqMulMmK2_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmK2 : MetalKqMulMmK45T {
     override K2 = true
 }
 
-// iq2s rides its own IQ2S arm; the split scale plane binds twice like k6 (d8 plane at s0off = doff)
 [metal_dispatch(name = "enc_kq_mm_iq2s_c", pso = "g_pso_kq_mm_b23", tgmem = "MetalKqMulMmIq2s_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmIq2s : MetalKqMulMmK45T {
     override IQ2S = true
 }
 
-// iq2xs rides its own IQ2XS arm; the same split scale plane binds (d8 plane at s0off = doff)
 [metal_dispatch(name = "enc_kq_mm_iq2xs_c", pso = "g_pso_kq_mm_b24", tgmem = "MetalKqMulMmIq2xs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmIq2xs : MetalKqMulMmK45T {
     override IQ2XS = true
 }
 
-// iq2xxs rides its own IQ2XXS arm; the same split scale plane binds (d8 plane at s0off = doff)
 [metal_dispatch(name = "enc_kq_mm_iq2xxs_c", pso = "g_pso_kq_mm_b25", tgmem = "MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmIq2xxs : MetalKqMulMmK45T {
     override IQ2XXS = true
 }
 
-// iq4nl rides the IQ4XS arm with IQ4NL flipping the scale read to q40's per-32-block d plane
+// IQ4NL flips the scale read to q40's per-32-block d plane
 [metal_dispatch(name = "enc_kq_mm_iq4nl_c", pso = "g_pso_kq_mm_b45", tgmem = "MetalKqMulMmIq4nl_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmIq4nl : MetalKqMulMmK45T {
     override IQ4XS = true
@@ -6303,15 +6296,15 @@ def private kmask_scales(sv : uint4; iq : uint) : uint4 {
         ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u))
 }
 
-// IQ4_XS codebook (ggml's kvalues_iq4nl) as four packed words, selected + byte-extracted —
+// IQ4_XS codebook (kvalues_iq4nl) as four packed words, selected + byte-extracted —
 // no table memory; the k6 sign trick widens the byte
 def private iq4_lut(q : uint) : float {
     let w = q < 8u ? (q < 4u ? 3215825025u : 4142587343u) : (q < 12u ? 639175937u : 1901675829u)
     return float((int((w >> ((q & 3u) * 8u)) & 255u) ^ 128) - 128)
 }
 
-// ggml's iq3s_grid, one word per call - the GEMV/mul_mm stage it into threadgroup memory once
-// per group; the mv twins read it directly (unmeasured batch shapes - followup #58's stance).
+// iq3s_grid, one word per call - the GEMV/mul_mm stage it into threadgroup memory once
+// per group; the mv twins read it directly.
 def private iq3s_gw(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x01010101u, 0x01010103u, 0x01010105u, 0x0101010bu, 0x0101010fu, 0x01010301u, 0x01010303u, 0x01010305u,
@@ -6392,7 +6385,7 @@ def private iq3s_sx(sw, t : uint) : float {
     return float((int((sw >> (t * 8u)) & 255u) ^ 128) - 128)
 }
 
-// the HALVED iq3xxs grid (ggml's iq3xxs_grid, every byte / 2 - the plane convention), one
+// the HALVED iq3xxs grid (iq3xxs_grid, every byte / 2 - the plane convention), one
 // word per call; the GEMV and mul_mm stage it, the mv twins read it directly.
 def private iq3xxs_gw(i : int) : uint {
     let tbl = fixed_array<uint>(
@@ -6439,7 +6432,7 @@ def private ksign7m(v : uint) : uint {
     return v | ((t & 1u) << 7u)
 }
 
-// ggml's iq2xxs_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word
+// iq2xxs_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word
 // 2i+1 = 4..7); the same all-literal program-scope-constant form as its grid siblings.
 def private iq2xxs_gw(i : int) : uint {
     let tbl = fixed_array<uint>(
@@ -6510,7 +6503,7 @@ def private iq2xxs_gw(i : int) : uint {
     return tbl[i]
 }
 
-// ggml's iq2xs_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word
+// iq2xs_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word
 // 2i+1 = 4..7); the same all-literal program-scope-constant form as iq2s_gw below.
 def private iq2xs_gw(i : int) : uint {   // nolint:STYLE038 - a 1024-word data table, not splittable
     let tbl = fixed_array<uint>(
@@ -6645,7 +6638,7 @@ def private iq2xs_gw(i : int) : uint {   // nolint:STYLE038 - a 1024-word data t
     return tbl[i]
 }
 
-// ggml's iq2s_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word 2i+1
+// iq2s_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word 2i+1
 // = 4..7); an all-literal fixed_array local, so it lowers to a program-scope constant table -
 // every kernel reads it DIRECT (an f4 slab of 1024 entries would be 32 KB, past the tg budget).
 def private iq2s_gw(i : int) : uint {   // nolint:STYLE038 - a 2048-word data table, not splittable
@@ -8524,7 +8517,7 @@ class MetalKqGemvIq4nl {
     }
 }
 
-// IQ3_S: w = d*sc*(+-grid byte); the 2 KB grid in threadgroup memory (llama.cpp's shape), a
+// IQ3_S: w = d*sc*(+-grid byte); the 2 KB grid in threadgroup memory, a
 // 16-lane half-simdgroup per superblock, lane (bu, il) = block bu's half il: one qs word = 4
 // grid words = 16 elems = 4 CONSECUTIVE float4 x loads. Scale plane = the iq4xs/k6 split form.
 [metal_dispatch(name = "enc_kq_iq3s_c", pso = "g_pso_kq_iq3s", tgmem = "metal_kq_gemv_iq3s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
@@ -8536,7 +8529,7 @@ class MetalKqGemvIq3s {
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
-    @workgroup gridf : float4[512]   // magnitudes pre-expanded at stage time: the inner loop reads one float4 and flips signs, no byte extracts (the best of the eight raced forms - llama.cpp's own geometry included)
+    @workgroup gridf : float4[512]   // magnitudes pre-expanded at stage time: the inner loop reads one float4 and flips signs, no byte extracts (the best of the eight raced forms, the reference exe's geometry included)
 
     [metal_kernel(name="metal_kq_gemv_iq3s_msl")]
     def metal_kq_gemv_iq3s {
@@ -8553,7 +8546,7 @@ class MetalKqGemvIq3s {
         let bu = it / 2u
         let il = it % 2u
         let nb = ndim / 256u
-        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 4u   // 4 rows per simdgroup - y loads and grid gathers amortize x4 (llama.cpp N_R0_IQ3_S)
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 4u   // 4 rows per simdgroup - y loads and grid gathers amortize x4
         var sumf : float[4]
         var ib = ix
         while (ib < nb) {
@@ -8839,7 +8832,7 @@ class MetalKqGemvIq3xxs {
 }
 
 // The iq3xxs B2/B4 pair: the iq3s shells over the 24-word rows - direct halved-grid reads,
-// parity signs (unmeasured batch shapes - followup #58's stance).
+// parity signs.
 [ |> template_struct_instance]
 class template MetalKqMvIq3xxsT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16

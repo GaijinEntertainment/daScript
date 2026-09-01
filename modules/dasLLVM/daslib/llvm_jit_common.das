@@ -444,8 +444,7 @@ var public g_target_x64_amx = false
 var public g_target_os_linux = false
 
 // ARMv8.6 i8mm (SMMLA — 2×2 s8 matrix-multiply-accumulate; Apple M2/A15+, Graviton3+; M1 has
-// DotProd only). Host truth is LLVMGetHostCPUFeatures "+i8mm" — populated on Linux aarch64, EMPTY
-// on macOS where the CPU name implies features — so there the force env is the rail on both boxes.
+// DotProd only). Host truth is LLVMGetHostCPUFeatures "+i8mm" OR cpu_supports (ARCHITECTURE.md sec.4).
 var public g_target_arm64_i8mm = false
 
 // ARMv8.2 fullfp16 (native half arithmetic — fadd.4h/8h etc.). Detected as i8mm, except
@@ -603,6 +602,7 @@ def public init_jit_clopts() {
 // Pure target truth, no LLVM state touched: safe and required BEFORE init_jit, whose DisableJitVisitor
 // consults these gates. init_jit re-runs it — pass the SAME host_features or pass and emission diverge.
 // host_features=false targets a GENERIC CPU: cpuid gates stay off, since leaked F16C emits libcalls.
+[arch(at = "../ARCHITECTURE.md#aarch64-feature-truth")]
 def public init_jit_target_flags(target_triple : string = ""; host_features : bool = true) {
     g_target_host_features = host_features
     g_target_is_wasm = target_triple |> starts_with("wasm")
@@ -632,9 +632,6 @@ def public init_jit_target_flags(target_triple : string = ""; host_features : bo
     g_target_os_linux = (empty(target_triple)
         ? get_platform_name() == "linux"
         : find(target_triple, "linux") >= 0)
-    // aarch64 i8mm tier (see the g_target_arm64_i8mm declaration comment): host targets read
-    // LLVM's host string OR cpu_supports — macOS hands back an EMPTY host string, which left
-    // i8mm dark on every Apple M2+ — OR the arm force env; cross aarch64 triples the env only.
     g_target_arm64_i8mm = g_target_is_aarch64 && (arm64_forced_feature("i8mm")
         || (empty(target_triple) && host_features && (host_llvm_feature("i8mm") || cpu_supports("i8mm"))))
     // aarch64 fullfp16 (see declaration comment): darwin-arm64 == Apple Silicon == always.
@@ -894,7 +891,7 @@ def public with_target_machine(triple, cpu, features : string; opt_level : uint;
     LLVMDisposeTargetMachine(targetMachine)
 }
 
-[macro_function]
+[macro_function, arch(at = "../ARCHITECTURE.md#aarch64-feature-truth")]
 def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) : LLVMTargetMachineRef {
     LLVMInitializeAllTargetInfos()
     LLVMInitializeAllTargets()
@@ -922,9 +919,6 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
     var targetMachine : LLVMTargetMachineRef
     if (use_host_cpu && g_target_is_aarch64) {
         var feats = empty(features_msg) ? "+dotprod" : "{features_msg},+dotprod"
-        // same protection for i8mm: an Apple part this LLVM cannot name maps to "generic" where
-        // SMMLA has no instruction to select. cpu_supports reads sysctl truth, so the append is
-        // execution-safe on this host (unlike the force env, which may name absent silicon).
         if (cpu_supports("i8mm")) {
             feats = "{feats},+i8mm"
         }

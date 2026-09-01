@@ -59,3 +59,12 @@
   `has_env_variable(expr)` outside `daslib/llvm_env.das`. Spell the name as a literal through
   the declared forms, or declare the knob, instead** (the literal-name forms are
   scanner-enforced by `tests/llvm_env_registry.das`; weakening that test is a defect).
+
+- **A diff that lets a `requires=` expression name a new CPU feature adds that name to
+  `TUNE_KNOWN_FEATURES` (`daslib/llvm_tune.das`) in the same change.** Every sidecar save
+  stamps this box's pass/fail over that list as the `features` fingerprint, so a name
+  missing from it makes a shipped defaults profile claim a seat its minting box never raced.
+
+- **A diff that arms `DAS_TUNE_ONLY` for a single tuner spawn clears it immediately after
+  that spawn.** The auto/restart policy guard re-execs the process, and a filter left armed
+  makes the re-exec's own mint partial.

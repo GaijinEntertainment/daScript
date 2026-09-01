@@ -1821,7 +1821,7 @@ def private confirm_winner(winner : string) : string {
     return fb
 }
 
-// The q8q8 family race, verbatim the old inline tune_mode_run body: the fat-batch tile bench
+// The q8q8 family race: the fat-batch tile bench
 // picks the tile knobs (and with them the layout), the hot decode bench picks gkstep among the
 // rows sharing them, incumbent stickiness last. Returns the merged winner's suffix; "" means a
 // correctness gate failed and the tune must abort (the mismatch is printed inside).

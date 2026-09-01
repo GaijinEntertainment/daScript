@@ -730,10 +730,17 @@
     dequant twins, and no MoE GEMV / mul_mm trio for the format. Done = the twins stamped on
     the existing templates, the LUT cost measured against a `constant` table and against a
     byte-pair decode on the M5, and `bench_metal_gemv_kernels` / `bench_metal_kq_mm_lab` rows
-    for the format beside k4's.
+    for the format beside k4's. The same gap now covers every format this arc added: `k3`,
+    `iq3s`, `iq3xxs`, `iq4nl`, `k2`, `iq2s`, `iq2xs` and `iq2xxs` take the base `mul_mm` at the
+    prefill site - no tensor (`_t`), tall (`_th128`), double-buffered (`_thdb`) or dev-W dequant
+    twins - and `pf_devw_panel_kq` declines all nine formats outright. Done = the twins stamped
+    on the existing templates for whichever formats measure worth it, and that decline list
+    shortened to match.
 
-59. **Partial mint (Boris, 2026-08-30, for after the formats arc): "takes existing mint and
-    mints new kernels only. at least in debug-only mode."** Today a sidecar missing ANY demanded
+59. **DONE (2026-08-31, the unquirk pass): `--tune-only <family>` re-mints one family into the
+    existing sidecar, and the shipped defaults profiles adopt-then-race only the residue.**
+    Original ask - partial mint (Boris, 2026-08-30, for after the formats arc): "takes existing mint and
+    mints new kernels only. at least in debug-only mode." Today a sidecar missing ANY demanded
     kernel re-tunes the whole scope (the completeness rule), so every new `[tune]` family - one
     per format in this arc - re-mints every application sidecar on the box on its next start,
     minutes each (HOW_TO_ADD_A_FORMAT.md QUIRK 17), and the same rule keeps a stub-era

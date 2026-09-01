@@ -213,7 +213,7 @@ def test_iq3xxs_tables(t : T?) {
             t |> equal(IQ3XXS_GRID[i], lut[i])
             for (b in range(4)) {
                 let v = int((lut[i] >> uint(8 * b)) & 0xFFu)
-                // ggml levels 4..62 halved: even 2..30 plus 31 (the 62 top level)
+                // the disk levels 4..62 halved: even 2..30 plus 31 (the 62 top level)
                 t |> success(v == 31 || (v >= 2 && v <= 30 && v % 2 == 0), "halved grid byte in range")
             }
         }

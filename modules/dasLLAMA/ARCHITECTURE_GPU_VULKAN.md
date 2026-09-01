@@ -114,6 +114,21 @@ NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4;
 the extension lands on mm. The same resolver stamps the mode into the `.dlim` flavor
 configuration, so the recorded mode and the running mode cannot drift.
 
+**The tile's fast path is what makes the loads unclamped.** It runs when the weight tile is
+whole (`m0 + 128 <= d`), the token column is whole or stamped s, and K is a whole number of BK
+steps; the layouts are then created clamp-Undefined and the B and output strides are masked to
+a multiple of 8 f16 (`stride &= ~7`). The mask is an identity on today's shapes - `n` and `d`
+are 32-multiples - and it exists to make the alignment PROVABLE to the driver's address
+analysis, which is what keeps the loads on the wide path. The s column gates only the weight
+tile: its partial token column loads unclamped and its store clamps. Everything else takes the
+edge path with clamped layouts.
+
+**The no-split arm keeps literal loop bounds and a literal store base.** Where `ksplit` is zero
+the k loop runs the literal `0 .. n` with the store at the row base rather than the general
+`k0`/`k1`/`ybase` form, although those values are exactly `0`, `n` and `0` on that path: the
+general spelling cost 27% of prefill throughput (`benchmarks/lcpp_bench.das` pp512, 5060 Ti).
+The split arm keeps the general form.
+
 ### 2.2m Class-pipeline creation is the Vulkan tier's one shader A/B seat {#vk-class-pipeline-build}
 
 `vkd_class_pipe` is the single place a class kernel's SPIR-V becomes a pipeline, so both shader

@@ -182,7 +182,6 @@ def ensure_sgconfig(root : string) {
 // Copy them from the source tree of the daslang running this setup (get_das_root()), which is a
 // JIT-capable build. When setup itself runs under the target worktree's binary, use DASLANG as a
 // fallback SDK binary: a worktree-local root cannot supply a backend file that it is missing.
-// Windows-only for now (the codegen dll name / linker differ on posix — staging there is TBD).
 def root_from_daslang_binary(binary : string) : string {
     let executable_dir = dir_name(get_full_file_name(binary))
     let leaf = base_name(executable_dir)
@@ -205,8 +204,7 @@ def stage_jit_backend(root : string) {
             fallback_source = "DASLANG does not name an existing binary"
         }
     }
-    // the codegen backend is LLVM.dll on every platform (+ its .version stamp, which CMake's
-    // re-download check reads); only Windows also needs the lld-link.exe linker beside the binary
+    //! lib/LLVM.dll is the codegen backend's name on every platform; its .version stamp stages with it or a later cmake refetches LLVM.
     var jit_files <- ["lib/LLVM.dll", "lib/LLVM.dll.version"]
     if (get_platform_name() == "windows") {
         jit_files |> push("bin/lld-link.exe")

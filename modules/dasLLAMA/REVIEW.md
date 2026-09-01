@@ -294,3 +294,11 @@ family name on a shared path, is a defect - it carries declarative registration 
 changes none of its arithmetic - deleting or rewriting the CPU form in the same change is a
 defect.** The hook returns a decline value (`false`, or `-1` for the chunk hooks), and the CPU
 form serves every box with no driver.
+
+**A constant that a team-mode job lane reads is declared as a `def` returning the value, never
+as a `let` global.** A team lane never runs global initializers, so a `let` reads zero there
+while every single-threaded run reads the right value.
+
+**A diff that adds a row to `harness/tune_kernels.das`'s bench list puts it ahead of
+`dot_q8q8_laneq4x4`, which stays last.** That bench pins the repack backend for the rest of the
+process, so a row after it races against the pinned backend instead of the one it selects.

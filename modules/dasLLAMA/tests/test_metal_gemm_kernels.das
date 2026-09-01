@@ -123,7 +123,7 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_threadgroup_memory_length(enc, tgm, 0)
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs: the f16 d tail
+        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // the split-scale formats: the f16 d tail at nsb*16
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -484,7 +484,7 @@ def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     var dka = CvtArgs(total = uint(nblk))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, dq_pso)
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs: the f16 d tail
+        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // the split-scale formats: the f16 d tail at nsb*16
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)
         metal_set_buffer(enc, bwh, 0ul, 3)
@@ -1461,7 +1461,7 @@ def private moe_mulmm_kq_gate(t : T?; dev, queue; fmt : int; kdim, ndim : int; c
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_threadgroup_memory_length(enc, tgm, 0)
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs: the f16 d tail
+        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // the split-scale formats: the f16 d tail at nsb*16
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -2047,23 +2047,23 @@ def test_metal_gemm_kernels(t : T?) {
                     kq_mulmm_gate(t, dev, queue, fmt, true, 320, 512, 64, halfx = true, tall = true)   // off the 128 floor: the remainder pair at nonzero x/y offsets
                 }
                 kq_mulmm_gate(t, dev, queue, 4, false, 32, 256, 128)   // second shape: 2 col tiles
-                kq_mulmm_gate(t, dev, queue, 44, false, 64, 512, 64)   // iq4xs: the base form only (no tensor / tall twins)
+                kq_mulmm_gate(t, dev, queue, 44, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 44, false, 32, 256, 128)
-                kq_mulmm_gate(t, dev, queue, 3, false, 64, 512, 64)   // k3: the base form only (no tensor / tall twins)
+                kq_mulmm_gate(t, dev, queue, 3, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 3, false, 32, 256, 128)
-                kq_mulmm_gate(t, dev, queue, 33, false, 64, 512, 64)   // iq3s: the base form only (no tensor / tall twins)
+                kq_mulmm_gate(t, dev, queue, 33, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 33, false, 32, 256, 128)
-                kq_mulmm_gate(t, dev, queue, 34, false, 64, 512, 64)   // iq3xxs: the base form only (no tensor / tall twins)
+                kq_mulmm_gate(t, dev, queue, 34, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 34, false, 32, 256, 128)
-                kq_mulmm_gate(t, dev, queue, 45, false, 64, 512, 64)   // iq4nl: the base form only (no tensor / tall twins)
+                kq_mulmm_gate(t, dev, queue, 45, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 45, false, 32, 256, 128)
-                kq_mulmm_gate(t, dev, queue, 2, false, 64, 512, 64)   // k2: the base form only (no tensor / tall twins)
+                kq_mulmm_gate(t, dev, queue, 2, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 2, false, 32, 256, 128)
-                kq_mulmm_gate(t, dev, queue, 23, false, 64, 512, 64)   // iq2s: the base form only (no tensor / tall twins)
+                kq_mulmm_gate(t, dev, queue, 23, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 23, false, 32, 256, 128)
-                kq_mulmm_gate(t, dev, queue, 24, false, 64, 512, 64)   // iq2xs: the base form only (no tensor / tall twins)
+                kq_mulmm_gate(t, dev, queue, 24, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 24, false, 32, 256, 128)
-                kq_mulmm_gate(t, dev, queue, 25, false, 64, 512, 64)   // iq2xxs: the base form only (no tensor / tall twins)
+                kq_mulmm_gate(t, dev, queue, 25, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 25, false, 32, 256, 128)
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64)
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64, halfx = true)

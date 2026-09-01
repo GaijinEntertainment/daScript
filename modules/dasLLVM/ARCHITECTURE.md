@@ -125,3 +125,20 @@ Environment knobs load ONCE, at context init, into the `[EnvConfig]` structs `g_
 `g_env_tune` (`llvm_env.das`) - a mid-process `setenv` changes nothing the backend reads.
 In-process overrides therefore go through the tune setters (`tune_set_verbosity`,
 `tune_set_noise_cv`, ...), which also arm spawned children by exporting the matching variable.
+
+## 4. Host CPU feature truth on aarch64 {#aarch64-feature-truth}
+
+An aarch64 host target reads its CPU features from two sources, because neither answers alone.
+`LLVMGetHostCPUFeatures` returns an EMPTY string on macOS - there the CPU name is meant to imply
+the features - and a part this LLVM cannot name maps to the generic CPU, where SDOT and SMMLA
+have no instruction to select and codegen aborts. `cpu_supports` reads the operating system
+instead (sysctl / `AT_HWCAP` / `IsProcessorFeaturePresent`), so it answers for silicon LLVM has
+never heard of. Both the tier gates (`init_jit_target_flags`) and the target machine's feature
+string (`create_default_target_machine`) therefore take the union of the two: an LLVM host-string
+hit OR a `cpu_supports` hit. A cross-compile triple takes neither - only the force env.
+
+The two ways a feature reaches the target machine's string license different things. A
+detection-derived append - `+dotprod` always, `+i8mm` when `cpu_supports` confirms it - is
+EXECUTION-safe: the silicon running this process really has the instruction. A
+`DAS_JIT_ARM64_FORCE_FEATURES` append is EMISSION-only: it may name silicon this box does not
+have, so the artifact is for another machine and executing it here traps.

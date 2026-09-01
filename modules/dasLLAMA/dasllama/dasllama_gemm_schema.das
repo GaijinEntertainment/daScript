@@ -40,7 +40,7 @@ def q8q8_repack_type(mr : int; wbias : int = 0; kgroup : int = 4) : Q8RepackType
 //! The mr of the REFERENCE tier's layout (q8q8_repack_type(4), the old hand arm64-laneq layout
 //! the reference stub bodies read). Non-reference mr runs the generated grp<mr> kernel/layout pair,
 //! stamped from one manifest entry so both decline in lockstep (M4).
-def GEMM_REFERENCE_MR : int => 4   // a FUNCTION, not a let global: team-mode job lanes never run global init, so a let here reads 0 on the lanes the unstamped reference layout/repack run on
+def GEMM_REFERENCE_MR : int => 4
 
 //! GPU-tier device-plane shape of the Q8 rail: 32-weight blocks, 32B quants + one f16 scale
 //! halfword per block. Every q8 plane sizing (gathers, arena/stack math) derives from these.

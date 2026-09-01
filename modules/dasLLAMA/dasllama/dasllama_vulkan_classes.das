@@ -2465,10 +2465,10 @@ def private k5_dep(hb : uint) : uint {
 }
 
 // IQ4_XS codebook decode of one word of 4 nibble lanes (bits 7..4 of each byte clear) into 4
-// SIGNED int8 lanes (ggml's kvalues_iq4nl) — the sdot4 operand form; batch and gemv share it.
+// SIGNED int8 lanes (kvalues_iq4nl) — the sdot4 operand form; batch and gemv share it.
 // The codebook is four packed words picked by a dynamic vector index and byte-extracted: pure
-// ALU (a fixed_array local was a Function-storage table, 3.4x slower on the decode GEMV)
-// ggml's iq3s_grid, one word per call - the staging loops copy it into workgroup memory once
+// ALU (a fixed_array local was a Function-storage table, 3.4x slower on the decode GEMV - `benchmarks/lcpp_bench.das` tg128, 5060 Ti)
+// iq3s_grid, one word per call - the staging loops copy it into workgroup memory once
 // per kernel (a few indexed reads per thread), so the local-array storage class (QUIRK 20's
 // slow path) never sits on a hot path; a shader function cannot return a fixed array.
 def private iq3s_grid_word(i : int) : uint {
@@ -2540,7 +2540,7 @@ def private iq3s_grid_word(i : int) : uint {
     return tbl[i]
 }
 
-// ggml's iq2xxs_grid as low/high word pairs - 256 u64 entries, one uint word per call (word
+// iq2xxs_grid as low/high word pairs - 256 u64 entries, one uint word per call (word
 // 2i = magnitudes 0..3 of entry i, word 2i+1 = 4..7); staged into workgroup memory per kernel.
 def private iq2xxs_grid_word(i : int) : uint {
     let tbl = fixed_array<uint>(
@@ -2611,7 +2611,7 @@ def private iq2xxs_grid_word(i : int) : uint {
     return tbl[i]
 }
 
-// ggml's iq2xs_grid as low/high word pairs - 512 u64 entries, one uint word per call (word
+// iq2xs_grid as low/high word pairs - 512 u64 entries, one uint word per call (word
 // 2i = magnitudes 0..3 of entry i, word 2i+1 = 4..7); staged into workgroup memory per kernel.
 def private iq2xs_grid_word(i : int) : uint {   // nolint:STYLE038 - a 1024-word data table, not splittable
     let tbl = fixed_array<uint>(
@@ -2746,7 +2746,7 @@ def private iq2xs_grid_word(i : int) : uint {   // nolint:STYLE038 - a 1024-word
     return tbl[i]
 }
 
-// ggml's iq2s_grid as low/high word pairs - 1024 u64 entries, one uint word per call (word 2i =
+// iq2s_grid as low/high word pairs - 1024 u64 entries, one uint word per call (word 2i =
 // magnitudes 0..3 of entry i, word 2i+1 = 4..7); the staging loops copy it into workgroup
 // memory once per kernel, so the local-array storage class never sits on a hot path.
 def private iq2s_grid_word(i : int) : uint {   // nolint:STYLE038 - a 2048-word data table, not splittable
@@ -3010,7 +3010,7 @@ def private iq2s_grid_word(i : int) : uint {   // nolint:STYLE038 - a 2048-word 
     return tbl[i]
 }
 
-// the HALVED iq3xxs grid (ggml's iq3xxs_grid with every byte / 2 - the plane convention that
+// the HALVED iq3xxs grid (iq3xxs_grid with every byte / 2 - the plane convention that
 // absorbs the format's 0.25 into the stored d), one word per call; staging loops copy it into
 // workgroup memory (QUIRK 20's slow path stays off the hot loop).
 def private iq3xxs_grid_word(i : int) : uint {
@@ -4003,8 +4003,8 @@ class CmF16Batch : MoeCmBase {
         let nsteps = (nbb + 7u) / 8u
         let tid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID          // 0..3 (subgroupSize 32)
-        let smi = sg / 2u               // which 16-row half of the tile
-        let sni = sg % 2u               // which 16-col half of the tile
+        let row_half = sg / 2u               // which 16-row half of the tile
+        let col_half = sg % 2u               // which 16-col half of the tile
         var acc : coopmatAcc_f32_16x16
         var s = 0u
         while (s < nsteps) {
@@ -4056,8 +4056,8 @@ class CmF16Batch : MoeCmBase {
                 for (ks in range(2)) {
                     var a : coopmatA_f16_16x16
                     var b : coopmatB_f16_16x16
-                    coopmatLoad(a, cm_as, int(smi * 16u * 256u + uint(bb) * 32u + uint(ks) * 16u), 256, 0)
-                    coopmatLoad(b, cm_bs, int((uint(bb) * 32u + uint(ks) * 16u) * 32u + sni * 16u), 32, 0)
+                    coopmatLoad(a, cm_as, int(row_half * 16u * 256u + uint(bb) * 32u + uint(ks) * 16u), 256, 0)
+                    coopmatLoad(b, cm_bs, int((uint(bb) * 32u + uint(ks) * 16u) * 32u + col_half * 16u), 32, 0)
                     acc = coopmatMulAdd(a, b, acc)
                 }
             }
@@ -4071,8 +4071,8 @@ class CmF16Batch : MoeCmBase {
             let idx = lane * 8u + uint(e)
             let m = idx / 16u
             let nn = idx % 16u
-            let orow = xt * 32u + smi * 16u + m
-            let ocol = wt * 32u + sni * 16u + nn
+            let orow = xt * 32u + row_half * 16u + m
+            let ocol = wt * 32u + col_half * 16u + nn
             if (orow < cnt && ocol < pa.d) {
                 y[(row0 + orow) * pa.d + ocol] = cm_out[sg * 256u + idx]
             }
@@ -4105,10 +4105,10 @@ class CmI8Batch : MoeCmBase {
         let nbb = pa.n / 32u
         let sg = gl_SubgroupID
         let lane = gl_SubgroupInvocationID
-        let smi = sg / 2u
-        let sni = sg % 2u
-        let arow = xt * 32u + smi * 16u        // this subgroup's local token-row base
-        let bcol = wt * 32u + sni * 16u        // this subgroup's output-col base
+        let row_half = sg / 2u
+        let col_half = sg % 2u
+        let arow = xt * 32u + row_half * 16u        // this subgroup's local token-row base
+        let bcol = wt * 32u + col_half * 16u        // this subgroup's output-col base
         for (e in range(8)) {
             cmi_acc[sg * 256u + lane * 8u + uint(e)] = 0.0
         }
@@ -4656,8 +4656,8 @@ class KqQ40CmF16 : MoeCmBase {
         let nsb = pa.n / 256u
         let tid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let smi = sg / 2u
-        let sni = sg % 2u
+        let row_half = sg / 2u
+        let col_half = sg % 2u
         var acc : coopmatAcc_f32_16x16
         var s = 0u
         while (s < nsb) {
@@ -4715,8 +4715,8 @@ class KqQ40CmF16 : MoeCmBase {
                 for (ks in range(2)) {
                     var a : coopmatA_f16_16x16
                     var b : coopmatB_f16_16x16
-                    coopmatLoad(a, cm_as, int(smi * 16u * 256u + uint(bb) * 32u + uint(ks) * 16u), 256, 0)
-                    coopmatLoad(b, cm_bs, int((uint(bb) * 32u + uint(ks) * 16u) * 32u + sni * 16u), 32, 0)
+                    coopmatLoad(a, cm_as, int(row_half * 16u * 256u + uint(bb) * 32u + uint(ks) * 16u), 256, 0)
+                    coopmatLoad(b, cm_bs, int((uint(bb) * 32u + uint(ks) * 16u) * 32u + col_half * 16u), 32, 0)
                     acc = coopmatMulAdd(a, b, acc)
                 }
             }
@@ -4730,8 +4730,8 @@ class KqQ40CmF16 : MoeCmBase {
             let idx = lane * 8u + uint(e)
             let m = idx / 16u
             let nn = idx % 16u
-            let orow = xt * 32u + smi * 16u + m
-            let ocol = wt * 32u + sni * 16u + nn
+            let orow = xt * 32u + row_half * 16u + m
+            let ocol = wt * 32u + col_half * 16u + nn
             if (orow < cnt && ocol < pa.d) {
                 y[(row0 + orow) * pa.d + ocol] = cm_out[sg * 256u + idx]
             }
@@ -4794,8 +4794,7 @@ struct VkIq2xxsBlk {
 }
 
 // The cm2 tile: one class template over the two stamp axes. The token column BN - l 256, m 128,
-// s 32 (the expert-bucket geometry: STILE's fast path loads a partial column UNCLAMPED and clamps
-// only the store, so every plane it reads carries 32 rows of slack) - and the weight format: BLK
+// s 32 (the expert-bucket geometry) - and the weight format: BLK
 // the 16-bit-lane block struct, ST the scale plane's element, BLKW the block's element width, and
 // the format template's decode. 256 threads, one 128-weight x BN-token tile per wg, BK=64 per
 // step, an 8x-unrolled k loop; the decode METHOD reads the separate scale plane by block index -
@@ -4811,7 +4810,7 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant STILE : bool = false               // the 32-row column's partial-column fast path
     @template_constant BLKW : uint = 256u                 // elements per weight block
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
-    @workgroup @template_gate = IQLUT iq4lut : float16[16]   // kvalues_iq4nl as f16 (llama.cpp's init_iq_shmem form)
+    @workgroup @template_gate = IQLUT iq4lut : float16[16]   // kvalues_iq4nl as f16
     @template_constant IQ3GRID : bool = false             // stage the 2 KB iq3s grid into workgroup memory
     @workgroup @template_gate = IQ3GRID iq3s_gridc : uint[512]
     @template_constant IQ3XGRID : bool = false            // stage the 1 KB halved iq3xxs grid into workgroup memory
@@ -4891,11 +4890,6 @@ class template KqCm2BatchT : MoeCmBase {
         var acc : ACC
         let t0 = row0 + xt * BN
         let m0 = wt * 128u
-        // FAST PATH — every access of this tile provably in bounds and K a whole number of
-        // BK steps: unclamped (clamp-Undefined) layouts, and the B/out strides masked to a
-        // multiple of 8 f16 (identity here — pa.n and pa.d are 32-multiples — but the mask makes
-        // the alignment PROVABLE to the driver's address analysis via stride &= ~7). The s column
-        // gates only the weight tile: its partial token column loads unclamped, its store clamps
         if (m0 + 128u <= pa.d && (STILE || xt * BN + BN <= cnt) && (pa.n & 63u) == 0u) {
             var fla : tensorLayout2D
             tensorLayoutCreate(fla)
@@ -4910,8 +4904,6 @@ class template KqCm2BatchT : MoeCmBase {
             tensorLayoutCreate(flo)
             tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
             tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
-            // the no-split arm keeps LITERAL loop bounds and store base: the k0/k1/ybase form
-            // in this hot loop measured -27% pp on the 5060 Ti even when the values were 0/pa.n/0
             if (pa.ksplit == 0u) {
                 var k = 0u
                 for (_i in range(int(pa.n / 512u))) {

@@ -171,7 +171,7 @@ def private build_iq4xs_block() : array<uint8> {
 }
 
 // k3 synthetic superblock: 110B Q3_K disk block — 16 six-bit sub-scales SYNTH_SC[is % 8] packed in
-// ggml's kmask form (written in the PACK direction), f16 d = SYNTH_D, the 2-bit lanes + hmask bits
+// the disk kmask form (written in the PACK direction), f16 d = SYNTH_D, the 2-bit lanes + hmask bits
 // of q3_pat — weight k = (d * (SYNTH_SC[(k/16) % 8] - 32)) * (q3_pat(k) - 4)
 def private build_q3k_block() : array<uint8> {
     var blkb : array<uint8>

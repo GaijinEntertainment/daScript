@@ -256,3 +256,19 @@ specification and the CPU-vs-GPU transcript cells are its parity instrument. Eve
 best-effort: it answers false (or -1) on any shape, knob, quant-mode or device decline, and the
 CPU chain serves that encode. Engage is read from counter deltas (`metal_tower_stats`,
 `metal_tower_f16_encodes`), never from "the model ran".
+
+### 2.2y The Metal kq split scale plane {#metal-kq-split-scale-plane}
+
+Every superblock format but k4, k5, q40 and iq4nl stores its Metal-blob scale row SPLIT into two
+regions of one buffer: the 16-byte sub-scale strips of every superblock first, then the packed
+per-superblock d tail. A kernel binds that one buffer twice - the strips at `soff = sb0 * 16` and
+the tail at `doff = nsb * 16 + sb0 * 2` - so the two reads stride independently and the strip
+read stays 16-byte aligned. k2 is the one shape variation: its tail is 4 bytes per superblock
+(`nsb * 16 + sb0 * 4`), because it carries d and dmin. `kq_scales_of` builds the pair;
+`metal_blob_scale_plane` mints it at bake time, folding each format's 20-byte decoded row into
+`[16B strips][2B d]` (k3's row is 18 bytes and is already in that shape). The 2-byte tail is why
+a region's bind offset must be a multiple of 512 elements - the `(off/256)*2` d-plane bind is
+4-byte aligned only then - which is what `metal_blob_off_ok` and `moe_site_ok` check. iq4nl is
+the exception: it reuses q40's 16-byte plane of eight f16 d per superblock, binds once, and
+ignores `doff`. The Vulkan tier does not use this form - it binds the decoded 20-byte row as five
+uints per superblock.

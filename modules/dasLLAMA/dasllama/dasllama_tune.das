@@ -30,7 +30,7 @@ struct TunePerm {
 }
 
 def private build_grid() : array<TunePerm> {
-    // pruned to seats that win beyond noise (the 20-seat walk never spread >1.4% on any box); unroll=1 omits unroll_count (rows byte-identical to the hand hints); vec4_u4 = dot_q4's pinned NEON nibble-widening winner
+    // pruned to seats that win beyond noise (the 20-seat walk never spread >1.4% winner-vs-runner-up in any box's sidecar race tables); unroll=1 omits unroll_count (rows byte-identical to the hand hints); vec4_u4 = dot_q4's pinned NEON nibble-widening winner
     let WIDTHS = fixed_array(8, 16)
     let UNROLLS = fixed_array(2)   // unroll-only rows; u1 == plain
     var grid : array<TunePerm>
