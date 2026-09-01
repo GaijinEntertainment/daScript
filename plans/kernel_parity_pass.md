@@ -539,6 +539,19 @@ stays open.
    on zen4 even though zen2 killed it: `DASLLAMA_GRID_ROWS_X86=1` re-arms the x86 row-group arms as a
    lab knob (env, read at emit time - clear `.jitted_scripts` between A/B runs, the JIT cache does not
    key on it). A/B on zen4 next; if it wins there and loses on zen2 the gate becomes the tune class.
+   MEASURED on zen4 (one thread, engine phase; panel -> row form): iq2s 4918 -> 3559-3656 (reference 3757:
+   PARITY), iq3s 7577 -> 6267-6419 (6105; but -10% at 16 lanes), iq2xxs 4860 -> 4302-4485 (3922); iq2xs
+   4548 -> 8072 and iq3xxs 5973 -> 10744 LOSE 1.8x with either read shape (dword column or bytes). The
+   sign path splits the ISAs too: the per-row +-1 table (the M1's win) costs x86 four scalar loads and
+   three inserts per group, the vector-synthesized sign column plus one mask is cheaper there - with it
+   zen2's row form reads iq2xxs 4696 (panel 4998) while iq2s/iq3s/iq2xs stay panel there. LANDED
+   (c6e99f81a, f68534c06): `grid_rows_path` = the x86-vnni512 class takes the row form for iq2s and
+   iq2xxs, every other x86 case the panel; the knob forces either. zen4 default check: iq2s 3595-3714
+   (1.01-1.05x), iq2xxs 4383-4497 (0.87-0.89), iq2xs 4568-4577 (panel). OPEN: iq2s at 16 lanes on the
+   c7a (8 cores x 2 SMT) reads a 5.9 ms wall with one slot at 8.8 ms, both forms - iq2s's 8 KB grid table
+   plus panel plus x, twice per core, against a 32 KB L1 is the suspect (8-lane run next); the zen4 grid
+   residue at the engine shape is iq3s 0.78, iq2xs 0.86, iq3xxs 0.90 - the panel form's compute, kernel
+   work on the vnni512 lattice (a session of its own).
 
 CPU decode on ARM (the M1 ladder): iq2xs 0.51x, iq2xxs 0.57x, iq3xxs 0.72x, iq3s 0.93x. The memo
 (`kernel_parity_research_arm.md`): the sdot count is at parity (2 per 32 weights per row, both sides);
