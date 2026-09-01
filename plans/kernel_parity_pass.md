@@ -518,6 +518,30 @@ Reading: every one-thread row on both boxes is past the reference (zen4 >= 1.10,
 Under 0.95 at 16 lanes: zen4 q8 0.89, iq4xs 0.92, q51 0.94 (the DRAM-bound rows; iq4nl exactly 0.95) and Intel k6 0.68 (the normal-mode stall gap).
 Both minted profiles committed; the gemv seats took grid_vbmi for all five grid families on both boxes.
 
+### Intel v8 - THE GOAL TABLE (2026-09-01, c8i.4xlarge Xeon 6975P-C, x86-amx re-minted with the L3-proof engine-shape seat race, a3a1a08ab; ratio = reference / ours)
+
+| fmt | gemv 1T | tile 1T | gemv 16L |
+|---|---|---|---|
+| q8 | 1.16 | 3.76 | 0.96 |
+| q8s16 | 1.19 | 3.78 | 1.02 |
+| k4 | 1.48 | 3.31 | 1.53 |
+| k5 | 1.61 | 6.71 | 1.51 |
+| k6 | 1.18 | 3.78 | 1.06 |
+| q40 | 2.05 | 3.64 | 2.78 |
+| q51 | 1.94 | 6.35 | 1.87 |
+| iq4xs | 2.10 | 4.11 | 2.35 |
+| k3 | 1.60 | 3.24 | 0.95 |
+| iq3s | 2.13 | 14.08 | 1.86 |
+| iq3xxs | 1.99 | 10.32 | 2.18 |
+| iq4nl | 2.37 | 2.68 | 3.30 |
+| k2 | 1.61 | 2.13 | 1.44 |
+| iq2s | 1.15 | 6.83 | 1.17 |
+| iq2xs | 1.55 | 8.00 | 1.64 |
+| iq2xxs | 1.59 | 7.27 | 1.73 |
+| mx4 | 2.44 | 4.78 | 2.79 |
+
+Every row at or past 0.95: the goal holds on Intel. q8s16 is the like-for-like q8_0 row (f16 scales); the f32-scale q8 row is informational (byte-capped at 0.944 in theory, 0.96 here).
+
 ## 3. Research memos (read before touching the kernels)
 
 - `kernel_parity_research_cpu.md` - llama.cpp's CPU vec_dot for the five grid formats + Q2_K,
