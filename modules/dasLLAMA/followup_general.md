@@ -857,14 +857,11 @@
     0.92 / iq4nl 0.94 / k5 0.93-0.97 are accepted as they stand; pinned affinity is normally the
     faster arrangement and this may be the one case it is not - decide with a second SMT box in hand.
 
-68. **iq2xs on arm-i8mm regressed with the shared row-group grid decode.** M4 Pro, engine shape
-    (10 perf-core lanes, d=32768): iq2xs 1530 us at the arc's mid-point (branch 8693a5b47) -> 2348
-    now (0.95 of the reference; 0.90 at one thread). The seat is unchanged (`mr8`, the NEON sdot
-    row form) and the chunk grain does not move it (8/16/4/1 all ~2350). What changed is the grid
-    decode: on ARM `grid_rows_path` returns the ROW-GROUP form for every grid format (`rv == 4`),
-    and the refactor that made row groups win on x86 (0.79 -> 1.6 for iq2xs there) cost the ARM
-    path, which the panel form had served better for iq2xs's 9-bit index. There is no knob to force
-    the panel form on ARM (`DASLLAMA_GRID_ROWS_X86` gates x86 only). Isolated to arm-i8mm iq2xs -
-    every other M4 row is >= 0.95 and the goal boxes (zen4, Intel) are unaffected. The fix is an ARM
-    panel/row-form choice for iq2xs, decided the way the x86 class gate is: measure both forms on M4
-    and pin the winner per format.
+68. **iq2xs on arm-i8mm reads 0.90 one-thread / 0.95 at the engine shape - the format's true ARM standing,
+    not a regression.** An earlier mid-arc table read 1.46 (1530 us at 10 lanes), but neither today's emitter
+    nor that commit's own `dasllama/` sources reproduce it on the same box (both measure ~2350; binary, bench
+    and reference identical) - the old figure was an artifact of that session. The decode form is settled: the
+    row-group form beats the panel on ARM for every grid format at both shapes (iq2xs panel 3885 vs rows 2365
+    at 10 lanes), so the sdot gate is already right. What would actually lift iq2xs on ARM is a cheaper 9-bit
+    index path in the row form (its u16 word costs two column-byte reads per site where iq2xxs reads one), or
+    an ARM analog of the x86 symbol lattice over SMMLA - both open kernel work, not a gate flip.

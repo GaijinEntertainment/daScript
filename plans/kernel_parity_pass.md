@@ -591,7 +591,7 @@ the lattice row's tile IS the 512 body - so the gemv companion carries the latti
 | iq2xxs | 1.17 | 8.58 | 1.22 |
 | mx4 | 1.35 | 2.59 | 1.51 |
 
-Every row at or past 0.95 except iq2xs (0.90 one thread, 0.95 at 10 lanes) - a real regression from v1's 1.46, isolated to the ARM sdot row form (followup_general.md entry 68: the shared row-group refactor that won x86 cost ARM iq2xs; the fix is an ARM per-format panel/row choice). Chunk grain measured a null (8/16/4/1 all ~2350 us).
+Every row at or past 0.95 except iq2xs one-thread (0.90; 0.95 at the engine shape) - NOT a regression: v1's 1.46 does not reproduce with v1's own sources on the same box (both ~2350 us), and the row form beats the panel on ARM for every grid at both shapes (iq2xs panel 3885 vs rows 2365 at 10 lanes). followup_general.md entry 68 carries the true standing and the two kernel-work directions; chunk grain is a null (8/16/4/1 all ~2350).
 
 ## 3. Research memos (read before touching the kernels)
 
