@@ -30,7 +30,9 @@ def private scan_dir(dir : string; var offenders : array<string>) {
         let text = fread(path)
         var ln = 1
         for (line in split(text, "\n")) {
-            if (line |> find("LLVMSetIsInBounds") >= 0) {
+            let cmt = line |> find("//")
+            let code = cmt >= 0 ? slice(line, 0, cmt) : line   // a mention in a comment is not a call
+            if (code |> find("LLVMSetIsInBounds(") >= 0) {
                 offenders |> push("{path}:{ln}")
             }
             ln++
