@@ -1151,3 +1151,42 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   workgroups unsplit costs the same 921 us as split in two over 32: the split never bought the
   lone role anything on this box. Drift note: a plain window ranged 27.6-30.2 ms across the hour
   (wo, down and rope_kv drift together), so every A/B on this box is bracketed by plain runs.
+
+- 2026-09-02: Vulkan gap 1 (a), the scale hoist measured and killed for k6; the lever is the twin
+  body. The probe's `k6x` ladder at the 3B q6k shapes (l tile, TF/s, gate | down): constant
+  decode 60.1 | 42.3, nibble-only compose 47.3 | 36.1, full compose without scale reads 38.7 |
+  30.0, shipped 38.5 | 28.3. The scale plane costs 0-6%; the decode compose costs a third of the
+  ceiling. Same rows un-barriered (16 dispatches overlapping): 45.3 | 48.6 - the lone-dispatch
+  wave tail at the 3B shapes (down: 40 tiles on 36 SMs) is worth as much as the decode, a 3B
+  story, not the 1B's (its down GEMM is 32 l-tiles in one wave). So delta 1 (shAscales) is dead
+  for k6 and untested for k4, because the cheaper lever came first: the synthesized four-wide twin
+  repeats the whole scalar body four times, and a HAND-LAID twin shares what four consecutive
+  elements share. The template gains a `DECV4` axis (the format's own `decode_v4` rides the loads
+  instead of the synthesized twin); k4's twin reads its four nibbles as two 16-bit lanes and
+  extracts `(d*sc, dmin*mn)` once, scalar operation order kept. `cm2:k4`, two rounds, hand-laid
+  twin | stripped (TF/s): gate l 47.0/45.4 | 33.9/35.4, gate m 48.1/40.1 | 26.7/27.4, down l
+  37.6/33.4 | 25.6, down m 43.0/38.1 | 23.2, q/wo l 52.4/48.2 | 36.0. Against the synthesized
+  twin's rows above (gate l 41.4/40.8, down l 31.5): +10-19% at the tile. Oracle suite 88/88
+  under the hand-laid twin (bit-exact). The Q4_K_M window with the k4 twin alone, two runs (us):
+  q 1382 (was 1688), k+v 912-1050 (1140), wo 1297 (1553), gate 5612 (6658), up 4782 (5905),
+  down 5345-5836 (6396), window 22852-23500 (27183-27289), pp512 18176-18722 tok/s (16045-16190,
+  +14%). The window now sits at 1.02-1.05x of llama.cpp's 22302; the wall (0.92x of 20309 tok/s)
+  carries the host gap, item 4. The same twin for the other K-quants, `cm2:<fmt>` two rounds,
+  l tile ms/dispatch hand-laid | stripped (gate, down, q/wo): k6 0.569-0.572 | 0.748, 0.780-0.784
+  | 1.015-1.034, 0.214 | 0.291 (gate 44.8 TF/s against the synthesized twin's 38.5, +16%; down
+  32.7 against 28.3); k5 0.552-0.559 | 0.831-0.838, 0.725-0.730 | 1.102-1.108, 0.210-0.213 |
+  0.324; k3 0.524-0.538 | 0.658-0.676, 0.723 | 0.902-0.905, 0.212-0.215 | 0.276; k2 0.484-0.491
+  | 0.651-0.662, 0.660-0.664 | 0.887-0.897, 0.199-0.200 | 0.273-0.274. The m tile follows the
+  same sign on every row. Every K-quant's hand-laid twin beats the stripped arm by 25-50% where
+  the synthesized one managed 7-37%. The rest, l tile TF/s hand-laid | stripped (gate, down,
+  q/wo; two rounds): q40 51.0-51.6 | 44.8-45.2, 39.3-40.1 | 34.9-35.1, 56.3-58.0 | 48.8-49.0;
+  iq4xs 46.3-48.9 | 39.1-39.3, 37.5 | 30.1, 53.0-53.5 | 42.8; iq4nl 44.2-51.8 | 44.5-44.6, 39.9
+  | 34.5, 55.8-56.5 | 48.1-48.3; iq3xxs 46.5-47.4 | 28.1-29.0, 34.5 | 21.1, 48.4-50.5 |
+  30.3-30.5; iq3s 43.4-48.1 | 29.2-30.1, 36.1-36.3 | 22.5-22.6, 50.6-51.3 | 32.4-32.5; iq2s
+  48.9-50.4 | 30.2-32.5, 35.8-35.9 | 23.6-24.0, 51.1-52.6 | 33.2-33.3; iq2xxs 43.6-45.8 |
+  33.8-35.2, 32.5-32.6 | 25.4, 45.8-46.2 | 35.4-35.5; iq2xs 47.9-53.4 | 35.1-37.8, 37.5 |
+  28.0, 52.6-52.7 | 38.1-38.2. Every grid format's hand-laid twin wins 30-65% where the
+  synthesized one was flat (iq3xxs, iq2xs) or lost (iq3s, iq2s, iq2xxs): the grid lookup and
+  the sign parity are per four elements, and the synthesized twin ran them four times. The
+  three `DECVEC` opt-outs are retired; followup_vulkan 36 closes with this. All thirteen kq
+  formats now ship a hand-laid twin.

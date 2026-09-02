@@ -82,6 +82,16 @@ bytes. The IQ4_XS codebook is the one runtime-indexed read a decode makes: it is
 16-entry `@workgroup` f16 table ahead of the tile loop (the reference exe's shared-memory table-staging form),
 never selected out of a register vector per element.
 
+Every kq format's four-wide twin is hand-laid (`decode_v4`, the template's `DECV4` axis): it
+keeps the same spelling and shares what four consecutive elements share. A K-quant twin reads
+its four quant bytes as two 16-bit lanes and extracts the sub-block's scale pair once; a grid
+format's twin looks its grid word up once and takes the four bytes and the four sign bits from
+it. The synthesized twin (`DECVEC`, the axis a new format starts on) repeats the whole scalar
+body four times - the lane selects, the scale-plane words, the grid lookup and the sign parity
+- and on the grid formats it lost to the scalar callback for exactly that reason. The twin
+computes each element in the scalar's operation order, so the tile's oracle holds bit for bit
+under either callback.
+
 ### 2.2l The cm2 tile pick and the coopmat default ladder {#cm2-tile-pick-and-default}
 
 **The l/m tile pick is a wave-efficiency comparison.** For a GEMM of width `d` over `cnt` rows
@@ -128,9 +138,11 @@ NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4;
 the extension lands on mm. The same resolver stamps the mode into the `.dlim` flavor
 configuration, so the recorded mode and the running mode cannot drift. The four-wide decode
 callback is NOT in that configuration: a cm2 tile names both callbacks
-(`coopmatLoadTensorDecode`'s tenth argument is the template's `DECVEC` axis, on by default and
-off for the formats whose `cm2:<fmt>` probe row shows the synthesized twin losing - iq3s, iq2s
-and iq2xxs today), the device created with `DASLLAMA_VK_DECVEC` and the extension decides which
+(`coopmatLoadTensorDecode`'s tenth argument: the format's own `decode_v4` where the template's
+`DECV4` axis is on - every kq superblock format today, sec.2.2k - else the `DECVEC` axis,
+which synthesizes the twin from the scalar body and is where a new format starts, its
+`cm2:<fmt>` probe row deciding whether a hand-laid twin is owed), the device created with
+`DASLLAMA_VK_DECVEC` and the extension decides which
 one the driver runs, and neither choice shapes an image byte, so the bake identity ignores it
 (the configuration's own rule: a serve-only knob is never a field). `decvec_on` is the run's arm,
 announced on the `device ready` line.

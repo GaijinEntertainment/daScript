@@ -575,3 +575,8 @@ module) is independent and can land any time - it is pure structure.
     rate. Done = the three formats' probe rows at or above their scalar rate with the twin on.
     Related: the e2e A/B on the same box (`benchmarks/lcpp_bench.das`, ten reps) spreads 3-11%
     per row, so the probe row is the verdict and the e2e is the confirmation, never the reverse.
+    CLOSED (2026-09-02, the hand-laid twins commit on bbatkin/vk-mirror-bench): every kq format
+    carries a `decode_v4` (the template's `DECV4` axis), not just the three; the grid formats'
+    twins do one grid lookup per four elements and beat the scalar arm by 30-65% at the tile
+    (iq3s 43-48 vs 29-30 TF/s at the gate shape, iq2s 49-50 vs 30-32, iq2xxs 44-46 vs 34-35);
+    the `DECVEC` opt-outs are gone. Rows in `plans/kernel_parity_pass.md`.
