@@ -569,6 +569,30 @@ set (ruled, followup_general 67) - iq4xs 0.91-0.94, k5 0.93-0.98, iq4nl 0.94-0.9
 byte-capped at 0.944 (q8s16, the GGUF q8_0 path, reads 0.96). The grid families' tile crowns are the vbmi rows (a tile tie -
 the lattice row's tile IS the 512 body - so the gemv companion carries the lattice without a separate seat).
 
+### M4 Pro v2 - arm-i8mm re-minted on the rebased branch (2026-09-01; SOLO one thread, TEAM 10 perf-core lanes; ratio = reference / ours)
+
+| fmt | gemv 1T | tile 1T | gemv 10L |
+|---|---|---|---|
+| q8 | 1.65 | 2.31 | 0.95 |
+| q8s16 | 1.62 | 2.24 | 1.02 |
+| k4 | 1.40 | 2.18 | 1.00 |
+| k5 | 1.10 | 3.80 | 1.09 |
+| k6 | 1.34 | 2.22 | 1.11 |
+| q40 | 2.08 | 2.37 | 1.24 |
+| q51 | 1.24 | 2.91 | 1.56 |
+| iq4xs | 1.68 | 3.22 | 1.14 |
+| k3 | 1.27 | 2.60 | 1.46 |
+| iq3s | 1.04 | 13.51 | 1.16 |
+| iq3xxs | 1.09 | 12.41 | 1.18 |
+| iq4nl | 1.85 | 3.18 | 1.30 |
+| k2 | 1.44 | 2.54 | 1.52 |
+| iq2s | 1.24 | 8.17 | 1.13 |
+| iq2xs | 0.90 | 6.79 | 0.94 |
+| iq2xxs | 1.17 | 8.58 | 1.22 |
+| mx4 | 1.35 | 2.59 | 1.51 |
+
+Every row at or past 0.95 except iq2xs (0.90 one thread, 0.94 at 10 lanes) - the arm-i8mm class declines the lattice (VBMI is x86), so iq2xs rides the sdot row form there; the v1 table read it past 0.96 - a re-measure is owed before the PR.
+
 ## 3. Research memos (read before touching the kernels)
 
 - `kernel_parity_research_cpu.md` - llama.cpp's CPU vec_dot for the five grid formats + Q2_K,
