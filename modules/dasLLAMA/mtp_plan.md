@@ -477,24 +477,45 @@ ship a per-carrier default (gemma 2, Qwen NextN 1), keep `--mtp-depth` as the ov
   +5.3%), two-tier coarse/rerank proposal, replay-based rollback (B)/(C), tight-grid dispatch
   for the verify grids.
 
-### S6 - SpecBench harness + the reference row
+### S6 - the ruler is ours, the story is the ladder (ruled 2026-09-02)
 
-- Freeze the Spec-Bench 480-prompt JSONL (Apache-2.0, hemingkx/Spec-Bench) subset + our
-  counting/board prompts as tie-proof controls into the corpus dir; greedy only.
-- Bench arms: plain vs mtp at k (and adaptive) with the counters above + per-sequence p95
-  (the BASS straggler: batch-8 first seq 2.44x vs last 1.08x). Temp-0 task accuracy rides
-  the harness - accepted length alone is insufficient (GSM8K 93 -> 62 incident).
-- llama.cpp reference cells via `llama-speculative-simple --spec-type draft-mtp` (qwen: no
-  `-md`, head rides the second context; gemma: the assistant GGUF) - recon its output format
-  and pin the invocation in the ref-mint script; `llama-bench` cannot do it.
+- No llama.cpp reference CELL. `llama-bench` has no speculative flags, a fork patch would spoil the
+  stock instrument, and an MTP row cannot sit under the board's llama-bench convention (random-token
+  tg128 says nothing about acceptance). Boris: "ruler is for us (u and me). ladder is to present how
+  awesome our approach is" - llama.cpp is the yardstick, not a competitor; both projects borrow
+  freely with attribution.
+- The ruler = `llama-server /completion` on OUR rendered thinking-off prompt, raw, greedy, 128
+  tokens, `ignore_eos`, `cache_prompt` off, `-t 6 -np 1`; gemma `-md <head> --spec-type draft-mtp
+  --spec-draft-n-max K -ngld 99`, qwen NextN in-file. Identical continuation text is the control;
+  timings carry `draft_n / draft_n_accepted`. Prototype: the session's `lcpp_srv.sh`; the story's
+  measurement day re-runs it as a `.das` harness (popen + dasHV client) - written then, not before.
+- Prompts: the SpecBench-4 chat subset in `benchmarks/data/specbench4_prompts.txt` (Apache-2.0,
+  hemingkx/Spec-Bench, qids 81/241/401/321). The 480-prompt freeze and the per-sequence p95 /
+  temp-0 accuracy counters are ledgered, not this arc.
 
-### S7 - docs, board, close
+### S7 - close: the stories (ruled 2026-09-02, LAST thing in the arc)
 
-- `ARCHITECTURE_ENGINE.md` / `ARCHITECTURE_GPU.md` gain the MTP mechanism sections (today
-  only mentions); `REVIEW.md`/`REVIEW_GPU.md`: tune races include the verify widths M=2..9
+- dasllama.io gains a **stories** page. Voice: "Boris and Claude", plain engineering "we" - the
+  project is AI development in the open (performance-critical to an obscene degree, Boris has not
+  written a line of its code), and that is stated, not hidden.
+- Story 1: the M5 news item is over-detailed - it becomes the first story ("why it was fun"; format
+  tunable) and the news shrinks to a few lines plus a link.
+- Story 2: "we now support MTP on Mac" news + the story: what we tried (depth, width, controller,
+  drafter quant, pre/post-norm hidden), how we measured (the ruler above, identical prompts, same
+  denominator, the thinking-mode trap as the lesson), the per-prompt table with acceptance for both
+  engines, the depth curve with per-position acceptance, the round economics that cap the gain
+  ("how small the gain is" is the honest core), where the prompts come from, the commands verbatim,
+  **the date and the sha of the build** - "this is when we tried, this is what it was on that day".
+  Not a competition: llama.cpp is the gold standard and is named as such.
+- Story 3 (separate, later): the stale-sidecar afternoon - how a measurement lied and how we caught
+  it (#71/#73). Not in this arc.
+- Numbers for story 2 are records-grade: a measurement day with the release exe on a fresh mint for
+  ours, and llama.cpp from a STOCK upstream build at a pinned commit (one that carries the gemma
+  assistant head), both the same day on the same box. Dev-rail debug-jit numbers do not publish.
+- Also in the close: `REVIEW.md`/`REVIEW_GPU.md`: tune races include the verify widths M=2..9
   explicitly (llama.cpp's GEMV gate swallowed the verify batch: -25.8%); README rows;
-  `PERF_LEDGER.md` entries; `followup_*` for the ledgered fat; site rows per the ruling at
-  arc end; LAWS.md for the rulings; memory.
+  `PERF_LEDGER.md` entries; `followup_*` for the ledgered fat (S5); the `requires=` sweep (#70);
+  LAWS.md for the rulings; memory.
 
 ## S0 results
 
