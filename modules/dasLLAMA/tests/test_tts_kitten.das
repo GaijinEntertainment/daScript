@@ -196,7 +196,8 @@ def private oracle_size(t : T?; size : string) {
             }
             var noise <- case_noise(dump)
             var tr = new KittenTrace()
-            let wave <- kitten_synthesize_ids(m, ids, case_style(dump), c.speed, noise, 0ul, tr)
+            var tm = TtsTimings()
+            let wave <- kitten_synthesize_ids(m, ids, case_style(dump), c.speed, noise, 0ul, tr, tm)
             dump |> get("waveform") $(ref) {
                 if (length(wave) != length(ref.f)) {
                     t |> failure("{size} {c.id} {c.voice}: {length(wave)} samples, oracle has {length(ref.f)} (frames {tr.frames} vs {c.duration_sum})")
@@ -257,7 +258,10 @@ def private facade_smoke(t : T?; size : string) {
         }
         t |> success(finite, "every sample finite")
         t |> success(peak > 0.05, "peak {peak}: the model spoke")
-        to_log(LOG_INFO, "{size} facade: {length(audio.pcm)} samples, peak {peak}\n")
+        let tm & = audio.timings
+        t |> success(tm.total_us > 0l && tm.generator_us > 0l && tm.decoder_us > 0l && tm.front_end_us > 0l, "the stage clocks ran")
+        t |> success(tm.total_us >= tm.front_end_us + tm.bert_us + tm.decoder_us + tm.generator_us, "the total covers its parts")
+        to_log(LOG_INFO, "{size} facade: {length(audio.pcm)} samples, peak {peak}; {timings_line(tm, audio.sample_rate)}\n")
     }
 }
 

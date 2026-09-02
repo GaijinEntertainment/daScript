@@ -71,6 +71,7 @@ def synthesize(m : TtsModel; text : string; voice : string; speed : float = 1.0)
     if (empty(vname)) {
         panic("dasLLAMA tts: unknown voice '{voice}'")
     }
+    let clock = ref_time_ticks()
     let norm = normalize_text(text)
     let ps = kitten_phonemes_from_misaki(g2p_phonemize(m.g2p, m.tagger, norm))
     let ids <- kitten_token_ids(ps)
@@ -85,7 +86,9 @@ def synthesize(m : TtsModel; text : string; voice : string; speed : float = 1.0)
     }
     let sp = speed * (m.kitten.speed_priors?[vname] ?? 1.0)
     var noise = TtsNoise()
-    out.pcm <- kitten_synthesize_ids(m.kitten, ids, style, sp, noise, 0x5eed1ul, null)
+    out.timings.front_end_us = int64(get_time_usec(clock))
+    out.pcm <- kitten_synthesize_ids(m.kitten, ids, style, sp, noise, 0x5eed1ul, null, out.timings)
     kitten_trim(out.pcm)
+    to_log(LOG_INFO, "dasLLAMA tts: kitten {m.kitten.size}: {timings_line(out.timings, out.sample_rate)}\n")
     return <- out
 }

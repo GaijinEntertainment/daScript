@@ -910,7 +910,8 @@ def private concat_channels(x : array<float>; c : int64; f0d, nd, res : array<fl
 
 def private kitten_decode(d : KittenDecoder; text_c : int64; source : SineSourceCfg; asr : array<float>; frames : int64;
                           f0, nrg : array<float>; f2 : int64; s_ref : array<float>; var noise : TtsNoise; seed : uint64;
-                          var tr : KittenTrace?) : array<float> {
+                          var tr : KittenTrace?; var tm : TtsTimings) : array<float> {
+    var clock = ref_time_ticks()
     var @exact_size f0d : array<float>
     var @exact_size nd : array<float>
     var @exact_size res : array<float>
@@ -941,6 +942,8 @@ def private kitten_decode(d : KittenDecoder; text_c : int64; source : SineSource
     if (tr != null) {
         tr.gen_in := y
     }
+    tm.decoder_us = int64(get_time_usec(clock))
+    clock = ref_time_ticks()
     kitten_draw_noise(source, f2, seed, noise)
     var @exact_size har : array<float>
     let n = kitten_source(d, source, f0, f2, noise, har)
@@ -949,16 +952,22 @@ def private kitten_decode(d : KittenDecoder; text_c : int64; source : SineSource
     }
     var @exact_size har_spec : array<float>
     let har_frames = kitten_har_spectrum(d, har, n, tr, har_spec)
+    tm.source_us = int64(get_time_usec(clock))
+    clock = ref_time_ticks()
     var @exact_size wave : array<float>
     kitten_generator(d, y, cw, t, s_ref, har_spec, har_frames, tr, wave)
+    tm.generator_us = int64(get_time_usec(clock))
+    tm.samples = long_length(wave)
     return <- wave
 }
 
 //! Synthesize from token ids: the full StyleTTS2 pass, raw waveform (the reference driver's
 //! tail trim is the facade's). `noise` supplies the source noise (empty = drawn from `seed`);
-//! `tr` collects the stage tensors when not null.
+//! `tr` collects the stage tensors when not null; `tm` receives each stage's wall time.
 def kitten_synthesize_ids(m : KittenModel; ids : array<int>; style : array<float>; speed : float;
-                          var noise : TtsNoise; seed : uint64; var tr : KittenTrace?) : array<float> {
+                          var noise : TtsNoise; seed : uint64; var tr : KittenTrace?; var tm : TtsTimings) : array<float> {
+    let start = ref_time_ticks()
+    var clock = start
     let t = long_length(ids)
     let hs = m.style_dim / 2l
     var @exact_size s_ref : array<float>
@@ -976,11 +985,15 @@ def kitten_synthesize_ids(m : KittenModel; ids : array<int>; style : array<float
     if (tr != null) {
         tr.bert := d_en
     }
+    tm.bert_us = int64(get_time_usec(clock))
+    clock = ref_time_ticks()
     var @exact_size t_en : array<float>
     kitten_text_encoder(m.text_encoder, ids, t_en)
     if (tr != null) {
         tr.text_enc := t_en
     }
+    tm.text_enc_us = int64(get_time_usec(clock))
+    clock = ref_time_ticks()
     var @exact_size d : array<float>
     kitten_duration_encoder(m.predictor, d_en, t, s_pro, d)
     let dc = m.predictor.bert_encoder.nout + hs
@@ -995,6 +1008,8 @@ def kitten_synthesize_ids(m : KittenModel; ids : array<int>; style : array<float
     var @exact_size asr : array<float>
     align_expand_rows(d, t, dc, dur, en)
     align_expand_channels(t_en, m.text_encoder.c, t, dur, asr)
+    tm.duration_us = int64(get_time_usec(clock))
+    clock = ref_time_ticks()
     var @exact_size f0 : array<float>
     var @exact_size nrg : array<float>
     let f2 = kitten_prosody(m.predictor, en, dc, frames, s_pro, f0, nrg)
@@ -1002,7 +1017,10 @@ def kitten_synthesize_ids(m : KittenModel; ids : array<int>; style : array<float
         tr.f0 := f0
         tr.n := nrg
     }
-    return <- kitten_decode(m.decoder, m.text_encoder.c, m.source, asr, frames, f0, nrg, f2, s_ref, noise, seed, tr)
+    tm.prosody_us = int64(get_time_usec(clock))
+    var wave <- kitten_decode(m.decoder, m.text_encoder.c, m.source, asr, frames, f0, nrg, f2, s_ref, noise, seed, tr, tm)
+    tm.total_us = tm.front_end_us + int64(get_time_usec(start))
+    return <- wave
 }
 
 //! The reference driver's tail trim: a synthesis ends with 5000 samples of silence.

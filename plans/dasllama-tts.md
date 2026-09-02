@@ -347,7 +347,13 @@ Exit gates:
   per-block coverage lands as the oracle's stage and seam cells (each block isolated against
   onnxruntime tensors); fixture-tensor unit tests are the phase-3 job when Kokoro reuses the
   home.
-- JIT RTF < 0.5 nano, < 1.0 mini on the M1 (generous first gate; tighten later).
+- JIT RTF < 0.5 nano, < 1.0 mini on the M1 (generous first gate; tighten later). MEASURED
+  2026-09-02 (`TtsTimings`, model load excluded, warm, three sentences of 6-12 s): nano
+  0.18-0.20, mini 0.41-0.43 - MET. The split: generator 79-83% (the iSTFTNet residual blocks
+  over 27k-45k frames, im2col + f32 GEMM per conv plus Snake's sine per element), BERT 8-16%
+  (twelve tied layers: f32 GEMMs and a scalar attention loop), everything else under 5%.
+  onnxruntime on the same box: 0.035 / 0.28 - the phase-5 target; direct conv kernels, q8
+  planes and Metal are the ladder, the seam gates the parity guard.
 
 ### Phase 3 - Kokoro family
 
