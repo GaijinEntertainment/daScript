@@ -300,6 +300,21 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
 - Adaptive depth per the mlxfast shape, priced off t(M) (the same numbers the lab measured -
   a scheduler fitted to a SEPARATE cost model drifts from the launched geometry; their open
   PR #1388 unifies the two). Position-aware. Lands behind a lever; fixed-k is the fallback.
+- **Design (from the qwen38 memo sec. 6, 2026-09-01):** per round choose d in 0..kmax by the
+  greedy marginal rule - extend while `reach = prod_{i<d} p_i > price.marginal[d] * (1 +
+  expected) / price.cumulative[d]`, where `p_i` = a per-position conditional acceptance EMA
+  (P(draft i accepted | 0..i-1 accepted), seeded 0.85 * 0.98^i, alpha 0.15), and `price` = the
+  measured per-depth round cost relative to a plain step (T(d) = V + sum marginal[k] * V) -
+  MEASURED on this box at warm-up (a t(M) probe of the verify at M = 2..kmax+1 plus the draft
+  step), never a fitted shape (their fitted shape lost its whole win on the crown's kernel table).
+  Update: positions < a observe success; position a observes failure only on a real reject (not
+  a stop-token stop); a full accept nudges position a toward 0.95 (transferred optimism, capped).
+  Confidence gate: `p_0 = min(EMA[0], sigmoid(margin/2))` from the pending token's own top-2 logit
+  gap (free from the acceptance packet); d = 0 (a plain step, no draft) when p_0 <= h, with h the
+  head-step cost ratio (their 0.18, ours measured). Ceiling = the ruled 4; no floor (their floor
+  was a measurement artefact). Stop tokens commit like any token and the round drafts past them.
+  Denominator discipline for the board: the control is draft-count 0 on the same session with the
+  head resident (our `--mtp-ab` OFF arm), never the depth-1 rail.
 
 ### S5 - fat
 
@@ -405,6 +420,12 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
 - CPU batch B=2/4/6/8 (only B=3 + B=1-delegation + shrink are gated today).
 
 ## Predictions (logged BEFORE each measurement)
+
+- **0.8B depth sweep (k = 1..4, `--mtp-ab --mtp-depth`, M5, logged 2026-09-01 before the run):**
+  the head's 248320-row classifier is ~1/3 of a 0.8B step, so a draft costs ~0.35 step against
+  ~0.88 expected extra tokens per depth level. Predicted: k=1 1.27x (measured), **k=2 the best
+  cell at ~1.4x**, k=3 ~1.3x, k=4 ~1.15x. The 27B (classifier a small fraction of the trunk)
+  should favour deeper; the 0.8B is the wrong model to set the default from.
 
 - t(M): the mv family near-flat to M=4 (weights-bound), knee at 8; whole-step verify at
   k=3 within 1.3x of a plain step on 27B.
