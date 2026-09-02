@@ -878,3 +878,13 @@
     race any family whose adopted winner names a perm `tune_requires_ok` rejects locally (general,
     no rename, needs the suffix -> requires mapping surfaced to the adopt layer). The woodpecker
     round raised the Cascade Lake case.
+70. **Kernel alignment contracts still live as header sentences where `requires=` now exists.**
+   `[metal_dispatch]` takes `requires = "lhs % N, ..."` and the generated builder checks it at
+   every dispatch (the two fixed-B mul_mv forms declare their 256 / 128 K stripe; the mtl_toy
+   fixture proves the trip). The other contracts are still prose: `dasllama_metal_gemm.das`
+   ("Requires d % 64 == 0 and a big grid"), the mul_mm site ("d % 64 == 0, mp % 32 == 0"), the
+   64-wide classifier N tile ("the caller gates d % 64 == 0"), the tensor GEMM ("out-dim % 64, M
+   padded to 64"), plus every float4-view kernel's implicit `% 4`. Done = each such sentence
+   becomes a `requires=` item on its dispatch (kargs field or params name), the sentence goes,
+   and the batch/prefill drivers that route around the kernel gate per site on the same modulus
+   (never on a whole-rail knob). Ruled to land at the END of the MTP arc, not per slice.

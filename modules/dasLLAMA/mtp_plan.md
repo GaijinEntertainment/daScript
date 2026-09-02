@@ -376,6 +376,8 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
     Ruling (Boris): the kernel's alignment contract is a MACRO EXPANSION, not a lint - `requires =
     "ka.ndim % 256"` on `[metal_dispatch]` generates the check at every dispatch (the mv B2/B4 forms
     declare theirs; the toy fixture proves the trip); REVIEW_GPU.md duty + ARCHITECTURE_GPU.md statement.
+    The sweep of the remaining header-sentence contracts (GEMM d % 64, mul_mm mp % 32, tensor GEMM,
+    float4 views) is LEDGERED - `followup_general.md` #63, ruled for the END of the arc.
     Bisect controls that pinned it: gemma-4-12B dense batch clean (0.024), Qwen3-30B-A3B batch clean
     (0.14), `DASLLAMA_METAL_BATCH_CONCURRENT=0` bit-identical (not a hazard), `DASLLAMA_METAL_BATCH_MV=0`
     + the plane fix -> 0.96 / 0 flips. The `mtp-dff-<tag>` arm (distinct-session GPU batch vs GPU
