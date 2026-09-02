@@ -636,27 +636,39 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   = 74 tok/s, depth 3 = 53. Their recorded 68.5 (M4 Max) came from a different branch. So on M5:
   their best is serial 128; ours is 122 serial (they are ~5% ahead on plain decode) and **145 with
   MTP** - the drafter is the whole lead. Logs: scratchpad/mlxfast/.
-- **llama.cpp measured on this M5 (fork build b4-98c4764b6, llama-cli single-turn, chat template with
-  thinking off, 128 tokens, greedy, fa on; the gemma assistant head as `-md ... --spec-type draft-mtp`,
-  the Qwen head in-file), 2026-09-02:**
+- **llama.cpp measured on this M5 (fork build b4-98c4764b6, `llama-server` `/completion` on the
+  SAME pre-rendered thinking-off prompt our bench renders - `<|turn>model` + an empty
+  `<|channel>thought<channel|>` - greedy, 128 tokens, fa on; gemma assistant head as
+  `-md ... --spec-type draft-mtp`, the Qwen head in-file), 2026-09-02.** Both engines produce the
+  identical continuation text on every prompt, so the acceptance columns compare one drafter against
+  the other on one token stream. (An earlier llama-cli pass had THINKING ON on their side - its 91%
+  writing acceptance was an outline, not the blog post; discarded.)
 
-  | prompt | lcpp off | lcpp n_max=1 | lcpp n_max=2 | ours off | ours depth 2 (fused) |
-  |---|---|---|---|---|---|
-  | writing | 102.1 | 146.1 (1.43x) | 145.6 | 124.1 | 137.9 (1.11x) |
-  | summarization | 101.8 | 128.9 (1.27x) | 133.4 (1.31x) | 117.9 | 138.3 (1.17x) |
-  | math | 103.6 | 150.8 (1.46x) | **177.4 (1.71x)** | 123.9 | **193.6 (1.56x)** |
-  | qa | 103.1 | 138.3 (1.34x) | 149.1 (1.45x) | 124.9 | 158.2 (1.27x) |
+  | prompt | lcpp off | lcpp n_max=1 (accept) | lcpp n_max=2 (accept) | ours off | ours depth 1 (accept) | ours depth 2 (accept) |
+  |---|---|---|---|---|---|---|
+  | writing | 102.2 | 127.5 = 1.25x (65.8%) | 123.2 = 1.21x (50.4%) | 124.1 | **139.0** = 1.12x (64.9%) | 130.5 = 1.05x (47.7%) |
+  | summarization (700-tok ctx) | 101.8 | **134.8** = 1.32x (78.9%) | 134.7 = 1.32x (63.4%) | 118.0 | 132.4 = 1.12x (71.6%) | 129.0 = 1.10x (59.5%) |
+  | math | 103.4 | 148.7 = 1.44x (95.0%) | 169.9 = 1.64x (90.5%) | 123.9 | 157.4 = 1.27x (89.6%) | **183.4** = 1.49x (90.2%) |
+  | qa | 103.3 | 133.0 = 1.29x (72.6%) | 137.6 = 1.33x (61.9%) | 124.8 | 147.2 = 1.18x (74.0%) | **149.8** = 1.21x (63.4%) |
 
-  Plain decode: ours +18%. MTP ON absolute: ours ahead on three of four prompts (summarization,
-  math, qa by 4-9%), behind on writing by 5%. Their ratios are larger for the baseline reason (a
-  9.7 ms step vs our 8.2) - their two-row verify lands at about the same absolute cost as ours - but
-  their depth 2 GAINS over depth 1 (math +17%) where ours is flat: their three-row verify is cheaper
-  than ours. **Qwen3.6-27B-MTP (dense)**: lcpp off 28.4 / n_max 1 40.8 (1.44x) / n_max 3 42.8 (1.51x)
-  vs ours off 26.7 / k=1 34.9 (1.31x) / k=3 1.19x - they beat us plain (+6%) and ON (+17-23%), and
-  their depth 3 gains where ours loses. Two concrete gaps for the ledger: the dense 27B verify at 3-5
-  rows (ours 1.3-1.8x a step, theirs ~1.05x), and the 27B plain decode. Also their prefill on the
-  700-token summarization prompt reads 2800 tok/s vs our ~1700 (our pp512 board row is 3868) -
-  our prefill past 512 tokens needs a look.
+  - Acceptance is the SAME drafter: pooled depth 1 theirs 77.1% (216/280) vs ours 74.6%; depth 2
+    64.5% vs 63.3%; per position within a few points (math depth 1 is their 117-token EOS stop vs
+    our forced 128 - the post-EOS tail accepts poorly). The drafter is not where any gap is.
+  - Plain decode: ours +18-21% on the three short prompts, +16% on the 700-token one. MTP ON
+    absolute: ours ahead on writing, math, qa at both depths (by 4-9%); behind on summarization by
+    2-4%. Their step is flat across context (102.2 -> 101.8) while ours drops 118/124 = -5% at 700
+    tokens, and their prefill on that prompt reads 2813 tok/s vs our ~1733 (our pp512 board row is
+    3868). ONE gap, two faces: our long-context path (attention decode past ~500 keys, prefill past
+    512) - ledgered as followup_general #71.
+  - Round cost: their two-row verify round is 1.36x a step (13.4 ms on a 9.8 ms step), ours 1.45x
+    (11.8 ms on 8.15 - draft chain 0.05 ms, the rest verify+walk+commit); three rows 1.69x vs 1.87x.
+    Their k-row verify is relatively cheaper, our step is absolutely faster; the absolute round is
+    ours (11.8 vs 13.4 ms). Their ratios read larger for the baseline reason only.
+  - **Qwen3.6-27B-MTP (dense), raw prompt no template:** lcpp off 28.4 / n_max 1 40.5 (1.43x,
+    84.1%) / n_max 3 45.6-48.9 (1.61-1.72x, 75-89%) vs ours off 26.7 / k=1 34.9 (1.31x) / k=3
+    1.19x. They beat us plain (+6%) and ON (+16-40%), and their depth 3 gains where ours loses:
+    their 4-row dense verify is ~1.05-1.1x a step, ours 1.3-1.8x. Ledgered as followup_general #72
+    (the dense verify rows AND the 27B plain step).
 - **M4 Pro (Anton's mini, 14-core, 64 GB; NOT the 40-core M4 Max mlx.fast measured on), same
   corpus, fused round, 2026-09-02:** off 59.1, depth 1 **67.3 (1.14x)**, depth 2 55.7 (0.94x).
   Per task at depth 1: writing 1.10x, summarization 1.06x, math 1.24x, qa 1.16x. Round clocks: the

@@ -888,3 +888,16 @@
    becomes a `requires=` item on its dispatch (kargs field or params name), the sentence goes,
    and the batch/prefill drivers that route around the kernel gate per site on the same modulus
    (never on a whole-rail knob). Ruled to land at the END of the MTP arc, not per slice.
+71. **gemma-26B long-context decode and prefill past 512 tokens.** Matched-mode ruler (mtp_plan.md,
+   S3 results): our plain step drops 5% from a 35-token to a 700-token context (124 -> 118 tok/s)
+   where llama.cpp's is flat (102.2 -> 101.8), and our prefill of that 700-token prompt reads
+   ~1733 tok/s against llama.cpp's 2813 while our pp512 board row is 3868. One path, two faces:
+   the attention decode kernel past ~500 keys and the prefill bucket past 512. Done = a context
+   sweep (35 / 256 / 700 / 2048) of the plain step and of prefill on gemma-26B with the per-kernel
+   profile beside each point, then the kernel that owns the cliff.
+72. **Dense Qwen3.6-27B: the multi-row verify and the plain step.** Same ruler: llama.cpp's
+   4-row verify on the dense 27B costs ~1.05-1.1x a step (their depth 3 = 1.61-1.72x), ours 1.3-1.8x
+   (depth 3 loses); their plain decode is +6% on ours (28.4 vs 26.7). Done = the rows probe on the
+   27B at B=1/2/4 with the per-kernel split (where the extra rows are paid: GEMV rail vs the
+   mp-8 / GEMM crossover), and the plain-step gap profiled kernel by kernel.
+
