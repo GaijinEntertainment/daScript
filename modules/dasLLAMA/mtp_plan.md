@@ -426,6 +426,29 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   ~0.88 expected extra tokens per depth level. Predicted: k=1 1.27x (measured), **k=2 the best
   cell at ~1.4x**, k=3 ~1.3x, k=4 ~1.15x. The 27B (classifier a small fraction of the trunk)
   should favour deeper; the 0.8B is the wrong model to set the default from.
+  **RESULT (M5, -r 3, 8 prompts x 128):**
+
+  | k | off t/s | on t/s | ratio | per-draft acceptance |
+  |---|---|---|---|---|
+  | 1 | 357.9 ± 0.6 | 431.6 ± 0.3 | 1.21x | 87.9% |
+  | 2 | 356.3 ± 1.1 | 451.1 ± 1.9 | 1.27x | 80.0% |
+  | 3 | 355.4 ± 1.2 | **464.6 ± 2.6** | **1.31x** | 73.8% |
+  | 4 | 311.1 ± 32.6 (VOID, cv 10%) | 255.0 ± 4.0 | ~0.72x vs the settled off | 67.6% |
+
+  Prediction MISSED on both ends: the per-draft cost is lower than modelled (k=3 still gains), and
+  k=4 falls off a wall the model lacked - at nr = 5 the q8 sites run TWO B4 tiles, so every weight
+  streams twice per verify (the G(M) staircase of the qwen38 memo, at our width 5). The 8-row
+  single-pass form exists for K-quant (`kq_mvb8_*`) but not for q8 (`MetalGemvB24T` stops at B4):
+  a q8 B8 twin is the S5 item that unlocks k=4 on q8 models. The off arm's cv 10% at k=4 is the
+  sustained-load regime again (six minutes of continuous GPU load by then) - per-rep interleaving
+  stays owed (S6).
+- **27B-MTP depth sweep (k = 2..4, logged 2026-09-01 before the run):** calibrating from the
+  measured depth-1 round (1.82 tokens/round at ~1.25x settled => a round costs ~1.46 plain steps
+  at nr = 2) and ~0.22 step per extra level (a kq verify row + a draft whose head is 1/64 of the
+  trunk), with per-draft acceptance decaying ~7 points per level (82 -> 75 -> 68 -> 62):
+  E[tokens] 2.44 / 2.86 / 3.12 over costs 1.68 / 1.90 / 2.12 => **k=2 ~1.45x, k=3 ~1.5x, k=4
+  ~1.5x, no wall** (the kq sites have the single-pass B8 form; only the small q8 dn projections
+  tile). The off arms will carry the sustained-load noise.
 
 - t(M): the mv family near-flat to M=4 (weights-bound), knee at 8; whole-step verify at
   k=3 within 1.3x of a plain step on 27B.
