@@ -545,6 +545,9 @@ def main() {
     }
     apply_box_profile_runtime()
     set_metal_mode(cfg.ngl > 0 ? MetalMode.when_available : MetalMode.off)
+    if (cfg.ngl == 0) {
+        allow_cpu_prefill()   //! a CPU row prefills its control text on the CPU by design
+    }
     var rendered : array<string>
     var ours : array<string>
     render_prompts(cfg.model, texts, cfg.ngen, cfg.ngl > 0, rendered, ours)
@@ -560,6 +563,11 @@ def main() {
             run_lcpp_arm(cfg, head, d, rendered, ours, rows)
         }
     }
+    write_report(cfg, head, rows)
+}
+
+//! the dated, sha-stamped record: provenance of both engines, the model and its head, then the rows
+def private write_report(cfg : Args; head : string; rows : array<string>) {
     let meta = JV((date = format_time(get_clock(), "%Y-%m-%d %H:%M"), host = first_line(sh("hostname")),
         cpu = first_line(sh("sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m")),
         das_sha = first_line(sh("git rev-parse --short HEAD")), das_exe = cfg.exe,
