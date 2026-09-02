@@ -197,8 +197,14 @@ Steps:
    (`1/2 cup` -> "one two cup"); (d) units defined-not-wired (`kg/GB/ms/GHz` left as
    letters); (e) `°C` stripped; (f) decades (`1960s` -> "nineteen sixtys"). Idempotence
    test over the 200-sentence corpus.
-2. `dasllama_postag.das` - perceptron + tokenizer; gate: UD-EWT test-split tag accuracy
-   >= 96.5% AND the g2p heteronym gate below (the tagger only matters through it).
+2. `dasllama_postag.das` - perceptron + tokenizer; gate: tag agreement with the reference
+   tagger on the corpus >= 95% AND the g2p heteronym gate below (the tagger only matters
+   through it). Measured: UD-EWT gold alone tops out near 94% on its own web-text test split
+   (the 96.5% first written here was a WSJ-class number) and reads spelled-out numbers -
+   which the normalizer emits and treebanks of written text barely carry - as nouns; adding
+   spaCy-tagged public-domain prose run through the normalizer (`harness/mint_postag_silver.py`,
+   Project Gutenberg texts) lifts corpus agreement from 93% to 96% at no gold cost. UD
+   English-GUM was rejected as training data: CC BY-NC-SA.
 3. `dasllama_g2p.das` + `harness/build_g2p_data.py` - lexicon, rules, fallback chain,
    stress. Port misaki's `en.py` rules (0.03MB of Python - small); function words; the
    letter-name rule for single letters/acronyms.
@@ -213,7 +219,10 @@ Exit gates:
 - Token-identical with python arm E on >= 99% of the 200-sentence set AND a fresh
   2,000-sentence sweep (mine LJSpeech + Harvard lists 7+; the 1% budget is for
   tokenizer-boundary ties, each diff hand-classified).
-- Heteronym set: >= 27/38 (parity with misaki+spaCy; espeak is 11/38).
+- Heteronym set: parity with misaki+spaCy in each inventory - 24/38 in the misaki inventory
+  (Kokoro's, what the das test scores), 27/38 in the espeak inventory (Kitten's); espeak itself
+  is 11/38. The tagger is the lever: every heteronym miss below parity so far is a tag the
+  reference tagger read differently.
 - The six textnorm defect tests green; no `num2words`, no espeak symbol in any error path.
 - Startup: g2p data load < 50ms on the M1 (packed binary, no JSON).
 

@@ -237,6 +237,34 @@ def utf8_to_cpts(s : string) : array<int> {
     return <- cpts
 }
 
+//! Encode codepoints [a, b) of an array to a UTF-8 string.
+def cpts_to_utf8(c : array<int>; a, b : int) : string {
+    var inscope bytes : array<uint8>
+    bytes |> reserve((b - a) * 4)
+    for (i in range(a, b)) {
+        let cp = c[i]
+        if (cp < 128) {
+            bytes |> push(uint8(cp))
+        } elif (cp < 2048) {
+            bytes |> push(uint8(192 + (cp >> 6)))
+            bytes |> push(uint8(128 + (cp & 63)))
+        } elif (cp < 65536) {
+            bytes |> push(uint8(224 + (cp >> 12)))
+            bytes |> push(uint8(128 + ((cp >> 6) & 63)))
+            bytes |> push(uint8(128 + (cp & 63)))
+        } else {
+            bytes |> push(uint8(240 + (cp >> 18)))
+            bytes |> push(uint8(128 + ((cp >> 12) & 63)))
+            bytes |> push(uint8(128 + ((cp >> 6) & 63)))
+            bytes |> push(uint8(128 + (cp & 63)))
+        }
+    }
+    return string(bytes)
+}
+
+//! Encode a whole codepoint array to a UTF-8 string.
+def cpts_to_utf8(c : array<int>) : string => cpts_to_utf8(c, 0, length(c))
+
 //! Encode a single codepoint to its UTF-8 bytes as a string.
 def cpt_to_utf8(cpt : int) : string {
     if (cpt < 128) {

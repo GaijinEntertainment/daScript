@@ -1,0 +1,127 @@
+options gen2
+options _dasllama_internal = true
+
+require dastest/testing_boost public
+require dasllama/dasllama_g2p
+require dasllama/dasllama_postag
+require strings
+require daslib/strings_boost
+require daslib/fio
+require _tts_corpus
+require _model_tier   // models_dir(): tts_g2p.bin and tts_postag.bin live in the model store
+
+// TTS grapheme-to-phoneme against the 200-sentence corpus: phoneme-identical with the reference
+// front end (arm E of the fidelity experiment, fed the same normalized text), the heteronym
+// gate (both annotated readings present), the fallback chain, stress helpers, and the
+// load-time budget. Model-gated on tts_g2p.bin + tts_postag.bin (harness/build_g2p_data.py,
+// harness/train_postag.py).
+
+def private g2p_path() : string => path_join(models_dir(), "tts_g2p.bin")
+def private tagger_path() : string => path_join(models_dir(), "tts_postag.bin")
+
+def private data_present(t : T?) : bool {
+    for (p in [g2p_path(), tagger_path()]) {
+        let f = fopen(p, "rb")
+        if (f == null) {
+            t |> skip("{base_name(p)} absent in {models_dir()}")
+            return false
+        }
+        fclose(f)
+    }
+    return true
+}
+
+//! the heteronym scorer's fold: stress and length marks off, the reduced vowels and the flap
+//! folded together
+def private bare(ps : string) : string {
+    var s = replace(replace(replace(ps, "ˈ", ""), "ˌ", ""), "ː", "")   // nolint:STYLE039
+    s = replace(s, "ˑ", "")   // nolint:STYLE039
+    s = replace(s, " ", "")
+    s = replace(replace(replace(replace(s, "ᵻ", "ə"), "ɨ", "ə"), "ɐ", "ə"), "ɪ", "ə")   // nolint:STYLE039
+    return replace(replace(s, "ɾ", "t"), "T", "t")   // nolint:STYLE039
+}
+
+[test]
+def test_corpus_phonemes(t : T?) {
+    t |> run("phoneme-identical with the reference front end on 200 normalized sentences") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        let rows <- load_tts_corpus()
+        var mismatches = 0
+        for (r in rows) {
+            let got = strip(g2p_phonemize(g, tg, r.norm))
+            if (got != r.ps_misaki) {
+                mismatches++
+                t |> failure("{r.id}: got  {got}\n       want {r.ps_misaki}")
+            }
+        }
+        to_log(LOG_INFO, "tts g2p: {200 - mismatches}/200 sentences phoneme-identical with the reference\n")
+        t |> success(mismatches * 100 <= 200, "{mismatches} sentences differ (budget 1 percent)")
+    }
+    t |> run("heteronyms: both readings present") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        let rows <- load_tts_corpus()
+        var n = 0
+        var both = 0
+        for (r in rows) {
+            continue if (empty(r.heteronym.word))
+            n++
+            let ps = bare(g2p_phonemize(g, tg, r.norm))
+            let f1 = find(ps, bare(r.heteronym.form1)) >= 0
+            let f2 = find(ps, bare(r.heteronym.form2)) >= 0
+            if (f1 && f2) {
+                both++
+            } else {
+                to_log(LOG_INFO, "tts g2p heteronym miss {r.id} '{r.heteronym.word}': {f1 ? "" : "form1 "}{f2 ? "" : "form2 "}absent in {ps}\n")
+            }
+        }
+        to_log(LOG_INFO, "tts g2p: heteronyms both readings {both}/{n}\n")
+        t |> equal(n, 38)
+        // the reference front end scores 24/38 in this inventory (27/38 in the espeak one)
+        t |> success(both >= 24, "heteronyms {both}/{n} (reference front end 24 in this inventory)")
+    }
+}
+
+[test]
+def test_pieces(t : T?) {
+    t |> run("stress helpers") @(t : T?) {
+        t |> equal(apply_stress("hɛlˈO", -2.0), "hɛlO")   // nolint:STYLE039
+        t |> equal(apply_stress("hɛlˈO", -1.0), "hɛlˌO")   // nolint:STYLE039
+        t |> equal(apply_stress("hɛlO", 2.0), "hˈɛlO")   // nolint:STYLE039
+        t |> equal(apply_stress("hɛlO", 0.5), "hˌɛlO")   // nolint:STYLE039
+        t |> equal(apply_stress("hɛlˌO", 1.0), "hɛlˈO")   // nolint:STYLE039
+        t |> equal(apply_stress("sts", 2.0), "sts")
+    }
+    t |> run("ARPAbet into the inventory") @(t : T?) {
+        t |> equal(arpabet_to_misaki(["K", "AH0", "M", "P", "Y", "UW1", "T", "ER0"]), "kəmpjˈutəɹ")   // nolint:STYLE039
+        t |> equal(arpabet_to_misaki(["R", "IY2", "K", "AO1", "R", "D"]), "ɹˌikˈɔɹd")   // nolint:STYLE039
+        t |> equal(arpabet_to_misaki(["K", "AE2", "T"]), "kæt")   // nolint:STYLE039
+    }
+    t |> run("the fallback chain never drops a word") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        // in the gold lexicon, in CMUdict only, and a made-up spelling for the GRU
+        let ps = g2p_phonemize(g, tg, "The zymurgy of Kierkegaard was flombastic.")
+        t |> success(!empty(ps), ps)
+        var inscope words <- split(strip(ps), " ")
+        t |> equal(length(words), 6, ps)
+        for (w in words) {
+            t |> success(!empty(w), "an empty word in {ps}")
+        }
+        let spelled <- g2p_predict(g, "flombastic")
+        t |> success(length(spelled) >= 6 && length(spelled) <= 12, "GRU spelled {length(spelled)} phones")
+    }
+    t |> run("loads inside the budget") @(t : T?) {
+        return if (!data_present(t))
+        let t0 = ref_time_ticks()
+        let g <- load_g2p(g2p_path())
+        let usec = get_time_usec(t0)
+        to_log(LOG_INFO, "tts g2p: loaded {g.gold.n} gold, {g.silver.n} silver, {g.cmu.n} cmudict entries in {usec} us\n")
+        t |> success(usec < 50000, "load took {usec} us")
+        t |> success(g.gold.n > 90000 && g.silver.n > 90000 && g.cmu.n > 120000, "table sizes {g.gold.n} {g.silver.n} {g.cmu.n}")
+    }
+}

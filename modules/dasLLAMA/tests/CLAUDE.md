@@ -363,6 +363,20 @@ dedicated q8 plane (offset 0, plane == table exactly, gather rows BIT-match the 
 wblob provably too small to carry the expansion) and a K-quant table on its native kq plane;
 plus a greedy chat turn per serving mode on the E2B Q8_0 carrier - a q8 control, an fp32 turn,
 and a `q4_0` turn, the `q4_0` one proving q4 serving has a per-layer-embedding rail.
+`test_tts_textnorm.das` - model-free: the TTS text normalizer - the number, ordinal, year and
+decimal readers, the reference normalizer's own examples, the twelve fixed upstream defects as
+failing-first cases, and the 200-sentence corpus (`_tts_fixtures/g2p_corpus.json`, loaded by
+`_tts_corpus.das`) against the reference normalizer's output, idempotence included.
+`test_tts_postag.das` - model-free suite; model-gated (`tts_postag.bin` in the models dir): the
+TTS tokenizer token-for-token against the reference tokenizer on the corpus, the tagger's
+agreement with the reference tagger (overall and on the heteronym words), the packed file's
+header floors, and the load budget.
+`test_tts_g2p.das` - model-free suite; model-gated (`tts_g2p.bin` + `tts_postag.bin`): the
+grapheme-to-phoneme rail phoneme-identical with the reference front end on the corpus (fed the
+same normalized text), the heteronym gate (both annotated readings present, parity with the
+reference in this inventory), the fallback chain, stress helpers, and the load budget.
+`test_tts_kitten.das` - model-free: the KittenTTS symbol map (the front end's inventory into
+espeak-style IPA) against the reference rewrite over the corpus.
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference.

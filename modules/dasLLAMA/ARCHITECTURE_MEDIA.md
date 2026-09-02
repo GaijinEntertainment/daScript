@@ -33,6 +33,38 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
   sideways between families.
 - **`dasllama_vad.das`** - Silero-VAD weights and per-stream state.
 
+### 1.7c Text-to-speech front end
+
+The TTS family mirrors the ASR one - a types floor, a shared block home, a facade, one file per
+model family - and adds the text front end no ASR family needs. The front end runs in three
+stages, each its own file, and every stage is data-driven from the model store: nothing under
+`models/` carries TTS data.
+
+- **`dasllama_textnorm.das`** - text normalization: numbers, ordinals, years and decades,
+  currency, percentages, clock times, dates, fractions, units, abbreviations, URLs and e-mail
+  addresses become the words a reader says; prosodic punctuation and apostrophes survive,
+  everything else becomes a space. Twelve defects of the reference normalizer are fixed here
+  and pinned by the tests. Pure code, no data file.
+- **`dasllama_postag.das`** - the tokenizer and part-of-speech tagger. The tokenizer reproduces
+  the reference pipeline's English tokenization over normalized text (the exception table for
+  contractions and abbreviations, prefix and suffix punctuation, infix hyphens); the tagger is
+  a greedy averaged perceptron over the PTB tagset. Both load from `tts_postag.bin`
+  (`harness/train_postag.py`: UD English-EWT gold plus normalizer-shaped prose tagged by the
+  reference tagger, `harness/mint_postag_silver.py`). Tags matter downstream only through the
+  lexicon's part-of-speech entries and the punctuation phonemes.
+- **`dasllama_g2p.das`** - grapheme-to-phoneme into the 45-symbol US inventory: a gold lexicon
+  with part-of-speech keyed entries, a silver lexicon, function-word rules that read what
+  follows (the pass runs right to left), inflection stemming, capitalization and acronym stress,
+  then a fallback chain - CMUdict pre-rendered into the same inventory, then a GRU spelling
+  model - so no word is ever dropped. Loads `tts_g2p.bin` (`harness/build_g2p_data.py`),
+  searched in place as byte-sorted string tables. The 200-sentence fixture under
+  `tests/_tts_fixtures/` (minted by `harness/mint_tts_g2p_fixture.py` from the G2P fidelity
+  experiment) is the parity rail for all three stages.
+- **`dasllama_kitten.das`** - the KittenTTS family: the rewrite of the front end's inventory
+  into the espeak-style IPA these models consume (the diphthong letters expand, the calibrated
+  length and rhotic rules apply). The model itself - config, weight map, assembly, voices - lands
+  here as the family comes up.
+
 ### 1.7b Vision
 
 - **`dasllama_vision.das`** - the image preprocessing rail: dynamic-resolution geometry, the

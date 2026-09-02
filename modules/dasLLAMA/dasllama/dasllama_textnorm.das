@@ -281,29 +281,7 @@ def private digits_value(c : array<int>; a, b : int) : int64 {
     return v
 }
 
-def private cpts_str(c : array<int>; a, b : int) : string {
-    var inscope bytes : array<uint8>
-    bytes |> reserve((b - a) * 4)
-    for (i in range(a, b)) {
-        let cp = c[i]
-        if (cp < 128) {
-            bytes |> push(uint8(cp))
-        } elif (cp < 2048) {
-            bytes |> push(uint8(192 + (cp >> 6)))
-            bytes |> push(uint8(128 + (cp & 63)))
-        } elif (cp < 65536) {
-            bytes |> push(uint8(224 + (cp >> 12)))
-            bytes |> push(uint8(128 + ((cp >> 6) & 63)))
-            bytes |> push(uint8(128 + (cp & 63)))
-        } else {
-            bytes |> push(uint8(240 + (cp >> 18)))
-            bytes |> push(uint8(128 + ((cp >> 12) & 63)))
-            bytes |> push(uint8(128 + ((cp >> 6) & 63)))
-            bytes |> push(uint8(128 + (cp & 63)))
-        }
-    }
-    return string(bytes)
-}
+def private cpts_str(c : array<int>; a, b : int) : string => cpts_to_utf8(c, a, b)
 
 def private lower_str(c : array<int>; a, b : int) : string {
     var inscope lowered <- [for (i in range(a, b)); lower_ascii(c[i])]
