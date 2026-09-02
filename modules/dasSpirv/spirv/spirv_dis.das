@@ -160,7 +160,7 @@ def public strip_decode_vector(var words : array<uint>) : bool {
     for (i in range(5)) {
         out |> push(words[i])
     }
-    let ext_words <- string_words("SPV_NV_cooperative_matrix_decode_vector")
+    var inscope ext_words <- string_words("SPV_NV_cooperative_matrix_decode_vector")
     var stripped = false
     var i = 5
     let n = length(words)

@@ -264,7 +264,7 @@ def private first_load_operands(words : array<uint>) : array<uint> {
 }
 
 def private has_extension(words : array<uint>; name : string) : bool {
-    let want <- string_words(name)
+    var inscope want <- string_words(name)
     var found = false
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
         if (opcode == uint(SpvOp.Extension) && n == length(want)) {
@@ -297,8 +297,8 @@ def private validate_or_skip(t : T?; words : array<uint>; what : string) {
 [test]
 def test_coopmat2_decode_vector_synth(t : T?) {
     t |> run("synthesized twin: capability + extension, both mask bits, one twin for two loads, four calls of the scalar body") <| @(t : T?) {
-        let base <- coopmat2_words()
-        let spv <- clone_to_move(coopmat2_dv_synth_spv)
+        var inscope base <- coopmat2_words()
+        var inscope spv <- clone_to_move(coopmat2_dv_synth_spv)
         t |> success(op_has_operand(spv, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixDecodeVectorNV)),
             "OpCapability CooperativeMatrixDecodeVectorNV")
         t |> success(!op_has_operand(base, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixDecodeVectorNV)),
@@ -320,8 +320,8 @@ def test_coopmat2_decode_vector_synth(t : T?) {
             "the twin steps coordInBlock.y by 1, 2, 3")
         // the operand order behind the mask, checked in the words: DecodeFunc's id then
         // DecodeVectorFunc's, and those are the second and third OpFunction in emission order
-        let fids <- function_ids(spv)
-        let ops <- load_operands_with(spv, uint(SpvTensorAddressingOperands.DecodeVectorFunc))
+        var inscope fids <- function_ids(spv)
+        var inscope ops <- load_operands_with(spv, uint(SpvTensorAddressingOperands.DecodeVectorFunc))
         t |> success(length(fids) == 3 && length(ops) == 9, "the load carries nine operands and the module three functions")
         if (length(fids) == 3 && length(ops) == 9) {
             t |> equal(ops[7], fids[1], "operand 7 is the scalar decode's OpFunction id")
@@ -334,8 +334,8 @@ def test_coopmat2_decode_vector_synth(t : T?) {
 [test]
 def test_coopmat2_decode_vector_scalar_only(t : T?) {
     t |> run("`false`: the scalar-only load - no capability, no extension, DecodeFunc alone, two functions") <| @(t : T?) {
-        let base <- coopmat2_words()
-        let spv <- clone_to_move(coopmat2_dv_scalar_spv)
+        var inscope base <- coopmat2_words()
+        var inscope spv <- clone_to_move(coopmat2_dv_scalar_spv)
         t |> success(!op_has_operand(spv, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixDecodeVectorNV)),
             "no CooperativeMatrixDecodeVectorNV capability")
         t |> success(!has_extension(spv, "SPV_NV_cooperative_matrix_decode_vector"), "no decode-vector OpExtension")
@@ -351,15 +351,15 @@ def test_coopmat2_decode_vector_scalar_only(t : T?) {
 [test]
 def test_coopmat2_decode_vector_free(t : T?) {
     t |> run("hand-laid twin as a free function: half4 return, both mask bits, no synthesized calls") <| @(t : T?) {
-        let spv <- clone_to_move(coopmat2_dv_free_spv)
+        var inscope spv <- clone_to_move(coopmat2_dv_free_spv)
         t |> success(op_has_operand(spv, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixDecodeVectorNV)),
             "OpCapability CooperativeMatrixDecodeVectorNV")
         t |> success(count_op_operand_at(spv, SpvOp.CooperativeMatrixLoadTensorNV, 6, decode_and_vector_bits()) == 1,
             "the decode load's addressing mask carries DecodeFunc | DecodeVectorFunc")
         t |> success(count_op(spv, SpvOp.Function) == 3, "three OpFunction (main, the scalar decode, the hand-laid twin)")
         t |> success(count_op(spv, SpvOp.FunctionCall) == 0, "no OpFunctionCall: the hand-laid twin has its own body")
-        let fids <- function_ids(spv)
-        let ops <- load_operands_with(spv, uint(SpvTensorAddressingOperands.DecodeVectorFunc))
+        var inscope fids <- function_ids(spv)
+        var inscope ops <- load_operands_with(spv, uint(SpvTensorAddressingOperands.DecodeVectorFunc))
         if (length(fids) == 3 && length(ops) == 9) {
             t |> equal(ops[7], fids[1], "operand 7 is the scalar decode's OpFunction id")
             t |> equal(ops[8], fids[2], "operand 8 is the hand-laid twin's OpFunction id")
@@ -402,8 +402,8 @@ def test_coopmat2_decode_vector_strip(t : T?) {
             "exactly the capability, the extension and one operand word per load left the module")
         t |> success(count_op(stripped, SpvOp.Function) == 3,
             "the twin's OpFunction stays, unreferenced")
-        let fids <- function_ids(stripped)
-        let ops <- load_operands_with(stripped, uint(SpvTensorAddressingOperands.DecodeFunc))
+        var inscope fids <- function_ids(stripped)
+        var inscope ops <- load_operands_with(stripped, uint(SpvTensorAddressingOperands.DecodeFunc))
         if (length(fids) == 3 && length(ops) == 8) {
             t |> equal(ops[7], fids[1], "the surviving operand is the scalar decode's id")
         } else {
@@ -427,14 +427,14 @@ def test_coopmat2_decode_vector_strip(t : T?) {
         let ta = uint(SpvTensorAddressingOperands.TensorView) | decode_and_vector_bits()
         var words <- [0x07230203u, 0x00010600u, 0u, 100u, 0u,
             (2u << 16u) | uint(SpvOp.Capability), uint(SpvCapability.CooperativeMatrixDecodeVectorNV)]
-        let ext <- string_words("SPV_NV_cooperative_matrix_decode_vector")
+        var inscope ext <- string_words("SPV_NV_cooperative_matrix_decode_vector")
         words |> push((uint(1 + length(ext)) << 16u) | uint(SpvOp.Extension))
         words |> push_from(ext, [(13u << 16u) | ld, 10u, 11u, 12u, 13u, 14u, memop, 16u, 30u, ta, 40u, 41u, 42u],
             [(7u << 16u) | ld, 10u, 11u, 12u, 13u, 14u, 0u])
         let before = length(words)
         t |> success(strip_decode_vector(words), "the foreign module reports the strip")
         t |> success(length(words) == before - 2 - (1 + length(ext)) - 1, "the capability, the extension and one operand word left")
-        let ops <- first_load_operands(words)
+        var inscope ops <- first_load_operands(words)
         t |> success(length(ops) == 11, "the first load keeps eleven operands")
         if (length(ops) == 11) {
             t |> equal(ops[5], memop, "the memory-access mask is untouched")
