@@ -2,7 +2,6 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_handle.h"
-#include "daScript/ast/ast_typefactory_bind.h"
 #include "dasGLFW.h"
 #include "need_dasGLFW.h"
 #include "aot_dasGLFW.h"

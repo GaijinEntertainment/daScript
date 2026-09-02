@@ -2,7 +2,6 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_handle.h"
-#include "daScript/ast/ast_typefactory_bind.h"
 #include "daScript/simulate/bind_enum.h"
 #include "aot_builtin_clipboard.h"
 #include "dasIMGUI.h"
@@ -916,19 +915,12 @@ namespace das {
             ->arg_init(3, new ExprCall(LineInfo(), "ImVec2"));
         // time to fix-up const & ImVec2 and const & ImVec4
         for ( auto & pfn : this->functions.each() ) {
-            bool anyString = false;
             for ( auto & arg : pfn->arguments ) {
                 if ( arg->type->constant && arg->type->ref && !arg->type->isArray() ) {
                     if ( arg->type->baseType==Type::tFloat2 || arg->type->baseType==Type::tFloat4 ) {
                         arg->type->ref = false;
                     }
                 }
-                if ( arg->type->isString() && !arg->type->ref ) {
-                    anyString = true;
-                }
-            }
-            if ( anyString ) {
-                pfn->needStringCast = true;
             }
         }
     }

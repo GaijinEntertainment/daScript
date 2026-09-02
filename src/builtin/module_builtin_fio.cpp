@@ -333,7 +333,7 @@ namespace das {
     }
 
     static bool is_valid_fopen_mode(const char *mode) {
-        return mode && strchr("rwa", mode[0]) && mode[1 + strspn(mode + 1, "+btx")] == '\0';
+        return mode && *mode && strchr("rwa", mode[0]) && mode[1 + strspn(mode + 1, "+btx")] == '\0';
     }
 
 #if defined(_WIN32)

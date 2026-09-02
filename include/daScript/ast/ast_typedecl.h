@@ -722,6 +722,14 @@ namespace das {
         }
     };
 
+    // this binds any unspecified 'callback' thing to 'void *'
+    template <typename ResT, typename ...Args>
+    struct typeFactory<ResT (*)(Args...)> {
+        static TypeDeclPtr make(const ModuleLibrary & library ) {
+            return typeFactory<void *>::make(library);
+        };
+    };
+
     template <typename TT>
     struct typeFactory<const TT *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {

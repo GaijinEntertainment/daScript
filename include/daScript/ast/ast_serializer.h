@@ -252,7 +252,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 118;   // 118: per-record macro file dependencies (module cache re-validates them)
+            return 199;   // 199: MoreFunctionFlags lost needStringCast, so the flag bits shifted
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

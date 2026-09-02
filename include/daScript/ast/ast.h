@@ -920,7 +920,6 @@ namespace das
         union {
             struct {
                 bool    macroFunction : 1;
-                bool    needStringCast : 1;
                 bool    aotHashDeppendsOnArguments : 1;
                 bool    lateInit : 1;
                 bool    requestJit : 1;
