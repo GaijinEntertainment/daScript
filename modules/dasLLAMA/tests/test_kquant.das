@@ -2570,24 +2570,26 @@ def test_kq_plane_sb_metal_blob_form(t : T?) {
 // The VBMI lattice's tables are pure host-side data - prove them on any box, no VBMI needed:
 // every grid entry's packed code decodes back to the grid's own bytes through the alphabet,
 // and the ksigns +-1 expansion matches a scalar re-derivation.
+def private grid_words(kq : int) : array<uint> {
+    if (kq == 34) {
+        return <- [for (w in iq3xxs_grid()); w]
+    } elif (kq == 33) {
+        return <- [for (w in iq3s_grid()); w]
+    } elif (kq == 25) {
+        return <- [for (w in iq2xxs_grid2()); w]
+    } elif (kq == 24) {
+        return <- [for (w in iq2xs_grid2()); w]
+    }
+    return <- [for (w in iq2s_grid2()); w]
+}
+
 def private vbmi_plane_gate(t : T?; kq : int) {
-    var alpha <- vbmi_alphabet(kq)
+    let alpha <- vbmi_alphabet(kq)
     let iq3 = kq == 33 || kq == 34
     let bits = iq3 ? 3 : 2
     let nbytes = iq3 ? 2 : 4
     let mask = iq3 ? 7 : 3
-    var words : array<uint>
-    if (kq == 34) {
-        words <- [for (w in iq3xxs_grid()); w]
-    } elif (kq == 33) {
-        words <- [for (w in iq3s_grid()); w]
-    } elif (kq == 25) {
-        words <- [for (w in iq2xxs_grid2()); w]
-    } elif (kq == 24) {
-        words <- [for (w in iq2xs_grid2()); w]
-    } else {
-        words <- [for (w in iq2s_grid2()); w]
-    }
+    let words <- grid_words(kq)
     var bad = 0
     for (word in words) {
         for (half in range(iq3 ? 2 : 1)) {   // iq3: one word = two plane bytes (low/high pair); iq2: one word = one plane byte
@@ -2619,7 +2621,7 @@ def test_vbmi_lattice_tables(t : T?) {
             let packed = pm1_of(sb)
             for (k in range(8)) {
                 let lane = int8(int(packed >> uint64(8 * k)) & 0xFF)
-                let want = (sb & (1 << k)) != 0 ? int8(-1) : int8(1)
+                let want = int8((sb & (1 << k)) != 0 ? -1 : 1)
                 if (lane != want) {
                     bad++
                 }

@@ -176,7 +176,7 @@ def private has_generated_kernel(prog : Program?; jit_all_functions : bool) : bo
 // The environment/config salt shared by the whole-DLL key AND the per-partition obj cache key.
 // ONE helper on purpose: a salt component folded into the DLL key but not the partition key
 // would let a config change reuse stale cached partition objects.
-def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool; // nolint:STYLE037 - one flat fold per emission input; a split would hide which inputs key the cache
+def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool; // nolint:STYLE037,STYLE038 - one flat fold per emission input; a split would hide which inputs key the cache
                  target_triple : string; split : bool; use_host_cpu : bool) : uint64 {
     var h = LLVM_JIT_CODEGEN_VERSION
     // host/binary identity: object format follows the triple (COFF vs ELF on one checkout), and the emitting binary bakes its Context offsets into every global access - neither is in any AST hash

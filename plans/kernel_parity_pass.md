@@ -1035,7 +1035,12 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   against the clean-cpu reference 56.4 / 6.45 = 1.18x / 1.04x; the 08-04 row read 70.2 / 7.30 against
   59.1 / 6.80 = 1.19x / 1.07x. Both engines sit ~5% under August on this box (a different reference
   build too, 6c84c7d5d against ebd048f); the ratio held. Pinning the reference made no difference
-  today (56.8 pinned, 56.4 bare). The das side ran the adopted x86-avx2 class profile (sidecar
-  snapshot `zen2.tune.3fe069fc370e.json`), the 08-04 row a paranoid box mint.
+  today (56.8 pinned, 56.4 bare). The das side ran the adopted x86-avx2 class profile (sidecar sha
+  3fe069fc370e), the 08-04 row a paranoid box mint. NOT STORED: the records gate (`performance/REVIEW.das`)
+  rejects a run whose `hardware.remote_desktop` reads `parsec`, and the stamp fires on the parsecd
+  daemon's presence - it runs as a service on this box - so the row backs out of the branch and the
+  cell is re-minted once Parsec is stopped for the ten-minute rig window (Boris's call; the daemon is
+  his remote access). Instrument: `gen_bench_records.das -- -o gemma-4-12B --workload llm
+  --ref-no-affinity`, both walls out-of-process, direction-grade against the 08-04 row.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
