@@ -2021,3 +2021,29 @@ def test_lens_requires_gate(t : T?) {
         }
     }
 }
+
+// The K-quant small-batch form is a per-box crown: the decode race times the production two-row twin
+// against two single-row passes for every format with a twin, on this box, and returns a verdict per
+// format - the mint writes `kq_rows_<fmt>` where the passes won (the M4 Pro's k4; never on an M5).
+[test]
+def test_kq_rows_race_verdicts(t : T?) {
+    t |> run("the decode race returns a small-batch verdict per K-quant format") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!metal_decode_init()) {
+                t |> skip("no Metal device")
+                return
+            }
+            let res <- metal_tensor_race_decode()
+            var seen = 0
+            for (r in res) {
+                continue if (!(r.family |> starts_with("kq_rows_")))
+                seen++
+                t |> success(r.base_ms > 0.0lf && r.twin_ms > 0.0lf, "{r.family}: both arms timed (twin {r.base_ms:.3f} ms, passes {r.twin_ms:.3f} ms) {r.note}")
+                t |> success(r.winner == "tensor" || r.winner == "simdgroup", "{r.family}: a verdict, not a dispatch failure ({r.winner}: {r.note})")
+            }
+            t |> equal(seen, 12, "every K-quant format with a small-batch twin raced")
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}

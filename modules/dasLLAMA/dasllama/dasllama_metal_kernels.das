@@ -3760,6 +3760,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_mv_b4 = compile_pso(metal_q8_mv_b4_msl, metal_q8_mv_b4_msl_entry, metal_q8_mv_b4_msl_fastmath, ok)
     g_pso_w13sw_b2 = compile_pso(MetalGemvW13SwB2_metal_gemv_w13sw_msl, MetalGemvW13SwB2_metal_gemv_w13sw_msl_entry, MetalGemvW13SwB2_metal_gemv_w13sw_msl_fastmath, ok)
     g_pso_w13sw_b4 = compile_pso(MetalGemvW13SwB4_metal_gemv_w13sw_msl, MetalGemvW13SwB4_metal_gemv_w13sw_msl_entry, MetalGemvW13SwB4_metal_gemv_w13sw_msl_fastmath, ok)
+    for (f in KQ_ROWS_RACE_FORMATS) {
+        g_kq_rows_crowned[int(f.fmt)] = metal_tensor_crowned("kq_rows_{f.fmt}")
+    }
     g_gemm_b_tensor = metal_tensor_crowned("gemmb_q8")
     g_pso_gemm_b = (g_gemm_b_tensor
         ? compile_pso(MetalQ8GemmBT_metal_q8_gemm_b_t_msl, MetalQ8GemmBT_metal_q8_gemm_b_t_msl_entry, MetalQ8GemmBT_metal_q8_gemm_b_t_msl_fastmath, ok)
@@ -4030,9 +4033,13 @@ def enc_site_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
     }
 }
 
-// One kq weight site in a batched step. B <= 8: nrows separate single-stream plane GEMVs (the
-// kq GEMV is ALU-bound, so this matches the upstream kq batch wall). B >= 9: the kq mul_mm twin over
-// the M-padded x panel. Disjoint y rows/columns: the caller's one barrier covers the whole group.
+//! per format: the box's mint crowned `kq_rows_<fmt>` - B single-row passes beat the small-batch twin
+//! there. Filled once in metal_decode_init from the crown list; uncrowned = the twin, today's form.
+var private g_kq_rows_crowned : bool[16]
+
+// One kq weight site in a batched step. B <= 8: the small-batch twin, or nrows single-stream GEMVs
+// where the box crowned `kq_rows_<fmt>`; B >= 9: the kq mul_mm twin over the M-padded x panel.
+[arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
 def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
                   bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
                   bn, bd, bys : MetalBuffer?; nrows, mp : int64) {
@@ -4042,8 +4049,7 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
         enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bys, mp, rows)
         return
     }
-    // B = 2..8: the ext small-batch twins — one weight pass per R-column group instead of B per-stream passes (-25..-40% at the 3B sites)
-    if (nrows >= 2l) {
+    if (nrows >= 2l && !g_kq_rows_crowned[int(fmt)]) {
         assert(xstride == n)
         var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(ystride), nr = uint(nrows))
         enc_kq_mvb(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), ka, rows, nrows)
@@ -4790,10 +4796,78 @@ def private race_decode_family(dev : MetalDevice?; queue : MetalCommandQueue?; f
     return res
 }
 
-//! Decode-side tuner entry (the runtime.metal_tensor crown): the batch q8 GEMM families.
+//! the K-quant formats with a small-batch twin, each with its race fixture's plane parameters
+//! (quant uints per superblock, scale-plane form) - the same table the prefill mul_mm race uses
+let KQ_ROWS_RACE_FORMATS <- [
+    (fmt = KqFmt.k4, qu = 32, sform = KqRaceScaleForm.compact),
+    (fmt = KqFmt.k5, qu = 40, sform = KqRaceScaleForm.compact),
+    (fmt = KqFmt.k6, qu = 48, sform = KqRaceScaleForm.split_d),
+    (fmt = KqFmt.iq4xs, qu = 32, sform = KqRaceScaleForm.split_d),
+    (fmt = KqFmt.iq4nl, qu = 32, sform = KqRaceScaleForm.pure_d),
+    (fmt = KqFmt.k3, qu = 24, sform = KqRaceScaleForm.split_d),
+    (fmt = KqFmt.iq3s, qu = 26, sform = KqRaceScaleForm.split_d),
+    (fmt = KqFmt.iq3xxs, qu = 24, sform = KqRaceScaleForm.split_d),
+    (fmt = KqFmt.k2, qu = 16, sform = KqRaceScaleForm.split_dmin),
+    (fmt = KqFmt.iq2s, qu = 18, sform = KqRaceScaleForm.split_d),
+    (fmt = KqFmt.iq2xs, qu = 16, sform = KqRaceScaleForm.split_d),
+    (fmt = KqFmt.iq2xxs, qu = 16, sform = KqRaceScaleForm.split_d)
+]
+
+//! The K-quant small-batch form race on the PRODUCTION wrappers: the two-row twin (`enc_kq_mvb`, base)
+//! against two single-row passes (`enc_kq_gemv`, the "tensor" side); the passes' win crowns
+//! `kq_rows_<fmt>`. Needs the decode PSOs - the caller runs `metal_decode_init` first.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
+def private race_kq_rows(queue : MetalCommandQueue?; fmt : KqFmt; qu_per_sb : int; sform : KqRaceScaleForm) : MetalTensorRaceResult {
+    var res = MetalTensorRaceResult(family = "kq_rows_{fmt}", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+    let n = 2048
+    let rows = 8192
+    let nblk = rows * (n / 256)
+    var planes = race_kq_planes(g_dev, nblk, qu_per_sb, sform)
+    var bq = planes.bq
+    var bs = planes.bs
+    let doff = planes.doff
+    var xa <- race_x_f32(2 * n)
+    var bx = race_buf(g_dev, uint64(2 * n * 4), unsafe(addr<void?>(xa[0])))
+    var by_twin = race_buf(g_dev, uint64(2 * rows * 4), null)
+    var by_rows = race_buf(g_dev, uint64(2 * rows * 4), null)
+    var bn = race_uniform_u32(g_dev, uint(n))
+    var bd = race_uniform_u32(g_dev, uint(rows))
+    var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(rows), nr = 2u)
+    race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
+        for (_r in range(8)) {
+            enc_kq_mvb(enc, fmt, bq, 0ul, bs, 0ul, doff, bx, by_twin, 0ul, ka, int64(rows), 2l)
+        }
+    }, $(enc) {
+        for (_r in range(8)) {
+            enc_kq_gemv(enc, fmt, bq, 0ul, bs, 0ul, doff, bx, by_rows, bn, bd, int64(rows), int64(n))
+            enc_kq_gemv(enc, fmt, bq, 0ul, bs, 0ul, doff, bx, by_rows, bn, bd, int64(rows), int64(n), uint64(rows * 4), uint64(n * 4))
+        }
+    })
+    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
+        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
+        res.note = "dispatch failed"
+    } elif (!race_envelope_ok(by_twin, by_rows, 2 * rows, res.note)) {
+        res.winner = "simdgroup"
+    } else {
+        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
+    }
+    metal_release(bq)
+    metal_release(bs)
+    metal_release(bx)
+    metal_release(by_twin)
+    metal_release(by_rows)
+    metal_release(bn)
+    metal_release(bd)
+    delete xa
+    return res
+}
+
+//! Decode-side tuner entry (the runtime.metal_tensor crown): the batch q8 GEMM families and the
+//! K-quant small-batch form per format.
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
 def metal_tensor_race_decode : array<MetalTensorRaceResult> {
     var results : array<MetalTensorRaceResult>
+    results |> reserve(8 + length(KQ_ROWS_RACE_FORMATS))
     var dev = metal_create_system_default_device()
     if (dev == null) {
         return <- results
@@ -4831,6 +4905,14 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
         metal_kq_gemv_iq3xxs_f4_msl, metal_kq_gemv_iq3xxs_f4_msl_entry, metal_kq_gemv_iq3xxs_f4_msl_fastmath, metal_kq_gemv_iq3xxs_f4_msl_tgmem, 24, 4, 8))
     metal_release(queue)
     metal_release(dev)
+    // the small-batch form per K-quant format rides the production PSOs, so it races on g_dev
+    if (metal_decode_init()) {
+        var pq = metal_new_command_queue(g_dev)
+        for (f in KQ_ROWS_RACE_FORMATS) {
+            results |> emplace(race_kq_rows(pq, f.fmt, f.qu, f.sform))
+        }
+        metal_release(pq)
+    }
     return <- results
 }
 

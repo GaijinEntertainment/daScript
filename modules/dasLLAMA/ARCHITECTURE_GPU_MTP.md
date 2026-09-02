@@ -53,3 +53,15 @@ carries its grid divisors the same way - the production mul_mm `mp % 32, d % 64`
 the split-K pair `d % 32` - so a grid that would have truncated silently now names the site.
 A contract on a value that reaches the builder only as a bound uniform BUFFER (the mul_mm's K)
 stays with the caller: the dispatch never pays a readback.
+
+### 2.31 The K-quant small-batch form is a per-box crown {#kq-rows-crown}
+
+**A verify row on a K-quant plane costs what the box says, not what the kernel comment says.**
+At two to eight rows `enc_kq_site_b` dispatches either the small-batch twin (one weight pass per
+row group) or B single-row GEMV passes. The K-quant GEMV is ALU-bound, so sharing the weight pass
+pays only where ALU is plentiful: on the M5 Max the two-row twin costs 0.52-0.89 of two passes,
+on the M4 Pro 1.35-1.5 for k4 while k6's twin still wins. The mint races the production wrappers
+per format (`race_kq_rows`, twin against two passes) and crowns `kq_rows_<fmt>` where the passes
+win; `metal_decode_init` reads the crowns once into `g_kq_rows_crowned` and the dispatcher takes
+the passes exactly there. An unraced box keeps the twin. The M4 Pro's Qwen3.8-27B round paid
+2.06x a step for its two verify rows under the twin - the reason its depth-1 speculation lost.

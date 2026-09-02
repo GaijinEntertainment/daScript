@@ -80,6 +80,10 @@ struct Args {
     @clarg_doc = "Render an existing ruler JSON as a markdown table and exit (no measurement)"
     render : string = ""
 
+    @clarg_name = "no-greedy"
+    @clarg_doc = "Skip our in-process greedy continuation (the text control) - the prompts still render through our template"
+    no_greedy : bool
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -211,7 +215,7 @@ def private render_prompts(model : string; texts : array<string>; ngen : int; gp
                 }
             }
             rendered |> push(sb)
-            ours |> push(greedy_text(t, tk, ids, ngen))
+            ours |> push(ngen > 0 ? greedy_text(t, tk, ids, ngen) : "")
             delete ids
         }
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -550,9 +554,10 @@ def main() {
     }
     var rendered : array<string>
     var ours : array<string>
-    render_prompts(cfg.model, texts, cfg.ngen, cfg.ngl > 0, rendered, ours)
+    render_prompts(cfg.model, texts, cfg.no_greedy ? 0 : cfg.ngen, cfg.ngl > 0, rendered, ours)
     rows |> reserve(length(rows) + length(ours))
     for (pi in range(length(ours))) {
+        continue if (empty(ours[pi]))
         let head96 = head_of(ours[pi], 96)
         rows |> push(write_json(JV((engine = "das", depth = 0, prompt = pi, text = head96))))
         print("ruler: das greedy prompt {pi}: {head96}\n")

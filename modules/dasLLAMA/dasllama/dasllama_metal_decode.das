@@ -2359,9 +2359,10 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
             return MetalDecodeDecline.no_uid
         }
     }
-    // dual-rope rows are built per class, each at ITS class's width (gemma4 swa rows = hs_swa/2)
+    // rows are built at the ROTATED width (partial rope: rope_dim/2), dual-rope rows per class at ITS width
+    let rot = c.rope_dim > 0l ? c.rope_dim : c.head_size
     let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
-    if (long_length(ws.scr.rope_cos) < nrows * (c.head_size / 2l) ||
+    if (long_length(ws.scr.rope_cos) < nrows * (rot / 2l) ||
             (has_dual_rope(c) && long_length(ws.scr.rope_cos_swa) < nrows * (swa_hs / 2l))) {
         return MetalDecodeDecline.rope_rows
     }

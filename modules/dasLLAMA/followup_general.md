@@ -941,6 +941,13 @@
    `get_mtp_depth()` (the round takes the plain step), and the tuner's confirm racing the NextN
    carrier too (a Qwen vehicle with its `mtp-` head: 0 vs 1, the same 2% margin), so a box mints
    what it measured. Related: #72 owns why the M4 Pro's dense verify rows cost what they cost.
+78. **The ruler's in-process CPU greedy dies on Qwen3.8-27B.** `mtp_ruler --ngl 0` renders and
+   continues the corpus on the CPU rails for the text control; on the M5 it produced prompt 0's 128
+   tokens and died mid prompt 1 (the 686-token prompt) with no exception text, twice. The release exe
+   on the same CPU rails serves the same model (the CPU point's das row). Done = reproduce under the
+   debugger (`gen_probe.das`-shaped, CPU mode, the summarization prompt), name the site, add its arm.
+   Until then the CPU row's control text comes from a `--no-greedy` run (prompts render, no
+   continuation) and the das CPU texts of the crashed run stand as printed.
 76. **Lint: a state-scaled `resize` with no reserve, on an unannotated array (its own PR).**
    PERF032 guards only arrays annotated `@exact_size`; the speculative round's deltanet rollback
    buffers were not, grew from empty with a bare resize to another buffer's `long_length`, and the

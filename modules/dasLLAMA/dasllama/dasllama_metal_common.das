@@ -2280,6 +2280,66 @@ def race_x_f32(count : int) : array<float> {
     return <- xa
 }
 
+// the race fixture's scale-plane layout, one value per on-disk scale form
+enum KqRaceScaleForm {
+    compact     //!< k4/k5: 16B kmask blocks, d+dmin leading halves
+    split_d     //!< k6 + every split-scale iquant: 16B strips + a 2B f16 d tail
+    split_dmin  //!< k2: 16B strips + a 4B d+dmin tail
+    pure_d      //!< iq4nl: a pure-d plane, 8 f16 per superblock
+}
+
+//! A K-quant weight fixture in the engine's split-plane layout: random quant bits (any pattern is a
+//! valid plane, so a twin-vs-base envelope doubles as a layout-agreement check) and constant f16
+//! scales. Returns the quant buffer, the scale buffer and the d-tail byte offset the encoders bind.
+def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScaleForm) : tuple<bq : MetalBuffer?; bs : MetalBuffer?; doff : uint64> {
+    var qplane : array<uint>
+    qplane |> resize(nblk * qu_per_sb)
+    for (i in range(nblk * qu_per_sb)) {
+        qplane[i] = uint(i) * 2654435761u   //! deterministic pseudo-random bit pattern
+    }
+    var splane : array<uint8>
+    let sbytes = sform == KqRaceScaleForm.split_d ? nblk * 18 : (sform == KqRaceScaleForm.split_dmin ? nblk * 20 : nblk * 16)
+    splane |> resize(sbytes)
+    if (sform == KqRaceScaleForm.split_d || sform == KqRaceScaleForm.split_dmin) {
+        for (i in range(nblk * 16)) {
+            splane[i] = uint8(2)
+        }
+        unsafe {
+            var ph = addr<float16?>(splane[nblk * 16])
+            let per = sform == KqRaceScaleForm.split_dmin ? 2 : 1
+            for (b in range(nblk * per)) {
+                ph[b] = float16(0.25)
+            }
+        }
+    } elif (sform == KqRaceScaleForm.pure_d) {
+        unsafe {
+            var ph = addr<float16?>(splane[0])
+            for (b in range(nblk * 8)) {
+                ph[b] = float16(0.25)
+            }
+        }
+    } else {
+        unsafe {
+            var ph = addr<float16?>(splane[0])
+            for (b in range(nblk)) {
+                ph[b * 8] = float16(0.25)       //! d
+                ph[b * 8 + 1] = float16(0.25)   //! dmin
+            }
+        }
+        for (b in range(nblk)) {
+            for (kx in range(4, 12)) {
+                splane[b * 16 + kx] = uint8(17)   //! kmask bytes: small scales, both halves
+            }
+        }
+    }
+    var bq = race_buf(dev, uint64(nblk * qu_per_sb * 4), unsafe(addr<void?>(qplane[0])))
+    var bs = race_buf(dev, uint64(sbytes), unsafe(addr<void?>(splane[0])))
+    let doff = sform == KqRaceScaleForm.split_d || sform == KqRaceScaleForm.split_dmin ? uint64(nblk * 16) : 0ul
+    delete qplane
+    delete splane
+    return (bq = bq, bs = bs, doff = doff)
+}
+
 // deterministic f16 panel — the f16-slab races (attention scores) feed and compare in half
 def race_x_f16(count : int) : array<float16> {
     var xa : array<float16>
