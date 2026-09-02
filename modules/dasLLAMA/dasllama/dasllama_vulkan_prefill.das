@@ -55,7 +55,8 @@ def private pf_qkv_feed_fused(l : int64) : bool => g_env_vulkan.vk_fuse && (pf_q
 let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds here; the cmd ring is sized from it
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-def private cm2_cls_ensure(fmt : int; tc : int64) : bool {
+//! The (format, column) -> class ladders, public for the harness probe's per-format arm
+def cm2_cls_ensure(fmt : int; tc : int64) : bool {
     verify(fmt == int(KqFmt.q8) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
     verify(tc == 256l || tc == 128l || tc == 32l, "vk prefill: a cm2 tile column the pick never returns")
     if (fmt == int(KqFmt.k4)) {
@@ -102,7 +103,7 @@ def private cm2_cls_ensure(fmt : int; tc : int64) : bool {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-def private cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     if (fmt == int(KqFmt.k4)) {
         if (tc == 256l) {
             return set_kq_batch_k4_cm2l_cls(bufs, sizes, gbits)
@@ -189,7 +190,7 @@ def private cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : i
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-def private cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     if (fmt == int(KqFmt.k4)) {
         if (tc == 256l) {
             enc_kq_batch_k4_cm2l_cls(raw, h, s, pc, groups)

@@ -113,8 +113,10 @@ NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4;
 `DASLLAMA_COOPMAT` overrides the ladder by name, and a cm2 request or force on a device without
 the extension lands on mm. The same resolver stamps the mode into the `.dlim` flavor
 configuration, so the recorded mode and the running mode cannot drift. The four-wide decode
-callback rides beside the mode the same way: every cm2 tile names both callbacks
-(`coopmatLoadTensorDecode`'s tenth argument is `true` on the template), the device's
+callback rides beside the mode the same way: a cm2 tile names both callbacks
+(`coopmatLoadTensorDecode`'s tenth argument is the template's `DECVEC` axis, on by default and
+off for the formats whose `cm2:<fmt>` probe row shows the synthesized twin losing - iq3s, iq2s,
+iq2xxs, the per-element grid-and-sign decodes), the device's
 `VK_NV_cooperative_matrix_decode_vector` bit decides which one the driver runs, and that bit is
 the `decvec` field of the flavor configuration (the `v` after the mode in the tag), so a
 `.dlim` baked on a device with the callback and one without carry different identities.
