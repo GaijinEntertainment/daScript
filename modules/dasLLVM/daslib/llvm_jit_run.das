@@ -36,11 +36,11 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x59ul   // aarch64 hosts append +i8mm when cpu_supports says so (0x58: [hint(unsafe_division_check)] drops the sdiv/srem guards)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x68ul   // the grid formats' gemv applies signs as one masked negate per weight vector (0x59: aarch64 hosts append +i8mm when cpu_supports says so)
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xfcc23a40234a227ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x6a0cebf74a395071ul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -176,7 +176,7 @@ def private has_generated_kernel(prog : Program?; jit_all_functions : bool) : bo
 // The environment/config salt shared by the whole-DLL key AND the per-partition obj cache key.
 // ONE helper on purpose: a salt component folded into the DLL key but not the partition key
 // would let a config change reuse stale cached partition objects.
-def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool; // nolint:STYLE037 - one flat fold per emission input; a split would hide which inputs key the cache
+def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool; // nolint:STYLE037,STYLE038 - one flat fold per emission input; a split would hide which inputs key the cache
                  target_triple : string; split : bool; use_host_cpu : bool) : uint64 {
     var h = LLVM_JIT_CODEGEN_VERSION
     // host/binary identity: object format follows the triple (COFF vs ELF on one checkout), and the emitting binary bakes its Context offsets into every global access - neither is in any AST hash
@@ -229,6 +229,12 @@ def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_
     }
     if (cpu_supports("avx512vnni")) {
         isa |= 16ul
+    }
+    if (cpu_supports("avx512vbmi")) {   // the grid formats' symbol lattice emits on it (grid = "vbmi")
+        h = (h ^ 0x1Bul) * JIT_FNV_PRIME
+    }
+    if (cpu_supports("amx-tile") && cpu_supports("amx-int8")) {   // tune_cpu_class picks x86-amx, which selects grid decode forms
+        h = (h ^ 0x1Cul) * JIT_FNV_PRIME
     }
     if (cpu_supports("avxvnniint8")) {
         isa |= 32ul

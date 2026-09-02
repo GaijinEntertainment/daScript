@@ -60,10 +60,7 @@ def test_preflight_config(tt : T?) {
     }
 
     tt |> run("--show-help lists the rail-skip flag the skills hardcode") <| @(t : T?) {
-        var exe = get_command_line_arguments()[0]
-        if (get_platform_name() == "windows") {
-            exe = exe |> replace("/", "\\")
-        }
+        let exe = get_command_line_arguments()[0]
         let tool = path_join(get_das_root(), "utils/internal/preflight/main.das")
         var out : string
         let rc = run_and_capture([exe, tool, "--", "--show-help"], out, 120.0)

@@ -137,6 +137,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     // 6. the class chain: only a LOWER class's profile on disk, and the box adopts it (the
     //    residue race then covers whatever its own class unlocks)
     var chain <- tune_class_chain()
+    t |> equal(chain[0], tune_cpu_class(), "the box's own class heads its ladder - a class outside the chain could never adopt its own profile")
     if (length(chain) > 1) {
         let lower = chain[length(chain) - 1]
         remove(sidecar)

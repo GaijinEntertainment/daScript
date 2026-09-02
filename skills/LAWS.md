@@ -23,3 +23,8 @@ then there is a race. if nothing available - no race." Profiles are keyed by CPU
 it), and separate CPU from GPU: "do u want to separate CPU and GPU tunes?" - resolved as
 kernels-only profiles, runtime knobs never travel. He will remove the dasllama.io tune service
 if the new-silicon race drops to a couple of minutes.
+## 2026-09-01 - skills/tune.md, the `[tune_companion]` section
+
+The gemv companion gets its own manifest entry, raced among the tile winner's same-layout rows, top two by tile time
+only: "i don't see the point of racing anything but top 2"; "im fine with more mints. performance matters more";
+"we split x64-amx from x86-vnni512 for sure".

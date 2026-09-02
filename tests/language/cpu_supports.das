@@ -25,6 +25,9 @@ def test_cpu_supports(t : T?) {
             if (cpu_supports("avx512vnni")) {
                 t |> success(cpu_supports("avx512f"), "avx512vnni implies avx512f")
             }
+            if (cpu_supports("avx512vbmi")) {
+                t |> success(cpu_supports("avx512f"), "avx512vbmi implies avx512f")
+            }
             if (cpu_supports("avx512bw")) {
                 t |> success(cpu_supports("avx512f"), "avx512bw implies avx512f")
             }

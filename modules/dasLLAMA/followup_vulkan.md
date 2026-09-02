@@ -537,13 +537,20 @@ module) is independent and can land any time - it is pure structure.
     it; a cell that embeds through the vulkan override and compares against the CPU pool
     proves it.
 
-34. **END-OF-ARC: the pp512 tier class (~0.67-0.70x of llama.cpp on 1B shapes).** Every
-    sb-format cm2 tile lands in the same band (k4 control 0.67x, iq3s 0.70x on the 5060 Ti)
-    while tg and the CPU tiers hold parity or better - the gap is the shared batch-GEMM
-    tier, not any one format's decode. Boris 2026-08-30: this one bothers him at 0.7 -
-    schedule a dedicated pass at the END of the iquant-formats arc (after the last format
-    lands), not per-format. Start from the followup 29-32 streamed-layer levers and a
-    kernel-level probe of the cm2 tile vs llama.cpp's mul_mm_cm2 at matched shapes.
+34. **The pp512 gap on every sb format (0.67x-0.90x of llama.cpp on 1B shapes) - not one band, and
+    not the tile.** The board spreads 1.34x (IQ4_XS 0.90, Q2_K 0.87, Q3_K 0.80, IQ4_NL 0.78, IQ2_XS
+    0.77, IQ3_S/IQ2_S 0.70, IQ3_XXS 0.69, Q4_K 0.67) while the Q8 rows sit at 1.00x+, so the format
+    decode is in it. The cm2 tile itself matches llama.cpp's design point for point - geometry,
+    workgroup, decode-in-load callback, one coopMatMulAdd per k-step, no k-loop barriers, the same
+    split-k heuristic (`plans/kernel_parity_research_vk.md`). The real differences: llama.cpp hoists
+    Q4_K/Q5_K scales into shared memory as ready (d,m) pairs where ours re-extracts from a second
+    SSBO with a variable shift per decoded element, and its scales sit in the quant block where ours
+    ride a separate plane. Order of work: (1) split the end-to-end budget - `GGML_VK_PERF_LOGGER=1`
+    per-shape MUL_MAT rows against our `pfq_ts` roles decide whether the GEMM is the 30% at all (the
+    chain carries 367 barriers per window); (2) the scale hoist; (3) interleave the scale plane into
+    the quant block; (4) pad N to the tile width. `harness/vk_gemm_probe.das` already carries the
+    isolation arms (`ref` = llama.cpp's own coopmat2 blob in our harness, `k6x flat` = compose
+    without scale reads). Boris 2026-08-30: this one bothers him at 0.7. Plan: `plans/kernel_parity_pass.md`.
 
 35. **The grid-format GEMV workgroup re-stage is a fixed per-workgroup cost - amplified on
     small models.** Every u64-grid gemv (iq2s 8 KB, iq2xs 4 KB) stages the codebook into

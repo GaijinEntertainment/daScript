@@ -56,7 +56,9 @@ def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : i
     let ncg = n / kgroup
     var tw : array<int8>
     var ts : array<float>
+    tw |> reserve(d * n)
     tw |> resize(d * n)
+    ts |> reserve(d * nb)
     ts |> resize(d * nb)
     unsafe {
         var twp = addr(tw[0])
@@ -102,7 +104,9 @@ def repack_mx4_grp(var np : uint8?; var ep : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tn : array<uint8>
     var te : array<uint8>
+    tn |> reserve(d * nrow)
     tn |> resize(d * nrow)
+    te |> reserve(d * nbb)
     te |> resize(d * nbb)
     unsafe {
         var tnp = addr(tn[0])
@@ -144,7 +148,9 @@ def repack_q51_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * nb * 20l)
     tq |> resize(d * nb * 20l)
+    ts |> reserve(d * nb * 4l)
     ts |> resize(d * nb * 4l)
     unsafe {
         var tqp = addr(tq[0])
@@ -194,7 +200,9 @@ def repack_k4_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -240,7 +248,9 @@ def repack_k5_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -283,6 +293,7 @@ def repack_k5_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete ts
 }
 
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def repack_k6_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let nsb = n / 256l
     let qrow = nsb * 192l
@@ -290,7 +301,9 @@ def repack_k6_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -314,10 +327,15 @@ def repack_k6_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
                             }
                         }
                     }
-                    for (h in range64(2l)) {   // qh bytes verbatim, row-interleaved by 4-byte columns
-                        for (jj in range64(8l)) {
+                    for (blk in range64(8l)) {   // qh re-packed per sub-block
+                        for (half in range64(2l)) {
                             for (t in range64(4l)) {
-                                kq[dq + 128l * mr + ((h * 8l + jj) * mr + r) * 4l + t] = tqp[sq + 128l + h * 32l + jj * 4l + t]
+                                var qhbyte = 0u
+                                for (j in range64(4l)) {
+                                    let l = (blk / 4l) * 32l + half * 16l + j * 4l + t
+                                    qhbyte |= ((uint(tqp[sq + 128l + l]) >> uint(2l * (blk % 4l))) & 3u) << uint(2l * j)
+                                }
+                                kq[dq + 128l * mr + ((blk * 2l + half) * mr + r) * 4l + t] = uint8(qhbyte)
                             }
                         }
                     }
@@ -344,7 +362,9 @@ def repack_q40_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -384,7 +404,9 @@ def repack_iq4xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -419,9 +441,8 @@ def repack_iq4xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete ts
 }
 
-//! k3 grp layout: the qs bytes as 16 four-byte columns ([h 0..1][8 l-groups]) x mr rows, then the
-//! hmask as 8 columns x mr rows at 64*mr — the 2-bit lanes and mask bits stay in place (the
-//! kernels shift per block); scales interleave as k6's row ([16 x mr int8][mr x f16 d]).
+//! scales interleave as k6's row ([16 x mr int8][mr x f16 d])
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let nsb = n / 256l
     let qrow = nsb * 96l
@@ -429,7 +450,9 @@ def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -443,14 +466,23 @@ def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
                 for (r in range64(mr)) {
                     let sq = (g * mr + r) * qrow + sbi * 96l
                     let ss = (g * mr + r) * srow + sbi * 18l
-                    for (c in range64(16l)) {
-                        for (t in range64(4l)) {
-                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                    for (blk in range64(8l)) {   // qs and hmask re-packed per sub-block
+                        for (half in range64(2l)) {
+                            for (t in range64(4l)) {
+                                var qbyte = 0u
+                                for (j in range64(4l)) {
+                                    let l = (blk / 4l) * 32l + half * 16l + j * 4l + t
+                                    qbyte |= ((uint(tqp[sq + l]) >> uint(2l * (blk % 4l))) & 3u) << uint(2l * j)
+                                }
+                                kq[dq + ((blk * 2l + half) * mr + r) * 4l + t] = uint8(qbyte)
+                            }
                         }
-                    }
-                    for (c in range64(8l)) {
                         for (t in range64(4l)) {
-                            kq[dq + 64l * mr + (c * mr + r) * 4l + t] = tqp[sq + 64l + c * 4l + t]
+                            var hbyte = 0u
+                            for (sidx in range64(8l)) {
+                                hbyte |= ((uint(tqp[sq + 64l + sidx * 4l + t]) >> uint(blk)) & 1u) << uint(sidx)
+                            }
+                            kq[dq + 64l * mr + (blk * mr + r) * 4l + t] = uint8(hbyte)
                         }
                     }
                     for (idx in range64(16l)) {
@@ -476,7 +508,9 @@ def repack_iq3s_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -521,7 +555,9 @@ def repack_k2_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -565,7 +601,9 @@ def repack_iq2s_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -609,7 +647,9 @@ def repack_iq2xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -653,7 +693,9 @@ def repack_iq2xxs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -746,7 +788,9 @@ def repack_iq3xxs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
+    tq |> reserve(d * qrow)
     tq |> resize(d * qrow)
+    ts |> reserve(d * srow)
     ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
@@ -950,6 +994,7 @@ def unpack_iq2xxs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int6
     }
 }
 
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
     if (fmt == 33l) {
         unpack_iq3s_panel_grp(kqg, dst, mr, nsb)
@@ -981,9 +1026,9 @@ def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, n
             let qb = sbi * (fmt == 5l ? 160l : 192l) * mr
             let ob = sbi * 256l * mr
             for (blk in range64(8l)) {
-                let g2 = uint64((blk % 4l) * 2l)
-                let hbase = qb + 128l * mr + (blk / 4l) * 32l * mr   // k6 high plane (k5 ignores)
+                let hbase = qb + 128l * mr + blk * 2l * mr * 4l   // k6 high plane (k5 ignores)
                 for (j in range64(4l)) {
+                    let sj = uint64(2l * j)
                     let gcol = ((blk * 4l + j) * mr) * 4l
                     var r4 = 0l
                     while (r4 < mr) {
@@ -1007,12 +1052,12 @@ def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, n
                                 hiw[w] = ((n >> 4ul) & LO4) | dh
                             }
                         } else {
-                            let h0w = reinterpret<uint64 const?>(kqg + (hbase + (j * mr + r4) * 4l))
-                            let h1w = reinterpret<uint64 const?>(kqg + (hbase + ((j + 4l) * mr + r4) * 4l))
+                            let h0w = reinterpret<uint64 const?>(kqg + (hbase + r4 * 4l))
+                            let h1w = reinterpret<uint64 const?>(kqg + (hbase + (mr + r4) * 4l))
                             for (w in range64(2l)) {
                                 let n = nw[w]
-                                low[w] = (n & LO4) | (((h0w[w] >> g2) & TOP2) << 4ul)
-                                hiw[w] = ((n >> 4ul) & LO4) | (((h1w[w] >> g2) & TOP2) << 4ul)
+                                low[w] = (n & LO4) | (((h0w[w] >> sj) & TOP2) << 4ul)
+                                hiw[w] = ((n >> 4ul) & LO4) | (((h1w[w] >> sj) & TOP2) << 4ul)
                             }
                         }
                         r4 += 4l

@@ -32,6 +32,8 @@ options _dasllama_internal = true
 //         first).
 
 require dasllama/dasllama_math
+require dasllama/dasllama_par   // maybe_parallel_for_indexed - the gemv seat races at the engine's decode shape
+require daslib/jobque_boost
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen
@@ -445,6 +447,33 @@ def kq_ssb(fmt : int64) : int64 => dasllama_gemm_schema::kq_ssb(int(fmt))
 
 // the family's sidecar entry = its [tune] function name (the K-quants by bit width - k3 included - q40/iq4xs by tag)
 def kq_tile_entry(fmt : int64) : string => fmt == 40l ? "q40q8_tile_gen" : (fmt == 44l ? "iq4xsq8_tile_gen" : (fmt == 33l ? "iq3sq8_tile_gen" : (fmt == 34l ? "iq3xxsq8_tile_gen" : (fmt == 45l ? "iq4nlq8_tile_gen" : (fmt == 23l ? "iq2sq8_tile_gen" : (fmt == 24l ? "iq2xsq8_tile_gen" : (fmt == 25l ? "iq2xxsq8_tile_gen" : "k{fmt}q8_tile_gen")))))))
+
+//! the gemv companion's own manifest entry: the tile's name with the tier swapped
+def kq_gemv_entry(fmt : int64) : string => replace(kq_tile_entry(fmt), "_tile_gen", "_gemv_gen")
+
+//! the gemv's seat among the tile winner's same-layout rows; "" when the tile winner keeps it
+[arch(at = "../ARCHITECTURE_MEASUREMENT.md#gemv-seat")]
+def private kq_gemv_seat(fmt : int64; winner : int; names : array<string>; vmr : array<int64>; tile, gemv : array<double>) : string {
+    var cand <- [for (i in range(length(names))); i; where vmr[i] == vmr[winner] && tile[i] < 1.0e29lf]
+    cand |> sort() $(a, b) => tile[a] < tile[b]
+    if (length(cand) > 2) {
+        cand |> resize(2)
+    }
+    var pick = winner
+    for (c in cand) {
+        if (gemv[c] < gemv[pick]) {
+            pick = c
+        }
+    }
+    let m = gen_margin()
+    if (pick != winner && gemv[winner] <= gemv[pick] * m) {
+        tune_detail("{kq_gemv_entry(fmt)}: {names[pick]} does not beat the tile seat {names[winner]} on the gemv by x{m:0.3f} - the gemv follows the tile\n")
+        pick = winner
+    }
+    pick = gen_sticky(kq_gemv_entry(fmt), names, gemv, pick)
+    delete cand
+    return pick == winner ? "" : names[pick]
+}
 
 // synthetic disk superblocks, varied per (row, superblock) so no two blocks repeat: any byte
 // is a legal quant, and the small d/dmin keep the f16 (s, o) pairs finite and row sums tame
@@ -988,6 +1017,41 @@ def run_kq_gemv(gemv; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr :
     }
 }
 
+//! the streamed fixture's master planes repeated `times` over into a repack buffer: a DRAM-bound plane at the
+//! same n (byte-identical row groups), x reused, no reference - a fresh build at that size would transcode
+//! millions of superblocks and run a scalar reference gemv over them, minutes per family
+def tile_kq_planes(fx : KqFixture; times : int64; var buf : KqBuf) {
+    let qrow = length(fx.kq)
+    let srow = length(fx.ks)
+    buf.q |> reserve(qrow * int(times))
+    buf.q |> resize(qrow * int(times))
+    buf.s |> reserve(srow * int(times))
+    buf.s |> resize(srow * int(times))
+    unsafe {
+        for (t in range64(times)) {
+            memcpy(addr(buf.q[int(t) * qrow]), addr(fx.kq[0]), qrow)
+            memcpy(addr(buf.s[int(t) * srow]), addr(fx.ks[0]), srow)
+        }
+    }
+}
+
+//! the engine's decode dispatch over the fixture: the engine's own splitter and every lane streaming its share
+def run_kq_gemv_team(gemv; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr : int64; var y : array<float>) {
+    let d = (fx.d / mr) * mr
+    let n = fx.n
+    unsafe {
+        var yp = addr(y[0])
+        let kqp = addr(kq[0])
+        let ksp = addr(ks[0])
+        let xqp = addr(fx.xq[0])
+        let xsp = addr(fx.xs[0])
+        let xbsp = addr(fx.xbs[0])
+        maybe_parallel_for_indexed(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(slot : int; rb : int; re : int) {
+            invoke(gemv, yp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
+        }
+    }
+}
+
 // k6's signed sub-scales cancel within a row, so element-relative tolerance is too strict at
 // production shapes (intermediate terms are large, the sum is small) — gate against the
 // fixture's magnitude instead; a real generator bug (wrong stride/lane/scale) is orders louder
@@ -1253,7 +1317,8 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
 // and the gemv (streamed + hot decode shapes), print the table, and return the tile-best
 // suffix ("" = a gate failed). The kq gemv is nrsplit-independent — same-mr rows share the
 // plane and the gemv shape — so the tile bench decides the family entry.
-def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : string { // nolint:STYLE038 — one family race: shared repacked buffers couple gate, bench and pick
+[arch(at = "../ARCHITECTURE_MEASUREMENT.md#gemv-seat")]
+def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var gemv_out : string&) : string { // nolint:STYLE037,STYLE038 — one family race: shared repacked buffers couple gate, bench and the two picks
     // batch shape: fat STREAMING ffn (weights > the L2 budget, multi-token-block walk) — the shape
     // class that carries ~90% of prefill time. The old 2048x512x64 kv-projection probe was L2-hot
     // and crowned hot-shape winners that lose double-digit % at model scale (mr4 vs mr8, M1).
@@ -1379,6 +1444,65 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : stri
     }
     var tnames <- [for (t in tvs); t._0]
     winner = gen_sticky(kq_tile_entry(fmt), tnames, best, winner)
+    var tbest : array<double>
+    tbest |> resize(nv)
+    for (i in range(nv)) {
+        tbest[i] = gbest[i]
+    }
+    with_job_que() {   // the lane count and the team dispatch both need the live jobque
+        if (get_total_hw_jobs() > 1) {
+            var kefx <- build_kq_fixture(fmt, 14336l, 512l, 1l)
+            let TILES = 320l
+            var ktfx = KqFixture(fmt = kefx.fmt, n = kefx.n, d = kefx.d * TILES, ntok = 1l, nsb = kefx.nsb)
+            ktfx.xq := kefx.xq
+            ktfx.xs := kefx.xs
+            ktfx.xbs := kefx.xbs
+            var tbuf : KqBuf
+            tile_kq_planes(kefx, TILES, tbuf)
+            delete kefx
+            unsafe {
+                repack_kq_grp_fmt(fmt, addr(tbuf.q[0]), addr(tbuf.s[0]), ktfx.n, ktfx.d, vmr[winner])
+            }
+            var kyt : array<float>
+            kyt |> resize(ktfx.d)
+            for (i in range(nv)) {
+                tbest[i] = 1.0e30lf
+            }
+            var tsamples : array<array<double>>
+            tsamples |> resize(nv)
+            for (r in range(7)) {   // the seat takes the MEDIAN: a round that finds the plane in L3 must not crown it
+                for (vi in range(nv)) {
+                    continue if (vmr[vi] != vmr[winner] || best[vi] >= 1.0e29lf)
+                    for (_w in range(r == 0 ? 3 : 0)) {
+                        run_kq_gemv_team(gtab[tvs[vi]._0], ktfx, tbuf.q, tbuf.s, vmr[vi], kyt)
+                    }
+                    let t0 = ref_time_ticks()
+                    run_kq_gemv_team(gtab[tvs[vi]._0], ktfx, tbuf.q, tbuf.s, vmr[vi], kyt)
+                    tsamples[vi] |> push(double(get_time_usec(t0)))
+                }
+            }
+            for (vi in range(nv)) {
+                if (!empty(tsamples[vi])) {
+                    sort(tsamples[vi])
+                    tbest[vi] = tsamples[vi][length(tsamples[vi]) / 2]
+                }
+            }
+            delete tsamples
+            for (vi in range(nv)) {
+                if (vmr[vi] == vmr[winner] && best[vi] < 1.0e29lf) {
+                    tune_detail("k{fmt} {tvs[vi]._0}: decode at the engine shape {tbest[vi]} us ({get_total_hw_jobs()} lanes, d={ktfx.d} n={ktfx.n})\n")
+                }
+            }
+            delete kyt
+            delete tbuf
+            delete ktfx
+        }
+    }
+    gemv_out = kq_gemv_seat(fmt, winner, tnames, vmr, best, tbest)
+    if (!empty(gemv_out)) {
+        rows_out["gemv_seat"] = JV((seat = gemv_out, tile_seat = tvs[winner]._0, gemv_us = gbest[winner], team_us = tbest[winner]))
+    }
+    delete tbest
     delete tnames
     let wname = tvs[winner]._0
     delete keep
@@ -2088,24 +2212,30 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         print("aborting mid-run - no sidecar written\n")
         return false
     }
-    // the kq families tune separately — one manifest entry per format, tile-best wins (the
-    // gemv is nrsplit-independent, so same-mr rows share its plane and kernel shape). No
-    // child-process confirm gate here: the kq stamp only moves the kq planes' interleave,
-    // and the e2e exposure (a tile-optimal mr shaving decode kernel rate) is bounded by the
-    // decode path staying DRAM-bound — validated end-to-end when the entries first landed.
+    // the kq families tune separately — the tile-best row is the format's entry, and the gemv takes its
+    // own entry when its seat differs. No child-process confirm gate here: the kq stamp only moves the
+    // kq planes' interleave, and the e2e exposure (a tile-optimal mr shaving decode kernel rate) is
+    // bounded by the decode path staying DRAM-bound — validated end-to-end when the entries first landed.
     for (fmt in kqSel) {
         interrupt_gate("k{fmt}q8_tile_gen")
         let kq_t0 = ref_time_ticks()
         let entry = kq_tile_entry(fmt)
         tune_progress_kernel_begin(entry, ROUNDS)
         var krows : table<string; JsonValue?>
-        let w = kq_tune_family(fmt, krows)
+        var gw = ""
+        let w = kq_tune_family(fmt, krows, gw)
         tune_detail("TUNE_GEN_TIME {entry} family {get_time_usec(kq_t0) / 1000} ms\n")
         tune_progress_kernel_end(entry, w, empty(w) ? "rejected" : "beats")
         // gate failure (the broken perm is named above): queue the always-correct reference
         // body so the scope still COMPLETES — a missing key re-tunes every start
         pending[entry] = empty(w) ? "reference" : w
         print("{entry} winner: {empty(w) ? "reference (gate-failure fallback)" : w}\n")
+        // ALWAYS written: tune_sidecar_merge is upsert-only, so a seat the re-race no longer wants
+        // must be overwritten with the follow-the-tile spelling, not left standing
+        pending[kq_gemv_entry(fmt)] = empty(gw) ? (empty(w) ? "reference" : w) : gw
+        if (!empty(gw)) {
+            print("{kq_gemv_entry(fmt)} winner: {gw} (the tile seat {w} keeps the tile)\n")
+        }
         g_rows[entry] = JV(krows)
     }
     if (!noise_gate("mid2")) {

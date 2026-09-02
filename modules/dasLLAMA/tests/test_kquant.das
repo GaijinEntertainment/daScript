@@ -6,6 +6,8 @@ options _function_length = 300        // and each gate carries its whole fixture
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require dasllama/dasllama_gemm_gen   // vbmi_pack_word / vbmi_alphabet / pm1_of - the lattice's pure table builders
+require dasllama/dasllama_layout   // moe_gpu_gather_stack_kq - the device-plane gather oracle
 require _model_tier
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common   // dequant_kq_plane_sb - the carrier-form dispatcher
@@ -2561,6 +2563,145 @@ def test_kq_plane_sb_metal_blob_form(t : T?) {
             delete rowform
             delete blobform
             seed++
+        }
+    }
+}
+
+// The VBMI lattice's tables are pure host-side data - prove them on any box, no VBMI needed:
+// every grid entry's packed code decodes back to the grid's own bytes through the alphabet,
+// and the ksigns +-1 expansion matches a scalar re-derivation.
+def private grid_words(kq : int) : array<uint> {
+    if (kq == 34) {
+        return <- [for (w in iq3xxs_grid()); w]
+    } elif (kq == 33) {
+        return <- [for (w in iq3s_grid()); w]
+    } elif (kq == 25) {
+        return <- [for (w in iq2xxs_grid2()); w]
+    } elif (kq == 24) {
+        return <- [for (w in iq2xs_grid2()); w]
+    }
+    return <- [for (w in iq2s_grid2()); w]
+}
+
+def private vbmi_plane_gate(t : T?; kq : int) {
+    let alpha <- vbmi_alphabet(kq)
+    let iq3 = kq == 33 || kq == 34
+    let bits = iq3 ? 3 : 2
+    let nbytes = iq3 ? 2 : 4
+    let mask = iq3 ? 7 : 3
+    let words <- grid_words(kq)
+    var bad = 0
+    for (word in words) {
+        for (half in range(iq3 ? 2 : 1)) {   // iq3: one word = two plane bytes (low/high pair); iq2: one word = one plane byte
+            let w = half == 0 ? word : (word >> 16u)
+            let code = vbmi_pack_word(w, alpha, bits, nbytes)
+            for (tb in range(nbytes)) {
+                let sym = (code >> (bits * tb)) & mask
+                let back = alpha[sym]
+                let orig = int((w >> uint(8 * tb)) & 0xFFu)
+                if (back != orig) {
+                    bad++
+                }
+            }
+        }
+    }
+    t |> equal(bad, 0, "kq {kq}: every grid byte round-trips through the code plane and alphabet")
+}
+
+[test]
+def test_vbmi_lattice_tables(t : T?) {
+    for (kq in [25, 24, 23, 34, 33]) {
+        t |> run("vbmi code planes round-trip the kq {kq} grid") @(t : T?) {
+            vbmi_plane_gate(t, kq)
+        }
+    }
+    t |> run("pm1_of matches the scalar +-1 expansion of every ksigns byte") @(tt : T?) {
+        var bad = 0
+        for (sb in range(256)) {
+            let packed = pm1_of(sb)
+            for (k in range(8)) {
+                let lane = int8(int(packed >> uint64(8 * k)) & 0xFF)
+                let want = int8((sb & (1 << k)) != 0 ? -1 : 1)
+                if (lane != want) {
+                    bad++
+                }
+            }
+        }
+        tt |> equal(bad, 0)
+    }
+}
+
+// The GPU device-plane gather's own invariant ("device bytes are identical either way"): gathering
+// from disk-order planes and from the grp<mr>-repacked planes must produce byte-identical wq/ws.
+// This is the only k3/k6 sub-block-plane reader with no dot-product oracle - the byte equality IS its gate.
+def private kq_gpu_gather_gate(t : T?; fmt : int) {
+    let n = 512l
+    let d = 32l
+    let nsb = n / 256l
+    let mr = kq_layout_of(fmt)
+    let qsb = kq_qsb(fmt)
+    let ssb = kq_ssb(fmt)
+    let blk1 <- fmt == 3 ? build_q3k_block() : build_q6k_block()
+    var kq : array<uint8>
+    var ks : array<uint8>
+    kq |> resize(d * nsb * qsb)
+    ks |> resize(d * nsb * ssb)
+    for (r in range64(d)) {
+        for (sbi in range64(nsb)) {
+            if (fmt == 3) {
+                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + sbi) * qsb, ks, (r * nsb + sbi) * ssb)
+            } else {
+                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + sbi) * qsb, ks, (r * nsb + sbi) * ssb)
+            }
+        }
+        var st = 0xC0FFEEu + uint(r) * 0x9E3779Bu
+        for (i in range64(nsb * qsb)) {
+            st = st * 1664525u + 1013904223u
+            kq[r * nsb * qsb + i] = uint8(uint(kq[r * nsb * qsb + i]) ^ (st >> 16u))
+        }
+    }
+    var m = Model()
+    if (fmt == 3) {
+        m.k3q := kq
+        m.k3s := ks
+    } else {
+        m.k6q := kq
+        m.k6s := ks
+    }
+    var wqDisk : array<uint8>
+    var wsDisk : array<uint8>
+    moe_gpu_gather_stack_kq(m, fmt == 3 ? KqFmt.k3 : KqFmt.k6, 0l, n, d, d, false, mr, wqDisk, wsDisk)
+    unsafe {
+        if (fmt == 3) {
+            repack_k3_grp(addr(m.k3q[0]), addr(m.k3s[0]), n, d, mr)
+        } else {
+            repack_k6_grp(addr(m.k6q[0]), addr(m.k6s[0]), n, d, mr)
+        }
+    }
+    var wqGrp : array<uint8>
+    var wsGrp : array<uint8>
+    moe_gpu_gather_stack_kq(m, fmt == 3 ? KqFmt.k3 : KqFmt.k6, 0l, n, d, d, true, mr, wqGrp, wsGrp)
+    var qdiff = 0
+    for (a, b in wqDisk, wqGrp) {
+        if (a != b) {
+            qdiff++
+        }
+    }
+    var sdiff = 0
+    for (a, b in wsDisk, wsGrp) {
+        if (a != b) {
+            sdiff++
+        }
+    }
+    t |> equal(qdiff, 0, "kq {fmt}: quant device bytes identical from disk-order and grp planes")
+    t |> equal(sdiff, 0, "kq {fmt}: scale device bytes identical from disk-order and grp planes")
+}
+
+[test]
+def test_kq_gpu_gather_grp(t : T?) {
+    for (fmt in [3, 6]) {
+        t |> run("moe_gpu_gather_stack_kq kq {fmt}: disk-order and grp planes gather identically") @(t : T?) {
+            kq_gpu_gather_gate(t, fmt)
         }
     }
 }

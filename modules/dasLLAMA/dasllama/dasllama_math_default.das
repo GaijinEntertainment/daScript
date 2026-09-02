@@ -1057,7 +1057,8 @@ def private dequant_iq4xs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr,
     }
 }
 
-//! k3 grp row dequant: the 2-bit lanes and hmask bits stay in place per (h, column) — w = (d * sc16) * (q - 4).
+//! w = (d * sc16) * (q - 4)
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def private dequant_k3_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
     unsafe {
         for (sbi in range64(nsb)) {
@@ -1066,14 +1067,12 @@ def private dequant_k3_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, ns
             let d = f16_to_f32(uint(ksg[sb + 16l * mr + 2l * r]) | (uint(ksg[sb + 16l * mr + 2l * r + 1l]) << 8u))
             for (blk in range64(8l)) {
                 let kb = sbi * 256l + blk * 32l
-                let h = blk / 4l
-                let sh = int((blk % 4l) * 2l)
                 let s0 = d * float(int(int8(ksg[sb + 2l * blk * mr + r])))
                 let s1 = d * float(int(int8(ksg[sb + (2l * blk + 1l) * mr + r])))
                 for (l4 in range64(8l)) {
                     for (t in range64(4l)) {
-                        let q2 = (int(kqg[qb + ((h * 8l + l4) * mr + r) * 4l + t]) >> sh) & 3
-                        let hb = (int(kqg[qb + 64l * mr + (l4 * mr + r) * 4l + t]) >> int(blk)) & 1
+                        let q2 = (int(kqg[qb + ((blk * 2l + l4 / 4l) * mr + r) * 4l + t]) >> int((l4 % 4l) * 2l)) & 3
+                        let hb = (int(kqg[qb + 64l * mr + (blk * mr + r) * 4l + t]) >> int(l4)) & 1
                         dst[kb + l4 * 4l + t] = (l4 < 4l ? s0 : s1) * float((q2 | (hb << 2)) - 4)
                     }
                 }
@@ -1293,6 +1292,7 @@ def private dequant_iq2xxs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr
 //! Dequant one row off the grp<mr>-REPACKED K-quant planes (repack_k4/k5/k6_grp layout).
 //! kqg/ksg = row's GROUP plane base (group g = row/mr); r = row % mr.
 //! embed_row's kq_repacked path — per-token, so scalar is fine.
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr, n : int64; var dst : float?) {   // nolint:STYLE037,STYLE038 — the flat per-format dispatch (one arm per kq format) is the honest shape
     let nsb = n / 256l
     let qsb = kq_qsb(int(fmt))
@@ -1360,7 +1360,7 @@ def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, m
                 }
                 for (j in range64(4l)) {
                     let hb = fmt == 5l ? int(kqg[qb + 128l * mr + (blk * 4l + j) * mr + r]) : 0
-                    let g2 = uint((blk % 4l) * 2l)
+                    let sj = uint(2l * j)
                     for (t in range64(4l)) {
                         let nib = uint(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
                         var qlo = int(nib & 15u)
@@ -1369,11 +1369,11 @@ def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, m
                             qlo |= ((hb >> int(t)) & 1) << 4
                             qhi |= ((hb >> int(4l + t)) & 1) << 4
                         } elif (fmt == 6l) {
-                            let hbase = qb + 128l * mr + (blk / 4l) * 32l * mr
-                            let h0 = uint(kqg[hbase + (j * mr + r) * 4l + t])
-                            let h1 = uint(kqg[hbase + ((j + 4l) * mr + r) * 4l + t])
-                            qlo |= int(((h0 >> g2) & 3u) << 4u)
-                            qhi |= int(((h1 >> g2) & 3u) << 4u)
+                            let hbase = qb + 128l * mr + blk * 2l * mr * 4l
+                            let h0 = uint(kqg[hbase + r * 4l + t])
+                            let h1 = uint(kqg[hbase + (mr + r) * 4l + t])
+                            qlo |= int(((h0 >> sj) & 3u) << 4u)
+                            qhi |= int(((h1 >> sj) & 3u) << 4u)
                         }
                         if (fmt == 6l) {
                             dst[kb + j * 4l + t] = s0 * (float(qlo) - 32.0)

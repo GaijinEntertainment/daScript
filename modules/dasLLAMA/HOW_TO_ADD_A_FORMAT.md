@@ -260,6 +260,19 @@ loses cross-module inlining); the first run after a cache write pays one cold co
 deser re-key); QUIRK 21 still applies to emitter edits. Numbers, caveats and the
 invalidation ledger: `plans/jit_compile_time.md`.
 
+**Kernel-loop invocation (adopted 2026-09-01):** a kernel spelling is raced without a model in
+`benchmarks/matmul/kq_kernel_bench.das` - `DAS_TUNE_MODE=tune bin/Release/daslang.exe -jit
+modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das -- --fmt <fmt> --perm <substr>` times every
+row of the tile's and gemv's `_variants()` registries at one thread on synthetic planes (seconds
+per try), and the reference row at the same shape is the reference exe's `test-backend-ops perf
+-o MUL_MAT -p "type_a=<type>,type_b=f32,m=4096,n=1,"` under `GGML_BENCH_THREADS=1`;
+`harness/kernel_ladder.sh` runs both sides for every format and prints the box's ratio table. The
+app run comes only after a spelling wins there. Procedure, fact base and work queue:
+`plans/kernel_parity_pass.md`.
+2026-09-01: the pass closed the M1 CPU at kernel level - all 32 ladder rows at or above the
+reference (the grid decodes 1.16-1.51x, from 0.51-0.93x) - so the per-format M1 CPU tg tails stamped
+below (0.51x-0.73x) predate the ARM row-group decode; re-stamp the vehicles before quoting them.
+
 A real file whose every tensor type is now loadable (the header census script in the session
 scratchpad, or `harness/gguf_dump.das`), through `examples/dasLLAMA/run.das` against
 `simple_ids.exe` from the llama.cpp reference build for the same prompt; then `test_model_image`
@@ -554,6 +567,9 @@ only the step-3 0.0267 top-2 flip vs llama.cpp. M1 benches: CPU das 897.4/56.3 v
 is CLOSED - and with it THE FORMAT LADDER: four-tier table zen2 2.86x/0.70x, vk 0.78x/0.70x,
 M1 CPU 6.41x/0.57x, Metal 0.93x/0.78x.
 
+2026-09-01 (kernel parity pass): zen2 16t (`benchmarks/lcpp_bench.das --for-debug-purposes`, debug-jit) vs the clean-cpu `llama-bench` on the IQ2_XXS-local 1B: pp512 506.9 vs
+181.2 (2.80x), tg128 88.6 vs 86.2 (1.03x, was 0.70x) - the sign column + u64 pair gemv.
+
 ### IQ2_XS Phase A (CPU, 2026-08-31) - the ksigns u64 tier
 
 Shape: 256-superblock grid format - each of the 32 u16 qs words carries a 9-bit index into
@@ -620,6 +636,9 @@ tiers. M1 16GB benches: CPU das 746.6/51.6 vs llama.cpp 144.8/101.1 (5.16x/0.51x
 #60/#61 CPU tg tail, deepest of the grid formats), Metal das 3223.1/180.1 vs 3462.0/208.3
 (0.93x/0.86x - the iq2s pp class). The format is CLOSED on all four tiers; four-tier table:
 zen2 2.78x/0.70x, vk 0.77x/0.54x, M1 CPU 5.16x/0.51x, Metal 0.93x/0.86x.
+
+2026-09-01 (kernel parity pass): zen2 16t (`benchmarks/lcpp_bench.das --for-debug-purposes`, debug-jit) vs the clean-cpu `llama-bench` on the IQ2_XS-local 1B: pp512 480.7 vs
+174.6 (2.75x), tg128 93.8 vs 85.9 (1.09x, was 0.70x) - sign column + u64 pair + column dword read.
 
 ### IQ2_S Phase A (CPU, 2026-08-31) - the u64-grid tier
 
@@ -699,6 +718,7 @@ the mradermacher i1 vehicle - IQ2_S attn x32 + IQ3_XXS/IQ3_S/Q4_K/Q5_K):
 | tier | pp512 das / llama.cpp | tg128 das / llama.cpp |
 |---|---|---|
 | zen2 CPU | 501.5 / 138.5 (3.62x) | 55.8 / 73.5 (0.76x) |
+| zen2 CPU, 2026-09-01 kernel parity pass | 494.4 / 138.1 (3.58x) | 71.9 / 74.5 (0.97x, +-4.2) - sign column + u64 pair |
 | 5060 Ti Vulkan | 12099.3 / 17377.5 (0.70x - the tier class) | 292.4 / 362.5 (0.81x) |
 | M1 CPU | 883.3 / 413.4 (2.14x) | 53.7 / 73.9 (0.73x) |
 | M1 Metal | 3170.5 / 3427.2 (0.93x) | 205.8 / 220.7 (0.93x) |
@@ -915,6 +935,7 @@ the local --tensor-type requant, iq3_xxs on attn_k/q + all ffn):
 | tier | pp512 das / llama.cpp | tg128 das / llama.cpp |
 |---|---|---|
 | zen2 CPU | 507.2 / 136.0 (3.73x) | 56.7 / 72.6 (0.78x) |
+| zen2 CPU, 2026-09-01 kernel parity pass | 501.0 / 135.8 (3.69x) | 74.9 / 74.3 (1.01x) - sign column + column dword read |
 | 5060 Ti Vulkan | 12225.7 / 17807.7 (0.69x - the tier class) | 372.1 / 389.9 (0.95x) |
 | M1 CPU | 906.0 / 410.5 (2.21x) | 53.5 / 74.0 (0.72x) |
 | M1 Metal | 3224.0 / 3429.9 (0.94x) | 213.5 / 227.3 (0.94x) |
@@ -1017,6 +1038,7 @@ embedding head is Q6_K - three formats share every decode step):
 | tier | pp512 das / llama.cpp | tg128 das / llama.cpp |
 |---|---|---|
 | zen2 CPU | 516.9 / 104.9 (4.93x) | 52.4 / 57.0 (0.92x) |
+| zen2 CPU, 2026-09-01 kernel parity pass | 526.1 / 104.7 (5.03x) | 69.9 / 56.5 (1.24x) - the vector sign column gemv |
 | 5060 Ti Vulkan | 12539.6 / 17865 (0.70x) | 288.1 / 324.2 (0.89x) |
 | M1 CPU | 886.2 / 433.6 (2.04x) | 57.4 / 66.6 (0.86x) |
 | M1 Metal | 3237.6 / 3344.3 (0.97x) | 199.4 / 209.0 (0.95x) |
