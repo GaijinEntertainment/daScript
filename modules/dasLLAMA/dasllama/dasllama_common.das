@@ -5094,6 +5094,22 @@ def attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64) {
 // qk-norm, rope, flash-style attention, wo) as one device chain per window; norm, activation
 // image, KV-store, and residual stay CPU. Numerics: GPU f32 tile accumulation — drift-class vs CPU flash.
 [no_alloc, no_env, no_io, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+//! The CPU embed of a prefill: x_b[p] = the embedding row of tokens[p], the rows across the dispatch lanes
+def private embed_rows(t : Model; var s : Session; tokens : array<int64>; npos : int64) {
+    let dim = t.config.dim
+    let tp = unsafe(addr(t))
+    let tkp = unsafe(addr(tokens[0]))
+    var xp = unsafe(addr(s.x_b[0]))
+    maybe_parallel_for(npos >= 32l, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+        unsafe {
+            for (p in range(rb, re)) {
+                var dp = xp + int64(p) * dim
+                embed_row(*tp, tkp[p], dp)
+            }
+        }
+    }
+}
+
 def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64; skip_logits : bool = false) {
     let c = t.config
     if (npos <= 0l) {
@@ -5124,9 +5140,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         s.embed_gpu_pending = true
     } else {
         s.embed_gpu_pending = false
-        for (p in range64(npos)) {
-            embed_row(t, tokens[p], unsafe(addr(s.x_b[p * dim])))
-        }
+        embed_rows(t, s, tokens, npos)
         if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
             scale_inplace(unsafe(addr(s.x_b[0])), c.embed_scale, npos * dim)
         }

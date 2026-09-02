@@ -1207,4 +1207,48 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   18786-19457 tok/s. THE GPU WINDOW NOW READS 0.99x OF llama.cpp's 22302 us. LESSON for the
   next slice-shaped change: the tier suite's small model never reaches the split-k branch -
   a golden-output witness at the 1B shapes is the parity pregate (frozen fixture, Q8_0 has
-  one) or the bench's sanity argmax/logit against a recorded value.
+  one) or the bench's sanity argmax/logit against a recorded value. Q8_0 with the slice:
+  parity pregate 40/40 token-for-token, window 19954 us, pp512 23827 tok/s - past llama.cpp's
+  20237 tok/s on that vehicle.
+
+- 2026-09-02: Vulkan gap 1 (d), the host budget measured. `JOBQUE_PROFILING=1 lcpp_bench
+  --prof` on the Q4_K_M window: wall 25728 us against a 22.1 ms GPU window; buckets embed 2179
+  us (the CPU `embed_row` over 512 tokens plus the 4 MB x upload), rope_build 152, alloc 17;
+  the driver's own prep 460 and record 570 sit outside the buckets. llama.cpp gathers the
+  embedding on the device (GET_ROWS, 6 us). The device gather rail exists
+  (`vk_rdec_prefill_ids`, `vk_rdec_set_emb`) but the embed gate keeps this model on the CPU
+  embed: the gather kernel serves q8 tied planes and the f32 table only, and the 1B ties a
+  q6_K plane (followup_vulkan 37 = the kq gather). Landed instead, the cheap half:
+  `forward_prefill`'s embed loop runs across the dispatch lanes (`maybe_parallel_for` with
+  hoisted raw pointers - a parallel block cannot capture the model). Embed bucket 2179 -> 295
+  us, profiled window wall 25728 -> 24106. Timed windows after (two runs that read 24.3-24.4 ms
+  GPU were drift - wo, gate, down and act inflated together - and a bracket brought the same
+  binary back): GPU 22065-22118 us, pp512 20812-20822 tok/s, sanity argmax 319 / tg logit
+  8.516193, Q8_0 parity 40/40. llama.cpp on the same box, same driver, four-wide decode: pp512
+  20309 tok/s. Q4_K_M 1B pp512 stands at 1.025x of llama.cpp; the day's ladder on the window:
+  27.8 ms (morning) -> 27.2 (group-aware split-k) -> 22.9 (hand-laid twins) -> 22.1 (last-layer
+  slice), wall 15.3k -> 20.8k tok/s (embed parallel). Left on the table: the kq device gather
+  (embed 295 us + the 4 MB x upload inside prep 460), rope_build 151 us, record 570 us.
+
+- 2026-09-02: the ten-vehicle board on the branch tip (`lcpp_bench --for-debug-purposes --plen
+  512 --ngen 128 --reps 6`, the bench's mean +- sd) against the llama.cpp rows above (vector
+  build, medians of six, same box and driver):
+
+  | format | pp512 ours | pp512 llama.cpp | ratio | tg128 ours | tg128 llama.cpp | ratio |
+  |---|---|---|---|---|---|---|
+  | Q4_K_M | 21023 +- 296 | 20309 | 1.04 | 338.0 | 354.2 | 0.95 |
+  | Q3_K_L | 16984 +- 1031 | 18883 | 0.90 | 351.0 | 332.7 | 1.06 |
+  | Q2_K | 21824 +- 395 | 19684 | 1.11 | 410.0 | 400.7 | 1.02 |
+  | IQ4_XS | 19443 +- 1874 | 19515 | 1.00 | 321.5 | 331.4 | 0.97 |
+  | IQ4_NL | 22042 +- 435 | 20488 | 1.08 | 326.1 | 344.8 | 0.95 |
+  | IQ3_M | 17692 +- 677 | 19638 | 0.90 | 267.2 | 306.4 | 0.87 |
+  | IQ3_XXS | 19684 +- 513 | 19488 | 1.01 | 347.5 | 355.4 | 0.98 |
+  | IQ2_XS | 21828 +- 284 | 20011 | 1.09 | 183.0 | 329.4 | 0.56 |
+  | IQ2_XXS | 18870 +- 409 | 20052 | 0.94 | 278.6 | 390.8 | 0.71 |
+  | Q8_0 | 23974 +- 172 | 20237 | 1.19 | 233.5 +- 42 | 249.9 | 0.93 |
+
+  pp512 (this arc's gap 1): seven of ten at or past 1.0 from a 0.67-0.90 start; the three below
+  are Q3_K_L 0.90 (a 6% spread on our side), IQ3_M 0.90 and IQ2_XXS 0.94 - the k3, iq3s and
+  iq2xxs tiles, whose per-shape reference rows (llama.cpp's perf-logger MUL_MAT rows per format)
+  are the next mirror-bench pass. tg128 is gap 3 (the grid tg tails: IQ2_XS 0.56, IQ2_XXS 0.71,
+  IQ3_M 0.87; followup_vulkan 35), untouched by this arc.

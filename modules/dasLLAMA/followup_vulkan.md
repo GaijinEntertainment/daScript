@@ -580,3 +580,14 @@ module) is independent and can land any time - it is pure structure.
     twins do one grid lookup per four elements and beat the scalar arm by 30-65% at the tile
     (iq3s 43-48 vs 29-30 TF/s at the gate shape, iq2s 49-50 vs 30-32, iq2xxs 44-46 vs 34-35);
     the `DECVEC` opt-outs are gone. Rows in `plans/kernel_parity_pass.md`.
+
+37. **Device embed gather over a kq tied plane.** `vulkan_embed_gpu_gate` admits a model only
+    when `rdec_set_emb` placed a q8 tied plane or the f32 table fit under `RDEC_EMB_F32_CAP`;
+    a kq tied plane (Llama-3.2-1B Q4_K_M ties a q6_K classifier) keeps the CPU embed, which the
+    host profile put at 2.2 ms of a 25.7 ms window before the embed went parallel (2026-09-02,
+    `JOBQUE_PROFILING=1 lcpp_bench --prof`). llama.cpp gathers on the device (GET_ROWS, 6 us)
+    and skips the 4 MB x upload. Lever: an `emb_gather_kq_cls` per format reading the arena's
+    superblock planes with the cm2 decode's `(blk, bc, cib)` math (the tile classes own those
+    methods; a gather class needs the same members or a shared free decode), then
+    `rdec_set_emb` for `cls_kq`. Done = the embed bucket gone and the x upload out of prep on
+    the Q4_K_M window, parity pregate token-for-token on Q8_0 and a kq vehicle.
