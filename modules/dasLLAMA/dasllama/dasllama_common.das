@@ -2082,9 +2082,10 @@ struct Session {
     @scratch mtp_hrows : array<float>      // verify-batch post-final-norm hidden rows (rows x dim) — the drafter's next input / the carry
     mtp_drafted : int64            // session-lifetime telemetry: drafts attempted / accepted
     mtp_accepted : int64
-    // deltanet rollback for a rejected verify batch (sized lazily on first snapshot)
-    mtp_snap_conv : array<float>
-    mtp_snap_state : array<float>
+    // deltanet rollback for a rejected verify batch (sized lazily on first snapshot - a 27B hybrid's
+    // state is 151 MB, so the first growth reserves before it resizes)
+    @scratch mtp_snap_conv : array<float>
+    @scratch mtp_snap_state : array<float>
     mtp_snap_pos : int64
 }
 
@@ -4595,8 +4596,8 @@ def mtp_state_snapshot(var s : Session) {
     dn_flush_all(s)   // the snapshot must capture device-resident decode-step state
     let nc = long_length(s.dn_conv_state)
     let ns = long_length(s.dn_state)
-    s.mtp_snap_conv |> resize(nc)   // no-op after the first call
-    s.mtp_snap_state |> resize(ns)
+    s.mtp_snap_conv |> overwrite_resize(nc)   // reserves once, a no-op after the first call
+    s.mtp_snap_state |> overwrite_resize(ns)
     copy_floats(s.dn_conv_state, 0l, s.mtp_snap_conv, 0l, nc)
     copy_floats(s.dn_state, 0l, s.mtp_snap_state, 0l, ns)
     s.mtp_snap_pos = s.dn_pos

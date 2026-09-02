@@ -91,6 +91,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_bench_records_schema.das",
                     "modules/dasLLAMA/tests/test_box_ident.das",
                     "modules/dasLLAMA/tests/test_box_profile.das",
+                    "modules/dasLLAMA/tests/test_mtp_snapshot.das",
                     "modules/dasLLAMA/tests/test_dasllama_lint_contracts.das",
                     "modules/dasLLAMA/tests/test_metal_float_a_gate.das",
                     "modules/dasLLAMA/tests/test_dasllama_lint_escape.das",

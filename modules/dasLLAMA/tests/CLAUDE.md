@@ -220,6 +220,9 @@ with no escape compiles; an internal require does not) via spawned compiles,
 `load_audio_16k_mono`'s empty-on-failure contract, `decode_audio_16k_mono`'s frame cap (a
 synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call still works), and
 `gemma4a_probe_proj_dim`'s 0-not-panic contract on `.dlim` / missing / non-GGUF inputs.
+`test_mtp_snapshot.das` - model-free: the speculative round's deltanet rollback sizes its two
+snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB, past the 64 MB
+unreserved-growth guard) and restores from it.
 `test_think_split.das` - the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
 `test_tool_formats.das` - the per-ToolMode wire codecs (dasllama_tools), model-free: defs
