@@ -77,6 +77,9 @@ struct Args {
     @clarg_doc = "Output JSON path (default: stdout only)"
     out : string = ""
 
+    @clarg_doc = "Render an existing ruler JSON as a markdown table and exit (no measurement)"
+    render : string = ""
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -402,6 +405,98 @@ def private run_lcpp_arm(cfg : Args; head : string; kmax : int; rendered, ours :
     sleep(2000u)
 }
 
+// ===== --render: one markdown table per ruler JSON =====
+
+def private pct(acc, dr : int64) : string {
+    return dr > 0l ? "{double(acc) * 100.0lf / double(dr):.1f}%" : "-"
+}
+
+//! Row (engine, depth, prompt) -> cell text: "tok/s (accept%)" for an ON arm, "tok/s" for OFF
+def private cell(rows : array<JsonValue?>; engine : string; depth, prompt : int64) : string {
+    for (r in rows) {
+        if ((r?["engine"] ?? "") != engine || (r?["depth"] ?? -9l) != depth || (r?["prompt"] ?? -9l) != prompt) {
+            continue
+        }
+        if (engine == "das") {
+            return depth == 0l ? "" : "{r?["on_tps"] ?? 0.0lf:.1f} ({pct(r?["accepted"] ?? 0l, r?["drafted"] ?? 0l)})"
+        }
+        let tps = r?["tps"] ?? 0.0lf
+        return depth == 0l ? "{tps:.1f}" : "{tps:.1f} ({pct(r?["accepted"] ?? 0l, r?["drafted"] ?? 0l)})"
+    }
+    return ""
+}
+
+def private das_off(rows : array<JsonValue?>; prompt : int64) : string {
+    for (r in rows) {
+        if ((r?["engine"] ?? "") == "das" && (r?["depth"] ?? 0l) == 1l && (r?["prompt"] ?? -9l) == prompt) {
+            return "{r?["off_tps"] ?? 0.0lf:.1f}"
+        }
+    }
+    return ""
+}
+
+def private render_table(path : string) {
+    var err = ""
+    var doc = read_json(fread(path), err)
+    if (doc == null) {
+        print("mtp_ruler: {path} does not parse ({err})\n")
+        return
+    }
+    let meta = doc?["meta"]
+    print("{meta?["date"] ?? ""} - {meta?["cpu"] ?? ""} - das {meta?["das_sha"] ?? ""} - {meta?["lcpp_version"] ?? ""} - ngl {meta?["ngl"] ?? 99l}\n")
+    print("model {base_name(meta?["model"] ?? "")} - head {base_name(meta?["head"] ?? "")} - corpus {base_name(meta?["corpus"] ?? "")} - n {meta?["ngen"] ?? 0l} - reps {meta?["reps"] ?? 0l}\n\n")
+    let rn = doc?["rows"]
+    var rows : array<JsonValue?>
+    if (rn != null && rn.value is _array) {
+        rows := rn.value as _array
+    }
+    let depths <- split(meta?["depths"] ?? "1,2", ",")
+    let head = build_string() $(w) {
+        w |> write("| prompt | das off | ")
+        for (d in depths) {
+            w |> write("das depth {strip(d)} | ")
+        }
+        w |> write("llama.cpp off | ")
+        for (d in depths) {
+            w |> write("llama.cpp n_max {strip(d)} | ")
+        }
+        w |> write("same text |\n|---|---|")
+        for (_d in range(2 * length(depths) + 2)) {
+            w |> write("---|")
+        }
+    }
+    print("{head}\n")
+    var nprompts = 0l
+    for (r in rows) {
+        nprompts = max(nprompts, (r?["prompt"] ?? -1l) + 1l)
+    }
+    for (pi in range64(nprompts)) {
+        let line = build_string() $(w) {
+            w |> write("| {pi} | {das_off(rows, pi)} | ")
+            for (d in depths) {
+                w |> write("{cell(rows, "das", int64(to_int(strip(d))), pi)} | ")
+            }
+            w |> write("{cell(rows, "llama.cpp", 0l, pi)} | ")
+            for (d in depths) {
+                w |> write("{cell(rows, "llama.cpp", int64(to_int(strip(d))), pi)} | ")
+            }
+        }
+        var same = "-"
+        for (r in rows) {
+            if ((r?["engine"] ?? "") == "llama.cpp" && (r?["depth"] ?? -9l) == 0l && (r?["prompt"] ?? -9l) == pi) {
+                same = (r?["same_text_as_das"] ?? false) ? "yes" : "NO"
+            }
+        }
+        print("{line}{same} |\n")
+    }
+    for (r in rows) {
+        if ((r?["engine"] ?? "") == "das" && (r?["prompt"] ?? 0l) == -1l) {
+            print("\ndas depth {r?["depth"] ?? 0l} pooled: off {r?["off_tps"] ?? 0.0lf:.1f} on {r?["on_tps"] ?? 0.0lf:.1f} tok/s; {r?["note"] ?? ""}\n")
+        }
+    }
+    delete_json(doc)
+}
+
 [export]
 def main() {
     if (!jit_enabled()) {
@@ -415,6 +510,10 @@ def main() {
         return
     }
     let cfg <- r |> move_unwrap
+    if (!empty(cfg.render)) {
+        render_table(cfg.render)
+        return
+    }
     if (cfg.help || empty(cfg.model)) {
         print_help(get_command_info(type<Args>), "mtp_ruler")
         return
