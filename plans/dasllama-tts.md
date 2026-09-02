@@ -613,6 +613,13 @@ blocks) - ~130 ms on kokoro; (g) Snake's sin as the vecmath polynomial (JIT or a
 out of the per-tap call - ~150 ms; (i) one fused AdaIN statistics pass - ~20 ms. Together the
 kokoro q8 generator lands near 500 ms and the total near 900 ms, RTF ~0.10, torch parity.
 
+Rung (f) receipt (2026-09-02): the residual block starts from its input (`adain_rows_into`
+normalizes while it copies, the first residual add is `sum_rows_into`), the residual adds,
+stage sums and scale are float4 row-block passes (`add_rows`, `copy_rows`, `scale_rows`), and
+the stage-level copies are gone. Kokoro generator through the rail: q8 868 -> 684 ms (copy
+77 -> 0, residual adds 71 -> 7, stage sums 32 -> 3, adain 52 -> 40), f32 1073 -> 906. Rigs
+green at the unchanged bars.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the

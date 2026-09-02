@@ -1038,19 +1038,21 @@ def styletts2_prosody(p : St2Predictor; en : array<float>; c, frames : int64; s 
     return f2
 }
 
-// One Snake residual block on token-major x [t][c]; every op class lands in its tts.gen.* bucket
-// of the encode-stage profiling rail (set_asr_prof / asr_prof_report).
-def private gen_res_block(b : St2GenResBlock; var x : array<float>; t : int64; s : array<float>) {
+// One Snake residual block on token-major rows: `y` = `src` plus the three conv pairs' residuals,
+// the first pair reading `src` so no copy of the input is ever made. Every op class lands in
+// its tts.gen.* bucket of the encode-stage profiling rail.
+def private gen_res_block(b : St2GenResBlock; src : array<float>; @exact_size var y : array<float>; t : int64; s : array<float>) {
     let n = b.c * t
     var inscope @exact_size xt : array<float>
     var inscope @exact_size y1 : array<float>
     var inscope @exact_size y2 : array<float>
     for (j in range(length(b.convs1))) {
         var tc = ref_time_ticks()
-        copy_floats_into(x, n, xt)
-        asr_prof_add("tts.gen.copy", tc)
-        tc = ref_time_ticks()
-        adain_rows(b.adain1[j], xt, t, b.c, s, LN_EPS)
+        if (j == 0) {
+            adain_rows_into(b.adain1[j], src, xt, t, b.c, s, LN_EPS)
+        } else {
+            adain_rows_into(b.adain1[j], y, xt, t, b.c, s, LN_EPS)
+        }
         asr_prof_add("tts.gen.adain", tc)
         tc = ref_time_ticks()
         snake_rows(xt, t, b.c, b.alpha1[j].a)
@@ -1068,8 +1070,10 @@ def private gen_res_block(b : St2GenResBlock; var x : array<float>; t : int64; s
         conv1d_rows(b.convs2[j], y1, t, y2)
         asr_prof_add("tts.gen.conv", tc)
         tc = ref_time_ticks()
-        for (i in range64(n)) {
-            x[i] += y2[i]
+        if (j == 0) {
+            sum_rows_into(y, src, y2, n)
+        } else {
+            add_rows(y, y2, n)
         }
         asr_prof_add("tts.gen.resadd", tc)
     }
@@ -1117,6 +1121,7 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
     var inscope @exact_size xs : array<float>
     var inscope @exact_size src_ct : array<float>
     var inscope @exact_size src : array<float>
+    var inscope @exact_size src_res : array<float>
     var tc = ref_time_ticks()
     leaky_relu(x, cc * tt, 0.1)
     asr_prof_add("tts.gen.leaky", tc)
@@ -1129,9 +1134,9 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
     }
     transpose_ct(src_ct, src_c, src_t, src)
     asr_prof_add("tts.gen.noise", tc)
-    gen_res_block(d.noise_res[i], src, src_t, s)
+    gen_res_block(d.noise_res[i], src, src_res, src_t, s)
     if (tr != null && i == 0l) {
-        transpose_tc(src, src_t, src_c, tr.nres0)
+        transpose_tc(src_res, src_t, src_c, tr.nres0)
     }
     tc = ref_time_ticks()
     conv1d_rows(d.ups[i], x, tt, y)
@@ -1157,26 +1162,17 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
     }
     let n = cc * tt
     tc = ref_time_ticks()
-    for (e in range64(n)) {
-        x[e] += src[e]
-    }
-    xs |> reserve_resize(n)
-    for (e in range64(n)) {
-        xs[e] = 0.0
-    }
+    add_rows(x, src_res, n)
     asr_prof_add("tts.gen.stagesum", tc)
     stage_resblocks(d, i, x, xs, y, cc, tt, s, tr)
 }
 
-// The stage's n_kernels Snake residual blocks, each on a copy of the stage input, averaged.
+// The stage's n_kernels Snake residual blocks, each from the stage input, averaged into it.
 def private stage_resblocks(d : St2Decoder; i : int64; var x, xs, y : array<float>; cc, tt : int64; s : array<float>; var tr : StyleTts2Trace?) {
     let n = cc * tt
     var tc = 0l
     for (j in range64(d.n_kernels)) {
-        tc = ref_time_ticks()
-        copy_floats_into(x, n, y)
-        asr_prof_add("tts.gen.copy", tc)
-        gen_res_block(d.resblocks[i * d.n_kernels + j], y, tt, s)
+        gen_res_block(d.resblocks[i * d.n_kernels + j], x, y, tt, s)
         if (tr != null && i == 0l) {
             if (j == 0l) {
                 transpose_tc(y, tt, cc, tr.rb0)
@@ -1187,16 +1183,17 @@ def private stage_resblocks(d : St2Decoder; i : int64; var x, xs, y : array<floa
             }
         }
         tc = ref_time_ticks()
-        for (e in range64(n)) {
-            xs[e] += y[e]
+        if (j == 0l) {
+            copy_rows(xs, y, n)
+        } else {
+            add_rows(xs, y, n)
         }
         asr_prof_add("tts.gen.stagesum", tc)
     }
-    let inv = 1.0 / float(d.n_kernels)
     tc = ref_time_ticks()
-    for (e in range64(n)) {
-        x[e] = xs[e] * inv
-    }
+    scale_rows(xs, 1.0 / float(d.n_kernels), n)
+    delete x
+    x <- xs
     asr_prof_add("tts.gen.stagesum", tc)
 }
 

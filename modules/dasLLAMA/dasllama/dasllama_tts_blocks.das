@@ -1028,16 +1028,13 @@ def private column_sums(x : array<float>; t, c : int64; center : array<float>; s
     }
 }
 
-//! AdaIN1d in place on token-major x [T][C]: the instance-norm statistics per channel over
-//! the rows, then one per-channel affine that folds the norm's own scale and shift with
-//! (1 + gamma) and beta.
-def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<float>; eps : float) {
-    rows_width_check(c, "adain_rows")
+// The per-channel affine AdaIN folds to: the instance-norm statistics of `x` over the rows,
+// the norm's own scale and shift, then (1 + gamma) and beta.
+def private adain_affine(a : TtsAdaIn; x : array<float>; t, c : int64; style : array<float>; eps : float;
+                         var scale : array<float>; var shift : array<float>) {
     var inscope @scratch h : array<float>
     var inscope @scratch mean : array<float>
     var inscope @scratch ssq : array<float>
-    var inscope @scratch scale : array<float>
-    var inscope @scratch shift : array<float>
     linear_vec(a.fc, style, h)
     column_sums(x, t, c, h, false, mean)
     let inv_t = 1.0 / float(t)
@@ -1055,6 +1052,14 @@ def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<f
         scale[ci] = rs * g * gamma1
         shift[ci] = (bb - mean[ci] * rs * g) * gamma1 + h[c + ci]
     }
+}
+
+//! AdaIN1d in place on token-major x [T][C].
+def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<float>; eps : float) {
+    rows_width_check(c, "adain_rows")
+    var inscope @scratch scale : array<float>
+    var inscope @scratch shift : array<float>
+    adain_affine(a, x, t, c, style, eps, scale, shift)
     var xp = unsafe(addr(x[0]))
     let s4 = unsafe(addr<float4 const?>(scale[0]))
     let b4 = unsafe(addr<float4 const?>(shift[0]))
@@ -1067,6 +1072,106 @@ def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<f
                 for (j in range64(c4)) {
                     row4[j] = mad(row4[j], s4[j], b4[j])
                 }
+            }
+        }
+    }
+}
+
+//! AdaIN1d of token-major src [T][C] written into dst - the copy a residual branch would make
+//! of its input, folded into the normalize pass.
+def adain_rows_into(a : TtsAdaIn; src : array<float>; @exact_size var dst : array<float>; t, c : int64; style : array<float>; eps : float) {
+    rows_width_check(c, "adain_rows_into")
+    var inscope @scratch scale : array<float>
+    var inscope @scratch shift : array<float>
+    adain_affine(a, src, t, c, style, eps, scale, shift)
+    dst |> reserve_resize(t * c)
+    let xp = unsafe(addr<float const?>(src[0]))
+    var dp = unsafe(addr(dst[0]))
+    let s4 = unsafe(addr<float4 const?>(scale[0]))
+    let b4 = unsafe(addr<float4 const?>(shift[0]))
+    let chunks = lanes_for_work(t * c, 0)
+    maybe_parallel_for(0, int(t), chunks) $(rb, re) {
+        unsafe {
+            let c4 = c / 4l
+            for (r in range64(int64(rb), int64(re))) {
+                let row4 = reinterpret<float4 const?>(xp + r * c)
+                var out4 = reinterpret<float4?>(dp + r * c)
+                for (j in range64(c4)) {
+                    out4[j] = mad(row4[j], s4[j], b4[j])
+                }
+            }
+        }
+    }
+}
+
+// ===== elementwise row passes (float4 lanes, row blocks across lanes) =====
+
+//! y += x over n floats (n % 4 == 0).
+def add_rows(var y : array<float>; x : array<float>; n : int64) {
+    rows_width_check(n, "add_rows")
+    var yp = unsafe(addr(y[0]))
+    let xp = unsafe(addr<float const?>(x[0]))
+    let n4 = int(n / 4l)
+    maybe_parallel_for(0, n4, lanes_for_work(n, 0)) $(rb, re) {
+        unsafe {
+            var y4 = reinterpret<float4?>(yp)
+            let x4 = reinterpret<float4 const?>(xp)
+            for (i in range64(int64(rb), int64(re))) {
+                y4[i] += x4[i]
+            }
+        }
+    }
+}
+
+//! y = a + b over n floats (n % 4 == 0); `y` sized here.
+def sum_rows_into(@exact_size var y : array<float>; a, b : array<float>; n : int64) {
+    rows_width_check(n, "sum_rows_into")
+    y |> reserve_resize(n)
+    var yp = unsafe(addr(y[0]))
+    let ap = unsafe(addr<float const?>(a[0]))
+    let bp = unsafe(addr<float const?>(b[0]))
+    let n4 = int(n / 4l)
+    maybe_parallel_for(0, n4, lanes_for_work(n, 0)) $(rb, re) {
+        unsafe {
+            var y4 = reinterpret<float4?>(yp)
+            let a4 = reinterpret<float4 const?>(ap)
+            let b4 = reinterpret<float4 const?>(bp)
+            for (i in range64(int64(rb), int64(re))) {
+                y4[i] = a4[i] + b4[i]
+            }
+        }
+    }
+}
+
+//! y *= s over n floats (n % 4 == 0).
+def scale_rows(var y : array<float>; s : float; n : int64) {
+    rows_width_check(n, "scale_rows")
+    var yp = unsafe(addr(y[0]))
+    let n4 = int(n / 4l)
+    let s4 = float4(s)
+    maybe_parallel_for(0, n4, lanes_for_work(n, 0)) $(rb, re) {
+        unsafe {
+            var y4 = reinterpret<float4?>(yp)
+            for (i in range64(int64(rb), int64(re))) {
+                y4[i] *= s4
+            }
+        }
+    }
+}
+
+//! dst = src over n floats (n % 4 == 0); `dst` sized here.
+def copy_rows(@exact_size var dst : array<float>; src : array<float>; n : int64) {
+    rows_width_check(n, "copy_rows")
+    dst |> reserve_resize(n)
+    var dp = unsafe(addr(dst[0]))
+    let sp = unsafe(addr<float const?>(src[0]))
+    let n4 = int(n / 4l)
+    maybe_parallel_for(0, n4, lanes_for_work(n, 0)) $(rb, re) {
+        unsafe {
+            var d4 = reinterpret<float4?>(dp)
+            let s4 = reinterpret<float4 const?>(sp)
+            for (i in range64(int64(rb), int64(re))) {
+                d4[i] = s4[i]
             }
         }
     }
