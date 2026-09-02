@@ -461,6 +461,56 @@ def private check_exe_fn_global_restore {
     }
 }
 
+// The ONE release, mechanically. A carrier's image backing is either a mapping or a chunk, and
+// image_chunk_alloc hands back an image-page-aligned offset INTO a das-heap array<uint8> - so
+// munmap on a chunk SUCCEEDS and punches a hole in the process heap, which kills an unrelated
+// malloc long afterwards with nothing to point at the caller. Only image_backing_release tells
+// the two apart. fmap_close is therefore legal in exactly two places: inside that release, and
+// inside a function that opened the mapping it closes.
+def private report_stray_closes(path, fn : string; opened : bool; closes : array<int>) {
+    return if (fn == "image_backing_release" || opened)
+    for (ln in closes) {
+        gate_finding(path, ln,
+            "fmap_close on a backing this function did not open - a carrier's image_map may be a chunk, and munmap on one succeeds and holes the heap; release it through image_backing_release")
+    }
+}
+
+def private check_image_backing_release {
+    var files : array<string>
+    for (folder in ["modules/dasLLAMA/dasllama", "modules/dasLLAMA/tests", "modules/dasLLAMA/benchmarks",
+                    "modules/dasLLAMA/performance", "modules/dasLLAMA/harness", "utils/dasllama-server",
+                    "utils/dasllama-convert", "tutorials/dasLLAMA"]) {
+        collect_das_files(folder, files)
+    }
+    for (p in files) {
+        var fn = ""
+        var opened = false
+        var closes : array<int>
+        var line_no = 0
+        for (line in split(strip_line_comments(fread(p)), "\n")) {
+            line_no++
+            if (line |> starts_with("def ")) {
+                report_stray_closes(p, fn, opened, closes)
+                var rest = slice(line, 4)
+                if (rest |> starts_with("private ")) {
+                    rest = slice(rest, length("private "))
+                }
+                fn = ident_prefix(rest)
+                opened = false
+                closes |> clear()
+            }
+            if (contains_word(line, "fmap_open")) {
+                opened = true
+            }
+            if (contains_word(line, "fmap_close")) {
+                closes |> push(line_no)
+            }
+        }
+        report_stray_closes(p, fn, opened, closes)
+    }
+    delete files
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
@@ -471,6 +521,7 @@ def main() : int {
     check_race_bind_numbers()
     check_gpu_role_partition()
     check_fastmath_default()
+    check_image_backing_release()
     var inscope tut_texts : array<string>
     read_das_stripped(TUTORIAL_DIR, tut_texts)
     var inscope rst_texts : array<string>

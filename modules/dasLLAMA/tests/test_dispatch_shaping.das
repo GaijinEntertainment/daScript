@@ -25,6 +25,11 @@ def private pin_shaping_baseline() {
 }
 
 [test]
+def test_gemv_chunks_default(t : T?) {
+    t |> equal(get_gemv_chunks_per_lane(), 8, "the shipped default - retune the ladder tables if this moves")
+}
+
+[test]
 def test_lanes_for_work(t : T?) {
     with_job_que() {
         pin_shaping_baseline()

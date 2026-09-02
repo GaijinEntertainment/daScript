@@ -37,6 +37,11 @@ family, or backend no existing cell exercises - a q8 or f32 serving lane and a G
 included. A kernel or form that only makes a path an existing cell already serves faster is
 not a new capability - it re-mints that cell's row on at least one box instead.
 
+**A diff that makes an already-served path measurably faster re-mints that cell's board row
+(`performance/records/`) on at least one box, in the same change.** The board is the module's
+public memory of what serving costs; a kernel win that never lands there is invisible to the
+next regression check.
+
 **A timing figure PRESENTED AS A MEASUREMENT of a served turn as a whole - tok/s, latency, a
 whole-turn model or engine comparison - is a defect wherever this module writes it down with
 no cell behind it: a checked-in doc, a ledger, a code comment, or a PR description.** The

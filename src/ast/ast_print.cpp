@@ -331,7 +331,6 @@ namespace das {
             if ( fn->moreFlags ) {
                 ss << "// ";
                 if ( fn->macroFunction ) { ss << "[macro_function]"; }
-                if ( fn->needStringCast ) { ss << "[need_string_cast]"; }
                 if ( fn->aotHashDeppendsOnArguments ) { ss << "[aot_hash_deppends_on_arguments]"; }
                 if ( fn->requestJit ) { ss << "[jit]"; }
                 if ( fn->requestNoJit ) { ss << "[no_jit]"; }

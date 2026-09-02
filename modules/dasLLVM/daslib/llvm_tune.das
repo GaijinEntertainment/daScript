@@ -1237,11 +1237,12 @@ def tune_pick_fallback(chain : string) : string {
     return ""
 }
 
-let private TUNE_KNOWN_FEATURES = "avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx512f;avx512bw;avx512vl;avx512vnni;amx-tile;amx-int8;neon;dotprod;i8mm;bf16;fullfp16;sve;lse"
+let private TUNE_KNOWN_FEATURES = "avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx512f;avx512bw;avx512vl;avx512vnni;avx512vbmi;amx-tile;amx-int8;neon;dotprod;i8mm;bf16;fullfp16;sve;lse"
 
     //! The ';'-joined subset of the known `requires=` feature names this box passes — stamped
     //! into every sidecar's provenance as `features`, which is what lets a shipped profile say
     //! exactly which gated seats its minting box could and could not race.
+[arch(at = "../ARCHITECTURE.md#x64-tier-gates")]
 def tune_feature_fingerprint() : string {
     var have <- [for (f in split(TUNE_KNOWN_FEATURES, ";")); f; where fallback_feature_ok(f)]
     let joined = join(have, ";")
@@ -1256,7 +1257,7 @@ def tune_cpu_class() : string {
     let arch = get_architecture_name()
     if (arch == "x86_64") {
         if (fallback_feature_ok("avx512vnni") && fallback_feature_ok("avx512bw")) {
-            return "x86-vnni512"
+            return (fallback_feature_ok("amx-int8") && fallback_feature_ok("amx-tile")) ? "x86-amx" : "x86-vnni512"
         }
         if (fallback_feature_ok("avxvnni")) {
             return "x86-vnni256"
@@ -1273,7 +1274,7 @@ def tune_cpu_class() : string {
     //! profile adopts the nearest lower class and races only what that class could not.
 def tune_class_chain() : array<string> {
     let ladder = (get_architecture_name() == "x86_64"
-        ? "x86-vnni512;x86-vnni256;x86-avx2;x86-base"
+        ? "x86-amx;x86-vnni512;x86-vnni256;x86-avx2;x86-base"
         : "arm-i8mm;arm-neon")
     let own = tune_cpu_class()
     var chain : array<string>
@@ -1653,6 +1654,18 @@ class private TuneAnnotation : AstFunctionAnnotation {
                 suffix = ""
             }
         }
+        var companionOwnSuffix : array<string>   // a companion's OWN entry (the harness's gemv seat) when it names an eligible perm of this grid; else it follows the main
+        companionOwnSuffix |> resize(length(comps))
+        if (manifestFound) {
+            for (ci, c in count(), comps) {
+                let own = manifest?["{c.fnname}"] ?? ""
+                for (p in perms) {
+                    if (p.suffix == own && perm_requires_ok(p)) {
+                        companionOwnSuffix[ci] = own
+                    }
+                }
+            }
+        }
         let fromManifest = !empty(suffix)
         var ok = true
         if (empty(suffix)) {
@@ -1685,8 +1698,22 @@ class private TuneAnnotation : AstFunctionAnnotation {
             for (p in perms) {
                 if (p.suffix == suffix) {
                     stamp_llvm_code(func, genKey, p, fromManifest ? mpath : "")
-                    for (c in comps) {
-                        stamp_llvm_code(c.fn, c.genkey, p, fromManifest ? mpath : "")
+                    for (ci, c in count(), comps) {
+                        var stampedOwn = false
+                        if (!empty(companionOwnSuffix[ci]) && companionOwnSuffix[ci] != suffix) {
+                            for (q in perms) {
+                                if (q.suffix == companionOwnSuffix[ci]) {
+                                    stamp_llvm_code(c.fn, c.genkey, q, mpath)
+                                    stampedOwn = true
+                                }
+                            }
+                            if (stampedOwn && tune_verbosity() == "verbose") {
+                                print("llvm_tune: {c.fnname} <- {companionOwnSuffix[ci]} (its own entry, {mpath})\n")
+                            }
+                        }
+                        if (!stampedOwn) {
+                            stamp_llvm_code(c.fn, c.genkey, p, fromManifest ? mpath : "")
+                        }
                     }
                     if (tune_verbosity() == "verbose") {
                         print("llvm_tune: {fname} <- {suffix} ({fromManifest ? mpath : "fallback"})\n")
@@ -1709,6 +1736,7 @@ class private TuneAnnotation : AstFunctionAnnotation {
                 }
             }
         }
+        delete companionOwnSuffix
         delete perms
         delete comps
         return ok

@@ -333,7 +333,7 @@ namespace das {
     }
 
     static bool is_valid_fopen_mode(const char *mode) {
-        return mode && strchr("rwa", mode[0]) && mode[1 + strspn(mode + 1, "+btx")] == '\0';
+        return mode && *mode && strchr("rwa", mode[0]) && mode[1 + strspn(mode + 1, "+btx")] == '\0';
     }
 
 #if defined(_WIN32)
@@ -1173,11 +1173,19 @@ namespace das {
         return out;
     }
 
+    static string winNativeExePath ( const char * exe ) {
+        string s = exe ? exe : "";
+        for ( auto & ch : s ) {
+            if ( ch == '/' ) ch = '\\';
+        }
+        return s;
+    }
+
     static string winBuildCommandLine ( char ** argv, uint64_t argc ) {
         string s;
         for ( uint64_t i = 0; i < argc; ++i ) {
             if ( i ) s += ' ';
-            s += winArgvEscape(argv[i]);
+            s += i ? winArgvEscape(argv[i]) : winArgvEscape(winNativeExePath(argv[i]).c_str());
         }
         return s;
     }

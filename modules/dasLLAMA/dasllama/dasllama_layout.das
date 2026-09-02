@@ -914,6 +914,7 @@ def q8_region_to_metal_blob(qp : int8 const?; sp : float const?; n, rows : int64
 // Gather one PREPARED K-quant weight stack into the GPU tier's device planes — quant payloads
 // row-major per superblock in the k/k+16 nibble pairing, plus DECODED 20B scale rows. Reads
 // whatever the load prepared (grp<mr> interleave or disk-order); device bytes are identical either way.
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
@@ -968,12 +969,23 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     for (m in range64(96l)) {
                                         dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                     }
-                                } elif (fmt == KqFmt.k3) {   // 16 qs columns, then the 8 hmask columns at 64*mr
+                                } elif (fmt == KqFmt.k3) {   // the sub-block-packed qs + hmask columns
                                     for (m in range64(64l)) {
-                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                        let half = (m % 32l) / 16l
+                                        let j = (m % 16l) / 4l
+                                        var qbyte = 0u
+                                        for (bb in range64(4l)) {
+                                            let col = ((m / 32l) * 4l + bb) * 2l + half
+                                            qbyte |= ((uint(gq[(col * mr + r) * 4l + m % 4l]) >> uint(2l * j)) & 3u) << uint(2l * bb)
+                                        }
+                                        dq[m] = uint8(qbyte)
                                     }
                                     for (m in range64(32l)) {
-                                        dq[64l + m] = gq[64l * mr + ((m / 4l) * mr + r) * 4l + m % 4l]
+                                        var hbyte = 0u
+                                        for (blk in range64(8l)) {
+                                            hbyte |= ((uint(gq[64l * mr + (blk * mr + r) * 4l + m % 4l]) >> uint(m / 4l)) & 1u) << uint(blk)
+                                        }
+                                        dq[64l + m] = uint8(hbyte)
                                     }
                                 } elif (fmt == KqFmt.k2) {   // 16 qs columns, nothing else
                                     for (m in range64(64l)) {
@@ -1000,9 +1012,16 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     for (bj in range64(32l)) {
                                         dq[128l + bj] = gq[128l * mr + bj * mr + r]
                                     }
-                                } elif (fmt == KqFmt.k6) {
+                                } elif (fmt == KqFmt.k6) {   // the sub-block-packed qh columns
                                     for (p in range64(64l)) {
-                                        dq[128l + p] = gq[128l * mr + ((p / 4l) * mr + r) * 4l + p % 4l]
+                                        let half = (p % 32l) / 16l
+                                        let j = (p % 16l) / 4l
+                                        var qhbyte = 0u
+                                        for (bb in range64(4l)) {
+                                            let col = ((p / 32l) * 4l + bb) * 2l + half
+                                            qhbyte |= ((uint(gq[128l * mr + (col * mr + r) * 4l + p % 4l]) >> uint(2l * j)) & 3u) << uint(2l * bb)
+                                        }
+                                        dq[128l + p] = uint8(qhbyte)
                                     }
                                 }
                                 if (fmt == KqFmt.k6 || fmt == KqFmt.k3) {

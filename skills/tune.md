@@ -89,6 +89,14 @@ two-function stamp, so a kernel and (say) its repack-layout query can never
 desync, JIT-time declines included. The sibling is a plain function declared
 earlier in the same module, with an explicit return type.
 
+A companion may carry its **own** manifest entry, keyed by its function name:
+when that entry names a permutation of the same grid that this box can run,
+the companion stamps it instead of the main entry's. The harness writes one
+only where it measured a different winner for the sibling - the dasLLAMA tuner
+gives the kq gemv its own seat among the rows sharing the tile winner's plane
+layout - and never for a companion whose choice must follow the main (the
+layout query). No entry = the companion follows, as before.
+
 ## The mode contract
 
 The `DAS_TUNE_MODE` environment variable selects the compile-time behavior:
@@ -174,8 +182,9 @@ fingerprint (and any `version_of=` pin value). Runtime knobs, race tables and
 box identity never travel - all three are properties of the box that measured
 them, not of its class.
 
-The class names follow the features `requires=` can gate: `x86-vnni512` /
-`x86-vnni256` / `x86-avx2` / `x86-base`, `arm-i8mm` / `arm-neon`; any other
+The class names follow the features `requires=` can gate: `x86-amx` (AMX-INT8 +
+AMX-TILE over the 512-bit VNNI gate) / `x86-vnni512` / `x86-vnni256` / `x86-avx2` /
+`x86-base`, `arm-i8mm` / `arm-neon`; any other
 architecture gets `<platform>-<arch>`, a key no shipped profile matches, so
 such a box always races (`tune_cpu_class()` computes this box's,
 `tune_class_chain()` its adoption ladder). An untuned auto/restart start walks the ladder from the box's own

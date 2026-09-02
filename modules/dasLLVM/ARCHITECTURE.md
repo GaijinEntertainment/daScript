@@ -161,3 +161,34 @@ because the mints that matter most produce no successful read - the first mint h
 and a re-mint replaces one the gate rejected. An absent file registers as size -1 and hash 0,
 which the next run's re-validation sees change. Registering is a no-op outside compilation, so
 the manifest's runtime readers reach the same call unconditionally.
+
+## 6. The x64 kernel-matrix tier gates {#x64-tier-gates}
+
+An x64 host target publishes eight boolean gates (`g_target_x64_*`), one per instruction tier the
+kernel matrix and the tune grids select on: `avx2`, `f16c`, `vnni256` (256-bit VPDPBUSD by either
+VEX AVX-VNNI or EVEX AVX512-VNNI+VL), `avx512bw` (zmm byte ops - BW, not merely F), `avx512vnni`
+(zmm VPDPBUSD; implies bw, the sign trick around it is BW), `avx512vbmi` (VPERMI2B / VPERMB /
+VPMULTISHIFTQB - the grid formats' symbol lattice), `vnniint8` (VEX VPDPBSSD, native s8 x s8),
+and `amx` (both amx-tile and amx-int8; the per-process XTILEDATA grant is a separate runtime step
+the family's own witness performs). `init_jit_target_flags` decides each from cpuid truth OR'd with
+the `DAS_JIT_X64_FORCE_FEATURES` emission-only override; a cross triple or a generic target
+(`host_features = false`) drops to forced-only truth - cpuid is not consulted, the force env is
+the only tier source there.
+
+The cpuid truth is `das_cpu_supports` (`src/builtin/module_builtin_runtime.cpp`), a hand-kept table
+keyed by the LLVM target-feature spelling - so the force env and `llc -mattr` take the same names.
+A tier feature usually lands as three parts: its cpuid line there, its name in
+`TUNE_KNOWN_FEATURES` (`daslib/llvm_tune.das`, the profile fingerprint the `requires=` gates are
+checked against), and - when the emitters branch on it - a `g_target_x64_*` gate. The cpuid line
+is the load-bearing one: a name missing from the table answers false on every box, so the perm
+that requires it declines everywhere and no error names the cause.
+
+## 7. A constant-folded GEP is not an instruction {#gep-constant-fold}
+
+`LLVMBuildGEP2` over a global with a constant index does not create an instruction - LLVM folds
+it into a `ConstantExpr`, one shared object per distinct expression in the context. Any API that
+casts a "just built" GEP to `GetElementPtrInst` therefore writes through the wrong type into the
+constant's memory when the fold happened - `LLVMSetIsInBounds` was the instance that corrupted
+the context (heap damage surfacing in `LLVMContextDispose` at teardown). The in-bounds form is
+requested at build time (`LLVMBuildInBoundsGEP2`), which folds to an in-bounds `ConstantExpr`
+correctly; the `llvm_boost` wrapper's `inbounds` default rides that builder.

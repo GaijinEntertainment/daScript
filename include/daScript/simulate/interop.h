@@ -13,6 +13,22 @@ namespace das
     };
 
     template <>
+    struct cast_arg<char *> {
+        static __forceinline char * to ( Context & ctx, SimNode * node ) {
+            char * res = node->evalPtr(ctx);
+            return res ? res : ((char *)"");
+        }
+    };
+
+    template <>
+    struct cast_arg<const char *> {
+        static __forceinline char * to ( Context & ctx, SimNode * node ) {
+            char * res = node->evalPtr(ctx);
+            return res ? res : ((char *)"");
+        }
+    };
+
+    template <>
     struct cast_arg<Context *> {
         static __forceinline Context * to ( Context & ctx, SimNode * ) {
             return &ctx;

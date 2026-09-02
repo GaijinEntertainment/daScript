@@ -707,14 +707,6 @@
     the expected crowned entries' counts moved, once the cell picks a carrier whose shapes
     actually ready the tensor variants.
 
-61. **An in-process image-off seam for facade-knob test cells.** A cell whose subject is a
-    facade lane knob (`load_asr_model` under `set_asr_tower_fp32`) must keep the facade
-    loader, and on a cold box that load BAKES the pinned lane's `.dlim` and GC-purges the
-    serving lane's flavor (`dlim_gc_stale`) - the class that broke `test_audio_embedder`
-    once already. The tests checklist ledgers the residue; the fix is an in-process
-    equivalent of `DASLLAMA_IMAGE=0` (`g_env_engine.image` is a `let` read at load), so such
-    cells can run image-free instead of risking the purge.
-
 57. **Plane types have no `long_length`.** `length(PlaneF)` / `length(PlaneU16)` return
     `int`, so every `uint64(length(t.blob) * 4l)` spelling caps a plane at 2^31 elements
     before the widening - headroom-only today (whisper large-v3's twin is ~632M elements).
@@ -761,16 +753,36 @@
     `[tune_perm]` spellings and let the probe judge. Done = a per-format note naming what was
     raced and what won, beside the existing bench rows.
 
-61. **IQ3_S CPU decode: race a no-panel gemv spelling (the 0.92x tail).** The stamped gemv
-    gathers each superblock into an alloca panel and then runs the vector dot - a store/load
-    round trip per superblock that a single token never amortizes; llama.cpp's per-row form
-    (grid words composed straight into vectors, signs applied to the ACTIVATION via
-    shuffle+cmpeq/xor-sub, magnitudes kept unsigned for maddubs) edges it 57.0 vs 52.4 tg128
-    on the zen2 (pp512 is ours 4.93x - the panel amortizes across the tile). The counter to
-    race as a [tune_perm]: compose the gathered words directly into the weight vectors
-    (insertelement per i32 lane, no panel), and/or the signs-on-activation form that drops
-    the abs+psign pair. Done = a gemv perm that takes tg128 at or past llama.cpp's, crowned
-    by the probe.
+61. **Grid-format CPU decode: the panel round trip, one shared cost (kernel-level 0.43x-0.91x).**
+    Measured 2026-09-01 at one thread, m=4096 k=14336 (`benchmarks/matmul/kq_kernel_bench.das` vs
+    the reference exe's `test-backend-ops perf`): iq3s 11406 us vs 10340 (0.91x), iq3xxs 11578 vs
+    6590 (0.57x), iq2s 11732 vs 5074 (0.43x), iq2xs 11490 vs 5386 (0.47x), iq2xxs 11061 vs 5124
+    (0.46x) - all five at 48-51 ns per superblock against k4/k2's 8.6-8.8, a flat cost independent
+    of the format. Every one of the five gathers ends each decoded dword with a 4-byte store into the
+    alloca panel and the dot reloads 32 bytes spanning eight such stores - a wide load over narrow
+    stores, which x86 does not forward; llama.cpp composes grid words into registers on both arches
+    (`plans/kernel_parity_research_cpu.md`). Signs-on-activation does NOT port to our 8-rows-per-vector
+    layout (llama.cpp's own arm64 arms sign the weights for the same reason). The spellings, in
+    order: `gather="reg"` (group-major compose, insertelement per row, no panel), `psign="mask"` (a
+    vector sign mask replacing GPR sign math + abs), a `vpdpbssd` seat for AVX-VNNI-INT8 hosts, a
+    repack-baked parity sign byte. Done = each of the five at or past the reference row at one thread,
+    crowned by the probe; plan and fact base: `plans/kernel_parity_pass.md`.
+    2026-09-01: `gather="reg"` measured 1.85x SLOWER (insertelement chains, 5x the code) and was
+    dropped; `sign="vec"` landed for iq3s (7732 us = 1.34x the reference) and iq2s (7076 us =
+    0.72x). Then all five: the sign column synthesized from the 7-bit codes (parity = the 8th bit,
+    no plane change), the iq2 formats' u64 grid pair as one load, and the knob collapsed into the
+    one gemv path (the tuner races the tile, where a gemv-only spelling ties). Kernel-level, one
+    thread: iq3s 1.37x, iq2s 0.98x, iq2xxs 0.98x, iq2xs 0.86x, iq3xxs 0.83x of the reference.
+    Open residue: the per-dword qs byte loads of iq2xs/iq3xxs.
+    2026-09-01, ARM: the sdot lattice's decode composes row PAIRS straight from the grid words (two
+    rows x 8 weights per vector, one u64 grid entry per iq2 row, the ksigns formats signed by a +-1
+    table row per 7-bit code, iq3s/iq2s by the mask off the plane's sign column) - M1 one thread:
+    iq2xs 1.24x, iq2xxs 1.20x, iq3xxs 1.36x, iq2s 1.51x, iq3s 1.15x, all five ahead. x86 is untouched
+    (zen2 v3: iq3s 1.36x, iq2xs 1.13x, iq2xxs 1.04x, iq2s 1.01x, iq3xxs 1.00x) - its residue stays
+    the qs byte loads; the M1 lesson (3 loads against 4 NEON ops per cycle, count both) is in the plan.
+    2026-09-01, x86: the same row-group form measured 1.2-1.5x SLOWER than the panel on zen2 (iq2xs
+    4646 -> 6785 us; llama.cpp's AVX2 insert form does 5320 there) - killed for x86, kept for the sdot
+    lattice; zen4's 0.77-0.88x waits on a port profile (`plans/kernel_parity_pass.md`, queue).
 
 62. **IQ3_S Metal decode: the ~140 GB/s compose ceiling (tg 0.95x).** Eight GEMV forms raced
     at n=2048 d=8192 - gather placement x3, gather deleted, signs deleted, llama.cpp's exact
@@ -783,7 +795,91 @@
     a form that clears 180 GB/s in the dispatch-loop probe (QUIRK 22's harness), or a note
     proving the ceiling is shared by llama.cpp's own kernel when isolated the same way.
 
-63. **Two FFTs in the tree: `dasllama_audio.das` carries its own power-of-two FFT
+63. **Reasoning-trace length under quantization: a rollback-and-ban sampler feature (Boris,
+    2026-09-01).** Quantization noise raises the entropy of a reasoning model's intermediate steps,
+    and a model trained to self-verify treats its own noisier steps as suspect - the "wait, let me
+    recheck" branch fires more often and each firing adds a hundred tokens. The remedy in the field:
+    detect the reconsideration n-grams (", but wait", "Wait,", "Hmm,", "Actually," - a table of a few
+    dozen phrases) after they are emitted, rewind the KV cache to the position before the phrase and
+    resample with the phrase's first tokens banned. The trigger is multi-token, so a per-token logit
+    bias cannot express it; the rewind is what makes it exact. Ours: the decode loop owns the position
+    counter, so the rewind is "n_past back k, drop k cache rows" plus a phrase table and a ban list in
+    the sampler; expose it as a server/CLI knob. Done = the knob, a test that a forced ", but wait"
+    stream rewinds and continues, and a before/after token count on a 27B reasoning prompt.
+    2026-09-01 research (`plans/qwen38_thinking_control.md`): the phrase-level rollback is what
+    Antislop does and costs 69-96% of throughput; the cheap form that the two 2026 papers measure is a
+    SINGLE-TOKEN logit penalty on the reconsideration tokens ("wait", "but", "alternatively") at
+    12-51% shorter traces with equal or better accuracy - build that first, the rollback only if the
+    single-token penalty measures short.
+
+64. **Qwen 3.8 thinking control: expose quick / normal / high (Boris, 2026-09-01).** The model's one
+    first-party knob is `reasoning_effort` with exactly three legal values - `xhigh` (default),
+    `medium`, `low` - which the chat template turns into one system-prompt sentence (`medium` injects
+    nothing; anything else, OpenAI's usual `high` included, raises in the template). No budget exists in
+    the model; `<think>` and `</think>` are single vocab tokens (248068 / 248069), so an early stop is a
+    one-token force. What our stack lacks (`plans/qwen38_thinking_control.md`): a `dasllama_arch_qwen38.das`
+    (the GGUF spec exists), the template's `<think>` prefill in `chatml_chat`, and the server drops
+    `reasoning_effort`. The three levers, in order: (1) map quick/normal/high -> low/medium/xhigh in the
+    template's effort sentence and accept `reasoning_effort` in the server (translate `high` to `xhigh`
+    instead of raising); (2) a reasoning token budget in `SamplingParams` that forces `</think>` - the
+    counter must see the PROMPT-side `<think>` (the template opens the block), so prefill tokens pass
+    through the sampler's state; (3) the single-token reconsideration penalty of entry 63. Nobody
+    publishes what the effort levels cost; measure our three rungs on the 27B before naming them.
+
+65. **An in-process image-off seam for facade-knob test cells.** A cell whose subject is a
+    facade lane knob (`load_asr_model` under `set_asr_tower_fp32`) must keep the facade
+    loader, and on a cold box that load BAKES the pinned lane's `.dlim` and GC-purges the
+    serving lane's flavor (`dlim_gc_stale`) - the class that broke `test_audio_embedder`
+    once already. The tests checklist ledgers the residue; the fix is an in-process
+    equivalent of `DASLLAMA_IMAGE=0` (`g_env_engine.image` is a `let` read at load), so such
+    cells can run image-free instead of risking the purge.
+
+66. **x86 hybrid core detection for the lane policy.** `get_num_perf_cores` / `is_slow_tier_compute`
+    are Apple-only (`job_que.cpp`), so `dasllama_jobque_threads_cap` applies its split - every core
+    for prefill, perf cores for the decode lanes - on darwin alone. A hybrid Intel client (12th-15th
+    gen) runs its E-cores as decode team lanes and the join waits on their last chunk; prefill is
+    fine there (homogeneous ISA, extra compute). Detection is small: Linux counts
+    `/sys/devices/cpu_core/cpus` against `/sys/devices/cpu_atom/cpus` (hybrid Intel, kernel 5.13+),
+    Windows reads `EfficiencyClass` from `GetLogicalProcessorInformationEx(RelationProcessorCore)`;
+    the darwin branch then applies unchanged. No EC2 instance has such a part (server Xeons only);
+    a Hetzner EX44 (i5-13500, 6P+8E) or EX101 (i9-13900) rents by the hour for the check.
+
+67. **Per-format decode lane cap on SMT x86.** Figures: `benchmarks/matmul/kq_kernel_bench.das`
+    (`--team --d 32768 --ntok 0 --base-align 4096`, DAS_JOBQUE_THREADS as stated) against `test-backend-ops perf`
+    at m=32768/16t on the same box. zen4 (8 cores x 2 SMT) at the engine's decode shape (d=32768, DRAM-streamed): the light formats gain at one lane per core - iq4xs 3116 -> 3004 us,
+    iq4nl 3049 -> 2946, q8s16 6339 -> 6120, k4 3169 -> 2891 - while the lattice grids halve without
+    the SMT lanes (iq2xs 1412 -> 2714) and k5 does not move. Two siblings split one core's issue
+    width on a kernel that is not ALU-bound; the reference streams the same bytes at 84-91 GB/s
+    where ours sit at 79-82 with every lane busy. The darwin policy (`dasllama_jobque_threads_cap`:
+    every core for prefill, perf cores for decode) is the right shape but one global cap; here it
+    has to be per family: the tuner races the gemv seat at physical-core lanes beside the all-lane
+    race it already runs, stores `decode_lanes` per family in the sidecar, and `matmul_chunks_gemv`
+    applies the format's cap (its callers know the tensor's KqFmt). Ruled 2026-09-01: zen4's iq4xs
+    0.92 / iq4nl 0.94 / k5 0.93-0.97 are accepted as they stand; pinned affinity is normally the
+    faster arrangement and this may be the one case it is not - decide with a second SMT box in hand.
+
+68. **iq2xs on arm-i8mm reads 0.90 one-thread / 0.95 at the engine shape - the format's true ARM standing,
+    not a regression.** Figures: `benchmarks/matmul/kq_kernel_bench.das` (1T default shape; `--team --d 32768`
+    at 10 lanes) against `test-backend-ops perf` on the same M4 Pro. An earlier mid-arc table read 1.46 (1530 us at 10 lanes), but neither today's emitter
+    nor that commit's own `dasllama/` sources reproduce it on the same box (both measure ~2350; binary, bench
+    and reference identical) - the old figure was an artifact of that session. The decode form is settled: the
+    row-group form beats the panel on ARM for every grid format at both shapes (iq2xs panel 3885 vs rows 2365
+    at 10 lanes), so the sdot gate is already right. What would actually lift iq2xs on ARM is a cheaper 9-bit
+    index path in the row form (its u16 word costs two column-byte reads per site where iq2xxs reads one), or
+    an ARM analog of the x86 symbol lattice over SMMLA - both open kernel work, not a gate flip.
+
+69. **A class profile can carry winners a class member cannot run.** `tune_cpu_class()` puts every
+    AVX512VNNI+BW host in `x86-vnni512`, and that class's shipped profile now carries `grid_vbmi`
+    winners minted on zen4 (which has VBMI). On a member without VBMI (Cascade Lake, Ice Lake-SP
+    predecessors), adoption marks the profile complete - nothing races - and every vbmi entry
+    declines at stamp time to its `fallback=` chain, silently costing those boxes the grid formats'
+    best seats. Two candidate fixes, unbuilt: split a `x86-vbmi512` class above `x86-vnni512` in
+    `tune_cpu_class` / `tune_class_chain` (a re-mint renames the profile), or make `profile_try_adopt`
+    race any family whose adopted winner names a perm `tune_requires_ok` rejects locally (general,
+    no rename, needs the suffix -> requires mapping surfaced to the adopt layer). The woodpecker
+    round raised the Cascade Lake case.
+
+70. **Two FFTs in the tree: `dasllama_audio.das` carries its own power-of-two FFT
     (`build_fft_plan` / `fft_pow2_run` / `build_dft_twiddles`, the mel front end's kernel) while
     `modules/dasMinfft` binds a general FFT/DCT library.** The TTS path added a third shape - the
     N=20 STFT/ISTFT of the iSTFTNet generator, a direct 11-bin sum where a transform library
@@ -793,7 +889,7 @@
     records why the mel kernel keeps its own (JIT-inlined, plan-cached, no module dependency on
     the CPU-only build) and the direct N=20 sum stays where it is.
 
-64. **LINT candidate (approved 2026-09-02): a local container with no `inscope`, `delete`, or
+71. **LINT candidate (approved 2026-09-02): a local container with no `inscope`, `delete`, or
     move-out in a `persistent_heap` program.** daslang frees a local container only under
     `var inscope`, an explicit `delete`, or a move-out; a plain `var a : array<T>` / `let a <- f()`
     / `var s = StructWithArrays()` is a per-call leak on the persistent heap. The TTS path carried

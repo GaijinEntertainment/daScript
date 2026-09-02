@@ -113,6 +113,27 @@ def test_popen_argv_arg_with_embedded_quote(t : T?) {
 }
 
 [test]
+def test_popen_argv_relative_forward_slash_exe(t : T?) {
+    t |> run("a relative argv[0] with forward slashes and no leading ./ spawns") @(t : T?) {
+        let exe = get_full_file_name(das_exe())
+        let exe_dir = dir_name(exe)
+        let rel = "{base_name(exe_dir)}/{base_name(exe)}"
+        let launch_dir = dir_name(exe_dir)
+        let saved_cwd = getcwd()
+        if (!chdir(launch_dir)) {
+            t |> failure("could not chdir to {launch_dir}")
+            return
+        }
+        var output : string
+        let rc = run_argv([rel, "--help"], output)
+        t |> success(chdir(saved_cwd), "could not restore the working directory {saved_cwd}")
+        t |> equal(rc, 0, "spawning {rel} from {launch_dir} failed")
+        t |> success(find(output, "daslang version") >= 0,
+            "expected 'daslang version' in output: {output}")
+    }
+}
+
+[test]
 def test_popen_argv_child_stdin_isolated(t : T?) {
     t |> run("child cannot read parent's stdin") @(t : T?) {
         // Spawn the same echo fixture used by test_popen_argv_pipe. The

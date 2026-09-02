@@ -7,10 +7,7 @@ require daslib/fio
 
 [test]
 def test_dasfmt_exclude_mask(t : T?) {
-    var exe = get_command_line_arguments()[0]
-    if (get_platform_name() == "windows") {
-        exe = exe |> replace("/", "\\")
-    }
+    let exe = get_command_line_arguments()[0]
     let tool = path_join(get_das_root(), "utils/das-fmt/dasfmt.das")
     var terr : string
     let tmp = temp_directory(terr)

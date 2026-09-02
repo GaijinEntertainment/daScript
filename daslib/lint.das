@@ -158,6 +158,9 @@ class LintVisitor : AstVisitor {
     @do_not_delete lint014_candidates : array<Variable const?>
     lint023_candidates : array<Lint023Candidate>
     lint023_store_nodes : table<uint64>
+    @do_not_delete lint029_candidates : array<Variable const?>
+    @do_not_delete lint029_mutated : array<Variable const?>
+    lint029_exempt : bool = false
     //! AST visitor that performs lint checks.
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -177,6 +180,8 @@ class LintVisitor : AstVisitor {
     lint021_narrow_depth : int = 0
     lint021_poison_depth : int = 0
     lint021_closure_depth : int = 0
+    lint023_deferred_depth : int = 0
+    lint023_jumps : bool = false
     lint022_refs : RefIndex
     @do_not_delete lint022_self_struct : Structure const? = null
     lint022_generic_sweep : bool = false
@@ -340,6 +345,8 @@ class LintVisitor : AstVisitor {
         lint021_narrow_depth = 0
         lint021_poison_depth = 0
         lint021_closure_depth = 0
+        lint023_deferred_depth = 0
+        lint023_jumps = false
         if (fun.moreFlags.isTemplate) {
             noLint = true
             return
@@ -358,6 +365,10 @@ class LintVisitor : AstVisitor {
             if (idx >= 0) {
                 lint014_candidates |> erase(idx)
             }
+            let idx29 = lint029_candidates |> find_index(ev.variable)
+            if (idx29 >= 0) {
+                lint029_candidates |> erase(idx29)
+            }
         }
     }
 
@@ -370,13 +381,23 @@ class LintVisitor : AstVisitor {
         lint014_candidates |> clear()
         if (!noLint && genericDepth == 0) {
             for (c in lint023_candidates) {
-                if (!c.disqualified && c.stores > 0) {
+                if (!c.disqualified && c.stores > 0 && !lint023_jumps) {
                     lint_error("LINT023: mutable by-value argument {c.v.name}: {describe(c.v._type, false, false, false)} is written but never read - the caller never sees a write to a by-value copy; declare it `{describe(c.v._type, false, false, false)}&` if it is an out-parameter, otherwise the write is dead", c.v.at)
                 }
             }
         }
         lint023_candidates |> clear()
         lint023_store_nodes |> clear()
+        if (!noLint && genericDepth == 0) {
+            for (v in lint029_candidates) {
+                let structish = (v._type != null
+                    && (v._type.baseType == Type.tStructure || v._type.baseType == Type.tHandle))
+                continue if (structish && lint029_mutated |> find_index(v) < 0)
+                lint_error("LINT029: by-ref argument {v.name}: {describe(v._type, false, false, false)} is mutated - every call site sees the write; declare the parameter const and return the result instead if this function should be pure", v.at)
+            }
+        }
+        lint029_candidates |> clear()
+        lint029_mutated |> clear()
         if (!noLint && genericDepth == 0) {
             for (e in ds_entries) {
                 if (!e.skip && e.has_pending && e.pending_pure && e.pending_expr != null) {
@@ -405,6 +426,7 @@ class LintVisitor : AstVisitor {
         if (!noLint && genericDepth == 0 && (bf.isClosure || bf.isLambdaBlock || bf.isGeneratorBlock)) {
             branch_depth++
             lint021_closure_depth++
+            lint023_deferred_depth++
         }
     }
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
@@ -415,6 +437,7 @@ class LintVisitor : AstVisitor {
         if (!noLint && genericDepth == 0 && (bf.isClosure || bf.isLambdaBlock || bf.isGeneratorBlock)) {
             branch_depth--
             lint021_closure_depth--
+            lint023_deferred_depth--
         }
         return <- blk
     }
@@ -449,6 +472,9 @@ class LintVisitor : AstVisitor {
             exprForTerminator |> pop()
         }
         exprForTerminator |> push(0ul)
+        if (!noLint && genericDepth == 0) {
+            lint023_jumps = true
+        }
     }
 
     def override preVisitExprCast(expr : ExprCast?) : void {
@@ -540,6 +566,19 @@ class LintVisitor : AstVisitor {
         lint014_candidates |> push(v)
     }
 
+    def lint029_collect_candidate(fun : FunctionPtr; v : VariablePtr) {
+        if (lint029_exempt || noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used || v.isAccessUnused) return
+        let name = string(v.name)
+        if ((name |> starts_with("_")) || find(name, "`") >= 0
+                || fun.name == "finalize" || fun.moreFlags.addressTaken
+                || v._type == null || v._type.flags.constant
+                || !(v._type.flags.ref || v._type.isRefType)
+                || !(v.access_flags.access_ref || v.access_info.access_info_pass_mutable)) {
+            return
+        }
+        lint029_candidates |> push(v)
+    }
+
     def lint023_collect_candidate(v : VariablePtr) {
         if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used || v.isAccessUnused) return
         let name = string(v.name)
@@ -575,7 +614,7 @@ class LintVisitor : AstVisitor {
         if (ci < 0 || lint023_candidates[ci].disqualified) return
         if (expr.varFlags.under_clone || key_exists(lint023_store_nodes, intptr(expr))) {
             lint023_candidates[ci].stores++
-        } else {
+        } elif (lint023_candidates[ci].stores > 0 || lint023_deferred_depth > 0) {
             lint023_candidates[ci].disqualified = true
         }
     }
@@ -591,6 +630,25 @@ class LintVisitor : AstVisitor {
         validate_argument(arg, "LINT012", "function argument")
         validate_unwritten_var_argument(fun, arg)
         lint023_collect_candidate(arg)
+        lint029_collect_candidate(fun, arg)
+    }
+
+    def private lint029_note_mutation(v : Variable const?) : void {
+        if (v != null && lint029_candidates |> find_index(v) >= 0
+                && lint029_mutated |> find_index(v) < 0) {
+            lint029_mutated |> push(v)
+        }
+    }
+
+    def override preVisitExprField(expr : ExprField?) : void {
+        if (noLint || genericDepth > 0 || expr.value == null) return
+        var obj = expr.value
+        if (obj is ExprRef2Value) {
+            obj = (obj as ExprRef2Value).subexpr
+        }
+        return if (!(obj is ExprVar) || (expr._type != null
+            && (expr._type.baseType == Type.tPointer || expr._type.baseType == Type.tHandle)))
+        lint029_note_mutation((obj as ExprVar).variable)
     }
 
     def override preVisitExprBlockArgument(_blk : ExprBlock?; arg : VariablePtr; _lastArg : bool) : void {
@@ -1064,6 +1122,9 @@ class LintVisitor : AstVisitor {
             lint022_refs.names |> insert("{expr.name}")
         }
         if (noLint || genericDepth > 0) return
+        if (key_exists(lint023_store_nodes, intptr(expr))) {
+            lint029_note_mutation(expr.variable)
+        }
         lint023_note_use(expr)
         let ci = lint021_find(expr.variable)
         if (ci >= 0 && !lint021_candidates[ci].disqualified) {
@@ -1122,18 +1183,38 @@ class LintVisitor : AstVisitor {
         return <- expr
     }
 
+    //! A label or a goto puts control flow beyond what the source order describes - a backward
+    //! jump can place a read after a store that appears above it - so the order test cannot judge
+    //! this function and LINT023 stands down for all of it.
+    def override preVisitExprGoto(_expr : ExprGoto?) : void {
+        if (!noLint && genericDepth == 0) {
+            lint023_jumps = true
+        }
+    }
     def override preVisitExprFor(_expr : ExprFor?) : void {
-        if (!noLint && genericDepth == 0) branch_depth++
+        if (!noLint && genericDepth == 0) {
+            branch_depth++
+            lint023_deferred_depth++
+        }
     }
     def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
-        if (!noLint && genericDepth == 0) branch_depth--
+        if (!noLint && genericDepth == 0) {
+            branch_depth--
+            lint023_deferred_depth--
+        }
         return <- expr
     }
     def override preVisitExprWhile(_expr : ExprWhile?) : void {
-        if (!noLint && genericDepth == 0) branch_depth++
+        if (!noLint && genericDepth == 0) {
+            branch_depth++
+            lint023_deferred_depth++
+        }
     }
     def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
-        if (!noLint && genericDepth == 0) branch_depth--
+        if (!noLint && genericDepth == 0) {
+            branch_depth--
+            lint023_deferred_depth--
+        }
         return <- expr
     }
     def override preVisitExprTryCatch(_expr : ExprTryCatch?) : void {
@@ -1169,6 +1250,7 @@ def public paranoid(prog : ProgramPtr; compile_time_errors : bool; disabled_code
     //! ``// nolint:CODE`` directives.
     var astVisitor = new LintVisitor(
         compile_time_errors = compile_time_errors,
+        lint029_exempt = lint029_source_exempt(prog),
         multiple_contexts = prog._options |> find_arg("multiple_contexts") ?as tBool ?? prog.policies.multiple_contexts)
     astVisitor.disabled_codes := disabled_codes
     make_visitor(*astVisitor) $(adapter) {
@@ -1194,6 +1276,7 @@ def public paranoid_collect(prog : ProgramPtr; var errors : array<string>;
     var astVisitor = new LintVisitor(
         compile_time_errors = false,
         collect_errors = true,
+        lint029_exempt = lint029_source_exempt(prog),
         multiple_contexts = prog._options |> find_arg("multiple_contexts") ?as tBool ?? prog.policies.multiple_contexts)
     astVisitor.disabled_codes := disabled_codes
     astVisitor.enabled_codes := enabled_codes
@@ -1216,6 +1299,7 @@ def public paranoid_collect_issues(prog : ProgramPtr; var issues : array<LintIss
     var astVisitor = new LintVisitor(
         compile_time_errors = false,
         collect_errors = true,
+        lint029_exempt = lint029_source_exempt(prog),
         multiple_contexts = prog._options |> find_arg("multiple_contexts") ?as tBool ?? prog.policies.multiple_contexts)
     astVisitor.disabled_codes := disabled_codes
     astVisitor.enabled_codes := enabled_codes
