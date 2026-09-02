@@ -33,6 +33,10 @@ folder walk does not surface it for a `dasllama/`-only diff.**
 **A GPU kernel, driver, dispatch-class, or K/V-mirror change - and a GPU kernel A/B race,
 knockout, or hand-binding arm, wherever the diff puts it - applies `REVIEW_GPU.md`.**
 
+**A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
+`[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture either emitter compiles - wherever
+the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.**
+
 **A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it,
 a `.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a
 flavor (the backend-and-layout variant an image is baked for, one part of its identity) -
