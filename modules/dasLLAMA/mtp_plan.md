@@ -610,7 +610,11 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   (p2/p1 0.71 vs 0.89, p3/p2 0.73 vs 0.86) are also worse, which a worse head compounds - the chain
   is not exonerated but the earlier "0.55 at position 2" was a CONDITIONAL rate set against their
   unconditional one. A clean split needs the Q8_0 27B head (mtp-Qwen3.8-27B-Q8_0 exists for 3.8)
-  or llama-speculative-simple on the same GGUF.
+  or llama-speculative-simple on the same GGUF. **Q8_0 head on Qwen3.8-27B (Q4_K_M trunk), depth 4:
+  p1 81.3 p2 64.3 p3 34.5 p4 22.4** (off 27.4, on 19.4 = 0.71x at depth 4) - the same p1 as the 3.6's
+  Q4 head, so head quantization is not the p1 limiter either; what is left between our ~81% and
+  vLLM's 93.5% is the Q4_K_M TARGET, the corpus (SpecBench chat turns vs their ~2k-context samples)
+  and the acceptance definition.
 
 ## Predictions (logged BEFORE each measurement)
 
