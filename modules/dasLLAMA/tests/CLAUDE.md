@@ -50,7 +50,15 @@ GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance). MTP p
 fixture tag `0.8b 27b 35b 3.8-27b` (3.8-27b = the Qwen3.8-27B trunk + its split Q8_0 head; ctrl = plain-vs-plain forced feed must be bit-identical; ff = the
 verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose openers; ffk = the
 same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay; count = speculative
-free-run == plain free-run, token-exact, counting prompt, at depth 1, 2 and 4). The pairs prefill on
+free-run == plain free-run, token-exact, counting prompt, at depth 1, 2 and 4). The same file carries
+the BATCH RAIL's parity arms per verify-fixture tag `l1b g12 q30 g26` (Llama-3.2-1B, gemma-4-12B,
+Qwen3-30B-A3B, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single
+step at B=2/B=4 on identical real-text tokens plus one CPU reference row (the batch rail's logits
+gate - the support matrix's batch cell only proves ENGAGE); `mtp-vff-<tag>` = the same-slab batch
+verify's four rows vs four plain steps; `mtp-vff1-<tag>` = one row through the batch driver (the
+encoder alone, no row mixing). Bars: 0.5 dense, 2.0 plain MoE, 24.0 gemma-MoE = the support
+matrix's own Q4_K_M forced-step bar (the routed experts amplify a float-class difference at a
+near-tie into the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips). The pairs prefill on
 the GPU twin through the metal prefill override (a planar 27B prefill costs minutes per session),
 so the fixture shuts down BOTH drivers before its leak gate. Prefill parity: `base mm-tail s16
 kq cont span span-fused span-mrope span-ds dim qkv` (mm-tail = the GEMV-tail residue peel -

@@ -853,10 +853,10 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                         enc_moe_gemv_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, 1l, bmx, r.bh12,
                             r.bmoe_sel, bwb3, mka, uint64(knfe * 4l))
                     } else {
-                        var k1a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+                        var k1a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = kq_sb(fe1) ? r.k_moe_esb : r.k_moe_eblk,
                             xs = 0u, ss = 0u, bxs = 0u, bys = 0u, hasb = 0u)
                         enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, 1l, bmx, r.bh12, r.bmoe_sel, k1a)
-                        var k3a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe3 == KqFmt.q8 || fe3 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+                        var k3a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = kq_sb(fe3) ? r.k_moe_esb : r.k_moe_eblk,
                             xs = 0u, ss = 0u, bxs = 0u, bys = 0u, hasb = 0u)
                         enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, 1l, bmx, r.bh12, r.bmoe_sel, k3a, uint64(knfe * 4l))
                     }
@@ -880,7 +880,7 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                         enc_moe_gemv_mx4(enc, t, t.we2_offs[l], dim, c.n_expert_used, 1l, r.bh12, r.bmoe_dn,
                             r.bmoe_sel, bwb2, m2a)
                     } else {
-                        var k2a = MoeGemvArgs(ndim = r.k_moe_nfe, ddim = r.k_dim, eplane = fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+                        var k2a = MoeGemvArgs(ndim = r.k_moe_nfe, ddim = r.k_dim, eplane = kq_sb(fe2) ? r.k_moe_esb : r.k_moe_eblk,
                             xs = r.k_moe_xs_dn, ss = 0u, bxs = 0u, bys = 0u, hasb = 0u)
                         enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, 1l, r.bh12, r.bmoe_dn, r.bmoe_sel, k2a)
                     }
@@ -1334,14 +1334,14 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
                 var bw_shg = upload_region(addr < void? >(t.fblob[t.shexp_gate_off + l * dim]), uint64(dim * 4l))
                 enc_moe_router(enc, bw_shg, r.bxb, r.bmoe_lg, r.u_dim, r.u_one32, r.u_dim, g_one, g_zero, 1l, r.nrows)
             }
-            var v1a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+            var v1a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = kq_sb(fe1) ? r.k_moe_esb : r.k_moe_eblk,
                             xs = 0u, ss = r.k_moe_ss, bxs = r.k_dim, bys = r.k_moe_knfe, hasb = 0u)
             enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, r.nrows, r.bxb, r.bh12, r.bmoe_sel, v1a)
-            var v3a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe3 == KqFmt.q8 || fe3 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+            var v3a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = kq_sb(fe3) ? r.k_moe_esb : r.k_moe_eblk,
                             xs = 0u, ss = r.k_moe_ss, bxs = r.k_dim, bys = r.k_moe_knfe, hasb = 0u)
             enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, r.nrows, r.bxb, r.bh12, r.bmoe_sel, v3a, uint64(r.nrows * knfe * 4l))
             enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(r.nrows * knfe * 4l), r.u_moe_tot, r.nrows * knfe)
-            var v2a = MoeGemvArgs(ndim = r.k_moe_nfe, ddim = r.k_dim, eplane = fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+            var v2a = MoeGemvArgs(ndim = r.k_moe_nfe, ddim = r.k_dim, eplane = kq_sb(fe2) ? r.k_moe_esb : r.k_moe_eblk,
                             xs = r.k_moe_xs_dn, ss = r.k_moe_ss, bxs = r.k_moe_knfe, bys = r.k_moe_kdim, hasb = 0u)
             enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, r.nrows, r.bh12, r.bmoe_dn, r.bmoe_sel, v2a)
             if (r.u_moe_nsh != null) {
@@ -2242,6 +2242,7 @@ var private g_bsk = true
 // DASLLAMA_METAL_BATCH_CONCURRENT: encode on a CONCURRENT compute encoder, barrier only at a real
 // hazard (RAW/WAR/WAW) — the only exploitable overlap in our FUSED chain is W1 || W3. Default ON:
 // measured +1-2% at every B (pipelines launch overhead even on the RAW chain). =0 = serial (A/B).
+let private MV_K_ALIGN = 256l          // the mv forms' K stripe (B2 256, B4 128): no tail guard
 var private g_bconcurrent = true
 // DASLLAMA_METAL_BATCH_FUSE: fold w1 + w3 + swiglu into one fused dispatch on the fixed-B path
 // (B <= 4) — cuts 2 dispatches + their barriers per layer where inter-dispatch bubbles hurt most.
@@ -2436,12 +2437,19 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_b_caps |> resize(nrows)
     var maxcnt = 0l
     var rows_ok = false
+    let same = batch_same_slab()
+    var mir_same = (ok = false, koff = 0ul, voff = 0ul, cap = 0l)
     for (attempt in range(2)) {
         rows_ok = true
         maxcnt = 0l
         for (i in range64(nrows)) {
             var sp = sessions[i]
-            let mir = mirror_prepare(t, *sp, ws.positions[i])
+            // same-slab verify: one session, rows at pos..pos+nrows-1 - the mirror is prepared ONCE
+            // at the base (the rows above it are what this step writes); every row shares its slab
+            if (!same || i == 0l) {
+                mir_same = mirror_prepare(t, *sp, ws.positions[i])
+            }
+            let mir = mir_same
             if (!mir.ok) {
                 rows_ok = false
                 break
@@ -2507,6 +2515,11 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     // the x-staged w13sw fusion stands down with it). Hetero rides it too: the QKV arm carries
     // the no-wv cat3 stream, and the wo site's x stride (the one per-class xs4) picks its twin
     let mv = g_bmv && !use_gemm && !use_mm
+    // a site whose K breaks the mv stripe alignment rides the tail-exact GEMV form instead
+    // (gemma-4-26B-A4B: dense hidden 2112 = 8.25 stripes)
+    let mv_kdim = mv && (dim % MV_K_ALIGN) == 0l
+    let mv_wo = mv && (qd % MV_K_ALIGN) == 0l && (!hetero || (qd_sw % MV_K_ALIGN) == 0l)
+    let mv_w2 = mv && (hidden % MV_K_ALIGN) == 0l
     let geglu = c.ffn_act != FfnAct.silu    // gemma: gelu gate — the swiglu-fused w13 form stands down
     // fold w1+w3+swiglu into one fused GEMV on the fixed-B path; a knockout run (g_skip) keeps the
     // stages separable so its per-stage attribution stays valid
@@ -2729,7 +2742,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                         let bwv_ = blob_of(g_dev, t, t.wv_offs[l])
                         enc_gemm_mm_b(enc, bwv_.buf, bwv_.boff, bxb, bqkv, uint64((qd_l + kvd_l) * 4l), u_dim, u_qkvd_l, mp, kvd_l)
                     }
-                } elif (mv) {
+                } elif (mv_kdim) {
                     // per-tensor mv dispatches into the fused bqkv at segment y offsets (the
                     // ys uniform carries the fused row stride; the cat streams died with the
                     // blob image — kind-major layout keeps q/k/v apart)
@@ -2877,7 +2890,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 } elif (use_mm) {
                     let bwo = blob_of(g_dev, t, t.wo_offs[l])
                     enc_gemm_mm_b(enc, bwo.buf, bwo.boff, bxb, bxb2, 0ul, u_qd_l, u_dim, mp, dim)
-                } elif (mv) {
+                } elif (mv_wo) {
                     let bwo = blob_of(g_dev, t, t.wo_offs[l])
                     enc_mv_site(enc, bwo.buf, bwo.boff, bxb, bxb2,
                         qd_l, (het ? qd_sw : qd) / 4l, dim, nrows, dim, uint64(qd_l * 4l))
@@ -2955,10 +2968,10 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     enc_moe_gemv_mx4(enc, t, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh, bmsel, bwb1, bka)
                     enc_moe_gemv_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh2, bmsel, bwb3, bka)
                 } else {
-                    var b1a = MoeGemvArgs(ndim = k_dim, ddim = k_moe_nfe, eplane = fe1 == KqFmt.q8 ? k_moe_eblk : k_moe_esb,
+                    var b1a = MoeGemvArgs(ndim = k_dim, ddim = k_moe_nfe, eplane = kq_sb(fe1) ? k_moe_esb : k_moe_eblk,
                         xs = 0u, ss = k_moe_ss, bxs = k_dim, bys = k_moe_knfe, hasb = 0u)
                     enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh, bmsel, b1a)
-                    var b3a = MoeGemvArgs(ndim = k_dim, ddim = k_moe_nfe, eplane = fe3 == KqFmt.q8 ? k_moe_eblk : k_moe_esb,
+                    var b3a = MoeGemvArgs(ndim = k_dim, ddim = k_moe_nfe, eplane = kq_sb(fe3) ? k_moe_esb : k_moe_eblk,
                         xs = 0u, ss = k_moe_ss, bxs = k_dim, bys = k_moe_knfe, hasb = 0u)
                     enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh2, bmsel, b3a)
                 }
@@ -2980,7 +2993,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                         xs = k_moe_xs_dn, ss = k_moe_ss, bxs = k_moe_knfe, bys = k_moe_kdim, hasb = k_moe_gmode)
                     enc_moe_gemv_mx4(enc, t, t.we2_offs[l], dim, c.n_expert_used, nrows, bgh, bmdn, bmsel, bwb2, b2m)
                 } else {
-                    var b2a = MoeGemvArgs(ndim = k_moe_nfe, ddim = k_dim, eplane = fe2 == KqFmt.q8 ? k_moe_eblk : k_moe_esb,
+                    var b2a = MoeGemvArgs(ndim = k_moe_nfe, ddim = k_dim, eplane = kq_sb(fe2) ? k_moe_esb : k_moe_eblk,
                         xs = k_moe_xs_dn, ss = k_moe_ss, bxs = k_moe_knfe, bys = k_moe_kdim, hasb = 0u)
                     enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, nrows, bgh, bmdn, bmsel, b2a)
                 }
@@ -3001,7 +3014,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     let bw3 = blob_of(g_dev, t, t.w3_offs[l])
                     enc_gemm_mm_b(enc, bw1.buf, bw1.boff, bxb, bhb, 0ul, u_dim, u_hidden, mp, hidden)
                     enc_gemm_mm_b(enc, bw3.buf, bw3.boff, bxb, bhb2, 0ul, u_dim, u_hidden, mp, hidden)
-                } elif (mv) {
+                } elif (mv_kdim) {
                     // two mv dispatches read the same norm and write DISJOINT gate/up — one
                     // barrier covers both; the ew2 swiglu below fuses them (fuse13 stands down)
                     let bw1 = blob_of(g_dev, t, t.w1_offs[l])
@@ -3043,7 +3056,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 } elif (use_mm) {
                     let bw2 = blob_of(g_dev, t, t.w2_offs[l])
                     enc_gemm_mm_b(enc, bw2.buf, bw2.boff, bhb, bxb, 0ul, u_hidden, u_dim, mp, dim)
-                } elif (mv) {
+                } elif (mv_w2) {
                     let bw2 = blob_of(g_dev, t, t.w2_offs[l])
                     enc_mv_site(enc, bw2.buf, bw2.boff, bhb, bxb,
                         hidden, hidden / 4l, dim, nrows, dim, uint64(hidden * 4l))
@@ -3114,7 +3127,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             } elif (use_mm) {
                 let bwc = blob_of(g_dev, t, t.wcls_off)
                 enc_gemm_mm_b(enc, bwc.buf, bwc.boff, bxf, blog, 0ul, u_dim, u_vocab, mp, c.vocab_size)
-            } elif (mv) {
+            } elif (mv_kdim) {
                 let bwc = blob_of(g_dev, t, t.wcls_off)
                 enc_mv_site(enc, bwc.buf, bwc.boff, bxf, blog,
                     dim, dim / 4l, c.vocab_size, nrows, c.vocab_size, uint64(dim * 4l))
@@ -3142,7 +3155,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         // zero-copy logits: scatter each staging row into its session's wrapped storage ON the cb
         // (the KV writeback stays). All-or-nothing per step: one unwrappable session keeps the whole
         // step on the landing scatter. Pipe mode writes s.logits ASYNCHRONOUSLY — fixed-token-only.
-        nc_all = true
+        nc_all = !same   // the same-slab verify keeps the staging image: every row lands on one session
         for (i in range64(nrows)) {
             nc_all &&= nc_logits_for(g_dev, *sessions[i]) != null
         }
@@ -3259,6 +3272,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_lp_upooled |> push((buf = u_total_dim, size = 4ul))
     g_lp_upooled |> push((buf = u_total_h, size = 4ul))
     g_lp_blog = gpu_logits && !nc_all ? blog : null   // nc steps: the GPU scatter already fed s.logits
+    g_lp_sameslab = same
+    g_lp_bxf = same && gpu_logits ? bxf : null
+    g_lp_bxf_bytes = same ? nrows * dim * 4l : 0l
     g_lp_xb = null
     if (!gpu_logits) {
         g_lp_xb = bx   // the CPU-classifier tail reads x_b — sync-only writeback

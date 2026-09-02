@@ -183,6 +183,88 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
     attn_out_suffix(t, ws.scr, l, nrows)
 }
 
+// the per-step row prep every batch shape shares (positions already in ws.positions / rope_positions)
+def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64) {
+    let c = t.config
+    batch_decode_alloc(t, ws.scr, nrows)
+    // embed each row's token into the residual stream
+    let dim = c.dim
+    let ts_embed = prof_ticks()
+    for (i in range64(nrows)) {
+        embed_row(t, tokens[i], unsafe(addr(ws.scr.x_b[i * dim])))
+    }
+    if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
+        scale_inplace(unsafe(addr(ws.scr.x_b[0])), c.embed_scale, nrows * dim)
+    }
+    prof_add("embed", ts_embed)
+    if (has_ple(c)) {  // gemma-4 E-series: per-(row, layer) side input (token-indexed, position-free)
+        let ts_ple = prof_ticks()
+        ple_pre_prefill(t, ws.scr, tokens, nrows)
+        prof_add("ple", ts_ple)
+    }
+    // per-row RoPE cos/sin table(s) — row i at sessions[i]'s own position
+    let ts_rope_build = prof_ticks()
+    build_rope_table_rows(ws.scr.rope_cos, ws.scr.rope_sin, t, c.rope_freq_base, c.rope_freq_scale,
+        ws.rope_positions, nrows, c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
+    if (has_dual_rope(c)) {
+        let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
+        build_rope_table_rows(ws.scr.rope_cos_swa, ws.scr.rope_sin_swa, t, c.rope_freq_base_swa,
+            c.rope_freq_scale_swa, ws.rope_positions, nrows, swa_hs, !c.rope_ff_global_only)
+    }
+    prof_add("rope_build", ts_rope_build)
+}
+
+//! The SAME-SLAB verify: nrows rows of ONE session at pos..pos+nrows-1 in one batch step (row i attends
+//! rows < i this step writes). True when the metal batch rail served it; rows' logits land in
+//! s.mtp_logits_b (row 0 also in s.mtp_logits), post-norm hidden rows in s.mtp_hrows; n_past is the caller's.
+def eval_verify_batch_(t : Model; var ws : BatchWorkspace; var s : Session; tokens : array<int64>; pos, nrows : int64) : bool {
+    let c = t.config
+    if (nrows <= 0l || long_length(tokens) < nrows || pos + nrows > c.seq_len || !batch_decode_override_armed()) {
+        return false
+    }
+    var sessions : array<Session?>
+    sessions |> reserve(nrows)
+    unsafe {
+        for (_i in range64(nrows)) {
+            sessions |> push(addr(s))
+        }
+    }
+    ws.scr.kv_dtype_k = s.kv_dtype_k
+    ws.scr.kv_dtype_v = s.kv_dtype_v
+    ws.scr.kv_signs := s.kv_signs
+    ws.scr.kv_bprefix_k := s.kv_bprefix_k
+    ws.scr.kv_bprefix_v := s.kv_bprefix_v
+    ws.scr.kv_pool = s.kv_pool
+    ws.positions |> grow_resize(nrows)
+    ws.rope_positions |> grow_resize(nrows)
+    ws.kbase |> grow_resize(nrows)
+    ws.vbase |> grow_resize(nrows)
+    kv_ensure(s, pos + nrows)
+    for (i in range64(nrows)) {
+        ws.positions[i] = pos + i
+        ws.rope_positions[i] = pos + i + s.rope_pos_delta
+        if (s.kv_pool == null) {
+            unsafe {
+                ws.kbase[i] = addr(s.key_cache[0])
+                ws.vbase[i] = addr(s.value_cache[0])
+            }
+        } else {
+            ws.kbase[i] = null
+            ws.vbase[i] = null
+        }
+    }
+    batch_rows_prep_(t, ws, tokens, nrows)
+    batch_decode_logits_reset()
+    set_batch_same_slab(true)
+    let done = batch_decode_override_invoke(t, ws, sessions, nrows)
+    set_batch_same_slab(false)
+    sessions |> clear()   // borrowed handles - clear so the delete frees only the buffer
+    unsafe {
+        delete sessions
+    }
+    return done && batch_decode_logits_done()
+}
+
 //! One synchronous batched decode step: row i evals tokens[i] at sessions[i]'s position; each
 //! session advances by one. Sessions must be distinct, same-geometry (one model, equal cache
 //! sizes, uniform KV dtype); B == 1, q4_0, non-std attention, or classic rope fall back to forward().
@@ -260,32 +342,8 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
             ws.vbase[i] = null
         }
     }
-    batch_decode_alloc(t, ws.scr, nrows)
-    // embed each row's token into the residual stream
+    batch_rows_prep_(t, ws, tokens, nrows)
     let dim = c.dim
-    let ts_embed = prof_ticks()
-    for (i in range64(nrows)) {
-        embed_row(t, tokens[i], unsafe(addr(ws.scr.x_b[i * dim])))
-    }
-    if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
-        scale_inplace(unsafe(addr(ws.scr.x_b[0])), c.embed_scale, nrows * dim)
-    }
-    prof_add("embed", ts_embed)
-    if (has_ple(c)) {  // gemma-4 E-series: per-(row, layer) side input (token-indexed, position-free)
-        let ts_ple = prof_ticks()
-        ple_pre_prefill(t, ws.scr, tokens, nrows)
-        prof_add("ple", ts_ple)
-    }
-    // per-row RoPE cos/sin table(s) — row i at sessions[i]'s own position
-    let ts_rope_build = prof_ticks()
-    build_rope_table_rows(ws.scr.rope_cos, ws.scr.rope_sin, t, c.rope_freq_base, c.rope_freq_scale,
-        ws.rope_positions, nrows, c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
-    if (has_dual_rope(c)) {
-        let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
-        build_rope_table_rows(ws.scr.rope_cos_swa, ws.scr.rope_sin_swa, t, c.rope_freq_base_swa,
-            c.rope_freq_scale_swa, ws.rope_positions, nrows, swa_hs, !c.rope_ff_global_only)
-    }
-    prof_add("rope_build", ts_rope_build)
     // layer stack: batched attention + the arch's batched FFN. An active batch-decode override may
     // claim the whole stack (false = declined, fall back to the per-layer loop below).
     var stack_done = false

@@ -348,6 +348,45 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
     embed table is the legal fallback, a later item).
   - *Round* = the qwen round with the draft step and the verify swapped: chain -> same-slab batch
     verify -> accept walk -> commit (watermark + carry hidden = row a's post-norm hidden).
+  - **Memo facts that pin the drafter** (`~/.claude/plans/mtp-research/gemma_drafter_design.md`,
+    2026-09-01): input = `concat(TARGET token_embd(tok) * sqrt(2816), target hidden)` -> pre_projection;
+    the target hidden is POST final norm in llama.cpp and PRE norm in mlxfast - **resolve by
+    acceptance, feed both**; K/V from target layer 28 (drafter layers 0-2, sliding, GQA 2) and
+    layer 29 (layer 3, full, GQA 8); attention scale 1.0; rope 1e6 (full, with the 64/192 proportional
+    freq table) and 1e4 (sliding); ONE constant anchor position for every chain step; masks =
+    sliding lower bound only (keys > anchor - 1024; the ring-boundary key at exactly anchor-1024
+    must be masked); GELU-tanh gated MLP 8192; per-layer `layer_output_scale` 0.29/0.50/0.53/0.41;
+    tail = output_norm -> logits over the drafter's OWN tied token_embd (no softcap) and
+    post_projection -> the 2816 feedback hidden. The frozen snapshot is reused unchanged for the
+    whole chain (a VIEW of the two mirrors, fenced against the round's own row writes). Centroid
+    mask: dead for this checkpoint (`use_ordered_embeddings: false`, no tensors anywhere) - not built.
+    mlxfast's gemma arm is currently DISARMED (`speculationEnabled = false`): their rectangular verify
+    was not argmax-exact vs serial on the quantized target (7/8 prompts forked at near-ties), so they
+    sealed a serial oracle - our forced-feed tolerance policy is the honest instrument here.
+  - **Batch-rail defects found by the verify gate (2026-09-01)** - the gemma-4-26B-A4B batch step
+    had never had its logits checked (the support matrix's batch cell is ENGAGE-only, tolerances
+    cover single decode); GPU batch vs GPU single at B=2 read maxd 48 with 46/48 argmax flips, CPU
+    reference 23-30 away (single 2.1). Two independent bugs, both fixed in the batch driver:
+    (1) the expert-plane stride tested `fmt == q8` for the block-plane case, so Q5_1 experts (the
+    26B's `ffn_down_exps`) took the 256-element super-block stride - all nine MoE GEMV sites now
+    route through `kq_sb(fmt)`; (2) the fixed-B mul_mv forms stripe K in 256 (B2) / 128 (B4)
+    element chunks with no tail guard (their header says so) and the rail gate never checked the
+    shapes - the 26B's dense hidden 2112 overran on the w2 site; each mv site now gates on its own
+    K % 256 (`mv_kdim` / `mv_wo` / `mv_w2`) and falls to the tail-exact GEMV form otherwise.
+    Bisect controls that pinned it: gemma-4-12B dense batch clean (0.024), Qwen3-30B-A3B batch clean
+    (0.14), `DASLLAMA_METAL_BATCH_CONCURRENT=0` bit-identical (not a hazard), `DASLLAMA_METAL_BATCH_MV=0`
+    + the plane fix -> 0.96 / 0 flips. The `mtp-dff-<tag>` arm (distinct-session GPU batch vs GPU
+    single + a CPU reference row) is the batch rail's parity gate from now on; fixtures l1b, g12,
+    q30, g26.
+  - *Verify status (2026-09-01)*: the same-slab batch mode landed (`eval_verify_batch_`,
+    `set_batch_same_slab`, the driver's shared row-0 mirror + `land_sameslab_rows`); the batch rail
+    declines deltanet hybrids (the qwen twins keep the dedicated same-slab verify), so its gate is
+    the head-less gemma-4-26B-A4B fixture (`test_metal_verify_gemma26`, arm `mtp-vff-g26`, bar 24.0
+    = the support matrix's Q4_K_M forced-step bar). Post-fix trace: rounds 1-5 at the GPU-vs-GPU floor
+    (0.003-0.01, same as the one-row arm's 0.007), then isolated spikes at pos 56/64/72/73 (0.97,
+    1.8, 3.6, 11.2) with the argmax never flipping and the deviation decaying after - the routed
+    experts amplifying a near-tie into the K/V history, not a same-slab defect. Distinct-session
+    batch reads 0.96 over 24 steps; gemma-4-12B dense same-slab 0.128; Llama 0.003.
 
 ### S4 - the depth controller
 

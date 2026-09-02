@@ -1873,6 +1873,9 @@ var @scratch g_lp_cbs : array<MetalCommandBuffer?>   // per-step cb stash; relea
 var @scratch g_lp_pooled : array<tuple<buf : MetalBuffer?; size : uint64>>   // pending-step stash; clear()-recycled per finish
 var @scratch g_lp_upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
 var g_lp_blog : MetalBuffer?
+var g_lp_sameslab = false       // same-slab verify: land every row's logits + hidden on sessions[0]
+var g_lp_bxf : MetalBuffer?     // ... the rows' post-final-norm hidden (nrows x dim)
+var g_lp_bxf_bytes = 0l
 var g_lp_xb : MetalBuffer?      // production sync + CPU-classifier path: x_b writeback
 var g_lp_xb_dst : void?         // ... into the caller's workspace (borrowed, sync-only)
 var g_lp_xb_bytes = 0l
@@ -1895,6 +1898,29 @@ var g_lp_prev_gpu_end = 0.0lf   // last finished step's gpu_end — the handoff 
 
 // wait + read back + release the pending step; x_b writes back only on the sync CPU-classifier
 // path (pipe mode skips it — stale). A dispatch error sets g_lp_err (sync reruns on CPU; a pipelined step is lost).
+// same-slab landing: every row's logits (row 0 also into mtp_logits) + the post-norm hidden rows onto the ONE session
+def private land_sameslab_rows(lgp : uint8?) {
+    var s0 = g_lp_sessions[0]
+    let vb = g_lp_vocab * 4l
+    unsafe {
+        if (lgp != null) {
+            if (long_length(s0.mtp_logits_b) < g_lp_nrows * g_lp_vocab) {
+                s0.mtp_logits_b |> resize(g_lp_nrows * g_lp_vocab)
+            }
+            memcpy(addr < void? >(s0.mtp_logits_b[0]), reinterpret<void?>(lgp), g_lp_nrows * vb)
+            if (long_length(s0.mtp_logits) >= g_lp_vocab) {   // sized only on NextN-headed sessions
+                memcpy(addr < void? >(s0.mtp_logits[0]), reinterpret<void?>(lgp), vb)
+            }
+        }
+        if (g_lp_bxf != null) {
+            if (long_length(s0.mtp_hrows) * 4l < g_lp_bxf_bytes) {
+                s0.mtp_hrows |> resize(g_lp_bxf_bytes / 4l)
+            }
+            memcpy(addr < void? >(s0.mtp_hrows[0]), metal_buffer_contents(g_lp_bxf), g_lp_bxf_bytes)
+        }
+    }
+}
+
 def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error/stats/release/readback share the step's locals
     if (!g_lp_active) {
         return
@@ -1948,7 +1974,7 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
                     memcpy(reinterpret<void?>(kv_layer_vbase(*sp, l, g_lp_seq) + prow * rowb_l),
                         reinterpret<void?>(ab + (g_lp_voffs[i] + uint64(g_lp_lvbase[fb] + pos * rowb_l))), rowb_l)
                 }
-                if (lgp != null) {
+                if (lgp != null && !g_lp_sameslab) {
                     memcpy(addr < void? >(sp.logits[0]),
                         reinterpret<void?>(lgp + i * g_lp_vocab * 4l), g_lp_vocab * 4l)
                 }
@@ -1956,6 +1982,9 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
                     let wm0 = g_mirrors[sp.uid].watermark
                     g_mirrors[sp.uid].watermark = max(wm0, pos + 1l)
                 }
+            }
+            if (g_lp_sameslab && g_lp_nrows > 0l) {
+                land_sameslab_rows(lgp)
             }
         }
         g_us_breadback += int64(get_time_usec(ts_rb))
@@ -1985,6 +2014,8 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
     }
     g_lp_upooled |> clear()
     g_lp_blog = null
+    g_lp_sameslab = false
+    g_lp_bxf = null
     g_lp_xb = null
     g_lp_xb_dst = null
     g_lp_sessions |> clear()   // borrowed handles — clear, never delete

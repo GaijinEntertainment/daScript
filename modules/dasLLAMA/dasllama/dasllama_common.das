@@ -603,6 +603,15 @@ def select_decode_override(name : string) : bool {
 
 //! The armed batch-decode override, or none — eval_batch_ (dasllama_batch) dispatches through these
 //! two rather than the registry going public.
+// same-slab verify mode of the batch step: every row is ONE session at consecutive positions (the metal driver prepares the mirror once and lands all rows on it)
+var private g_batch_same_slab = false
+
+def set_batch_same_slab(on : bool) {
+    g_batch_same_slab = on
+}
+
+def batch_same_slab() : bool => g_batch_same_slab
+
 def batch_decode_override_armed() : bool => !empty(g_batch_decode_override_name)
 
 def batch_decode_override_invoke(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
@@ -2025,6 +2034,7 @@ struct Session {
     mtp_vbatch : array<int64>      // the 2-row verify batch [tok, draft] (persistent — no per-step alloc)
     mtp_norm_b : array<float>      // verify-batch final-normed rows (npos x dim), input to the batched classifier
     @scratch mtp_logits_b : array<float>   // verify-batch logits (rows x vocab) — ONE classifier pass covers every row; grows once to the round's width
+    @scratch mtp_hrows : array<float>      // verify-batch post-final-norm hidden rows (rows x dim) — the drafter's next input / the carry
     mtp_drafted : int64            // session-lifetime telemetry: drafts attempted / accepted
     mtp_accepted : int64
     // deltanet rollback for a rejected verify batch (sized lazily on first snapshot)

@@ -8,6 +8,7 @@ require dasllama/dasllama   // the public facade — engine + arch registrations
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
 require dasllama/dasllama_image   // load_model_cached — the served (image) flavor for the GPU twin
 require dasllama/dasllama_gguf   // set_mtp_head_path — the split-head fixture names its head explicitly
+require dasllama/dasllama_batch   // eval_verify_batch_ + create_batch_workspace_ — the batch-rail verify arm
 require ?das_metal dasllama/dasllama_metal_decode   // stats + the forced-reject lever + shutdown
 require ?das_metal dasllama/dasllama_metal_prefill   // the metal prefill override for the pair's prompts
 require ?das_metal metal/das_metal_boost   // metal_live_object_count for the leak gate
@@ -273,6 +274,235 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
     delete spec
 }
 
+// per-row logits comparison stats (the harness probe's shape): flips against the plain top-2 margin
+struct RowStats {
+    rows : int64
+    flips : int64
+    max_abs : float
+    flip_margin_max : float
+}
+
+def private argmax_at(v : array<float>; off, n : int64) : int64 {
+    var best = 0l
+    var bv = v[off]
+    for (i in range64(1l, n)) {
+        if (v[off + i] > bv) {
+            bv = v[off + i]
+            best = i
+        }
+    }
+    return best
+}
+
+def private compare_row(plain, store : array<float>; soff, n : int64; var st : RowStats; tag : string; pos : int64; verbose : bool) {
+    var mx = 0.0
+    for (i in range64(n)) {
+        mx = max(mx, abs(plain[i] - store[soff + i]))
+    }
+    st.rows++
+    st.max_abs = max(st.max_abs, mx)
+    let ap = argmax_at(plain, 0l, n)
+    let av = argmax_at(store, soff, n)
+    if (ap != av) {
+        st.flips++
+        let mg = top2_margin(plain, n)
+        st.flip_margin_max = max(st.flip_margin_max, mg)
+        if (verbose) {
+            feint("FLIP {tag} pos={pos}: plain {ap} vs verify {av} margin {mg} maxd {mx}\n")
+        }
+    }
+}
+
+// The batch-rail verify (eval_verify_batch_: ONE session at nr consecutive positions through the
+// batch driver's same-slab mode) against the plain GPU step, forced-feed: A plain-steps the
+// reference tokens (recording every step's logits); B verifies the same nr tokens per round and
+// each row's logits are compared to A's step at that position. Any model, head or not - this is
+// the verify the gemma drafter rides.
+def private vff_pair(tr, trg : Model; prompt : array<int64>; nrounds, nr : int64; var st : RowStats; var served : int64&; verbose : bool) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let c = tr.config
+        let vocab = c.vocab_size
+        with_job_que() {
+            setup_dasllama_jobque()
+            var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            gpu_prefill_pair(trg, sa, sb, prompt)
+            select_decode_override("metal")
+            let before = metal_batch_decode_stats().steps
+            var ws <- create_batch_workspace_(trg)
+            var tok = greedy_top(sa.logits, vocab)
+            var one <- [tok]
+            eval_(trg, sa, one)   // mirror-building step on both
+            eval_(trg, sb, one)
+            finish_pending_step()   // the single-stream decode is one step deep - land before reading
+            tok = greedy_top(sa.logits, vocab)
+            var pos = sb.n_past
+            var toks : array<int64>
+            var store : array<float>
+            var rowmax : array<float>   // per verify row: which rows carry the deviation
+            toks |> resize(nr)
+            store |> resize(nr * vocab)
+            rowmax |> resize(nr)
+            for (_r in range64(nrounds)) {
+                if (pos + nr + 1l >= c.seq_len) {
+                    break
+                }
+                // A: nr plain steps, recording the logits each produces
+                for (i in range64(nr)) {
+                    toks[i] = tok
+                    one[0] = tok
+                    eval_(trg, sa, one)
+                    finish_pending_step()
+                    for (v in range64(vocab)) {
+                        store[i * vocab + v] = sa.logits[v]
+                    }
+                    tok = greedy_top(sa.logits, vocab)
+                }
+                // B: the same nr tokens as one same-slab verify; row i is the step on toks[i]
+                if (!eval_verify_batch_(trg, ws, sb, toks, pos, nr)) {
+                    break
+                }
+                sb.n_past = pos + nr
+                for (i in range64(nr)) {
+                    var plain : array<float>
+                    plain |> resize(vocab)
+                    for (v in range64(vocab)) {
+                        plain[v] = store[i * vocab + v]
+                    }
+                    compare_row(plain, sb.mtp_logits_b, i * vocab, vocab, st, "vrow{i}", pos + i, verbose)
+                    var rmx = 0.0
+                    for (v in range64(vocab)) {
+                        rmx = max(rmx, abs(plain[v] - sb.mtp_logits_b[i * vocab + v]))
+                    }
+                    rowmax[i] = max(rowmax[i], rmx)
+                    if (verbose) {
+                        to_log(LOG_INFO, "vff round pos={pos + i} row={i} maxd={rmx} plain_top={argmax_at(plain, 0l, vocab)} verify_top={argmax_at(sb.mtp_logits_b, i * vocab, vocab)} margin={top2_margin(plain, vocab)}\n")
+                    }
+                    delete plain
+                }
+                pos += nr
+            }
+            served = metal_batch_decode_stats().steps - before
+            to_log(LOG_INFO, "metal vff per-row maxd: {rowmax}\n")
+            select_decode_override("")
+            delete ws
+            delete one
+            delete toks
+            delete store
+            delete rowmax
+            delete sa
+            delete sb
+        }
+    }
+}
+
+// the same twin, DISTINCT sessions: GPU single step vs GPU batch step on identical tokens - the
+// batch rail's own parity on this model, so a same-slab failure can be told from a rail failure
+def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : int64; var st : RowStats; var served : int64&; verbose : bool) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let c = trg.config
+        let vocab = c.vocab_size
+        let nb = long_length(prompts)
+        with_job_que() {
+            setup_dasllama_jobque()
+            var sa : array<Session>
+            var sb : array<Session>
+            sa |> reserve(nb)
+            sb |> reserve(nb)
+            for (i in range64(nb)) {
+                sa |> emplace <| make_run_state(c, KVDtype.f16, KVDtype.f16)
+                sb |> emplace <| make_run_state(c, KVDtype.f16, KVDtype.f16)
+                gpu_prefill_pair(trg, sa[i], sb[i], prompts[i])
+            }
+            select_decode_override("metal")
+            let before = metal_batch_decode_stats().steps
+            var ws <- create_batch_workspace_(trg)
+            var sessb : array<Session?>
+            var cur : array<int64>
+            sessb |> reserve(nb)
+            cur |> reserve(nb)
+            for (i in range64(nb)) {
+                unsafe {
+                    sessb |> push(addr(sb[i]))
+                }
+                cur |> push(greedy_top(sa[i].logits, vocab))
+            }
+            var one <- [0l]
+            // CPU reference for row 0's first step: which GPU side the truth sits with
+            var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+            eval_(tr, sc, prompts[0])
+            one[0] = cur[0]
+            eval_(tr, sc, one)
+            for (step in range64(nsteps)) {
+                for (i in range64(nb)) {
+                    one[0] = cur[i]
+                    eval_(trg, sa[i], one)
+                    finish_pending_step()   // one-deep pipelined single decode - land before the read
+                }
+                eval_batch_(trg, ws, sessb, cur)
+                if (step == 0l) {
+                    var mxs = 0.0
+                    var mxb = 0.0
+                    for (v in range64(vocab)) {
+                        mxs = max(mxs, abs(sc.logits[v] - sa[0].logits[v]))
+                        mxb = max(mxb, abs(sc.logits[v] - sb[0].logits[v]))
+                    }
+                    to_log(LOG_INFO, "metal dff cpu-ref B={nb}: cpu-vs-single maxd={mxs} cpu-vs-batch maxd={mxb} cpu top={greedy_top(sc.logits, vocab)} single top={greedy_top(sa[0].logits, vocab)} batch top={greedy_top(sb[0].logits, vocab)}\n")
+                }
+                for (i in range64(nb)) {
+                    compare_row(sa[i].logits, sb[i].logits, 0l, vocab, st, "drow{i}", sb[i].n_past - 1l, verbose)
+                    cur[i] = greedy_top(sa[i].logits, vocab)
+                }
+            }
+            delete sc
+            served = metal_batch_decode_stats().steps - before
+            select_decode_override("")
+            sessb |> clear()
+            unsafe {
+                delete sessb
+            }
+            delete ws
+            delete one
+            delete cur
+            delete sa
+            delete sb
+        }
+    }
+}
+
+def private dff_cell(t : T?; tr, trg : Model; tag : string; prose_a, prose_b : array<int64>; tol : float) {
+    for (nb in [2l, 4l]) {
+        var sub : array<array<int64>>
+        sub |> reserve(nb)
+        for (i in range64(nb)) {
+            sub |> emplace <| clone_to_move((i & 1l) == 0l ? prose_a : prose_b)
+        }
+        var st = RowStats()
+        var served = 0l
+        dff_pair(tr, trg, sub, 24l, st, served, false)
+        if (served == 0l) {
+            t |> skip("{tag} dff B={nb}: the metal batch rail declined distinct-session steps")
+        } else {
+            t |> success(st.max_abs <= tol, "{tag} dff B={nb}: GPU batch step vs GPU single step within {tol} over {st.rows} rows (maxd {st.max_abs}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max})")
+            to_log(LOG_INFO, "metal dff {tag} B={nb}: maxd={st.max_abs} flips={st.flips}/{st.rows} widest_margin={st.flip_margin_max} steps={served}\n")
+        }
+        delete sub
+    }
+}
+
+def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; nr : int64 = 4l) {
+    var st = RowStats()
+    var served = 0l
+    vff_pair(tr, trg, prompt, 12l, nr, st, served, false)
+    if (served == 0l) {
+        t |> skip("{tag}: the metal batch rail declined the same-slab verify")
+    } else {
+        t |> success(st.rows > 0l, "{tag} vff: rows compared ({st.rows})")
+        t |> success(st.max_abs <= tol, "{tag} vff: batch same-slab verify rows vs plain steps within {tol} over {st.rows} rows (maxd {st.max_abs}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max})")
+        to_log(LOG_INFO, "metal vff {tag}: maxd={st.max_abs} flips={st.flips}/{st.rows} widest_margin={st.flip_margin_max} steps={served}\n")
+    }
+}
+
 def private restore_knobs(prior_backend : string; prior_wscale : bool) {
     clear_kernel_backend_pin()
     select_kernel_backend(prior_backend)
@@ -311,7 +541,25 @@ def private run_fixture(t : T?; file, tag : string) {
         var prose_a <- encode(tr, PROSE_A, true, false)
         var prose_b <- encode(tr, PROSE_B, true, false)
         var count <- encode(tr, counting_prompt(1, 40), true, false)
+        run_arms(t, tr, trg, tag, prose_a, prose_b, count)
+        metal_decode_shutdown()
+        metal_prefill_shutdown()   // the pairs prefill on the GPU - its panels release here too
+        set_mtp_spec(false)
+        restore_knobs(prior_backend, prior_wscale)
+        delete prose_a
+        delete prose_b
+        delete count
+        delete tr
+        delete trg
+        t |> equal(metal_live_object_count(), 0l, "{tag}: no leaked Metal objects after shutdown")
+    } else {
+        t |> skip("no das_metal on this build")
+    }
+}
 
+// the fixture's arms, one gate each
+def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, count : array<int64>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
         // control: plain vs plain on the GPU, the SAME feeds - the harness must read exactly zero
         if (arm_on(t, "mtp-ctrl-{tag}")) {
             let st = ff_pair(tr, trg, prose_a, 16l, false)
@@ -328,6 +576,11 @@ def private run_fixture(t : T?; file, tag : string) {
             ff_cell(t, tr, trg, tag, "prose-b", prose_b)
         }
 
+        // the batch-rail same-slab verify (the gemma drafter's verify) vs plain steps, GPU-vs-GPU
+        if (arm_on(t, "mtp-vff-{tag}")) {
+            vff_cell(t, tr, trg, tag, prose_a, FF_TOL)
+        }
+
         // depth N under forced reject: every round verifies k+1 rows and replays row 0 from the
         // pre-verify recurrent state - the rollback path exercised on every single round
         if (arm_on(t, "mtp-ffk-{tag}")) {
@@ -342,19 +595,6 @@ def private run_fixture(t : T?; file, tag : string) {
             count_cell(t, tr, trg, tag, count, 2l)
             count_cell(t, tr, trg, tag, count, 4l)
         }
-
-        metal_decode_shutdown()
-        metal_prefill_shutdown()   // the pairs prefill on the GPU - its panels release here too
-        set_mtp_spec(false)
-        restore_knobs(prior_backend, prior_wscale)
-        delete prose_a
-        delete prose_b
-        delete count
-        delete tr
-        delete trg
-        t |> equal(metal_live_object_count(), 0l, "{tag}: no leaked Metal objects after shutdown")
-    } else {
-        t |> skip("no das_metal on this build")
     }
 }
 
@@ -394,5 +634,86 @@ def test_metal_mtp_parity_qwen38_split_head(t : T?) {
         set_mtp_head_path(head)
         run_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "3.8-27b")
         clear_mtp_head_path()
+    }
+}
+
+// A head-less fixture: only the batch-rail verify arm runs (the model has no draft head yet - the
+// gemma assistant drafter lands in S3). gemma4's router amplifies any float-class difference to
+// ~2.5 logits/step (the support-matrix row's finding), so its bar is the row's, not the 0.5 one.
+def private run_verify_fixture(t : T?; file, tag : string; tol : float) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), file)
+        if (!model_available(t, path)) {
+            return
+        }
+        let prior_wscale = get_wscale_f16()
+        let prior_backend = active_kernel_backend()
+        set_wscale_f16(false)
+        pin_kernel_backend("portable")
+        var tr <- load_model_(path, QuantMode.q8)
+        tr.config.seq_len = min(tr.config.seq_len, 512l)
+        var trg <- served_twin(path, 512l)
+        if (!trg.metal_blob) {
+            t |> skip("{file}: the served image is not the metal-blob flavor on this box")
+            restore_knobs(prior_backend, prior_wscale)
+            delete tr
+            delete trg
+            return
+        }
+        var prose_a <- encode(tr, PROSE_A, true, false)
+        var prose_b <- encode(tr, PROSE_B, true, false)
+        if (arm_on(t, "mtp-dff-{tag}")) {
+            dff_cell(t, tr, trg, tag, prose_a, prose_b, tol)
+        }
+        if (arm_on(t, "mtp-vff-{tag}")) {
+            vff_cell(t, tr, trg, tag, prose_a, tol)
+        }
+        if (arm_on(t, "mtp-vff1-{tag}")) {   // one row through the batch driver: the encoder alone, no row mixing
+            vff_cell(t, tr, trg, tag, prose_a, tol, 1l)
+        }
+        metal_decode_shutdown()
+        metal_prefill_shutdown()
+        restore_knobs(prior_backend, prior_wscale)
+        delete prose_a
+        delete prose_b
+        delete tr
+        delete trg
+        t |> equal(metal_live_object_count(), 0l, "{tag}: no leaked Metal objects after shutdown")
+    } else {
+        t |> skip("no das_metal on this build")
+    }
+}
+
+[test]
+def test_metal_verify_gemma26(t : T?) {
+    t |> run("batch-rail same-slab verify vs plain GPU decode - gemma-4-26B-A4B-it-Q4_K_M (large tier)") <| @(t : T?) {
+        // the support matrix's gemma4moe Q4_K_M forced-step bar: the routed experts amplify any
+        // float-class difference at a near-tie (measured: floor 0.003-0.01, isolated spikes to 11,
+        // argmax never flips); token parity is not the instrument for this model
+        run_verify_fixture(t, "gemma-4-26B-A4B-it-Q4_K_M.gguf", "g26", 24.0)
+    }
+}
+
+// the control for the batch-rail same-slab verify: the batch parity fixture itself (attention-only,
+// batch B=2/3/6 token-exact vs the CPU control) - a failure here is the same-slab plumbing, not gemma
+[test]
+def test_metal_verify_llama1b(t : T?) {
+    t |> run("batch-rail same-slab verify vs plain GPU decode - Llama-3.2-1B-Instruct-Q8_0 (control)") <| @(t : T?) {
+        run_verify_fixture(t, "Llama-3.2-1B-Instruct-Q8_0.gguf", "l1b", 0.5)
+    }
+}
+
+[test]
+def test_metal_verify_gemma12(t : T?) {
+    t |> run("batch-rail same-slab verify vs plain GPU decode - gemma-4-12B-it-Q4_K_M (large tier)") <| @(t : T?) {
+        run_verify_fixture(t, "gemma-4-12B-it-Q4_K_M.gguf", "g12", 0.5)
+    }
+}
+
+// plain-MoE control (qwen3moe: routed experts, no parallel dense branch) for the gemma-MoE cell
+[test]
+def test_metal_verify_qwen30a3(t : T?) {
+    t |> run("batch-rail same-slab verify vs plain GPU decode - Qwen3-30B-A3B-Instruct-2507-Q4_K_M (large tier)") <| @(t : T?) {
+        run_verify_fixture(t, "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", "q30", 2.0)
     }
 }
