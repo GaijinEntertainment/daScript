@@ -423,6 +423,14 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
 
 ### S4 - the depth controller
 
+**Measured recommendation (2026-09-02, awaiting Boris):** a fixed depth per carrier is within noise of
+anything a controller could pick. gemma-4-26B-A4B: depth 1 and depth 2 yield the same tokens per
+millisecond (1.185x vs 1.19x; 1.746 tok / 11.7 ms vs 2.27 tok / 15.25 ms); depths 3-4 lose on the
+five-row rail. Qwen3.6-27B: depth 1 (1.31x) beats every deeper setting. The per-position curve is the
+same shape on every task (p2/p1 ~0.7), so a controller has nothing to switch on except the task's
+overall acceptance, which does not change the depth ranking. Proposal: drop the EWMA controller,
+ship a per-carrier default (gemma 2, Qwen NextN 1), keep `--mtp-depth` as the override.
+
 - Adaptive depth per the mlxfast shape, priced off t(M) (the same numbers the lab measured -
   a scheduler fitted to a SEPARATE cost model drifts from the launched geometry; their open
   PR #1388 unifies the two). Position-aware. Lands behind a lever; fixed-k is the fallback.
