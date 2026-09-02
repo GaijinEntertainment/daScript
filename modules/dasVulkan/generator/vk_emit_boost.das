@@ -1344,7 +1344,7 @@ def private call_arg(a : CmdArg) : string {
     } elif (a.kind == CmdArgKind.in_array_handle || a.kind == CmdArgKind.in_array_struct) {
         return "array_addr(vkraw_{a.pname})"
     } elif (a.kind == CmdArgKind.in_array2_struct) {
-        return "unsafe(reinterpret<{a.elem_vktype}??>(array_addr(vkptr_{a.pname})))"
+        return "unsafe(reinterpret<{a.elem_vktype} ??>(array_addr(vkptr_{a.pname})))"   // the formatter's spelling of a pointer-to-pointer, so the emitted file verifies clean
     } elif (a.kind == CmdArgKind.erasevkcount) {
         return "uint(length({a.count_for}))"
     } elif (a.kind == CmdArgKind.count_query) {

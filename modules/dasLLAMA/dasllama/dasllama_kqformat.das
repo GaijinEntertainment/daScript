@@ -11,6 +11,7 @@ module dasllama_kqformat shared public
 // across a module seam.
 
 require dasllama/dasllama_lint public
+require daslib/enum_trait   // kq_fmt_of_name walks the enum
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
 //! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs/iq4nl/k2/iq2s/iq2xs/iq2xxs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
@@ -37,6 +38,17 @@ enum KqFmt : uint8 {
 //! kernels). q51 deliberately fails this: it rides per-32 planes with Q8_0-form activations —
 //! a `fmt != KqFmt.q8` test does not imply the kq lattice; branch on kq_sb where it does.
 def kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
+
+//! Parses an enum member's spelling (`k4`, `iq2xxs`, ...) into `out`; false for any other string.
+def kq_fmt_of_name(name : string; var out : KqFmt&) : bool {
+    for (f in type<KqFmt>) {
+        if ("{f}" == name) {
+            out = f
+            return true
+        }
+    }
+    return false
+}
 
 //! The same predicate over the int id space the GPU drivers carry per stack/plane.
 def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.k3) || fmt == int(KqFmt.iq3s) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.k2) || fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs)

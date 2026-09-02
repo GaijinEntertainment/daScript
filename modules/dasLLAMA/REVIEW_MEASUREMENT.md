@@ -32,10 +32,11 @@ re-measured cell.
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
-`PROFILE.md` section. A servable capability is a path that serves a weight format, modality,
-family, or backend no existing cell exercises - a q8 or f32 serving lane and a GPU tower
-included. A kernel or form that only makes a path an existing cell already serves faster is
-not a new capability - it re-mints that cell's row on at least one box instead.
+`PROFILE.md` section. A servable capability is a path no existing cell exercises: one that
+serves a weight format, modality, family, or backend - a q8 or f32 serving lane and a GPU tower
+(a GPU-run vision or audio encoder) included - or one that a run with no flags and no
+environment overrides serves. A kernel or form that only makes a path an existing cell already
+serves faster is not a new capability.
 
 **A diff that makes an already-served path measurably faster re-mints that cell's board row
 (`performance/records/`) on at least one box, in the same change.** The board is the module's

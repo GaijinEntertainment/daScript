@@ -19,7 +19,7 @@
 #endif
 
 /* VOLK_GENERATE_VERSION_DEFINE */
-#define VOLK_HEADER_VERSION 350
+#define VOLK_HEADER_VERSION 357
 /* VOLK_GENERATE_VERSION_DEFINE */
 
 #ifndef VK_NO_PROTOTYPES
@@ -867,6 +867,22 @@ struct VolkDeviceTable
 #else
 	PFN_vkVoidFunction padding_fbfa9964[2];
 #endif /* defined(VK_AMD_draw_indirect_count) */
+#if defined(VK_AMD_gpa_interface)
+	PFN_vkCmdBeginGpaSampleAMD vkCmdBeginGpaSampleAMD;
+	PFN_vkCmdBeginGpaSessionAMD vkCmdBeginGpaSessionAMD;
+	PFN_vkCmdCopyGpaSessionResultsAMD vkCmdCopyGpaSessionResultsAMD;
+	PFN_vkCmdEndGpaSampleAMD vkCmdEndGpaSampleAMD;
+	PFN_vkCmdEndGpaSessionAMD vkCmdEndGpaSessionAMD;
+	PFN_vkCreateGpaSessionAMD vkCreateGpaSessionAMD;
+	PFN_vkDestroyGpaSessionAMD vkDestroyGpaSessionAMD;
+	PFN_vkGetGpaDeviceClockInfoAMD vkGetGpaDeviceClockInfoAMD;
+	PFN_vkGetGpaSessionResultsAMD vkGetGpaSessionResultsAMD;
+	PFN_vkGetGpaSessionStatusAMD vkGetGpaSessionStatusAMD;
+	PFN_vkResetGpaSessionAMD vkResetGpaSessionAMD;
+	PFN_vkSetGpaDeviceClockModeAMD vkSetGpaDeviceClockModeAMD;
+#else
+	PFN_vkVoidFunction padding_56ca082d[12];
+#endif /* defined(VK_AMD_gpa_interface) */
 #if defined(VK_AMD_shader_info)
 	PFN_vkGetShaderInfoAMD vkGetShaderInfoAMD;
 #else
@@ -1793,6 +1809,17 @@ struct VolkDeviceTable
 #else
 	PFN_vkVoidFunction padding_4979ca14[1];
 #endif /* defined(VK_NV_fragment_shading_rate_enums) */
+#if defined(VK_NV_low_latency) && VK_NV_LOW_LATENCY_SPEC_VERSION >= 2
+	PFN_vkGetLatencyTimingsLegacyNV vkGetLatencyTimingsLegacyNV;
+	PFN_vkGetSleepStatusLegacyNV vkGetSleepStatusLegacyNV;
+	PFN_vkLatencySleepLegacyNV vkLatencySleepLegacyNV;
+	PFN_vkQueueNotifyOutOfBandLegacyNV vkQueueNotifyOutOfBandLegacyNV;
+	PFN_vkSetLatencyMarkerLegacyNV vkSetLatencyMarkerLegacyNV;
+	PFN_vkSetLatencySleepModeLegacyNV vkSetLatencySleepModeLegacyNV;
+	PFN_vkShutdownLatencyDeviceLegacyNV vkShutdownLatencyDeviceLegacyNV;
+#else
+	PFN_vkVoidFunction padding_f08173c[7];
+#endif /* defined(VK_NV_low_latency) && VK_NV_LOW_LATENCY_SPEC_VERSION >= 2 */
 #if defined(VK_NV_low_latency2)
 	PFN_vkGetLatencyTimingsNV vkGetLatencyTimingsNV;
 	PFN_vkLatencySleepNV vkLatencySleepNV;
@@ -1986,12 +2013,12 @@ struct VolkDeviceTable
 #else
 	PFN_vkVoidFunction padding_3a8ec90e[1];
 #endif /* (defined(VK_EXT_extended_dynamic_state3) && defined(VK_EXT_provoking_vertex)) || (defined(VK_EXT_shader_object) && defined(VK_EXT_provoking_vertex)) */
-#if (defined(VK_EXT_extended_dynamic_state3) && defined(VK_EXT_line_rasterization)) || (defined(VK_EXT_shader_object) && defined(VK_EXT_line_rasterization))
+#if (defined(VK_EXT_extended_dynamic_state3) && (defined(VK_VERSION_1_4) || defined(VK_KHR_line_rasterization) || defined(VK_EXT_line_rasterization))) || (defined(VK_EXT_shader_object) && (defined(VK_VERSION_1_4) || defined(VK_KHR_line_rasterization) || defined(VK_EXT_line_rasterization)))
 	PFN_vkCmdSetLineRasterizationModeEXT vkCmdSetLineRasterizationModeEXT;
 	PFN_vkCmdSetLineStippleEnableEXT vkCmdSetLineStippleEnableEXT;
 #else
 	PFN_vkVoidFunction padding_29cdb756[2];
-#endif /* (defined(VK_EXT_extended_dynamic_state3) && defined(VK_EXT_line_rasterization)) || (defined(VK_EXT_shader_object) && defined(VK_EXT_line_rasterization)) */
+#endif /* (defined(VK_EXT_extended_dynamic_state3) && (defined(VK_VERSION_1_4) || defined(VK_KHR_line_rasterization) || defined(VK_EXT_line_rasterization))) || (defined(VK_EXT_shader_object) && (defined(VK_VERSION_1_4) || defined(VK_KHR_line_rasterization) || defined(VK_EXT_line_rasterization))) */
 #if (defined(VK_EXT_extended_dynamic_state3) && defined(VK_EXT_depth_clip_control)) || (defined(VK_EXT_shader_object) && defined(VK_EXT_depth_clip_control))
 	PFN_vkCmdSetDepthClipNegativeOneToOneEXT vkCmdSetDepthClipNegativeOneToOneEXT;
 #else
@@ -2557,6 +2584,20 @@ extern PFN_vkSetLocalDimmingAMD vkSetLocalDimmingAMD;
 extern PFN_vkCmdDrawIndexedIndirectCountAMD vkCmdDrawIndexedIndirectCountAMD;
 extern PFN_vkCmdDrawIndirectCountAMD vkCmdDrawIndirectCountAMD;
 #endif /* defined(VK_AMD_draw_indirect_count) */
+#if defined(VK_AMD_gpa_interface)
+extern PFN_vkCmdBeginGpaSampleAMD vkCmdBeginGpaSampleAMD;
+extern PFN_vkCmdBeginGpaSessionAMD vkCmdBeginGpaSessionAMD;
+extern PFN_vkCmdCopyGpaSessionResultsAMD vkCmdCopyGpaSessionResultsAMD;
+extern PFN_vkCmdEndGpaSampleAMD vkCmdEndGpaSampleAMD;
+extern PFN_vkCmdEndGpaSessionAMD vkCmdEndGpaSessionAMD;
+extern PFN_vkCreateGpaSessionAMD vkCreateGpaSessionAMD;
+extern PFN_vkDestroyGpaSessionAMD vkDestroyGpaSessionAMD;
+extern PFN_vkGetGpaDeviceClockInfoAMD vkGetGpaDeviceClockInfoAMD;
+extern PFN_vkGetGpaSessionResultsAMD vkGetGpaSessionResultsAMD;
+extern PFN_vkGetGpaSessionStatusAMD vkGetGpaSessionStatusAMD;
+extern PFN_vkResetGpaSessionAMD vkResetGpaSessionAMD;
+extern PFN_vkSetGpaDeviceClockModeAMD vkSetGpaDeviceClockModeAMD;
+#endif /* defined(VK_AMD_gpa_interface) */
 #if defined(VK_AMD_shader_info)
 extern PFN_vkGetShaderInfoAMD vkGetShaderInfoAMD;
 #endif /* defined(VK_AMD_shader_info) */
@@ -3207,6 +3248,15 @@ extern PFN_vkGetMemoryWin32HandleNV vkGetMemoryWin32HandleNV;
 #if defined(VK_NV_fragment_shading_rate_enums)
 extern PFN_vkCmdSetFragmentShadingRateEnumNV vkCmdSetFragmentShadingRateEnumNV;
 #endif /* defined(VK_NV_fragment_shading_rate_enums) */
+#if defined(VK_NV_low_latency) && VK_NV_LOW_LATENCY_SPEC_VERSION >= 2
+extern PFN_vkGetLatencyTimingsLegacyNV vkGetLatencyTimingsLegacyNV;
+extern PFN_vkGetSleepStatusLegacyNV vkGetSleepStatusLegacyNV;
+extern PFN_vkLatencySleepLegacyNV vkLatencySleepLegacyNV;
+extern PFN_vkQueueNotifyOutOfBandLegacyNV vkQueueNotifyOutOfBandLegacyNV;
+extern PFN_vkSetLatencyMarkerLegacyNV vkSetLatencyMarkerLegacyNV;
+extern PFN_vkSetLatencySleepModeLegacyNV vkSetLatencySleepModeLegacyNV;
+extern PFN_vkShutdownLatencyDeviceLegacyNV vkShutdownLatencyDeviceLegacyNV;
+#endif /* defined(VK_NV_low_latency) && VK_NV_LOW_LATENCY_SPEC_VERSION >= 2 */
 #if defined(VK_NV_low_latency2)
 extern PFN_vkGetLatencyTimingsNV vkGetLatencyTimingsNV;
 extern PFN_vkLatencySleepNV vkLatencySleepNV;
@@ -3344,10 +3394,10 @@ extern PFN_vkCmdSetColorBlendAdvancedEXT vkCmdSetColorBlendAdvancedEXT;
 #if (defined(VK_EXT_extended_dynamic_state3) && defined(VK_EXT_provoking_vertex)) || (defined(VK_EXT_shader_object) && defined(VK_EXT_provoking_vertex))
 extern PFN_vkCmdSetProvokingVertexModeEXT vkCmdSetProvokingVertexModeEXT;
 #endif /* (defined(VK_EXT_extended_dynamic_state3) && defined(VK_EXT_provoking_vertex)) || (defined(VK_EXT_shader_object) && defined(VK_EXT_provoking_vertex)) */
-#if (defined(VK_EXT_extended_dynamic_state3) && defined(VK_EXT_line_rasterization)) || (defined(VK_EXT_shader_object) && defined(VK_EXT_line_rasterization))
+#if (defined(VK_EXT_extended_dynamic_state3) && (defined(VK_VERSION_1_4) || defined(VK_KHR_line_rasterization) || defined(VK_EXT_line_rasterization))) || (defined(VK_EXT_shader_object) && (defined(VK_VERSION_1_4) || defined(VK_KHR_line_rasterization) || defined(VK_EXT_line_rasterization)))
 extern PFN_vkCmdSetLineRasterizationModeEXT vkCmdSetLineRasterizationModeEXT;
 extern PFN_vkCmdSetLineStippleEnableEXT vkCmdSetLineStippleEnableEXT;
-#endif /* (defined(VK_EXT_extended_dynamic_state3) && defined(VK_EXT_line_rasterization)) || (defined(VK_EXT_shader_object) && defined(VK_EXT_line_rasterization)) */
+#endif /* (defined(VK_EXT_extended_dynamic_state3) && (defined(VK_VERSION_1_4) || defined(VK_KHR_line_rasterization) || defined(VK_EXT_line_rasterization))) || (defined(VK_EXT_shader_object) && (defined(VK_VERSION_1_4) || defined(VK_KHR_line_rasterization) || defined(VK_EXT_line_rasterization))) */
 #if (defined(VK_EXT_extended_dynamic_state3) && defined(VK_EXT_depth_clip_control)) || (defined(VK_EXT_shader_object) && defined(VK_EXT_depth_clip_control))
 extern PFN_vkCmdSetDepthClipNegativeOneToOneEXT vkCmdSetDepthClipNegativeOneToOneEXT;
 #endif /* (defined(VK_EXT_extended_dynamic_state3) && defined(VK_EXT_depth_clip_control)) || (defined(VK_EXT_shader_object) && defined(VK_EXT_depth_clip_control)) */

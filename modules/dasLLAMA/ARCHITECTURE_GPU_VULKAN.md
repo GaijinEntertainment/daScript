@@ -76,7 +76,7 @@ compiler pattern-matches only one spelling into that path: a 16-bit load (`int16
 members) followed by `unpack8(w)[i & 1u]` - a byte2 lane select - with sub-fields pulled out by
 shift and mask. A 32-bit word with a variable shift runs slower; an `unpack8` of a 32-bit word
 indexed by a runtime value (a byte4 dynamic select) drops the whole kernel off the block-load
-path, to about a third of the rate. Every cm2 decode - q8 and the six kq superblock formats -
+path, to about a third of the rate. Every cm2 decode - q8 and the thirteen kq superblock formats -
 is spelled the 16-bit way, which is why the block structs are `int16` arrays over the same
 bytes. The IQ4_XS codebook is the one runtime-indexed read a decode makes: it is staged into a
 16-entry `@workgroup` f16 table ahead of the tile loop (the reference exe's shared-memory table-staging form),
@@ -105,14 +105,23 @@ image and the hidden plane - is sized with 32 rows of slack past its last region
 callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE stamped class. The
 prefill driver reaches them through one dispatcher per stage (`cm2_cls_ensure`, `cm2_cls_set`,
 `cm2_cls_enc`), all three keyed on the same `(fmt, ml)` pair, so the pipeline a role ensures,
-the set it binds and the kernel it encodes can never be three different classes. The decode
+the set it binds and the kernel it encodes can never be three different classes. The three are
+not private: the per-format arm of `harness/vk_gemm_probe.das` drives the same ladders, so a
+probe row times the class the driver would serve rather than a copy of it. The decode
 GEMV keeps its quant chains: the feed format pick is decoupled from the weight format.
 
 **The served GEMM mode resolves once, at init, through one ladder.** cm2 where the device has
 NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4;
 `DASLLAMA_COOPMAT` overrides the ladder by name, and a cm2 request or force on a device without
 the extension lands on mm. The same resolver stamps the mode into the `.dlim` flavor
-configuration, so the recorded mode and the running mode cannot drift.
+configuration, so the recorded mode and the running mode cannot drift. The four-wide decode
+callback is NOT in that configuration: a cm2 tile names both callbacks
+(`coopmatLoadTensorDecode`'s tenth argument is the template's `DECVEC` axis, on by default and
+off for the formats whose `cm2:<fmt>` probe row shows the synthesized twin losing - iq3s, iq2s
+and iq2xxs today), the device created with `DASLLAMA_VK_DECVEC` and the extension decides which
+one the driver runs, and neither choice shapes an image byte, so the bake identity ignores it
+(the configuration's own rule: a serve-only knob is never a field). `decvec_on` is the run's arm,
+announced on the `device ready` line.
 
 **The tile's fast path is what makes the loads unclamped.** It runs when the weight tile is
 whole (`m0 + 128 <= d`), the token column is whole or stamped s, and K is a whole number of BK
@@ -132,7 +141,14 @@ The split arm keeps the general form.
 ### 2.2m Class-pipeline creation is the Vulkan tier's one shader A/B seat {#vk-class-pipeline-build}
 
 `vkd_class_pipe` is the single place a class kernel's SPIR-V becomes a pipeline, so both shader
-instruments hang there and nothing else has to know about them.
+instruments hang there and nothing else has to know about them. The four-wide decode fallback
+hangs there too: when the device was created without `VK_NV_cooperative_matrix_decode_vector`
+(`decvec_on` false) the served words go through `strip_decode_vector` (the capability, the
+extension and every load's `DecodeVectorFunc` operand removed, the scalar callback left to
+serve), after the override and before the shader module, so a dumped or overridden blob is
+always the emitted, unstripped one. The seat is also the in-process A/B: `vkd_pipes_rebuild`
+marks every class slot stale, so the next ensure rebuilds it under whatever `decvec_on` says,
+which is how the `cm2:<fmt>` probe runs both arms interleaved in one process.
 
 **The dump runs before the override.** `DASLLAMA_VK_SPV_DUMP=<dir>` writes the EMITTED words as
 `<dir>/<kernel>.spv`; `DASLLAMA_VK_SPV_OVERRIDE=<dir>` then replaces them with that directory's

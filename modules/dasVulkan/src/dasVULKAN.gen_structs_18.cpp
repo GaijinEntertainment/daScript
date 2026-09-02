@@ -4,6 +4,426 @@
 
 namespace das {
 
+#if defined(VK_EXT_descriptor_buffer)
+struct VkOpaqueCaptureDescriptorDataCreateInfoEXT_Ann : ManagedStructureAnnotation<VkOpaqueCaptureDescriptorDataCreateInfoEXT> {
+    VkOpaqueCaptureDescriptorDataCreateInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkOpaqueCaptureDescriptorDataCreateInfoEXT", ml, "VkOpaqueCaptureDescriptorDataCreateInfoEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkOpaqueCaptureDescriptorDataCreateInfoEXT_Ann * ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT = nullptr;
+void VkOpaqueCaptureDescriptorDataCreateInfoEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkOpaqueCaptureDescriptorDataCreateInfoEXT, pNext), makeType<void *>(*mlib));
+    addFieldEx("opaqueCaptureDescriptorData", "opaqueCaptureDescriptorData", offsetof(VkOpaqueCaptureDescriptorDataCreateInfoEXT, opaqueCaptureDescriptorData), makeType<void *>(*mlib));
+}
+#endif
+
+#if defined(VK_VERSION_1_3)
+struct VkPhysicalDeviceShaderIntegerDotProductFeatures_Ann : ManagedStructureAnnotation<VkPhysicalDeviceShaderIntegerDotProductFeatures> {
+    VkPhysicalDeviceShaderIntegerDotProductFeatures_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceShaderIntegerDotProductFeatures", ml, "VkPhysicalDeviceShaderIntegerDotProductFeatures") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceShaderIntegerDotProductFeatures_Ann * ann_VkPhysicalDeviceShaderIntegerDotProductFeatures = nullptr;
+void VkPhysicalDeviceShaderIntegerDotProductFeatures_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceShaderIntegerDotProductFeatures, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(shaderIntegerDotProduct)>("shaderIntegerDotProduct", "shaderIntegerDotProduct");
+}
+#endif
+
+#if defined(VK_VERSION_1_3)
+struct VkPhysicalDeviceShaderIntegerDotProductProperties_Ann : ManagedStructureAnnotation<VkPhysicalDeviceShaderIntegerDotProductProperties> {
+    VkPhysicalDeviceShaderIntegerDotProductProperties_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceShaderIntegerDotProductProperties", ml, "VkPhysicalDeviceShaderIntegerDotProductProperties") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceShaderIntegerDotProductProperties_Ann * ann_VkPhysicalDeviceShaderIntegerDotProductProperties = nullptr;
+void VkPhysicalDeviceShaderIntegerDotProductProperties_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceShaderIntegerDotProductProperties, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct8BitUnsignedAccelerated)>("integerDotProduct8BitUnsignedAccelerated", "integerDotProduct8BitUnsignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct8BitSignedAccelerated)>("integerDotProduct8BitSignedAccelerated", "integerDotProduct8BitSignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct8BitMixedSignednessAccelerated)>("integerDotProduct8BitMixedSignednessAccelerated", "integerDotProduct8BitMixedSignednessAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct4x8BitPackedUnsignedAccelerated)>("integerDotProduct4x8BitPackedUnsignedAccelerated", "integerDotProduct4x8BitPackedUnsignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct4x8BitPackedSignedAccelerated)>("integerDotProduct4x8BitPackedSignedAccelerated", "integerDotProduct4x8BitPackedSignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct4x8BitPackedMixedSignednessAccelerated)>("integerDotProduct4x8BitPackedMixedSignednessAccelerated", "integerDotProduct4x8BitPackedMixedSignednessAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct16BitUnsignedAccelerated)>("integerDotProduct16BitUnsignedAccelerated", "integerDotProduct16BitUnsignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct16BitSignedAccelerated)>("integerDotProduct16BitSignedAccelerated", "integerDotProduct16BitSignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct16BitMixedSignednessAccelerated)>("integerDotProduct16BitMixedSignednessAccelerated", "integerDotProduct16BitMixedSignednessAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct32BitUnsignedAccelerated)>("integerDotProduct32BitUnsignedAccelerated", "integerDotProduct32BitUnsignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct32BitSignedAccelerated)>("integerDotProduct32BitSignedAccelerated", "integerDotProduct32BitSignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct32BitMixedSignednessAccelerated)>("integerDotProduct32BitMixedSignednessAccelerated", "integerDotProduct32BitMixedSignednessAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct64BitUnsignedAccelerated)>("integerDotProduct64BitUnsignedAccelerated", "integerDotProduct64BitUnsignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct64BitSignedAccelerated)>("integerDotProduct64BitSignedAccelerated", "integerDotProduct64BitSignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct64BitMixedSignednessAccelerated)>("integerDotProduct64BitMixedSignednessAccelerated", "integerDotProduct64BitMixedSignednessAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating8BitUnsignedAccelerated)>("integerDotProductAccumulatingSaturating8BitUnsignedAccelerated", "integerDotProductAccumulatingSaturating8BitUnsignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating8BitSignedAccelerated)>("integerDotProductAccumulatingSaturating8BitSignedAccelerated", "integerDotProductAccumulatingSaturating8BitSignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated)>("integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated", "integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated)>("integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated", "integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated)>("integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated", "integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated)>("integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated", "integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating16BitUnsignedAccelerated)>("integerDotProductAccumulatingSaturating16BitUnsignedAccelerated", "integerDotProductAccumulatingSaturating16BitUnsignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating16BitSignedAccelerated)>("integerDotProductAccumulatingSaturating16BitSignedAccelerated", "integerDotProductAccumulatingSaturating16BitSignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated)>("integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated", "integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating32BitUnsignedAccelerated)>("integerDotProductAccumulatingSaturating32BitUnsignedAccelerated", "integerDotProductAccumulatingSaturating32BitUnsignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating32BitSignedAccelerated)>("integerDotProductAccumulatingSaturating32BitSignedAccelerated", "integerDotProductAccumulatingSaturating32BitSignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated)>("integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated", "integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating64BitUnsignedAccelerated)>("integerDotProductAccumulatingSaturating64BitUnsignedAccelerated", "integerDotProductAccumulatingSaturating64BitUnsignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating64BitSignedAccelerated)>("integerDotProductAccumulatingSaturating64BitSignedAccelerated", "integerDotProductAccumulatingSaturating64BitSignedAccelerated");
+    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated)>("integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated", "integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated");
+}
+#endif
+
+#if defined(VK_EXT_physical_device_drm)
+struct VkPhysicalDeviceDrmPropertiesEXT_Ann : ManagedStructureAnnotation<VkPhysicalDeviceDrmPropertiesEXT> {
+    VkPhysicalDeviceDrmPropertiesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceDrmPropertiesEXT", ml, "VkPhysicalDeviceDrmPropertiesEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceDrmPropertiesEXT_Ann * ann_VkPhysicalDeviceDrmPropertiesEXT = nullptr;
+void VkPhysicalDeviceDrmPropertiesEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceDrmPropertiesEXT, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(hasPrimary)>("hasPrimary", "hasPrimary");
+    addField<DAS_BIND_MANAGED_FIELD(hasRender)>("hasRender", "hasRender");
+    addField<DAS_BIND_MANAGED_FIELD(primaryMajor)>("primaryMajor", "primaryMajor");
+    addField<DAS_BIND_MANAGED_FIELD(primaryMinor)>("primaryMinor", "primaryMinor");
+    addField<DAS_BIND_MANAGED_FIELD(renderMajor)>("renderMajor", "renderMajor");
+    addField<DAS_BIND_MANAGED_FIELD(renderMinor)>("renderMinor", "renderMinor");
+}
+#endif
+
+#if defined(VK_KHR_fragment_shader_barycentric)
+struct VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR> {
+    VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR", ml, "VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR_Ann * ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR = nullptr;
+void VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(fragmentShaderBarycentric)>("fragmentShaderBarycentric", "fragmentShaderBarycentric");
+}
+#endif
+
+#if defined(VK_KHR_fragment_shader_barycentric)
+struct VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR> {
+    VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR", ml, "VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR_Ann * ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR = nullptr;
+void VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(triStripVertexOrderIndependentOfProvokingVertex)>("triStripVertexOrderIndependentOfProvokingVertex", "triStripVertexOrderIndependentOfProvokingVertex");
+}
+#endif
+
+#if defined(VK_KHR_shader_fma)
+struct VkPhysicalDeviceShaderFmaFeaturesKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceShaderFmaFeaturesKHR> {
+    VkPhysicalDeviceShaderFmaFeaturesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceShaderFmaFeaturesKHR", ml, "VkPhysicalDeviceShaderFmaFeaturesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceShaderFmaFeaturesKHR_Ann * ann_VkPhysicalDeviceShaderFmaFeaturesKHR = nullptr;
+void VkPhysicalDeviceShaderFmaFeaturesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceShaderFmaFeaturesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(shaderFmaFloat16)>("shaderFmaFloat16", "shaderFmaFloat16");
+    addField<DAS_BIND_MANAGED_FIELD(shaderFmaFloat32)>("shaderFmaFloat32", "shaderFmaFloat32");
+    addField<DAS_BIND_MANAGED_FIELD(shaderFmaFloat64)>("shaderFmaFloat64", "shaderFmaFloat64");
+}
+#endif
+
+#if defined(VK_NV_ray_tracing_motion_blur)
+struct VkPhysicalDeviceRayTracingMotionBlurFeaturesNV_Ann : ManagedStructureAnnotation<VkPhysicalDeviceRayTracingMotionBlurFeaturesNV> {
+    VkPhysicalDeviceRayTracingMotionBlurFeaturesNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceRayTracingMotionBlurFeaturesNV", ml, "VkPhysicalDeviceRayTracingMotionBlurFeaturesNV") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceRayTracingMotionBlurFeaturesNV_Ann * ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV = nullptr;
+void VkPhysicalDeviceRayTracingMotionBlurFeaturesNV_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceRayTracingMotionBlurFeaturesNV, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(rayTracingMotionBlur)>("rayTracingMotionBlur", "rayTracingMotionBlur");
+    addField<DAS_BIND_MANAGED_FIELD(rayTracingMotionBlurPipelineTraceRaysIndirect)>("rayTracingMotionBlurPipelineTraceRaysIndirect", "rayTracingMotionBlurPipelineTraceRaysIndirect");
+}
+#endif
+
+#if defined(VK_NV_ray_tracing_validation)
+struct VkPhysicalDeviceRayTracingValidationFeaturesNV_Ann : ManagedStructureAnnotation<VkPhysicalDeviceRayTracingValidationFeaturesNV> {
+    VkPhysicalDeviceRayTracingValidationFeaturesNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceRayTracingValidationFeaturesNV", ml, "VkPhysicalDeviceRayTracingValidationFeaturesNV") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceRayTracingValidationFeaturesNV_Ann * ann_VkPhysicalDeviceRayTracingValidationFeaturesNV = nullptr;
+void VkPhysicalDeviceRayTracingValidationFeaturesNV_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceRayTracingValidationFeaturesNV, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(rayTracingValidation)>("rayTracingValidation", "rayTracingValidation");
+}
+#endif
+
+#if defined(VK_NV_ray_tracing_linear_swept_spheres)
+struct VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV_Ann : ManagedStructureAnnotation<VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV> {
+    VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV", ml, "VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV_Ann * ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV = nullptr;
+void VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(spheres)>("spheres", "spheres");
+    addField<DAS_BIND_MANAGED_FIELD(linearSweptSpheres)>("linearSweptSpheres", "linearSweptSpheres");
+}
+#endif
+
+#if defined(VK_NV_ray_tracing_motion_blur)
+struct VkAccelerationStructureGeometryMotionTrianglesDataNV_Ann : ManagedStructureAnnotation<VkAccelerationStructureGeometryMotionTrianglesDataNV> {
+    VkAccelerationStructureGeometryMotionTrianglesDataNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkAccelerationStructureGeometryMotionTrianglesDataNV", ml, "VkAccelerationStructureGeometryMotionTrianglesDataNV") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkAccelerationStructureGeometryMotionTrianglesDataNV_Ann * ann_VkAccelerationStructureGeometryMotionTrianglesDataNV = nullptr;
+void VkAccelerationStructureGeometryMotionTrianglesDataNV_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkAccelerationStructureGeometryMotionTrianglesDataNV, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(vertexData)>("vertexData", "vertexData");
+}
+#endif
+
+#if defined(VK_NV_ray_tracing_motion_blur)
+struct VkAccelerationStructureMotionInfoNV_Ann : ManagedStructureAnnotation<VkAccelerationStructureMotionInfoNV> {
+    VkAccelerationStructureMotionInfoNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkAccelerationStructureMotionInfoNV", ml, "VkAccelerationStructureMotionInfoNV") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkAccelerationStructureMotionInfoNV_Ann * ann_VkAccelerationStructureMotionInfoNV = nullptr;
+void VkAccelerationStructureMotionInfoNV_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkAccelerationStructureMotionInfoNV, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(maxInstances)>("maxInstances", "maxInstances");
+    addFieldEx("flags", "flags", offsetof(VkAccelerationStructureMotionInfoNV, flags), makeVkFlags_VkAccelerationStructureMotionInfoFlagsNV());
+}
+#endif
+
+#if defined(VK_NV_ray_tracing_motion_blur)
+struct VkSRTDataNV_Ann : ManagedStructureAnnotation<VkSRTDataNV> {
+    VkSRTDataNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSRTDataNV", ml, "VkSRTDataNV") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkSRTDataNV_Ann * ann_VkSRTDataNV = nullptr;
+void VkSRTDataNV_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sx)>("sx", "sx");
+    addField<DAS_BIND_MANAGED_FIELD(a)>("a", "a");
+    addField<DAS_BIND_MANAGED_FIELD(b)>("b", "b");
+    addField<DAS_BIND_MANAGED_FIELD(pvx)>("pvx", "pvx");
+    addField<DAS_BIND_MANAGED_FIELD(sy)>("sy", "sy");
+    addField<DAS_BIND_MANAGED_FIELD(c)>("c", "c");
+    addField<DAS_BIND_MANAGED_FIELD(pvy)>("pvy", "pvy");
+    addField<DAS_BIND_MANAGED_FIELD(sz)>("sz", "sz");
+    addField<DAS_BIND_MANAGED_FIELD(pvz)>("pvz", "pvz");
+    addField<DAS_BIND_MANAGED_FIELD(qx)>("qx", "qx");
+    addField<DAS_BIND_MANAGED_FIELD(qy)>("qy", "qy");
+    addField<DAS_BIND_MANAGED_FIELD(qz)>("qz", "qz");
+    addField<DAS_BIND_MANAGED_FIELD(qw)>("qw", "qw");
+    addField<DAS_BIND_MANAGED_FIELD(tx)>("tx", "tx");
+    addField<DAS_BIND_MANAGED_FIELD(ty)>("ty", "ty");
+    addField<DAS_BIND_MANAGED_FIELD(tz)>("tz", "tz");
+}
+#endif
+
+#if defined(VK_NV_external_memory_rdma)
+struct VkMemoryGetRemoteAddressInfoNV_Ann : ManagedStructureAnnotation<VkMemoryGetRemoteAddressInfoNV> {
+    VkMemoryGetRemoteAddressInfoNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkMemoryGetRemoteAddressInfoNV", ml, "VkMemoryGetRemoteAddressInfoNV") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkMemoryGetRemoteAddressInfoNV_Ann * ann_VkMemoryGetRemoteAddressInfoNV = nullptr;
+void VkMemoryGetRemoteAddressInfoNV_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkMemoryGetRemoteAddressInfoNV, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(memory)>("memory", "memory");
+    addField<DAS_BIND_MANAGED_FIELD(handleType)>("handleType", "handleType");
+}
+#endif
+
+#if defined(VK_EXT_rgba10x6_formats)
+struct VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT_Ann : ManagedStructureAnnotation<VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT> {
+    VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT", ml, "VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT_Ann * ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT = nullptr;
+void VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(formatRgba10x6WithoutYCbCrSampler)>("formatRgba10x6WithoutYCbCrSampler", "formatRgba10x6WithoutYCbCrSampler");
+}
+#endif
+
+#if defined(VK_VERSION_1_3)
+struct VkFormatProperties3_Ann : ManagedStructureAnnotation<VkFormatProperties3> {
+    VkFormatProperties3_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkFormatProperties3", ml, "VkFormatProperties3") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkFormatProperties3_Ann * ann_VkFormatProperties3 = nullptr;
+void VkFormatProperties3_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkFormatProperties3, pNext), makeType<void *>(*mlib));
+    addFieldEx("linearTilingFeatures", "linearTilingFeatures", offsetof(VkFormatProperties3, linearTilingFeatures), makeVkFlags_VkFormatFeatureFlags2());
+    addFieldEx("optimalTilingFeatures", "optimalTilingFeatures", offsetof(VkFormatProperties3, optimalTilingFeatures), makeVkFlags_VkFormatFeatureFlags2());
+    addFieldEx("bufferFeatures", "bufferFeatures", offsetof(VkFormatProperties3, bufferFeatures), makeVkFlags_VkFormatFeatureFlags2());
+}
+#endif
+
+#if defined(VK_KHR_extended_flags)
+struct VkFormatProperties4KHR_Ann : ManagedStructureAnnotation<VkFormatProperties4KHR> {
+    VkFormatProperties4KHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkFormatProperties4KHR", ml, "VkFormatProperties4KHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkFormatProperties4KHR_Ann * ann_VkFormatProperties4KHR = nullptr;
+void VkFormatProperties4KHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkFormatProperties4KHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("linearTilingFeatures", "linearTilingFeatures", offsetof(VkFormatProperties4KHR, linearTilingFeatures), makeVkFlags_VkFormatFeatureFlags4KHR());
+    addFieldEx("optimalTilingFeatures", "optimalTilingFeatures", offsetof(VkFormatProperties4KHR, optimalTilingFeatures), makeVkFlags_VkFormatFeatureFlags4KHR());
+    addFieldEx("bufferFeatures", "bufferFeatures", offsetof(VkFormatProperties4KHR, bufferFeatures), makeVkFlags_VkFormatFeatureFlags4KHR());
+}
+#endif
+
+#if defined(VK_EXT_image_drm_format_modifier)
+struct VkDrmFormatModifierPropertiesList2EXT_Ann : ManagedStructureAnnotation<VkDrmFormatModifierPropertiesList2EXT> {
+    VkDrmFormatModifierPropertiesList2EXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkDrmFormatModifierPropertiesList2EXT", ml, "VkDrmFormatModifierPropertiesList2EXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkDrmFormatModifierPropertiesList2EXT_Ann * ann_VkDrmFormatModifierPropertiesList2EXT = nullptr;
+void VkDrmFormatModifierPropertiesList2EXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkDrmFormatModifierPropertiesList2EXT, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(drmFormatModifierCount)>("drmFormatModifierCount", "drmFormatModifierCount");
+    addFieldEx("pDrmFormatModifierProperties", "pDrmFormatModifierProperties", offsetof(VkDrmFormatModifierPropertiesList2EXT, pDrmFormatModifierProperties), makeType<VkDrmFormatModifierProperties2EXT *>(*mlib));
+}
+#endif
+
+#if defined(VK_EXT_image_drm_format_modifier)
+struct VkDrmFormatModifierProperties2EXT_Ann : ManagedStructureAnnotation<VkDrmFormatModifierProperties2EXT> {
+    VkDrmFormatModifierProperties2EXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkDrmFormatModifierProperties2EXT", ml, "VkDrmFormatModifierProperties2EXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkDrmFormatModifierProperties2EXT_Ann * ann_VkDrmFormatModifierProperties2EXT = nullptr;
+void VkDrmFormatModifierProperties2EXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(drmFormatModifier)>("drmFormatModifier", "drmFormatModifier");
+    addField<DAS_BIND_MANAGED_FIELD(drmFormatModifierPlaneCount)>("drmFormatModifierPlaneCount", "drmFormatModifierPlaneCount");
+    addFieldEx("drmFormatModifierTilingFeatures", "drmFormatModifierTilingFeatures", offsetof(VkDrmFormatModifierProperties2EXT, drmFormatModifierTilingFeatures), makeVkFlags_VkFormatFeatureFlags2());
+}
+#endif
+
+#if defined(VK_VERSION_1_3)
+struct VkPipelineRenderingCreateInfo_Ann : ManagedStructureAnnotation<VkPipelineRenderingCreateInfo> {
+    VkPipelineRenderingCreateInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPipelineRenderingCreateInfo", ml, "VkPipelineRenderingCreateInfo") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPipelineRenderingCreateInfo_Ann * ann_VkPipelineRenderingCreateInfo = nullptr;
+void VkPipelineRenderingCreateInfo_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPipelineRenderingCreateInfo, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(viewMask)>("viewMask", "viewMask");
+    addField<DAS_BIND_MANAGED_FIELD(colorAttachmentCount)>("colorAttachmentCount", "colorAttachmentCount");
+    addFieldEx("pColorAttachmentFormats", "pColorAttachmentFormats", offsetof(VkPipelineRenderingCreateInfo, pColorAttachmentFormats), makeType<VkFormat *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(depthAttachmentFormat)>("depthAttachmentFormat", "depthAttachmentFormat");
+    addField<DAS_BIND_MANAGED_FIELD(stencilAttachmentFormat)>("stencilAttachmentFormat", "stencilAttachmentFormat");
+}
+#endif
+
+#if defined(VK_VERSION_1_3)
+struct VkRenderingInfo_Ann : ManagedStructureAnnotation<VkRenderingInfo> {
+    VkRenderingInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderingInfo", ml, "VkRenderingInfo") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkRenderingInfo_Ann * ann_VkRenderingInfo = nullptr;
+void VkRenderingInfo_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkRenderingInfo, pNext), makeType<void *>(*mlib));
+    addFieldEx("flags", "flags", offsetof(VkRenderingInfo, flags), makeVkFlags_VkRenderingFlags());
+    addField<DAS_BIND_MANAGED_FIELD(renderArea)>("renderArea", "renderArea");
+    addField<DAS_BIND_MANAGED_FIELD(layerCount)>("layerCount", "layerCount");
+    addField<DAS_BIND_MANAGED_FIELD(viewMask)>("viewMask", "viewMask");
+    addField<DAS_BIND_MANAGED_FIELD(colorAttachmentCount)>("colorAttachmentCount", "colorAttachmentCount");
+    addFieldEx("pColorAttachments", "pColorAttachments", offsetof(VkRenderingInfo, pColorAttachments), makeType<VkRenderingAttachmentInfo *>(*mlib));
+    addFieldEx("pDepthAttachment", "pDepthAttachment", offsetof(VkRenderingInfo, pDepthAttachment), makeType<VkRenderingAttachmentInfo *>(*mlib));
+    addFieldEx("pStencilAttachment", "pStencilAttachment", offsetof(VkRenderingInfo, pStencilAttachment), makeType<VkRenderingAttachmentInfo *>(*mlib));
+}
+#endif
+
+#if defined(VK_KHR_maintenance10)
+struct VkRenderingEndInfoKHR_Ann : ManagedStructureAnnotation<VkRenderingEndInfoKHR> {
+    VkRenderingEndInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderingEndInfoKHR", ml, "VkRenderingEndInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkRenderingEndInfoKHR_Ann * ann_VkRenderingEndInfoKHR = nullptr;
+void VkRenderingEndInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkRenderingEndInfoKHR, pNext), makeType<void *>(*mlib));
+}
+#endif
+
 #if defined(VK_VERSION_1_3)
 struct VkRenderingAttachmentInfo_Ann : ManagedStructureAnnotation<VkRenderingAttachmentInfo> {
     VkRenderingAttachmentInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderingAttachmentInfo", ml, "VkRenderingAttachmentInfo") {}
@@ -350,6 +770,42 @@ void VkDataGraphPipelineSessionNeuralStatisticsCreateInfoARM_Ann::init() {
 }
 #endif
 
+#if defined(VK_ARM_tensor_controls)
+struct VkTensorExplicitTilingFormatPropertiesARM_Ann : ManagedStructureAnnotation<VkTensorExplicitTilingFormatPropertiesARM> {
+    VkTensorExplicitTilingFormatPropertiesARM_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkTensorExplicitTilingFormatPropertiesARM", ml, "VkTensorExplicitTilingFormatPropertiesARM") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkTensorExplicitTilingFormatPropertiesARM_Ann * ann_VkTensorExplicitTilingFormatPropertiesARM = nullptr;
+void VkTensorExplicitTilingFormatPropertiesARM_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkTensorExplicitTilingFormatPropertiesARM, pNext), makeType<void *>(*mlib));
+    addFieldEx("brick16TilingTensorFeatures", "brick16TilingTensorFeatures", offsetof(VkTensorExplicitTilingFormatPropertiesARM, brick16TilingTensorFeatures), makeVkFlags_VkFormatFeatureFlags2());
+    addFieldEx("brick8TilingTensorFeatures", "brick8TilingTensorFeatures", offsetof(VkTensorExplicitTilingFormatPropertiesARM, brick8TilingTensorFeatures), makeVkFlags_VkFormatFeatureFlags2());
+    addFieldEx("brick4TilingTensorFeatures", "brick4TilingTensorFeatures", offsetof(VkTensorExplicitTilingFormatPropertiesARM, brick4TilingTensorFeatures), makeVkFlags_VkFormatFeatureFlags2());
+    addFieldEx("blockUTilingTensorFeatures", "blockUTilingTensorFeatures", offsetof(VkTensorExplicitTilingFormatPropertiesARM, blockUTilingTensorFeatures), makeVkFlags_VkFormatFeatureFlags2());
+    addFieldEx("blockU64kTilingTensorFeatures", "blockU64kTilingTensorFeatures", offsetof(VkTensorExplicitTilingFormatPropertiesARM, blockU64kTilingTensorFeatures), makeVkFlags_VkFormatFeatureFlags2());
+}
+#endif
+
+#if defined(VK_ARM_tensor_controls)
+struct VkTensorRollingBackingCreateInfoARM_Ann : ManagedStructureAnnotation<VkTensorRollingBackingCreateInfoARM> {
+    VkTensorRollingBackingCreateInfoARM_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkTensorRollingBackingCreateInfoARM", ml, "VkTensorRollingBackingCreateInfoARM") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkTensorRollingBackingCreateInfoARM_Ann * ann_VkTensorRollingBackingCreateInfoARM = nullptr;
+void VkTensorRollingBackingCreateInfoARM_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkTensorRollingBackingCreateInfoARM, pNext), makeType<void *>(*mlib));
+    addFieldEx("wraps", "wraps", offsetof(VkTensorRollingBackingCreateInfoARM, wraps), makeFixedArrayTypeDecl(int32_t(VK_MAX_TENSOR_CREATE_INFO_ROLLING_BACKING_WRAP_COUNT_ARM), makeType<uint32_t>(*mlib)));
+}
+#endif
+
 #if defined(VK_VALVE_descriptor_set_host_mapping)
 struct VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE_Ann : ManagedStructureAnnotation<VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE> {
     VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE", ml, "VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE") {}
@@ -450,417 +906,73 @@ void VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT_Ann::init() {
 }
 #endif
 
-#if defined(VK_EXT_shader_module_identifier)
-struct VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT_Ann : ManagedStructureAnnotation<VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT> {
-    VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT", ml, "VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT_Ann * ann_VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT = nullptr;
-void VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT, pNext), makeType<void *>(*mlib));
-    addFieldEx("shaderModuleIdentifierAlgorithmUUID", "shaderModuleIdentifierAlgorithmUUID", offsetof(VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT, shaderModuleIdentifierAlgorithmUUID), makeFixedArrayTypeDecl(int32_t(VK_UUID_SIZE), makeType<uint8_t>(*mlib)));
-}
-#endif
-
-#if defined(VK_EXT_shader_module_identifier)
-struct VkPipelineShaderStageModuleIdentifierCreateInfoEXT_Ann : ManagedStructureAnnotation<VkPipelineShaderStageModuleIdentifierCreateInfoEXT> {
-    VkPipelineShaderStageModuleIdentifierCreateInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPipelineShaderStageModuleIdentifierCreateInfoEXT", ml, "VkPipelineShaderStageModuleIdentifierCreateInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPipelineShaderStageModuleIdentifierCreateInfoEXT_Ann * ann_VkPipelineShaderStageModuleIdentifierCreateInfoEXT = nullptr;
-void VkPipelineShaderStageModuleIdentifierCreateInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPipelineShaderStageModuleIdentifierCreateInfoEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(identifierSize)>("identifierSize", "identifierSize");
-    addFieldEx("pIdentifier", "pIdentifier", offsetof(VkPipelineShaderStageModuleIdentifierCreateInfoEXT, pIdentifier), makeType<uint8_t *>(*mlib));
-}
-#endif
-
-#if defined(VK_EXT_shader_module_identifier)
-struct VkShaderModuleIdentifierEXT_Ann : ManagedStructureAnnotation<VkShaderModuleIdentifierEXT> {
-    VkShaderModuleIdentifierEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkShaderModuleIdentifierEXT", ml, "VkShaderModuleIdentifierEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkShaderModuleIdentifierEXT_Ann * ann_VkShaderModuleIdentifierEXT = nullptr;
-void VkShaderModuleIdentifierEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkShaderModuleIdentifierEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(identifierSize)>("identifierSize", "identifierSize");
-    addFieldEx("identifier", "identifier", offsetof(VkShaderModuleIdentifierEXT, identifier), makeFixedArrayTypeDecl(int32_t(VK_MAX_SHADER_MODULE_IDENTIFIER_SIZE_EXT), makeType<uint8_t>(*mlib)));
-}
-#endif
-
-#if defined(VK_EXT_image_compression_control)
-struct VkImageCompressionControlEXT_Ann : ManagedStructureAnnotation<VkImageCompressionControlEXT> {
-    VkImageCompressionControlEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImageCompressionControlEXT", ml, "VkImageCompressionControlEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkImageCompressionControlEXT_Ann * ann_VkImageCompressionControlEXT = nullptr;
-void VkImageCompressionControlEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkImageCompressionControlEXT, pNext), makeType<void *>(*mlib));
-    addFieldEx("flags", "flags", offsetof(VkImageCompressionControlEXT, flags), makeVkFlags_VkImageCompressionFlagsEXT());
-    addField<DAS_BIND_MANAGED_FIELD(compressionControlPlaneCount)>("compressionControlPlaneCount", "compressionControlPlaneCount");
-    addFieldEx("pFixedRateFlags", "pFixedRateFlags", offsetof(VkImageCompressionControlEXT, pFixedRateFlags), makeType<VkImageCompressionFixedRateFlagsEXT *>(*mlib));
-}
-#endif
-
-#if defined(VK_EXT_image_compression_control)
-struct VkPhysicalDeviceImageCompressionControlFeaturesEXT_Ann : ManagedStructureAnnotation<VkPhysicalDeviceImageCompressionControlFeaturesEXT> {
-    VkPhysicalDeviceImageCompressionControlFeaturesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceImageCompressionControlFeaturesEXT", ml, "VkPhysicalDeviceImageCompressionControlFeaturesEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceImageCompressionControlFeaturesEXT_Ann * ann_VkPhysicalDeviceImageCompressionControlFeaturesEXT = nullptr;
-void VkPhysicalDeviceImageCompressionControlFeaturesEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceImageCompressionControlFeaturesEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(imageCompressionControl)>("imageCompressionControl", "imageCompressionControl");
-}
-#endif
-
-#if defined(VK_EXT_image_compression_control)
-struct VkImageCompressionPropertiesEXT_Ann : ManagedStructureAnnotation<VkImageCompressionPropertiesEXT> {
-    VkImageCompressionPropertiesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImageCompressionPropertiesEXT", ml, "VkImageCompressionPropertiesEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkImageCompressionPropertiesEXT_Ann * ann_VkImageCompressionPropertiesEXT = nullptr;
-void VkImageCompressionPropertiesEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkImageCompressionPropertiesEXT, pNext), makeType<void *>(*mlib));
-    addFieldEx("imageCompressionFlags", "imageCompressionFlags", offsetof(VkImageCompressionPropertiesEXT, imageCompressionFlags), makeVkFlags_VkImageCompressionFlagsEXT());
-    addFieldEx("imageCompressionFixedRateFlags", "imageCompressionFixedRateFlags", offsetof(VkImageCompressionPropertiesEXT, imageCompressionFixedRateFlags), makeVkFlags_VkImageCompressionFixedRateFlagsEXT());
-}
-#endif
-
-#if defined(VK_EXT_image_compression_control_swapchain)
-struct VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT_Ann : ManagedStructureAnnotation<VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT> {
-    VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT", ml, "VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT_Ann * ann_VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT = nullptr;
-void VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(imageCompressionControlSwapchain)>("imageCompressionControlSwapchain", "imageCompressionControlSwapchain");
-}
-#endif
-
-#if defined(VK_VERSION_1_4)
-struct VkImageSubresource2_Ann : ManagedStructureAnnotation<VkImageSubresource2> {
-    VkImageSubresource2_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImageSubresource2", ml, "VkImageSubresource2") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkImageSubresource2_Ann * ann_VkImageSubresource2 = nullptr;
-void VkImageSubresource2_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkImageSubresource2, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(imageSubresource)>("imageSubresource", "imageSubresource");
-}
-#endif
-
-#if defined(VK_VERSION_1_4)
-struct VkSubresourceLayout2_Ann : ManagedStructureAnnotation<VkSubresourceLayout2> {
-    VkSubresourceLayout2_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSubresourceLayout2", ml, "VkSubresourceLayout2") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkSubresourceLayout2_Ann * ann_VkSubresourceLayout2 = nullptr;
-void VkSubresourceLayout2_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkSubresourceLayout2, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(subresourceLayout)>("subresourceLayout", "subresourceLayout");
-}
-#endif
-
-#if defined(VK_EXT_subpass_merge_feedback)
-struct VkRenderPassCreationControlEXT_Ann : ManagedStructureAnnotation<VkRenderPassCreationControlEXT> {
-    VkRenderPassCreationControlEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderPassCreationControlEXT", ml, "VkRenderPassCreationControlEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkRenderPassCreationControlEXT_Ann * ann_VkRenderPassCreationControlEXT = nullptr;
-void VkRenderPassCreationControlEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkRenderPassCreationControlEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(disallowMerging)>("disallowMerging", "disallowMerging");
-}
-#endif
-
-#if defined(VK_EXT_subpass_merge_feedback)
-struct VkRenderPassCreationFeedbackInfoEXT_Ann : ManagedStructureAnnotation<VkRenderPassCreationFeedbackInfoEXT> {
-    VkRenderPassCreationFeedbackInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderPassCreationFeedbackInfoEXT", ml, "VkRenderPassCreationFeedbackInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkRenderPassCreationFeedbackInfoEXT_Ann * ann_VkRenderPassCreationFeedbackInfoEXT = nullptr;
-void VkRenderPassCreationFeedbackInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(postMergeSubpassCount)>("postMergeSubpassCount", "postMergeSubpassCount");
-}
-#endif
-
-#if defined(VK_EXT_subpass_merge_feedback)
-struct VkRenderPassCreationFeedbackCreateInfoEXT_Ann : ManagedStructureAnnotation<VkRenderPassCreationFeedbackCreateInfoEXT> {
-    VkRenderPassCreationFeedbackCreateInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderPassCreationFeedbackCreateInfoEXT", ml, "VkRenderPassCreationFeedbackCreateInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkRenderPassCreationFeedbackCreateInfoEXT_Ann * ann_VkRenderPassCreationFeedbackCreateInfoEXT = nullptr;
-void VkRenderPassCreationFeedbackCreateInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkRenderPassCreationFeedbackCreateInfoEXT, pNext), makeType<void *>(*mlib));
-    addFieldEx("pRenderPassFeedback", "pRenderPassFeedback", offsetof(VkRenderPassCreationFeedbackCreateInfoEXT, pRenderPassFeedback), makeType<VkRenderPassCreationFeedbackInfoEXT *>(*mlib));
-}
-#endif
-
-#if defined(VK_EXT_subpass_merge_feedback)
-struct VkRenderPassSubpassFeedbackInfoEXT_Ann : ManagedStructureAnnotation<VkRenderPassSubpassFeedbackInfoEXT> {
-    VkRenderPassSubpassFeedbackInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderPassSubpassFeedbackInfoEXT", ml, "VkRenderPassSubpassFeedbackInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkRenderPassSubpassFeedbackInfoEXT_Ann * ann_VkRenderPassSubpassFeedbackInfoEXT = nullptr;
-void VkRenderPassSubpassFeedbackInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(subpassMergeStatus)>("subpassMergeStatus", "subpassMergeStatus");
-    addFieldEx("description", "description", offsetof(VkRenderPassSubpassFeedbackInfoEXT, description), makeFixedArrayTypeDecl(int32_t(VK_MAX_DESCRIPTION_SIZE), makeType<int8_t>(*mlib)));
-    addField<DAS_BIND_MANAGED_FIELD(postMergeIndex)>("postMergeIndex", "postMergeIndex");
-}
-#endif
-
-#if defined(VK_EXT_subpass_merge_feedback)
-struct VkRenderPassSubpassFeedbackCreateInfoEXT_Ann : ManagedStructureAnnotation<VkRenderPassSubpassFeedbackCreateInfoEXT> {
-    VkRenderPassSubpassFeedbackCreateInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderPassSubpassFeedbackCreateInfoEXT", ml, "VkRenderPassSubpassFeedbackCreateInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkRenderPassSubpassFeedbackCreateInfoEXT_Ann * ann_VkRenderPassSubpassFeedbackCreateInfoEXT = nullptr;
-void VkRenderPassSubpassFeedbackCreateInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkRenderPassSubpassFeedbackCreateInfoEXT, pNext), makeType<void *>(*mlib));
-    addFieldEx("pSubpassFeedback", "pSubpassFeedback", offsetof(VkRenderPassSubpassFeedbackCreateInfoEXT, pSubpassFeedback), makeType<VkRenderPassSubpassFeedbackInfoEXT *>(*mlib));
-}
-#endif
-
-#if defined(VK_EXT_subpass_merge_feedback)
-struct VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT_Ann : ManagedStructureAnnotation<VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT> {
-    VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT", ml, "VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT_Ann * ann_VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT = nullptr;
-void VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(subpassMergeFeedback)>("subpassMergeFeedback", "subpassMergeFeedback");
-}
-#endif
-
-#if defined(VK_EXT_opacity_micromap)
-struct VkMicromapBuildInfoEXT_Ann : ManagedStructureAnnotation<VkMicromapBuildInfoEXT> {
-    VkMicromapBuildInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkMicromapBuildInfoEXT", ml, "VkMicromapBuildInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkMicromapBuildInfoEXT_Ann * ann_VkMicromapBuildInfoEXT = nullptr;
-void VkMicromapBuildInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkMicromapBuildInfoEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(type)>("type_", "type");
-    addFieldEx("flags", "flags", offsetof(VkMicromapBuildInfoEXT, flags), makeVkFlags_VkBuildMicromapFlagsEXT());
-    addField<DAS_BIND_MANAGED_FIELD(mode)>("mode", "mode");
-    addField<DAS_BIND_MANAGED_FIELD(dstMicromap)>("dstMicromap", "dstMicromap");
-    addField<DAS_BIND_MANAGED_FIELD(usageCountsCount)>("usageCountsCount", "usageCountsCount");
-    addFieldEx("pUsageCounts", "pUsageCounts", offsetof(VkMicromapBuildInfoEXT, pUsageCounts), makeType<VkMicromapUsageEXT *>(*mlib));
-    addFieldEx("ppUsageCounts", "ppUsageCounts", offsetof(VkMicromapBuildInfoEXT, ppUsageCounts), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(data)>("data", "data");
-    addField<DAS_BIND_MANAGED_FIELD(scratchData)>("scratchData", "scratchData");
-    addField<DAS_BIND_MANAGED_FIELD(triangleArray)>("triangleArray", "triangleArray");
-    addField<DAS_BIND_MANAGED_FIELD(triangleArrayStride)>("triangleArrayStride", "triangleArrayStride");
-}
-#endif
-
-#if defined(VK_EXT_opacity_micromap)
-struct VkMicromapCreateInfoEXT_Ann : ManagedStructureAnnotation<VkMicromapCreateInfoEXT> {
-    VkMicromapCreateInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkMicromapCreateInfoEXT", ml, "VkMicromapCreateInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkMicromapCreateInfoEXT_Ann * ann_VkMicromapCreateInfoEXT = nullptr;
-void VkMicromapCreateInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkMicromapCreateInfoEXT, pNext), makeType<void *>(*mlib));
-    addFieldEx("createFlags", "createFlags", offsetof(VkMicromapCreateInfoEXT, createFlags), makeVkFlags_VkMicromapCreateFlagsEXT());
-    addField<DAS_BIND_MANAGED_FIELD(buffer)>("buffer", "buffer");
-    addField<DAS_BIND_MANAGED_FIELD(offset)>("offset", "offset");
-    addField<DAS_BIND_MANAGED_FIELD(size)>("size", "size");
-    addField<DAS_BIND_MANAGED_FIELD(type)>("type_", "type");
-    addField<DAS_BIND_MANAGED_FIELD(deviceAddress)>("deviceAddress", "deviceAddress");
-}
-#endif
-
-#if defined(VK_EXT_opacity_micromap)
-struct VkMicromapVersionInfoEXT_Ann : ManagedStructureAnnotation<VkMicromapVersionInfoEXT> {
-    VkMicromapVersionInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkMicromapVersionInfoEXT", ml, "VkMicromapVersionInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkMicromapVersionInfoEXT_Ann * ann_VkMicromapVersionInfoEXT = nullptr;
-void VkMicromapVersionInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkMicromapVersionInfoEXT, pNext), makeType<void *>(*mlib));
-    addFieldEx("pVersionData", "pVersionData", offsetof(VkMicromapVersionInfoEXT, pVersionData), makeType<uint8_t *>(*mlib));
-}
-#endif
-
-#if defined(VK_EXT_opacity_micromap)
-struct VkCopyMicromapInfoEXT_Ann : ManagedStructureAnnotation<VkCopyMicromapInfoEXT> {
-    VkCopyMicromapInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkCopyMicromapInfoEXT", ml, "VkCopyMicromapInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkCopyMicromapInfoEXT_Ann * ann_VkCopyMicromapInfoEXT = nullptr;
-void VkCopyMicromapInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkCopyMicromapInfoEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(src)>("src", "src");
-    addField<DAS_BIND_MANAGED_FIELD(dst)>("dst", "dst");
-    addField<DAS_BIND_MANAGED_FIELD(mode)>("mode", "mode");
-}
-#endif
-
-#if defined(VK_EXT_opacity_micromap)
-struct VkCopyMicromapToMemoryInfoEXT_Ann : ManagedStructureAnnotation<VkCopyMicromapToMemoryInfoEXT> {
-    VkCopyMicromapToMemoryInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkCopyMicromapToMemoryInfoEXT", ml, "VkCopyMicromapToMemoryInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkCopyMicromapToMemoryInfoEXT_Ann * ann_VkCopyMicromapToMemoryInfoEXT = nullptr;
-void VkCopyMicromapToMemoryInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkCopyMicromapToMemoryInfoEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(src)>("src", "src");
-    addField<DAS_BIND_MANAGED_FIELD(dst)>("dst", "dst");
-    addField<DAS_BIND_MANAGED_FIELD(mode)>("mode", "mode");
-}
-#endif
-
-#if defined(VK_EXT_opacity_micromap)
-struct VkCopyMemoryToMicromapInfoEXT_Ann : ManagedStructureAnnotation<VkCopyMemoryToMicromapInfoEXT> {
-    VkCopyMemoryToMicromapInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkCopyMemoryToMicromapInfoEXT", ml, "VkCopyMemoryToMicromapInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkCopyMemoryToMicromapInfoEXT_Ann * ann_VkCopyMemoryToMicromapInfoEXT = nullptr;
-void VkCopyMemoryToMicromapInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkCopyMemoryToMicromapInfoEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(src)>("src", "src");
-    addField<DAS_BIND_MANAGED_FIELD(dst)>("dst", "dst");
-    addField<DAS_BIND_MANAGED_FIELD(mode)>("mode", "mode");
-}
-#endif
-
-#if defined(VK_EXT_opacity_micromap)
-struct VkMicromapBuildSizesInfoEXT_Ann : ManagedStructureAnnotation<VkMicromapBuildSizesInfoEXT> {
-    VkMicromapBuildSizesInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkMicromapBuildSizesInfoEXT", ml, "VkMicromapBuildSizesInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkMicromapBuildSizesInfoEXT_Ann * ann_VkMicromapBuildSizesInfoEXT = nullptr;
-void VkMicromapBuildSizesInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkMicromapBuildSizesInfoEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(micromapSize)>("micromapSize", "micromapSize");
-    addField<DAS_BIND_MANAGED_FIELD(buildScratchSize)>("buildScratchSize", "buildScratchSize");
-    addField<DAS_BIND_MANAGED_FIELD(discardable)>("discardable", "discardable");
-}
-#endif
-
-#if defined(VK_EXT_opacity_micromap)
-struct VkMicromapUsageEXT_Ann : ManagedStructureAnnotation<VkMicromapUsageEXT> {
-    VkMicromapUsageEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkMicromapUsageEXT", ml, "VkMicromapUsageEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkMicromapUsageEXT_Ann * ann_VkMicromapUsageEXT = nullptr;
-void VkMicromapUsageEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(count)>("count", "count");
-    addField<DAS_BIND_MANAGED_FIELD(subdivisionLevel)>("subdivisionLevel", "subdivisionLevel");
-    addField<DAS_BIND_MANAGED_FIELD(format)>("format", "format");
-}
-#endif
-
-#if defined(VK_EXT_opacity_micromap)
-struct VkMicromapTriangleEXT_Ann : ManagedStructureAnnotation<VkMicromapTriangleEXT> {
-    VkMicromapTriangleEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkMicromapTriangleEXT", ml, "VkMicromapTriangleEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkMicromapTriangleEXT_Ann * ann_VkMicromapTriangleEXT = nullptr;
-void VkMicromapTriangleEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(dataOffset)>("dataOffset", "dataOffset");
-    addField<DAS_BIND_MANAGED_FIELD(subdivisionLevel)>("subdivisionLevel", "subdivisionLevel");
-    addField<DAS_BIND_MANAGED_FIELD(format)>("format", "format");
-}
-#endif
-
 void das_vulkan_add_structs_18(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_EXT_descriptor_buffer)
+    ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT = new VkOpaqueCaptureDescriptorDataCreateInfoEXT_Ann(lib); mod.addAnnotation(ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT);
+#endif
+#if defined(VK_VERSION_1_3)
+    ann_VkPhysicalDeviceShaderIntegerDotProductFeatures = new VkPhysicalDeviceShaderIntegerDotProductFeatures_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceShaderIntegerDotProductFeatures);
+#endif
+#if defined(VK_VERSION_1_3)
+    ann_VkPhysicalDeviceShaderIntegerDotProductProperties = new VkPhysicalDeviceShaderIntegerDotProductProperties_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceShaderIntegerDotProductProperties);
+#endif
+#if defined(VK_EXT_physical_device_drm)
+    ann_VkPhysicalDeviceDrmPropertiesEXT = new VkPhysicalDeviceDrmPropertiesEXT_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceDrmPropertiesEXT);
+#endif
+#if defined(VK_KHR_fragment_shader_barycentric)
+    ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR = new VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR);
+#endif
+#if defined(VK_KHR_fragment_shader_barycentric)
+    ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR = new VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR);
+#endif
+#if defined(VK_KHR_shader_fma)
+    ann_VkPhysicalDeviceShaderFmaFeaturesKHR = new VkPhysicalDeviceShaderFmaFeaturesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceShaderFmaFeaturesKHR);
+#endif
+#if defined(VK_NV_ray_tracing_motion_blur)
+    ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV = new VkPhysicalDeviceRayTracingMotionBlurFeaturesNV_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV);
+#endif
+#if defined(VK_NV_ray_tracing_validation)
+    ann_VkPhysicalDeviceRayTracingValidationFeaturesNV = new VkPhysicalDeviceRayTracingValidationFeaturesNV_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceRayTracingValidationFeaturesNV);
+#endif
+#if defined(VK_NV_ray_tracing_linear_swept_spheres)
+    ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV = new VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV);
+#endif
+#if defined(VK_NV_ray_tracing_motion_blur)
+    ann_VkAccelerationStructureGeometryMotionTrianglesDataNV = new VkAccelerationStructureGeometryMotionTrianglesDataNV_Ann(lib); mod.addAnnotation(ann_VkAccelerationStructureGeometryMotionTrianglesDataNV);
+#endif
+#if defined(VK_NV_ray_tracing_motion_blur)
+    ann_VkAccelerationStructureMotionInfoNV = new VkAccelerationStructureMotionInfoNV_Ann(lib); mod.addAnnotation(ann_VkAccelerationStructureMotionInfoNV);
+#endif
+#if defined(VK_NV_ray_tracing_motion_blur)
+    ann_VkSRTDataNV = new VkSRTDataNV_Ann(lib); mod.addAnnotation(ann_VkSRTDataNV);
+#endif
+#if defined(VK_NV_external_memory_rdma)
+    ann_VkMemoryGetRemoteAddressInfoNV = new VkMemoryGetRemoteAddressInfoNV_Ann(lib); mod.addAnnotation(ann_VkMemoryGetRemoteAddressInfoNV);
+#endif
+#if defined(VK_EXT_rgba10x6_formats)
+    ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT = new VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT);
+#endif
+#if defined(VK_VERSION_1_3)
+    ann_VkFormatProperties3 = new VkFormatProperties3_Ann(lib); mod.addAnnotation(ann_VkFormatProperties3);
+#endif
+#if defined(VK_KHR_extended_flags)
+    ann_VkFormatProperties4KHR = new VkFormatProperties4KHR_Ann(lib); mod.addAnnotation(ann_VkFormatProperties4KHR);
+#endif
+#if defined(VK_EXT_image_drm_format_modifier)
+    ann_VkDrmFormatModifierPropertiesList2EXT = new VkDrmFormatModifierPropertiesList2EXT_Ann(lib); mod.addAnnotation(ann_VkDrmFormatModifierPropertiesList2EXT);
+#endif
+#if defined(VK_EXT_image_drm_format_modifier)
+    ann_VkDrmFormatModifierProperties2EXT = new VkDrmFormatModifierProperties2EXT_Ann(lib); mod.addAnnotation(ann_VkDrmFormatModifierProperties2EXT);
+#endif
+#if defined(VK_VERSION_1_3)
+    ann_VkPipelineRenderingCreateInfo = new VkPipelineRenderingCreateInfo_Ann(lib); mod.addAnnotation(ann_VkPipelineRenderingCreateInfo);
+#endif
+#if defined(VK_VERSION_1_3)
+    ann_VkRenderingInfo = new VkRenderingInfo_Ann(lib); mod.addAnnotation(ann_VkRenderingInfo);
+#endif
+#if defined(VK_KHR_maintenance10)
+    ann_VkRenderingEndInfoKHR = new VkRenderingEndInfoKHR_Ann(lib); mod.addAnnotation(ann_VkRenderingEndInfoKHR);
+#endif
 #if defined(VK_VERSION_1_3)
     ann_VkRenderingAttachmentInfo = new VkRenderingAttachmentInfo_Ann(lib); mod.addAnnotation(ann_VkRenderingAttachmentInfo);
 #endif
@@ -921,6 +1033,12 @@ void das_vulkan_add_structs_18(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_ARM_data_graph_neural_accelerator_statistics)
     ann_VkDataGraphPipelineSessionNeuralStatisticsCreateInfoARM = new VkDataGraphPipelineSessionNeuralStatisticsCreateInfoARM_Ann(lib); mod.addAnnotation(ann_VkDataGraphPipelineSessionNeuralStatisticsCreateInfoARM);
 #endif
+#if defined(VK_ARM_tensor_controls)
+    ann_VkTensorExplicitTilingFormatPropertiesARM = new VkTensorExplicitTilingFormatPropertiesARM_Ann(lib); mod.addAnnotation(ann_VkTensorExplicitTilingFormatPropertiesARM);
+#endif
+#if defined(VK_ARM_tensor_controls)
+    ann_VkTensorRollingBackingCreateInfoARM = new VkTensorRollingBackingCreateInfoARM_Ann(lib); mod.addAnnotation(ann_VkTensorRollingBackingCreateInfoARM);
+#endif
 #if defined(VK_VALVE_descriptor_set_host_mapping)
     ann_VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE = new VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE);
 #endif
@@ -939,81 +1057,75 @@ void das_vulkan_add_structs_18(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_EXT_shader_module_identifier)
     ann_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT = new VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT);
 #endif
-#if defined(VK_EXT_shader_module_identifier)
-    ann_VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT = new VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT);
-#endif
-#if defined(VK_EXT_shader_module_identifier)
-    ann_VkPipelineShaderStageModuleIdentifierCreateInfoEXT = new VkPipelineShaderStageModuleIdentifierCreateInfoEXT_Ann(lib); mod.addAnnotation(ann_VkPipelineShaderStageModuleIdentifierCreateInfoEXT);
-#endif
-#if defined(VK_EXT_shader_module_identifier)
-    ann_VkShaderModuleIdentifierEXT = new VkShaderModuleIdentifierEXT_Ann(lib); mod.addAnnotation(ann_VkShaderModuleIdentifierEXT);
-#endif
-#if defined(VK_EXT_image_compression_control)
-    ann_VkImageCompressionControlEXT = new VkImageCompressionControlEXT_Ann(lib); mod.addAnnotation(ann_VkImageCompressionControlEXT);
-#endif
-#if defined(VK_EXT_image_compression_control)
-    ann_VkPhysicalDeviceImageCompressionControlFeaturesEXT = new VkPhysicalDeviceImageCompressionControlFeaturesEXT_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceImageCompressionControlFeaturesEXT);
-#endif
-#if defined(VK_EXT_image_compression_control)
-    ann_VkImageCompressionPropertiesEXT = new VkImageCompressionPropertiesEXT_Ann(lib); mod.addAnnotation(ann_VkImageCompressionPropertiesEXT);
-#endif
-#if defined(VK_EXT_image_compression_control_swapchain)
-    ann_VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT = new VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT);
-#endif
-#if defined(VK_VERSION_1_4)
-    ann_VkImageSubresource2 = new VkImageSubresource2_Ann(lib); mod.addAnnotation(ann_VkImageSubresource2);
-#endif
-#if defined(VK_VERSION_1_4)
-    ann_VkSubresourceLayout2 = new VkSubresourceLayout2_Ann(lib); mod.addAnnotation(ann_VkSubresourceLayout2);
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkRenderPassCreationControlEXT = new VkRenderPassCreationControlEXT_Ann(lib); mod.addAnnotation(ann_VkRenderPassCreationControlEXT);
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkRenderPassCreationFeedbackInfoEXT = new VkRenderPassCreationFeedbackInfoEXT_Ann(lib); mod.addAnnotation(ann_VkRenderPassCreationFeedbackInfoEXT);
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkRenderPassCreationFeedbackCreateInfoEXT = new VkRenderPassCreationFeedbackCreateInfoEXT_Ann(lib); mod.addAnnotation(ann_VkRenderPassCreationFeedbackCreateInfoEXT);
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkRenderPassSubpassFeedbackInfoEXT = new VkRenderPassSubpassFeedbackInfoEXT_Ann(lib); mod.addAnnotation(ann_VkRenderPassSubpassFeedbackInfoEXT);
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkRenderPassSubpassFeedbackCreateInfoEXT = new VkRenderPassSubpassFeedbackCreateInfoEXT_Ann(lib); mod.addAnnotation(ann_VkRenderPassSubpassFeedbackCreateInfoEXT);
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT = new VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT);
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapBuildInfoEXT = new VkMicromapBuildInfoEXT_Ann(lib); mod.addAnnotation(ann_VkMicromapBuildInfoEXT);
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapCreateInfoEXT = new VkMicromapCreateInfoEXT_Ann(lib); mod.addAnnotation(ann_VkMicromapCreateInfoEXT);
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapVersionInfoEXT = new VkMicromapVersionInfoEXT_Ann(lib); mod.addAnnotation(ann_VkMicromapVersionInfoEXT);
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkCopyMicromapInfoEXT = new VkCopyMicromapInfoEXT_Ann(lib); mod.addAnnotation(ann_VkCopyMicromapInfoEXT);
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkCopyMicromapToMemoryInfoEXT = new VkCopyMicromapToMemoryInfoEXT_Ann(lib); mod.addAnnotation(ann_VkCopyMicromapToMemoryInfoEXT);
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkCopyMemoryToMicromapInfoEXT = new VkCopyMemoryToMicromapInfoEXT_Ann(lib); mod.addAnnotation(ann_VkCopyMemoryToMicromapInfoEXT);
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapBuildSizesInfoEXT = new VkMicromapBuildSizesInfoEXT_Ann(lib); mod.addAnnotation(ann_VkMicromapBuildSizesInfoEXT);
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapUsageEXT = new VkMicromapUsageEXT_Ann(lib); mod.addAnnotation(ann_VkMicromapUsageEXT);
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapTriangleEXT = new VkMicromapTriangleEXT_Ann(lib); mod.addAnnotation(ann_VkMicromapTriangleEXT);
-#endif
 }
 
 void das_vulkan_fill_structs_18(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_EXT_descriptor_buffer)
+    ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT->mlib = &lib; ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT->init(); ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT->mlib = nullptr;
+#endif
+#if defined(VK_VERSION_1_3)
+    ann_VkPhysicalDeviceShaderIntegerDotProductFeatures->mlib = &lib; ann_VkPhysicalDeviceShaderIntegerDotProductFeatures->init(); ann_VkPhysicalDeviceShaderIntegerDotProductFeatures->mlib = nullptr;
+#endif
+#if defined(VK_VERSION_1_3)
+    ann_VkPhysicalDeviceShaderIntegerDotProductProperties->mlib = &lib; ann_VkPhysicalDeviceShaderIntegerDotProductProperties->init(); ann_VkPhysicalDeviceShaderIntegerDotProductProperties->mlib = nullptr;
+#endif
+#if defined(VK_EXT_physical_device_drm)
+    ann_VkPhysicalDeviceDrmPropertiesEXT->mlib = &lib; ann_VkPhysicalDeviceDrmPropertiesEXT->init(); ann_VkPhysicalDeviceDrmPropertiesEXT->mlib = nullptr;
+#endif
+#if defined(VK_KHR_fragment_shader_barycentric)
+    ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR->mlib = &lib; ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR->init(); ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_fragment_shader_barycentric)
+    ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR->mlib = &lib; ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR->init(); ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_shader_fma)
+    ann_VkPhysicalDeviceShaderFmaFeaturesKHR->mlib = &lib; ann_VkPhysicalDeviceShaderFmaFeaturesKHR->init(); ann_VkPhysicalDeviceShaderFmaFeaturesKHR->mlib = nullptr;
+#endif
+#if defined(VK_NV_ray_tracing_motion_blur)
+    ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV->mlib = &lib; ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV->init(); ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV->mlib = nullptr;
+#endif
+#if defined(VK_NV_ray_tracing_validation)
+    ann_VkPhysicalDeviceRayTracingValidationFeaturesNV->mlib = &lib; ann_VkPhysicalDeviceRayTracingValidationFeaturesNV->init(); ann_VkPhysicalDeviceRayTracingValidationFeaturesNV->mlib = nullptr;
+#endif
+#if defined(VK_NV_ray_tracing_linear_swept_spheres)
+    ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV->mlib = &lib; ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV->init(); ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV->mlib = nullptr;
+#endif
+#if defined(VK_NV_ray_tracing_motion_blur)
+    ann_VkAccelerationStructureGeometryMotionTrianglesDataNV->mlib = &lib; ann_VkAccelerationStructureGeometryMotionTrianglesDataNV->init(); ann_VkAccelerationStructureGeometryMotionTrianglesDataNV->mlib = nullptr;
+#endif
+#if defined(VK_NV_ray_tracing_motion_blur)
+    ann_VkAccelerationStructureMotionInfoNV->mlib = &lib; ann_VkAccelerationStructureMotionInfoNV->init(); ann_VkAccelerationStructureMotionInfoNV->mlib = nullptr;
+#endif
+#if defined(VK_NV_ray_tracing_motion_blur)
+    ann_VkSRTDataNV->mlib = &lib; ann_VkSRTDataNV->init(); ann_VkSRTDataNV->mlib = nullptr;
+#endif
+#if defined(VK_NV_external_memory_rdma)
+    ann_VkMemoryGetRemoteAddressInfoNV->mlib = &lib; ann_VkMemoryGetRemoteAddressInfoNV->init(); ann_VkMemoryGetRemoteAddressInfoNV->mlib = nullptr;
+#endif
+#if defined(VK_EXT_rgba10x6_formats)
+    ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT->mlib = &lib; ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT->init(); ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT->mlib = nullptr;
+#endif
+#if defined(VK_VERSION_1_3)
+    ann_VkFormatProperties3->mlib = &lib; ann_VkFormatProperties3->init(); ann_VkFormatProperties3->mlib = nullptr;
+#endif
+#if defined(VK_KHR_extended_flags)
+    ann_VkFormatProperties4KHR->mlib = &lib; ann_VkFormatProperties4KHR->init(); ann_VkFormatProperties4KHR->mlib = nullptr;
+#endif
+#if defined(VK_EXT_image_drm_format_modifier)
+    ann_VkDrmFormatModifierPropertiesList2EXT->mlib = &lib; ann_VkDrmFormatModifierPropertiesList2EXT->init(); ann_VkDrmFormatModifierPropertiesList2EXT->mlib = nullptr;
+#endif
+#if defined(VK_EXT_image_drm_format_modifier)
+    ann_VkDrmFormatModifierProperties2EXT->mlib = &lib; ann_VkDrmFormatModifierProperties2EXT->init(); ann_VkDrmFormatModifierProperties2EXT->mlib = nullptr;
+#endif
+#if defined(VK_VERSION_1_3)
+    ann_VkPipelineRenderingCreateInfo->mlib = &lib; ann_VkPipelineRenderingCreateInfo->init(); ann_VkPipelineRenderingCreateInfo->mlib = nullptr;
+#endif
+#if defined(VK_VERSION_1_3)
+    ann_VkRenderingInfo->mlib = &lib; ann_VkRenderingInfo->init(); ann_VkRenderingInfo->mlib = nullptr;
+#endif
+#if defined(VK_KHR_maintenance10)
+    ann_VkRenderingEndInfoKHR->mlib = &lib; ann_VkRenderingEndInfoKHR->init(); ann_VkRenderingEndInfoKHR->mlib = nullptr;
+#endif
 #if defined(VK_VERSION_1_3)
     ann_VkRenderingAttachmentInfo->mlib = &lib; ann_VkRenderingAttachmentInfo->init(); ann_VkRenderingAttachmentInfo->mlib = nullptr;
 #endif
@@ -1074,6 +1186,12 @@ void das_vulkan_fill_structs_18(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_ARM_data_graph_neural_accelerator_statistics)
     ann_VkDataGraphPipelineSessionNeuralStatisticsCreateInfoARM->mlib = &lib; ann_VkDataGraphPipelineSessionNeuralStatisticsCreateInfoARM->init(); ann_VkDataGraphPipelineSessionNeuralStatisticsCreateInfoARM->mlib = nullptr;
 #endif
+#if defined(VK_ARM_tensor_controls)
+    ann_VkTensorExplicitTilingFormatPropertiesARM->mlib = &lib; ann_VkTensorExplicitTilingFormatPropertiesARM->init(); ann_VkTensorExplicitTilingFormatPropertiesARM->mlib = nullptr;
+#endif
+#if defined(VK_ARM_tensor_controls)
+    ann_VkTensorRollingBackingCreateInfoARM->mlib = &lib; ann_VkTensorRollingBackingCreateInfoARM->init(); ann_VkTensorRollingBackingCreateInfoARM->mlib = nullptr;
+#endif
 #if defined(VK_VALVE_descriptor_set_host_mapping)
     ann_VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE->mlib = &lib; ann_VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE->init(); ann_VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE->mlib = nullptr;
 #endif
@@ -1091,78 +1209,6 @@ void das_vulkan_fill_structs_18(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_EXT_shader_module_identifier)
     ann_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT->mlib = &lib; ann_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT->init(); ann_VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_shader_module_identifier)
-    ann_VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT->mlib = &lib; ann_VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT->init(); ann_VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_shader_module_identifier)
-    ann_VkPipelineShaderStageModuleIdentifierCreateInfoEXT->mlib = &lib; ann_VkPipelineShaderStageModuleIdentifierCreateInfoEXT->init(); ann_VkPipelineShaderStageModuleIdentifierCreateInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_shader_module_identifier)
-    ann_VkShaderModuleIdentifierEXT->mlib = &lib; ann_VkShaderModuleIdentifierEXT->init(); ann_VkShaderModuleIdentifierEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_image_compression_control)
-    ann_VkImageCompressionControlEXT->mlib = &lib; ann_VkImageCompressionControlEXT->init(); ann_VkImageCompressionControlEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_image_compression_control)
-    ann_VkPhysicalDeviceImageCompressionControlFeaturesEXT->mlib = &lib; ann_VkPhysicalDeviceImageCompressionControlFeaturesEXT->init(); ann_VkPhysicalDeviceImageCompressionControlFeaturesEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_image_compression_control)
-    ann_VkImageCompressionPropertiesEXT->mlib = &lib; ann_VkImageCompressionPropertiesEXT->init(); ann_VkImageCompressionPropertiesEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_image_compression_control_swapchain)
-    ann_VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT->mlib = &lib; ann_VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT->init(); ann_VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_4)
-    ann_VkImageSubresource2->mlib = &lib; ann_VkImageSubresource2->init(); ann_VkImageSubresource2->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_4)
-    ann_VkSubresourceLayout2->mlib = &lib; ann_VkSubresourceLayout2->init(); ann_VkSubresourceLayout2->mlib = nullptr;
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkRenderPassCreationControlEXT->mlib = &lib; ann_VkRenderPassCreationControlEXT->init(); ann_VkRenderPassCreationControlEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkRenderPassCreationFeedbackInfoEXT->mlib = &lib; ann_VkRenderPassCreationFeedbackInfoEXT->init(); ann_VkRenderPassCreationFeedbackInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkRenderPassCreationFeedbackCreateInfoEXT->mlib = &lib; ann_VkRenderPassCreationFeedbackCreateInfoEXT->init(); ann_VkRenderPassCreationFeedbackCreateInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkRenderPassSubpassFeedbackInfoEXT->mlib = &lib; ann_VkRenderPassSubpassFeedbackInfoEXT->init(); ann_VkRenderPassSubpassFeedbackInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkRenderPassSubpassFeedbackCreateInfoEXT->mlib = &lib; ann_VkRenderPassSubpassFeedbackCreateInfoEXT->init(); ann_VkRenderPassSubpassFeedbackCreateInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_subpass_merge_feedback)
-    ann_VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT->mlib = &lib; ann_VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT->init(); ann_VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapBuildInfoEXT->mlib = &lib; ann_VkMicromapBuildInfoEXT->init(); ann_VkMicromapBuildInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapCreateInfoEXT->mlib = &lib; ann_VkMicromapCreateInfoEXT->init(); ann_VkMicromapCreateInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapVersionInfoEXT->mlib = &lib; ann_VkMicromapVersionInfoEXT->init(); ann_VkMicromapVersionInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkCopyMicromapInfoEXT->mlib = &lib; ann_VkCopyMicromapInfoEXT->init(); ann_VkCopyMicromapInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkCopyMicromapToMemoryInfoEXT->mlib = &lib; ann_VkCopyMicromapToMemoryInfoEXT->init(); ann_VkCopyMicromapToMemoryInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkCopyMemoryToMicromapInfoEXT->mlib = &lib; ann_VkCopyMemoryToMicromapInfoEXT->init(); ann_VkCopyMemoryToMicromapInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapBuildSizesInfoEXT->mlib = &lib; ann_VkMicromapBuildSizesInfoEXT->init(); ann_VkMicromapBuildSizesInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapUsageEXT->mlib = &lib; ann_VkMicromapUsageEXT->init(); ann_VkMicromapUsageEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_opacity_micromap)
-    ann_VkMicromapTriangleEXT->mlib = &lib; ann_VkMicromapTriangleEXT->init(); ann_VkMicromapTriangleEXT->mlib = nullptr;
 #endif
 }
 

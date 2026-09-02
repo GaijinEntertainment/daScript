@@ -4,6 +4,37 @@
 
 namespace das {
 
+#if defined(VK_NV_device_generated_commands_compute)
+struct VkPipelineIndirectDeviceAddressInfoNV_Ann : ManagedStructureAnnotation<VkPipelineIndirectDeviceAddressInfoNV> {
+    VkPipelineIndirectDeviceAddressInfoNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPipelineIndirectDeviceAddressInfoNV", ml, "VkPipelineIndirectDeviceAddressInfoNV") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPipelineIndirectDeviceAddressInfoNV_Ann * ann_VkPipelineIndirectDeviceAddressInfoNV = nullptr;
+void VkPipelineIndirectDeviceAddressInfoNV_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPipelineIndirectDeviceAddressInfoNV, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(pipelineBindPoint)>("pipelineBindPoint", "pipelineBindPoint");
+    addField<DAS_BIND_MANAGED_FIELD(pipeline)>("pipeline", "pipeline");
+}
+#endif
+
+#if defined(VK_NV_device_generated_commands_compute)
+struct VkBindPipelineIndirectCommandNV_Ann : ManagedStructureAnnotation<VkBindPipelineIndirectCommandNV> {
+    VkBindPipelineIndirectCommandNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkBindPipelineIndirectCommandNV", ml, "VkBindPipelineIndirectCommandNV") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkBindPipelineIndirectCommandNV_Ann * ann_VkBindPipelineIndirectCommandNV = nullptr;
+void VkBindPipelineIndirectCommandNV_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(pipelineAddress)>("pipelineAddress", "pipelineAddress");
+}
+#endif
+
 #if defined(VK_VERSION_1_1)
 struct VkPhysicalDeviceFeatures2_Ann : ManagedStructureAnnotation<VkPhysicalDeviceFeatures2> {
     VkPhysicalDeviceFeatures2_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceFeatures2", ml, "VkPhysicalDeviceFeatures2") {}
@@ -824,45 +855,13 @@ void VkExportFenceCreateInfo_Ann::init() {
 }
 #endif
 
-#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
-struct VkImportFenceWin32HandleInfoKHR_Ann : ManagedStructureAnnotation<VkImportFenceWin32HandleInfoKHR> {
-    VkImportFenceWin32HandleInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImportFenceWin32HandleInfoKHR", ml, "VkImportFenceWin32HandleInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkImportFenceWin32HandleInfoKHR_Ann * ann_VkImportFenceWin32HandleInfoKHR = nullptr;
-void VkImportFenceWin32HandleInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkImportFenceWin32HandleInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(fence)>("fence", "fence");
-    addFieldEx("flags", "flags", offsetof(VkImportFenceWin32HandleInfoKHR, flags), makeVkFlags_VkFenceImportFlags());
-    addField<DAS_BIND_MANAGED_FIELD(handleType)>("handleType", "handleType");
-    addFieldEx("handle", "handle", offsetof(VkImportFenceWin32HandleInfoKHR, handle), makeType<void *>(*mlib));
-    addFieldEx("name", "name", offsetof(VkImportFenceWin32HandleInfoKHR, name), makeType<void *>(*mlib));
-}
-#endif
-
-#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
-struct VkExportFenceWin32HandleInfoKHR_Ann : ManagedStructureAnnotation<VkExportFenceWin32HandleInfoKHR> {
-    VkExportFenceWin32HandleInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkExportFenceWin32HandleInfoKHR", ml, "VkExportFenceWin32HandleInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkExportFenceWin32HandleInfoKHR_Ann * ann_VkExportFenceWin32HandleInfoKHR = nullptr;
-void VkExportFenceWin32HandleInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkExportFenceWin32HandleInfoKHR, pNext), makeType<void *>(*mlib));
-    addFieldEx("pAttributes", "pAttributes", offsetof(VkExportFenceWin32HandleInfoKHR, pAttributes), makeType<void *>(*mlib));
-    addFieldEx("dwAccess", "dwAccess", offsetof(VkExportFenceWin32HandleInfoKHR, dwAccess), makeType<uint32_t>(*mlib));
-    addFieldEx("name", "name", offsetof(VkExportFenceWin32HandleInfoKHR, name), makeType<void *>(*mlib));
-}
-#endif
-
 void das_vulkan_add_structs_4(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_NV_device_generated_commands_compute)
+    ann_VkPipelineIndirectDeviceAddressInfoNV = new VkPipelineIndirectDeviceAddressInfoNV_Ann(lib); mod.addAnnotation(ann_VkPipelineIndirectDeviceAddressInfoNV);
+#endif
+#if defined(VK_NV_device_generated_commands_compute)
+    ann_VkBindPipelineIndirectCommandNV = new VkBindPipelineIndirectCommandNV_Ann(lib); mod.addAnnotation(ann_VkBindPipelineIndirectCommandNV);
+#endif
 #if defined(VK_VERSION_1_1)
     ann_VkPhysicalDeviceFeatures2 = new VkPhysicalDeviceFeatures2_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceFeatures2);
 #endif
@@ -1007,15 +1006,15 @@ void das_vulkan_add_structs_4(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_VERSION_1_1)
     ann_VkExportFenceCreateInfo = new VkExportFenceCreateInfo_Ann(lib); mod.addAnnotation(ann_VkExportFenceCreateInfo);
 #endif
-#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
-    ann_VkImportFenceWin32HandleInfoKHR = new VkImportFenceWin32HandleInfoKHR_Ann(lib); mod.addAnnotation(ann_VkImportFenceWin32HandleInfoKHR);
-#endif
-#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
-    ann_VkExportFenceWin32HandleInfoKHR = new VkExportFenceWin32HandleInfoKHR_Ann(lib); mod.addAnnotation(ann_VkExportFenceWin32HandleInfoKHR);
-#endif
 }
 
 void das_vulkan_fill_structs_4(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_NV_device_generated_commands_compute)
+    ann_VkPipelineIndirectDeviceAddressInfoNV->mlib = &lib; ann_VkPipelineIndirectDeviceAddressInfoNV->init(); ann_VkPipelineIndirectDeviceAddressInfoNV->mlib = nullptr;
+#endif
+#if defined(VK_NV_device_generated_commands_compute)
+    ann_VkBindPipelineIndirectCommandNV->mlib = &lib; ann_VkBindPipelineIndirectCommandNV->init(); ann_VkBindPipelineIndirectCommandNV->mlib = nullptr;
+#endif
 #if defined(VK_VERSION_1_1)
     ann_VkPhysicalDeviceFeatures2->mlib = &lib; ann_VkPhysicalDeviceFeatures2->init(); ann_VkPhysicalDeviceFeatures2->mlib = nullptr;
 #endif
@@ -1159,12 +1158,6 @@ void das_vulkan_fill_structs_4(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_VERSION_1_1)
     ann_VkExportFenceCreateInfo->mlib = &lib; ann_VkExportFenceCreateInfo->init(); ann_VkExportFenceCreateInfo->mlib = nullptr;
-#endif
-#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
-    ann_VkImportFenceWin32HandleInfoKHR->mlib = &lib; ann_VkImportFenceWin32HandleInfoKHR->init(); ann_VkImportFenceWin32HandleInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
-    ann_VkExportFenceWin32HandleInfoKHR->mlib = &lib; ann_VkExportFenceWin32HandleInfoKHR->init(); ann_VkExportFenceWin32HandleInfoKHR->mlib = nullptr;
 #endif
 }
 

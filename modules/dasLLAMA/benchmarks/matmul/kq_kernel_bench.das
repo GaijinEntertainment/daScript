@@ -74,10 +74,9 @@ let S16_NAME = "q8s16"   // q8 over binary16 group scales - the wscale_f16 rail 
 var g_s16 = false        // the current q8-family row is the s16 flavor
 
 def fmt_of_name(name : string) : KqFmt {
-    for (f in type<KqFmt>) {
-        if ("{f}" == name) {
-            return f
-        }
+    var f : KqFmt
+    if (kq_fmt_of_name(name, f)) {
+        return f
     }
     panic("unknown kq format '{name}'")
     return KqFmt.q8

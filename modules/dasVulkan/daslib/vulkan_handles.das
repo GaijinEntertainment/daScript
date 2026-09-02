@@ -717,6 +717,22 @@ def finalize(var self : ShaderInstrumentationARM) {
 def boost_value_to_vk(self : ShaderInstrumentationARM) : VkShaderInstrumentationARM { return unsafe(reinterpret<VkShaderInstrumentationARM>(self._vk)) }
 def vk_value_to_boost(v : VkShaderInstrumentationARM) : ShaderInstrumentationARM { var b : ShaderInstrumentationARM; b._vk = unsafe(reinterpret<uint64>(v)); return b }
 
+struct GpaSessionAMD {
+    _vk : uint64
+    _needs_delete : bool
+    _device : uint64
+}
+def finalize(var self : GpaSessionAMD) {
+    if (self._needs_delete) {
+        unsafe {
+            vkDestroyGpaSessionAMD(reinterpret<VkDevice>(self._device), reinterpret<VkGpaSessionAMD>(self._vk), null)
+        }
+    }
+    self._needs_delete = false
+}
+def boost_value_to_vk(self : GpaSessionAMD) : VkGpaSessionAMD { return unsafe(reinterpret<VkGpaSessionAMD>(self._vk)) }
+def vk_value_to_boost(v : VkGpaSessionAMD) : GpaSessionAMD { var b : GpaSessionAMD; b._vk = unsafe(reinterpret<uint64>(v)); return b }
+
 struct DisplayKHR {
     _vk : uint64
     _needs_delete : bool

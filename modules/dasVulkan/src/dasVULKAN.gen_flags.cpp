@@ -278,7 +278,7 @@ TypeDeclPtr makeVkFlags_VkImageViewCreateFlags() {
 TypeDeclPtr makeVkFlags_VkPipelineCreateFlags() {
     auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineCreateFlags";
-    ft->argNames = { "disable_optimization", "allow_derivatives", "derivative", "view_index_from_device_index", "dispatch_base", "defer_compile_nv", "capture_statistics_khr", "capture_internal_representations_khr", "fail_on_pipeline_compile_required", "early_return_on_failure", "link_time_optimization_ext", "library_khr", "ray_tracing_skip_triangles_khr", "ray_tracing_skip_aabbs_khr", "ray_tracing_no_null_any_hit_shaders_khr", "ray_tracing_no_null_closest_hit_shaders_khr", "ray_tracing_no_null_miss_shaders_khr", "ray_tracing_no_null_intersection_shaders_khr", "indirect_bindable_nv", "ray_tracing_shader_group_handle_capture_replay_khr", "ray_tracing_allow_motion_nv", "rendering_fragment_shading_rate_attachment_khr", "rendering_fragment_density_map_attachment_ext", "retain_link_time_optimization_info_ext", "ray_tracing_opacity_micromap_ext", "color_attachment_feedback_loop_ext", "depth_stencil_attachment_feedback_loop_ext", "no_protected_access", "ray_tracing_displacement_micromap_nv", "descriptor_buffer_ext", "protected_access_only" };
+    ft->argNames = { "disable_optimization", "allow_derivatives", "derivative", "view_index_from_device_index", "dispatch_base", "defer_compile_nv", "capture_statistics_khr", "capture_internal_representations_khr", "fail_on_pipeline_compile_required", "early_return_on_failure", "link_time_optimization_ext", "library_khr", "ray_tracing_skip_triangles_khr", "ray_tracing_skip_aabbs_khr", "ray_tracing_no_null_any_hit_shaders_khr", "ray_tracing_no_null_closest_hit_shaders_khr", "ray_tracing_no_null_miss_shaders_khr", "ray_tracing_no_null_intersection_shaders_khr", "indirect_bindable_nv", "ray_tracing_shader_group_handle_capture_replay_khr", "ray_tracing_allow_motion_nv", "rendering_fragment_shading_rate_attachment_khr", "rendering_fragment_density_map_attachment_ext", "retain_link_time_optimization_info_ext", "ray_tracing_opacity_micromap_khr", "color_attachment_feedback_loop_ext", "depth_stencil_attachment_feedback_loop_ext", "no_protected_access", "ray_tracing_displacement_micromap_nv", "descriptor_buffer_ext", "protected_access_only" };
     return ft;
 }
 #endif
@@ -563,7 +563,7 @@ TypeDeclPtr makeVkFlags_VkGeometryFlagsKHR() {
 TypeDeclPtr makeVkFlags_VkGeometryInstanceFlagsKHR() {
     auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkGeometryInstanceFlagsKHR";
-    ft->argNames = { "triangle_facing_cull_disable_khr", "triangle_flip_facing_khr", "force_opaque_khr", "force_no_opaque_khr", "force_opacity_micromap_2_state_ext", "disable_opacity_micromaps_ext" };
+    ft->argNames = { "triangle_facing_cull_disable_khr", "triangle_flip_facing_khr", "force_opaque_khr", "force_no_opaque_khr", "force_opacity_micromap_2_state_khr", "disable_opacity_micromaps_khr" };
     return ft;
 }
 #endif
@@ -599,7 +599,7 @@ TypeDeclPtr makeVkFlags_VkClusterAccelerationStructureAddressResolutionFlagsNV()
 TypeDeclPtr makeVkFlags_VkBuildAccelerationStructureFlagsKHR() {
     auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkBuildAccelerationStructureFlagsKHR";
-    ft->argNames = { "allow_update_khr", "allow_compaction_khr", "prefer_fast_trace_khr", "prefer_fast_build_khr", "low_memory_khr", "motion_nv", "allow_opacity_micromap_update_ext", "allow_disable_opacity_micromaps_ext", "allow_opacity_micromap_data_update_ext", "allow_displacement_micromap_update_nv", "_b10", "allow_data_access_khr", "allow_cluster_opacity_micromaps_nv" };
+    ft->argNames = { "allow_update_khr", "allow_compaction_khr", "prefer_fast_trace_khr", "prefer_fast_build_khr", "low_memory_khr", "motion_nv", "allow_opacity_micromap_update_khr", "allow_disable_opacity_micromaps_khr", "allow_opacity_micromap_data_update_ext", "allow_displacement_micromap_update_nv", "micromap_lossy_khr", "allow_data_access_khr", "allow_cluster_opacity_micromaps_nv" };
     return ft;
 }
 #endif
@@ -727,7 +727,15 @@ TypeDeclPtr makeVkFlags_VkAccelerationStructureMotionInstanceFlagsNV() {
 TypeDeclPtr makeVkFlags_VkFormatFeatureFlags2() {
     auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkFormatFeatureFlags2";
-    ft->argNames = { "sampled_image", "storage_image", "storage_image_atomic", "uniform_texel_buffer", "storage_texel_buffer", "storage_texel_buffer_atomic", "vertex_buffer", "color_attachment", "color_attachment_blend", "depth_stencil_attachment", "blit_src", "blit_dst", "sampled_image_filter_linear", "sampled_image_filter_cubic", "transfer_src", "transfer_dst", "sampled_image_filter_minmax", "midpoint_chroma_samples", "sampled_image_ycbcr_conversion_linear_filter", "sampled_image_ycbcr_conversion_separate_reconstruction_filter", "sampled_image_ycbcr_conversion_chroma_reconstruction_explicit", "sampled_image_ycbcr_conversion_chroma_reconstruction_explicit_forceable", "disjoint", "cosited_chroma_samples", "fragment_density_map_ext", "video_decode_output_khr", "video_decode_dpb_khr", "video_encode_input_khr", "video_encode_dpb_khr", "acceleration_structure_vertex_buffer_khr", "fragment_shading_rate_attachment_khr", "storage_read_without_format", "storage_write_without_format", "sampled_image_depth_comparison", "weight_image_qcom", "weight_sampled_image_qcom", "block_matching_qcom", "box_filter_sampled_qcom", "linear_color_attachment_nv", "tensor_shader_arm", "optical_flow_image_nv", "optical_flow_vector_nv", "optical_flow_cost_nv", "tensor_image_aliasing_arm", "_b44", "_b45", "host_image_transfer", "_b47", "tensor_data_graph_arm", "video_encode_quantization_delta_map_khr", "video_encode_emphasis_map_khr", "acceleration_structure_radius_buffer_nv", "depth_copy_on_compute_queue_khr", "depth_copy_on_transfer_queue_khr", "stencil_copy_on_compute_queue_khr", "stencil_copy_on_transfer_queue_khr", "data_graph_optical_flow_image_arm", "data_graph_optical_flow_vector_arm", "data_graph_optical_flow_cost_arm", "copy_image_indirect_dst_khr" };
+    ft->argNames = { "sampled_image", "storage_image", "storage_image_atomic", "uniform_texel_buffer", "storage_texel_buffer", "storage_texel_buffer_atomic", "vertex_buffer", "color_attachment", "color_attachment_blend", "depth_stencil_attachment", "blit_src", "blit_dst", "sampled_image_filter_linear", "sampled_image_filter_cubic", "transfer_src", "transfer_dst", "sampled_image_filter_minmax", "midpoint_chroma_samples", "sampled_image_ycbcr_conversion_linear_filter", "sampled_image_ycbcr_conversion_separate_reconstruction_filter", "sampled_image_ycbcr_conversion_chroma_reconstruction_explicit", "sampled_image_ycbcr_conversion_chroma_reconstruction_explicit_forceable", "disjoint", "cosited_chroma_samples", "fragment_density_map_ext", "video_decode_output_khr", "video_decode_dpb_khr", "video_encode_input_khr", "video_encode_dpb_khr", "acceleration_structure_vertex_buffer_khr", "fragment_shading_rate_attachment_khr", "storage_read_without_format", "storage_write_without_format", "sampled_image_depth_comparison", "weight_image_qcom", "weight_sampled_image_qcom", "block_matching_qcom", "box_filter_sampled_qcom", "linear_color_attachment_nv", "tensor_shader_arm", "optical_flow_image_nv", "optical_flow_vector_nv", "optical_flow_cost_nv", "tensor_image_aliasing_arm", "block_matching_sxd_qcom", "sampled_image_filter_linear_2d_img", "host_image_transfer", "_b47", "tensor_data_graph_arm", "video_encode_quantization_delta_map_khr", "video_encode_emphasis_map_khr", "acceleration_structure_radius_buffer_nv", "depth_copy_on_compute_queue_khr", "depth_copy_on_transfer_queue_khr", "stencil_copy_on_compute_queue_khr", "stencil_copy_on_transfer_queue_khr", "data_graph_optical_flow_image_arm", "data_graph_optical_flow_vector_arm", "data_graph_optical_flow_cost_arm", "copy_image_indirect_dst_khr" };
+    return ft;
+}
+#endif
+
+#if defined(VK_KHR_extended_flags)
+TypeDeclPtr makeVkFlags_VkFormatFeatureFlags4KHR() {
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
+    ft->alias = "VkFormatFeatureFlags4KHR";
     return ft;
 }
 #endif
@@ -807,7 +815,7 @@ TypeDeclPtr makeVkFlags_VkDirectDriverLoadingFlagsLUNARG() {
 TypeDeclPtr makeVkFlags_VkPipelineCreateFlags2() {
     auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkPipelineCreateFlags2";
-    ft->argNames = { "disable_optimization", "allow_derivatives", "derivative", "view_index_from_device_index", "dispatch_base", "defer_compile_nv", "capture_statistics_khr", "capture_internal_representations_khr", "fail_on_pipeline_compile_required", "early_return_on_failure", "link_time_optimization_ext", "library_khr", "ray_tracing_skip_triangles_khr", "ray_tracing_skip_aabbs_khr", "ray_tracing_no_null_any_hit_shaders_khr", "ray_tracing_no_null_closest_hit_shaders_khr", "ray_tracing_no_null_miss_shaders_khr", "ray_tracing_no_null_intersection_shaders_khr", "indirect_bindable_nv", "ray_tracing_shader_group_handle_capture_replay_khr", "ray_tracing_allow_motion_nv", "rendering_fragment_shading_rate_attachment_khr", "rendering_fragment_density_map_attachment_ext", "retain_link_time_optimization_info_ext", "ray_tracing_opacity_micromap_ext", "color_attachment_feedback_loop_ext", "depth_stencil_attachment_feedback_loop_ext", "no_protected_access", "ray_tracing_displacement_micromap_nv", "descriptor_buffer_ext", "protected_access_only", "capture_data_khr", "execution_graph_amdx", "ray_tracing_allow_spheres_and_linear_swept_spheres_nv", "enable_legacy_dithering_ext", "_b35", "descriptor_heap_ext", "disallow_opacity_micromap_arm", "indirect_bindable_ext", "instrument_shaders_arm", "per_layer_fragment_density_valve", "_b41", "_b42", "_64_indexing_ext" };
+    ft->argNames = { "disable_optimization", "allow_derivatives", "derivative", "view_index_from_device_index", "dispatch_base", "defer_compile_nv", "capture_statistics_khr", "capture_internal_representations_khr", "fail_on_pipeline_compile_required", "early_return_on_failure", "link_time_optimization_ext", "library_khr", "ray_tracing_skip_triangles_khr", "ray_tracing_skip_aabbs_khr", "ray_tracing_no_null_any_hit_shaders_khr", "ray_tracing_no_null_closest_hit_shaders_khr", "ray_tracing_no_null_miss_shaders_khr", "ray_tracing_no_null_intersection_shaders_khr", "indirect_bindable_nv", "ray_tracing_shader_group_handle_capture_replay_khr", "ray_tracing_allow_motion_nv", "rendering_fragment_shading_rate_attachment_khr", "rendering_fragment_density_map_attachment_ext", "retain_link_time_optimization_info_ext", "ray_tracing_opacity_micromap_khr", "color_attachment_feedback_loop_ext", "depth_stencil_attachment_feedback_loop_ext", "no_protected_access", "ray_tracing_displacement_micromap_nv", "descriptor_buffer_ext", "protected_access_only", "capture_data_khr", "execution_graph_amdx", "ray_tracing_allow_spheres_and_linear_swept_spheres_nv", "enable_legacy_dithering_ext", "_b35", "descriptor_heap_ext", "disallow_opacity_micromap_arm", "indirect_bindable_ext", "instrument_shaders_arm", "per_layer_fragment_density_valve", "opacity_micromap_disallow_mixed_special_index_khr", "_b42", "_64_indexing_ext" };
     return ft;
 }
 #endif
@@ -817,6 +825,24 @@ TypeDeclPtr makeVkFlags_VkBufferUsageFlags2() {
     auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkBufferUsageFlags2";
     ft->argNames = { "transfer_src", "transfer_dst", "uniform_texel_buffer", "storage_texel_buffer", "uniform_buffer", "storage_buffer", "index_buffer", "vertex_buffer", "indirect_buffer", "conditional_rendering_ext", "shader_binding_table_khr", "transform_feedback_buffer_ext", "transform_feedback_counter_buffer_ext", "video_decode_src_khr", "video_decode_dst_khr", "video_encode_dst_khr", "video_encode_src_khr", "shader_device_address", "_b18", "acceleration_structure_build_input_read_only_khr", "acceleration_structure_storage_khr", "sampler_descriptor_buffer_ext", "resource_descriptor_buffer_ext", "micromap_build_input_read_only_ext", "micromap_storage_ext", "execution_graph_scratch_amdx", "push_descriptors_descriptor_buffer_ext", "tile_memory_qcom", "descriptor_heap_ext", "data_graph_foreign_descriptor_arm", "_b30", "preprocess_buffer_ext", "memory_decompression_ext", "compressed_data_dgf1_amdx" };
+    return ft;
+}
+#endif
+
+#if defined(VK_KHR_extended_flags)
+TypeDeclPtr makeVkFlags_VkImageUsageFlags2KHR() {
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
+    ft->alias = "VkImageUsageFlags2KHR";
+    ft->argNames = { "transfer_src_khr", "transfer_dst_khr", "sampled_khr", "storage_khr", "color_attachment_khr", "depth_stencil_attachment_khr", "transient_attachment_khr", "input_attachment_khr", "fragment_shading_rate_attachment_khr", "fragment_density_map_ext", "video_decode_dst_khr", "video_decode_src_khr", "video_decode_dpb_khr", "video_encode_dst_khr", "video_encode_src_khr", "video_encode_dpb_khr", "_b16", "_b17", "invocation_mask_huawei", "attachment_feedback_loop_ext", "sample_weight_qcom", "sample_block_match_qcom", "host_transfer_khr", "tensor_aliasing_arm", "_b24", "video_encode_quantization_delta_map_khr", "video_encode_emphasis_map_khr", "tile_memory_qcom" };
+    return ft;
+}
+#endif
+
+#if defined(VK_KHR_extended_flags)
+TypeDeclPtr makeVkFlags_VkImageCreateFlags2KHR() {
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
+    ft->alias = "VkImageCreateFlags2KHR";
+    ft->argNames = { "sparse_binding_khr", "sparse_residency_khr", "sparse_aliased_khr", "mutable_format_khr", "cube_compatible_khr", "_2d_array_compatible_khr", "split_instance_bind_regions_khr", "block_texel_view_compatible_khr", "extended_usage_khr", "disjoint_khr", "alias_khr", "protected_khr", "sample_locations_compatible_depth_ext", "corner_sampled_nv", "subsampled_ext", "fragment_density_map_offset_ext", "descriptor_buffer_capture_replay_ext", "_2d_view_compatible_ext", "multisampled_render_to_single_sampled_ext", "_b19", "video_profile_independent_khr", "_b21", "alias_single_layer_descriptor_khr" };
     return ft;
 }
 #endif
@@ -910,6 +936,31 @@ TypeDeclPtr makeVkFlags_VkSpirvResourceTypeFlagsEXT() {
 }
 #endif
 
+#if defined(VK_AMD_gpa_interface)
+TypeDeclPtr makeVkFlags_VkGpaSqShaderStageFlagsAMD() {
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
+    ft->alias = "VkGpaSqShaderStageFlagsAMD";
+    ft->argNames = { "ps_amd", "vs_amd", "gs_amd", "es_amd", "hs_amd", "ls_amd", "cs_amd" };
+    return ft;
+}
+#endif
+
+#if defined(VK_AMD_gpa_interface)
+TypeDeclPtr makeVkFlags_VkGpaPerfBlockPropertiesFlagsAMD() {
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
+    ft->alias = "VkGpaPerfBlockPropertiesFlagsAMD";
+    return ft;
+}
+#endif
+
+#if defined(VK_AMD_gpa_interface)
+TypeDeclPtr makeVkFlags_VkPhysicalDeviceGpaPropertiesFlagsAMD() {
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
+    ft->alias = "VkPhysicalDeviceGpaPropertiesFlagsAMD";
+    return ft;
+}
+#endif
+
 #if defined(VK_KHR_device_address_commands)
 TypeDeclPtr makeVkFlags_VkAddressCommandFlagsKHR() {
     auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
@@ -950,7 +1001,7 @@ TypeDeclPtr makeVkFlags_VkSurfaceTransformFlagsKHR() {
 TypeDeclPtr makeVkFlags_VkSwapchainCreateFlagsKHR() {
     auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSwapchainCreateFlagsKHR";
-    ft->argNames = { "split_instance_bind_regions_khr", "protected_khr", "mutable_format_khr", "deferred_memory_allocation_khr", "_b4", "_b5", "present_id_2_khr", "present_wait_2_khr", "_b8", "present_timing_ext" };
+    ft->argNames = { "split_instance_bind_regions_khr", "protected_khr", "mutable_format_khr", "deferred_memory_allocation_khr", "_b4", "_b5", "present_id_2_khr", "present_wait_2_khr", "multisampled_render_to_single_sampled_ext", "present_timing_ext" };
     return ft;
 }
 #endif
@@ -1470,7 +1521,7 @@ TypeDeclPtr makeVkFlags_VkPresentGravityFlagsKHR() {
 TypeDeclPtr makeVkFlags_VkShaderCreateFlagsEXT() {
     auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkShaderCreateFlagsEXT";
-    ft->argNames = { "link_stage_ext", "allow_varying_subgroup_size_ext", "require_full_subgroups_ext", "no_task_shader_ext", "dispatch_base_ext", "fragment_shading_rate_attachment_ext", "fragment_density_map_attachment_ext", "indirect_bindable_ext", "_b8", "_b9", "descriptor_heap_ext", "instrument_shader_arm", "_b12", "_b13", "_b14", "_64_indexing_ext", "_b16", "_b17", "independent_sets_khr" };
+    ft->argNames = { "link_stage_ext", "allow_varying_subgroup_size_ext", "require_full_subgroups_ext", "no_task_shader_ext", "dispatch_base_ext", "fragment_shading_rate_attachment_ext", "fragment_density_map_attachment_ext", "indirect_bindable_ext", "_b8", "_b9", "descriptor_heap_ext", "instrument_shader_arm", "opacity_micromap_disallow_mixed_special_index_ext", "_b13", "_b14", "_64_indexing_ext", "_b16", "_b17", "independent_sets_khr" };
     return ft;
 }
 #endif
@@ -1717,7 +1768,16 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeCapabilityFlagsKHR() {
 TypeDeclPtr makeVkFlags_VkVideoEncodeFeedbackFlagsKHR() {
     auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeFeedbackFlagsKHR";
-    ft->argNames = { "bitstream_buffer_offset_khr", "bitstream_bytes_written_khr", "bitstream_has_overrides_khr" };
+    ft->argNames = { "bitstream_buffer_offset_khr", "bitstream_bytes_written_khr", "bitstream_has_overrides_khr", "average_quantization_khr", "min_quantization_khr", "max_quantization_khr", "intra_pixels_khr", "inter_pixels_khr", "skipped_pixels_khr", "picture_partition_count_khr" };
+    return ft;
+}
+#endif
+
+#if defined(VK_KHR_video_encode_feedback2)
+TypeDeclPtr makeVkFlags_VkVideoEncodePerPartitionFeedbackFlagsKHR() {
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
+    ft->alias = "VkVideoEncodePerPartitionFeedbackFlagsKHR";
+    ft->argNames = { "status_khr", "bitstream_buffer_offset_khr", "bitstream_bytes_written_khr" };
     return ft;
 }
 #endif
@@ -2154,6 +2214,9 @@ void das_vulkan_init_flags(Module & mod, ModuleLibrary & lib) {
     mod.addAlias(makeVkFlags_VkFormatFeatureFlags2());
     { auto td = makeVkFlags_VkFormatFeatureFlags2(); td->alias = "VkFormatFeatureFlags2KHR"; mod.addAlias(td); }
 #endif
+#if defined(VK_KHR_extended_flags)
+    mod.addAlias(makeVkFlags_VkFormatFeatureFlags4KHR());
+#endif
 #if defined(VK_VERSION_1_3)
     mod.addAlias(makeVkFlags_VkRenderingFlags());
     { auto td = makeVkFlags_VkRenderingFlags(); td->alias = "VkRenderingFlagsKHR"; mod.addAlias(td); }
@@ -2188,6 +2251,12 @@ void das_vulkan_init_flags(Module & mod, ModuleLibrary & lib) {
     mod.addAlias(makeVkFlags_VkBufferUsageFlags2());
     { auto td = makeVkFlags_VkBufferUsageFlags2(); td->alias = "VkBufferUsageFlags2KHR"; mod.addAlias(td); }
 #endif
+#if defined(VK_KHR_extended_flags)
+    mod.addAlias(makeVkFlags_VkImageUsageFlags2KHR());
+#endif
+#if defined(VK_KHR_extended_flags)
+    mod.addAlias(makeVkFlags_VkImageCreateFlags2KHR());
+#endif
 #if defined(VK_KHR_copy_memory_indirect)
     mod.addAlias(makeVkFlags_VkAddressCopyFlagsKHR());
 #endif
@@ -2218,6 +2287,15 @@ void das_vulkan_init_flags(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_EXT_descriptor_heap)
     mod.addAlias(makeVkFlags_VkSpirvResourceTypeFlagsEXT());
     addConstant<Bitfield>(mod, "VK_SPIRV_RESOURCE_TYPE_ALL_EXT", Bitfield(uint32_t(VK_SPIRV_RESOURCE_TYPE_ALL_EXT)));
+#endif
+#if defined(VK_AMD_gpa_interface)
+    mod.addAlias(makeVkFlags_VkGpaSqShaderStageFlagsAMD());
+#endif
+#if defined(VK_AMD_gpa_interface)
+    mod.addAlias(makeVkFlags_VkGpaPerfBlockPropertiesFlagsAMD());
+#endif
+#if defined(VK_AMD_gpa_interface)
+    mod.addAlias(makeVkFlags_VkPhysicalDeviceGpaPropertiesFlagsAMD());
 #endif
 #if defined(VK_KHR_device_address_commands)
     mod.addAlias(makeVkFlags_VkAddressCommandFlagsKHR());
@@ -2527,6 +2605,9 @@ void das_vulkan_init_flags(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_KHR_video_encode_queue)
     mod.addAlias(makeVkFlags_VkVideoEncodeFeedbackFlagsKHR());
+#endif
+#if defined(VK_KHR_video_encode_feedback2)
+    mod.addAlias(makeVkFlags_VkVideoEncodePerPartitionFeedbackFlagsKHR());
 #endif
 #if defined(VK_KHR_video_encode_queue)
     mod.addAlias(makeVkFlags_VkVideoEncodeRateControlFlagsKHR());

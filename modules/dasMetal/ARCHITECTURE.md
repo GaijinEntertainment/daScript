@@ -252,7 +252,9 @@ this document and the emitter know.
 threadgroup bank-conflict worst case: every row then starts in the same bank. Rows pad to 72
 halves, and a 32-deep tail row pads to 40, so consecutive rows walk the banks instead. The pad
 is the row stride the `matmul2d` tensor extent carries, so the emitter passes the stride
-explicitly rather than letting the extent default to the packed width.
+explicitly rather than letting the extent default to the packed width. A reduction width known
+only at run time reaches a Metal kernel the same way, as `dynamic_extent` on that tensor
+descriptor - this emitter's runtime-extent descriptor.
 
 **`bk` names the resident staging footprint, not the chunk depth.** `bk = 32` stages one
 32-deep chunk between barriers. `bk = 64` stages one 64-deep chunk and halves the barriers per

@@ -1044,3 +1044,63 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   --ref-no-affinity`, both walls out-of-process, direction-grade against the 08-04 row.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
+
+- 2026-09-02: llama.cpp's four-wide coopmat2 decode measured on the 5060 Ti. Box moved to
+  Vulkan SDK 1.4.357.0 (glslc knows `GL_NV_cooperative_matrix_decode_vector`) and NVIDIA driver
+  616.56 (advertises `VK_NV_cooperative_matrix_decode_vector`); llama.cpp 6c84c7d5d rebuilt
+  into `build-vulkan-357` beside the scalar `build-vulkan`. llama-bench `-p 512 -n 128 -ngl 99
+  -r 6`, medians of six, ten Llama-3.2-1B vehicles, scalar -> vector build:
+
+  | format | pp512 scalar | pp512 vector | ratio | tg128 scalar | tg128 vector | ratio |
+  |---|---|---|---|---|---|---|
+  | Q4_K_M | 19363 | 20309 | 1.049 | 349.1 | 354.2 | 1.014 |
+  | Q3_K_L | 17073 | 18883 | 1.106 | 329.0 | 332.7 | 1.011 |
+  | Q2_K | 17625 | 19684 | 1.117 | 395.5 | 400.7 | 1.013 |
+  | IQ4_XS | 17632 | 19515 | 1.107 | 332.2 | 331.4 | 0.997 |
+  | IQ4_NL | 18606 | 20488 | 1.101 | 346.2 | 344.8 | 0.996 |
+  | IQ3_M | 17361 | 19638 | 1.131 | 306.3 | 306.4 | 1.000 |
+  | IQ3_XXS | 17512 | 19488 | 1.113 | 363.6 | 355.4 | 0.978 |
+  | IQ2_XS | 18618 | 20011 | 1.075 | 327.5 | 329.4 | 1.006 |
+  | IQ2_XXS | 18489 | 20052 | 1.085 | 393.7 | 390.8 | 0.993 |
+  | Q8_0 | 20947 | 20237 | 0.966 | 249.7 | 249.9 | 1.001 |
+
+  Every quantized format's pp512 gains 5-13% (min..max bands do not overlap); tg128 is flat
+  (the mat-vec shaders never enter coopmat2); Q8_0 pp loses 3% (no decode callback to widen -
+  a codegen side effect of the rebuilt shader set, small and real). The reference our Vulkan
+  pp512 rows are held to is therefore 5-13% higher from this driver on; the 08-31 per-format
+  rows were taken against the scalar build. A three-rep first pass was unreadable (one rep in
+  three 30-50% off on half the cells); six reps and medians are the floor for this box.
+
+- 2026-09-02: the four-wide decode twin on OUR cm2 tiles (branch bbatkin/vulkan-sdk-357: the
+  emitter synthesizes the vector callback over each format's scalar decode; the class-pipeline
+  seat strips it where the device lacks the feature; DASLLAMA_VK_DECVEC=0 is the same-build A/B).
+  `harness/vk_gemm_probe.das k4|k6` on the 5060 Ti, driver 616.56, TFLOP/s twin off -> on:
+
+  | shape | k4 l | k4 m | k6 l | k6 m | kq tile (control) |
+  |---|---|---|---|---|---|
+  | gate 9728x2560x512 | 38.0 -> 40.8 | 28.7 -> 36.8 | 33.7 -> 38.5 | 25.4 -> 32.3 | 11.8 -> 12.1 |
+  | down 2560x9728x512 | 26.5 -> 31.2 | 24.3 -> 33.4 | 24.9 -> 28.1 | 22.7 -> 28.1 | 11.8 -> 11.7 |
+  | q/wo 4096x2560 (k6: kv 1024x2560) | 37.5 -> 45.0 | 27.8 -> 37.9 | 19.7 -> 22.1 | 25.9 -> 31.7 | 11.1 -> 11.7 |
+
+  The tile gains 7-37% with the synthesized twin, so no hand-laid body is owed for k4/k6. The
+  tile oracles stay bit-exact under both callbacks (test_vulkan_kernels 86/86; the stripped
+  blobs 8/8). End to end (`lcpp_bench --for-debug-purposes -p 512 -n 128 -r 10`, ten 1B vehicles,
+  DASLLAMA_VK_DECVEC 1 vs 0): Q4_K_M 14510 vs 13283 (+9%), IQ4_NL +5%, Q8_0 +4%, IQ3_M +3%,
+  IQ2_XS +3%, Q3_K/Q2_K/IQ4_XS/IQ3_XXS within the band, IQ2_XXS 11987 vs 13799 (-13%, wide
+  spread) - the e2e spread on this box is 3-11% of the mean per row, so only the tile rates
+  above are load-bearing; the grid formats' tile rates follow (the new `cm2:<fmt>` probe arm).
+  The grid formats and q40 through `cm2:<fmt>` (l-tile / m-tile, twin off -> on, gate | down):
+  iq2xs 34.5->45.3 / 30.3->37.8 | 27.9->32.2 / 26.3->33.2 (+15..31%); q40 41.4->46.3 / 39.8->41.1 |
+  35.1->35.7 / 37.0->38.6 (+2..12%); iq3xxs 28.8->29.5 / 21.0->21.6 | 21.0->20.6 / 18.0->18.6 (flat);
+  iq3s 30.2->28.9 / 22.8->21.8 | 22.6->21.2 / 20.4->19.0 (-4..9%); iq2s 31.8->30.9 / 24.5->23.6 |
+  24.0->21.3 / 21.0->19.8 (-1..11%); iq2xxs 34.9->30.0 / 26.6->22.0 | 25.4->21.2 / 22.6->19.6
+  (-13..17%). RULING (mine): the twin is the template's DECVEC axis, default on, overridden off for
+  iq3s / iq2s / iq2xxs; their hand-laid twins are followup_vulkan 36.
+  IN ONE PROCESS (the probe's both-arms run through `vkd_pipes_rebuild`, two rounds each, the three
+  opt-outs flipped on for the measurement; l-tile gate | down, twin on vs off): iq3s 29.3/30.3 vs
+  30.6 | 21.5 vs 22.7 (-1..5%); iq2s 31.0 vs 32.9/33.3 | 21.8 vs 24.0 (-6..9%); iq2xxs 30.5 vs
+  35.0 | 21.7 vs 25.5 (-13..15%); k4 41.4/40.8 vs 35.8/35.9 | 31.5 vs 27.1 (+15..16%). The
+  two-process reading and the one-process reading agree in sign and size on every row, so the
+  DECVEC overrides stand on the in-process instrument. The instrument's own first run caught a seat
+  defect: the strip mutated the class's emitted words in place, so a later rebuild with the twin on
+  served stripped words - the seat now strips a copy.

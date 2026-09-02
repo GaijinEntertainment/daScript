@@ -238,9 +238,9 @@ static VkResult WRAP_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR ( VkPhysi
 }
 #endif
 
-#if defined(VK_VERSION_1_4)
-static void WRAP_vkCmdBindDescriptorSets2 ( VkCommandBuffer commandBuffer, const VkBindDescriptorSetsInfo & pBindDescriptorSetsInfo ) {
-    ::vkCmdBindDescriptorSets2(commandBuffer, &pBindDescriptorSetsInfo);
+#if defined(VK_AMD_gpa_interface)
+static VkResult WRAP_vkCreateGpaSessionAMD ( VkDevice device, const VkGpaSessionCreateInfoAMD & pCreateInfo, const VkAllocationCallbacks * pAllocator, VkGpaSessionAMD & pGpaSession ) {
+    return ::vkCreateGpaSessionAMD(device, &pCreateInfo, pAllocator, &pGpaSession);
 }
 #endif
 
@@ -401,9 +401,9 @@ void das_vulkan_init_funcs_16(Module & mod, ModuleLibrary & lib) {
     addExtern<DAS_BIND_FUN(WRAP_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR)>(mod, lib, "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR")
         ->args({"physicalDevice","pPropertyCount","pProperties"});
 #endif
-#if defined(VK_VERSION_1_4)
-    addExtern<DAS_BIND_FUN(WRAP_vkCmdBindDescriptorSets2)>(mod, lib, "vkCmdBindDescriptorSets2", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdBindDescriptorSets2")
-        ->args({"commandBuffer","pBindDescriptorSetsInfo"});
+#if defined(VK_AMD_gpa_interface)
+    addExtern<DAS_BIND_FUN(WRAP_vkCreateGpaSessionAMD)>(mod, lib, "vkCreateGpaSessionAMD", SideEffects::modifyArgumentAndExternal, "WRAP_vkCreateGpaSessionAMD")
+        ->args({"device","pCreateInfo","pAllocator","pGpaSession"});
 #endif
 }
 

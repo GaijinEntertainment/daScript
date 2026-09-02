@@ -57,6 +57,9 @@ jobs:
             --skip-report /tmp/vk_skip_report.txt
           diff -u modules/dasVulkan/generator/skip_report.txt /tmp/vk_skip_report.txt
           diff -u modules/dasVulkan/generator/copyability_report.txt /tmp/copyability_report.txt
+          # the committed binding matches the fresh run too: a fresh report beside a stale file is red
+          for f in /tmp/vk_regen_src/*; do diff -u "modules/dasVulkan/src/$(basename "$f")" "$f"; done
+          for f in /tmp/vk_regen_daslib/*; do diff -u "modules/dasVulkan/daslib/$(basename "$f")" "$f"; done
 
       - name: "Lint: every dasVulkan .das must be clean"
         run: |

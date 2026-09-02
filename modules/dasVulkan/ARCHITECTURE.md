@@ -199,7 +199,11 @@ first, and chains a `VkPhysicalDeviceVulkan13Features` onto the tail of its pNex
 when the device reports both bits, after whichever optional struct that creator chained last. A
 device missing the pair degrades to the same device without it rather than failing to create.
 That tail position is why the chaining is a per-creator ladder: only the creator knows which of
-its own optional blocks is last. `create_device_coopmat_full_subgroups`, which predates the
+its own optional blocks is last. `create_device_storage_8_16_int_dot_coopmat2` runs one rung
+past the pair: when the device reports `VK_NV_cooperative_matrix_decode_vector` it chains
+`VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV` after the 1.3 block, or after
+whichever optional block is last when the pair is missing. That rung is the creator's tail, so
+the next optional block chains after it. `create_device_coopmat_full_subgroups`, which predates the
 ladder, is the other shape: it chains its `VkPhysicalDeviceVulkan13Features` unconditionally in
 mid-chain and copies the reported bits into it - a 1.3 core struct, so the chain is legal
 either way, and a missing pair leaves the bits off.

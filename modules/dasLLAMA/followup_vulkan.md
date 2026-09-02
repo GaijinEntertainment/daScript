@@ -562,3 +562,16 @@ module) is independent and can land any time - it is pure structure.
     widen rows-per-workgroup for grid formats, or fold the grid into a device-buffer read
     the L2 serves. Done = 1B-class grid-format tg within the k-format band on the same
     vehicle.
+
+36. **Hand-laid four-wide decode twins for iq3s, iq2s and iq2xxs.** The emitter's synthesized
+    twin (four calls of the scalar decode) loses on three formats (`harness/vk_gemm_probe.das --
+    cm2:<fmt>` on the RTX 5060 Ti, driver 616.56, `DASLLAMA_VK_DECVEC` 1 vs 0: iq3s -4..9%,
+    iq2s -1..11%, iq2xxs -13..17%, while iq2xs gains 15-31% and iq3xxs reads flat), so those
+    three override the tile template's `DECVEC` axis off. One grid word carries four (iq3s) to
+    eight (iq2xxs) weights, which is exactly what a hand-written `half4` body shares across its
+    lanes: one grid read, one sign extraction, four scaled results. Lever: a second
+    `[spirv_decode]` method returning `half4` in `coopmatLoadTensorDecode`'s tenth slot, the
+    scalar body kept as the fallback; gate the tile oracle and the probe row against the scalar
+    rate. Done = the three formats' probe rows at or above their scalar rate with the twin on.
+    Related: the e2e A/B on the same box (`benchmarks/lcpp_bench.das`, ten reps) spreads 3-11%
+    per row, so the probe row is the verdict and the e2e is the confirmation, never the reverse.

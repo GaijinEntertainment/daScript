@@ -2912,6 +2912,63 @@ def get_physical_device_cooperative_matrix_properties_k_h_r(physicalDevice : Phy
     return <- vklist
 }
 
+def set_gpa_device_clock_mode_a_m_d(device : Device; var result : VkResult? = null) : VkGpaDeviceClockModeInfoAMD {
+    var vkout = VkGpaDeviceClockModeInfoAMD()
+    vk_check(vkSetGpaDeviceClockModeAMD(boost_value_to_vk(device), vkout), result)
+    return vkout
+}
+
+def get_gpa_device_clock_info_a_m_d(device : Device; var result : VkResult? = null) : VkGpaDeviceGetClockInfoAMD {
+    var vkout = VkGpaDeviceGetClockInfoAMD()
+    vk_check(vkGetGpaDeviceClockInfoAMD(boost_value_to_vk(device), vkout), result)
+    return vkout
+}
+
+def cmd_begin_gpa_session_a_m_d(commandBuffer : CommandBuffer; gpaSession : GpaSessionAMD; var result : VkResult? = null) {
+    vk_check(vkCmdBeginGpaSessionAMD(boost_value_to_vk(commandBuffer), boost_value_to_vk(gpaSession)), result)
+}
+
+def cmd_end_gpa_session_a_m_d(commandBuffer : CommandBuffer; gpaSession : GpaSessionAMD; var result : VkResult? = null) {
+    vk_check(vkCmdEndGpaSessionAMD(boost_value_to_vk(commandBuffer), boost_value_to_vk(gpaSession)), result)
+}
+
+def cmd_begin_gpa_sample_a_m_d(commandBuffer : CommandBuffer; gpaSession : GpaSessionAMD; var pGpaSampleBeginInfo : GpaSampleBeginInfoAMD; var result : VkResult? = null) : uint {
+    let vkview_pGpaSampleBeginInfo = vk_view_create_unsafe(pGpaSampleBeginInfo)
+    defer() { vk_view_destroy(pGpaSampleBeginInfo) }
+    var vkout : uint
+    vk_check(vkCmdBeginGpaSampleAMD(boost_value_to_vk(commandBuffer), boost_value_to_vk(gpaSession), vkview_pGpaSampleBeginInfo, vkout), result)
+    return vkout
+}
+
+def cmd_end_gpa_sample_a_m_d(commandBuffer : CommandBuffer; gpaSession : GpaSessionAMD; sampleID : uint) {
+    vkCmdEndGpaSampleAMD(boost_value_to_vk(commandBuffer), boost_value_to_vk(gpaSession), sampleID)
+}
+
+def get_gpa_session_status_a_m_d(device : Device; gpaSession : GpaSessionAMD; var result : VkResult? = null) {
+    vk_check(vkGetGpaSessionStatusAMD(boost_value_to_vk(device), boost_value_to_vk(gpaSession)), result)
+}
+
+def get_gpa_session_results_a_m_d(device : Device; gpaSession : GpaSessionAMD; sampleID : uint; var result : VkResult? = null) : array<uint8> {
+    var vkcount = 0ul
+    vk_check(vkGetGpaSessionResultsAMD(boost_value_to_vk(device), boost_value_to_vk(gpaSession), sampleID, vkcount, null), result)
+    var vklist : array<uint8>
+    vklist |> resize(int64(vkcount))
+    if (vkcount > 0ul) {
+        unsafe {
+            vk_check(vkGetGpaSessionResultsAMD(boost_value_to_vk(device), boost_value_to_vk(gpaSession), sampleID, vkcount, addr<void?>(vklist[0])), result)
+        }
+    }
+    return <- vklist
+}
+
+def reset_gpa_session_a_m_d(device : Device; gpaSession : GpaSessionAMD; var result : VkResult? = null) {
+    vk_check(vkResetGpaSessionAMD(boost_value_to_vk(device), boost_value_to_vk(gpaSession)), result)
+}
+
+def cmd_copy_gpa_session_results_a_m_d(commandBuffer : CommandBuffer; gpaSession : GpaSessionAMD) {
+    vkCmdCopyGpaSessionResultsAMD(boost_value_to_vk(commandBuffer), boost_value_to_vk(gpaSession))
+}
+
 def cmd_bind_descriptor_sets2(commandBuffer : CommandBuffer; var pBindDescriptorSetsInfo : BindDescriptorSetsInfo) {
     let vkview_pBindDescriptorSetsInfo = vk_view_create_unsafe(pBindDescriptorSetsInfo)
     defer() { vk_view_destroy(pBindDescriptorSetsInfo) }
@@ -2970,6 +3027,32 @@ def queue_notify_out_of_band_n_v(queue : Queue; pQueueTypeInfo : OutOfBandQueueT
     let vkview_pQueueTypeInfo = vk_view_create_unsafe(pQueueTypeInfo)
     defer() { vk_view_destroy(pQueueTypeInfo) }
     vkQueueNotifyOutOfBandNV(boost_value_to_vk(queue), vkview_pQueueTypeInfo)
+}
+
+def set_latency_sleep_mode_legacy_n_v(device : Device; lowLatencyMode : uint; lowLatencyBoost : uint; minimumIntervalUs : uint) {
+    vkSetLatencySleepModeLegacyNV(boost_value_to_vk(device), lowLatencyMode, lowLatencyBoost, minimumIntervalUs)
+}
+
+def latency_sleep_legacy_n_v(device : Device; signalSemaphore : Semaphore; value : uint64) {
+    vkLatencySleepLegacyNV(boost_value_to_vk(device), boost_value_to_vk(signalSemaphore), value)
+}
+
+def set_latency_marker_legacy_n_v(device : Device; frameID : uint64; marker : uint) {
+    vkSetLatencyMarkerLegacyNV(boost_value_to_vk(device), frameID, marker)
+}
+
+def queue_notify_out_of_band_legacy_n_v(queue : Queue; queueType : uint) {
+    vkQueueNotifyOutOfBandLegacyNV(boost_value_to_vk(queue), queueType)
+}
+
+def get_sleep_status_legacy_n_v(device : Device) : uint {
+    var vkout : uint
+    vkGetSleepStatusLegacyNV(boost_value_to_vk(device), vkout)
+    return vkout
+}
+
+def shutdown_latency_device_legacy_n_v(device : Device) {
+    vkShutdownLatencyDeviceLegacyNV(boost_value_to_vk(device))
 }
 
 def cmd_set_rendering_attachment_locations(commandBuffer : CommandBuffer; var pLocationInfo : RenderingAttachmentLocationInfo) {

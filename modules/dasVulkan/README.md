@@ -26,8 +26,8 @@ daslang -load_module <path-to-dasVulkan> examples/enumerate.das                 
 
 | What | Version | License |
 |---|---|---|
-| [volk](https://github.com/zeux/volk) | vulkan-sdk-1.4.350.0 | MIT |
-| [Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers) (headers + `registry/vk.xml`) | vulkan-sdk-1.4.350.0 | Apache-2.0 / MIT |
+| [volk](https://github.com/zeux/volk) | vulkan-sdk-1.4.357.0 | MIT |
+| [Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers) (headers + `registry/vk.xml`) | vulkan-sdk-1.4.357.0 | Apache-2.0 / MIT |
 
 Building the module requires no Vulkan SDK - the vendored headers and volk's runtime loading cover it. The LunarG SDK (validation layers, glslang) is recommended for development.
 

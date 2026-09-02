@@ -59,6 +59,18 @@ public:
 };
 #endif
 
+#if defined(VK_KHR_opacity_micromap)
+class Enumeration_VkAccelerationStructureSerializedBlockTypeKHR : public Enumeration {
+public:
+    Enumeration_VkAccelerationStructureSerializedBlockTypeKHR() : Enumeration("VkAccelerationStructureSerializedBlockTypeKHR") {
+        external = true;
+        cppName = "VkAccelerationStructureSerializedBlockTypeKHR";
+        baseType = (Type) ToBasicType< underlying_type<VkAccelerationStructureSerializedBlockTypeKHR>::type >::type;
+        addI("OPACITY_MICROMAP_KHR", int64_t(VK_ACCELERATION_STRUCTURE_SERIALIZED_BLOCK_TYPE_OPACITY_MICROMAP_KHR), LineInfo());
+    }
+};
+#endif
+
 #if defined(VK_KHR_acceleration_structure)
 class Enumeration_VkAccelerationStructureTypeKHR : public Enumeration {
 public:
@@ -74,6 +86,9 @@ public:
 #endif
 #if defined(VK_NV_ray_tracing)
         addI("BOTTOM_LEVEL_NV", int64_t(VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV), LineInfo());
+#endif
+#if defined(VK_KHR_opacity_micromap)
+        addI("OPACITY_MICROMAP_KHR", int64_t(VK_ACCELERATION_STRUCTURE_TYPE_OPACITY_MICROMAP_KHR), LineInfo());
 #endif
     }
 };
@@ -667,6 +682,21 @@ public:
 #if defined(VK_EXT_shader_float8)
         addI("FLOAT8_E5M2_EXT", int64_t(VK_COMPONENT_TYPE_FLOAT8_E5M2_EXT), LineInfo());
 #endif
+#if defined(VK_EXT_shader_ocp_microscaling_types)
+        addI("FLOAT6_E2M3_EXT", int64_t(VK_COMPONENT_TYPE_FLOAT6_E2M3_EXT), LineInfo());
+#endif
+#if defined(VK_EXT_shader_ocp_microscaling_types)
+        addI("FLOAT6_E3M2_EXT", int64_t(VK_COMPONENT_TYPE_FLOAT6_E3M2_EXT), LineInfo());
+#endif
+#if defined(VK_EXT_shader_ocp_microscaling_types)
+        addI("FLOAT4_E2M1_EXT", int64_t(VK_COMPONENT_TYPE_FLOAT4_E2M1_EXT), LineInfo());
+#endif
+#if defined(VK_EXT_shader_ocp_microscaling_types)
+        addI("FLOAT8_UNSIGNED_E8M0_EXT", int64_t(VK_COMPONENT_TYPE_FLOAT8_UNSIGNED_E8M0_EXT), LineInfo());
+#endif
+#if defined(VK_EXT_shader_ocp_microscaling_types)
+        addI("MXINT8_EXT", int64_t(VK_COMPONENT_TYPE_MXINT8_EXT), LineInfo());
+#endif
     }
 };
 #endif
@@ -871,18 +901,6 @@ public:
 };
 #endif
 
-#if defined(VK_ARM_data_graph)
-class Enumeration_VkDataGraphPipelineSessionBindPointTypeARM : public Enumeration {
-public:
-    Enumeration_VkDataGraphPipelineSessionBindPointTypeARM() : Enumeration("VkDataGraphPipelineSessionBindPointTypeARM") {
-        external = true;
-        cppName = "VkDataGraphPipelineSessionBindPointTypeARM";
-        baseType = (Type) ToBasicType< underlying_type<VkDataGraphPipelineSessionBindPointTypeARM>::type >::type;
-        addI("MEMORY_ARM", int64_t(VK_DATA_GRAPH_PIPELINE_SESSION_BIND_POINT_TYPE_MEMORY_ARM), LineInfo());
-    }
-};
-#endif
-
 }
 
 namespace das {
@@ -899,6 +917,9 @@ void das_vulkan_init_enums_0(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_NV_ray_tracing_motion_blur)
     mod.addEnumeration(new Enumeration_VkAccelerationStructureMotionInstanceTypeNV());
+#endif
+#if defined(VK_KHR_opacity_micromap)
+    mod.addEnumeration(new Enumeration_VkAccelerationStructureSerializedBlockTypeKHR());
 #endif
 #if defined(VK_KHR_acceleration_structure)
     mod.addEnumeration(new Enumeration_VkAccelerationStructureTypeKHR());
@@ -1004,9 +1025,6 @@ void das_vulkan_init_enums_0(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_ARM_data_graph)
     mod.addEnumeration(new Enumeration_VkDataGraphPipelineSessionBindPointARM());
-#endif
-#if defined(VK_ARM_data_graph)
-    mod.addEnumeration(new Enumeration_VkDataGraphPipelineSessionBindPointTypeARM());
 #endif
 }
 

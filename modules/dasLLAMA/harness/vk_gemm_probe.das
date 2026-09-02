@@ -7,16 +7,20 @@ options _dasllama_internal = true
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
 // Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle);
-// k4|k6 the K-quant tiles; cm2x|k6x|ref the bisect and reference arms.
+// k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m tiles; cm2x|k6x|ref the bisect and
+// reference arms.
 // Shapes default to Llama-3.2-3B Q8 geometry (dim 3072, hidden 8192, kv_dim 1024).
 
 require math
+require strings
+require daslib/enum_trait
 require vulkan
 require vulkan/vulkan_boost
 require spirv/spirv_shader
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_vulkan_classes
+require dasllama/dasllama_vulkan_prefill
 require dasllama/dasllama_kqformat
 
 let private MM_TILE = 128
@@ -352,6 +356,119 @@ class Cm2PxLit : MoeCmBase {
         coopmatConvert(accw, acc)
         coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
     }
+}
+
+def private cm2_fmt_names : string {
+    return build_string() $(var w) {
+        var first = true
+        for (f in type<KqFmt>) {
+            if (kq_sb(f)) {
+                w |> write("{first ? "" : " "}{f}")
+                first = false
+            }
+        }
+    }
+}
+
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
+    let nsb = n / 256
+    let totsb = d * nsb
+    let bb = arena_block_bytes(fmt)
+    let wq_words = int(bb.wq / 4l)
+    let ws_words = int(bb.ws / 4l)
+    var wqh : array<uint>
+    var wsuh : array<uint>
+    var xfh : array<uint>
+    var xqh : array<uint>
+    var axsh : array<float>
+    wqh |> resize(totsb * wq_words)
+    wsuh |> resize(totsb * ws_words)
+    xfh |> resize(cnt * n / 2)
+    xqh |> resize(cnt * nsb * 64)
+    axsh |> resize(cnt * nsb)
+    for (i in range(totsb * wq_words)) {
+        wqh[i] = hash_word(uint(i) + 29u)
+    }
+    for (sb in range(totsb)) {
+        wsuh[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
+        for (wi in range(1, ws_words)) {
+            wsuh[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
+        }
+    }
+    for (i in range(cnt * n / 2)) {
+        xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
+    }
+    for (i in range(cnt * nsb * 64)) {
+        xqh[i] = hash_word(uint(i) * 13u + 1u)
+    }
+    for (i in range(cnt * nsb)) {
+        axsh[i] = 0.0625
+    }
+    let wq_bytes = int64(totsb) * bb.wq
+    let ws_bytes = long_length(wsuh) * 4l
+    let xf_bytes = int64(cnt * n) * 2l
+    let xq_bytes = long_length(xqh) * 4l
+    let axs_bytes = int64(cnt * nsb) * 4l
+    let y_bytes = int64(cnt * d) * 4l
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let xfd = make_device_buf(xf_bytes)
+    let xqd = make_device_buf(xq_bytes)
+    let axsd = make_device_buf(axs_bytes)
+    let yd = make_device_buf(y_bytes)
+    let flop = 2.0lf * double(cnt) * double(d) * double(n)
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
+        upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
+        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+        upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
+        let vnames = fixed_array("cm2l", "cm2m", "kq  ")
+        for (v in range(3)) {
+            let ttile = v == 0 ? 256 : (v == 1 ? 128 : 32)
+            let wtile = v == 2 ? 32 : 128
+            let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
+            var sched : array<uint>
+            sched |> resize(4 + wgs)
+            sched[2] = uint(cnt)
+            let sc_bytes = int64(4 + wgs) * 4l
+            let scd = make_device_buf(sc_bytes)
+            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+            delete sched
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var hz : VkHaz
+            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+            if (v == 2) {
+                var s = kq_batch_cls_set_for(fmt, false,
+                    fixed_array(wqd, wsd, scd, xqd, axsd, yd),
+                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
+                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                for (_k in range(DISPATCHES)) {
+                    var hz2 : VkHaz
+                    kq_batch_cls_enc_for(fmt, false, raw, hz2, s, pc, int64(wgs))
+                }
+            } else {
+                var s = cm2_cls_set(fmt, int64(ttile), fixed_array(wqd, wsd, scd, xfd, yd),
+                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
+                    fixed_array(1u, 2u, 0u, 4u, 16u))
+                for (_k in range(DISPATCHES)) {
+                    cm2_cls_enc(fmt, int64(ttile), raw, hz, s, pc, int64(wgs))
+                }
+            }
+            vk_check(vkEndCommandBuffer(raw), null)
+            let us = usec_per_dispatch(raw)
+            let tf = flop / (us * 1000000.0lf)
+            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
+        }
+    }
+    delete wqh
+    delete wsuh
+    delete xfh
+    delete xqh
+    delete axsh
 }
 
 // k4 (Q4_K) cm2 decode-in-load vs the serving kq tile - per-shape rate on the qwen role shapes
@@ -1269,10 +1386,43 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         }
     }
     var only = ""
+    var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
         if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "k4" || a == "k6" || a == "k6x") {
             only = a
+        } elif (a |> starts_with("cm2:")) {
+            only = "cm2:"
+            var pf : KqFmt
+            cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
         }
+    }
+    if (only == "cm2:") {
+        if (!g_gpu.has_coopmat2) {
+            print("no coopmat2 on this device\n")
+            return
+        }
+        if (cm2_fmt < 0 || !kq_sb(cm2_fmt)) {
+            print("cm2:<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
+            return
+        }
+        // the four-wide decode's A/B, both arms in ONE process, interleaved: the class pipelines
+        // rebuild under each arm (the twin served, then stripped), two rounds so drift shows
+        let twin_device = g_gpu.decvec_on
+        let arms = twin_device ? 2 : 1
+        for (round in range(2)) {
+            for (arm in range(arms)) {
+                g_gpu.decvec_on = twin_device && arm == 0
+                vkd_pipes_rebuild()
+                verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l)
+                    && kq_batch_cls_ensure(cm2_fmt, false), "cm2:<fmt> probe pipelines must engage")
+                let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down", 2560, 9728, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
+            }
+        }
+        g_gpu.decvec_on = twin_device
+        return
     }
     if (only == "k6x") {
         if (!g_gpu.has_coopmat2) {

@@ -253,6 +253,17 @@ def public ensure_coopmat_conversions(var m : SpirvModule) {
     m.type_pool |> insert("cap_cm2_convert", 1u)
 }
 
+[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+def public ensure_coopmat_decode_vector(var m : SpirvModule) {
+    ensure_cooperative_matrix2(m)
+    return if ((m.type_pool?["cap_cm2_decvec"] ?? 0u) != 0u)
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixDecodeVectorNV))
+    var nm <- string_words("SPV_NV_cooperative_matrix_decode_vector")
+    emit_n(m, SEC_EXT, SpvOp.Extension, nm)
+    delete nm
+    m.type_pool |> insert("cap_cm2_decvec", 1u)
+}
+
 // OpTypeTensorLayoutNV — the cm2 address-mapping object type: `dim` dimensions, `clamp` out-of-bounds
 // mode (SpvTensorClampMode: 0 = Undefined for the aligned fast path, 1 = Constant zero-fill for
 // guarded edges). Both operands are <id>s of uint constants, like the coopmat type's. Deduped.

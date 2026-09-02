@@ -4809,6 +4809,7 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant BN : uint = 256u                   // the token column
     @template_constant STILE : bool = false               // the 32-row column's partial-column fast path
     @template_constant BLKW : uint = 256u                 // elements per weight block
+    @template_constant DECVEC : bool = true               //!< the four-wide decode twin rides the loads; false serves the scalar callback only
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
     @workgroup @template_gate = IQLUT iq4lut : float16[16]   // kvalues_iq4nl as f16
     @template_constant IQ3GRID : bool = false             // stage the 2 KB iq3s grid into workgroup memory
@@ -4908,14 +4909,14 @@ class template KqCm2BatchT : MoeCmBase {
                 var k = 0u
                 for (_i in range(int(pa.n / 512u))) {
                     for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
                         coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                         acc = coopmatMulAdd(a, b, acc)
                         k += 64u
                     }
                 }
                 while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
                     coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                     acc = coopmatMulAdd(a, b, acc)
                     k += 64u
@@ -4929,14 +4930,14 @@ class template KqCm2BatchT : MoeCmBase {
             var k = k0
             for (_i in range(int((k1 - k0) / 512u))) {
                 for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
                     coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                     acc = coopmatMulAdd(a, b, acc)
                     k += 64u
                 }
             }
             while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
                 coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                 acc = coopmatMulAdd(a, b, acc)
                 k += 64u
@@ -5173,6 +5174,7 @@ class template Iq3sCm2T : KqCm2BatchT {
     typedef BLK = VkIq3sBlk
     typedef ST = uint
     override IQ3GRID = true
+    override DECVEC = false
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3sBlk; bc, cib : uint2) : float16 {
@@ -5252,6 +5254,7 @@ class template Iq2sCm2T : KqCm2BatchT {
     typedef BLK = VkIq2sBlk
     typedef ST = uint
     override IQ2SGRID = true
+    override DECVEC = false
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2sBlk; bc, cib : uint2) : float16 {
@@ -5304,6 +5307,7 @@ class template Iq2xxsCm2T : KqCm2BatchT {
     typedef BLK = VkIq2xxsBlk
     typedef ST = uint
     override IQ2XXSGRID = true
+    override DECVEC = false
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xxsBlk; bc, cib : uint2) : float16 {
