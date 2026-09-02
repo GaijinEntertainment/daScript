@@ -315,7 +315,7 @@ def run_and_stream(args : array<string>; var tail_out : string&; keep_tail : int
     var acc = ""
     let rc = unsafe(popen_argv(args, 0.0, $(f) {
         if (f == null) {
-            to_log(LOG_ERROR, "run_and_stream: could not spawn {args[0]} (no child, no output)\n")
+            to_log(LOG_ERROR, "dasLLAMA bench: could not spawn {args[0]} (no child, no output)\n")
             return
         }
         while (true) {
@@ -411,13 +411,7 @@ def run_capture(cmd : string; first_line : bool) : string {
 // The running daslang's version, via the box's binary (DASLANG_BIN, default bin/daslang from the
 // repo-root cwd these tools run in). Takes the last token of the first --version line ("0.6.3").
 def das_version() : string {
-    // shell-free spawn (fio's run_and_capture → popen_argv), so no cmd and no quote/option traps;
-    // CreateProcess still wants backslashes in the program path (probe-verified: `bin/daslang`
-    // fails to spawn, `bin\daslang` runs), hence the normalize
-    var bin = g_env_prof.daslang_bin
-    if (is_windows()) {
-        bin = replace(bin, "/", "\\")
-    }
+    let bin = g_env_prof.daslang_bin
     var out = ""
     if (run_and_capture([bin, "--version"], out) != 0) {
         return "unknown"

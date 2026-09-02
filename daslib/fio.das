@@ -692,8 +692,7 @@ def rmdir_rec_result(path : string) : fs_result_bool {
 
 def run_and_capture(args : array<string>; var output : string&; timeout_sec : float = 0.0) : int {
     //! Run an external command and capture its stdout+stderr (merged into one pipe by the underlying ``popen_argv``). Returns the process exit code;
-    //! -1 means the spawn itself failed. No shell is involved; the program path (``args[0]``) may use either slash style on every
-    //! platform (``popen_argv`` respells it natively before the Windows CreateProcess call, which rejects ``bin/daslang``-style forward-slash relative paths).
+    //! -1 means the spawn itself failed. No shell is involved, and a forward-slash ``args[0]`` spawns on every platform (``popen_argv`` hands Windows the backslash spelling).
     var captured : string
     let exit_code = unsafe(popen_argv(args, timeout_sec, $(f) {
         if (f != null) {
