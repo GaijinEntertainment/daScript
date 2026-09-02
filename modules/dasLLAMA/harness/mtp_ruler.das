@@ -64,6 +64,9 @@ struct Args {
     @clarg_doc = "Threads for llama-server (-t); the exe takes its box profile"
     threads : int = 6
 
+    @clarg_doc = "GPU layers for both engines (99 = all on the GPU; 0 = the CPU rails: our NextN depth-1 round, llama-server -ngl 0 -ngld 0)"
+    ngl : int = 99
+
     @clarg_doc = "llama-server port"
     port : int = 18790
 
@@ -258,7 +261,7 @@ def private run_das(cfg : Args; head : string; depth : int; var rows : array<str
     let tmpo = "{temp_directory(terr)}/mtp_ruler_das_{depth}.txt"
     let pin = !empty(head) && !gguf_is_assistant(head) ? " DASLLAMA_MTP_HEAD=\"{head}\"" : ""
     let cmd = ("DAS_TUNE_MANIFEST={pin} \"{cfg.exe}\" -- -m \"{cfg.model}\" --mtp-ab --mtp-depth {depth} -n {cfg.ngen} -r {cfg.reps}"
-        + " --ngl 99 --prompts \"{cfg.prompts}\" --chat-prompts > \"{tmpo}\" 2>&1")
+        + " --ngl {cfg.ngl} --prompts \"{cfg.prompts}\" --chat-prompts > \"{tmpo}\" 2>&1")
     print("ruler: das depth {depth}: {cmd}\n")
     sleep(uint(max(cfg.settle, 0)) * 1000u)
     sh(cmd, 3600.0)
@@ -356,12 +359,12 @@ def private run_lcpp_arm(cfg : Args; head : string; kmax : int; rendered, ours :
     if (kmax > 0) {
         spec = " --spec-type draft-mtp --spec-draft-n-max {kmax}"
         if (!empty(head)) {
-            spec = "{spec} -md \"{head}\" -ngld 99"
+            spec = "{spec} -md \"{head}\" -ngld {cfg.ngl}"
         }
     }
     var terr = ""
     let log = "{temp_directory(terr)}/mtp_ruler_lcpp_{kmax}.log"
-    let cmd = ("\"{cfg.server}\" --port {cfg.port} --host 127.0.0.1 -ngl 99 -fa on -c 2048 -t {cfg.threads} -np 1 --no-warmup -fit off"
+    let cmd = ("\"{cfg.server}\" --port {cfg.port} --host 127.0.0.1 -ngl {cfg.ngl} -fa on -c 2048 -t {cfg.threads} -np 1 --no-warmup -fit off"
         + " -m \"{cfg.model}\"{spec} > \"{log}\" 2>&1 & echo $!")
     print("ruler: lcpp n_max {kmax}: {cmd}\n")
     sleep(uint(max(cfg.settle, 0)) * 1000u)
@@ -457,7 +460,7 @@ def main() {
         das_sha = first_line(sh("git rev-parse --short HEAD")), das_exe = cfg.exe,
         lcpp_server = cfg.server, lcpp_version = first_line(sh("\"{cfg.server}\" --version 2>&1")),
         model = cfg.model, model_sha = sha_of(cfg.model), head = head, head_sha = sha_of(head),
-        corpus = cfg.prompts, ngen = cfg.ngen, reps = cfg.reps, threads = cfg.threads, depths = cfg.depths))
+        corpus = cfg.prompts, ngen = cfg.ngen, reps = cfg.reps, threads = cfg.threads, ngl = cfg.ngl, depths = cfg.depths))
     let text = "\{\"meta\":{write_json_compact(meta)},\"rows\":[{join(rows, ",")}]}"
     var err = ""
     var doc = read_json(text, err)
