@@ -98,6 +98,7 @@ struct St2AdainResBlk {
     upsample : bool
     learned_sc : bool
     dim_in : int64
+    dim_in_s : int64   // the served input width: dim_in, or padded to 32 for the q8 lane
     dim_out : int64
 }
 
@@ -414,7 +415,7 @@ def private read_arr(m : GGUFMeta; bytes : array<uint8> | #; name : string) : ar
     return <- a
 }
 
-def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : string; rows : bool = false) : TtsConv1d {
+def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : string; rows : bool = false; cin_s : int64 = 0l) : TtsConv1d {
     var c = TtsConv1d()
     c.w <- read_arr(m, bytes, wname)
     if (!empty(bname) && gguf_find_tensor(m, bname) >= 0) {
@@ -439,13 +440,23 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
         c.cout = d2
         c.cin = d1 * c.groups
     }
+    if (cin_s > 0l) {   // pad before the served layout is minted - the mint drops the ONNX weight
+        conv1d_pad_cin(c, cin_s)
+    }
     c.served_rows = rows
     conv1d_prepare(c, g_stage_q8, g_stage_repack)
     return <- c
 }
 
-def private read_conv_p(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows : bool = false) : TtsConv1d {
-    return <- read_conv(m, bytes, "{prefix}.weight", "{prefix}.bias", rows)
+def private read_conv_p(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows : bool = false; cin_s : int64 = 0l) : TtsConv1d {
+    return <- read_conv(m, bytes, "{prefix}.weight", "{prefix}.bias", rows, cin_s)
+}
+
+// the input width a conv will read, from its tensor dims and geometry - known before the read
+def private conv_cin_of(m : GGUFMeta; bytes : array<uint8> | #; wname : string) : int64 {
+    var inscope geo <- gguf_int_array(m, bytes, "styletts2.conv.{wname}")
+    let ti = need_tensor(m, wname)
+    return geo[6] != 0l ? m.tensors[ti].dims[2] : m.tensors[ti].dims[1] * geo[5]
 }
 
 def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows_only : bool = false) : TtsLinear {
@@ -506,25 +517,32 @@ def private read_adaln(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) 
 }
 
 // The block runs on token-major rows, so its width must sit on the 16-column tile the rows
-// convs serve at - the row stride of every buffer in the block is the width itself.
-def private read_adain_res_blk(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) : St2AdainResBlk {
+// convs serve at - the row stride of every buffer in the block is the width itself. `pad_in`
+// pads an input width off 32 (the decoder's concat rows) so its convs reach the q8 lane.
+def private read_adain_res_blk(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; pad_in : bool = false) : St2AdainResBlk {
     var b = St2AdainResBlk()
+    b.dim_in = conv_cin_of(m, bytes, "{prefix}.conv1.weight")
+    b.learned_sc = gguf_find_tensor(m, "{prefix}.conv1x1.weight") >= 0
+    b.upsample = gguf_find_tensor(m, "{prefix}.pool.weight") >= 0
+    let pad = pad_in && b.learned_sc && b.dim_in % 32l != 0l
+    b.dim_in_s = pad ? (b.dim_in + 31l) / 32l * 32l : b.dim_in
+    let cin_s = pad ? b.dim_in_s : 0l
     b.norm1 <- read_adain(m, bytes, "{prefix}.norm1")
+    if (pad) {
+        adain_pad(b.norm1, b.dim_in, b.dim_in_s)
+    }
     b.norm2 <- read_adain(m, bytes, "{prefix}.norm2")
-    b.conv1 <- read_conv_p(m, bytes, "{prefix}.conv1", true)
+    b.conv1 <- read_conv_p(m, bytes, "{prefix}.conv1", true, cin_s)
     b.conv2 <- read_conv_p(m, bytes, "{prefix}.conv2", true)
-    b.dim_in = b.conv1.cin
     b.dim_out = b.conv1.cout
     if (b.dim_out % 16l != 0l) {
         panic("dasLLAMA styletts2: {prefix} is {b.dim_out} wide; a residual block's width sits on the 16-column tile")
     }
-    b.learned_sc = gguf_find_tensor(m, "{prefix}.conv1x1.weight") >= 0
     if (b.learned_sc) {
-        b.conv1x1 <- read_conv_p(m, bytes, "{prefix}.conv1x1", true)
+        b.conv1x1 <- read_conv_p(m, bytes, "{prefix}.conv1x1", true, cin_s)
     }
-    b.upsample = gguf_find_tensor(m, "{prefix}.pool.weight") >= 0
     if (b.upsample) {
-        b.pool <- read_conv_p(m, bytes, "{prefix}.pool")
+        b.pool <- read_conv_p(m, bytes, "{prefix}.pool", false, cin_s)
     }
     return <- b
 }
@@ -608,10 +626,10 @@ def private read_predictor(m : GGUFMeta; bytes : array<uint8> | #; var p : St2Pr
 }
 
 def private read_decoder(m : GGUFMeta; bytes : array<uint8> | #; var d : St2Decoder) {
-    d.encode <- read_adain_res_blk(m, bytes, "decoder.encode")
+    d.encode <- read_adain_res_blk(m, bytes, "decoder.encode", true)
     var i = 0
     while (gguf_find_tensor(m, "decoder.decode.{i}.conv1.weight") >= 0) {
-        d.decode |> emplace(read_adain_res_blk(m, bytes, "decoder.decode.{i}"))
+        d.decode |> emplace(read_adain_res_blk(m, bytes, "decoder.decode.{i}", true))
         i++
     }
     d.f0_conv <- read_conv_p(m, bytes, "decoder.F0_conv")
@@ -1023,8 +1041,8 @@ def private adain_res_blk(b : St2AdainResBlk; x : array<float>; t : int64; s : a
     var c1 & = unsafe(sc.rb_c1)
     var shortcut & = unsafe(sc.rb_sc)
     var shortcut2 & = unsafe(sc.rb_sc2)
-    adain_rows_into(b.norm1, x, r, t, b.dim_in, s, LN_EPS)
-    leaky_relu(r, b.dim_in * t, 0.2)
+    adain_rows_into(b.norm1, x, r, t, b.dim_in_s, s, LN_EPS)
+    leaky_relu(r, b.dim_in_s * t, 0.2)
     var t1 = t
     if (b.upsample) {
         conv1d_rows_transposed_depthwise(b.pool, r, t, pooled)
@@ -1037,7 +1055,7 @@ def private adain_res_blk(b : St2AdainResBlk; x : array<float>; t : int64; s : a
     leaky_relu(c1, b.dim_out * t1, 0.2)
     conv1d_rows(b.conv2, c1, t1, out)
     if (b.upsample) {
-        resize_nearest_rows(x, t, b.dim_in, 2l, shortcut)
+        resize_nearest_rows(x, t, b.dim_in_s, 2l, shortcut)
         if (b.learned_sc) {
             conv1d_rows(b.conv1x1, shortcut, t1, shortcut2)
             residual_join(out, shortcut2, b.dim_out * t1)
@@ -1372,31 +1390,34 @@ def styletts2_draw_noise(cfg : SineSourceCfg; frames : int64; seed : uint64; var
 }
 
 //! cat(x [t][c], asr_res [t][rc] at row stride `rs` when `with_res`, F0 [t], N [t]) as one row
-//! per frame: out [t][c + rc + 2].
-def private concat_rows(x : array<float>; c : int64; res : array<float>; rc, rs : int64; f0d, nd : array<float>; with_res : bool; t : int64; @scratch @exact_size var out : array<float>) {
+//! per frame, zero-padded to `width` columns: out [t][width].
+def private concat_rows(x : array<float>; c : int64; res : array<float>; rc, rs : int64; f0d, nd : array<float>; with_res : bool; t, width : int64; @scratch @exact_size var out : array<float>) {
     let r = with_res ? rc : 0l
     let total = c + r + 2l
-    out |> reserve_resize(total * t)
+    out |> reserve_resize(width * t)
     var op = unsafe(addr(out[0]))
     let xp = unsafe(addr<float const?>(x[0]))
     let rp = with_res ? unsafe(addr<float const?>(res[0])) : null
     unsafe {
         for (i in range64(t)) {
-            var row = op + i * total
+            var row = op + i * width
             memcpy(row, xp + i * c, c * 4l)
             if (with_res) {
                 memcpy(row + c, rp + i * rs, rc * 4l)
             }
             row[c + r] = f0d[i]
             row[c + r + 1l] = nd[i]
+            for (j in range64(total, width)) {
+                row[j] = 0.0
+            }
         }
     }
 }
 
 [cold_path]
-def private trace_dec_in(var tr : StyleTts2Trace?; y : array<float>; cw : int64; f0d, nd, res : array<float>; rc, rs, frames : int64; @scratch @exact_size var cat : array<float>) {
-    concat_rows(y, cw, res, rc, rs, f0d, nd, true, frames, cat)
-    trace_rows(tr.dec_in, cat, frames, cw + rc + 2l)
+def private trace_dec_in(var tr : StyleTts2Trace?; y : array<float>; cw : int64; f0d, nd, res : array<float>; rc, rs, frames, width : int64; @scratch @exact_size var cat : array<float>) {
+    concat_rows(y, cw, res, rc, rs, f0d, nd, true, frames, width, cat)
+    trace_rows_strided(tr.dec_in, cat, frames, cw + rc + 2l, width)
 }
 
 // One decoder block from `src`: through the concat scratch when the block's width asks for
@@ -1404,7 +1425,7 @@ def private trace_dec_in(var tr : StyleTts2Trace?; y : array<float>; cw : int64;
 def private decode_step(blk : St2AdainResBlk; cw : int64; src : array<float>; @scratch @exact_size var cat : array<float>;
                         @scratch @exact_size var dst : array<float>; t : int64; f0d, nd, res : array<float>; rc, rs : int64; s_ref : array<float>; var sc : St2Scratch) : int64 {
     if (blk.dim_in != cw) {
-        concat_rows(src, cw, res, rc, rs, f0d, nd, true, t, cat)
+        concat_rows(src, cw, res, rc, rs, f0d, nd, true, t, blk.dim_in_s, cat)
         return adain_res_blk(blk, cat, t, s_ref, dst, sc)
     }
     return adain_res_blk(blk, src, t, s_ref, dst, sc)
@@ -1432,11 +1453,12 @@ def private styletts2_decode(d : St2Decoder; text_c : int64; source : SineSource
     if (tr != null) {
         trace_rows_strided(tr.asr_res, res, frames, rc, rs)
     }
-    concat_rows(asr_tm, text_c, res, rc, rs, f0d, nd, false, frames, cat)
+    concat_rows(asr_tm, text_c, res, rc, rs, f0d, nd, false, frames, d.encode.dim_in_s, cat)
     var t = adain_res_blk(d.encode, cat, frames, s_ref, a, sc)
     var cw = d.encode.dim_out
     if (tr != null) {
-        trace_dec_in(tr, a, cw, f0d, nd, res, rc, rs, frames, cat)
+        let w0 = !empty(d.decode) ? d.decode[0].dim_in_s : cw + rc + 2l
+        trace_dec_in(tr, a, cw, f0d, nd, res, rc, rs, frames, w0, cat)
     }
     var in_a = true
     for (i in range(length(d.decode))) {

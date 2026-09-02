@@ -701,6 +701,18 @@ synthesis 690-697 ms, RTF 0.075; nano 386 ms for 15 s, RTF 0.026. `IMAGE_VERSION
 conv served from an image older than its layout panics by name rather than indexing an empty
 array. Blocks 12/12, kitten 13/13, kokoro 4/4, facade 9/9.
 
+Concat padding receipt (2026-09-02, ledger row 74 closed): a decoder block fed by the concat
+(514 or 1090 channels, off the q8 lane's 32) now reads a served width `dim_in_s` padded to 32 -
+`conv1d_pad_cin` zero-pads conv1, the 1x1 shortcut and the depthwise pool before their served
+layouts mint (the reader learns the width from the tensor dims first, since the mint drops the
+ONNX weight), `adain_pad` re-lays the AdaIN affine's two halves at the padded width with zero
+gamma, beta, scale and shift for the pad, and `concat_rows` writes the zero columns - so a pad
+channel is exactly zero through the norm, the LeakyReLU and the conv, and the parity bars do not
+move. All four decoder convs serve q8 now. Kokoro warm: decoder 65 -> 24 ms (the f32 tile at
+K = 1090 was paying far more than its arithmetic), synthesis 651-671 ms, RTF 0.071-0.073, 26%
+ahead of torch; nano 383 ms for 15 s, RTF 0.026. `IMAGE_VERSION` 31. Blocks 13/13 (the padded
+conv and AdaIN cell), kitten 13/13, kokoro 4/4, facade 9/9.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the

@@ -371,6 +371,92 @@ def conv1d_out_len(c : TtsConv1d; t_in : int64) : int64 {
     return (t_in + c.pad_l + c.pad_r - c.dilation * (c.k - 1l) - 1l) / c.stride + 1l
 }
 
+//! Pad a forward conv's input channels to `cin_s` with zero weights, the ONNX layout kept (a
+//! depthwise conv pads its channel count and bias with it), so the conv reads rows padded to
+//! the same width - the bake-time transform that puts a concat width on the q8 lane's 32.
+def conv1d_pad_cin(var c : TtsConv1d; cin_s : int64) {
+    return if (cin_s == c.cin)
+    let depthwise = c.groups != 1l
+    if (cin_s < c.cin || (depthwise && c.groups != c.cin) || (c.transposed && !depthwise)) {
+        panic("dasLLAMA tts: conv1d_pad_cin takes a forward dense conv or a depthwise one and a wider cin; got cin={c.cin} -> {cin_s} groups={c.groups} transposed={c.transposed}")
+    }
+    let k = c.k
+    var inscope w : array<float>
+    w |> reserve_resize((depthwise ? cin_s : c.cout * cin_s) * k)
+    for (v in w) {
+        v = 0.0
+    }
+    if (depthwise) {
+        for (i in range64(c.cin * k)) {
+            w[i] = c.w[i]
+        }
+        if (!empty(c.b)) {
+            c.b |> reserve_resize(cin_s)
+            for (i in range64(c.cin, cin_s)) {
+                c.b[i] = 0.0
+            }
+        }
+        c.cout = cin_s
+        c.groups = cin_s
+    } else {
+        for (co in range64(c.cout)) {
+            for (ci in range64(c.cin)) {
+                for (kk in range64(k)) {
+                    w[(co * cin_s + ci) * k + kk] = c.w[(co * c.cin + ci) * k + kk]
+                }
+            }
+        }
+    }
+    c.cin = cin_s
+    c.w <- w
+}
+
+//! Pad an AdaIN from `c` to `cs` channels: the two halves of `fc` re-laid at the padded width
+//! with zero gamma and beta rows for the pad, zero norm scale and shift - so a padded channel
+//! normalizes to exactly zero.
+def adain_pad(var a : TtsAdaIn; c, cs : int64) {
+    return if (cs == c)
+    let nin = a.fc.nin
+    var inscope w : array<float>
+    w |> reserve_resize(2l * cs * nin)
+    for (v in w) {
+        v = 0.0
+    }
+    var inscope b : array<float>
+    b |> reserve_resize(2l * cs)
+    for (v in b) {
+        v = 0.0
+    }
+    for (half in range64(2l)) {
+        for (ci in range64(c)) {
+            for (i in range64(nin)) {
+                w[(half * cs + ci) * nin + i] = a.fc.w[(half * c + ci) * nin + i]
+            }
+            if (!empty(a.fc.b)) {
+                b[half * cs + ci] = a.fc.b[half * c + ci]
+            }
+        }
+    }
+    a.fc.w <- w
+    if (!empty(a.fc.b)) {
+        a.fc.b <- b
+    }
+    a.fc.nout = 2l * cs
+    delete a.fc.wt   // a tiled twin minted at the old width would be stale; the affine reads w
+    if (!empty(a.norm.w)) {
+        a.norm.w |> reserve_resize(cs)
+        for (i in range64(c, cs)) {
+            a.norm.w[i] = 0.0
+        }
+    }
+    if (!empty(a.norm.b)) {
+        a.norm.b |> reserve_resize(cs)
+        for (i in range64(c, cs)) {
+            a.norm.b[i] = 0.0
+        }
+    }
+}
+
 //! Can this conv serve the q8 rows form: a dense forward conv whose widths quantize per 32.
 def conv1d_q8_eligible(c : TtsConv1d) : bool {
     return c.groups == 1l && !c.transposed && c.stride == 1l && c.cin % 32l == 0l && c.cout % 32l == 0l

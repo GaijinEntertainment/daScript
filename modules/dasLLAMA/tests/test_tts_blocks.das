@@ -324,6 +324,77 @@ def private pool_and_nearest_case() : BlockCase {
     return res
 }
 
+// a conv and an AdaIN padded from 66 to 96 input channels against the unpadded pair on the same
+// rows: the padded columns stay zero and the real ones agree exactly
+def private pad_case() : BlockCase {
+    var r = TtsRng()
+    rng_seed(r, 0x9adul)
+    let cin = 66l
+    let cs = 96l
+    let cout = 64l
+    let t = 300l
+    var inscope c0 <- make_conv(r, cin, cout, 3l, 1l, 1l, 1l, false, true)
+    var inscope cp := c0
+    conv1d_pad_cin(cp, cs)
+    var inscope c <- prepared(c0, true)
+    cp.served_rows = true
+    conv1d_prepare(cp)
+    var inscope x : array<float>
+    rand_fill(r, x, t * cin, 2.0)
+    var inscope xp : array<float>
+    xp |> resize(t * cs)
+    for (i in range64(t * cs)) {
+        let j = i % cs
+        xp[i] = j < cin ? x[(i / cs) * cin + j] : 0.0
+    }
+    var inscope y : array<float>
+    var inscope yp : array<float>
+    conv1d_rows(c, x, t, y)
+    conv1d_rows(cp, xp, t, yp)
+    var inscope env : array<float>
+    env |> resize(length(y))
+    for (i in range(length(y))) {
+        env[i] = 0.0
+    }
+    var res = score("padded conv", yp, y, env, 0.0)
+    var a = TtsAdaIn()
+    a.fc.nin = STYLE
+    a.fc.nout = 2l * cin
+    rand_fill(r, a.fc.w, STYLE * 2l * cin, 0.2)
+    rand_fill(r, a.fc.b, 2l * cin, 0.2)
+    rand_fill(r, a.norm.w, cin, 1.0)
+    rand_fill(r, a.norm.b, cin, 0.5)
+    var ap := a
+    adain_pad(ap, cin, cs)
+    var inscope style : array<float>
+    rand_fill(r, style, STYLE, 1.0)
+    var inscope xa := x
+    var inscope xap := xp
+    adain_rows(a, xa, t, cin, style, 1.0e-5)
+    adain_rows(ap, xap, t, cs, style, 1.0e-5)
+    var inscope got : array<float>
+    got |> resize(t * cin)
+    var pad_nonzero = 0
+    for (i in range64(t * cs)) {
+        let j = i % cs
+        if (j < cin) {
+            got[(i / cs) * cin + j] = xap[i]
+        } elif (xap[i] != 0.0) {
+            pad_nonzero++
+        }
+    }
+    var inscope env2 : array<float>
+    env2 |> resize(t * cin)
+    for (i in range64(t * cin)) {
+        env2[i] = 0.0
+    }
+    let ad = score("padded adain", got, xa, env2, 0.0)
+    res.bad += ad.bad + pad_nonzero
+    res.max_ratio = max(res.max_ratio, ad.max_ratio)
+    res.max_abs = max(res.max_abs, ad.max_abs)
+    return res
+}
+
 // attention_rows against a scalar per-head reference, at a token count off the 16-key pad.
 def private attention_case() : BlockCase {
     var r = TtsRng()
@@ -513,6 +584,9 @@ def test_rows_convs(t : T?) {
         }
         t |> run("the residual block's pool and nearest shortcut") @(t : T?) {
             report(t, pool_and_nearest_case())
+        }
+        t |> run("an input width padded to the q8 lane") @(t : T?) {
+            report(t, pad_case())
         }
     }
 }

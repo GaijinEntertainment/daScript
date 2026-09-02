@@ -941,14 +941,3 @@
     `@scratch` generically, but the mark is inert on a `var inscope @scratch` LOCAL (eight TTS
     findings sat on locals already carrying it) - the message should say "move it to a reused
     field", or the rule should honor a scope-lifetime local it can prove.
-
-74. **The TTS decoder's concat convs run f32 on the q8 lane: pad `cin` to 32 at bake.** The
-    encode block's conv1 reads 514 channels (asr + F0 + N) and each decode block's conv1 reads
-    1090 (the block width + asr_res + F0 + N); `conv1d_q8_eligible` wants `cin % 32 == 0`, so
-    those four convs - the decoder's largest - stay on the f32 tile while conv2 and the 1x1
-    shortcuts serve q8. Done when the served layout carries a padded `cin_s`: `concat_rows`
-    writes zero columns to the padded width, the q8 stacked weight bakes [cout][k*cin_s] with
-    zero rows for the pad, and the block's AdaIN affine and norm carry zero gamma, beta and
-    scale for the pad channels so the pad stays zero through the norm and the LeakyReLU.
-    Worth ~13 ms of kokoro's 66 ms decoder on this box; the rows AdaIN kernels' scalar
-    off-lane path retires with it.
