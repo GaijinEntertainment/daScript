@@ -734,9 +734,9 @@ def public cooperative_matrix2_fa_supported(phys : VkPhysicalDevice) : bool {
 }
 
 //! True when the device also carries the four-wide cm2 decode callback
-//! (VK_NV_cooperative_matrix_decode_vector), which ``create_device_storage_8_16_int_dot_coopmat2``
-//! enables opportunistically; a module naming the vector callback elsewhere drops that operand first.
-[arch(at="../ARCHITECTURE.md#storage-8-16")]
+//! (VK_NV_cooperative_matrix_decode_vector); ``create_device_storage_8_16_int_dot_coopmat2`` enables it
+//! when asked and reported, and a module naming it on a device created without it drops that operand first.
+[arch(at="../ARCHITECTURE.md#subgroup-pair")]
 def public cooperative_matrix2_decode_vector_supported(phys : VkPhysicalDevice) : bool {
     if (!cooperative_matrix2_supported(phys) || !device_extension_available(phys, "VK_NV_cooperative_matrix_decode_vector")) return false
     var fdv = VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV()
@@ -797,10 +797,10 @@ def public select_transfer_queue_family(phys : VkPhysicalDevice) : int {
 }
 
 //! Superset of create_device_storage_8_16_int_dot_coopmat that ALSO enables VK_NV_cooperative_matrix2 +
-//! ``bufferDeviceAddress`` (gate with ``cooperative_matrix2_supported``), plus the same opportunistic set
-//! (coopvec, residency levers, timelineSemaphore, external_memory_host) and ``transfer_family`` second queue.
+//! ``bufferDeviceAddress`` (gate with ``cooperative_matrix2_supported``), plus the opportunistic set (coopvec,
+//! residency levers, timelineSemaphore, external_memory_host, the four-wide decode unless ``decode_vector`` is false) and ``transfer_family``.
 [arch(at="../ARCHITECTURE.md#storage-8-16"), arch(at="../ARCHITECTURE.md#subgroup-pair")]
-def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; queue_family : uint; transfer_family : int = -1) : Device {   // nolint:STYLE038 — linear feature/extension pNext-chain assembly, one hop per capability
+def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; queue_family : uint; transfer_family : int = -1; decode_vector : bool = true) : Device {   // nolint:STYLE038 — linear feature/extension pNext-chain assembly, one hop per capability
     var q12q = VkPhysicalDeviceVulkan12Features()
     var qcv = VkPhysicalDeviceCooperativeVectorFeaturesNV()
     var qmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
@@ -818,7 +818,7 @@ def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; 
     }
     vkGetPhysicalDeviceFeatures2(phys, q2)
     let with_coopvec = device_extension_available(phys, "VK_NV_cooperative_vector") && qcv.cooperativeVector != 0u
-    let with_decvec = device_extension_available(phys, "VK_NV_cooperative_matrix_decode_vector") && qdv.cooperativeMatrixDecodeVector != 0u
+    let with_decvec = decode_vector && device_extension_available(phys, "VK_NV_cooperative_matrix_decode_vector") && qdv.cooperativeMatrixDecodeVector != 0u
     let with_memprio = device_extension_available(phys, "VK_EXT_memory_priority") && qmp.memoryPriority != 0u
     let with_pageable = (with_memprio && device_extension_available(phys, "VK_EXT_pageable_device_local_memory")
         && qpg.pageableDeviceLocalMemory != 0u)

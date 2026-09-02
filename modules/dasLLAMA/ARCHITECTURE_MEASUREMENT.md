@@ -41,8 +41,9 @@ and our tile against the upstream coopmat2 GEMM blob, served in place of a probe
 through `DASLLAMA_VK_SPV_OVERRIDE` (the `ref` arm). The `cm2:<fmt>` arm generalizes the first
 axis to any kq superblock format: it drives the prefill's own (format, column) ladders for the
 l and m columns with the kq batch tile as the control row, over random block bytes at that
-format's device block size, and the same run under `DASLLAMA_VK_DECVEC=0` is the four-wide
-decode's same-build A/B on that format. A new arm joins one of the three.
+format's device block size, and it runs the four-wide decode's two arms (the twin served, then
+stripped through `vkd_pipes_rebuild`) interleaved in one process, two rounds each, so a format's
+`DECVEC` verdict comes from one instrument. A new arm joins one of the three.
 
 **A measured number proves its kernel provenance through `tune_gate()`
 (`performance/profile_common.das`), one arm per world it can run in.** Three worlds, because

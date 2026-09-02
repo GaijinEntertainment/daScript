@@ -13,6 +13,7 @@ options _dasllama_internal = true
 
 require math
 require strings
+require daslib/enum_trait
 require vulkan
 require vulkan/vulkan_boost
 require spirv/spirv_shader
@@ -357,12 +358,16 @@ class Cm2PxLit : MoeCmBase {
     }
 }
 
-def private kq_fmt_by_name(name : string) : int {
-    let names = fixed_array("q8", "k4", "k5", "k6", "q40", "q51", "iq4xs", "k3", "iq3s", "iq3xxs", "iq4nl", "k2", "iq2s", "iq2xs", "iq2xxs")
-    for (i in range(length(names))) {
-        if (names[i] == name) return i
+def private cm2_fmt_names : string {
+    return build_string() $(var w) {
+        var first = true
+        for (f in type<KqFmt>) {
+            if (kq_sb(f)) {
+                w |> write("{first ? "" : " "}{f}")
+                first = false
+            }
+        }
     }
-    return -1
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
@@ -1387,7 +1392,8 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
-            cm2_fmt = kq_fmt_by_name(slice(a, 4))
+            var pf : KqFmt
+            cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
         }
     }
     if (only == "cm2:") {
@@ -1396,14 +1402,26 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             return
         }
         if (cm2_fmt < 0 || !kq_sb(cm2_fmt)) {
-            print("cm2:<fmt> needs a kq superblock format name (k4 k5 k6 q40 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs)\n")
+            print("cm2:<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
             return
         }
-        verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l)
-            && kq_batch_cls_ensure(cm2_fmt, false), "cm2:<fmt> probe pipelines must engage")
-        run_cm2_fmt_shape(cm2_fmt, "gate", 9728, 2560, 512)
-        run_cm2_fmt_shape(cm2_fmt, "down", 2560, 9728, 512)
-        run_cm2_fmt_shape(cm2_fmt, "q/wo", 4096, 2560, 512)
+        // the four-wide decode's A/B, both arms in ONE process, interleaved: the class pipelines
+        // rebuild under each arm (the twin served, then stripped), two rounds so drift shows
+        let twin_device = g_gpu.decvec_on
+        let arms = twin_device ? 2 : 1
+        for (round in range(2)) {
+            for (arm in range(arms)) {
+                g_gpu.decvec_on = twin_device && arm == 0
+                vkd_pipes_rebuild()
+                verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l)
+                    && kq_batch_cls_ensure(cm2_fmt, false), "cm2:<fmt> probe pipelines must engage")
+                let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down", 2560, 9728, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
+            }
+        }
+        g_gpu.decvec_on = twin_device
         return
     }
     if (only == "k6x") {

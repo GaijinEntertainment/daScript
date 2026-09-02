@@ -115,13 +115,13 @@ NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4;
 `DASLLAMA_COOPMAT` overrides the ladder by name, and a cm2 request or force on a device without
 the extension lands on mm. The same resolver stamps the mode into the `.dlim` flavor
 configuration, so the recorded mode and the running mode cannot drift. The four-wide decode
-callback rides beside the mode the same way: a cm2 tile names both callbacks
+callback is NOT in that configuration: a cm2 tile names both callbacks
 (`coopmatLoadTensorDecode`'s tenth argument is the template's `DECVEC` axis, on by default and
-off for the formats whose `cm2:<fmt>` probe row shows the synthesized twin losing - iq3s, iq2s,
-iq2xxs, the per-element grid-and-sign decodes), the device's
-`VK_NV_cooperative_matrix_decode_vector` bit decides which one the driver runs, and that bit is
-the `decvec` field of the flavor configuration (the `v` after the mode in the tag), so a
-`.dlim` baked on a device with the callback and one without carry different identities.
+off for the formats whose `cm2:<fmt>` probe row shows the synthesized twin losing - iq3s, iq2s
+and iq2xxs today), the device created with `DASLLAMA_VK_DECVEC` and the extension decides which
+one the driver runs, and neither choice shapes an image byte, so the bake identity ignores it
+(the configuration's own rule: a serve-only knob is never a field). `decvec_on` is the run's arm,
+announced on the `device ready` line.
 
 **The tile's fast path is what makes the loads unclamped.** It runs when the weight tile is
 whole (`m0 + 128 <= d`), the token column is whole or stamped s, and K is a whole number of BK
@@ -142,10 +142,13 @@ The split arm keeps the general form.
 
 `vkd_class_pipe` is the single place a class kernel's SPIR-V becomes a pipeline, so both shader
 instruments hang there and nothing else has to know about them. The four-wide decode fallback
-hangs there too: on a device without `VK_NV_cooperative_matrix_decode_vector` the served words
-go through `strip_decode_vector` (the capability, the extension and every load's
-`DecodeVectorFunc` operand removed, the scalar callback left to serve), after the override and
-before the shader module, so a dumped or overridden blob is always the emitted, unstripped one.
+hangs there too: when the device was created without `VK_NV_cooperative_matrix_decode_vector`
+(`decvec_on` false) the served words go through `strip_decode_vector` (the capability, the
+extension and every load's `DecodeVectorFunc` operand removed, the scalar callback left to
+serve), after the override and before the shader module, so a dumped or overridden blob is
+always the emitted, unstripped one. The seat is also the in-process A/B: `vkd_pipes_rebuild`
+marks every class slot stale, so the next ensure rebuilds it under whatever `decvec_on` says,
+which is how the `cm2:<fmt>` probe runs both arms interleaved in one process.
 
 **The dump runs before the override.** `DASLLAMA_VK_SPV_DUMP=<dir>` writes the EMITTED words as
 `<dir>/<kernel>.spv`; `DASLLAMA_VK_SPV_OVERRIDE=<dir>` then replaces them with that directory's

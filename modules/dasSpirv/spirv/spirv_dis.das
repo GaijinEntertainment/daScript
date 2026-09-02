@@ -142,6 +142,12 @@ def private memory_access_extra_words(mask : uint) : int {
     if ((mask & uint(SpvMemoryAccess.MakePointerVisible)) != 0u) {
         n++
     }
+    if ((mask & uint(SpvMemoryAccess.AliasScopeINTELMask)) != 0u) {
+        n++
+    }
+    if ((mask & uint(SpvMemoryAccess.NoAliasINTELMask)) != 0u) {
+        n++
+    }
     return n
 }
 
@@ -166,7 +172,6 @@ def public strip_decode_vector(var words : array<uint>) : bool {
             break
         }
         var drop = false
-        var drop_operand_idx = -1
         if (op == uint(SpvOp.Capability) && wc == 2 && words[i + 1] == uint(SpvCapability.CooperativeMatrixDecodeVectorNV)) {
             drop = true
         } elif (op == uint(SpvOp.Extension) && wc == 1 + length(ext_words)) {
@@ -179,7 +184,7 @@ def public strip_decode_vector(var words : array<uint>) : bool {
             drop = same
         } elif (op == uint(SpvOp.CooperativeMatrixLoadTensorNV)) {
             let mi = 6 + memory_access_extra_words(words[i + 6])
-            if (mi < wc) {
+            if (mi + 1 < wc) {   // the mask is operand mi of wc - 1 operands; a load with none carries no twin
                 let ta = words[i + 1 + mi]
                 if ((ta & uint(SpvTensorAddressingOperands.DecodeVectorFunc)) != 0u) {
                     var pos = mi + 1
@@ -189,13 +194,12 @@ def public strip_decode_vector(var words : array<uint>) : bool {
                     if ((ta & uint(SpvTensorAddressingOperands.DecodeFunc)) != 0u) {
                         pos++
                     }
-                    drop_operand_idx = pos
                     let nwc = uint(wc - 1)
                     out |> push((nwc << 16u) | op)
                     for (k in range(wc - 1)) {
                         if (k == mi) {
                             out |> push(ta & ~uint(SpvTensorAddressingOperands.DecodeVectorFunc))
-                        } elif (k != drop_operand_idx) {
+                        } elif (k != pos) {
                             out |> push(words[i + 1 + k])
                         }
                     }

@@ -1096,3 +1096,11 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   24.0->21.3 / 21.0->19.8 (-1..11%); iq2xxs 34.9->30.0 / 26.6->22.0 | 25.4->21.2 / 22.6->19.6
   (-13..17%). RULING (mine): the twin is the template's DECVEC axis, default on, overridden off for
   iq3s / iq2s / iq2xxs; their hand-laid twins are followup_vulkan 36.
+  IN ONE PROCESS (the probe's both-arms run through `vkd_pipes_rebuild`, two rounds each, the three
+  opt-outs flipped on for the measurement; l-tile gate | down, twin on vs off): iq3s 29.3/30.3 vs
+  30.6 | 21.5 vs 22.7 (-1..5%); iq2s 31.0 vs 32.9/33.3 | 21.8 vs 24.0 (-6..9%); iq2xxs 30.5 vs
+  35.0 | 21.7 vs 25.5 (-13..15%); k4 41.4/40.8 vs 35.8/35.9 | 31.5 vs 27.1 (+15..16%). The
+  two-process reading and the one-process reading agree in sign and size on every row, so the
+  DECVEC overrides stand on the in-process instrument. The instrument's own first run caught a seat
+  defect: the strip mutated the class's emitted words in place, so a later rebuild with the twin on
+  served stripped words - the seat now strips a copy.

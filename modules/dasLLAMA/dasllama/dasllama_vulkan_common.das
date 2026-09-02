@@ -471,7 +471,7 @@ struct GpuState {
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops)
-    decvec_on : bool         // DASLLAMA_VK_DECVEC asked and the device has the four-wide decode callback (the dry bake: the flavor's decvec bit)
+    decvec_on : bool         // DASLLAMA_VK_DECVEC asked and the device reports the four-wide decode callback (a dry bake creates no pipelines and leaves it off)
     full_sg_on : bool        // DASLLAMA_VK_FULLSG asked and the device has the feature: every class pipeline pins REQUIRE_FULL_SUBGROUPS
     coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile, 4 = cm2 decode-in-load (the default where the device has it, else 3)
     sm_count : int           // shaderSMCount (VK_NV_shader_sm_builtins; 0 = unknown -> l-tile always, no split-k)
@@ -992,7 +992,6 @@ def vk_moe_init : bool {
         g_gpu.coopmat_mode = g_vk_dry_cfg.coopmat_mode
         g_gpu.has_coopmat = g_vk_dry_cfg.coopmat_mode > 0
         g_gpu.has_coopmat2 = g_vk_dry_cfg.coopmat_mode == 4
-        g_gpu.decvec_on = g_gpu.has_coopmat2 && g_vk_dry_cfg.decvec
         g_gpu.rows_per_wg = int64((WG_X + uint(g_vk_dry_cfg.subgroup_size) - 1u) / uint(g_vk_dry_cfg.subgroup_size))
         g_gpu.msr = g_vk_dry_cfg.max_storage_range
         g_gpu.weight_budget = g_vk_dry_cfg.vram_mb * 1_000_000l
@@ -1030,7 +1029,7 @@ def vk_moe_init : bool {
     }
     if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == 4) {
         // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
-        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam)
+        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam, g_env_vulkan.vk_decvec)
         to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load, {g_gpu.sm_count} SMs; DASLLAMA_COOPMAT=mm restores the mul_mm tiles)\n")
     } elif (g_gpu.has_coopmat) {
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam, xfam)
@@ -1137,7 +1136,7 @@ def vk_moe_init : bool {
     g_gpu.host_mem |> erase(g_gpu.staging.buf)   // process-lifetime — exempt from the model-drop sweep
     g_init_failed = false
     g_gpu.full_sg_on = g_env_vulkan.vk_fullsg && compute_full_subgroups_supported(g_gpu.phys)
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""})\n")
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""}{g_gpu.decvec_on ? ", four-wide decode (DASLLAMA_VK_DECVEC)" : ""})\n")
     if (dasllama_noisy()) {
         // storage-range is the limit that actually binds the arena; allocs/descriptors do not
         var lp : VkPhysicalDeviceProperties
@@ -2316,6 +2315,15 @@ struct VkdClass {
     set_layout : DescriptorSetLayout
     pipe_layout : PipelineLayout
     pipes : array<Pipeline>    // one per [vk_dispatch] kernel, indexed by annotation ordinal
+    pipe_epochs : array<int>   // the g_vkd_pipe_epoch each slot was built under; a stale slot rebuilds on its next ensure
+}
+
+var private g_vkd_pipe_epoch = 0
+
+//! PROBE SEAM: every class pipeline rebuilds on its next ensure - the in-process A/B for what
+//! vkd_class_pipe decides (the four-wide decode strip under `g_gpu.decvec_on`). Device idle first.
+def vkd_pipes_rebuild() {
+    g_vkd_pipe_epoch++
 }
 
 // once-per-class named decline log for the workgroup-footprint gate below
@@ -2388,7 +2396,8 @@ def vkd_set(c : VkdClass; set_ : VkDescriptorSet; bufs : uint64 const[]; sizes :
 
 // true when the kernel's pipe slot is filled (slots fill lazily, one per ensure_<kernel> call)
 def vkd_pipe_made(c : VkdClass; ord : int) : bool {
-    return ord < length(c.pipes) && intptr(boost_value_to_vk(c.pipes[ord])) != 0ul
+    if (ord >= length(c.pipes) || intptr(boost_value_to_vk(c.pipes[ord])) == 0ul) return false
+    return ord < length(c.pipe_epochs) && c.pipe_epochs[ord] == g_vkd_pipe_epoch
 }
 
 // DASLLAMA_VK_SPV_OVERRIDE=<dir>: serve <dir>/<kernel>.spv instead of the emitted words at
@@ -2444,16 +2453,26 @@ def private spv_dump_save(kernel : string; spv : array<uint>) {
 def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
     if (length(c.pipes) <= ord) {
         c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
+        c.pipe_epochs |> resize(ord + 1)
     }
     spv_dump_save(kernel, spv)   // the EMITTED words, before an override replaces them
     spv_override_load(kernel, spv)
-    if (!g_gpu.decvec_on) {
-        strip_decode_vector(spv)
+    var shader : ShaderModule
+    if (g_gpu.decvec_on) {
+        shader <- create_shader_module(g_gpu.device, spv)
+    } else {
+        var served := spv   // the class's emitted words stay whole: a later rebuild with the twin on serves them again
+        strip_decode_vector(served)
+        shader <- create_shader_module(g_gpu.device, served)
+        delete served
     }
-    var shader <- create_shader_module(g_gpu.device, spv)
+    if (intptr(boost_value_to_vk(c.pipes[ord])) != 0ul) {
+        delete c.pipes[ord]   // a rebuild (vkd_pipes_rebuild) replaces a live slot; the device is idle by contract
+    }
     c.pipes[ord] <- (g_gpu.full_sg_on
         ? create_compute_pipeline_full_subgroups(g_gpu.device, c.pipe_layout, shader)
         : create_compute_pipeline(g_gpu.device, c.pipe_layout, shader))
+    c.pipe_epochs[ord] = g_vkd_pipe_epoch
     let pk = intptr(boost_value_to_vk(c.pipes[ord]))
     g_pipe_access[pk] = uint2(rmask, wmask)
     g_pipe_names[pk] = kernel

@@ -181,7 +181,8 @@ own init/release pair.
 
 **A diff that adds or removes a Metal-only or Vulkan-only hook, role, served path, or
 backend-only capability - anything that changes what one backend can serve and the other
-cannot - lands its `ARCHITECTURE_GPU.md` sec.1.5 edit in the same change - including when
+cannot, where one backend serving the same path faster or slower is not such a change - lands
+its `ARCHITECTURE_GPU.md` sec.1.5 edit in the same change - including when
 sec.1.5 already carries that class of asymmetry, and including sec.1.5's per-driver lists of
 registered hooks and borrowed kernels.** sec.1.5 is the closed list; an asymmetry it does not
 carry does not exist.
@@ -271,8 +272,14 @@ sits behind the gate's `mint_time` flag, and the mint-time verdict tests the mod
 fields.** The load selects the repacking CPU backend before the flavor is decided, so a
 mint-time read bakes a verdict the drivers do not share.
 
-**A diff that adds a cm2 tile format instance ships that format's `cm2:<fmt>` probe rows
-(`harness/vk_gemm_probe.das`) taken with `DASLLAMA_VK_DECVEC` set to 1 and to 0, and overrides
-the tile template's `DECVEC` axis off where the four-wide row is slower.** The synthesized twin
-loses on the per-element grid-and-sign decodes, so a format lands with its own verdict, never
-the default's.
+**A diff that adds a cm2 tile format instance, changes a format's cm2 decode body, or changes a
+format's `DECVEC` constant puts that format's `cm2:<fmt>` probe rows
+(`harness/vk_gemm_probe.das`), both the `DASLLAMA_VK_DECVEC=1` and the `=0` rows, in the PR
+body.** A cm2 tile is the NV_cooperative_matrix2 GEMM class stamped per (weight format, column)
+pair in `dasllama/dasllama_vulkan_classes.das`; its `DECVEC` template constant, on by default,
+runs the four-wide decode callback the emitter builds out of the format's scalar
+`[spirv_decode] def decode`.
+
+**A cm2 tile format instance whose `DASLLAMA_VK_DECVEC=1` probe row is slower than its `=0` row
+carries `override DECVEC = false` on that format's class (`dasllama/dasllama_vulkan_classes.das`),
+in the same change.** The four-wide decode wins on some formats and loses on others.
