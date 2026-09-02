@@ -131,8 +131,8 @@ struct Args {
     chat_prompts : bool
 
     @clarg_name = "mtp-depth"
-    @clarg_doc = "Speculative depth for the --mtp-ab ON arm: drafts per round (the verify runs depth+1 rows). 1 = the shipped depth-1 rail"
-    mtp_depth : int = 1
+    @clarg_doc = "Speculative depth for the --mtp-ab ON arm: drafts per round (the verify runs depth+1 rows). 0 = the box profile's default for the round kind (runtime.mtp_depth_nextn / mtp_depth_assistant, 1 when unminted)"
+    mtp_depth : int = 0
 
     @clarg_name = "mtp-ab"
     @clarg_doc = "A/B MTP/NextN self-speculation in-process, OFF then ON (needs a NextN head in the GGUF). Runs the tg-real row, NOT the llama-bench tg row — acceptance is meaningless on synthetic ids. Reports the draft accept rate; mutually exclusive with the other A/B levers"
@@ -1490,7 +1490,9 @@ def main() : int {
                 panic("lcpp_bench: --mtp-ab needs a NextN draft head or an assistant drafter sidecar, and {mpath} has neither")
             }
         }
-        set_mtp_depth(int64(cfg.mtp_depth))
+        if (cfg.mtp_depth > 0) {
+            set_mtp_depth(int64(cfg.mtp_depth))
+        }
         // the exec REQUEST (exe-native / -jit / interpreted) + the armed GPU tier are stamped;
         // a jit run that produced nothing logs its own LLVM JIT error beside this
         let exec_state = is_standalone_exe() ? "exe-native" : (jit_enabled() ? "jit" : "INTERPRETED")

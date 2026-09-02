@@ -31,6 +31,10 @@ def private restore_defaults() {
     set_jobque_spin_us(30000l)
     set_jobque_join_poll(50l)
     set_team_rank_gate(-1)
+    clear_mtp_depth()
+    set_mtp_depth_nextn(1l)
+    set_mtp_depth_assistant(1l)
+    set_mtp_round_kind(MtpRoundKind.nextn)
 }
 
 [test]
@@ -294,3 +298,26 @@ def test_kernels_only_sidecar_declines_as_no_runtime(t : T?) {
     restore_defaults()
 }
 
+// The speculative depth: the box knobs decide per round kind until an explicit set wins.
+[test]
+def test_mtp_depth_knobs_apply_per_round_kind(t : T?) {
+    var terr = ""
+    let dir = temp_directory(terr)
+    t |> success(terr == "", "temp_directory resolves")
+    let path = path_join(dir, "dasllama_test_box_profile_mtp.json")
+    let js = "\{\"runtime\":\{\"mtp_depth_nextn\":1,\"mtp_depth_assistant\":2\}\}"
+    t |> success(fwrite(path, js), "profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(get_mtp_depth_assistant(), 2l, "assistant knob applied")
+    t |> equal(get_mtp_depth_nextn(), 1l, "nextn knob applied")
+    set_mtp_round_kind(MtpRoundKind.nextn)
+    t |> equal(get_mtp_depth(), 1l, "a NextN round drafts the nextn depth")
+    set_mtp_round_kind(MtpRoundKind.assistant)
+    t |> equal(get_mtp_depth(), 2l, "an assistant round drafts the assistant depth")
+    set_mtp_depth(3l)
+    t |> equal(get_mtp_depth(), 3l, "an explicit depth wins over the knobs")
+    clear_mtp_depth()
+    t |> equal(get_mtp_depth(), 2l, "clearing the explicit depth hands the knobs back")
+    remove(path)
+    restore_defaults()
+}

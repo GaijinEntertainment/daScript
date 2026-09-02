@@ -129,28 +129,8 @@ in prefill) and the tuner calls those public entries.
 `MetalPrefillDecline`); decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for
 both paths.
 
-**The speculative round on Metal is one queue, one join.** A round drafts k tokens and verifies them
-as k+1 same-slab rows of the batch driver. The gemma assistant drafter encodes its k steps into ONE
-command buffer committed without a wait: draft i embeds `bvtok[i]` (the seed at 0), its argmax lands
-in `bvtok[i+1]` on the device, and its post_projection is copied on the device into the next step's
-input; the batch driver then takes that token buffer (`set_batch_same_slab_tokens`) and dequantizes
-the rows' embeddings on its own encoder instead of the workspace's CPU rows, lands every row's
-argmax (`enc_argmax_rows`) with the logits, and the host reads tokens and winners only after the
-verify's join - queue order completes the chain first. The drafter's h input is the target's
-post-output_norm hidden, carried in `s.mtp_h` by the decode on head-less models
-(`set_metal_mtp_carry_hidden`); the pre-norm residual is a lever that measured worse. The two-row
-verify's GPU cost is ~1.2x a one-row step on this model (the rows' weight stream), the physics the
-round cannot recover; everything the host did between the drafts and the verify was.
-
-**A kernel's argument-alignment contract is declared on its `[metal_dispatch]` and enforced at
-every dispatch.** `requires = "lhs % N, ..."` (lhs a `params=` name or a kargs field) makes the
-generated builder check each item before it binds and call `metal_requires_failed` on a miss -
-a panic naming the builder and the broken contract, or the test hook installed with
-`set_metal_requires_hook`. The check is one integer modulo per dispatch, so the kernel keeps its
-tail-guard-free main loop and the DRIVER does the shape routing: the fixed-B mul_mv forms stripe
-K in 256 (B2) / 128 (B4) element chunks, and the batched decode driver gates each mv site on its
-own K (`mv_kdim`, `mv_wo`, `mv_w2`), falling to the tail-exact GEMV form where the alignment
-fails (gemma-4-26B-A4B's dense hidden 2112 on the w2 site).
+Sections 2.28-2.30, the Metal speculative round and the dispatch alignment contract, are
+`ARCHITECTURE_GPU_MTP.md`.
 
 **The allowed asymmetries between the backends - this list is closed; a new one lands with its
 entry here:**
@@ -247,7 +227,7 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 `modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
 and why they lose.
 
-Sections 2.2j-2.2p, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`.
+Sections 2.2j-2.2q, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`.
 
 ### 2.2w The tower attention routes {#tower-attn-routes}
 

@@ -442,6 +442,11 @@ struct public HarnessEnv {
     @clarg_doc = "IQ2_XXS vehicle for the tuner's serving-crown confirm (FULL path). Unset: the confirm auto-resolves the first *IQ2_XXS*.gguf in the models dir; none found = no crown (the base kernel serves)."
     confirm_iq2xxs : string = ""
 
+    @clarg_path
+    @clarg_default_doc = "auto-resolved from the models dir"
+    @clarg_doc = "gemma-4 vehicle for the tuner's assistant-depth confirm (FULL path; its mtp- head must sit beside it). Unset: the confirm auto-resolves the first gemma-4*.gguf with a head in the models dir; none found = depth 1 serves"
+    confirm_mtp_gemma : string = ""
+
     @clarg_doc = "Override the batched-dispatch chunk count in the 1-core GEMM probe."
     batch_chunks : string = ""
 

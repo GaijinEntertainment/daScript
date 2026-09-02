@@ -423,7 +423,21 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
 
 ### S4 - the depth controller
 
-**Measured recommendation (2026-09-02, awaiting Boris):** a fixed depth per carrier is within noise of
+**Ruled and landed (2026-09-02, Boris: "we drop controller for sure"):** the depth is a box knob per
+round kind. `get_mtp_depth()` serves an explicit `set_mtp_depth` (the bench's `--mtp-depth`, now
+0 = box default) when one was made, else `runtime.mtp_depth_assistant` / `runtime.mtp_depth_nextn`
+by the `MtpRoundKind` the gemma drafter's attach/detach selects (defaults 1). The assistant knob is
+MINTED: `tune_kernels` races depth 1 vs 2 as serving tg on the SpecBench chat corpus (`lcpp_bench
+--mtp-ab --prompts specbench4 --chat-prompts -n 128 -r 3`, the `mtp=on` line) on a gemma-4 vehicle with
+its `mtp-` head beside it; depth 2 must beat by 2% (its downside is asymmetric - a 6% loss on the M4
+Pro, a tie here - and a tie is not worth the longer round), no vehicle = depth 1 with a
+`DASLLAMA_CONFIRM_MTP_GEMMA` provisioning hint. The first cut raced on the bench's synthetic 32-token
+prompt and depth 2 lost 10% there (137.5 vs 152.2): incoherent text is not the site shape. The NextN
+knob is not raced (depth 1 won on every NextN carrier measured; #72 owns the 27B depth-3 gap).
+Tests: `test_box_profile.das` `test_mtp_depth_knobs_apply_per_round_kind`. The EWMA controller design
+below stays as the record of what was NOT built and why.
+
+**Measured recommendation that led there (2026-09-02):** a fixed depth per carrier is within noise of
 anything a controller could pick. gemma-4-26B-A4B: depth 1 and depth 2 yield the same tokens per
 millisecond (1.185x vs 1.19x; 1.746 tok / 11.7 ms vs 2.27 tok / 15.25 ms); depths 3-4 lose on the
 five-row rail. Qwen3.6-27B: depth 1 (1.31x) beats every deeper setting. The per-position curve is the

@@ -1480,6 +1480,8 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     apply_i64_knob(rt, "metal_tall_floor") $(v) { set_metal_tall_floor(v) }
     apply_i64_knob(rt, "metal_devw_small_panel_mb") $(v) { set_metal_devw_small_panel_mb(v) }
     apply_i64_knob(rt, "metal_cvt_min_rows") $(v) { set_metal_cvt_min_rows(v) }
+    apply_i64_knob(rt, "mtp_depth_nextn") $(v) { set_mtp_depth_nextn(v) }
+    apply_i64_knob(rt, "mtp_depth_assistant") $(v) { set_mtp_depth_assistant(v) }
     let mtc = read_json_field(rt, "metal_tensor", "")
     if (mtc != "" && !g_tensor_crowns_pinned) {
         set_metal_tensor_crowns(mtc)
@@ -4417,7 +4419,16 @@ var private g_mtp_batch_cls = true
 // the speculative depth k: drafts per round (the verify runs k+1 rows). 1 = the shipped depth-1
 // rail; the metal round serves 1..MTP_MAX_ROWS-1, the CPU rail stays at 1.
 let MTP_MAX_ROWS = 9l
+//! Which speculative round serves: the native NextN head (qwen) or the assistant drafter (gemma-4).
+enum public MtpRoundKind {
+    nextn
+    assistant
+}
 var private g_mtp_depth = 1l
+var private g_mtp_depth_explicit = false
+var private g_mtp_depth_nextn = 1l        //! box knob `runtime.mtp_depth_nextn`
+var private g_mtp_depth_assistant = 1l    //! box knob `runtime.mtp_depth_assistant`
+var private g_mtp_round_kind = MtpRoundKind.nextn
 
 var private @scratch g_mtp_pos_try : array<int64>   // rounds that drafted position i (0-based)
 var private @scratch g_mtp_pos_hit : array<int64>   // ... and accepted it
@@ -4459,11 +4470,43 @@ def mtp_pos_report() : string {
     }
 }
 
+//! An explicit depth (a `--mtp-depth` flag, an API caller) wins over the box defaults.
 def set_mtp_depth(k : int64) {
     g_mtp_depth = clamp(k, 1l, MTP_MAX_ROWS - 1l)
+    g_mtp_depth_explicit = true
 }
 
-def get_mtp_depth() : int64 => g_mtp_depth
+//! Back to the box defaults - the per-kind knobs decide again.
+def clear_mtp_depth {
+    g_mtp_depth_explicit = false
+}
+
+def set_mtp_depth_nextn(k : int64) {
+    g_mtp_depth_nextn = clamp(k, 1l, MTP_MAX_ROWS - 1l)
+}
+
+def get_mtp_depth_nextn() : int64 => g_mtp_depth_nextn
+
+def set_mtp_depth_assistant(k : int64) {
+    g_mtp_depth_assistant = clamp(k, 1l, MTP_MAX_ROWS - 1l)
+}
+
+def get_mtp_depth_assistant() : int64 => g_mtp_depth_assistant
+
+def set_mtp_round_kind(k : MtpRoundKind) {
+    g_mtp_round_kind = k
+}
+
+def get_mtp_round_kind() : MtpRoundKind => g_mtp_round_kind
+
+//! The depth a round drafts: the explicit setting when one was made, else the box knob of the
+//! round kind that serves (measured per box - the M5's two-row gemma verify ties depth 1 at
+//! depth 2 where the M4 Pro's loses; the NextN carriers measured depth 1 everywhere).
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-depth-knob")]
+def get_mtp_depth() : int64 {
+    if (g_mtp_depth_explicit) return g_mtp_depth
+    return g_mtp_round_kind == MtpRoundKind.assistant ? g_mtp_depth_assistant : g_mtp_depth_nextn
+}
 
 //! One batched classifier pass over the whole MTP verify window instead of a per-row GEMV each —
 //! the plane (vocab x dim) is a step's largest weight read. Pure perf lever; A/B only.

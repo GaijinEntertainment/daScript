@@ -64,6 +64,7 @@ def public metal_requires_failed(msg : string) {
 
 // requires item "lhs % N" (lhs = a params= name or kargs.field):
 //   if ((uint64(lhs) % N) != 0) metal_requires_failed("<builder>: lhs % N != 0")
+[arch(at="../ARCHITECTURE_GPU_MTP.md#metal-dispatch-requires")]
 def private mk_requires_check(at : LineInfo; fn_name, lhs : string; n : int) : ExpressionPtr {
     let parts <- split(lhs, ".")
     var v : Expression? = new ExprVar(at = at, name := strip(parts[0]))

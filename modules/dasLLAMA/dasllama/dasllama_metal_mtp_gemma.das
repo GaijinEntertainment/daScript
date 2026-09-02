@@ -202,6 +202,7 @@ def public attach_gemma_drafter(t : Model; path : string) : bool {
     g_gemma_ws <- create_batch_workspace_(t)
     g_gemma_ws_ok = true
     set_metal_mtp_carry_hidden(true)
+    set_mtp_round_kind(MtpRoundKind.assistant)
     g_gemma_attached = true
     g_gemma_drafted = 0l
     g_gemma_accepted = 0l
@@ -225,6 +226,7 @@ def public detach_gemma_drafter {
     }
     delete g_gemma_drafter
     set_metal_mtp_carry_hidden(false)
+    set_mtp_round_kind(MtpRoundKind.nextn)
     g_gemma_attached = false
 }
 
@@ -540,6 +542,7 @@ def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) : int
     return 0l
 }
 
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
 def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {
     if (!g_gemma_attached) {
         return metal_mtp_spec_round(t, s, tok, k_req)

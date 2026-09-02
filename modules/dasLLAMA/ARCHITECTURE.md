@@ -50,6 +50,9 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_VULKAN_DECODE.md` - sec.2.2r-2.2t: the per-op tier's decode era - the decode
   attention block over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, and the
   whole-token decode span.
+- `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.30: the Metal speculative round over the batch driver's
+  same-slab verify, the box knob that sets the depth a round drafts, and the kernel
+  argument-alignment contract enforced at every dispatch.
 - `ARCHITECTURE_RUNTIME.md` - sec.2.2, 2.3, 2.3a, 2.4, 2.6-2.9, 2.11, 2.12, 2.18-2.19: kernel
   shape, caches, lint policy, knobs, coverage, the GPU ramp, the hybrid worker pool, and the
   MoE region split.

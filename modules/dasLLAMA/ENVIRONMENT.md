@@ -171,6 +171,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_MODELS_DIR` | path | unset | Directory holding the .gguf models the probes, benches and tests load. dasllama-server's model catalog downloads here too when set. |
 | `DASLLAMA_CONFIRM_MODEL` | path | auto-resolved from the models dir | Model used by the tuner's confirm gate (FULL path, not a bare filename). Unset: the gate auto-resolves from the models dir - the preferred confirm carrier, else the largest present q8 gguf; the fallback pins only when the box has no q8 model at all. |
 | `DASLLAMA_CONFIRM_IQ2XXS` | path | auto-resolved from the models dir | IQ2_XXS vehicle for the tuner's serving-crown confirm (FULL path). Unset: the confirm auto-resolves the first *IQ2_XXS*.gguf in the models dir; none found = no crown (the base kernel serves). |
+| `DASLLAMA_CONFIRM_MTP_GEMMA` | path | auto-resolved from the models dir | gemma-4 vehicle for the tuner's assistant-depth confirm (FULL path; its mtp- head must sit beside it). Unset: the confirm auto-resolves the first gemma-4*.gguf with a head in the models dir; none found = depth 1 serves |
 | `DASLLAMA_BATCH_CHUNKS` | text | unset | Override the batched-dispatch chunk count in the 1-core GEMM probe. |
 | `DASLLAMA_PROBE_MODEL` | text | Qwen3VL-8B-Instruct-Q8_0.gguf | Model filename (inside the models dir) the image-turn attribution probe loads. |
 | `DASLLAMA_BATCH_GRID_2D` | number | unset | Use the 2D batch grid in the parity probe. |
