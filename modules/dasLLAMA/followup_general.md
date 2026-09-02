@@ -856,3 +856,15 @@
     applies the format's cap (its callers know the tensor's KqFmt). Ruled 2026-09-01: zen4's iq4xs
     0.92 / iq4nl 0.94 / k5 0.93-0.97 are accepted as they stand; pinned affinity is normally the
     faster arrangement and this may be the one case it is not - decide with a second SMT box in hand.
+
+68. **iq2xs on arm-i8mm regressed with the shared row-group grid decode.** M4 Pro, engine shape
+    (10 perf-core lanes, d=32768): iq2xs 1530 us at the arc's mid-point (branch 8693a5b47) -> 2348
+    now (0.95 of the reference; 0.90 at one thread). The seat is unchanged (`mr8`, the NEON sdot
+    row form) and the chunk grain does not move it (8/16/4/1 all ~2350). What changed is the grid
+    decode: on ARM `grid_rows_path` returns the ROW-GROUP form for every grid format (`rv == 4`),
+    and the refactor that made row groups win on x86 (0.79 -> 1.6 for iq2xs there) cost the ARM
+    path, which the panel form had served better for iq2xs's 9-bit index. There is no knob to force
+    the panel form on ARM (`DASLLAMA_GRID_ROWS_X86` gates x86 only). Isolated to arm-i8mm iq2xs -
+    every other M4 row is >= 0.95 and the goal boxes (zen4, Intel) are unaffected. The fix is an ARM
+    panel/row-form choice for iq2xs, decided the way the x86 class gate is: measure both forms on M4
+    and pin the winner per format.
