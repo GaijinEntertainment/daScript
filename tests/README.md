@@ -384,7 +384,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | fio_file.das | File I/O - fopen, fread, fwrite with fuzzing | |
 | fio_utils.das | File utilities - fexist, rmdir, rmdir_rec, fread/fwrite by path, get_das_version | |
 | glob_test.das | Pathname glob - `match_glob` (literal, `*`, `**`, `?`, `[a-z]`, `[!abc]`, edge cases), `glob`, `glob_filtered` walk, `is_glob_pattern` | |
-| popen_argv.das | `popen_argv` - basic invocation, non-zero exit on unknown flag, exit code capture | |
+| popen_argv.das | `popen_argv` - basic invocation, non-zero exit on unknown flag, exit code capture, a forward-slash relative argv[0] | |
 
 ## fixed_array/
 

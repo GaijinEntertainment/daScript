@@ -1173,11 +1173,19 @@ namespace das {
         return out;
     }
 
+    static string winNativeExePath ( const char * exe ) {
+        string s = exe ? exe : "";
+        for ( auto & ch : s ) {
+            if ( ch == '/' ) ch = '\\';
+        }
+        return s;
+    }
+
     static string winBuildCommandLine ( char ** argv, uint64_t argc ) {
         string s;
         for ( uint64_t i = 0; i < argc; ++i ) {
             if ( i ) s += ' ';
-            s += winArgvEscape(argv[i]);
+            s += i ? winArgvEscape(argv[i]) : winArgvEscape(winNativeExePath(argv[i]).c_str());
         }
         return s;
     }

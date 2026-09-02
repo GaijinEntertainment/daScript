@@ -315,6 +315,7 @@ def run_and_stream(args : array<string>; var tail_out : string&; keep_tail : int
     var acc = ""
     let rc = unsafe(popen_argv(args, 0.0, $(f) {
         if (f == null) {
+            to_log(LOG_ERROR, "run_and_stream: could not spawn {args[0]} (no child, no output)\n")
             return
         }
         while (true) {

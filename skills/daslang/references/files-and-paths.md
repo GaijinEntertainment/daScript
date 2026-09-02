@@ -63,8 +63,8 @@ fopen(path, "rb") $(f) {
   concept-assert raw POD. The array forms **panic above 2 GiB**; `long_fread` / `long_fwrite`
   return `int64` and have no cap.
 - `run_and_capture(args, var output, timeout_sec = 0.0) : int` runs a child with no shell, capturing
-  merged stdout+stderr. **Windows trap: `args[0]` must use backslashes** - the OS will not resolve a
-  forward-slash relative path - so `replace(exe, "/", "\\")` first.
+  merged stdout+stderr. `args[0]` may use either slash style on every host - the spawn respells it
+  natively for Windows, whose CreateProcess rejects a forward-slash relative path.
 
 ## Mutating operations and their three error forms
 

@@ -113,6 +113,28 @@ def test_popen_argv_arg_with_embedded_quote(t : T?) {
 }
 
 [test]
+def test_popen_argv_relative_forward_slash_exe(t : T?) {
+    t |> run("a relative argv[0] spelled with forward slashes spawns") @(t : T?) {
+        // "Release/daslang.exe" from bin/ - no leading ./, forward slash: the one spelling
+        // Windows CreateProcess refuses unless the spawn respells it natively
+        let exe = get_full_file_name(das_exe())
+        let parent = dir_name(exe)
+        let rel = "{base_name(parent)}/{base_name(exe)}"
+        let saved = getcwd()
+        if (!chdir(dir_name(parent))) {
+            t |> failure("could not chdir to {dir_name(parent)}")
+            return
+        }
+        var output : string
+        let rc = run_argv([rel, "--help"], output)
+        t |> success(chdir(saved), "could not restore the working directory {saved}")
+        t |> equal(rc, 0, "spawning {rel} from {dir_name(parent)} failed")
+        t |> success(find(output, "daslang version") >= 0,
+            "expected 'daslang version' in output: {output}")
+    }
+}
+
+[test]
 def test_popen_argv_child_stdin_isolated(t : T?) {
     t |> run("child cannot read parent's stdin") @(t : T?) {
         // Spawn the same echo fixture used by test_popen_argv_pipe. The
