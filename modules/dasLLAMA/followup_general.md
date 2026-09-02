@@ -941,6 +941,13 @@
    `get_mtp_depth()` (the round takes the plain step), and the tuner's confirm racing the NextN
    carrier too (a Qwen vehicle with its `mtp-` head: 0 vs 1, the same 2% margin), so a box mints
    what it measured. Related: #72 owns why the M4 Pro's dense verify rows cost what they cost.
+79. **The speculative round's verify may want the batch rail's same-slab step.** With the rope gate
+   fixed, `eval_verify_batch_` at two rows on Qwen3.8-27B (M5) reads 31.2 ms per step in the rows
+   probe (0.86x a 36.3 ms plain step) while the round's own two-row verify (`acquire_step` with
+   `nrows`) costs 42.5 ms - the same kernels, a different driver path (pipelined batch rail vs the
+   decode driver's multi-row step with its dn tape and walk). Done = a per-phase split of both paths
+   on the same rows, then the round takes whichever is cheaper on the box, with the depth-1 parity
+   arms proving the swap.
 78. **The ruler's in-process CPU greedy dies on Qwen3.8-27B.** `mtp_ruler --ngl 0` renders and
    continues the corpus on the CPU rails for the text control; on the M5 it produced prompt 0's 128
    tokens and died mid prompt 1 (the 686-token prompt) with no exception text, twice. The release exe

@@ -822,6 +822,28 @@ differ more than gemma's), so three of four acceptance columns are flagged. Roun
 tokens/round. Their dense two-row verify rides at ~1.05x a step, which is the whole difference at
 equal acceptance (followup #72). The CPU point (both engines `-ngl 0`, our NextN depth 1) is queued.
 
+**The M4 Pro Qwen3.8 loss, dug (2026-09-02, Boris: "i don't see the point postponing the fix").**
+The round's two verify rows cost 154 ms on a 77 ms step - 2.0x to the millisecond - so the second
+row bought nothing. Two findings, both fixed in the arc:
+- The batched decode driver's rope-row gate asked `head_size/2` floats per row while the rows are
+  built at `rope_dim/2`; every partial-rope carrier (qwen35: head 256, rope 64) declined with
+  `rope_rows`, the parity fixtures SKIPPED on a decline instead of failing, and the multi-session
+  batch fell to per-row steps on the M5 too (`eval_batch_` B=2 read 2.00x a step). The gate asks the
+  rotated width; the verify fixtures carry `must_serve` (head-less Qwen3.8-27B, large tier, red ->
+  green with a negative control). The MTP round itself has its own verify path and never hit this.
+  Side effect worth a look: the fixed batch rail's same-slab two-row step on Qwen3.8 reads 31 ms
+  against the round's own 42 ms verify - the round may want the batch rail's verify (ledger).
+- The round's verify rows on K-quant planes take the small-batch twins (`enc_kq_mvb`), which the
+  July lab already called ALU-bound. The GEMV lab on both boxes (3B shapes, wGB/s): on the M5 the
+  two-row twin costs 0.52-0.89 of two single passes; on the M4 Pro 1.35-1.5 for k4 (k6's still
+  wins 0.81-0.84). So the form is a per-box crown: `race_kq_rows` (the production wrappers, twin vs
+  two passes, per format on `race_kq_planes` fixtures) crowns `kq_rows_<fmt>`, `enc_kq_site_b` takes
+  the passes there, an unraced box keeps the twin. The M4 mint + rig rebuild + Qwen3.8 ruler rerun
+  are the proof, pending. llama.cpp's round on the M4 is 1.53x a step; our per-row floor is 2.0x, so
+  parity there needs a two-row K4 kernel that amortizes on an ALU-short GPU (their `mul_mv_ext`
+  dequantizes once per block for all rows) - the lab's levers (a) hoist the row-invariant x sums,
+  (b) inline per-quarter dequant, (c) fp16 x panels.
+
 **Two harness lessons, both now in the ruler:**
 - A heat-soaked box under-reads a memory-bound decode by 13-18% (llama.cpp Qwen3.8 off read 21-22
   straight after our runs vs 25.5 cold; our own depth-2 baseline slid 26.9 -> 23.1 back to back).
