@@ -1554,6 +1554,15 @@ def main() : int {
                     let rate = drafted > 0l ? double(accepted) * 100.0lf / double(drafted) : 0.0lf
                     say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}; {mtp_pos_report()}\n")
                     mtp_pos_reset()
+                    static_if (typeinfo builtin_module_exists(das_metal)) {
+                        if (gemma_drafter_attached()) {
+                            let gt = gemma_drafter_time()
+                            let gs = gemma_drafter_stats()
+                            let per = gs.rounds > 0l ? double(gt.draft_us) / double(gs.rounds) / 1000.0lf : 0.0lf
+                            let pver = gs.rounds > 0l ? double(gt.verify_us) / double(gs.rounds) / 1000.0lf : 0.0lf
+                            say(fmt, "  gemma drafter: {gs.rounds} rounds, draft chain {per:.2f} ms/round, verify+commit {pver:.2f} ms/round, cold {double(gt.cold_us) / 1000.0lf:.1f} ms total\n")
+                        }
+                    }
                 }
                 results |> push(st)
                 delete tps

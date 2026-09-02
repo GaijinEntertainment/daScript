@@ -200,6 +200,9 @@ def public attach_gemma_drafter(t : Model; path : string) : bool {
     g_gemma_drafted = 0l
     g_gemma_accepted = 0l
     g_gemma_rounds = 0l
+    g_gemma_us_draft = 0l
+    g_gemma_us_verify = 0l
+    g_gemma_us_cold = 0l
     to_log(LOG_INFO, "dasLLAMA gemma drafter attached: {path} ({g_gemma_drafter.n_layers} Q-only layers over target layers {g_gemma_drafter.kv_layer})\n")
     return true
 }
@@ -398,6 +401,12 @@ var private @scratch g_gemma_hn : array<float>     // ... and the drafter's h_ne
 var private g_gemma_draft_cpu = false              // bring-up bisect: the CPU oracle drafts instead of the GPU step
 var private g_gemma_trace = false                  // bring-up bisect: one log line per round
 var private g_gemma_cpu_out : GemmaDraftOut
+var private g_gemma_us_draft = 0l   // round time split since attach: the draft chain ...
+var private g_gemma_us_verify = 0l  // ... the same-slab verify + walk + commit
+var private g_gemma_us_cold = 0l    // ... cold rounds (one plain step)
+
+//! Round time split since attach, microseconds: draft chain / verify+commit / cold rounds.
+def public gemma_drafter_time() : tuple<draft_us : int64; verify_us : int64; cold_us : int64> => (draft_us = g_gemma_us_draft, verify_us = g_gemma_us_verify, cold_us = g_gemma_us_cold)
 
 //! Bring-up levers: `set_gemma_draft_on_cpu(true)` routes every draft step through the CPU oracle
 //! (the target's live K/V, the same inputs), `set_gemma_trace(true)` logs drafts vs truth per round.
@@ -450,6 +459,15 @@ def private gemma_trace_round(s : Session; pos, drafted, a, vocab : int64) {
 //! [tok, d_1 .. d_k], the accept walk, the commit. Same contract as metal_mtp_spec_round: returns a,
 //! the accepted drafts are s.mtp_vbatch[1..a], tok is always committed; a cold round takes one
 //! plain GPU step and returns 0. A model without a drafter (the NextN carriers) takes the metal round.
+// a round that cannot speculate takes one plain GPU step (output-invariant either way)
+def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) : int64 {
+    let tc = ref_time_ticks()
+    forward(t, s, tok, pos)
+    s.n_past = pos + 1l
+    g_gemma_us_cold += int64(get_time_usec(tc))
+    return 0l
+}
+
 def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {
     if (!g_gemma_attached) {
         return metal_mtp_spec_round(t, s, tok, k_req)
@@ -470,11 +488,10 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
         cold = mr.watermark < pos || mr.cap_rows < pos + k + 1l
     }
     if (cold) {
-        forward(t, s, tok, pos)
-        s.n_past = pos + 1l
-        return 0l
+        return gemma_plain_step(t, s, tok, pos)
     }
     finish_pending_step()
+    let td = ref_time_ticks()
     s.mtp_vbatch[0] = tok
     unsafe {
         memcpy(addr < void? >(g_gemma_h[0]), addr < void? >(s.mtp_h[0]), uint64(dr.tdim) * 4ul)
@@ -492,15 +509,13 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
         }
     }
     if (drafted == 0l) {
-        forward(t, s, tok, pos)
-        s.n_past = pos + 1l
-        return 0l
+        return gemma_plain_step(t, s, tok, pos)
     }
+    g_gemma_us_draft += int64(get_time_usec(td))
+    let tv = ref_time_ticks()
     let nr = drafted + 1l
     if (!eval_verify_batch_(t, g_gemma_ws, s, s.mtp_vbatch, pos, nr)) {
-        forward(t, s, tok, pos)
-        s.n_past = pos + 1l
-        return 0l
+        return gemma_plain_step(t, s, tok, pos)
     }
     g_gemma_drafted += drafted
     g_gemma_rounds++
@@ -524,6 +539,7 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     mtp_pos_note(drafted, a)
     g_gemma_accepted += a
     s.n_past = pos + a + 1l
+    g_gemma_us_verify += int64(get_time_usec(tv))
     return a
 }
 

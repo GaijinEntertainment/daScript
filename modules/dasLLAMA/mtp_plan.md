@@ -542,6 +542,36 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   once S1/S3 make them loadable;
 - CPU batch B=2/4/6/8 (only B=3 + B=1-delegation + shrink are gated today).
 
+## S3 results (gemma-4-26B-A4B-it-Q4_K_M + mtp-...-Q8_0 drafter, M5, SpecBench-4 chat, -n 128 -r 3, debug-jit, 2026-09-02)
+
+| depth | off t/s | on t/s | ratio | accept | per position (accepted_i / rounds) |
+|---|---|---|---|---|---|
+| 1 | 122.2 | 138.6 | **1.13x** | 74.6% | p1 74.6 |
+| 2 | 122.2 | 140.3 | **1.15x** | 63.3% | (sweep run; per-position not yet printed) |
+| 3 | 122.2 | 96.4 | 0.79x | 51.3% | p1 69.3 p2 47.5 p3 37.1 |
+| 4 | 122.1 | 103.1 (78.1 in the sweep run) | 0.84x | 45.2% | p1 72.0 p2 48.9 p3 35.7 p4 24.2 |
+
+- Depth 2 is the peak; 3 and 4 lose because five and six verify rows cross onto the mp-8 / GEMM
+  rails while acceptance halves per position. The two depth-4 runs differ by 25% (78 vs 103) at
+  1% sd each - a systematic between-run effect (thermal / the sweep's fourth run), to be re-measured
+  before anything is recorded.
+- Round economics at depth 1: 1.746 tok/round for 1.13x => a round costs 1.55 target steps, i.e. the
+  DRAFT STEP costs ~0.55 of a target step (~3.7 ms) for 420M params (~0.45 GB q8 => ~1.1 ms at
+  bandwidth). The synchronous per-draft command buffer + wait, the 262144-row tied head (64% of the
+  drafter's weights), and the single-row GEMV forms are the suspects - the S5 fat list for gemma.
+  vLLM reports 1.60x at B1 for gemma-26 (bf16, their acceptance is higher too).
+- **Pre-norm vs post-norm target hidden: SETTLED for post-norm** (llama.cpp's reading). Counting
+  free-run, GPU drafter: post-norm k1 19/21, k2 44/55, k4 72/103 vs pre-norm 17/23, 40/57, 66/113 -
+  post-norm wins at every depth. The `mtp-count-pre` lever stays as the record.
+- **Qwen3.6-27B-MTP per-position curve** (same corpus, depth 4): p1 81.1% p2 57.7% p3 42.3% p4 29.2%
+  (off 20.5 on 17.3 t/s = 0.84x at depth 4). vLLM (bf16, ~2k context, K=6): 93.5 / 82.9 / 71.5 /
+  58.5. Ours is lower at EVERY position including p1 (no chain compounding there), so a large part
+  of the gap is the Q4_K_M target + Q4_K_M head and the prompts, not the chain; the drop-off ratios
+  (p2/p1 0.71 vs 0.89, p3/p2 0.73 vs 0.86) are also worse, which a worse head compounds - the chain
+  is not exonerated but the earlier "0.55 at position 2" was a CONDITIONAL rate set against their
+  unconditional one. A clean split needs the Q8_0 27B head (mtp-Qwen3.8-27B-Q8_0 exists for 3.8)
+  or llama-speculative-simple on the same GGUF.
+
 ## Predictions (logged BEFORE each measurement)
 
 - **0.8B depth sweep (k = 1..4, `--mtp-ab --mtp-depth`, M5, logged 2026-09-01 before the run):**
