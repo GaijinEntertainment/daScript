@@ -1558,7 +1558,7 @@ class public LlvmJitVisitor : AstVisitor {
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
                 var arg = LLVMBuildPointerCast(g_builder, src, ptrType, "any_array_{funcArg.name}_ptr")
                 params |> push(arg)
-            } elif (extern_func != null && extern_func.moreFlags.needStringCast && a._type.isString && !a._type.flags.ref) {
+            } elif (extern_func != null && a._type.isString && !a._type.flags.ref) {
                 // Wrap string argument for extern functions. Empty string in das is null.
                 var res = LLVMBuildSelect(g_builder,
                     LLVMBuildIsNull(g_builder, src, ""),

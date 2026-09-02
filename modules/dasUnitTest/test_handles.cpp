@@ -569,6 +569,10 @@ int32_t test_escape_retained_first_int () {
     return g_escape_test_retained ? *(int32_t *)g_escape_test_retained : -1;
 }
 
+int64_t testStringArgLength ( const char * str ) {
+    return str ? int64_t(strlen(str)) : -1;
+}
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib(this);
     lib.addBuiltInModule();
@@ -603,6 +607,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAlias(typeFactory<Point3>::make(lib));
     addVectorAnnotation<Point3Array>(this,lib,new Point3ArrayAnnotation(lib));
     addCtorAndUsing<Point3Array>(*this, lib, "Point3Array", "Point3Array");
+    addExtern<DAS_BIND_FUN(testStringArgLength)>(*this, lib, "test_string_arg_length",
+        SideEffects::none, "testStringArgLength")->arg("str");
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
         SideEffects::modifyExternal, "testPoint3Array");
     addExtern<DAS_BIND_FUN(testNotLocalObject)>(*this, lib, "testNotLocalObject",

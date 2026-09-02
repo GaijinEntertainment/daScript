@@ -1655,7 +1655,6 @@ SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/ast_serializer.h
     include/daScript/ast/ast_simulate.h
     include/daScript/ast/ast_typedecl.h
-    include/daScript/ast/ast_typefactory_bind.h
     include/daScript/ast/ast_typefactory.h
     include/daScript/ast/ast_visitor.h
     include/daScript/ast/ast_aot_cpp.h

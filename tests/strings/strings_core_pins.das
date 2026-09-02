@@ -16,7 +16,7 @@ def private heap_str(src : string) : string {
 // for a string-to-integer reinterpret (llvm_jit.das:5537 tests isPointer, which a string is not)
 def private ptr_of(s : string) : uint8 const? => unsafe(reinterpret<uint8 const?>(s))
 
-def private is_null_str(s : string) : bool => ptr_of(s) == null
+def private is_null_str(s : string) : bool => empty(s)
 
 def private ptr_delta(src, res : string) : int64 => ptr_of(res) - ptr_of(src)
 
@@ -196,9 +196,7 @@ def test_pin_das_string_overloads(t : T?) {
         t |> success(!starts_with(ds, "abcdefg"), "das_string starts_with cmp longer than str")
         t |> success(ends_with(ds, "def"), "das_string ends_with match")
         t |> success(!ends_with(ds, "dee"), "das_string ends_with mismatch")
-        // an empty das literal is a null pointer, and this overload null-checks cmp first,
-        // so it disagrees with ends_with(string, "") above
-        t |> success(!ends_with(ds, ""), "das_string ends_with empty cmp is FALSE")
+        t |> success(ends_with(ds, ""), "das_string ends_with empty cmp is true")
         t |> success(!ends_with(ds, "zabcdef"), "das_string ends_with cmp longer than str")
     }
 }

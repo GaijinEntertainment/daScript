@@ -40,7 +40,7 @@ def private str_byte(s : string; idx : int) : int {
     return int(unsafe(p[idx]))
 }
 
-def private is_null_str(s : string) : bool => unsafe(reinterpret<uint8 const?>(s)) == null
+def private is_null_str(s : string) : bool => empty(s)
 
 // ===== interior NUL =====
 
@@ -108,8 +108,7 @@ def test_nul_strip_and_trim(t : T?) {
     t |> equal(length(trim(inner)), 1, "trim behaves the same")
     var inscope padded <- with_nul(" ", " ")
     let stripped = strip(padded)
-    t |> success(!is_null_str(stripped), "a lone NUL between spaces is content, not whitespace")
-    t |> equal(length(stripped), 0, "and the result reads as the empty string")
+    t |> equal(length(stripped), 0, "a lone NUL between spaces reads as the empty string")
     t |> equal(length(trim(padded)), 0, "trim agrees")
     // the char-set form only trims the right, so the leading space survives and the NUL stops it
     let rt = rtrim(padded, " ")

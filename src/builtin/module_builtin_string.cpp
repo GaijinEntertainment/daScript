@@ -32,7 +32,7 @@ namespace das
     };
 
     int32_t get_character_at ( const char * str, int32_t index, Context * context, LineInfoArg * at ) {
-        if ( !str || index<0 ) {
+        if ( index<0 ) {
             context->throw_error_at(at, "string character index out of range, %u", uint32_t(index));
         }
         for ( int32_t i = 0; i <= index; ++i ) {
@@ -83,7 +83,7 @@ namespace das
         return uint32_t(bytes.size);
     }
 
-    // Every string entry below is stringLengthSafe + a length-bounded core, so the same core
+    // Every string entry below is stringLength + a length-bounded core, so the same core
     // serves a byte view that carries its own length and never scans for a terminator.
     // A bounded core treats an interior NUL as data.
 
@@ -101,50 +101,50 @@ namespace das
     }
 
     bool builtin_string_endswith ( const char * str, const char * cmp, Context * context ) {
-        return ends_with_core(str, stringLengthSafe(*context, str), cmp, stringLengthSafe(*context, cmp));
+        return ends_with_core(str, stringLength(*context, str), cmp, stringLength(*context, cmp));
     }
 
     bool builtin_string_startswith ( const char * str, const char * cmp, Context * context ) {
-        return starts_with_core(str, stringLengthSafe(*context, str), cmp, stringLengthSafe(*context, cmp));
+        return starts_with_core(str, stringLength(*context, str), cmp, stringLength(*context, cmp));
     }
 
     // das_string overload: prefix-test the das_string in place (no allocation),
     // sibling to builtin_string_ends_with. Lets AST/lint passes that hold names as
     // das_string do `name |> starts_with("...")` without materializing a string.
     bool builtin_string_starts_with ( const string & str, const char * cmp, Context * context ) {
-        return starts_with_core(str.data(), uint32_t(str.length()), cmp, stringLengthSafe(*context, cmp));
+        return starts_with_core(str.data(), uint32_t(str.length()), cmp, stringLength(*context, cmp));
     }
 
     bool builtin_string_startswith2 ( const char * str, const char * cmp, uint32_t cmpLen, Context * context ) {
-        return starts_with_core(str, stringLengthSafe(*context, str), cmp, min(cmpLen, stringLengthSafe(*context, cmp)));
+        return starts_with_core(str, stringLength(*context, str), cmp, min(cmpLen, stringLength(*context, cmp)));
     }
 
     bool builtin_string_startswith3 ( const char * str, int32_t offset, const char * cmp, Context * context ) {
-        return starts_with_at_core(str, stringLengthSafe(*context, str), offset, cmp, stringLengthSafe(*context, cmp));
+        return starts_with_at_core(str, stringLength(*context, str), offset, cmp, stringLength(*context, cmp));
     }
 
     bool builtin_string_startswith4 ( const char * str, int32_t offset, const char * cmp, uint32_t cmpLen, Context * context ) {
-        return starts_with_at_core(str, stringLengthSafe(*context, str), offset, cmp, min(cmpLen, stringLengthSafe(*context, cmp)));
+        return starts_with_at_core(str, stringLength(*context, str), offset, cmp, min(cmpLen, stringLength(*context, cmp)));
     }
 
     bool builtin_view_endswith ( const TArray<uint8_t> & bytes, const char * cmp, Context * context, LineInfoArg * at ) {
-        return ends_with_core(view_data(bytes), view_size(bytes, context, at), cmp, stringLengthSafe(*context, cmp));
+        return ends_with_core(view_data(bytes), view_size(bytes, context, at), cmp, stringLength(*context, cmp));
     }
 
     bool builtin_view_startswith ( const TArray<uint8_t> & bytes, const char * cmp, Context * context, LineInfoArg * at ) {
-        return starts_with_core(view_data(bytes), view_size(bytes, context, at), cmp, stringLengthSafe(*context, cmp));
+        return starts_with_core(view_data(bytes), view_size(bytes, context, at), cmp, stringLength(*context, cmp));
     }
 
     bool builtin_view_startswith2 ( const TArray<uint8_t> & bytes, const char * cmp, uint32_t cmpLen, Context * context, LineInfoArg * at ) {
-        return starts_with_core(view_data(bytes), view_size(bytes, context, at), cmp, min(cmpLen, stringLengthSafe(*context, cmp)));
+        return starts_with_core(view_data(bytes), view_size(bytes, context, at), cmp, min(cmpLen, stringLength(*context, cmp)));
     }
 
     bool builtin_view_startswith3 ( const TArray<uint8_t> & bytes, int32_t offset, const char * cmp, Context * context, LineInfoArg * at ) {
-        return starts_with_at_core(view_data(bytes), view_size(bytes, context, at), offset, cmp, stringLengthSafe(*context, cmp));
+        return starts_with_at_core(view_data(bytes), view_size(bytes, context, at), offset, cmp, stringLength(*context, cmp));
     }
 
     bool builtin_view_startswith4 ( const TArray<uint8_t> & bytes, int32_t offset, const char * cmp, uint32_t cmpLen, Context * context, LineInfoArg * at ) {
-        return starts_with_at_core(view_data(bytes), view_size(bytes, context, at), offset, cmp, min(cmpLen, stringLengthSafe(*context, cmp)));
+        return starts_with_at_core(view_data(bytes), view_size(bytes, context, at), offset, cmp, min(cmpLen, stringLength(*context, cmp)));
     }
 
     static inline const char* strip_l(const char *str, uint32_t len) {
@@ -195,15 +195,15 @@ namespace das
     }
 
     char* builtin_string_strip ( const char *str, Context * context, LineInfoArg * at ) {
-        return strip_core(str, stringLengthSafe(*context, str), context, at);
+        return strip_core(str, stringLength(*context, str), context, at);
     }
 
     char* builtin_string_strip_left ( const char *str, Context * context, LineInfoArg * at ) {
-        return strip_left_core(str, stringLengthSafe(*context, str), context, at);
+        return strip_left_core(str, stringLength(*context, str), context, at);
     }
 
     char* builtin_string_strip_right ( const char *str, Context * context, LineInfoArg * at ) {
-        return strip_right_core(str, stringLengthSafe(*context, str), context, at);
+        return strip_right_core(str, stringLength(*context, str), context, at);
     }
 
     char* builtin_view_strip ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
@@ -219,7 +219,7 @@ namespace das
     }
 
     int builtin_string_skip_white_space ( const char * str, int from, Context * context ) {
-        return skip_white_space_core(str, stringLengthSafe(*context, str), from);
+        return skip_white_space_core(str, stringLength(*context, str), from);
     }
 
     int builtin_view_skip_white_space ( const TArray<uint8_t> & bytes, int from, Context * context, LineInfoArg * at ) {
@@ -266,8 +266,8 @@ namespace das
     }
 
     int builtin_string_find1 ( const char *str, const char *substr, int start, Context * context ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
-        return find_sub_core(str, strLen, substr, stringLengthSafe ( *context, substr ),
+        const uint32_t strLen = stringLength ( *context, str );
+        return find_sub_core(str, strLen, substr, stringLength ( *context, substr ),
             uint32_t(clamp_int(start, 0, int(strLen))));
     }
 
@@ -278,8 +278,8 @@ namespace das
     }
 
     int builtin_string_rfind1 ( const char *str, const char *substr, int start, Context * context ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
-        return rfind_sub_core(str, strLen, substr, stringLengthSafe ( *context, substr ), start);
+        const uint32_t strLen = stringLength ( *context, str );
+        return rfind_sub_core(str, strLen, substr, stringLength ( *context, substr ), start);
     }
 
     int builtin_string_rfind2 (const char *str, const char *substr) {
@@ -290,23 +290,23 @@ namespace das
     }
 
     int builtin_view_find ( const TArray<uint8_t> & bytes, const char * substr, Context * context, LineInfoArg * at ) {
-        return find_sub_core(view_data(bytes), view_size(bytes, context, at), substr, stringLengthSafe(*context, substr), 0);
+        return find_sub_core(view_data(bytes), view_size(bytes, context, at), substr, stringLength(*context, substr), 0);
     }
 
     int builtin_view_find_from ( const TArray<uint8_t> & bytes, const char * substr, int start, Context * context, LineInfoArg * at ) {
         const uint32_t len = view_size(bytes, context, at);
-        return find_sub_core(view_data(bytes), len, substr, stringLengthSafe(*context, substr),
+        return find_sub_core(view_data(bytes), len, substr, stringLength(*context, substr),
             uint32_t(clamp_int(start, 0, int(len))));
     }
 
     int builtin_view_rfind ( const TArray<uint8_t> & bytes, const char * substr, Context * context, LineInfoArg * at ) {
         const uint32_t len = view_size(bytes, context, at);
-        return rfind_sub_core(view_data(bytes), len, substr, stringLengthSafe(*context, substr), int(len));
+        return rfind_sub_core(view_data(bytes), len, substr, stringLength(*context, substr), int(len));
     }
 
     int builtin_view_rfind_from ( const TArray<uint8_t> & bytes, const char * substr, int start, Context * context, LineInfoArg * at ) {
         const uint32_t len = view_size(bytes, context, at);
-        return rfind_sub_core(view_data(bytes), len, substr, stringLengthSafe(*context, substr), start);
+        return rfind_sub_core(view_data(bytes), len, substr, stringLength(*context, substr), start);
     }
 
     static char * chop_core ( const char * str, uint32_t strLength, int start, int length, Context * context, LineInfoArg * at ) {
@@ -319,7 +319,7 @@ namespace das
     }
 
     char* builtin_string_chop(const char* str, int start, int length, Context* context, LineInfoArg * at) {
-        return chop_core(str, stringLengthSafe(*context, str), start, length, context, at);
+        return chop_core(str, stringLength(*context, str), start, length, context, at);
     }
 
     char* builtin_view_chop ( const TArray<uint8_t> & bytes, int start, int length, Context* context, LineInfoArg * at ) {
@@ -347,11 +347,11 @@ namespace das
     }
 
     char* builtin_string_slice1 ( const char *str, int start, int end, Context * context, LineInfoArg * at ) {
-        return slice_core(str, stringLengthSafe ( *context, str ), start, end, context, at);
+        return slice_core(str, stringLength ( *context, str ), start, end, context, at);
     }
 
     char* builtin_string_slice2 ( const char *str, int start, Context * context, LineInfoArg * at ) {
-        return slice_core(str, stringLengthSafe ( *context, str ), start, context, at);
+        return slice_core(str, stringLength ( *context, str ), start, context, at);
     }
 
     char* builtin_view_slice1 ( const TArray<uint8_t> & bytes, int start, int end, Context * context, LineInfoArg * at ) {
@@ -363,7 +363,7 @@ namespace das
     }
 
     char* builtin_string_reverse ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
+        const uint32_t strLen = stringLength ( *context, str );
         if (!strLen)
             return nullptr;
         char * ret = context->allocateString(str, strLen, at);
@@ -378,7 +378,7 @@ namespace das
     }
 
     char* builtin_string_tolower ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
+        const uint32_t strLen = stringLength ( *context, str );
         if (!strLen)
             return nullptr;
         char * ret = context->allocateString(nullptr, strLen, at);
@@ -389,7 +389,6 @@ namespace das
     }
 
     char* builtin_string_tolower_in_place(char* str) {
-        if (!str) return nullptr;
         char* pch = str;
         for (;;) {
             char ch = *pch;
@@ -405,7 +404,7 @@ namespace das
     }
 
     char* builtin_string_toupper ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
+        const uint32_t strLen = stringLength ( *context, str );
         if (!strLen)
             return nullptr;
         char * ret = context->allocateString(nullptr, strLen, at);
@@ -416,7 +415,6 @@ namespace das
     }
 
     char* builtin_string_toupper_in_place ( char* str ) {
-        if (!str) return nullptr;
         char* pch = str;
         for (;;) {
             char ch = *pch;
@@ -429,9 +427,6 @@ namespace das
 
     int builtin_string_stricmp( const char *a, const char *b )
     {
-        if ( !a && !b ) return 0;
-        if ( !a ) return -1;
-        if ( !b ) return 1;
         int d;
         for (;; ++a, ++b){
             d = to_lower(*a) - to_lower(*b);
@@ -447,7 +442,6 @@ namespace das
 
     template <typename TT>
     TT string_to_int_number ( const char *str, Context * context, LineInfoArg * at ) {
-        if ( !str ) context->throw_error_at(at, "expecting string");
         TT result = 0;
         while ( is_white_space(*str) ) str++;
         bool hex = false;
@@ -494,7 +488,6 @@ namespace das
 
     template <typename TT>
     TT string_to_real_number ( const char *str, Context * context, LineInfoArg * at ) {
-        if ( !str ) context->throw_error_at(at, "expecting string");
         TT result = 0;
         while ( is_white_space(*str) ) str++;
         auto res = fast_float::from_chars(str, str+strlen(str), result);
@@ -512,7 +505,6 @@ namespace das
 
     template <typename TT>
     TT fast_to_real ( const char *str ) {
-        if ( !str ) return 0;
         TT result = 0;
         while ( is_white_space(*str) ) str++;
         auto res = fast_float::from_chars(str, str+strlen(str), result);
@@ -529,7 +521,6 @@ namespace das
 
     template <typename TT>
     TT fast_to_int_TT ( const char *str, bool hex ) {
-        if ( !str ) return 0;
         TT result = 0;
         while ( is_white_space(*str) ) str++;
         if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
@@ -621,7 +612,6 @@ namespace das
     }
 
     StringBuilderWriter & write_escape_string ( StringBuilderWriter & writer, char * str ) {
-        if ( !str ) return writer;
         auto estr = escapeString(str,false);
         writer.writeStr(estr.c_str(), estr.length());
         return writer;
@@ -634,7 +624,7 @@ namespace das
     }
 
     char * string_repeat ( const char * str, int count, Context * context, LineInfoArg * at ) {
-        uint32_t len = stringLengthSafe ( *context, str );
+        uint32_t len = stringLength ( *context, str );
         if ( !len || count<=0 ) return nullptr;
         char * res = context->allocateString(nullptr, uint64_t(len) * uint64_t(count), at);
         for ( char * s = res; count; count--, s+=len ) {
@@ -644,8 +634,6 @@ namespace das
     }
 
     DAS_API vector<string> split ( const char * str, const char * delim ) {
-        if ( !str ) str = "";
-        if ( !delim ) delim = "";
         vector<const char *> tokens;
         vector<string> words;
         const char * ch = str;
@@ -671,12 +659,10 @@ namespace das
     }
 
     void builtin_string_split_by_char ( const char * str, const char * delim, const Block & block, Context * context, LineInfoArg * at ) {
-        if ( !str ) str = "";
-        if ( !delim ) delim = "";
         vector<const char *> tokens;
         vector<string> words;
         const char * ch = str;
-        auto delimLen = stringLengthSafe(*context,delim);
+        auto delimLen = stringLength(*context,delim);
         if ( delimLen ) {
             while ( *ch ) {
                 const char * tok = ch;
@@ -687,7 +673,7 @@ namespace das
                 if ( !*ch ) words.push_back("");
             }
         } else {
-            auto len = stringLengthSafe(*context,str);
+            auto len = stringLength(*context,str);
             words.reserve(len);
             while ( *ch ) {
                 words.push_back(string(1,*ch));
@@ -707,12 +693,10 @@ namespace das
     }
 
     void builtin_string_split ( const char * str, const char * delim, const Block & block, Context * context, LineInfoArg * at ) {
-        if ( !str ) str = "";
-        if ( !delim ) delim = "";
         vector<const char *> tokens;
         vector<string> words;
         const char * ch = str;
-        auto delimLen = stringLengthSafe(*context,delim);
+        auto delimLen = stringLength(*context,delim);
         if ( delimLen ) {
             while ( *ch ) {
                 const char * tok = ch;
@@ -723,7 +707,7 @@ namespace das
                 if ( !*ch ) words.push_back("");
             }
         } else {
-            auto len = stringLengthSafe(*context,str);
+            auto len = stringLength(*context,str);
             words.reserve(len);
             while ( *ch ) {
                 words.push_back(string(1,*ch));
@@ -764,9 +748,9 @@ namespace das
     }
 
     char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context, LineInfoArg * at ) {
-        return replace_core(str, stringLengthSafe(*context, str),
-            toSearch, stringLengthSafe(*context, toSearch),
-            replaceStr, stringLengthSafe(*context, replaceStr), context, at);
+        return replace_core(str, stringLength(*context, str),
+            toSearch, stringLength(*context, toSearch),
+            replaceStr, stringLength(*context, replaceStr), context, at);
     }
 
     class StrdupDataWalker : public DataWalker {
@@ -782,12 +766,10 @@ namespace das
     }
 
     char * builtin_string_escape ( const char *str, Context * context, LineInfoArg * at ) {
-        if ( !str ) return nullptr;
         return context->allocateString(escapeString(str,false), at);
     }
 
     char * builtin_string_unescape ( const char *str, Context * context, LineInfoArg * at ) {
-        if ( !str ) return nullptr;
         bool err = false;
         auto estr = unescapeString(str, &err, false);
         if ( err ) context->throw_error_at(at, "invalid escape sequence");
@@ -795,18 +777,17 @@ namespace das
     }
 
     char * builtin_string_safe_unescape ( const char *str, Context * context, LineInfoArg * at ) {
-        if ( !str ) return nullptr;
         bool err = false;
         auto estr = unescapeString(str, &err, false);
         return context->allocateString(estr, at);
     }
 
     int builtin_find_first_char_of ( const char * str, int Ch, Context * context ) {
-        return find_char_core(str, stringLengthSafe ( *context, str ), Ch, 0);
+        return find_char_core(str, stringLength ( *context, str ), Ch, 0);
     }
 
     int builtin_find_first_char_of2 ( const char * str, int Ch, int start, Context * context ) {
-        uint32_t strLen = stringLengthSafe ( *context, str );
+        uint32_t strLen = stringLength ( *context, str );
         start = clamp_int((start < 0) ? (strLen + start) : start, 0, strLen);
         return find_char_core(str, strLen, Ch, uint32_t(start));
     }
@@ -831,7 +812,7 @@ namespace das
     TArray<uint8_t> builtin_string_to_bytes ( const char * str, Context * context, LineInfoArg * at ) {
         TArray<uint8_t> bytes;
         das_zero(bytes);
-        uint32_t len = stringLengthSafe(*context, str);
+        uint32_t len = stringLength(*context, str);
         if ( len ) {
             // exact reserve first: known final size, so the resize never grows - no pow2
             // slack on big strings, and no max_unreserved_size panic
@@ -857,9 +838,8 @@ namespace das
     }
 
     bool builtin_string_ends_with(const string &str, char * substr, Context * context ) {
-        if ( substr==nullptr ) return false;
         auto sz = str.length();
-        auto slen = stringLengthSafe(*context,substr);
+        auto slen = stringLength(*context,substr);
         if ( slen>sz ) return false;
         return memcmp ( str.data() + sz - slen, substr, slen )==0;
     }
@@ -918,19 +898,19 @@ namespace das
     }
 
     char * builtin_string_trim ( char* s, Context * context, LineInfoArg * at ) {
-        return trim_core(s, stringLengthSafe(*context, s), context, at);
+        return trim_core(s, stringLength(*context, s), context, at);
     }
 
     char * builtin_string_ltrim ( char* s, Context * context, LineInfoArg * at ) {
-        return ltrim_core(s, stringLengthSafe(*context, s), context, at);
+        return ltrim_core(s, stringLength(*context, s), context, at);
     }
 
     char * builtin_string_rtrim ( char* s, Context * context, LineInfoArg * at ) {
-        return rtrim_core(s, stringLengthSafe(*context, s), context, at);
+        return rtrim_core(s, stringLength(*context, s), context, at);
     }
 
     char * builtin_string_rtrim_ts ( char* s, char * ts, Context * context, LineInfoArg * at ) {
-        return rtrim_chars_core(s, stringLengthSafe(*context, s), ts ? ts : "", context, at);
+        return rtrim_chars_core(s, stringLength(*context, s), ts ? ts : "", context, at);
     }
 
     char * builtin_view_trim ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
@@ -950,7 +930,6 @@ namespace das
     }
 
     void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context, LineInfoArg * at ) {
-        if ( !str ) return;
         Array arr;
         array_mark_locked(arr, (char *)str, uint32_t(strlen(str)));
         vec4f args[1];
@@ -959,7 +938,6 @@ namespace das
     }
 
     char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context, LineInfoArg * at ) {
-        if ( !str ) return nullptr;
         int32_t len = int32_t(strlen(str));
         char * cstr = context->allocateString(str, len, at);
         memcpy(cstr, str, len);

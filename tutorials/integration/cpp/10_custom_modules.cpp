@@ -10,7 +10,6 @@
 
 #include "daScript/daScript.h"
 #include "daScript/ast/ast_interop.h"
-#include "daScript/ast/ast_typefactory_bind.h"
 #include "daScript/ast/ast_handle.h"
 
 #include <cmath>
