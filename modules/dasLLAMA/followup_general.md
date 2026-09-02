@@ -928,3 +928,12 @@
    and the shared experts twice; a gathered GEMV over the union of selected experts (the prefill
    bucket kernels at M = 2..9) streams each expert once. The physics that caps depth 2 on every
    MoE carrier measured - Qwen3-30B-A3B at B=2 already pays 1.37x.
+76. **Lint: a state-scaled `resize` with no reserve, on an unannotated array (its own PR).**
+   PERF032 guards only arrays annotated `@exact_size`; the speculative round's deltanet rollback
+   buffers were not, grew from empty with a bare resize to another buffer's `long_length`, and the
+   64 MB unreserved-growth guard killed the first CPU speculative step on Qwen3.8-27B (151 MB of
+   state) - a runtime failure lint could have named at the diff. Candidate rule: a `resize` /
+   `resize_no_init` whose size expression is `long_length(<array>)` / `length(<array>)` or a
+   product of one, on a destination with no `reserve` / `ensure_capacity` / `overwrite_resize`
+   earlier in the function, is a finding regardless of annotation; the fix text names
+   `overwrite_resize`. Authoring: `skills/internal/perf_lint_authoring.md`. Ruled a follow-up PR.
