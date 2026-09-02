@@ -18,3 +18,21 @@ compacted, or cited as rules.
 
 - **2026-09-01** (`REVIEW.md`): the two gate rules took the site checklist's dragon wording -
   the weakening rule re-plained, the disclosure rule naming `ALLOWED_HOSTS` directly.
+
+- **2026-09-01** (`REVIEW.md`): flashlight round after PR 3920. Boris ruled "yes" on the
+  staged-path gate - `REVIEW.das` now reads the deploy's `cp` steps and the CMake stage
+  target and fails on a staged tree outside its root list - so the served-tree duty shrank
+  to the routes the gate does not read.
+
+- **2026-09-01** (`REVIEW.md`, round 2): the dragon found the opening's route list and the
+  served-tree rule naming different routes, "today" as a moment pin, "root list" naming no
+  API, and a gate blind spot - a CMake stage target spelling `site/` outright with no
+  `SITE_*` variable. Boris's standing rule for this branch is discuss-implement, so: the
+  gate now parses both destination shapes, the rule names the shapes, the weakening rule
+  covers both checks and names `DEPLOYED_ROOTS`.
+
+- **2026-09-01** (`REVIEW.md`, round 3): `daspkg release --web` named no command - it is
+  `release wasm`; the weakening rule's list qualifier read two ways and now says a list
+  change is not the difference; the served-tree duty binds the step the gate does not read
+  rather than a shape list; removing a `DEPLOYED_ROOTS` entry - the largest weakening the
+  file allowed silently - now owes a PR-body line, the mirror of adding a host.

@@ -45,6 +45,7 @@ CLI tools that take a user-supplied pattern or a comma/newline-separated list of
 * ``glob_filtered(root, includes, excludes, blk)`` — multi-pattern walk; excludes win on conflict.
 * ``is_glob_pattern(pattern) : bool`` — true if the string contains ``*``, ``?``, or ``[``.
 * ``to_generic_path(s) : string`` — convert a path to use forward slashes regardless of host.
+* ``tilde_home(text) : string`` — every home directory in ``text`` (``/Users/<name>/``, ``/home/<name>/``, ``<drive>:\Users\<name>\`` or ``<drive>:/Users/<name>/``) rewritten as ``~/`` (``~\`` on the backslash drive form) wherever it starts a path: the path under the home survives, the user name does not; a bare home with no separator after the name stays.
 * ``expand_glob(pattern, var result)`` — expand a single glob pattern (e.g. ``src/**/*.das``)
   into a sorted list of matching file paths. Splits the literal directory prefix from the glob
   remainder, picks recursive vs shallow walk based on whether the remainder contains ``**`` or ``/``,

@@ -425,7 +425,7 @@ def private load_sidecar_doc(path : string) : JsonValue? {
 // processes' note entries — a save rebuilt from its own notes alone drops every other scope's
 // version stamp, and two pinned scopes then invalidate each other (the auto policy loops)
 def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
-    var prov = JV((binary = running_binary(), platform = get_platform_name(),
+    var prov = JV((binary = tilde_home(running_binary()), platform = get_platform_name(),
         arch = get_architecture_name(), box = tune_box_identity(), written = iso8601_now(),
         features = tune_feature_fingerprint()))
     let old = doc?["provenance"]

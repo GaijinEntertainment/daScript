@@ -252,9 +252,10 @@ artifact - the one rail where globals restore as DATA, so a function-typed globa
 boot-restore `[init]` dies on its first invoke while every `-jit` suite stays green. ~90 s.
 `test_gen_records_args.das` - model-free: the measurement orchestrator's pure seams - the
 pybench args builder's per-tool arms (onnx carries the `--out` recovery file and never a
-device; nemo forwards `--device`), the `asr_gpu_pair_tool` roster, and the
-`records_run_verdict` ZERO-cells refusal - the branches that decide what lands on the
-public board, which no model suite reaches.
+device; nemo forwards `--device`), the `asr_gpu_pair_tool` roster, the
+`records_run_verdict` ZERO-cells refusal, and the `argv_receipt` form (every element
+shell-quoted where it must be, every home directory spelled `~` outside the quotes) - the
+branches that decide what lands on the public board, which no model suite reaches.
 `test_sizing_helpers.das` - model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse, `overwrite_resize` grow-only no-init) fed directly, including
 grows past the `max_unreserved_size` guard that must not panic.

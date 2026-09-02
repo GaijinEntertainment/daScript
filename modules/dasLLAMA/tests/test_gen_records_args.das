@@ -7,10 +7,12 @@ require ../performance/profile_common.das
 require daslib/fio
 require strings
 require daslib/strings_boost
+require daslib/env_registry
 
 // Model-free instruments for the measurement orchestrator's pure seams: the pybench args
-// builder's per-tool arms, the GPU-pair roster, and the ZERO-cells refusal - the branches
-// that decide what lands on the public board, none of which any model suite reaches.
+// builder's per-tool arms, the GPU-pair roster, the ZERO-cells refusal, and the receipt
+// form - the branches that decide what lands on the public board, none of which any model
+// suite reaches.
 
 def private has(args : array<string>; v : string) : bool {
     for (a in args) {
@@ -108,4 +110,27 @@ def test_zero_cells_refusal(t : T?) {
         let good = records_run_verdict(0, 1)
         t |> equal(0, good.rc, "one measured cell with no failures is green")
     }
+}
+
+[test]
+def test_argv_receipt_spells_home_as_tilde(t : T?) {
+    let line = argv_receipt(["/Users/ci/Work/bin/daslang", "-jit", "lcpp_bench.das", "--", "-m", "/Users/ci/models/q.gguf", "a b", "/Users/ci/my dir/x.gguf"])
+    t |> equal(line, "~/Work/bin/daslang -jit lcpp_bench.das -- -m ~/models/q.gguf \"a b\" ~/\"my dir/x.gguf\"", "every home spelled ~ outside the quotes a shell would otherwise keep literal")
+    t |> equal(argv_line(["/Users/ci/bin/tool", "-m", "/Users/ci/my dir/x"]), "~/bin/tool -m ~/\"my dir/x\"", "the display form keeps ~ outside its space-quotes too")
+    t |> equal(argv_line(["C:\\Users\\ci\\my dir\\x.exe"]), "~\\\"my dir\\x.exe\"", "the drive form keeps ~ outside the quotes on its own separator")
+}
+
+[test]
+def test_bench_env_line_spells_home_as_tilde(t : T?) {
+    let had = env_is_set("DASLLAMA_MODELS_DIR")
+    let before = had ? env_value_of("DASLLAMA_MODELS_DIR") : ""
+    set_env_variable("DASLLAMA_MODELS_DIR", "/Users/ci/my models")
+    let line = bench_env_line()
+    if (had) {
+        set_env_variable("DASLLAMA_MODELS_DIR", before)
+    } else {
+        set_env_variable("DASLLAMA_MODELS_DIR", "")
+    }
+    t |> success(find(line, "DASLLAMA_MODELS_DIR=~/\"my models\"") >= 0, "the env receipt spells the home ~ outside the quotes a value with a space needs: {line}")
+    t |> success(find(line, "/Users/") < 0, "no home directory survives in the env receipt")
 }

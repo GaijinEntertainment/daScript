@@ -120,7 +120,6 @@
         tg_das: tok(das, 'tg128'), tg_ref: ref ? tok(ref, 'tg128') : 0,
         pp_ratio: ref ? ratio(tok(das, 'pp512'), tok(ref, 'pp512')) : null,
         tg_ratio: ref ? ratio(tok(das, 'tg128'), tok(ref, 'tg128')) : null,
-        noted: !!((das && das.comment) || (ref && ref.comment)),
         das: das, ref: ref
       });
     });
@@ -245,7 +244,7 @@
             return '<td class="' + cls.join(' ') + '">' + out + '</td>';
           }).join('');
           var rec = spec.receipt ? spec.receipt(r) : null;
-          return '<tr class="dl-row' + (r.noted ? ' dl-row--noted' : '') + '" data-row="' + i + '">' + tds + '</tr>' +
+          return '<tr class="dl-row" data-row="' + i + '">' + tds + '</tr>' +
             (rec ? '<tr hidden data-receipt="' + i + '"><td colspan="' + ncol + '">' +
               '<div class="dl-bench-receipt">' + rec + '</div></td></tr>' : '');
         }).join('');

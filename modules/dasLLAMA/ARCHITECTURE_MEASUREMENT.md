@@ -14,7 +14,11 @@ columns were produced, and they are pinned, not re-measured.
 `performance/gen_bench_records.das` sweeps a board by spawning that rig once per cell, and
 writes `performance/records/<box>.json`. `gen_site_records.das` merges those into the file the
 site renders. A stored row carries its own command, sha, version, tune stamp and exec format, so
-a number is self-describing rather than a bare figure in a table.
+a number is self-describing rather than a bare figure in a table. The command, its environment
+line and a sidecar's `binary` spell the home directory `~` (`tilde_home`, `daslib/fio`): a
+public row names no user and still reproduces on any box. The re-mint rule sanctions one edit
+to a stored row - spelling its home directory `~` - since no measurement changes; an archived
+tune sidecar is never edited, its sha256 being what ties a row to the exe it shipped with.
 
 **Regression checking inverts the same rig:** `gen_bench_records.das --oracle --legs metal`
 takes the store's das rows as the work list, re-measures each once, and gates one-sided against

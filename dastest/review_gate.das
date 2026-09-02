@@ -495,6 +495,336 @@ def cmake_list_entries(text : string; listname : string) : array<string> {
     return <- out
 }
 
+def private is_shell_operator(tok : string) : bool {
+    return (tok == "||" || tok == "&&" || tok == ";" || tok == "|" || tok |> starts_with(">") ||
+        tok |> starts_with("2>") || tok |> starts_with("&"))
+}
+
+//! Sources of every `cp` in shell text whose destination starts with `dest_prefix` - one
+//! entry per source, quotes removed (a quoted run is one source), `-r`-style flags dropped,
+//! a `#` comment dropped, the argument list cut at the first shell operator (`||`, `2>`,
+//! ...). Line-based: a `cp` inside a YAML `run:` block is one line of shell.
+def shell_cp_sources(text : string; dest_prefix : string) : array<string> {
+    var out : array<string>
+    for (line in split(text, "\n")) {
+        // cmake_words reads a shell line well enough here: a `#` comment is dropped and a
+        // quoted run is one word, which is what a cp argument needs
+        var inscope toks <- cmake_words(line)
+        let at = find_index(toks, "cp")
+        continue if (at < 0)
+        var args : array<string>
+        args |> reserve(length(toks))
+        for (i in range(at + 1, length(toks))) {
+            break if (is_shell_operator(toks[i]))
+            continue if (toks[i] |> starts_with("-"))
+            args |> push(toks[i])
+        }
+        continue if (length(args) < 2 || !(args[length(args) - 1] |> starts_with(dest_prefix)))
+        out |> reserve(length(out) + length(args) - 1)
+        for (i in range(length(args) - 1)) {
+            out |> push(args[i])
+        }
+    }
+    return <- out
+}
+
+//! Sources of every `-E copy` / `-E copy_directory` in CMake text whose destination
+//! contains `dest_marker` - one entry per source, `${...}` references verbatim. The
+//! argument list of one copy ends at the next CMake keyword or the closing paren.
+def cmake_copy_sources(text : string; dest_marker : string) : array<string> {
+    var out : array<string>
+    var inscope words <- cmake_words(text)
+    let n = length(words)
+    var i = 0
+    while (i + 1 < n) {
+        if (words[i] != "-E" || (words[i + 1] != "copy" && words[i + 1] != "copy_directory")) {
+            i++
+            continue
+        }
+        var j = i + 2
+        var args : array<string>
+        args |> reserve(8)
+        while (j < n && words[j] != ")" && words[j] != "(" && !is_cmake_keyword(words[j])) {
+            args |> push(words[j])
+            j++
+        }
+        if (length(args) >= 2 && find(args[length(args) - 1], dest_marker) >= 0) {
+            out |> reserve(length(out) + length(args) - 1)
+            for (k in range(length(args) - 1)) {
+                out |> push(args[k])
+            }
+        }
+        i = j
+    }
+    return <- out
+}
+
+//! Home-directory gate for a published record: every line of the file at `path` that
+//! `tilde_home` would change - one naming `/Users/<u>/`, `/home/<u>/` or a drive-letter
+//! `\\Users\\<u>\\` - is a finding. A receipt that reaches a reader names no user.
+def gate_home_paths(path : string) {
+    let text = fread(path)
+    let st = stat(path)
+    if (empty(text) && (!st.is_valid || st.size > 0ul)) {
+        gate_finding(path, "missing or unreadable - the gate cannot pass a file it could not read")
+        return
+    }
+    var line = 0
+    for (raw in split(text, "\n")) {
+        line++
+        //! a JSON record doubles its backslashes, so a drive-letter home only matches un-doubled
+        let unescaped = replace(raw, "\\\\", "\\")
+        if (tilde_home(unescaped) != unescaped) {
+            gate_finding(path, line, "names a home directory - a published record spells it ~ (tilde_home in daslib/fio)")
+        }
+    }
+}
+
+//! Every identifier-shaped token in `text` that starts with `prefix` - `[A-Za-z0-9_-]` runs,
+//! so `dl-row--flat` is one token and `dl-row` inside it is not. A class-name census for a
+//! prefix a stylesheet owns, from markup, script or stylesheet text alike.
+def prefixed_tokens(text : string; prefix : string) : table<string> {
+    var out : table<string>
+    peek_data(text) $(d) {
+        let n = length(d)
+        var i = 0
+        while (i < n) {
+            let at = find(d, prefix, i)
+            break if (at < 0)
+            if (at > 0 && is_token_byte(int(d[at - 1]))) {
+                i = at + 1
+                continue
+            }
+            var e = at
+            while (e < n && is_token_byte(int(d[e]))) {
+                e++
+            }
+            // the bare prefix in prose ("dl-* names") is not a name
+            if (e > at + length(prefix)) {
+                out |> insert(slice(d, at, e))
+            }
+            i = e
+        }
+    }
+    return <- out
+}
+
+def private is_token_byte(b : int) : bool {
+    return is_alnum(b) || b == '_' || b == '-'
+}
+
+//! Every `prefix`-token that appears in a stylesheet's SELECTORS - the text outside rule
+//! bodies, block comments stripped, the rules nested in a group at-rule (`@media`,
+//! `@supports`, ...) included. A name in a comment, a property value, an at-rule prelude or
+//! a `@font-face` descriptor is not a definition; only a selector styles anything.
+def css_selector_tokens(text : string; prefix : string) : table<string> {
+    let selectors = build_string() $(var b : StringBuilderWriter) {
+        peek_data(strip_block_comments(text)) $(d) {
+            var groups : array<bool>
+            var opaque = 0
+            var start = 0
+            for (i in range(length(d))) {
+                let c = int(d[i])
+                if (c == '{') {
+                    let prelude = strip(slice(d, start, i))
+                    let group = opaque == 0 && is_css_group_at_rule(prelude)
+                    if (opaque == 0 && !(prelude |> starts_with("@"))) {
+                        b |> write(prelude)
+                        b |> write(" ")
+                    }
+                    groups |> push(group)
+                    if (!group) {
+                        opaque++
+                    }
+                    start = i + 1
+                } elif (c == '}') {
+                    if (!empty(groups)) {
+                        if (!groups[length(groups) - 1]) {
+                            opaque--
+                        }
+                        groups |> pop()
+                    }
+                    start = i + 1
+                } elif (c == ';' && opaque == 0) {
+                    start = i + 1
+                }
+            }
+        }
+    }
+    return <- prefixed_tokens(selectors, prefix)
+}
+
+//! A group at-rule's block holds rules, so the selectors inside it define names; every other
+//! at-rule's block holds descriptors or keyframe steps.
+def private is_css_group_at_rule(prelude : string) : bool {
+    return false if (!(prelude |> starts_with("@")))
+    var e = 1
+    peek_data(prelude) $(d) {
+        while (e < length(d) && is_token_byte(int(d[e]))) {
+            e++
+        }
+    }
+    let name = slice(prelude, 1, e)
+    return name == "media" || name == "supports" || name == "container" || name == "layer" || name == "scope" || name == "document" || name == "starting-style"
+}
+
+//! Every `id="..."` value in markup. A class census subtracts these: an element id shares
+//! the class namespace in a stylesheet's eyes but is a script hook, not a style.
+def html_ids(text : string) : table<string> {
+    var out : table<string>
+    peek_data(text) $(d) {
+        let n = length(d)
+        var i = 0
+        while (i < n) {
+            let at = find(d, "id=\"", i)
+            break if (at < 0)
+            // `data-id="` or `uuid="` carry the same four bytes; only a bare attribute counts
+            if (at > 0 && is_token_byte(int(d[at - 1]))) {
+                i = at + 4
+                continue
+            }
+            var e = at + 4
+            while (e < n && int(d[e]) != '"') {
+                e++
+            }
+            out |> insert(slice(d, at + 4, e))
+            i = e + 1
+        }
+    }
+    return <- out
+}
+
+//! Prefix census: every `prefix`-token a file in `files` uses that `defined` does not name is
+//! a finding, the element ids declared across `files` left out. The stylesheet that owns the prefix decides
+//! `defined`; `what_defines` names it in the finding.
+def gate_prefixed_names_defined(files : array<string>; prefix : string; defined : table<string>; what_defines : string) {
+    // a script addresses an id the markup declares, so the ids of every file in the set are
+    // subtracted from every file's census
+    var ids : table<string>
+    for (path in files) {
+        var inscope file_ids <- html_ids(fread(path))
+        for (id in keys(file_ids)) {
+            ids |> insert(id)
+        }
+    }
+    for (path in files) {
+        let text = fread(path)
+        var inscope used <- prefixed_tokens(text, prefix)
+        for (name in keys(used)) {
+            continue if (key_exists(defined, name) || key_exists(ids, name))
+            gate_finding(path, find_line(text, name),
+                "uses {name}, which {what_defines} does not define - a {prefix}* name is that stylesheet's; an element renders unstyled under a name it does not know")
+        }
+    }
+}
+
+//! Every `<code class="<cls>" ...>` block in markup, in order, HTML entities decoded - the
+//! source a page shows. Each entry carries the block's source, its whole opening tag (so a
+//! caller can read a `data-*` attribute on it), and the byte offsets of that tag and of the
+//! end of its `</code>`.
+def html_code_blocks(text : string; cls : string) : array<tuple<source : string; tag : string; at : int; after : int>> {
+    var out : array<tuple<source : string; tag : string; at : int; after : int>>
+    let opener = "<code class=\"{cls}\""
+    peek_data(text) $(d) {
+        var i = 0
+        while (true) {
+            let at = find(d, opener, i)
+            break if (at < 0)
+            let tag_end = find(d, ">", at)
+            break if (tag_end < 0)
+            let close = find(d, "</code>", tag_end)
+            break if (close < 0)
+            let decoded = replace_multiple(slice(d, tag_end + 1, close), [(text = "&lt;", replacement = "<"),
+                (text = "&gt;", replacement = ">"), (text = "&quot;", replacement = "\""), (text = "&#39;", replacement = "'"),
+                (text = "&nbsp;", replacement = " "), (text = "&amp;", replacement = "&")])
+            out |> push((source = decoded, tag = slice(d, at, tag_end + 1), at = at, after = close + length("</code>")))
+            i = close + 1
+        }
+    }
+    return <- out
+}
+
+//! Every fenced code block of language `lang` in markdown, in order - the lines between a
+//! "```<lang>" line and the next "```" line. Each entry carries the block's source, its
+//! opening fence line as `tag`, and the byte offsets of that fence and of the end of the
+//! closing one - the shape [[html_code_blocks]] returns, so one caller reads both.
+def markdown_fences(text : string; lang : string) : array<tuple<source : string; tag : string; at : int; after : int>> {
+    var out : array<tuple<source : string; tag : string; at : int; after : int>>
+    let opener = "```{lang}"
+    peek_data(text) $(d) {
+        var i = 0
+        while (true) {
+            let at = find(d, opener, i)
+            break if (at < 0)
+            let line_end = find(d, "\n", at)
+            break if (line_end < 0)
+            // the opener must be the whole fence line: "```das" is not "```dasx"
+            if (strip(slice(d, at + 3, line_end)) != lang) {
+                i = line_end + 1
+                continue
+            }
+            let close = find(d, "\n```", line_end)
+            break if (close < 0)
+            out |> push((source = slice(d, line_end + 1, close + 1), tag = slice(d, at, line_end), at = at, after = close + 4))
+            i = close + 4
+        }
+    }
+    return <- out
+}
+
+//! The rows of the first markdown pipe table under the `## <section>` heading: one entry
+//! per body row, each the cell strings in column order with surrounding spaces and any
+//! backticks removed. The header row comes first; the `|---|` alignment row is dropped.
+def markdown_table_rows(text : string; section : string) : array<array<string>> {
+    var out : array<array<string>>
+    var in_section = false
+    var in_table = false
+    var done = false
+    // no `break` out of the loop over the temporary split array and no scoped array inside
+    // it: both leave a lock behind in some interpreter permutations (issue 3923)
+    for (raw in split(text, "\n")) {
+        continue if (done)
+        let line = strip(raw)
+        if (line |> starts_with("## ")) {
+            done = in_table
+            in_section = line == "## {section}"
+            continue
+        }
+        continue if (!in_section)
+        if (!(line |> starts_with("|"))) {
+            done = in_table
+            continue
+        }
+        in_table = true
+        continue if (line |> starts_with("|---") || line |> starts_with("| ---"))
+        let n_cells = count_cells(line)
+        continue if (n_cells < 3)
+        var row : array<string>
+        row |> reserve(n_cells - 2)
+        var idx = 0
+        for (cell in split(line, "|")) {
+            if (idx > 0 && idx < n_cells - 1) {
+                row |> push(strip(replace(cell, "`", "")))
+            }
+            idx++
+        }
+        out |> emplace(row)
+    }
+    return <- out
+}
+
+def private count_cells(line : string) : int {
+    var n = 1
+    peek_data(line) $(d) {
+        for (i in range(length(d))) {
+            if (int(d[i]) == '|') {
+                n++
+            }
+        }
+    }
+    return n
+}
+
 //! Host of an absolute or protocol-relative URL, lowercased - "" when the URL is relative
 //! or when what follows the scheme is not host-shaped. Scheme and host are matched
 //! case-insensitively, as a browser reads them; a bracketed IPv6 literal comes back with
@@ -812,10 +1142,16 @@ def private is_markup_file(name : string) : bool {
     return (name |> ends_with(".html") || name |> ends_with(".rst") || name |> ends_with(".md"))
 }
 
+[arch(at="README.md#web-gate-scanned-set")]
+def private is_asset_manifest(name : string) : bool {
+    return name |> ends_with(".assets.json")
+}
+
 // the walker takes basenames, so the rule-document test reads a name, never a path
 def private is_scanned_file(name : string) : bool {
     return false if (is_rule_document(name))
-    return (is_markup_file(name) || name |> ends_with(".js") || name |> ends_with(".css"))
+    return (is_markup_file(name) || name |> ends_with(".js") || name |> ends_with(".css") ||
+        is_asset_manifest(name))
 }
 
 def private walk_web_files(folder : string; skip_dirs : table<string>; var out : array<string>) {
@@ -840,10 +1176,11 @@ def private resource_urls_of(path : string; text : string) : array<string> {
 }
 
 //! Cookie-and-host gate for a served web tree: every markup (`.html`, `.rst`, `.md`),
-//! `.js` and `.css` file under `roots`, never descending into a directory named in
-//! `skip_dirs`, is read for `document.cookie` and for a resource host `allowed_hosts` does
-//! not name. Markup contributes its resource tags and inline script bodies, script text its
-//! URL literals, a stylesheet its `@import` and `url(...)` addresses.
+//! `.js`, `.css` and `.assets.json` file under `roots`, never descending into a directory
+//! named in `skip_dirs`, is read for `document.cookie` and for a resource host
+//! `allowed_hosts` does not name. Markup contributes its resource tags and inline script
+//! bodies, script text and an asset manifest their URL literals, a stylesheet its
+//! `@import` and `url(...)` addresses.
 def gate_web_third_party(roots : array<string>; skip_dirs : table<string>; allowed_hosts : table<string>) {
     var files : array<string>
     for (root in roots) {

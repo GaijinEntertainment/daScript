@@ -358,19 +358,32 @@ def run_capture_argv(args : array<string>) : string {
     return strip(acc)
 }
 
-//! The display form of an argv for receipts — one line, elements with spaces quoted.
+// a `~` a shell expands stands outside the quotes: the home is spelled first, the rest is
+// quoted when it must be, and the receipt still runs on any box - on either separator
+def private tilde_outside_quotes(a : string; needs_quotes : bool) : string {
+    let t = tilde_home(a)
+    if (t |> starts_with("~/") || t |> starts_with("~\\")) {
+        let home = slice(t, 0, 2)
+        let rest = slice(t, 2)
+        return needs_quotes ? "{home}\"{rest}\"" : t
+    }
+    return needs_quotes ? "\"{t}\"" : t
+}
+
+//! The display form of an argv for receipts — one line, elements with spaces quoted, every
+//! home directory spelled `~` outside the quotes.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def argv_line(args : array<string>) : string {
-    let line = build_string() $(w) {
+    return build_string() $(w) {
         var first = true
         for (a in args) {
             if (!first) {
                 w |> write(" ")
             }
             first = false
-            w |> write(find(a, " ") >= 0 ? "\"{a}\"" : a)
+            w |> write(tilde_outside_quotes(a, find(a, " ") >= 0))
         }
     }
-    return "{line}"
 }
 
 // Run `cmd`, return its trimmed stdout (first line only when `first_line`). fread reads a
@@ -1571,7 +1584,9 @@ def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int
         if (r.total > 0.0lf && (best < 0.0lf || r.total < best)) {
             best = r.total
             encode_out = max(r.encode, 0.0lf)   // the best rep's already-parsed encode split
-            text_out = mtmd_response_text(out)
+            // the transcript is stored on a public row; a log line in it that names the model
+            // path spells the home ~ like every other receipt field
+            text_out = tilde_home(mtmd_response_text(out))
         }
     }
     return best
@@ -1877,21 +1892,35 @@ def private shell_quote(s : string) : string {
 //! alike. Not a reconstruction: a rebuilt `-- {parsed args}` string loses the binary actually used
 //! and silently drops anything the arg parser did not model.
 def bench_cmd_line() : string {
-    var parts <- [for (a in get_command_line_arguments()); shell_quote(a)]
+    return argv_receipt(get_command_line_arguments())
+}
+
+//! One argv as the receipt a public row carries: every element shell-quoted where it must be,
+//! every home directory spelled `~` outside the quotes so a shell still expands it - the same
+//! rule [[argv_line]] and [[bench_env_line]] apply.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+def argv_receipt(args : array<string>) : string {
+    var parts <- [for (a in args); tilde_outside_quotes(a, shell_quote(a) != a)]
     let line = join(parts, " ")
     delete parts
     return line
 }
 
 //! The set members of [[BENCH_ENV_VARS]] that are actually set, as a copy-pasteable `K=V ...`
-//! prefix. Pair with [[bench_cmd_line]] and the row reproduces exactly.
+//! prefix with every home directory spelled `~`. Pair with [[bench_cmd_line]] and the row
+//! reproduces exactly.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def bench_env_line() : string {
-    var parts <- [for (name in BENCH_ENV_VARS);
-        "{name}={shell_quote(env_value_of(name))}";
-        where env_is_set(name)]
+    var parts <- [for (name in BENCH_ENV_VARS); env_receipt_part(name); where env_is_set(name)]
     let line = join(parts, " ")
     delete parts
     return line
+}
+
+// one `K=V` of the env receipt, the value read once
+def private env_receipt_part(name : string) : string {
+    let value = env_value_of(name)
+    return "{name}={tilde_outside_quotes(value, shell_quote(value) != value)}"
 }
 
 //! One GGUF's identity plus every run measured against it. `gguf` (the exact filename) is the

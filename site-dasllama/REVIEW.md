@@ -3,59 +3,57 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasllama_io_site.md`.
 
-In this checklist "a page" means every served page in this directory - index.html,
-ladder.html, sidecars.html - the generated news region inside index.html included.
+In this checklist "a page" means every served `.html` page in this directory, the generated
+news region inside index.html included.
 
 **A shell command, flag, or output line shown on a page is a defect unless the command runs
-verbatim and produces the result the page shows.** Never show a command for an
-implementation that does not exist yet.
+verbatim and produces the result the page shows.**
 
 **A code sample shown on a page that does not compile and run with the current toolchain is
 a defect.**
 
-**A number shown on a page whose source is not identifiable from the page itself is a
-defect: rendered from live data, or a page comment / prose clause naming the checked-in
-measurement record (or the box, date and measurement - or naming it a placeholder).**
+**A number shown on a page with no source named on the page is a defect** - the source is
+live data the page renders it from, or a page comment or prose clause naming the checked-in
+measurement record, or naming the box and date and what was measured, or the word
+placeholder.
 
 **A comparative superiority claim made in words rather than as side-by-side figures, on any
-page, is a defect.** Figures copied from a checked-in record may stand side by side, ours
-and another engine's - the arithmetic a reader does is not the page's claim.
+page, is a defect** - the arithmetic a reader does over two figures is not the page's claim.
 
-**Copy or rendering that lets a row with no reference engine's figure imply parity with a
-reference engine is a defect - an empty ratio cell reads "not raced".**
+**Copy or rendering that lets a row with no reference engine's figure imply parity is a
+defect - an empty ratio cell means the comparison was never run.**
 
 **A diff that makes `REVIEW.das`'s cookie-and-host check read fewer files, or report less
-than it does today with the same `ALLOWED_HOSTS`, is a defect** - the gate bans
+than it did before the change with the same `ALLOWED_HOSTS`, is a defect** - the gate bans
 `document.cookie` and reports any resource a page loads from a host the list does not
 name.
 
 **A diff that adds a host to `REVIEW.das`'s `ALLOWED_HOSTS` states, in the PR body, what a
 visitor sends that host and whether the host sets cookies.**
 
-**A `dl-*` selector that `site/files/dasllama-table.css` (repo root) does not already
-define, declared in any file under this directory, is a defect** - site chrome here uses the
-`dio-` prefix in `files/dasllama-io.css`, and the `dl-*` measurement-table language is that
-shared sheet's.
+**Weakening `REVIEW.das`'s `dl-*` census - the gate that reports a `dl-*` name used in a
+page, script or stylesheet here that no selector of `site/files/dasllama-table.css` (repo
+root) defines and no `id="..."` in those files declares - is a defect.**
 
 **A statement on a page here about what a shipped tool does is a defect unless it matches
 the current code.**
 
 **A claim in a `_news/*.md` entry that is not true at publish time is a defect, including a
 claim about what a page here renders - check that one against the page's markup and
-`files/dasllama-io.js`.** An entry for something not yet shipped is a defect.
+`files/dasllama-io.js`.**
 
-**A hand-edit between the `news:begin` and `news:end` markers in index.html is a defect -
-edit `_news/` and re-run `build_news.py` instead.** A diff that changes `_news/` also lands
-the regenerated index.html, feed.xml and sitemap.xml, in the same change.
+**A `_news/*.md` entry for something not yet shipped is a defect.**
 
 **A value `files/dasllama-io.js` takes from `/api/*` and puts into markup without the
 context-correct escape is a defect: `esc()` (which escapes `< > & " '`) for text and for
 quoted-attribute values, `Number(...)` for anything numeric, and `safeApiHref()` (an
 `^/api/...` allow-list) for anything landing in `href`/`src` or fed to `fetch`.**
 
-**A page that lacks `<title>`, a meta description, OpenGraph tags, or the Atom `<link>` is a
-defect - a new or renamed page included.**
+**Weakening `test_metadata.py`'s per-page assertions - the test that fails a page without a
+`<title>`, a meta description, the OpenGraph tags, or the Atom `<link>` - is a defect.**
 
-**A diff that adds a file under `files/` also verifies the dasllama.io deploy step
-(`.github/workflows/pages.yml`, "Stage dasllama.io for deployment") stages it, in the same
-change.** Local preview serves the tree directly, so a staging miss is invisible until deploy.
+**Weakening `REVIEW.das`'s page census - the gate that reports a top-level served file with
+no copy line in the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root), or a
+page missing from `build_news.py`'s sitemap list or `test_metadata.py`'s page list - is a
+defect.** Local preview serves the tree directly, so no miss shows there: the page deploys
+unlisted, uncrawled, or unchecked.

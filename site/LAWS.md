@@ -32,3 +32,55 @@ compacted, or cited as rules.
   re-plained ("any resource a page loads from a host its allowed list does not name") and
   the disclosure rule now names `ALLOWED_HOSTS` rather than pointing at its neighbour -
   rules are unordered, so an adjacency referent points at nothing.
+
+- **2026-09-01** (`REVIEW.md`): flashlight round after PR 3920, dragon findings on this
+  checklist. Boris ruled "yes" to defining "editor content" in place (sample bundles are
+  not pages - `web/examples/ui/REVIEW.md` binds them), to dropping "under this folder" from
+  the two embedded-sample rules and the "link every embedded sample" tail, to "playground
+  sample" in the stated-run rule, and to rewrapping the one over-wide line. The run-not-row
+  tail on the first rule stays - the 2026-08-30 ruling placed it there.
+
+- **2026-09-01** (`REVIEW.md`): on the bench receipts carrying his local paths - "we really
+  don't want to show my local paths. its annoying" - Boris ruled option B: the home
+  directory is spelled `~` in every recorded line, the recorder does it, a gate enforces it,
+  and the 386 existing lines are migrated once rather than re-minted. The exact-argv rule
+  gained that one clause.
+
+- **2026-09-01** (`REVIEW.md`): flashlight round, lint candidate (a) ruled "yes" - the
+  tests-entry receipt rule is now `REVIEW.das`'s check and the checklist keeps the
+  weakening residue; the row rule keeps its renderer half.
+
+- **2026-09-01** (`REVIEW.md`): flashlight round, lint candidate (b) ruled "yes" - the two
+  cell-parity rules are now one `REVIEW.das` check (JSON record against the INTERP and JIT
+  tables, both pairs) and the checklist keeps one weakening residue; the two same-change
+  duties above them stay.
+
+- **2026-09-01** (`REVIEW.md`, round 2): the dragon caught the `~` clause on the exact-argv
+  rule duplicating the new home-path gate (the other three gates got residues, this one
+  kept a duty) - the clause went and the residue joined the others; the opening's last
+  "it" now says "that editor"; the row rule lost its third-copy tail (the 2026-08-30 tail on
+  the first rule stays); "the web build" names `web/` (repo root); "today" became "before
+  the change".
+
+- **2026-09-01** (`REVIEW.md`, round 2 rulings, "all as suggested"): the dl-* definition
+  duty became `REVIEW.das`'s census over dasllama.html and its script against the inline
+  style and the shared sheet, mirroring the dasllama.io gate; the checklist keeps the
+  weakening residue.
+
+- **2026-09-01** (`REVIEW.md`, round 2 rulings, "all as suggested"): the three embedded-sample
+  rules - full program, playground link, gen2 - became one `REVIEW.das` check that compiles
+  each block with the running binary; the checklist keeps the weakening residue.
+
+- **2026-09-01** (`REVIEW.md`, the embedded-sample residue): the gate's first run found the
+  four blog fences and the dasllama.html hero sample failing the sample rules. Boris ruled:
+  "lets skip blog, for sure. its blog after all. i can post whatever i feel like there" -
+  blog posts are out of the sample check; and "lets opt out dasllama hero sample. one day
+  we'll get dasLLAMA to work on playground, maybe. until then out" - the block carries
+  `data-playground="none"`, is still compiled, and owes no link.
+
+- **2026-09-01** (`REVIEW.md`, round 3): the review-md auditor showed the round-2 cut of the
+  `~` clause left the exact-argv rule contradicting the home-path residue - the clause was a
+  boundary, not a duplicate - so it returned, with "outside the quotes" after the dasLLAMA
+  auditor found 116 quoted tildes no shell expands; the two record-to-table duties went to
+  the parity gate that enforces them; the sample residue split into the residue and a ledger
+  duty; the dl-* residue lost its cross-site sentence and names the id subtraction.

@@ -9,7 +9,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -35,7 +35,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -52,7 +52,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -92,7 +92,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -118,7 +118,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -135,7 +135,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -175,7 +175,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -215,7 +215,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -241,7 +241,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -268,7 +268,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -294,7 +294,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -311,7 +311,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -351,7 +351,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -377,7 +377,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -394,7 +394,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -434,7 +434,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -474,7 +474,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -500,7 +500,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -527,7 +527,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -553,7 +553,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -570,7 +570,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -610,7 +610,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -636,7 +636,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -653,7 +653,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -693,7 +693,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -733,7 +733,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -759,7 +759,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -776,7 +776,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -839,7 +839,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -902,7 +902,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -965,7 +965,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp/build/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 99",
+        "cmd":"~/Work/llama.cpp/build/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1020,7 +1020,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload",
+        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1075,7 +1075,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp/build/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload --no-op-offload",
+        "cmd":"~/Work/llama.cpp/build/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload --no-op-offload",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1140,7 +1140,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1187,7 +1187,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1228,7 +1228,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1269,7 +1269,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1310,7 +1310,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1357,7 +1357,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1404,7 +1404,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1467,7 +1467,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1530,7 +1530,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1593,7 +1593,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp/build/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 99",
+        "cmd":"~/Work/llama.cpp/build/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1648,7 +1648,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload",
+        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1703,7 +1703,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp/build/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload --no-op-offload",
+        "cmd":"~/Work/llama.cpp/build/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload --no-op-offload",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1768,7 +1768,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1794,7 +1794,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1811,7 +1811,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1851,7 +1851,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1877,7 +1877,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1894,7 +1894,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1934,7 +1934,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1974,7 +1974,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2000,7 +2000,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2027,7 +2027,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2053,7 +2053,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2070,7 +2070,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2110,7 +2110,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2136,7 +2136,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2153,7 +2153,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2193,7 +2193,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2233,7 +2233,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2259,7 +2259,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2286,7 +2286,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2312,7 +2312,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2329,7 +2329,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2369,7 +2369,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2395,7 +2395,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2412,7 +2412,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2452,7 +2452,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2492,7 +2492,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2518,7 +2518,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2545,7 +2545,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-09",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2590,7 +2590,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2616,7 +2616,7 @@
         "version":"0.6.4",
         "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2633,7 +2633,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-09",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2674,7 +2674,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-09",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2715,7 +2715,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-02",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2755,7 +2755,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-09",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -4850,7 +4850,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-19",
-        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
+        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -4866,17 +4866,17 @@
           "asr:jfk.wav":{
             "ms":10856.700000000001,
             "encode_ms":10250,
-            "text":"0.00.002.693 I common_init_result: fitting params to device memory ... 0.00.002.698 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.394.588 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 65536 MiB of total host memory 0.00.717.140 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.720.088 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.727.508 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.03.555.923 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.03.601.627 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.03.871.589 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.03.871.647 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.03.871.857 W WARN: This is an experimental CLI for testing multimodal capability. 0.03.871.861 W       For normal use cases, please use the standard llama-cli 0.03.911.963 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 3) 0.13.320.562 I mtmd batch encoding done in 9408 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
+            "text":"0.00.002.693 I common_init_result: fitting params to device memory ... 0.00.002.698 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.394.588 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 65536 MiB of total host memory 0.00.717.140 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.720.088 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.727.508 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.03.555.923 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.03.601.627 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.03.871.589 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.03.871.647 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.03.871.857 W WARN: This is an experimental CLI for testing multimodal capability. 0.03.871.861 W       For normal use cases, please use the standard llama-cli 0.03.911.963 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 3) 0.13.320.562 I mtmd batch encoding done in 9408 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
           },
           "asr:jfk3.wav":{
             "ms":32567.700000000001,
             "encode_ms":30752.799999999999,
-            "text":"0.00.002.705 I common_init_result: fitting params to device memory ... 0.00.002.711 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.386.614 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 65536 MiB of total host memory 0.00.709.151 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.712.157 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.719.632 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.03.552.780 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.03.598.616 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.03.867.936 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.03.868.007 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.03.868.236 W WARN: This is an experimental CLI for testing multimodal capability. 0.03.868.238 W       For normal use cases, please use the standard llama-cli 0.03.917.351 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 4) 0.29.551.257 I mtmd batch encoding done in 25634 ms 0.31.591.355 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 4) 0.34.195.849 I mtmd batch encoding done in 2604 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
+            "text":"0.00.002.705 I common_init_result: fitting params to device memory ... 0.00.002.711 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.386.614 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 65536 MiB of total host memory 0.00.709.151 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.712.157 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.719.632 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.03.552.780 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.03.598.616 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.03.867.936 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.03.868.007 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.03.868.236 W WARN: This is an experimental CLI for testing multimodal capability. 0.03.868.238 W       For normal use cases, please use the standard llama-cli 0.03.917.351 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 4) 0.29.551.257 I mtmd batch encoding done in 25634 ms 0.31.591.355 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 4) 0.34.195.849 I mtmd batch encoding done in 2604 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
           },
           "asr:gb1.wav":{
             "ms":199122.89999999999,
             "encode_ms":186566.5,
-            "text":"0.00.002.711 I common_init_result: fitting params to device memory ... 0.00.002.719 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.392.436 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 65536 MiB of total host memory 0.00.722.790 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.725.808 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.733.411 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.03.566.951 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.03.613.063 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.03.883.901 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.03.883.969 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.03.884.208 W WARN: This is an experimental CLI for testing multimodal capability. 0.03.884.209 W       For normal use cases, please use the standard llama-cli 0.04.009.695 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 9) 0.29.640.810 I mtmd batch encoding done in 25631 ms 0.31.753.252 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 9) 0.57.359.370 I mtmd batch encoding done in 25606 ms 0.59.593.505 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 9) 1.25.190.660 I mtmd batch encoding done in 25597 ms 1.27.622.943 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 9) 1.53.167.372 I mtmd batch encoding done in 25545 ms 1.55.682.842 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 9) 2.21.252.229 I mtmd batch encoding done in 25570 ms 2.23.966.896 I encoding mtmd batch, n_chunks = 1 (done = 6, total = 9) 2.49.589.272 I mtmd batch encoding done in 25623 ms 2.52.458.579 I encoding mtmd batch, n_chunks = 1 (done = 7, total = 9) 3.08.436.803 I mtmd batch encoding done in 15978 ms My fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As far as we can see, there is comfort and hope in the words of the prophet Isaiah. Lift your eyes and look to the heavens, who created space. He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the Shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God may God continue to bless America.DASLLAMA_IDS: 4754 12339 14522 236764 672 1719 815 6111 21832 4668 532 1822 55882 531 1023 2891 236761 2640 236743 236819 236787 236771 236771 672 5597 236764 9017 2256 528 21912 5745 3662 607 1023 2557 51320 18693 236761 562 2822 990 3209 236764 37061 691 3472 14773 699 506 55748 2787 9539 236761 669 18693 563 5745 236761 2085 659 951 43732 236761 2154 3905 691 496 13919 529 6819 236787 44221 26839 89702 236764 41523 44221 8972 19864 236764 43224 94816 18093 236764 22359 6822 9833 236764 43224 8966 16376 1209 236764 3587 236761 751 19321 1789 34525 2149 236764 532 98134 121873 236764 496 105721 528 506 33722 5661 15150 236761 3143 1758 532 3607 12718 1822 4652 528 506 2509 531 784 27069 528 614 3911 1056 2557 10224 815 2229 531 4483 4180 15668 236761 1030 563 3735 531 29346 506 39793 529 4301 684 35305 532 506 18502 529 67112 506 48621 11661 529 506 10824 236761 3143 101195 7261 506 39793 532 901 17175 1091 95826 236764 14111 901 1053 496 1494 532 29417 5708 528 1972 236761 8468 529 910 23648 532 63485 532 184291 236764 692 795 4305 1091 784 506 919 236761 2343 14522 3124 659 6972 618 1388 529 506 7965 529 1239 1758 532 3607 1015 735 1010 2238 672 11059 10932 532 32717 236761 1599 236789 500 711 7057 236761 5137 4251 7097 66031 2061 607 611 236761 1452 1724 611 9312 795 2462 735 506 2833 532 36637 529 672 2891 236761 669 4400 528 837 901 8390 795 4102 236761 192411 563 5378 1131 506 29151 6998 1023 1902 684 506 18014 529 17324 532 506 86508 531 3050 236761 5137 9338 1131 2557 795 817 580 236761 799 506 55748 3124 236764 692 5004 21404 532 40578 236761 1773 2793 618 692 740 1460 236764 993 563 5931 532 4614 528 506 4171 529 506 59918 81034 236761 79493 822 6114 532 1385 531 506 80958 236764 1015 4464 2557 236761 1293 1015 12076 855 506 129196 20472 886 684 886 532 9139 1091 1546 684 1463 236761 8468 529 914 1822 2066 532 45478 6332 236764 711 886 529 1091 563 9724 236761 669 1638 33797 1015 5618 506 8197 992 10077 506 5618 529 506 6819 39690 692 92377 3124 236761 669 13919 529 506 114357 18693 1602 711 994 21236 531 10824 236761 16961 692 740 14098 600 784 659 21236 2033 236761 3353 3803 14321 506 112792 7965 532 1149 3803 1149 3803 4102 531 14321 5711 236761 106"
+            "text":"0.00.002.711 I common_init_result: fitting params to device memory ... 0.00.002.719 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.392.436 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 65536 MiB of total host memory 0.00.722.790 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.725.808 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.733.411 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.03.566.951 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.03.613.063 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.03.883.901 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.03.883.969 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.03.884.208 W WARN: This is an experimental CLI for testing multimodal capability. 0.03.884.209 W       For normal use cases, please use the standard llama-cli 0.04.009.695 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 9) 0.29.640.810 I mtmd batch encoding done in 25631 ms 0.31.753.252 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 9) 0.57.359.370 I mtmd batch encoding done in 25606 ms 0.59.593.505 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 9) 1.25.190.660 I mtmd batch encoding done in 25597 ms 1.27.622.943 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 9) 1.53.167.372 I mtmd batch encoding done in 25545 ms 1.55.682.842 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 9) 2.21.252.229 I mtmd batch encoding done in 25570 ms 2.23.966.896 I encoding mtmd batch, n_chunks = 1 (done = 6, total = 9) 2.49.589.272 I mtmd batch encoding done in 25623 ms 2.52.458.579 I encoding mtmd batch, n_chunks = 1 (done = 7, total = 9) 3.08.436.803 I mtmd batch encoding done in 15978 ms My fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As far as we can see, there is comfort and hope in the words of the prophet Isaiah. Lift your eyes and look to the heavens, who created space. He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the Shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God may God continue to bless America.DASLLAMA_IDS: 4754 12339 14522 236764 672 1719 815 6111 21832 4668 532 1822 55882 531 1023 2891 236761 2640 236743 236819 236787 236771 236771 672 5597 236764 9017 2256 528 21912 5745 3662 607 1023 2557 51320 18693 236761 562 2822 990 3209 236764 37061 691 3472 14773 699 506 55748 2787 9539 236761 669 18693 563 5745 236761 2085 659 951 43732 236761 2154 3905 691 496 13919 529 6819 236787 44221 26839 89702 236764 41523 44221 8972 19864 236764 43224 94816 18093 236764 22359 6822 9833 236764 43224 8966 16376 1209 236764 3587 236761 751 19321 1789 34525 2149 236764 532 98134 121873 236764 496 105721 528 506 33722 5661 15150 236761 3143 1758 532 3607 12718 1822 4652 528 506 2509 531 784 27069 528 614 3911 1056 2557 10224 815 2229 531 4483 4180 15668 236761 1030 563 3735 531 29346 506 39793 529 4301 684 35305 532 506 18502 529 67112 506 48621 11661 529 506 10824 236761 3143 101195 7261 506 39793 532 901 17175 1091 95826 236764 14111 901 1053 496 1494 532 29417 5708 528 1972 236761 8468 529 910 23648 532 63485 532 184291 236764 692 795 4305 1091 784 506 919 236761 2343 14522 3124 659 6972 618 1388 529 506 7965 529 1239 1758 532 3607 1015 735 1010 2238 672 11059 10932 532 32717 236761 1599 236789 500 711 7057 236761 5137 4251 7097 66031 2061 607 611 236761 1452 1724 611 9312 795 2462 735 506 2833 532 36637 529 672 2891 236761 669 4400 528 837 901 8390 795 4102 236761 192411 563 5378 1131 506 29151 6998 1023 1902 684 506 18014 529 17324 532 506 86508 531 3050 236761 5137 9338 1131 2557 795 817 580 236761 799 506 55748 3124 236764 692 5004 21404 532 40578 236761 1773 2793 618 692 740 1460 236764 993 563 5931 532 4614 528 506 4171 529 506 59918 81034 236761 79493 822 6114 532 1385 531 506 80958 236764 1015 4464 2557 236761 1293 1015 12076 855 506 129196 20472 886 684 886 532 9139 1091 1546 684 1463 236761 8468 529 914 1822 2066 532 45478 6332 236764 711 886 529 1091 563 9724 236761 669 1638 33797 1015 5618 506 8197 992 10077 506 5618 529 506 6819 39690 692 92377 3124 236761 669 13919 529 506 114357 18693 1602 711 994 21236 531 10824 236761 16961 692 740 14098 600 784 659 21236 2033 236761 3353 3803 14321 506 112792 7965 532 1149 3803 1149 3803 4102 531 14321 5711 236761 106"
           }
         },
         "workload":"audio-chat",
@@ -4923,7 +4923,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -4970,7 +4970,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5017,7 +5017,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5157,7 +5157,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5198,7 +5198,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5239,7 +5239,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5280,7 +5280,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5343,7 +5343,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5406,7 +5406,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5469,7 +5469,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp/build/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 99",
+        "cmd":"~/Work/llama.cpp/build/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5524,7 +5524,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload",
+        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5579,7 +5579,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp/build/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload --no-op-offload",
+        "cmd":"~/Work/llama.cpp/build/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 8 -ngl 0 --no-mmproj-offload --no-op-offload",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5742,7 +5742,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-05",
-        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
+        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -6029,7 +6029,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-17",
-        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-Qwen3-ASR-0.6B-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
+        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-Qwen3-ASR-0.6B-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -6045,17 +6045,17 @@
           "asr:jfk.wav":{
             "ms":3631,
             "encode_ms":3411.3000000000002,
-            "text":"0.00.002.825 I common_init_result: fitting params to device memory ... 0.00.002.829 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.150.924 I common_params_fit_impl: projected to use 7927 MiB of host memory vs. 65536 MiB of total host memory 0.00.246.414 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.01.381.457 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.530.702 I mtmd_cli_context: chat template example: <|im_start|>system You are a helpful assistant<|im_end|> <|im_start|>user Hello<|im_end|> <|im_start|>assistant Hi there<|im_end|> <|im_start|>user How are you?<|im_end|> <|im_start|>assistant 0.01.627.863 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.627.916 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf 0.01.628.151 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.628.153 W       For normal use cases, please use the standard llama-cli 0.01.640.082 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 4) 0.03.838.627 I mtmd batch encoding done in 2198 ms 0.03.908.815 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 4) 0.04.981.565 I mtmd batch encoding done in 1072 ms language English<asr_text>And so, my fellow Americans, ask not what your country can do for you; ask what you can do for your country.DASLLAMA_IDS: 11528 6364 151704 3036 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 26 2548 1128 498 646 653 369 697 3146 13 151645"
+            "text":"0.00.002.825 I common_init_result: fitting params to device memory ... 0.00.002.829 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.150.924 I common_params_fit_impl: projected to use 7927 MiB of host memory vs. 65536 MiB of total host memory 0.00.246.414 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.01.381.457 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.530.702 I mtmd_cli_context: chat template example: <|im_start|>system You are a helpful assistant<|im_end|> <|im_start|>user Hello<|im_end|> <|im_start|>assistant Hi there<|im_end|> <|im_start|>user How are you?<|im_end|> <|im_start|>assistant 0.01.627.863 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.627.916 I main: loading model: ~/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf 0.01.628.151 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.628.153 W       For normal use cases, please use the standard llama-cli 0.01.640.082 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 4) 0.03.838.627 I mtmd batch encoding done in 2198 ms 0.03.908.815 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 4) 0.04.981.565 I mtmd batch encoding done in 1072 ms language English<asr_text>And so, my fellow Americans, ask not what your country can do for you; ask what you can do for your country.DASLLAMA_IDS: 11528 6364 151704 3036 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 26 2548 1128 498 646 653 369 697 3146 13 151645"
           },
           "asr:jfk3.wav":{
             "ms":10218.799999999999,
             "encode_ms":9566.5,
-            "text":"0.00.002.778 I common_init_result: fitting params to device memory ... 0.00.002.783 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.151.295 I common_params_fit_impl: projected to use 7927 MiB of host memory vs. 65536 MiB of total host memory 0.00.246.618 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.01.382.534 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.531.144 I mtmd_cli_context: chat template example: <|im_start|>system You are a helpful assistant<|im_end|> <|im_start|>user Hello<|im_end|> <|im_start|>assistant Hi there<|im_end|> <|im_start|>user How are you?<|im_end|> <|im_start|>assistant 0.01.628.678 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.628.728 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf 0.01.628.986 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.628.987 W       For normal use cases, please use the standard llama-cli 0.01.650.672 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 7) 0.03.855.027 I mtmd batch encoding done in 2205 ms 0.03.924.504 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 7) 0.06.066.919 I mtmd batch encoding done in 2143 ms 0.06.141.993 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 7) 0.08.302.970 I mtmd batch encoding done in 2161 ms 0.08.382.558 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 7) 0.10.518.900 I mtmd batch encoding done in 2137 ms 0.10.604.874 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 7) 0.11.139.481 I mtmd batch encoding done in 534 ms language English<asr_text>And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.DASLLAMA_IDS: 11528 6364 151704 3036 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 11 2548 1128 498 646 653 369 697 3146 13 1597 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 11 2548 1128 498 646 653 369 697 3146 13 1597 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 11 2548 1128 498 646 653 369 697 3146 13 151645"
+            "text":"0.00.002.778 I common_init_result: fitting params to device memory ... 0.00.002.783 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.151.295 I common_params_fit_impl: projected to use 7927 MiB of host memory vs. 65536 MiB of total host memory 0.00.246.618 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.01.382.534 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.531.144 I mtmd_cli_context: chat template example: <|im_start|>system You are a helpful assistant<|im_end|> <|im_start|>user Hello<|im_end|> <|im_start|>assistant Hi there<|im_end|> <|im_start|>user How are you?<|im_end|> <|im_start|>assistant 0.01.628.678 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.628.728 I main: loading model: ~/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf 0.01.628.986 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.628.987 W       For normal use cases, please use the standard llama-cli 0.01.650.672 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 7) 0.03.855.027 I mtmd batch encoding done in 2205 ms 0.03.924.504 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 7) 0.06.066.919 I mtmd batch encoding done in 2143 ms 0.06.141.993 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 7) 0.08.302.970 I mtmd batch encoding done in 2161 ms 0.08.382.558 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 7) 0.10.518.900 I mtmd batch encoding done in 2137 ms 0.10.604.874 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 7) 0.11.139.481 I mtmd batch encoding done in 534 ms language English<asr_text>And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.DASLLAMA_IDS: 11528 6364 151704 3036 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 11 2548 1128 498 646 653 369 697 3146 13 1597 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 11 2548 1128 498 646 653 369 697 3146 13 1597 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 11 2548 1128 498 646 653 369 697 3146 13 151645"
           },
           "asr:gb1.wav":{
             "ms":65002.400000000001,
             "encode_ms":57179.699999999997,
-            "text":"0.00.002.778 I common_init_result: fitting params to device memory ... 0.00.002.784 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.150.965 I common_params_fit_impl: projected to use 7927 MiB of host memory vs. 65536 MiB of total host memory 0.00.246.505 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.01.376.286 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.519.070 I mtmd_cli_context: chat template example: <|im_start|>system You are a helpful assistant<|im_end|> <|im_start|>user Hello<|im_end|> <|im_start|>assistant Hi there<|im_end|> <|im_start|>user How are you?<|im_end|> <|im_start|>assistant 0.01.616.380 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.616.431 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf 0.01.616.663 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.616.664 W       For normal use cases, please use the standard llama-cli 0.01.715.326 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 27) 0.03.920.249 I mtmd batch encoding done in 2205 ms 0.03.989.480 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 27) 0.06.129.445 I mtmd batch encoding done in 2140 ms 0.06.204.261 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 27) 0.08.345.157 I mtmd batch encoding done in 2141 ms 0.08.456.484 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 27) 0.10.594.888 I mtmd batch encoding done in 2138 ms 0.10.680.754 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 27) 0.12.820.107 I mtmd batch encoding done in 2140 ms 0.12.912.022 I encoding mtmd batch, n_chunks = 1 (done = 6, total = 27) 0.15.064.588 I mtmd batch encoding done in 2152 ms 0.15.161.516 I encoding mtmd batch, n_chunks = 1 (done = 7, total = 27) 0.17.296.728 I mtmd batch encoding done in 2135 ms 0.17.400.463 I encoding mtmd batch, n_chunks = 1 (done = 8, total = 27) 0.19.552.829 I mtmd batch encoding done in 2152 ms 0.19.662.924 I encoding mtmd batch, n_chunks = 1 (done = 9, total = 27) 0.21.798.724 I mtmd batch encoding done in 2135 ms 0.21.912.233 I encoding mtmd batch, n_chunks = 1 (done = 10, total = 27) 0.24.073.586 I mtmd batch encoding done in 2161 ms 0.24.195.406 I encoding mtmd batch, n_chunks = 1 (done = 11, total = 27) 0.26.331.711 I mtmd batch encoding done in 2136 ms 0.26.456.647 I encoding mtmd batch, n_chunks = 1 (done = 12, total = 27) 0.28.608.969 I mtmd batch encoding done in 2153 ms 0.28.739.760 I encoding mtmd batch, n_chunks = 1 (done = 13, total = 27) 0.30.878.410 I mtmd batch encoding done in 2139 ms 0.31.019.269 I encoding mtmd batch, n_chunks = 1 (done = 14, total = 27) 0.33.155.206 I mtmd batch encoding done in 2136 ms 0.33.333.160 I encoding mtmd batch, n_chunks = 1 (done = 15, total = 27) 0.35.492.949 I mtmd batch encoding done in 2160 ms 0.35.642.193 I encoding mtmd batch, n_chunks = 1 (done = 16, total = 27) 0.37.776.954 I mtmd batch encoding done in 2135 ms 0.37.932.145 I encoding mtmd batch, n_chunks = 1 (done = 17, total = 27) 0.40.084.322 I mtmd batch encoding done in 2152 ms 0.40.244.192 I encoding mtmd batch, n_chunks = 1 (done = 18, total = 27) 0.42.380.933 I mtmd batch encoding done in 2137 ms 0.42.548.164 I encoding mtmd batch, n_chunks = 1 (done = 19, total = 27) 0.44.702.428 I mtmd batch encoding done in 2154 ms 0.44.872.938 I encoding mtmd batch, n_chunks = 1 (done = 20, total = 27) 0.47.007.286 I mtmd batch encoding done in 2134 ms 0.47.184.267 I encoding mtmd batch, n_chunks = 1 (done = 21, total = 27) 0.49.339.683 I mtmd batch encoding done in 2155 ms 0.49.523.933 I encoding mtmd batch, n_chunks = 1 (done = 22, total = 27) 0.51.659.114 I mtmd batch encoding done in 2135 ms 0.51.847.637 I encoding mtmd batch, n_chunks = 1 (done = 23, total = 27) 0.54.001.165 I mtmd batch encoding done in 2154 ms 0.54.196.215 I encoding mtmd batch, n_chunks = 1 (done = 24, total = 27) 0.56.332.282 I mtmd batch encoding done in 2136 ms 0.56.533.995 I encoding mtmd batch, n_chunks = 1 (done = 25, total = 27) 0.58.415.840 I mtmd batch encoding done in 1881 ms language English<asr_text>My fellow Americans. This day has brought terrible news. In great sadness to our country. At nine o'clock this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven. Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Doctor Kulpina Shavla, and Elon Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket. And the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers. And they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well. Of the families of these men and women, who have been given this sudden shock in grief. You are not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude. Of this country, the cause in which they died will continue. Mankind is led into the darkness. Beyond our world, by the inspiration of discovery. And the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah. Lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one. And calls them each by name. Because of his great power. And mighty strength, not one of them is missing. The same creator who names the stars. Also knows the names. Of the seven souls we mourn today. The crew of the shuttle Columbia. Did not return safely to Earth. Yet we can pray. That all are safely home. May God bless the grieving families. And may God continue to bless America.DASLLAMA_IDS: 11528 6364 151704 5050 12357 8877 13 1096 1899 702 7117 17478 3669 13 758 2244 50878 311 1039 3146 13 2411 11627 297 62410 419 6556 11 8954 2524 304 16003 5558 3645 448 1039 3550 44541 18796 13 362 2805 882 2937 11 33998 572 3884 15679 504 279 49293 3403 8257 13 576 18796 374 5558 13 2619 525 902 31596 13 1913 4479 572 264 13627 315 8094 13 51698 22388 73359 11 54137 51698 7937 20642 11 34138 80464 21304 11 21316 6798 10471 11 34138 12375 14249 1749 11 18635 730 12840 2210 1417 402 4260 11 323 68539 15152 263 11 264 14889 301 304 279 15907 6553 11732 13 4220 2953 323 3198 19110 2244 5214 304 279 2473 311 678 21941 13 758 458 4231 979 3550 10971 702 2525 311 2803 4558 14021 11 432 374 4135 311 30705 279 35964 315 5821 553 24306 13 1597 279 26038 315 59399 279 41342 15955 16566 315 279 9237 13 4220 68422 6876 279 35964 13 1597 807 16601 1105 72552 11 14063 807 1030 264 1550 323 34382 7428 304 2272 13 9211 315 862 24744 323 58672 323 10507 2142 11 582 686 3116 1105 678 279 803 13 2009 8877 3351 525 7274 438 1632 13 4940 279 8521 315 1493 2953 323 3198 11 879 614 1012 2661 419 10968 10755 304 37284 13 1446 525 537 7484 13 5633 4453 6995 342 7231 2342 448 498 13 1597 1846 498 10245 686 2677 614 279 5091 323 45035 13 4940 419 3146 11 279 5240 304 892 807 8469 686 3060 13 386 69270 374 6069 1119 279 26298 13 30786 1039 1879 11 553 279 19760 315 18335 13 1597 279 78322 311 3535 13 5633 11618 1119 3550 686 728 389 13 758 279 49293 3351 11 582 5485 19258 323 30826 13 14626 42626 1091 582 646 1490 11 1052 374 6838 323 3900 13 758 279 4244 315 279 52504 63430 13 52435 697 6414 323 1401 311 279 62780 13 10479 3465 678 1493 30 1260 879 12434 700 279 6774 884 18432 825 553 825 13 1597 6738 1105 1817 553 829 13 9211 315 806 2244 2355 13 1597 41627 8170 11 537 825 315 1105 374 7402 13 576 1852 19919 879 5036 279 9759 13 7281 8788 279 5036 13 4940 279 8094 34726 582 59134 3351 13 576 13627 315 279 44541 18796 13 14568 537 470 21000 311 9237 13 14626 582 646 23803 13 2938 678 525 21000 2114 13 3217 4264 16072 279 90744 8521 13 1597 1231 4264 3060 311 16072 5159 13 151645"
+            "text":"0.00.002.778 I common_init_result: fitting params to device memory ... 0.00.002.784 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.150.965 I common_params_fit_impl: projected to use 7927 MiB of host memory vs. 65536 MiB of total host memory 0.00.246.505 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.01.376.286 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.519.070 I mtmd_cli_context: chat template example: <|im_start|>system You are a helpful assistant<|im_end|> <|im_start|>user Hello<|im_end|> <|im_start|>assistant Hi there<|im_end|> <|im_start|>user How are you?<|im_end|> <|im_start|>assistant 0.01.616.380 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.616.431 I main: loading model: ~/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf 0.01.616.663 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.616.664 W       For normal use cases, please use the standard llama-cli 0.01.715.326 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 27) 0.03.920.249 I mtmd batch encoding done in 2205 ms 0.03.989.480 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 27) 0.06.129.445 I mtmd batch encoding done in 2140 ms 0.06.204.261 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 27) 0.08.345.157 I mtmd batch encoding done in 2141 ms 0.08.456.484 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 27) 0.10.594.888 I mtmd batch encoding done in 2138 ms 0.10.680.754 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 27) 0.12.820.107 I mtmd batch encoding done in 2140 ms 0.12.912.022 I encoding mtmd batch, n_chunks = 1 (done = 6, total = 27) 0.15.064.588 I mtmd batch encoding done in 2152 ms 0.15.161.516 I encoding mtmd batch, n_chunks = 1 (done = 7, total = 27) 0.17.296.728 I mtmd batch encoding done in 2135 ms 0.17.400.463 I encoding mtmd batch, n_chunks = 1 (done = 8, total = 27) 0.19.552.829 I mtmd batch encoding done in 2152 ms 0.19.662.924 I encoding mtmd batch, n_chunks = 1 (done = 9, total = 27) 0.21.798.724 I mtmd batch encoding done in 2135 ms 0.21.912.233 I encoding mtmd batch, n_chunks = 1 (done = 10, total = 27) 0.24.073.586 I mtmd batch encoding done in 2161 ms 0.24.195.406 I encoding mtmd batch, n_chunks = 1 (done = 11, total = 27) 0.26.331.711 I mtmd batch encoding done in 2136 ms 0.26.456.647 I encoding mtmd batch, n_chunks = 1 (done = 12, total = 27) 0.28.608.969 I mtmd batch encoding done in 2153 ms 0.28.739.760 I encoding mtmd batch, n_chunks = 1 (done = 13, total = 27) 0.30.878.410 I mtmd batch encoding done in 2139 ms 0.31.019.269 I encoding mtmd batch, n_chunks = 1 (done = 14, total = 27) 0.33.155.206 I mtmd batch encoding done in 2136 ms 0.33.333.160 I encoding mtmd batch, n_chunks = 1 (done = 15, total = 27) 0.35.492.949 I mtmd batch encoding done in 2160 ms 0.35.642.193 I encoding mtmd batch, n_chunks = 1 (done = 16, total = 27) 0.37.776.954 I mtmd batch encoding done in 2135 ms 0.37.932.145 I encoding mtmd batch, n_chunks = 1 (done = 17, total = 27) 0.40.084.322 I mtmd batch encoding done in 2152 ms 0.40.244.192 I encoding mtmd batch, n_chunks = 1 (done = 18, total = 27) 0.42.380.933 I mtmd batch encoding done in 2137 ms 0.42.548.164 I encoding mtmd batch, n_chunks = 1 (done = 19, total = 27) 0.44.702.428 I mtmd batch encoding done in 2154 ms 0.44.872.938 I encoding mtmd batch, n_chunks = 1 (done = 20, total = 27) 0.47.007.286 I mtmd batch encoding done in 2134 ms 0.47.184.267 I encoding mtmd batch, n_chunks = 1 (done = 21, total = 27) 0.49.339.683 I mtmd batch encoding done in 2155 ms 0.49.523.933 I encoding mtmd batch, n_chunks = 1 (done = 22, total = 27) 0.51.659.114 I mtmd batch encoding done in 2135 ms 0.51.847.637 I encoding mtmd batch, n_chunks = 1 (done = 23, total = 27) 0.54.001.165 I mtmd batch encoding done in 2154 ms 0.54.196.215 I encoding mtmd batch, n_chunks = 1 (done = 24, total = 27) 0.56.332.282 I mtmd batch encoding done in 2136 ms 0.56.533.995 I encoding mtmd batch, n_chunks = 1 (done = 25, total = 27) 0.58.415.840 I mtmd batch encoding done in 1881 ms language English<asr_text>My fellow Americans. This day has brought terrible news. In great sadness to our country. At nine o'clock this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven. Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Doctor Kulpina Shavla, and Elon Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket. And the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers. And they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well. Of the families of these men and women, who have been given this sudden shock in grief. You are not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude. Of this country, the cause in which they died will continue. Mankind is led into the darkness. Beyond our world, by the inspiration of discovery. And the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah. Lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one. And calls them each by name. Because of his great power. And mighty strength, not one of them is missing. The same creator who names the stars. Also knows the names. Of the seven souls we mourn today. The crew of the shuttle Columbia. Did not return safely to Earth. Yet we can pray. That all are safely home. May God bless the grieving families. And may God continue to bless America.DASLLAMA_IDS: 11528 6364 151704 5050 12357 8877 13 1096 1899 702 7117 17478 3669 13 758 2244 50878 311 1039 3146 13 2411 11627 297 62410 419 6556 11 8954 2524 304 16003 5558 3645 448 1039 3550 44541 18796 13 362 2805 882 2937 11 33998 572 3884 15679 504 279 49293 3403 8257 13 576 18796 374 5558 13 2619 525 902 31596 13 1913 4479 572 264 13627 315 8094 13 51698 22388 73359 11 54137 51698 7937 20642 11 34138 80464 21304 11 21316 6798 10471 11 34138 12375 14249 1749 11 18635 730 12840 2210 1417 402 4260 11 323 68539 15152 263 11 264 14889 301 304 279 15907 6553 11732 13 4220 2953 323 3198 19110 2244 5214 304 279 2473 311 678 21941 13 758 458 4231 979 3550 10971 702 2525 311 2803 4558 14021 11 432 374 4135 311 30705 279 35964 315 5821 553 24306 13 1597 279 26038 315 59399 279 41342 15955 16566 315 279 9237 13 4220 68422 6876 279 35964 13 1597 807 16601 1105 72552 11 14063 807 1030 264 1550 323 34382 7428 304 2272 13 9211 315 862 24744 323 58672 323 10507 2142 11 582 686 3116 1105 678 279 803 13 2009 8877 3351 525 7274 438 1632 13 4940 279 8521 315 1493 2953 323 3198 11 879 614 1012 2661 419 10968 10755 304 37284 13 1446 525 537 7484 13 5633 4453 6995 342 7231 2342 448 498 13 1597 1846 498 10245 686 2677 614 279 5091 323 45035 13 4940 419 3146 11 279 5240 304 892 807 8469 686 3060 13 386 69270 374 6069 1119 279 26298 13 30786 1039 1879 11 553 279 19760 315 18335 13 1597 279 78322 311 3535 13 5633 11618 1119 3550 686 728 389 13 758 279 49293 3351 11 582 5485 19258 323 30826 13 14626 42626 1091 582 646 1490 11 1052 374 6838 323 3900 13 758 279 4244 315 279 52504 63430 13 52435 697 6414 323 1401 311 279 62780 13 10479 3465 678 1493 30 1260 879 12434 700 279 6774 884 18432 825 553 825 13 1597 6738 1105 1817 553 829 13 9211 315 806 2244 2355 13 1597 41627 8170 11 537 825 315 1105 374 7402 13 576 1852 19919 879 5036 279 9759 13 7281 8788 279 5036 13 4940 279 8094 34726 582 59134 3351 13 576 13627 315 279 44541 18796 13 14568 537 470 21000 311 9237 13 14626 582 646 23803 13 2938 678 525 21000 2114 13 3217 4264 16072 279 90744 8521 13 1597 1231 4264 3060 311 16072 5159 13 151645"
           }
         },
         "workload":"audio-chat",
@@ -6109,7 +6109,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-17",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -6155,7 +6155,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-17",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -6196,7 +6196,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-17",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -6242,7 +6242,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-17",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -6283,7 +6283,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-17",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -6329,7 +6329,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-17",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "cmd":"~/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -6380,7 +6380,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-21",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-3-4b-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-3-4b-it-F16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-3-4b-it-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-3-4b-it-F16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",

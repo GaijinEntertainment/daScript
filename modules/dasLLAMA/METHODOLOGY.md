@@ -107,7 +107,7 @@ Every row carries, machine-captured at run time - never typed by hand:
   not.
 - **Environment**: the full set of engine environment variables in effect (the whole registry,
   not a curated subset - an unrecorded variable is how two different configs come to look like
-  the same row), the exact command lines of both sides, and the auto-probed hardware block
+  the same row), the command lines of both sides with the home directory spelled `~`, and the auto-probed hardware block
   (chip, cores, RAM and its configuration, GPU, OS, power plan and SMT state where relevant).
 
 The audio corpus is fully reproducible: the clips are whisper.cpp's own samples (or

@@ -174,6 +174,7 @@ def private check_records_corpus {
             }
             return
         }
+        gate_home_paths(full)
         return if (!(doc.value is _array))
         for (model in doc.value as _array) {
             let runs = model?["runs"]

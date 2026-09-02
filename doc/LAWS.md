@@ -17,3 +17,7 @@ compacted, or cited as rules.
 
 - **2026-09-01** (`REVIEW.md`): the two gate rules took the site checklist's dragon wording -
   the weakening rule re-plained, the disclosure rule naming `ALLOWED_HOSTS` directly.
+
+- **2026-09-01** (`REVIEW.md`, round 3): the residue's tail had the cookie ban running over
+  `conf.py`, which the gate never cookie-scans, and said "absolute" where the scanner also
+  reads protocol-relative literals; it now says what the gate does.
