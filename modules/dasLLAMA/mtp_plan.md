@@ -391,7 +391,10 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
     + the plane fix -> 0.96 / 0 flips. The `mtp-dff-<tag>` arm (distinct-session GPU batch vs GPU
     single + a CPU reference row) is the batch rail's parity gate from now on; fixtures l1b, g12,
     q30, g26.
-  - **S3 build (2026-09-01, in flight)**: `dasllama/dasllama_mtp_gemma.das` = the sidecar loader
+  - **S3 DONE (2026-09-02)**: the drafter serves, GPU == CPU oracle to 6e-5, the fused round is
+    token-identical to the per-step path at k = 1, 2, 4; SpecBench-4 depth 1 1.185x / depth 2 1.19x
+    on gemma-4-26B-A4B (M5, debug-jit). Build notes follow.
+  - **S3 build (2026-09-01)**: `dasllama/dasllama_mtp_gemma.das` = the sidecar loader
     (`GemmaDrafter`: Q8_0 weights as one q8 blob + F32 norms, offsets per layer) + the CPU reference
     step `gemma_draft_step_cpu` (the oracle); `dasllama/dasllama_metal_mtp_gemma.das` = the GPU
     drafter (`attach_gemma_drafter` uploads the blob once; `gemma_draft_step_gpu` = embed(tok)*sqrt(2816)
