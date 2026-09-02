@@ -88,7 +88,8 @@ without macro plumbing.
 
 **`[spirv_decode]` method form.** The decode callback's SPIR-V signature is a rigid three
 parameters. The method form erases the das-level `self` from it, so the decode body still reads
-its class members - a separate scale plane, push constants, `@workgroup` staging.
+its class members - a separate scale plane, push constants, `@workgroup` staging. The four-wide
+twin of that callback is section 3.3.
 
 **Cooperative-matrix element loops carry `Unroll`.** `coopmatClamp` walks a coopmat local
 element by element through a hand-emitted structured loop bounded by
@@ -128,6 +129,21 @@ parse. The tile markers are empty structs with no storage, so the CPU bodies of 
 (returns `c`) and `coopmatConvert` (writes nothing) cannot compute what the emitted form
 computes: a coopmat kernel's device test takes a plain CPU reference as its oracle, the one
 sanctioned exception to the emitter checklist's CPU-body rule.
+
+### 3.3 The four-wide decode twin {#cm2-decode-vector}
+
+`SPV_NV_cooperative_matrix_decode_vector` adds no opcode: one capability and the
+`DecodeVectorFunc` bit of the tensor-load's addressing mask, whose operand names a second decode
+function returning the 4-lane vector of the tile component type, called for four consecutive
+elements along the block's last dimension from a multiple of four. The scalar `DecodeFunc` stays
+mandatory beside it and the driver picks per call site, so one module serves devices with and
+without the feature. `coopmatLoadTensorDecode`'s tenth argument selects the twin: `true` has the
+emitter synthesize it as four `OpFunctionCall`s of the scalar body at `coordInBlock.y + 0..3`
+composed into the vector (the driver's compiler inlines the calls and merges the loads they
+share), `false` is the scalar-only load, and a `[spirv_decode]` function returning `half4` /
+`float4` with the scalar contract's parameters is a hand-laid twin. Twins register in their own
+table keyed by the function they came from, so one scalar body yields one twin however many loads
+name it, and emit after the scalar bodies they call.
 
 ## 4. Test architecture - "every emitted instruction has a test"
 

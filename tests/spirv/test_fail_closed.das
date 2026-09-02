@@ -79,6 +79,9 @@ def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-chec
         // a 4-parameter [spirv_decode] is legal only as a kernel-class method (the leading self is
         // erased from the emitted signature); a free function with 4 params is rejected outright
         check_rejects(t, "_fc_decode4", "must be a class method (leading self)")
+        // the four-wide form's tenth argument: a stray literal, and a hand-laid twin with a scalar result
+        check_rejects(t, "_fc_decode_v_arg", "the tenth argument must be true, false")
+        check_rejects(t, "_fc_decode_v_ret", "result must be half4 or float4")
         // subpass input attachments + subpassLoad are fragment-only
         check_rejects(t, "_fc_subpass_stage", "subpassInput 'fc_subpass' is fragment-only")
         // mesh-shader output config: bad topology string (parsed in patch) + non-positive count (emit gate)

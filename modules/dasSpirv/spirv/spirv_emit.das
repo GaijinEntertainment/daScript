@@ -140,6 +140,8 @@ struct EmitCtx {
     call_temps    : table<uint64; CallTemp>     // intptr(ref-arg Expression) -> its copy-in/out Function-storage temp
     decode_funcs  : table<uint64; DecodeFn>     // intptr(Function) -> registered cm2 decode function ([spirv_decode], referenced via @@ from coopmatLoadTensorDecode)
     decode_order  : array<uint64>               // decode_funcs keys in stable emission order (first-reference order)
+    decode_vec_funcs : table<uint64; DecodeFn>  // the four-wide twins (DecodeVectorFunc): intptr(the hand-written vector Function), or intptr(the scalar Function) a twin was synthesized from
+    decode_vec_order : array<uint64>            // decode_vec_funcs keys in stable emission order
     // class-kernel frontend ([spirv_kernel] on a class method): `self.member` resolves through
     // member_vars to a synthetic Variable classified exactly like a module global
     self_arg      : uint64                      // intptr(the CURRENT function's self argument Variable); 0 = not a class kernel. Swapped per method body during emission.
@@ -191,6 +193,8 @@ struct DecodeFn {
     block_ptr_type : uint   // OpTypePointer PhysicalStorageBuffer <block_type>
     has_self : bool         // class-method form: arguments[0] is the das-level self, params shift by one
     valid   : bool
+    lanes   : int = 1       // 1 = the scalar DecodeFunc; 4 = the DecodeVectorFunc twin (ret_type is then the 4-lane vector)
+    synth_of : uint64       // lanes 4 only: intptr(the scalar Function) the twin was synthesized from; 0 = a hand-written body
 }
 
 // A cm2 reduce-combine ([spirv_combine]) or per-element ([spirv_per_element]) function: emitted as a
@@ -4479,6 +4483,8 @@ class SpirvEmit : AstVisitor {
                 let cn = "{co.name}"
                 if (last && (cn == "coopmatLoadTensorDecode" || cn == "coopmatReduce")) {
                     suppress_fn_addr = true
+                } elif (cn == "coopmatLoadTensorDecode" && length(expr.arguments) == 10 && arg == expr.arguments[8]) {
+                    suppress_fn_addr = true   // the four-wide form: @@decode sits before decode_v
                 } elif (cn == "coopmatPerElement" && length(expr.arguments) > 2 && arg == expr.arguments[2]) {
                     suppress_fn_addr = true
                 }
@@ -4942,8 +4948,8 @@ class SpirvEmit : AstVisitor {
             let is_store = origin_name == "coopmatStoreTensor"
             let is_decode = origin_name == "coopmatLoadTensorDecode"
             let argc = length(expr.arguments)
-            if (is_decode ? argc != 9 : (argc != 8 && argc != 9)) {
-                errs |> push("{origin_name} expects ({is_store ? "mat, dst" : "dst, src"}, base, layout, r0, nr, c0, nc{is_decode ? ", @@decode" : " [, view]"})")
+            if (is_decode ? (argc != 9 && argc != 10) : (argc != 8 && argc != 9)) {
+                errs |> push("{origin_name} expects ({is_store ? "mat, dst" : "dst, src"}, base, layout, r0, nr, c0, nc{is_decode ? ", @@decode [, decode_v]" : " [, view]"})")
                 return expr
             }
             let ci = coopmat_info(expr.arguments[0]._type)
@@ -4960,6 +4966,7 @@ class SpirvEmit : AstVisitor {
             if (sliced == 0u) return expr
             var ta_mask = 0u
             var ta_extra = 0u
+            var ta_extra2 = 0u   // the DecodeVectorFunc id; operands follow the mask in bit order, DecodeFunc first
             if (is_decode) {
                 let da0 = expr.arguments[8]
                 let r2v = da0 ?as ExprRef2Value
@@ -4989,6 +4996,15 @@ class SpirvEmit : AstVisitor {
                 if (fid == 0u) return expr
                 ta_mask = uint(SpvTensorAddressingOperands.DecodeFunc)
                 ta_extra = fid
+                if (argc == 10) {
+                    let nerr = length(errs)
+                    let vfid = resolve_decode_vector_arg(bm, *ctx, expr.arguments[9], dfn, errs)
+                    if (vfid == 0u && length(errs) > nerr) return expr
+                    if (vfid != 0u) {
+                        ta_mask |= uint(SpvTensorAddressingOperands.DecodeVectorFunc)
+                        ta_extra2 = vfid
+                    }
+                }
             } elif (argc == 9) {
                 let vo = tensor_object_type_of(bm, expr.arguments[8]._type)
                 if (vo.id == 0u || !vo.is_view) {
@@ -5026,6 +5042,9 @@ class SpirvEmit : AstVisitor {
                 var ops <- [dst.pty, res, sptr, cur_obj, sliced, uint(SpvMemoryAccess.None), ta_mask]
                 if (ta_extra != 0u) {
                     ops |> push(ta_extra)
+                }
+                if (ta_extra2 != 0u) {
+                    ops |> push(ta_extra2)
                 }
                 emit_n(bm, SEC_FUNCS, SpvOp.CooperativeMatrixLoadTensorNV, ops)
                 delete ops
@@ -6910,10 +6929,98 @@ def private register_decode_func(var m : SpirvModule; var ctx : EmitCtx; f : Fun
         let ex = ctx.decode_funcs?[intptr(f)] ?? DecodeFn()
         return ex.valid ? ex.fn_id : 0u
     }
-    var df = DecodeFn(fn = f, valid = true)
-    ensure_cooperative_matrix2(m)
+    let df <- validate_decode_func(m, ctx, f, 1, errors)
+    ctx.decode_funcs |> insert(intptr(f), df)
+    ctx.decode_order |> push(intptr(f))
+    return df.valid ? df.fn_id : 0u
+}
+
+// The four-wide twin's registration: the tenth coopmatLoadTensorDecode argument is `true` (synthesize
+// the twin over the scalar function `sf`), `false` (scalar-only load), or a [spirv_decode] function
+// returning half4 / float4 with the scalar contract's parameters. Returns the twin's id, 0 for
+// `false`, and 0 with an error pushed for anything else.
+[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+def private resolve_decode_vector_arg(var m : SpirvModule; var ctx : EmitCtx; va0 : ExpressionPtr; sf : Function const?; var errors : array<string>) : uint {
+    let r2v = va0 ?as ExprRef2Value
+    let va = r2v != null ? r2v.subexpr : va0
+    let cb = va ?as ExprConstBool
+    if (cb != null) {
+        return cb.value ? register_decode_vector_synth(m, ctx, sf) : 0u
+    }
+    var vfn : Function const?
+    let fa = va ?as ExprAddr
+    if (fa != null && fa.func != null) {
+        vfn = fa.func
+    } else {
+        let mf = va ?as ExprField
+        if (mf != null) {
+            vfn = ctx.decode_methods?[intptr(mf)] ?? null
+        }
+    }
+    if (vfn == null) {
+        errors |> push("coopmatLoadTensorDecode: the tenth argument must be true, false, @@<vector decode function> or self.<vector decode method>")
+        return 0u
+    }
+    if (!function_has_annotation(vfn, "spirv_decode")) {
+        errors |> push("coopmatLoadTensorDecode: '{vfn.name}' must be annotated [spirv_decode]")
+        return 0u
+    }
+    if (key_exists(ctx.decode_vec_funcs, intptr(vfn))) {
+        let ex = ctx.decode_vec_funcs?[intptr(vfn)] ?? DecodeFn()
+        return ex.valid ? ex.fn_id : 0u
+    }
+    let df <- validate_decode_func(m, ctx, vfn, 4, errors)
+    ctx.decode_vec_funcs |> insert(intptr(vfn), df)
+    ctx.decode_vec_order |> push(intptr(vfn))
+    return df.valid ? df.fn_id : 0u
+}
+
+// The synthesized twin: the scalar function's signature with the 4-lane vector of its result, keyed
+// by the scalar function (one twin per scalar body, however many loads name it). Its body is emitted
+// by emit_decode_function: four OpFunctionCalls of the scalar at coordInBlock.y + 0..3, composed.
+[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+def private register_decode_vector_synth(var m : SpirvModule; var ctx : EmitCtx; sf : Function const?) : uint {
+    if (key_exists(ctx.decode_vec_funcs, intptr(sf))) {
+        let ex = ctx.decode_vec_funcs?[intptr(sf)] ?? DecodeFn()
+        return ex.valid ? ex.fn_id : 0u
+    }
+    let sdf = ctx.decode_funcs?[intptr(sf)] ?? DecodeFn()
+    var df = DecodeFn(fn = sf, valid = sdf.valid, lanes = 4, synth_of = intptr(sf),
+        block_type = sdf.block_type, block_ptr_type = sdf.block_ptr_type, has_self = sdf.has_self)
+    if (df.valid) {
+        ensure_coopmat_decode_vector(m)
+        df.ret_type = type_vector(m, sdf.ret_type, 4)
+        df.fn_id = alloc_id(m)
+        let arr2 = type_array(m, type_uint(m), 2)
+        var ps <- [df.block_ptr_type, arr2, arr2]
+        df.type_id = type_function(m, df.ret_type, ps)
+        delete ps
+    }
+    ctx.decode_vec_funcs |> insert(intptr(sf), df)
+    ctx.decode_vec_order |> push(intptr(sf))
+    return df.valid ? df.fn_id : 0u
+}
+
+// The shared contract check: (block : <struct>; blockCoord, coordInBlock : uint2) returning the tile
+// component type (lanes 1: float16 / float / int8) or its 4-lane vector (lanes 4: half4 / float4).
+def private validate_decode_func(var m : SpirvModule; ctx : EmitCtx; f : Function const?; lanes : int; var errors : array<string>) : DecodeFn {
+    var df = DecodeFn(fn = f, valid = true, lanes = lanes)
+    if (lanes == 4) {
+        ensure_coopmat_decode_vector(m)
+    } else {
+        ensure_cooperative_matrix2(m)
+    }
     let rbt = f.result.baseType
-    if (rbt == Type.tFloat16) {
+    if (lanes == 4) {
+        if (rbt == Type.tHalf4) {
+            df.ret_type = type_vector(m, type_float(m, 16u), 4)
+        } elif (rbt == Type.tFloat4) {
+            df.ret_type = type_vector(m, type_float(m, 32u), 4)
+        } else {
+            errors |> push("vector decode function '{f.name}': result must be half4 or float4 (four consecutive elements of the tile's component type)")
+            df.valid = false
+        }
+    } elif (rbt == Type.tFloat16) {
         df.ret_type = type_float(m, 16u)
     } elif (rbt == Type.tFloat) {
         df.ret_type = type_float(m, 32u)
@@ -6967,9 +7074,7 @@ def private register_decode_func(var m : SpirvModule; var ctx : EmitCtx; f : Fun
         df.type_id = type_function(m, df.ret_type, ps)
         delete ps
     }
-    ctx.decode_funcs |> insert(intptr(f), df)
-    ctx.decode_order |> push(intptr(f))
-    return df.valid ? df.fn_id : 0u
+    return <- df
 }
 
 // Emit one registered decode function: OpFunction with the PSB block pointer decorated Aliased
@@ -6990,8 +7095,10 @@ def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : De
     let p0 = alloc_id(m)
     emit(m, SEC_FUNCS, SpvOp.FunctionParameter, df.block_ptr_type, p0)
     emit(m, SEC_DECOR, SpvOp.Decorate, p0, uint(SpvDecoration.Aliased))
-    ctx.local_vars |> insert(intptr(f.arguments[ab]), LocalVar(ptr_id = p0, value_type = df.block_type,
-        is_opaque = true, storage = SpvStorageClass.PhysicalStorageBuffer))
+    if (df.synth_of == 0ul) {
+        ctx.local_vars |> insert(intptr(f.arguments[ab]), LocalVar(ptr_id = p0, value_type = df.block_type,
+            is_opaque = true, storage = SpvStorageClass.PhysicalStorageBuffer))
+    }
     let arr2 = type_array(m, type_uint(m), 2)
     var coord_pids : uint[2]
     for (i in range(1, 3)) {
@@ -7001,6 +7108,13 @@ def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : De
     }
     let id_label = alloc_id(m)
     emit(m, SEC_FUNCS, SpvOp.Label, id_label)
+    if (df.synth_of != 0ul) {
+        // the synthesized four-wide twin has no das body: four calls of the scalar function
+        emit_decode_vector_synth_body(m, ctx, df, p0, coord_pids)
+        emit(m, SEC_FUNCS, SpvOp.FunctionEnd)
+        ctx.self_arg = saved_self
+        return
+    }
     // The das body types the coords as uint2, but the spec-mandated params are uint[2] ARRAYS —
     // rebuild each as a uvec2 SSA value at entry and bind THAT, so any vector op in the body
     // (not just .x/.y extracts) lowers against the type the AST believes in.
@@ -7025,6 +7139,44 @@ def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : De
     }
     emit(m, SEC_FUNCS, SpvOp.FunctionEnd)
     ctx.self_arg = saved_self
+}
+
+// The synthesized twin's body: the scalar decode called at coordInBlock (row, col + 0..3), the four
+// results composed into the vector. The block pointer and blockCoord pass through unchanged; the
+// driver's compiler inlines the four calls and merges what they share (the scale word, the byte two
+// nibbles sit in), which is where the form's gain comes from.
+[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+def private emit_decode_vector_synth_body(var m : SpirvModule; ctx : EmitCtx; df : DecodeFn; p0 : uint; coord_pids : uint[2]) {
+    let sdf = ctx.decode_funcs?[df.synth_of] ?? DecodeFn()
+    let ut = type_uint(m)
+    let arr2 = type_array(m, ut, 2)
+    let row = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.CompositeExtract, ut, row, coord_pids[1], 0u)
+    let col = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.CompositeExtract, ut, col, coord_pids[1], 1u)
+    var lanes : array<uint>
+    lanes |> reserve(4)
+    for (i in range(4)) {
+        var ci = col
+        if (i > 0) {
+            ci = alloc_id(m)
+            emit(m, SEC_FUNCS, SpvOp.IAdd, ut, ci, col, const_uint(m, uint(i)))
+        }
+        let cib = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.CompositeConstruct, arr2, cib, row, ci)
+        let r = alloc_id(m)
+        var call <- [sdf.ret_type, r, sdf.fn_id, p0, coord_pids[0], cib]
+        emit_n(m, SEC_FUNCS, SpvOp.FunctionCall, call)
+        delete call
+        lanes |> push(r)
+    }
+    let v = alloc_id(m)
+    var ops <- [df.ret_type, v]
+    ops |> push_from(lanes)
+    emit_n(m, SEC_FUNCS, SpvOp.CompositeConstruct, ops)
+    delete ops
+    delete lanes
+    emit(m, SEC_FUNCS, SpvOp.ReturnValue, v)
 }
 
 // The by-value scalar types a callback parameter may carry: uint / int / float / float16.
@@ -7178,17 +7330,23 @@ class private SpirvMethodScan : AstVisitor {
     // through the dispatch table now and suppress its structural read — the load arm passes the
     // function by ID (the DecodeFunc operand), no value is ever produced
     def override preVisitExprCall(expr : ExprCall?) : void {
-        if (expr.func == null || length(expr.arguments) != 9) return
+        let argc = length(expr.arguments)
+        if (expr.func == null || (argc != 9 && argc != 10)) return
         var co = expr.func
         while (co.fromGeneric != null) {
             co = co.fromGeneric
         }
         if ("{co.name}" != "coopmatLoadTensorDecode") return
-        let da0 = expr.arguments[8]
+        // the decode argument, and the four-wide form's trailing decode_v when it is a method too
+        for (ai in range(8, argc)) {
+            scan_decode_method_arg(expr.arguments[ai])
+        }
+    }
+    def scan_decode_method_arg(da0 : ExpressionPtr) : void {
         let r2v = da0 ?as ExprRef2Value
         let da = r2v != null ? r2v.subexpr : da0
         let fld = da ?as ExprField
-        // fld == null is the @@fn form — consumed whole by the load arm
+        // fld == null is the @@fn form (or the bool of the four-wide form) — consumed whole by the load arm
         if (fld == null || key_exists(ctx.decode_methods, intptr(fld))) return
         var be = fld.value
         let br2v = be ?as ExprRef2Value
@@ -7659,6 +7817,13 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     // cm2 decode functions (registered by the coopmatLoadTensorDecode arm during the body walk)
     for (key in ctx.decode_order) {
         let df = ctx.decode_funcs?[key] ?? DecodeFn()
+        if (df.valid) {
+            emit_decode_function(m, ctx, df, errors)
+        }
+    }
+    // their four-wide twins (hand-written, or synthesized over the scalar body they follow)
+    for (key in ctx.decode_vec_order) {
+        let df = ctx.decode_vec_funcs?[key] ?? DecodeFn()
         if (df.valid) {
             emit_decode_function(m, ctx, df, errors)
         }
