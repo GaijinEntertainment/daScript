@@ -933,6 +933,14 @@
    and the shared experts twice; a gathered GEMV over the union of selected experts (the prefill
    bucket kernels at M = 2..9) streams each expert once. The physics that caps depth 2 on every
    MoE carrier measured - Qwen3-30B-A3B at B=2 already pays 1.37x.
+77. **A box where the NextN round loses needs a depth-0 default.** Records day, M4 Pro,
+   Qwen3.8-27B + Q8_0 head, exe-first and settled: off 12.7 tok/s, depth 1 11.0 (0.87x), depth 2 7.7,
+   at 77% acceptance - the two-row verify costs 2.06x a step on that GPU (llama.cpp's 1.53x, 11.5 ->
+   13.6-14.5 there). The box knob `mtp_depth_nextn` clamps to 1..8, so the honest default on such a
+   box - no speculation - cannot be minted. Done = 0 admitted as "off" on both depth knobs and in
+   `get_mtp_depth()` (the round takes the plain step), and the tuner's confirm racing the NextN
+   carrier too (a Qwen vehicle with its `mtp-` head: 0 vs 1, the same 2% margin), so a box mints
+   what it measured. Related: #72 owns why the M4 Pro's dense verify rows cost what they cost.
 76. **Lint: a state-scaled `resize` with no reserve, on an unannotated array (its own PR).**
    PERF032 guards only arrays annotated `@exact_size`; the speculative round's deltanet rollback
    buffers were not, grew from empty with a bare resize to another buffer's `long_length`, and the

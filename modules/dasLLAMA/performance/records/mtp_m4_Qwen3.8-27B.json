@@ -1,0 +1,279 @@
+{
+	"meta" : {
+		"head" : "/Users/dasbox/models/mtp-Qwen3.8-27B-Q8_0.gguf",
+		"depths" : "1,2",
+		"ngl" : 99,
+		"model" : "/Users/dasbox/models/Qwen3.8-27B-Q4_K_M.gguf",
+		"lcpp_server" : "/Users/dasbox/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
+		"das_exe" : "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench",
+		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",
+		"das_sha" : "e58e5a3ba",
+		"head_sha" : "cbf60a0c48b431bb61f1d49b8948dc88ac29c398d6dbdbbb2e6e89ef77eacc9a",
+		"reps" : 3,
+		"model_sha" : "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34\t0x46aee4960\t2026-08-18T06:36:23",
+		"date" : "2026-09-02 22:49",
+		"cpu" : "Apple M4 Pro",
+		"host" : "Antons-Mac-mini.local",
+		"lcpp_version" : "version: 0.3.0-dev (build 10659, commit 6fdd0ac89)",
+		"threads" : 10,
+		"ngen" : 128
+	},
+	"rows" : [
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 0,
+			"off_tps" : 12.8,
+			"on_tps" : 10.6,
+			"drafted" : 225,
+			"accepted" : 159
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 1,
+			"off_tps" : 12.6,
+			"on_tps" : 11.1,
+			"drafted" : 213,
+			"accepted" : 171
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 2,
+			"off_tps" : 12.8,
+			"on_tps" : 12.1,
+			"drafted" : 198,
+			"accepted" : 186
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 3,
+			"off_tps" : 12.8,
+			"on_tps" : 10.4,
+			"drafted" : 228,
+			"accepted" : 153
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : -1,
+			"off_tps" : 12.74,
+			"on_tps" : 11.01,
+			"note" : "mtp: 669/864 drafts accepted (77.4%) at depth 1; per-position accept: p1 77.4% (669/864)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 0,
+			"off_tps" : 12.8,
+			"on_tps" : 6.7,
+			"drafted" : 354,
+			"accepted" : 210
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 1,
+			"off_tps" : 12.6,
+			"on_tps" : 7.5,
+			"drafted" : 318,
+			"accepted" : 228
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 2,
+			"off_tps" : 12.8,
+			"on_tps" : 8.4,
+			"drafted" : 282,
+			"accepted" : 243
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 3,
+			"off_tps" : 12.8,
+			"on_tps" : 8.5,
+			"drafted" : 276,
+			"accepted" : 243
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : -1,
+			"off_tps" : 12.75,
+			"on_tps" : 7.71,
+			"note" : "mtp: 924/1230 drafts accepted (75.1%) at depth 2; per-position accept: p1 83.9% (516/615) p2 66.3% (408/615)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 0,
+			"text" : "# Aloha Spirit: Why Your Next Trip to Hawaii Needs to Be More Than Just a Beach Day\n\nThere’s a"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 1,
+			"text" : "Hillary Clinton’s security detail in Iowa recently included a second, visually identical armor"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 2,
+			"text" : "To determine the total cost of travel, we need to calculate the cost of the tickets based on the"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 3,
+			"text" : "The character of **Anna** in the TV series *Once Upon a Time* was played by **Ginnifer Goodwin**"
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "# Aloha Spirit: Why Your Next Trip to Hawaii Needs to Be More Than Just a Beach Day\n\nThere’s a",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 0,
+			"engine" : "llama.cpp",
+			"tps" : 11.55928730513557,
+			"same_text_as_das" : true,
+			"accepted" : 0,
+			"prompt_n" : 31
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "Here is a summary of the article:\n\nHillary Clinton’s Secret Service detail recently deployed a",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 1,
+			"engine" : "llama.cpp",
+			"tps" : 11.464275450487902,
+			"same_text_as_das" : false,
+			"accepted" : 0,
+			"prompt_n" : 686
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "To find the total cost of travel, we need to calculate the cost of the supplies and the cost of ",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 2,
+			"engine" : "llama.cpp",
+			"tps" : 11.43371382148617,
+			"same_text_as_das" : false,
+			"accepted" : 0,
+			"prompt_n" : 64
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "The character **Anna** in the TV series *Once Upon a Time* was played by **Ginnifer Goodwin**.\n\n",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 3,
+			"engine" : "llama.cpp",
+			"tps" : 11.445284849501286,
+			"same_text_as_das" : false,
+			"accepted" : 0,
+			"prompt_n" : 19
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "# Aloha Spirit: Why Your Next Trip to Hawaii Needs to Be More Than Just a Beach Day\n\nThere’s a",
+			"depth" : 1,
+			"drafted" : 216,
+			"prompt" : 0,
+			"engine" : "llama.cpp",
+			"tps" : 13.627036824412466,
+			"same_text_as_das" : true,
+			"accepted" : 162,
+			"prompt_n" : 31
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "Here is a summary of the article:\n\nHillary Clinton’s Secret Service detail recently deployed a",
+			"depth" : 1,
+			"drafted" : 210,
+			"prompt" : 1,
+			"engine" : "llama.cpp",
+			"tps" : 13.82823820285914,
+			"same_text_as_das" : false,
+			"accepted" : 171,
+			"prompt_n" : 686
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "To find the total cost of travel, we need to calculate the cost of the supplies and the cost of ",
+			"depth" : 1,
+			"drafted" : 195,
+			"prompt" : 2,
+			"engine" : "llama.cpp",
+			"tps" : 14.451613608715947,
+			"same_text_as_das" : false,
+			"accepted" : 183,
+			"prompt_n" : 64
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "The character **Anna** in the TV series *Once Upon a Time* was played by **Ginnifer Goodwin**.\n\n",
+			"depth" : 1,
+			"drafted" : 210,
+			"prompt" : 3,
+			"engine" : "llama.cpp",
+			"tps" : 13.513869906074111,
+			"same_text_as_das" : false,
+			"accepted" : 168,
+			"prompt_n" : 19
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "# Aloha Spirit: Why Your Next Trip to Hawaii Needs to Be More Than Just a Beach Day\n\nThere’s a",
+			"depth" : 2,
+			"drafted" : 324,
+			"prompt" : 0,
+			"engine" : "llama.cpp",
+			"tps" : 12.324636286039135,
+			"same_text_as_das" : true,
+			"accepted" : 216,
+			"prompt_n" : 31
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "Here is a summary of the article:\n\nHillary Clinton’s Secret Service detail recently deployed a",
+			"depth" : 2,
+			"drafted" : 318,
+			"prompt" : 1,
+			"engine" : "llama.cpp",
+			"tps" : 12.378117831622104,
+			"same_text_as_das" : false,
+			"accepted" : 222,
+			"prompt_n" : 686
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "To find the total cost of travel, we need to calculate the cost of the supplies and the cost of ",
+			"depth" : 2,
+			"drafted" : 276,
+			"prompt" : 2,
+			"engine" : "llama.cpp",
+			"tps" : 13.863079364447556,
+			"same_text_as_das" : false,
+			"accepted" : 240,
+			"prompt_n" : 64
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "The character **Anna** in the TV series *Once Upon a Time* was played by **Ginnifer Goodwin**.\n\n",
+			"depth" : 2,
+			"drafted" : 336,
+			"prompt" : 3,
+			"engine" : "llama.cpp",
+			"tps" : 11.511011267578068,
+			"same_text_as_das" : false,
+			"accepted" : 210,
+			"prompt_n" : 19
+		}
+	]
+}
