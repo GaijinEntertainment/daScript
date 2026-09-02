@@ -16,6 +16,7 @@ require dasllama/dasllama_image   // load_model_cached - the .dlim rail
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_chat   // create_chat_renderer_ / set_thinking_ / add_user_ / render_turn_
 require dasllama/dasllama_mtp_gemma   // gemma_drafter_sidecar
+require dasllama/dasllama_gguf   // gguf_is_assistant
 require ../performance/profile_common.das   // apply_box_profile_runtime
 require dashv/dashv_boost   // GET / POST against the reference server
 require daslib/jobque_boost
@@ -186,10 +187,13 @@ def private parse_das_prompt_row(ln : string; depth : int) : string {
         drafted = dr, accepted = acc)))
 }
 
-def private run_das(cfg : Args; depth : int; var rows : array<string>) {
+//! The exe finds a gemma assistant head by its quant-stem rule; a NextN split head rides the shard
+//! walk only under its exact trunk basename or `DASLLAMA_MTP_HEAD`, so a `-Q8_0` head is pinned.
+def private run_das(cfg : Args; head : string; depth : int; var rows : array<string>) {
     var terr = ""
     let tmpo = "{temp_directory(terr)}/mtp_ruler_das_{depth}.txt"
-    let cmd = ("DAS_TUNE_MANIFEST= \"{cfg.exe}\" -- -m \"{cfg.model}\" --mtp-ab --mtp-depth {depth} -n {cfg.ngen} -r {cfg.reps}"
+    let pin = !empty(head) && !gguf_is_assistant(head) ? " DASLLAMA_MTP_HEAD=\"{head}\"" : ""
+    let cmd = ("DAS_TUNE_MANIFEST={pin} \"{cfg.exe}\" -- -m \"{cfg.model}\" --mtp-ab --mtp-depth {depth} -n {cfg.ngen} -r {cfg.reps}"
         + " --ngl 99 --prompts \"{cfg.prompts}\" --chat-prompts > \"{tmpo}\" 2>&1")
     print("ruler: das depth {depth}: {cmd}\n")
     sh(cmd, 3600.0)
@@ -361,7 +365,7 @@ def main() {
     let depths <- parse_depths(cfg.depths)
     if (!empty(cfg.exe)) {
         for (d in depths) {
-            run_das(cfg, d, rows)
+            run_das(cfg, head, d, rows)
         }
     }
     if (!empty(cfg.server)) {
