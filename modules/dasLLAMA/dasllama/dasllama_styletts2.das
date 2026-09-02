@@ -8,10 +8,14 @@ require dasllama/dasllama_lint public
 require math
 require strings
 require daslib/fio
+require daslib/archive
+require dasllama/dasllama_env
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_par
+require dasllama/dasllama_plane
+require dasllama/dasllama_image
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 
@@ -25,19 +29,19 @@ require dasllama/dasllama_tts_blocks
 // ===== weights =====
 
 struct St2Albert {
-    word_emb : array<float>
-    pos_emb : array<float>
-    type_emb : array<float>
-    emb_ln : TtsNorm
-    map_in : TtsLinear
-    q : TtsLinear
-    k : TtsLinear
-    v : TtsLinear
-    dense : TtsLinear
-    attn_ln : TtsNorm
-    ffn : TtsLinear
-    ffn_out : TtsLinear
-    full_ln : TtsNorm
+    word_emb : TtsWeight = TtsWeight()
+    pos_emb : TtsWeight = TtsWeight()
+    type_emb : TtsWeight = TtsWeight()
+    emb_ln : TtsNorm = TtsNorm()
+    map_in : TtsLinear = TtsLinear()
+    q : TtsLinear = TtsLinear()
+    k : TtsLinear = TtsLinear()
+    v : TtsLinear = TtsLinear()
+    dense : TtsLinear = TtsLinear()
+    attn_ln : TtsNorm = TtsNorm()
+    ffn : TtsLinear = TtsLinear()
+    ffn_out : TtsLinear = TtsLinear()
+    full_ln : TtsNorm = TtsNorm()
     emb_dim : int64
     hidden : int64
     heads : int64
@@ -45,20 +49,47 @@ struct St2Albert {
     max_pos : int64
 }
 
+def weights_walk(var io : TtsBlobIo; var a : St2Albert) {
+    weights_walk(io, a.word_emb)
+    weights_walk(io, a.pos_emb)
+    weights_walk(io, a.type_emb)
+    weights_walk(io, a.emb_ln)
+    weights_walk(io, a.map_in)
+    weights_walk(io, a.q)
+    weights_walk(io, a.k)
+    weights_walk(io, a.v)
+    weights_walk(io, a.dense)
+    weights_walk(io, a.attn_ln)
+    weights_walk(io, a.ffn)
+    weights_walk(io, a.ffn_out)
+    weights_walk(io, a.full_ln)
+}
+
 struct St2TextEncoder {
-    emb : array<float>
+    emb : TtsWeight = TtsWeight()
     cnn : array<TtsConv1d>
     cnn_ln : array<TtsNorm>
-    lstm : TtsBiLstm
+    lstm : TtsBiLstm = TtsBiLstm()
     c : int64
+}
+
+def weights_walk(var io : TtsBlobIo; var te : St2TextEncoder) {
+    weights_walk(io, te.emb)
+    for (c in te.cnn) {
+        weights_walk(io, c)
+    }
+    for (n in te.cnn_ln) {
+        weights_walk(io, n)
+    }
+    weights_walk(io, te.lstm)
 }
 
 //! StyleTTS2's AdainResBlk1d: two AdaIN + LeakyReLU + conv passes, an optional 2x upsample
 //! (depthwise transposed conv on the residual, nearest on the shortcut), a learned 1x1
 //! shortcut when the width changes, the sum scaled by 1/sqrt(2).
 struct St2AdainResBlk {
-    norm1 : TtsAdaIn
-    norm2 : TtsAdaIn
+    norm1 : TtsAdaIn = TtsAdaIn()
+    norm2 : TtsAdaIn = TtsAdaIn()
     conv1 : TtsConv1d = TtsConv1d()
     conv2 : TtsConv1d = TtsConv1d()
     conv1x1 : TtsConv1d = TtsConv1d()
@@ -69,17 +100,47 @@ struct St2AdainResBlk {
     dim_out : int64
 }
 
+def weights_walk(var io : TtsBlobIo; var b : St2AdainResBlk) {
+    weights_walk(io, b.norm1)
+    weights_walk(io, b.norm2)
+    weights_walk(io, b.conv1)
+    weights_walk(io, b.conv2)
+    weights_walk(io, b.conv1x1)
+    weights_walk(io, b.pool)
+}
+
 struct St2Predictor {
-    bert_encoder : TtsLinear
+    bert_encoder : TtsLinear = TtsLinear()
     lstms : array<TtsBiLstm>
     lns : array<TtsAdaLayerNorm>
-    lstm : TtsBiLstm
-    duration_proj : TtsLinear
-    shared_lstm : TtsBiLstm
+    lstm : TtsBiLstm = TtsBiLstm()
+    duration_proj : TtsLinear = TtsLinear()
+    shared_lstm : TtsBiLstm = TtsBiLstm()
     f0 : array<St2AdainResBlk>
     n : array<St2AdainResBlk>
     f0_proj : TtsConv1d = TtsConv1d()
     n_proj : TtsConv1d = TtsConv1d()
+}
+
+def weights_walk(var io : TtsBlobIo; var p : St2Predictor) {
+    weights_walk(io, p.bert_encoder)
+    for (l in p.lstms) {
+        weights_walk(io, l)
+    }
+    for (l in p.lns) {
+        weights_walk(io, l)
+    }
+    weights_walk(io, p.lstm)
+    weights_walk(io, p.duration_proj)
+    weights_walk(io, p.shared_lstm)
+    for (b in p.f0) {
+        weights_walk(io, b)
+    }
+    for (b in p.n) {
+        weights_walk(io, b)
+    }
+    weights_walk(io, p.f0_proj)
+    weights_walk(io, p.n_proj)
 }
 
 //! The generator's AdaINResBlock1: three dilated conv pairs with AdaIN and Snake before each.
@@ -88,9 +149,30 @@ struct St2GenResBlock {
     convs2 : array<TtsConv1d>
     adain1 : array<TtsAdaIn>
     adain2 : array<TtsAdaIn>
-    alpha1 : array<array<float>>
-    alpha2 : array<array<float>>
+    alpha1 : array<TtsWeight>
+    alpha2 : array<TtsWeight>
     c : int64
+}
+
+def weights_walk(var io : TtsBlobIo; var b : St2GenResBlock) {
+    for (c in b.convs1) {
+        weights_walk(io, c)
+    }
+    for (c in b.convs2) {
+        weights_walk(io, c)
+    }
+    for (a in b.adain1) {
+        weights_walk(io, a)
+    }
+    for (a in b.adain2) {
+        weights_walk(io, a)
+    }
+    for (w in b.alpha1) {
+        weights_walk(io, w)
+    }
+    for (w in b.alpha2) {
+        weights_walk(io, w)
+    }
 }
 
 struct St2Decoder {
@@ -108,15 +190,46 @@ struct St2Decoder {
     stft_fwd_im : TtsConv1d = TtsConv1d()
     stft_bwd_re : TtsConv1d = TtsConv1d()
     stft_bwd_im : TtsConv1d = TtsConv1d()
-    source_linear : TtsLinear
+    source_linear : TtsLinear = TtsLinear()
     n_kernels : int64
     bins : int64
     stft_pad_reflect : bool
     istft_envelope : bool
     stft_eps : float
-    window : array<float>
+    window : TtsWeight = TtsWeight()
 }
 
+def weights_walk(var io : TtsBlobIo; var d : St2Decoder) {
+    weights_walk(io, d.encode)
+    for (b in d.decode) {
+        weights_walk(io, b)
+    }
+    weights_walk(io, d.f0_conv)
+    weights_walk(io, d.n_conv)
+    weights_walk(io, d.asr_res)
+    for (c in d.ups) {
+        weights_walk(io, c)
+    }
+    for (c in d.noise_convs) {
+        weights_walk(io, c)
+    }
+    for (b in d.noise_res) {
+        weights_walk(io, b)
+    }
+    for (b in d.resblocks) {
+        weights_walk(io, b)
+    }
+    weights_walk(io, d.conv_post)
+    weights_walk(io, d.stft_fwd_re)
+    weights_walk(io, d.stft_fwd_im)
+    weights_walk(io, d.stft_bwd_re)
+    weights_walk(io, d.stft_bwd_im)
+    weights_walk(io, d.source_linear)
+    weights_walk(io, d.window)
+}
+
+//! The served StyleTTS2 carrier: every weight a borrowed view over `blob`, the `.dlim` plane
+//! the served layouts were minted into; scalars, spans and the voice roster ride the meta.
 struct StyleTts2Model {
     family : string
     name : string
@@ -126,11 +239,103 @@ struct StyleTts2Model {
     style_rows : int
     voice_names : array<string>
     voices : table<string; array<float>>
-    albert : St2Albert
-    text_encoder : St2TextEncoder
+    voice_spans : table<string; TtsSpan>
+    albert : St2Albert = St2Albert()
+    text_encoder : St2TextEncoder = St2TextEncoder()
     predictor : St2Predictor = St2Predictor()
     decoder : St2Decoder = St2Decoder()
     source : SineSourceCfg = SineSourceCfg()
+    blob : PlaneF = PlaneF()
+    image_map : void?
+    image_bytes : uint64
+}
+
+def weights_walk(var io : TtsBlobIo; var m : StyleTts2Model) {
+    weights_walk(io, m.albert)
+    weights_walk(io, m.text_encoder)
+    weights_walk(io, m.predictor)
+    weights_walk(io, m.decoder)
+    for (name in m.voice_names) {
+        var span = m.voice_spans?[name] ?? TtsSpan()
+        weight_slot(io, m.voices[name], span)
+        m.voice_spans[name] = span
+    }
+}
+
+// serialize_image_meta covers 13 fields; voices (views bound from voice_spans), image_map and
+// image_bytes are the deliberate skips
+let private ST2_META_FIELDS = 13 + 3
+let ST2_IMAGE_TAG = "tts-f32"
+
+def private serialize_image_meta(var arch : Archive; var m : StyleTts2Model) {
+    verify(count_meta_fields(m) == ST2_META_FIELDS)   // grew StyleTts2Model? extend this list
+    arch |> serialize(m.family)
+    arch |> serialize(m.name)
+    arch |> serialize_raw(m.sample_rate)
+    arch |> serialize_raw(m.n_symbols)
+    arch |> serialize_raw(m.style_dim)
+    arch |> serialize_raw(m.style_rows)
+    serialize_strings(arch, m.voice_names)
+    arch |> serialize(m.voice_spans)
+    arch |> serialize(m.albert)
+    arch |> serialize(m.text_encoder)
+    arch |> serialize(m.predictor)
+    arch |> serialize(m.decoder)
+    arch |> serialize(m.source)
+}
+
+[unused_argument(m)]
+def private image_post_load(var m : StyleTts2Model) {}
+
+//! Point every weight view into the mapped blob - after the parse bound the plane.
+def private st2_bind(var m : StyleTts2Model) {
+    var io = TtsBlobIo(staging = false, plane = m.blob)
+    weights_walk(io, m)
+}
+
+def finalize(var m : StyleTts2Model) {
+    for (name in m.voice_names) {
+        if (key_exists(m.voices, name)) {
+            release_weight(m.voices[name])
+        }
+    }
+    delete m.voices
+    delete m.voice_spans
+    delete m.voice_names
+    delete m.albert
+    delete m.text_encoder
+    delete m.predictor
+    delete m.decoder
+    delete m.blob
+    if (m.image_map != null) {
+        image_backing_release(m.image_map, m.image_bytes)
+        m.image_map = null
+        m.image_bytes = 0ul
+    }
+}
+
+//! The mint-side carrier: `e` holds the scalars and spans, `blob` the plane bytes until the
+//! writer has them. Public because the off-rail suites compare a staged read to the served map.
+struct St2Staging {
+    e : StyleTts2Model = StyleTts2Model()
+    blob : array<float>
+}
+
+def private serialize_image_meta(var arch : Archive; var st : St2Staging) {
+    serialize_image_meta(arch, st.e)
+}
+
+[unused_argument(st)]
+def private image_post_load(var st : St2Staging) {}
+
+def finalize(var st : St2Staging) {
+    delete st.blob
+    delete st.e
+}
+
+[init]
+def private register_styletts2_image_tags {
+    register_image_family_tag(ST2_IMAGE_TAG, true)   // no CPU knob shapes the blob: one image per box
 }
 
 let private LN_EPS = 1e-5
@@ -155,7 +360,7 @@ def private read_arr(m : GGUFMeta; bytes : array<uint8> | #; name : string) : ar
     return <- a
 }
 
-def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : string) : TtsConv1d {
+def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : string; rows : bool = false) : TtsConv1d {
     var c = TtsConv1d()
     c.w <- read_arr(m, bytes, wname)
     if (!empty(bname) && gguf_find_tensor(m, bname) >= 0) {
@@ -180,15 +385,16 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
         c.cout = d2
         c.cin = d1 * c.groups
     }
+    c.served_rows = rows
     conv1d_prepare(c)
     return <- c
 }
 
-def private read_conv_p(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) : TtsConv1d {
-    return <- read_conv(m, bytes, "{prefix}.weight", "{prefix}.bias")
+def private read_conv_p(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows : bool = false) : TtsConv1d {
+    return <- read_conv(m, bytes, "{prefix}.weight", "{prefix}.bias", rows)
 }
 
-def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) : TtsLinear {
+def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows_only : bool = false) : TtsLinear {
     var l = TtsLinear()
     l.w <- read_arr(m, bytes, "{prefix}.weight")
     let ti = need_tensor(m, "{prefix}.weight")
@@ -197,7 +403,7 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string)
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         l.b <- read_arr(m, bytes, "{prefix}.bias")
     }
-    linear_prepare(l)
+    linear_prepare(l, rows_only)
     return <- l
 }
 
@@ -273,30 +479,30 @@ def private read_gen_res_block(m : GGUFMeta; bytes : array<uint8> | #; prefix : 
     b.alpha1 |> reserve(3)
     b.alpha2 |> reserve(3)
     for (j in range(3)) {
-        b.convs1 |> emplace(read_conv_p(m, bytes, "{prefix}.convs1.{j}"))
-        b.convs2 |> emplace(read_conv_p(m, bytes, "{prefix}.convs2.{j}"))
+        b.convs1 |> emplace(read_conv_p(m, bytes, "{prefix}.convs1.{j}", true))
+        b.convs2 |> emplace(read_conv_p(m, bytes, "{prefix}.convs2.{j}", true))
         b.adain1 |> emplace(read_adain(m, bytes, "{prefix}.adain1.{j}"))
         b.adain2 |> emplace(read_adain(m, bytes, "{prefix}.adain2.{j}"))
-        b.alpha1 |> emplace(read_arr(m, bytes, "{prefix}.alpha1.{j}"))
-        b.alpha2 |> emplace(read_arr(m, bytes, "{prefix}.alpha2.{j}"))
+        b.alpha1 |> emplace(read_weight(m, bytes, "{prefix}.alpha1.{j}"))
+        b.alpha2 |> emplace(read_weight(m, bytes, "{prefix}.alpha2.{j}"))
     }
     b.c = b.convs1[0].cout
     return <- b
 }
 
 def private read_albert(m : GGUFMeta; bytes : array<uint8> | #; var a : St2Albert) {
-    a.word_emb <- read_arr(m, bytes, "bert.embeddings.word_embeddings.weight")
-    a.pos_emb <- read_arr(m, bytes, "bert.embeddings.position_embeddings.weight")
-    a.type_emb <- read_arr(m, bytes, "bert.embeddings.token_type_embeddings.weight")
+    a.word_emb <- read_weight(m, bytes, "bert.embeddings.word_embeddings.weight")
+    a.pos_emb <- read_weight(m, bytes, "bert.embeddings.position_embeddings.weight")
+    a.type_emb <- read_weight(m, bytes, "bert.embeddings.token_type_embeddings.weight")
     a.emb_ln <- read_norm(m, bytes, "bert.embeddings.LayerNorm.weight", "bert.embeddings.LayerNorm.bias")
-    a.map_in <- read_linear(m, bytes, "bert.encoder.embedding_hidden_mapping_in")
-    a.q <- read_linear(m, bytes, "bert.layer.attention.query")
-    a.k <- read_linear(m, bytes, "bert.layer.attention.key")
-    a.v <- read_linear(m, bytes, "bert.layer.attention.value")
-    a.dense <- read_linear(m, bytes, "bert.layer.attention.dense")
+    a.map_in <- read_linear(m, bytes, "bert.encoder.embedding_hidden_mapping_in", true)
+    a.q <- read_linear(m, bytes, "bert.layer.attention.query", true)
+    a.k <- read_linear(m, bytes, "bert.layer.attention.key", true)
+    a.v <- read_linear(m, bytes, "bert.layer.attention.value", true)
+    a.dense <- read_linear(m, bytes, "bert.layer.attention.dense", true)
     a.attn_ln <- read_norm(m, bytes, "bert.layer.attention.LayerNorm.weight", "bert.layer.attention.LayerNorm.bias")
-    a.ffn <- read_linear(m, bytes, "bert.layer.ffn")
-    a.ffn_out <- read_linear(m, bytes, "bert.layer.ffn_output")
+    a.ffn <- read_linear(m, bytes, "bert.layer.ffn", true)
+    a.ffn_out <- read_linear(m, bytes, "bert.layer.ffn_output", true)
     a.full_ln <- read_norm(m, bytes, "bert.layer.full_layer_layer_norm.weight", "bert.layer.full_layer_layer_norm.bias")
     a.emb_dim = a.map_in.nin
     a.hidden = a.map_in.nout
@@ -306,7 +512,7 @@ def private read_albert(m : GGUFMeta; bytes : array<uint8> | #; var a : St2Alber
 }
 
 def private read_text_encoder(m : GGUFMeta; bytes : array<uint8> | #; var te : St2TextEncoder) {
-    te.emb <- read_arr(m, bytes, "text_encoder.embedding.weight")
+    te.emb <- read_weight(m, bytes, "text_encoder.embedding.weight")
     te.c = m.tensors[need_tensor(m, "text_encoder.embedding.weight")].dims[0]
     var i = 0
     while (gguf_find_tensor(m, "text_encoder.cnn.{i}.0.weight") >= 0) {
@@ -318,7 +524,7 @@ def private read_text_encoder(m : GGUFMeta; bytes : array<uint8> | #; var te : S
 }
 
 def private read_predictor(m : GGUFMeta; bytes : array<uint8> | #; var p : St2Predictor) {
-    p.bert_encoder <- read_linear(m, bytes, "bert_encoder")
+    p.bert_encoder <- read_linear(m, bytes, "bert_encoder", true)
     var pairs = 0
     while (gguf_find_tensor(m, "predictor.text_encoder.lstms.{2 * pairs}.weight_ih") >= 0) {
         pairs++
@@ -354,7 +560,7 @@ def private read_decoder(m : GGUFMeta; bytes : array<uint8> | #; var d : St2Deco
     d.asr_res <- read_conv_p(m, bytes, "decoder.asr_res.0")
     i = 0
     while (gguf_find_tensor(m, "decoder.generator.ups.{i}.weight") >= 0) {
-        d.ups |> emplace(read_conv_p(m, bytes, "decoder.generator.ups.{i}"))
+        d.ups |> emplace(read_conv_p(m, bytes, "decoder.generator.ups.{i}", true))
         d.noise_convs |> emplace(read_conv_p(m, bytes, "decoder.generator.noise_convs.{i}"))
         d.noise_res |> emplace(read_gen_res_block(m, bytes, "decoder.generator.noise_res.{i}"))
         i++
@@ -365,7 +571,7 @@ def private read_decoder(m : GGUFMeta; bytes : array<uint8> | #; var d : St2Deco
         i++
     }
     d.n_kernels = long_length(d.resblocks) / long_length(d.ups)
-    d.conv_post <- read_conv_p(m, bytes, "decoder.generator.conv_post")
+    d.conv_post <- read_conv_p(m, bytes, "decoder.generator.conv_post", true)
     d.stft_fwd_re <- read_conv(m, bytes, "decoder.generator.stft.weight_forward_real", "")
     d.stft_fwd_im <- read_conv(m, bytes, "decoder.generator.stft.weight_forward_imag", "")
     d.stft_bwd_re <- read_conv(m, bytes, "decoder.generator.stft.weight_backward_real", "")
@@ -376,43 +582,84 @@ def private read_decoder(m : GGUFMeta; bytes : array<uint8> | #; var d : St2Deco
     d.istft_envelope = gguf_str(m, bytes, "styletts2.istft_norm") == "envelope"
     d.stft_eps = gguf_f32(m, bytes, "styletts2.stft_eps")
     if (gguf_find_tensor(m, "decoder.generator.stft.window") >= 0) {
-        d.window <- read_arr(m, bytes, "decoder.generator.stft.window")
+        d.window <- read_weight(m, bytes, "decoder.generator.stft.window")
     }
 }
 
-//! Load a converted StyleTTS2-lineage GGUF (harness/convert_kitten.py, harness/convert_kokoro.py):
-//! the shared weights, voices and STFT convention; family keys are the family file's to read.
-def load_styletts2(path : string) : StyleTts2Model {
-    var inscope km = StyleTts2Model()
+def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) : TtsWeight {
+    var w = TtsWeight()
+    w.a <- read_arr(m, bytes, name)
+    return <- w
+}
+
+//! Read a converted StyleTTS2-lineage GGUF (harness/convert_kitten.py, harness/convert_kokoro.py)
+//! into the mint-side carrier: served layouts minted, voices and STFT convention read, every
+//! weight moved into the staging blob. Family keys are the family file's to read.
+def stage_styletts2(path : string) : St2Staging {
+    var inscope st = St2Staging()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA styletts2: cannot open model '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
-        km.family = gguf_str(m, bytes, "general.architecture")
+        st.e.family = gguf_str(m, bytes, "general.architecture")
         if (!gguf_has(m, "styletts2.sample_rate")) {
-            panic("dasLLAMA styletts2: '{path}' ({km.family}) carries no styletts2 metadata")
+            panic("dasLLAMA styletts2: '{path}' ({st.e.family}) carries no styletts2 metadata")
         }
-        km.name = gguf_str(m, bytes, "general.name")
-        km.sample_rate = int(gguf_int(m, bytes, "styletts2.sample_rate"))
-        km.n_symbols = gguf_int(m, bytes, "styletts2.n_symbols")
-        km.style_dim = gguf_int(m, bytes, "styletts2.style_dim")
-        km.style_rows = int(gguf_int(m, bytes, "styletts2.style_rows"))
-        km.source.n_harm = gguf_int(m, bytes, "styletts2.n_harmonics")
-        km.source.sample_rate = float(km.sample_rate)
-        km.source.torch_math = gguf_has(m, "styletts2.resample") && gguf_str(m, bytes, "styletts2.resample") == "torch"
-        km.voice_names <- gguf_str_array(m, bytes, "styletts2.voices")
-        for (v in km.voice_names) {
-            km.voices[v] <- read_arr(m, bytes, "voice.{v}")
+        st.e.name = gguf_str(m, bytes, "general.name")
+        st.e.sample_rate = int(gguf_int(m, bytes, "styletts2.sample_rate"))
+        st.e.n_symbols = gguf_int(m, bytes, "styletts2.n_symbols")
+        st.e.style_dim = gguf_int(m, bytes, "styletts2.style_dim")
+        st.e.style_rows = int(gguf_int(m, bytes, "styletts2.style_rows"))
+        st.e.source.n_harm = gguf_int(m, bytes, "styletts2.n_harmonics")
+        st.e.source.sample_rate = float(st.e.sample_rate)
+        st.e.source.torch_math = gguf_has(m, "styletts2.resample") && gguf_str(m, bytes, "styletts2.resample") == "torch"
+        st.e.voice_names <- gguf_str_array(m, bytes, "styletts2.voices")
+        for (v in st.e.voice_names) {
+            st.e.voices[v] <- read_arr(m, bytes, "voice.{v}")
         }
-        read_albert(m, bytes, km.albert)
-        read_text_encoder(m, bytes, km.text_encoder)
-        read_predictor(m, bytes, km.predictor)
-        read_decoder(m, bytes, km.decoder)
+        read_albert(m, bytes, st.e.albert)
+        read_text_encoder(m, bytes, st.e.text_encoder)
+        read_predictor(m, bytes, st.e.predictor)
+        read_decoder(m, bytes, st.e.decoder)
     }
     fclose(f)
-    return <- km
+    var io = TtsBlobIo(staging = true, blob = unsafe(addr(st.blob)))
+    weights_walk(io, st.e)
+    return <- st
+}
+
+//! Mint a served model from a staged read without touching disk - the in-memory image rail,
+//! the off-rail control for suites.
+def mint_styletts2(var st : St2Staging; var out : StyleTts2Model) {
+    cache_via_image_staged(st, out, "", ST2_IMAGE_TAG)
+    st2_bind(out)
+}
+
+//! Load a converted StyleTTS2-lineage GGUF through its prepared image: the sibling `.dlim` maps
+//! when it exists, else the GGUF stages, bakes and maps (``DASLLAMA_IMAGE=0`` mints in memory).
+def load_styletts2(path : string) : StyleTts2Model {
+    var inscope m = StyleTts2Model()
+    if (g_env_engine.image) {
+        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
+        let img = image_path_for(path, ST2_IMAGE_TAG)
+        let ts = ref_time_ticks()
+        if (load_image(img, m, ST2_IMAGE_TAG)) {
+            st2_bind(m)
+            to_log(LOG_INFO, "dasLLAMA styletts2: prepared image mapped in {get_time_usec(ts) / 1000} ms - {img}\n")
+            return <- m
+        }
+        var inscope st <- stage_styletts2(path)
+        if (cache_via_image_staged(st, m, img, ST2_IMAGE_TAG)) {
+            dlim_gc_stale(path, ST2_IMAGE_TAG)   // the fresh bake ON DISK proves its lane's siblings dead
+        }
+        st2_bind(m)
+        return <- m
+    }
+    var inscope st <- stage_styletts2(path)
+    mint_styletts2(st, m)
+    return <- m
 }
 
 //! True when `name` is one of the model's voices.
@@ -547,7 +794,7 @@ def styletts2_albert(a : St2Albert; ids : array<int>; @exact_size var out : arra
     for (i in range64(t)) {
         let id = int64(ids[i])
         for (d in range64(a.emb_dim)) {
-            e[i * a.emb_dim + d] = a.word_emb[id * a.emb_dim + d] + a.pos_emb[i * a.emb_dim + d] + a.type_emb[d]
+            e[i * a.emb_dim + d] = a.word_emb.a[id * a.emb_dim + d] + a.pos_emb.a[i * a.emb_dim + d] + a.type_emb.a[d]
         }
     }
     layernorm_rows(e, t, a.emb_dim, a.emb_ln, ALBERT_EPS)
@@ -584,7 +831,7 @@ def styletts2_text_encoder(te : St2TextEncoder; ids : array<int>; @exact_size va
     for (i in range64(t)) {
         let id = int64(ids[i])
         for (d in range64(c)) {
-            xtm[i * c + d] = te.emb[id * c + d]
+            xtm[i * c + d] = te.emb.a[id * c + d]
         }
     }
     var inscope @exact_size x : array<float>
@@ -738,10 +985,10 @@ def private gen_res_block(b : St2GenResBlock; var x : array<float>; t : int64; s
     for (j in range(length(b.convs1))) {
         copy_floats_into(x, n, xt)
         adain_rows(b.adain1[j], xt, t, b.c, s, LN_EPS)
-        snake_rows(xt, t, b.c, b.alpha1[j])
+        snake_rows(xt, t, b.c, b.alpha1[j].a)
         conv1d_rows(b.convs1[j], xt, t, y1)
         adain_rows(b.adain2[j], y1, t, b.c, s, LN_EPS)
-        snake_rows(y1, t, b.c, b.alpha2[j])
+        snake_rows(y1, t, b.c, b.alpha2[j].a)
         conv1d_rows(b.convs2[j], y1, t, y2)
         for (i in range64(n)) {
             x[i] += y2[i]
@@ -884,7 +1131,7 @@ def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : a
         wave[i] = wr[STFT_PAD + i] - wi[STFT_PAD + i]
     }
     if (d.istft_envelope) {
-        istft_envelope_divide(wave, n, d.window, d.stft_bwd_re.k, d.stft_bwd_re.stride, STFT_PAD)
+        istft_envelope_divide(wave, n, d.window.a, d.stft_bwd_re.k, d.stft_bwd_re.stride, STFT_PAD)
     }
     return n
 }

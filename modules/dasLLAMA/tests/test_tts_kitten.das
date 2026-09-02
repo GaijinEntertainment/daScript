@@ -7,6 +7,8 @@ require dastest/testing_boost public
 require dasllama/dasllama_kitten
 require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
+require dasllama/dasllama_tts_blocks
+require dasllama/dasllama_styletts2
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
@@ -105,6 +107,74 @@ def private facade_smoke(t : T?; size : string) {
 def test_kitten_facade(t : T?) {
     t |> run("nano: text in, speech out") @(t : T?) {
         facade_smoke(t, "nano")
+    }
+}
+
+// elements of the served view that differ from the staging blob's span (the off-rail truth)
+def private span_mismatch(blob : array<float>; span : TtsSpan; view : array<float>) : int {
+    if (long_length(view) != span.n) {
+        return 1000000
+    }
+    var bad = 0
+    for (i in range64(span.n)) {
+        if (view[i] != blob[span.off + i]) {
+            bad++
+        }
+    }
+    return bad
+}
+
+struct ImageRoundtrip {
+    cold_backed : bool
+    warm_backed : bool
+    minted_backed : bool
+    mismatches : int
+    voices : int
+}
+
+// the image rail on the nano GGUF: a fresh staged read is the off-rail truth; the cold load (a
+// bake or a map, both image-backed) must serve its bytes; the warm load maps; the in-memory mint
+// serves without a file
+def private image_roundtrip(path : string) : ImageRoundtrip {
+    var r = ImageRoundtrip()
+    var inscope st <- stage_styletts2(path)
+    var inscope m <- load_styletts2(path)
+    r.cold_backed = m.image_map != null
+    r.mismatches += span_mismatch(st.blob, m.albert.q.wt_span, m.albert.q.wt)
+    r.mismatches += span_mismatch(st.blob, m.decoder.resblocks[0].convs1[0].wk_span, m.decoder.resblocks[0].convs1[0].wk)
+    r.mismatches += span_mismatch(st.blob, m.decoder.ups[0].wtr_span, m.decoder.ups[0].wtr)
+    r.mismatches += span_mismatch(st.blob, m.decoder.window.span, m.decoder.window.a)
+    r.mismatches += span_mismatch(st.blob, m.text_encoder.cnn[0].w_span, m.text_encoder.cnn[0].w)
+    for (name in m.voice_names) {
+        r.mismatches += span_mismatch(st.blob, m.voice_spans?[name] ?? TtsSpan(), m.voices[name])
+        r.voices++
+    }
+    var inscope warm <- load_styletts2(path)
+    r.warm_backed = warm.image_map != null
+    var inscope st2 <- stage_styletts2(path)
+    var inscope minted = StyleTts2Model()
+    mint_styletts2(st2, minted)
+    r.minted_backed = minted.image_map != null
+    r.mismatches += span_mismatch(st.blob, minted.albert.q.wt_span, minted.albert.q.wt)
+    return r
+}
+
+[test]
+def test_kitten_image(t : T?) {
+    t |> run("nano: the staged read, the mapped image and the in-memory mint agree") @(t : T?) {
+        if (!stat(gguf_path("nano")).is_valid) {
+            t |> skip("kitten-nano.gguf not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let r = image_roundtrip(gguf_path("nano"))
+            t |> success(r.cold_backed, "the cold load serves from an image")
+            t |> success(r.warm_backed, "the warm load maps the image")
+            t |> success(r.minted_backed, "the in-memory mint serves from a chunk")
+            t |> equal(r.voices, 8)
+            t |> equal(r.mismatches, 0, "served elements differing from the staged blob")
+        }
     }
 }
 

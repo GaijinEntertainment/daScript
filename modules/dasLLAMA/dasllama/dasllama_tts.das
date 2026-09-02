@@ -37,6 +37,16 @@ struct TtsModel {
     tagger : PosTagger
 }
 
+// Stated rather than inferred: the shared carrier holds borrowed planes, and a generated
+// teardown would force every module that deletes a TtsModel to see the plane finalizers too.
+def finalize(var m : TtsModel) {
+    delete m.model
+    delete m.kitten
+    delete m.kokoro
+    delete m.g2p
+    delete m.tagger
+}
+
 //! Load a TTS GGUF; `tts_g2p.bin` and `tts_postag.bin` come from the same directory.
 def load_tts_model(path : string) : TtsModel {
     var inscope m = TtsModel()

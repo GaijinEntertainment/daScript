@@ -65,16 +65,26 @@ stages, each its own file, and every stage is data-driven from the model store: 
   (the source noise a synthesis consumed - captured from the oracle, or drawn). Family files
   require this, never each other.
 - **`dasllama_tts_blocks.das`** - the StyleTTS2-lineage block home, the TTS twin of
-  `dasllama_tower.das`: f32 channel-major [C][T] operators - Conv1d (dense as im2col + the
-  batched GEMM, depthwise direct, forward and transposed), the dense layer, LayerNorm over rows
-  and over channels, InstanceNorm and AdaIN, AdaLayerNorm, the bidirectional LSTM (gates
-  i,f,g,o, both bias halves pre-summed), LeakyReLU / Snake / sigmoid / tanh, nearest and
-  ONNX-half-pixel linear resampling, the duration-to-frame expansion, half-to-even rounding,
-  PCG32 with a polar normal, the harmonic-plus-noise sine source, and the STFT pieces (edge pad,
-  magnitude and phase, polar to rectangular, reflection pad). The sine source keeps the
-  reference's operation order exactly: its phase reaches 1e5 radians, where one float32 ulp is a
-  hundredth of a radian. One home: a family file re-implementing one of these is a defect, and
-  nothing here names a family type.
+  `dasllama_tower.das`, in two layouts. The channel-major [C][T] forms are the reference: Conv1d
+  (dense as im2col + the batched GEMM, depthwise direct, forward and transposed), the dense
+  layer, LayerNorm over rows and over channels, InstanceNorm and AdaIN, AdaLayerNorm, the
+  bidirectional LSTM (gates i,f,g,o, both bias halves pre-summed), LeakyReLU / Snake / sigmoid /
+  tanh, nearest and ONNX-half-pixel linear resampling, the duration-to-frame expansion,
+  half-to-even rounding, PCG32 with a polar normal, the harmonic-plus-noise sine source, and the
+  STFT pieces (edge pad, magnitude and phase, polar to rectangular, reflection pad). The
+  token-major [T][C] "rows" forms are what the generator and bert run: a dense stride-1 conv is
+  k tap-GEMMs on the tiled `gemm_f32_jo` over the shifted input rows (no im2col; the served
+  width `cout_s` on the 16-column tile), a transposed conv one GEMM plus a gather overlap-add,
+  the dense layer the same tiled GEMM off `wt`, Snake and AdaIN four channels a lane; every rows
+  kernel splits its rows across lanes on tile-aligned block edges, and `tests/test_tts_blocks.das`
+  holds each one to its channel-major twin at the dot-envelope bar. A weight is an ONNX-layout
+  array plus the served layout `conv1d_prepare` / `linear_prepare` mint for the consumer the
+  reader names (`served_rows`, `rows_only`), the unread one dropped; beside every weight array
+  sits its `TtsSpan` into the model's blob, and `weights_walk` is the one walk that moves weights
+  into a staging blob or binds them as borrowed views over a served plane (`release_weight` is
+  the one teardown). The sine source keeps the reference's operation order exactly: its phase
+  reaches 1e5 radians, where one float32 ulp is a hundredth of a radian. One home: a family file
+  re-implementing one of these is a defect, and nothing here names a family type.
 - **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share: the weight
   map of the converted GGUF (conv geometry rides as `styletts2.conv.<weight>` metadata, so the
   assembly hardcodes the wiring and reads the shapes; the STFT convention - replicate or reflect
@@ -84,7 +94,17 @@ stages, each its own file, and every stage is data-driven from the model store: 
   applied twelve times) -> text encoder -> duration encoder -> durations -> alignment ->
   prosody (F0, energy) -> decoder -> iSTFTNet generator, with a stopwatch per stage
   (`TtsTimings`) and `StyleTts2Trace` collecting the stage tensors the parity rail compares.
-  Nothing here names a family: a family's quirk lands in its family file.
+  The served carrier rides the `.dlim` image rail (`ARCHITECTURE_IMAGE.md`): `stage_styletts2`
+  reads the GGUF into `St2Staging` - the served layouts minted, every weight moved into one
+  staging `blob` with its span recorded - and `load_styletts2` maps the sibling image under
+  the `tts-f32` tag or bakes it from that staging (`DASLLAMA_IMAGE=0` mints in memory,
+  `mint_styletts2` is the suites' off-rail control); the meta blob carries the scalars, the
+  spans and the voice roster through the leaf structs' own `serialize` overloads, and the
+  loader binds every weight array as a borrowed view over the mapped `blob` plane after the
+  parse (post-load runs before the planes bind, so binding cannot happen there). The carrier
+  therefore takes an explicit `finalize` - views forgotten, owned buffers deleted, the backing
+  released once - and so does every struct that holds it (`TtsModel`), the vision embedder's
+  reason. Nothing here names a family: a family's quirk lands in its family file.
 - **`dasllama_kitten.das`** - the KittenTTS family (nano and mini): the reference driver's symbol
   table, re-spacing rule and style-row rule (the chunk's character count), its speed priors and
   voice aliases (`kitten.*` metadata), its 5000-sample tail trim, and the rewrite of the front

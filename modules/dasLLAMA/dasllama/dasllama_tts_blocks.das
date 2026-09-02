@@ -6,8 +6,10 @@ module dasllama_tts_blocks shared public
 
 require dasllama/dasllama_lint public
 require math
+require daslib/archive
 require dasllama/dasllama_math
 require dasllama/dasllama_par
+require dasllama/dasllama_plane
 require dasllama/dasllama_tower
 require dasllama/dasllama_common
 
@@ -17,21 +19,104 @@ require dasllama/dasllama_common
 //! form the generator runs: tap-GEMMs on the tiled kernel, row blocks across lanes). One home:
 //! a family file re-implementing one of these is a defect.
 
-// ===== weights =====
+// ===== weights and the blob =====
 
-//! One 1-D convolution, forward or transposed. `w` is the ONNX layout - [cout][cin][k] for a
-//! forward conv, [cin][cout][k] transposed. The served layouts, filled at load by
-//! `conv1d_prepare` for the dense (groups == 1) forms: `wt` [cout*k][cin] is the channel-major
-//! transposed conv's GEMM form; `wk` [k][cin][cout_s] is the rows form's per-tap B operand,
-//! its output width `cout_s` rounded up to the 16-column tile (zero columns past `cout`) so
-//! the tiled kernel never falls to the scalar strip; `wtr` [cin][k*cout] is the rows form's
-//! transposed-conv B operand (tap-major columns).
+//! Where a weight lives in the model's blob plane: `off` floats in, `n` floats long. Beside
+//! every weight array: on a served model the array is a borrowed view over that range (bound
+//! at post-load, forgotten at finalize); on a staging model it is empty, the bytes sit in the
+//! staging blob. An empty span (`n == 0`) is an absent weight.
+struct TtsSpan {
+    off : int64 = -1l
+    n : int64
+}
+
+let BLOB_ALIGN = 64l   // floats: every span starts on a 256-byte boundary, a legal GPU buffer offset
+
+//! Append `src` to a staging blob on the alignment boundary; the span it landed in.
+def blob_push(var blob : array<float>; src : array<float>) : TtsSpan {
+    let n = long_length(src)
+    return TtsSpan() if (n == 0l)
+    let off = (long_length(blob) + BLOB_ALIGN - 1l) / BLOB_ALIGN * BLOB_ALIGN
+    blob |> ensure_capacity(off + n)
+    blob |> resize(off + n)
+    for (i in range64(n)) {
+        blob[off + i] = src[i]
+    }
+    return TtsSpan(off = off, n = n)
+}
+
+//! Bind `a` as a borrowed view over `span` of a served blob.
+def bind_span(blob : PlaneF; span : TtsSpan; var a : array<float>) {
+    return if (span.n == 0l)
+    if (span.off < 0l || span.n > blob.n || span.off > blob.n - span.n) {
+        panic("dasLLAMA tts: weight span {span.off}+{span.n} lies outside the {blob.n}-float blob")
+    }
+    unsafe {
+        _builtin_make_temp_array_i64(a, reinterpret<void?>(plane_at(blob, span.off)), span.n)
+    }
+}
+
+//! Forget a borrowed view or delete an owned buffer - the one teardown for a weight array.
+def release_weight(var a : array<float>) {
+    if (lock_count(a) != 0) {
+        unsafe {
+            _builtin_forget_temp_array(a)
+        }
+    } else {
+        delete a
+    }
+}
+
+//! The blob walk's mode: staging moves each weight into `blob` and records its span; serving
+//! binds each weight as a view over `plane` at its span.
+struct TtsBlobIo {
+    staging : bool
+    blob : array<float>?
+    plane : PlaneF = PlaneF()
+}
+
+//! One weight through the walk (see TtsBlobIo).
+def weight_slot(var io : TtsBlobIo; var a : array<float>; var span : TtsSpan) {
+    if (io.staging) {
+        span = blob_push(*io.blob, a)
+        delete a
+    } else {
+        bind_span(io.plane, span, a)
+    }
+}
+
+//! A bare weight vector (an embedding table, a Snake alpha, the ISTFT window) with its span.
+struct TtsWeight {
+    a : array<float>
+    span : TtsSpan = TtsSpan()
+}
+
+def serialize(var arch : Archive; var w : TtsWeight) {
+    arch |> serialize(w.span)
+}
+
+def finalize(var w : TtsWeight) {
+    release_weight(w.a)
+}
+
+def weights_walk(var io : TtsBlobIo; var w : TtsWeight) {
+    weight_slot(io, w.a, w.span)
+}
+
+//! One 1-D convolution; `w` is the ONNX layout ([cout][cin][k] forward, [cin][cout][k] transposed)
+//! and `conv1d_prepare` mints the one served layout its consumer reads (see the layouts below)
+//! - `served_rows` names the consumer: the rows form or the channel-major form.
 struct TtsConv1d {
-    w : array<float>
-    wt : array<float>
-    wk : array<float>
-    wtr : array<float>
+    w : array<float>     // ONNX layout - the channel-major forms' weight (depthwise, im2col)
+    wt : array<float>    // [cout*k][cin] - the channel-major transposed conv's GEMM form
+    wk : array<float>    // [k][cin][cout_s] - the rows form's per-tap B operand, cout_s on the 16-column tile
+    wtr : array<float>   // [cin][k*cout] - the rows form's transposed-conv B operand
     b : array<float>
+    w_span : TtsSpan = TtsSpan()
+    wt_span : TtsSpan = TtsSpan()
+    wk_span : TtsSpan = TtsSpan()
+    wtr_span : TtsSpan = TtsSpan()
+    b_span : TtsSpan = TtsSpan()
     cout : int64
     cout_s : int64
     cin : int64
@@ -43,22 +128,99 @@ struct TtsConv1d {
     groups : int64 = 1l
     output_padding : int64
     transposed : bool
+    served_rows : bool
+}
+
+def serialize(var arch : Archive; var c : TtsConv1d) {
+    arch |> serialize(c.w_span)
+    arch |> serialize(c.wt_span)
+    arch |> serialize(c.wk_span)
+    arch |> serialize(c.wtr_span)
+    arch |> serialize(c.b_span)
+    arch |> serialize_raw(c.cout)
+    arch |> serialize_raw(c.cout_s)
+    arch |> serialize_raw(c.cin)
+    arch |> serialize_raw(c.k)
+    arch |> serialize_raw(c.stride)
+    arch |> serialize_raw(c.pad_l)
+    arch |> serialize_raw(c.pad_r)
+    arch |> serialize_raw(c.dilation)
+    arch |> serialize_raw(c.groups)
+    arch |> serialize_raw(c.output_padding)
+    arch |> serialize_raw(c.transposed)
+    arch |> serialize_raw(c.served_rows)
+}
+
+def finalize(var c : TtsConv1d) {
+    release_weight(c.w)
+    release_weight(c.wt)
+    release_weight(c.wk)
+    release_weight(c.wtr)
+    release_weight(c.b)
+}
+
+def weights_walk(var io : TtsBlobIo; var c : TtsConv1d) {
+    weight_slot(io, c.w, c.w_span)
+    weight_slot(io, c.wt, c.wt_span)
+    weight_slot(io, c.wk, c.wk_span)
+    weight_slot(io, c.wtr, c.wtr_span)
+    weight_slot(io, c.b, c.b_span)
 }
 
 //! A dense layer, w [nout][nin] with an optional bias; `wt` [nin][nout] is the tiled GEMM's B
-//! operand, minted at load by `linear_prepare` when `nout` sits on the 16-column tile.
+//! operand, minted by `linear_prepare` when `nout` sits on the 16-column tile.
 struct TtsLinear {
     w : array<float>
     wt : array<float>
     b : array<float>
+    w_span : TtsSpan = TtsSpan()
+    wt_span : TtsSpan = TtsSpan()
+    b_span : TtsSpan = TtsSpan()
     nout : int64
     nin : int64
+}
+
+def serialize(var arch : Archive; var l : TtsLinear) {
+    arch |> serialize(l.w_span)
+    arch |> serialize(l.wt_span)
+    arch |> serialize(l.b_span)
+    arch |> serialize_raw(l.nout)
+    arch |> serialize_raw(l.nin)
+}
+
+def finalize(var l : TtsLinear) {
+    release_weight(l.w)
+    release_weight(l.wt)
+    release_weight(l.b)
+}
+
+def weights_walk(var io : TtsBlobIo; var l : TtsLinear) {
+    weight_slot(io, l.w, l.w_span)
+    weight_slot(io, l.wt, l.wt_span)
+    weight_slot(io, l.b, l.b_span)
 }
 
 //! A normalization's affine pair; empty arrays mean identity.
 struct TtsNorm {
     w : array<float>
     b : array<float>
+    w_span : TtsSpan = TtsSpan()
+    b_span : TtsSpan = TtsSpan()
+}
+
+def serialize(var arch : Archive; var n : TtsNorm) {
+    arch |> serialize(n.w_span)
+    arch |> serialize(n.b_span)
+}
+
+def finalize(var n : TtsNorm) {
+    release_weight(n.w)
+    release_weight(n.b)
+}
+
+def weights_walk(var io : TtsBlobIo; var n : TtsNorm) {
+    weight_slot(io, n.w, n.w_span)
+    weight_slot(io, n.b, n.b_span)
 }
 
 //! One LSTM direction, gates in i,f,g,o order: w_ih [4H][nin], w_hh [4H][H], b [4H] (the two
@@ -67,25 +229,62 @@ struct TtsLstm {
     w_ih : array<float>
     w_hh : array<float>
     b : array<float>
+    w_ih_span : TtsSpan = TtsSpan()
+    w_hh_span : TtsSpan = TtsSpan()
+    b_span : TtsSpan = TtsSpan()
     nin : int64
     hidden : int64
 }
 
+def serialize(var arch : Archive; var l : TtsLstm) {
+    arch |> serialize(l.w_ih_span)
+    arch |> serialize(l.w_hh_span)
+    arch |> serialize(l.b_span)
+    arch |> serialize_raw(l.nin)
+    arch |> serialize_raw(l.hidden)
+}
+
+def finalize(var l : TtsLstm) {
+    release_weight(l.w_ih)
+    release_weight(l.w_hh)
+    release_weight(l.b)
+}
+
+def weights_walk(var io : TtsBlobIo; var l : TtsLstm) {
+    weight_slot(io, l.w_ih, l.w_ih_span)
+    weight_slot(io, l.w_hh, l.w_hh_span)
+    weight_slot(io, l.b, l.b_span)
+}
+
 struct TtsBiLstm {
-    fwd : TtsLstm
-    bwd : TtsLstm
+    fwd : TtsLstm = TtsLstm()
+    bwd : TtsLstm = TtsLstm()
+}
+
+def weights_walk(var io : TtsBlobIo; var l : TtsBiLstm) {
+    weights_walk(io, l.fwd)
+    weights_walk(io, l.bwd)
 }
 
 //! AdaIN1d: instance norm over time per channel, then (1 + gamma) * x + beta with gamma and
 //! beta the two halves of fc(style).
 struct TtsAdaIn {
-    fc : TtsLinear
-    norm : TtsNorm
+    fc : TtsLinear = TtsLinear()
+    norm : TtsNorm = TtsNorm()
+}
+
+def weights_walk(var io : TtsBlobIo; var a : TtsAdaIn) {
+    weights_walk(io, a.fc)
+    weights_walk(io, a.norm)
 }
 
 //! AdaLayerNorm: layer norm over channels per position, then the same affine from fc(style).
 struct TtsAdaLayerNorm {
-    fc : TtsLinear
+    fc : TtsLinear = TtsLinear()
+}
+
+def weights_walk(var io : TtsBlobIo; var a : TtsAdaLayerNorm) {
+    weights_walk(io, a.fc)
 }
 
 // ===== sizing =====
@@ -98,24 +297,32 @@ def conv1d_out_len(c : TtsConv1d; t_in : int64) : int64 {
     return (t_in + c.pad_l + c.pad_r - c.dilation * (c.k - 1l) - 1l) / c.stride + 1l
 }
 
-//! Mint the served layouts of a dense conv from its ONNX weight: `wt` and `wtr` for a
-//! transposed conv, `wk` for a forward one.
+//! Mint the one served layout of a dense conv from its ONNX weight and drop what the consumer
+//! never reads: the rows form takes `wk` (forward) or `wtr` (transposed) and loses `w`; the
+//! channel-major form keeps `w`, a transposed one minting `wt` in its place.
 def conv1d_prepare(var c : TtsConv1d) {
     c.cout_s = c.cout
     return if (c.groups != 1l)
     if (c.transposed) {
-        c.wt |> reserve_resize(c.cout * c.k * c.cin)
-        c.wtr |> reserve_resize(c.cin * c.k * c.cout)
+        if (c.served_rows) {
+            c.wtr |> reserve_resize(c.cin * c.k * c.cout)
+        } else {
+            c.wt |> reserve_resize(c.cout * c.k * c.cin)
+        }
         for (ci in range64(c.cin)) {
             for (co in range64(c.cout)) {
                 for (kk in range64(c.k)) {
                     let v = c.w[(ci * c.cout + co) * c.k + kk]
-                    c.wt[(co * c.k + kk) * c.cin + ci] = v
-                    c.wtr[(ci * c.k + kk) * c.cout + co] = v
+                    if (c.served_rows) {
+                        c.wtr[(ci * c.k + kk) * c.cout + co] = v
+                    } else {
+                        c.wt[(co * c.k + kk) * c.cin + ci] = v
+                    }
                 }
             }
         }
-    } else {
+        delete c.w
+    } elif (c.served_rows) {
         c.cout_s = (c.cout + 15l) / 16l * 16l
         c.wk |> reserve_resize(c.k * c.cin * c.cout_s)
         for (i in range64(c.k * c.cin * c.cout_s)) {
@@ -128,6 +335,7 @@ def conv1d_prepare(var c : TtsConv1d) {
                 }
             }
         }
+        delete c.w
     }
 }
 
@@ -416,14 +624,18 @@ def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @exact_size var y
 
 // ===== dense =====
 
-//! Mint the tiled GEMM's B operand `wt` [nin][nout] when the width sits on the 16-column tile.
-def linear_prepare(var l : TtsLinear) {
+//! Mint the tiled GEMM's B operand `wt` [nin][nout] when the width sits on the 16-column tile;
+//! a layer only `linear_rows` ever reads (`rows_only`) then drops `w`.
+def linear_prepare(var l : TtsLinear; rows_only : bool = false) {
     return if (l.nout % 16l != 0l)
     l.wt |> reserve_resize(l.nin * l.nout)
     for (o in range64(l.nout)) {
         for (i in range64(l.nin)) {
             l.wt[i * l.nout + o] = l.w[o * l.nin + i]
         }
+    }
+    if (rows_only) {
+        delete l.w
     }
 }
 
@@ -558,34 +770,39 @@ def adain(a : TtsAdaIn; var x : array<float>; c, t : int64; style : array<float>
 
 // Per-channel sums over the rows of x [t][c] (of x itself, or of (x - center)^2), float4 lanes
 // per row block, the blocks combined in double: `out` [c].
+let private STAT_BLOCK = 256l   // rows per partial sum: fixed, so the result never depends on the lane split
+
 def private column_sums(x : array<float>; t, c : int64; center : array<float>; squared : bool; var out : array<float>) {
-    let nslot = int64(max(get_dispatch_slot_bound(), 1))
+    let nblk = (t + STAT_BLOCK - 1l) / STAT_BLOCK
     var inscope @scratch part : array<float>
-    part |> reserve_resize(nslot * c)
-    for (i in range64(nslot * c)) {
+    part |> reserve_resize(nblk * c)
+    for (i in range64(nblk * c)) {
         part[i] = 0.0
     }
     let xp = unsafe(addr<float const?>(x[0]))
     var pp = unsafe(addr(part[0]))
     let m4 = unsafe(addr<float4 const?>(center[0]))
-    let chunks = lanes_for_work(t * c, 0)
-    maybe_parallel_for_indexed(0, int(t), chunks) $(slot, rb, re) {
+    let chunks = min(lanes_for_work(t * c, 0), int(nblk))
+    maybe_parallel_for(0, int(nblk), chunks) $(bb, be) {
         unsafe {
-            var acc4 = reinterpret<float4?>(pp + int64(slot) * c)
             let c4 = c / 4l
-            if (squared) {
-                for (r in range64(int64(rb), int64(re))) {
-                    let row4 = reinterpret<float4 const?>(xp + r * c)
-                    for (j in range64(c4)) {
-                        let dv = row4[j] - m4[j]
-                        acc4[j] += dv * dv
+            for (blk in range64(int64(bb), int64(be))) {
+                var acc4 = reinterpret<float4?>(pp + blk * c)
+                let r1 = min(t, (blk + 1l) * STAT_BLOCK)
+                if (squared) {
+                    for (r in range64(blk * STAT_BLOCK, r1)) {
+                        let row4 = reinterpret<float4 const?>(xp + r * c)
+                        for (j in range64(c4)) {
+                            let dv = row4[j] - m4[j]
+                            acc4[j] += dv * dv
+                        }
                     }
-                }
-            } else {
-                for (r in range64(int64(rb), int64(re))) {
-                    let row4 = reinterpret<float4 const?>(xp + r * c)
-                    for (j in range64(c4)) {
-                        acc4[j] += row4[j]
+                } else {
+                    for (r in range64(blk * STAT_BLOCK, r1)) {
+                        let row4 = reinterpret<float4 const?>(xp + r * c)
+                        for (j in range64(c4)) {
+                            acc4[j] += row4[j]
+                        }
                     }
                 }
             }
@@ -594,7 +811,7 @@ def private column_sums(x : array<float>; t, c : int64; center : array<float>; s
     out |> reserve_resize(c)
     for (ci in range64(c)) {
         var s = 0.0lf
-        for (k in range64(nslot)) {
+        for (k in range64(nblk)) {
             s += double(part[k * c + ci])
         }
         out[ci] = float(s)

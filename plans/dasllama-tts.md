@@ -554,6 +554,23 @@ mini total 1200 ms (RTF 0.128; ORT's uint8 run 0.28); kokoro bert 422 -> 110 ms,
 linear to the dot form. What remains on kokoro: generator 1079 (71%), decoder 173, bert 110,
 prosody 74 - the decoder's AdainResBlk convs still run channel-major.
 
+Rung (c) receipt (2026-09-02): the StyleTTS2 carrier rides the `.dlim` rail. `stage_styletts2`
+reads the GGUF with the served layouts minted - `served_rows` / `rows_only` name each weight's
+consumer and the unread layout is dropped, so the image holds one form per weight - and moves
+every weight into one page-aligned `blob` with a `TtsSpan` beside its array; `load_styletts2`
+maps the sibling image under the config-free `tts-f32` tag or bakes it; the meta carries the
+scalars, spans and voice roster through the leaf structs' Archive overloads; the loader binds
+every array as a borrowed view after the parse (post-load runs before the planes bind).
+Sizes: nano 66 MB (GGUF 59), mini 314 MB, kokoro 373 MB; bake 19-63 ms, map 4-5 ms, load
+18 ms end to end; synthesis speed unchanged (nano 532 ms mapped, 524 in memory). Two defects
+found and fixed on the way: rows kernels must be split-invariant (the facade's streaming cell
+compares two syntheses sample for sample; AdaIN's column sums now accumulate per fixed 256-row
+block) and the shared identity folded the CPU tune knobs, so the CLI (manifest applied) and
+the tests baked different identities in one lane and reaped each other - a family tag can now
+register config-free (`image_config_for`), ruled in `REVIEW_IMAGE.md`. `test_tts_kitten` gains
+the image round-trip cell (staged read vs mapped image vs in-memory mint, element for element).
+The generator hook slot (the sec.2.14 shape) is the remaining half of this rung.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the

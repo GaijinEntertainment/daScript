@@ -44,6 +44,7 @@ def private abs_of(x : array<float>) : array<float> {
     return <- y
 }
 
+// A raw conv - ONNX weight and geometry, no served layout minted yet.
 def private make_conv(var r : TtsRng; cin, cout, k, stride, pad, dil : int64; transposed, with_bias : bool) : TtsConv1d {
     var c = TtsConv1d()
     c.cin = cin
@@ -59,8 +60,15 @@ def private make_conv(var r : TtsRng; cin, cout, k, stride, pad, dil : int64; tr
     if (with_bias) {
         rand_fill(r, c.b, cout, 0.5)
     }
-    conv1d_prepare(c)
     return <- c
+}
+
+// The raw conv prepared for one consumer: the rows form or the channel-major reference.
+def private prepared(c : TtsConv1d; rows : bool) : TtsConv1d {
+    var p := c
+    p.served_rows = rows
+    conv1d_prepare(p)
+    return <- p
 }
 
 // The same conv over |w| with no bias: its output is the dot envelope of every output element.
@@ -97,8 +105,10 @@ def private score(name : string; got, want, env : array<float>; bias_abs : float
 def private conv_case(name : string; cin, cout, k, stride, pad, dil : int64; transposed : bool) : BlockCase {
     var r = TtsRng()
     rng_seed(r, 0x5eedul + uint64(k * 100l + dil))
-    var inscope c <- make_conv(r, cin, cout, k, stride, pad, dil, transposed, true)
-    var inscope e <- envelope_conv(c)
+    var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, dil, transposed, true)
+    var inscope e <- envelope_conv(c0)
+    var inscope c <- prepared(c0, false)
+    var inscope cr <- prepared(c0, true)
     let t_in = T_ROWS
     var inscope x_ct : array<float>
     rand_fill(r, x_ct, cin * t_in, 2.0)
@@ -110,12 +120,12 @@ def private conv_case(name : string; cin, cout, k, stride, pad, dil : int64; tra
     var inscope x_rows : array<float>
     transpose_ct(x_ct, cin, t_in, x_rows)
     var inscope y_rows : array<float>
-    conv1d_rows(c, x_rows, t_in, y_rows)
-    let t_out = conv1d_out_len(c, t_in)
+    conv1d_rows(cr, x_rows, t_in, y_rows)
+    let t_out = conv1d_out_len(cr, t_in)
     var inscope got : array<float>
-    transpose_tc_strided(y_rows, t_out, cout, c.cout_s, got)
+    transpose_tc_strided(y_rows, t_out, cout, cr.cout_s, got)
     var bias_abs = 0.0
-    for (b in c.b) {
+    for (b in c0.b) {
         bias_abs = max(bias_abs, abs(b))
     }
     return score(name, got, want, env, bias_abs)
@@ -303,7 +313,8 @@ def test_rows_conv_refuses_the_wrong_shape(t : T?) {
     t |> run("a strided forward conv is not a rows conv") @(t : T?) {
         var r = TtsRng()
         rng_seed(r, 1ul)
-        var inscope c <- make_conv(r, 8l, 16l, 4l, 2l, 1l, 1l, false, false)
+        var inscope c0 <- make_conv(r, 8l, 16l, 4l, 2l, 1l, 1l, false, false)
+        var inscope c <- prepared(c0, false)
         t |> equal(c.cout_s, 16l)
         t |> equal(c.stride, 2l)
         // the refusal is a panic by contract; the shape check is what the cell pins

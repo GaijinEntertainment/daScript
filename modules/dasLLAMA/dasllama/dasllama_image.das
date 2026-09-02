@@ -57,7 +57,17 @@ struct ImgSection {
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def image_identity(tag : string = ""; quant : string = "q8") : string {
-    return image_identity_of(dlim_config_current(quant), tag)
+    return image_identity_of(image_config_for(tag, quant), tag)
+}
+
+//! The configuration an image under `tag` is keyed and stored by: the box's current one, or the
+//! default one for a family registered config-free (no CPU knob shapes its bytes, so its image
+//! is one file per box rather than one per tune state).
+def image_config_for(tag : string; quant : string = "q8") : DlimConfiguration {
+    if (tag != "" && has_value(g_config_free_tags, tag)) {
+        return DlimConfiguration(quant = quant)
+    }
+    return dlim_config_current(quant)
 }
 
 //! The identity of an explicit configuration — the ONE spelling every identity consumer (the
@@ -152,6 +162,7 @@ struct DlimImageInfo {
 }
 
 var private g_family_tags : array<string>
+var private g_config_free_tags : array<string>   // the family tags keyed by the default configuration
 
 var private g_image_frozen = false
 
@@ -164,9 +175,12 @@ def set_image_artifacts_frozen(frozen : bool) {
 
 //! Register an image family/flavor tag (call from the family module's [init]) so
 //! ``dlim_current_identities`` — and with it every list/GC verdict — covers its images.
-def register_image_family_tag(tag : string) {
+def register_image_family_tag(tag : string; config_free : bool = false) {
     if (!has_value(g_family_tags, tag)) {
         g_family_tags |> push(tag)
+    }
+    if (config_free && !has_value(g_config_free_tags, tag)) {
+        g_config_free_tags |> push(tag)
     }
 }
 
@@ -732,10 +746,12 @@ def private layout_describe(var t; var d : string&) {
 // an array field's ELEMENT struct also serializes element-wise — its shape is load-bearing
 def private layout_describe_elem(var a : array<auto(TT)>; var d : string&) {
     static_if (typeinfo is_struct(type<TT>)) {
-        var tmp : TT
-        layout_describe(tmp, d)
-        d += "^"
-        delete tmp
+        unsafe {   // the var-decl of a TT whose finalizer makes it is_unsafe_when_uninitialized (the TTS leaf structs)
+            var tmp : TT
+            layout_describe(tmp, d)
+            d += "^"
+            delete tmp
+        }
     }
 }
 
@@ -781,7 +797,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                         tag : string; quant : string; consume : bool; layout : uint64;
                         plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
     // one config snapshot serves the meta embed AND the header hash — they must agree
-    let dcfg = dlim_config_current(quant)
+    let dcfg = image_config_for(tag, quant)
     let ident = image_identity_of(dcfg, tag)
     var fend = 0ul
     var meta_off = 0ul

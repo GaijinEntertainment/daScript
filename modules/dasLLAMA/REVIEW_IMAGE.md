@@ -44,7 +44,10 @@ with the meta flags describing the layout - a per-tensor type split is not a sec
 decides that, not the load.**
 
 **A flavor takes its image file through `image_path_for` and its tag through
-`register_image_family_tag`.**
+`register_image_family_tag`; a family whose plane bytes no CPU knob shapes registers that tag
+config-free, and a family whose bytes any knob shapes never does.** A config-bound identity on
+a knob-free family bakes one image per tune state and reaps the others on every switch; a
+config-free identity on a knob-shaped family serves the wrong bytes under a changed knob.
 
 **A diff that changes the `.dlim` layout or serialization, or changes which tensors the gguf
 loader puts into an image, bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) in the same
