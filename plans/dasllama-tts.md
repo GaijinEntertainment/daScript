@@ -685,6 +685,21 @@ rows), and `IMAGE_VERSION` moves to 29 for the served-layout change. Kokoro, sam
 warm: decoder 182 -> 66 ms, prosody 74 -> 31, synthesis 884 -> 730-760 ms, RTF 0.080 (torch
 0.097); nano's decoder 12 -> 3 ms, facade RTF 0.026-0.028. Blocks 11/11 (the pool and nearest
 cells, AdaIN at width 66), kitten 13/13 and kokoro 4/4 at the unchanged parity bars, facade 9/9.
+Rig on this state, q8 lane, 200 sentences: nano WER 4.13% / UTMOS 3.967 (f32 3.81 / 3.963;
+reference 4.22 / 4.035), mini 4.18 / 4.335 (f32 4.36 / 4.337; reference 4.00 / 3.996), kokoro
+3.45 / 4.500 (f32 3.41 / 4.501; reference 3.18 / 4.499) - the q8 lane holds on all three.
+
+Cheap-section receipt (2026-09-02, "might as well finish the cheap section"): the noise convs
+are strided (k = 2*stride), so they ran channel-major through im2col plus a transpose; a strided
+forward conv now has a rows form (`conv1d_rows_dense_strided`: per chunk of output rows the k
+tap rows stack side by side, one tiled GEMM with K = k*cin reading `wk` as [k*cin][cout_s]),
+the spectrum transposes once per synthesis, and the generator and its hook take it as rows.
+The AdaIN affine's two column passes fold into one (`column_stats`: each fixed row block sums
+x - its first row and the square, the blocks merge in double). Kokoro warm: noise 38 -> 5 ms,
+adain 43 -> 40 (the statistics were the smaller half of that bucket), generator 480 -> 445,
+synthesis 690-697 ms, RTF 0.075; nano 386 ms for 15 s, RTF 0.026. `IMAGE_VERSION` 30; a rows
+conv served from an image older than its layout panics by name rather than indexing an empty
+array. Blocks 12/12, kitten 13/13, kokoro 4/4, facade 9/9.
 
 ## Risks
 

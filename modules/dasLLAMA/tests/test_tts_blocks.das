@@ -484,6 +484,10 @@ def test_rows_convs(t : T?) {
         t |> run("the padded served width (conv_post's 22 columns)") @(t : T?) {
             report(t, conv_case("conv_post k7 cout22", 64l, 22l, 7l, 1l, 3l, 1l, false))
         }
+        t |> run("the strided noise convs over stacked tap rows") @(t : T?) {
+            report(t, conv_case("noise conv k20 s10", 22l, 128l, 20l, 10l, 5l, 1l, false))
+            report(t, conv_case("noise conv k12 s6", 22l, 64l, 12l, 6l, 3l, 1l, false))
+        }
         t |> run("transposed upsamplers") @(t : T?) {
             report(t, conv_case("convT k20 s10", 64l, 32l, 20l, 10l, 5l, 1l, true))
             report(t, conv_case("convT k12 s6", 64l, 32l, 12l, 6l, 3l, 1l, true))
@@ -515,14 +519,14 @@ def test_rows_convs(t : T?) {
 
 [test]
 def test_rows_conv_refuses_the_wrong_shape(t : T?) {
-    t |> run("a strided forward conv is not a rows conv") @(t : T?) {
+    t |> run("a grouped conv is not a rows conv") @(t : T?) {
         var r = TtsRng()
         rng_seed(r, 1ul)
-        var inscope c0 <- make_conv(r, 8l, 16l, 4l, 2l, 1l, 1l, false, false)
+        var inscope c0 <- make_conv(r, 8l, 8l, 3l, 1l, 1l, 1l, false, false)
+        c0.groups = 8l
         var inscope c <- prepared(c0, false)
-        t |> equal(c.cout_s, 16l)
-        t |> equal(c.stride, 2l)
+        t |> equal(c.cout_s, 8l)
         // the refusal is a panic by contract; the shape check is what the cell pins
-        t |> success(!c.transposed && c.stride != 1l, "the shape the rows conv refuses")
+        t |> success(c.groups != 1l, "the shape the rows conv refuses")
     }
 }

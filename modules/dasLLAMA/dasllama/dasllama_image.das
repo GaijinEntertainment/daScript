@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 29   // the TTS decoder and prosody convs serve the rows layout; the q8 conv taps stacked along K
+let IMAGE_VERSION = 30   // the TTS decoder, prosody and noise convs serve the rows layout; the q8 conv taps stacked along K
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and

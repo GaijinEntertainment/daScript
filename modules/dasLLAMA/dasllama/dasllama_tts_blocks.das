@@ -490,6 +490,7 @@ var @scratch g_q8_xq : array<int8>
 var @scratch g_q8_xs : array<float>
 var @scratch g_q8_xst : array<int8>
 var @scratch g_q8_xss : array<float>
+var @scratch g_rows_xst : array<float>
 var @scratch g_adain_h : array<float>
 var @scratch g_adain_mean : array<float>
 var @scratch g_adain_ssq : array<float>
@@ -744,7 +745,68 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
 // The q8 rows lane: the input rows quantized once (Q8_0 per 32 along cin), then each tap one
 // backend q8.q8 batch GEMM over the rows whose shifted input exists (the kernel splits its
 // weight rows across lanes itself), added onto the bias-initialized y.
-let private Q8_STACK_BYTES = 4l * 1024l * 1024l   // the stacked chunk stays cache-resident while the kernel reads it
+let private ROWS_STACK_BYTES = 4l * 1024l * 1024l   // a stacked chunk stays cache-resident while the GEMM reads it
+
+// A strided forward conv on rows, f32: per chunk of output rows the k tap rows stack side by
+// side (zero where a tap leaves the input) and one tiled GEMM with K = k*cin reads `wk` as
+// [k*cin][cout_s]; the bias seeds the rows the GEMM accumulates onto.
+def private conv1d_rows_dense_strided(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
+    let t_out = conv1d_out_len(c, t_in)
+    let cin = c.cin
+    let cout = c.cout_s
+    let nbias = empty(c.b) ? 0l : c.cout
+    let k = c.k
+    let kc = k * cin
+    let stride = c.stride
+    let dil = c.dilation
+    let pad = c.pad_l
+    var xst & = g_rows_xst
+    let chunk = clamp(ROWS_STACK_BYTES / (kc * 4l) / 4l * 4l, 64l, t_out)
+    xst |> reserve_resize(chunk * kc)
+    var yp = unsafe(addr(y[0]))
+    let xp = unsafe(addr<float const?>(x[0]))
+    let wp = unsafe(addr<float const?>(c.wk[0]))
+    let bp = nbias > 0l ? unsafe(addr<float const?>(c.b[0])) : null
+    var xstp = unsafe(addr(xst[0]))
+    var r0 = 0l
+    while (r0 < t_out) {
+        let rows = min(chunk, t_out - r0)
+        maybe_parallel_for(0, int(rows), lanes_for_work(rows * kc, 0)) $(rb, re) {
+            unsafe {
+                for (r in range64(int64(rb), int64(re))) {
+                    var drow = xstp + r * kc
+                    for (kk in range64(k)) {
+                        let src = (r0 + r) * stride + kk * dil - pad
+                        if (src >= 0l && src < t_in) {
+                            memcpy(drow + kk * cin, xp + src * cin, cin * 4l)
+                        } else {
+                            for (j in range64(cin)) {
+                                drow[kk * cin + j] = 0.0
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let chunks = matmul_chunks(int(rows), ROWS_OVERSPLIT, rows * kc * cout)
+        maybe_parallel_for(0, int(rows), chunks) $(rb, re) {
+            unsafe {
+                let rb4 = tile_edge(int64(rb), rows)
+                let re4 = tile_edge(int64(re), rows)
+                for (r in range64(rb4, re4)) {
+                    var yrow = yp + (r0 + r) * cout
+                    for (co in range64(cout)) {
+                        yrow[co] = co < nbias ? bp[co] : 0.0
+                    }
+                }
+                if (re4 > rb4) {
+                    gemm_f32_jo(yp + (r0 + rb4) * cout, xstp + rb4 * kc, wp, re4 - rb4, kc, cout)
+                }
+            }
+        }
+        r0 += rows
+    }
+}
 
 // One GEMM per chunk of output rows over stacked rows - the k shifted input rows side by side,
 // copied from the once-quantized input, zero scales where the shift leaves it - so the kernel
@@ -764,7 +826,7 @@ def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; 
     xq |> reserve_resize(t_in * cin)
     xs |> reserve_resize(t_in * nb)
     quantize_q8_0_into(x, t_in * cin, xq, xs, 0l, 0l)
-    let chunk = clamp(Q8_STACK_BYTES / kc / 4l * 4l, 64l, t_out)
+    let chunk = clamp(ROWS_STACK_BYTES / kc / 4l * 4l, 64l, t_out)
     xst |> reserve_resize(chunk * kc)
     xss |> reserve_resize(chunk * knb)
     var yp = unsafe(addr(y[0]))
@@ -824,12 +886,15 @@ def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; 
     }
 }
 
-//! y [t_out][cout_s] = conv(x [t_in][cin]) in the rows form; the row stride is the served
-//! width `cout_s`. Dense convs only, forward at stride 1 or transposed; every other shape
-//! runs the channel-major `conv1d`. A conv minted q8 runs the q8 lane.
+//! y [t_out][cout_s] = conv(x [t_in][cin]) in the rows form, the row stride the served width
+//! `cout_s`: dense convs only - forward (stride 1 as tap-GEMMs, strided over stacked tap rows)
+//! or transposed, a conv minted q8 on the q8 lane; a grouped conv runs the channel-major form.
 def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_size var y : array<float>) {
-    if (c.groups != 1l || (!c.transposed && c.stride != 1l)) {
-        panic("dasLLAMA tts: the rows conv takes a dense conv (forward at stride 1, or transposed); got groups={c.groups} stride={c.stride} transposed={c.transposed}")
+    if (c.groups != 1l) {
+        panic("dasLLAMA tts: the rows conv takes a dense conv; got groups={c.groups}")
+    }
+    if (!c.q8 && empty(c.transposed ? c.wtr : c.wk)) {
+        panic("dasLLAMA tts: a rows conv with no rows layout - a prepared image older than this build's served layouts; delete the .dlim beside the GGUF")
     }
     let t_out = conv1d_out_len(c, t_in)
     y |> reserve_resize(t_out * c.cout_s)
@@ -838,6 +903,8 @@ def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_s
     } elif (c.transposed) {
         rows_width_check(c.cout, "conv1d_rows (transposed)")
         conv1d_rows_transposed(c, x, t_in, y)
+    } elif (c.stride != 1l) {
+        conv1d_rows_dense_strided(c, x, t_in, y)
     } else {
         conv1d_rows_dense(c, x, t_in, y)
     }
@@ -1148,63 +1215,75 @@ def adain(a : TtsAdaIn; var x : array<float>; c, t : int64; style : array<float>
     }
 }
 
-// Per-channel sums over the rows of x [t][c] (of x itself, or of (x - center)^2), float4 lanes
-// per row block, the blocks combined in double: `out` [c].
-let private STAT_BLOCK = 256l   // rows per partial sum: fixed, so the result never depends on the lane split
+// Per-channel mean and sum of squared deviations over the rows of x [t][c] in ONE pass: each
+// fixed-size row block sums (x - its own first row) and that square (the shift keeps the
+// one-pass variance from cancelling), and the blocks merge in double, lane-split invariant.
+let private STAT_BLOCK = 256l
 
-def private column_sums(x : array<float>; t, c : int64; center : array<float>; squared : bool; var out : array<float>) {
+def private column_stats(x : array<float>; t, c : int64; var mean : array<float>; var ssq : array<float>) {
     let nblk = (t + STAT_BLOCK - 1l) / STAT_BLOCK
     var part & = g_colsum_part
-    part |> reserve_resize(nblk * c)
-    for (i in range64(nblk * c)) {
+    part |> reserve_resize(2l * nblk * c)
+    for (i in range64(2l * nblk * c)) {
         part[i] = 0.0
     }
     let xp = unsafe(addr<float const?>(x[0]))
     var pp = unsafe(addr(part[0]))
-    let mp = unsafe(addr<float const?>(center[0]))
-    let m4 = unsafe(addr<float4 const?>(center[0]))
     let chunks = min(lanes_for_work(t * c, 0), int(nblk))
     maybe_parallel_for(0, int(nblk), chunks) $(bb, be) {
         unsafe {
             let c4 = c / 4l
             for (blk in range64(int64(bb), int64(be))) {
-                var acc4 = reinterpret<float4?>(pp + blk * c)
-                let r1 = min(t, (blk + 1l) * STAT_BLOCK)
+                let r0 = blk * STAT_BLOCK
+                let r1 = min(t, r0 + STAT_BLOCK)
+                let base = xp + r0 * c
+                var s1 = pp + blk * 2l * c
+                var s2 = s1 + c
                 if (c4 * 4l != c) {   // a width off the lane: the same block sums, one channel at a time
-                    var acc = pp + blk * c
-                    for (r in range64(blk * STAT_BLOCK, r1)) {
+                    for (r in range64(r0 + 1l, r1)) {
                         let row = xp + r * c
                         for (j in range64(c)) {
-                            let dv = squared ? row[j] - mp[j] : row[j]
-                            acc[j] += squared ? dv * dv : dv
-                        }
-                    }
-                } elif (squared) {
-                    for (r in range64(blk * STAT_BLOCK, r1)) {
-                        let row4 = reinterpret<float4 const?>(xp + r * c)
-                        for (j in range64(c4)) {
-                            let dv = row4[j] - m4[j]
-                            acc4[j] += dv * dv
+                            let dv = row[j] - base[j]
+                            s1[j] += dv
+                            s2[j] += dv * dv
                         }
                     }
                 } else {
-                    for (r in range64(blk * STAT_BLOCK, r1)) {
+                    let b4 = reinterpret<float4 const?>(base)
+                    var a1 = reinterpret<float4?>(s1)
+                    var a2 = reinterpret<float4?>(s2)
+                    for (r in range64(r0 + 1l, r1)) {
                         let row4 = reinterpret<float4 const?>(xp + r * c)
                         for (j in range64(c4)) {
-                            acc4[j] += row4[j]
+                            let dv = row4[j] - b4[j]
+                            a1[j] += dv
+                            a2[j] += dv * dv
                         }
                     }
                 }
             }
         }
     }
-    out |> reserve_resize(c)
+    mean |> reserve_resize(c)
+    ssq |> reserve_resize(c)
     for (ci in range64(c)) {
-        var s = 0.0lf
-        for (k in range64(nblk)) {
-            s += double(part[k * c + ci])
+        var n = 0.0lf
+        var m = 0.0lf
+        var m2 = 0.0lf
+        for (blk in range64(nblk)) {
+            let r0 = blk * STAT_BLOCK
+            let nb = double(min(t, r0 + STAT_BLOCK) - r0)
+            let sb1 = double(part[blk * 2l * c + ci])
+            let sb2 = double(part[blk * 2l * c + c + ci])
+            let mb = double(x[r0 * c + ci]) + sb1 / nb
+            let delta = mb - m
+            let nn = n + nb
+            m += delta * nb / nn
+            m2 += sb2 - sb1 * sb1 / nb + delta * delta * n * nb / nn
+            n = nn
         }
-        out[ci] = float(s)
+        mean[ci] = float(m)
+        ssq[ci] = float(m2)
     }
 }
 
@@ -1216,12 +1295,8 @@ def private adain_affine(a : TtsAdaIn; x : array<float>; t, c : int64; style : a
     var mean & = g_adain_mean
     var ssq & = g_adain_ssq
     linear_vec(a.fc, style, h)
-    column_sums(x, t, c, h, false, mean)
+    column_stats(x, t, c, mean, ssq)
     let inv_t = 1.0 / float(t)
-    for (ci in range64(c)) {
-        mean[ci] *= inv_t
-    }
-    column_sums(x, t, c, mean, true, ssq)
     scale |> reserve_resize(c)
     shift |> reserve_resize(c)
     for (ci in range64(c)) {

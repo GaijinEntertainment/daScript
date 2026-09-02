@@ -620,7 +620,7 @@ def private read_decoder(m : GGUFMeta; bytes : array<uint8> | #; var d : St2Deco
     i = 0
     while (gguf_find_tensor(m, "decoder.generator.ups.{i}.weight") >= 0) {
         d.ups |> emplace(read_conv_p(m, bytes, "decoder.generator.ups.{i}", true))
-        d.noise_convs |> emplace(read_conv_p(m, bytes, "decoder.generator.noise_convs.{i}"))
+        d.noise_convs |> emplace(read_conv_p(m, bytes, "decoder.generator.noise_convs.{i}", true))
         d.noise_res |> emplace(read_gen_res_block(m, bytes, "decoder.generator.noise_res.{i}"))
         i++
     }
@@ -824,6 +824,7 @@ struct St2Scratch {
     @scratch @exact_size dec_cat : array<float>
     @scratch @exact_size dec_har : array<float>
     @scratch @exact_size dec_spec : array<float>
+    @scratch @exact_size dec_spec_tm : array<float>
     @scratch @exact_size so_sines : array<float>
     @scratch @exact_size hs_padded : array<float>
     @scratch @exact_size hs_re : array<float>
@@ -832,7 +833,6 @@ struct St2Scratch {
     @scratch @exact_size gen_b : array<float>
     @scratch @exact_size st_y : array<float>
     @scratch @exact_size st_rb : array<float>
-    @scratch @exact_size st_src_ct : array<float>
     @scratch @exact_size st_src : array<float>
     @scratch @exact_size st_src_res : array<float>
     @scratch @exact_size grb_xt : array<float>
@@ -1178,20 +1178,18 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; @sc
                             var cc, tt : int64&; s : array<float>; har_spec : array<float>; har_frames : int64;
                             var tr : StyleTts2Trace?; var sc : St2Scratch) {
     var y & = unsafe(sc.st_y)
-    var src_ct & = unsafe(sc.st_src_ct)
     var src & = unsafe(sc.st_src)
     var src_res & = unsafe(sc.st_src_res)
     var tc = ref_time_ticks()
     leaky_relu(x, cc * tt, 0.1)
     asr_prof_add("tts.gen.leaky", tc)
     tc = ref_time_ticks()
-    conv1d(d.noise_convs[i], har_spec, har_frames, src_ct)
+    conv1d_rows(d.noise_convs[i], har_spec, har_frames, src)
     let src_t = conv1d_out_len(d.noise_convs[i], har_frames)
     let src_c = d.noise_convs[i].cout
     if (tr != null && i == 0l) {
-        trace_take(tr.src0, src_ct)
+        trace_rows(tr.src0, src, src_t, src_c)
     }
-    transpose_ct(src_ct, src_c, src_t, src)
     asr_prof_add("tts.gen.noise", tc)
     gen_res_block(d.noise_res[i], src, src_res, src_t, s, sc)
     if (tr != null && i == 0l) {
@@ -1258,7 +1256,8 @@ def private stage_resblocks(d : St2Decoder; i : int64; x : array<float>; @scratc
 // specification and the fallback) =====
 
 //! Serves the whole generator - the rows form [t][c] of its input, the style, the source
-//! spectrum - writing exactly the waveform's samples into `wave`, or declines with false.
+//! spectrum as rows [har_frames][2 * bins] - writing exactly the waveform's samples into
+//! `wave`, or declines with false.
 typedef St2GeneratorGpuFn = function<(d : St2Decoder; x_rows : array<float>; c, t : int64; s : array<float>;
                                        har_spec : array<float>; har_frames : int64; var wave : array<float>) : bool>
 var private g_st2_gen_gpu : St2GeneratorGpuFn
@@ -1314,14 +1313,16 @@ def styletts2_generator_rows(d : St2Decoder; var x : array<float>; c, t : int64;
     return generator_tail(d, a, cc, tt, tr, wave, sc)
 }
 
-//! The generator from channel-major x_in [c][t] - the parity rail's seam form: one transpose
-//! into the carrier, then the rows form.
+//! The generator from channel-major x_in [c][t] and har_spec [2 * bins][har_frames] - the
+//! parity rail's seam form: two transposes into the carrier, then the rows form.
 def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : array<float>;
                         har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?;
                         @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : int64 {
     var a & = unsafe(sc.gen_a)
+    var spec_tm & = unsafe(sc.dec_spec_tm)
     transpose_ct(x_in, c, t, a)
-    return styletts2_generator_rows(d, a, c, t, s, har_spec, har_frames, tr, wave, sc)
+    transpose_ct(har_spec, d.noise_convs[0].cin, har_frames, spec_tm)
+    return styletts2_generator_rows(d, a, c, t, s, spec_tm, har_frames, tr, wave, sc)
 }
 
 // conv_post, the polar-to-rectangular pair and the inverse STFT: the waveform into `wave`.
@@ -1464,13 +1465,15 @@ def private styletts2_decode(d : St2Decoder; text_c : int64; source : SineSource
         trace_take(tr.har, har)
     }
     let har_frames = styletts2_har_spectrum(d, har, n, tr, har_spec, sc)
+    var spec_tm & = unsafe(sc.dec_spec_tm)
+    transpose_ct(har_spec, d.noise_convs[0].cin, har_frames, spec_tm)
     tm.source_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
     var samples = 0l
     if (in_a) {
-        samples = styletts2_generator_rows(d, a, cw, t, s_ref, har_spec, har_frames, tr, sc.wave, sc)
+        samples = styletts2_generator_rows(d, a, cw, t, s_ref, spec_tm, har_frames, tr, sc.wave, sc)
     } else {
-        samples = styletts2_generator_rows(d, b, cw, t, s_ref, har_spec, har_frames, tr, sc.wave, sc)
+        samples = styletts2_generator_rows(d, b, cw, t, s_ref, spec_tm, har_frames, tr, sc.wave, sc)
     }
     tm.generator_us = int64(get_time_usec(clock))
     tm.samples = samples
