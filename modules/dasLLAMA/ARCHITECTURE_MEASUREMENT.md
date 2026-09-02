@@ -59,6 +59,17 @@ in-process reference check: `harness/vk_gemm_probe.das` dispatches the shipped, 
 kernels on timing fixtures, compares no arm's output, and marks every row `timing-only`; its
 rows never enter a record store, and a decision it seeds is confirmed by the e2e board rows.
 
+**A binary-stale sidecar still serves its `runtime` section; a foreign one serves nothing.**
+The staleness rule kills measured kernel WINNERS - a rebuild can change the bodies they were
+raced on - but the `runtime` knobs (lane caps, jobque shape, the `metal_tensor` crowns that turn
+the tensor mul_mm twins on) are properties of the box, not of the binary. The engine's no-path
+`apply_box_profile_runtime()` therefore takes the checked route: `stale_binary` applies the
+runtime section and says so; `foreign_box` and `unreadable` apply nothing, because those knobs
+are the minting box's state; `absent` is an unminted box. Without the crowns the twins run their
+base forms - gemma-26B pp512 on an M5 reads 1662 against 3835 tok/s - so `metal_decode_init`
+warns when a profile was asked for, declined, and no crowns are set, and `lcpp_bench` stamps a
+cell that passed `tune_gate()` on `DASLLAMA_ALLOW_UNTUNED=1` with an `untuned:` flavor prefix.
+
 **The retune re-exec bites scaffolding, and the pin for it is checked in.** Any bare `daslang`
 run that requires the engine - a probe, a one-off script, a REPL experiment - re-execs into a
 full retune when no manifest is armed. `performance/last_known_good_sidecar.json` exists for

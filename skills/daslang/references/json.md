@@ -79,6 +79,10 @@ Safe operators never crash, even on null. **`js?.value` reads the struct field
 `JsonValue.value`** (the underlying `JsValue` variant), *not* a JSON key named `"value"` - for that
 key write `js?["value"]`.
 
+A missing key or index through `?[]` / `?.` yields a NON-null node of the `_null` case, not a null
+pointer: `js?["absent"] == null` is false. Test presence with `v != null && v.value is _object`
+(or the `?? default` fold), never with `== null` (probe-verified 2026-09-02).
+
 `is` / `as` test the underlying variant through the pointer; `as` on the wrong case crashes.
 
 Cases: `_object` (`table<string; JsonValue?>`), `_array` (`array<JsonValue?>`), `_string`

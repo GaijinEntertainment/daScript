@@ -17,9 +17,12 @@ The sidecar is **per-app**: `<app>.tune.json` beside the app - the root
 script this process runs (the first `.das` on the command line), or the
 binary itself when there is none (standalone exe, embedded host).
 `DAS_TUNE_MANIFEST` overrides the location outright. A sidecar **older than
-the running binary is stale** and reads as absent everywhere - a rebuilt
-binary invalidates every measured winner, so copied-around stale files can
-never resurrect dead measurements.
+the running binary is stale** and its `"kernels"` winners read as absent
+everywhere - a rebuilt binary invalidates every measured winner, so
+copied-around stale files can never resurrect dead measurements. The
+`"runtime"` section is the app's to judge: its knobs describe the box, not
+the binary, and an app may keep serving them off a binary-stale sidecar
+(dasLLAMA does) while a sidecar minted on another box serves nothing.
 
 ```{note}
 

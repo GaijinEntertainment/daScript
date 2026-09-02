@@ -1266,7 +1266,8 @@ def private tests_of(rows : array<RowStat>) : table<string; BenchTest> {
 var private g_debug_run = false
 
 def private flavor_stamp(base : string) : string {
-    return g_debug_run ? "debug-jit:{base}" : base
+    let b = tune_gate_bypassed() ? "untuned:{base}" : base
+    return g_debug_run ? "debug-jit:{b}" : b
 }
 
 [export]

@@ -3581,6 +3581,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     if (!metal_common_init()) {
         return false
     }
+    if (!box_profile_runtime_applied() && !empty(box_profile_runtime_declined()) && empty(get_metal_tensor_crowns())) {
+        to_log(LOG_WARNING, "dasLLAMA metal: no box profile applied ({box_profile_runtime_declined()}) - no metal_tensor crowns, every tensor mul_mm twin runs its base form; on a tensor-lane GPU prefill measures ~2x slower (gemma-26B pp512 on an M5: 1662 vs 3835 tok/s). Mint: DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=<repo>/modules/dasLLAMA/performance/<box>.tune.json bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das -dasroot <repo>\n")
+    }
     var ok = true
     // the GEMV / rms / add / swiglu MSL sources are the prefill module's, verbatim (own PSOs)
     g_pso_gemv = compile_pso(MetalQ8Gemv_metal_q8_gemv_msl, MetalQ8Gemv_metal_q8_gemv_msl_entry, MetalQ8Gemv_metal_q8_gemv_msl_fastmath, ok)

@@ -902,11 +902,14 @@
    (depth 3 loses); their plain decode is +6% on ours (28.4 vs 26.7). Done = the rows probe on the
    27B at B=1/2/4 with the per-kernel split (where the extra rows are paid: GEMV rail vs the
    mp-8 / GEMM crossover), and the plain-step gap profiled kernel by kernel.
-73. **An untuned Metal start serves no tensor crowns - a 2.3x prefill cliff with a one-line
-   warning.** After every rebuild the staleness rule drops the box sidecar, and with it the
-   `runtime.metal_tensor` membership, so every dev run until the next mint prefills gemma-26B at
-   1662 instead of 3835 tok/s while printing only "untuned kernels run fallback". The twin race
-   that decides the membership costs well under a second (the mint's `METAL_TWIN` rows are
-   0.03-0.45 ms dispatches, best-of-3). Candidate: an untuned Metal start races the twins in place
-   of serving none, or the warning states the magnitude. NEEDS BORIS'S RULING - a tune-framework
-   policy, not a kernel change.
+73. **Metal twin crowns keyed by device plus MSL hash, raced lazily.** The binary-mtime staleness
+   rule is the wrong key for the tensor twins in both directions: a C++ rebuild that changes no MSL
+   wipes them, a `.das` emitter edit that changes the MSL leaves them standing. Step 1 landed with
+   the MTP arc - a binary-stale sidecar keeps its `runtime` section, a foreign one applies nothing,
+   `metal_decode_init` warns with the magnitude when a profile was declined and no crowns are set,
+   and the bench stamps `untuned:` cells. Done (its own PR, ruled) = hash the MSL text at PSO
+   compile, keep `(device, hash) -> base | tensor` in the sidecar's runtime section, race a twin on
+   its first dispatch when the entry is missing (the mint's `METAL_TWIN` rows are 0.03-0.45 ms
+   dispatches, best-of-3 - under a second for the twenty twins), and keep the serving-confirm crown
+   (`kq_gemv_iq2xxs_f4`) mint-only with base as the safe side. Never the CPU class defaults: an M4
+   is `arm-neon` with no tensor lane.

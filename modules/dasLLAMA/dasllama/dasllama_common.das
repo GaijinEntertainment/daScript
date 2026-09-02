@@ -1379,13 +1379,51 @@ def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v :
 //! Apply the runtime knobs from the app tune sidecar's optional "runtime" section (see
 //! tune_for_this_box.md): token block, L2 budget, threading thresholds, chunk multipliers, and an
 //! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
-[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
-def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a flat knob catalog; a split would invent seams
-    if (path == "" && box_profile_stale()) {
-        to_log(LOG_INFO, "dasLLAMA: tune sidecar is older than the binary - runtime knobs not applied (re-tune)\n")
+var private g_box_profile_runtime_applied = false
+var private g_box_profile_runtime_declined = ""
+
+//! True once a sidecar's runtime section was applied in this process.
+def public box_profile_runtime_applied() : bool {
+    return g_box_profile_runtime_applied
+}
+
+//! Why the checked apply declined the box sidecar - the `TuneSidecarReason` name, "" when it
+//! did not decline (or was never asked).
+def public box_profile_runtime_declined() : string {
+    return g_box_profile_runtime_declined
+}
+
+//! The default (no path) route checks the sidecar's standing; an explicit path applies as given.
+def apply_box_profile_runtime(path : string = "") {
+    if (path == "") {
+        apply_box_profile_runtime_checked(box_profile_path())
+    } else {
+        apply_box_profile_runtime_at(path)
+    }
+}
+
+//! A sidecar another box minted, or one that does not read as a sidecar, is somewhere else's box
+//! state and applies nothing; one that merely predates the binary keeps its runtime section - the
+//! knobs are this box's state, only the kernel winners died with the rebuild.
+def apply_box_profile_runtime_checked(path : string) {
+    let reason = box_profile_verdict_at(path)
+    if (reason == TuneSidecarReason.absent) {
+        g_box_profile_runtime_declined = "{reason}"
         return
     }
-    let ppath = path != "" ? path : box_profile_path()
+    if (reason == TuneSidecarReason.foreign_box || reason == TuneSidecarReason.unreadable) {
+        g_box_profile_runtime_declined = "{reason}"
+        to_log(LOG_INFO, "dasLLAMA: tune sidecar {path} not applied ({reason}) - its runtime knobs are the minting box's state\n")
+        return
+    }
+    if (reason == TuneSidecarReason.stale_binary) {
+        to_log(LOG_INFO, "dasLLAMA: tune sidecar predates the binary - kernel winners fall back; the runtime knobs are box state and apply\n")
+    }
+    apply_box_profile_runtime_at(path)
+}
+
+[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a flat knob catalog; a split would invent seams
     let text = fread(ppath)
     if (empty(text)) return
     var err = ""
@@ -1394,7 +1432,12 @@ def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a f
         to_log(LOG_WARNING, "dasLLAMA: {ppath} is not valid JSON ({err}) - runtime knobs not applied\n")
         return
     }
-    let rt = jv?["runtime"]   // null-sentinel when absent — every read below then keeps its default
+    let rt = jv?["runtime"]   // a null-KIND node when absent (not a null pointer) — every read below then keeps its default
+    if (rt != null && rt.value is _object) {
+        g_box_profile_runtime_applied = true
+    } else {
+        g_box_profile_runtime_declined = "no_runtime_section"   //! a fallback-stamp sidecar: kernels, no box state
+    }
     apply_i64_knob(rt, "q8_token_block") $(v) { set_q8_token_block(v) }
     apply_i64_knob(rt, "q8_l2_budget") $(v) { set_q8_l2_budget(v) }
     apply_i64_knob(rt, "target_chunk_work") $(v) { set_target_chunk_work(v) }

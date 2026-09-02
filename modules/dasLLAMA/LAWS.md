@@ -103,3 +103,10 @@ skipped this (IQ4_XS, Q3_K) get the retroactive audit at the end of the arc (#60
   moved into the `[metal_dispatch]` expansion (`requires = "lhs % N"` generates the check at
   every dispatch); the review duty asks for the attribute instead of the sentence, and the
   architecture doc states the mechanism.
+- **2026-09-02** (`ARCHITECTURE_MEASUREMENT.md`, `skills/tune.md`): Boris, on the untuned dev rail
+  halving Metal prefill because a binary-stale sidecar dropped the `metal_tensor` crowns with the
+  kernel winners: asked for suggestions, then "okie" to the recommendation - staleness drops
+  `kernels` and keeps `runtime` (box state, not binary state), the no-crowns state warns with its
+  magnitude and the bench stamps such cells distinctly; the device-plus-MSL-hash twin cache with a
+  lazy race is its own PR after the MTP arc.
+
