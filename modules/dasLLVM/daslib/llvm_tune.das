@@ -1653,14 +1653,14 @@ class private TuneAnnotation : AstFunctionAnnotation {
                 suffix = ""
             }
         }
-        var csuffix : array<string>   // a companion's OWN entry (the harness's gemv seat) when it names an eligible perm of this grid; else it follows the main
-        csuffix |> resize(length(comps))
+        var companionOwnSuffix : array<string>   // a companion's OWN entry (the harness's gemv seat) when it names an eligible perm of this grid; else it follows the main
+        companionOwnSuffix |> resize(length(comps))
         if (manifestFound) {
             for (ci, c in count(), comps) {
                 let own = manifest?["{c.fnname}"] ?? ""
                 for (p in perms) {
                     if (p.suffix == own && perm_requires_ok(p)) {
-                        csuffix[ci] = own
+                        companionOwnSuffix[ci] = own
                     }
                 }
             }
@@ -1698,19 +1698,19 @@ class private TuneAnnotation : AstFunctionAnnotation {
                 if (p.suffix == suffix) {
                     stamp_llvm_code(func, genKey, p, fromManifest ? mpath : "")
                     for (ci, c in count(), comps) {
-                        var own = false
-                        if (!empty(csuffix[ci]) && csuffix[ci] != suffix) {
+                        var stampedOwn = false
+                        if (!empty(companionOwnSuffix[ci]) && companionOwnSuffix[ci] != suffix) {
                             for (q in perms) {
-                                if (q.suffix == csuffix[ci]) {
+                                if (q.suffix == companionOwnSuffix[ci]) {
                                     stamp_llvm_code(c.fn, c.genkey, q, mpath)
-                                    own = true
+                                    stampedOwn = true
                                 }
                             }
-                            if (own && tune_verbosity() == "verbose") {
-                                print("llvm_tune: {c.fnname} <- {csuffix[ci]} (its own entry, {mpath})\n")
+                            if (stampedOwn && tune_verbosity() == "verbose") {
+                                print("llvm_tune: {c.fnname} <- {companionOwnSuffix[ci]} (its own entry, {mpath})\n")
                             }
                         }
-                        if (!own) {
+                        if (!stampedOwn) {
                             stamp_llvm_code(c.fn, c.genkey, p, fromManifest ? mpath : "")
                         }
                     }
@@ -1735,7 +1735,7 @@ class private TuneAnnotation : AstFunctionAnnotation {
                 }
             }
         }
-        delete csuffix
+        delete companionOwnSuffix
         delete perms
         delete comps
         return ok

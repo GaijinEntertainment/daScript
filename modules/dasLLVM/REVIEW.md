@@ -71,3 +71,13 @@
   recorded path is read by other people and must not name the user who minted it. A host path
   a diff passes to a filesystem call stays raw: no filesystem call resolves `~`.
   `tests/llvm_tune_manifest.das` here asserts a minted sidecar carries no home directory.
+- **Never set the in-bounds flag on a GEP after building it - `LLVMSetIsInBounds` casts its
+  argument to `GetElementPtrInst`; pass `inbounds` to `LLVMBuildGEP2` in `daslib/llvm_boost.das`,
+  or call `LLVMBuildInBoundsGEP2`, instead.** A GEP over a global with a constant index folds
+  into a `ConstantExpr`, so that cast writes the flag through a wrong type into LLVM's constant
+  object.
+- **A new x64 tier feature lands in three places in one diff: its cpuid line in `das_cpu_supports`
+  (`src/builtin/module_builtin_runtime.cpp`), its name in `TUNE_KNOWN_FEATURES`
+  (`daslib/llvm_tune.das`), and its `g_target_x64_*` gate in `daslib/llvm_jit_common.das`
+  (`ARCHITECTURE.md#x64-tier-gates`).** A name the cpuid table does not know answers false on
+  every box, so every perm that requires it silently declines to its fallback.

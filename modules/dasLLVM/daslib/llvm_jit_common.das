@@ -430,7 +430,7 @@ var public g_target_x64_f16c = false
 var public g_target_x64_vnni256 = false
 var public g_target_x64_avx512bw = false
 var public g_target_x64_avx512vnni = false
-var public g_target_x64_avx512vbmi = false   // zmm byte permutes across two registers (VPERMI2B) + VPMULTISHIFTQB: the grid formats' symbol lattice
+var public g_target_x64_avx512vbmi = false   //! zmm byte permutes across two registers (VPERMI2B) + VPMULTISHIFTQB: the grid formats' symbol lattice
 // AVX-VNNI-INT8 (VEX vpdpbssd — native s8×s8, no sign trick). No shipped silicon in the fleet
 // yet; lights up via cpuid on future boxes and via DAS_JIT_X64_FORCE_FEATURES for emission-only
 // verification today.
@@ -603,7 +603,7 @@ def public init_jit_clopts() {
 // Pure target truth, no LLVM state touched: safe and required BEFORE init_jit, whose DisableJitVisitor
 // consults these gates. init_jit re-runs it — pass the SAME host_features or pass and emission diverge.
 // host_features=false targets a GENERIC CPU: cpuid gates stay off, since leaked F16C emits libcalls.
-[arch(at = "../ARCHITECTURE.md#aarch64-feature-truth")]
+[arch(at = "../ARCHITECTURE.md#aarch64-feature-truth"), arch(at = "../ARCHITECTURE.md#x64-tier-gates")]
 def public init_jit_target_flags(target_triple : string = ""; host_features : bool = true) {
     g_target_host_features = host_features
     g_target_is_wasm = target_triple |> starts_with("wasm")
