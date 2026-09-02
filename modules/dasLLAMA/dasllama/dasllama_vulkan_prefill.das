@@ -321,18 +321,20 @@ def private pf_kv_merged(l, dim, kvd : int64) : bool {
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : int;
                         wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
-                        abit, ybit : uint; n, d, blk, wlen : int64; f16feed : bool; sib_tiles : int64 = 0l) {
+                        abit, ybit : uint; n, d, blk, wlen : int64; f16feed : bool; sib_tiles : int64 = 0l; row0 : int64 = 0l) {
     // cm2 tile + split picks (pure in d/wlen/n/sm_count) — computed once, fed to fill AND enc
     var nsplit = 1l
     var ksplit = 0l
     var cm2_tc = 0l
     if (f16feed) {
         cm2_tc = batch_tile_edges(fmt, d, wlen, true).tc
-        let sp = cm2_split_k(d, wlen, n, cm2_tc, sib_tiles)
-        nsplit = sp.nsplit
-        ksplit = sp.ksplit
+        if (row0 == 0l) {   // a sliced region never splits k: the reduce sums dense planes from row 0
+            let sp = cm2_split_k(d, wlen, n, cm2_tc, sib_tiles)
+            nsplit = sp.nsplit
+            ksplit = sp.ksplit
+        }
     }
-    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt, f16feed, nsplit))
+    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt, f16feed, nsplit, row0))
     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = nsplit > 1l ? uint(ksplit) : 0u)
     if (f16feed) {
         // native fmt-0 decode-in-load; a split pick reroutes the GEMM into the scratch planes
@@ -901,14 +903,16 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let gsb = gu6 ? g_rd.dummy : g_rd.pf_xs
                 let gqn = gu6 ? np * dim * 2l : np * dim
                 let gsn = gu6 ? 256l : np * (dim / 32l) * 4l
-                let tgu = cm2_tiles(hid, wlen)
+                let ffn_row0 = l + 1l == g_rd.n_layers && gu6 && dn6 ? max(wlen - 32l, 0l) : 0l
+                let ffn_rows = wlen - ffn_row0
+                let tgu = cm2_tiles(hid, ffn_rows)
                 pf_gemm_enc(raw, h, b + 10, g_rd.layers[l].f1, p1.wq, p1.ws, gqb, gsb, g_rd.pf_gate,
-                    p1.wqb, p1.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_GATE, dim, hid, g_rd.layers[l].b1, wlen, gu6, tgu)
+                    p1.wqb, p1.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_GATE, dim, hid, g_rd.layers[l].b1, ffn_rows, gu6, tgu, ffn_row0)
                 pf_gemm_enc(raw, h, b + 11, g_rd.layers[l].f3, p3.wq, p3.ws, gqb, gsb, g_rd.pf_up,
-                    p3.wqb, p3.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_UP, dim, hid, g_rd.layers[l].b3, wlen, gu6, tgu)
+                    p3.wqb, p3.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_UP, dim, hid, g_rd.layers[l].b3, ffn_rows, gu6, tgu, ffn_row0)
                 if (dn6) {
-                    var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 32l))
-                    enc_actf16_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
+                    var pc12 = ActArgs(nelem = uint(ffn_rows * hid), gelu = 0u, nblk = uint(ffn_rows * hid / 32l), base = uint(ffn_row0 * hid))
+                    enc_actf16_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (ffn_rows * hid / 4l + 255l) / 256l)
                 } elif (dnk) {
                     var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 256l))
                     enc_q8k_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 8l + 255l) / 256l)
@@ -923,9 +927,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let hqn = dn6 ? np * hid * 2l : np * hid
                 let hsn = dn6 ? 256l : np * (hid / 32l) * 4l
                 pf_gemm_enc(raw, h, b + 13, g_rd.layers[l].f2, p2.wq, p2.ws, hqb, hsb, g_rd.pf_ffnout,
-                    p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, wlen, dn6)
+                    p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, ffn_rows, dn6, 0l, ffn_row0)
                 let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — composed from int64 layout offsets
-                var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
+                var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0, row0 = uint(ffn_row0))
                 let next_qkv6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
                 if (l + 1l < g_rd.n_layers && pf_qkv_feed_fused(l + 1l)) {
                     if (next_qkv6) {
@@ -934,7 +938,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                         enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int(l * 2l + 1l)], pc14, wlen)
                     }
                 } else {
-                    enc_cls_ar(raw, h, g_rd.pf_sets[b + 14], pc14, wlen)
+                    enc_cls_ar(raw, h, g_rd.pf_sets[b + 14], pc14, ffn_rows)
                 }
                 pfq_ts(raw)
             }
@@ -1090,7 +1094,7 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
 // single-region batch schedule over an arena block: 4-word record at 0, all tiles map to region
 // 0 at map_off = 4. Returns the dispatch workgroup count. `cm2l` must match the dispatched
 // class's tile rule (batch_tile_edges); `nsplit` stacks split-k planes onto the same map.
-def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int; cm2l : bool = false; nsplit : int64 = 1l) : uint {
+def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int; cm2l : bool = false; nsplit : int64 = 1l; row0 : int64 = 0l) : uint {
     let te = batch_tile_edges(fmt, d, npos, cm2l)
     let wtiles = (d + te.td - 1l) / te.td
     let rtiles = (npos + te.tc - 1l) / te.tc
@@ -1099,7 +1103,7 @@ def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
         mp[0] = uint(arena_local_blk(blk))   // slab-local block base (already in fmt units)
-        mp[1] = 0u          // rb0 - r0
+        mp[1] = uint(row0)  // rb0 - r0
         mp[2] = uint(npos)  // cnt
         mp[3] = 0u          // wg base
         for (g in range64(total)) {

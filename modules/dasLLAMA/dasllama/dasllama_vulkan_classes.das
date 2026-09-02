@@ -37,6 +37,7 @@ struct ArArgs {
     woff : uint     // norm-weight row base in wn (the driver's norms plane is shared per-layer)
     eps : float
     ascale : float
+    row0 : uint     // first row of the dispatch (the last layer's FFN slice starts below the window's end)
 }
 
 // the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
@@ -123,7 +124,7 @@ class ClsArAddRms : ArBase {
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_spv")]
     def run {
-        let base = gl_WorkGroupID.x * pa.dim
+        let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
         let ss = accum_row(base)
         let inv = rms_inv(ss)
         var k = gl_LocalInvocationID.x
@@ -310,6 +311,7 @@ struct ActArgs {
     nelem : uint   // element count (4-wide kernels; always a 32-multiple, the guard is exact)
     gelu : uint    // activation select: 0 = silu, else tanh-gelu
     nblk : uint    // 32-block / superblock count (the requant kernels' guard)
+    base : uint    // element base (the f16 route's last-layer slice; a 32-multiple)
 }
 
 // the one activation formula (silu or tanh-gelu on v, times u) — the classes' act_mul
@@ -412,8 +414,8 @@ class ActF16 {
 
     [spirv_kernel(local_size_x = 256, name = "actf16_cls_spv")]
     def run {
-        let e = gl_GlobalInvocationID.x * 4u
-        if (e < pa.nelem) {
+        let e = pa.base + gl_GlobalInvocationID.x * 4u
+        if (e < pa.base + pa.nelem) {
             outh[e] = float16(clamp(act_mul(gate[e], up[e]), -65504.0, 65504.0))
             outh[e + 1u] = float16(clamp(act_mul(gate[e + 1u], up[e + 1u]), -65504.0, 65504.0))
             outh[e + 2u] = float16(clamp(act_mul(gate[e + 2u], up[e + 2u]), -65504.0, 65504.0))

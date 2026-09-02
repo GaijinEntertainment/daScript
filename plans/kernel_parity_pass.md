@@ -1189,4 +1189,22 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   synthesized one was flat (iq3xxs, iq2xs) or lost (iq3s, iq2s, iq2xxs): the grid lookup and
   the sign parity are per four elements, and the synthesized twin ran them four times. The
   three `DECVEC` opt-outs are retired; followup_vulkan 36 closes with this. All thirteen kq
-  formats now ship a hand-laid twin.
+  formats now ship a hand-laid twin. With every twin, the Q4_K_M window: 22787-23034 us,
+  pp512 18382-18544 tok/s; oracle 88/88, lint green.
+
+- 2026-09-02: Vulkan gap 1 (c) landed - the last layer's FFN runs on the window's last 32
+  rows. Only the classifier's row is read past the final layer (the KV mirrors were stored
+  before the FFN; a later window starts from fresh embeddings), so gate, up, down, the
+  activation and the residual step of the last layer take a region 32 rows below the window's
+  end: 32 rather than one because the s tile's fast path loads a whole 32-row column unclamped
+  and the resident planes carry no read slack. Plumbing: `fill_arena_batch_sched` row base,
+  `ActArgs.base`, `ArArgs.row0`; f16-fed cm2 route only. The first cut shipped a bug the tier
+  suite (36/36) did not see and the bench's sanity line did: the sliced down GEMM (2048 wide,
+  K 8192) still qualified for split-k, and the split-k reduce sums dense planes from row 0, so
+  the classifier read stale rows (argmax 2242 " config" against every earlier run's 319). A
+  sliced region never splits k now; sanity back to argmax 319 and the tg4 logit 8.516193, bit
+  for bit the pre-slice value. Two windows: 22076-22085 us (from 22787-23034), pp512
+  18786-19457 tok/s. THE GPU WINDOW NOW READS 0.99x OF llama.cpp's 22302 us. LESSON for the
+  next slice-shaped change: the tier suite's small model never reaches the split-k branch -
+  a golden-output witness at the 1B shapes is the parity pregate (frozen fixture, Q8_0 has
+  one) or the bench's sanity argmax/logit against a recorded value.

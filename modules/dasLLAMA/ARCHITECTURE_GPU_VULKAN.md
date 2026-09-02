@@ -20,6 +20,18 @@ buffers.** Every window's rope and attention address the KV mirror at ABSOLUTE p
 window w attends everything the earlier windows stored; only the last window runs the final
 requant and the classifier.
 
+**The last layer's FFN runs on the window's last 32 rows only.** Nothing downstream of the
+final layer reads more than the last row - the classifier requantizes row `wlen - 1`, the KV
+mirrors were stored before the FFN, and a later window starts from fresh embeddings - so the
+gate, up and down GEMMs, the activation and the residual step of the last layer take a region
+starting 32 rows below the window's end (`fill_arena_batch_sched`'s `row0`, `ActArgs.base`,
+`ArArgs.row0`). Thirty-two, not one, because the s tile's fast path loads a whole 32-row
+column unclamped and the resident planes carry no read slack past the window. Rows below the
+slice keep stale gate, up, hidden and residual values that nothing reads. A sliced GEMM never
+splits k: the split-k reduce sums dense partial planes from row 0, so a region starting below
+the window's end would reduce the wrong rows. The slice takes the f16-fed cm2 route only
+(`gu6 && dn6`); the other feeds run the full window.
+
 **The k and v GEMMs merge into ONE dispatch when the layer's q, k and v weight planes are all
 q8 and the k and v planes sit adjacent in the arena.** The bump allocator places them
 back-to-back unless a slab boundary intervenes, so the merged form asks only those two
