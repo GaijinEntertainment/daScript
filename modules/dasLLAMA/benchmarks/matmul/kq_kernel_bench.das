@@ -5,13 +5,13 @@ options _dasllama_internal = true
 
 require daslib/clargs
 require daslib/enum_trait
-require daslib/fio
 require daslib/jobque_boost
 require dasllama/dasllama_par
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_math
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema
+require llvm/daslib/llvm_env
 require math
 require strings
 require daslib/strings_boost
@@ -356,7 +356,7 @@ def emit_row(var rows : int&; name, tier : string; var st : RowStat; n, d, ntok,
     let ns_per_sb = float(best) * 1000.0 / float(d * nsb * ntok)
     let gbs = float(plane_bytes) / (float(best) * 1000.0)
     let gflops = 2.0 * float(n) * float(d) * float(ntok) / (float(best) * 1000.0)
-    let mode = get_env_variable("DAS_TUNE_MODE")
+    let mode = g_env_tune.tune_mode
     let perm = (st.perm == "reference" && mode != "tune" && mode != "test") ? "stamped" : st.perm   // normal mode: the registry's one row IS the stamped winner
     let lanes = st.lane_hi > 0l ? "\t{st.lane_lo}\t{st.lane_hi}" : ""
     var each = ""
@@ -719,7 +719,7 @@ def main : int {
     }
     var fs <- formats_of(cfg.fmt)
     if (!cfg.tsv) {
-        print("kq_kernel_bench: n={cfg.n} d={cfg.d} ntok={cfg.ntok} rounds={cfg.rounds} team={cfg.team} tune_mode={get_env_variable("DAS_TUNE_MODE")}\n")
+        print("kq_kernel_bench: n={cfg.n} d={cfg.d} ntok={cfg.ntok} rounds={cfg.rounds} team={cfg.team} tune_mode={g_env_tune.tune_mode}\n")
         print("fmt\ttier\tperm\tn\td\tntok\tbest_us\tmedian_us\tns_per_sb\tGB/s\tGFLOP/s{cfg.team ? "\tlane_lo\tlane_hi" : ""}\n")
     }
     var rows = 0
