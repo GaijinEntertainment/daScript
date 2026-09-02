@@ -1981,6 +1981,11 @@ namespace das
         return simfn->code && simfn->code->rtti_node_isJit();
     }
 
+    bool das_is_aot_function ( const Func func ) {
+        auto simfn = func.PTR;
+        return simfn && simfn->aot;
+    }
+
     bool das_jit_enabled ( Context * context, LineInfoArg * at ) {
         if ( !context->thisProgram ) context->throw_error_at(at, "can only query for jit during compilation");
         return context->thisProgram->policies.jit_enabled;
@@ -2847,6 +2852,9 @@ namespace das
         // jit
         addExternInline<DAS_BIND_FUN(das_is_jit_function)>(*this, lib, "is_jit_function",
                 SideEffects::worstDefault, "das_is_jit_function")
+                    ->args({"function"});
+        addExternInline<DAS_BIND_FUN(das_is_aot_function)>(*this, lib, "is_aot_function",
+                SideEffects::worstDefault, "das_is_aot_function")
                     ->args({"function"});
         addExternInline<DAS_BIND_FUN(das_jit_enabled)>(*this, lib, "jit_enabled",
             SideEffects::none, "das_jit_enabled")

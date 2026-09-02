@@ -3798,7 +3798,7 @@ class public CppAot : AstVisitor {
             }
             return empty(bif.cppName);
         }
-        if (func.flags.noAot || func.flags.aotHybrid) return true;
+        if (func.flags.noAot || func.flags.aotHybrid || func.moreFlags.requestJit) return true;
         return func._module != program.getThisModule;
     }
     def needsArgPassType(argType : TypeDeclPtr) {

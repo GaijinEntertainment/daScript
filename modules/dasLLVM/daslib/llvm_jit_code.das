@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options strict_smart_pointers = false
+options no_global_variables = false
 
 module llvm_jit_code shared private
 

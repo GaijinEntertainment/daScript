@@ -413,6 +413,18 @@ class public CollectExternVisitor : AstVisitor {
         }
     }
 
+    // `new [[Handle...]]` allocates through the annotation the same way ExprNew does, and the
+    // emitter names that slot after the ascend node - so it needs its own resolution.
+    def override preVisitExprAscend(expr : ExprAscend?) {
+        assume subT = expr.subexpr._type
+        if (subT.isHandle) {
+            let name = uid.get_ascend_new(expr)
+            if (initialize(name)) {
+                register_new_from_annotation(name, subT.annotation)
+            }
+        }
+    }
+
     def override preVisitExprNew(expr : ExprNew?) {
         if (expr.typeexpr.isHandle) {
             let name = uid.get_new(expr.typeexpr)
