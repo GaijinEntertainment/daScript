@@ -933,14 +933,30 @@
    and the shared experts twice; a gathered GEMV over the union of selected experts (the prefill
    bucket kernels at M = 2..9) streams each expert once. The physics that caps depth 2 on every
    MoE carrier measured - Qwen3-30B-A3B at B=2 already pays 1.37x.
-77. **A box where the NextN round loses needs a depth-0 default.** Records day, M4 Pro,
-   Qwen3.8-27B + Q8_0 head, exe-first and settled: off 12.7 tok/s, depth 1 11.0 (0.87x), depth 2 7.7,
-   at 77% acceptance - the two-row verify costs 2.06x a step on that GPU (llama.cpp's 1.53x, 11.5 ->
-   13.6-14.5 there). The box knob `mtp_depth_nextn` clamps to 1..8, so the honest default on such a
-   box - no speculation - cannot be minted. Done = 0 admitted as "off" on both depth knobs and in
-   `get_mtp_depth()` (the round takes the plain step), and the tuner's confirm racing the NextN
-   carrier too (a Qwen vehicle with its `mtp-` head: 0 vs 1, the same 2% margin), so a box mints
-   what it measured. Related: #72 owns why the M4 Pro's dense verify rows cost what they cost.
+77. **A box where the NextN round loses needs a depth-0 default.** The M4 Pro's Qwen3.8-27B round
+   lost at depth 1 (12.7 -> 11.0) while its two-row verify cost 2.06x a step; the two-row k4 tile
+   (`kq_mvb2_k4_r2`) turned that into 12.7 -> 13.9 (1.09x, round 1.62x a step), so no box of ours
+   loses today. The gap stands: the box knobs `mtp_depth_nextn/assistant` clamp to 1..8, so a box
+   whose round loses cannot mint the honest default of no speculation. Done = 0 admitted as "off" on
+   both knobs and in `get_mtp_depth()` (the round takes the plain step), and the tuner's confirm
+   racing the NextN carrier too (a Qwen vehicle with its `mtp-` head: 0 vs 1, the same 2% margin).
+80. **Three to eight verify rows on an ALU-short GPU take the wide form nobody raced.** The
+   two-row crown decides two rows only; at three rows `enc_kq_mvb` takes the four-column form
+   (`enc_kq_mvb4`, the ext algorithm at four x columns, the fourth dead padding), which the GEMV lab
+   puts at 1.27-1.46x of four single passes on the M4 Pro (`k4_extb4` / `k4_ext4`, q3b / w2_3b /
+   cls3b) while two of the crowned tiles do four rows in 2.49 ms against its 4.26 at cls. The round
+   split on the M4 (Qwen3.8-27B, 78.7 ms step): depth 1 verify 119 ms (59.5 per row), depth 2 verify
+   302 ms (100.8 per row) - the third row costs 2.3 steps and the round 4.04x a step (llama.cpp's
+   n_max 2 round 2.22x). Depth 2 loses on acceptance anyway, but the same dispatcher serves batched
+   decode of independent sessions at 3-8 rows. Done = where `kq_mvb2_k4_r2` is crowned, `enc_kq_site_b`
+   decomposes rows into tile pairs plus one single pass (3 = 2+1, 4 = 2+2, ...) - or the four-column
+   and eight-column forms get their own form race - with the rows probe at B=3,4 on the M4 as proof.
+81. **The CPU speculative round runs depth 1 whatever the knob says.** M4 Pro, Qwen3.8-27B on the
+   CPU rails (`--ngl` unset): `--mtp-depth 1` and `--mtp-depth 2` both report 228/290 drafts
+   accepted "at depth 1 / 2" with identical per-prompt numbers (off 11.56 -> on 10.66, 0.92x). The
+   round dispatches with `get_mtp_depth()`, so the CPU override either ignores k or caps it silently.
+   Done = the CPU round honors k or clamps with a logged reason, and the bench's "at depth k" line
+   prints the depth that ran.
 79. **The batch rail has no hybrid-graph arm; a same-slab verify for the qwen35 round would need one.**
    The batch driver (`metal_batch_decode_forward`) runs std attention only - no deltanet layers, no
    2x-wide gated Q - and graph-declines hybrids (the rope_rows decline used to hide that it would

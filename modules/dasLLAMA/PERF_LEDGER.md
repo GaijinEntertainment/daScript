@@ -1234,3 +1234,12 @@ group; wording kept.
   box (measurement day): ours 12.9 -> 11.5 at depth 1 (0.89x). Round cost from the pooled numbers:
   ours (1 + 0.774) / 1.094 = 1.62x a step (was 2.06x), theirs (1 + 0.823) / 1.20 = 1.52x. Plain
   decode ours +10%; speculation ON at parity (13.9 vs 13.8).
+- **M4 Pro Qwen3.8-27B round split (`DASLLAMA_MTP_DEBUG=time`, the tile rig, -n 64 -r 2, plain
+  step 78.7 ms):** depth 1 per round draft 7.4 ms, verify 119.0 ms (59.5 per row, 1.51x a step),
+  walk+commit 1.0, replay 0.7, tokens/round 1.80 -> 14.0 tok/s (1.10x); depth 2 draft 14.1, verify
+  302.5 (100.8 per row, 3.84x a step), walk 0.45, replay 1.1, tokens/round 2.38 -> 7.7 tok/s
+  (0.61x). The third verify row leaves the crowned pair path for the four-column form (followup
+  #80). GEMV lab, the four-column forms on the M4 (B=4 vs four b1c passes, q3b / w2_3b / cls3b):
+  `k4_ext4` 1.31 / 1.46 / 1.33x, `k4_extb4` 1.27 / 1.42 / 1.27x; two tiles (2 x `k4_r2c2`) 0.078 /
+  0.190 / 2.49 ms against `k4_extb4` 0.114 / 0.290 / 4.26. CPU rails on the same box: off 11.56 ->
+  MTP 10.66 (0.92x, 78.6% accept) at depth 1, and the identical numbers at `--mtp-depth 2` (#81).
