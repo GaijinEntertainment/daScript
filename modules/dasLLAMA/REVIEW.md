@@ -27,8 +27,8 @@ winners back.
 **A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`), or to a
 tune-boot path that reaches it, applies `REVIEW_EXCHANGE.md`.**
 
-**Every `dasllama/` change applies this folder's `tests/REVIEW.md`.** A `dasllama/` diff never
-opens that checklist on its own.
+**Every `dasllama/` change applies this folder's `tests/REVIEW.md` - open it explicitly: the
+folder walk does not surface it for a `dasllama/`-only diff.**
 
 **A GPU kernel, driver, dispatch-class, or K/V-mirror change - and a GPU kernel A/B race,
 knockout, or hand-binding arm, wherever the diff puts it - applies `REVIEW_GPU.md`.**
@@ -249,8 +249,8 @@ the tuning the profile was meant to save.
 root) - is a `def` returning it, never a module global with a declaration initializer (`let`
 or `var`).** A team lane never runs global initializers, so the global reads zero there while
 every single-threaded run reads the right value.
-- **A `resize` of a buffer whose element count scales with a model dimension in `dasllama/` is
-  preceded by a `reserve` of the same count** (`reserve_resize` / `grow_resize` /
-  `ensure_length` in `dasllama_common.das`, or the pair spelled out). A bare grow past 64 MB trips
-  the heap's unreserved-size cap and panics the load; `dasllama_repack.das`'s plane-size scratch
-  copies were the last bare ones.
+**A `resize` in `dasllama/` of a buffer whose element count scales with a model dimension is
+preceded by a `reserve` of the same count (`reserve_resize` / `grow_resize` / `ensure_length` in
+`dasllama_common.das`, or the pair spelled out) - whatever the size looks like at today's
+shapes.** A model dimension makes the count unbounded, and a bare grow past the heap's
+unreserved-size cap (64 MB) panics the load on the first big model rather than at the call site.

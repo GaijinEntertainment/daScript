@@ -500,8 +500,8 @@ def public get_matmul_min_chunk_rows_gemv() : int { return g_matmul_min_chunk_ro
 
 // GEMV tail: the one-chunk-per-lane equal split leaves the join waiting out the SLOWEST lane's
 // whole chunk (median lane idles 14-24% of every GEMV stage, per-lane trace 3990X). >1 publishes
-// wave-aligned chunks per lane so finished lanes keep serving; 16 (only bites past 64*waves*lanes rows); 1 = equal split.
-var g_gemv_chunks_per_lane = 16
+// wave-aligned chunks per lane so finished lanes keep serving; default 8; 1 = historical equal split.
+var g_gemv_chunks_per_lane = 8
 def public set_gemv_chunks_per_lane(v : int) { g_gemv_chunks_per_lane = max(v, 1) }
 def public get_gemv_chunks_per_lane() : int { return g_gemv_chunks_per_lane }
 

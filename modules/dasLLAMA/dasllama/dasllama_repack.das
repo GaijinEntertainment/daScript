@@ -441,9 +441,6 @@ def repack_iq4xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete ts
 }
 
-//! k3 grp layout: the qs bytes as 16 four-byte columns ([h 0..1][8 l-groups]) x mr rows, then the
-//! hmask as 8 columns x mr rows at 64*mr — the 2-bit lanes and mask bits stay in place (the
-//! kernels shift per block); scales interleave as k6's row ([16 x mr int8][mr x f16 d]).
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let nsb = n / 256l

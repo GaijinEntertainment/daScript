@@ -2093,6 +2093,7 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
     let packed = kq_reads_packed_planes(int64(fmt))
     var scratch : array<uint8>
     if (!packed) {
+        scratch |> reserve(mr * nsb * 256l + 64l)
         scratch |> resize(mr * nsb * 256l + 64l)   // + a cache line: the panel starts 64-aligned, the tile's 32/64-byte loads never straddle one
     }
     unsafe {

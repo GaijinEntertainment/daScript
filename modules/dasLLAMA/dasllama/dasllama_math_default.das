@@ -1057,7 +1057,6 @@ def private dequant_iq4xs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr,
     }
 }
 
-//! k3 grp row dequant: the 2-bit lanes and hmask bits stay in place per (h, column) — w = (d * sc16) * (q - 4).
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def private dequant_k3_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
     unsafe {

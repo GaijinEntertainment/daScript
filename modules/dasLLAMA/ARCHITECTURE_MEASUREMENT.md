@@ -170,7 +170,7 @@ by the margin over the tile winner's own gemv, and the incumbent keeps a tie. Ev
 therefore carries a 256-wide `mr = 16` alternate beside its 512-wide tile crown. The seat is decided
 at the engine's decode shape - a DRAM-bound plane streamed by every lane through the engine's own
 splitter - because the engine's row length moves the answer (k3 on Granite Rapids: the 256 seat wins
-at n=2048 and loses at 14336). The seat fixture is a 512-row build at the ffn width tiled 320 times,
+at n=2048 and loses at 14336 - `benchmarks/matmul/kq_kernel_bench.das`, tune mode, seats pinned, d=32768). The seat fixture is a 512-row build at the ffn width tiled 320 times,
 past the largest L3 a socket lends a slice of, and the seat takes the MEDIAN of seven rounds: a round
 that finds the plane in L3 must not crown it. In normal mode `llvm_tune` stamps a companion from its
 own manifest entry when one exists and is a perm this box can run, else from the tile's.
