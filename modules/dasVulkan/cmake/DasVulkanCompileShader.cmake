@@ -1,11 +1,10 @@
 # GLSL -> SPIR-V build helper for apps that author shaders in GLSL.
 # dasVulkan's native path compiles daScript shaders (via dasSpirv) and ships
 # no GLSL step, so DAS_VULKAN_COMPILE_SHADER fills that gap: the consuming
-# app's CMake calls it per shader.  It drives the Vulkan SDK tools, the
-# VULKAN_SDK environment's bin first and PATH after, so the SDK the environment
-# names wins over an older one that happens to sit earlier on PATH; the module
-# build itself never touches the SDK (vendored headers + volk), so including
-# this file is inert -- only calling the macro needs the tools.
+# app's CMake calls it per shader.  It drives the Vulkan SDK tools, searching
+# the VULKAN_SDK bin before PATH so a stale SDK earlier on PATH cannot win; the
+# module build itself never touches the SDK (vendored headers + volk), so
+# including this file is inert -- only calling the macro needs the tools.
 SET(DAS_VULKAN_SDK_BIN_HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
 FIND_PROGRAM(DAS_VULKAN_GLSLANG_VALIDATOR_EXE glslangValidator HINTS ${DAS_VULKAN_SDK_BIN_HINTS})
 FIND_PROGRAM(DAS_VULKAN_SPIRV_OPT_EXE spirv-opt HINTS ${DAS_VULKAN_SDK_BIN_HINTS})

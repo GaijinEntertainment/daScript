@@ -539,12 +539,8 @@ def public coopmatLoadTensor(var dst; src; base : int | uint; var tl; r0, nr, c0
 def public coopmatLoadTensor(var dst; src; base : int | uint; var tl; r0, nr, c0, nc : uint; var tv) : void {}
 [unused_argument(dst, src, base, tl, r0, nr, c0, nc, decode), sideeffects]
 def public coopmatLoadTensorDecode(var dst; src; base : int | uint; var tl; r0, nr, c0, nc : uint; decode) : void {}
-// The four-wide form (SPV_NV_cooperative_matrix_decode_vector): `decode_v` is `true` to have the
-// emitter synthesize the vector twin from `decode` (four calls along the block's last dimension,
-// composed into a half4 / float4), `false` for the scalar-only load, or `@@fn` / `self.<method>` of
-// a [spirv_decode] function with the same parameters returning half4 / float4 - a hand-laid body
-// for a format whose four lanes share work the synthesized twin cannot. Both callbacks ride the
-// load; the driver picks per call site, so a device without the feature is served by `decode`.
+//! `decode_v` picks the four-wide twin: `true` synthesizes it from `decode`, `false` is the
+//! scalar-only load, `@@fn` / `self.<method>` returning half4 / float4 is a hand-laid twin.
 [unused_argument(dst, src, base, tl, r0, nr, c0, nc, decode, decode_v), sideeffects]
 def public coopmatLoadTensorDecode(var dst; src; base : int | uint; var tl; r0, nr, c0, nc : uint; decode; decode_v) : void {}
 [unused_argument(mat, dst, base, tl, r0, nr, c0, nc), sideeffects]

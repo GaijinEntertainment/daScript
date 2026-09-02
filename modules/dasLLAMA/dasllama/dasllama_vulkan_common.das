@@ -9,7 +9,7 @@ options _function_length = 0   // same
 require dasllama/dasllama_lint public
 require vulkan
 require vulkan/vulkan_boost
-require spirv/spirv_dis   // strip_decode_vector: the class-pipeline seat's fallback for devices without the four-wide decode
+require spirv/spirv_dis
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_gemm_schema
@@ -471,7 +471,7 @@ struct GpuState {
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops)
-    has_coopmat2_decvec : bool   // ... plus the four-wide decode callback; without it every class blob is served through strip_decode_vector
+    decvec_on : bool         // DASLLAMA_VK_DECVEC asked and the device has the four-wide decode callback (the dry bake: the flavor's decvec bit)
     full_sg_on : bool        // DASLLAMA_VK_FULLSG asked and the device has the feature: every class pipeline pins REQUIRE_FULL_SUBGROUPS
     coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile, 4 = cm2 decode-in-load (the default where the device has it, else 3)
     sm_count : int           // shaderSMCount (VK_NV_shader_sm_builtins; 0 = unknown -> l-tile always, no split-k)
@@ -992,7 +992,7 @@ def vk_moe_init : bool {
         g_gpu.coopmat_mode = g_vk_dry_cfg.coopmat_mode
         g_gpu.has_coopmat = g_vk_dry_cfg.coopmat_mode > 0
         g_gpu.has_coopmat2 = g_vk_dry_cfg.coopmat_mode == 4
-        g_gpu.has_coopmat2_decvec = g_gpu.has_coopmat2 && g_vk_dry_cfg.decvec
+        g_gpu.decvec_on = g_gpu.has_coopmat2 && g_vk_dry_cfg.decvec
         g_gpu.rows_per_wg = int64((WG_X + uint(g_vk_dry_cfg.subgroup_size) - 1u) / uint(g_vk_dry_cfg.subgroup_size))
         g_gpu.msr = g_vk_dry_cfg.max_storage_range
         g_gpu.weight_budget = g_vk_dry_cfg.vram_mb * 1_000_000l
@@ -1019,7 +1019,7 @@ def vk_moe_init : bool {
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
     g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && cooperative_matrix2_fa_supported(g_gpu.phys)
-    g_gpu.has_coopmat2_decvec = g_gpu.has_coopmat2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
+    g_gpu.decvec_on = g_gpu.has_coopmat2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
     g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
     g_gpu.sm_count = query_sm_count(g_gpu.phys)
     // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
@@ -2447,8 +2447,8 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
     }
     spv_dump_save(kernel, spv)   // the EMITTED words, before an override replaces them
     spv_override_load(kernel, spv)
-    if (!g_gpu.has_coopmat2_decvec) {
-        strip_decode_vector(spv)   // no four-wide decode on this device: the scalar callback serves every load
+    if (!g_gpu.decvec_on) {
+        strip_decode_vector(spv)
     }
     var shader <- create_shader_module(g_gpu.device, spv)
     c.pipes[ord] <- (g_gpu.full_sg_on

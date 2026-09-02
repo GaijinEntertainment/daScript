@@ -105,7 +105,9 @@ image and the hidden plane - is sized with 32 rows of slack past its last region
 callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE stamped class. The
 prefill driver reaches them through one dispatcher per stage (`cm2_cls_ensure`, `cm2_cls_set`,
 `cm2_cls_enc`), all three keyed on the same `(fmt, ml)` pair, so the pipeline a role ensures,
-the set it binds and the kernel it encodes can never be three different classes. The decode
+the set it binds and the kernel it encodes can never be three different classes. The three are
+not private: the per-format arm of `harness/vk_gemm_probe.das` drives the same ladders, so a
+probe row times the class the driver would serve rather than a copy of it. The decode
 GEMV keeps its quant chains: the feed format pick is decoupled from the weight format.
 
 **The served GEMM mode resolves once, at init, through one ladder.** cm2 where the device has

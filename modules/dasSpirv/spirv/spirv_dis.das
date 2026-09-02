@@ -8,7 +8,7 @@ options gen2
 module spirv_dis shared public
 
 require spirv_grammar
-require spirv_builder   // string_words: the OpExtension literal the strip matches
+require spirv_builder
 require strings
 
 // Walk instructions (header skipped). The block gets the opcode and a [opStart, opStart+opCount)
@@ -131,7 +131,6 @@ def public count_op_operand_at(words : array<uint>; op : SpvOp; idx : int; value
     return count
 }
 
-// The extra operand words a MemoryAccess mask carries (Aligned's literal, the two scope ids).
 def private memory_access_extra_words(mask : uint) : int {
     var n = 0
     if ((mask & uint(SpvMemoryAccess.Aligned)) != 0u) {
@@ -146,11 +145,8 @@ def private memory_access_extra_words(mask : uint) : int {
     return n
 }
 
-// Remove the four-wide decode twin's use from a finished module, for a device that lacks
-// VK_NV_cooperative_matrix_decode_vector: the capability and extension declarations go, and every
-// OpCooperativeMatrixLoadTensorNV drops the DecodeVectorFunc bit and its operand. The twin's
-// OpFunction stays, unreferenced. Returns true when anything was stripped. The scalar DecodeFunc
-// the spec requires beside the twin is what serves the load afterwards.
+//! Downgrades a finished module for a device without the four-wide decode: the scalar callback
+//! serves every load afterwards. True when anything was removed.
 [arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
 def public strip_decode_vector(var words : array<uint>) : bool {
     var out : array<uint>
@@ -170,7 +166,7 @@ def public strip_decode_vector(var words : array<uint>) : bool {
             break
         }
         var drop = false
-        var drop_at = -1   // operand index (0-based after word0) of the DecodeVectorFunc id to omit
+        var drop_operand_idx = -1
         if (op == uint(SpvOp.Capability) && wc == 2 && words[i + 1] == uint(SpvCapability.CooperativeMatrixDecodeVectorNV)) {
             drop = true
         } elif (op == uint(SpvOp.Extension) && wc == 1 + length(ext_words)) {
@@ -182,7 +178,6 @@ def public strip_decode_vector(var words : array<uint>) : bool {
             }
             drop = same
         } elif (op == uint(SpvOp.CooperativeMatrixLoadTensorNV)) {
-            // operands: rtype, res, ptr, obj, layout, memop [memop extras], ta_mask [view] [decode] [decode_v]
             let mi = 6 + memory_access_extra_words(words[i + 6])
             if (mi < wc) {
                 let ta = words[i + 1 + mi]
@@ -194,13 +189,13 @@ def public strip_decode_vector(var words : array<uint>) : bool {
                     if ((ta & uint(SpvTensorAddressingOperands.DecodeFunc)) != 0u) {
                         pos++
                     }
-                    drop_at = pos
+                    drop_operand_idx = pos
                     let nwc = uint(wc - 1)
                     out |> push((nwc << 16u) | op)
                     for (k in range(wc - 1)) {
                         if (k == mi) {
                             out |> push(ta & ~uint(SpvTensorAddressingOperands.DecodeVectorFunc))
-                        } elif (k != drop_at) {
+                        } elif (k != drop_operand_idx) {
                             out |> push(words[i + 1 + k])
                         }
                     }

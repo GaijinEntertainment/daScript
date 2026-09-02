@@ -49,7 +49,7 @@ struct public DlimCpuConfig {
 //! `cls` are here so every walk-shaping switch is in the identity (the old tag missed them).
 struct public DlimVulkanConfig {
     coopmat_mode : int
-    decvec : bool   // the cm2 loads run the four-wide decode callback (VK_NV_cooperative_matrix_decode_vector)
+    decvec : bool   //!< the cm2 loads run the four-wide decode callback (VK_NV_cooperative_matrix_decode_vector)
     vram_mb : int64
     moe_layers : int64
     moe_stream : int64

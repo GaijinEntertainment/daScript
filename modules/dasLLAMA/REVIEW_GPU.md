@@ -270,3 +270,9 @@ runtime state - the active kernel backend, a mode toggle - on its mint-time path
 sits behind the gate's `mint_time` flag, and the mint-time verdict tests the model's own
 fields.** The load selects the repacking CPU backend before the flavor is decided, so a
 mint-time read bakes a verdict the drivers do not share.
+
+**A diff that adds a cm2 tile format instance ships that format's `cm2:<fmt>` probe rows
+(`harness/vk_gemm_probe.das`) taken with `DASLLAMA_VK_DECVEC` set to 1 and to 0, and overrides
+the tile template's `DECVEC` axis off where the four-wide row is slower.** The synthesized twin
+loses on the per-element grid-and-sign decodes, so a format lands with its own verdict, never
+the default's.

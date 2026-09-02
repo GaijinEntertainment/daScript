@@ -7,18 +7,19 @@ options _dasllama_internal = true
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
 // Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle);
-// k4|k6 the K-quant tiles; cm2x|k6x|ref the bisect and reference arms.
+// k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m tiles; cm2x|k6x|ref the bisect and
+// reference arms.
 // Shapes default to Llama-3.2-3B Q8 geometry (dim 3072, hidden 8192, kv_dim 1024).
 
 require math
-require strings   // the cm2:<fmt> arg split
+require strings
 require vulkan
 require vulkan/vulkan_boost
 require spirv/spirv_shader
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_vulkan_classes
-require dasllama/dasllama_vulkan_prefill   // cm2_cls_ensure/set/enc: the per-format ladders the cm2:<fmt> arm rides
+require dasllama/dasllama_vulkan_prefill
 require dasllama/dasllama_kqformat
 
 let private MM_TILE = 128
@@ -356,11 +357,6 @@ class Cm2PxLit : MoeCmBase {
     }
 }
 
-// k4 (Q4_K) cm2 decode-in-load vs the serving kq tile - per-shape rate on the qwen role shapes
-// ===== any kq format's cm2 tiles (arg "cm2:<fmt>", e.g. cm2:iq2xxs) - the l and m columns through
-// the prefill's (format, column) ladders plus the kq batch tile as the control row; random block
-// bytes at the format's device block size, timing only. The DASLLAMA_VK_DECVEC=0 twin of a run is
-// the four-wide decode's A/B on that format. =====
 def private kq_fmt_by_name(name : string) : int {
     let names = fixed_array("q8", "k4", "k5", "k6", "q40", "q51", "iq4xs", "k3", "iq3s", "iq3xxs", "iq4nl", "k2", "iq2s", "iq2xs", "iq2xxs")
     for (i in range(length(names))) {
@@ -369,6 +365,7 @@ def private kq_fmt_by_name(name : string) : int {
     return -1
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let nsb = n / 256
     let totsb = d * nsb
@@ -469,6 +466,7 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // 
     delete axsh
 }
 
+// k4 (Q4_K) cm2 decode-in-load vs the serving kq tile - per-shape rate on the qwen role shapes
 def private run_k4_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let nsb = n / 256
     let totsb = d * nsb

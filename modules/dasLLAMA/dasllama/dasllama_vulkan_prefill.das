@@ -55,7 +55,6 @@ def private pf_qkv_feed_fused(l : int64) : bool => g_env_vulkan.vk_fuse && (pf_q
 let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds here; the cmd ring is sized from it
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-//! The (format, column) -> class ladders, public for the harness probe's per-format arm
 def cm2_cls_ensure(fmt : int; tc : int64) : bool {
     verify(fmt == int(KqFmt.q8) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
     verify(tc == 256l || tc == 128l || tc == 32l, "vk prefill: a cm2 tile column the pick never returns")

@@ -4809,7 +4809,7 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant BN : uint = 256u                   // the token column
     @template_constant STILE : bool = false               // the 32-row column's partial-column fast path
     @template_constant BLKW : uint = 256u                 // elements per weight block
-    @template_constant DECVEC : bool = true               // the four-wide decode twin rides the loads; a format whose probe row shows the synthesized twin losing turns it off
+    @template_constant DECVEC : bool = true               //!< the four-wide decode twin rides the loads; false serves the scalar callback only
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
     @workgroup @template_gate = IQLUT iq4lut : float16[16]   // kvalues_iq4nl as f16
     @template_constant IQ3GRID : bool = false             // stage the 2 KB iq3s grid into workgroup memory
@@ -5174,7 +5174,7 @@ class template Iq3sCm2T : KqCm2BatchT {
     typedef BLK = VkIq3sBlk
     typedef ST = uint
     override IQ3GRID = true
-    override DECVEC = false   // probe cm2:iq3s: the synthesized twin loses 4-9% (a grid read + sign per element, four calls do not merge)
+    override DECVEC = false
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3sBlk; bc, cib : uint2) : float16 {
@@ -5254,7 +5254,7 @@ class template Iq2sCm2T : KqCm2BatchT {
     typedef BLK = VkIq2sBlk
     typedef ST = uint
     override IQ2SGRID = true
-    override DECVEC = false   // probe cm2:iq2s: the synthesized twin loses 1-11%
+    override DECVEC = false
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2sBlk; bc, cib : uint2) : float16 {
@@ -5307,7 +5307,7 @@ class template Iq2xxsCm2T : KqCm2BatchT {
     typedef BLK = VkIq2xxsBlk
     typedef ST = uint
     override IQ2XXSGRID = true
-    override DECVEC = false   // probe cm2:iq2xxs: the synthesized twin loses 13-17%; one grid word covers eight weights, the hand-laid twin's case
+    override DECVEC = false
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xxsBlk; bc, cib : uint2) : float16 {

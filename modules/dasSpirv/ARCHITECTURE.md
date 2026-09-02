@@ -145,6 +145,22 @@ share), `false` is the scalar-only load, and a `[spirv_decode]` function returni
 table keyed by the function they came from, so one scalar body yields one twin however many loads
 name it, and emit after the scalar bodies they call.
 
+The extension stands apart from the cm2 base: a module that uses the twin declares the
+`CooperativeMatrixDecodeVectorNV` capability and the `SPV_NV_cooperative_matrix_decode_vector`
+extension name, and the device must have its own
+`VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV` bit enabled.
+
+The tensor-addressing operands follow the mask word in bit order - `TensorView`, then
+`DecodeFunc`, then `DecodeVectorFunc` - after the load's fixed prefix: result type, result,
+pointer, object, layout, memory-access mask and that mask's own extra words. The emitter appends
+them in that order and the strip counts forward to the operand it removes by the same rule.
+
+A finished module is downgraded rather than recompiled. `strip_decode_vector` walks the word
+stream and removes the capability, the extension declaration, and each
+`OpCooperativeMatrixLoadTensorNV`'s `DecodeVectorFunc` bit together with its operand word; the
+twin's `OpFunction` stays in the module, unreferenced, and the mandatory scalar `DecodeFunc`
+serves the load. One emitted blob therefore runs on a device without the feature.
+
 ## 4. Test architecture - "every emitted instruction has a test"
 
 The behavioral layers, then the enforcement gates (all in main-tree `tests/spirv/` except the

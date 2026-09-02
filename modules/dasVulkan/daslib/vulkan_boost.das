@@ -734,8 +734,8 @@ def public cooperative_matrix2_fa_supported(phys : VkPhysicalDevice) : bool {
 }
 
 //! True when the device also carries the four-wide cm2 decode callback
-//! (VK_NV_cooperative_matrix_decode_vector); ``create_device_storage_8_16_int_dot_coopmat2``
-//! enables it opportunistically, and ``strip_decode_vector`` serves a module without it.
+//! (VK_NV_cooperative_matrix_decode_vector), which ``create_device_storage_8_16_int_dot_coopmat2``
+//! enables opportunistically; a module naming the vector callback elsewhere drops that operand first.
 [arch(at="../ARCHITECTURE.md#storage-8-16")]
 def public cooperative_matrix2_decode_vector_supported(phys : VkPhysicalDevice) : bool {
     if (!cooperative_matrix2_supported(phys) || !device_extension_available(phys, "VK_NV_cooperative_matrix_decode_vector")) return false
@@ -890,7 +890,6 @@ def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; 
                 fcm2.pNext = addr<void?>(f13)
             }
         }
-        // the four-wide decode callback, opportunistic like the fa trio: the chain's last rung
         if (with_decvec) {
             if (with_fullsg) {
                 f13.pNext = addr<void?>(fdv)
