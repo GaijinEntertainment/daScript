@@ -636,6 +636,27 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   = 74 tok/s, depth 3 = 53. Their recorded 68.5 (M4 Max) came from a different branch. So on M5:
   their best is serial 128; ours is 122 serial (they are ~5% ahead on plain decode) and **145 with
   MTP** - the drafter is the whole lead. Logs: scratchpad/mlxfast/.
+- **llama.cpp measured on this M5 (fork build b4-98c4764b6, llama-cli single-turn, chat template with
+  thinking off, 128 tokens, greedy, fa on; the gemma assistant head as `-md ... --spec-type draft-mtp`,
+  the Qwen head in-file), 2026-09-02:**
+
+  | prompt | lcpp off | lcpp n_max=1 | lcpp n_max=2 | ours off | ours depth 2 (fused) |
+  |---|---|---|---|---|---|
+  | writing | 102.1 | 146.1 (1.43x) | 145.6 | 124.1 | 137.9 (1.11x) |
+  | summarization | 101.8 | 128.9 (1.27x) | 133.4 (1.31x) | 117.9 | 138.3 (1.17x) |
+  | math | 103.6 | 150.8 (1.46x) | **177.4 (1.71x)** | 123.9 | **193.6 (1.56x)** |
+  | qa | 103.1 | 138.3 (1.34x) | 149.1 (1.45x) | 124.9 | 158.2 (1.27x) |
+
+  Plain decode: ours +18%. MTP ON absolute: ours ahead on three of four prompts (summarization,
+  math, qa by 4-9%), behind on writing by 5%. Their ratios are larger for the baseline reason (a
+  9.7 ms step vs our 8.2) - their two-row verify lands at about the same absolute cost as ours - but
+  their depth 2 GAINS over depth 1 (math +17%) where ours is flat: their three-row verify is cheaper
+  than ours. **Qwen3.6-27B-MTP (dense)**: lcpp off 28.4 / n_max 1 40.8 (1.44x) / n_max 3 42.8 (1.51x)
+  vs ours off 26.7 / k=1 34.9 (1.31x) / k=3 1.19x - they beat us plain (+6%) and ON (+17-23%), and
+  their depth 3 gains where ours loses. Two concrete gaps for the ledger: the dense 27B verify at 3-5
+  rows (ours 1.3-1.8x a step, theirs ~1.05x), and the 27B plain decode. Also their prefill on the
+  700-token summarization prompt reads 2800 tok/s vs our ~1700 (our pp512 board row is 3868) -
+  our prefill past 512 tokens needs a look.
 - **M4 Pro (Anton's mini, 14-core, 64 GB; NOT the 40-core M4 Max mlx.fast measured on), same
   corpus, fused round, 2026-09-02:** off 59.1, depth 1 **67.3 (1.14x)**, depth 2 55.7 (0.94x).
   Per task at depth 1: writing 1.10x, summarization 1.06x, math 1.24x, qa 1.16x. Round clocks: the
