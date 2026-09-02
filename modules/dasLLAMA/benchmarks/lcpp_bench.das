@@ -124,6 +124,10 @@ struct Args {
     @clarg_doc = "A/B the GPU MoE prefill arm in-process: every row runs twice, device-side prefill OFF then ON. Needs resident expert layers (DASLLAMA_GPU_MOE_LAYERS); decode has no npos gate so tg reads as a wash. Mutually exclusive with the other A/B levers"
     prefill_ab : bool
 
+    @clarg_name = "chat-prompts"
+    @clarg_doc = "Wrap each tg-real corpus segment as one user turn in the model's chat template (thinking off) instead of feeding it as raw text - the shape instruct models are used in (Spec-Bench prompts)"
+    chat_prompts : bool
+
     @clarg_name = "mtp-depth"
     @clarg_doc = "Speculative depth for the --mtp-ab ON arm: drafts per round (the verify runs depth+1 rows). 1 = the shipped depth-1 rail"
     mtp_depth : int = 1
@@ -1040,6 +1044,20 @@ def private bench_output_gate(t : Model; s : Session; fmt : OutFmt; tag : string
     return true
 }
 
+// one tg-real corpus segment's ids: raw text, or one user turn in the model's chat template
+// (thinking off) - the shape instruct models are actually used in
+def private corpus_ids(t : Model; tk : Tokenizer; tx : string; chat : bool) : array<int64> {
+    if (!chat) {
+        return <- encode(tk, tx, false)
+    }
+    var cs <- create_chat_renderer_(t, "", 0l)
+    set_thinking_(cs, false)
+    add_user_(cs, tx)
+    var ids <- render_turn_(t, cs)
+    finalize(cs)
+    return <- ids
+}
+
 // Greedy pick over the last logits — the tg-real row's sampler. Runs INSIDE the timed window, but
 // both A/B arms pay it identically so it cancels for judging.
 def private argmax_logit(s : Session; vocab : int64) : int64 {
@@ -1440,7 +1458,7 @@ def main() : int {
                 ? path_join(get_this_module_dir(), "data/wikitext2_prompts.txt") : cfg.prompts)
             var maxlen = 0l
             for (tx in texts) {
-                var ids <- encode(tk, tx, false)
+                var ids <- corpus_ids(t, tk, tx, cfg.chat_prompts)
                 maxlen = max(maxlen, long_length(ids))
                 toks |> emplace(ids)
             }

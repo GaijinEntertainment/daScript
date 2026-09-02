@@ -285,6 +285,28 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
   in one look - every round's last truth was id 0. Callers moved to the round: `generate_mtp_greedy`
   (drains the accepted drafts), `lcpp_bench --mtp-ab --mtp-depth k`.
 
+#### S2 measurements: per-phase timing + SpecBench-4 (2026-09-01)
+
+- **27B round split (`DASLLAMA_MTP_DEBUG=time`, plain step ~44 ms):** k=1 verify 44.9 ms (22.4/row),
+  k=3 verify 79.8 ms (19.9/row), k=4 verify 153.4 ms (30.7/row); draft 2.8 / 8.5 / 11.3 ms; walk +
+  commit < 0.7 ms; replay < 1.8 ms. The verify amortizes 2 -> 4 rows (per-row cost flat to
+  improving) and hits a wall at row 5 (the q8 dn projections' two-tile + the B8 form); the
+  recurrent replay is free. Tokens/round 1.77 / 2.61 / 2.79.
+- **Qwen3.8-27B + Q8_0 head** chained: k=2 65.6%, k=3 56.0% (1.11x) - the newer head does NOT
+  chain better than the 3.6's in our engine; both are ~83% at position 1 and ~55% deeper.
+- **SpecBench-4** (`benchmarks/data/specbench4_prompts.txt`: writing 81, summarization 241,
+  math_reasoning 401, qa 321; `lcpp_bench --prompts ... --chat-prompts` wraps each in the model's
+  chat template, thinking off): 27B k=1 **83.1% / 1.31x** (off 26.7, on 34.9), k=3 59.3% / 1.19x;
+  0.8B k=1 69.1% / 1.07x, k=3 44.7% / 0.96x. The corpus does not explain the 27B's deep-position
+  starvation (same on both corpora); the 0.8B is corpus-sensitive the other way (chat is harder
+  than wikitext for a 0.8B). Caveat: the tg-real row generates 128 tokens past end-of-turn (the
+  llama-bench contract), which drags the two short-answer prompts - the S6 harness needs stop-at-EOS
+  + per-task accounting.
+- **Verdict for the qwen carriers:** depth 1 ships (1.24-1.31x on the 27B); depth > 1 is break-even
+  because the nextn heads starve past position 2 - a head property, not corpus or engine. The
+  controller (S4) makes that automatic per head. The gemma assistant drafter (trained multi-token)
+  is the carrier that can show depth paying - S3 next, per ruling.
+
 ### S3 - gemma assistant drafter
 
 - Loader for arch `gemma4-assistant` (embed tied to the trunk's, pre/post projections, 4
