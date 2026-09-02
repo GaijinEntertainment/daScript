@@ -383,7 +383,9 @@ the reference driver's re-spacing and wrapping), the oracle cells are model-gate
 oracle case, identical durations on every case, and on the bring-up set every stage through the
 decoder output within 1e-4 of the oracle's peak, the sine source within 1e-4 fed the oracle's F0,
 the generator within 1e-4 fed the oracle's source and decoder output; the end-to-end waveform
-difference is logged, not gated (the F0 phase drift the header explains).
+difference is logged, not gated (the F0 phase drift the header explains). A facade smoke cell
+(model-gated the same way, plus `tts_g2p.bin` + `tts_postag.bin`) speaks one sentence through
+`load_tts_model` / `synthesize` and checks the PCM is finite, non-silent and of speech length.
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference.

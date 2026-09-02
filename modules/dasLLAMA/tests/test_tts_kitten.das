@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_kitten
+require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
@@ -228,6 +229,42 @@ def private oracle_size(t : T?; size : string) {
         t |> equal(ids_ok, length(mf.cases), "cases whose token ids match the reference driver")
         t |> equal(same_length, length(mf.cases), "cases whose durations, hence sample counts, match the oracle")
         to_log(LOG_INFO, "{size}: worst end-to-end waveform maxdiff {worst} at {worst_case} over {length(mf.cases)} cases (informational)\n")
+    }
+}
+
+// text in, speech out through the facade: the front end's packs sit beside the GGUF in the store
+def private facade_smoke(t : T?; size : string) {
+    if (!stat(gguf_path(size)).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid ||
+        !stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
+        t |> skip("kitten-{size}.gguf or the front-end packs not present")
+        return
+    }
+    with_job_que() {
+        setup_dasllama_jobque_()
+        let m <- load_tts_model(gguf_path(size))
+        let c <- caps(m)
+        t |> equal(c.sample_rate, 24000)
+        t |> equal(length(c.voices), 8)
+        let audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "Bella")
+        t |> equal(audio.sample_rate, 24000)
+        // 51 characters of text: well over a second of speech, under ten
+        t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
+        var finite = true
+        var peak = 0.0
+        for (v in audio.pcm) {
+            finite = finite && abs(v) < 10.0   // a NaN fails the comparison too
+            peak = max(peak, abs(v))
+        }
+        t |> success(finite, "every sample finite")
+        t |> success(peak > 0.05, "peak {peak}: the model spoke")
+        to_log(LOG_INFO, "{size} facade: {length(audio.pcm)} samples, peak {peak}\n")
+    }
+}
+
+[test]
+def test_kitten_facade(t : T?) {
+    t |> run("nano: text in, speech out") @(t : T?) {
+        facade_smoke(t, "nano")
     }
 }
 
