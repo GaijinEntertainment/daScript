@@ -104,7 +104,12 @@ stages, each its own file, and every stage is data-driven from the model store: 
   parse (post-load runs before the planes bind, so binding cannot happen there). The carrier
   therefore takes an explicit `finalize` - views forgotten, owned buffers deleted, the backing
   released once - and so does every struct that holds it (`TtsModel`), the vision embedder's
-  reason. Nothing here names a family: a family's quirk lands in its family file.
+  reason. The generator carries the sec.2.14 hook slot (`register_styletts2_generator_gpu`,
+  `styletts2_generator_gpu_stats`): a driver takes the rows-form input, the style and the source
+  spectrum and answers with the waveform or declines; the SineGen phase chain and the harmonic
+  STFT stay on the CPU in both routes (the phase law), the trace rail keeps the CPU chain, and
+  engage is read from the counters. No driver fills the slot yet. Nothing here names a family: a
+  family's quirk lands in its family file.
 - **`dasllama_kitten.das`** - the KittenTTS family (nano and mini): the reference driver's symbol
   table, re-spacing rule and style-row rule (the chunk's character count), its speed priors and
   voice aliases (`kitten.*` metadata), its 5000-sample tail trim, and the rewrite of the front

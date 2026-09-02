@@ -569,7 +569,10 @@ block) and the shared identity folded the CPU tune knobs, so the CLI (manifest a
 the tests baked different identities in one lane and reaped each other - a family tag can now
 register config-free (`image_config_for`), ruled in `REVIEW_IMAGE.md`. `test_tts_kitten` gains
 the image round-trip cell (staged read vs mapped image vs in-memory mint, element for element).
-The generator hook slot (the sec.2.14 shape) is the remaining half of this rung.
+The generator hook slot (the sec.2.14 shape) closes the rung: `register_styletts2_generator_gpu`
++ `styletts2_generator_gpu_stats`, the driver taking the rows-form input, style and source
+spectrum and answering with the waveform or declining, the trace rail keeping the CPU chain;
+`test_kitten_generator_hook` proves decline and serve through the counters. No driver yet.
 
 ## Risks
 

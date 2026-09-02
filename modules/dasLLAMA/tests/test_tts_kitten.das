@@ -159,6 +159,77 @@ def private image_roundtrip(path : string) : ImageRoundtrip {
     return r
 }
 
+// the generator hook under test: declines, or serves a silent waveform of the CPU chain's length
+var private g_hook_serves = false
+
+[unused_argument(d, x_rows, c, s, har_spec, har_frames)]
+def private generator_stub(d : St2Decoder; x_rows : array<float>; c, t : int64; s : array<float>;
+                           har_spec : array<float>; har_frames : int64; var wave : array<float>) : bool {
+    if (!g_hook_serves) {
+        return false
+    }
+    wave |> resize(t * 600l)
+    for (i in range64(t * 600l)) {
+        wave[i] = 0.0
+    }
+    return true
+}
+
+struct HookProbe {
+    calls_after_decline : int
+    served_after_decline : int
+    spoke_after_decline : bool
+    served_after_serve : int
+    silent_after_serve : bool
+}
+
+def private hook_probe(path : string) : HookProbe {
+    var r = HookProbe()
+    var inscope m <- load_tts_model(path)
+    register_styletts2_generator_gpu(@@generator_stub)
+    g_hook_serves = false
+    let s0 = styletts2_generator_gpu_stats()
+    var inscope a <- synthesize(m, "The hook declines and the model speaks.", "Bella")
+    let s1 = styletts2_generator_gpu_stats()
+    r.calls_after_decline = s1.calls - s0.calls
+    r.served_after_decline = s1.served - s0.served
+    var peak = 0.0
+    for (v in a.pcm) {
+        peak = max(peak, abs(v))
+    }
+    r.spoke_after_decline = peak > 0.05
+    g_hook_serves = true
+    var inscope b <- synthesize(m, "The hook serves silence.", "Bella")
+    let s2 = styletts2_generator_gpu_stats()
+    r.served_after_serve = s2.served - s1.served
+    peak = 0.0
+    for (v in b.pcm) {
+        peak = max(peak, abs(v))
+    }
+    r.silent_after_serve = peak == 0.0 && !empty(b.pcm)
+    g_hook_serves = false
+    return r
+}
+
+[test]
+def test_kitten_generator_hook(t : T?) {
+    t |> run("nano: the generator hook declines into the CPU chain and serves when it answers") @(t : T?) {
+        if (!stat(gguf_path("nano")).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
+            t |> skip("kitten-nano.gguf or the front-end packs not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let r = hook_probe(gguf_path("nano"))
+            t |> equal(r.calls_after_decline, 1, "one chunk, one hook call")
+            t |> equal(r.served_after_decline, 0, "a decline serves nothing")
+            t |> success(r.spoke_after_decline, "the CPU chain spoke after the decline")
+            t |> equal(r.served_after_serve, 1, "the serving hook is counted")
+            t |> success(r.silent_after_serve, "the served waveform reached the facade")
+        }
+    }
+}
+
 [test]
 def test_kitten_image(t : T?) {
     t |> run("nano: the staged read, the mapped image and the in-memory mint agree") @(t : T?) {

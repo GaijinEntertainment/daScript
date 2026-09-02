@@ -1100,12 +1100,45 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
     }
 }
 
-//! The iSTFTNet generator: two upsampling stages, each adding the source spectrum through
-//! its noise branch and refining through Snake residual blocks, then the inverse STFT.
+// ===== the generator GPU hook (a driver registers at [init] and requires this module for its
+// types, so nothing here can require the driver back; the CPU chain below is the
+// specification and the fallback) =====
+
+//! Serves the whole generator - the rows form [t][c] of its input, the style, the source
+//! spectrum - writing exactly the waveform's samples into `wave`, or declines with false.
+typedef St2GeneratorGpuFn = function<(d : St2Decoder; x_rows : array<float>; c, t : int64; s : array<float>;
+                                       har_spec : array<float>; har_frames : int64; var wave : array<float>) : bool>
+var private g_st2_gen_gpu : St2GeneratorGpuFn
+var private g_st2_gen_gpu_set = false
+var private g_st2_gen_gpu_calls = 0
+var private g_st2_gen_gpu_served = 0
+
+[arch(at = "../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_styletts2_generator_gpu(fn : St2GeneratorGpuFn) {
+    g_st2_gen_gpu = fn
+    g_st2_gen_gpu_set = true
+}
+
+//! Hook invocations and the ones that served, since the process started: engage is read from
+//! these counters, never inferred from a synthesis having run.
+def styletts2_generator_gpu_stats() : tuple<calls : int; served : int> {
+    return (calls = g_st2_gen_gpu_calls, served = g_st2_gen_gpu_served)
+}
+
+//! The iSTFTNet generator: two upsampling stages, each adding the source spectrum through its
+//! noise branch and refining through Snake residual blocks, then the inverse STFT. A registered
+//! driver gets the first refusal, except on the trace rail (its stage tensors are the point).
 def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : array<float>;
                         har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?; @exact_size var wave : array<float>) : int64 {
     var inscope @exact_size x : array<float>
     transpose_ct(x_in, c, t, x)
+    if (g_st2_gen_gpu_set && tr == null) {
+        g_st2_gen_gpu_calls++
+        if (invoke(g_st2_gen_gpu, d, x, c, t, s, har_spec, har_frames, wave)) {
+            g_st2_gen_gpu_served++
+            return long_length(wave)
+        }
+    }
     var cc = c
     var tt = t
     for (i in range64(long_length(d.ups))) {
