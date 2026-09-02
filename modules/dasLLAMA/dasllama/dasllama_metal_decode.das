@@ -1557,6 +1557,21 @@ def private encode_dn_replay(t : Model; var r : StepRes; nrun : int64) {
     metal_release(cb)
 }
 
+// DASLLAMA_MTP_DEBUG=time: the round's wall split, accumulated and printed every 64 rounds
+var private g_mtpt_rounds = 0l
+var private g_mtpt_draft_us = 0l
+var private g_mtpt_verify_us = 0l
+var private g_mtpt_walk_us = 0l
+var private g_mtpt_replay_us = 0l
+var private g_mtpt_accepted = 0l
+var private g_mtpt_k = 0l
+
+[cold_path]
+def private mtp_time_report() {
+    let r = double(max(g_mtpt_rounds, 1l))
+    to_log(LOG_INFO, "mtp time k={g_mtpt_k} rounds={g_mtpt_rounds} per round: draft {double(g_mtpt_draft_us) / r:.0f} us | verify {double(g_mtpt_verify_us) / r:.0f} us | walk+commit {double(g_mtpt_walk_us) / r:.0f} us | replay {double(g_mtpt_replay_us) / r:.0f} us | tokens/round {1.0lf + double(g_mtpt_accepted) / r:.2f}\n")
+}
+
 [cold_path]   // the DASLLAMA_MTP_DEBUG=trace line: drafts, per-row truths, the accepted count
 def private mtp_trace_round(s : Session; pos, k, nr, a, vocab : int64) {
     let line : string = build_string() $(var w) {
@@ -1604,6 +1619,8 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
     // the draft chain into the verify batch: vbatch[0] = tok, vbatch[i] = d_i from (d_{i-1}, the
     // head's own h) - d_1 from (tok, the trunk's stashed h)
     s.mtp_vbatch[0] = tok
+    let timed = g_env_mtp_debug == "time"
+    let ts_draft = timed ? ref_time_ticks() : 0l
     if (!cold) {
         // the warm's row-pos h input is the PRE-draft trunk hidden — the chain overwrites mtp_h
         s.mtp_xb_save |> resize(c.dim)
@@ -1632,6 +1649,7 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
     }
     s.mtp_drafted += k
     let nr = k + 1l
+    let ts_verify = timed ? ref_time_ticks() : 0l
     mtp_verify_prep_n(t, s, s.mtp_vbatch, nr, pos)
     finish_pending_step()
     let mr = g_mirrors[s.uid]
@@ -1694,6 +1712,7 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         s.n_past = pos + 1l
         return 0l
     }
+    let ts_walk = timed ? ref_time_ticks() : 0l
     // the accept walk: row i is the truth for draft i+1
     var a = 0l
     while (a < k && argmax_row(s.mtp_logits_b, a, c.vocab_size) == s.mtp_vbatch[a + 1l]) {
@@ -1708,6 +1727,7 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx + a * c.dim * 4l), c.dim * 4l)
         memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits_b[a * c.vocab_size]), c.vocab_size * 4l)
     }
+    let ts_replay = timed ? ref_time_ticks() : 0l
     if (r.dn) {
         // the shadow holds the post-row-k state; a partial accept replays rows 0..a over it from the live pre-verify state, then the shadow becomes live
         if (a < k) {
@@ -1716,6 +1736,18 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         dn_mirror_flip(s.uid, pos + a + 1l)
     }
     release_step(r)
+    if (timed) {
+        g_mtpt_rounds++
+        g_mtpt_k = k
+        g_mtpt_accepted += a
+        g_mtpt_draft_us += int64(get_time_usec(ts_draft)) - int64(get_time_usec(ts_verify))
+        g_mtpt_verify_us += int64(get_time_usec(ts_verify)) - int64(get_time_usec(ts_walk))
+        g_mtpt_walk_us += int64(get_time_usec(ts_walk)) - int64(get_time_usec(ts_replay))
+        g_mtpt_replay_us += int64(get_time_usec(ts_replay))
+        if (g_mtpt_rounds % 64l == 0l) {
+            mtp_time_report()
+        }
+    }
     s.mtp_h_pos1 = pos + a + 1l
     g_mirrors[s.uid].watermark = pos + a + 1l
     s.mtp_accepted += a

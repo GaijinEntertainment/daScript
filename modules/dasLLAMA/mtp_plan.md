@@ -449,6 +449,16 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   E[tokens] 2.44 / 2.86 / 3.12 over costs 1.68 / 1.90 / 2.12 => **k=2 ~1.45x, k=3 ~1.5x, k=4
   ~1.5x, no wall** (the kq sites have the single-pass B8 form; only the small q8 dn projections
   tile). The off arms will carry the sustained-load noise.
+  **RESULT (M5, -r 3):** k=2 off 23.5 ± 2.5 (VOID) / on 23.2 => ~1.03x vs the settled 22.6, per-draft
+  69.1%; **k=3 off 22.6 / on 27.7 = 1.23x**, 61.3%; k=4 off 23.3 / on 17.4 = **0.74x**, 51.4%.
+  Depth-1 measured 1.24x earlier. Prediction MISSED: (a) the round's cost is non-monotonic in rows
+  (3 rows dearer than 4, 5 rows a wall) - the per-width kernel cliffs of the qwen38 memo, on our
+  kq B2/B4/B8 ladder and the q8 dn projections' two-tile above 4; (b) the head's conditional
+  acceptance beyond position 1 falls off a cliff (per-draft average 82 -> 69 -> 61 -> 51 =>
+  positions 2..4 near 55/45/35%): the Qwen3.6 nextn head is a depth-1 head; chaining it starves.
+  Depth as implemented buys nothing on the 27B. Next: the per-phase round timing (`DASLLAMA_MTP_DEBUG=time`),
+  then S5 decides which fat to cut first; and the Qwen3.8 head's decay curve (the qwen38 track
+  reached 4.7 accepted/round on it - if its head chains, the carrier decides the default depth).
 
 - t(M): the mv family near-flat to M=4 (weights-bound), knee at 8; whole-step verify at
   k=3 within 1.3x of a plain step on 27B.
