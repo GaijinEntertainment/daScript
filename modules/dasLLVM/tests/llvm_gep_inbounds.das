@@ -24,7 +24,7 @@ def private scan_dir(dir : string; var offenders : array<string>) {
             }
             return
         }
-        if (!(name |> ends_with(".das"))) {
+        if (!(name |> ends_with(".das")) || name == "llvm_gep_inbounds.das") {   // the scanner names its own quarry
             return
         }
         let text = fread(path)

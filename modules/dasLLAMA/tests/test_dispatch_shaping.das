@@ -19,10 +19,14 @@ def private pin_shaping_baseline() {
     set_batch_lane_cap(0)
     set_matmul_min_chunk_rows(16)
     set_matmul_min_chunk_rows_gemv(64)
-    t |> equal(get_gemv_chunks_per_lane(), 8, "the shipped default - retune the ladder tables if this moves")
     set_gemv_chunks_per_lane(1)
     set_gemv_wave_fill(true)
     set_batch_grid_2d(0)
+}
+
+[test]
+def test_gemv_chunks_default(t : T?) {
+    t |> equal(get_gemv_chunks_per_lane(), 8, "the shipped default - retune the ladder tables if this moves")
 }
 
 [test]
