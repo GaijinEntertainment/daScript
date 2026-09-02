@@ -570,6 +570,9 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   dispatches plus a GATHERED GEMV twin (stream each selected expert's plane once, the bucket's x rows
   through the fixed-B form's indirection) in place of the per-(row, slot) MoE GEMV. Expected: the
   two-row verify from 1.34x toward ~1.1x of a step, i.e. 1.13x -> ~1.4x at today's acceptance.
+- **The Q4 target is not what caps acceptance**: the Q8_0 target at depth 1 accepts 76.5% (vs 74.6%
+  on Q4_K_M; off 109.6, on 126.0 = 1.15x; verify 12.33 ms vs step 9.13 = 1.35x again). 75% at
+  position 1 is the head's own agreement with the target on SpecBench chat prompts.
 - **Pre-norm vs post-norm target hidden: SETTLED for post-norm** (llama.cpp's reading). Counting
   free-run, GPU drafter: post-norm k1 19/21, k2 44/55, k4 72/103 vs pre-norm 17/23, 40/57, 66/113 -
   post-norm wins at every depth. The `mtp-count-pre` lever stays as the record.
