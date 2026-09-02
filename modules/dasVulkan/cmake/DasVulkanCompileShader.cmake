@@ -1,13 +1,15 @@
 # GLSL -> SPIR-V build helper for apps that author shaders in GLSL.
 # dasVulkan's native path compiles daScript shaders (via dasSpirv) and ships
 # no GLSL step, so DAS_VULKAN_COMPILE_SHADER fills that gap: the consuming
-# app's CMake calls it per shader.  It drives the Vulkan SDK tools found on
-# PATH; the module build itself never touches the SDK (vendored headers +
-# volk), so including this file is inert -- only calling the macro needs the
-# tools.
-FIND_PROGRAM(DAS_VULKAN_GLSLANG_VALIDATOR_EXE glslangValidator)
-FIND_PROGRAM(DAS_VULKAN_SPIRV_OPT_EXE spirv-opt)
-FIND_PROGRAM(DAS_VULKAN_SPIRV_DIS_EXE spirv-dis)
+# app's CMake calls it per shader.  It drives the Vulkan SDK tools, the
+# VULKAN_SDK environment's bin first and PATH after, so the SDK the environment
+# names wins over an older one that happens to sit earlier on PATH; the module
+# build itself never touches the SDK (vendored headers + volk), so including
+# this file is inert -- only calling the macro needs the tools.
+SET(DAS_VULKAN_SDK_BIN_HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
+FIND_PROGRAM(DAS_VULKAN_GLSLANG_VALIDATOR_EXE glslangValidator HINTS ${DAS_VULKAN_SDK_BIN_HINTS})
+FIND_PROGRAM(DAS_VULKAN_SPIRV_OPT_EXE spirv-opt HINTS ${DAS_VULKAN_SDK_BIN_HINTS})
+FIND_PROGRAM(DAS_VULKAN_SPIRV_DIS_EXE spirv-dis HINTS ${DAS_VULKAN_SDK_BIN_HINTS})
 
 # DAS_VULKAN_COMPILE_SHADER(<input> <extra_deps>
 #     [OUTPUT_DIR <dir>]            # default: CMAKE_CURRENT_BINARY_DIR
@@ -19,7 +21,7 @@ MACRO(DAS_VULKAN_COMPILE_SHADER input extra_deps)
             OR NOT DAS_VULKAN_SPIRV_DIS_EXE)
         MESSAGE(FATAL_ERROR
             "DAS_VULKAN_COMPILE_SHADER needs glslangValidator, spirv-opt "
-            "and spirv-dis on PATH (the Vulkan SDK).")
+            "and spirv-dis (set VULKAN_SDK or put the Vulkan SDK bin on PATH).")
     ENDIF()
     CMAKE_PARSE_ARGUMENTS(DS "" "OUTPUT_DIR"
         "GLSLANG_PRE_ARGS;GLSLANG_ARGS;SPIRV_OPT_ARGS" ${ARGN})

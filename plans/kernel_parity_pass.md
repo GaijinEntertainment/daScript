@@ -1044,3 +1044,29 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   --ref-no-affinity`, both walls out-of-process, direction-grade against the 08-04 row.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
+
+- 2026-09-02: llama.cpp's four-wide coopmat2 decode measured on the 5060 Ti. Box moved to
+  Vulkan SDK 1.4.357.0 (glslc knows `GL_NV_cooperative_matrix_decode_vector`) and NVIDIA driver
+  616.56 (advertises `VK_NV_cooperative_matrix_decode_vector`); llama.cpp 6c84c7d5d rebuilt
+  into `build-vulkan-357` beside the scalar `build-vulkan`. llama-bench `-p 512 -n 128 -ngl 99
+  -r 6`, medians of six, ten Llama-3.2-1B vehicles, scalar -> vector build:
+
+  | format | pp512 scalar | pp512 vector | ratio | tg128 scalar | tg128 vector | ratio |
+  |---|---|---|---|---|---|---|
+  | Q4_K_M | 19363 | 20309 | 1.049 | 349.1 | 354.2 | 1.014 |
+  | Q3_K_L | 17073 | 18883 | 1.106 | 329.0 | 332.7 | 1.011 |
+  | Q2_K | 17625 | 19684 | 1.117 | 395.5 | 400.7 | 1.013 |
+  | IQ4_XS | 17632 | 19515 | 1.107 | 332.2 | 331.4 | 0.997 |
+  | IQ4_NL | 18606 | 20488 | 1.101 | 346.2 | 344.8 | 0.996 |
+  | IQ3_M | 17361 | 19638 | 1.131 | 306.3 | 306.4 | 1.000 |
+  | IQ3_XXS | 17512 | 19488 | 1.113 | 363.6 | 355.4 | 0.978 |
+  | IQ2_XS | 18618 | 20011 | 1.075 | 327.5 | 329.4 | 1.006 |
+  | IQ2_XXS | 18489 | 20052 | 1.085 | 393.7 | 390.8 | 0.993 |
+  | Q8_0 | 20947 | 20237 | 0.966 | 249.7 | 249.9 | 1.001 |
+
+  Every quantized format's pp512 gains 5-13% (min..max bands do not overlap); tg128 is flat
+  (the mat-vec shaders never enter coopmat2); Q8_0 pp loses 3% (no decode callback to widen -
+  a codegen side effect of the rebuilt shader set, small and real). The reference our Vulkan
+  pp512 rows are held to is therefore 5-13% higher from this driver on; the 08-31 per-format
+  rows were taken against the scalar build. A three-rep first pass was unreadable (one rep in
+  three 30-50% off on half the cells); six reps and medians are the floor for this box.
