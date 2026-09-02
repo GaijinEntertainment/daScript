@@ -29,7 +29,8 @@ drop-in. espeak-ng (GPL-3.0) is dev-time oracle ONLY, never shipped, never linke
   on the M1 Max (the oracles live there). Base is master fffb3b370; master merges into the
   branch once PR #3924 (CPU kernel parity) lands. Kokoro's first GGUF carries a curated
   roster, but the FULL voice set and both Kitten checkpoints are downloaded at the pinned
-  revisions from day one, so the full GGUF is one converter flag away.
+  revisions from day one, so the full GGUF is one converter flag away. Nothing generated is
+  committed - GGUFs and packed data live in the model store, not `models/`.
 
 ## Evidence base (box-local, M1 Max)
 
@@ -130,8 +131,10 @@ gains a 1.7c TTS section with these charters in the same PR that creates the fil
   with `torch.rand`/`torch.randn_like` intercepted, dumps the draws -> `tests` fixture, so
   das-vs-torch parity is provable despite the stochastic decoder.
 
-Model/data files land beside the other dasLLAMA models (`models/`), each with its license
-sidecar: kitten (Apache-2.0), Kokoro (Apache-2.0), misaki lexicons (Apache-2.0), CMUdict
+Nothing generated lands in git (Boris, 2026-09-02): the three GGUFs, `tts_g2p.bin` and
+`tts_postag.bin` all go to the model store beside the other dasLLAMA models
+(`~/Work/llama.cpp/models`, resolved the way the ASR tests resolve theirs), each with its
+license sidecar; the repo carries only converters, sources of truth for the data, and tests: kitten (Apache-2.0), Kokoro (Apache-2.0), misaki lexicons (Apache-2.0), CMUdict
 (BSD-2, CMU copyright line), g2p_en GRU (Apache-2.0), UD-EWT-trained tagger (weights ours;
 CC BY-SA attribution for the training data in THIRD_PARTY_NOTICES.md). Update
 `THIRD_PARTY_NOTICES.md` in the first PR that ships any of these.
@@ -317,8 +320,8 @@ has non-English voices - out of scope until English is surpassed).
 - Voice roster for Kokoro's first GGUF (curated ~8 vs all).
 - the server's `/v1/audio/speech` in phase 4 vs its own arc (Boris leaned "phase 4 closes the
   capability row"; confirm at the time).
-- Model file hosting/distribution (same answer as the other dasLLAMA models - wherever
-  `models/` currently sources from).
+- Model file hosting/distribution beyond the local store (same answer as the other dasLLAMA
+  models when they get one).
 - Whether `dasllama_postag`/`dasllama_textnorm` should eventually promote to daslib (they
   are English-text utilities with no model dependency) - start module-local, promote only
   on a second consumer.
