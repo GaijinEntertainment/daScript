@@ -624,6 +624,18 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   prompt (S6 in its honest form; the aggregate tok/s over a mixed corpus is time-weighted and reads
   1.26x where the rows read 1.11 / 1.17 / 1.56 / 1.27). Post-#3924 the bench's tune-provenance gate
   refuses an unproven cell: dev runs pass `DASLLAMA_ALLOW_UNTUNED=1`, record runs mint the sidecar.
+- **mlx.fast measured on THIS M5 (Opus agent, 2026-09-02, their engine, their free-run leg, their
+  tokenizer + chat template, thinking off, same four SpecBench turns, 128 tokens, B=1):** serial
+  **126-130 tok/s** (llama-benchy 0.3.7 against their mlx-server independently reads 129.0; their
+  shipped benchctl reads 87 because it teacher-forces one decode step per token over the worker's
+  stdio). Their MTP arm does not work on this checkpoint: it is sealed behind two static switches
+  (`speculationEnabled = false`, `submissionDraftDepth = 0`); armed, it crashes in
+  `applyCachedDrafterRoPE` (a rank-2 vs rank-3 concat; one-line local fix), and once running the
+  adaptive controller converges to depth 0 (4% slower than serial) because the envelope seals
+  `verificationMode = .serialTarget` (a depth-k round = 1+k full target forwards); forced depth 1
+  = 74 tok/s, depth 3 = 53. Their recorded 68.5 (M4 Max) came from a different branch. So on M5:
+  their best is serial 128; ours is 122 serial (they are ~5% ahead on plain decode) and **145 with
+  MTP** - the drafter is the whole lead. Logs: scratchpad/mlxfast/.
 - **M4 Pro (Anton's mini, 14-core, 64 GB; NOT the 40-core M4 Max mlx.fast measured on), same
   corpus, fused round, 2026-09-02:** off 59.1, depth 1 **67.3 (1.14x)**, depth 2 55.7 (0.94x).
   Per task at depth 1: writing 1.10x, summarization 1.06x, math 1.24x, qa 1.16x. Round clocks: the
