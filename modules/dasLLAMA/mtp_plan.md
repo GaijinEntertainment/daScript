@@ -680,6 +680,51 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   there (1.2x on M5) and the round's verify+commit at 25.6 ms carries ~4 ms of host work (join
   landing, per-group command buffers, the slower CPU) against ~1 ms on M5. The depth default is a
   per-box-class knob (M5 2, M4 Pro 1) - a box-profile field, not a runtime controller.
+### #71 context sweep (M5, gemma-4-26B-A4B-it-Q4_K_M, 2026-09-02) - the prefill "gap" was the untuned dev rail
+
+Prediction (logged above): a prefill chunking cliff past 512. Wrong on both counts - the prompt
+is ONE pass (`mp = round32(npos)`, no chunking), and the cliff was not in the tree at all.
+
+**Prefill, prompt tokens/s (llama-bench `-p N -n 0 -r 3` vs `lcpp_bench -p N -n 0 -r 3`):**
+
+| M | llama.cpp | ours, dev rail (`DASLLAMA_ALLOW_UNTUNED=1`) | ours, m5 sidecar accepted |
+|---|---|---|---|
+| 35 | 721 | 506 | 611 (0.85x) |
+| 256 | 2809 | 1397 | **3124 (1.11x)** |
+| 512 (board row 08-30: 3868 vs their 3476) | - | 1662 | **3835** |
+| 700 | 3037 | 1733 | **3965 (1.31x)** |
+| 2048 | 3175 | 1858 | **4551 (1.43x)** |
+
+The dev rail halves prefill at every M and the board's 08-30 rig exe measures 3861 on this box
+today, so the tree is fine: the tune gate's staleness rule (sidecar older than the rebuilt
+binary) dropped the run to "every kernel at fallback", and that fallback also serves NO
+`runtime.metal_tensor` crowns - the membership that turns the Metal-4 tensor mul_mm forms on
+(runtime knobs never travel with the class defaults, by design). Isolated with two temporary
+manifests: `kernels` EMPTIED but `runtime` kept = **3822**; the same minus `metal_tensor` = **1664**.
+The K-quant tensor twins are the money: the mint races `kq_mulmm_k4/k5/k6` at base 0.18 ms vs
+tensor 0.065-0.075 ms (2.5x per dispatch). A fresh mint against the current binary (5.5 min,
+one winner change, -0.7% uniform shift) puts the dev rail at 3830. `-jit -module-cache` vs the monolith: 1662 vs
+1662, exonerated. `DASLLAMA_GPU_MOE_SPLIT=0` and `-t 6`: no effect (1662-1668). Decode is
+untouched by the rail (GPU-bound; 124/122/118/110 on both).
+
+**Decode at depth, tok/s (llama-bench `tg128 @ dN` vs the per-prompt plain rows of a 4-prompt
+corpus at 35 / ~260 / ~810 / ~2450 tokens):**
+
+| context | llama.cpp | ours (tuned) | ours MTP depth 1 (accept) |
+|---|---|---|---|
+| 35 | 99.8 | 124.0 | 142.7 (69.3%) |
+| 256 | 99.5 | 122.0 | 142.5 (76.4%) |
+| 700 | 98.4 | 117.8 | 129.3 (69.3%) |
+| 2048 | 93.9 | 109.8 | 126.1 (82.9%) |
+
+Ours drops 11.5% from 35 to 2048 keys, theirs 6%; ours stays ahead at every depth (+17% at 2048).
+The decode attention is a 64-key chunk per threadgroup plus a combine pass (`ATTN_CHUNK_ROWS`);
+the extra 5.5 points at 2048 keys is a chunk-count scaling item, not a cliff.
+
+**What #71 becomes:** (a) the dev-rail trap is a rail fix, not a kernel item - see the ledger
+rewrite; (b) pp35 at 0.85x is the small-M prefill regime (one 32-row tile, the GEMM ladder's
+floor) - a real but narrow item; (c) decode attention past ~1k keys - a microbench item.
+
 - **The Q4 target is not what caps acceptance**: the Q8_0 target at depth 1 accepts 76.5% (vs 74.6%
   on Q4_K_M; off 109.6, on 126.0 = 1.15x; verify 12.33 ms vs step 9.13 = 1.35x again). 75% at
   position 1 is the head's own agreement with the target on SpecBench chat prompts.
@@ -748,6 +793,14 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
 - Depth-N on Qwen3.8-27B, k=3 at ~85% acceptance: 1.6-1.9x over plain (upstream M3 Max:
   +42% with a GEMV-bound verify; mlxfast pooled 2.69x after a week of kernel work).
 - Gemma drafter first pass: 1.4-1.7x at B=1 (mlxfast measured 1.95x on M4 Max; vLLM 1.60x).
+
+- **#71 context sweep (logged 2026-09-02 before the run).** Prefill: ours has a cliff between 512 and
+  700 (3868 -> 1733 measured) that I predict is the prefill driver's chunking past its 512-token
+  bucket - the 188-token remainder runs a small-M path at a fraction of the rate; so pp2048 recovers
+  to 2600-3000 (four full chunks amortize the tail) rather than falling further, and pp256 sits
+  near 3000. llama.cpp: pp35 ~350, pp256 ~2200, pp700 2813, pp2048 ~2900 (flat past 512). Decode at
+  depth: ours 124 -> 123 (256) -> 118 (700) -> 105-110 (2048), llama.cpp 102 flat to ~99 at 2048 -
+  our attention decode kernel scales with keys where theirs does not.
 
 ## Traps (build against these)
 

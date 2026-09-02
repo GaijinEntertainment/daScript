@@ -888,16 +888,25 @@
    becomes a `requires=` item on its dispatch (kargs field or params name), the sentence goes,
    and the batch/prefill drivers that route around the kernel gate per site on the same modulus
    (never on a whole-rail knob). Ruled to land at the END of the MTP arc, not per slice.
-71. **gemma-26B long-context decode and prefill past 512 tokens.** Matched-mode ruler (mtp_plan.md,
-   S3 results): our plain step drops 5% from a 35-token to a 700-token context (124 -> 118 tok/s)
-   where llama.cpp's is flat (102.2 -> 101.8), and our prefill of that 700-token prompt reads
-   ~1733 tok/s against llama.cpp's 2813 while our pp512 board row is 3868. One path, two faces:
-   the attention decode kernel past ~500 keys and the prefill bucket past 512. Done = a context
-   sweep (35 / 256 / 700 / 2048) of the plain step and of prefill on gemma-26B with the per-kernel
-   profile beside each point, then the kernel that owns the cliff.
+71. **gemma-26B: small-M prefill and decode attention past ~1k keys.** The context sweep
+   (mtp_plan.md, "#71 context sweep") dissolved the prefill half of the original item - the halving
+   was the untuned dev rail serving no `runtime.metal_tensor` crowns, and on tuned kernels ours
+   leads llama.cpp 3124/3965/4551 vs 2809/3037/3175 tok/s at 256/700/2048 tokens. Two residuals:
+   pp35 reads 611 vs their 721 (the one-tile small-M regime of the GEMM ladder), and the plain step
+   drops 11.5% from 35 to 2048 keys where theirs drops 6% (`ATTN_CHUNK_ROWS` = 64 keys per
+   threadgroup plus the combine pass; ours still leads 110 vs 94 at 2048). Done = the small-M
+   prefill profiled at M = 32/64/128 against their pp rows, and the decode attention microbenched
+   at 512/1024/2048/4096 keys against `test-backend-ops` FLASH_ATTN_EXT rows.
 72. **Dense Qwen3.6-27B: the multi-row verify and the plain step.** Same ruler: llama.cpp's
    4-row verify on the dense 27B costs ~1.05-1.1x a step (their depth 3 = 1.61-1.72x), ours 1.3-1.8x
    (depth 3 loses); their plain decode is +6% on ours (28.4 vs 26.7). Done = the rows probe on the
    27B at B=1/2/4 with the per-kernel split (where the extra rows are paid: GEMV rail vs the
    mp-8 / GEMM crossover), and the plain-step gap profiled kernel by kernel.
-
+73. **An untuned Metal start serves no tensor crowns - a 2.3x prefill cliff with a one-line
+   warning.** After every rebuild the staleness rule drops the box sidecar, and with it the
+   `runtime.metal_tensor` membership, so every dev run until the next mint prefills gemma-26B at
+   1662 instead of 3835 tok/s while printing only "untuned kernels run fallback". The twin race
+   that decides the membership costs well under a second (the mint's `METAL_TWIN` rows are
+   0.03-0.45 ms dispatches, best-of-3). Candidate: an untuned Metal start races the twins in place
+   of serving none, or the warning states the magnitude. NEEDS BORIS'S RULING - a tune-framework
+   policy, not a kernel change.
