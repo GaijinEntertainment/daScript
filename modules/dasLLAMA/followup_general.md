@@ -897,11 +897,16 @@
    threadgroup plus the combine pass; ours still leads 110 vs 94 at 2048). Done = the small-M
    prefill profiled at M = 32/64/128 against their pp rows, and the decode attention microbenched
    at 512/1024/2048/4096 keys against `test-backend-ops` FLASH_ATTN_EXT rows.
-72. **Dense Qwen3.6-27B: the multi-row verify and the plain step.** Same ruler: llama.cpp's
-   4-row verify on the dense 27B costs ~1.05-1.1x a step (their depth 3 = 1.61-1.72x), ours 1.3-1.8x
-   (depth 3 loses); their plain decode is +6% on ours (28.4 vs 26.7). Done = the rows probe on the
-   27B at B=1/2/4 with the per-kernel split (where the extra rows are paid: GEMV rail vs the
-   mp-8 / GEMM crossover), and the plain-step gap profiled kernel by kernel.
+72. **Dense 27B: the two-row verify streams the weights twice.** Records day (M5, Qwen3.8-27B +
+   Q8_0 head, settled, exe-first): our round is 53.9 ms - draft 3 ms, verify 42 ms on a 36.2 ms
+   plain step (**1.19x**) - for 1.78 tokens; llama.cpp's round is 54.4 ms on a 39.2 ms step for 1.85
+   tokens (their acceptance on their own continuation). Equal rounds, our faster step, so the
+   speculative gain reads 1.20x against their 1.34x. The lever is ours alone: a two-row verify
+   that streams each weight plane once is ~1.05x a step, worth ~+12% on the dense carrier at the
+   same acceptance. The Qwen3.6-27B-MTP in-file head (dev rail, 2026-09-02) is the case where THEIR
+   rows come cheap: n_max 3 = 1.61-1.72x while ours lost at depth 3 (1.3-1.8x per extra row), so
+   the rows probe at B = 1/2/4 with the per-kernel split (GEMV rail vs the mp-8 / GEMM crossover)
+   is the first measurement, then the plain-step gap (28.4 vs 26.7 there) kernel by kernel.
 73. **Metal twin crowns keyed by device plus MSL hash, raced lazily.** The binary-mtime staleness
    rule is the wrong key for the tensor twins in both directions: a C++ rebuild that changes no MSL
    wipes them, a `.das` emitter edit that changes the MSL leaves them standing. Step 1 landed with
