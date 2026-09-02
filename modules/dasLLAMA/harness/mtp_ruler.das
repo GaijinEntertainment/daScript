@@ -532,21 +532,23 @@ def main() {
     print("ruler: {length(texts)} prompts from {cfg.prompts}; head = {empty(head) ? "(none)" : head}\n")
     var rows : array<string>
     let depths <- parse_depths(cfg.depths)
+    //! the exe measures FIRST, from a parent that has loaded nothing: a parent that had just run
+    //! the engine in-process read the exe's speculative arm 20% low (27.5 -> 26.4 vs 32.5 clean)
+    if (!empty(cfg.exe)) {
+        for (d in depths) {
+            run_das(cfg, head, d, rows)
+        }
+    }
     apply_box_profile_runtime()
     set_metal_mode(MetalMode.when_available)
     var rendered : array<string>
     var ours : array<string>
     render_prompts(cfg.model, texts, cfg.ngen, rendered, ours)
-    rows |> reserve(length(ours))
+    rows |> reserve(length(rows) + length(ours))
     for (pi in range(length(ours))) {
         let head96 = head_of(ours[pi], 96)
         rows |> push(write_json(JV((engine = "das", depth = 0, prompt = pi, text = head96))))
         print("ruler: das greedy prompt {pi}: {head96}\n")
-    }
-    if (!empty(cfg.exe)) {
-        for (d in depths) {
-            run_das(cfg, head, d, rows)
-        }
     }
     if (!empty(cfg.server)) {
         run_lcpp_arm(cfg, head, 0, rendered, ours, rows)
