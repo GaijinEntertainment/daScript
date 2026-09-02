@@ -2230,8 +2230,10 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         // body so the scope still COMPLETES — a missing key re-tunes every start
         pending[entry] = empty(w) ? "reference" : w
         print("{entry} winner: {empty(w) ? "reference (gate-failure fallback)" : w}\n")
-        if (!empty(gw)) {   // the gemv's own seat (same layout as the tile's); absent = the companion follows the tile
-            pending[kq_gemv_entry(fmt)] = gw
+        // ALWAYS written: tune_sidecar_merge is upsert-only, so a seat the re-race no longer wants
+        // must be overwritten with the follow-the-tile spelling, not left standing
+        pending[kq_gemv_entry(fmt)] = empty(gw) ? (empty(w) ? "reference" : w) : gw
+        if (!empty(gw)) {
             print("{kq_gemv_entry(fmt)} winner: {gw} (the tile seat {w} keeps the tile)\n")
         }
         g_rows[entry] = JV(krows)

@@ -75,7 +75,7 @@ fi
 for f in $(cut -f1 "$WORK/ours.tsv" | sort -u); do
     t=$(ggml_type "$f")
     [ -n "$t" ] || { echo "kernel_ladder: no ggml type for '$f'" >&2; continue; }
-    GGML_BENCH_THREADS=$THREADS "$TBO" perf -b CPU -o MUL_MAT -p "type_a=$t,type_b=f32,m=$ROWS,n=(1|512)," 2>/dev/null \
+    GGML_BENCH_THREADS=$THREADS "$TBO" perf -b CPU -o MUL_MAT -p "type_a=$t,type_b=f32,m=$ROWS,n=(1|$NTOK)," 2>/dev/null \
         | sed 's/\x1b\[[0-9;]*m//g' | awk -v f="$f" '
             /MUL_MAT\(/ {
                 n = $0; sub(/.*,n=/, "", n); sub(/,.*/, "", n)

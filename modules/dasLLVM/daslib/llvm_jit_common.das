@@ -430,7 +430,7 @@ var public g_target_x64_f16c = false
 var public g_target_x64_vnni256 = false
 var public g_target_x64_avx512bw = false
 var public g_target_x64_avx512vnni = false
-var public g_target_x64_avx512vbmi = false   //! zmm byte permutes across two registers (VPERMI2B) + VPMULTISHIFTQB: the grid formats' symbol lattice
+var public g_target_x64_avx512vbmi = false   //! zmm byte permutes across two registers (VPERMI2B) + VPMULTISHIFTQB
 // AVX-VNNI-INT8 (VEX vpdpbssd — native s8×s8, no sign trick). No shipped silicon in the fleet
 // yet; lights up via cpuid on future boxes and via DAS_JIT_X64_FORCE_FEATURES for emission-only
 // verification today.

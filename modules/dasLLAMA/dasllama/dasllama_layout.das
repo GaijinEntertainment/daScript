@@ -961,11 +961,11 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                             if (grouped) {
                                 let gq = qp + sliceQ + g * mr * qrow + sbi * qsb * mr
                                 let gs = sp + sliceS + g * mr * srow + sbi * dssb * mr
-                                if (fmt == KqFmt.iq3s) {   // 26 uniform 4-qhbyte columns over [qs][qh][signs]
+                                if (fmt == KqFmt.iq3s) {   // 26 uniform 4-byte columns over [qs][qh][signs]
                                     for (m in range64(104l)) {
                                         dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                     }
-                                } elif (fmt == KqFmt.iq3xxs) {   // 24 uniform 4-qhbyte columns over [qs][aux]
+                                } elif (fmt == KqFmt.iq3xxs) {   // 24 uniform 4-byte columns over [qs][aux]
                                     for (m in range64(96l)) {
                                         dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                     }
@@ -991,15 +991,15 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     for (m in range64(64l)) {
                                         dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                     }
-                                } elif (fmt == KqFmt.iq2s) {   // 18 uniform 4-qhbyte columns over [idx][signs][qh]
+                                } elif (fmt == KqFmt.iq2s) {   // 18 uniform 4-byte columns over [idx][signs][qh]
                                     for (m in range64(72l)) {
                                         dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                     }
-                                } elif (fmt == KqFmt.iq2xs) {   // 16 uniform 4-qhbyte columns over the u16 qs words
+                                } elif (fmt == KqFmt.iq2xs) {   // 16 uniform 4-byte columns over the u16 qs words
                                     for (m in range64(64l)) {
                                         dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                     }
-                                } elif (fmt == KqFmt.iq2xxs) {   // 16 uniform 4-qhbyte columns over the u16 qs words
+                                } elif (fmt == KqFmt.iq2xxs) {   // 16 uniform 4-byte columns over the u16 qs words
                                     for (m in range64(64l)) {
                                         dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                     }

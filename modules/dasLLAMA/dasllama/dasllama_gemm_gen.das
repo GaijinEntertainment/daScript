@@ -452,7 +452,7 @@ def private bias_acc_init(var te : TileEmit; var bi, xlo, xhi : LLVMOpaqueValue?
 //! llvm.prefetch(read, high locality, data) of the weight plane at byte offset `off`
 def private prefetch_wg(var te : TileEmit; var off : LLVMOpaqueValue?) {
     let b = te.builder
-    var p = LLVMBuildGEP2(b, te.types.t_int8, te.wg, off, "")
+    var p = LLVMBuildGEP2(b, te.types.t_int8, te.wg, off, "", false)   // the look-ahead runs past the plane's end by design - inbounds would be poison
     var args <- [p, te.types->ConstI32(0ul), te.types->ConstI32(3ul), te.types->ConstI32(1ul)]
     LLVMBuildCall2(b, te.prefetch_ty, te.prefetch_decl, args, "")
 }
@@ -1503,7 +1503,7 @@ def private grid_rows_path(te : TileEmit) : bool {
 }
 
 //! eight +-1 bytes for sign byte `sb`, lane k negative when bit k is set
-def private pm1_of(sb : int) : uint64 {
+def public pm1_of(sb : int) : uint64 {   // test_kquant round-trips the sign expansion
     var v = 0ul
     for (k in range(8)) {
         v |= uint64(((sb >> k) & 1) != 0 ? 0xFF : 0x01) << uint64(8 * k)
@@ -1877,7 +1877,7 @@ def private vbmi_push_iq2(te : TileEmit; var p0, p1 : array<LLVMOpaqueValue?>; w
 }
 
 //! the grid's symbol alphabet: the halved iq3xxs magnitudes, iq3s's odd magnitudes, the iq2 family's three
-def private vbmi_alphabet(kq : int) : array<int> {
+def public vbmi_alphabet(kq : int) : array<int> {   // test_kquant round-trips the code planes
     if (kq == 34) return <- [2, 6, 10, 14, 18, 22, 26, 31]
     if (kq == 33) return <- [1, 3, 5, 7, 9, 11, 13, 15]
     return <- [8, 25, 43]
@@ -1908,7 +1908,7 @@ def private vbmi_tag(kq : int) : string => kq == 25 ? "iq2xxs" : (kq == 24 ? "iq
 def private vbmi_entries(kq : int) : int => (kq == 25 || kq == 34) ? 256 : (kq == 23 ? 1024 : 512)
 
 //! a grid word's low `nbytes` weight bytes as packed symbols (weight t at bits t*bits); a byte outside the alphabet is a broken table
-def private vbmi_pack_word(word : uint; alpha : array<int>; bits, nbytes : int) : int {
+def public vbmi_pack_word(word : uint; alpha : array<int>; bits, nbytes : int) : int {
     var code = 0
     for (t in range(nbytes)) {
         let wb = int((word >> uint(8 * t)) & 0xFFu)

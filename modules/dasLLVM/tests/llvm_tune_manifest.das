@@ -95,6 +95,22 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     t |> success(other6)   // no sidecar entry -> the fallback stamp (k1) stands
     t |> success(ref5)     // explicit "reference" entry -> the original body despite fallback
 
+    // the companion's OWN sidecar entry (the gemv-seat rail): man_kv stamps from it while man_add keeps k2
+    var olines : array<string>
+    let rco = spawn_client("\"{bin}\" -jit \"{clientPath}\" -- write-own", olines)
+    t |> equal(rco, 0)
+    var ownLines : array<string>
+    let rcor = spawn_client("\"{bin}\" -jit \"{clientPath}\"", ownLines)
+    t |> equal(rcor, 0)
+    var ownResult7 = false
+    var ownKv1 = false
+    for (ln in ownLines) {
+        ownResult7 ||= ln == "RESULT 7"
+        ownKv1 ||= ln == "KV 1"
+    }
+    t |> success(ownResult7, "the main entry still stamps k2")
+    t |> success(ownKv1, "the companion stamps from its own entry")
+
     // STALE sidecar (older than the daslang binary) reads as absent: back to fallback tier
     let backRes = set_mtime_result(sidecarPath, mktime(2000, 1, 1, 0, 0, 0))
     t |> success(!(backRes is error), "could not back-date the sidecar")

@@ -867,3 +867,14 @@
     at 10 lanes), so the sdot gate is already right. What would actually lift iq2xs on ARM is a cheaper 9-bit
     index path in the row form (its u16 word costs two column-byte reads per site where iq2xxs reads one), or
     an ARM analog of the x86 symbol lattice over SMMLA - both open kernel work, not a gate flip.
+
+69. **A class profile can carry winners a class member cannot run.** `tune_cpu_class()` puts every
+    AVX512VNNI+BW host in `x86-vnni512`, and that class's shipped profile now carries `grid_vbmi`
+    winners minted on zen4 (which has VBMI). On a member without VBMI (Cascade Lake, Ice Lake-SP
+    predecessors), adoption marks the profile complete - nothing races - and every vbmi entry
+    declines at stamp time to its `fallback=` chain, silently costing those boxes the grid formats'
+    best seats. Two candidate fixes, unbuilt: split a `x86-vbmi512` class above `x86-vnni512` in
+    `tune_cpu_class` / `tune_class_chain` (a re-mint renames the profile), or make `profile_try_adopt`
+    race any family whose adopted winner names a perm `tune_requires_ok` rejects locally (general,
+    no rename, needs the suffix -> requires mapping surfaced to the adopt layer). The woodpecker
+    round raised the Cascade Lake case.
