@@ -16,6 +16,8 @@ require math
 require dasllama/dasllama_env
 require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
 
+let MODULE_CACHE = ".jitted_scripts/module_cache/dastest.dascache"   // `-jit -module-cache`: the dastest child skips the module-graph compile after its first run
+
 [CommandLineArgs]
 struct RunArgs {
     @clarg_short = "a"
@@ -287,12 +289,13 @@ def main() : int {
     let tmo = cfg.full ? 3600 : 1200
     let reps = max(cfg.nreps, 1)
     let das_exe = empty(cfg.das) ? get_command_line_arguments()[0] : cfg.das
+    mkdir(dir_name(MODULE_CACHE))   // the front-end cache: the first run writes it, later runs skip the module-graph compile
     var failures = 0
     for (rep in range(reps)) {
         for (file in files) {
             let tag = base_name(file)
             let log_path = path_join(tmp, "dasllama_run_{tag}_{rep}_{ref_time_ticks()}.log")
-            let cmd = "{envs}\"{das_exe}\" -jit dastest/dastest.das -- --test \"{file}\" --timeout {tmo} > \"{log_path}\" 2>&1"
+            let cmd = "{envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das -- --test \"{file}\" --timeout {tmo} > \"{log_path}\" 2>&1"
             let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
             to_log(LOG_INFO, "START {tag}{rep_tag}: {cmd}\n")
             let t0 = ref_time_ticks()

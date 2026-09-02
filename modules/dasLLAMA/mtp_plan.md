@@ -572,7 +572,15 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   gemma verify's 1.34x is NOT expert traffic: it is the round's software cost - a synchronous batch
   step (no one-deep pipeline), the CPU accept walk over 2 x 262144 logits, the landing memcpys, the
   synchronous per-draft command buffer. ~4 ms per round recoverable => depth 1 from 1.13x toward ~1.5x.
-  The dedup below stays relevant for the qwen MoE carrier only.
+  The dedup below stays relevant for the qwen MoE carrier only. Same-slab through the verify entry
+  (`--sameslab`): B=2 1.01x, B=4 1.25x, **B=5 1.81x** (the mp-8 two-tile rail: the depth-3/4 cliff).
+  So the round at depth 1 = draft 1.35 + same-slab step ~10.3 + walk/commit ~0.7 ms, strictly serial,
+  against a pipelined single step of 8.2 ms - the batch step's synchronous shape (no one-deep overlap,
+  CPU landing of 2 x 1 MB logits) and the serial phases are the recoverable part. GPU envelope
+  (`DASLLAMA_METAL_PIPE_DEBUG=1`) of the two-row batch step: 9.8 ms GPU + 0.4 ms gap - the step is
+  GPU-bound, so the round's floor is ~9.8 (verify) + ~1.0 (draft GPU) = 10.8 ms => depth 1 ~1.32x
+  once the CPU walk, the landing and the serial gaps are gone; the 2-row weight stream itself
+  (9.8 vs the pipelined single's 8.2) is the physics.
   The dedup has a home: the prefill's MoE bucket rail (`pf_enc_moe_count` -> `pf_enc_moe_bucket`
   -> per-expert gathered mul_mm over the bucket rows, ARCHITECTURE_GPU_PREFILL.md#prefill-moe-buckets)
   already builds the per-expert row lists on the GPU; a <=8-row verify wants the same two bucket
