@@ -555,10 +555,14 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   rails while acceptance halves per position. The two depth-4 runs differ by 25% (78 vs 103) at
   1% sd each - a systematic between-run effect (thermal / the sweep's fourth run), to be re-measured
   before anything is recorded.
-- Round economics at depth 1: 1.746 tok/round for 1.13x => a round costs 1.55 target steps, i.e. the
-  DRAFT STEP costs ~0.55 of a target step (~3.7 ms) for 420M params (~0.45 GB q8 => ~1.1 ms at
-  bandwidth). The synchronous per-draft command buffer + wait, the 262144-row tied head (64% of the
-  drafter's weights), and the single-row GEMV forms are the suspects - the S5 fat list for gemma.
+- Round economics at depth 1, MEASURED (the round's own clocks): draft chain 1.35 ms/round,
+  verify + walk + commit 10.97 ms/round, plain step 8.17 ms. The two-row verify costs 1.34x a plain
+  step - the MoE EXPERT UNION (two consecutive rows select up to 16 of 128 experts per layer, the
+  batched expert GEMV streams every (row, slot) plane, shared experts twice), the wall llama.cpp and
+  the July data named. 1.746 tok/round at 12.3 ms vs 8.17 = 1.16x predicted, 1.13x measured. Depth 2:
+  draft 2.78, verify 13.38 (1.64x a step) for 2.27 tok/round = 1.15x. So on gemma-26B the drafter is
+  NOT the fat; the verify is, and it is physics unless the batched MoE GEMV dedups the expert union
+  (gather the rows that share an expert, stream the plane once) - the S5 item that moves this model.
   vLLM reports 1.60x at B1 for gemma-26 (bf16, their acceptance is higher too).
 - **Pre-norm vs post-norm target hidden: SETTLED for post-norm** (llama.cpp's reading). Counting
   free-run, GPU drafter: post-norm k1 19/21, k2 44/55, k4 72/103 vs pre-norm 17/23, 40/57, 66/113 -
