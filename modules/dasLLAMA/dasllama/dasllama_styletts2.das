@@ -767,92 +767,117 @@ struct StyleTts2Trace {
     frames : int64
 }
 
-// Self-attention on token-major h [t][hidden]: the projections on the tiled GEMM, then one
-// head per lane - Q.K^T and P.V on the tiles over a 16-padded key axis (the pad keys score
-// -1e30 and carry zero values), softmax per row between them.
-def private albert_attention(a : St2Albert; h : array<float>; t : int64; var out : array<float>) {
-    var inscope @scratch q : array<float>
-    var inscope @scratch k : array<float>
-    var inscope @scratch v : array<float>
-    var inscope @scratch ctx : array<float>
-    var inscope @scratch head_scratch : array<float>
+//! The synthesis carrier: every activation buffer the pass sizes, reused across syntheses (a
+//! context runs one at a time), so a synthesis allocates nothing - the `[hot_path]` contract.
+//! `wave` is the last synthesis's waveform; `noise` the source noise it drew.
+struct St2Scratch {
+    @scratch @exact_size s_ref : array<float>
+    @scratch @exact_size s_pro : array<float>
+    @scratch @exact_size bert : array<float>
+    @scratch @exact_size d_en : array<float>
+    @scratch @exact_size t_en : array<float>
+    @scratch @exact_size d : array<float>
+    @scratch @exact_size dur : array<int>
+    @scratch @exact_size raw : array<float>
+    @scratch @exact_size en : array<float>
+    @scratch @exact_size asr : array<float>
+    @scratch @exact_size f0 : array<float>
+    @scratch @exact_size nrg : array<float>
+    @scratch @exact_size wave : array<float>
+    noise : TtsNoise = TtsNoise()
+    @scratch @exact_size al_e : array<float>
+    @scratch @exact_size al_attn : array<float>
+    @scratch @exact_size al_f : array<float>
+    @scratch @exact_size al_f2 : array<float>
+    @scratch @exact_size att_q : array<float>
+    @scratch @exact_size att_k : array<float>
+    @scratch @exact_size att_v : array<float>
+    @scratch @exact_size att_ctx : array<float>
+    @scratch @exact_size te_xtm : array<float>
+    @scratch @exact_size te_a : array<float>
+    @scratch @exact_size te_b : array<float>
+    @scratch @exact_size de_x : array<float>
+    @scratch @exact_size de_y : array<float>
+    @scratch @exact_size du_x : array<float>
+    @scratch @exact_size du_logits : array<float>
+    @scratch @exact_size pr_en_tm : array<float>
+    @scratch @exact_size pr_x_tm : array<float>
+    @scratch @exact_size pr_x : array<float>
+    @scratch @exact_size pb_a : array<float>
+    @scratch @exact_size pb_b : array<float>
+    @scratch @exact_size rb_r : array<float>
+    @scratch @exact_size rb_pooled : array<float>
+    @scratch @exact_size rb_c1 : array<float>
+    @scratch @exact_size rb_sc : array<float>
+    @scratch @exact_size rb_sc2 : array<float>
+    @scratch @exact_size dec_f0d : array<float>
+    @scratch @exact_size dec_nd : array<float>
+    @scratch @exact_size dec_res : array<float>
+    @scratch @exact_size dec_a : array<float>
+    @scratch @exact_size dec_b : array<float>
+    @scratch @exact_size dec_cat : array<float>
+    @scratch @exact_size dec_har : array<float>
+    @scratch @exact_size dec_spec : array<float>
+    @scratch @exact_size so_sines : array<float>
+    @scratch @exact_size hs_padded : array<float>
+    @scratch @exact_size hs_re : array<float>
+    @scratch @exact_size hs_im : array<float>
+    @scratch @exact_size gen_a : array<float>
+    @scratch @exact_size gen_b : array<float>
+    @scratch @exact_size st_y : array<float>
+    @scratch @exact_size st_rb : array<float>
+    @scratch @exact_size st_src_ct : array<float>
+    @scratch @exact_size st_src : array<float>
+    @scratch @exact_size st_src_res : array<float>
+    @scratch @exact_size grb_xt : array<float>
+    @scratch @exact_size grb_y1 : array<float>
+    @scratch @exact_size grb_y2 : array<float>
+    @scratch @exact_size gen_post : array<float>
+    @scratch @exact_size gen_re : array<float>
+    @scratch @exact_size gen_im : array<float>
+    @scratch @exact_size gen_wr : array<float>
+    @scratch @exact_size gen_wi : array<float>
+}
+
+// ===== the trace rail's captures: the oracle harness's opt-in leg, cold by contract =====
+
+[cold_path]
+def private trace_take(var dst : array<float>; src : array<float>) {
+    dst := src
+}
+
+[cold_path]
+def private trace_rows(var dst : array<float>; rows : array<float>; t, c : int64) {
+    transpose_tc(rows, t, c, dst)
+}
+
+[cold_path]
+def private trace_rows_strided(var dst : array<float>; rows : array<float>; t, c, stride : int64) {
+    transpose_tc_strided(rows, t, c, stride, dst)
+}
+
+// Self-attention on token-major h [t][hidden]: the projections on the tiled GEMM, the heads
+// on the attention kernel, the output projection back on the tile.
+def private albert_attention(a : St2Albert; h : array<float>; t : int64; var out : array<float>; var sc : St2Scratch) {
+    var q & = unsafe(sc.att_q)
+    var k & = unsafe(sc.att_k)
+    var v & = unsafe(sc.att_v)
+    var ctx & = unsafe(sc.att_ctx)
     linear_rows(a.q, h, t, q)
     linear_rows(a.k, h, t, k)
     linear_rows(a.v, h, t, v)
-    let hidden = a.hidden
-    let heads = a.heads
-    let dh = hidden / heads
-    let tp = (t + 15l) / 16l * 16l
-    let per_head = t * dh + dh * tp + tp * dh + t * tp + t * dh   // qh, kT, vh, s, oh
-    ctx |> reserve_resize(t * hidden)
-    head_scratch |> reserve_resize(heads * per_head)
-    let scale = 1.0 / sqrt(float(dh))
-    let qp = unsafe(addr<float const?>(q[0]))
-    let kp = unsafe(addr<float const?>(k[0]))
-    let vp = unsafe(addr<float const?>(v[0]))
-    var cp = unsafe(addr(ctx[0]))
-    var sp = unsafe(addr(head_scratch[0]))
-    maybe_parallel_for(0, int(heads), int(heads)) $(hb, he) {
-        unsafe {
-            for (hd in range64(int64(hb), int64(he))) {
-                let off = hd * dh
-                var qh = sp + hd * per_head
-                var kT = qh + t * dh
-                var vh = kT + dh * tp
-                var s = vh + tp * dh
-                var oh = s + t * tp
-                for (i in range64(t)) {
-                    for (e in range64(dh)) {
-                        qh[i * dh + e] = qp[i * hidden + off + e]
-                        vh[i * dh + e] = vp[i * hidden + off + e]
-                        kT[e * tp + i] = kp[i * hidden + off + e]
-                    }
-                }
-                for (i in range64(t * dh, tp * dh)) {
-                    vh[i] = 0.0
-                }
-                for (e in range64(dh)) {
-                    for (i in range64(t, tp)) {
-                        kT[e * tp + i] = 0.0
-                    }
-                }
-                for (i in range64(t * tp)) {
-                    s[i] = 0.0
-                }
-                gemm_f32_jo(s, qh, kT, t, dh, tp)
-                for (i in range64(t)) {
-                    var row = s + i * tp
-                    for (j in range64(t)) {
-                        row[j] *= scale
-                    }
-                    for (j in range64(t, tp)) {
-                        row[j] = -1e30
-                    }
-                    softmax(row, tp)
-                }
-                for (i in range64(t * dh)) {
-                    oh[i] = 0.0
-                }
-                gemm_f32_jo(oh, s, vh, t, tp, dh)
-                for (i in range64(t)) {
-                    for (e in range64(dh)) {
-                        cp[i * hidden + off + e] = oh[i * dh + e]
-                    }
-                }
-            }
-        }
-    }
+    attention_rows(q, k, v, t, a.hidden, a.heads, ctx)
     linear_rows(a.dense, ctx, t, out)
 }
 
 //! The PL-BERT encoder: embeddings, then one ALBERT layer applied n_layers times; out [T][hidden].
-def styletts2_albert(a : St2Albert; ids : array<int>; @exact_size var out : array<float>) {
+def styletts2_albert(a : St2Albert; ids : array<int>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) {
     let t = long_length(ids)
     if (t > a.max_pos) {
         panic("dasLLAMA styletts2: {t} tokens exceed the encoder's {a.max_pos} positions")
     }
-    var inscope @exact_size e : array<float>
-    e |> reserve_resize(t * a.emb_dim)
+    unsafe(scratch_resize(sc.al_e, t * a.emb_dim))
+    var e & = unsafe(sc.al_e)
     for (i in range64(t)) {
         let id = int64(ids[i])
         for (d in range64(a.emb_dim)) {
@@ -860,58 +885,63 @@ def styletts2_albert(a : St2Albert; ids : array<int>; @exact_size var out : arra
         }
     }
     layernorm_rows(e, t, a.emb_dim, a.emb_ln, ALBERT_EPS)
-    var inscope @exact_size h : array<float>
-    linear_rows(a.map_in, e, t, h)
-    var inscope @scratch attn : array<float>
-    var inscope @scratch f : array<float>
-    var inscope @scratch f2 : array<float>
+    linear_rows(a.map_in, e, t, out)
+    var attn & = unsafe(sc.al_attn)
+    var f & = unsafe(sc.al_f)
+    var f2 & = unsafe(sc.al_f2)
     let n = t * a.hidden
     for (_layer in range64(a.n_layers)) {
-        albert_attention(a, h, t, attn)
+        albert_attention(a, out, t, attn, sc)
         for (i in range64(n)) {
-            attn[i] += h[i]
+            attn[i] += out[i]
         }
         layernorm_rows(attn, t, a.hidden, a.attn_ln, ALBERT_EPS)
         linear_rows(a.ffn, attn, t, f)
         gelu(f, t * a.ffn.nout)
         linear_rows(a.ffn_out, f, t, f2)
         for (i in range64(n)) {
-            h[i] = f2[i] + attn[i]
+            out[i] = f2[i] + attn[i]
         }
-        layernorm_rows(h, t, a.hidden, a.full_ln, ALBERT_EPS)
+        layernorm_rows(out, t, a.hidden, a.full_ln, ALBERT_EPS)
     }
-    delete out
-    out <- h
 }
 
 //! The text encoder: embedding, conv + channel LayerNorm + LeakyReLU stack, BiLSTM; out [C][T].
-def styletts2_text_encoder(te : St2TextEncoder; ids : array<int>; @exact_size var out : array<float>) {
+def styletts2_text_encoder(te : St2TextEncoder; ids : array<int>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) {
     let t = long_length(ids)
     let c = te.c
-    var inscope @exact_size xtm : array<float>
-    xtm |> reserve_resize(t * c)
+    unsafe(scratch_resize(sc.te_xtm, t * c))
+    var xtm & = unsafe(sc.te_xtm)
     for (i in range64(t)) {
         let id = int64(ids[i])
         for (d in range64(c)) {
             xtm[i * c + d] = te.emb.a[id * c + d]
         }
     }
-    var inscope @exact_size x : array<float>
-    transpose_tc(xtm, t, c, x)
-    var inscope @exact_size y : array<float>
-    for (i in range(length(te.cnn))) {
-        conv1d(te.cnn[i], x, t, y)
-        layernorm_channels(y, c, t, te.cnn_ln[i], LN_EPS)
-        leaky_relu(y, c * t, 0.2)
-        delete x
-        x <- y
+    var a & = unsafe(sc.te_a)
+    var b & = unsafe(sc.te_b)
+    transpose_tc(xtm, t, c, a)
+    for (i in range(length(te.cnn))) {   // the conv stack ping-pongs a and b
+        if (i % 2 == 0) {
+            conv1d(te.cnn[i], a, t, b)
+            layernorm_channels(b, c, t, te.cnn_ln[i], LN_EPS)
+            leaky_relu(b, c * t, 0.2)
+        } else {
+            conv1d(te.cnn[i], b, t, a)
+            layernorm_channels(a, c, t, te.cnn_ln[i], LN_EPS)
+            leaky_relu(a, c * t, 0.2)
+        }
     }
-    transpose_ct(x, c, t, xtm)
-    bilstm(te.lstm, xtm, t, y)
-    transpose_tc(y, t, c, out)
+    if (length(te.cnn) % 2 == 1) {
+        transpose_ct(b, c, t, xtm)
+    } else {
+        transpose_ct(a, c, t, xtm)
+    }
+    bilstm(te.lstm, xtm, t, a)
+    transpose_tc(a, t, c, out)
 }
 
-def private append_style_rows(x : array<float>; t, c : int64; s : array<float>; @exact_size var out : array<float>) {
+def private append_style_rows(x : array<float>; t, c : int64; s : array<float>; @scratch @exact_size var out : array<float>) {
     let sd = long_length(s)
     out |> reserve_resize(t * (c + sd))
     for (i in range64(t)) {
@@ -926,25 +956,24 @@ def private append_style_rows(x : array<float>; t, c : int64; s : array<float>; 
 
 //! The duration encoder: alternating BiLSTM and AdaLayerNorm passes over the BERT features
 //! with the prosody style appended after each; out is token-major [T][C + style].
-def styletts2_duration_encoder(p : St2Predictor; d_en : array<float>; t : int64; s : array<float>; @exact_size var out : array<float>) {
+def styletts2_duration_encoder(p : St2Predictor; d_en : array<float>; t : int64; s : array<float>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) {
     let c = p.bert_encoder.nout
-    var inscope @exact_size x : array<float>
-    var inscope @exact_size y : array<float>
+    var x & = unsafe(sc.de_x)
+    var y & = unsafe(sc.de_y)
     append_style_rows(d_en, t, c, s, x)
     for (i in range(length(p.lstms))) {
         bilstm(p.lstms[i], x, t, y)
         ada_layernorm_rows(p.lns[i], y, t, c, s, LN_EPS)
         append_style_rows(y, t, c, s, x)
     }
-    delete out
-    out <- x
+    copy_floats_into(x, t * (c + long_length(s)), out)
 }
 
 //! Frame counts per token: sigmoid(duration logits) summed, divided by speed, rounded half
 //! to even, at least one. Returns the total frame count.
-def styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : float; @exact_size var dur : array<int>; @exact_size var raw : array<float>) : int64 {
-    var inscope @exact_size x : array<float>
-    var inscope @exact_size logits : array<float>
+def styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : float; @scratch @exact_size var dur : array<int>; @scratch @exact_size var raw : array<float>; var sc : St2Scratch) : int64 {
+    var x & = unsafe(sc.du_x)
+    var logits & = unsafe(sc.du_logits)
     bilstm(p.lstm, d, t, x)
     linear_rows(p.duration_proj, x, t, logits)
     let nb = p.duration_proj.nout
@@ -964,88 +993,105 @@ def styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : f
     return frames
 }
 
-def private copy_floats_into(src : array<float>; n : int64; @exact_size var dst : array<float>) {
+def private copy_floats_into(src : array<float>; n : int64; @scratch @exact_size var dst : array<float>) {
     dst |> reserve_resize(n)
     for (i in range64(n)) {
         dst[i] = src[i]
     }
 }
 
-def private adain_res_blk(b : St2AdainResBlk; x : array<float>; t : int64; s : array<float>; @exact_size var out : array<float>) : int64 {
-    var inscope @exact_size r : array<float>
+// out = (out + shortcut) / sqrt(2): the residual block's join
+def private residual_join(var out : array<float>; shortcut : array<float>; n : int64) {
+    let inv = 1.0 / sqrt(2.0)
+    for (i in range64(n)) {
+        out[i] = (out[i] + shortcut[i]) * inv
+    }
+}
+
+def private adain_res_blk(b : St2AdainResBlk; x : array<float>; t : int64; s : array<float>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) : int64 {
+    var r & = unsafe(sc.rb_r)
+    var pooled & = unsafe(sc.rb_pooled)
+    var c1 & = unsafe(sc.rb_c1)
+    var shortcut & = unsafe(sc.rb_sc)
+    var shortcut2 & = unsafe(sc.rb_sc2)
     copy_floats_into(x, b.dim_in * t, r)
     adain(b.norm1, r, b.dim_in, t, s, LN_EPS)
     leaky_relu(r, b.dim_in * t, 0.2)
     var t1 = t
     if (b.upsample) {
-        var inscope @exact_size pooled : array<float>
         conv1d(b.pool, r, t, pooled)
         t1 = conv1d_out_len(b.pool, t)
-        delete r
-        r <- pooled
+        conv1d(b.conv1, pooled, t1, c1)
+    } else {
+        conv1d(b.conv1, r, t1, c1)
     }
-    var inscope @exact_size c1 : array<float>
-    conv1d(b.conv1, r, t1, c1)
     adain(b.norm2, c1, b.dim_out, t1, s, LN_EPS)
     leaky_relu(c1, b.dim_out * t1, 0.2)
     conv1d(b.conv2, c1, t1, out)
-    var inscope @exact_size sc : array<float>
     if (b.upsample) {
-        resize_nearest(x, b.dim_in, t, 2l, sc)
+        resize_nearest(x, b.dim_in, t, 2l, shortcut)
     } else {
-        copy_floats_into(x, b.dim_in * t, sc)
+        copy_floats_into(x, b.dim_in * t, shortcut)
     }
     if (b.learned_sc) {
-        var inscope @exact_size sc2 : array<float>
-        conv1d(b.conv1x1, sc, t1, sc2)
-        delete sc
-        sc <- sc2
-    }
-    let inv = 1.0 / sqrt(2.0)
-    for (i in range64(b.dim_out * t1)) {
-        out[i] = (out[i] + sc[i]) * inv
+        conv1d(b.conv1x1, shortcut, t1, shortcut2)
+        residual_join(out, shortcut2, b.dim_out * t1)
+    } else {
+        residual_join(out, shortcut, b.dim_out * t1)
     }
     return t1
 }
 
-def private prosody_branch(blocks : array<St2AdainResBlk>; proj : TtsConv1d; x : array<float>; frames : int64; s : array<float>; @exact_size var out : array<float>) : int64 {
-    var inscope @exact_size a : array<float>
-    var inscope @exact_size b : array<float>
-    copy_floats_into(x, long_length(x), a)
+// The branch's residual blocks ping-pong the carrier's two branch buffers, the first reading x.
+def private prosody_branch(blocks : array<St2AdainResBlk>; proj : TtsConv1d; x : array<float>; frames : int64; s : array<float>;
+                           @scratch @exact_size var out : array<float>; var sc : St2Scratch) : int64 {
+    var a & = unsafe(sc.pb_a)
+    var b & = unsafe(sc.pb_b)
     var t = frames
-    for (blk in blocks) {
-        t = adain_res_blk(blk, a, t, s, b)
-        delete a
-        a <- b
+    let nb = length(blocks)
+    for (i in range(nb)) {
+        if (i == 0) {
+            t = adain_res_blk(blocks[i], x, t, s, a, sc)
+        } elif (i % 2 == 1) {
+            t = adain_res_blk(blocks[i], a, t, s, b, sc)
+        } else {
+            t = adain_res_blk(blocks[i], b, t, s, a, sc)
+        }
     }
-    conv1d(proj, a, t, out)
+    if (nb == 0) {
+        conv1d(proj, x, t, out)
+    } elif (nb % 2 == 1) {
+        conv1d(proj, a, t, out)
+    } else {
+        conv1d(proj, b, t, out)
+    }
     return conv1d_out_len(proj, t)
 }
 
 //! F0 and energy curves from the aligned duration-encoder features: the shared BiLSTM, then
 //! each branch's three residual blocks (the middle one doubles the frame rate) and projection.
 def styletts2_prosody(p : St2Predictor; en : array<float>; c, frames : int64; s : array<float>;
-                      @exact_size var f0 : array<float>; @exact_size var n : array<float>) : int64 {
-    var inscope @exact_size en_tm : array<float>
-    var inscope @exact_size x_tm : array<float>
-    var inscope @exact_size x : array<float>
+                      @scratch @exact_size var f0 : array<float>; @scratch @exact_size var n : array<float>; var sc : St2Scratch) : int64 {
+    var en_tm & = unsafe(sc.pr_en_tm)
+    var x_tm & = unsafe(sc.pr_x_tm)
+    var x & = unsafe(sc.pr_x)
     transpose_ct(en, c, frames, en_tm)
     bilstm(p.shared_lstm, en_tm, frames, x_tm)
     let width = 2l * p.shared_lstm.fwd.hidden
     transpose_tc(x_tm, frames, width, x)
-    let f2 = prosody_branch(p.f0, p.f0_proj, x, frames, s, f0)
-    prosody_branch(p.n, p.n_proj, x, frames, s, n)
+    let f2 = prosody_branch(p.f0, p.f0_proj, x, frames, s, f0, sc)
+    prosody_branch(p.n, p.n_proj, x, frames, s, n, sc)
     return f2
 }
 
 // One Snake residual block on token-major rows: `y` = `src` plus the three conv pairs' residuals,
 // the first pair reading `src` so no copy of the input is ever made. Every op class lands in
 // its tts.gen.* bucket of the encode-stage profiling rail.
-def private gen_res_block(b : St2GenResBlock; src : array<float>; @exact_size var y : array<float>; t : int64; s : array<float>) {
+def private gen_res_block(b : St2GenResBlock; src : array<float>; @scratch @exact_size var y : array<float>; t : int64; s : array<float>; var sc : St2Scratch) {
     let n = b.c * t
-    var inscope @exact_size xt : array<float>
-    var inscope @exact_size y1 : array<float>
-    var inscope @exact_size y2 : array<float>
+    var xt & = unsafe(sc.grb_xt)
+    var y1 & = unsafe(sc.grb_y1)
+    var y2 & = unsafe(sc.grb_y2)
     for (j in range(length(b.convs1))) {
         var tc = ref_time_ticks()
         if (j == 0) {
@@ -1082,8 +1128,8 @@ def private gen_res_block(b : St2GenResBlock; src : array<float>; @exact_size va
 //! The harmonic source: sines plus noise from the F0 curve, mixed to one signal of
 //! frames * upsample samples.
 def styletts2_source(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; f0_frames : int64;
-                     noise : TtsNoise; @exact_size var har : array<float>) : int64 {
-    var inscope @exact_size sines : array<float>
+                     noise : TtsNoise; @scratch @exact_size var har : array<float>; var sc : St2Scratch) : int64 {
+    var sines & = unsafe(sc.so_sines)
     let n = sine_source(cfg, f0, f0_frames, noise.uniform, noise.normal, sines)
     linear_rows(d.source_linear, sines, n, har)
     tanh_inplace(har, n)
@@ -1093,35 +1139,37 @@ def styletts2_source(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; f0_
 //! The source spectrum: the mixed signal edge-padded and analysed by the STFT convs into
 //! [2 * bins][frames] (magnitude rows, then phase rows).
 def styletts2_har_spectrum(d : St2Decoder; har : array<float>; n : int64; var tr : StyleTts2Trace?;
-                           @exact_size var har_spec : array<float>) : int64 {
-    var inscope @exact_size padded : array<float>
+                           @scratch @exact_size var har_spec : array<float>; var sc : St2Scratch) : int64 {
+    var padded & = unsafe(sc.hs_padded)
+    var re & = unsafe(sc.hs_re)
+    var im & = unsafe(sc.hs_im)
     if (d.stft_pad_reflect) {
         pad_reflect(har, n, STFT_PAD, padded)
     } else {
         pad_edge(har, n, STFT_PAD, padded)
     }
-    var inscope @exact_size re : array<float>
-    var inscope @exact_size im : array<float>
     conv1d(d.stft_fwd_re, padded, n + 2l * STFT_PAD, re)
     conv1d(d.stft_fwd_im, padded, n + 2l * STFT_PAD, im)
     let frames = conv1d_out_len(d.stft_fwd_re, n + 2l * STFT_PAD)
     if (tr != null) {
-        tr.stft_re := re
+        trace_take(tr.stft_re, re)
     }
     magnitude_phase(re, im, d.bins, frames, d.stft_eps, har_spec)
     if (tr != null) {
-        tr.har_spec := har_spec
+        trace_take(tr.har_spec, har_spec)
     }
     return frames
 }
 
-def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var cc, tt : int64&; s : array<float>;
-                            har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?) {
-    var inscope @exact_size y : array<float>
-    var inscope @exact_size xs : array<float>
-    var inscope @exact_size src_ct : array<float>
-    var inscope @exact_size src : array<float>
-    var inscope @exact_size src_res : array<float>
+// One generator stage: x [tt][cc] rows in, `out` the next stage's rows; the upsampled stream
+// carries the noise branch and the averaged Snake residual blocks.
+def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; @scratch @exact_size var out : array<float>;
+                            var cc, tt : int64&; s : array<float>; har_spec : array<float>; har_frames : int64;
+                            var tr : StyleTts2Trace?; var sc : St2Scratch) {
+    var y & = unsafe(sc.st_y)
+    var src_ct & = unsafe(sc.st_src_ct)
+    var src & = unsafe(sc.st_src)
+    var src_res & = unsafe(sc.st_src_res)
     var tc = ref_time_ticks()
     leaky_relu(x, cc * tt, 0.1)
     asr_prof_add("tts.gen.leaky", tc)
@@ -1130,13 +1178,13 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
     let src_t = conv1d_out_len(d.noise_convs[i], har_frames)
     let src_c = d.noise_convs[i].cout
     if (tr != null && i == 0l) {
-        tr.src0 := src_ct
+        trace_take(tr.src0, src_ct)
     }
     transpose_ct(src_ct, src_c, src_t, src)
     asr_prof_add("tts.gen.noise", tc)
-    gen_res_block(d.noise_res[i], src, src_res, src_t, s)
+    gen_res_block(d.noise_res[i], src, src_res, src_t, s, sc)
     if (tr != null && i == 0l) {
-        transpose_tc(src_res, src_t, src_c, tr.nres0)
+        trace_rows(tr.nres0, src_res, src_t, src_c)
     }
     tc = ref_time_ticks()
     conv1d_rows(d.ups[i], x, tt, y)
@@ -1145,55 +1193,52 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
     cc = d.ups[i].cout
     if (tr != null) {
         if (i == 0l) {
-            transpose_tc(y, tt, cc, tr.ups0)
+            trace_rows(tr.ups0, y, tt, cc)
         } else {
-            transpose_tc(y, tt, cc, tr.ups1)
+            trace_rows(tr.ups1, y, tt, cc)
         }
     }
     if (i == long_length(d.ups) - 1l) {
-        pad_reflect_left_rows(y, tt, cc, 1l, x)
+        pad_reflect_left_rows_inplace(y, tt, cc, 1l)
         tt++
-    } else {
-        delete x
-        x <- y
     }
     if (src_t != tt) {
         panic("dasLLAMA styletts2: source branch {src_t} frames against {tt} at stage {i}")
     }
     let n = cc * tt
     tc = ref_time_ticks()
-    add_rows(x, src_res, n)
+    add_rows(y, src_res, n)
     asr_prof_add("tts.gen.stagesum", tc)
-    stage_resblocks(d, i, x, xs, y, cc, tt, s, tr)
+    stage_resblocks(d, i, y, out, cc, tt, s, tr, sc)
 }
 
-// The stage's n_kernels Snake residual blocks, each from the stage input, averaged into it.
-def private stage_resblocks(d : St2Decoder; i : int64; var x, xs, y : array<float>; cc, tt : int64; s : array<float>; var tr : StyleTts2Trace?) {
+// The stage's n_kernels Snake residual blocks, each from the stage stream x, averaged into out.
+def private stage_resblocks(d : St2Decoder; i : int64; x : array<float>; @scratch @exact_size var out : array<float>;
+                            cc, tt : int64; s : array<float>; var tr : StyleTts2Trace?; var sc : St2Scratch) {
     let n = cc * tt
+    var y & = unsafe(sc.st_rb)
     var tc = 0l
     for (j in range64(d.n_kernels)) {
-        gen_res_block(d.resblocks[i * d.n_kernels + j], x, y, tt, s)
+        gen_res_block(d.resblocks[i * d.n_kernels + j], x, y, tt, s, sc)
         if (tr != null && i == 0l) {
             if (j == 0l) {
-                transpose_tc(y, tt, cc, tr.rb0)
+                trace_rows(tr.rb0, y, tt, cc)
             } elif (j == 1l) {
-                transpose_tc(y, tt, cc, tr.rb1)
+                trace_rows(tr.rb1, y, tt, cc)
             } elif (j == 2l) {
-                transpose_tc(y, tt, cc, tr.rb2)
+                trace_rows(tr.rb2, y, tt, cc)
             }
         }
         tc = ref_time_ticks()
         if (j == 0l) {
-            copy_rows(xs, y, n)
+            copy_rows(out, y, n)
         } else {
-            add_rows(xs, y, n)
+            add_rows(out, y, n)
         }
         asr_prof_add("tts.gen.stagesum", tc)
     }
     tc = ref_time_ticks()
-    scale_rows(xs, 1.0 / float(d.n_kernels), n)
-    delete x
-    x <- xs
+    scale_rows(out, 1.0 / float(d.n_kernels), n)
     asr_prof_add("tts.gen.stagesum", tc)
 }
 
@@ -1226,34 +1271,50 @@ def styletts2_generator_gpu_stats() : tuple<calls : int; served : int> {
 //! noise branch and refining through Snake residual blocks, then the inverse STFT. A registered
 //! driver gets the first refusal, except on the trace rail (its stage tensors are the point).
 def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : array<float>;
-                        har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?; @exact_size var wave : array<float>) : int64 {
-    var inscope @exact_size x : array<float>
-    transpose_ct(x_in, c, t, x)
+                        har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?;
+                        @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : int64 {
+    var a & = unsafe(sc.gen_a)
+    var b & = unsafe(sc.gen_b)
+    transpose_ct(x_in, c, t, a)
     if (g_st2_gen_gpu_set && tr == null) {
         g_st2_gen_gpu_calls++
-        if (invoke(g_st2_gen_gpu, d, x, c, t, s, har_spec, har_frames, wave)) {
+        if (invoke(g_st2_gen_gpu, d, a, c, t, s, har_spec, har_frames, wave)) {
             g_st2_gen_gpu_served++
             return long_length(wave)
         }
     }
     var cc = c
     var tt = t
-    for (i in range64(long_length(d.ups))) {
-        generator_stage(d, i, x, cc, tt, s, har_spec, har_frames, tr)
+    let nst = long_length(d.ups)
+    for (i in range64(nst)) {   // the stages ping-pong a and b
+        if (i % 2l == 0l) {
+            generator_stage(d, i, a, b, cc, tt, s, har_spec, har_frames, tr, sc)
+        } else {
+            generator_stage(d, i, b, a, cc, tt, s, har_spec, har_frames, tr, sc)
+        }
     }
+    if (nst % 2l == 1l) {
+        return generator_tail(d, b, cc, tt, tr, wave, sc)
+    }
+    return generator_tail(d, a, cc, tt, tr, wave, sc)
+}
+
+// conv_post, the polar-to-rectangular pair and the inverse STFT: the waveform into `wave`.
+def private generator_tail(d : St2Decoder; var x : array<float>; cc, tt : int64; var tr : StyleTts2Trace?;
+                           @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : int64 {
+    var y & = unsafe(sc.gen_post)
+    var re & = unsafe(sc.gen_re)
+    var im & = unsafe(sc.gen_im)
+    var wr & = unsafe(sc.gen_wr)
+    var wi & = unsafe(sc.gen_wi)
     let tc = ref_time_ticks()
     leaky_relu(x, cc * tt, 0.01)
-    var inscope @exact_size y : array<float>
     conv1d_rows(d.conv_post, x, tt, y)
     if (tr != null) {
-        transpose_tc_strided(y, tt, d.conv_post.cout, d.conv_post.cout_s, tr.conv_post)
+        trace_rows_strided(tr.conv_post, y, tt, d.conv_post.cout, d.conv_post.cout_s)
     }
-    var inscope @exact_size re : array<float>
-    var inscope @exact_size im : array<float>
     polar_to_rect_rows(y, d.conv_post.cout_s, d.bins, tt, re, im)
     asr_prof_add("tts.gen.post", tc)
-    var inscope @exact_size wr : array<float>
-    var inscope @exact_size wi : array<float>
     conv1d(d.stft_bwd_re, re, tt, wr)
     conv1d(d.stft_bwd_im, im, tt, wi)
     let full = conv1d_out_len(d.stft_bwd_re, tt)
@@ -1270,22 +1331,22 @@ def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : a
 
 //! Draw the source noise the synthesis needs when none was captured.
 def styletts2_draw_noise(cfg : SineSourceCfg; frames : int64; seed : uint64; var noise : TtsNoise) {
-    return if (!empty(noise.normal))
+    return if (noise.captured)
     var rng = TtsRng()
     rng_seed(rng, seed)
     let n = frames * cfg.upsample
-    noise.uniform |> reserve_resize(cfg.n_harm)
+    unsafe(scratch_resize(noise.uniform, cfg.n_harm))
     for (h in range64(cfg.n_harm)) {
         noise.uniform[h] = rng_uniform(rng)
     }
-    noise.normal |> reserve_resize(n * cfg.n_harm)
+    unsafe(scratch_resize(noise.normal, n * cfg.n_harm))
     for (i in range64(n * cfg.n_harm)) {
         noise.normal[i] = rng_normal(rng)
     }
 }
 
 //! cat(x [c][t], F0 [1][t], N [1][t]) with asr_res between when `with_res`.
-def private concat_channels(x : array<float>; c : int64; f0d, nd, res : array<float>; with_res : bool; t : int64; @exact_size var out : array<float>) {
+def private concat_channels(x : array<float>; c : int64; f0d, nd, res : array<float>; with_res : bool; t : int64; @scratch @exact_size var out : array<float>) {
     let rc = with_res ? long_length(res) / t : 0l
     let total = c + rc + 2l
     out |> reserve_resize(total * t)
@@ -1303,117 +1364,135 @@ def private concat_channels(x : array<float>; c : int64; f0d, nd, res : array<fl
     }
 }
 
+[cold_path]
+def private trace_dec_in(var tr : StyleTts2Trace?; y : array<float>; cw : int64; f0d, nd, res : array<float>; frames : int64) {
+    concat_channels(y, cw, f0d, nd, res, true, frames, tr.dec_in)
+}
+
+// One decoder block from `src`: through the concat scratch when the block's width asks for
+// the F0, energy and residual channels again, straight through otherwise.
+def private decode_step(blk : St2AdainResBlk; cw : int64; src : array<float>; @scratch @exact_size var cat : array<float>;
+                        @scratch @exact_size var dst : array<float>; t : int64; f0d, nd, res, s_ref : array<float>; var sc : St2Scratch) : int64 {
+    if (blk.dim_in != cw) {
+        concat_channels(src, cw, f0d, nd, res, true, t, cat)
+        return adain_res_blk(blk, cat, t, s_ref, dst, sc)
+    }
+    return adain_res_blk(blk, src, t, s_ref, dst, sc)
+}
+
+// The decoder: F0, energy and the asr residual as channels, the encode block, the decode blocks
+// ping-ponging the carrier's two stream buffers, then the source and the generator into sc.wave.
 def private styletts2_decode(d : St2Decoder; text_c : int64; source : SineSourceCfg; asr : array<float>; frames : int64;
                              f0, nrg : array<float>; f2 : int64; s_ref : array<float>; var noise : TtsNoise; seed : uint64;
-                             var tr : StyleTts2Trace?; var tm : TtsTimings) : array<float> {
+                             var tr : StyleTts2Trace?; var tm : TtsTimings; var sc : St2Scratch) : int64 {
     var clock = ref_time_ticks()
-    var inscope @exact_size f0d : array<float>
-    var inscope @exact_size nd : array<float>
-    var inscope @exact_size res : array<float>
+    var f0d & = unsafe(sc.dec_f0d)
+    var nd & = unsafe(sc.dec_nd)
+    var res & = unsafe(sc.dec_res)
+    var a & = unsafe(sc.dec_a)
+    var b & = unsafe(sc.dec_b)
+    var cat & = unsafe(sc.dec_cat)
     conv1d(d.f0_conv, f0, f2, f0d)
     conv1d(d.n_conv, nrg, f2, nd)
     conv1d(d.asr_res, asr, frames, res)
     if (tr != null) {
-        tr.asr_res := res
+        trace_take(tr.asr_res, res)
     }
-    var inscope @exact_size x : array<float>
-    var inscope @exact_size y : array<float>
-    concat_channels(asr, text_c, f0d, nd, res, false, frames, x)
-    var t = adain_res_blk(d.encode, x, frames, s_ref, y)
+    concat_channels(asr, text_c, f0d, nd, res, false, frames, cat)
+    var t = adain_res_blk(d.encode, cat, frames, s_ref, a, sc)
     var cw = d.encode.dim_out
     if (tr != null) {
-        concat_channels(y, cw, f0d, nd, res, true, frames, tr.dec_in)
+        trace_dec_in(tr, a, cw, f0d, nd, res, frames)
     }
+    var in_a = true
     for (i in range(length(d.decode))) {
-        if (d.decode[i].dim_in != cw) {
-            concat_channels(y, cw, f0d, nd, res, true, t, x)
+        if (in_a) {
+            t = decode_step(d.decode[i], cw, a, cat, b, t, f0d, nd, res, s_ref, sc)
         } else {
-            delete x
-            x <- y
+            t = decode_step(d.decode[i], cw, b, cat, a, t, f0d, nd, res, s_ref, sc)
         }
-        t = adain_res_blk(d.decode[i], x, t, s_ref, y)
+        in_a = !in_a
         cw = d.decode[i].dim_out
     }
     if (tr != null) {
-        tr.gen_in := y
+        if (in_a) {
+            trace_take(tr.gen_in, a)
+        } else {
+            trace_take(tr.gen_in, b)
+        }
     }
     tm.decoder_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
     styletts2_draw_noise(source, f2, seed, noise)
-    var inscope @exact_size har : array<float>
-    let n = styletts2_source(d, source, f0, f2, noise, har)
+    var har & = unsafe(sc.dec_har)
+    var har_spec & = unsafe(sc.dec_spec)
+    let n = styletts2_source(d, source, f0, f2, noise, har, sc)
     if (tr != null) {
-        tr.har := har
+        trace_take(tr.har, har)
     }
-    var inscope @exact_size har_spec : array<float>
-    let har_frames = styletts2_har_spectrum(d, har, n, tr, har_spec)
+    let har_frames = styletts2_har_spectrum(d, har, n, tr, har_spec, sc)
     tm.source_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    var inscope @exact_size wave : array<float>
-    styletts2_generator(d, y, cw, t, s_ref, har_spec, har_frames, tr, wave)
+    var samples = 0l
+    if (in_a) {
+        samples = styletts2_generator(d, a, cw, t, s_ref, har_spec, har_frames, tr, sc.wave, sc)
+    } else {
+        samples = styletts2_generator(d, b, cw, t, s_ref, har_spec, har_frames, tr, sc.wave, sc)
+    }
     tm.generator_us = int64(get_time_usec(clock))
-    tm.samples = long_length(wave)
-    return <- wave
+    tm.samples = samples
+    return samples
 }
 
-//! Synthesize from token ids: the full StyleTTS2 pass, raw waveform (the reference driver's
-//! tail trim is the facade's). `noise` supplies the source noise (empty = drawn from `seed`);
-//! `tr` collects the stage tensors when not null; `tm` receives each stage's wall time.
+//! Synthesize from token ids: the full StyleTTS2 pass into `sc.wave` (the facade trims the
+//! tail), the sample count back. `noise` supplies the source noise (empty = drawn from `seed`),
+//! `tr` collects the stage tensors when not null, `tm` the stage walls, `sc` every buffer.
+[hot_path]
 def styletts2_synthesize(m : StyleTts2Model; ids : array<int>; style : array<float>; speed : float;
-                         var noise : TtsNoise; seed : uint64; var tr : StyleTts2Trace?; var tm : TtsTimings) : array<float> {
+                         var noise : TtsNoise; seed : uint64; var tr : StyleTts2Trace?; var tm : TtsTimings; var sc : St2Scratch) : int64 {
     let start = ref_time_ticks()
     var clock = start
     let t = long_length(ids)
     let hs = m.style_dim / 2l
-    var inscope @exact_size s_ref : array<float>
-    var inscope @exact_size s_pro : array<float>
-    s_ref |> reserve_resize(hs)
-    s_pro |> reserve_resize(hs)
+    unsafe(scratch_resize(sc.s_ref, hs))
+    unsafe(scratch_resize(sc.s_pro, hs))
+    var s_ref & = unsafe(sc.s_ref)
+    var s_pro & = unsafe(sc.s_pro)
     for (i in range64(hs)) {
         s_ref[i] = style[i]
         s_pro[i] = style[hs + i]
     }
-    var inscope @exact_size bert : array<float>
-    styletts2_albert(m.albert, ids, bert)
-    var inscope @exact_size d_en : array<float>
-    linear_rows(m.predictor.bert_encoder, bert, t, d_en)
+    styletts2_albert(m.albert, ids, sc.bert, sc)
+    linear_rows(m.predictor.bert_encoder, sc.bert, t, sc.d_en)
     if (tr != null) {
-        tr.bert := d_en
+        trace_take(tr.bert, sc.d_en)
     }
     tm.bert_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    var inscope @exact_size t_en : array<float>
-    styletts2_text_encoder(m.text_encoder, ids, t_en)
+    styletts2_text_encoder(m.text_encoder, ids, sc.t_en, sc)
     if (tr != null) {
-        tr.text_enc := t_en
+        trace_take(tr.text_enc, sc.t_en)
     }
     tm.text_enc_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    var inscope @exact_size d : array<float>
-    styletts2_duration_encoder(m.predictor, d_en, t, s_pro, d)
+    styletts2_duration_encoder(m.predictor, sc.d_en, t, s_pro, sc.d, sc)
     let dc = m.predictor.bert_encoder.nout + hs
-    var inscope @exact_size dur : array<int>
-    var inscope @exact_size raw : array<float>
-    let frames = styletts2_durations(m.predictor, d, t, speed, dur, raw)
+    let frames = styletts2_durations(m.predictor, sc.d, t, speed, sc.dur, sc.raw, sc)
     if (tr != null) {
-        tr.dur_raw := raw
+        trace_take(tr.dur_raw, sc.raw)
         tr.frames = frames
     }
-    var inscope @exact_size en : array<float>
-    var inscope @exact_size asr : array<float>
-    align_expand_rows(d, t, dc, dur, en)
-    align_expand_channels(t_en, m.text_encoder.c, t, dur, asr)
+    align_expand_rows(sc.d, t, dc, sc.dur, sc.en)
+    align_expand_channels(sc.t_en, m.text_encoder.c, t, sc.dur, sc.asr)
     tm.duration_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    var inscope @exact_size f0 : array<float>
-    var inscope @exact_size nrg : array<float>
-    let f2 = styletts2_prosody(m.predictor, en, dc, frames, s_pro, f0, nrg)
+    let f2 = styletts2_prosody(m.predictor, sc.en, dc, frames, s_pro, sc.f0, sc.nrg, sc)
     if (tr != null) {
-        tr.f0 := f0
-        tr.n := nrg
+        trace_take(tr.f0, sc.f0)
+        trace_take(tr.n, sc.nrg)
     }
     tm.prosody_us = int64(get_time_usec(clock))
-    var inscope wave <- styletts2_decode(m.decoder, m.text_encoder.c, m.source, asr, frames, f0, nrg, f2, s_ref, noise, seed, tr, tm)
+    let samples = styletts2_decode(m.decoder, m.text_encoder.c, m.source, sc.asr, frames, sc.f0, sc.nrg, f2, s_ref, noise, seed, tr, tm, sc)
     tm.total_us = tm.front_end_us + int64(get_time_usec(start))
-    return <- wave
+    return samples
 }

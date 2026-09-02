@@ -112,7 +112,7 @@ def dump_i(dump : table<string; TtsDumpTensor>; name : string) : array<int> {
 }
 
 def case_noise(dump : table<string; TtsDumpTensor>) : TtsNoise {
-    return <- TtsNoise(uniform <- dump_f(dump, "noise_uniform"), normal <- dump_f(dump, "noise_normal"))
+    return <- TtsNoise(uniform <- dump_f(dump, "noise_uniform"), normal <- dump_f(dump, "noise_normal"), captured = true)
 }
 
 // the generator fed the oracle's own F0 curve, source signal and decoder output: block
@@ -131,12 +131,13 @@ def private seam_check(t : T?; m : StyleTts2Model; tag : string; dump : table<st
     let cw = long_length(gen_in) / f2
     var inscope noise <- case_noise(dump)
     var tr = new StyleTts2Trace()
+    var inscope sc = St2Scratch()
     var inscope har : array<float>
-    let n = styletts2_source(m.decoder, m.source, f0, f2, noise, har)
+    let n = styletts2_source(m.decoder, m.source, f0, f2, noise, har, sc)
     stage_diff(t, "{tag} SOURCE", "har", har, dump, true)
     var inscope har_ref <- dump_f(dump, "har")
     var inscope spec : array<float>
-    let frames = styletts2_har_spectrum(m.decoder, har_ref, n, tr, spec)
+    let frames = styletts2_har_spectrum(m.decoder, har_ref, n, tr, spec, sc)
     var inscope spec_ref <- dump_f(dump, "har_spec")
     if (!empty(spec_ref)) {
         // the reference's FFT and a direct sum agree on the magnitude everywhere and on the phase
@@ -146,7 +147,7 @@ def private seam_check(t : T?; m : StyleTts2Model; tag : string; dump : table<st
         spec := spec_ref
     }
     var inscope wave : array<float>
-    styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, tr, wave)
+    styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, tr, wave, sc)
     stage_diff(t, "{tag} SEAM", "stft_re", tr.stft_re, dump)
     stage_diff(t, "{tag} SEAM", "ups0", tr.ups0, dump)
     stage_diff(t, "{tag} SEAM", "src0", tr.src0, dump)
@@ -206,7 +207,9 @@ def tts_parity(t : T?; rig : TtsParityRig) {
             var inscope noise <- case_noise(dump)
             var tr = new StyleTts2Trace()
             var tm = TtsTimings()
-            var inscope wave <- styletts2_synthesize(m, ids, dump_f(dump, "style"), c.speed, noise, 0ul, tr, tm)
+            var inscope sc = St2Scratch()
+            styletts2_synthesize(m, ids, dump_f(dump, "style"), c.speed, noise, 0ul, tr, tm, sc)
+            let wave & = sc.wave
             dump |> get("waveform") $(ref) {
                 if (length(wave) != length(ref.f)) {
                     t |> failure("{tag}: {length(wave)} samples, oracle has {length(ref.f)} (frames {tr.frames} vs {c.duration_sum})")

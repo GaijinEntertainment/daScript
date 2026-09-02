@@ -620,6 +620,22 @@ the stage-level copies are gone. Kokoro generator through the rail: q8 868 -> 68
 77 -> 0, residual adds 71 -> 7, stage sums 32 -> 3, adain 52 -> 40), f32 1073 -> 906. Rigs
 green at the unchanged bars.
 
+Hot-path rung receipt (2026-09-02): `styletts2_synthesize` carries `[hot_path]` and the lint
+holds it to zero allocations. Every stage activation is a `@scratch @exact_size` field of the
+`St2Scratch` carrier the facade's `TtsModel` reuses across syntheses (the waveform is `sc.wave`;
+ping-pong fields replace the delete-and-move handoffs), the block home's kernel-private
+transients are `@scratch` module globals, every block-home out-parameter is `@scratch`, and
+the ALBERT head loop moved into the block home as `attention_rows` (its own blocks cell). A
+`@scratch` mark on a local is inert, and a helper wrapping the sizing call hides the contract,
+so sizing is the builtin `scratch_resize` at the site. Speed, same input, mapped, clean: nano
+459 ms f32 / 415 q8 (RTF 0.040; ORT 0.035), kokoro 1375 / 1044 (RTF 0.116; torch 0.097). The
+carrier exposed one defect: the source noise, once drawn into a reused carrier, was never
+redrawn for the next chunk (the parity rig's captured noise and a drawn one were told apart by
+emptiness) - `TtsNoise.captured` now decides, and the facade's streaming cell is the witness.
+`REVIEW_TTS.md` binds the TTS files (fourteen rules, three dragon rounds); ledger row 72
+retires the two bucket rails into the jobque markers as a follow-up PR, row 73 lists the
+`REVIEW.das` gates.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the

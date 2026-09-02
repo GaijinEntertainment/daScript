@@ -96,3 +96,23 @@ side?" and then "lets make sure we do for all new CPU kernels, and if we skipped
 ones - lets ledger towards the end of this arc." Every new format's CPU kernel work starts by
 reading llama.cpp's arch kernel and racing its techniques as tune perms; the formats that
 skipped this (IQ4_XS, Q3_K) get the retroactive audit at the end of the arc (#60).
+
+## 2026-09-02 - REVIEW_TTS.md (new), REVIEW.md (the TTS routing line), followup_general.md (#72)
+
+Boris, at the TTS arc's phase-5 stopping point: "add REVIEW.md for tts. [hotpath] annotation
+on everything involved in tts generation. similar concept as how the rest of dasLLAMA does
+it. perhaps steal wording from REVIEW.md on other parts." The TTS checklist mirrors the
+audio one - the hot-path contract on the synthesis path, `[cold_path]` on debug legs, the
+GEMM-through-the-wrappers rule, the lane pin/reset duty - and adds the arc's own laws: the
+rows form ships its channel-major twin and block cell, split-invariance, one served layout
+per weight, the sine source's phase order, the rig delta per kernel or lexicon change, and
+the failing-first front-end case. Same day, on the profiling rails: "we have one which feeds
+into jobque and there is /utils/jobque-timeline which displays them ... it's
+counterproductive to keep building timing rigs" - one instrumentation rail, the jobque
+markers; `prof_add` and `asr_prof_add` retire in their own PR (#72), with the mechanical clock
+rule as a lint candidate. On the hot-path mechanism, after a helper wrapping the sizing call
+("cute. this is not a hack how?" ... "the intent of the @scratch is to provide a way to say
+'yes, this global data persists between iterations of decode\generation, and grows as needed.
+but never truly reallocated'" ... "sounds good on both"): a reused buffer is sized by the
+builtin `scratch_resize` at the site, never through a helper, and the `@scratch` mark sits on
+the callee out-parameter the buffer grows through - the checklist's scratch rule says so.

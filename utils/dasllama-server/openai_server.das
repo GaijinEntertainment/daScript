@@ -3913,7 +3913,7 @@ def private emit_tts_event(events : Channel?; event : TtsEvent) {
     events |> push_clone(event)
 }
 
-def private process_tts_job(model : TtsModel; job : TtsJob; events : Channel?) {
+def private process_tts_job(var model : TtsModel; job : TtsJob; events : Channel?) {
     let voice = empty(job.voice) ? caps(model).voices[0] : job.voice
     var inscope audio <- synthesize(model, job.text, voice, job.speed)
     var inscope bytes <- job.format == "pcm" ? pcm16_bytes(audio.pcm) : wav_pcm16_bytes(audio.pcm, audio.sample_rate)

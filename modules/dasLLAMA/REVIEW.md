@@ -41,7 +41,7 @@ applies `REVIEW_IMAGE.md`.**
 **A change to `dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_io.das`,
 `dasllama/dasllama_audio_embedder.das`, `dasllama/dasllama_asr.das`,
 `dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR family file - one
-`dasllama/dasllama_<family>.das` holding a single speech model family - applies
+`dasllama/dasllama_<family>.das` holding a single speech-recognition family - applies
 `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
@@ -54,6 +54,14 @@ schedules such a stream, applies `REVIEW_VISION.md`.**
 **A `dasllama/dasllama_tower.das` change - the shared encoder-tower home - applies
 `REVIEW_AUDIO.md` and `REVIEW_VISION.md`;** a family file that only CALLS a shared rail does
 not thereby pick up the other modality's checklist.
+
+**A change to `dasllama/dasllama_tts.das`, `dasllama/dasllama_tts_types.das`,
+`dasllama/dasllama_tts_blocks.das`, `dasllama/dasllama_styletts2.das`, a TTS family file -
+one `dasllama/dasllama_<family>.das` holding a single speech-synthesis family - a text
+front-end file - one stage of the pass that turns text into phonemes
+(`dasllama/dasllama_textnorm.das`, `dasllama/dasllama_postag.das`,
+`dasllama/dasllama_g2p.das`) - or a call that pins the TTS weight lane (`set_tts_q8`),
+wherever the diff puts it, applies `REVIEW_TTS.md`.**
 
 **A diff that adds a file under `dasllama/`, moves code between files, or lands a kernel,
 codec, transform, tokenizer, tool-wire, media-IO or registration concern in a new place
@@ -249,6 +257,7 @@ the tuning the profile was meant to save.
 root) - is a `def` returning it, never a module global with a declaration initializer (`let`
 or `var`).** A team lane never runs global initializers, so the global reads zero there while
 every single-threaded run reads the right value.
+
 **A `resize` in `dasllama/` of a buffer whose element count scales with a model dimension is
 preceded by a `reserve` of the same count (`reserve_resize` / `grow_resize` / `ensure_length` in
 `dasllama_common.das`, or the pair spelled out) - whatever the size looks like at today's

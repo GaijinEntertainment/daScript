@@ -195,7 +195,9 @@ def private is_alloc_builtin(n : string) : bool {
 def private is_container_sizing(n : string) : bool {
     return (n == "resize" || n == "resize_no_init" || n == "reserve" || n == "clear"
             || n == "push" || n == "push_clone" || n == "emplace" || n == "push_from"
-            || n == "push_clone_from" || n == "insert" || n == "erase" || n == "pop")
+            || n == "push_clone_from" || n == "insert" || n == "erase" || n == "pop"
+            || n == "ensure_capacity" || n == "scratch_resize" || n == "scratch_reserve"
+            || n == "scratch_ensure_capacity")
 }
 
 def private perf030_needs_release(td : TypeDeclPtr) : bool {

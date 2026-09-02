@@ -83,8 +83,8 @@ stages, each its own file, and every stage is data-driven from the model store: 
   sits its `TtsSpan` into the model's blob, and `weights_walk` is the one walk that moves weights
   into a staging blob or binds them as borrowed views over a served plane (`release_weight` is
   the one teardown). The sine source keeps the reference's operation order exactly: its phase
-  reaches 1e5 radians, where one float32 ulp is a hundredth of a radian. One home: a family file
-  re-implementing one of these is a defect, and nothing here names a family type.
+  reaches 1e5 radians, where one float32 ulp is a hundredth of a radian. One home: the block
+  home holds the operators, and it names no family type.
 - **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share: the weight
   map of the converted GGUF (conv geometry rides as `styletts2.conv.<weight>` metadata, so the
   assembly hardcodes the wiring and reads the shapes; the STFT convention - replicate or reflect
@@ -108,8 +108,8 @@ stages, each its own file, and every stage is data-driven from the model store: 
   `styletts2_generator_gpu_stats`): a driver takes the rows-form input, the style and the source
   spectrum and answers with the waveform or declines; the SineGen phase chain and the harmonic
   STFT stay on the CPU in both routes (the phase law), the trace rail keeps the CPU chain, and
-  engage is read from the counters. No driver fills the slot yet. Nothing here names a family: a
-  family's quirk lands in its family file.
+  engage is read from the counters. No driver fills the slot yet. The assembly names no family;
+  a family's quirk lives in its family file.
 - **`dasllama_kitten.das`** - the KittenTTS family (nano and mini): the reference driver's symbol
   table, re-spacing rule and style-row rule (the chunk's character count), its speed priors and
   voice aliases (`kitten.*` metadata), its 5000-sample tail trim, and the rewrite of the front

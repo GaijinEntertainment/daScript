@@ -31,6 +31,7 @@ enum TtsKind {
 struct TtsModel {
     kind : TtsKind
     model : StyleTts2Model = StyleTts2Model()
+    scratch : St2Scratch = St2Scratch()   // the activation carrier every synthesis reuses
     kitten : KittenFamily
     kokoro : KokoroFamily
     g2p : G2pModel
@@ -41,6 +42,7 @@ struct TtsModel {
 // teardown would force every module that deletes a TtsModel to see the plane finalizers too.
 def finalize(var m : TtsModel) {
     delete m.model
+    delete m.scratch
     delete m.kitten
     delete m.kokoro
     delete m.g2p
@@ -204,7 +206,7 @@ def private add_timings(var acc : TtsTimings; t : TtsTimings) {
 }
 
 // one chunk of normalized text through the family's symbols and the shared assembly
-def private synthesize_chunk(m : TtsModel; norm : string; vname : string; speed : float) : TtsAudio {
+def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; speed : float) : TtsAudio {
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
     let clock = ref_time_ticks()
@@ -215,9 +217,9 @@ def private synthesize_chunk(m : TtsModel; norm : string; vname : string; speed 
     let sp = is_kitten ? speed * (m.kitten.speed_priors?[vname] ?? 1.0) : speed
     var inscope style : array<float>
     styletts2_style(m.model, vname, row, style)
-    var inscope noise = TtsNoise()
     out.timings.front_end_us = int64(get_time_usec(clock))
-    out.pcm <- styletts2_synthesize(m.model, ids, style, sp, noise, 0x5eed1ul, null, out.timings)
+    styletts2_synthesize(m.model, ids, style, sp, m.scratch.noise, 0x5eed1ul, null, out.timings, m.scratch)
+    out.pcm := m.scratch.wave
     if (is_kitten) {
         kitten_trim(out.pcm)
     }
@@ -235,7 +237,7 @@ def private resolve_voice(m : TtsModel; voice : string) : string {
 
 //! Text -> speech, one sentence-sized chunk at a time: the block receives each chunk's audio as
 //! soon as it exists, in order. Normalization runs once over the whole text.
-def synthesize_stream(m : TtsModel; text : string; voice : string; speed : float; blk : block<(chunk : TtsAudio)>) {
+def synthesize_stream(var m : TtsModel; text : string; voice : string; speed : float; blk : block<(chunk : TtsAudio)>) {
     let vname = resolve_voice(m, voice)
     let norm = normalize_text(text)
     for (chunk in tts_chunks(norm)) {
@@ -247,7 +249,7 @@ def synthesize_stream(m : TtsModel; text : string; voice : string; speed : float
 
 //! Text -> speech: normalize, chunk by sentence, phonemize, map into the family's symbols,
 //! synthesize; the chunks concatenate, the timings sum.
-def synthesize(m : TtsModel; text : string; voice : string; speed : float = 1.0) : TtsAudio {
+def synthesize(var m : TtsModel; text : string; voice : string; speed : float = 1.0) : TtsAudio {
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
     synthesize_stream(m, text, voice, speed) $(chunk) {

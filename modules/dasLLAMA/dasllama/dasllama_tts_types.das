@@ -53,8 +53,9 @@ struct TtsAudio {
 }
 
 //! The source noise a synthesis consumed - captured from the oracle for a parity run, or
-//! drawn from the session's own generator. Empty arrays mean "draw".
+//! drawn from the session's own generator into a carrier every synthesis reuses.
 struct TtsNoise {
-    uniform : array<float>   // one initial phase per harmonic
-    normal : array<float>    // [samples x harmonics], sample-major
+    @scratch uniform : array<float>   // one initial phase per harmonic; drawn per synthesis into a reused carrier
+    @scratch normal : array<float>    // [samples x harmonics], sample-major
+    captured : bool                   // supplied by an oracle dump: a synthesis reads it as is and never redraws
 }

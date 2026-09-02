@@ -274,6 +274,61 @@ def private linear_case(nin, nout : int64) : BlockCase {
     return res
 }
 
+// attention_rows against a scalar per-head reference, at a token count off the 16-key pad.
+def private attention_case() : BlockCase {
+    var r = TtsRng()
+    rng_seed(r, 0x47ul)
+    let t = 37l
+    let heads = 4l
+    let dh = 16l
+    let hidden = heads * dh
+    var inscope q : array<float>
+    var inscope k : array<float>
+    var inscope v : array<float>
+    rand_fill(r, q, t * hidden, 1.0)
+    rand_fill(r, k, t * hidden, 1.0)
+    rand_fill(r, v, t * hidden, 2.0)
+    var inscope want : array<float>
+    want |> resize(t * hidden)
+    var inscope env : array<float>
+    env |> resize(t * hidden)
+    var inscope p : array<float>
+    p |> resize(t)
+    let scale = 1.0 / sqrt(float(dh))
+    for (hd in range64(heads)) {
+        let off = hd * dh
+        for (i in range64(t)) {
+            var mx = -1e30
+            for (j in range64(t)) {
+                var s = 0.0
+                for (e in range64(dh)) {
+                    s += q[i * hidden + off + e] * k[j * hidden + off + e]
+                }
+                p[j] = s * scale
+                mx = max(mx, p[j])
+            }
+            var sum = 0.0
+            for (j in range64(t)) {
+                p[j] = exp(p[j] - mx)
+                sum += p[j]
+            }
+            for (e in range64(dh)) {
+                var acc = 0.0
+                var reach = 0.0
+                for (j in range64(t)) {
+                    acc += p[j] * v[j * hidden + off + e]
+                    reach += p[j] * abs(v[j * hidden + off + e])
+                }
+                want[i * hidden + off + e] = acc / sum
+                env[i * hidden + off + e] = reach / sum
+            }
+        }
+    }
+    var inscope got : array<float>
+    attention_rows(q, k, v, t, hidden, heads, got)
+    return score("attention", got, want, env, 0.0)
+}
+
 let Q8_REL = 2.0e-2   // Q8_0 weights and per-32 activations: a few thousandths of the envelope, gated at 2%
 
 // The q8 rows lane of a conv against the channel-major f32 reference at the q8 bar.
@@ -386,6 +441,9 @@ def test_rows_convs(t : T?) {
         t |> run("linear_rows on the tile") @(t : T?) {
             report(t, linear_case(96l, 64l))
             report(t, linear_case(768l, 3072l))
+        }
+        t |> run("attention_rows against the scalar heads") @(t : T?) {
+            report(t, attention_case())
         }
         t |> run("the q8 lane against the f32 reference") @(t : T?) {
             report(t, conv_case_q8("conv q8 k3 d1", 128l, 128l, 3l, 1l, 1l))

@@ -446,7 +446,7 @@ def conv1d_prepare(var c : TtsConv1d; q8 : bool = false; repack : bool = false) 
 // ===== layout =====
 
 //! [C][T] -> [T][C]
-def transpose_ct(x : array<float>; c, t : int64; var y : array<float>) {
+def transpose_ct(x : array<float>; c, t : int64; @scratch var y : array<float>) {
     y |> reserve_resize(c * t)
     for (ci in range64(c)) {
         let row = ci * t
@@ -457,12 +457,12 @@ def transpose_ct(x : array<float>; c, t : int64; var y : array<float>) {
 }
 
 //! [T][C] -> [C][T]
-def transpose_tc(x : array<float>; t, c : int64; var y : array<float>) {
+def transpose_tc(x : array<float>; t, c : int64; @scratch var y : array<float>) {
     transpose_tc_strided(x, t, c, c, y)
 }
 
 //! [T][C] rows of stride `row_stride` (>= c; the served width's padding columns dropped) -> [C][T]
-def transpose_tc_strided(x : array<float>; t, c, row_stride : int64; var y : array<float>) {
+def transpose_tc_strided(x : array<float>; t, c, row_stride : int64; @scratch var y : array<float>) {
     y |> reserve_resize(c * t)
     for (ti in range64(t)) {
         let row = ti * row_stride
@@ -474,13 +474,40 @@ def transpose_tc_strided(x : array<float>; t, c, row_stride : int64; var y : arr
 
 // ===== convolution =====
 
+// ===== kernel-private scratch: module globals, one per buffer, sized to the current call and
+// reused across calls - a context runs one synthesis at a time and lanes never size them, so a
+// kernel's transient buffer costs one growth per context, not one per call =====
+var @scratch g_conv_col : array<float>
+var @scratch g_conv_ytm : array<float>
+var @scratch g_convt_xtm : array<float>
+var @scratch g_convt_v : array<float>
+var @scratch g_rows_v : array<float>
+var @scratch g_q8_xq : array<int8>
+var @scratch g_q8_xs : array<float>
+var @scratch g_q8_ytap : array<float>
+var @scratch g_adain_h : array<float>
+var @scratch g_adain_mean : array<float>
+var @scratch g_adain_ssq : array<float>
+var @scratch g_adain_scale : array<float>
+var @scratch g_adain_shift : array<float>
+var @scratch g_colsum_part : array<float>
+var @scratch g_lstm_h : array<float>
+var @scratch g_lstm_c : array<float>
+var @scratch g_lstm_xin : array<float>
+var @scratch g_lstm_gates : array<float>
+var @scratch g_lstm_gates2 : array<float>
+var @scratch g_snake_inv : array<float>
+var @scratch @exact_size g_sine_rad : array<float>
+var @scratch @exact_size g_sine_low : array<float>
+var @scratch @exact_size g_sine_phase : array<float>
+
 let private CONV_CHUNK = 1024l   // im2col rows per GEMM
 
 def private conv1d_dense(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
     let kw = c.cin * c.k
-    var inscope @scratch col : array<float>
-    var inscope @scratch ytm : array<float>
+    var col & = g_conv_col
+    var ytm & = g_conv_ytm
     col |> reserve_resize(CONV_CHUNK * kw)
     ytm |> reserve_resize(CONV_CHUNK * c.cout)
     var t0 = 0l
@@ -538,8 +565,8 @@ def private conv1d_transposed_dense(c : TtsConv1d; x : array<float>; t_in : int6
         }
     }
     let d = c.cout * c.k
-    var inscope @scratch xtm : array<float>
-    var inscope @scratch v : array<float>
+    var xtm & = g_convt_xtm
+    var v & = g_convt_v
     transpose_ct(x, c.cin, t_in, xtm)
     v |> reserve_resize(t_in * d)
     matmul_batch(v, c.wt, xtm, c.cin, d, t_in)
@@ -580,7 +607,7 @@ def private conv1d_transposed_depthwise(c : TtsConv1d; x : array<float>; t_in : 
 }
 
 //! y [cout][t_out] = conv(x [cin][t_in]); grouped convs are the depthwise case only.
-def conv1d(c : TtsConv1d; x : array<float>; t_in : int64; @exact_size var y : array<float>) {
+def conv1d(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_size var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
     y |> reserve_resize(c.cout * t_out)
     if (c.groups == 1l) {
@@ -665,7 +692,7 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
     let stride = c.stride
     let d = k * cout
     let has_bias = !empty(c.b)
-    var inscope @scratch v : array<float>
+    var v & = g_rows_v
     v |> reserve_resize(t_in * d)
     var vp = unsafe(addr(v[0]))
     let xp = unsafe(addr<float const?>(x[0]))
@@ -719,9 +746,9 @@ def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; 
     let nb = cin / 32l
     let tap = cout * cin
     let nbias = empty(c.b) ? 0l : cout
-    var inscope @scratch xq : array<int8>
-    var inscope @scratch xs : array<float>
-    var inscope @scratch ytap : array<float>
+    var xq & = g_q8_xq
+    var xs & = g_q8_xs
+    var ytap & = g_q8_ytap
     xq |> reserve_resize(t_in * cin)
     xs |> reserve_resize(t_in * nb)
     ytap |> reserve_resize(t_out * cout)
@@ -770,7 +797,7 @@ def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; 
 //! y [t_out][cout_s] = conv(x [t_in][cin]) in the rows form; the row stride is the served
 //! width `cout_s`. Dense convs only, forward at stride 1 or transposed; every other shape
 //! runs the channel-major `conv1d`. A conv minted q8 runs the q8 lane.
-def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @exact_size var y : array<float>) {
+def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_size var y : array<float>) {
     if (c.groups != 1l || (!c.transposed && c.stride != 1l)) {
         panic("dasLLAMA tts: the rows conv takes a dense conv (forward at stride 1, or transposed); got groups={c.groups} stride={c.stride} transposed={c.transposed}")
     }
@@ -820,8 +847,8 @@ def linear_prepare(var l : TtsLinear; rows_only : bool = false; q8 : bool = fals
 def private linear_rows_q8(l : TtsLinear; x : array<float>; t : int64; var y : array<float>) {
     let nin = l.nin
     let nout = l.nout
-    var inscope @scratch xq : array<int8>
-    var inscope @scratch xs : array<float>
+    var xq & = g_q8_xq
+    var xs & = g_q8_xs
     xq |> reserve_resize(t * nin)
     xs |> reserve_resize(t * nin / 32l)
     quantize_q8_0_into(x, t * nin, xq, xs, 0l, 0l)
@@ -847,7 +874,7 @@ def private linear_rows_q8(l : TtsLinear; x : array<float>; t : int64; var y : a
 
 //! y [t][nout] = x [t][nin] . w^T + b: the tiled GEMM over row blocks when `wt` was minted,
 //! the batched dot form otherwise; a layer minted q8 runs the q8 lane.
-def linear_rows(l : TtsLinear; x : array<float>; t : int64; @exact_size var y : array<float>) {
+def linear_rows(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_size var y : array<float>) {
     y |> reserve_resize(t * l.nout)
     if (l.q8) {
         linear_rows_q8(l, x, t, y)
@@ -890,12 +917,84 @@ def linear_rows(l : TtsLinear; x : array<float>; t : int64; @exact_size var y : 
 }
 
 //! y [nout] = w . x + b
-def linear_vec(l : TtsLinear; x : array<float>; @exact_size var y : array<float>) {
+def linear_vec(l : TtsLinear; x : array<float>; @scratch @exact_size var y : array<float>) {
     y |> reserve_resize(l.nout)
     matmul(y, l.w, x, l.nin, l.nout)
     return if (empty(l.b))
     for (o in range64(l.nout)) {
         y[o] += l.b[o]
+    }
+}
+
+// ===== attention =====
+
+var @scratch g_att_heads : array<float>
+
+//! Multi-head self-attention on token-major q, k, v [t][hidden] (each row the heads' slices in
+//! order) into ctx [t][hidden]: one head per lane, Q.K^T and P.V on the tiles over a 16-padded
+//! key axis (pad keys score -1e30 and carry zero values), the scaled softmax per row between.
+def attention_rows(q, k, v : array<float>; t, hidden, heads : int64; @scratch @exact_size var ctx : array<float>) {
+    let dh = hidden / heads
+    let tp = (t + 15l) / 16l * 16l
+    let per_head = t * dh + dh * tp + tp * dh + t * tp + t * dh   // qh, kT, vh, s, oh
+    ctx |> reserve_resize(t * hidden)
+    var head_scratch & = g_att_heads
+    head_scratch |> reserve_resize(heads * per_head)
+    let scale = 1.0 / sqrt(float(dh))
+    let qp = unsafe(addr<float const?>(q[0]))
+    let kp = unsafe(addr<float const?>(k[0]))
+    let vp = unsafe(addr<float const?>(v[0]))
+    var cp = unsafe(addr(ctx[0]))
+    var sp = unsafe(addr(head_scratch[0]))
+    maybe_parallel_for(0, int(heads), int(heads)) $(hb, he) {
+        unsafe {
+            for (hd in range64(int64(hb), int64(he))) {
+                let off = hd * dh
+                var qh = sp + hd * per_head
+                var kT = qh + t * dh
+                var vh = kT + dh * tp
+                var s = vh + tp * dh
+                var oh = s + t * tp
+                for (i in range64(t)) {
+                    for (e in range64(dh)) {
+                        qh[i * dh + e] = qp[i * hidden + off + e]
+                        vh[i * dh + e] = vp[i * hidden + off + e]
+                        kT[e * tp + i] = kp[i * hidden + off + e]
+                    }
+                }
+                for (i in range64(t * dh, tp * dh)) {
+                    vh[i] = 0.0
+                }
+                for (e in range64(dh)) {
+                    for (i in range64(t, tp)) {
+                        kT[e * tp + i] = 0.0
+                    }
+                }
+                for (i in range64(t * tp)) {
+                    s[i] = 0.0
+                }
+                gemm_f32_jo(s, qh, kT, t, dh, tp)
+                for (i in range64(t)) {
+                    var row = s + i * tp
+                    for (j in range64(t)) {
+                        row[j] *= scale
+                    }
+                    for (j in range64(t, tp)) {
+                        row[j] = -1e30
+                    }
+                    softmax(row, tp)
+                }
+                for (i in range64(t * dh)) {
+                    oh[i] = 0.0
+                }
+                gemm_f32_jo(oh, s, vh, t, tp, dh)
+                for (i in range64(t)) {
+                    for (e in range64(dh)) {
+                        cp[i * hidden + off + e] = oh[i * dh + e]
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -965,7 +1064,7 @@ def instance_norm_channels(var x : array<float>; c, t : int64; n : TtsNorm; eps 
 //! AdaIN1d in place on x [C][T]: (1 + gamma[c]) * instance_norm(x) + beta[c], gamma and beta
 //! the halves of fc(style).
 def adain(a : TtsAdaIn; var x : array<float>; c, t : int64; style : array<float>; eps : float) {
-    var inscope @scratch h : array<float>
+    var h & = g_adain_h
     linear_vec(a.fc, style, h)
     instance_norm_channels(x, c, t, a.norm, eps)
     for (ci in range64(c)) {
@@ -984,7 +1083,7 @@ let private STAT_BLOCK = 256l   // rows per partial sum: fixed, so the result ne
 
 def private column_sums(x : array<float>; t, c : int64; center : array<float>; squared : bool; var out : array<float>) {
     let nblk = (t + STAT_BLOCK - 1l) / STAT_BLOCK
-    var inscope @scratch part : array<float>
+    var part & = g_colsum_part
     part |> reserve_resize(nblk * c)
     for (i in range64(nblk * c)) {
         part[i] = 0.0
@@ -1032,9 +1131,9 @@ def private column_sums(x : array<float>; t, c : int64; center : array<float>; s
 // the norm's own scale and shift, then (1 + gamma) and beta.
 def private adain_affine(a : TtsAdaIn; x : array<float>; t, c : int64; style : array<float>; eps : float;
                          var scale : array<float>; var shift : array<float>) {
-    var inscope @scratch h : array<float>
-    var inscope @scratch mean : array<float>
-    var inscope @scratch ssq : array<float>
+    var h & = g_adain_h
+    var mean & = g_adain_mean
+    var ssq & = g_adain_ssq
     linear_vec(a.fc, style, h)
     column_sums(x, t, c, h, false, mean)
     let inv_t = 1.0 / float(t)
@@ -1057,8 +1156,8 @@ def private adain_affine(a : TtsAdaIn; x : array<float>; t, c : int64; style : a
 //! AdaIN1d in place on token-major x [T][C].
 def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<float>; eps : float) {
     rows_width_check(c, "adain_rows")
-    var inscope @scratch scale : array<float>
-    var inscope @scratch shift : array<float>
+    var scale & = g_adain_scale
+    var shift & = g_adain_shift
     adain_affine(a, x, t, c, style, eps, scale, shift)
     var xp = unsafe(addr(x[0]))
     let s4 = unsafe(addr<float4 const?>(scale[0]))
@@ -1079,10 +1178,10 @@ def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<f
 
 //! AdaIN1d of token-major src [T][C] written into dst - the copy a residual branch would make
 //! of its input, folded into the normalize pass.
-def adain_rows_into(a : TtsAdaIn; src : array<float>; @exact_size var dst : array<float>; t, c : int64; style : array<float>; eps : float) {
+def adain_rows_into(a : TtsAdaIn; src : array<float>; @scratch @exact_size var dst : array<float>; t, c : int64; style : array<float>; eps : float) {
     rows_width_check(c, "adain_rows_into")
-    var inscope @scratch scale : array<float>
-    var inscope @scratch shift : array<float>
+    var scale & = g_adain_scale
+    var shift & = g_adain_shift
     adain_affine(a, src, t, c, style, eps, scale, shift)
     dst |> reserve_resize(t * c)
     let xp = unsafe(addr<float const?>(src[0]))
@@ -1124,7 +1223,7 @@ def add_rows(var y : array<float>; x : array<float>; n : int64) {
 }
 
 //! y = a + b over n floats (n % 4 == 0); `y` sized here.
-def sum_rows_into(@exact_size var y : array<float>; a, b : array<float>; n : int64) {
+def sum_rows_into(@scratch @exact_size var y : array<float>; a, b : array<float>; n : int64) {
     rows_width_check(n, "sum_rows_into")
     y |> reserve_resize(n)
     var yp = unsafe(addr(y[0]))
@@ -1160,7 +1259,7 @@ def scale_rows(var y : array<float>; s : float; n : int64) {
 }
 
 //! dst = src over n floats (n % 4 == 0); `dst` sized here.
-def copy_rows(@exact_size var dst : array<float>; src : array<float>; n : int64) {
+def copy_rows(@scratch @exact_size var dst : array<float>; src : array<float>; n : int64) {
     rows_width_check(n, "copy_rows")
     dst |> reserve_resize(n)
     var dp = unsafe(addr(dst[0]))
@@ -1179,7 +1278,7 @@ def copy_rows(@exact_size var dst : array<float>; src : array<float>; n : int64)
 
 //! AdaLayerNorm in place on token-major x [T][C]: (1 + gamma) * layernorm(row) + beta.
 def ada_layernorm_rows(a : TtsAdaLayerNorm; var x : array<float>; t, c : int64; style : array<float>; eps : float) {
-    var inscope @scratch h : array<float>
+    var h & = g_adain_h
     linear_vec(a.fc, style, h)
     layernorm_channels_rows(x, t, c, eps)
     for (r in range64(t)) {
@@ -1222,11 +1321,11 @@ def private sigmoid_f(x : float) : float {
 def private lstm_direction(l : TtsLstm; x : array<float>; t : int64; reverse : bool;
                            var y : array<float>; ystride, yoff : int64) {
     let hd = l.hidden
-    var inscope @scratch h : array<float>
-    var inscope @scratch cst : array<float>
-    var inscope @scratch xin : array<float>
-    var inscope @scratch gates : array<float>
-    var inscope @scratch gates2 : array<float>
+    var h & = g_lstm_h
+    var cst & = g_lstm_c
+    var xin & = g_lstm_xin
+    var gates & = g_lstm_gates
+    var gates2 & = g_lstm_gates2
     h |> reserve_resize(hd)
     cst |> reserve_resize(hd)
     xin |> reserve_resize(l.nin)
@@ -1257,7 +1356,7 @@ def private lstm_direction(l : TtsLstm; x : array<float>; t : int64; reverse : b
 }
 
 //! Bidirectional LSTM over token-major x [T][nin] -> y [T][2H], forward half first.
-def bilstm(l : TtsBiLstm; x : array<float>; t : int64; @exact_size var y : array<float>) {
+def bilstm(l : TtsBiLstm; x : array<float>; t : int64; @scratch @exact_size var y : array<float>) {
     let hd = l.fwd.hidden
     y |> reserve_resize(t * 2l * hd)
     lstm_direction(l.fwd, x, t, false, y, 2l * hd, 0l)
@@ -1289,7 +1388,7 @@ def snake(var x : array<float>; c, t : int64; alpha : array<float>) {
 //! Snake on token-major x [T][C]: four channels per lane, row blocks across lanes.
 def snake_rows(var x : array<float>; t, c : int64; alpha : array<float>) {
     rows_width_check(c, "snake_rows")
-    var inscope @scratch inv : array<float>
+    var inv & = g_snake_inv
     inv |> reserve_resize(c)
     for (ci in range64(c)) {
         inv[ci] = 1.0 / alpha[ci]
@@ -1327,7 +1426,7 @@ def tanh_inplace(var x : array<float>; n : int64) {
 // ===== resampling =====
 
 //! Nearest-neighbour upsample of x [C][T] by an integer factor (ONNX asymmetric / floor).
-def resize_nearest(x : array<float>; c, t, factor : int64; @exact_size var y : array<float>) {
+def resize_nearest(x : array<float>; c, t, factor : int64; @scratch @exact_size var y : array<float>) {
     let t_out = t * factor
     y |> reserve_resize(c * t_out)
     for (ci in range64(c)) {
@@ -1348,7 +1447,7 @@ def private fmaf(a, b, c : float) : float {
 //! Linear resample of x [C][T] by `scale`: bit for bit onnxruntime's trilinear kernel on a
 //! [1][C][T] tensor (ONNX half_pixel; a depth of one halves both depth weights; the unscaled
 //! channel axis weights its own row one and the next zero, the last row averaging itself).
-def resize_linear(x : array<float>; c, t : int64; scale : float; @exact_size var y : array<float>) : int64 {
+def resize_linear(x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
     let t_out = int64(floor(float(t) * scale))
     y |> reserve_resize(c * t_out)
     let half = 0.5
@@ -1386,7 +1485,7 @@ def resize_linear(x : array<float>; c, t : int64; scale : float; @exact_size var
 //! Linear resample of x [C][T] by `scale`, bit for bit what PyTorch's CPU upsample_linear1d
 //! computes (align_corners false, scale_factor given): the source coordinate in double from the
 //! float reciprocal scale, the two taps combined as fma(l0, x0, l1 * x1).
-def resize_linear_torch(x : array<float>; c, t : int64; scale : float; @exact_size var y : array<float>) : int64 {
+def resize_linear_torch(x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
     let t_out = int64(floor(float(t) * scale))
     y |> reserve_resize(c * t_out)
     let inv = double(1.0 / scale)
@@ -1406,7 +1505,7 @@ def resize_linear_torch(x : array<float>; c, t : int64; scale : float; @exact_si
 // ===== alignment =====
 
 //! y [C][F] repeats token t's column dur[t] times: x is token-major [T][C].
-def align_expand_rows(x : array<float>; t, c : int64; dur : array<int>; @exact_size var y : array<float>) : int64 {
+def align_expand_rows(x : array<float>; t, c : int64; dur : array<int>; @scratch @exact_size var y : array<float>) : int64 {
     var frames = 0l
     for (d in dur) {
         frames += int64(d)
@@ -1425,7 +1524,7 @@ def align_expand_rows(x : array<float>; t, c : int64; dur : array<int>; @exact_s
 }
 
 //! y [C][F] repeats token t's column dur[t] times: x is channel-major [C][T].
-def align_expand_channels(x : array<float>; c, t : int64; dur : array<int>; @exact_size var y : array<float>) : int64 {
+def align_expand_channels(x : array<float>; c, t : int64; dur : array<int>; @scratch @exact_size var y : array<float>) : int64 {
     var frames = 0l
     for (d in dur) {
         frames += int64(d)
@@ -1524,7 +1623,7 @@ struct SineSourceCfg {
     torch_math : bool   // the reference's arithmetic: PyTorch's (double-accumulated cumsum, its resampler), else onnxruntime's
 }
 
-def private source_resize(cfg : SineSourceCfg; x : array<float>; c, t : int64; scale : float; @exact_size var y : array<float>) : int64 {
+def private source_resize(cfg : SineSourceCfg; x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
     return cfg.torch_math ? resize_linear_torch(x, c, t, scale, y) : resize_linear(x, c, t, scale, y)
 }
 
@@ -1532,7 +1631,7 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
                 @exact_size var out : array<float>) : int64 {
     let n = frames * cfg.upsample
     let nh = cfg.n_harm
-    var inscope @exact_size rad : array<float>
+    var rad & = g_sine_rad
     rad |> reserve_resize(nh * n)
     for (h in range64(nh)) {
         let mult = float(h + 1l)
@@ -1544,7 +1643,7 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
             rad[h * n] += noise_u[h]
         }
     }
-    var inscope @exact_size low : array<float>
+    var low & = g_sine_low
     let nlow = source_resize(cfg, rad, nh, n, 1.0 / float(cfg.upsample), low)
     // the reference's operation order, kept exactly: the phase reaches 1e5 radians, where one
     // float32 ulp is a hundredth of a radian, so a reassociated product is an audible change
@@ -1561,7 +1660,7 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
             low[h * nlow + i] = ((acc * 2.0) * PI) * float(cfg.upsample)
         }
     }
-    var inscope @exact_size phase : array<float>
+    var phase & = g_sine_phase
     let nup = source_resize(cfg, low, nh, nlow, float(cfg.upsample), phase)
     if (nup != n) {
         panic("dasLLAMA tts: sine source resample {nlow} -> {nup} samples, want {n}")
@@ -1575,9 +1674,6 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
             out[i * nh + h] = s * uv + noise_amp * noise_n[i * nh + h]
         }
     }
-    delete rad
-    delete low
-    delete phase
     return n
 }
 
@@ -1586,7 +1682,7 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
 //! Magnitude and phase from the two conv halves re/im [bins][frames] -> out [2*bins][frames]
 //! (magnitude rows first). A zero imaginary part reads as +0, so a negative real axis is +pi:
 //! torch.angle's branch, which a conv's -0 sum would otherwise flip to -pi.
-def magnitude_phase(re, im : array<float>; bins, frames : int64; eps : float; @exact_size var out : array<float>) {
+def magnitude_phase(re, im : array<float>; bins, frames : int64; eps : float; @scratch @exact_size var out : array<float>) {
     out |> reserve_resize(2l * bins * frames)
     for (i in range64(bins * frames)) {
         let r = re[i]
@@ -1598,7 +1694,7 @@ def magnitude_phase(re, im : array<float>; bins, frames : int64; eps : float; @e
 
 //! exp(log-magnitude) and sin(phase) into the rectangular pair the inverse conv consumes:
 //! re = mag * cos(phase), im = mag * sin(phase) from x [2*bins][frames].
-def polar_to_rect(x : array<float>; bins, frames : int64; @exact_size var re : array<float>; @exact_size var im : array<float>) {
+def polar_to_rect(x : array<float>; bins, frames : int64; @scratch @exact_size var re : array<float>; @scratch @exact_size var im : array<float>) {
     re |> reserve_resize(bins * frames)
     im |> reserve_resize(bins * frames)
     for (i in range64(bins * frames)) {
@@ -1611,7 +1707,7 @@ def polar_to_rect(x : array<float>; bins, frames : int64; @exact_size var re : a
 
 //! `polar_to_rect` from token-major rows x [frames][stride] (magnitude columns then phase
 //! columns, `stride` >= 2*bins) into the channel-major pair the inverse conv consumes.
-def polar_to_rect_rows(x : array<float>; stride, bins, frames : int64; @exact_size var re : array<float>; @exact_size var im : array<float>) {
+def polar_to_rect_rows(x : array<float>; stride, bins, frames : int64; @scratch @exact_size var re : array<float>; @scratch @exact_size var im : array<float>) {
     re |> reserve_resize(bins * frames)
     im |> reserve_resize(bins * frames)
     for (f in range64(frames)) {
@@ -1626,7 +1722,7 @@ def polar_to_rect_rows(x : array<float>; stride, bins, frames : int64; @exact_si
 }
 
 //! Edge-pad a mono signal by `pad` samples on both sides.
-def pad_edge(x : array<float>; n, pad : int64; @exact_size var y : array<float>) {
+def pad_edge(x : array<float>; n, pad : int64; @scratch @exact_size var y : array<float>) {
     y |> reserve_resize(n + 2l * pad)
     for (i in range64(n + 2l * pad)) {
         y[i] = x[clamp(i - pad, 0l, n - 1l)]
@@ -1634,7 +1730,7 @@ def pad_edge(x : array<float>; n, pad : int64; @exact_size var y : array<float>)
 }
 
 //! Reflection-pad a mono signal by `pad` samples on both sides (torch.stft's center pad).
-def pad_reflect(x : array<float>; n, pad : int64; @exact_size var y : array<float>) {
+def pad_reflect(x : array<float>; n, pad : int64; @scratch @exact_size var y : array<float>) {
     y |> reserve_resize(n + 2l * pad)
     for (i in range64(n + 2l * pad)) {
         var src = i - pad
@@ -1672,7 +1768,7 @@ def istft_envelope_divide(var wave : array<float>; n : int64; window : array<flo
 }
 
 //! Reflection-pad x [C][T] by `left` on the left only (the generator's (1, 0) pad).
-def pad_reflect_left(x : array<float>; c, t, left : int64; @exact_size var y : array<float>) {
+def pad_reflect_left(x : array<float>; c, t, left : int64; @scratch @exact_size var y : array<float>) {
     let t_out = t + left
     y |> reserve_resize(c * t_out)
     for (ci in range64(c)) {
@@ -1683,8 +1779,31 @@ def pad_reflect_left(x : array<float>; c, t, left : int64; @exact_size var y : a
     }
 }
 
+//! `pad_reflect_left_rows` in place: x [t][c] grows to [t + left][c], its rows shifted down by
+//! `left` and the new leading rows reflecting the ones that follow.
+def pad_reflect_left_rows_inplace(@scratch @exact_size var x : array<float>; t, c, left : int64) {
+    let t_out = t + left
+    x |> reserve_resize(t_out * c)
+    var to = t_out - 1l
+    while (to >= left) {
+        let src = (to - left) * c
+        let dst = to * c
+        for (ci in range64(c)) {
+            x[dst + ci] = x[src + ci]
+        }
+        to--
+    }
+    for (p in range64(left)) {
+        let src = (2l * left - p) * c
+        let dst = p * c
+        for (ci in range64(c)) {
+            x[dst + ci] = x[src + ci]
+        }
+    }
+}
+
 //! The rows twin of `pad_reflect_left`: y [t + left][c] from x [t][c].
-def pad_reflect_left_rows(x : array<float>; t, c, left : int64; @exact_size var y : array<float>) {
+def pad_reflect_left_rows(x : array<float>; t, c, left : int64; @scratch @exact_size var y : array<float>) {
     let t_out = t + left
     y |> reserve_resize(t_out * c)
     for (to in range64(t_out)) {
