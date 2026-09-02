@@ -878,16 +878,16 @@
     race any family whose adopted winner names a perm `tune_requires_ok` rejects locally (general,
     no rename, needs the suffix -> requires mapping surfaced to the adopt layer). The woodpecker
     round raised the Cascade Lake case.
-70. **Kernel alignment contracts still live as header sentences where `requires=` now exists.**
-   `[metal_dispatch]` takes `requires = "lhs % N, ..."` and the generated builder checks it at
-   every dispatch (the two fixed-B mul_mv forms declare their 256 / 128 K stripe; the mtl_toy
-   fixture proves the trip). The other contracts are still prose: `dasllama_metal_gemm.das`
-   ("Requires d % 64 == 0 and a big grid"), the mul_mm site ("d % 64 == 0, mp % 32 == 0"), the
-   64-wide classifier N tile ("the caller gates d % 64 == 0"), the tensor GEMM ("out-dim % 64, M
-   padded to 64"), plus every float4-view kernel's implicit `% 4`. Done = each such sentence
-   becomes a `requires=` item on its dispatch (kargs field or params name), the sentence goes,
-   and the batch/prefill drivers that route around the kernel gate per site on the same modulus
-   (never on a whole-rail knob). Ruled to land at the END of the MTP arc, not per slice.
+70. **Kernel alignment contracts as `requires=` - the residue.** The sweep landed on every
+   `[metal_dispatch]` GEMM form: the production mul_mm (`mp % 32, d % 64`), the 32-wide and 64-wide
+   GEMM-B forms and their tensor twins (`ka.ndim % 32|64, ka.kdim % 32`), the split-K pair
+   (`d % 32, ka.kdim % 32`), beside the two fixed-B mul_mv stripes; the header sentences went.
+   Two contracts cannot take the attribute yet: `dasllama_metal_gemm.das`'s `MetalQ8Gemm64`
+   ("Requires d % 64 == 0 and a big grid") is the legacy per-op path with a hand-written dispatch
+   and no `[metal_dispatch]` seat - it keeps its sentence until that path either dies or gets a
+   builder; and the float4-view `% 4` on kernels whose K reaches the builder only as a uniform
+   BUFFER (`bk` on the mul_mm) is invisible to a scalar check - a `requires=` on a bound-buffer
+   value needs a readback the dispatch must never pay, so that contract stays with the caller.
 71. **gemma-26B: small-M prefill and decode attention past ~1k keys.** The context sweep
    (mtp_plan.md, "#71 context sweep") dissolved the prefill half of the original item - the halving
    was the untuned dev rail serving no `runtime.metal_tensor` crowns, and on tuned kernels ours
@@ -913,3 +913,18 @@
    dispatches, best-of-3 - under a second for the twenty twins), and keep the serving-confirm crown
    (`kq_gemv_iq2xxs_f4`) mint-only with base as the safe side. Never the CPU class defaults: an M4
    is `arm-neon` with no tensor lane.
+74. **The speculative round's remaining fat (the MTP arc's S5, ledgered).** The gemma round is
+   one queue and one join; what is left: (a) one command buffer per round - draft chain, verify
+   and the warm step encoded together (the in-graph argmax makes it possible; today the verify is
+   its own buffer, a second commit); (b) the drafter's quant twins raced - Q8_0 serves, BF16 is a
+   lever that measured 9-10% slower upstream, whole-head 2-bit collapses acceptance; (c) a compact
+   draft vocabulary (98336 of 248320 rows on qwen38 upstream, +5.3% there); (d) the two-tier
+   coarse/rerank draft; (e) replay-based rollback of the recurrent state instead of the snapshot
+   pair; (f) tight-grid dispatch for the verify grids (launch only the causally valid
+   threadgroups). Each is one measured lever on the S3 rail (`lcpp_bench --mtp-ab --prompts
+   specbench4 --chat-prompts -n 128 -r 3`), promoted only on a win over the fused round.
+75. **MoE verify rows dedup the expert union.** The two-row gemma verify costs 1.45x a step on
+   the M5 and 1.51x on the M4 Pro because the batched expert GEMV streams every (row, slot) plane
+   and the shared experts twice; a gathered GEMV over the union of selected experts (the prefill
+   bucket kernels at M = 2..9) streams each expert once. The physics that caps depth 2 on every
+   MoE carrier measured - Qwen3-30B-A3B at B=2 already pays 1.37x.

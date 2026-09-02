@@ -47,4 +47,9 @@ a panic naming the builder and the broken contract, or the test hook installed w
 tail-guard-free main loop and the DRIVER does the shape routing: the fixed-B mul_mv forms stripe
 K in 256 (B2) / 128 (B4) element chunks, and the batched decode driver gates each mv site on its
 own K (`mv_kdim`, `mv_wo`, `mv_w2`), falling to the tail-exact GEMV form where the alignment
-fails (gemma-4-26B-A4B's dense hidden 2112 on the w2 site).
+fails (gemma-4-26B-A4B's dense hidden 2112 on the w2 site). Every `[metal_dispatch]` GEMM form
+carries its grid divisors the same way - the production mul_mm `mp % 32, d % 64`, the 32- and
+64-wide GEMM-B forms and their tensor twins `ka.ndim % 32|64` with the q8 block `ka.kdim % 32`,
+the split-K pair `d % 32` - so a grid that would have truncated silently now names the site.
+A contract on a value that reaches the builder only as a bound uniform BUFFER (the mul_mm's K)
+stays with the caller: the dispatch never pays a readback.

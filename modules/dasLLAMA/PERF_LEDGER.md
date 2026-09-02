@@ -1181,3 +1181,36 @@ group; wording kept.
   Layr Labs, vendored mlx-swift incl. Metal kernels (c) 2023 ml-explore/Apple - so adoption
   is clean with those two attribution lines (the NAX arc's steel_attention_nax credit is the
   house pattern); model weights are not in the repo and carry their own terms.
+
+### From the MTP depth-N arc (2026-09-02, M5 Max, dev rail debug-jit unless noted)
+
+- **gemma-4-26B-A4B-it-Q4_K_M + the Q8_0 assistant drafter, SpecBench-4 chat, -n 128 -r 3:**
+  off 122.6, depth 1 143.4 (1.17x, accept 74.6%), depth 2 145.4 (1.19x, 63.3%; p1 74.7 p2
+  52.0), depth 3 0.79x, depth 4 0.84x. Per prompt at depth 1: writing 1.12x (64.9%),
+  summarization 1.12x (71.6%), math 1.27x (89.6%), qa 1.18x (74.0%). Round clocks: draft chain
+  0.05 ms, verify+commit 11.8 ms against an 8.15 ms step - the two-row verify is 1.45x a step on
+  the MoE expert union; that, not the drafter, caps the gain. The Q8_0 target accepts 76.5% vs
+  74.6% on Q4_K_M: the target quant is not what caps acceptance. Pre-norm target hidden lost to
+  post-norm.
+- **Same corpus on the M4 Pro (14-core, 64 GB):** off 59.1, depth 1 67.3 (1.14x), depth 2 55.7
+  (0.94x) - the two-row verify is 1.51x a step there; depth is a box knob, minted (S4).
+- **llama.cpp b4-98c4764b6 through `llama-server /completion` on the identical rendered
+  thinking-off prompt, greedy, 128 tokens, identical continuation text:** gemma off 102.2,
+  n_max 1 127.5 / 134.8 / 148.7 / 133.0 (writing / summarization / math / qa; accept 65.8 / 78.9 /
+  95.0 / 72.6%), n_max 2 123.2 / 134.7 / 169.9 / 137.6. Ours off 124.1 / 118.0 / 123.9 / 124.8,
+  depth 1 139.0 / 132.4 / 157.4 / 147.2, depth 2 130.5 / 129.0 / 183.4 / 149.8. Same drafter
+  acceptance (pooled 77.1% vs 74.6%); ours ahead ON on three prompts, behind 2-4% on the
+  700-token one. Qwen3.6-27B-MTP dense: lcpp 28.4 -> 40.5 (n1) -> 45.6-48.9 (n3) vs ours 26.7 ->
+  34.9 (k1); their 4-row verify is ~1.05x a step, ours 1.3-1.8x (followup #72). An earlier
+  llama-cli pass with THINKING ON on their side only was discarded - its 91% acceptance was an
+  outline, not the blog post.
+- **Context sweep, tuned kernels (fresh m5 mint):** prefill ours 611 / 3124 / 3965 / 4551 vs
+  llama-bench 721 / 2809 / 3037 / 3175 tok/s at 35 / 256 / 700 / 2048 tokens; decode at depth
+  ours 124.0 / 122.0 / 117.8 / 109.8 vs 99.8 / 99.5 / 98.4 / 93.9. The dev rail with a
+  binary-stale sidecar read 506 / 1397 / 1733 / 1858 - no `runtime.metal_tensor` crowns (the
+  K-quant tensor mul_mm twins race base 0.18 ms vs tensor 0.065 ms) - fixed by keeping the runtime
+  section of a binary-stale sidecar (followup #73 step 1); decode never moved. The 08-30 rig exe
+  read pp512 3861 the same day - the board row (3868) stands.
+- **Depth race on the box (the S4 mint):** synthetic 32-token prompt depth 2 137.5 vs depth 1
+  152.2 (loss: incoherent text is not the site shape); SpecBench chat corpus 145.55 vs 145.29
+  (tie) - the M5 sidecar carries `mtp_depth_assistant = 1`.

@@ -2279,11 +2279,11 @@ class template MetalQ8GemmBSplitT {
     }
 }
 
-[metal_dispatch(name = "enc_gemm_b_c", pso = "g_pso_gemm_b", tgmem = "MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem", tg = 128, grid = "ntg", params = "ntg : int64")]
+[metal_dispatch(name = "enc_gemm_b_c", pso = "g_pso_gemm_b", tgmem = "MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem", tg = 128, grid = "ntg", params = "ntg : int64", requires = "ka.ndim % 32, ka.kdim % 32")]
 class MetalQ8GemmB : MetalQ8GemmBSplitT {
 }
 
-[metal_dispatch(name = "enc_gemm_sk_b_c", pso = "g_pso_gemm_b_sk", tgmem = "MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem", tg = 128, grid = "d/32, nsk", params = "d : int64, nsk : int64")]
+[metal_dispatch(name = "enc_gemm_sk_b_c", pso = "g_pso_gemm_b_sk", tgmem = "MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem", tg = 128, grid = "d/32, nsk", params = "d : int64, nsk : int64", requires = "d % 32, ka.kdim % 32")]
 class MetalQ8GemmBSk : MetalQ8GemmBSplitT {
     override IS_SK = true
 }
@@ -2342,17 +2342,17 @@ class template MetalQ8GemmTensorT {
     }
 }
 
-[metal_dispatch(name = "enc_gemm_b_t_c", pso = "g_pso_gemm_b", tgmem = "MetalQ8GemmBT_metal_q8_gemm_b_t_msl_tgmem", tg = 128, grid = "ntg", params = "ntg : int64")]
+[metal_dispatch(name = "enc_gemm_b_t_c", pso = "g_pso_gemm_b", tgmem = "MetalQ8GemmBT_metal_q8_gemm_b_t_msl_tgmem", tg = 128, grid = "ntg", params = "ntg : int64", requires = "ka.ndim % 32, ka.kdim % 32")]
 class MetalQ8GemmBT : MetalQ8GemmTensorT {
 }
 
-[metal_dispatch(name = "enc_gemm_sk_b_t_c", pso = "g_pso_gemm_b_sk", tgmem = "MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_tgmem", tg = 128, grid = "d/32, nsk", params = "d : int64, nsk : int64")]
+[metal_dispatch(name = "enc_gemm_sk_b_t_c", pso = "g_pso_gemm_b_sk", tgmem = "MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_tgmem", tg = 128, grid = "d/32, nsk", params = "d : int64, nsk : int64", requires = "d % 32, ka.kdim % 32")]
 class MetalQ8GemmBSkT : MetalQ8GemmTensorT {
     override IS_SK = true
     override LDC_ND = true
 }
 
-[metal_dispatch(name = "enc_gemm64_b_t_c", pso = "g_pso_gemm64_b", tgmem = "MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_tgmem", tg = 128, grid = "ntg", params = "ntg : int64")]
+[metal_dispatch(name = "enc_gemm64_b_t_c", pso = "g_pso_gemm64_b", tgmem = "MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_tgmem", tg = 128, grid = "ntg", params = "ntg : int64", requires = "ka.ndim % 64, ka.kdim % 32")]
 class MetalQ8Gemm64BT : MetalQ8GemmTensorT {
     override TILE_N = 64u
     override LDC_ND = true
@@ -2361,7 +2361,7 @@ class MetalQ8Gemm64BT : MetalQ8GemmTensorT {
 // The 64-wide twin of MulMm's 32(M) x 64(N) tile: half the threadgroups (d/64) at ~29% fewer
 // instructions per element — wins where the grid stays fat (e.g. the vocab classifier). Each
 // simdgroup owns a 16x32 quadrant (2 token x 4 wrow tiles).
-[metal_dispatch(name = "enc_gemm64_b_c", pso = "g_pso_gemm64_b", tgmem = "metal_q8_gemm64_b_msl_tgmem", tg = 128, grid = "ntg", params = "ntg : int64")]
+[metal_dispatch(name = "enc_gemm64_b_c", pso = "g_pso_gemm64_b", tgmem = "metal_q8_gemm64_b_msl_tgmem", tg = 128, grid = "ntg", params = "ntg : int64", requires = "ka.ndim % 64, ka.kdim % 32")]
 class MetalQ8Gemm64B {
     @ssbo @binding = 0 @role = "weight" @off = "boff" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
     @ssbo @binding = 2 @role = "weight" @off = "boff" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
@@ -4308,7 +4308,7 @@ def enc_gemv_w13sw_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuf
 
 // the production mul_mm dispatch (the prefill kernel: 34B-blob dual-view W, raw f32 X): y binds
 // at a byte offset so per-tensor tiles land inside a wider fused row — the ndim uniform is the
-// y ROW STRIDE while this tensor's output width d shapes the grid (d % 64 == 0, mp % 32 == 0)
+// y ROW STRIDE while this tensor's output width d shapes the grid
 def enc_gemm_mm_b(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
                   bx, by : MetalBuffer?; yoff : uint64; bk, bn : MetalBuffer?; mp, d : int64) {
     enc_gemm_mm_c(enc, bwblob, wboff, bwblob, bx, by, yoff, bk, bn, mp, d)
@@ -4342,7 +4342,7 @@ def enc_sk_reduce_b(enc : MetalComputeEncoder?; bpart, by : MetalBuffer?; total,
     enc_sk_reduce_c(enc, bpart, by, ka, total)
 }
 
-// the 64-wide N tile (classifier site): the caller gates d % 64 == 0
+// the 64-wide N tile (classifier site)
 def enc_gemm64_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
                  bx, by : MetalBuffer?; var ka : Q8GemmArgs; mp32, d : int64) {
     let ntg = (mp32 / 32l) * (d / 64l)
@@ -5751,8 +5751,8 @@ class MetalF32MulMm : MetalMmTileBase {
 
 // The production GEMM: 64-output x 32-token C tiles (4 simdgroups, 8 accumulators), W as
 // interleaved 34B q8 blocks, raw f32 activations. Rolled [unroll_full] math over simdgroup-matrix
-// arrays. Requires out-dim % 64, M padded to 64. Beats the upstream equivalent 2-3% on M1 Max.
-[metal_dispatch(name = "enc_gemm_mm_c", pso = "g_pso_mm", tgmem = "metal_q8_mulmm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
+// arrays. Beats the upstream equivalent 2-3% on M1 Max.
+[metal_dispatch(name = "enc_gemm_mm_c", pso = "g_pso_mm", tgmem = "metal_q8_mulmm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "mp % 32, d % 64")]
 class MetalQ8MulMm : MetalMmTileBase {
     @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
     @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>    // the SAME blob buffer, BYTE view: quants of block b at 34*b + 2

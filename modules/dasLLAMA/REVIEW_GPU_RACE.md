@@ -34,6 +34,12 @@ kernels on one queue and compares their outputs.
 small enough to sit in cache ranks the kernels by an effect production never sees, and the
 race then picks the slower kernel.
 
+**A race or mint that crowns a kernel the batched decode driver serves at verify widths runs
+its M axis at every width the speculative round can dispatch - 2 through `MTP_MAX_ROWS - 1`
+rows - never at M = 1 or the prefill tile alone.** A crown chosen at one row served the k+1
+verify rows through the single-row GEMV gate at -25.8%; the verify rows are a production shape
+of their own.
+
 **A kernel A/B race arm that mints a runtime crown or a tune-sidecar row binds a DIFFERENT
 output buffer for consecutive dispatches of its chain, never one shared output.** One shared
 output serializes the chain on its write-after-read hazard while the served graph overlaps
