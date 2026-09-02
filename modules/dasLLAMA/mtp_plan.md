@@ -832,6 +832,13 @@ equal acceptance (followup #72). The CPU point (both engines `-ngl 0`, our NextN
 - Also: `llama-cli` re-wraps a raw prompt as a chat turn even under `--no-jinja`; the NextN split
   head rides the shard walk only under the exact trunk basename, so a `-Q8_0` head is pinned
   through `DASLLAMA_MTP_HEAD`.
+- **The CPU point found an engine bug.** The CPU NextN round's deltanet rollback grew its two
+  snapshot buffers from empty with a bare resize; Qwen3.8-27B's recurrent state (48 x 32 x 128 x 192
+  floats, 151 MB) tripped the 64 MB unreserved-growth guard on the first speculative step. The
+  July CPU profile predates the guard, the 0.8B fixture's state is 19 MB, so nothing had tripped it.
+  Fixed with its test first (`tests/test_mtp_snapshot.das`, model-free, builds that state on a bare
+  session). llama.cpp's CPU MTP on the same box: off 9.4-9.6, n_max 1 8.5-9.5 tok/s - a loss at
+  80-94% acceptance, the July finding on their side too.
 
 ## Predictions (logged BEFORE each measurement)
 
