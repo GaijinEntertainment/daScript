@@ -373,6 +373,9 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
     element chunks with no tail guard (their header says so) and the rail gate never checked the
     shapes - the 26B's dense hidden 2112 overran on the w2 site; each mv site now gates on its own
     K % 256 (`mv_kdim` / `mv_wo` / `mv_w2`) and falls to the tail-exact GEMV form otherwise.
+    Ruling (Boris): the kernel's alignment contract is a MACRO EXPANSION, not a lint - `requires =
+    "ka.ndim % 256"` on `[metal_dispatch]` generates the check at every dispatch (the mv B2/B4 forms
+    declare theirs; the toy fixture proves the trip); REVIEW_GPU.md duty + ARCHITECTURE_GPU.md statement.
     Bisect controls that pinned it: gemma-4-12B dense batch clean (0.024), Qwen3-30B-A3B batch clean
     (0.14), `DASLLAMA_METAL_BATCH_CONCURRENT=0` bit-identical (not a hazard), `DASLLAMA_METAL_BATCH_MV=0`
     + the plane fix -> 0.96 / 0 flips. The `mtp-dff-<tag>` arm (distinct-session GPU batch vs GPU

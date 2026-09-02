@@ -96,3 +96,10 @@ side?" and then "lets make sure we do for all new CPU kernels, and if we skipped
 ones - lets ledger towards the end of this arc." Every new format's CPU kernel work starts by
 reading llama.cpp's arch kernel and racing its techniques as tune perms; the formats that
 skipped this (IQ4_XS, Q3_K) get the retroactive audit at the end of the arc (#60).
+
+- **2026-09-01** (`REVIEW_GPU.md`, `ARCHITECTURE_GPU.md`): Boris, on the proposal to lint kernel
+  headers' "Requires n % 256" sentences against call-site gates: "your lint opportunity sounds
+  more like a macro expansion. like 'test alignment on dispatch' or something." The contract
+  moved into the `[metal_dispatch]` expansion (`requires = "lhs % N"` generates the check at
+  every dispatch); the review duty asks for the attribute instead of the sentence, and the
+  architecture doc states the mechanism.

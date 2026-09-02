@@ -28,6 +28,12 @@ Stamped means the guard is carried by a `@template_constant` - a `static_if` blo
 select on the constant. The instance stamped without the guard shows no guard in its generated
 `*_msl` global.
 
+**A kernel main loop that walks whole chunks with no tail guard must declare the alignment it
+assumes as `requires = "..."` on its `[metal_dispatch]`; a "requires n % 256" sentence in the
+header is not the contract.** The generated builder then trips on the first misaligned dispatch
+instead of reading the next row. A driver that routes shapes around such a kernel gates on the
+same modulus per site, never on a whole-rail knob.
+
 **Never let a `matmul2d` left or right operand reach the op as `float` outside a kernel class
 stamped `[metal_kernel(float_a_ok=true)]` - convert it in the pass that writes the operand's
 buffer, or in the staging loop that reads it.** A float operand keeps the op off its native

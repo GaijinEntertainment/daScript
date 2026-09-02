@@ -128,6 +128,16 @@ in prefill) and the tuner calls those public entries.
 `MetalPrefillDecline`); decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for
 both paths.
 
+**A kernel's argument-alignment contract is declared on its `[metal_dispatch]` and enforced at
+every dispatch.** `requires = "lhs % N, ..."` (lhs a `params=` name or a kargs field) makes the
+generated builder check each item before it binds and call `metal_requires_failed` on a miss -
+a panic naming the builder and the broken contract, or the test hook installed with
+`set_metal_requires_hook`. The check is one integer modulo per dispatch, so the kernel keeps its
+tail-guard-free main loop and the DRIVER does the shape routing: the fixed-B mul_mv forms stripe
+K in 256 (B2) / 128 (B4) element chunks, and the batched decode driver gates each mv site on its
+own K (`mv_kdim`, `mv_wo`, `mv_w2`), falling to the tail-exact GEMV form where the alignment
+fails (gemma-4-26B-A4B's dense hidden 2112 on the w2 site).
+
 **The allowed asymmetries between the backends - this list is closed; a new one lands with its
 entry here:**
 

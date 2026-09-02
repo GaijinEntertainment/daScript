@@ -1895,8 +1895,8 @@ class MetalGemvB4 : MetalGemvB24T {
 
 // Skinny-batch GEMV: streamed form beats x-staged panel kernels ~12% at B <= 4. 64 threads = 2
 // simdgroups x 2 row-halves; 16 lanes stream one output row's interleaved 34B q8 blocks, batch
-// columns share the dequantized weight stream. Requires n % 256 == 0 (unguarded 4-chunk stripe).
-[metal_dispatch(name = "enc_mv_b2_c", pso = "g_pso_mv_b2", tg = 64, grid = "d/4", params = "d : int64")]
+// columns share the dequantized weight stream. The 4-chunk K stripe has no tail guard (requires=).
+[metal_dispatch(name = "enc_mv_b2_c", pso = "g_pso_mv_b2", tg = 64, grid = "d/4", params = "d : int64", requires = "ka.ndim % 256")]
 class MetalQ8MvB2 {
     @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
     @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
@@ -1957,7 +1957,7 @@ class MetalQ8MvB2 {
 // 4-column twin (serves B = 3..4; pad column reads clamp to row 0, stores gate on nrows). Drops
 // to 8 lanes per output row (4 rows/simdgroup, 8 rows/tg): fewer lanes per weight load, more
 // rows in flight hides the block-load latency instead.
-[metal_dispatch(name = "enc_mv_b4_c", pso = "g_pso_mv_b4", tg = 64, grid = "d/8", params = "d : int64")]
+[metal_dispatch(name = "enc_mv_b4_c", pso = "g_pso_mv_b4", tg = 64, grid = "d/8", params = "d : int64", requires = "ka.ndim % 128")]
 class MetalQ8MvB4 {
     @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>

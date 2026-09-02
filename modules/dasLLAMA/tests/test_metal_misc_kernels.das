@@ -12,6 +12,7 @@ require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/mi
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers + eyeball-dump compares
 require ?das_metal _mtl_toy               // the [metal_dispatch] multi-kernel fixture
+require ?das_metal dasllama/dasllama_metal_lens   // set_metal_requires_hook - the requires= tripwire observer
 require llvm/daslib/f16_cvt         // f32_to_f16 — packing the synthetic scale planes
 require math
 require daslib/fio                  // the lens tgmem gate's spawned compiles
@@ -1785,6 +1786,12 @@ def private softcap_row_gate(t : T?; dev, queue; total : int; cap : float) {
 // — scale (ys = xs*gain) then shift (ys += gain). The per-kernel STAGING divergence (shift
 // stages no xs) is proven at compile time — ast_dump of the builders + the lens cover rule;
 // the hazard rail is un-armed in suites, so this gate witnesses binds/kargs/grid, not staging.
+var private g_toy_trips : array<string>   // what the requires= tripwire reported (the hook target)
+
+def private record_toy_trip(msg : string) {
+    g_toy_trips |> push(msg)
+}
+
 def private mtl_toy_lens_gate(t : T?; dev, queue; n : int) {
     let tag = "mtl_toy multi-kernel n={n}"
     var err : string
@@ -1813,6 +1820,7 @@ def private mtl_toy_lens_gate(t : T?; dev, queue; n : int) {
     var bxs = buf_upload(dev, xv)
     var bys = buf_fill(dev, n + 16, -1000.0)
     var ka = MtToyArgs(n = uint(n), gain = gain)
+    set_metal_requires_hook(@@record_toy_trip)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         enc_mtl_toy_scale(enc, bxs, bys, ka, int64(n))
         enc_mtl_toy_shift(enc, bxs, bys, ka, int64(n))
@@ -1821,6 +1829,22 @@ def private mtl_toy_lens_gate(t : T?; dev, queue; n : int) {
     if (ran) {
         t |> equal(buf_mismatch_exact(bys, want, tag), 0)
     }
+    // the requires= tripwire: n % 8 (params) on scale, ka.n % 8 (kargs) on shift - an aligned n
+    // passes silently, n + 4 trips both with the builder's name and the broken contract
+    t |> equal(length(g_toy_trips), 0, "{tag}: aligned dispatches raise no requires trip")
+    var kbad = MtToyArgs(n = uint(n + 4), gain = gain)
+    let ran_bad = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        enc_mtl_toy_scale(enc, bxs, bys, kbad, int64(n + 4))
+        enc_mtl_toy_shift(enc, bxs, bys, kbad, int64(n + 4))
+    }
+    t |> success(ran_bad, "{tag}: misaligned encode still runs under the hook: {err}")
+    t |> equal(length(g_toy_trips), 2, "{tag}: both misaligned dispatches trip requires=")
+    if (length(g_toy_trips) == 2) {
+        t |> equal(g_toy_trips[0], "enc_mtl_toy_scale: n % 8 != 0")
+        t |> equal(g_toy_trips[1], "enc_mtl_toy_shift: ka.n % 8 != 0")
+    }
+    clear_metal_requires_hook()
+    delete g_toy_trips
     metal_release(bxs)
     metal_release(bys)
     metal_release(g_mtl_toy_scale_pso)
@@ -1915,9 +1939,10 @@ def test_metal_misc_kernels(t : T?) {
     }
 }
 
-//! spawns a compile of a one-class [metal_dispatch] program carrying @workgroup state
-def private spawn_wg_fixture(with_tgmem : bool; tag : string) : tuple<rc : int; out : string> {
-    let tgarg = with_tgmem ? "tgmem = \"wg_fixture_msl_tgmem\", " : ""
+//! spawns a compile of a one-class [metal_dispatch] program carrying @workgroup state; `extra`
+//! is spliced verbatim into the dispatch attribute list (the requires= grammar gate rides it)
+def private spawn_wg_fixture(with_tgmem : bool; tag : string; extra : string = "") : tuple<rc : int; out : string> {
+    let tgarg = (with_tgmem ? "tgmem = \"wg_fixture_msl_tgmem\", " : "") + extra
     let src = join([
         "options gen2",
         "options _dasllama_internal = true",
@@ -1974,6 +1999,23 @@ def test_lens_tgmem_gate(t : T?) {
             t |> success(find(bad.out, "no tgmem=") >= 0, "the refusal names the gate: {bad.out}")
             let good = spawn_wg_fixture(true, "ok")
             t |> equal(0, good.rc, "the tgmem= twin compiles: {good.out}")
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}
+
+[test]
+def test_lens_requires_gate(t : T?) {
+    t |> run("[metal_dispatch] requires= takes only 'lhs % int' items") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let bad = spawn_wg_fixture(true, "req_bad", "requires = \"n % x\", ")
+            t |> success(bad.rc != 0, "a non-integer modulus must not compile")
+            t |> success(find(bad.out, "requires item") >= 0, "the refusal names the item grammar: {bad.out}")
+            let bad2 = spawn_wg_fixture(true, "req_bad2", "requires = \"n\", ")
+            t |> success(bad2.rc != 0, "an item without '%' must not compile")
+            let good = spawn_wg_fixture(true, "req_ok", "requires = \"n % 64\", ")
+            t |> equal(0, good.rc, "the well-formed twin compiles: {good.out}")
         } else {
             t |> skip("das_metal is not built on this platform")
         }

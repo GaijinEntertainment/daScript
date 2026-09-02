@@ -40,6 +40,47 @@ struct private BufField {
                      // `!= null ? param : dref` result. "" = required bind (no default)
 }
 
+//! The `requires=` tripwire: a dispatch whose arguments break the kernel's declared alignment
+//! contract lands here. That is a caller bug, so it panics; a test installs a hook to observe it.
+var g_metal_requires_hook : function<(msg : string) : void>
+var g_metal_requires_hooked = false
+
+def public set_metal_requires_hook(h : function<(msg : string) : void>) {
+    g_metal_requires_hook = h
+    g_metal_requires_hooked = true
+}
+
+def public clear_metal_requires_hook {
+    g_metal_requires_hooked = false
+}
+
+def public metal_requires_failed(msg : string) {
+    if (g_metal_requires_hooked) {
+        invoke(g_metal_requires_hook, msg)
+    } else {
+        panic(msg)
+    }
+}
+
+// requires item "lhs % N" (lhs = a params= name or kargs.field):
+//   if ((uint64(lhs) % N) != 0) metal_requires_failed("<builder>: lhs % N != 0")
+def private mk_requires_check(at : LineInfo; fn_name, lhs : string; n : int) : ExpressionPtr {
+    let parts <- split(lhs, ".")
+    var v : Expression? = new ExprVar(at = at, name := strip(parts[0]))
+    for (i in range(1, length(parts))) {
+        v = new ExprField(at = at, value = v, name := strip(parts[i]))
+    }
+    var cv = new ExprCall(at = at, name := "uint64")
+    cv.arguments |> emplace_new <| v
+    var md = new ExprOp2(at = at, op := "%", left = cv, right = new ExprConstUInt64(at = at, value = uint64(n)))
+    var ne = new ExprOp2(at = at, op := "!=", left = md, right = new ExprConstUInt64(at = at, value = 0ul))
+    var call = new ExprCall(at = at, name := "metal_requires_failed")
+    call.arguments |> emplace_new <| new ExprConstString(at = at, value := "{fn_name}: {lhs} % {n} != 0")
+    var blk = new ExprBlock(at = at)
+    blk.list |> emplace_new <| call
+    return new ExprIfThenElse(at = at, cond = ne, if_true = blk)
+}
+
 def private mk_kn_pipeline(at : LineInfo; pso : string) : ExpressionPtr {
     var c = new ExprCall(at = at, name := "kn_pipeline")
     c.arguments |> emplace_new <| new ExprVar(at = at, name := "enc")
@@ -452,6 +493,18 @@ class MetalDispatch : AstStructureAnnotation {
         // gate scans the whole staged set — but reads-then-writes matches the hand-written order).
         var body : array<ExpressionPtr>
         body |> reserve(length(bufs) * 3 + 4)
+        // requires = "lhs % N, ..." — the kernel's alignment contracts, checked before every dispatch
+        let requires = find_arg(args, "requires") ?as tString ?? ""
+        if (!empty(strip(requires))) {
+            for (item in split(requires, ",")) {
+                let lr <- split(item, "%")
+                if (length(lr) != 2 || !is_digit_tok(strip(lr[1])) || empty(strip(lr[0]))) {
+                    errors := "[metal_dispatch] {fn_name}: requires item '{strip(item)}' must be 'param % int' or 'kargs.field % int'"
+                    return false
+                }
+                body |> push(mk_requires_check(at, fn_name, strip(lr[0]), to_int(strip(lr[1]))))
+            }
+        }
         body |> push(mk_kn_pipeline(at, pso))
         if (!empty(tgmem)) {
             body |> push(mk_kn_tgmem(at, tgmem))
