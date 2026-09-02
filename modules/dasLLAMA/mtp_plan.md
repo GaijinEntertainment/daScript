@@ -624,6 +624,12 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   prompt (S6 in its honest form; the aggregate tok/s over a mixed corpus is time-weighted and reads
   1.26x where the rows read 1.11 / 1.17 / 1.56 / 1.27). Post-#3924 the bench's tune-provenance gate
   refuses an unproven cell: dev runs pass `DASLLAMA_ALLOW_UNTUNED=1`, record runs mint the sidecar.
+- **M4 Pro (Anton's mini, 14-core, 64 GB; NOT the 40-core M4 Max mlx.fast measured on), same
+  corpus, fused round, 2026-09-02:** off 59.1, depth 1 **67.3 (1.14x)**, depth 2 55.7 (0.94x).
+  Per task at depth 1: writing 1.10x, summarization 1.06x, math 1.24x, qa 1.16x. Round clocks: the
+  two-row verify costs 25.6 ms against a 16.9 ms step (**1.51x**, vs 1.34x on M5), three rows 40.2 ms
+  (2.4x) - on the smaller GPU the second row's expert union is paid in full, so depth 2 loses there.
+  Against mlx.fast's recorded M4 Max: their 35.2 -> 68.5 tok/s vs our 59.1 -> 67.3 on half the GPU.
 - **The Q4 target is not what caps acceptance**: the Q8_0 target at depth 1 accepts 76.5% (vs 74.6%
   on Q4_K_M; off 109.6, on 126.0 = 1.15x; verify 12.33 ms vs step 9.13 = 1.35x again). 75% at
   position 1 is the head's own agreement with the target on SpecBench chat prompts.
