@@ -564,6 +564,15 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   NOT the fat; the verify is, and it is physics unless the batched MoE GEMV dedups the expert union
   (gather the rows that share an expert, stream the plane once) - the S5 item that moves this model.
   vLLM reports 1.60x at B1 for gemma-26 (bf16, their acceptance is higher too).
+  **CORRECTED by the batch-rows cost probe** (`harness/batch_rows_probe.das`, distinct sessions, ms
+  per step vs the single step): gemma-26B B=2 **1.02x**, B=4 1.26x, B=8 2.13x; gemma-12B (dense)
+  B=2 0.91x, B=4 1.29x, B=8 2.23x; Qwen3-30B-A3B B=2 **1.37x**, B=4 1.96x, B=8 3.20x. The expert
+  union costs nothing at two rows on gemma's dense-branch MoE (its experts are 704 wide, the dense
+  branch and attention dominate) and a third on the qwen MoE (the 35B-A3B carrier will pay it). So the
+  gemma verify's 1.34x is NOT expert traffic: it is the round's software cost - a synchronous batch
+  step (no one-deep pipeline), the CPU accept walk over 2 x 262144 logits, the landing memcpys, the
+  synchronous per-draft command buffer. ~4 ms per round recoverable => depth 1 from 1.13x toward ~1.5x.
+  The dedup below stays relevant for the qwen MoE carrier only.
   The dedup has a home: the prefill's MoE bucket rail (`pf_enc_moe_count` -> `pf_enc_moe_bucket`
   -> per-expert gathered mul_mm over the bucket rows, ARCHITECTURE_GPU_PREFILL.md#prefill-moe-buckets)
   already builds the per-expert row lists on the GPU; a <=8-row verify wants the same two bucket
