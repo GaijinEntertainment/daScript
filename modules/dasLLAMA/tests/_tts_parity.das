@@ -12,6 +12,7 @@ require dasllama/dasllama_styletts2
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
+require daslib/defer
 require _tts_oracle
 require _model_tier
 
@@ -187,6 +188,10 @@ def tts_parity(t : T?; rig : TtsParityRig) {
     }
     with_job_que() {
         setup_dasllama_jobque_()
+        set_styletts2_q8(false)   // the bars are the f32 lane's
+        defer() {
+            reset_styletts2_q8()
+        }
         var inscope m <- load_styletts2(rig.gguf)
         t |> equal(m.family, rig.family)
         t |> equal(m.sample_rate, 24000)

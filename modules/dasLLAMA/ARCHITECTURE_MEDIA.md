@@ -97,8 +97,14 @@ stages, each its own file, and every stage is data-driven from the model store: 
   The served carrier rides the `.dlim` image rail (`ARCHITECTURE_IMAGE.md`): `stage_styletts2`
   reads the GGUF into `St2Staging` - the served layouts minted, every weight moved into one
   staging `blob` with its span recorded - and `load_styletts2` maps the sibling image under
-  the `tts-f32` tag or bakes it from that staging (`DASLLAMA_IMAGE=0` mints in memory,
-  `mint_styletts2` is the suites' off-rail control); the meta blob carries the scalars, the
+  the lane's tag or bakes it from that staging (`DASLLAMA_IMAGE=0` mints in memory,
+  `mint_styletts2` is the suites' off-rail control). Two lanes, each its own image: `tts-q8`,
+  the served default - the rows GEMMs' weights as Q8_0 quants in an int8 plane repacked for
+  the box's backend, the tag config-bound - and `tts-f32`, the file's planes under a
+  config-free tag: the reference lane the parity rail and the block test hold against, which
+  carries no optimization duty (the rig held q8 at f32 quality, and f32 costs memory for
+  nothing). The `set_tts_q8` pin selects a lane; `reset_tts_q8` returns to the default. The
+  meta blob carries the scalars, the
   spans and the voice roster through the leaf structs' own `serialize` overloads, and the
   loader binds every weight array as a borrowed view over the mapped `blob` plane after the
   parse (post-load runs before the planes bind, so binding cannot happen there). The carrier

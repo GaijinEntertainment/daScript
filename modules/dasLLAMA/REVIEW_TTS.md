@@ -1,24 +1,24 @@
 # dasLLAMA text-to-speech Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_MEDIA.md`.
+doc: `ARCHITECTURE_MEDIA.md`. Planned work: `followup_general.md`.
 
 **Routed from `REVIEW.md`: a diff touching `dasllama/dasllama_tts.das`,
 `dasllama/dasllama_tts_types.das`, `dasllama/dasllama_tts_blocks.das`,
 `dasllama/dasllama_styletts2.das`, a TTS family file - one `dasllama/dasllama_<family>.das`
 holding a single speech-synthesis family - a text front-end file - one stage of the pass
 that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
-`dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - or a call that pins the TTS
+`dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - the front-end packs' mint
+(`harness/build_g2p_data.py`, `performance/build_tts_data.das`), or a call that pins the TTS
 weight lane (`set_tts_q8`), wherever the diff puts it, applies this list together with
 `REVIEW.md`.**
 
 **A synthesis entry point - `styletts2_synthesize`, and any function `dasllama/dasllama_tts.das`
 calls to produce audio - carries `[hot_path]`.**
 
-**A buffer reused across syntheses in `dasllama/dasllama_tts_blocks.das`,
-`dasllama/dasllama_styletts2.das`, or a TTS family file that is not `@scratch` - on its
-declaration, or on the callee parameter it grows through - is a defect.** A `nolint` where
-the annotation fits is a defect.
+**A buffer reused across syntheses in a file this checklist routes that is not `@scratch` -
+on its declaration, or on the callee parameter it grows through - is a defect.** A `nolint`
+where the annotation fits is a defect.
 
 **A debug or profiling code path in a file this checklist routes that is not `[cold_path]`
 is a defect.** A `nolint` where `[cold_path]` fits is a defect.

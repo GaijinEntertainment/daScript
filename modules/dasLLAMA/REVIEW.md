@@ -60,7 +60,8 @@ not thereby pick up the other modality's checklist.
 one `dasllama/dasllama_<family>.das` holding a single speech-synthesis family - a text
 front-end file - one stage of the pass that turns text into phonemes
 (`dasllama/dasllama_textnorm.das`, `dasllama/dasllama_postag.das`,
-`dasllama/dasllama_g2p.das`) - or a call that pins the TTS weight lane (`set_tts_q8`),
+`dasllama/dasllama_g2p.das`) - the front-end packs' mint (`harness/build_g2p_data.py`,
+`performance/build_tts_data.das`), or a call that pins the TTS weight lane (`set_tts_q8`),
 wherever the diff puts it, applies `REVIEW_TTS.md`.**
 
 **A diff that adds a file under `dasllama/`, moves code between files, or lands a kernel,
@@ -260,6 +261,6 @@ every single-threaded run reads the right value.
 
 **A `resize` in `dasllama/` of a buffer whose element count scales with a model dimension is
 preceded by a `reserve` of the same count (`reserve_resize` / `grow_resize` / `ensure_length` in
-`dasllama_common.das`, or the pair spelled out) - whatever the size looks like at today's
-shapes.** A model dimension makes the count unbounded, and a bare grow past the heap's
+`dasllama/dasllama_common.das`, or the pair spelled out).** A model dimension makes the count
+unbounded, and a bare grow past the heap's
 unreserved-size cap (64 MB) panics the load on the first big model rather than at the call site.

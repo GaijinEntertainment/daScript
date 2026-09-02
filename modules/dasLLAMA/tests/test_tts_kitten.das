@@ -11,6 +11,7 @@ require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_styletts2
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
+require daslib/defer
 require daslib/fio
 require math
 require _tts_corpus
@@ -136,6 +137,10 @@ struct ImageRoundtrip {
 // bake or a map, both image-backed) must serve its bytes; the warm load maps; the in-memory mint
 // serves without a file
 def private image_roundtrip(path : string) : ImageRoundtrip {
+    set_styletts2_q8(false)   // the staged read is the f32 lane
+    defer() {
+        reset_styletts2_q8()
+    }
     var r = ImageRoundtrip()
     var inscope st <- stage_styletts2(path)
     var inscope m <- load_styletts2(path)

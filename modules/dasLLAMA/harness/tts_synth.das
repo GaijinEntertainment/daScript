@@ -33,8 +33,10 @@ struct SynthArgs {
     limit : int = 0
     @clarg_doc = "the sentence fixture (default: tests/_tts_fixtures/g2p_corpus.json)"
     fixture : string = ""
-    @clarg_doc = "serve the rows GEMMs as Q8_0 quants (the q8 lane's own prepared image)"
+    @clarg_doc = "pin the rows GEMMs to Q8_0 quants (the serving default; the q8 lane's own prepared image)"
     q8 : bool = false
+    @clarg_doc = "pin the rows GEMMs to the file's f32 planes (the reference lane)"
+    f32 : bool = false
     @clarg_doc = "print the generator's per-op profile over the whole run (PROF rows)"
     prof : bool = false
 }
@@ -63,8 +65,8 @@ def main() : int {
     var audio_total = 0.0lf
     var gen_total = 0.0lf
     var failed = ""
-    if (args.q8) {
-        set_tts_q8(true)
+    if (args.q8 || args.f32) {
+        set_tts_q8(args.q8)
     }
     with_job_que() {
         setup_dasllama_jobque_()

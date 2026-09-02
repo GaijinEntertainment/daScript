@@ -44,8 +44,11 @@ struct Txt2WavArgs {
     @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch"
     tune : bool
 
-    @clarg_doc = "Serve the rows GEMMs as Q8_0 quants (its own prepared image beside the GGUF)"
+    @clarg_doc = "Pin the rows GEMMs to Q8_0 quants (the serving default; its own prepared image beside the GGUF)"
     q8 : bool
+
+    @clarg_doc = "Pin the rows GEMMs to the file's f32 planes (the reference lane)"
+    f32 : bool
 
     @clarg_doc = "Print the generator's per-op profile (PROF rows: bucket, ms, hits, percent)"
     prof : bool
@@ -87,8 +90,8 @@ def main : int {
     }
     log_tune_status("txt2wav")
 
-    if (cfg.q8) {
-        set_tts_q8(true)
+    if (cfg.q8 || cfg.f32) {
+        set_tts_q8(cfg.q8)
     }
     let t_load = ref_time_ticks()
     var inscope m <- load_tts_model(cfg.tts)

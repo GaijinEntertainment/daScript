@@ -313,7 +313,7 @@ def private st2_serve_q8() : bool {
     if (g_st2_q8_pin != St2Lane.unset) {
         return g_st2_q8_pin == St2Lane.q8
     }
-    return false   // the policy default stays f32 until the rig rules on the q8 lane
+    return true   // the rig held q8 at f32 quality, so f32 is the reference lane, not the served one
 }
 
 //! Pin the rows GEMMs' format for subsequent loads: q8 quants vs the file's own f32 planes.

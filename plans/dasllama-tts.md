@@ -590,8 +590,12 @@ repacked in place for the box's backend, and drops the f32 served layout; `conv1
 batch kernel - a conv quantizes its input rows once, then one kernel call per tap over the
 rows whose shifted input exists, accumulated onto the bias-initialized output. The lane trio
 `set_tts_q8` / `reset_tts_q8` / `tts_serves_q8` (facade) pins it; tag `tts-q8` is
-config-bound (the repack is the backend's); policy default stays f32 until this receipt is
-ruled. Block test: q8 error 3-8% of a 2% dot-envelope bar. Rig, kokoro af_heart, 200
+config-bound (the repack is the backend's). Ruled on this receipt (Boris, 2026-09-02): q8 is
+the served default - "this just removes 'duty to optimize f32 path'. because its more memory
+for no good reason" - so the f32 lane is the reference the parity rail and the block test
+hold against, selected by the pin (`--f32` on `txt2wav`, `tts_synth`, `tts_rig.py`), and
+rung (d), the Accelerate tier for the f32 GEMMs, leaves the ladder. Block test: q8 error 3-8%
+of a 2% dot-envelope bar. Rig, kokoro af_heart, 200
 sentences: WER 3.50% (f32 3.41, reference 3.18), UTMOS 4.500 (f32 4.501) - two words of
 2202, quality intact. Speed, same input, mapped, clean: nano 532 -> 499 ms (bert 108 -> 61,
 generator 307 -> 328), mini 1200 -> 1023 (bert 113 -> 60, generator 725 -> 602), kokoro

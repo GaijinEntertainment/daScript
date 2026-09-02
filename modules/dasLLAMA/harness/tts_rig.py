@@ -89,7 +89,8 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--daslang", default=os.path.join(REPO, "bin", "daslang"))
     ap.add_argument("--skip-synth", action="store_true", help="score existing folders")
-    ap.add_argument("--q8", action="store_true", help="serve the rows GEMMs as Q8_0 quants (folders get a _q8 suffix)")
+    ap.add_argument("--q8", action="store_true", help="pin the rows GEMMs to Q8_0 quants, the serving default (folders get a _q8 suffix)")
+    ap.add_argument("--f32", action="store_true", help="pin the rows GEMMs to the file's f32 planes, the reference lane (folders get a _f32 suffix)")
     a = ap.parse_args()
     rows = json.load(open(FIXTURE, encoding="utf8"))
     if a.limit:
@@ -97,7 +98,7 @@ def main():
     dirs = {}
     for spec in a.models:
         model, voice = spec.split(":")
-        d = os.path.join(a.out, f"{model}_{voice}" + ("_q8" if a.q8 else ""))
+        d = os.path.join(a.out, f"{model}_{voice}" + ("_q8" if a.q8 else "_f32" if a.f32 else ""))
         dirs[spec] = d
         os.makedirs(d, exist_ok=True)
         if not a.skip_synth:
@@ -108,6 +109,8 @@ def main():
                 cmd += ["--limit", str(a.limit)]
             if a.q8:
                 cmd += ["--q8"]
+            if a.f32:
+                cmd += ["--f32"]
             run(cmd)
     env = dict(os.environ, HF_HOME=os.path.join(a.root, ".hf"), NEMO_CACHE_DIR=os.path.join(a.root, ".nemo"),
                TORCH_HOME=os.path.join(os.path.dirname(a.root), ".torchhub"))

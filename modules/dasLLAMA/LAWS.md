@@ -116,3 +116,9 @@ rule as a lint candidate. On the hot-path mechanism, after a helper wrapping the
 but never truly reallocated'" ... "sounds good on both"): a reused buffer is sized by the
 builtin `scratch_resize` at the site, never through a helper, and the `@scratch` mark sits on
 the callee out-parameter the buffer grows through - the checklist's scratch rule says so.
+Same day, on the q8 lane's rig receipt (kokoro WER 3.50 vs 3.41 f32, UTMOS tie): "this just
+removes 'duty to optimize f32 path'. because its more memory for no good reason" - q8 is the
+served default and f32 the reference lane, stated in `ARCHITECTURE_MEDIA.md` sec 1.7c. The
+plan's standing rule from the same arc - no lexicon or rule change lands without a rig delta -
+is why the front-end packs' mint routes to the TTS checklist: a lexicon-only diff has to open
+the rule that asks for the delta.
