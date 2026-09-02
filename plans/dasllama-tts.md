@@ -661,7 +661,15 @@ four runs, RTF 0.096 - torch is 0.097 on this box. Nano on the same input: 15.0 
 459-467 ms, RTF 0.031 - ORT f32 is 0.035. All four suites green (blocks 10, kitten 13,
 kokoro 4, facade 9). What remains on kokoro: conv 304 (63% of the generator), adain 43, noise
 38, ups 29, snake 31; outside the generator the decoder (182 ms, still channel-major) is the
-largest stage.
+largest stage. The rail then took the table's neighbours ("lets do tan as well - and check if
+anything else near should go at the same one"): tan mirrors `v_tan`; exp2, log2, log and pow
+mirror `v_exp2` / `v_log2_est_p5` bit for bit (plain fmul+fadd where vecmath's chains are
+unfused - fusing drifted log2 by 2e-6); tanh, sinh, cosh have no vecmath twin (the
+interpreter calls libm per lane) and ride the exp emitter within 3.6e-7 relative - the tower
+GELU's `tanh(float4)` is the consumer. Recorded: the interpreter's log2 is an estimate at
+3.65e-5 relative, inherited by log and pow. `modules/dasLLVM/tests/llvm_vector_math.das`
+pins every bound on both rails; ns per element on this box: tan 10.1 -> 2.6, log2 9.3 -> 1.7,
+exp2 6.6 -> 2.1, pow 14.7 -> 5.5, tanh 9.0 -> 3.7.
 
 ## Risks
 
