@@ -141,6 +141,19 @@ Add a ``// nolint:CODE`` comment on the same line as the flagged expression::
 The suppression is exact: ``// nolint:PERF003`` only suppresses PERF003, not other
 rules. An optional explanation after the code is recommended but not required.
 
+When one rule needs silencing throughout a file — a whole-file shape the rule
+cannot see — declare it once in the header instead of on every line. The mirror
+arms a rule for one file: a rule that is off by default, or one the repo
+configuration turned off::
+
+    options _nolint = "LINT029,PERF030"
+    options _lint = "STYLE005"
+
+The codes are comma-separated and apply to that file only. Both are layered after
+the repo configuration and the environment, so the file has the final say, and an
+enable beats a disable of the same code. An unknown code is ignored, so a typo
+changes nothing.
+
 A file whose *subject* conflicts with the lint pipeline's compile policies can opt
 out entirely with a ``// lint-skip-file: <reason>`` comment in the file header (the
 first 16 lines — deeper occurrences are treated as prose, so quoting the directive
@@ -1083,7 +1096,9 @@ rule: a read, ``return``, passing it on (to a ``&`` slot too — the callee may
 read it first), ``addr``, a lambda capture, a write through a pointer
 parameter's pointee (``p.x = 1`` reaches the caller's object; reassigning
 ``p`` itself is a store like any other). Class methods and ``[extern]`` stubs,
-underscore-prefixed names and ``[unused_argument]`` are skipped.
+underscore-prefixed names and ``[unused_argument]`` are skipped. A parameter
+the body writes *and* reads back is silent: the writes cannot leave the
+function, so the parameter simply is the local.
 
 A read only counts when it can **follow** a store. A read that precedes every
 store — the ``if (tex != 0u)`` guard above a ``tex = 0u`` that clears a handle
@@ -1116,10 +1131,47 @@ sits above it, so source order describes nothing there.
         return length(text)
     }
 
-    // Not flagged — a scratch parameter is written and then read
-    def twice(var n : int) : int {
-        n = n * 2
-        return n
+LINT029 — by-ref argument is mutated
+====================================
+
+The purity contract: a function that writes to a ``var`` by-ref parameter — a
+struct, array or table passed ``var``, or an explicit ``&`` — changes state
+its caller owns. Functions communicate through return values; a call site
+where every argument is read-only is one a reader can reason about locally.
+The rule ships **off**. It is advice, not a gate — a "be careful, keep this in
+mind" reminder rather than a defect report. Arm it on a file you are writing new
+code in with ``options _lint = "LINT029"``, read what it says, and skip the
+findings you disagree with: a deliberate out-parameter keeps its ``var`` under a
+per-line ``// nolint:LINT029``. A tree that wants the contract enforced for
+everyone turns it on with ``LINT029 = true`` in ``.lint_config``.
+
+A parameter counts as mutated when the body writes it directly or passes it on
+to a mutable slot. Receiver position exempts nothing: a mutated struct is a
+finding wherever it sits. Four shapes are outside the rule. A parameter the
+function returns — ``var`` is how a non-copyable value moves out (the same
+exemption LINT014 grants). A struct whose every field access yields a pointer
+or a handle — there ``var`` is what keeps the CONTAINED handle non-const, so
+the const-parameter remedy does not exist. Block and lambda parameters — a
+callback's mutable slot is its caller's contract. Library
+code — any ``daslib/`` folder, the stdlib and module daslibs alike — is
+exempt wholesale, because the builder/state idiom (``var self``,
+``var writer``, ``var st``) is the library's own. Class methods, ``[extern]``
+stubs, ``finalize`` overloads, address-taken functions, underscore-prefixed
+names and ``[unused_argument]`` are skipped.
+
+.. das-doc: alt
+.. code-block:: das
+
+    // Flagged when enabled — the caller's array grows
+    def append_one(var xs : array<int>) {   // LINT029 on xs
+        xs |> push(1)
+    }
+
+    // Pure — the result is returned
+    def appended_one(xs : array<int>) : array<int> {
+        var r := xs
+        r |> push(1)
+        return <- r
     }
 
 .. _perf_lint:

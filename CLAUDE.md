@@ -282,6 +282,18 @@ diagnostic in any tier.
 
 For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...) - see `skills/daslang/references/files-and-paths.md`. Never hand-roll `rfind("/")` + slice: misses Windows separators.
 
+**Return the result; do not fill an argument.** A function that hands its answer back
+through a `var` parameter puts the caller's state in play at every call site, and a reader has
+to open the callee to learn what moved. Return the value - a struct or a named tuple when
+there is more than one. The carve-out is performance, and only measured performance: a
+caller-owned buffer deliberately reused across calls on a hot path (inference kernels, audio
+render callbacks, per-frame GPU/vertex buffers) stays an out-parameter, because returning a
+fresh container there allocates per call. **LINT029 checks this and ships OFF** - arm it on a
+file you are writing new code in with `options _lint = "LINT029"`, and treat what it says as
+"be careful, keep this in mind" rather than a defect: reading a finding and moving on is a
+normal outcome, not a suppression to justify. The dead-write half IS a gate - LINT023 is on
+everywhere and reports a by-value out-parameter whose write nobody can read.
+
 **Inline literals over temp-var-and-push:** for a short array consumed in one expression write `stack([a, b, c])`, not `var xs : array<T>; xs |> emplace(a); xs |> emplace(b); stack(xs)`. Faster interpreted and easier to read; same for table literals and other bracketed constructors, while it stays readable.
 
 **Minimize `unsafe`:** most `unsafe(reinterpret<T?>)` in macro code exists to strip `const` from raw-pointer field access - fix the root cause by making the function parameter `var`, so field access returns non-const pointers. Reserve `unsafe` for genuinely unsafe operations (pointer arithmetic, `reinterpret` across unrelated types).

@@ -436,6 +436,15 @@ def set_skip_reason(file : string; lint_fixtures : bool; var result : LintResult
     return false
 }
 
+def private file_nolint_codes(prog : ProgramPtr; base : table<string>) : table<string> {
+    var merged : table<string>
+    for (code in keys(base)) {
+        merged |> insert(code)
+    }
+    add_module_rule_overrides(prog, merged)
+    return <- merged
+}
+
 def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
               disabled_codes, enabled_codes : table<string>; defer_stale : bool) : LintResult {
     var result = LintResult(file = file)
@@ -482,19 +491,20 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
                     result.compile_errors = issue_str
                     return
                 }
+                let file_disabled <- file_nolint_codes(program, disabled_codes)
                 if (run_paranoid) {
                     var paranoid_issues : array<LintIssue>
-                    result.count += paranoid_collect_issues(program, paranoid_issues, disabled_codes, enabled_codes)
+                    result.count += paranoid_collect_issues(program, paranoid_issues, file_disabled, enabled_codes)
                     result.issues |> push_from(paranoid_issues)
                 }
                 if (run_perf) {
                     var perf_issues : array<LintIssue>
-                    result.count += perf_lint_collect_issues(program, perf_issues, disabled_codes, enabled_codes)
+                    result.count += perf_lint_collect_issues(program, perf_issues, file_disabled, enabled_codes)
                     result.issues |> push_from(perf_issues)
                 }
                 if (run_style) {
                     var style_issues : array<LintIssue>
-                    result.count += style_lint_collect_issues(program, style_issues, disabled_codes, enabled_codes, comment_hygiene)
+                    result.count += style_lint_collect_issues(program, style_issues, file_disabled, enabled_codes, comment_hygiene)
                     result.issues |> push_from(style_issues)
                 }
             }
