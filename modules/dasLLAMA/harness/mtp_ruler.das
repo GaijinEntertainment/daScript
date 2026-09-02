@@ -179,16 +179,18 @@ def private greedy_text(t : Model; tk : Tokenizer; ids : array<int64>; ngen : in
 //! Every corpus turn rendered through the model's own chat template, thinking off, as the text the
 //! reference server must see raw - the leading BOS piece dropped because the server adds its own -
 //! plus our greedy continuation of it, the control the reference's text is checked against.
-def private render_prompts(model : string; texts : array<string>; ngen : int; var rendered : array<string>; var ours : array<string>) {
+def private render_prompts(model : string; texts : array<string>; ngen : int; gpu : bool; var rendered : array<string>; var ours : array<string>) {
     let tk <- load_tokenizer_auto(model)
     with_job_que() {
         setup_dasllama_jobque_()
         var t <- load_model_cached(model, QuantMode.q8)
         t.config.seq_len = min(t.config.seq_len, 2048l)
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            select_prefill_override("metal")
-            set_metal_prefill_min_npos(1l)
-            select_decode_override("metal")
+            if (gpu) {   //! the control text comes from the rail under measurement - CPU kernels for a CPU row
+                select_prefill_override("metal")
+                set_metal_prefill_min_npos(1l)
+                select_decode_override("metal")
+            }
         }
         rendered |> reserve(length(texts))
         ours |> reserve(length(texts))
@@ -213,10 +215,12 @@ def private render_prompts(model : string; texts : array<string>; ngen : int; va
             delete ids
         }
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            select_decode_override("")
-            select_prefill_override("")
-            metal_decode_shutdown()
-            metal_prefill_shutdown()
+            if (gpu) {
+                select_decode_override("")
+                select_prefill_override("")
+                metal_decode_shutdown()
+                metal_prefill_shutdown()
+            }
         }
         delete t
     }
@@ -540,10 +544,10 @@ def main() {
         }
     }
     apply_box_profile_runtime()
-    set_metal_mode(MetalMode.when_available)
+    set_metal_mode(cfg.ngl > 0 ? MetalMode.when_available : MetalMode.off)
     var rendered : array<string>
     var ours : array<string>
-    render_prompts(cfg.model, texts, cfg.ngen, rendered, ours)
+    render_prompts(cfg.model, texts, cfg.ngen, cfg.ngl > 0, rendered, ours)
     rows |> reserve(length(rows) + length(ours))
     for (pi in range(length(ours))) {
         let head96 = head_of(ours[pi], 96)
