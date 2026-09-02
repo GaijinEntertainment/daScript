@@ -542,6 +542,33 @@ Both minted profiles committed; the gemv seats took grid_vbmi for all five grid 
 
 Every row at or past 0.95: the goal holds on Intel. q8s16 is the like-for-like q8_0 row (f16 scales); the f32-scale q8 row is informational (byte-capped at 0.944 in theory, 0.96 here).
 
+### zen4 v8 - THE GOAL TABLE (2026-09-01, c7a.4xlarge EPYC 9R14, x86-vnni512 re-minted with the L3-proof engine-shape seat race, a3a1a08ab; ratio = reference / ours)
+
+| fmt | gemv 1T | tile 1T | gemv 16L |
+|---|---|---|---|
+| q8 | 1.99 | 3.01 | 0.90 (ladder pass read 0.68; re-measured 6677-6703 vs 6059) |
+| q8s16 | 1.92 | 2.99 | 0.96 |
+| k4 | 2.29 | 2.49 | 0.98 |
+| k5 | 1.33 | 6.30 | 0.98 |
+| k6 | 1.07 | 3.47 | 0.99 |
+| q40 | 4.48 | 3.42 | 0.91-0.97 (ladder 0.89; re-measured 2944-3143 vs 2851) |
+| q51 | 2.83 | 6.02 | 1.01 |
+| iq4xs | 2.17 | 4.05 | 0.91 |
+| k3 | 1.79 | 2.69 | 1.01 |
+| iq3s | 2.24 | 11.91 | 1.30 |
+| iq3xxs | 2.22 | 10.23 | 1.19 |
+| iq4nl | 2.86 | 2.20 | 0.99 |
+| k2 | 1.74 | 1.69 | 1.10 |
+| iq2s | 1.33 | 6.71 | 1.28 |
+| iq2xs | 1.44 | 6.52 | 1.44 |
+| iq2xxs | 1.79 | 7.66 | 1.51 |
+| mx4 | 2.60 | 4.60 | 1.02 |
+
+One thread every row >= 1.07, tiles clean, every grid row 1.19-1.51 at 16 lanes. Under 0.95 at 16 lanes: the accepted streaming
+set (ruled, followup_general 67) - iq4xs 0.91-0.94, k5 0.93-0.98, iq4nl 0.94-0.99, q40 0.91-0.97 - and the f32-scale q8 row,
+byte-capped at 0.944 (q8s16, the GGUF q8_0 path, reads 0.96). The grid families' tile crowns are the vbmi rows (a tile tie -
+the lattice row's tile IS the 512 body - so the gemv companion carries the lattice without a separate seat).
+
 ## 3. Research memos (read before touching the kernels)
 
 - `kernel_parity_research_cpu.md` - llama.cpp's CPU vec_dot for the five grid formats + Q2_K,
