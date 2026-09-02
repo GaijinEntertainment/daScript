@@ -1214,3 +1214,13 @@ group; wording kept.
 - **Depth race on the box (the S4 mint):** synthetic 32-token prompt depth 2 137.5 vs depth 1
   152.2 (loss: incoherent text is not the site shape); SpecBench chat corpus 145.55 vs 145.29
   (tie) - the M5 sidecar carries `mtp_depth_assistant = 1`.
+- **The k4 two-row twin, GEMV lab `bench_metal_gemv_kernels` (3 rounds best-of, B=2 ms; two b1c
+  passes as the bar):** M4 Pro q3b / w2_3b / cls3b: bar 0.0456 / 0.1028 / 1.671; ext twin
+  (production, `k4_ext2`) 0.0620 / 0.153 / 2.32 = 1.36 / 1.49 / 1.39x; the two-row register tile
+  (`k4_r2c2`) 0.0385 / 0.0983 / 1.245 = 0.85 / 0.96 / 0.74x; the lcpp-shaped `k4_mvb2` 0.96 /
+  1.05 / 0.89x. M5 Max: bar 0.01482 / 0.03488 / 0.7466; ext 0.82 / 0.89 / 0.52x; tile 0.94 / 1.07
+  / 0.63x; mvb2 0.78 / 0.80 / 0.54x. The tile is the M4's form, the ext twin the M5's - the
+  `kq_mvb2_k4_r2` crown. Production race on the M4 mint before the tile (n 2048 x 8192 rows, 8
+  dispatches): twin 0.83 ms vs two passes 0.51 (k4), 0.90 vs 0.70 (k6), 0.82 vs 0.40 (k2), k5
+  0.84 vs 0.94 and k3 0.85 vs 0.86 keep the twin; on the M5 the twin wins every K-quant
+  (k4 0.152 vs 0.187) and loses iq4xs (0.243 vs 0.202) and iq4nl only.

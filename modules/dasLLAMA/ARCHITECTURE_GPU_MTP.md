@@ -65,3 +65,12 @@ per format (`race_kq_rows`, twin against two passes) and crowns `kq_rows_<fmt>` 
 win; `metal_decode_init` reads the crowns once into `g_kq_rows_crowned` and the dispatcher takes
 the passes exactly there. An unraced box keeps the twin. The M4 Pro's Qwen3.8-27B round paid
 2.06x a step for its two verify rows under the twin - the reason its depth-1 speculation lost.
+
+The k4 twin itself has two forms, and the form is the box's too. The ext twin gives a thread one
+weight row and two x columns; the two-row register tile (`MetalKqMvB2K4R2`) gives it two weight
+rows and both columns, so every x float4 load feeds two rows - fewer loads per FMA, twice the
+live registers. The tile wins where ALU is short (M4 Pro: 0.74-0.96 of two passes against the ext
+twin's 1.36-1.49) and loses where it is not (M5 Max: 0.63-1.07 against 0.52-0.89). The mint races
+the two production twins first (`race_kq_k4_form`) and crowns `kq_mvb2_k4_r2` where the tile
+wins; `enc_kq_mvb` takes the tile at two rows exactly there, and the k4 rows race that follows
+meets the box's twin form. An unraced box keeps the ext twin.

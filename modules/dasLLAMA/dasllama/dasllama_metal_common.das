@@ -248,6 +248,7 @@ var g_pso_kq_k6 : MetalComputePipeline?
 var g_pso_kq_iq4xs : MetalComputePipeline?
 var g_pso_kq_k3 : MetalComputePipeline?
 var g_pso_kq_mvb2_k4 : MetalComputePipeline?   // batch B=2..8: the kq ext small-batch mv twins
+var g_pso_kq_mvb2_k4r2 : MetalComputePipeline?   // the k4 twin's two-row register tile (the `kq_mvb2_k4_r2` crown)
 var g_pso_kq_mvb4_k4 : MetalComputePipeline?
 var g_pso_kq_mvb2_k5 : MetalComputePipeline?
 var g_pso_kq_mvb4_k5 : MetalComputePipeline?

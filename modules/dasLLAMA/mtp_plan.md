@@ -829,20 +829,32 @@ row bought nothing. Two findings, both fixed in the arc:
   built at `rope_dim/2`; every partial-rope carrier (qwen35: head 256, rope 64) declined with
   `rope_rows`, the parity fixtures SKIPPED on a decline instead of failing, and the multi-session
   batch fell to per-row steps on the M5 too (`eval_batch_` B=2 read 2.00x a step). The gate asks the
-  rotated width; the verify fixtures carry `must_serve` (head-less Qwen3.8-27B, large tier, red ->
-  green with a negative control). The MTP round itself has its own verify path and never hit this.
-  Side effect worth a look: the fixed batch rail's same-slab two-row step on Qwen3.8 reads 31 ms
-  against the round's own 42 ms verify - the round may want the batch rail's verify (ledger).
+  rotated width and the batch rope-store now rotates rope_dim (its `RopeStoreBArgs.rot` carried the
+  head size). What the opened gate then exposed: the batch rail has NO arm for the hybrid graph
+  (deltanet layers, the 2x-wide gated Q) and served head-less Qwen3.8-27B with plain attention over
+  every layer (maxd 22.5, 47/48 argmax flips) - the rope_rows decline had been hiding that too. The
+  rail now graph-declines every non-std graph; the head-less Qwen3.8 fixture asserts the decline
+  reason. The 31 ms "same-slab two-row step" that suggested the round should borrow the batch
+  rail's verify was that garbage rail - retracted (ledger #79). The MTP round has its own verify
+  path (dn tape + gated Q at nrows) and never hit any of this. The rot fix itself has no carrier on
+  disk (the std-attention partial-rope arches are glm4moe-class): kernel-level parity covers the
+  rope-store at rot < hs, the driver argument is covered by reading.
 - The round's verify rows on K-quant planes take the small-batch twins (`enc_kq_mvb`), which the
   July lab already called ALU-bound. The GEMV lab on both boxes (3B shapes, wGB/s): on the M5 the
   two-row twin costs 0.52-0.89 of two single passes; on the M4 Pro 1.35-1.5 for k4 (k6's still
   wins 0.81-0.84). So the form is a per-box crown: `race_kq_rows` (the production wrappers, twin vs
   two passes, per format on `race_kq_planes` fixtures) crowns `kq_rows_<fmt>`, `enc_kq_site_b` takes
-  the passes there, an unraced box keeps the twin. The M4 mint + rig rebuild + Qwen3.8 ruler rerun
-  are the proof, pending. llama.cpp's round on the M4 is 1.53x a step; our per-row floor is 2.0x, so
-  parity there needs a two-row K4 kernel that amortizes on an ALU-short GPU (their `mul_mv_ext`
-  dequantizes once per block for all rows) - the lab's levers (a) hoist the row-invariant x sums,
-  (b) inline per-quarter dequant, (c) fp16 x panels.
+  the passes there, an unraced box keeps the twin. The M4 mint (both chains, before the tile):
+  passes win k4 0.51 vs twin 0.83 ms, k6 0.70 vs 0.90, k2 0.40 vs 0.82, every iquant; the twin
+  keeps k5 and k3. The M5 mint: the twin wins every K-quant, the passes win iq4xs / iq4nl only.
+  llama.cpp's round on the M4 is 1.53x a step; our per-row floor is 2.0x, so parity there needs a
+  two-row K4 kernel that amortizes on an ALU-short GPU. Built: the two-row register tile
+  (`lab k4_r2c2` -> production `MetalKqMvB2K4R2`, `enc_kq_mvb2_k4r2_c`): a thread owns TWO weight
+  rows and both x columns, every x float4 load feeds two rows. Lab, B=2 cost as a fraction of two
+  single passes (q3b / w2_3b / cls3b): M4 Pro tile 0.85 / 0.96 / 0.74 vs the ext twin 1.36 / 1.49 /
+  1.39; M5 Max tile 0.94 / 1.07 / 0.63 vs ext 0.82 / 0.89 / 0.52. A per-box form: `race_kq_k4_form`
+  races the two production twins first and crowns `kq_mvb2_k4_r2` where the tile wins; the k4 rows
+  race then meets the box's twin. M4 mint + rig rebuild + Qwen3.8 ruler rerun on the tile: pending.
 
 **Two harness lessons, both now in the ruler:**
 - A heat-soaked box under-reads a memory-bound decode by 13-18% (llama.cpp Qwen3.8 off read 21-22

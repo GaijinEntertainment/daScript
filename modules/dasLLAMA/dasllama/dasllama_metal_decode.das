@@ -2335,8 +2335,8 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
             }
         }
     }
-    // shexp MoE has no batch arm — a std-attention shexp model (qwen2moe-class) must decline
-    if (!t.blocks.ffn_is_dense && t.config.n_ff_shexp > 0l) {
+    // no batch arm for hybrid graphs (deltanet layers, gated Q - the round path serves them) nor shexp MoE
+    if (!t.blocks.attn_is_std || (!t.blocks.ffn_is_dense && t.config.n_ff_shexp > 0l)) {
         return MetalDecodeDecline.graph
     }
     let shape = decode_shape_decline(t, BATCH_NEEDS_OK, true)
@@ -2349,9 +2349,12 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
     }
     let c = t.config
     let kdt = ws.scr.kv_dtype_k
+    // the block-codec rope-store arms rotate the whole head: partial rope serves on f16 / f32 only (as the single-row gate)
+    let partial_rope = c.rope_dim > 0l && c.rope_dim != c.head_size
     if (ws.scr.kv_dtype_v != kdt ||
             (kdt != KVDtype.f16 && kdt != KVDtype.f32 &&
-             kdt != KVDtype.q8_0 && kdt != KVDtype.tq4)) {
+             kdt != KVDtype.q8_0 && kdt != KVDtype.tq4) ||
+            (partial_rope && kdt != KVDtype.f16 && kdt != KVDtype.f32)) {
         return MetalDecodeDecline.kv_dtype
     }
     for (i in range64(nrows)) {
@@ -2864,9 +2867,11 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 // hetero: the swa pair's rows are hs_sw/2 wide — the class's own width)
                 var bcos_l = lsl && dual_rope ? bcos_swa : bcos
                 var bsin_l = lsl && dual_rope ? bsin_swa : bsin
-                // one kargs per shape, from this layer's own geometry (rope is full-width here)
+                // one kargs per shape, from this layer's own geometry; a partial-rope carrier (qwen35:
+                // rope 64 of head 256) rotates rot/2 pairs off rot/2-wide table rows, the rest identity
                 let neox_l = c.rope_neox ? 1u : 0u
                 let hasb_l = c.attn_qkv_bias ? 1u : 0u
+                let rot_l = uint(c.rope_dim > 0l ? c.rope_dim : hs_l)
                 if (tq4) {
                     var tka = RopeStoreBTq4Args(lay = lay_l, qd = uint(qd_l), head_size = uint(hs_l),
                         nheads = uint(n_heads), kv_mul = kvm_l, qstride = uint(qkvd_l),
@@ -2883,7 +2888,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     var rka = RopeStoreBArgs(lay = lay_l, kv_dim = uint(kvd_l), qd = uint(qd_l),
                         head_size = uint(hs_l), npairs_q = uint(qd_l / 2l),
                         npairs = uint((qd_l + kvd_l) / 2l), qstride = uint(qkvd_l),
-                        neox = neox_l, has_bias = hasb_l, rot = uint(hs_l))
+                        neox = neox_l, has_bias = hasb_l, rot = rot_l)
                     enc_rope_store_b(enc, f16, bqkv, bcos_l, bsin_l, brt, bbias, rka,
                         (qd_l + kvd_l) / 2l, nrows)
                 }

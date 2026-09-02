@@ -501,11 +501,19 @@ def private dff_cell(t : T?; tr, trg : Model; tag : string; prose_a, prose_b : a
 //! the same-slab verify lands GPU logits only on head-less models (the batch driver's gpu_logits gate
 //! excludes NextN carriers - their round has its own verify), so a NextN fixture's decline is a skip;
 //! `must_serve` marks a head-less carrier the rail is contracted to serve - a decline there is a failure
-def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; nr : int64 = 4l; must_serve : bool = false) {
+def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; nr : int64 = 4l; must_serve : bool = false;
+                     expect_decline : string = "") {
     var st = RowStats()
     var served = 0l
+    let declines_before <- metal_batch_decode_declines()
     vff_pair(tr, trg, prompt, 12l, nr, st, served, false)
-    if (served == 0l) {
+    if (expect_decline != "") {
+        let declines_after <- metal_batch_decode_declines()
+        let before = declines_before?[expect_decline] ?? 0l
+        let after = declines_after?[expect_decline] ?? 0l
+        t |> success(served == 0l && after > before,
+            "{tag}: the metal batch rail declines this graph as {expect_decline} ({before} -> {after}, served {served})")
+    } elif (served == 0l) {
         if (must_serve) {
             t |> failure("{tag}: the metal batch rail declined the same-slab verify on a carrier it must serve")
         } else {
@@ -655,7 +663,7 @@ def test_metal_mtp_parity_qwen38_split_head(t : T?) {
 // A head-less fixture: only the batch-rail verify arm runs (the model has no draft head yet - the
 // gemma assistant drafter lands in S3). gemma4's router amplifies any float-class difference to
 // ~2.5 logits/step (the support-matrix row's finding), so its bar is the row's, not the 0.5 one.
-def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_serve : bool = false) {
+def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_serve : bool = false; expect_decline : string = "") {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)
         if (!model_available(t, path)) {
@@ -684,13 +692,13 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
             dff_cell(t, tr, trg, tag, prose_a, prose_b, tol, true)
         }
         if (arm_on(t, "mtp-vff-{tag}")) {
-            vff_cell(t, tr, trg, tag, prose_a, tol, 4l, must_serve)
+            vff_cell(t, tr, trg, tag, prose_a, tol, 4l, must_serve, expect_decline)
         }
         if (arm_on(t, "mtp-vff1-{tag}")) {   // one row through the batch driver: the encoder alone, no row mixing
-            vff_cell(t, tr, trg, tag, prose_a, tol, 1l, must_serve)
+            vff_cell(t, tr, trg, tag, prose_a, tol, 1l, must_serve, expect_decline)
         }
         if (arm_on(t, "mtp-vff5-{tag}")) {   // five rows: the batch driver's GEMM rail (mp 32) under the same-slab verify
-            vff_cell(t, tr, trg, tag, prose_a, tol, 5l, must_serve)
+            vff_cell(t, tr, trg, tag, prose_a, tol, 5l, must_serve, expect_decline)
         }
         // the assistant drafter's round (gemma-4 targets with an mtp-* sidecar beside them): counting
         // free-run, speculative == plain at depth 1, 2 and 4
@@ -756,13 +764,13 @@ def test_metal_verify_gemma12(t : T?) {
     }
 }
 
-// the partial-rope carrier (qwen35: head 256, rope_dim 64), HEAD-LESS so the batch rail's GPU logits
-// gate admits it: the rail's rope rows are built at rope-dim width and its gate must ask for that
-// width, not the head's - the decline read rope_rows and had hidden behind a skip
+// the hybrid carrier (qwen35: deltanet layers, the 2x-wide gated Q), HEAD-LESS so the batch rail's GPU
+// logits gate admits it: the rail has no arm for either, so it must decline the GRAPH - served, it
+// ran plain attention over every layer (maxd 22, every argmax flipped) behind the rope_rows decline
 [test]
 def test_metal_verify_qwen38_27b(t : T?) {
-    t |> run("batch-rail same-slab verify vs plain GPU decode - Qwen3.8-27B-Q4_K_M, no head (partial rope, large tier)") <| @(t : T?) {
-        run_verify_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "q38", 2.0, true)
+    t |> run("batch-rail same-slab verify declines the hybrid graph - Qwen3.8-27B-Q4_K_M, no head (deltanet + gated Q, large tier)") <| @(t : T?) {
+        run_verify_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "q38", 2.0, false, "graph")
     }
 }
 

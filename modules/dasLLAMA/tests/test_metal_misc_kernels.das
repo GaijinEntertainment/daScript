@@ -2024,7 +2024,7 @@ def test_lens_requires_gate(t : T?) {
 
 // The K-quant small-batch form is a per-box crown: the decode race times the production two-row twin
 // against two single-row passes for every format with a twin, on this box, and returns a verdict per
-// format - the mint writes `kq_rows_<fmt>` where the passes won (the M4 Pro's k4; never on an M5).
+// format - the mint writes `kq_rows_<fmt>` where the passes won (the M4 Pro's k4; the M5 Max's iq4 pair).
 [test]
 def test_kq_rows_race_verdicts(t : T?) {
     t |> run("the decode race returns a small-batch verdict per K-quant format") <| @(t : T?) {
@@ -2035,13 +2035,19 @@ def test_kq_rows_race_verdicts(t : T?) {
             }
             let res <- metal_tensor_race_decode()
             var seen = 0
+            var form = 0
             for (r in res) {
-                continue if (!(r.family |> starts_with("kq_rows_")))
-                seen++
+                if (r.family == "kq_mvb2_k4_r2") {
+                    form++
+                } else {
+                    continue if (!(r.family |> starts_with("kq_rows_")))
+                    seen++
+                }
                 t |> success(r.base_ms > 0.0lf && r.twin_ms > 0.0lf, "{r.family}: both arms timed (twin {r.base_ms:.3f} ms, passes {r.twin_ms:.3f} ms) {r.note}")
                 t |> success(r.winner == "tensor" || r.winner == "simdgroup", "{r.family}: a verdict, not a dispatch failure ({r.winner}: {r.note})")
             }
             t |> equal(seen, 12, "every K-quant format with a small-batch twin raced")
+            t |> equal(form, 1, "the k4 twin's two-row tile raced its two-column form")
         } else {
             t |> skip("das_metal is not built on this platform")
         }
