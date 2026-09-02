@@ -1190,7 +1190,7 @@ def q8q8_tile_s16_gen(var yp : float?; wg : int8 const?; sg : uint16 const?; xqp
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, kstep = 2, gkstep = 2, bias = 128, requires = "avxvnni|avx512vnni"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, kstep = 2, requires = "avx512vnni,avx512bw"),
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, kstep = 2, gkstep = 2, bias = 128, requires = "avx512vnni,avx512bw"),
- tune_perm(dot = "vpdpbusd", width = 512, mr = 16, kstep = 2, gkstep = 2, bias = 128, pf = 2048, requires = "avx512vnni,avx512bw"),   // the crown with a 2 KB software prefetch on the gemv stream (lab row)
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, kstep = 2, gkstep = 2, bias = 128, prefetch = 2048, requires = "avx512vnni,avx512bw"),   // the crown with a 2 KB software prefetch on the gemv stream (lab row)
  tune_perm(dot = "vpdpbssd", width = 256, mr = 8, kstep = 2, requires = "avxvnniint8"),
  tune_perm(dot = "smmla", mr = 4, kstep = 2, requires = "i8mm"), tune_perm(dot = "smmla", mr = 4, kstep = 2, nrsplit = 2, requires = "i8mm"),
  tune_perm(dot = "smmla", mr = 8, kstep = 2, nrsplit = 2, requires = "i8mm"), tune_perm(dot = "smmla", mr = 8, kstep = 4, nrsplit = 2, requires = "i8mm"),

@@ -260,6 +260,7 @@ struct RowStat {
 }
 
 let TEAM_BURN = 6   // warmup dispatches per row before the team arm times anything
+let SOLO_BURN = 3   // the solo arm's unmeasured warm rounds (a core ramps for ~3)
 var g_each_round = false   // --each
 
 //! the engine's decode dispatch, verbatim (dasllama_math's matmul shape): the splitter's chunk count over the
@@ -387,7 +388,7 @@ def perm_wanted(spec, suffix : string) : bool {
 def time_rows(var stats : array<RowStat>; rounds : int; blk : block<(row : int) : void>) {
     for (row in range(length(stats))) {
         stats[row].us |> reserve(rounds)
-        for (_w in range(3)) {
+        for (_w in range(SOLO_BURN)) {
             invoke(blk, row)
         }
     }

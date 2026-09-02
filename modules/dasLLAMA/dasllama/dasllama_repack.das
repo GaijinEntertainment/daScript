@@ -330,12 +330,12 @@ def repack_k6_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
                     for (blk in range64(8l)) {   // qh re-packed per sub-block
                         for (half in range64(2l)) {
                             for (t in range64(4l)) {
-                                var byte = 0u
+                                var qhbyte = 0u
                                 for (j in range64(4l)) {
                                     let l = (blk / 4l) * 32l + half * 16l + j * 4l + t
-                                    byte |= ((uint(tqp[sq + 128l + l]) >> uint(2l * (blk % 4l))) & 3u) << uint(2l * j)
+                                    qhbyte |= ((uint(tqp[sq + 128l + l]) >> uint(2l * (blk % 4l))) & 3u) << uint(2l * j)
                                 }
-                                kq[dq + 128l * mr + ((blk * 2l + half) * mr + r) * 4l + t] = uint8(byte)
+                                kq[dq + 128l * mr + ((blk * 2l + half) * mr + r) * 4l + t] = uint8(qhbyte)
                             }
                         }
                     }
@@ -441,6 +441,7 @@ def repack_iq4xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete ts
 }
 
+//! scales interleave as k6's row ([16 x mr int8][mr x f16 d])
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let nsb = n / 256l
