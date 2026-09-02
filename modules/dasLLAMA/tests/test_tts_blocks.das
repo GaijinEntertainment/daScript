@@ -234,6 +234,36 @@ def private pad_and_polar_case() : BlockCase {
     return res
 }
 
+// linear_rows on the tiled path (wt minted) against the same layer on the batched dot form.
+def private linear_case(nin, nout : int64) : BlockCase {
+    var r = TtsRng()
+    rng_seed(r, 0xabcul + uint64(nin))
+    let t = T_ROWS
+    var l = TtsLinear(nin = nin, nout = nout)
+    rand_fill(r, l.w, nout * nin, 1.0 / sqrt(float(nin)))
+    rand_fill(r, l.b, nout, 0.5)
+    var e = TtsLinear(nin = nin, nout = nout, w <- abs_of(l.w))
+    var inscope x : array<float>
+    rand_fill(r, x, t * nin, 2.0)
+    var inscope x_abs <- abs_of(x)
+    var inscope want : array<float>
+    var inscope env : array<float>
+    linear_rows(l, x, t, want)   // no wt yet: the dot form
+    linear_rows(e, x_abs, t, env)
+    linear_prepare(l)
+    var inscope got : array<float>
+    linear_rows(l, x, t, got)
+    var bias_abs = 0.0
+    for (b in l.b) {
+        bias_abs = max(bias_abs, abs(b))
+    }
+    var res <- score("linear {nin}x{nout}", got, want, env, bias_abs)
+    if (empty(l.wt)) {
+        res.bad += 1000000   // the tiled path never engaged
+    }
+    return res
+}
+
 def private report(t : T?; r : BlockCase) {
     to_log(LOG_INFO, "tts blocks {r.name}: max |rows - ref| {r.max_abs}, worst ratio to the bar {r.max_ratio}, over the bar {r.bad}\n")
     t |> equal(r.bad, 0, "{r.name}: elements past the dot-envelope bar")
@@ -255,6 +285,10 @@ def test_rows_convs(t : T?) {
         t |> run("transposed upsamplers") @(t : T?) {
             report(t, conv_case("convT k20 s10", 64l, 32l, 20l, 10l, 5l, 1l, true))
             report(t, conv_case("convT k12 s6", 64l, 32l, 12l, 6l, 3l, 1l, true))
+        }
+        t |> run("linear_rows on the tile") @(t : T?) {
+            report(t, linear_case(96l, 64l))
+            report(t, linear_case(768l, 3072l))
         }
         t |> run("snake, adain, pad, polar") @(t : T?) {
             report(t, snake_case())

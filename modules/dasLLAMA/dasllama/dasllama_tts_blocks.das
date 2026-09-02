@@ -45,9 +45,11 @@ struct TtsConv1d {
     transposed : bool
 }
 
-//! A dense layer, w [nout][nin] with an optional bias.
+//! A dense layer, w [nout][nin] with an optional bias; `wt` [nin][nout] is the tiled GEMM's B
+//! operand, minted at load by `linear_prepare` when `nout` sits on the 16-column tile.
 struct TtsLinear {
     w : array<float>
+    wt : array<float>
     b : array<float>
     nout : int64
     nin : int64
@@ -290,6 +292,10 @@ def conv1d(c : TtsConv1d; x : array<float>; t_in : int64; @exact_size var y : ar
 
 let private ROWS_OVERSPLIT = 2   // row-block chunks per lane: balance against the tap ranges' ragged ends
 
+//! A row-block edge snapped up to the tile's 4-row group (the last edge stays at `t`), so no
+//! lane's block ends in the scalar remainder rows; both ends of every block snap the same way.
+def private tile_edge(r, t : int64) : int64 => min(t, (r + 3l) / 4l * 4l)
+
 //! Every rows-form kernel walks channels four at a time.
 def private rows_width_check(c : int64; what : string) {
     if (c % 4l != 0l) {
@@ -314,7 +320,9 @@ def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var
     let chunks = matmul_chunks(int(t_out), ROWS_OVERSPLIT, t_out * cin * cout * k)
     maybe_parallel_for(0, int(t_out), chunks) $(rb, re) {
         unsafe {
-            for (r in range64(int64(rb), int64(re))) {
+            let rb4 = tile_edge(int64(rb), t_out)
+            let re4 = tile_edge(int64(re), t_out)
+            for (r in range64(rb4, re4)) {
                 var yrow = yp + r * cout
                 for (co in range64(cout)) {
                     yrow[co] = co < nbias ? bp[co] : 0.0
@@ -322,8 +330,8 @@ def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var
             }
             for (kk in range64(k)) {
                 let shift = kk * dil - pad_l
-                let r0 = max(int64(rb), -shift)
-                let r1 = min(int64(re), t_in - shift)
+                let r0 = max(rb4, -shift)
+                let r1 = min(re4, t_in - shift)
                 if (r1 > r0) {
                     gemm_f32_jo(yp + r0 * cout, xp + (r0 + shift) * cin, wp + kk * cin * cout, r1 - r0, cin, cout)
                 }
@@ -353,10 +361,14 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
     let chunks_in = matmul_chunks(int(t_in), ROWS_OVERSPLIT, t_in * cin * d)
     maybe_parallel_for(0, int(t_in), chunks_in) $(rb, re) {
         unsafe {
-            for (i in range64(int64(rb) * d, int64(re) * d)) {
+            let rb4 = tile_edge(int64(rb), t_in)
+            let re4 = tile_edge(int64(re), t_in)
+            for (i in range64(rb4 * d, re4 * d)) {
                 vp[i] = 0.0
             }
-            gemm_f32_jo(vp + int64(rb) * d, xp + int64(rb) * cin, wp, int64(re - rb), cin, d)
+            if (re4 > rb4) {
+                gemm_f32_jo(vp + rb4 * d, xp + rb4 * cin, wp, re4 - rb4, cin, d)
+            }
         }
     }
     var yp = unsafe(addr(y[0]))
@@ -404,15 +416,53 @@ def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @exact_size var y
 
 // ===== dense =====
 
-//! y [t][nout] = x [t][nin] . w^T + b
+//! Mint the tiled GEMM's B operand `wt` [nin][nout] when the width sits on the 16-column tile.
+def linear_prepare(var l : TtsLinear) {
+    return if (l.nout % 16l != 0l)
+    l.wt |> reserve_resize(l.nin * l.nout)
+    for (o in range64(l.nout)) {
+        for (i in range64(l.nin)) {
+            l.wt[i * l.nout + o] = l.w[o * l.nin + i]
+        }
+    }
+}
+
+//! y [t][nout] = x [t][nin] . w^T + b: the tiled GEMM over row blocks when `wt` was minted,
+//! the batched dot form otherwise.
 def linear_rows(l : TtsLinear; x : array<float>; t : int64; @exact_size var y : array<float>) {
     y |> reserve_resize(t * l.nout)
-    matmul_batch(y, l.w, x, l.nin, l.nout, t)
-    return if (empty(l.b))
-    for (r in range64(t)) {
-        let row = r * l.nout
-        for (o in range64(l.nout)) {
-            y[row + o] += l.b[o]
+    if (empty(l.wt)) {
+        matmul_batch(y, l.w, x, l.nin, l.nout, t)
+        return if (empty(l.b))
+        for (r in range64(t)) {
+            let row = r * l.nout
+            for (o in range64(l.nout)) {
+                y[row + o] += l.b[o]
+            }
+        }
+        return
+    }
+    let nin = l.nin
+    let nout = l.nout
+    let nbias = empty(l.b) ? 0l : nout
+    var yp = unsafe(addr(y[0]))
+    let xp = unsafe(addr<float const?>(x[0]))
+    let wp = unsafe(addr<float const?>(l.wt[0]))
+    let bp = nbias > 0l ? unsafe(addr<float const?>(l.b[0])) : null
+    let chunks = matmul_chunks(int(t), ROWS_OVERSPLIT, t * nin * nout)
+    maybe_parallel_for(0, int(t), chunks) $(rb, re) {
+        unsafe {
+            let rb4 = tile_edge(int64(rb), t)
+            let re4 = tile_edge(int64(re), t)
+            for (r in range64(rb4, re4)) {
+                var yrow = yp + r * nout
+                for (o in range64(nout)) {
+                    yrow[o] = o < nbias ? bp[o] : 0.0
+                }
+            }
+            if (re4 > rb4) {
+                gemm_f32_jo(yp + rb4 * nout, xp + rb4 * nin, wp, re4 - rb4, nin, nout)
+            }
         }
     }
 }

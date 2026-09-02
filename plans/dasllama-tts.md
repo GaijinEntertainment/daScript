@@ -544,6 +544,16 @@ nano generator 1638 -> 309 ms, total 2267 -> 941 ms (RTF 0.091); kokoro generato
 channel-major twin at the dot-envelope bar (worst case 0.3% of the bar). Bert is now 54% of
 nano and the decoder 9% of kokoro - rung (b) next.
 
+Rung (b) receipt (2026-09-02): `linear_rows` takes the tiled GEMM over tile-aligned row
+blocks whenever `nout` sits on the 16-column tile (`wt` [nin][nout] minted at load by
+`linear_prepare`; the dot form stays for the rest - duration_proj, source_linear); ALBERT
+attention runs one head per lane on the tiles over a 16-padded key axis (pad keys score
+-1e30, pad values zero). nano bert 510 -> 108 ms, total 941 -> 532 ms (RTF 0.051; ORT 0.035);
+mini total 1200 ms (RTF 0.128; ORT's uint8 run 0.28); kokoro bert 422 -> 110 ms, total
+1855 -> 1513 ms (RTF 0.168). Rigs green at the unchanged bars; the block test holds the tiled
+linear to the dot form. What remains on kokoro: generator 1079 (71%), decoder 173, bert 110,
+prosody 74 - the decoder's AdainResBlk convs still run channel-major.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the

@@ -11,6 +11,7 @@ require daslib/fio
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common
 require dasllama/dasllama_math
+require dasllama/dasllama_par
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 
@@ -196,6 +197,7 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string)
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         l.b <- read_arr(m, bytes, "{prefix}.bias")
     }
+    linear_prepare(l)
     return <- l
 }
 
@@ -456,36 +458,78 @@ struct StyleTts2Trace {
     frames : int64
 }
 
+// Self-attention on token-major h [t][hidden]: the projections on the tiled GEMM, then one
+// head per lane - Q.K^T and P.V on the tiles over a 16-padded key axis (the pad keys score
+// -1e30 and carry zero values), softmax per row between them.
 def private albert_attention(a : St2Albert; h : array<float>; t : int64; var out : array<float>) {
     var inscope @scratch q : array<float>
     var inscope @scratch k : array<float>
     var inscope @scratch v : array<float>
     var inscope @scratch ctx : array<float>
-    var inscope @scratch p : array<float>
+    var inscope @scratch head_scratch : array<float>
     linear_rows(a.q, h, t, q)
     linear_rows(a.k, h, t, k)
     linear_rows(a.v, h, t, v)
-    ctx |> reserve_resize(t * a.hidden)
-    p |> reserve_resize(t)
-    let dh = a.hidden / a.heads
+    let hidden = a.hidden
+    let heads = a.heads
+    let dh = hidden / heads
+    let tp = (t + 15l) / 16l * 16l
+    let per_head = t * dh + dh * tp + tp * dh + t * tp + t * dh   // qh, kT, vh, s, oh
+    ctx |> reserve_resize(t * hidden)
+    head_scratch |> reserve_resize(heads * per_head)
     let scale = 1.0 / sqrt(float(dh))
-    for (hd in range64(a.heads)) {
-        let off = hd * dh
-        for (i in range64(t)) {
-            for (j in range64(t)) {
-                var s = 0.0
+    let qp = unsafe(addr<float const?>(q[0]))
+    let kp = unsafe(addr<float const?>(k[0]))
+    let vp = unsafe(addr<float const?>(v[0]))
+    var cp = unsafe(addr(ctx[0]))
+    var sp = unsafe(addr(head_scratch[0]))
+    maybe_parallel_for(0, int(heads), int(heads)) $(hb, he) {
+        unsafe {
+            for (hd in range64(int64(hb), int64(he))) {
+                let off = hd * dh
+                var qh = sp + hd * per_head
+                var kT = qh + t * dh
+                var vh = kT + dh * tp
+                var s = vh + tp * dh
+                var oh = s + t * tp
+                for (i in range64(t)) {
+                    for (e in range64(dh)) {
+                        qh[i * dh + e] = qp[i * hidden + off + e]
+                        vh[i * dh + e] = vp[i * hidden + off + e]
+                        kT[e * tp + i] = kp[i * hidden + off + e]
+                    }
+                }
+                for (i in range64(t * dh, tp * dh)) {
+                    vh[i] = 0.0
+                }
                 for (e in range64(dh)) {
-                    s += q[i * a.hidden + off + e] * k[j * a.hidden + off + e]
+                    for (i in range64(t, tp)) {
+                        kT[e * tp + i] = 0.0
+                    }
                 }
-                p[j] = s * scale
-            }
-            softmax(p, t)
-            for (e in range64(dh)) {
-                var acc = 0.0
-                for (j in range64(t)) {
-                    acc += p[j] * v[j * a.hidden + off + e]
+                for (i in range64(t * tp)) {
+                    s[i] = 0.0
                 }
-                ctx[i * a.hidden + off + e] = acc
+                gemm_f32_jo(s, qh, kT, t, dh, tp)
+                for (i in range64(t)) {
+                    var row = s + i * tp
+                    for (j in range64(t)) {
+                        row[j] *= scale
+                    }
+                    for (j in range64(t, tp)) {
+                        row[j] = -1e30
+                    }
+                    softmax(row, tp)
+                }
+                for (i in range64(t * dh)) {
+                    oh[i] = 0.0
+                }
+                gemm_f32_jo(oh, s, vh, t, tp, dh)
+                for (i in range64(t)) {
+                    for (e in range64(dh)) {
+                        cp[i * hidden + off + e] = oh[i * dh + e]
+                    }
+                }
             }
         }
     }
