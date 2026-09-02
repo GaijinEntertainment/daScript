@@ -316,6 +316,38 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
   generalizes; gemma4 MoE nst arm - recon); the centroid mask if the tensors exist.
 - Gates: invariance tests on gemma-4-26B-A4B Q4_K_M + Q8_0; forced-reject; image + audio
   suites untouched (the flavor pick is metal-mode-gated).
+- **Design skeleton (recon 2026-09-01; the mlxfast drafter memo refines it):**
+  - *Target facts* (gemma-4-26B-A4B Q4_K_M header): 30 layers, dim 2816, pattern 5 sliding + 1
+    global per 6 (global = layers 5, 11, 17, 23, 29), sliding KV 8 heads x 256 / global KV 2 heads
+    x 512, 16 q heads, 128 experts top-8 (expert ffn 704) + the dense shared FFN (2112), softcap
+    30, rope 1e6 / swa 1e4, `shared_kv_layers = 0`, per-layer `layer_output_scale`, pre/post norms.
+    The same-slab `encode_verify_layer` refuses every one of these (dual rope, pre_post_norm,
+    layer_out_scale, softcap, hetero heads); the BATCH driver (`metal_batch_decode_forward`) serves
+    them all at B rows today (gemma4-12B B=2 token-exact, 26B engage cells).
+  - *Verify = the batch driver in a SAME-SLAB mode*: one session repeated k+1 times with
+    `ws.positions[i] = pos + i`; two deltas - `mirror_prepare` runs once at the base (rows above it
+    are written by this very step; the route table's cnt_i = pos+1+i already orders row i's
+    attention after rows < i's stores, exactly the same-slab verify's discipline), and the landing
+    keeps the per-row logits (`ws.logits_b` is already B x vocab) plus the per-row post-norm
+    hidden rows for the drafter's next input instead of scattering into one session's row.
+    Synchronous (finish_pending_step right after). No dn state on gemma (attention-only trunk):
+    rollback = the KV watermark alone. No head warm (the drafter is KV-less).
+  - *Drafter* = a mini-Model loaded from the `gemma4-assistant` sidecar (the shard walk attaches
+    it like the qwen head, but a shard whose `general.architecture` differs from the trunk's is a
+    DRAFTER, not a nextn block): 4 layers at dim 1024 (3 sliding, 1 full; q_proj 16 heads x 256 /
+    x 512, q_norm, o_proj, dense MLP 8192 gelu, per-layer `layer_output_scale`, post norms), own
+    tied `token_embd` 1024 x 262144, `nextn.pre_projection` 5632 -> 1024 over `[embed(last) |
+    target hidden]`, `nextn.post_projection` 1024 -> 2816 = the feedback hidden for the chain.
+    Its attention has NO K/V of its own: a new kernel attends the drafter's Q over the TARGET's
+    K/V mirror rows at two capture layers (last sliding = 28, last global = 29) at a constant RoPE
+    anchor with a bidirectional mask over the frozen prefix - a snapshot view into the arena, not a
+    copy (the fence: the verify's row writes must not land before the chain has read).
+  - *Chain*: k drafter forwards at the anchor, step 0 from the target's hidden, step i from the
+    drafter's post_projection output; argmax over the drafter's 262144-row tied table (the
+    centroid mask is NOT in any conversion - `masked_embedding` tensors dropped; k-means over the
+    embed table is the legal fallback, a later item).
+  - *Round* = the qwen round with the draft step and the verify swapped: chain -> same-slab batch
+    verify -> accept walk -> commit (watermark + carry hidden = row a's post-norm hidden).
 
 ### S4 - the depth controller
 
