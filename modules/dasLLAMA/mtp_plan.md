@@ -432,7 +432,10 @@ MINTED: `tune_kernels` races depth 1 vs 2 as serving tg on the SpecBench chat co
 its `mtp-` head beside it; depth 2 must beat by 2% (its downside is asymmetric - a 6% loss on the M4
 Pro, a tie here - and a tie is not worth the longer round), no vehicle = depth 1 with a
 `DASLLAMA_CONFIRM_MTP_GEMMA` provisioning hint. The first cut raced on the bench's synthetic 32-token
-prompt and depth 2 lost 10% there (137.5 vs 152.2): incoherent text is not the site shape. The NextN
+prompt and depth 2 lost 10% there (137.5 vs 152.2): incoherent text is not the site shape. The M5
+mint on the chat corpus reads depth 2 145.55 vs depth 1 145.29 tok/s - the tie the S3 table showed -
+so this box's sidecar carries `mtp_depth_assistant = 1`; the knob earns its 2 on a box whose k-row
+verify is cheaper than the M5's 1.2x. The NextN
 knob is not raced (depth 1 won on every NextN carrier measured; #72 owns the 27B depth-3 gap).
 Tests: `test_box_profile.das` `test_mtp_depth_knobs_apply_per_round_kind`. The EWMA controller design
 below stays as the record of what was NOT built and why.
