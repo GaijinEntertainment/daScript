@@ -9,7 +9,7 @@ into f32 weights, and writes `kitten-<size>.gguf`:
   their `predictor.` prefix back; the ALBERT layer group is `bert.layer.*`), [out, in] like
   PyTorch; the LSTM gates reordered from ONNX's i,o,f,c to i,f,g,o with the two bias halves
   summed - one cell serves every LSTM in the block home;
-- the geometry of every convolution as metadata `kitten.conv.<weight>` =
+- the geometry of every convolution as metadata `styletts2.conv.<weight>` =
   [kernel, stride, pad_left, pad_right, dilation, groups, transposed, output_padding];
 - the eight voices from voices.npz as `voice.<name>` [400, 256] tensors, `speed_priors` and
   `voice_aliases` from config.json as metadata.
@@ -115,19 +115,24 @@ def main():
     w.add_string("kitten.size", a.size)
     w.add_string("kitten.revision", kg.REVISIONS[a.size])
     w.add_string("kitten.source", f"KittenML/kitten-tts-{a.size}-0.8 {kg.MODEL_FILES[a.size]} (Apache-2.0)")
-    w.add_uint32("kitten.sample_rate", 24000)
-    w.add_uint32("kitten.n_symbols", int(tensors["text_encoder.embedding.weight"].shape[0]))
-    w.add_uint32("kitten.style_dim", int(voices[voices.files[0]].shape[1]))
-    w.add_uint32("kitten.style_rows", int(voices[voices.files[0]].shape[0]))
-    w.add_uint32("kitten.n_harmonics", int(tensors["decoder.generator.m_source.l_linear.weight"].shape[1]))
-    w.add_array("kitten.voices", list(voices.files))
+    w.add_uint32("styletts2.sample_rate", 24000)
+    w.add_uint32("styletts2.n_symbols", int(tensors["text_encoder.embedding.weight"].shape[0]))
+    w.add_uint32("styletts2.style_dim", int(voices[voices.files[0]].shape[1]))
+    w.add_uint32("styletts2.style_rows", int(voices[voices.files[0]].shape[0]))
+    w.add_uint32("styletts2.n_harmonics", int(tensors["decoder.generator.m_source.l_linear.weight"].shape[1]))
+    w.add_array("styletts2.voices", list(voices.files))
+    # the checkpoint's conv-based STFT: replicate padding, no inverse normalization, eps inside the sqrt
+    w.add_string("styletts2.stft_pad", "edge")
+    w.add_string("styletts2.istft_norm", "basis")
+    w.add_float32("styletts2.stft_eps", 1e-14)
+    w.add_string("styletts2.resample", "onnxruntime")
     for v, s in cfg.get("speed_priors", {}).items():
         w.add_float32(f"kitten.speed_prior.{v}", float(s))
     aliases = cfg.get("voice_aliases", {})
     w.add_array("kitten.alias_names", list(aliases.keys()))
     w.add_array("kitten.alias_voices", list(aliases.values()))
     for name, geo in sorted(geometry.items()):
-        w.add_array(f"kitten.conv.{name}", [int(x) for x in geo])
+        w.add_array(f"styletts2.conv.{name}", [int(x) for x in geo])
     for name in sorted(tensors):
         w.add_tensor(name, tensors[name])
     w.write_header_to_file()

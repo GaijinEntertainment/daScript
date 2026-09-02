@@ -377,15 +377,20 @@ same normalized text), the heteronym gate (both annotated readings present, pari
 reference in this inventory), the fallback chain, stress helpers, and the load budget.
 `test_tts_kitten.das` - model-free suite; the symbol-map and token-rule cells run everywhere
 (the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
-the reference driver's re-spacing and wrapping), the oracle cells are model-gated
-(`kitten-<size>.gguf` + `tts_oracle/kitten_<size>/` under the models dir, both from
-`performance/build_tts_data.das`): per size, the token ids against the reference driver on every
+the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-<size>.gguf` +
+`tts_oracle/kitten_<size>/` under the models dir, both from `performance/build_tts_data.das`)
+run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
+sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings.
+`test_tts_kokoro.das` - model-free suite; model-gated (`kokoro-82m.gguf` + `tts_oracle/kokoro/`):
+the vocabulary and style-row rule, the parity rail of `_tts_parity.das` against the PyTorch
+reference, and a facade smoke cell through the front end's own inventory.
+`_tts_parity.das` - the rail both families run: token ids against the reference driver on every
 oracle case, identical durations on every case, and on the bring-up set every stage through the
 decoder output within 1e-4 of the oracle's peak, the sine source within 1e-4 fed the oracle's F0,
-the generator within 1e-4 fed the oracle's source and decoder output; the end-to-end waveform
-difference is logged, not gated (the F0 phase drift the header explains). A facade smoke cell
-(model-gated the same way, plus `tts_g2p.bin` + `tts_postag.bin`) speaks one sentence through
-`load_tts_model` / `synthesize` and checks the PCM is finite, non-silent and of speech length.
+the source spectrum's magnitude within 1e-4 of its peak and its phase within 1e-2 rad where the
+magnitude carries signal, and the generator (its stage-0 internals included) within 1e-4 fed the
+oracle's spectrum and decoder output; the end-to-end waveform difference is logged, not gated (the
+F0 phase drift the file header explains).
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference.

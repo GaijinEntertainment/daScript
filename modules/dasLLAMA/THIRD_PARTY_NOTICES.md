@@ -34,9 +34,9 @@ derive from the Silero VAD project (https://github.com/snakers4/silero-vad), Cop
 
 ## Text-to-speech front end
 
-The TTS front end and the KittenTTS family reimplement, and pack data from, the following
+The TTS front end and the two TTS families reimplement, and pack data from, the following
 works. The packed files (`tts_g2p.bin`, `tts_postag.bin`, `kitten-nano.gguf`,
-`kitten-mini.gguf`, the `tts_oracle/` dumps) are built by the `harness/` scripts into the
+`kitten-mini.gguf`, `kokoro-82m.gguf`, the `tts_oracle/` dumps) are built by the `harness/` scripts into the
 model store (`performance/build_tts_data.das`), each beside a license file naming these
 sources; nothing under this repository redistributes the data itself.
 
@@ -58,6 +58,12 @@ sources; nothing under this repository redistributes the data itself.
   converted into `kitten-<size>.gguf` by `harness/convert_kitten.py`. The model architecture is
   StyleTTS2 (Yinghao Aaron Li et al., MIT License) as the checkpoints instantiate it, reimplemented
   in `dasllama/dasllama_tts_blocks.das`.
+- **Kokoro** (https://github.com/hexgrad/kokoro), Apache License 2.0 - see `LICENSE.APACHE-2.0`.
+  The `hexgrad/Kokoro-82M` weights and voice packs (Apache License 2.0, at the revision pinned in
+  `harness/kitten_graph.py`) are converted into `kokoro-82m.gguf` by `harness/convert_kokoro.py`;
+  `dasllama/dasllama_kokoro.das` carries the pipeline's vocabulary and style-row rule. The model
+  architecture is StyleTTS2 (Yinghao Aaron Li et al., MIT License), shared with KittenTTS in
+  `dasllama/dasllama_styletts2.das` over the block home.
 - **spaCy** (https://github.com/explosion/spaCy), Copyright ExplosionAI GmbH, MIT License - see
   `LICENSE.SPACY`. Its English tokenizer exception table is exported into `tts_postag.bin`, and
   its `en_core_web_sm` tagger provides the silver part-of-speech tags the tagger trains on.

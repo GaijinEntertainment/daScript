@@ -23,6 +23,8 @@ SNAPSHOTS = {
     "mini": HUB + "models--KittenML--kitten-tts-mini-0.8/snapshots/c02725660cea441db4c383af69f1f26f5cd00947/",
 }
 MODEL_FILES = {"nano": "kitten_tts_nano_v0_8.onnx", "mini": "kitten_tts_mini_v0_8.onnx"}
+KOKORO_REVISION = "f3ff3571791e39611d31c381e3a41a3af07b4987"
+KOKORO_SNAPSHOT = HUB + "models--hexgrad--Kokoro-82M/snapshots/" + KOKORO_REVISION + "/"
 REVISIONS = {"nano": "7a1db645b1f3ab9420761d87428e042b9cec3f26", "mini": "c02725660cea441db4c383af69f1f26f5cd00947"}
 
 

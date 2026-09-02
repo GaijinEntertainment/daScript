@@ -536,6 +536,26 @@ def resize_linear(x : array<float>; c, t : int64; scale : float; @exact_size var
     return t_out
 }
 
+//! Linear resample of x [C][T] by `scale`, bit for bit what PyTorch's CPU upsample_linear1d
+//! computes (align_corners false, scale_factor given): the source coordinate in double from the
+//! float reciprocal scale, the two taps combined as fma(l0, x0, l1 * x1).
+def resize_linear_torch(x : array<float>; c, t : int64; scale : float; @exact_size var y : array<float>) : int64 {
+    let t_out = int64(floor(float(t) * scale))
+    y |> reserve_resize(c * t_out)
+    let inv = double(1.0 / scale)
+    for (to in range64(t_out)) {
+        let src = max(0.0, float(inv * (double(to) + 0.5lf) - 0.5lf))
+        let i0 = min(int64(src), t - 1l)
+        let i1 = min(i0 + 1l, t - 1l)
+        let l1 = src - float(i0)
+        let l0 = 1.0 - l1
+        for (ci in range64(c)) {
+            y[ci * t_out + to] = fmaf(l0, x[ci * t + i0], l1 * x[ci * t + i1])
+        }
+    }
+    return t_out
+}
+
 // ===== alignment =====
 
 //! y [C][F] repeats token t's column dur[t] times: x is token-major [T][C].
@@ -654,6 +674,11 @@ struct SineSourceCfg {
     sine_amp : float = 0.1
     noise_std : float = 0.003
     voiced_thr : float = 10.0
+    torch_math : bool   // the reference's arithmetic: PyTorch's (double-accumulated cumsum, its resampler), else onnxruntime's
+}
+
+def private source_resize(cfg : SineSourceCfg; x : array<float>; c, t : int64; scale : float; @exact_size var y : array<float>) : int64 {
+    return cfg.torch_math ? resize_linear_torch(x, c, t, scale, y) : resize_linear(x, c, t, scale, y)
 }
 
 def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u, noise_n : array<float>;
@@ -673,18 +698,24 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
         }
     }
     var @exact_size low : array<float>
-    let nlow = resize_linear(rad, nh, n, 1.0 / float(cfg.upsample), low)
+    let nlow = source_resize(cfg, rad, nh, n, 1.0 / float(cfg.upsample), low)
     // the reference's operation order, kept exactly: the phase reaches 1e5 radians, where one
     // float32 ulp is a hundredth of a radian, so a reassociated product is an audible change
     for (h in range64(nh)) {
         var acc = 0.0
+        var acc64 = 0.0lf
         for (i in range64(nlow)) {
-            acc += low[h * nlow + i]
+            if (cfg.torch_math) {
+                acc64 += double(low[h * nlow + i])   // PyTorch's CPU cumsum: a double accumulator, each output rounded
+                acc = float(acc64)
+            } else {
+                acc += low[h * nlow + i]
+            }
             low[h * nlow + i] = ((acc * 2.0) * PI) * float(cfg.upsample)
         }
     }
     var @exact_size phase : array<float>
-    let nup = resize_linear(low, nh, nlow, float(cfg.upsample), phase)
+    let nup = source_resize(cfg, low, nh, nlow, float(cfg.upsample), phase)
     if (nup != n) {
         panic("dasLLAMA tts: sine source resample {nlow} -> {nup} samples, want {n}")
     }
@@ -706,14 +737,15 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
 // ===== STFT as convolution =====
 
 //! Magnitude and phase from the two conv halves re/im [bins][frames] -> out [2*bins][frames]
-//! (magnitude rows first).
+//! (magnitude rows first). A zero imaginary part reads as +0, so a negative real axis is +pi:
+//! torch.angle's branch, which a conv's -0 sum would otherwise flip to -pi.
 def magnitude_phase(re, im : array<float>; bins, frames : int64; eps : float; @exact_size var out : array<float>) {
     out |> reserve_resize(2l * bins * frames)
     for (i in range64(bins * frames)) {
         let r = re[i]
         let m = im[i]
         out[i] = sqrt(r * r + m * m + eps)
-        out[bins * frames + i] = atan2(m, r)
+        out[bins * frames + i] = m == 0.0 ? (r < 0.0 ? PI : 0.0) : atan2(m, r)
     }
 }
 
@@ -735,6 +767,44 @@ def pad_edge(x : array<float>; n, pad : int64; @exact_size var y : array<float>)
     y |> reserve_resize(n + 2l * pad)
     for (i in range64(n + 2l * pad)) {
         y[i] = x[clamp(i - pad, 0l, n - 1l)]
+    }
+}
+
+//! Reflection-pad a mono signal by `pad` samples on both sides (torch.stft's center pad).
+def pad_reflect(x : array<float>; n, pad : int64; @exact_size var y : array<float>) {
+    y |> reserve_resize(n + 2l * pad)
+    for (i in range64(n + 2l * pad)) {
+        var src = i - pad
+        if (src < 0l) {
+            src = -src
+        } elif (src >= n) {
+            src = 2l * (n - 1l) - src
+        }
+        y[i] = x[src]
+    }
+}
+
+//! torch.istft's window normalization: divide the overlap-added signal by the summed squared
+//! window envelope wherever it is not negligible. `wave` is the trimmed signal (`pad` samples
+//! dropped on each side), `k`/`hop` the frame length and stride.
+def istft_envelope_divide(var wave : array<float>; n : int64; window : array<float>; k, hop, pad : int64) {
+    for (i in range64(n)) {
+        let m = i + pad
+        var env = 0.0
+        var f = (m - k + hop) / hop
+        if (f < 0l) {
+            f = 0l
+        }
+        while (f * hop <= m) {
+            let j = m - f * hop
+            if (j < k) {
+                env += window[j] * window[j]
+            }
+            f++
+        }
+        if (env > 1e-11) {
+            wave[i] /= env
+        }
     }
 }
 

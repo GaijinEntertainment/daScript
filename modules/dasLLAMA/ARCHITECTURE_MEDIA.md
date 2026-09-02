@@ -74,17 +74,28 @@ stages, each its own file, and every stage is data-driven from the model store: 
   reference's operation order exactly: its phase reaches 1e5 radians, where one float32 ulp is a
   hundredth of a radian. One home: a family file re-implementing one of these is a defect, and
   nothing here names a family type.
-- **`dasllama_kitten.das`** - the KittenTTS family (nano and mini from one code path): the
-  weight map of the converted GGUF (`harness/convert_kitten.py`; conv geometry rides as
-  `kitten.conv.<weight>` metadata, so the assembly hardcodes the wiring and reads the shapes), the
-  reference driver's symbol table, re-spacing rule and style-row rule, the voices with their
-  speed priors and aliases, the rewrite of the front end's inventory into the espeak-style IPA
-  these models consume, and the assembly: PL-BERT (one ALBERT layer applied twelve times) ->
-  text encoder -> duration encoder -> durations -> alignment -> prosody (F0, energy) -> decoder
-  -> iSTFTNet generator. `KittenTrace` collects the stage tensors the oracle test compares.
-- **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (family by `general.architecture`;
-  `tts_g2p.bin` and `tts_postag.bin` read from the GGUF's directory), `caps`, `synthesize` (text
-  -> normalize -> phonemize -> family symbols -> PCM). Requires no `audio` module.
+- **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share: the weight
+  map of the converted GGUF (conv geometry rides as `styletts2.conv.<weight>` metadata, so the
+  assembly hardcodes the wiring and reads the shapes; the STFT convention - replicate or reflect
+  padding, basis-folded or envelope-normalized inverse, the magnitude epsilon, which
+  resampler's arithmetic the sine source mirrors - rides as `styletts2.*` metadata too), the
+  voices as `voice.<name>` [rows x style] tensors, and the assembly: PL-BERT (one ALBERT layer
+  applied twelve times) -> text encoder -> duration encoder -> durations -> alignment ->
+  prosody (F0, energy) -> decoder -> iSTFTNet generator, with a stopwatch per stage
+  (`TtsTimings`) and `StyleTts2Trace` collecting the stage tensors the parity rail compares.
+  Nothing here names a family: a family's quirk lands in its family file.
+- **`dasllama_kitten.das`** - the KittenTTS family (nano and mini): the reference driver's symbol
+  table, re-spacing rule and style-row rule (the chunk's character count), its speed priors and
+  voice aliases (`kitten.*` metadata), its 5000-sample tail trim, and the rewrite of the front
+  end's inventory into the espeak-style IPA these models consume.
+- **`dasllama_kokoro.das`** - the Kokoro family (Kokoro-82M): the reference pipeline's
+  vocabulary (`kokoro.symbol_*` metadata - the front end's own inventory, no rewrite), its token
+  wrapping and style-row rule (the phoneme string's character count less one). Fifty-four voice
+  packs of 510 rows.
+- **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
+  picked by `general.architecture`; `tts_g2p.bin` and `tts_postag.bin` read from the GGUF's
+  directory), `caps`, `synthesize` (text -> normalize -> phonemize -> the family's symbols and
+  style row -> PCM, timed). Requires no `audio` module.
 
 ### 1.7b Vision
 

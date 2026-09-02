@@ -9,9 +9,9 @@ require dasllama/dasllama_env
 
 // Regenerate the TTS model-store data from the experiment tree: the G2P pack (which also emits
 // the tag-keyed lexicon words), the silver tagging prose sampled around those words, the tagger
-// pack, then the KittenTTS GGUFs and their onnxruntime oracle dumps - each step a harness
+// pack, then the KittenTTS and Kokoro GGUFs and their oracle dumps - each step a harness
 // script, each output beside its license file. This is the provenance recipe for tts_postag.bin,
-// tts_g2p.bin, kitten-<size>.gguf and tts_oracle/.
+// tts_g2p.bin, kitten-<size>.gguf, kokoro-82m.gguf and tts_oracle/.
 //   daslang -jit performance/build_tts_data.das -- --root ~/Work/tts-ab/g2p [--models <dir>] [--silver-sents 100000] [--no-kitten]
 // `root` holds the fidelity experiment (its .venv-g2p with misaki, g2p_en, spacy + en_core_web_sm,
 // onnx + onnxruntime + kittentts; .nltk with CMUdict; work/ud-ewt with the treebank; work/gutenberg
@@ -26,7 +26,7 @@ struct BuildArgs {
     models : string = ""
     @clarg_doc = "sentences of silver tagging prose to sample (0 = keep an existing work/silver_focus); every sentence carrying a tag-keyed word is kept on top"
     silver_sents : int = 100000
-    @clarg_doc = "skip the KittenTTS GGUF conversion and oracle dumps"
+    @clarg_doc = "skip the KittenTTS and Kokoro GGUF conversions and oracle dumps"
     no_kitten : bool = false
 }
 
@@ -76,8 +76,10 @@ def main() : int {
         for (size in ["nano", "mini"]) {
             return 1 if (!step("convert kitten {size}", [py, path_join(harness, "convert_kitten.py"), "--size", size, "--out", store]))
         }
-        return 1 if (!step("mint the kitten oracle dumps", [py, path_join(harness, "kitten_oracle.py"), "--out", path_join(store, "tts_oracle")]))
+        return 1 if (!step("mint the kitten oracle dumps", [py, path_join(harness, "kitten_oracle.py"), "--out", path_join(store, "tts_oracle")]) ||
+            !step("convert kokoro", [py, path_join(harness, "convert_kokoro.py"), "--out", store]) ||
+            !step("mint the kokoro oracle dumps", [py, path_join(harness, "kokoro_oracle.py"), "--out", path_join(store, "tts_oracle")]))
     }
-    to_log(LOG_INFO, "tts data: done - {path_join(store, "tts_postag.bin")}, {path_join(store, "tts_g2p.bin")}, kitten-nano/mini.gguf, tts_oracle/\n")
+    to_log(LOG_INFO, "tts data: done - {path_join(store, "tts_postag.bin")}, {path_join(store, "tts_g2p.bin")}, kitten-nano/mini.gguf, kokoro-82m.gguf, tts_oracle/\n")
     return 0
 }
