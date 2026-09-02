@@ -905,3 +905,23 @@
     (`var inscope @exact_size y`). The error text stands alone: the leak, the three fixes, the
     exemption. Rig for the negative control: `heap_bytes_allocated()` per iteration, flat vs
     growing.
+
+72. **One instrumentation rail (Boris, 2026-09-02): the jobque markers; every other timing
+    accumulator in `dasllama/` is a defect, and building another timing rig is counterproductive.**
+    dasLLAMA carries three sanctioned rails - the `jobque_profile` markers (`trace_tag` /
+    `trace_marker`, `JOBQUE_PROFILING`-compiled, `utils/jobque-timeline` with per-category stats),
+    the `prof_add` / `forward_profile_*` decode buckets (197 sites in 17 files) and the
+    `asr_prof_add` encode buckets (147 sites in 12 files, the TTS generator's `tts.gen.*` among
+    them) - and `REVIEW.md`'s clock rule plus `ARCHITECTURE_MEASUREMENT.md` sec.2.10 name all
+    three, which is how the second and third were built without anyone noticing. Done, as its own
+    PR: (1) every `prof_add` / `asr_prof_add` site becomes a marker category (a `TRACE_TAG_*` block
+    per family beside the ASR ones); (2) the consumers of the bucket tables - the `PROF` rows in
+    `harness/asr_stage_probe.das`, `q3omni_bench.das`, `qwen_encode_split_probe.das`, `asr_prof_ms`
+    in the ASR store reader, `forward_profile_report` - read an aggregator over the saved
+    `jobque_profile` trace that prints the same bucket table; (3) the two rule passages drop the
+    retired rails and state the deliverable carve-out: a per-request wall the API returns
+    (`TtsTimings`, the server's timings line) is a deliverable, not instrumentation; (4) `LAWS.md`
+    records the ruling. Lint candidate, the mechanical form of the clock rule that is prose today:
+    a `dasllama/` file that adds a clock read (`ref_time_ticks` / `get_time_usec`) whose value
+    reaches a log, an accumulator table or a struct field, outside a `// clock: control` mark, a
+    cold load / bake / map log, or a marker call.
