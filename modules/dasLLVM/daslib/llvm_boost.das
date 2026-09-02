@@ -307,6 +307,7 @@ def LLVMAddIncoming(phi : LLVMOpaqueValue?; var phi_vals : array<LLVMOpaqueValue
     LLVMAddIncoming(phi, array_data_ptr(phi_vals), array_data_ptr(phi_blocks), uint(length(phi_vals)))
 }
 
+[arch(at = "../ARCHITECTURE.md#gep-constant-fold")]
 def LLVMBuildGEP2(builder : LLVMOpaqueBuilder?; ty : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; var index : LLVMOpaqueValue?; name : string; inbounds : bool = true) {
     if (inbounds) {
         return LLVMBuildInBoundsGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)

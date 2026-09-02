@@ -1242,6 +1242,7 @@ let private TUNE_KNOWN_FEATURES = "avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx5
     //! The ';'-joined subset of the known `requires=` feature names this box passes — stamped
     //! into every sidecar's provenance as `features`, which is what lets a shipped profile say
     //! exactly which gated seats its minting box could and could not race.
+[arch(at = "../ARCHITECTURE.md#x64-tier-gates")]
 def tune_feature_fingerprint() : string {
     var have <- [for (f in split(TUNE_KNOWN_FEATURES, ";")); f; where fallback_feature_ok(f)]
     let joined = join(have, ";")
