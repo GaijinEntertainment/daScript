@@ -55,6 +55,16 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   implementation.
 - **`dasllama_batch.das`** - the batched decode step: one pass of the weights over B sessions,
   GEMVs widened to B-row GEMMs, attention still per-(row, head) against each session's own cache.
+- **`dasllama_mtp_gemma.das`** - the gemma-4 assistant drafter's loader (`GemmaDrafter`: the
+  sidecar's Q8_0 weights as one q8 blob + its F32 norms) and the CPU reference forward of one draft
+  step - the oracle the GPU drafter is measured against, never the serving path.
+- **`dasllama_mtp_gemma.das`** - the gemma-4 assistant drafter (`gemma4-assistant`), which is a
+  SIDECAR head, not a trunk block: it owns no K/V projection and borrows the target trunk's cache
+  at two capture layers, so it never rides the arch registry or `forward_mtp`. The file holds the
+  sidecar resolver, the refusing loader (`GemmaDrafter`, whose `blob` is raw GGUF Q8_0 = the Metal
+  34B form, so the GPU encoder uploads it with no repack), and the CPU reference forward the GPU
+  encoder is scored against. A refusal is `ok = false` plus a `why`, never a panic - a drafter is
+  optional and a bad sidecar must degrade to plain decode.
 - **`dasllama_sampling.das`** - token sampling and the generation drivers. A leaf on top of
   `forward`/`eval_batch`; the engine never calls back in.
 - **`dasllama_ple.das`** - gemma-4 E-series per-layer embeddings and the gemma4 MoE FFN. The

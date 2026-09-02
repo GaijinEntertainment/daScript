@@ -50,7 +50,8 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
     if (name == "decode") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das" ]
     } elif (name == "mtp") {
-        return <- [ "modules/dasLLAMA/tests/test_metal_mtp_parity.das" ]
+        return <- [ "modules/dasLLAMA/tests/test_metal_mtp_parity.das",
+                    "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das" ]
     } elif (name == "prefill") {
         return <- [ "modules/dasLLAMA/tests/test_metal_prefill_parity.das" ]
     } elif (name == "matrix") {
@@ -116,6 +117,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_metal_gemm.das",
                     "modules/dasLLAMA/tests/test_metal_role_infer.das",
                     "modules/dasLLAMA/tests/test_model_specs.das",
+                    "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
                     "modules/dasLLAMA/tests/test_mxfp4.das",
                     "modules/dasLLAMA/tests/test_par_indexed.das",
                     "modules/dasLLAMA/tests/test_parity.das",

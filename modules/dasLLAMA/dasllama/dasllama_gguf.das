@@ -282,12 +282,33 @@ def gguf_shard_paths(path : string; missing_ok : bool = false) : array<string> {
     var res <- gguf_split_paths(path, missing_ok)
     if (!empty(res)) {
         let side = mtp_head_sidecar(path)
-        if (!empty(side)) {
+        if (!empty(side) && !gguf_is_assistant(side)) {
             res |> push(side)   // the head is the LAST shard: first-match lookups keep the trunk's tables
         }
     }
     return <- res
 }
+
+//! `general.architecture` of the GGUF at `path` ("" when unreadable) - a header-only read.
+def gguf_file_arch(path : string) : string {
+    var arch = ""
+    fopen(path, "rb") $(f) {
+        if (f == null) {
+            return
+        }
+        fmap(f) $(var bytes : array<uint8>#) {
+            var inscope m <- parse_gguf_meta(bytes)
+            if (gguf_has(m, "general.architecture")) {
+                arch = gguf_str(m, bytes, "general.architecture")
+            }
+        }
+    }
+    return arch
+}
+
+//! An assistant drafter (arch `<family>-assistant`: gemma4-assistant) is its own tiny model over the
+//! target's K/V, never a shard of the trunk - the shard walk leaves it to the drafter loader.
+def gguf_is_assistant(path : string) : bool => gguf_file_arch(path) |> ends_with("-assistant")
 
 // the GGUF split-name expansion proper ("<prefix>-NNNNN-of-NNNNN.gguf" -> every sibling)
 def private gguf_split_paths(path : string; missing_ok : bool) : array<string> {

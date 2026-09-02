@@ -373,6 +373,14 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
     element chunks with no tail guard (their header says so) and the rail gate never checked the
     shapes - the 26B's dense hidden 2112 overran on the w2 site; each mv site now gates on its own
     K % 256 (`mv_kdim` / `mv_wo` / `mv_w2`) and falls to the tail-exact GEMV form otherwise.
+    THIRD bug, found by the gemma round at k=4 (five verify rows): the alignment fallback I added
+    for (2) called the B2/B4 GEMV form directly (`enc_gemv_b(nrows > 2)`, a 4-row form) at 5..8
+    rows, so rows 4+ were never computed - distinct sessions at B=5 flip exactly 1 row in 5, at B=8
+    exactly 4 in 8; in the same-slab verify the garbage K/V of those rows then poisons every later
+    row. Every fallback now goes through `enc_gemv_rows` (two 4-row tiles at 5..8). Arms added for
+    all of it: `mtp-vff5-<tag>` (5 same-slab rows), `mtp-dff8-<tag>` (B=5 and 8 distinct), the
+    gemv oracle at K=2112. Ruling (Boris, 2026-09-01): every bug like these lands with its failing
+    arm first; the qwen session hit the same class.
     Ruling (Boris): the kernel's alignment contract is a MACRO EXPANSION, not a lint - `requires =
     "ka.ndim % 256"` on `[metal_dispatch]` generates the check at every dispatch (the mv B2/B4 forms
     declare theirs; the toy fixture proves the trip); REVIEW_GPU.md duty + ARCHITECTURE_GPU.md statement.
@@ -383,6 +391,23 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
     + the plane fix -> 0.96 / 0 flips. The `mtp-dff-<tag>` arm (distinct-session GPU batch vs GPU
     single + a CPU reference row) is the batch rail's parity gate from now on; fixtures l1b, g12,
     q30, g26.
+  - **S3 build (2026-09-01, in flight)**: `dasllama/dasllama_mtp_gemma.das` = the sidecar loader
+    (`GemmaDrafter`: Q8_0 weights as one q8 blob + F32 norms, offsets per layer) + the CPU reference
+    step `gemma_draft_step_cpu` (the oracle); `dasllama/dasllama_metal_mtp_gemma.das` = the GPU
+    drafter (`attach_gemma_drafter` uploads the blob once; `gemma_draft_step_gpu` = embed(tok)*sqrt(2816)
+    ‖ h -> pre_proj -> 4 x [rms, Q gemv, per-head q_norm, Q-only rope via the fused store with every
+    pair a Q pair, the DECODE's own attention kernels over the target mirror at layer 28/29 with
+    cnt = anchor (keys < anchor: the seed is unfed), scale 1.0, sliding window on the chunked form,
+    wo, post-norm, residual, rms, gate/up, geglu, down, post-norm, (residual + branch) * layer_scale]
+    -> output_norm -> tied-embed logits -> GPU argmax; post_proj -> next h) and the round
+    `gemma_mtp_spec_round` (constant anchor = pos for the whole chain; k drafts; `eval_verify_batch_`
+    at k+1 rows; accept walk on mtp_logits_b; commit = row a's logits + row a's post-norm hidden from
+    mtp_hrows; watermark/n_past = pos+a+1). It registers the `metal` round override after the decode
+    module and delegates drafter-less models to `metal_mtp_spec_round`. The decode carries the
+    post-norm hidden in `s.mtp_h` on head-less models via `set_metal_mtp_carry_hidden` (the drafter's
+    input; pre-norm is the experiment variant still to add). `gguf_shard_paths` refuses an
+    `*-assistant` arch sidecar (a drafter is not a shard). `lcpp_bench --mtp-ab` attaches the sidecar
+    for gemma targets.
   - *Verify status (2026-09-01)*: the same-slab batch mode landed (`eval_verify_batch_`,
     `set_batch_same_slab`, the driver's shared row-0 mirror + `land_sameslab_rows`); the batch rail
     declines deltanet hybrids (the qwen twins keep the dedicated same-slab verify), so its gate is

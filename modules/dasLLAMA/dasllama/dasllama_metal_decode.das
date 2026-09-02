@@ -1891,12 +1891,15 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
             if (r.gpu_logits && r.bnc == null) {   // zero-copy steps: the GPU already wrote s.logits
                 memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), r.bytes_log)
             }
-            if (r.gpu_logits && c.n_layer_nextn > 0l) {
-                // forward()'s mtp_h stash contract — bxf holds the post-final-norm hidden this row
+            if (r.gpu_logits && (c.n_layer_nextn > 0l || g_mtp_carry_hidden)) {
+                // forward()'s mtp_h stash contract — bxf holds the post-final-norm hidden this row (the assistant drafter's carry too)
+                if (long_length(s.mtp_h) < c.dim) {
+                    s.mtp_h |> resize(c.dim)   // nolint:PERF026 — once per session on a head-less model
+                }
                 memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), r.bytes_x)
             }
         }
-        if (r.gpu_logits && c.n_layer_nextn > 0l) {
+        if (r.gpu_logits && (c.n_layer_nextn > 0l || g_mtp_carry_hidden)) {
             s.mtp_h_pos1 = r.pos + 1l
         }
         if (r.gpu_logits) {
@@ -2243,6 +2246,14 @@ var private g_bsk = true
 // hazard (RAW/WAR/WAW) — the only exploitable overlap in our FUSED chain is W1 || W3. Default ON:
 // measured +1-2% at every B (pipelines launch overhead even on the RAW chain). =0 = serial (A/B).
 let private MV_K_ALIGN = 256l          // the mv forms' K stripe (B2 256, B4 128): no tail guard
+var private g_mtp_carry_hidden = false   // land every step's post-norm hidden in s.mtp_h on head-less models (the assistant drafter's input)
+
+//! The assistant drafter (dasllama_metal_mtp_gemma) attaches by asking the decode to carry the
+//! post-final-norm hidden of every step in s.mtp_h - the same stash the NextN carriers get for free.
+def set_metal_mtp_carry_hidden(on : bool) {
+    g_mtp_carry_hidden = on
+}
+
 var private g_bconcurrent = true
 // DASLLAMA_METAL_BATCH_FUSE: fold w1 + w3 + swiglu into one fused dispatch on the fixed-B path
 // (B <= 4) — cuts 2 dispatches + their barriers per layer where inter-dispatch bubbles hurt most.
@@ -2515,8 +2526,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     // the x-staged w13sw fusion stands down with it). Hetero rides it too: the QKV arm carries
     // the no-wv cat3 stream, and the wo site's x stride (the one per-class xs4) picks its twin
     let mv = g_bmv && !use_gemm && !use_mm
-    // a site whose K breaks the mv stripe alignment rides the tail-exact GEMV form instead
-    // (gemma-4-26B-A4B: dense hidden 2112 = 8.25 stripes)
+    // a site whose K breaks the mv stripe alignment rides the tail-exact GEMV tiles instead
+    // (enc_gemv_rows: 5..8 rows = two 4-row tiles; gemma-4-26B-A4B's dense hidden 2112 = 8.25 stripes)
     let mv_kdim = mv && (dim % MV_K_ALIGN) == 0l
     let mv_wo = mv && (qd % MV_K_ALIGN) == 0l && (!hetero || (qd_sw % MV_K_ALIGN) == 0l)
     let mv_w2 = mv && (hidden % MV_K_ALIGN) == 0l
@@ -2770,11 +2781,11 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                             enc_gemm_b(enc, bwv_.buf, bwv_.boff, bxb, bqkv, gemm_ka(dim, kvd_l, qkvd_l), mp, kvd_l, uint64((qd_l + kvd_l) * 4l))
                         }
                     } else {
-                        enc_gemv_b(enc, nrows > 2l, bwq_.buf, bwq_.boff, bxb, bqkv, u_dim, u_qd_l, u_qkvd_l, qd_l)
-                        enc_gemv_b(enc, nrows > 2l, bwk_.buf, bwk_.boff, bxb, bqkv, u_dim, u_kvd_l, u_qkvd_l, kvd_l, uint64(qd_l * 4l))
+                        enc_gemv_rows(enc, nrows, bwq_.buf, bwq_.boff, bxb, bqkv, u_dim, u_qd_l, u_qkvd_l, dim, qd_l, qkvd_l)
+                        enc_gemv_rows(enc, nrows, bwk_.buf, bwk_.boff, bxb, bqkv, u_dim, u_kvd_l, u_qkvd_l, dim, kvd_l, qkvd_l, uint64(qd_l * 4l))
                         if (has_wv) {
                             let bwv_ = blob_of(g_dev, t, t.wv_offs[l])
-                            enc_gemv_b(enc, nrows > 2l, bwv_.buf, bwv_.boff, bxb, bqkv, u_dim, u_kvd_l, u_qkvd_l, kvd_l, uint64((qd_l + kvd_l) * 4l))
+                            enc_gemv_rows(enc, nrows, bwv_.buf, bwv_.boff, bxb, bqkv, u_dim, u_kvd_l, u_qkvd_l, dim, kvd_l, qkvd_l, uint64((qd_l + kvd_l) * 4l))
                         }
                     }
                 }
@@ -2902,7 +2913,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     } elif (use_gemm) {
                         enc_gemm_b(enc, bwo.buf, bwo.boff, bxb, bxb2, gemm_ka(qd_l, dim, dim), mp, dim)
                     } else {
-                        enc_gemv_b(enc, nrows > 2l, bwo.buf, bwo.boff, bxb, bxb2, u_qd_l, u_dim, u_dim, dim)
+                        enc_gemv_rows(enc, nrows, bwo.buf, bwo.boff, bxb, bxb2, u_qd_l, u_dim, u_dim, qd_l, dim, dim)
                     }
                 }
             }
@@ -3036,8 +3047,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                             enc_gemm_b(enc, bw1.buf, bw1.boff, bxb, bhb, gemm_ka(dim, hidden, hidden), mp, hidden)
                             enc_gemm_b(enc, bw3.buf, bw3.boff, bxb, bhb2, gemm_ka(dim, hidden, hidden), mp, hidden)
                         } else {
-                            enc_gemv_b(enc, nrows > 2l, bw1.buf, bw1.boff, bxb, bhb, u_dim, u_hidden, u_hidden, hidden)
-                            enc_gemv_b(enc, nrows > 2l, bw3.buf, bw3.boff, bxb, bhb2, u_dim, u_hidden, u_hidden, hidden)
+                            enc_gemv_rows(enc, nrows, bw1.buf, bw1.boff, bxb, bhb, u_dim, u_hidden, u_hidden, dim, hidden, hidden)
+                            enc_gemv_rows(enc, nrows, bw3.buf, bw3.boff, bxb, bhb2, u_dim, u_hidden, u_hidden, dim, hidden, hidden)
                         }
                     }
                 }
@@ -3068,7 +3079,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     } elif (use_gemm) {
                         enc_gemm_b(enc, bw2.buf, bw2.boff, bhb, bxb, gemm_ka(hidden, dim, dim), mp, dim)
                     } else {
-                        enc_gemv_b(enc, nrows > 2l, bw2.buf, bw2.boff, bhb, bxb, u_hidden, u_dim, u_dim, dim)
+                        enc_gemv_rows(enc, nrows, bw2.buf, bw2.boff, bhb, bxb, u_hidden, u_dim, u_dim, hidden, dim, dim)
                     }
                 }
             }
@@ -3138,7 +3149,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 } elif (use_gemm) {
                     enc_gemm_b(enc, bwc.buf, bwc.boff, bxf, blog, gemm_ka(dim, c.vocab_size, c.vocab_size), mp, c.vocab_size)
                 } else {
-                    enc_gemv_b(enc, nrows > 2l, bwc.buf, bwc.boff, bxf, blog, u_dim, u_vocab, u_vocab, c.vocab_size)
+                    enc_gemv_rows(enc, nrows, bwc.buf, bwc.boff, bxf, blog, u_dim, u_vocab, u_vocab, dim, c.vocab_size, c.vocab_size)
                 }
             }
         }

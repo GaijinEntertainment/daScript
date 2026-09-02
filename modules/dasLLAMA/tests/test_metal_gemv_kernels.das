@@ -798,6 +798,8 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 gemv_b_gate(t, dev, queue, 2, 256, 8, 24)
                 gemv_b_gate(t, dev, queue, 4, 320, 18, 18)
                 gemv_b_gate(t, dev, queue, 4, 256, 8, 24)
+                gemv_b_gate(t, dev, queue, 4, 2112, 18, 18)   // K off the 256 stripe (gemma-4-26B's dense hidden): the tail loop, not the mv forms' contract
+                gemv_b_gate(t, dev, queue, 2, 2112, 8, 24)
                 q8_mv_b_gate(t, dev, queue, 2, 512, 11, 2, 128, 11)
                 q8_mv_b_gate(t, dev, queue, 2, 256, 8, 2, 68, 20)
                 q8_mv_b_gate(t, dev, queue, 4, 512, 11, 3, 128, 11)

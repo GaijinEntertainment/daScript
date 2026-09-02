@@ -9,6 +9,8 @@ require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads t
 require dasllama/dasllama_image   // load_model_cached — the served (image) flavor for the GPU twin
 require dasllama/dasllama_gguf   // set_mtp_head_path — the split-head fixture names its head explicitly
 require dasllama/dasllama_batch   // eval_verify_batch_ + create_batch_workspace_ — the batch-rail verify arm
+require dasllama/dasllama_mtp_gemma   // gemma_drafter_sidecar — the assistant drafter beside a gemma-4 target
+require ?das_metal dasllama/dasllama_metal_mtp_gemma   // attach_gemma_drafter — the gemma spec round rides the verify fixtures
 require ?das_metal dasllama/dasllama_metal_decode   // stats + the forced-reject lever + shutdown
 require ?das_metal dasllama/dasllama_metal_prefill   // the metal prefill override for the pair's prompts
 require ?das_metal metal/das_metal_boost   // metal_live_object_count for the leak gate
@@ -470,8 +472,8 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
     }
 }
 
-def private dff_cell(t : T?; tr, trg : Model; tag : string; prose_a, prose_b : array<int64>; tol : float) {
-    for (nb in [2l, 4l]) {
+def private dff_cell(t : T?; tr, trg : Model; tag : string; prose_a, prose_b : array<int64>; tol : float; wide : bool = false) {
+    for (nb in (wide ? [5l, 8l] : [2l, 4l])) {
         var sub : array<array<int64>>
         sub |> reserve(nb)
         for (i in range64(nb)) {
@@ -665,11 +667,40 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float) {
         if (arm_on(t, "mtp-dff-{tag}")) {
             dff_cell(t, tr, trg, tag, prose_a, prose_b, tol)
         }
+        if (arm_on(t, "mtp-dff8-{tag}")) {   // B=5 and B=8: the GEMM / mv8 rails of the batch driver
+            dff_cell(t, tr, trg, tag, prose_a, prose_b, tol, true)
+        }
         if (arm_on(t, "mtp-vff-{tag}")) {
             vff_cell(t, tr, trg, tag, prose_a, tol)
         }
         if (arm_on(t, "mtp-vff1-{tag}")) {   // one row through the batch driver: the encoder alone, no row mixing
             vff_cell(t, tr, trg, tag, prose_a, tol, 1l)
+        }
+        if (arm_on(t, "mtp-vff5-{tag}")) {   // five rows: the batch driver's GEMM rail (mp 32) under the same-slab verify
+            vff_cell(t, tr, trg, tag, prose_a, tol, 5l)
+        }
+        // the assistant drafter's round (gemma-4 targets with an mtp-* sidecar beside them): counting
+        // free-run, speculative == plain at depth 1, 2 and 4
+        if (arm_on(t, "mtp-count-{tag}")) {
+            let side = gemma_drafter_sidecar(path)
+            if (empty(side)) {
+                t |> skip("{tag}: no assistant drafter sidecar beside {file}")
+            } elif (!attach_gemma_drafter(trg, side)) {
+                t |> skip("{tag}: the drafter {side} did not attach")
+            } else {
+                var count <- encode(tr, counting_prompt(1, 40), true, false)
+                set_gemma_trace(arm_on(t, "mtp-count-trace"))
+                set_gemma_draft_on_cpu(arm_on(t, "mtp-count-cpu"))   // bring-up bisect: the CPU oracle drafts
+                for (depth in [1l, 2l, 4l]) {
+                    count_cell(t, tr, trg, tag, count, depth)
+                    let st = gemma_drafter_stats()
+                    to_log(LOG_INFO, "gemma drafter {tag} k{depth}: rounds={st.rounds} drafted={st.drafted} accepted={st.accepted}\n")
+                }
+                set_gemma_trace(false)
+                set_gemma_draft_on_cpu(false)
+                detach_gemma_drafter()
+                delete count
+            }
         }
         metal_decode_shutdown()
         metal_prefill_shutdown()

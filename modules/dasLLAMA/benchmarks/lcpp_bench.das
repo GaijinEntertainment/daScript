@@ -19,6 +19,8 @@ require dasllama/dasllama_tower   // the encode-stage prof rail (set_asr_prof/as
 require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
 require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require ?das_metal dasllama/dasllama_metal_prefill   // --asr --ngl: the chat-decoder prefill engage witness
+require ?das_metal dasllama/dasllama_metal_mtp_gemma   // --mtp-ab on a gemma-4 target: the assistant drafter sidecar attaches here
+require dasllama/dasllama_mtp_gemma   // ... and gemma_drafter_sidecar finds the sidecar beside the target
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
 require dasllama/dasllama_vision_embedder   // --image: the vision embedder (any family) + encode_image_
 require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
@@ -1473,9 +1475,19 @@ def main() : int {
         }
         let c = t.config
         // a model with no NextN head silently no-ops set_mtp_spec — both arms would be identical
-        // and the row would read as a valid 1.00x result. Fail closed instead.
+        // and the row would read as a valid 1.00x result. Fail closed instead; a gemma-4 target
+        // carries its drafter as an assistant sidecar (mtp-<name>-Q8_0.gguf beside it) instead.
         if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
-            panic("lcpp_bench: --mtp-ab needs a NextN draft head, and {mpath} has none")
+            var attached = false
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                let side = gemma_drafter_sidecar(mpath)
+                if (!empty(side)) {
+                    attached = attach_gemma_drafter(t, side)
+                }
+            }
+            if (!attached) {
+                panic("lcpp_bench: --mtp-ab needs a NextN draft head or an assistant drafter sidecar, and {mpath} has neither")
+            }
         }
         set_mtp_depth(int64(cfg.mtp_depth))
         // the exec REQUEST (exe-native / -jit / interpreted) + the armed GPU tier are stamped;

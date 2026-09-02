@@ -56,11 +56,23 @@ Qwen3-30B-A3B, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch 
 step at B=2/B=4 on identical real-text tokens plus one CPU reference row (the batch rail's logits
 gate - the support matrix's batch cell only proves ENGAGE); `mtp-vff-<tag>` = the same-slab batch
 verify's four rows vs four plain steps; `mtp-vff1-<tag>` = one row through the batch driver (the
-encoder alone, no row mixing). Bars: 0.5 dense, 2.0 plain MoE, 24.0 gemma-MoE = the support
+encoder alone, no row mixing); `mtp-vff5-<tag>` = five rows (the mv8 / GEMM rails, mp 8 / 32);
+`mtp-dff8-<tag>` = distinct sessions at B=5 and B=8 (the same rails, one session per row).
+`mtp-count-<tag>` on a gemma-4 target with an `mtp-*` assistant sidecar beside it attaches the
+drafter and runs the counting free-run at depth 1, 2, 4 (speculative == plain); `mtp-count-cpu`
+routes the drafts through the CPU oracle and `mtp-count-trace` logs drafts vs truth per round
+(bring-up levers, pass them with the fixture arm). Bars: 0.5 dense, 2.0 plain MoE, 24.0 gemma-MoE = the support
 matrix's own Q4_K_M forced-step bar (the routed experts amplify a float-class difference at a
 near-tie into the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips). The pairs prefill on
 the GPU twin through the metal prefill override (a planar 27B prefill costs minutes per session),
-so the fixture shuts down BOTH drivers before its leak gate. Prefill parity: `base mm-tail s16
+so the fixture shuts down BOTH drivers before its leak gate.
+The `mtp` suite also carries `test_mtp_gemma_drafter.das` (the gemma-4 assistant drafter, also in
+the model-free suite): `mtp-gdraft-refuse` (needs no file - the loader's no-panic refusal contract
+and the sidecar resolver's two refusals), `mtp-gdraft-load` (the 440 MiB
+`mtp-gemma-4-26B-A4B-it-Q8_0.gguf` sidecar's whole struct - geometry, per-layer head/kv classes,
+blob and fblob sizes against the tensor sum, 32-byte tensor alignment, the p-RoPE table) and
+`mtp-gdraft-cpu` (the CPU oracle's one step over a live gemma-4-26B-A4B session - PARITY_FULL,
+finiteness and range only; no numeric oracle for the drafter exists yet). Prefill parity: `base mm-tail s16
 kq cont span span-fused span-mrope span-ds dim qkv` (mm-tail = the GEMV-tail residue peel -
 four fixtures, npos % 32 == 1 (the lone row rides the reduction-split GEMV), == 2 (the b4
 form at 2 rows), == 5 (two b4 dispatches, 4 rows + 1) and npos == 5 (the pure-tail leg,
@@ -235,6 +247,9 @@ mels across calls); its ungated cells are the model-free half.
 `asr_encode_bucket`) over constructed structs, the audio families' lane knobs (qwen3a /
 gemma4a / canary: the un-pinned default against the predicate the policy itself consults, both
 pins, and reset from the EXACT pin), and parakeet's SPM detokenizer over a toy vocab.
+`test_mtp_gemma_drafter.das` - model-free suite AND the `mtp` suite: the gemma-4 assistant
+drafter (`dasllama/dasllama_mtp_gemma`). Its `mtp-gdraft-refuse` arm runs with no model; the
+sidecar-shape and CPU-oracle arms gate on the files.
 `test_model_specs.das` - model-free: the model-set table's shape invariants
 (`../performance/model_specs.das`: unique file/display keys, official => provenance pinned,
 parity-evidence shape), the derived provenance view's invariants (unique names, sha-or-recipe,
