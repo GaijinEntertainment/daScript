@@ -569,6 +569,16 @@ int32_t test_escape_retained_first_int () {
     return g_escape_test_retained ? *(int32_t *)g_escape_test_retained : -1;
 }
 
+// the pair exists to price the null-string substitution: same node shape, same
+// argument count, same work - only the parameter type differs
+int64_t testFourStrings ( const char * a, const char * b, const char * c, const char * d ) {
+    return int64_t(intptr_t(a) ^ intptr_t(b) ^ intptr_t(c) ^ intptr_t(d));
+}
+
+int64_t testFourPointers ( void * a, void * b, void * c, void * d ) {
+    return int64_t(intptr_t(a) ^ intptr_t(b) ^ intptr_t(c) ^ intptr_t(d));
+}
+
 int64_t testStringArgLength ( const char * str ) {
     return str ? int64_t(strlen(str)) : -1;
 }
@@ -607,6 +617,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAlias(typeFactory<Point3>::make(lib));
     addVectorAnnotation<Point3Array>(this,lib,new Point3ArrayAnnotation(lib));
     addCtorAndUsing<Point3Array>(*this, lib, "Point3Array", "Point3Array");
+    addExtern<DAS_BIND_FUN(testFourStrings)>(*this, lib, "test_four_strings",
+        SideEffects::none, "testFourStrings")->args({"a","b","c","d"});
+    addExtern<DAS_BIND_FUN(testFourPointers)>(*this, lib, "test_four_pointers",
+        SideEffects::none, "testFourPointers")->args({"a","b","c","d"});
     addExtern<DAS_BIND_FUN(testStringArgLength)>(*this, lib, "test_string_arg_length",
         SideEffects::none, "testStringArgLength")->arg("str");
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
