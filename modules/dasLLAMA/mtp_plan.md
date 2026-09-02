@@ -546,8 +546,8 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
 
 | depth | off t/s | on t/s | ratio | accept | per position (accepted_i / rounds) |
 |---|---|---|---|---|---|
-| 1 | 122.2 | 138.6 | **1.13x** | 74.6% | p1 74.6 |
-| 2 | 122.2 | 140.3 | **1.15x** | 63.3% | (sweep run; per-position not yet printed) |
+| 1 | 122.2 | 138.6 -> **145.0 fused** | 1.13x -> **1.185x** | 74.6% | p1 74.6 |
+| 2 | 122.2 | 140.3 -> **144.7 fused** | 1.15x -> **1.19x** | 63.3% | p1 74.7 p2 52.0 |
 | 3 | 122.2 | 96.4 | 0.79x | 51.3% | p1 69.3 p2 47.5 p3 37.1 |
 | 4 | 122.1 | 103.1 (78.1 in the sweep run) | 0.84x | 45.2% | p1 72.0 p2 48.9 p3 35.7 p4 24.2 |
 
@@ -576,7 +576,17 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   (`--sameslab`): B=2 1.01x, B=4 1.25x, **B=5 1.81x** (the mp-8 two-tile rail: the depth-3/4 cliff).
   So the round at depth 1 = draft 1.35 + same-slab step ~10.3 + walk/commit ~0.7 ms, strictly serial,
   against a pipelined single step of 8.2 ms - the batch step's synchronous shape (no one-deep overlap,
-  CPU landing of 2 x 1 MB logits) and the serial phases are the recoverable part. GPU envelope
+  CPU landing of 2 x 1 MB logits) and the serial phases are the recoverable part.
+  **FUSED ROUND landed (2026-09-02)**: the k drafts encode into ONE command buffer committed without a
+  wait (draft i embeds bvtok[i], the winner lands in bvtok[i+1] on the device, h chains through
+  post_projection on the device), the same-slab verify embeds its rows from that token buffer
+  (`set_batch_same_slab_tokens`, the driver's own `enc_embed` per row), a per-row argmax
+  (`enc_argmax_rows`) lands the accept walk's truths with the join. Draft chain CPU 1.35 -> 0.03 ms;
+  round 12.3 -> 11.7 ms at depth 1. Token-identical to the per-step path at k = 1, 2, 4 (counting arm,
+  same acceptance counts). Remaining above the GPU floor (~10.8): the join's CPU landing (nr MB of
+  logits + KV writeback) and the batch driver's host prep. Note the probe's "B=2 = 1.02x" is WALL
+  time: the single step's ~2 ms of host work hides inside it; GPU-wise a two-row step is ~1.2x a
+  one-row step (9.8 vs 8.2 ms), and that 20% is the model's real two-row cost on this GPU. GPU envelope
   (`DASLLAMA_METAL_PIPE_DEBUG=1`) of the two-row batch step: 9.8 ms GPU + 0.4 ms gap - the step is
   GPU-bound, so the round's floor is ~9.8 (verify) + ~1.0 (draft GPU) = 10.8 ms => depth 1 ~1.32x
   once the CPU walk, the landing and the serial gaps are gone; the 2-row weight stream itself

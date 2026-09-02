@@ -1147,8 +1147,8 @@ class MetalArgmax {
 class MetalEmbedQ8 {
     @ssbo @binding = 0 @role = "weight" @off = "eoff" q : array<int8>      // the embed blob slice, byte view (quants at 34*b + 2)
     @ssbo @binding = 1 @role = "weight" @off = "eoff" sc : array<float16>  // the same buffer, half-scale view (block b at 17*b)
-    @ssbo @binding = 2 tok : array<uint>
-    @ssbo @binding = 3 xo : array<float>    // [dim] residual input out
+    @ssbo @binding = 2 @off = "toff" tok : array<uint>     // the token at a byte offset: row i of a token list
+    @ssbo @binding = 3 @off = "xoff" xo : array<float>     // [dim] residual input out, at row i's byte offset
     @uniform @binding = 4 dim : uint
     @uniform @binding = 5 @role = "weight" escale : float    // embed_scale (gemma: sqrt(dim); 1.0 elsewhere — g_one or an uploaded scalar)
 
@@ -1161,6 +1161,64 @@ class MetalEmbedQ8 {
         let e = tok[0] * dim + gid
         let b = e / 32u
         xo[gid] = (float(q[b * 34u + 2u + e % 32u]) * float(sc[b * 17u])) * escale
+    }
+}
+
+// Per-row argmax over a [nrows x n] logits image (the same-slab verify's accept walk on the GPU):
+// one threadgroup per row, tok[row] = the row's winner (lowest index on ties, like MetalArgmax).
+[metal_dispatch(name = "enc_argmax_rows", pso = "g_pso_argmax_rows", tgmem = "metal_argmax_rows_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
+class MetalArgmaxRows {
+    @ssbo @binding = 0 lg : array<float>    // [nrows x n]
+    @ssbo @binding = 1 tok : array<uint>    // [nrows] winners out
+    @uniform @binding = 2 n : uint
+    @workgroup redv : float[32]
+    @workgroup redi : uint[32]
+
+    [metal_kernel(name="metal_argmax_rows_msl")]
+    def metal_argmax_rows {
+        let row = gl_WorkGroupID.x
+        let lid = gl_LocalInvocationID.x
+        let nt = gl_WorkGroupSize.x
+        let base = row * n
+        var bv = -3.0e38
+        var bi = 0u
+        var j = lid
+        while (j < n) {
+            let v = lg[base + j]
+            if (v > bv) {
+                bv = v
+                bi = j
+            }
+            j += nt
+        }
+        var m = 16u
+        while (m >= 1u) {
+            let ov = simd_shuffle_xor(bv, m)
+            let oi = simd_shuffle_xor(bi, m)
+            if (ov > bv || (ov == bv && oi < bi)) {
+                bv = ov
+                bi = oi
+            }
+            m /= 2u
+        }
+        if (gl_SubgroupInvocationID == 0u) {
+            redv[gl_SubgroupID] = bv
+            redi[gl_SubgroupID] = bi
+        }
+        barrier()
+        if (lid == 0u) {
+            var fv = redv[0]
+            var fi = redi[0]
+            var sg = 1u
+            while (sg < gl_NumSubgroups) {
+                if (redv[sg] > fv || (redv[sg] == fv && redi[sg] < fi)) {
+                    fv = redv[sg]
+                    fi = redi[sg]
+                }
+                sg++
+            }
+            tok[row] = fi
+        }
     }
 }
 
@@ -3585,6 +3643,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_unsign = compile_pso(metal_fwht_unsign_msl, metal_fwht_unsign_msl_entry, metal_fwht_unsign_msl_fastmath, ok)
     g_pso_qknorm = compile_pso(metal_qk_norm_msl, metal_qk_norm_msl_entry, metal_qk_norm_msl_fastmath, ok)
     g_pso_argmax = compile_pso(metal_argmax_msl, metal_argmax_msl_entry, metal_argmax_msl_fastmath, ok)
+    g_pso_argmax_rows = compile_pso(metal_argmax_rows_msl, metal_argmax_rows_msl_entry, metal_argmax_rows_msl_fastmath, ok)
     g_pso_moe_router = compile_pso(MetalMoeRouter_metal_moe_router_msl, MetalMoeRouter_metal_moe_router_msl_entry, MetalMoeRouter_metal_moe_router_msl_fastmath, ok)
     g_pso_moe_router_b = compile_pso(MetalMoeRouterB_metal_moe_router_msl, MetalMoeRouterB_metal_moe_router_msl_entry, MetalMoeRouterB_metal_moe_router_msl_fastmath, ok)
     g_pso_dn_ba = compile_pso(MetalDnBa_metal_q8_gemv_msl, MetalDnBa_metal_q8_gemv_msl_entry, MetalDnBa_metal_q8_gemv_msl_fastmath, ok)
@@ -4056,8 +4115,8 @@ def enc_gemv_w13sw(enc : MetalComputeEncoder?; bw : MetalBuffer?; w1off, w3off :
     enc_w13sw_c(enc, bw, w1off, bw, bx, bh, bn, bhid, bw, w3off, bw, bact, hidden)
 }
 
-def enc_embed(enc : MetalComputeEncoder?; bw : MetalBuffer?; eoff : uint64; btok, bx, bdim, bescale : MetalBuffer?; dim : int64) {
-    enc_embed_c(enc, bw, eoff, bw, btok, bx, bdim, bescale != null ? bescale : g_one, dim)
+def enc_embed(enc : MetalComputeEncoder?; bw : MetalBuffer?; eoff : uint64; btok, bx, bdim, bescale : MetalBuffer?; dim : int64; toff : uint64 = 0ul; xoff : uint64 = 0ul) {
+    enc_embed_c(enc, bw, eoff, bw, btok, toff, bx, xoff, bdim, bescale != null ? bescale : g_one, dim)
 }
 
 // the tied-k6 spec embed gather: the scale buffer binds twice (f16 d plane @doff + sub-scale
@@ -4568,6 +4627,10 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     if (g_pso_rpst32 != null) {
         metal_release(g_pso_rpst32)
         g_pso_rpst32 = null
+    }
+    if (g_pso_argmax_rows != null) {
+        metal_release(g_pso_argmax_rows)
+        g_pso_argmax_rows = null
     }
     if (g_pso_argmax != null) {
         metal_release(g_pso_argmax)

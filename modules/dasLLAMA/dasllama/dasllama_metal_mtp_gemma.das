@@ -33,8 +33,10 @@ struct GemmaDrafterGpu {
     bhn : MetalBuffer?         // [dim] output-norm hidden
     blog : MetalBuffer?        // [vocab] logits
     bhnext : MetalBuffer?      // [tdim] post_projection hidden = the next step's h
-    btok : MetalBuffer?        // [1] token in
+    btok : MetalBuffer?        // [1] token in (the oracle's single step)
     btok_out : MetalBuffer?    // [1] argmax out
+    bvtok : MetalBuffer?       // [MTP_MAX_ROWS] the round's token list: seed at 0, draft i's winner at i+1 - the verify embeds from it
+    u_one1 : MetalBuffer?      // uniform 1: the one-token copies
     bpart : MetalBuffer?       // chunked attention partials (grown on demand)
     bpart_bytes : uint64
     bcos : MetalBuffer?        // the anchor's rope row, full class (hs_full / 2)
@@ -101,6 +103,8 @@ def private gemma_gpu_release(var g : GemmaDrafterGpu) {
     rel(g.bhnext)
     rel(g.btok)
     rel(g.btok_out)
+    rel(g.bvtok)
+    rel(g.u_one1)
     rel(g.bpart)
     rel(g.bcos)
     rel(g.bsin)
@@ -146,6 +150,8 @@ def private gemma_gpu_init(dr : GemmaDrafter; escale : float; var g : GemmaDraft
     g.bhnext = metal_new_buffer(g_dev, uint64(dr.tdim) * f4)
     g.btok = metal_new_buffer(g_dev, 64ul)
     g.btok_out = metal_new_buffer(g_dev, 64ul)
+    g.bvtok = metal_new_buffer(g_dev, 64ul)
+    g.u_one1 = ubuf_u32(1u)
     g.bcos = metal_new_buffer(g_dev, uint64(hs_mx / 2l) * f4)
     g.bsin = metal_new_buffer(g_dev, uint64(hs_mx / 2l) * f4)
     g.bcos_sw = metal_new_buffer(g_dev, uint64(hs_mx / 2l) * f4)
@@ -334,7 +340,6 @@ def public gemma_draft_step_gpu(t : Model; s : Session; tok, anchor : int64; h :
     let dr & = g_gemma_drafter
     var g & = g_gemma_gpu
     let mr = g_mirrors[s.uid]
-    let dim = dr.dim
     gemma_rope_rows(t, g, anchor)
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
@@ -346,15 +351,7 @@ def public gemma_draft_step_gpu(t : Model; s : Session; tok, anchor : int64; h :
         memcpy(reinterpret<void?>(bxp + dr.tdim * 4l), addr < void? >(h[0]), uint64(dr.tdim) * 4ul)
         let temb = blob_of(g_dev, t, t.emb_q8_off)   // the target's q8 token table (the decode's own embed source)
         enc_embed(enc, temb.buf, temb.boff, g.btok, g.bx, g.u_tdim, g.u_escale, dr.tdim)
-        enc_gemv(enc, g.bblob, uint64(dr.pre_proj_off), g.bx, g.bxin, g.u_cat, g.u_dim, dim)
-        for (l in range64(dr.n_layers)) {
-            encode_gemma_layer(t, s, enc, g, l, anchor, mr)
-        }
-        var bw_on = upload_region(addr < void? >(dr.fblob[dr.out_norm_off]), uint64(dim) * 4ul)
-        enc_rms(enc, g.bxin, 0ul, bw_on, g.bhn, g.u_dim, g.u_eps)
-        enc_gemv(enc, g.bblob, uint64(dr.tok_emb_off), g.bhn, g.blog, g.u_dim, g.u_vocab, dr.vocab)
-        enc_argmax(enc, g.blog, g.btok_out, g.u_vocab)
-        enc_gemv(enc, g.bblob, uint64(dr.post_proj_off), g.bhn, g.bhnext, g.u_dim, g.u_tdim, dr.tdim)
+        encode_gemma_draft(t, s, enc, g, anchor, mr)
     }
     metal_end_encoding(enc)
     metal_release(enc)
@@ -394,6 +391,81 @@ def public gemma_drafter_last_logits(var dst : array<float>) {
     unsafe {
         memcpy(addr < void? >(dst[0]), metal_buffer_contents(g_gemma_gpu.blog), uint64(dr.vocab) * 4ul)
     }
+}
+
+// the layer chain + tail of one draft step on `enc`: bx = [embed ; h] -> logits, argmax into btok_out,
+// post_projection into bhnext (the next step's h)
+def private encode_gemma_draft(t : Model; s : Session; enc : MetalComputeEncoder?; var g : GemmaDrafterGpu; anchor : int64; mr : KVMirror) {
+    let dr & = g_gemma_drafter
+    let dim = dr.dim
+    unsafe {
+        enc_gemv(enc, g.bblob, uint64(dr.pre_proj_off), g.bx, g.bxin, g.u_cat, g.u_dim, dim)
+        for (l in range64(dr.n_layers)) {
+            encode_gemma_layer(t, s, enc, g, l, anchor, mr)
+        }
+        var bw_on = upload_region(addr < void? >(dr.fblob[dr.out_norm_off]), uint64(dim) * 4ul)
+        enc_rms(enc, g.bxin, 0ul, bw_on, g.bhn, g.u_dim, g.u_eps)
+        enc_gemv(enc, g.bblob, uint64(dr.tok_emb_off), g.bhn, g.blog, g.u_dim, g.u_vocab, dr.vocab)
+        enc_argmax(enc, g.blog, g.btok_out, g.u_vocab)
+        enc_gemv(enc, g.bblob, uint64(dr.post_proj_off), g.bhn, g.bhnext, g.u_dim, g.u_tdim, dr.tdim)
+    }
+}
+
+//! The k-draft chain as ONE command buffer, committed without a wait: draft i embeds bvtok[i] (the
+//! seed at 0, the argmaxes above it), its h is the CPU carry for i = 0 and the previous draft's
+//! post_projection copied on the device after; each winner lands in bvtok[i + 1], so the verify
+//! that follows on the same queue embeds the rows from the same buffer and the CPU touches nothing
+//! until the verify's join.
+def private gemma_draft_chain_gpu(t : Model; s : Session; seed, anchor, k : int64) : bool {
+    let dr & = g_gemma_drafter
+    var g & = g_gemma_gpu
+    let mr = g_mirrors[s.uid]
+    gemma_rope_rows(t, g, anchor)
+    var cb = metal_new_command_buffer_unretained(g_queue)
+    var enc = metal_new_compute_encoder(cb)
+    gr_arm(false)
+    unsafe {
+        var tp = reinterpret<uint?>(metal_buffer_contents(g.bvtok))
+        tp[0] = uint(seed)
+        var bxp = reinterpret<uint8?>(metal_buffer_contents(g.bx))
+        memcpy(reinterpret<void?>(bxp + dr.tdim * 4l), addr < void? >(s.mtp_h[0]), uint64(dr.tdim) * 4ul)
+        let temb = blob_of(g_dev, t, t.emb_q8_off)
+        for (i in range64(k)) {
+            if (i > 0l) {
+                enc_copy_row(enc, g.bhnext, 0ul, g.bx, uint64(dr.tdim * 4l), g.u_tdim, dr.tdim)
+            }
+            enc_embed(enc, temb.buf, temb.boff, g.bvtok, g.bx, g.u_tdim, g.u_escale, dr.tdim, uint64(i * 4l), 0ul)
+            encode_gemma_draft(t, s, enc, g, anchor, mr)
+            enc_copy_row(enc, g.btok_out, 0ul, g.bvtok, uint64((i + 1l) * 4l), g.u_one1, 1l)
+        }
+    }
+    metal_end_encoding(enc)
+    metal_release(enc)
+    metal_commit(cb)
+    let ok = !metal_command_buffer_failed(cb)   // an encode-time failure surfaces here; the GPU result is read after the verify's join
+    metal_release(cb)
+    return ok
+}
+
+// the bring-up lever's chain: the CPU oracle drafts step by step from the CPU carry, tokens into mtp_vbatch
+def private gemma_draft_chain_cpu(t : Model; var s : Session; pos, k : int64) : int64 {
+    let dr & = g_gemma_drafter
+    var drafted = 0l
+    unsafe {
+        memcpy(addr < void? >(g_gemma_h[0]), addr < void? >(s.mtp_h[0]), uint64(dr.tdim) * 4ul)
+    }
+    for (i in range64(k)) {
+        var d = 0l
+        if (!gemma_draft_step(t, s, s.mtp_vbatch[i], pos, g_gemma_h, d, g_gemma_hn)) {
+            break
+        }
+        s.mtp_vbatch[i + 1l] = d
+        drafted++
+        unsafe {
+            memcpy(addr < void? >(g_gemma_h[0]), addr < void? >(g_gemma_hn[0]), uint64(dr.tdim) * 4ul)
+        }
+    }
+    return drafted
 }
 
 var private @scratch g_gemma_h : array<float>      // the chain's h input (tdim)
@@ -493,35 +565,37 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     finish_pending_step()
     let td = ref_time_ticks()
     s.mtp_vbatch[0] = tok
-    unsafe {
-        memcpy(addr < void? >(g_gemma_h[0]), addr < void? >(s.mtp_h[0]), uint64(dr.tdim) * 4ul)
-    }
-    var drafted = 0l
-    for (i in range64(k)) {
-        var d = 0l
-        if (!gemma_draft_step(t, s, s.mtp_vbatch[i], pos, g_gemma_h, d, g_gemma_hn)) {
-            break
-        }
-        s.mtp_vbatch[i + 1l] = d
-        drafted++
-        unsafe {
-            memcpy(addr < void? >(g_gemma_h[0]), addr < void? >(g_gemma_hn[0]), uint64(dr.tdim) * 4ul)
-        }
-    }
+    let gpu_chain = !g_gemma_draft_cpu
+    // the GPU chain and the verify ride the queue back to back (one join at the end); the CPU lever
+    // drafts step by step with the oracle
+    let drafted = gpu_chain ? (gemma_draft_chain_gpu(t, s, tok, pos, k) ? k : 0l) : gemma_draft_chain_cpu(t, s, pos, k)
     if (drafted == 0l) {
         return gemma_plain_step(t, s, tok, pos)
     }
     g_gemma_us_draft += int64(get_time_usec(td))
     let tv = ref_time_ticks()
     let nr = drafted + 1l
-    if (!eval_verify_batch_(t, g_gemma_ws, s, s.mtp_vbatch, pos, nr)) {
+    if (gpu_chain) {
+        set_batch_same_slab_tokens(g_gemma_gpu.bvtok)
+    }
+    let vok = eval_verify_batch_(t, g_gemma_ws, s, s.mtp_vbatch, pos, nr)
+    set_batch_same_slab_tokens(null)
+    if (!vok) {
         return gemma_plain_step(t, s, tok, pos)
+    }
+    if (gpu_chain) {
+        unsafe {   // the chain's winners, landed by the verify's join (queue order completes the chain first)
+            let tp = reinterpret<uint?>(metal_buffer_contents(g_gemma_gpu.bvtok))
+            for (i in range64(drafted)) {
+                s.mtp_vbatch[i + 1l] = int64(tp[i + 1l])
+            }
+        }
     }
     g_gemma_drafted += drafted
     g_gemma_rounds++
-    // the accept walk: row i is the truth for draft i+1
+    // the accept walk: row i is the truth for draft i+1 (the join landed every row's argmax)
     var a = 0l
-    while (a < drafted && row_argmax(s.mtp_logits_b, a, c.vocab_size) == s.mtp_vbatch[a + 1l]) {
+    while (a < drafted && sameslab_argmax(a) == s.mtp_vbatch[a + 1l]) {
         a++
     }
     if (g_gemma_trace) {

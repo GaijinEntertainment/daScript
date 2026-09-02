@@ -213,6 +213,7 @@ var g_pso_dn_ba : MetalComputePipeline?     // DeltaNet β/α batched narrow GEM
 var g_pso_moe_router_b : MetalComputePipeline?   // position-blocked router / f32-slab GEMV (prefill-only dispatch)
 
 var g_pso_argmax : MetalComputePipeline?
+var g_pso_argmax_rows : MetalComputePipeline?   // the same-slab verify's per-row accept-walk argmax
 var g_pso_copy_row : MetalComputePipeline?   // zero-copy logits: staging row -> wrapped session storage
 var g_pso_emb : MetalComputePipeline?
 var g_pso_emb_k6 : MetalComputePipeline?     // tied-k6 spec chain's embed gather
@@ -1876,6 +1877,11 @@ var g_lp_blog : MetalBuffer?
 var g_lp_sameslab = false       // same-slab verify: land every row's logits + hidden on sessions[0]
 var g_lp_bxf : MetalBuffer?     // ... the rows' post-final-norm hidden (nrows x dim)
 var g_lp_bxf_bytes = 0l
+var g_lp_bvarg : MetalBuffer?   // same-slab verify: the rows' GPU argmax (uint per row), landed into g_sameslab_arg
+var @scratch g_sameslab_arg : array<int64>
+
+//! The same-slab verify's per-row argmax as the join landed it (row i = the truth for draft i+1).
+def sameslab_argmax(i : int64) : int64 => g_sameslab_arg[i]
 var g_lp_xb : MetalBuffer?      // production sync + CPU-classifier path: x_b writeback
 var g_lp_xb_dst : void?         // ... into the caller's workspace (borrowed, sync-only)
 var g_lp_xb_bytes = 0l
@@ -1917,6 +1923,15 @@ def private land_sameslab_rows(lgp : uint8?) {
                 s0.mtp_hrows |> resize(g_lp_bxf_bytes / 4l)
             }
             memcpy(addr < void? >(s0.mtp_hrows[0]), metal_buffer_contents(g_lp_bxf), g_lp_bxf_bytes)
+        }
+        if (g_lp_bvarg != null) {
+            if (long_length(g_sameslab_arg) < g_lp_nrows) {
+                g_sameslab_arg |> resize(g_lp_nrows)
+            }
+            let ap = reinterpret<uint?>(metal_buffer_contents(g_lp_bvarg))
+            for (i in range64(g_lp_nrows)) {
+                g_sameslab_arg[i] = int64(ap[i])
+            }
         }
     }
 }
@@ -2016,6 +2031,7 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
     g_lp_blog = null
     g_lp_sameslab = false
     g_lp_bxf = null
+    g_lp_bvarg = null
     g_lp_xb = null
     g_lp_xb_dst = null
     g_lp_sessions |> clear()   // borrowed handles — clear, never delete

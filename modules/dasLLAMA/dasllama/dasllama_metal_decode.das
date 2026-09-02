@@ -2260,6 +2260,15 @@ def set_metal_mtp_carry_hidden(on : bool; pre : bool = false) {
 
 def metal_mtp_carry_pre() : bool => g_mtp_carry_pre
 
+var private g_b_same_toks : MetalBuffer?   // same-slab verify: the rows' tokens ON the GPU (uint per row) - the driver embeds them itself
+
+//! The same-slab verify's rows come as a GPU token buffer (the draft chain's argmax outputs, never
+//! read back): the driver dequantizes their embeddings on the encoder instead of taking the
+//! workspace's CPU-embedded rows, and lands every row's argmax for the accept walk. null = CPU rows.
+def set_batch_same_slab_tokens(var b : MetalBuffer?) {
+    g_b_same_toks = b
+}
+
 var private g_bconcurrent = true
 // DASLLAMA_METAL_BATCH_FUSE: fold w1 + w3 + swiglu into one fused dispatch on the fixed-B path
 // (B <= 4) — cuts 2 dispatches + their barriers per layer where inter-dispatch bubbles hurt most.
@@ -2680,8 +2689,11 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_nch = (!use_attn_d && chunked) ? uniform_u32(uint(nchmax)) : null
     var u_nsgs = use_attn_d ? uniform_u32(uint(d_nsgs)) : null
     var u_vocab = gpu_logits ? uniform_u32(uint(c.vocab_size)) : null
+    let gpu_toks = same && g_b_same_toks != null && t.cls_q8
     unsafe {
-        memcpy(metal_buffer_contents(bx), addr < void? >(ws.scr.x_b[0]), nrows * dim * 4l)
+        if (!gpu_toks) {
+            memcpy(metal_buffer_contents(bx), addr < void? >(ws.scr.x_b[0]), nrows * dim * 4l)
+        }
         memcpy(metal_buffer_contents(bcos), addr < void? >(ws.scr.rope_cos[0]), bytes_tab)
         memcpy(metal_buffer_contents(bsin), addr < void? >(ws.scr.rope_sin[0]), bytes_tab)
         if (dual_rope) {
@@ -2703,6 +2715,17 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     hz_arm(conc)   // the range oracle: the *_b encoders self-declare, hz_gate barriers at real hazards
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
+    if (gpu_toks) {
+        // the rows' residual inputs from the GPU token list: row i = embed(tok[i]) * embed_scale
+        let bemb = blob_of(g_dev, t, t.emb_q8_off)
+        var u_esc = c.embed_scale != 1.0 ? uniform_f32(c.embed_scale) : g_one
+        for (i in range64(nrows)) {
+            enc_embed(enc, bemb.buf, bemb.boff, g_b_same_toks, bx, u_dim, u_esc, dim, uint64(i * 4l), uint64(i * dim * 4l))
+        }
+        if (u_esc != g_one) {
+            g_lp_upooled |> push((buf = u_esc, size = 4ul))
+        }
+    }
     // layer-0 attention norm (the per-layer trailing add+rms feeds the NEXT layer's)
     if (g_skip != "ew") {
         unsafe {
@@ -3172,6 +3195,13 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         // zero-copy logits: scatter each staging row into its session's wrapped storage ON the cb
         // (the KV writeback stays). All-or-nothing per step: one unwrappable session keeps the whole
         // step on the landing scatter. Pipe mode writes s.logits ASYNCHRONOUSLY — fixed-token-only.
+        if (same) {
+            // the accept walk's truths on the GPU: one winner per row, landed with the logits
+            var bvarg = pool_acquire(g_pool, g_dev, 64ul)
+            enc_argmax_rows(enc, blog, bvarg, u_vocab, nrows)
+            g_lp_bvarg = bvarg
+            g_lp_pooled |> push((buf = bvarg, size = 64ul))
+        }
         nc_all = !same   // the same-slab verify keeps the staging image: every row lands on one session
         for (i in range64(nrows)) {
             nc_all &&= nc_logits_for(g_dev, *sessions[i]) != null
