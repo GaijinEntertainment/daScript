@@ -1469,7 +1469,7 @@ def private checkpoint_cell_visible(cell : TerminalCell const) : bool {
 def private checkpoint_write_row(var writer : StringBuilderWriter;
                                  row : TerminalRow const;
                                  var active_style : TerminalCell;
-                                 var active_hyperlink : string) {
+                                 var active_hyperlink : string&) {
     var last_column = -1
     for (column in range(length(row.cells))) {
         if (checkpoint_cell_visible(row.cells[column])) {
@@ -1495,7 +1495,7 @@ def private checkpoint_write_buffer(var writer : StringBuilderWriter;
                                     buffer : TerminalBuffer const;
                                     include_history : bool;
                                     var active_style : TerminalCell;
-                                    var active_hyperlink : string) {
+                                    var active_hyperlink : string&) {
     var line = 0
     let line_count = (include_history ? length(buffer.history) : 0) + length(buffer.screen)
     if (include_history) {
@@ -1532,7 +1532,7 @@ def private checkpoint_write_cursor_state(var writer : StringBuilderWriter;
 def private checkpoint_restore_buffer_state(var writer : StringBuilderWriter;
                                             buffer : TerminalBuffer const;
                                             var active_style : TerminalCell;
-                                            var active_hyperlink : string) {
+                                            var active_hyperlink : string&) {
     let esc = to_char(27)
     writer |> write("{esc}[{buffer.scroll_top + 1};{buffer.scroll_bottom + 1}r")
     writer |> write("{esc}[{buffer.saved_cursor.row + 1};{buffer.saved_cursor.column + 1}H")

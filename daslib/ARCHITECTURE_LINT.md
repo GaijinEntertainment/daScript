@@ -102,11 +102,35 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   from dead code. Public symbols, lifecycle/macro hooks, virtual methods, and generic
   bodies are skipped: their callers are invisible to lint.
 - **Argument rules skip what the author does not own, and converge leaf-first.**
-  LINT012/013/014/023 stay silent on class methods, `[extern]` stubs, `finalize`
+  LINT012/013/014/023/029 stay silent on class methods, `[extern]` stubs, `finalize`
   overloads, and address-taken functions; LINT014 also skips a parameter whose mutability
   a callee demands - the leaf is flagged first and each fix re-exposes the next caller.
   A returned `var` argument keeps its `var` (a non-copyable result cannot move from
   const); a used `_name` parameter is never LINT004'd (interface and keyword-clash names).
+- **LINT023 reads the store/use stream in order.** A use disqualifies a candidate only
+  once a store has been seen, so a read that precedes every store leaves the write dead -
+  the shape that hides a cleared-but-not-returned handle. `lint023_deferred_depth` covers
+  the placements whose execution order is not the source order: a closure, lambda or
+  generator body, and any loop body, where a read is taken to follow the store. A `label`
+  or a `goto` anywhere in the function sets `lint023_jumps` and the rule reports nothing
+  there at all: a backward jump can place a read after a store above it, so the order test
+  has no ground to stand on. It is
+  deliberately NOT `branch_depth`, which also counts `if` and `try/catch`: a conditional
+  reorders nothing, and the read that exposes the dead write sits inside one - folding the
+  two counters together makes the rule silent on the shape it exists to catch.
+- **LINT029 ships default-off and is advisory.** `seed_default_disabled` carries it beside
+  STYLE005, so a tree sees it only once a file arms it (`options _lint = "LINT029"`) or the
+  repo config turns it on. The findings are a reminder to prefer a returned result, not a
+  defect report, so skipping one is a normal outcome rather than a suppression to justify.
+- **LINT029 fires per argument straight from the compiler's access flags**
+  (`access_ref` / `access_info_pass_mutable` - the same evidence LINT014 reads in
+  reverse) and shares LINT014's return-erase. Receiver position exempts nothing: a
+  mutated struct is a finding wherever it sits, and only a struct whose every field
+  access yields a pointer or a handle stands down - there `var` is what keeps the
+  CONTAINED handle non-const. The rule stands down wholesale when the program source
+  sits in any `daslib/` folder (`lint029_source_exempt`, `daslib/lint_config.das`):
+  library code lives on the builder/state idiom (`var self`, `var writer`), so the
+  purity contract binds application code only.
 - **Closure bodies are per-rule, not global.** LINT010 counts a closure body as a branch
   (it may run later or never - writes inside must not kill outside stores, reads inside
   must not keep an outside init live); LINT021 counts the same body as an escape - a

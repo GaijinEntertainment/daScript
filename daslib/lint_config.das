@@ -108,10 +108,12 @@ def public load_lint_config_from_path(path : string; var disabled_codes : table<
     }
 }
 
-//! Seeds ``disabled_codes`` with the canonical default-off rule set (currently just STYLE005). Call before ``load_lint_config`` so that a ``STYLE005 = true`` directive in ``.lint_config`` can re-enable it.
+//! Seeds ``disabled_codes`` with the canonical default-off rule set (STYLE005 and LINT029). Call before ``load_lint_config`` so that a ``STYLE005 = true`` directive in ``.lint_config`` can re-enable it.
 def public seed_default_disabled(var disabled_codes : table<string>) : void {
-    if (!key_exists(disabled_codes, "STYLE005")) {
-        disabled_codes |> insert("STYLE005")
+    for (code in ["STYLE005", "LINT029"]) {
+        if (!key_exists(disabled_codes, code)) {
+            disabled_codes |> insert(code)
+        }
     }
 }
 
@@ -218,7 +220,33 @@ def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
         if (key_exists(disabled, code)) disabled |> erase(code)
     }
     load_env_disabled(disabled)
+    add_module_rule_overrides(prog, disabled)
     return <- disabled
+}
+
+//! The module-local rule overrides, layered LAST so the file has the final say: ``options _nolint``
+//! silences the listed codes for this file, ``options _lint`` arms them (a default-off rule, or one
+//! the repo config turned off). An enable beats a disable; an unknown code changes nothing.
+def public add_module_rule_overrides(prog : ProgramPtr; var disabled_codes : table<string>) : void {
+    apply_module_codes(prog, "_nolint", disabled_codes, true)
+    apply_module_codes(prog, "_lint", disabled_codes, false)
+}
+
+def private apply_module_codes(prog : ProgramPtr; option : string;
+                               var disabled_codes : table<string>; disable : bool) : void {
+    let configured = prog._options |> find_arg(option)
+    return if (!(configured is tString))
+    for (part in split(configured as tString, ",")) {
+        let code = part |> strip |> to_upper
+        continue if (empty(code))
+        if (disable) {
+            if (!key_exists(disabled_codes, code)) {
+                disabled_codes |> insert(code)
+            }
+        } elif (key_exists(disabled_codes, code)) {
+            disabled_codes |> erase(code)
+        }
+    }
 }
 
 def private module_source_path(prog : ProgramPtr) : string {
@@ -243,6 +271,10 @@ def public is_daslib_source(prog : ProgramPtr) : bool {
 
 //! True when the compiling module's source lives under ``daslib/`` or ``modules/`` -
 //! shipped library code whose emitted strings flow into every consumer's logs (STYLE039).
+def public lint029_source_exempt(prog : ProgramPtr) : bool {
+    return path_has_segment(module_source_path(prog), "daslib")
+}
+
 def public is_shipped_library_source(prog : ProgramPtr) : bool {
     let file = module_source_path(prog)
     return path_has_segment(file, "daslib") || path_has_segment(file, "modules")
