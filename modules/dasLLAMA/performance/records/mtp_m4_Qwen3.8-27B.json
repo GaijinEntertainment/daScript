@@ -7,11 +7,11 @@
 		"lcpp_server" : "/Users/dasbox/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
 		"das_exe" : "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench",
 		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",
-		"das_sha" : "e58e5a3ba",
+		"das_sha" : "8a03da431",
 		"head_sha" : "cbf60a0c48b431bb61f1d49b8948dc88ac29c398d6dbdbbb2e6e89ef77eacc9a",
 		"reps" : 3,
 		"model_sha" : "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34\t0x46aee4960\t2026-08-18T06:36:23",
-		"date" : "2026-09-02 22:49",
+		"date" : "2026-09-03 02:04",
 		"cpu" : "Apple M4 Pro",
 		"host" : "Antons-Mac-mini.local",
 		"lcpp_version" : "version: 0.3.0-dev (build 10659, commit 6fdd0ac89)",
@@ -24,7 +24,7 @@
 			"depth" : 1,
 			"prompt" : 0,
 			"off_tps" : 12.8,
-			"on_tps" : 10.6,
+			"on_tps" : 13.4,
 			"drafted" : 225,
 			"accepted" : 159
 		},
@@ -33,7 +33,7 @@
 			"depth" : 1,
 			"prompt" : 1,
 			"off_tps" : 12.6,
-			"on_tps" : 11.1,
+			"on_tps" : 14,
 			"drafted" : 213,
 			"accepted" : 171
 		},
@@ -42,7 +42,7 @@
 			"depth" : 1,
 			"prompt" : 2,
 			"off_tps" : 12.8,
-			"on_tps" : 12.1,
+			"on_tps" : 15.4,
 			"drafted" : 198,
 			"accepted" : 186
 		},
@@ -51,7 +51,7 @@
 			"depth" : 1,
 			"prompt" : 3,
 			"off_tps" : 12.8,
-			"on_tps" : 10.4,
+			"on_tps" : 13.2,
 			"drafted" : 228,
 			"accepted" : 153
 		},
@@ -60,7 +60,7 @@
 			"depth" : 1,
 			"prompt" : -1,
 			"off_tps" : 12.74,
-			"on_tps" : 11.01,
+			"on_tps" : 13.95,
 			"note" : "mtp: 669/864 drafts accepted (77.4%) at depth 1; per-position accept: p1 77.4% (669/864)"
 		},
 		{
@@ -68,7 +68,7 @@
 			"depth" : 2,
 			"prompt" : 0,
 			"off_tps" : 12.8,
-			"on_tps" : 6.7,
+			"on_tps" : 6.9,
 			"drafted" : 354,
 			"accepted" : 210
 		},
@@ -76,8 +76,8 @@
 			"engine" : "das",
 			"depth" : 2,
 			"prompt" : 1,
-			"off_tps" : 12.6,
-			"on_tps" : 7.5,
+			"off_tps" : 12.7,
+			"on_tps" : 7.6,
 			"drafted" : 318,
 			"accepted" : 228
 		},
@@ -86,7 +86,7 @@
 			"depth" : 2,
 			"prompt" : 2,
 			"off_tps" : 12.8,
-			"on_tps" : 8.4,
+			"on_tps" : 8.6,
 			"drafted" : 282,
 			"accepted" : 243
 		},
@@ -95,7 +95,7 @@
 			"depth" : 2,
 			"prompt" : 3,
 			"off_tps" : 12.8,
-			"on_tps" : 8.5,
+			"on_tps" : 8.7,
 			"drafted" : 276,
 			"accepted" : 243
 		},
@@ -104,7 +104,7 @@
 			"depth" : 2,
 			"prompt" : -1,
 			"off_tps" : 12.75,
-			"on_tps" : 7.71,
+			"on_tps" : 7.89,
 			"note" : "mtp: 924/1230 drafts accepted (75.1%) at depth 2; per-position accept: p1 83.9% (516/615) p2 66.3% (408/615)"
 		},
 		{
@@ -138,7 +138,7 @@
 			"drafted" : 0,
 			"prompt" : 0,
 			"engine" : "llama.cpp",
-			"tps" : 11.55928730513557,
+			"tps" : 11.552473271004914,
 			"same_text_as_das" : true,
 			"accepted" : 0,
 			"prompt_n" : 31
@@ -150,7 +150,7 @@
 			"drafted" : 0,
 			"prompt" : 1,
 			"engine" : "llama.cpp",
-			"tps" : 11.464275450487902,
+			"tps" : 11.456267455958951,
 			"same_text_as_das" : false,
 			"accepted" : 0,
 			"prompt_n" : 686
@@ -162,7 +162,7 @@
 			"drafted" : 0,
 			"prompt" : 2,
 			"engine" : "llama.cpp",
-			"tps" : 11.43371382148617,
+			"tps" : 11.434143491624228,
 			"same_text_as_das" : false,
 			"accepted" : 0,
 			"prompt_n" : 64
@@ -174,7 +174,7 @@
 			"drafted" : 0,
 			"prompt" : 3,
 			"engine" : "llama.cpp",
-			"tps" : 11.445284849501286,
+			"tps" : 11.451588453238104,
 			"same_text_as_das" : false,
 			"accepted" : 0,
 			"prompt_n" : 19
@@ -186,7 +186,7 @@
 			"drafted" : 216,
 			"prompt" : 0,
 			"engine" : "llama.cpp",
-			"tps" : 13.627036824412466,
+			"tps" : 13.620059083233896,
 			"same_text_as_das" : true,
 			"accepted" : 162,
 			"prompt_n" : 31
@@ -198,7 +198,7 @@
 			"drafted" : 210,
 			"prompt" : 1,
 			"engine" : "llama.cpp",
-			"tps" : 13.82823820285914,
+			"tps" : 13.817500819905383,
 			"same_text_as_das" : false,
 			"accepted" : 171,
 			"prompt_n" : 686
@@ -210,7 +210,7 @@
 			"drafted" : 195,
 			"prompt" : 2,
 			"engine" : "llama.cpp",
-			"tps" : 14.451613608715947,
+			"tps" : 14.447763342020105,
 			"same_text_as_das" : false,
 			"accepted" : 183,
 			"prompt_n" : 64
@@ -222,7 +222,7 @@
 			"drafted" : 210,
 			"prompt" : 3,
 			"engine" : "llama.cpp",
-			"tps" : 13.513869906074111,
+			"tps" : 13.499684260155504,
 			"same_text_as_das" : false,
 			"accepted" : 168,
 			"prompt_n" : 19
@@ -234,7 +234,7 @@
 			"drafted" : 324,
 			"prompt" : 0,
 			"engine" : "llama.cpp",
-			"tps" : 12.324636286039135,
+			"tps" : 12.323078322889657,
 			"same_text_as_das" : true,
 			"accepted" : 216,
 			"prompt_n" : 31
@@ -246,7 +246,7 @@
 			"drafted" : 318,
 			"prompt" : 1,
 			"engine" : "llama.cpp",
-			"tps" : 12.378117831622104,
+			"tps" : 12.398106482077125,
 			"same_text_as_das" : false,
 			"accepted" : 222,
 			"prompt_n" : 686
@@ -258,7 +258,7 @@
 			"drafted" : 276,
 			"prompt" : 2,
 			"engine" : "llama.cpp",
-			"tps" : 13.863079364447556,
+			"tps" : 13.886684894679076,
 			"same_text_as_das" : false,
 			"accepted" : 240,
 			"prompt_n" : 64
@@ -270,7 +270,7 @@
 			"drafted" : 336,
 			"prompt" : 3,
 			"engine" : "llama.cpp",
-			"tps" : 11.511011267578068,
+			"tps" : 11.518929252887618,
 			"same_text_as_das" : false,
 			"accepted" : 210,
 			"prompt_n" : 19

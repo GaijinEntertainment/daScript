@@ -1223,4 +1223,14 @@ group; wording kept.
   `kq_mvb2_k4_r2` crown. Production race on the M4 mint before the tile (n 2048 x 8192 rows, 8
   dispatches): twin 0.83 ms vs two passes 0.51 (k4), 0.90 vs 0.70 (k6), 0.82 vs 0.40 (k2), k5
   0.84 vs 0.94 and k3 0.85 vs 0.86 keep the twin; on the M5 the twin wins every K-quant
-  (k4 0.152 vs 0.187) and loses iq4xs (0.243 vs 0.202) and iq4nl only.
+  (k4 0.152 vs 0.187) and loses iq4xs (0.243 vs 0.202) and iq4nl only. With the tile in the
+  race: M4 form ext 0.844 vs tile 0.482 ms (tile crowned), then k4 rows tile-twin 0.484 vs two
+  passes 0.551 (the twin keeps k4 on the M4 again); M5 form ext 0.492 vs tile 0.528 (ext keeps).
+- **M4 Pro Qwen3.8-27B-Q4_K_M ruler on the tile (rig 8a03da431 on its fresh mint, stock llama.cpp
+  6fdd0ac, exe-first, settle 180, -n 128 -r 3, SpecBench-4 chat):** ours off 12.7 -> depth 1 13.9
+  (1.09x, accept 77.4%) -> depth 2 7.9 (0.62x); per prompt depth 1 13.4 / 14.0 / 15.4 / 13.2
+  (writing / summarization / math / qa). llama.cpp off 11.5 -> n_max 1 13.6 / 13.8 / 14.4 / 13.5
+  (pooled 13.8, accept 82.3%) -> n_max 2 12.3 / 12.4 / 13.9 / 11.5. Before the tile on the same
+  box (measurement day): ours 12.9 -> 11.5 at depth 1 (0.89x). Round cost from the pooled numbers:
+  ours (1 + 0.774) / 1.094 = 1.62x a step (was 2.06x), theirs (1 + 0.823) / 1.20 = 1.52x. Plain
+  decode ours +10%; speculation ON at parity (13.9 vs 13.8).

@@ -854,7 +854,10 @@ row bought nothing. Two findings, both fixed in the arc:
   single passes (q3b / w2_3b / cls3b): M4 Pro tile 0.85 / 0.96 / 0.74 vs the ext twin 1.36 / 1.49 /
   1.39; M5 Max tile 0.94 / 1.07 / 0.63 vs ext 0.82 / 0.89 / 0.52. A per-box form: `race_kq_k4_form`
   races the two production twins first and crowns `kq_mvb2_k4_r2` where the tile wins; the k4 rows
-  race then meets the box's twin. M4 mint + rig rebuild + Qwen3.8 ruler rerun on the tile: pending.
+  race then meets the box's twin. M4 mint on the tile: form ext 0.844 vs tile 0.482 ms -> crowned;
+  rows tile-twin 0.484 vs passes 0.551 -> the twin keeps k4. M4 Qwen3.8 ruler on that rig: ours 12.7
+  -> 13.9 at depth 1 (1.09x; was 12.9 -> 11.5, 0.89x) vs llama.cpp 11.5 -> 13.8 - ON at parity,
+  plain +10%; round 1.62x a step (was 2.06x) vs their 1.52x. Depth 2 still loses (7.9).
 
 **Two harness lessons, both now in the ruler:**
 - A heat-soaked box under-reads a memory-bound decode by 13-18% (llama.cpp Qwen3.8 off read 21-22
