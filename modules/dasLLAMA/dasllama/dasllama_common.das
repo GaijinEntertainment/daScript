@@ -1528,7 +1528,7 @@ def dlim_config_sources_register() {
 }
 
 //! The Model's plane pair for a kq format - the dispatcher every plane-form consumer keys on.
-def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks : array<uint8> const?&) {   // nolint:STYLE037 — the format ladder
+def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks : array<uint8> const?&) {
     unsafe {
         if (fmt == KqFmt.k4) {
             kq = addr(t.k4q)
@@ -5090,11 +5090,6 @@ def attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64) {
     prof_add("act_resid", ts_resid0)
 }
 
-// The GPU arm shared by the std and gated prefill blocks: the whole attention block (GEMMs,
-// qk-norm, rope, flash-style attention, wo) as one device chain per window; norm, activation
-// image, KV-store, and residual stay CPU. Numerics: GPU f32 tile accumulation — drift-class vs CPU flash.
-[no_alloc, no_env, no_io, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-//! The CPU embed of a prefill: x_b[p] = the embedding row of tokens[p], the rows across the dispatch lanes
 def private embed_rows(t : Model; var s : Session; tokens : array<int64>; npos : int64) {
     let dim = t.config.dim
     let tp = unsafe(addr(t))
@@ -5110,6 +5105,10 @@ def private embed_rows(t : Model; var s : Session; tokens : array<int64>; npos :
     }
 }
 
+// The GPU arm shared by the std and gated prefill blocks: the whole attention block (GEMMs,
+// qk-norm, rope, flash-style attention, wo) as one device chain per window; norm, activation
+// image, KV-store, and residual stay CPU. Numerics: GPU f32 tile accumulation — drift-class vs CPU flash.
+[no_alloc, no_env, no_io, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64; skip_logits : bool = false) {
     let c = t.config
     if (npos <= 0l) {

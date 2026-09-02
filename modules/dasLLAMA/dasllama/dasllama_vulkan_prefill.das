@@ -318,7 +318,7 @@ def private pf_kv_merged(l, dim, kvd : int64) : bool {
 // one prefill GEMM role on the class rail: schedule fill + a per-(role, variant) cached set +
 // BatchArgs push. kq formats take the kq tile family, else the q8 router (whose variant moves
 // with wlen — the last window is shorter).
-[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : int;
                         wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
                         abit, ybit : uint; n, d, blk, wlen : int64; f16feed : bool; sib_tiles : int64 = 0l; row0 : int64 = 0l) {
@@ -328,7 +328,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
     var cm2_tc = 0l
     if (f16feed) {
         cm2_tc = batch_tile_edges(fmt, d, wlen, true).tc
-        if (row0 == 0l) {   // a sliced region never splits k: the reduce sums dense planes from row 0
+        if (row0 == 0l) {
             let sp = cm2_split_k(d, wlen, n, cm2_tc, sib_tiles)
             nsplit = sp.nsplit
             ksplit = sp.ksplit

@@ -152,6 +152,7 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
 }
 
 //! workgroups a (d, cnt) GEMM takes at its own tile pick
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def cm2_tiles(d, cnt : int64) : int64 {
     let tc = cm2_tile_cols(d, cnt)
     return ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc)

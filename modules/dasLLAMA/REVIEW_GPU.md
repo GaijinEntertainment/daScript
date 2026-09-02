@@ -82,6 +82,10 @@ wider-row site passes the full stride or dispatches the padded tile.** A split r
 `row x dispatched-width`, so a wider-row caller lands its split rows on top of the row beside
 them.
 
+**A prefill GEMM dispatched at a nonzero start row - a region beginning below the window's
+end - never asks `cm2_split_k` for a split; it encodes unsplit.** The split-k reduce sums dense
+partial planes counted from row 0, so a sliced region would reduce the wrong rows.
+
 **A scratch buffer a dispatch writes is never rebound for a new write before the reader of
 its previous write is encoded - rotate through as many buffers as the chain has dispatches in
 flight between a write and its read.** One shared scratch serializes the whole chain through
