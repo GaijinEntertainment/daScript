@@ -488,6 +488,14 @@ runs nano in f32 (RTF 0.035, 8 threads); mini's ORT figure (0.28) is a dynamic-u
 (MatMulInteger x135, ConvInteger x74, DynamicQuantizeLSTM x6), so mini is not comparable
 until a quantized rung exists.
 
+Kokoro references (taken 2026-09-02 after rung (c), same input, this box, 8 threads, best of 5;
+`kokoro` 0.9.4 on torch 2.13, and the community `onnx-community/Kokoro-82M-v1.0-ONNX` export on
+onnxruntime 1.29, both from the g2p venv; the reference pipeline speaks the text as ONE chunk of
+154 phonemes, 9.6 s of audio): torch CPU 929 ms, RTF 0.097; ORT f32 (310 MB) 1328 ms, RTF 0.138;
+ORT int8 dynamic (`model_quantized`, 88 MB) 4630 ms, RTF 0.49; ORT `q8f16` 4687 ms, RTF 0.49 -
+the quantized exports run 3.5x SLOWER than f32 on this Apple box. das after (a)-(c): 1513 ms,
+RTF 0.168 - 1.7x behind torch, 1.2x behind ORT f32, 3x ahead of ORT's int8.
+
 Where the 5x is: the convs run im2col + `matmul_batch`, the dot-per-token GEMV form; the
 tiled f32 GEMM (`gemm_f32`, 4x16 float4 microkernel, `[tuned]`, C += A.B) is what the
 attention tiles use. In token-major [T][C] a stride-1 conv is k tap-GEMMs on that kernel
