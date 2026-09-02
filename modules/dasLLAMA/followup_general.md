@@ -792,3 +792,20 @@
     written to be bit-close to the reference, so the seam gates must stay green) or the ledger
     records why the mel kernel keeps its own (JIT-inlined, plan-cached, no module dependency on
     the CPU-only build) and the direct N=20 sum stays where it is.
+
+64. **LINT candidate (approved 2026-09-02): a local container with no `inscope`, `delete`, or
+    move-out in a `persistent_heap` program.** daslang frees a local container only under
+    `var inscope`, an explicit `delete`, or a move-out; a plain `var a : array<T>` / `let a <- f()`
+    / `var s = StructWithArrays()` is a per-call leak on the persistent heap. The TTS path carried
+    155 of them: one synthesis allocates hundreds of MB of activations, Kitten mini grew ~1 GB per
+    sentence, and the OS killed the 200-sentence rig at sentence 175. PERF030 (move-assign onto a
+    live variable) covers none of these shapes. Done = a `daslib/perf_lint.das` rule that arms
+    only when the program declares `options persistent_heap` (the linear heap is bulk-reset, so
+    one-shot scripts are exempt) and `force_inscope_pod` is off; fires on a heap-carrying local
+    (array, table, struct/tuple/variant holding one; strings excluded) declared without `inscope`
+    when no path in its scope deletes it or moves it out (`return <- x`, `y <- x`, an `emplace` /
+    move-`push`, a `<-` into a field); the fix text spells `var inscope x <- f()` for the `let`
+    form (`let inscope` is rejected for containers) and keeps annotations after the keyword
+    (`var inscope @exact_size y`). The error text stands alone: the leak, the three fixes, the
+    exemption. Rig for the negative control: `heap_bytes_allocated()` per iteration, flat vs
+    growing.
