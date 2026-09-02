@@ -671,6 +671,21 @@ GELU's `tanh(float4)` is the consumer. Recorded: the interpreter's log2 is an es
 pins every bound on both rails; ns per element on this box: tan 10.1 -> 2.6, log2 9.3 -> 1.7,
 exp2 6.6 -> 2.1, pow 14.7 -> 5.5, tanh 9.0 -> 3.7.
 
+Decoder rung receipt (2026-09-02): the AdaIN residual block runs on rows - `adain_rows_into`
+folds the input copy into the first norm, the identity shortcut reads the input in place, the
+convs are `conv1d_rows` (the q8 lane where cin sits on 32; the concat widths 514 and 1090 do
+not, so those two convs stay on the f32 tile), the upsampling pool is the new
+`conv1d_rows_transposed_depthwise`, the nearest shortcut `resize_nearest_rows` - so the
+decoder (asr transposed once, `asr_res` a rows k1 conv, `concat_rows` one row per frame) and
+both prosody branches (the BiLSTM output already rows; one transpose in front of each
+single-channel projection) run token-major, and the generator takes the decoder's rows
+directly (`styletts2_generator_rows`; the channel-major entry is the parity rig's seam form).
+The rows AdaIN kernels take a width off the four-lane one channel at a time (the concat
+rows), and `IMAGE_VERSION` moves to 29 for the served-layout change. Kokoro, same input,
+warm: decoder 182 -> 66 ms, prosody 74 -> 31, synthesis 884 -> 730-760 ms, RTF 0.080 (torch
+0.097); nano's decoder 12 -> 3 ms, facade RTF 0.026-0.028. Blocks 11/11 (the pool and nearest
+cells, AdaIN at width 66), kitten 13/13 and kokoro 4/4 at the unchanged parity bars, facade 9/9.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the

@@ -157,10 +157,9 @@ def private snake_case() : BlockCase {
     return score("snake", got, x_ct, env, 0.0)
 }
 
-def private adain_case() : BlockCase {
+def private adain_case(c : int64) : BlockCase {
     var r = TtsRng()
-    rng_seed(r, 91ul)
-    let c = 64l
+    rng_seed(r, 91ul + uint64(c))
     let t = T_ROWS
     var a = TtsAdaIn()
     a.fc.nin = STYLE
@@ -187,7 +186,7 @@ def private adain_case() : BlockCase {
     for (i in range64(c * t)) {
         env[i] = abs(x_ct[i]) + 8.0   // the normalized value's scale plus the affine's reach
     }
-    return score("adain", got, x_ct, env, 0.0)
+    return score("adain c={c}", got, x_ct, env, 0.0)
 }
 
 def private pad_and_polar_case() : BlockCase {
@@ -271,6 +270,57 @@ def private linear_case(nin, nout : int64) : BlockCase {
     if (empty(l.wt)) {
         res.bad += 1000000   // the tiled path never engaged
     }
+    return res
+}
+
+// the residual block's upsampling pool (depthwise transposed k3 s2) and the nearest copy of its
+// shortcut, rows against channel-major
+def private pool_and_nearest_case() : BlockCase {
+    var r = TtsRng()
+    rng_seed(r, 0x7001ul)
+    let c = 64l
+    let t = 300l
+    var inscope pool = TtsConv1d(cin = c, cout = c, k = 3l, stride = 2l, pad_l = 1l, pad_r = 1l, dilation = 1l, groups = c, transposed = true, output_padding = 1l)
+    rand_fill(r, pool.w, c * 3l, 1.0)
+    rand_fill(r, pool.b, c, 0.5)
+    var inscope e = TtsConv1d(cin = c, cout = c, k = 3l, stride = 2l, pad_l = 1l, pad_r = 1l, dilation = 1l, groups = c, transposed = true, output_padding = 1l)
+    e.w <- abs_of(pool.w)
+    conv1d_prepare(pool)
+    conv1d_prepare(e)
+    var inscope x_ct : array<float>
+    rand_fill(r, x_ct, c * t, 2.0)
+    var inscope x_abs <- abs_of(x_ct)
+    var inscope want : array<float>
+    var inscope env : array<float>
+    conv1d(pool, x_ct, t, want)
+    conv1d(e, x_abs, t, env)
+    var inscope x_rows : array<float>
+    transpose_ct(x_ct, c, t, x_rows)
+    var inscope y_rows : array<float>
+    conv1d_rows_transposed_depthwise(pool, x_rows, t, y_rows)
+    let t_out = conv1d_out_len(pool, t)
+    var inscope got : array<float>
+    transpose_tc(y_rows, t_out, c, got)
+    var bias_abs = 0.0
+    for (b in pool.b) {
+        bias_abs = max(bias_abs, abs(b))
+    }
+    var res = score("pool convT depthwise", got, want, env, bias_abs)
+    var inscope want2 : array<float>
+    resize_nearest(x_ct, c, t, 2l, want2)
+    var inscope y2 : array<float>
+    resize_nearest_rows(x_rows, t, c, 2l, y2)
+    var inscope got2 : array<float>
+    transpose_tc(y2, 2l * t, c, got2)
+    var inscope env2 : array<float>
+    env2 |> resize(length(want2))
+    for (i in range(length(want2))) {
+        env2[i] = 0.0
+    }
+    let near = score("nearest x2", got2, want2, env2, 0.0)
+    res.bad += near.bad
+    res.max_ratio = max(res.max_ratio, near.max_ratio)
+    res.max_abs = max(res.max_abs, near.max_abs)
     return res
 }
 
@@ -453,8 +503,12 @@ def test_rows_convs(t : T?) {
         }
         t |> run("snake, adain, pad, polar") @(t : T?) {
             report(t, snake_case())
-            report(t, adain_case())
+            report(t, adain_case(64l))
+            report(t, adain_case(66l))   // the decoder's concat widths sit off the lane
             report(t, pad_and_polar_case())
+        }
+        t |> run("the residual block's pool and nearest shortcut") @(t : T?) {
+            report(t, pool_and_nearest_case())
         }
     }
 }

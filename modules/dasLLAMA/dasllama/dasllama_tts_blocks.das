@@ -843,6 +843,47 @@ def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_s
     }
 }
 
+//! y [t_out][c] = depthwise transposed conv of x [t_in][c] in the rows form (the residual
+//! block's upsampling pool): every output row gathers the input rows its taps reach, channels
+//! four a lane, so a row's sum never depends on how the rows split across workers.
+def conv1d_rows_transposed_depthwise(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_size var y : array<float>) {
+    if (c.groups != c.cin || c.cin != c.cout || !c.transposed) {
+        panic("dasLLAMA tts: the rows depthwise transposed conv takes groups == cin == cout; got groups={c.groups} cin={c.cin} cout={c.cout}")
+    }
+    let t_out = conv1d_out_len(c, t_in)
+    let ch = c.cin
+    let k = c.k
+    let stride = c.stride
+    let dil = c.dilation
+    let pad_l = c.pad_l
+    let nbias = empty(c.b) ? 0l : ch
+    y |> reserve_resize(t_out * ch)
+    var yp = unsafe(addr(y[0]))
+    let xp = unsafe(addr<float const?>(x[0]))
+    let wp = unsafe(addr<float const?>(c.w[0]))
+    let bp = nbias > 0l ? unsafe(addr<float const?>(c.b[0])) : null
+    maybe_parallel_for(0, int(t_out), lanes_for_work(t_out * ch * k, 0)) $(rb, re) {
+        unsafe {
+            for (p in range64(int64(rb), int64(re))) {
+                var yrow = yp + p * ch
+                for (j in range64(ch)) {
+                    yrow[j] = j < nbias ? bp[j] : 0.0
+                }
+                for (kk in range64(k)) {
+                    let num = p + pad_l - kk * dil
+                    continue if (num < 0l || num % stride != 0l)
+                    let t = num / stride
+                    continue if (t >= t_in)
+                    let xrow = xp + t * ch
+                    for (j in range64(ch)) {
+                        yrow[j] += wp[j * k + kk] * xrow[j]
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ===== dense =====
 
 //! Mint the tiled GEMM's B operand `wt` [nin][nout] when the width sits on the 16-column tile;
@@ -1120,6 +1161,7 @@ def private column_sums(x : array<float>; t, c : int64; center : array<float>; s
     }
     let xp = unsafe(addr<float const?>(x[0]))
     var pp = unsafe(addr(part[0]))
+    let mp = unsafe(addr<float const?>(center[0]))
     let m4 = unsafe(addr<float4 const?>(center[0]))
     let chunks = min(lanes_for_work(t * c, 0), int(nblk))
     maybe_parallel_for(0, int(nblk), chunks) $(bb, be) {
@@ -1128,7 +1170,16 @@ def private column_sums(x : array<float>; t, c : int64; center : array<float>; s
             for (blk in range64(int64(bb), int64(be))) {
                 var acc4 = reinterpret<float4?>(pp + blk * c)
                 let r1 = min(t, (blk + 1l) * STAT_BLOCK)
-                if (squared) {
+                if (c4 * 4l != c) {   // a width off the lane: the same block sums, one channel at a time
+                    var acc = pp + blk * c
+                    for (r in range64(blk * STAT_BLOCK, r1)) {
+                        let row = xp + r * c
+                        for (j in range64(c)) {
+                            let dv = squared ? row[j] - mp[j] : row[j]
+                            acc[j] += squared ? dv * dv : dv
+                        }
+                    }
+                } elif (squared) {
                     for (r in range64(blk * STAT_BLOCK, r1)) {
                         let row4 = reinterpret<float4 const?>(xp + r * c)
                         for (j in range64(c4)) {
@@ -1185,11 +1236,12 @@ def private adain_affine(a : TtsAdaIn; x : array<float>; t, c : int64; style : a
 
 //! AdaIN1d in place on token-major x [T][C].
 def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<float>; eps : float) {
-    rows_width_check(c, "adain_rows")
     var scale & = g_adain_scale
     var shift & = g_adain_shift
     adain_affine(a, x, t, c, style, eps, scale, shift)
     var xp = unsafe(addr(x[0]))
+    let sp = unsafe(addr<float const?>(scale[0]))
+    let bp = unsafe(addr<float const?>(shift[0]))
     let s4 = unsafe(addr<float4 const?>(scale[0]))
     let b4 = unsafe(addr<float4 const?>(shift[0]))
     let chunks = lanes_for_work(t * c, 0)
@@ -1197,6 +1249,13 @@ def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<f
         unsafe {
             let c4 = c / 4l
             for (r in range64(int64(rb), int64(re))) {
+                if (c4 * 4l != c) {   // a width off the lane
+                    var row = xp + r * c
+                    for (j in range64(c)) {
+                        row[j] = mad(row[j], sp[j], bp[j])
+                    }
+                    continue
+                }
                 var row4 = reinterpret<float4?>(xp + r * c)
                 for (j in range64(c4)) {
                     row4[j] = mad(row4[j], s4[j], b4[j])
@@ -1209,13 +1268,14 @@ def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<f
 //! AdaIN1d of token-major src [T][C] written into dst - the copy a residual branch would make
 //! of its input, folded into the normalize pass.
 def adain_rows_into(a : TtsAdaIn; src : array<float>; @scratch @exact_size var dst : array<float>; t, c : int64; style : array<float>; eps : float) {
-    rows_width_check(c, "adain_rows_into")
     var scale & = g_adain_scale
     var shift & = g_adain_shift
     adain_affine(a, src, t, c, style, eps, scale, shift)
     dst |> reserve_resize(t * c)
     let xp = unsafe(addr<float const?>(src[0]))
     var dp = unsafe(addr(dst[0]))
+    let sp = unsafe(addr<float const?>(scale[0]))
+    let bp = unsafe(addr<float const?>(shift[0]))
     let s4 = unsafe(addr<float4 const?>(scale[0]))
     let b4 = unsafe(addr<float4 const?>(shift[0]))
     let chunks = lanes_for_work(t * c, 0)
@@ -1223,6 +1283,14 @@ def adain_rows_into(a : TtsAdaIn; src : array<float>; @scratch @exact_size var d
         unsafe {
             let c4 = c / 4l
             for (r in range64(int64(rb), int64(re))) {
+                if (c4 * 4l != c) {   // a width off the lane
+                    let row = xp + r * c
+                    var out = dp + r * c
+                    for (j in range64(c)) {
+                        out[j] = mad(row[j], sp[j], bp[j])
+                    }
+                    continue
+                }
                 let row4 = reinterpret<float4 const?>(xp + r * c)
                 var out4 = reinterpret<float4?>(dp + r * c)
                 for (j in range64(c4)) {
@@ -1464,6 +1532,20 @@ def resize_nearest(x : array<float>; c, t, factor : int64; @scratch @exact_size 
         let yrow = ci * t_out
         for (to in range64(t_out)) {
             y[yrow + to] = x[xrow + to / factor]
+        }
+    }
+}
+
+//! Nearest upsampling of x [t][c] along t in the rows form: each output row is a copy of its
+//! source row.
+def resize_nearest_rows(x : array<float>; t, c, factor : int64; @scratch @exact_size var y : array<float>) {
+    let t_out = t * factor
+    y |> reserve_resize(t_out * c)
+    var yp = unsafe(addr(y[0]))
+    let xp = unsafe(addr<float const?>(x[0]))
+    unsafe {
+        for (to in range64(t_out)) {
+            memcpy(yp + to * c, xp + (to / factor) * c, c * 4l)
         }
     }
 }

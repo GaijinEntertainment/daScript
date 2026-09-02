@@ -505,17 +505,22 @@ def private read_adaln(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) 
     return <- a
 }
 
+// The block runs on token-major rows, so its width must sit on the 16-column tile the rows
+// convs serve at - the row stride of every buffer in the block is the width itself.
 def private read_adain_res_blk(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) : St2AdainResBlk {
     var b = St2AdainResBlk()
     b.norm1 <- read_adain(m, bytes, "{prefix}.norm1")
     b.norm2 <- read_adain(m, bytes, "{prefix}.norm2")
-    b.conv1 <- read_conv_p(m, bytes, "{prefix}.conv1")
-    b.conv2 <- read_conv_p(m, bytes, "{prefix}.conv2")
+    b.conv1 <- read_conv_p(m, bytes, "{prefix}.conv1", true)
+    b.conv2 <- read_conv_p(m, bytes, "{prefix}.conv2", true)
     b.dim_in = b.conv1.cin
     b.dim_out = b.conv1.cout
+    if (b.dim_out % 16l != 0l) {
+        panic("dasLLAMA styletts2: {prefix} is {b.dim_out} wide; a residual block's width sits on the 16-column tile")
+    }
     b.learned_sc = gguf_find_tensor(m, "{prefix}.conv1x1.weight") >= 0
     if (b.learned_sc) {
-        b.conv1x1 <- read_conv_p(m, bytes, "{prefix}.conv1x1")
+        b.conv1x1 <- read_conv_p(m, bytes, "{prefix}.conv1x1", true)
     }
     b.upsample = gguf_find_tensor(m, "{prefix}.pool.weight") >= 0
     if (b.upsample) {
@@ -611,7 +616,7 @@ def private read_decoder(m : GGUFMeta; bytes : array<uint8> | #; var d : St2Deco
     }
     d.f0_conv <- read_conv_p(m, bytes, "decoder.F0_conv")
     d.n_conv <- read_conv_p(m, bytes, "decoder.N_conv")
-    d.asr_res <- read_conv_p(m, bytes, "decoder.asr_res.0")
+    d.asr_res <- read_conv_p(m, bytes, "decoder.asr_res.0", true)
     i = 0
     while (gguf_find_tensor(m, "decoder.generator.ups.{i}.weight") >= 0) {
         d.ups |> emplace(read_conv_p(m, bytes, "decoder.generator.ups.{i}", true))
@@ -813,6 +818,7 @@ struct St2Scratch {
     @scratch @exact_size dec_f0d : array<float>
     @scratch @exact_size dec_nd : array<float>
     @scratch @exact_size dec_res : array<float>
+    @scratch @exact_size dec_asr_tm : array<float>
     @scratch @exact_size dec_a : array<float>
     @scratch @exact_size dec_b : array<float>
     @scratch @exact_size dec_cat : array<float>
@@ -1008,36 +1014,41 @@ def private residual_join(var out : array<float>; shortcut : array<float>; n : i
     }
 }
 
+// The AdaIN residual block on token-major rows x [t][dim_in] -> out [t1][dim_out]: the first
+// norm copies as it normalizes, the identity shortcut reads x in place, the upsampling pool is
+// the rows depthwise transposed conv and the nearest copy of the shortcut.
 def private adain_res_blk(b : St2AdainResBlk; x : array<float>; t : int64; s : array<float>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) : int64 {
     var r & = unsafe(sc.rb_r)
     var pooled & = unsafe(sc.rb_pooled)
     var c1 & = unsafe(sc.rb_c1)
     var shortcut & = unsafe(sc.rb_sc)
     var shortcut2 & = unsafe(sc.rb_sc2)
-    copy_floats_into(x, b.dim_in * t, r)
-    adain(b.norm1, r, b.dim_in, t, s, LN_EPS)
+    adain_rows_into(b.norm1, x, r, t, b.dim_in, s, LN_EPS)
     leaky_relu(r, b.dim_in * t, 0.2)
     var t1 = t
     if (b.upsample) {
-        conv1d(b.pool, r, t, pooled)
+        conv1d_rows_transposed_depthwise(b.pool, r, t, pooled)
         t1 = conv1d_out_len(b.pool, t)
-        conv1d(b.conv1, pooled, t1, c1)
+        conv1d_rows(b.conv1, pooled, t1, c1)
     } else {
-        conv1d(b.conv1, r, t1, c1)
+        conv1d_rows(b.conv1, r, t1, c1)
     }
-    adain(b.norm2, c1, b.dim_out, t1, s, LN_EPS)
+    adain_rows(b.norm2, c1, t1, b.dim_out, s, LN_EPS)
     leaky_relu(c1, b.dim_out * t1, 0.2)
-    conv1d(b.conv2, c1, t1, out)
+    conv1d_rows(b.conv2, c1, t1, out)
     if (b.upsample) {
-        resize_nearest(x, b.dim_in, t, 2l, shortcut)
-    } else {
-        copy_floats_into(x, b.dim_in * t, shortcut)
-    }
-    if (b.learned_sc) {
-        conv1d(b.conv1x1, shortcut, t1, shortcut2)
+        resize_nearest_rows(x, t, b.dim_in, 2l, shortcut)
+        if (b.learned_sc) {
+            conv1d_rows(b.conv1x1, shortcut, t1, shortcut2)
+            residual_join(out, shortcut2, b.dim_out * t1)
+        } else {
+            residual_join(out, shortcut, b.dim_out * t1)
+        }
+    } elif (b.learned_sc) {
+        conv1d_rows(b.conv1x1, x, t1, shortcut2)
         residual_join(out, shortcut2, b.dim_out * t1)
     } else {
-        residual_join(out, shortcut, b.dim_out * t1)
+        residual_join(out, x, b.dim_out * t1)
     }
     return t1
 }
@@ -1047,6 +1058,7 @@ def private prosody_branch(blocks : array<St2AdainResBlk>; proj : TtsConv1d; x :
                            @scratch @exact_size var out : array<float>; var sc : St2Scratch) : int64 {
     var a & = unsafe(sc.pb_a)
     var b & = unsafe(sc.pb_b)
+    var ct & = unsafe(sc.pr_x)
     var t = frames
     let nb = length(blocks)
     for (i in range(nb)) {
@@ -1058,13 +1070,15 @@ def private prosody_branch(blocks : array<St2AdainResBlk>; proj : TtsConv1d; x :
             t = adain_res_blk(blocks[i], b, t, s, a, sc)
         }
     }
-    if (nb == 0) {
-        conv1d(proj, x, t, out)
+    let c = nb == 0 ? proj.cin : blocks[nb - 1].dim_out
+    if (nb == 0) {   // the single-channel projection stays channel-major: one transpose in
+        transpose_tc(x, t, c, ct)
     } elif (nb % 2 == 1) {
-        conv1d(proj, a, t, out)
+        transpose_tc(a, t, c, ct)
     } else {
-        conv1d(proj, b, t, out)
+        transpose_tc(b, t, c, ct)
     }
+    conv1d(proj, ct, t, out)
     return conv1d_out_len(proj, t)
 }
 
@@ -1074,13 +1088,10 @@ def styletts2_prosody(p : St2Predictor; en : array<float>; c, frames : int64; s 
                       @scratch @exact_size var f0 : array<float>; @scratch @exact_size var n : array<float>; var sc : St2Scratch) : int64 {
     var en_tm & = unsafe(sc.pr_en_tm)
     var x_tm & = unsafe(sc.pr_x_tm)
-    var x & = unsafe(sc.pr_x)
     transpose_ct(en, c, frames, en_tm)
     bilstm(p.shared_lstm, en_tm, frames, x_tm)
-    let width = 2l * p.shared_lstm.fwd.hidden
-    transpose_tc(x_tm, frames, width, x)
-    let f2 = prosody_branch(p.f0, p.f0_proj, x, frames, s, f0, sc)
-    prosody_branch(p.n, p.n_proj, x, frames, s, n, sc)
+    let f2 = prosody_branch(p.f0, p.f0_proj, x_tm, frames, s, f0, sc)
+    prosody_branch(p.n, p.n_proj, x_tm, frames, s, n, sc)
     return f2
 }
 
@@ -1267,18 +1278,17 @@ def styletts2_generator_gpu_stats() : tuple<calls : int; served : int> {
     return (calls = g_st2_gen_gpu_calls, served = g_st2_gen_gpu_served)
 }
 
-//! The iSTFTNet generator: two upsampling stages, each adding the source spectrum through its
-//! noise branch and refining through Snake residual blocks, then the inverse STFT. A registered
-//! driver gets the first refusal, except on the trace rail (its stage tensors are the point).
-def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : array<float>;
-                        har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?;
-                        @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : int64 {
+//! The iSTFTNet generator on token-major rows x [t][c]: two upsampling stages, each adding the
+//! source spectrum through its noise branch and refining through Snake residual blocks, then the
+//! inverse STFT into `wave`; a registered driver gets the first refusal, except on the trace rail.
+def styletts2_generator_rows(d : St2Decoder; var x : array<float>; c, t : int64; s : array<float>;
+                             har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?;
+                             @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : int64 {
     var a & = unsafe(sc.gen_a)
     var b & = unsafe(sc.gen_b)
-    transpose_ct(x_in, c, t, a)
     if (g_st2_gen_gpu_set && tr == null) {
         g_st2_gen_gpu_calls++
-        if (invoke(g_st2_gen_gpu, d, a, c, t, s, har_spec, har_frames, wave)) {
+        if (invoke(g_st2_gen_gpu, d, x, c, t, s, har_spec, har_frames, wave)) {
             g_st2_gen_gpu_served++
             return long_length(wave)
         }
@@ -1286,17 +1296,32 @@ def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : a
     var cc = c
     var tt = t
     let nst = long_length(d.ups)
-    for (i in range64(nst)) {   // the stages ping-pong a and b
-        if (i % 2l == 0l) {
-            generator_stage(d, i, a, b, cc, tt, s, har_spec, har_frames, tr, sc)
-        } else {
+    for (i in range64(nst)) {   // the first stage reads x, then the stages ping-pong b and a
+        if (i == 0l) {
+            generator_stage(d, i, x, b, cc, tt, s, har_spec, har_frames, tr, sc)
+        } elif (i % 2l == 1l) {
             generator_stage(d, i, b, a, cc, tt, s, har_spec, har_frames, tr, sc)
+        } else {
+            generator_stage(d, i, a, b, cc, tt, s, har_spec, har_frames, tr, sc)
         }
+    }
+    if (nst == 0l) {
+        return generator_tail(d, x, cc, tt, tr, wave, sc)
     }
     if (nst % 2l == 1l) {
         return generator_tail(d, b, cc, tt, tr, wave, sc)
     }
     return generator_tail(d, a, cc, tt, tr, wave, sc)
+}
+
+//! The generator from channel-major x_in [c][t] - the parity rail's seam form: one transpose
+//! into the carrier, then the rows form.
+def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : array<float>;
+                        har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?;
+                        @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : int64 {
+    var a & = unsafe(sc.gen_a)
+    transpose_ct(x_in, c, t, a)
+    return styletts2_generator_rows(d, a, c, t, s, har_spec, har_frames, tr, wave, sc)
 }
 
 // conv_post, the polar-to-rectangular pair and the inverse STFT: the waveform into `wave`.
@@ -1345,36 +1370,40 @@ def styletts2_draw_noise(cfg : SineSourceCfg; frames : int64; seed : uint64; var
     }
 }
 
-//! cat(x [c][t], F0 [1][t], N [1][t]) with asr_res between when `with_res`.
-def private concat_channels(x : array<float>; c : int64; f0d, nd, res : array<float>; with_res : bool; t : int64; @scratch @exact_size var out : array<float>) {
-    let rc = with_res ? long_length(res) / t : 0l
-    let total = c + rc + 2l
+//! cat(x [t][c], asr_res [t][rc] at row stride `rs` when `with_res`, F0 [t], N [t]) as one row
+//! per frame: out [t][c + rc + 2].
+def private concat_rows(x : array<float>; c : int64; res : array<float>; rc, rs : int64; f0d, nd : array<float>; with_res : bool; t : int64; @scratch @exact_size var out : array<float>) {
+    let r = with_res ? rc : 0l
+    let total = c + r + 2l
     out |> reserve_resize(total * t)
-    for (i in range64(c * t)) {
-        out[i] = x[i]
-    }
-    if (with_res) {
-        for (i in range64(rc * t)) {
-            out[c * t + i] = res[i]
+    var op = unsafe(addr(out[0]))
+    let xp = unsafe(addr<float const?>(x[0]))
+    let rp = with_res ? unsafe(addr<float const?>(res[0])) : null
+    unsafe {
+        for (i in range64(t)) {
+            var row = op + i * total
+            memcpy(row, xp + i * c, c * 4l)
+            if (with_res) {
+                memcpy(row + c, rp + i * rs, rc * 4l)
+            }
+            row[c + r] = f0d[i]
+            row[c + r + 1l] = nd[i]
         }
-    }
-    for (i in range64(t)) {
-        out[(c + rc) * t + i] = f0d[i]
-        out[(c + rc + 1l) * t + i] = nd[i]
     }
 }
 
 [cold_path]
-def private trace_dec_in(var tr : StyleTts2Trace?; y : array<float>; cw : int64; f0d, nd, res : array<float>; frames : int64) {
-    concat_channels(y, cw, f0d, nd, res, true, frames, tr.dec_in)
+def private trace_dec_in(var tr : StyleTts2Trace?; y : array<float>; cw : int64; f0d, nd, res : array<float>; rc, rs, frames : int64; @scratch @exact_size var cat : array<float>) {
+    concat_rows(y, cw, res, rc, rs, f0d, nd, true, frames, cat)
+    trace_rows(tr.dec_in, cat, frames, cw + rc + 2l)
 }
 
 // One decoder block from `src`: through the concat scratch when the block's width asks for
 // the F0, energy and residual channels again, straight through otherwise.
 def private decode_step(blk : St2AdainResBlk; cw : int64; src : array<float>; @scratch @exact_size var cat : array<float>;
-                        @scratch @exact_size var dst : array<float>; t : int64; f0d, nd, res, s_ref : array<float>; var sc : St2Scratch) : int64 {
+                        @scratch @exact_size var dst : array<float>; t : int64; f0d, nd, res : array<float>; rc, rs : int64; s_ref : array<float>; var sc : St2Scratch) : int64 {
     if (blk.dim_in != cw) {
-        concat_channels(src, cw, f0d, nd, res, true, t, cat)
+        concat_rows(src, cw, res, rc, rs, f0d, nd, true, t, cat)
         return adain_res_blk(blk, cat, t, s_ref, dst, sc)
     }
     return adain_res_blk(blk, src, t, s_ref, dst, sc)
@@ -1389,36 +1418,40 @@ def private styletts2_decode(d : St2Decoder; text_c : int64; source : SineSource
     var f0d & = unsafe(sc.dec_f0d)
     var nd & = unsafe(sc.dec_nd)
     var res & = unsafe(sc.dec_res)
+    var asr_tm & = unsafe(sc.dec_asr_tm)
     var a & = unsafe(sc.dec_a)
     var b & = unsafe(sc.dec_b)
     var cat & = unsafe(sc.dec_cat)
     conv1d(d.f0_conv, f0, f2, f0d)
     conv1d(d.n_conv, nrg, f2, nd)
-    conv1d(d.asr_res, asr, frames, res)
+    transpose_ct(asr, text_c, frames, asr_tm)
+    conv1d_rows(d.asr_res, asr_tm, frames, res)
+    let rc = d.asr_res.cout
+    let rs = d.asr_res.cout_s
     if (tr != null) {
-        trace_take(tr.asr_res, res)
+        trace_rows_strided(tr.asr_res, res, frames, rc, rs)
     }
-    concat_channels(asr, text_c, f0d, nd, res, false, frames, cat)
+    concat_rows(asr_tm, text_c, res, rc, rs, f0d, nd, false, frames, cat)
     var t = adain_res_blk(d.encode, cat, frames, s_ref, a, sc)
     var cw = d.encode.dim_out
     if (tr != null) {
-        trace_dec_in(tr, a, cw, f0d, nd, res, frames)
+        trace_dec_in(tr, a, cw, f0d, nd, res, rc, rs, frames, cat)
     }
     var in_a = true
     for (i in range(length(d.decode))) {
         if (in_a) {
-            t = decode_step(d.decode[i], cw, a, cat, b, t, f0d, nd, res, s_ref, sc)
+            t = decode_step(d.decode[i], cw, a, cat, b, t, f0d, nd, res, rc, rs, s_ref, sc)
         } else {
-            t = decode_step(d.decode[i], cw, b, cat, a, t, f0d, nd, res, s_ref, sc)
+            t = decode_step(d.decode[i], cw, b, cat, a, t, f0d, nd, res, rc, rs, s_ref, sc)
         }
         in_a = !in_a
         cw = d.decode[i].dim_out
     }
     if (tr != null) {
         if (in_a) {
-            trace_take(tr.gen_in, a)
+            trace_rows(tr.gen_in, a, t, cw)
         } else {
-            trace_take(tr.gen_in, b)
+            trace_rows(tr.gen_in, b, t, cw)
         }
     }
     tm.decoder_us = int64(get_time_usec(clock))
@@ -1435,9 +1468,9 @@ def private styletts2_decode(d : St2Decoder; text_c : int64; source : SineSource
     clock = ref_time_ticks()
     var samples = 0l
     if (in_a) {
-        samples = styletts2_generator(d, a, cw, t, s_ref, har_spec, har_frames, tr, sc.wave, sc)
+        samples = styletts2_generator_rows(d, a, cw, t, s_ref, har_spec, har_frames, tr, sc.wave, sc)
     } else {
-        samples = styletts2_generator(d, b, cw, t, s_ref, har_spec, har_frames, tr, sc.wave, sc)
+        samples = styletts2_generator_rows(d, b, cw, t, s_ref, har_spec, har_frames, tr, sc.wave, sc)
     }
     tm.generator_us = int64(get_time_usec(clock))
     tm.samples = samples

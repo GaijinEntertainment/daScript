@@ -72,12 +72,17 @@ stages, each its own file, and every stage is data-driven from the model store: 
   tanh, nearest and ONNX-half-pixel linear resampling, the duration-to-frame expansion,
   half-to-even rounding, PCG32 with a polar normal, the harmonic-plus-noise sine source, and the
   STFT pieces (edge pad, magnitude and phase, polar to rectangular, reflection pad). The
-  token-major [T][C] "rows" forms are what the generator and bert run: a dense stride-1 conv is
+  token-major [T][C] "rows" forms are what bert, the prosody branches, the decoder and the
+  generator run (the F0 and energy curves and their projections stay channel-major - one
+  channel is a column either way): a dense stride-1 conv is
   k tap-GEMMs on the tiled `gemm_f32_jo` over the shifted input rows (no im2col; the served
   width `cout_s` on the 16-column tile) - on the q8 lane one Q8·Q8 batch GEMM per chunk of
   output rows over tap-stacked int8 rows, the k shifted input rows side by side (K = k*cin,
   the weight baked [cout][k*cin], zero scales where a shift leaves the input), so nothing
-  accumulates across taps - a transposed conv one GEMM plus a gather overlap-add,
+  accumulates across taps - a transposed conv one GEMM plus a gather overlap-add, the AdaIN
+  residual block's upsampling pool a per-row depthwise transposed conv and its shortcut a
+  row copy (the block's width sits on the 16-column tile; AdaIN takes a width off the lane
+  one channel at a time, which is how the decoder's concat rows run),
   the dense layer the same tiled GEMM off `wt`, Snake and AdaIN four channels a lane; every rows
   kernel splits its rows across lanes on tile-aligned block edges, and `tests/test_tts_blocks.das`
   holds each one to its channel-major twin at the dot-envelope bar. A weight is an ONNX-layout
