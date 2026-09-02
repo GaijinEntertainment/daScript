@@ -101,6 +101,18 @@ and clamps only the store, so every f16 plane the chain feeds it - the gathered 
 image and the hidden plane - is sized with 32 rows of slack past its last region
 (`ffn_cm2_chunk_rows`).
 
+**The split-k pick counts the dispatch group, not the GEMM.** Long K (2048 and up) on a grid
+that would fill under half the SMs splits the reduction across f32 partial planes that
+`SplitKReduce` sums (three chunks up to two thirds full, at most eight, each chunk 256-aligned
+and a split that would strand an empty tail shed). The grid it measures is the role's own
+workgroups PLUS those of the chain neighbours it runs beside - q with k and v, gate with up
+(`cm2_tiles`, the same pick each neighbour's own dispatch makes) - because the hazard-mask rail
+lets independent roles co-run, while every split role serializes through the one scratch plane
+(`VHZ_SK`) its neighbours would also claim. Counted alone, a 512-wide k or v projection over a
+512-row window fills 16 of 36 SMs and splits in two; counted beside q it runs whole, and k and v
+fill the device together. Split-k is left to the lone role - wo, down, a small model's
+classifier - whose grid nothing else pads.
+
 **The f16 feed admits q8 and every kq superblock format** (`kq_sb`) - the set the cm2 decode
 callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE stamped class. The
 prefill driver reaches them through one dispatcher per stage (`cm2_cls_ensure`, `cm2_cls_set`,

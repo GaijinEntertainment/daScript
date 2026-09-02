@@ -1104,3 +1104,50 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   DECVEC overrides stand on the in-process instrument. The instrument's own first run caught a seat
   defect: the strip mutated the class's emitted words in place, so a later rebuild with the twin on
   served stripped words - the seat now strips a copy.
+
+- 2026-09-02: Vulkan gap 1, the budget split (queue item 1; measurement only). One pp512 window
+  of Llama-3.2-1B Q4_K_M on the 5060 Ti, driver 616.56, both engines on the four-wide decode:
+  llama.cpp's `GGML_VK_PERF_LOGGER=1` op rows (`llama-bench -p 512 -n 0 -r 2 -ngl 99`, the last
+  graph) against our `DASLLAMA_GPU_PROF=1` role stamps (`lcpp_bench --for-debug-purposes --plen
+  512 --ngen 0 --reps 2`, three windows within 3%). GPU time per window, us:
+
+  | role | ours | llama.cpp | ratio |
+  |---|---|---|---|
+  | q + wo (2048 <- 2048) | 3251 | 2617 | 1.24 |
+  | k + v (512 <- 2048) | 2111 | 964 | 2.19 |
+  | gate + up (8192 <- 2048) | 12496 | 8858 (30 of 32 at n=512) | 1.32 normalized |
+  | down (2048 <- 8192) | 6372 | 4914 (15 of 16 at n=512) | 1.22 normalized |
+  | classifier (last row) | 528 | 536 | 0.99 |
+  | GEMM total | 24758 | 17985 | 1.38 |
+  | attention | 903 | 902 | 1.00 |
+  | everything else (norms, rope, act, requant, residual) | 2116 | 3415 | 0.62 |
+  | window total | 27777 | 22302 | 1.25 |
+
+  Verdict: the gap is the GEMM and nothing else - our non-GEMM side is 1.3 ms AHEAD and the
+  attention is at parity. The 6.8 ms GEMM gap splits three ways: (a) the big tiles run 1.22-1.32x
+  slower (4.8 ms; 41-47 TFLOPS against llama.cpp's 50-58 - the memo's scale-hoist territory);
+  (b) the narrow k/v shape (d = 512) runs 2.2x slower (1.1 ms): `cm2_tile_cols` picks the 128-tile
+  and `cm2_split_k` doubles it to 32 workgroups on 36 SMs - one wave, one workgroup per SM, 18.7
+  TFLOPS; (c) llama.cpp slices to the last token after the last layer's attention, so its
+  last-layer gate/up/down/act run at n=1 while ours run the whole window and requantize one row
+  (0.9 ms, 3%). Beyond the GPU: our wall per window is 33.5 ms (15295 tok/s) against a 27.8 ms
+  GPU total, llama.cpp's 25.2 ms (20309) against 22.3 - 5.7 ms of host per window against 2.9,
+  a further 2.8 ms (8% of our wall) outside every kernel. Logs: scratchpad lcpp_perf_q4km.log,
+  our_prof_q4km.log.
+
+- 2026-09-02: Vulkan gap 1 (b) landed - the split-k pick counts the dispatch group. The force-knob
+  sweep on the Q4_K_M window (`DASLLAMA_CM2_TILE` x `DASLLAMA_CM2_SPLITK`, plain runs bracketing
+  every arm) showed the k and v roles' 2.2x was not the tile: with split-k off and the same m
+  tile, k+v fell from 1917 to 1264 us, because k and v stop serializing through the shared
+  split-k scratch and co-run under the hazard rail (the v stamp then reads only v's tail, 184 us).
+  Forced split-k 4 or 8 and the s tile run 2-3x slower on every big role (one 512x8192 f32 plane
+  per split written and re-read; the path costs 2.4x its bandwidth estimate - not pursued, no big
+  role splits by heuristic), and the l tile with split 4 made attention 4.7x slower (4303 us): an
+  aliasing smell in the split-k scratch to look at before split-k is ever widened. The fix:
+  `cm2_split_k` takes the neighbours' workgroups (`cm2_tiles`) - q beside k and v, gate beside up.
+  After, two windows: k 921-931 + v 217-219 = 1140-1148 us against 1913-1917 before (-40% on the
+  pair; llama.cpp 964, so 1.18x, in line with the other shapes), window 27183-27289 against
+  27651-27727, pp512 16045-16190 tok/s against 15671-15841 (+2.3%). The lone k GEMM at 16
+  workgroups unsplit costs the same 921 us as split in two over 32: the split never bought the
+  lone role anything on this box. Drift note: a plain window ranged 27.6-30.2 ms across the hour
+  (wo, down and rope_kv drift together), so every A/B on this box is bracketed by plain runs.
