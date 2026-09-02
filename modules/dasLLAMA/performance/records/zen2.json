@@ -462,37 +462,40 @@
         "flavor":"tuned",
         "box":"zen2",
         "threads":16,
-        "date":"2026-08-04",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m D:\\work\\llama.cpp\\models\\gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
+        "date":"2026-09-01",
+        "cmd":"modules\\dasLLAMA\\performance\\_rig\\dasllama-bench\\dasllama-bench.exe -- -m D:/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
         "hardware":{
           "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
           "arch":"AMD64",
-          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "os":"Microsoft Windows [Version 10.0.26200.9168]",
           "total_cores":128,
           "ram_gb":256,
           "gpu":"NVIDIA GeForce RTX 5060 Ti",
-          "ram_config":"8×32 GB @ 2666 MT/s",
+          "ram_config":"8x32 GB @ 2666 MT/s",
           "power_plan":"High performance",
           "smt":"on",
-          "remote_desktop":"off"
+          "remote_desktop":"parsec"
         },
         "tests":{
           "pp512":{
-            "tok_s":70.207003056096113,
-            "stddev":0.25786811113357544
+            "tok_s":66.41365246733001,
+            "stddev":1.7098919153213501
           },
           "tg128":{
-            "tok_s":7.301398548790532,
-            "stddev":0.009024646133184433
+            "tok_s":6.7354839007033362,
+            "stddev":0.045002911239862442
           }
         },
         "source":"official",
-        "sha":"37a2c1662",
-        "version":"0.6.4",
-        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "tune_sha":"fe4d9873989abfef6cdca7eba5a000845d781cf3c4bb7e7673db5d83335e4ece",
+        "sha":"6f7da32ed",
+        "version":"unknown",
+        "dasllama_version":15,
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); k3q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nlq8_tile_gen=dot_maddubs_width256_mr8 (manifest); k2q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_tile_gen=dot_maddubs_width256_mr8 (manifest)",
+        "tune_sha":"3fe069fc370ef67773722b024397886cce90777ee6859a22df23099b9c9683fb",
+        "noise":"ok",
+        "parity":"ok",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar x64-gen (repacked)",
-        "env":"DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:\\work\\llama.cpp\\models\\",
+        "env":"DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models/",
         "files":[
           {
             "role":"weights",
@@ -508,32 +511,32 @@
         "flavor":"clean-cpu",
         "box":"zen2",
         "threads":16,
-        "date":"2026-08-04",
-        "cmd":"D:\\Work\\llama.cpp-ref-ebd048f\\build-clean-cpu\\bin\\Release\\llama-bench.exe -m D:\\work\\llama.cpp\\models\\gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -t 16 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-01",
+        "cmd":"D:/Work/llama.cpp/build-clean-cpu/bin/Release/llama-bench.exe -m D:/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -t 16 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
           "arch":"AMD64",
-          "os":"Microsoft Windows [Version 10.0.26200.8875]",
+          "os":"Microsoft Windows [Version 10.0.26200.9168]",
           "total_cores":128,
           "ram_gb":256,
           "gpu":"NVIDIA GeForce RTX 5060 Ti",
-          "ram_config":"8×32 GB @ 2666 MT/s",
+          "ram_config":"8x32 GB @ 2666 MT/s",
           "power_plan":"High performance",
           "smt":"on",
-          "remote_desktop":"off"
+          "remote_desktop":"parsec"
         },
         "tests":{
           "pp512":{
-            "tok_s":59.069308999999997,
-            "stddev":0.26938099999999998
+            "tok_s":56.404944999999998,
+            "stddev":0.141788
           },
           "tg128":{
-            "tok_s":6.7950109999999997,
-            "stddev":0.016497000000000001
+            "tok_s":6.4491550000000002,
+            "stddev":0.035576999999999998
           }
         },
         "source":"official",
-        "sha":"ebd048fc5",
+        "sha":"6c84c7d5d",
         "exec_fmt":"native gguf formats; cpu runtime layout repack",
         "files":[
           {

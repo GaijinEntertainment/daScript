@@ -1021,5 +1021,21 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
 - 2026-09-01: Intel v6 (rebased, seat race at the engine shape but n=2048): every row >= 0.97 except k3 0.89 -
   the tiled fixture's row length flipped the k3 seat to 256_mr16 again; the seat fixture is now built at n=14336
   (29dc0b35f). Intel v7 and zen4 v7 re-mints running.
+- 2026-09-01: the board rig's parity pregate "flake" was a spawn defect, not the engine: `popen_argv`
+  builds a CreateProcess command line with a NULL application name, and Windows refuses a RELATIVE
+  argv[0] spelled with forward slashes (`modules/.../dasllama-bench.exe` -> spawn fails, rc -1, no
+  child) while `./x.exe`, `../x.exe`, absolute and backslash spellings all resolve. The rig spawned
+  exactly that spelling; the same child run by hand passed 40/40. Fixed at the source - the spawn
+  respells argv[0] natively on Windows (every `popen_argv` / `spawn_argv` / `popen_argv_pipe` caller),
+  `tests/fio/popen_argv.das` spawns the offending shape, `run_and_stream` now logs a failed spawn
+  instead of "pregate output above" with nothing above, and the caller-side backslash workaround
+  left `daslib/fio.das` and the language skill.
+- 2026-09-01: the zen2 board row for gemma-4-12B Q4_K_M re-minted on the fixed rig (`records/zen2.json`,
+  16 threads, reference unpinned as the 08-04 sweep ran it): das pp512 66.4 +-1.7 / tg128 6.74 +-0.05
+  against the clean-cpu reference 56.4 / 6.45 = 1.18x / 1.04x; the 08-04 row read 70.2 / 7.30 against
+  59.1 / 6.80 = 1.19x / 1.07x. Both engines sit ~5% under August on this box (a different reference
+  build too, 6c84c7d5d against ebd048f); the ratio held. Pinning the reference made no difference
+  today (56.8 pinned, 56.4 bare). The das side ran the adopted x86-avx2 class profile (sidecar
+  snapshot `zen2.tune.3fe069fc370e.json`), the 08-04 row a paranoid box mint.
 - 2026-09-01: step 0 done - `kq_kernel_bench.das`, the reference rows, both memos, the fact base
   above. `test-backend-ops` built in `build-clean-cpu` and `build-vulkan` with the thread pin.
