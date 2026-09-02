@@ -745,10 +745,9 @@ def private special_case(g : G2pModel; word : string; tag : string; stress : flo
     if (key_exists(SYMBOLS, word)) {
         return lookup(g, SYMBOLS?[word] ?? "", "", NO_STRESS, ctx, true)
     }
-    if (find(strip(word), '.') >= 0 || (find(word, '.') >= 0 && find(trim_dots(word), '.') >= 0)) {
-        if (is_alpha_word(replace(word, ".", "")) && longest_dot_piece(word) < 3) {
-            return get_nnp(g, word)
-        }
+    // an interior dot between short letter runs (U.S., a.m.) spells the letters out
+    if (find(trim_dots(word), '.') >= 0 && is_alpha_word(replace(word, ".", "")) && longest_dot_piece(word) < 3) {
+        return get_nnp(g, word)
     }
     if (word == "a" || word == "A") {
         return tag == "DT" ? some_ps("ɐ", 4) : some_ps("ˈA", 4)   // nolint:STYLE039
