@@ -4376,6 +4376,46 @@ var private g_mtp_batch_cls = true
 let MTP_MAX_ROWS = 9l
 var private g_mtp_depth = 1l
 
+var private @scratch g_mtp_pos_try : array<int64>   // rounds that drafted position i (0-based)
+var private @scratch g_mtp_pos_hit : array<int64>   // ... and accepted it
+
+//! Per-position acceptance telemetry (vLLM's survival-curve instrument): position i's rate is
+//! hit[i] / try[i] over every round since the last reset - the conditional rate given the round
+//! drafted that deep. Both round drivers note every round; the bench prints the report per arm.
+def mtp_pos_reset {
+    g_mtp_pos_try |> resize(MTP_MAX_ROWS)
+    g_mtp_pos_hit |> resize(MTP_MAX_ROWS)
+    for (i in range64(MTP_MAX_ROWS)) {
+        g_mtp_pos_try[i] = 0l
+        g_mtp_pos_hit[i] = 0l
+    }
+}
+
+def mtp_pos_note(drafted, accepted : int64) {
+    if (long_length(g_mtp_pos_try) < MTP_MAX_ROWS) {
+        mtp_pos_reset()
+    }
+    for (i in range64(min(drafted, MTP_MAX_ROWS))) {
+        g_mtp_pos_try[i]++
+        if (i < accepted) {
+            g_mtp_pos_hit[i]++
+        }
+    }
+}
+
+[cold_path]
+def mtp_pos_report() : string {
+    return build_string() $(var w) {
+        w |> write("per-position accept:")
+        for (i in range64(long_length(g_mtp_pos_try))) {
+            if (g_mtp_pos_try[i] > 0l) {
+                let pct = double(g_mtp_pos_hit[i]) * 100.0lf / double(g_mtp_pos_try[i])
+                w |> write(" p{i + 1l} {pct:.1f}% ({g_mtp_pos_hit[i]}/{g_mtp_pos_try[i]})")
+            }
+        }
+    }
+}
+
 def set_mtp_depth(k : int64) {
     g_mtp_depth = clamp(k, 1l, MTP_MAX_ROWS - 1l)
 }

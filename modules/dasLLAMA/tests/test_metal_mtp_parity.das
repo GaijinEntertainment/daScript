@@ -691,6 +691,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float) {
                 var count <- encode(tr, counting_prompt(1, 40), true, false)
                 set_gemma_trace(arm_on(t, "mtp-count-trace"))
                 set_gemma_draft_on_cpu(arm_on(t, "mtp-count-cpu"))   // bring-up bisect: the CPU oracle drafts
+                set_gemma_carry_pre_norm(arm_on(t, "mtp-count-pre"))   // the memo's open question: pre-norm residual as the drafter's h
                 for (depth in [1l, 2l, 4l]) {
                     count_cell(t, tr, trg, tag, count, depth)
                     let st = gemma_drafter_stats()
@@ -698,6 +699,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float) {
                 }
                 set_gemma_trace(false)
                 set_gemma_draft_on_cpu(false)
+                set_gemma_carry_pre_norm(false)
                 detach_gemma_drafter()
                 delete count
             }

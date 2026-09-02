@@ -1751,6 +1751,7 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
     s.mtp_h_pos1 = pos + a + 1l
     g_mirrors[s.uid].watermark = pos + a + 1l
     s.mtp_accepted += a
+    mtp_pos_note(k, a)
     s.n_past = pos + a + 1l
     return a
 }
@@ -1896,7 +1897,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
                 if (long_length(s.mtp_h) < c.dim) {
                     s.mtp_h |> resize(c.dim)   // nolint:PERF026 — once per session on a head-less model
                 }
-                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), r.bytes_x)
+                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(g_mtp_carry_pre && c.n_layer_nextn <= 0l ? r.bx : r.bxf), r.bytes_x)
             }
         }
         if (r.gpu_logits && (c.n_layer_nextn > 0l || g_mtp_carry_hidden)) {
@@ -2246,13 +2247,18 @@ var private g_bsk = true
 // hazard (RAW/WAR/WAW) — the only exploitable overlap in our FUSED chain is W1 || W3. Default ON:
 // measured +1-2% at every B (pipelines launch overhead even on the RAW chain). =0 = serial (A/B).
 let private MV_K_ALIGN = 256l          // the mv forms' K stripe (B2 256, B4 128): no tail guard
-var private g_mtp_carry_hidden = false   // land every step's post-norm hidden in s.mtp_h on head-less models (the assistant drafter's input)
+var private g_mtp_carry_hidden = false   // land every step's final hidden in s.mtp_h on head-less models (the assistant drafter's input)
+var private g_mtp_carry_pre = false      // ... the PRE-final-norm residual instead of the post-norm hidden (the memo's open question)
 
 //! The assistant drafter (dasllama_metal_mtp_gemma) attaches by asking the decode to carry the
-//! post-final-norm hidden of every step in s.mtp_h - the same stash the NextN carriers get for free.
-def set_metal_mtp_carry_hidden(on : bool) {
+//! final hidden of every step in s.mtp_h - the same stash the NextN carriers get for free. `pre`
+//! picks the residual before output_norm (mlxfast's reading) over the normed hidden (llama.cpp's).
+def set_metal_mtp_carry_hidden(on : bool; pre : bool = false) {
     g_mtp_carry_hidden = on
+    g_mtp_carry_pre = pre
 }
+
+def metal_mtp_carry_pre() : bool => g_mtp_carry_pre
 
 var private g_bconcurrent = true
 // DASLLAMA_METAL_BATCH_FUSE: fold w1 + w3 + swiglu into one fused dispatch on the fixed-B path
@@ -3284,7 +3290,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_lp_upooled |> push((buf = u_total_h, size = 4ul))
     g_lp_blog = gpu_logits && !nc_all ? blog : null   // nc steps: the GPU scatter already fed s.logits
     g_lp_sameslab = same
-    g_lp_bxf = same && gpu_logits ? bxf : null
+    g_lp_bxf = same && gpu_logits ? (g_mtp_carry_pre ? bx : bxf) : null   // the verify rows' carry: post-norm, or the pre-norm residual
     g_lp_bxf_bytes = same ? nrows * dim * 4l : 0l
     g_lp_xb = null
     if (!gpu_logits) {

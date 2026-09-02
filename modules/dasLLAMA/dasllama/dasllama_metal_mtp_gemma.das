@@ -409,6 +409,14 @@ def public set_gemma_trace(on : bool) {
     g_gemma_trace = on
 }
 
+//! The drafter's h input: the target's post-output_norm hidden (default, llama.cpp's reading) or
+//! the pre-norm residual (mlxfast's). Takes effect from the next decode step's landing.
+def public set_gemma_carry_pre_norm(on : bool) {
+    if (g_gemma_attached) {
+        set_metal_mtp_carry_hidden(true, on)
+    }
+}
+
 def private gemma_draft_step(t : Model; var s : Session; tok, anchor : int64; h : array<float>; var out_tok : int64&; var h_next : array<float>) : bool {
     if (!g_gemma_draft_cpu) {
         return gemma_draft_step_gpu(t, s, tok, anchor, h, out_tok, h_next)
@@ -513,6 +521,7 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     g_mirrors[s.uid].watermark = pos + a + 1l
     s.mtp_accepted += a
     s.mtp_drafted += drafted
+    mtp_pos_note(drafted, a)
     g_gemma_accepted += a
     s.n_past = pos + a + 1l
     return a
