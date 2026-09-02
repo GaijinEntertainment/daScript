@@ -136,16 +136,16 @@ let g_intrin_lookup <- {
     "math::rcp" => @@intrinsic_math_rcp,
     "math::rcp_est" => @@intrinsic_math_rcp,
     "math::exp" => @@intrinsic_math_exp,
-    "math::log" => @@intrinsic_math_float_op1,
-    "math::exp2" => @@intrinsic_math_float_op1,
-    "math::log2" => @@intrinsic_math_float_op1,
+    "math::log" => @@intrinsic_math_log,
+    "math::exp2" => @@intrinsic_math_exp2,
+    "math::log2" => @@intrinsic_math_log2,
     "math::sqrt" => @@intrinsic_math_float_op1,
     "math::rsqrt" => @@intrinsic_math_rsqrt,
     "math::rsqrt_est" => @@intrinsic_math_rsqrt,
     "math::tan" => @@intrinsic_math_tan,
     "math::sin" => @@intrinsic_math_sincos,
     "math::cos" => @@intrinsic_math_sincos,
-    "math::pow" => @@intrinsic_op2,
+    "math::pow" => @@intrinsic_math_pow,
     "math::min" => @@intrinsic_math_minmax,
     "math::max" => @@intrinsic_math_minmax,
     "math::hmin" => @@intrinsic_math_hminmax,
@@ -1071,11 +1071,6 @@ def intrinsic_math_fract(var ctx : JitCtx; expr : ExprCallFunc?; arguments : arr
     return LLVMBuildFSub(ctx.builder, arguments[0], fl, "fract")
 }
 
-def intrinsic_math_tan(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    var sin_a = intrinsic_math_any_float_op1("sin", ctx.builder, expr, arguments)
-    var cos_a = intrinsic_math_any_float_op1("cos", ctx.builder, expr, arguments)
-    return LLVMBuildFDiv(ctx.builder, sin_a, cos_a, "tan")
-}
 
 def intrinsic_math_lerp_op3(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var a = arguments[0]
@@ -1161,10 +1156,6 @@ def intrinsic_math_fmod(var ctx : JitCtx; expr : ExprCallFunc?; arguments : arra
     }
 }
 
-def intrinsic_math_sinh_cosh_tanh(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return intrinsic_math_any_float_op1(string(expr.name), ctx.builder, expr, arguments)
-}
-
 def private vmath_fma(builder : LLVMOpaqueBuilder?; decl : LLVMOpaqueValue?; fty : LLVMOpaqueType?;
                       a, b, c : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     if (decl != null) {
@@ -1186,6 +1177,47 @@ def private vmath_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMO
     return build_broadcast_vector(ctx.builder, opType, LLVMConstReal(ctx.types.t_float, v))
 }
 
+// ===== the inline-polynomial rail =====
+// The default lowering of a transcendental on a vector type is @llvm.<op>.vNf32, which scalarizes
+// to N libm calls on any target without a vector libm (Darwin-ARM and most others). Each emitter
+// below replaces one such call with the SAME polynomial the interpreter and AOT already run
+// (vecmath, include/vecmath/), so the three rails agree instead of merely being close. The gate is
+// aarch64 by measurement, not by portability: on x64 the always-computed guard branches of these
+// kernels cost more than they save (see build_vector_expf).
+// One exception is flagged at its emitter: vecmath has no vector sinh/cosh/tanh, so those three
+// have no interpreter twin to mirror and the JIT necessarily diverges there.
+def private vmath_poly_gate(opType : TypeDeclPtr) : bool {
+    return g_target_is_aarch64 && opType.isVectorType && opType.vectorBaseType == Type.tFloat
+}
+
+def private vmath_fma_decl(opType : TypeDeclPtr; lt : LLVMOpaqueType?) : LLVMOpaqueValue? {
+    let fid = LLVMLookupIntrinsicID(build_op_name("fmuladd", opType))
+    return fid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, fid, [ lt]) : null
+}
+
+// One Horner step of a vecmath POLY macro: a*b + c, deliberately NOT fused. The POLY0..POLY5
+// macros spell v_add(v_mul(..)) rather than v_madd, and the exp2/log2 chains alternate sign
+// heavily enough that one contracted step moves the result by several ulp. Emitting @llvm.fmuladd
+// here costs bit-exact agreement with the interpreter and AOT (measured: 200k lanes identical
+// unfused, up to 1.9e-6 apart fused) - so the polynomials that vecmath writes unfused stay
+// unfused, and only the chains vecmath writes as v_madd/v_nmsub take vmath_fma.
+def private vmath_poly_step(bld : LLVMOpaqueBuilder?; a, b, c : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    return LLVMBuildFAdd(bld, LLVMBuildFMul(bld, a, b, ""), c, "")
+}
+
+def private vmath_call1(ctx : JitCtx; opType : TypeDeclPtr; op_name : string; x : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let lt = type_to_llvm_type(opType)
+    let decl = LLVMGetIntrinsicDeclaration(g_mod, LLVMLookupIntrinsicID(build_op_name(op_name, opType)), [ lt])
+    return LLVMBuildCall2(ctx.builder, LLVMFunctionType(lt, [ lt]), decl, [ x], "")
+}
+
+// v_min / v_max as the rest of this file already spells them - fcmp + select, not @llvm.minnum:
+// build_math_minmax lowers math::min the same way, so the NaN edge stays one behaviour per binary
+def private vmath_fminmax(ctx : JitCtx; wantMin : bool; a, b : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let pred = wantMin ? LLVMRealPredicate.LLVMRealOLT : LLVMRealPredicate.LLVMRealOGT
+    return LLVMBuildSelect(ctx.builder, LLVMBuildFCmp(ctx.builder, pred, a, b, ""), a, b, "")
+}
+
 // Vectorized expf emitted as inline IR — ggml_v_expf (ARM optimized-routines), max rel err ~2 ulp.
 // The default lowering (@llvm.exp.vNf32) scalarizes to N libm expf calls on targets without a vector
 // libm (Darwin-ARM, most others) — ~7x slower. The |n|>126 overflow/underflow path is a branchless
@@ -1198,8 +1230,7 @@ def private build_vector_expf(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaque
     let dim = opType.vectorDim
     let lt = type_to_llvm_type(opType)
     let fty = LLVMFunctionType(lt, [ lt, lt, lt])
-    let fid = LLVMLookupIntrinsicID(build_op_name("fmuladd", opType))
-    let fma_decl = fid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, fid, [ lt]) : null
+    let fma_decl = vmath_fma_decl(opType, lt)
     let R = vmath_fsplat(ctx, opType, 12582912.0lf); let LE = vmath_fsplat(ctx, opType, 1.4426950216293335lf)
     let NH = vmath_fsplat(ctx, opType, -0.693145751953125lf); let NL = vmath_fsplat(ctx, opType, -1.428606765330187e-06lf)
     let C0 = vmath_fsplat(ctx, opType, 0.9999994039535522lf); let C1 = vmath_fsplat(ctx, opType, 0.4999912679195404lf)
@@ -1216,8 +1247,7 @@ def private build_vector_expf(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaque
         vmath_isplat(ctx, dim, 23ul), "")                                   // exponent field of 2^n
     let k = LLVMBuildBitCast(bld, LLVMBuildAdd(bld, e, vmath_isplat(ctx, dim, 0x3f800000ul), ""), lt, "")
     let fast = vmath_fma(bld, fma_decl, fty, poly, k, k)                     // k*(1+poly), normal range
-    let fabs_decl = LLVMGetIntrinsicDeclaration(g_mod, LLVMLookupIntrinsicID(build_op_name("fabs", opType)), [ lt])
-    let nabs = LLVMBuildCall2(bld, LLVMFunctionType(lt, [ lt]), fabs_decl, [ n], "")
+    let nabs = vmath_call1(ctx, opType, "fabs", n)
     let c126 = LLVMBuildFCmp(bld, LLVMRealPredicate.LLVMRealOGT, nabs, vmath_fsplat(ctx, opType, 126.0lf), "")
     let c192 = LLVMBuildFCmp(bld, LLVMRealPredicate.LLVMRealOGT, nabs, vmath_fsplat(ctx, opType, 192.0lf), "")
     let nlez = LLVMBuildFCmp(bld, LLVMRealPredicate.LLVMRealOLE, n, vmath_fsplat(ctx, opType, 0.0lf), "")
@@ -1234,7 +1264,7 @@ def private build_vector_expf(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaque
 // libm is correctly rounded and a single scalar call carries no scalarization penalty.
 def intrinsic_math_exp(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    if (g_target_is_aarch64 && opType.isVectorType && opType.vectorBaseType == Type.tFloat) {
+    if (vmath_poly_gate(opType)) {
         return build_vector_expf(ctx, opType, arguments[0])
     }
     return intrinsic_math_any_float_op1("exp", ctx.builder, expr, arguments)
@@ -1256,8 +1286,7 @@ def private build_vector_sincos(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaq
     let lt = type_to_llvm_type(opType)
     let it = LLVMVectorType(ctx.types.t_int32, uint(dim))
     let fty = LLVMFunctionType(lt, [ lt, lt, lt])
-    let fid = LLVMLookupIntrinsicID(build_op_name("fmuladd", opType))
-    let fma_decl = fid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, fid, [ lt]) : null
+    let fma_decl = vmath_fma_decl(opType, lt)
     let TWO_DIV_PI = vmath_fsplat(ctx, opType, 0.63661977lf)
     let KC1 = vmath_fsplat(ctx, opType, -1.57079625129lf); let KC2 = vmath_fsplat(ctx, opType, -7.54978995489e-8lf)
     let CC0 = vmath_fsplat(ctx, opType, -0.0013602249lf); let CC1 = vmath_fsplat(ctx, opType, 0.0416566950lf)
@@ -1268,8 +1297,7 @@ def private build_vector_sincos(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaq
     let half = LLVMBuildBitCast(bld, LLVMBuildOr(bld, sgn, vmath_isplat(ctx, dim, 0x3f000000ul), ""), lt, "")
     let xl = LLVMBuildFAdd(bld, LLVMBuildFMul(bld, x, TWO_DIV_PI, ""), half, "")  // x*2/pi + copysign(0.5,x)
     let q = LLVMBuildFPToSI(bld, xl, it, "")                                      // round(x*2/pi), the quadrant
-    let trunc_decl = LLVMGetIntrinsicDeclaration(g_mod, LLVMLookupIntrinsicID(build_op_name("trunc", opType)), [ lt])
-    let qf = LLVMBuildCall2(bld, LLVMFunctionType(lt, [ lt]), trunc_decl, [ xl], "")
+    let qf = vmath_call1(ctx, opType, "trunc", xl)
     let xr = vmath_fma(bld, fma_decl, fty, qf, KC2, vmath_fma(bld, fma_decl, fty, qf, KC1, x))  // x - q*pi/2
     let x2 = LLVMBuildFMul(bld, xr, xr, "")
     let x3 = LLVMBuildFMul(bld, x2, xr, "")
@@ -1295,8 +1323,196 @@ def private build_vector_sincos(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaq
 def intrinsic_math_sincos(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     let name = string(expr.name)
-    if (g_target_is_aarch64 && opType.isVectorType && opType.vectorBaseType == Type.tFloat) {
+    if (vmath_poly_gate(opType)) {
         return build_vector_sincos(ctx, opType, arguments[0], name == "cos")
+    }
+    return intrinsic_math_any_float_op1(name, ctx.builder, expr, arguments)
+}
+
+// Vectorized tanf as inline IR - vecmath v_tan (dag_vecMath_trig.h), NOT sin/cos then divide:
+// v_tan has its own reduction (octant q = trunc(|x|*4/pi) rounded up to even, a three-constant
+// Cody-Waite split DP1/DP2/DP3) and its own degree-6-in-x^2 minimax, so dividing the sin/cos
+// polynomials would give a different answer than the interpreter. Odd octants take -1/y; the
+// |x| <= 1e-4 lane keeps the reduced argument, which is what tan(x) == x means here.
+def private build_vector_tan(ctx : JitCtx; opType : TypeDeclPtr; ang : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let bld = ctx.builder
+    let dim = opType.vectorDim
+    let lt = type_to_llvm_type(opType)
+    let it = LLVMVectorType(ctx.types.t_int32, uint(dim))
+    let fty = LLVMFunctionType(lt, [ lt, lt, lt])
+    let fma_decl = vmath_fma_decl(opType, lt)
+    let sgn = LLVMBuildAnd(bld, LLVMBuildBitCast(bld, ang, it, ""), vmath_isplat(ctx, dim, 0x80000000ul), "")
+    let ax = vmath_call1(ctx, opType, "fabs", ang)
+    let big = LLVMBuildFCmp(bld, LLVMRealPredicate.LLVMRealOGT, ax, vmath_fsplat(ctx, opType, 1.0e-4lf), "")
+    let oct = LLVMBuildFPToSI(bld, LLVMBuildFMul(bld, ax, vmath_fsplat(ctx, opType, 1.27323954lf), ""), it, "")
+    let q = LLVMBuildAnd(bld, LLVMBuildAdd(bld, oct, vmath_isplat(ctx, dim, 1ul), ""),
+        vmath_isplat(ctx, dim, 0xfffffffeul), "")                                  // round the octant up to even
+    let qf = LLVMBuildSIToFP(bld, q, lt, "")
+    let r1 = vmath_fma(bld, fma_decl, fty, qf, vmath_fsplat(ctx, opType, -0.78515625lf), ax)
+    let r2 = vmath_fma(bld, fma_decl, fty, qf, vmath_fsplat(ctx, opType, -2.4187564849853515625e-4lf), r1)
+    let xr = vmath_fma(bld, fma_decl, fty, qf, vmath_fsplat(ctx, opType, -3.77489497744594108e-8lf), r2)
+    let x2 = LLVMBuildFMul(bld, xr, xr, "")
+    var y = vmath_fma(bld, fma_decl, fty, x2, vmath_fsplat(ctx, opType, 9.38540185543e-3lf), vmath_fsplat(ctx, opType, 3.11992232697e-3lf))
+    y = vmath_fma(bld, fma_decl, fty, y, x2, vmath_fsplat(ctx, opType, 2.44301354525e-2lf))
+    y = vmath_fma(bld, fma_decl, fty, y, x2, vmath_fsplat(ctx, opType, 5.34112807005e-2lf))
+    y = vmath_fma(bld, fma_decl, fty, y, x2, vmath_fsplat(ctx, opType, 1.33387994085e-1lf))
+    y = vmath_fma(bld, fma_decl, fty, y, x2, vmath_fsplat(ctx, opType, 3.33331568548e-1lf))
+    y = vmath_fma(bld, fma_decl, fty, LLVMBuildFMul(bld, y, x2, ""), xr, xr)
+    let poly = LLVMBuildSelect(bld, big, y, xr, "")
+    let even = LLVMBuildICmp(bld, LLVMIntPredicate.LLVMIntEQ,
+        LLVMBuildAnd(bld, q, vmath_isplat(ctx, dim, 2ul), ""), vmath_isplat(ctx, dim, 0ul), "")
+    let recip = LLVMBuildFDiv(bld, vmath_fsplat(ctx, opType, -1.0lf), poly, "")
+    let res = LLVMBuildSelect(bld, even, poly, recip, "")
+    return LLVMBuildBitCast(bld, LLVMBuildXor(bld, LLVMBuildBitCast(bld, res, it, ""), sgn, ""), lt, "")
+}
+
+def intrinsic_math_tan(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    if (vmath_poly_gate(opType)) {
+        return build_vector_tan(ctx, opType, arguments[0])
+    }
+    var sin_a = intrinsic_math_any_float_op1("sin", ctx.builder, expr, arguments)
+    var cos_a = intrinsic_math_any_float_op1("cos", ctx.builder, expr, arguments)
+    return LLVMBuildFDiv(ctx.builder, sin_a, cos_a, "tan")
+}
+
+// Vectorized exp2f as inline IR - vecmath v_exp2 (dag_vecMath_common.h): clamp to the
+// representable exponent window, split off the integer part by round-to-nearest-even, build 2^i
+// straight into the exponent field, and take a degree-5 minimax of 2^f on [-0.5, 0.5). The final
+// select is vecmath's, not an optimization: it forces exp2(integer) to be exact.
+def private build_vector_exp2(ctx : JitCtx; opType : TypeDeclPtr; x0 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let bld = ctx.builder
+    let dim = opType.vectorDim
+    let lt = type_to_llvm_type(opType)
+    let it = LLVMVectorType(ctx.types.t_int32, uint(dim))
+    let hi = vmath_fminmax(ctx, true, x0, vmath_fsplat(ctx, opType, 129.0lf))
+    let x = vmath_fminmax(ctx, false, hi, vmath_fsplat(ctx, opType, -126.99999lf))
+    let biased = LLVMBuildFSub(bld, x, vmath_fsplat(ctx, opType, 0.499996185302734375lf), "")  // 0.5f - 32*2^-23
+    let ipart = LLVMBuildFPToSI(bld, vmath_call1(ctx, opType, "roundeven", biased), it, "")
+    let fpart = LLVMBuildFSub(bld, x, LLVMBuildSIToFP(bld, ipart, lt, ""), "")
+    let expipart = LLVMBuildBitCast(bld, LLVMBuildShl(bld,
+        LLVMBuildAdd(bld, ipart, vmath_isplat(ctx, dim, 127ul), ""), vmath_isplat(ctx, dim, 23ul), ""), lt, "")
+    var p = vmath_poly_step(bld, vmath_fsplat(ctx, opType, 1.8775767e-3lf), fpart, vmath_fsplat(ctx, opType, 8.9893397e-3lf))
+    p = vmath_poly_step(bld, p, fpart, vmath_fsplat(ctx, opType, 5.5826318e-2lf))
+    p = vmath_poly_step(bld, p, fpart, vmath_fsplat(ctx, opType, 2.4015361e-1lf))
+    p = vmath_poly_step(bld, p, fpart, vmath_fsplat(ctx, opType, 6.9315308e-1lf))
+    p = vmath_poly_step(bld, p, fpart, vmath_fsplat(ctx, opType, 9.9999994e-1lf))
+    let isInt = LLVMBuildFCmp(bld, LLVMRealPredicate.LLVMRealOEQ, fpart, vmath_fsplat(ctx, opType, 0.0lf), "")
+    return LLVMBuildSelect(bld, isInt, expipart, LLVMBuildFMul(bld, expipart, p, ""), "")
+}
+
+def intrinsic_math_exp2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    if (vmath_poly_gate(opType)) {
+        return build_vector_exp2(ctx, opType, arguments[0])
+    }
+    return intrinsic_math_any_float_op1("exp2", ctx.builder, expr, arguments)
+}
+
+// Vectorized log2f as inline IR - vecmath v_log2_est_p5 (dag_vecMath_common.h): the exponent
+// field gives the integer part, the mantissa is forced into [1,2) and fed to a degree-5 minimax,
+// and the p*(m-1) shape is what makes log2(1) exactly 0. It is an ESTIMATE, materially looser
+// than libm - the interpreter and AOT have always used it, so the JIT matching it is the whole
+// point. It reads the exponent through a mask, so it never produces -inf or NaN: log2(0) is -127
+// and log2(-x) == log2(x). That is the interpreter's behaviour and the test pins it.
+def private build_vector_log2(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let bld = ctx.builder
+    let dim = opType.vectorDim
+    let lt = type_to_llvm_type(opType)
+    let it = LLVMVectorType(ctx.types.t_int32, uint(dim))
+    let i = LLVMBuildBitCast(bld, x, it, "")
+    let e = LLVMBuildSIToFP(bld, LLVMBuildSub(bld,
+        LLVMBuildLShr(bld, LLVMBuildAnd(bld, i, vmath_isplat(ctx, dim, 0x7f800000ul), ""), vmath_isplat(ctx, dim, 23ul), ""),
+        vmath_isplat(ctx, dim, 127ul), ""), lt, "")
+    let m = LLVMBuildBitCast(bld, LLVMBuildOr(bld,
+        LLVMBuildAnd(bld, i, vmath_isplat(ctx, dim, 0x007ffffful), ""), vmath_isplat(ctx, dim, 0x3f800000ul), ""), lt, "")
+    var p = vmath_poly_step(bld, vmath_fsplat(ctx, opType, -3.4436006e-2lf), m, vmath_fsplat(ctx, opType, 3.1821337e-1lf))
+    p = vmath_poly_step(bld, p, m, vmath_fsplat(ctx, opType, -1.2315303lf))
+    p = vmath_poly_step(bld, p, m, vmath_fsplat(ctx, opType, 2.5988452lf))
+    p = vmath_poly_step(bld, p, m, vmath_fsplat(ctx, opType, -3.3241990lf))
+    p = vmath_poly_step(bld, p, m, vmath_fsplat(ctx, opType, 3.1157899lf))
+    return vmath_poly_step(bld, p, LLVMBuildFSub(bld, m, vmath_fsplat(ctx, opType, 1.0lf), ""), e)
+}
+
+def intrinsic_math_log2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    if (vmath_poly_gate(opType)) {
+        return build_vector_log2(ctx, opType, arguments[0])
+    }
+    return intrinsic_math_any_float_op1("log2", ctx.builder, expr, arguments)
+}
+
+// v_log is v_log2_est_p5 scaled by ln2 - the natural log inherits the estimate's error
+def intrinsic_math_log(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    if (vmath_poly_gate(opType)) {
+        return LLVMBuildFMul(ctx.builder, build_vector_log2(ctx, opType, arguments[0]),
+            vmath_fsplat(ctx, opType, 0.6931471805599453lf), "")
+    }
+    return intrinsic_math_any_float_op1("log", ctx.builder, expr, arguments)
+}
+
+// v_pow: exp2(log2_est_p5(x) * y), with vecmath's y == 0 guard on top (0^0 and inf^0 give 1).
+// Inherits the log2 estimate's error, amplified by |y|.
+def intrinsic_math_pow(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    if (!vmath_poly_gate(opType)) {
+        return intrinsic_op2(ctx, expr, arguments)
+    }
+    let l2 = build_vector_log2(ctx, opType, arguments[0])
+    let r = build_vector_exp2(ctx, opType, LLVMBuildFMul(ctx.builder, l2, arguments[1], ""))
+    let y0 = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate.LLVMRealOEQ, arguments[1], vmath_fsplat(ctx, opType, 0.0lf), "")
+    return LLVMBuildSelect(ctx.builder, y0, vmath_fsplat(ctx, opType, 1.0lf), r, "")
+}
+
+// Vectorized sinh/cosh/tanh built on build_vector_expf. THIS ONE HAS NO INTERPRETER TWIN:
+// vecmath has no vector hyperbolics, so SimPolicy binds vsinh/vcosh/vtanh (aot_builtin_math.h),
+// which call libm once per lane. The JIT therefore diverges from interp and AOT here by the
+// exp polynomial's error rather than agreeing with them - the opposite trade from every other
+// emitter on this rail, taken because the consumer (GELU over float4 rows) pays four libm calls
+// per vector otherwise. The bound is measured in llvm_vector_math.das.
+// Near zero the exp forms of sinh and tanh cancel catastrophically, so |x| < 0.25 takes the odd
+// Taylor series instead; cosh is well conditioned everywhere and needs no such arm. tanh clamps
+// to +-9 first: exp(18) cannot overflow, and (t-1)/(t+1) there already rounds to exactly +-1.
+def private build_vector_hyper(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqueValue?; op_name : string) : LLVMOpaqueValue? {
+    let bld = ctx.builder
+    let lt = type_to_llvm_type(opType)
+    let fty = LLVMFunctionType(lt, [ lt, lt, lt])
+    let fma_decl = vmath_fma_decl(opType, lt)
+    let half = vmath_fsplat(ctx, opType, 0.5lf)
+    if (op_name != "tanh") {
+        let ep = build_vector_expf(ctx, opType, x)
+        let en = build_vector_expf(ctx, opType, LLVMBuildFNeg(bld, x, ""))
+        if (op_name == "cosh") {
+            return LLVMBuildFMul(bld, LLVMBuildFAdd(bld, ep, en, ""), half, "")
+        }
+        let u = LLVMBuildFMul(bld, x, x, "")
+        var s = vmath_fma(bld, fma_decl, fty, vmath_fsplat(ctx, opType, 2.7557319223985893e-6lf), u, vmath_fsplat(ctx, opType, 1.984126984126984e-4lf))
+        s = vmath_fma(bld, fma_decl, fty, s, u, vmath_fsplat(ctx, opType, 8.333333333333333e-3lf))
+        s = vmath_fma(bld, fma_decl, fty, s, u, vmath_fsplat(ctx, opType, 0.16666666666666666lf))
+        s = vmath_fma(bld, fma_decl, fty, s, u, vmath_fsplat(ctx, opType, 1.0lf))
+        let near = LLVMBuildFCmp(bld, LLVMRealPredicate.LLVMRealOLT, vmath_call1(ctx, opType, "fabs", x), vmath_fsplat(ctx, opType, 0.25lf), "")
+        return LLVMBuildSelect(bld, near, LLVMBuildFMul(bld, x, s, ""),
+            LLVMBuildFMul(bld, LLVMBuildFSub(bld, ep, en, ""), half, ""), "")
+    }
+    let cl = vmath_fminmax(ctx, false, vmath_fminmax(ctx, true, x, vmath_fsplat(ctx, opType, 9.0lf)), vmath_fsplat(ctx, opType, -9.0lf))
+    let t = build_vector_expf(ctx, opType, LLVMBuildFAdd(bld, cl, cl, ""))
+    let one = vmath_fsplat(ctx, opType, 1.0lf)
+    let far = LLVMBuildFDiv(bld, LLVMBuildFSub(bld, t, one, ""), LLVMBuildFAdd(bld, t, one, ""), "")
+    let u = LLVMBuildFMul(bld, x, x, "")
+    var s = vmath_fma(bld, fma_decl, fty, vmath_fsplat(ctx, opType, 0.021869488536155203lf), u, vmath_fsplat(ctx, opType, -0.05396825396825397lf))
+    s = vmath_fma(bld, fma_decl, fty, s, u, vmath_fsplat(ctx, opType, 0.13333333333333333lf))
+    s = vmath_fma(bld, fma_decl, fty, s, u, vmath_fsplat(ctx, opType, -0.3333333333333333lf))
+    s = vmath_fma(bld, fma_decl, fty, s, u, one)
+    let near = LLVMBuildFCmp(bld, LLVMRealPredicate.LLVMRealOLT, vmath_call1(ctx, opType, "fabs", x), vmath_fsplat(ctx, opType, 0.25lf), "")
+    return LLVMBuildSelect(bld, near, LLVMBuildFMul(bld, x, s, ""), far, "")
+}
+
+def intrinsic_math_sinh_cosh_tanh(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    let name = string(expr.name)
+    if (vmath_poly_gate(opType)) {
+        return build_vector_hyper(ctx, opType, arguments[0], name)
     }
     return intrinsic_math_any_float_op1(name, ctx.builder, expr, arguments)
 }
