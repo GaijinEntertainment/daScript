@@ -21,15 +21,15 @@ struct KokoroFamily {
 
 //! Read the `kokoro.*` metadata of a converted Kokoro GGUF.
 def load_kokoro_family(path : string) : KokoroFamily {
-    var fam = KokoroFamily()
+    var inscope fam = KokoroFamily()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA kokoro: cannot open model '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
-        let cpts <- gguf_int_array(m, bytes, "kokoro.symbol_cpts")
-        let ids <- gguf_int_array(m, bytes, "kokoro.symbol_ids")
+        var inscope cpts <- gguf_int_array(m, bytes, "kokoro.symbol_cpts")
+        var inscope ids <- gguf_int_array(m, bytes, "kokoro.symbol_ids")
         for (c, i in cpts, ids) {
             fam.sym[int(c)] = int(i)
         }
@@ -42,7 +42,7 @@ def load_kokoro_family(path : string) : KokoroFamily {
 //! symbol the vocabulary knows, in order, wrapped in the pad token on both sides.
 def kokoro_token_ids(fam : KokoroFamily; ps : string) : array<int> {
     var inscope cps <- utf8_to_cpts(ps)
-    var ids : array<int>
+    var inscope ids : array<int>
     ids |> reserve(length(cps) + 2)
     ids |> push(0)
     for (c in cps) {

@@ -342,13 +342,13 @@
       `timestamp_granularities[]` where the family has word timestamps; `prompt` biasing;
       `stream=true` transcription events; `/v1/audio/translations` for the whisper family
       (native decoder mode; other families decline); accept-and-ignore `image_url.detail`.
-    - CAPABILITY DECISIONS (Boris's call, each a new model class): TTS - `/v1/audio/speech`
-      and chat `modalities:["text","audio"]`. No served artifact can speak; the two Omni
-      families have Talkers upstream but the GGUF ecosystem carries only thinker + audio
-      encoder, and a talker conditions on thinker HIDDEN STATES (not a bolt-on). The
-      reference-backed route if wanted: a dedicated small TTS family (the upstream tts
-      example - OuteTTS + WavTokenizer ggufs). Realtime API (WebSocket voice, barge-in) is
-      the end-state the smaller audio choices point at; name it before choosing them.
+    - CAPABILITY DECISIONS (Boris's call, each a new model class): TTS `/v1/audio/speech` -
+      DONE (the StyleTTS2 lineage: KittenTTS nano/mini and Kokoro-82M, `--tts`, wav/pcm;
+      `plans/dasllama-tts.md`). Still open: chat `modalities:["text","audio"]` - no served
+      LLM artifact can speak; the two Omni families have Talkers upstream but the GGUF
+      ecosystem carries only thinker + audio encoder, and a talker conditions on thinker
+      HIDDEN STATES (not a bolt-on). Realtime API (WebSocket voice, barge-in) is the end-state
+      the smaller audio choices point at; name it before choosing them.
     - DECLINE/PARK: `/v1/images/generations` (+edits/variations) - no roster model
       generates images even upstream; diffusion is a disjoint class (DiT/UNet + conv2d VAE,
       no upstream reference; the GGML reference is stable-diffusion.cpp, which shares
@@ -782,3 +782,13 @@
     or fusing the sign flip into the staged slab per SITE via a second indexed table. Done =
     a form that clears 180 GB/s in the dispatch-loop probe (QUIRK 22's harness), or a note
     proving the ceiling is shared by llama.cpp's own kernel when isolated the same way.
+
+63. **Two FFTs in the tree: `dasllama_audio.das` carries its own power-of-two FFT
+    (`build_fft_plan` / `fft_pow2_run` / `build_dft_twiddles`, the mel front end's kernel) while
+    `modules/dasMinfft` binds a general FFT/DCT library.** The TTS path added a third shape - the
+    N=20 STFT/ISTFT of the iSTFTNet generator, a direct 11-bin sum where a transform library
+    buys nothing. Done = one decision: either the mel front end moves onto dasMinfft (racing the
+    hand-rolled plan on the whisper 400-point and parakeet 512-point mels - the in-tree FFT was
+    written to be bit-close to the reference, so the seam gates must stay green) or the ledger
+    records why the mel kernel keeps its own (JIT-inlined, plan-cached, no module dependency on
+    the CPU-only build) and the direct N=20 sum stays where it is.

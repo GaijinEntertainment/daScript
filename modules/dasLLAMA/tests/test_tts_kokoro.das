@@ -44,7 +44,7 @@ def test_kokoro_oracle(t : T?) {
         delete g_family
         g_family <- load_kokoro_family(gguf_path())
         t |> success(length(g_family.sym) > 100, "{length(g_family.sym)} symbols in the vocabulary")
-        let ids <- kokoro_token_ids(g_family, "hˈɛlO wˈɜɹld")   // nolint:STYLE039
+        var inscope ids <- kokoro_token_ids(g_family, "hˈɛlO wˈɜɹld")   // nolint:STYLE039
         t |> equal(length(ids), 14, "two pads around twelve known symbols")
         t |> equal(ids[0], 0)
         t |> equal(ids[length(ids) - 1], 0)
@@ -64,11 +64,11 @@ def test_kokoro_facade(t : T?) {
         }
         with_job_que() {
             setup_dasllama_jobque_()
-            let m <- load_tts_model(gguf_path())
-            let c <- caps(m)
+            var inscope m <- load_tts_model(gguf_path())
+            var inscope c <- caps(m)
             t |> equal(c.sample_rate, 24000)
             t |> success(length(c.voices) >= 50, "{length(c.voices)} voices")
-            let audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "af_heart")
+            var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "af_heart")
             t |> equal(audio.sample_rate, 24000)
             t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
             var finite = true

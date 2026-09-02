@@ -23,7 +23,8 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
 - **`dasllama_audio.das`** - the audio encoder tower: the mel front-ends (mtmd and whisper.cpp
   flavors), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`, and the
   whisper-class encode + block loop with its GPU hooks. Composes `dasllama_tower.das`.
-- **`dasllama_audio_io.das`** - decode-any-format -> 16 kHz mono f32 PCM. The only file that talks to
+- **`dasllama_audio_io.das`** - decode-any-format -> 16 kHz mono f32 PCM, and the reverse leg the TTS
+  facade hands out: f32 samples -> 16-bit PCM bytes / a RIFF WAV file. The only file that talks to
   miniaudio.
 - **`dasllama_asr.das`** - the ASR facade: capability declaration, timestamp granularity, the
   backend-neutral entry points.
@@ -94,8 +95,22 @@ stages, each its own file, and every stage is data-driven from the model store: 
   packs of 510 rows.
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
   picked by `general.architecture`; `tts_g2p.bin` and `tts_postag.bin` read from the GGUF's
-  directory), `caps`, `synthesize` (text -> normalize -> phonemize -> the family's symbols and
-  style row -> PCM, timed). Requires no `audio` module.
+  directory), `caps`, `synthesize_stream` (text -> normalize -> the reference sentence chunker,
+  400 characters a chunk, abbreviations and decimals never split -> per chunk: phonemize -> the
+  family's symbols and style row -> PCM, timed, delivered to the caller's block as it lands) and
+  `synthesize` (the same, concatenated, timings summed). Requires no `audio` module.
+
+Every local container on the TTS path is `var inscope`: the persistent heap frees nothing at
+scope exit, and one synthesis allocates its activation buffers per call - the generator's alone
+run to hundreds of megabytes per sentence, so a bare local is a per-sentence leak that ends in
+the OS killing a long run.
+
+The product surfaces sit outside the module: `utils/dasllama-server/txt2wav.das` (text or a
+file -> a WAV, the timings line on stderr) and the server's `/v1/audio/speech` route (a
+dedicated TTS worker thread, one synthesis at a time, the audio served from a temp file the
+route reaps a minute after the wire closes - dasHV writes string bodies only). The rig that
+scores the whole chain is `harness/tts_rig.py` over `harness/tts_synth.das`: the 200-sentence
+fixture through one model and voice, WER by parakeet, UTMOS by the metrics venv, one table.
 
 ### 1.7b Vision
 

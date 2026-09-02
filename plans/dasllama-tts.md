@@ -419,6 +419,46 @@ Exit gates (measured 2026-09-02; the same seams as phase 2, for the same reason)
 Exit gates: rig runs one command -> table; the server endpoint passes a curl-level dastest
 (dashv skill applies); REVIEW.das/lint/format green.
 
+**Receipts (2026-09-02):**
+- Facade: `synthesize_stream` (the reference sentence chunker, 400 chars, abbreviations and
+  decimals never split) + `synthesize`; `test_tts_facade.das` 9/9 (chunker, WAV writer,
+  streaming == buffered).
+- `dasllama_audio_io.das`: `pcm16_bytes` / `wav_pcm16_bytes` / `write_wav_pcm16`.
+- Server: `/v1/audio/speech` (`--tts`; one TTS worker thread, wav | pcm, compressed formats 400,
+  audio served from a temp file the drain reaps a minute after the wire closes). A TTS-only boot
+  is allowed (the slot-less path rides setup mode's guards); the no-slot refusal now runs before
+  any channel or worker exists. `test_openai_server_speech.das` 5/5 on a quiet box.
+- CLI: `utils/dasllama-server/txt2wav.das` (`--tts --text|--file --out [--voice --speed]`).
+- Rig: `harness/tts_rig.py` over `harness/tts_synth.das` - one command -> WER / UTMOS / RTF
+  table for every model:voice; the 200-sentence table is below.
+- Two defects the rig caught, both fixed:
+  1. **Every local container on the TTS path leaked** - a plain `var a : array<T>` / `let a <- f()`
+     is never freed at scope exit on the persistent heap (memory.md sec 3), and a synthesis
+     allocates hundreds of megabytes of activations per sentence: Kitten mini grew ~1 GB per
+     sentence and the OS killed the rig at sentence 175 (40 GB). 155 declarations swept to
+     `var inscope`; `heap_bytes_allocated()` is now flat across sentences (nano: 0x75 MB = the model).
+  2. **The server's TTS worker ran its kernels through the shared jobque team** - a new OS thread
+     defaults to team mode, so every per-timestep LSTM matmul published to the team and waited
+     (RTF 4-21, text encoder 1000x slower). The worker now calls `set_jobque_thread_team_mode`
+     like the ASR workers (inline under `hybrid`).
+- **The rig's first full table (200 sentences, 2202 words; parakeet-tdt-0.6b-v2 WER, UTMOS22
+  strong; M1 Max, warm JIT f32):**
+
+  | model:voice | WER % | UTMOS | audio s | gen s | RTF | reference arm E (WER / UTMOS) |
+  |---|---|---|---|---|---|---|
+  | kitten-nano:Bella | 3.81 | 3.963 | 1437.9 | 454.1 | 0.316* | 4.22 / 4.035 |
+  | kitten-mini:Bella | 4.36 | 4.337 | 1227.6 | 1231.3 | 1.003* | 4.00 / 3.996 |
+  | kokoro-82m:af_heart | 3.41 | 4.501 | 831.1 | 534.8 | 0.643 | 3.18 / 4.499 |
+
+  WER differences are a handful of words (1 word = 0.045%); the noise stream differs from the
+  reference's, so sample-level divergence is expected. Mini's UTMOS is 0.34 above the
+  reference because the reference arm runs the dynamic-uint8 ONNX graph and das runs the
+  dequantized f32 weights (the phase-2 step-0 ruling). *The nano and mini RTF columns are
+  contaminated: the speech-route dastest and the three TTS suites ran on the same box during
+  those two passes; the quiet-box figures stand at nano 0.18-0.20, mini 0.41-0.43 (the phase-2
+  receipts), kokoro 0.64-0.66 (this pass ran alone). The rig's own RTF column is honest only on
+  a quiet box - one process per box, as everywhere.
+
 ### Phase 5 - the surpass program (open-ended, rig-gated)
 
 Standing rule: no lexicon/rule change lands without a rig delta attached.

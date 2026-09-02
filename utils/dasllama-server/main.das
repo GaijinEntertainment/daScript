@@ -5,7 +5,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // dasllama-server — an OpenAI-compatible HTTP server over the dasLLAMA facade.
 //
 //   bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8]
-//                                                       [--kv-dtype f16] [--asr <asr.bin>] [--mmproj <mmproj.gguf>]
+//                                                       [--kv-dtype f16] [--asr <asr.bin>] [--mmproj <mmproj.gguf>] [--tts <tts.gguf>]
 //                                                       [--image-mmproj <mmproj.gguf>] [--config server.toml] [--tune]
 //
 // --config points at a TOML file whose keys mirror the long flag names (model = "...", port = 8080,
@@ -89,6 +89,9 @@ struct ServerArgs {
 
     @clarg_doc = "mmproj for the GGUF Qwen3-ASR route (paired with --asr)"
     mmproj : string
+
+    @clarg_doc = "Path to a TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m) — enables /v1/audio/speech"
+    tts : string
 
     @clarg_name = "image-mmproj"
     @clarg_doc = "Vision mmproj (gemma4uv, gemma4v, or gemma3v, sniffed) for the default model — enables image_url parts on /v1/chat/completions"
@@ -251,7 +254,7 @@ var private g_cfg_sources : table<string; string>
 var private g_cfg_authoritative = false
 
 let CONFIG_KEYS = fixed_array("model", "port", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
-    "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "asr_workers",
+    "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "asr_workers", "tts",
     "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "page_rows",
     "prefix", "flat", "mtp", "lcpp_bin", "models_dir", "models")
 
@@ -334,6 +337,9 @@ def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 �
     if (!empty(cfg.mmproj)) {
         g_cfg_sources["mmproj"] = "cli"
     }
+    if (!empty(cfg.tts)) {
+        g_cfg_sources["tts"] = "cli"
+    }
     if (!empty(cfg.image_mmproj)) {
         g_cfg_sources["image_mmproj"] = "cli"
     }
@@ -412,6 +418,7 @@ def apply_config(var cfg : ServerArgs) : bool {
     cfg_from_toml(root, "gpu_vram_mb", cfg.gpu_vram_mb, auth)
     cfg_from_toml(root, "asr", cfg.asr, auth)
     cfg_from_toml(root, "mmproj", cfg.mmproj, auth)
+    cfg_from_toml(root, "tts", cfg.tts, auth)
     cfg_from_toml(root, "image_mmproj", cfg.image_mmproj, auth)
     cfg_from_toml(root, "asr_workers", cfg.asr_workers, auth)
     cfg_from_toml(root, "ctx", cfg.ctx, auth)
@@ -603,6 +610,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         gpu_vram_mb = cfg.gpu_vram_mb,
         asr = cfg.asr,
         mmproj = cfg.mmproj,
+        tts = cfg.tts,
         image_mmproj = cfg.image_mmproj,
         asr_workers = cfg.asr_workers > 0 ? cfg.asr_workers : 1,
         ctx = cfg.ctx,
@@ -1008,6 +1016,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
 
         if (!empty(g_cfg.asr)) {
             configure_asr_workers(g_cfg.asr, g_cfg.mmproj, g_cfg.asr_workers > 0 ? g_cfg.asr_workers : 1)
+        }
+        if (!empty(g_cfg.tts)) {
+            configure_tts(g_cfg.tts)
         }
     }
 

@@ -384,6 +384,10 @@ sentence and checks the PCM is finite, non-silent, of speech length, and carries
 `test_tts_kokoro.das` - model-free suite; model-gated (`kokoro-82m.gguf` + `tts_oracle/kokoro/`):
 the vocabulary and style-row rule, the parity rail of `_tts_parity.das` against the PyTorch
 reference, and a facade smoke cell through the front end's own inventory.
+`test_tts_facade.das` - model-free suite: the sentence chunker (the reference driver's boundary
+rule, the character cap, the appended punctuation) and the WAV container; model-gated
+(`kitten-nano.gguf` + the front-end packs): the streaming form's chunks concatenate to the
+buffered synthesis sample for sample.
 `_tts_parity.das` - the rail both families run: token ids against the reference driver on every
 oracle case, identical durations on every case, and on the bring-up set every stage through the
 decoder output within 1e-4 of the oracle's peak, the sine source within 1e-4 fed the oracle's F0,

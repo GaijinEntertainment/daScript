@@ -25,7 +25,7 @@ require _model_tier
 [test]
 def test_symbol_map(t : T?) {
     t |> run("the corpus rewrites symbol for symbol") @(t : T?) {
-        let rows <- load_tts_corpus()
+        var inscope rows <- load_tts_corpus()
         var mismatches = 0
         for (r in rows) {
             let got = kitten_phonemes_from_misaki(r.ps_misaki)
@@ -44,7 +44,7 @@ def test_symbol_map(t : T?) {
     }
     t |> run("the token rule") @(t : T?) {
         // pad, "h", "i", space, ",", space, "w", space, ".", ellipsis, pad - punctuation is its own token
-        let ids <- kitten_token_ids("hi, w.")
+        var inscope ids <- kitten_token_ids("hi, w.")
         t |> equal(length(ids), 11)
         t |> equal(ids[0], 0)
         t |> equal(ids[3], 16, "the space symbol")
@@ -78,11 +78,11 @@ def private facade_smoke(t : T?; size : string) {
     }
     with_job_que() {
         setup_dasllama_jobque_()
-        let m <- load_tts_model(gguf_path(size))
-        let c <- caps(m)
+        var inscope m <- load_tts_model(gguf_path(size))
+        var inscope c <- caps(m)
         t |> equal(c.sample_rate, 24000)
         t |> equal(length(c.voices), 8)
-        let audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "Bella")
+        var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "Bella")
         t |> equal(audio.sample_rate, 24000)
         // 51 characters of text: well over a second of speech, under ten
         t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")

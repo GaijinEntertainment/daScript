@@ -148,7 +148,7 @@ def private need_tensor(m : GGUFMeta; name : string) : int {
 
 def private read_arr(m : GGUFMeta; bytes : array<uint8> | #; name : string) : array<float> {
     let ti = need_tensor(m, name)
-    var a : array<float>
+    var inscope a : array<float>
     a |> reserve_resize(m.tensors[ti].n_elem)
     gguf_read_tensor_f32(m, bytes, name, a, 0l, m.tensors[ti].n_elem)
     return <- a
@@ -160,7 +160,7 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
     if (!empty(bname) && gguf_find_tensor(m, bname) >= 0) {
         c.b <- read_arr(m, bytes, bname)
     }
-    let geo <- gguf_int_array(m, bytes, "styletts2.conv.{wname}")
+    var inscope geo <- gguf_int_array(m, bytes, "styletts2.conv.{wname}")
     c.k = geo[0]
     c.stride = geo[1]
     c.pad_l = geo[2]
@@ -381,7 +381,7 @@ def private read_decoder(m : GGUFMeta; bytes : array<uint8> | #; var d : St2Deco
 //! Load a converted StyleTTS2-lineage GGUF (harness/convert_kitten.py, harness/convert_kokoro.py):
 //! the shared weights, voices and STFT convention; family keys are the family file's to read.
 def load_styletts2(path : string) : StyleTts2Model {
-    var km = StyleTts2Model()
+    var inscope km = StyleTts2Model()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA styletts2: cannot open model '{path}'")
@@ -457,11 +457,11 @@ struct StyleTts2Trace {
 }
 
 def private albert_attention(a : St2Albert; h : array<float>; t : int64; var out : array<float>) {
-    var @scratch q : array<float>
-    var @scratch k : array<float>
-    var @scratch v : array<float>
-    var @scratch ctx : array<float>
-    var @scratch p : array<float>
+    var inscope @scratch q : array<float>
+    var inscope @scratch k : array<float>
+    var inscope @scratch v : array<float>
+    var inscope @scratch ctx : array<float>
+    var inscope @scratch p : array<float>
     linear_rows(a.q, h, t, q)
     linear_rows(a.k, h, t, k)
     linear_rows(a.v, h, t, v)
@@ -498,7 +498,7 @@ def styletts2_albert(a : St2Albert; ids : array<int>; @exact_size var out : arra
     if (t > a.max_pos) {
         panic("dasLLAMA styletts2: {t} tokens exceed the encoder's {a.max_pos} positions")
     }
-    var @exact_size e : array<float>
+    var inscope @exact_size e : array<float>
     e |> reserve_resize(t * a.emb_dim)
     for (i in range64(t)) {
         let id = int64(ids[i])
@@ -507,11 +507,11 @@ def styletts2_albert(a : St2Albert; ids : array<int>; @exact_size var out : arra
         }
     }
     layernorm_rows(e, t, a.emb_dim, a.emb_ln, ALBERT_EPS)
-    var @exact_size h : array<float>
+    var inscope @exact_size h : array<float>
     linear_rows(a.map_in, e, t, h)
-    var @scratch attn : array<float>
-    var @scratch f : array<float>
-    var @scratch f2 : array<float>
+    var inscope @scratch attn : array<float>
+    var inscope @scratch f : array<float>
+    var inscope @scratch f2 : array<float>
     let n = t * a.hidden
     for (_layer in range64(a.n_layers)) {
         albert_attention(a, h, t, attn)
@@ -535,7 +535,7 @@ def styletts2_albert(a : St2Albert; ids : array<int>; @exact_size var out : arra
 def styletts2_text_encoder(te : St2TextEncoder; ids : array<int>; @exact_size var out : array<float>) {
     let t = long_length(ids)
     let c = te.c
-    var @exact_size xtm : array<float>
+    var inscope @exact_size xtm : array<float>
     xtm |> reserve_resize(t * c)
     for (i in range64(t)) {
         let id = int64(ids[i])
@@ -543,9 +543,9 @@ def styletts2_text_encoder(te : St2TextEncoder; ids : array<int>; @exact_size va
             xtm[i * c + d] = te.emb[id * c + d]
         }
     }
-    var @exact_size x : array<float>
+    var inscope @exact_size x : array<float>
     transpose_tc(xtm, t, c, x)
-    var @exact_size y : array<float>
+    var inscope @exact_size y : array<float>
     for (i in range(length(te.cnn))) {
         conv1d(te.cnn[i], x, t, y)
         layernorm_channels(y, c, t, te.cnn_ln[i], LN_EPS)
@@ -575,8 +575,8 @@ def private append_style_rows(x : array<float>; t, c : int64; s : array<float>; 
 //! with the prosody style appended after each; out is token-major [T][C + style].
 def styletts2_duration_encoder(p : St2Predictor; d_en : array<float>; t : int64; s : array<float>; @exact_size var out : array<float>) {
     let c = p.bert_encoder.nout
-    var @exact_size x : array<float>
-    var @exact_size y : array<float>
+    var inscope @exact_size x : array<float>
+    var inscope @exact_size y : array<float>
     append_style_rows(d_en, t, c, s, x)
     for (i in range(length(p.lstms))) {
         bilstm(p.lstms[i], x, t, y)
@@ -590,8 +590,8 @@ def styletts2_duration_encoder(p : St2Predictor; d_en : array<float>; t : int64;
 //! Frame counts per token: sigmoid(duration logits) summed, divided by speed, rounded half
 //! to even, at least one. Returns the total frame count.
 def styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : float; @exact_size var dur : array<int>; @exact_size var raw : array<float>) : int64 {
-    var @exact_size x : array<float>
-    var @exact_size logits : array<float>
+    var inscope @exact_size x : array<float>
+    var inscope @exact_size logits : array<float>
     bilstm(p.lstm, d, t, x)
     linear_rows(p.duration_proj, x, t, logits)
     let nb = p.duration_proj.nout
@@ -619,31 +619,31 @@ def private copy_floats_into(src : array<float>; n : int64; @exact_size var dst 
 }
 
 def private adain_res_blk(b : St2AdainResBlk; x : array<float>; t : int64; s : array<float>; @exact_size var out : array<float>) : int64 {
-    var @exact_size r : array<float>
+    var inscope @exact_size r : array<float>
     copy_floats_into(x, b.dim_in * t, r)
     adain(b.norm1, r, b.dim_in, t, s, LN_EPS)
     leaky_relu(r, b.dim_in * t, 0.2)
     var t1 = t
     if (b.upsample) {
-        var @exact_size pooled : array<float>
+        var inscope @exact_size pooled : array<float>
         conv1d(b.pool, r, t, pooled)
         t1 = conv1d_out_len(b.pool, t)
         delete r
         r <- pooled
     }
-    var @exact_size c1 : array<float>
+    var inscope @exact_size c1 : array<float>
     conv1d(b.conv1, r, t1, c1)
     adain(b.norm2, c1, b.dim_out, t1, s, LN_EPS)
     leaky_relu(c1, b.dim_out * t1, 0.2)
     conv1d(b.conv2, c1, t1, out)
-    var @exact_size sc : array<float>
+    var inscope @exact_size sc : array<float>
     if (b.upsample) {
         resize_nearest(x, b.dim_in, t, 2l, sc)
     } else {
         copy_floats_into(x, b.dim_in * t, sc)
     }
     if (b.learned_sc) {
-        var @exact_size sc2 : array<float>
+        var inscope @exact_size sc2 : array<float>
         conv1d(b.conv1x1, sc, t1, sc2)
         delete sc
         sc <- sc2
@@ -656,8 +656,8 @@ def private adain_res_blk(b : St2AdainResBlk; x : array<float>; t : int64; s : a
 }
 
 def private prosody_branch(blocks : array<St2AdainResBlk>; proj : TtsConv1d; x : array<float>; frames : int64; s : array<float>; @exact_size var out : array<float>) : int64 {
-    var @exact_size a : array<float>
-    var @exact_size b : array<float>
+    var inscope @exact_size a : array<float>
+    var inscope @exact_size b : array<float>
     copy_floats_into(x, long_length(x), a)
     var t = frames
     for (blk in blocks) {
@@ -673,9 +673,9 @@ def private prosody_branch(blocks : array<St2AdainResBlk>; proj : TtsConv1d; x :
 //! each branch's three residual blocks (the middle one doubles the frame rate) and projection.
 def styletts2_prosody(p : St2Predictor; en : array<float>; c, frames : int64; s : array<float>;
                       @exact_size var f0 : array<float>; @exact_size var n : array<float>) : int64 {
-    var @exact_size en_tm : array<float>
-    var @exact_size x_tm : array<float>
-    var @exact_size x : array<float>
+    var inscope @exact_size en_tm : array<float>
+    var inscope @exact_size x_tm : array<float>
+    var inscope @exact_size x : array<float>
     transpose_ct(en, c, frames, en_tm)
     bilstm(p.shared_lstm, en_tm, frames, x_tm)
     let width = 2l * p.shared_lstm.fwd.hidden
@@ -687,9 +687,9 @@ def styletts2_prosody(p : St2Predictor; en : array<float>; c, frames : int64; s 
 
 def private gen_res_block(b : St2GenResBlock; var x : array<float>; t : int64; s : array<float>) {
     let n = b.c * t
-    var @exact_size xt : array<float>
-    var @exact_size y1 : array<float>
-    var @exact_size y2 : array<float>
+    var inscope @exact_size xt : array<float>
+    var inscope @exact_size y1 : array<float>
+    var inscope @exact_size y2 : array<float>
     for (j in range(length(b.convs1))) {
         copy_floats_into(x, n, xt)
         adain(b.adain1[j], xt, b.c, t, s, LN_EPS)
@@ -708,7 +708,7 @@ def private gen_res_block(b : St2GenResBlock; var x : array<float>; t : int64; s
 //! frames * upsample samples.
 def styletts2_source(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; f0_frames : int64;
                      noise : TtsNoise; @exact_size var har : array<float>) : int64 {
-    var @exact_size sines : array<float>
+    var inscope @exact_size sines : array<float>
     let n = sine_source(cfg, f0, f0_frames, noise.uniform, noise.normal, sines)
     linear_rows(d.source_linear, sines, n, har)
     tanh_inplace(har, n)
@@ -719,14 +719,14 @@ def styletts2_source(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; f0_
 //! [2 * bins][frames] (magnitude rows, then phase rows).
 def styletts2_har_spectrum(d : St2Decoder; har : array<float>; n : int64; var tr : StyleTts2Trace?;
                            @exact_size var har_spec : array<float>) : int64 {
-    var @exact_size padded : array<float>
+    var inscope @exact_size padded : array<float>
     if (d.stft_pad_reflect) {
         pad_reflect(har, n, STFT_PAD, padded)
     } else {
         pad_edge(har, n, STFT_PAD, padded)
     }
-    var @exact_size re : array<float>
-    var @exact_size im : array<float>
+    var inscope @exact_size re : array<float>
+    var inscope @exact_size im : array<float>
     conv1d(d.stft_fwd_re, padded, n + 2l * STFT_PAD, re)
     conv1d(d.stft_fwd_im, padded, n + 2l * STFT_PAD, im)
     let frames = conv1d_out_len(d.stft_fwd_re, n + 2l * STFT_PAD)
@@ -742,9 +742,9 @@ def styletts2_har_spectrum(d : St2Decoder; har : array<float>; n : int64; var tr
 
 def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var cc, tt : int64&; s : array<float>;
                             har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?) {
-    var @exact_size y : array<float>
-    var @exact_size xs : array<float>
-    var @exact_size src : array<float>
+    var inscope @exact_size y : array<float>
+    var inscope @exact_size xs : array<float>
+    var inscope @exact_size src : array<float>
     leaky_relu(x, cc * tt, 0.1)
     conv1d(d.noise_convs[i], har_spec, har_frames, src)
     let src_t = conv1d_out_len(d.noise_convs[i], har_frames)
@@ -809,7 +809,7 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
 //! its noise branch and refining through Snake residual blocks, then the inverse STFT.
 def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : array<float>;
                         har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?; @exact_size var wave : array<float>) : int64 {
-    var @exact_size x : array<float>
+    var inscope @exact_size x : array<float>
     copy_floats_into(x_in, c * t, x)
     var cc = c
     var tt = t
@@ -817,16 +817,16 @@ def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : a
         generator_stage(d, i, x, cc, tt, s, har_spec, har_frames, tr)
     }
     leaky_relu(x, cc * tt, 0.01)
-    var @exact_size y : array<float>
+    var inscope @exact_size y : array<float>
     conv1d(d.conv_post, x, tt, y)
     if (tr != null) {
         tr.conv_post := y
     }
-    var @exact_size re : array<float>
-    var @exact_size im : array<float>
+    var inscope @exact_size re : array<float>
+    var inscope @exact_size im : array<float>
     polar_to_rect(y, d.bins, tt, re, im)
-    var @exact_size wr : array<float>
-    var @exact_size wi : array<float>
+    var inscope @exact_size wr : array<float>
+    var inscope @exact_size wi : array<float>
     conv1d(d.stft_bwd_re, re, tt, wr)
     conv1d(d.stft_bwd_im, im, tt, wi)
     let full = conv1d_out_len(d.stft_bwd_re, tt)
@@ -880,17 +880,17 @@ def private styletts2_decode(d : St2Decoder; text_c : int64; source : SineSource
                              f0, nrg : array<float>; f2 : int64; s_ref : array<float>; var noise : TtsNoise; seed : uint64;
                              var tr : StyleTts2Trace?; var tm : TtsTimings) : array<float> {
     var clock = ref_time_ticks()
-    var @exact_size f0d : array<float>
-    var @exact_size nd : array<float>
-    var @exact_size res : array<float>
+    var inscope @exact_size f0d : array<float>
+    var inscope @exact_size nd : array<float>
+    var inscope @exact_size res : array<float>
     conv1d(d.f0_conv, f0, f2, f0d)
     conv1d(d.n_conv, nrg, f2, nd)
     conv1d(d.asr_res, asr, frames, res)
     if (tr != null) {
         tr.asr_res := res
     }
-    var @exact_size x : array<float>
-    var @exact_size y : array<float>
+    var inscope @exact_size x : array<float>
+    var inscope @exact_size y : array<float>
     concat_channels(asr, text_c, f0d, nd, res, false, frames, x)
     var t = adain_res_blk(d.encode, x, frames, s_ref, y)
     var cw = d.encode.dim_out
@@ -913,16 +913,16 @@ def private styletts2_decode(d : St2Decoder; text_c : int64; source : SineSource
     tm.decoder_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
     styletts2_draw_noise(source, f2, seed, noise)
-    var @exact_size har : array<float>
+    var inscope @exact_size har : array<float>
     let n = styletts2_source(d, source, f0, f2, noise, har)
     if (tr != null) {
         tr.har := har
     }
-    var @exact_size har_spec : array<float>
+    var inscope @exact_size har_spec : array<float>
     let har_frames = styletts2_har_spectrum(d, har, n, tr, har_spec)
     tm.source_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    var @exact_size wave : array<float>
+    var inscope @exact_size wave : array<float>
     styletts2_generator(d, y, cw, t, s_ref, har_spec, har_frames, tr, wave)
     tm.generator_us = int64(get_time_usec(clock))
     tm.samples = long_length(wave)
@@ -938,55 +938,55 @@ def styletts2_synthesize(m : StyleTts2Model; ids : array<int>; style : array<flo
     var clock = start
     let t = long_length(ids)
     let hs = m.style_dim / 2l
-    var @exact_size s_ref : array<float>
-    var @exact_size s_pro : array<float>
+    var inscope @exact_size s_ref : array<float>
+    var inscope @exact_size s_pro : array<float>
     s_ref |> reserve_resize(hs)
     s_pro |> reserve_resize(hs)
     for (i in range64(hs)) {
         s_ref[i] = style[i]
         s_pro[i] = style[hs + i]
     }
-    var @exact_size bert : array<float>
+    var inscope @exact_size bert : array<float>
     styletts2_albert(m.albert, ids, bert)
-    var @exact_size d_en : array<float>
+    var inscope @exact_size d_en : array<float>
     linear_rows(m.predictor.bert_encoder, bert, t, d_en)
     if (tr != null) {
         tr.bert := d_en
     }
     tm.bert_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    var @exact_size t_en : array<float>
+    var inscope @exact_size t_en : array<float>
     styletts2_text_encoder(m.text_encoder, ids, t_en)
     if (tr != null) {
         tr.text_enc := t_en
     }
     tm.text_enc_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    var @exact_size d : array<float>
+    var inscope @exact_size d : array<float>
     styletts2_duration_encoder(m.predictor, d_en, t, s_pro, d)
     let dc = m.predictor.bert_encoder.nout + hs
-    var @exact_size dur : array<int>
-    var @exact_size raw : array<float>
+    var inscope @exact_size dur : array<int>
+    var inscope @exact_size raw : array<float>
     let frames = styletts2_durations(m.predictor, d, t, speed, dur, raw)
     if (tr != null) {
         tr.dur_raw := raw
         tr.frames = frames
     }
-    var @exact_size en : array<float>
-    var @exact_size asr : array<float>
+    var inscope @exact_size en : array<float>
+    var inscope @exact_size asr : array<float>
     align_expand_rows(d, t, dc, dur, en)
     align_expand_channels(t_en, m.text_encoder.c, t, dur, asr)
     tm.duration_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    var @exact_size f0 : array<float>
-    var @exact_size nrg : array<float>
+    var inscope @exact_size f0 : array<float>
+    var inscope @exact_size nrg : array<float>
     let f2 = styletts2_prosody(m.predictor, en, dc, frames, s_pro, f0, nrg)
     if (tr != null) {
         tr.f0 := f0
         tr.n := nrg
     }
     tm.prosody_us = int64(get_time_usec(clock))
-    var wave <- styletts2_decode(m.decoder, m.text_encoder.c, m.source, asr, frames, f0, nrg, f2, s_ref, noise, seed, tr, tm)
+    var inscope wave <- styletts2_decode(m.decoder, m.text_encoder.c, m.source, asr, frames, f0, nrg, f2, s_ref, noise, seed, tr, tm)
     tm.total_us = tm.front_end_us + int64(get_time_usec(start))
     return <- wave
 }

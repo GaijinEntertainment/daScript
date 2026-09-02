@@ -64,6 +64,10 @@ Run under ``-jit`` --- interpreted inference is far too slow for model work::
      -
      - ---
      - mmproj GGUF for the Qwen3-ASR route (paired with ``--asr``)
+   * - ``--tts``
+     -
+     - ---
+     - TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m) --- enables ``/v1/audio/speech``
    * - ``--image-mmproj``
      -
      - ---
@@ -103,9 +107,11 @@ dasLLAMA application on the box — no per-app scope declaration, since requirin
 dasLLAMA pulls in its ``[tune_scope]``. Two sibling CLI tools ship alongside
 the server, each with the same ``[tune_policy(missing = "auto")]`` and reading
 the same manifest: ``ask`` (a one-shot ``--prompt`` → completion, reporting
-ttft and prefill/decode t/s) and ``wav2txt`` (an ``--file`` audio → transcript,
-reporting decode/transcribe time and the real-time factor). Whichever of the
-three you run first tunes the box; the rest are then instant. See
+ttft and prefill/decode t/s), ``wav2txt`` (an ``--file`` audio → transcript,
+reporting decode/transcribe time and the real-time factor) and ``txt2wav`` (a
+``--tts`` model plus ``--text`` or ``--file`` → a WAV, reporting the per-stage
+synthesis time and the real-time factor). Whichever of the four you run first
+tunes the box; the rest are then instant. See
 :ref:`Kernel tuning <tune>` for the framework, and
 ``modules/dasLLAMA/tune_for_this_box.md`` for the measurement discipline.
 
@@ -138,6 +144,9 @@ Endpoints
    * - ``POST``
      - ``/v1/audio/translations``
      - Speech→English text (needs ``--asr``)
+   * - ``POST``
+     - ``/v1/audio/speech``
+     - Text→speech (needs ``--tts``); ``response_format`` ``wav`` (default) or ``pcm``
    * - ``POST``
      - ``/v1/models/activate``
      - ``{"model": name}`` — make ``name`` the default + stepped slot and move the GPU tier to it now (loopback-only; 409 while work is live)

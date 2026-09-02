@@ -58,9 +58,9 @@ def private kitten_word_cpt(c : int) : bool {
 //! driver's re-spacing (runs of word characters and single punctuation marks, one space
 //! between), unknown symbols dropped, wrapped in pad / ellipsis / pad.
 def kitten_token_ids(ps : string) : array<int> {
-    let sym <- {for (c, i in KITTEN_SYMBOL_CPTS, KITTEN_SYMBOL_IDS); c => i}
+    var inscope sym <- {for (c, i in KITTEN_SYMBOL_CPTS, KITTEN_SYMBOL_IDS); c => i}
     var inscope cps <- utf8_to_cpts(ps)
-    var ids : array<int>
+    var inscope ids : array<int>
     ids |> push(0)
     let space_id = sym?[' '] ?? 0
     var in_word = false
@@ -101,21 +101,21 @@ struct KittenFamily {
 
 //! Read the `kitten.*` metadata of a converted KittenTTS GGUF.
 def load_kitten_family(path : string) : KittenFamily {
-    var fam = KittenFamily()
+    var inscope fam = KittenFamily()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA kitten: cannot open model '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
-        let voices <- gguf_str_array(m, bytes, "styletts2.voices")
+        var inscope voices <- gguf_str_array(m, bytes, "styletts2.voices")
         for (v in voices) {
             if (gguf_has(m, "kitten.speed_prior.{v}")) {
                 fam.speed_priors[v] = gguf_f32(m, bytes, "kitten.speed_prior.{v}")
             }
         }
-        let anames <- gguf_str_array(m, bytes, "kitten.alias_names")
-        let avoices <- gguf_str_array(m, bytes, "kitten.alias_voices")
+        var inscope anames <- gguf_str_array(m, bytes, "kitten.alias_names")
+        var inscope avoices <- gguf_str_array(m, bytes, "kitten.alias_voices")
         for (an, av in anames, avoices) {
             fam.aliases[an] = av
         }

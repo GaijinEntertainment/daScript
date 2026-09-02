@@ -96,7 +96,7 @@ def spectrum_diff(t : T?; tag : string; ours, ref : array<float>; bins, frames :
 }
 
 def dump_f(dump : table<string; TtsDumpTensor>; name : string) : array<float> {
-    var out : array<float>
+    var inscope out : array<float>
     dump |> get(name) $(tensor) {
         out := tensor.f
     }
@@ -104,7 +104,7 @@ def dump_f(dump : table<string; TtsDumpTensor>; name : string) : array<float> {
 }
 
 def dump_i(dump : table<string; TtsDumpTensor>; name : string) : array<int> {
-    var out : array<int>
+    var inscope out : array<int>
     dump |> get(name) $(tensor) {
         out := tensor.i
     }
@@ -118,26 +118,26 @@ def case_noise(dump : table<string; TtsDumpTensor>) : TtsNoise {
 // the generator fed the oracle's own F0 curve, source signal and decoder output: block
 // correctness at the seams, with the phase drift the predictor's rounding noise induces taken out
 def private seam_check(t : T?; m : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>) {
-    let f0 <- dump_f(dump, "f0")
-    let gen_in <- dump_f(dump, "gen_in")
-    let style <- dump_f(dump, "style")
+    var inscope f0 <- dump_f(dump, "f0")
+    var inscope gen_in <- dump_f(dump, "gen_in")
+    var inscope style <- dump_f(dump, "style")
     let hs = m.style_dim / 2l
-    var s_ref : array<float>
+    var inscope s_ref : array<float>
     s_ref |> resize(hs)
     for (i in range64(hs)) {
         s_ref[i] = style[i]
     }
     let f2 = long_length(f0)
     let cw = long_length(gen_in) / f2
-    let noise <- case_noise(dump)
+    var inscope noise <- case_noise(dump)
     var tr = new StyleTts2Trace()
-    var har : array<float>
+    var inscope har : array<float>
     let n = styletts2_source(m.decoder, m.source, f0, f2, noise, har)
     stage_diff(t, "{tag} SOURCE", "har", har, dump, true)
-    let har_ref <- dump_f(dump, "har")
-    var spec : array<float>
+    var inscope har_ref <- dump_f(dump, "har")
+    var inscope spec : array<float>
     let frames = styletts2_har_spectrum(m.decoder, har_ref, n, tr, spec)
-    let spec_ref <- dump_f(dump, "har_spec")
+    var inscope spec_ref <- dump_f(dump, "har_spec")
     if (!empty(spec_ref)) {
         // the reference's FFT and a direct sum agree on the magnitude everywhere and on the phase
         // wherever the magnitude is meaningful; below that the phase is rounding noise the network
@@ -145,7 +145,7 @@ def private seam_check(t : T?; m : StyleTts2Model; tag : string; dump : table<st
         spectrum_diff(t, "{tag} SPECTRUM", spec, spec_ref, m.decoder.bins, frames)
         spec := spec_ref
     }
-    var wave : array<float>
+    var inscope wave : array<float>
     styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, tr, wave)
     stage_diff(t, "{tag} SEAM", "stft_re", tr.stft_re, dump)
     stage_diff(t, "{tag} SEAM", "ups0", tr.ups0, dump)
@@ -179,14 +179,14 @@ def tts_parity(t : T?; rig : TtsParityRig) {
         t |> skip("{base_name(rig.gguf)} not present")
         return
     }
-    let mf <- load_tts_oracle_manifest(rig.oracle_dir)
+    var inscope mf <- load_tts_oracle_manifest(rig.oracle_dir)
     if (empty(mf.cases)) {
         t |> skip("{rig.oracle_dir} not stocked")
         return
     }
     with_job_que() {
         setup_dasllama_jobque_()
-        let m <- load_styletts2(rig.gguf)
+        var inscope m <- load_styletts2(rig.gguf)
         t |> equal(m.family, rig.family)
         t |> equal(m.sample_rate, 24000)
         var ids_ok = 0
@@ -195,18 +195,18 @@ def tts_parity(t : T?; rig : TtsParityRig) {
         var worst_case = ""
         for (c in mf.cases) {
             let tag = "{rig.family} {c.id} {c.voice}"
-            let dump <- load_tts_dump(path_join(rig.oracle_dir, c.file))
-            let ids <- dump_i(dump, "input_ids")
-            let ours <- invoke(rig.ids, c.ps_espeak)
+            var inscope dump <- load_tts_dump(path_join(rig.oracle_dir, c.file))
+            var inscope ids <- dump_i(dump, "input_ids")
+            var inscope ours <- invoke(rig.ids, c.ps_espeak)
             if (same_ints(ours, ids)) {
                 ids_ok++
             } else {
                 to_log(LOG_INFO, "{tag}: token ids differ - ours {ours}\n   oracle {ids}\n")
             }
-            var noise <- case_noise(dump)
+            var inscope noise <- case_noise(dump)
             var tr = new StyleTts2Trace()
             var tm = TtsTimings()
-            let wave <- styletts2_synthesize(m, ids, dump_f(dump, "style"), c.speed, noise, 0ul, tr, tm)
+            var inscope wave <- styletts2_synthesize(m, ids, dump_f(dump, "style"), c.speed, noise, 0ul, tr, tm)
             dump |> get("waveform") $(ref) {
                 if (length(wave) != length(ref.f)) {
                     t |> failure("{tag}: {length(wave)} samples, oracle has {length(ref.f)} (frames {tr.frames} vs {c.duration_sum})")

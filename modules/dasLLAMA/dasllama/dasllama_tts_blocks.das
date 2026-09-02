@@ -131,8 +131,8 @@ let private CONV_CHUNK = 1024l   // im2col rows per GEMM
 def private conv1d_dense(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
     let kw = c.cin * c.k
-    var @scratch col : array<float>
-    var @scratch ytm : array<float>
+    var inscope @scratch col : array<float>
+    var inscope @scratch ytm : array<float>
     col |> reserve_resize(CONV_CHUNK * kw)
     ytm |> reserve_resize(CONV_CHUNK * c.cout)
     var t0 = 0l
@@ -190,8 +190,8 @@ def private conv1d_transposed_dense(c : TtsConv1d; x : array<float>; t_in : int6
         }
     }
     let d = c.cout * c.k
-    var @scratch xtm : array<float>
-    var @scratch v : array<float>
+    var inscope @scratch xtm : array<float>
+    var inscope @scratch v : array<float>
     transpose_ct(x, c.cin, t_in, xtm)
     v |> reserve_resize(t_in * d)
     matmul_batch(v, c.wt, xtm, c.cin, d, t_in)
@@ -343,7 +343,7 @@ def instance_norm_channels(var x : array<float>; c, t : int64; n : TtsNorm; eps 
 //! AdaIN1d in place on x [C][T]: (1 + gamma[c]) * instance_norm(x) + beta[c], gamma and beta
 //! the halves of fc(style).
 def adain(a : TtsAdaIn; var x : array<float>; c, t : int64; style : array<float>; eps : float) {
-    var @scratch h : array<float>
+    var inscope @scratch h : array<float>
     linear_vec(a.fc, style, h)
     instance_norm_channels(x, c, t, a.norm, eps)
     for (ci in range64(c)) {
@@ -358,7 +358,7 @@ def adain(a : TtsAdaIn; var x : array<float>; c, t : int64; style : array<float>
 
 //! AdaLayerNorm in place on token-major x [T][C]: (1 + gamma) * layernorm(row) + beta.
 def ada_layernorm_rows(a : TtsAdaLayerNorm; var x : array<float>; t, c : int64; style : array<float>; eps : float) {
-    var @scratch h : array<float>
+    var inscope @scratch h : array<float>
     linear_vec(a.fc, style, h)
     layernorm_channels_rows(x, t, c, eps)
     for (r in range64(t)) {
@@ -401,11 +401,11 @@ def private sigmoid_f(x : float) : float {
 def private lstm_direction(l : TtsLstm; x : array<float>; t : int64; reverse : bool;
                            var y : array<float>; ystride, yoff : int64) {
     let hd = l.hidden
-    var @scratch h : array<float>
-    var @scratch cst : array<float>
-    var @scratch xin : array<float>
-    var @scratch gates : array<float>
-    var @scratch gates2 : array<float>
+    var inscope @scratch h : array<float>
+    var inscope @scratch cst : array<float>
+    var inscope @scratch xin : array<float>
+    var inscope @scratch gates : array<float>
+    var inscope @scratch gates2 : array<float>
     h |> reserve_resize(hd)
     cst |> reserve_resize(hd)
     xin |> reserve_resize(l.nin)
@@ -685,7 +685,7 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
                 @exact_size var out : array<float>) : int64 {
     let n = frames * cfg.upsample
     let nh = cfg.n_harm
-    var @exact_size rad : array<float>
+    var inscope @exact_size rad : array<float>
     rad |> reserve_resize(nh * n)
     for (h in range64(nh)) {
         let mult = float(h + 1l)
@@ -697,7 +697,7 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
             rad[h * n] += noise_u[h]
         }
     }
-    var @exact_size low : array<float>
+    var inscope @exact_size low : array<float>
     let nlow = source_resize(cfg, rad, nh, n, 1.0 / float(cfg.upsample), low)
     // the reference's operation order, kept exactly: the phase reaches 1e5 radians, where one
     // float32 ulp is a hundredth of a radian, so a reassociated product is an audible change
@@ -714,7 +714,7 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
             low[h * nlow + i] = ((acc * 2.0) * PI) * float(cfg.upsample)
         }
     }
-    var @exact_size phase : array<float>
+    var inscope @exact_size phase : array<float>
     let nup = source_resize(cfg, low, nh, nlow, float(cfg.upsample), phase)
     if (nup != n) {
         panic("dasLLAMA tts: sine source resample {nlow} -> {nup} samples, want {n}")

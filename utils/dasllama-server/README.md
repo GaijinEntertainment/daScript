@@ -31,12 +31,13 @@ Run under `-jit` - interpreted inference is far too slow. Flags:
 | `--asr` | `-a` | - | ASR model (whisper/parakeet/qwen3-asr) - enables the `/v1/audio/*` routes |
 | `--asr-workers` | - | `1` | Long-lived ASR request threads; each owns a model and reusable session. Set `2` for two parallel transcriptions |
 | `--mmproj` | - | - | mmproj GGUF for the Qwen3-ASR route (paired with `--asr`) |
+| `--tts` | - | - | TTS model GGUF (`kitten-nano`, `kitten-mini`, `kokoro-82m`; the front-end packs `tts_g2p.bin` + `tts_postag.bin` sit beside it) - enables `/v1/audio/speech` |
 | `--image-mmproj` | - | - | Vision mmproj (gemma4uv, gemma4v, or gemma3v, sniffed) for the default model - enables `image_url` parts on `/v1/chat/completions`. Per-model in a `[[models]]` roster: `image_mmproj = "..."`. When the file also carries a gemma4a audio encoder (the E-series mmproj carries both towers), the same flag arms **native audio**: `input_audio` parts serve through the same slot - one decoder, one mmproj, no dedicated ASR model copy |
 | `--ctx` | - | *model* | Context-length cap in tokens (default: the model's trained `context_length`; set it to bound `--flat` KV or trim RAM) |
 | `--max-tokens` | - | `256` | Default reply token budget when a request omits `max_tokens` (clamped to `--ctx` per request) |
 | `--streams` | `-s` | `4` | Max concurrent generation streams |
 | `--threads` | `-t` | `16` | Worker-lane cap for the matmul dispatch (`-1` = all cores) - decode is bandwidth-bound, so an uncapped dispatch just fights the rest of the box |
-| `--team-dispatch` | - | `hybrid` | `hybrid`: LLM uses the worker team while ASR callers run inline; `team`: all callers use serialized team publishes; `inline`: every caller runs independently |
+| `--team-dispatch` | - | `hybrid` | `hybrid`: LLM uses the worker team while the ASR and TTS workers run inline; `team`: all callers use serialized team publishes; `inline`: every caller runs independently |
 | `--chunk` | - | `64` | Prefill quantum in tokens - decode stalls at most this per tick |
 | `--page-rows` | - | `64` | KV page size in positions for paged serving |
 | `--prefix` | - | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
@@ -58,7 +59,7 @@ ctx = 4096
 max_tokens = 4096  # default reply budget for clients that omit max_tokens (e.g. `llm chat`)
 streams = 4
 threads = 16       # matmul dispatch lane cap; -1 = all cores
-team_dispatch = "hybrid" # LLM team dispatch + independent inline ASR caller threads
+team_dispatch = "hybrid" # LLM team dispatch + independent inline ASR/TTS worker threads
 asr_workers = 2    # two independent transcription requests; each worker owns an ASR model
 ```
 
@@ -182,6 +183,7 @@ Windows locks the DLLs.
 | `POST` | `/v1/embeddings` | Mean-pooled, L2-normalized sentence embeddings |
 | `POST` | `/v1/audio/transcriptions` | Speech->text (multipart upload; needs `--asr`). `response_format=verbose_json` adds timed segments |
 | `POST` | `/v1/audio/translations` | Speech->English text (needs `--asr`) |
+| `POST` | `/v1/audio/speech` | Text->speech (needs `--tts`): `{"input", "voice"?, "speed"?, "response_format"?: "wav" \| "pcm"}` - the OpenAI shape; `wav` (default) is 16-bit PCM at the model's rate, `pcm` the raw samples; the compressed formats answer `400` (no encoder here). One synthesis at a time on the TTS worker (its kernels run inline under `hybrid`, like the ASR workers'), 16 queued |
 | `POST` | `/vad` | Silero speech spans over an uploaded clip (the control page's waveform overlay; in-handler, <=120 s, needs the in-repo `silero_vad.bin`) |
 | `GET`  | `/catalog` | The curated model list with local presence + the download state machine (`idle | downloading | verifying | done | failed`, byte progress) |
 | `POST` | `/catalog/download` | `{"name": <entry>}` - start one catalog download; `{"name", "tower": "vision"}` / `{"tower": "asr"}` pull a tower (409 while one runs or the file exists; sha-verified, never waived) |
@@ -409,6 +411,10 @@ absent; set `DASLLAMA_MODELS_DIR`):
   token spans, and comes back as a caption about the picture; plus the decode-failure and
   remote-URL 400s. Needs `gemma-4-12B-it-Q4_K_M.gguf`, `mmproj-gemma-4-12B-it-BF16.gguf` and the
   coco cats jpeg.
+- `test_openai_server_speech.das` - the speech route end to end on a TTS-only boot: a WAV answer
+  with a RIFF header of speech length, the raw `pcm` form, the declined `mp3`, the missing
+  `input`, the unknown voice, and the TTS id on `/v1/models`. Needs `kitten-nano.gguf` and the
+  front-end packs beside it.
 - `test_exchange_client.das` - the exception: model-free and runs everywhere. The sidecar
   exchange client against a fake exchange on 127.0.0.1:18131 (lookup/pick, the fetch-and-apply
   gate, applied_box staleness, the privacy strip, both submit rails, policy parsing).

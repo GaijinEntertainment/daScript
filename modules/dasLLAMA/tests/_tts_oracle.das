@@ -52,7 +52,7 @@ def private dump_str(b : array<uint8> | #; o, n : int64) : string {
 
 //! Read one dump into name -> tensor.
 def load_tts_dump(path : string) : table<string; TtsDumpTensor> {
-    var out : table<string; TtsDumpTensor>
+    var inscope out : table<string; TtsDumpTensor>
     let f = fopen(path, "rb")
     if (f == null) {
         panic("tts oracle: cannot open {path}")
