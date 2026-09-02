@@ -1585,11 +1585,11 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
     t0 |> run("the four-wide decode twin and its stripped fallback, on the device, against one CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device")
                 return
             }
             if (!(g_gpu.coopmat_mode == 4 && g_gpu.has_coopmat2)) {
-                feint("the cm2 l-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2) - skipping\n")
+                t |> skip("the cm2 l-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2)")
                 return
             }
             let twin_device = g_gpu.decvec_on
@@ -1647,6 +1647,11 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
             y_ref |> resize(rows * d)
             q8f16_gemm_oracle(wqh, wsh, xfh, sched, 2, n, d, y_ref)
             let floor = 4e-3 * max_abs(y_ref)
+            var y_sentinel : array<uint>
+            y_sentinel |> resize(rows * d)
+            for (i in range(rows * d)) {
+                y_sentinel[i] = 0x7fc00000u   // a NaN: a stale or unwritten output cannot sit inside any bar
+            }
             unsafe {
                 upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
                 upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
@@ -1657,6 +1662,7 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
                 for (arm in range(2)) {
                     var y_cls : array<float>
                     y_cls |> resize(rows * d)
+                    upload_region_at(yd2, 0l, addr<uint8 const?>(y_sentinel[0]), y_bytes)
                     var sc = (arm == 0
                         ? set_toy_q8_cm2_strip_cls(fixed_array(wqd, wsd, scd, xfd, yd2),
                             fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u))
@@ -1681,16 +1687,21 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
                     let what = arm == 0 ? "stripped (scalar callback)" : (twin_device ? "the four-wide twin" : "the twin stamp on a device without the callback")
                     to_log(LOG_INFO, "cm2 decode pair, {what}: {bad} of {rows * d} off the oracle\n")
                     t |> success(bad == 0, "{what} matches the CPU oracle ({bad} of {rows * d} off)")
+                    var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                    y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                    t |> success(mismatch_bars(y_poison, y_ref, 2e-2, floor) > 0, "the pair's bar reds a poisoned element")
+                    delete y_poison
                     delete y_cls
                 }
             }
             delete sched
             delete y_ref
+            delete y_sentinel
             delete wqh
             delete wsh
             delete xfh
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }

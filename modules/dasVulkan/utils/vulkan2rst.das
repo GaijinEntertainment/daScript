@@ -58,7 +58,7 @@ def document_module_vulkan_commands() {
         group_by_regex("Commands & queries", mod, %regex~^(create_(command_pool|query_pool|indirect_commands_layout_e_x_t|indirect_commands_layout_n_v|indirect_execution_set_e_x_t)|allocate_command_buffers)$%%),
         group_by_regex("Synchronization",   mod, %regex~^create_(fence|semaphore|event)$%%),
         group_by_regex("Surfaces & swapchains", mod, %regex~^create_(display_mode_k_h_r|display_plane_surface_k_h_r|headless_surface_e_x_t|swapchain.*|shared_swapchains_k_h_r)$%%),
-        group_by_regex("Acceleration & advanced", mod, %regex~^create_(acceleration_structure.*|micromap_e_x_t|optical_flow_session_n_v|external_compute_queue_n_v|cu_function_n_v_x|cu_module_n_v_x|tensor_view_a_r_m|tensor_a_r_m|video_session_k_h_r|video_session_parameters_k_h_r)$%%)
+        group_by_regex("Acceleration & advanced", mod, %regex~^create_(acceleration_structure.*|micromap_e_x_t|optical_flow_session_n_v|gpa_session_a_m_d|external_compute_queue_n_v|cu_function_n_v_x|cu_module_n_v_x|tensor_view_a_r_m|tensor_a_r_m|video_session_k_h_r|video_session_parameters_k_h_r)$%%)
     )
     document("Commands — RAII creators returning owning handle wrappers", mod, "vulkan_commands.rst", groups)
 }

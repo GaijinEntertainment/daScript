@@ -5,7 +5,10 @@
 # the VULKAN_SDK bin before PATH so a stale SDK earlier on PATH cannot win; the
 # module build itself never touches the SDK (vendored headers + volk), so
 # including this file is inert -- only calling the macro needs the tools.
-SET(DAS_VULKAN_SDK_BIN_HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
+SET(DAS_VULKAN_SDK_BIN_HINTS "")
+IF(DEFINED ENV{VULKAN_SDK} AND NOT "$ENV{VULKAN_SDK}" STREQUAL "")
+    SET(DAS_VULKAN_SDK_BIN_HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
+ENDIF()
 FIND_PROGRAM(DAS_VULKAN_GLSLANG_VALIDATOR_EXE glslangValidator HINTS ${DAS_VULKAN_SDK_BIN_HINTS})
 FIND_PROGRAM(DAS_VULKAN_SPIRV_OPT_EXE spirv-opt HINTS ${DAS_VULKAN_SDK_BIN_HINTS})
 FIND_PROGRAM(DAS_VULKAN_SPIRV_DIS_EXE spirv-dis HINTS ${DAS_VULKAN_SDK_BIN_HINTS})
