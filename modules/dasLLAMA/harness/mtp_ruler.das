@@ -17,6 +17,9 @@ require dasllama/dasllama_tokenizer
 require dasllama/dasllama_chat   // create_chat_renderer_ / set_thinking_ / add_user_ / render_turn_
 require dasllama/dasllama_mtp_gemma   // gemma_drafter_sidecar
 require dasllama/dasllama_gguf   // gguf_is_assistant
+require ?das_metal dasllama/dasllama_metal_common   // finish_pending_step
+require ?das_metal dasllama/dasllama_metal_decode
+require ?das_metal dasllama/dasllama_metal_prefill
 require ../performance/profile_common.das   // apply_box_profile_runtime
 require dashv/dashv_boost   // GET / POST against the reference server
 require daslib/jobque_boost
@@ -63,6 +66,9 @@ struct Args {
 
     @clarg_doc = "llama-server port"
     port : int = 18790
+
+    @clarg_doc = "Seconds to idle before every arm (default 90) - a heat-soaked box under-reads a memory-bound decode by 10-15%; the board driver settles the same way"
+    settle : int = 90
 
     @clarg_short = "o"
     @clarg_doc = "Output JSON path (default: stdout only)"
@@ -116,18 +122,70 @@ def private sha_of(path : string) : string {
     return !empty(ws) ? ws[0] : ""
 }
 
+//! the first `n` bytes of a continuation - what two engines are compared on
+def private head_of(s : string; n : int) : string {
+    var r = ""
+    peek_data(s) $(d) {
+        r = clone_string(slice(d, 0, min(length(d), n)))
+    }
+    return r
+}
+
 def private is_bos_piece(p : string) : bool {
     return p == "<bos>" || p == "<s>" || p == "<|begin_of_text|>" || p == "<|endoftext|>"
 }
 
+def private argmax_of(s : Session; vocab : int64) : int64 {
+    var best = 0l
+    var bv = s.logits[0]
+    for (v in range64(1l, vocab)) {
+        if (s.logits[v] > bv) {
+            bv = s.logits[v]
+            best = v
+        }
+    }
+    return best
+}
+
+//! Our own greedy continuation of a rendered prompt, the text the reference must reproduce for the
+//! two acceptance columns to be comparable (the same tokens seen by two drafters).
+def private greedy_text(t : Model; tk : Tokenizer; ids : array<int64>; ngen : int) : string {
+    var s <- make_run_state(t.config, KVDtype.f16, KVDtype.f16)
+    eval_(t, s, ids)
+    var tok = argmax_of(s, t.config.vocab_size)
+    var one <- [tok]
+    let text = build_string() $(w) {
+        for (_i in range(ngen)) {
+            w |> write(piece(tk, tok))
+            one[0] = tok
+            eval_(t, s, one)
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                finish_pending_step()
+            }
+            tok = argmax_of(s, t.config.vocab_size)
+        }
+    }
+    delete one
+    delete s
+    return text
+}
+
 //! Every corpus turn rendered through the model's own chat template, thinking off, as the text the
-//! reference server must see raw - the leading BOS piece dropped because the server adds its own.
-def private render_prompts(model : string; texts : array<string>) : array<string> {
-    var rendered : array<string>
+//! reference server must see raw - the leading BOS piece dropped because the server adds its own -
+//! plus our greedy continuation of it, the control the reference's text is checked against.
+def private render_prompts(model : string; texts : array<string>; ngen : int; var rendered : array<string>; var ours : array<string>) {
     let tk <- load_tokenizer_auto(model)
     with_job_que() {
         setup_dasllama_jobque_()
         var t <- load_model_cached(model, QuantMode.q8)
+        t.config.seq_len = min(t.config.seq_len, 2048l)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            select_prefill_override("metal")
+            set_metal_prefill_min_npos(1l)
+            select_decode_override("metal")
+        }
+        rendered |> reserve(length(texts))
+        ours |> reserve(length(texts))
         for (text in texts) {
             var cs <- create_chat_renderer_(t, "", 0l)
             set_thinking_(cs, false)
@@ -145,11 +203,17 @@ def private render_prompts(model : string; texts : array<string>) : array<string
                 }
             }
             rendered |> push(sb)
+            ours |> push(greedy_text(t, tk, ids, ngen))
             delete ids
+        }
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            select_decode_override("")
+            select_prefill_override("")
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
         }
         delete t
     }
-    return <- rendered
 }
 
 def private parse_depths(s : string) : array<int> {
@@ -196,6 +260,7 @@ def private run_das(cfg : Args; head : string; depth : int; var rows : array<str
     let cmd = ("DAS_TUNE_MANIFEST={pin} \"{cfg.exe}\" -- -m \"{cfg.model}\" --mtp-ab --mtp-depth {depth} -n {cfg.ngen} -r {cfg.reps}"
         + " --ngl 99 --prompts \"{cfg.prompts}\" --chat-prompts > \"{tmpo}\" 2>&1")
     print("ruler: das depth {depth}: {cmd}\n")
+    sleep(uint(max(cfg.settle, 0)) * 1000u)
     sh(cmd, 3600.0)
     var outp = ""
     if (fexist(tmpo)) {
@@ -286,7 +351,7 @@ def private lcpp_completion(port : int; prompt : string; ngen : int) : LcppTimin
     return r
 }
 
-def private run_lcpp_arm(cfg : Args; head : string; kmax : int; rendered : array<string>; var rows : array<string>) {
+def private run_lcpp_arm(cfg : Args; head : string; kmax : int; rendered, ours : array<string>; var rows : array<string>) {
     var spec = ""
     if (kmax > 0) {
         spec = " --spec-type draft-mtp --spec-draft-n-max {kmax}"
@@ -299,6 +364,7 @@ def private run_lcpp_arm(cfg : Args; head : string; kmax : int; rendered : array
     let cmd = ("\"{cfg.server}\" --port {cfg.port} --host 127.0.0.1 -ngl 99 -fa on -c 2048 -t {cfg.threads} -np 1 --no-warmup -fit off"
         + " -m \"{cfg.model}\"{spec} > \"{log}\" 2>&1 & echo $!")
     print("ruler: lcpp n_max {kmax}: {cmd}\n")
+    sleep(uint(max(cfg.settle, 0)) * 1000u)
     let pid = first_line(sh(cmd, 30.0))
     if (!wait_server(cfg.port, true, 300)) {
         print("ruler: llama-server did not come up in 300 s - log {log}\n")
@@ -323,9 +389,10 @@ def private run_lcpp_arm(cfg : Args; head : string; kmax : int; rendered : array
             text = r.text
         }
         let tps = tps_sum / double(max(cfg.reps, 1))
+        let same = pi < length(ours) && text == head_of(ours[pi], 96)
         rows |> push(write_json(JV((engine = "llama.cpp", depth = kmax, prompt = pi, tps = tps, predicted_n = npred,
-            prompt_n = nprompt, drafted = dn, accepted = da, text = text))))
-        print("ruler: lcpp n_max {kmax} prompt {pi}: {tps:.1f} tok/s over {npred} ({nprompt} prompt), accept {da}/{dn}\n")
+            prompt_n = nprompt, drafted = dn, accepted = da, text = text, same_text_as_das = same))))
+        print("ruler: lcpp n_max {kmax} prompt {pi}: {tps:.1f} tok/s over {npred} ({nprompt} prompt), accept {da}/{dn}{same ? "" : " - TEXT DIFFERS from ours"}\n")
     }
     sh("kill {pid}", 10.0)
     wait_server(cfg.port, false, 60)
@@ -363,18 +430,26 @@ def main() {
     print("ruler: {length(texts)} prompts from {cfg.prompts}; head = {empty(head) ? "(none)" : head}\n")
     var rows : array<string>
     let depths <- parse_depths(cfg.depths)
+    apply_box_profile_runtime()
+    set_metal_mode(MetalMode.when_available)
+    var rendered : array<string>
+    var ours : array<string>
+    render_prompts(cfg.model, texts, cfg.ngen, rendered, ours)
+    rows |> reserve(length(ours))
+    for (pi in range(length(ours))) {
+        let head96 = head_of(ours[pi], 96)
+        rows |> push(write_json(JV((engine = "das", depth = 0, prompt = pi, text = head96))))
+        print("ruler: das greedy prompt {pi}: {head96}\n")
+    }
     if (!empty(cfg.exe)) {
         for (d in depths) {
             run_das(cfg, head, d, rows)
         }
     }
     if (!empty(cfg.server)) {
-        apply_box_profile_runtime()
-        set_metal_mode(MetalMode.when_available)
-        let rendered <- render_prompts(cfg.model, texts)
-        run_lcpp_arm(cfg, head, 0, rendered, rows)
+        run_lcpp_arm(cfg, head, 0, rendered, ours, rows)
         for (d in depths) {
-            run_lcpp_arm(cfg, head, d, rendered, rows)
+            run_lcpp_arm(cfg, head, d, rendered, ours, rows)
         }
     }
     let meta = JV((date = format_time(get_clock(), "%Y-%m-%d %H:%M"), host = first_line(sh("hostname")),
