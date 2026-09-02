@@ -51,6 +51,7 @@ def main():
     ap.add_argument("texts", nargs="+")
     ap.add_argument("--max-sents", type=int, default=30000)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--focus-words", help="one word per line; every sentence carrying one is kept on top of the sample")
     a = ap.parse_args()
     sys.path.insert(0, os.path.join(a.root, "scripts"))
     os.environ.setdefault("HF_HOME", os.path.join(a.root, ".hf"))
@@ -64,7 +65,16 @@ def main():
         for para in paragraphs(text):
             sents.extend(sentences(para))
     random.Random(a.seed).shuffle(sents)
-    sents = sents[:a.max_sents]
+    focus = set()
+    if a.focus_words:
+        focus = {w.strip().lower() for w in open(a.focus_words, encoding="utf8") if w.strip()}
+    kept = sents[:a.max_sents]
+    if focus:
+        word_re = re.compile(r"[A-Za-z']+")
+        extra = [s for s in sents[a.max_sents:] if any(w.lower() in focus for w in word_re.findall(s))]
+        kept += extra
+        print(f"{len(extra)} extra sentences carry a focus word")
+    sents = kept
     print(f"{len(sents)} sentences from {len(a.texts)} texts")
 
     # the reference normalizer strips apostrophes; the das one keeps them, so shield them
