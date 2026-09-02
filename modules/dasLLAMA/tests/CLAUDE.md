@@ -46,10 +46,13 @@ arm13-conc arm14-poison` (arm14 = the shared-region collision gate: a foreign GP
 not degrade a later forced-feed decode - Qwen2.5-0.5B, its own `[test]` block),
 batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`, `batch-ff` (real-text forced feed,
 GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance). MTP parity
-(`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ctrl-<tag> mtp-ff-<tag> mtp-count-<tag>` per
+(`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag> mtp-count-<tag>` per
 fixture tag `0.8b 27b 35b 3.8-27b` (3.8-27b = the Qwen3.8-27B trunk + its split Q8_0 head; ctrl = plain-vs-plain forced feed must be bit-identical; ff = the
-verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose openers; count =
-speculative free-run == plain free-run, token-exact, counting prompt). Prefill parity: `base mm-tail s16
+verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose openers; ffk = the
+same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay; count = speculative
+free-run == plain free-run, token-exact, counting prompt, at depth 1, 2 and 4). The pairs prefill on
+the GPU twin through the metal prefill override (a planar 27B prefill costs minutes per session),
+so the fixture shuts down BOTH drivers before its leak gate. Prefill parity: `base mm-tail s16
 kq cont span span-fused span-mrope span-ds dim qkv` (mm-tail = the GEMV-tail residue peel -
 four fixtures, npos % 32 == 1 (the lone row rides the reduction-split GEMV), == 2 (the b4
 form at 2 rows), == 5 (two b4 dispatches, 4 rows + 1) and npos == 5 (the pure-tail leg,

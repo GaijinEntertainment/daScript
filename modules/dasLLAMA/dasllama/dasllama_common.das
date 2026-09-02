@@ -414,6 +414,28 @@ def register_mtp_spec_override(name : string; fn : MtpSpecOverrideFn) {
 typedef MtpSeamOverrideFn = function<(t : Model; var s : Session; token, pos : int64) : bool>
 var private g_mtp_seam_overrides : table<string; MtpSeamOverrideFn>
 
+typedef MtpRoundOverrideFn = function<(t : Model; var s : Session; tok : int64; k : int64) : int64>
+var private g_mtp_round_overrides : table<string; MtpRoundOverrideFn>
+
+def register_mtp_round_override(name : string; fn : MtpRoundOverrideFn) {
+    g_mtp_round_overrides[name] = fn
+}
+
+//! One speculative round at the configured depth (get_mtp_depth): commits `tok`, returns the
+//! accepted draft count a with the accepted drafts in s.mtp_vbatch[1..a]. The metal round serves
+//! any depth for blob models; every other rail is the depth-1 mtp_spec_eval.
+def mtp_spec_round(t : Model; var s : Session; tok : int64) : int64 {
+    if (t.metal_blob && !empty(g_decode_override_name) && key_exists(g_mtp_round_overrides, g_decode_override_name)) {
+        return invoke(g_mtp_round_overrides[g_decode_override_name], t, s, tok, get_mtp_depth())
+    }
+    var acc = 0l
+    if (mtp_spec_eval(t, s, tok, acc)) {
+        s.mtp_vbatch[1] = acc
+        return 1l
+    }
+    return 0l
+}
+
 def register_mtp_seam_override(name : string; fn : MtpSeamOverrideFn) {
     g_mtp_seam_overrides[name] = fn
 }
@@ -4591,9 +4613,9 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     return false
 }
 
-//! Greedy decode with MTP/NextN depth-1 self-speculation. Mirrors generate()'s contract (echo +
-//! greedy continuation, `total` ids) and is OUTPUT-INVARIANT vs plain greedy decode — the draft
-//! only decides batched-two-token vs plain-one-token stepping. Accept telemetry in the out params.
+//! Greedy decode with MTP/NextN self-speculation at the configured depth (set_mtp_depth). Mirrors
+//! generate()'s contract (echo + greedy continuation, `total` ids) and is OUTPUT-INVARIANT vs plain
+//! greedy decode — the drafts only decide how many tokens a round commits. Accept telemetry in the out params.
 def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total : int64;
                         var n_drafted, n_accepted : int64&) : array<int64> {
     let c = t.config
@@ -4626,12 +4648,17 @@ def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total
         break if (tok == 1l)   // BOS delimits sequences (generate()'s contract)
         ids |> push(tok)
         break if (long_length(ids) >= total)
-        var acc = 0l
-        if (mtp_spec_eval(t, s, tok, acc)) {
-            break if (acc == 1l)   // BOS: generate() stops before emitting it — mirror that
+        let a = mtp_spec_round(t, s, tok)   // commits tok + the accepted drafts at the configured depth
+        var stop = false
+        for (i in range64(a)) {
+            let acc = s.mtp_vbatch[i + 1l]
+            if (acc == 1l || long_length(ids) >= total) {   // BOS: generate() stops before emitting it — mirror that
+                stop = true
+                break
+            }
             ids |> push(acc)
-            break if (long_length(ids) >= total)
         }
+        break if (stop || long_length(ids) >= total)
         tok = parallel_argmax(s.logits, c.vocab_size)
     }
     n_drafted = s.mtp_drafted - d0

@@ -9,6 +9,7 @@ require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads t
 require dasllama/dasllama_image   // load_model_cached — the served (image) flavor for the GPU twin
 require dasllama/dasllama_gguf   // set_mtp_head_path — the split-head fixture names its head explicitly
 require ?das_metal dasllama/dasllama_metal_decode   // stats + the forced-reject lever + shutdown
+require ?das_metal dasllama/dasllama_metal_prefill   // the metal prefill override for the pair's prompts
 require ?das_metal metal/das_metal_boost   // metal_live_object_count for the leak gate
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join, used only inside the das_metal static_if halves
@@ -84,6 +85,20 @@ def private counting_prompt(start, last : int) : string {
 let PROSE_A = "The old lighthouse keeper watched the storm roll in from the west, counting the seconds between each flash and the thunder that followed. By midnight the waves were breaking over the jetty and"
 let PROSE_B = "In the spring of that year the river rose higher than anyone in the valley could remember, and the farmers along the lower fields moved their animals to the ridge while"
 
+// both sessions of a pair prefilled on the GPU twin through the metal prefill override (the
+// planar CPU prefill of a 27B costs minutes per session; the metal prefill stashes mtp_h and
+// warms the draft slab like the CPU one does)
+def private gpu_prefill_pair(trg : Model; var sa, sb : Session; prompt : array<int64>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        select_prefill_override("metal")
+        set_metal_prefill_min_npos(1l)
+        eval_(trg, sa, prompt)
+        eval_(trg, sb, prompt)
+        select_prefill_override("")
+        set_metal_prefill_min_npos(64l)
+    }
+}
+
 struct FfStats {
     steps : int64
     drafted : int64       // rounds where the spec rail actually drafted + verified
@@ -97,7 +112,7 @@ struct FfStats {
 // The forced-feed pair: session A steps plainly on the GPU, session B runs the speculative round
 // with every draft forced to reject (one committed token per round, row 0 promoted to s.logits),
 // both fed A's greedy token. `verify = false` is the control (B steps plainly too).
-def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; verify : bool) : FfStats {
+def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; verify : bool; depth : int64 = 1l) : FfStats {
     var st = FfStats()
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let c = tr.config
@@ -106,8 +121,7 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
             setup_dasllama_jobque()
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
             var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
-            eval_(tr, sa, prompt)   // planar CPU prefill: warms the CPU draft slab + stashes mtp_h
-            eval_(tr, sb, prompt)
+            gpu_prefill_pair(trg, sa, sb, prompt)   // metal prefill: stashes mtp_h + warms the draft slab, seconds at 27B
             select_decode_override("metal")
             let before = metal_decode_stats().decodes
             var tok = greedy_top(sa.logits, vocab)
@@ -117,6 +131,7 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
             tok = greedy_top(sa.logits, vocab)
             if (verify) {
                 set_metal_mtp_debug("reject")
+                set_mtp_depth(depth)
             }
             for (_i in range64(nsteps)) {
                 var mx = 0.0
@@ -132,8 +147,7 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
                 eval_(trg, sa, one)
                 if (verify) {
                     let nd0 = sb.mtp_drafted
-                    var acc = -1l
-                    mtp_spec_eval(trg, sb, tok, acc)
+                    mtp_spec_round(trg, sb, tok)   // forced reject: one committed token per round, row 0 promoted to s.logits
                     if (sb.mtp_drafted == nd0) {
                         st.cold++
                     } else {
@@ -146,6 +160,7 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
                 tok = greedy_top(sa.logits, vocab)
             }
             set_metal_mtp_debug("")
+            set_mtp_depth(1l)
             st.served = metal_decode_stats().decodes - before
             select_decode_override("")
             delete one
@@ -158,7 +173,8 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
 
 // Free-running pair on the GPU: plain greedy vs the speculative rail's committed stream. Only
 // valid as a token-exact gate on a counting prompt (near-tie-free by construction).
-def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var plain, spec : array<int64>) : int64 {
+def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var plain, spec : array<int64>; depth : int64;
+                          var drafted : int64&) : int64 {
     var served = 0l
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let c = tr.config
@@ -167,8 +183,7 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
             setup_dasllama_jobque()
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
             var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
-            eval_(tr, sa, prompt)
-            eval_(tr, sb, prompt)
+            gpu_prefill_pair(trg, sa, sb, prompt)
             select_decode_override("metal")
             let before = metal_decode_stats().decodes
             let t0 = greedy_top(sa.logits, vocab)
@@ -183,17 +198,20 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
                 eval_(trg, sa, one)
                 tok = greedy_top(sa.logits, vocab)
             }
-            // speculative: commit tok, plus the accepted draft when the round accepts
+            // speculative: commit tok, plus every accepted draft of the round
+            set_mtp_depth(depth)
             tok = greedy_top(sb.logits, vocab)
             while (long_length(spec) < n) {
                 spec |> push(tok)
-                var acc = -1l
-                if (mtp_spec_eval(trg, sb, tok, acc)) {
-                    spec |> push(acc)
+                let a = mtp_spec_round(trg, sb, tok)
+                for (i in range64(a)) {
+                    spec |> push(sb.mtp_vbatch[i + 1l])
                 }
                 tok = greedy_top(sb.logits, vocab)
             }
+            set_mtp_depth(1l)
             spec |> resize(n)
+            drafted = sb.mtp_drafted
             served = metal_decode_stats().decodes - before
             select_decode_override("")
             delete one
@@ -225,8 +243,8 @@ let FF_STEPS = 48l
 let COUNT_STEPS = 40l
 
 // one forced-feed cell: engaged-or-skip, then the tolerance gate with its flip telemetry
-def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<int64>) {
-    let st = ff_pair(tr, trg, prompt, FF_STEPS, true)
+def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<int64>; depth : int64 = 1l) {
+    let st = ff_pair(tr, trg, prompt, FF_STEPS, true, depth)
     if (st.served == 0l) {
         t |> skip("metal decode declined (no Metal device?)")
     } elif (st.drafted == 0l) {
@@ -239,6 +257,22 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
 }
 
 // the process-wide knobs every exit path of run_fixture puts back
+def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64) {
+    var plain : array<int64>
+    var spec : array<int64>
+    var drafted = 0l
+    let served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted)
+    if (served == 0l) {
+        t |> skip("metal decode declined (no Metal device?)")
+    } else {
+        log_gen_texts(tr, "{tag} counting k{depth}", plain, spec)
+        t |> success(drafted > 0l, "{tag} counting k{depth}: the spec rail engaged ({drafted} drafts) - a plain fallback would pass vacuously")
+        t |> success(same(plain, spec), "{tag} counting k{depth}: speculative free-run == plain free-run ({COUNT_STEPS} tokens)")
+    }
+    delete plain
+    delete spec
+}
+
 def private restore_knobs(prior_backend : string; prior_wscale : bool) {
     clear_kernel_backend_pin()
     select_kernel_backend(prior_backend)
@@ -294,22 +328,23 @@ def private run_fixture(t : T?; file, tag : string) {
             ff_cell(t, tr, trg, tag, "prose-b", prose_b)
         }
 
-        // counting: free-running speculation == free-running plain, token for token
+        // depth N under forced reject: every round verifies k+1 rows and replays row 0 from the
+        // pre-verify recurrent state - the rollback path exercised on every single round
+        if (arm_on(t, "mtp-ffk-{tag}")) {
+            ff_cell(t, tr, trg, "{tag} k2", "prose-a", prose_a, 2l)
+            ff_cell(t, tr, trg, "{tag} k4", "prose-b", prose_b, 4l)
+        }
+
+        // counting: free-running speculation == free-running plain, token for token, at depth 1
+        // and at depth 4 (full accepts, partial accepts and rejects all land on the counting stream)
         if (arm_on(t, "mtp-count-{tag}")) {
-            var plain : array<int64>
-            var spec : array<int64>
-            let served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec)
-            if (served == 0l) {
-                t |> skip("metal decode declined (no Metal device?)")
-            } else {
-                log_gen_texts(tr, "{tag} counting", plain, spec)
-                t |> success(same(plain, spec), "{tag} counting: speculative free-run == plain free-run ({COUNT_STEPS} tokens)")
-            }
-            delete plain
-            delete spec
+            count_cell(t, tr, trg, tag, count, 1l)
+            count_cell(t, tr, trg, tag, count, 2l)
+            count_cell(t, tr, trg, tag, count, 4l)
         }
 
         metal_decode_shutdown()
+        metal_prefill_shutdown()   // the pairs prefill on the GPU - its panels release here too
         set_mtp_spec(false)
         restore_knobs(prior_backend, prior_wscale)
         delete prose_a

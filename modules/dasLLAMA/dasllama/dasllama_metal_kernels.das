@@ -1814,7 +1814,7 @@ class MetalFwhtUnsign {
 class template MetalGemvB24T {
     @ssbo @binding = 0 @role = "weight" @off = "boff" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
     @ssbo @binding = 2 @role = "weight" @off = "boff" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
-    @ssbo @binding = 3 @role = "read" x : array<float4>    // [B x n] f32 rows, float4 view
+    @ssbo @binding = 3 @role = "read" @off = "xoff" x : array<float4>    // [B x n] f32 rows, float4 view (xoff = the 4-row tile at B > 4)
     @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>     // [B x d]
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
@@ -2030,8 +2030,8 @@ class MetalQ8MvB4 {
 class template MetalGemvW13SwB24T {
     @ssbo @binding = 0 @role = "weight" @off = "w1off" wqb1 : array<int8>   // w1 blob, byte view @ its tensor offset
     @ssbo @binding = 2 @role = "weight" @off = "w1off" wsh1 : array<float16>   // ... half-scale view
-    @ssbo @binding = 3 @role = "read" x : array<float4>    // [B x ndim] f32 rows, float4 view
-    @ssbo @binding = 4 @role = "write" y : array<float>     // [B x hidden] silu(gate)*up
+    @ssbo @binding = 3 @role = "read" @off = "xoff" x : array<float4>    // [B x ndim] f32 rows, float4 view (xoff = the 4-row tile at B > 4)
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>     // [B x hidden] silu(gate)*up
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 hidden : uint     // output rows
     @ssbo @binding = 8 @role = "weight" @off = "w3off" wqb3 : array<int8>   // w3 blob views
@@ -2845,6 +2845,7 @@ struct DnArgs {
     eps : float
     qscale : float
     mid : uint
+    split : uint    // 1: the final state / history store lands in the alias (shadow) region, the live region stays pre-window
 }
 
 // The fused q8 QKV-GEMV + rope + KV-store twins share one kargs — f16 and f32 mirrors differ
@@ -2884,7 +2885,7 @@ def dn_args(c : Config; npos : int64; mid : bool) : DnArgs {
     return DnArgs(cd = uint(dn_conv_dim(c)), dconv = uint(c.ssm_d_conv), npos = uint(npos),
         kd = uint(dn_key_dim(c)), ds = uint(c.ssm_d_state), nvh = uint(c.ssm_dt_rank),
         nkh = uint(c.ssm_n_group), di = uint(c.ssm_d_inner), eps = c.norm_eps,
-        qscale = 1.0 / sqrt(float(c.ssm_d_state)), mid = mid ? 1u : 0u)
+        qscale = 1.0 / sqrt(float(c.ssm_d_state)), mid = mid ? 1u : 0u, split = 0u)
 }
 
 // ===== the split-K "D" attention family: the stages that do not depend on the K/V codec =====
@@ -4172,11 +4173,22 @@ def enc_add(enc : MetalComputeEncoder?; bg : MetalBuffer?; goff : uint64; bu : M
 // consumed); the blob slice binds through both views at the tensor's byte offset. Pinned at
 // 4 rows/tg — the x-staged cooperative-load slot math bakes 128 threads in.
 def enc_gemv_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; boff : uint64;
-               bx, by, bn, bd, bys : MetalBuffer?; d : int64; yoff : uint64 = 0ul) {
+               bx, by, bn, bd, bys : MetalBuffer?; d : int64; yoff : uint64 = 0ul; xoff : uint64 = 0ul) {
     if (four) {
-        enc_gemv_b4_c(enc, bw, boff, bw, bx, by, yoff, bn, bd, bys, d)
+        enc_gemv_b4_c(enc, bw, boff, bw, bx, xoff, by, yoff, bn, bd, bys, d)
     } else {
-        enc_gemv_b2_c(enc, bw, boff, bw, bx, by, yoff, bn, bd, bys, d)
+        enc_gemv_b2_c(enc, bw, boff, bw, bx, xoff, by, yoff, bn, bd, bys, d)
+    }
+}
+
+// one q8 GEMV site at nrows live rows: the B2/B4 form at nrows <= 4 (spare rows of the B4 form
+// compute garbage into y rows the caller never reads), two 4-row tiles at 5..8 - the second tile
+// offsets x by 4 rows of n floats and y by 4 rows of the site's y stride (enc_mv_site's shape)
+def enc_gemv_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; boff : uint64;
+                  bx, by, bn, bd, bys : MetalBuffer?; n, d, ys : int64; yoff : uint64 = 0ul) {
+    enc_gemv_b(enc, nrows > 2l, bw, boff, bx, by, bn, bd, bys, d, yoff)
+    if (nrows > 4l) {
+        enc_gemv_b(enc, true, bw, boff, bx, by, bn, bd, bys, d, yoff + uint64(4l * ys * 4l), uint64(4l * n * 4l))
     }
 }
 
@@ -4215,11 +4227,20 @@ def enc_mv_site(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint6
 // layout), by is the [B x hidden] swiglu output. Replaces the w1 + w3 GEMVs + the swiglu ew2
 // with one dispatch. Same 4-rows/tg geometry, gridded over the hidden output rows.
 def enc_gemv_w13sw_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; w1off, w3off : uint64;
-                     bx, by, bn, bhid : MetalBuffer?; hidden : int64) {
+                     bx, by, bn, bhid : MetalBuffer?; hidden : int64; xoff : uint64 = 0ul; yoff : uint64 = 0ul) {
     if (four) {
-        enc_w13sw_b4_c(enc, bw, w1off, bw, bx, by, bn, bhid, bw, w3off, bw, hidden)
+        enc_w13sw_b4_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bw, w3off, bw, hidden)
     } else {
-        enc_w13sw_b2_c(enc, bw, w1off, bw, bx, by, bn, bhid, bw, w3off, bw, hidden)
+        enc_w13sw_b2_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bw, w3off, bw, hidden)
+    }
+}
+
+// the fused W1|W3 + swiglu site at nrows live rows (enc_gemv_rows's tiling; y stride = hidden)
+def enc_gemv_w13sw_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; w1off, w3off : uint64;
+                        bx, by, bn, bhid : MetalBuffer?; n, hidden : int64) {
+    enc_gemv_w13sw_b(enc, nrows > 2l, bw, w1off, w3off, bx, by, bn, bhid, hidden)
+    if (nrows > 4l) {
+        enc_gemv_w13sw_b(enc, true, bw, w1off, w3off, bx, by, bn, bhid, hidden, uint64(4l * n * 4l), uint64(4l * hidden * 4l))
     }
 }
 
@@ -11065,7 +11086,11 @@ class MetalDnConvHist {
         }
         k = 0u
         while (k < taps) {
-            hist[ch * taps + k] = nh[k]
+            if (ka.split != 0u) {
+                histm[ch * taps + k] = nh[k]
+            } else {
+                hist[ch * taps + k] = nh[k]
+            }
             k++
         }
     }
@@ -11182,7 +11207,11 @@ class MetalDnScan {
             p++
         }
         for [unroll_full] (c in range(4)) {
-            st[s0 + uint(c) * ds] = ls[c]
+            if (ka.split != 0u) {
+                stm[s0 + uint(c) * ds] = ls[c]
+            } else {
+                st[s0 + uint(c) * ds] = ls[c]
+            }
         }
     }
 }

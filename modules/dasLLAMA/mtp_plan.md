@@ -251,6 +251,40 @@ already (KV rollback is the watermark). The qwen38 memo (`~/.claude/plans/mtp-re
 qwen38_design.md`) rules for step 2: replay rows 0..a from the PRE-verify state with a store-only
 scan variant, conv state = a slice of the verify's conv inputs, no per-row checkpoints.
 
+#### S2 step 2 (2026-09-01): depth N serves on recurrent trunks - split-write + replay
+- `DnArgs.split`: the deltanet scan and conv-history kernels store their final state/taps into
+  the shadow region when set; the live region keeps the PRE-verify state. The verify runs split.
+- Replay tape: each recurrent layer's scan inputs (l2-normed conv rows, qkv rows, raw beta/alpha,
+  k+1 rows each) are copied into a per-layer slot during the verify; a partial accept a < k
+  replays rows 0..a from the live state into the shadow with the SAME kernels (npos = a+1,
+  split) - bit-exact with the verify's own boundary state by construction - then the shadow
+  becomes live (`dn_mirror_flip(pos+a+1)` on every commit; a == k needs no replay). The July
+  mid-store (post-row-0 shadow) is superseded; the `mid` path stays for the prefill/decode callers.
+- The chained draft's watermark gate takes the round's base position (`wm_pos`): a draft at
+  pos+i reads only slab rows its own chain wrote above the base.
+- q8 batched GEMV at 5..8 live rows: `enc_gemv_rows` / `enc_gemv_w13sw_rows` tile two B4 forms
+  (x offset by 4 rows of n, y by 4 rows of the site stride - `enc_mv_site`'s shape); the B24T and
+  W13Sw templates gained the `xoff` binding. Found by the trace: at nr = 5 the B4 classifier
+  left row 4 unread, so every bonus token was id 0.
+- Facade: `mtp_spec_round(t, s, tok) : int64` (accepted drafts in `s.mtp_vbatch[1..a]`) over a new
+  override registry; `set_mtp_depth(k)`; `set_metal_mtp_debug("trace")` logs drafts/truths/a per round.
+- Gates on the 0.8B (recurrent, 18 dn + 7 attn layers): depth 1 forced-feed unchanged to the
+  digit (0.0016374588 / 0.00065612793); depth 2 and 4 forced-feed (every round a k+1-row verify +
+  a 1-row replay) same digits; counting free-run token-exact vs plain at depth 1, 2 AND 4 (full
+  accepts, partial accepts, rejects).
+- **Two bugs the large tier found, both fixed:** (1) at nr >= 5 the fixed-B GEMV forms write
+  their FULL 4-row (B4 tile) or 8-row (B8) group, and the verify sized its row buffers to exactly
+  nr rows - the pad rows overflowed into the neighbouring pooled buffers (27B-MTP k4 maxd 25,
+  Qwen3.8 NaN; the 0.8B survived by luck). `acquire_step` now lays a multi-row verify out at the
+  4-row-padded stride the batch rail already uses (single-row steps stay at one row - padding
+  them over-read the session's one-row inputs and SIGBUSed). (2) The test's GPU-prefilled pairs
+  need `metal_prefill_shutdown()` before the leak gate (200 live panels were the prefill's, not a
+  leak). The pairs prefill on the GPU now (the planar CPU prefill of a 27B cost minutes per
+  session and blew the runner's 1200 s budget once the depth arms doubled the pair count).
+- `set_metal_mtp_debug("trace")` (one line per round: drafts, per-row truths, a) found bug (1)
+  in one look - every round's last truth was id 0. Callers moved to the round: `generate_mtp_greedy`
+  (drains the accepted drafts), `lcpp_bench --mtp-ab --mtp-depth k`.
+
 ### S3 - gemma assistant drafter
 
 - Loader for arch `gemma4-assistant` (embed tied to the trunk's, pre/post projections, 4

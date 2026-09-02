@@ -124,6 +124,10 @@ struct Args {
     @clarg_doc = "A/B the GPU MoE prefill arm in-process: every row runs twice, device-side prefill OFF then ON. Needs resident expert layers (DASLLAMA_GPU_MOE_LAYERS); decode has no npos gate so tg reads as a wash. Mutually exclusive with the other A/B levers"
     prefill_ab : bool
 
+    @clarg_name = "mtp-depth"
+    @clarg_doc = "Speculative depth for the --mtp-ab ON arm: drafts per round (the verify runs depth+1 rows). 1 = the shipped depth-1 rail"
+    mtp_depth : int = 1
+
     @clarg_name = "mtp-ab"
     @clarg_doc = "A/B MTP/NextN self-speculation in-process, OFF then ON (needs a NextN head in the GGUF). Runs the tg-real row, NOT the llama-bench tg row — acceptance is meaningless on synthetic ids. Reports the draft accept rate; mutually exclusive with the other A/B levers"
     mtp_ab : bool
@@ -1455,6 +1459,7 @@ def main() : int {
         if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
             panic("lcpp_bench: --mtp-ab needs a NextN draft head, and {mpath} has none")
         }
+        set_mtp_depth(int64(cfg.mtp_depth))
         // the exec REQUEST (exe-native / -jit / interpreted) + the armed GPU tier are stamped;
         // a jit run that produced nothing logs its own LLVM JIT error beside this
         let exec_state = is_standalone_exe() ? "exe-native" : (jit_enabled() ? "jit" : "INTERPRETED")
@@ -1490,12 +1495,11 @@ def main() : int {
                         forward_prefill(t, rs, toks[pi], pl, 0l)
                         let t0 = ref_time_ticks()
                         if (mtp_on) {
-                            rs.n_past = pl   // forward_prefill leaves n_past alone; mtp_spec_eval drives it
+                            rs.n_past = pl   // forward_prefill leaves n_past alone; the round drives it
                             var tok = argmax_logit(rs, c.vocab_size)
                             var gen = 0l
                             while (gen < ngen) {
-                                var acc = 0l   // the id is unused — only the 1-vs-2 advance is timed
-                                gen += mtp_spec_eval(t, rs, tok, acc) ? 2l : 1l
+                                gen += 1l + mtp_spec_round(t, rs, tok)   // tok + the accepted drafts; only the advance is timed
                                 tok = argmax_logit(rs, c.vocab_size)
                             }
                             rep_gen += gen   // a trailing accept may overshoot by 1 — count what ran
@@ -1518,7 +1522,7 @@ def main() : int {
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps, {length(toks)} prompts)\n")
                 if (mtp_on) {
                     let rate = drafted > 0l ? double(accepted) * 100.0lf / double(drafted) : 0.0lf
-                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%)\n")
+                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}\n")
                 }
                 results |> push(st)
                 delete tps
@@ -1535,8 +1539,7 @@ def main() : int {
                         var ptok = argmax_logit(ps, c.vocab_size)
                         var pgen = 0l
                         while (pgen < ngen) {
-                            var pacc = 0l
-                            pgen += mtp_spec_eval(t, ps, ptok, pacc) ? 2l : 1l
+                            pgen += 1l + mtp_spec_round(t, ps, ptok)
                             ptok = argmax_logit(ps, c.vocab_size)
                         }
                     } else {
