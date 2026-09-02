@@ -600,6 +600,18 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   dispatches plus a GATHERED GEMV twin (stream each selected expert's plane once, the bucket's x rows
   through the fixed-B form's indirection) in place of the per-(row, slot) MoE GEMV. Expected: the
   two-row verify from 1.34x toward ~1.1x of a step, i.e. 1.13x -> ~1.4x at today's acceptance.
+- **Per-task SpecBench-4 (gemma-26B, depth 2, fused round, -r 2, 2026-09-02)** - acceptance is a
+  property of the TASK far more than of depth or quantization:
+
+  | task | off | on | ratio | p1 | p2 |
+  |---|---|---|---|---|---|
+  | writing (qid 81) | 124.1 | 137.8 | 1.11x | 63.1% | 32.3% |
+  | summarization (qid 241) | 117.3 | 140.0 | 1.19x | 69.0% | 50.0% |
+  | math / GSM8K (qid 401) | 123.1 | **193.7** | **1.57x** | **97.8%** | 82.6% |
+  | qa (qid 321) | 124.1 | 158.9 | 1.28x | 75.0% | 51.8% |
+
+  Math reaches vLLM's 1.60x headline on the same model; creative writing is the floor. A SpecBench
+  report is a per-task table, never one number (the S6 harness = the bench printing per-prompt rows).
 - **The Q4 target is not what caps acceptance**: the Q8_0 target at depth 1 accepts 76.5% (vs 74.6%
   on Q4_K_M; off 109.6, on 126.0 = 1.15x; verify 12.33 ms vs step 9.13 = 1.35x again). 75% at
   position 1 is the head's own agreement with the target on SpecBench chat prompts.
