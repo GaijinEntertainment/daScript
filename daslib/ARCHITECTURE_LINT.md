@@ -107,6 +107,17 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   a callee demands - the leaf is flagged first and each fix re-exposes the next caller.
   A returned `var` argument keeps its `var` (a non-copyable result cannot move from
   const); a used `_name` parameter is never LINT004'd (interface and keyword-clash names).
+- **LINT023 reads the store/use stream in order.** A use disqualifies a candidate only
+  once a store has been seen, so a read that precedes every store leaves the write dead -
+  the shape that hides a cleared-but-not-returned handle. `lint023_deferred_depth` covers
+  the placements whose execution order is not the source order: a closure, lambda or
+  generator body, and any loop body, where a read is taken to follow the store. A `label`
+  or a `goto` anywhere in the function sets `lint023_jumps` and the rule reports nothing
+  there at all: a backward jump can place a read after a store above it, so the order test
+  has no ground to stand on. It is deliberately NOT `branch_depth`, which also counts `if`
+  and `try/catch`: a conditional reorders nothing, and the read that exposes the dead write
+  sits inside one - folding the two counters together makes the rule silent on the shape it
+  exists to catch.
 - **Closure bodies are per-rule, not global.** LINT010 counts a closure body as a branch
   (it may run later or never - writes inside must not kill outside stores, reads inside
   must not keep an outside init live); LINT021 counts the same body as an escape - a

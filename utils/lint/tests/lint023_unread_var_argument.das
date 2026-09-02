@@ -13,7 +13,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // appearance (a read, `return`, passing on, addr-of, capture, a write through
 // a pointer's pointee) is a use.
 
-expect 50503:9
+expect 50503:10
 
 require daslib/lint
 
@@ -71,7 +71,39 @@ def bad_ptr_reassign(var f : Foo?) {   // LINT023 - the pointer itself is a by-v
     f = null
 }
 
+def bad_read_before_store(var tex : uint) {   // LINT023 - the read precedes the store, so nothing reads it back
+    if (tex != 0u) {
+        print("{tex}\n")
+        tex = 0u
+    }
+}
+
 // === Negatives ===
+
+def good_goto_backwards(var n : int; times : int) {
+    var k = 0
+    label 1:
+    print("{n}\n")
+    n = k
+    k++
+    if (k < times) {
+        goto label 1
+    }
+}
+
+def good_read_in_block(var n : int) {
+    n = 1
+    invoke($() {
+        print("{n}\n")
+    })
+}
+
+def good_read_in_loop(var n : int) {
+    for (i in range(2)) {
+        print("{n}\n")
+        n = i
+    }
+}
 
 def good_write_then_read(var n : int) : int {
     n = n * 2
@@ -162,4 +194,12 @@ def main() {
     good_struct(s)
     good_underscore(1)
     good_marked(1)
+    drop_handle_probe()
+}
+
+def private drop_handle_probe() {
+    bad_read_before_store(7u)
+    good_read_in_block(1)
+    good_read_in_loop(1)
+    good_goto_backwards(1, 3)
 }

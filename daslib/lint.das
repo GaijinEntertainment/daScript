@@ -177,6 +177,8 @@ class LintVisitor : AstVisitor {
     lint021_narrow_depth : int = 0
     lint021_poison_depth : int = 0
     lint021_closure_depth : int = 0
+    lint023_deferred_depth : int = 0
+    lint023_jumps : bool = false
     lint022_refs : RefIndex
     @do_not_delete lint022_self_struct : Structure const? = null
     lint022_generic_sweep : bool = false
@@ -340,6 +342,8 @@ class LintVisitor : AstVisitor {
         lint021_narrow_depth = 0
         lint021_poison_depth = 0
         lint021_closure_depth = 0
+        lint023_deferred_depth = 0
+        lint023_jumps = false
         if (fun.moreFlags.isTemplate) {
             noLint = true
             return
@@ -370,7 +374,7 @@ class LintVisitor : AstVisitor {
         lint014_candidates |> clear()
         if (!noLint && genericDepth == 0) {
             for (c in lint023_candidates) {
-                if (!c.disqualified && c.stores > 0) {
+                if (!c.disqualified && c.stores > 0 && !lint023_jumps) {
                     lint_error("LINT023: mutable by-value argument {c.v.name}: {describe(c.v._type, false, false, false)} is written but never read - the caller never sees a write to a by-value copy; declare it `{describe(c.v._type, false, false, false)}&` if it is an out-parameter, otherwise the write is dead", c.v.at)
                 }
             }
@@ -405,6 +409,7 @@ class LintVisitor : AstVisitor {
         if (!noLint && genericDepth == 0 && (bf.isClosure || bf.isLambdaBlock || bf.isGeneratorBlock)) {
             branch_depth++
             lint021_closure_depth++
+            lint023_deferred_depth++
         }
     }
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
@@ -415,6 +420,7 @@ class LintVisitor : AstVisitor {
         if (!noLint && genericDepth == 0 && (bf.isClosure || bf.isLambdaBlock || bf.isGeneratorBlock)) {
             branch_depth--
             lint021_closure_depth--
+            lint023_deferred_depth--
         }
         return <- blk
     }
@@ -449,6 +455,9 @@ class LintVisitor : AstVisitor {
             exprForTerminator |> pop()
         }
         exprForTerminator |> push(0ul)
+        if (!noLint && genericDepth == 0) {
+            lint023_jumps = true
+        }
     }
 
     def override preVisitExprCast(expr : ExprCast?) : void {
@@ -575,7 +584,7 @@ class LintVisitor : AstVisitor {
         if (ci < 0 || lint023_candidates[ci].disqualified) return
         if (expr.varFlags.under_clone || key_exists(lint023_store_nodes, intptr(expr))) {
             lint023_candidates[ci].stores++
-        } else {
+        } elif (lint023_candidates[ci].stores > 0 || lint023_deferred_depth > 0) {
             lint023_candidates[ci].disqualified = true
         }
     }
@@ -1122,18 +1131,38 @@ class LintVisitor : AstVisitor {
         return <- expr
     }
 
+    //! A label or a goto puts control flow beyond what the source order describes - a backward
+    //! jump can place a read after a store that appears above it - so the order test cannot judge
+    //! this function and LINT023 stands down for all of it.
+    def override preVisitExprGoto(_expr : ExprGoto?) : void {
+        if (!noLint && genericDepth == 0) {
+            lint023_jumps = true
+        }
+    }
     def override preVisitExprFor(_expr : ExprFor?) : void {
-        if (!noLint && genericDepth == 0) branch_depth++
+        if (!noLint && genericDepth == 0) {
+            branch_depth++
+            lint023_deferred_depth++
+        }
     }
     def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
-        if (!noLint && genericDepth == 0) branch_depth--
+        if (!noLint && genericDepth == 0) {
+            branch_depth--
+            lint023_deferred_depth--
+        }
         return <- expr
     }
     def override preVisitExprWhile(_expr : ExprWhile?) : void {
-        if (!noLint && genericDepth == 0) branch_depth++
+        if (!noLint && genericDepth == 0) {
+            branch_depth++
+            lint023_deferred_depth++
+        }
     }
     def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
-        if (!noLint && genericDepth == 0) branch_depth--
+        if (!noLint && genericDepth == 0) {
+            branch_depth--
+            lint023_deferred_depth--
+        }
         return <- expr
     }
     def override preVisitExprTryCatch(_expr : ExprTryCatch?) : void {

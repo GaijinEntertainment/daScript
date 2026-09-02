@@ -1085,6 +1085,16 @@ parameter's pointee (``p.x = 1`` reaches the caller's object; reassigning
 ``p`` itself is a store like any other). Class methods and ``[extern]`` stubs,
 underscore-prefixed names and ``[unused_argument]`` are skipped.
 
+A read only counts when it can **follow** a store. A read that precedes every
+store — the ``if (tex != 0u)`` guard above a ``tex = 0u`` that clears a handle
+the caller still holds — leaves the write dead, and the rule says so. Two
+placements are read as "this runs after the store" whatever their position in
+the source, because they can: a read inside a closure, lambda or generator body
+(it runs when the block is invoked), and a read anywhere in a loop body (the
+next iteration puts it after the store). A function carrying a ``label`` or a
+``goto`` is skipped whole - a backward jump can put a read after a store that
+sits above it, so source order describes nothing there.
+
 .. das-doc: alt
 .. code-block:: das
 

@@ -360,14 +360,14 @@ def private make_texture(w, h : int; internal_format : uint; format, data_type, 
     return tex
 }
 
-def private drop_texture(var tex : uint) {
+def private drop_texture(var tex : uint&) {
     if (tex != 0u) {
         glDeleteTextures(1, unsafe(addr(tex)))
         tex = 0u
     }
 }
 
-def private drop_fbo(var fbo : uint) {
+def private drop_fbo(var fbo : uint&) {
     if (fbo != 0u) {
         glDeleteFramebuffers(1, unsafe(addr(fbo)))
         fbo = 0u
