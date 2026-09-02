@@ -33,6 +33,10 @@ struct SynthArgs {
     limit : int = 0
     @clarg_doc = "the sentence fixture (default: tests/_tts_fixtures/g2p_corpus.json)"
     fixture : string = ""
+    @clarg_doc = "serve the rows GEMMs as Q8_0 quants (the q8 lane's own prepared image)"
+    q8 : bool = false
+    @clarg_doc = "print the generator's per-op profile over the whole run (PROF rows)"
+    prof : bool = false
 }
 
 struct private SentenceTiming {
@@ -59,8 +63,12 @@ def main() : int {
     var audio_total = 0.0lf
     var gen_total = 0.0lf
     var failed = ""
+    if (args.q8) {
+        set_tts_q8(true)
+    }
     with_job_que() {
         setup_dasllama_jobque_()
+        set_asr_prof(args.prof)
         var inscope m <- load_tts_model(args.model)
         var n = 0
         for (r in rows.value as _array) {
@@ -82,6 +90,9 @@ def main() : int {
             n++
         }
         to_log(LOG_INFO, "tts synth: {n} sentences, {audio_total} s of audio in {gen_total} s (rtf {gen_total / max(audio_total, 1e-9lf)}) -> {args.out}\n")
+        if (args.prof) {
+            asr_prof_report()
+        }
     }
     if (!empty(failed)) {
         to_log(LOG_ERROR, "tts synth: {failed}\n")

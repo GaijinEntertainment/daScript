@@ -44,6 +44,12 @@ struct Txt2WavArgs {
     @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch"
     tune : bool
 
+    @clarg_doc = "Serve the rows GEMMs as Q8_0 quants (its own prepared image beside the GGUF)"
+    q8 : bool
+
+    @clarg_doc = "Print the generator's per-op profile (PROF rows: bucket, ms, hits, percent)"
+    prof : bool
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -81,6 +87,9 @@ def main : int {
     }
     log_tune_status("txt2wav")
 
+    if (cfg.q8) {
+        set_tts_q8(true)
+    }
     let t_load = ref_time_ticks()
     var inscope m <- load_tts_model(cfg.tts)
     let load_s = double(get_time_usec(t_load)) / 1.0e6lf
@@ -91,8 +100,12 @@ def main : int {
     var inscope audio = TtsAudio()
     with_job_que() {
         setup_dasllama_jobque()
+        set_asr_prof(cfg.prof)
         delete audio
         audio <- synthesize(m, text, voice, speed)
+        if (cfg.prof) {
+            asr_prof_report()
+        }
     }
     if (!write_wav_pcm16(cfg.out, audio.pcm, audio.sample_rate)) {
         to_log(LOG_ERROR, "txt2wav: could not write {cfg.out}\n")

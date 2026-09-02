@@ -89,6 +89,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--daslang", default=os.path.join(REPO, "bin", "daslang"))
     ap.add_argument("--skip-synth", action="store_true", help="score existing folders")
+    ap.add_argument("--q8", action="store_true", help="serve the rows GEMMs as Q8_0 quants (folders get a _q8 suffix)")
     a = ap.parse_args()
     rows = json.load(open(FIXTURE, encoding="utf8"))
     if a.limit:
@@ -96,7 +97,7 @@ def main():
     dirs = {}
     for spec in a.models:
         model, voice = spec.split(":")
-        d = os.path.join(a.out, f"{model}_{voice}")
+        d = os.path.join(a.out, f"{model}_{voice}" + ("_q8" if a.q8 else ""))
         dirs[spec] = d
         os.makedirs(d, exist_ok=True)
         if not a.skip_synth:
@@ -105,6 +106,8 @@ def main():
                    "--voice", voice, "--out", d]
             if a.limit:
                 cmd += ["--limit", str(a.limit)]
+            if a.q8:
+                cmd += ["--q8"]
             run(cmd)
     env = dict(os.environ, HF_HOME=os.path.join(a.root, ".hf"), NEMO_CACHE_DIR=os.path.join(a.root, ".nemo"),
                TORCH_HOME=os.path.join(os.path.dirname(a.root), ".torchhub"))

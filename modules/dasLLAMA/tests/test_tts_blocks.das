@@ -274,6 +274,93 @@ def private linear_case(nin, nout : int64) : BlockCase {
     return res
 }
 
+let Q8_REL = 2.0e-2   // Q8_0 weights and per-32 activations: a few thousandths of the envelope, gated at 2%
+
+// The q8 rows lane of a conv against the channel-major f32 reference at the q8 bar.
+def private conv_case_q8(name : string; cin, cout, k, pad, dil : int64) : BlockCase {
+    var r = TtsRng()
+    rng_seed(r, 0x9eedul + uint64(k * 100l + dil))
+    var inscope c0 <- make_conv(r, cin, cout, k, 1l, pad, dil, false, true)
+    var inscope e <- envelope_conv(c0)
+    var inscope c <- prepared(c0, false)
+    var inscope cq := c0
+    cq.served_rows = true
+    conv1d_prepare(cq, true, select_matmul_backend_for_load_())
+    let t_in = T_ROWS
+    var inscope x_ct : array<float>
+    rand_fill(r, x_ct, cin * t_in, 2.0)
+    var inscope x_abs <- abs_of(x_ct)
+    var inscope want : array<float>
+    var inscope env : array<float>
+    conv1d(c, x_ct, t_in, want)
+    conv1d(e, x_abs, t_in, env)
+    var inscope x_rows : array<float>
+    transpose_ct(x_ct, cin, t_in, x_rows)
+    var inscope y_rows : array<float>
+    conv1d_rows(cq, x_rows, t_in, y_rows)
+    let t_out = conv1d_out_len(cq, t_in)
+    var inscope got : array<float>
+    transpose_tc_strided(y_rows, t_out, cout, cq.cout_s, got)
+    var bias_abs = 0.0
+    for (b in c0.b) {
+        bias_abs = max(bias_abs, abs(b))
+    }
+    var res = BlockCase(name = name)
+    for (g, w, ev in got, want, env) {
+        let d = abs(g - w)
+        let bar = max(Q8_REL * (ev + bias_abs), FLOOR)
+        res.max_abs = max(res.max_abs, d)
+        res.max_ratio = max(res.max_ratio, d / bar)
+        if (d > bar) {
+            res.bad++
+        }
+    }
+    if (!cq.q8) {
+        res.bad += 1000000   // the q8 lane never minted
+    }
+    return res
+}
+
+// linear_rows on the q8 lane against the dot form at the q8 bar.
+def private linear_case_q8(nin, nout : int64) : BlockCase {
+    var r = TtsRng()
+    rng_seed(r, 0xdbcul + uint64(nin))
+    let t = T_ROWS
+    var l = TtsLinear(nin = nin, nout = nout)
+    rand_fill(r, l.w, nout * nin, 1.0 / sqrt(float(nin)))
+    rand_fill(r, l.b, nout, 0.5)
+    var e = TtsLinear(nin = nin, nout = nout, w <- abs_of(l.w))
+    var inscope x : array<float>
+    rand_fill(r, x, t * nin, 2.0)
+    var inscope x_abs <- abs_of(x)
+    var inscope want : array<float>
+    var inscope env : array<float>
+    linear_rows(l, x, t, want)
+    linear_rows(e, x_abs, t, env)
+    var lq := l
+    linear_prepare(lq, true, true, select_matmul_backend_for_load_())
+    var inscope got : array<float>
+    linear_rows(lq, x, t, got)
+    var bias_abs = 0.0
+    for (b in l.b) {
+        bias_abs = max(bias_abs, abs(b))
+    }
+    var res = BlockCase(name = "linear q8 {nin}x{nout}")
+    for (g, w, ev in got, want, env) {
+        let d = abs(g - w)
+        let bar = max(Q8_REL * (ev + bias_abs), FLOOR)
+        res.max_abs = max(res.max_abs, d)
+        res.max_ratio = max(res.max_ratio, d / bar)
+        if (d > bar) {
+            res.bad++
+        }
+    }
+    if (!lq.q8) {
+        res.bad += 1000000
+    }
+    return res
+}
+
 def private report(t : T?; r : BlockCase) {
     to_log(LOG_INFO, "tts blocks {r.name}: max |rows - ref| {r.max_abs}, worst ratio to the bar {r.max_ratio}, over the bar {r.bad}\n")
     t |> equal(r.bad, 0, "{r.name}: elements past the dot-envelope bar")
@@ -299,6 +386,12 @@ def test_rows_convs(t : T?) {
         t |> run("linear_rows on the tile") @(t : T?) {
             report(t, linear_case(96l, 64l))
             report(t, linear_case(768l, 3072l))
+        }
+        t |> run("the q8 lane against the f32 reference") @(t : T?) {
+            report(t, conv_case_q8("conv q8 k3 d1", 128l, 128l, 3l, 1l, 1l))
+            report(t, conv_case_q8("conv q8 k7 d3", 128l, 128l, 7l, 9l, 3l))
+            report(t, conv_case_q8("conv q8 k11 d5", 256l, 256l, 11l, 25l, 5l))
+            report(t, linear_case_q8(768l, 768l))
         }
         t |> run("snake, adain, pad, polar") @(t : T?) {
             report(t, snake_case())

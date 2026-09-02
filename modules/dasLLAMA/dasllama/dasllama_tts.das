@@ -66,6 +66,19 @@ def load_tts_model(path : string) : TtsModel {
     return <- m
 }
 
+//! Pin the rows GEMMs' format for subsequent TTS loads: Q8_0 quants (their own prepared image
+//! beside the GGUF) or the file's f32 planes; ``reset_tts_q8`` returns to the policy default.
+def set_tts_q8(on : bool) {
+    set_styletts2_q8(on)
+}
+
+def reset_tts_q8() {
+    reset_styletts2_q8()
+}
+
+//! Would the next TTS load serve its rows GEMMs as q8 - the pin when set, the policy otherwise.
+def tts_serves_q8() : bool => styletts2_serves_q8()
+
 def caps(m : TtsModel) : TtsCaps {
     var c = TtsCaps()
     c.voices := m.model.voice_names

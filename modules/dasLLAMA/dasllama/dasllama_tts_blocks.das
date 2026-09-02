@@ -10,6 +10,7 @@ require daslib/archive
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_plane
+require dasllama/dasllama_convert
 require dasllama/dasllama_tower
 require dasllama/dasllama_common
 
@@ -67,12 +68,14 @@ def release_weight(var a : array<float>) {
     }
 }
 
-//! The blob walk's mode: staging moves each weight into `blob` and records its span; serving
-//! binds each weight as a view over `plane` at its span.
+//! The blob walk's mode: staging moves each weight into `blob` (int8 quants into `qblob`) and
+//! records its span; serving binds each weight as a view over `plane` / `qplane` at its span.
 struct TtsBlobIo {
     staging : bool
     blob : array<float>?
+    qblob : array<int8>?
     plane : PlaneF = PlaneF()
+    qplane : PlaneI8 = PlaneI8()
 }
 
 //! One weight through the walk (see TtsBlobIo).
@@ -82,6 +85,51 @@ def weight_slot(var io : TtsBlobIo; var a : array<float>; var span : TtsSpan) {
         delete a
     } else {
         bind_span(io.plane, span, a)
+    }
+}
+
+//! `blob_push` for the int8 quant blob (a span counts int8 elements there).
+def blob_push_q8(var qblob : array<int8>; src : array<int8>) : TtsSpan {
+    let n = long_length(src)
+    return TtsSpan() if (n == 0l)
+    let off = (long_length(qblob) + BLOB_ALIGN - 1l) / BLOB_ALIGN * BLOB_ALIGN
+    qblob |> ensure_capacity(off + n)
+    qblob |> resize(off + n)
+    for (i in range64(n)) {
+        qblob[off + i] = src[i]
+    }
+    return TtsSpan(off = off, n = n)
+}
+
+//! `bind_span` over the int8 quant plane.
+def bind_span_q8(qplane : PlaneI8; span : TtsSpan; var a : array<int8>) {
+    return if (span.n == 0l)
+    if (span.off < 0l || span.n > qplane.n || span.off > qplane.n - span.n) {
+        panic("dasLLAMA tts: quant span {span.off}+{span.n} lies outside the {qplane.n}-byte quant blob")
+    }
+    unsafe {
+        _builtin_make_temp_array_i64(a, reinterpret<void?>(plane_at(qplane, span.off)), span.n)
+    }
+}
+
+//! `release_weight` for an int8 quant array.
+def release_weight_q8(var a : array<int8>) {
+    if (lock_count(a) != 0) {
+        unsafe {
+            _builtin_forget_temp_array(a)
+        }
+    } else {
+        delete a
+    }
+}
+
+//! `weight_slot` for an int8 quant array.
+def weight_slot_q8(var io : TtsBlobIo; var a : array<int8>; var span : TtsSpan) {
+    if (io.staging) {
+        span = blob_push_q8(*io.qblob, a)
+        delete a
+    } else {
+        bind_span_q8(io.qplane, span, a)
     }
 }
 
@@ -111,11 +159,15 @@ struct TtsConv1d {
     wt : array<float>    // [cout*k][cin] - the channel-major transposed conv's GEMM form
     wk : array<float>    // [k][cin][cout_s] - the rows form's per-tap B operand, cout_s on the 16-column tile
     wtr : array<float>   // [cin][k*cout] - the rows form's transposed-conv B operand
+    wq : array<int8>     // [k][cout][cin] Q8_0 quants, repacked for the backend - the q8 rows form's per-tap W
+    wqs : array<float>   // the Q8_0 scales of wq, one per 32
     b : array<float>
     w_span : TtsSpan = TtsSpan()
     wt_span : TtsSpan = TtsSpan()
     wk_span : TtsSpan = TtsSpan()
     wtr_span : TtsSpan = TtsSpan()
+    wq_span : TtsSpan = TtsSpan()
+    wqs_span : TtsSpan = TtsSpan()
     b_span : TtsSpan = TtsSpan()
     cout : int64
     cout_s : int64
@@ -129,6 +181,7 @@ struct TtsConv1d {
     output_padding : int64
     transposed : bool
     served_rows : bool
+    q8 : bool
 }
 
 def serialize(var arch : Archive; var c : TtsConv1d) {
@@ -136,6 +189,8 @@ def serialize(var arch : Archive; var c : TtsConv1d) {
     arch |> serialize(c.wt_span)
     arch |> serialize(c.wk_span)
     arch |> serialize(c.wtr_span)
+    arch |> serialize(c.wq_span)
+    arch |> serialize(c.wqs_span)
     arch |> serialize(c.b_span)
     arch |> serialize_raw(c.cout)
     arch |> serialize_raw(c.cout_s)
@@ -149,6 +204,7 @@ def serialize(var arch : Archive; var c : TtsConv1d) {
     arch |> serialize_raw(c.output_padding)
     arch |> serialize_raw(c.transposed)
     arch |> serialize_raw(c.served_rows)
+    arch |> serialize_raw(c.q8)
 }
 
 def finalize(var c : TtsConv1d) {
@@ -156,6 +212,8 @@ def finalize(var c : TtsConv1d) {
     release_weight(c.wt)
     release_weight(c.wk)
     release_weight(c.wtr)
+    release_weight_q8(c.wq)
+    release_weight(c.wqs)
     release_weight(c.b)
 }
 
@@ -164,6 +222,8 @@ def weights_walk(var io : TtsBlobIo; var c : TtsConv1d) {
     weight_slot(io, c.wt, c.wt_span)
     weight_slot(io, c.wk, c.wk_span)
     weight_slot(io, c.wtr, c.wtr_span)
+    weight_slot_q8(io, c.wq, c.wq_span)
+    weight_slot(io, c.wqs, c.wqs_span)
     weight_slot(io, c.b, c.b_span)
 }
 
@@ -172,31 +232,43 @@ def weights_walk(var io : TtsBlobIo; var c : TtsConv1d) {
 struct TtsLinear {
     w : array<float>
     wt : array<float>
+    wq : array<int8>     // [nout][nin] Q8_0 quants, repacked for the backend - the q8 rows form's W
+    wqs : array<float>
     b : array<float>
     w_span : TtsSpan = TtsSpan()
     wt_span : TtsSpan = TtsSpan()
+    wq_span : TtsSpan = TtsSpan()
+    wqs_span : TtsSpan = TtsSpan()
     b_span : TtsSpan = TtsSpan()
     nout : int64
     nin : int64
+    q8 : bool
 }
 
 def serialize(var arch : Archive; var l : TtsLinear) {
     arch |> serialize(l.w_span)
     arch |> serialize(l.wt_span)
+    arch |> serialize(l.wq_span)
+    arch |> serialize(l.wqs_span)
     arch |> serialize(l.b_span)
     arch |> serialize_raw(l.nout)
     arch |> serialize_raw(l.nin)
+    arch |> serialize_raw(l.q8)
 }
 
 def finalize(var l : TtsLinear) {
     release_weight(l.w)
     release_weight(l.wt)
+    release_weight_q8(l.wq)
+    release_weight(l.wqs)
     release_weight(l.b)
 }
 
 def weights_walk(var io : TtsBlobIo; var l : TtsLinear) {
     weight_slot(io, l.w, l.w_span)
     weight_slot(io, l.wt, l.wt_span)
+    weight_slot_q8(io, l.wq, l.wq_span)
+    weight_slot(io, l.wqs, l.wqs_span)
     weight_slot(io, l.b, l.b_span)
 }
 
@@ -297,12 +369,44 @@ def conv1d_out_len(c : TtsConv1d; t_in : int64) : int64 {
     return (t_in + c.pad_l + c.pad_r - c.dilation * (c.k - 1l) - 1l) / c.stride + 1l
 }
 
-//! Mint the one served layout of a dense conv from its ONNX weight and drop what the consumer
-//! never reads: the rows form takes `wk` (forward) or `wtr` (transposed) and loses `w`; the
-//! channel-major form keeps `w`, a transposed one minting `wt` in its place.
-def conv1d_prepare(var c : TtsConv1d) {
+//! Can this conv serve the q8 rows form: a dense forward conv whose widths quantize per 32.
+def conv1d_q8_eligible(c : TtsConv1d) : bool {
+    return c.groups == 1l && !c.transposed && c.stride == 1l && c.cin % 32l == 0l && c.cout % 32l == 0l
+}
+
+// The q8 rows lane: each tap [cout][cin] quantized Q8_0 along cin, then repacked in place for
+// the backend when the box's backend wants it (`repack`).
+def private conv1d_prepare_q8(var c : TtsConv1d; repack : bool) {
+    let tap = c.cout * c.cin
+    var inscope @scratch slab : array<float>
+    slab |> reserve_resize(tap)
+    c.wq |> reserve_resize(c.k * tap)
+    c.wqs |> reserve_resize(c.k * tap / 32l)
+    for (kk in range64(c.k)) {
+        for (co in range64(c.cout)) {
+            for (ci in range64(c.cin)) {
+                slab[co * c.cin + ci] = c.w[(co * c.cin + ci) * c.k + kk]
+            }
+        }
+        quantize_q8_0_into(slab, tap, c.wq, c.wqs, kk * tap, kk * tap / 32l)
+        if (repack) {
+            repack_q8q8_weight(c.wq, c.wqs, kk * tap, c.cin, c.cout)
+        }
+    }
+    c.q8 = true
+    delete c.w
+}
+
+//! Mint the one served layout of a dense conv and drop what the consumer never reads: the rows
+//! form takes `wk` (forward) or `wtr` (transposed) - or, with `q8`, the quantized per-tap form -
+//! and loses `w`; the channel-major form keeps `w`, a transposed one minting `wt` in its place.
+def conv1d_prepare(var c : TtsConv1d; q8 : bool = false; repack : bool = false) {
     c.cout_s = c.cout
     return if (c.groups != 1l)
+    if (q8 && c.served_rows && conv1d_q8_eligible(c)) {
+        conv1d_prepare_q8(c, repack)
+        return
+    }
     if (c.transposed) {
         if (c.served_rows) {
             c.wtr |> reserve_resize(c.cin * c.k * c.cout)
@@ -605,16 +709,76 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
     }
 }
 
+// The q8 rows lane: the input rows quantized once (Q8_0 per 32 along cin), then each tap one
+// backend q8.q8 batch GEMM over the rows whose shifted input exists (the kernel splits its
+// weight rows across lanes itself), added onto the bias-initialized y.
+def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
+    let t_out = conv1d_out_len(c, t_in)
+    let cin = c.cin
+    let cout = c.cout
+    let nb = cin / 32l
+    let tap = cout * cin
+    let nbias = empty(c.b) ? 0l : cout
+    var inscope @scratch xq : array<int8>
+    var inscope @scratch xs : array<float>
+    var inscope @scratch ytap : array<float>
+    xq |> reserve_resize(t_in * cin)
+    xs |> reserve_resize(t_in * nb)
+    ytap |> reserve_resize(t_out * cout)
+    quantize_q8_0_into(x, t_in * cin, xq, xs, 0l, 0l)
+    var yp = unsafe(addr(y[0]))
+    var ytp = unsafe(addr(ytap[0]))
+    let bp = nbias > 0l ? unsafe(addr<float const?>(c.b[0])) : null
+    let wqp = unsafe(addr<int8 const?>(c.wq[0]))
+    let wsp = unsafe(addr<float const?>(c.wqs[0]))
+    let xqp = unsafe(addr<int8 const?>(xq[0]))
+    let xsp = unsafe(addr<float const?>(xs[0]))
+    maybe_parallel_for(0, int(t_out), lanes_for_work(t_out * cout, 0)) $(rb, re) {
+        unsafe {
+            for (r in range64(int64(rb), int64(re))) {
+                var yrow = yp + r * cout
+                for (co in range64(cout)) {
+                    yrow[co] = co < nbias ? bp[co] : 0.0
+                }
+            }
+        }
+    }
+    for (kk in range64(c.k)) {
+        let shift = kk * c.dilation - c.pad_l
+        let r0 = max(0l, -shift)
+        let r1 = min(t_out, t_in - shift)
+        continue if (r1 <= r0)
+        let rows = r1 - r0
+        unsafe {
+            invoke(g_mm_q8q8_batch, ytp, wqp + kk * tap, wsp + kk * tap / 32l, xqp + (r0 + shift) * cin, xsp + (r0 + shift) * nb, cin, cout, rows)
+        }
+        maybe_parallel_for(0, int(rows), lanes_for_work(rows * cout, 0)) $(rb, re) {
+            unsafe {
+                let c4 = cout / 4l
+                for (r in range64(int64(rb), int64(re))) {
+                    var y4 = reinterpret<float4?>(yp + (r0 + r) * cout)
+                    let t4 = reinterpret<float4 const?>(ytp + r * cout)
+                    for (j in range64(c4)) {
+                        y4[j] += t4[j]
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! y [t_out][cout_s] = conv(x [t_in][cin]) in the rows form; the row stride is the served
 //! width `cout_s`. Dense convs only, forward at stride 1 or transposed; every other shape
-//! runs the channel-major `conv1d`.
+//! runs the channel-major `conv1d`. A conv minted q8 runs the q8 lane.
 def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @exact_size var y : array<float>) {
     if (c.groups != 1l || (!c.transposed && c.stride != 1l)) {
         panic("dasLLAMA tts: the rows conv takes a dense conv (forward at stride 1, or transposed); got groups={c.groups} stride={c.stride} transposed={c.transposed}")
     }
     let t_out = conv1d_out_len(c, t_in)
     y |> reserve_resize(t_out * c.cout_s)
-    if (c.transposed) {
+    if (c.q8) {
+        conv1d_rows_dense_q8(c, x, t_in, y)
+    } elif (c.transposed) {
         rows_width_check(c.cout, "conv1d_rows (transposed)")
         conv1d_rows_transposed(c, x, t_in, y)
     } else {
@@ -625,8 +789,20 @@ def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @exact_size var y
 // ===== dense =====
 
 //! Mint the tiled GEMM's B operand `wt` [nin][nout] when the width sits on the 16-column tile;
-//! a layer only `linear_rows` ever reads (`rows_only`) then drops `w`.
-def linear_prepare(var l : TtsLinear; rows_only : bool = false) {
+//! a layer only `linear_rows` ever reads (`rows_only`) then drops `w` - or, with `q8` and widths
+//! that quantize per 32, takes the Q8_0 form of `w` (repacked for the backend when `repack`).
+def linear_prepare(var l : TtsLinear; rows_only : bool = false; q8 : bool = false; repack : bool = false) {
+    if (q8 && rows_only && l.nin % 32l == 0l && l.nout % 32l == 0l) {
+        l.wq |> reserve_resize(l.nout * l.nin)
+        l.wqs |> reserve_resize(l.nout * l.nin / 32l)
+        quantize_q8_0_into(l.w, l.nout * l.nin, l.wq, l.wqs, 0l, 0l)
+        if (repack) {
+            repack_q8q8_weight(l.wq, l.wqs, 0l, l.nin, l.nout)
+        }
+        l.q8 = true
+        delete l.w
+        return
+    }
     return if (l.nout % 16l != 0l)
     l.wt |> reserve_resize(l.nin * l.nout)
     for (o in range64(l.nout)) {
@@ -639,10 +815,44 @@ def linear_prepare(var l : TtsLinear; rows_only : bool = false) {
     }
 }
 
+// The q8 lane of linear_rows: rows quantized Q8_0 per 32 along nin, one backend q8.q8 batch
+// GEMM (it splits its weight rows across lanes itself), then the bias.
+def private linear_rows_q8(l : TtsLinear; x : array<float>; t : int64; var y : array<float>) {
+    let nin = l.nin
+    let nout = l.nout
+    var inscope @scratch xq : array<int8>
+    var inscope @scratch xs : array<float>
+    xq |> reserve_resize(t * nin)
+    xs |> reserve_resize(t * nin / 32l)
+    quantize_q8_0_into(x, t * nin, xq, xs, 0l, 0l)
+    unsafe {
+        invoke(g_mm_q8q8_batch, addr(y[0]), addr<int8 const?>(l.wq[0]), addr<float const?>(l.wqs[0]),
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), nin, nout, t)
+    }
+    return if (empty(l.b))
+    var yp = unsafe(addr(y[0]))
+    let b4 = unsafe(addr<float4 const?>(l.b[0]))
+    maybe_parallel_for(0, int(t), lanes_for_work(t * nout, 0)) $(rb, re) {
+        unsafe {
+            let n4 = nout / 4l
+            for (r in range64(int64(rb), int64(re))) {
+                var y4 = reinterpret<float4?>(yp + r * nout)
+                for (j in range64(n4)) {
+                    y4[j] += b4[j]
+                }
+            }
+        }
+    }
+}
+
 //! y [t][nout] = x [t][nin] . w^T + b: the tiled GEMM over row blocks when `wt` was minted,
-//! the batched dot form otherwise.
+//! the batched dot form otherwise; a layer minted q8 runs the q8 lane.
 def linear_rows(l : TtsLinear; x : array<float>; t : int64; @exact_size var y : array<float>) {
     y |> reserve_resize(t * l.nout)
+    if (l.q8) {
+        linear_rows_q8(l, x, t, y)
+        return
+    }
     if (empty(l.wt)) {
         matmul_batch(y, l.w, x, l.nin, l.nout, t)
         return if (empty(l.b))

@@ -16,6 +16,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_plane
 require dasllama/dasllama_image
+require dasllama/dasllama_tower   // asr_prof_add: the encode-stage profiling rail
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 
@@ -245,7 +246,9 @@ struct StyleTts2Model {
     predictor : St2Predictor = St2Predictor()
     decoder : St2Decoder = St2Decoder()
     source : SineSourceCfg = SineSourceCfg()
+    q8 : bool               // the lane this image was minted on: the rows GEMMs serve Q8_0 quants
     blob : PlaneF = PlaneF()
+    qblob : PlaneI8 = PlaneI8()
     image_map : void?
     image_bytes : uint64
 }
@@ -262,10 +265,11 @@ def weights_walk(var io : TtsBlobIo; var m : StyleTts2Model) {
     }
 }
 
-// serialize_image_meta covers 13 fields; voices (views bound from voice_spans), image_map and
+// serialize_image_meta covers 14 fields; voices (views bound from voice_spans), image_map and
 // image_bytes are the deliberate skips
-let private ST2_META_FIELDS = 13 + 3
+let private ST2_META_FIELDS = 14 + 3
 let ST2_IMAGE_TAG = "tts-f32"
+let ST2_IMAGE_TAG_Q8 = "tts-q8"
 
 def private serialize_image_meta(var arch : Archive; var m : StyleTts2Model) {
     verify(count_meta_fields(m) == ST2_META_FIELDS)   // grew StyleTts2Model? extend this list
@@ -282,16 +286,62 @@ def private serialize_image_meta(var arch : Archive; var m : StyleTts2Model) {
     arch |> serialize(m.predictor)
     arch |> serialize(m.decoder)
     arch |> serialize(m.source)
+    arch |> serialize_raw(m.q8)
 }
 
 [unused_argument(m)]
 def private image_post_load(var m : StyleTts2Model) {}
 
-//! Point every weight view into the mapped blob - after the parse bound the plane.
+//! Point every weight view into the mapped blobs - after the parse bound the planes.
 def private st2_bind(var m : StyleTts2Model) {
-    var io = TtsBlobIo(staging = false, plane = m.blob)
+    var io = TtsBlobIo(staging = false, plane = m.blob, qplane = m.qblob)
     weights_walk(io, m)
 }
+
+// ===== the serving lane: f32 planes (the parity rail's form) or Q8_0 quants on the rows GEMMs.
+// Each lane is its own prepared image; the q8 image's bytes follow the backend's repack, so its
+// tag is config-bound while the f32 tag is config-free =====
+
+enum private St2Lane {
+    unset    // the policy decides
+    exact    // f32 planes
+    q8
+}
+var private g_st2_q8_pin = St2Lane.unset
+
+def private st2_serve_q8() : bool {
+    if (g_st2_q8_pin != St2Lane.unset) {
+        return g_st2_q8_pin == St2Lane.q8
+    }
+    return false   // the policy default stays f32 until the rig rules on the q8 lane
+}
+
+//! Pin the rows GEMMs' format for subsequent loads: q8 quants vs the file's own f32 planes.
+//! Each lane is its own prepared image. ``reset_styletts2_q8`` returns to the policy default.
+//! The facade spells these ``set_tts_q8`` / ``reset_tts_q8`` / ``tts_serves_q8``.
+def set_styletts2_q8(on : bool) {
+    g_st2_q8_pin = on ? St2Lane.q8 : St2Lane.exact
+}
+
+def reset_styletts2_q8() {
+    g_st2_q8_pin = St2Lane.unset
+}
+
+//! Would the next load serve the rows GEMMs as q8 - the pin when set, the policy otherwise.
+def styletts2_serves_q8() : bool => st2_serve_q8()
+
+def private st2_tag() : string => st2_serve_q8() ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
+
+// the lane changes what a load mints and serves, so the load says which and why
+def private st2_announce_lane() {
+    let why = g_st2_q8_pin != St2Lane.unset ? "pinned via set_tts_q8" : "the policy default"
+    to_log(LOG_INFO, "dasLLAMA styletts2: rows GEMM lane {st2_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
+}
+
+// what the readers mint while a stage runs: the lane's quant choice and whether the box's
+// backend wants the quants repacked
+var private g_stage_q8 = false
+var private g_stage_repack = false
 
 def finalize(var m : StyleTts2Model) {
     for (name in m.voice_names) {
@@ -307,6 +357,7 @@ def finalize(var m : StyleTts2Model) {
     delete m.predictor
     delete m.decoder
     delete m.blob
+    delete m.qblob
     if (m.image_map != null) {
         image_backing_release(m.image_map, m.image_bytes)
         m.image_map = null
@@ -319,6 +370,7 @@ def finalize(var m : StyleTts2Model) {
 struct St2Staging {
     e : StyleTts2Model = StyleTts2Model()
     blob : array<float>
+    qblob : array<int8>
 }
 
 def private serialize_image_meta(var arch : Archive; var st : St2Staging) {
@@ -330,12 +382,14 @@ def private image_post_load(var st : St2Staging) {}
 
 def finalize(var st : St2Staging) {
     delete st.blob
+    delete st.qblob
     delete st.e
 }
 
 [init]
 def private register_styletts2_image_tags {
-    register_image_family_tag(ST2_IMAGE_TAG, true)   // no CPU knob shapes the blob: one image per box
+    register_image_family_tag(ST2_IMAGE_TAG, true)   // no CPU knob shapes the f32 blob: one image per box
+    register_image_family_tag(ST2_IMAGE_TAG_Q8)      // the q8 quants follow the backend's repack
 }
 
 let private LN_EPS = 1e-5
@@ -386,7 +440,7 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
         c.cin = d1 * c.groups
     }
     c.served_rows = rows
-    conv1d_prepare(c)
+    conv1d_prepare(c, g_stage_q8, g_stage_repack)
     return <- c
 }
 
@@ -403,7 +457,7 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         l.b <- read_arr(m, bytes, "{prefix}.bias")
     }
-    linear_prepare(l, rows_only)
+    linear_prepare(l, rows_only, g_stage_q8, g_stage_repack)
     return <- l
 }
 
@@ -595,8 +649,11 @@ def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) :
 //! Read a converted StyleTTS2-lineage GGUF (harness/convert_kitten.py, harness/convert_kokoro.py)
 //! into the mint-side carrier: served layouts minted, voices and STFT convention read, every
 //! weight moved into the staging blob. Family keys are the family file's to read.
-def stage_styletts2(path : string) : St2Staging {
+def stage_styletts2(path : string; q8 : bool = false) : St2Staging {
     var inscope st = St2Staging()
+    st.e.q8 = q8
+    g_stage_q8 = q8
+    g_stage_repack = q8 && select_matmul_backend_for_load_()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA styletts2: cannot open model '{path}'")
@@ -625,39 +682,44 @@ def stage_styletts2(path : string) : St2Staging {
         read_decoder(m, bytes, st.e.decoder)
     }
     fclose(f)
-    var io = TtsBlobIo(staging = true, blob = unsafe(addr(st.blob)))
+    var io = TtsBlobIo(staging = true, blob = unsafe(addr(st.blob)), qblob = unsafe(addr(st.qblob)))
     weights_walk(io, st.e)
     return <- st
 }
 
 //! Mint a served model from a staged read without touching disk - the in-memory image rail,
-//! the off-rail control for suites.
+//! the off-rail control for suites. The staged read's lane picks the tag.
 def mint_styletts2(var st : St2Staging; var out : StyleTts2Model) {
-    cache_via_image_staged(st, out, "", ST2_IMAGE_TAG)
+    let tag = st.e.q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
+    cache_via_image_staged(st, out, "", tag)
     st2_bind(out)
 }
 
-//! Load a converted StyleTTS2-lineage GGUF through its prepared image: the sibling `.dlim` maps
-//! when it exists, else the GGUF stages, bakes and maps (``DASLLAMA_IMAGE=0`` mints in memory).
+//! Load a converted StyleTTS2-lineage GGUF through its prepared image on the current lane: the
+//! sibling `.dlim` maps when it exists, else the GGUF stages, bakes and maps
+//! (``DASLLAMA_IMAGE=0`` mints in memory).
 def load_styletts2(path : string) : StyleTts2Model {
     var inscope m = StyleTts2Model()
+    let q8 = st2_serve_q8()
+    let tag = st2_tag()
+    st2_announce_lane()
     if (g_env_engine.image) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
-        let img = image_path_for(path, ST2_IMAGE_TAG)
+        let img = image_path_for(path, tag)
         let ts = ref_time_ticks()
-        if (load_image(img, m, ST2_IMAGE_TAG)) {
+        if (load_image(img, m, tag)) {
             st2_bind(m)
             to_log(LOG_INFO, "dasLLAMA styletts2: prepared image mapped in {get_time_usec(ts) / 1000} ms - {img}\n")
             return <- m
         }
-        var inscope st <- stage_styletts2(path)
-        if (cache_via_image_staged(st, m, img, ST2_IMAGE_TAG)) {
-            dlim_gc_stale(path, ST2_IMAGE_TAG)   // the fresh bake ON DISK proves its lane's siblings dead
+        var inscope st <- stage_styletts2(path, q8)
+        if (cache_via_image_staged(st, m, img, tag)) {
+            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead
         }
         st2_bind(m)
         return <- m
     }
-    var inscope st <- stage_styletts2(path)
+    var inscope st <- stage_styletts2(path, q8)
     mint_styletts2(st, m)
     return <- m
 }
@@ -976,23 +1038,40 @@ def styletts2_prosody(p : St2Predictor; en : array<float>; c, frames : int64; s 
     return f2
 }
 
-// One Snake residual block on token-major x [t][c].
+// One Snake residual block on token-major x [t][c]; every op class lands in its tts.gen.* bucket
+// of the encode-stage profiling rail (set_asr_prof / asr_prof_report).
 def private gen_res_block(b : St2GenResBlock; var x : array<float>; t : int64; s : array<float>) {
     let n = b.c * t
     var inscope @exact_size xt : array<float>
     var inscope @exact_size y1 : array<float>
     var inscope @exact_size y2 : array<float>
     for (j in range(length(b.convs1))) {
+        var tc = ref_time_ticks()
         copy_floats_into(x, n, xt)
+        asr_prof_add("tts.gen.copy", tc)
+        tc = ref_time_ticks()
         adain_rows(b.adain1[j], xt, t, b.c, s, LN_EPS)
+        asr_prof_add("tts.gen.adain", tc)
+        tc = ref_time_ticks()
         snake_rows(xt, t, b.c, b.alpha1[j].a)
+        asr_prof_add("tts.gen.snake", tc)
+        tc = ref_time_ticks()
         conv1d_rows(b.convs1[j], xt, t, y1)
+        asr_prof_add("tts.gen.conv", tc)
+        tc = ref_time_ticks()
         adain_rows(b.adain2[j], y1, t, b.c, s, LN_EPS)
+        asr_prof_add("tts.gen.adain", tc)
+        tc = ref_time_ticks()
         snake_rows(y1, t, b.c, b.alpha2[j].a)
+        asr_prof_add("tts.gen.snake", tc)
+        tc = ref_time_ticks()
         conv1d_rows(b.convs2[j], y1, t, y2)
+        asr_prof_add("tts.gen.conv", tc)
+        tc = ref_time_ticks()
         for (i in range64(n)) {
             x[i] += y2[i]
         }
+        asr_prof_add("tts.gen.resadd", tc)
     }
 }
 
@@ -1038,7 +1117,10 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
     var inscope @exact_size xs : array<float>
     var inscope @exact_size src_ct : array<float>
     var inscope @exact_size src : array<float>
+    var tc = ref_time_ticks()
     leaky_relu(x, cc * tt, 0.1)
+    asr_prof_add("tts.gen.leaky", tc)
+    tc = ref_time_ticks()
     conv1d(d.noise_convs[i], har_spec, har_frames, src_ct)
     let src_t = conv1d_out_len(d.noise_convs[i], har_frames)
     let src_c = d.noise_convs[i].cout
@@ -1046,11 +1128,14 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
         tr.src0 := src_ct
     }
     transpose_ct(src_ct, src_c, src_t, src)
+    asr_prof_add("tts.gen.noise", tc)
     gen_res_block(d.noise_res[i], src, src_t, s)
     if (tr != null && i == 0l) {
         transpose_tc(src, src_t, src_c, tr.nres0)
     }
+    tc = ref_time_ticks()
     conv1d_rows(d.ups[i], x, tt, y)
+    asr_prof_add("tts.gen.ups", tc)
     tt = conv1d_out_len(d.ups[i], tt)
     cc = d.ups[i].cout
     if (tr != null) {
@@ -1071,6 +1156,7 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
         panic("dasLLAMA styletts2: source branch {src_t} frames against {tt} at stage {i}")
     }
     let n = cc * tt
+    tc = ref_time_ticks()
     for (e in range64(n)) {
         x[e] += src[e]
     }
@@ -1078,8 +1164,18 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
     for (e in range64(n)) {
         xs[e] = 0.0
     }
+    asr_prof_add("tts.gen.stagesum", tc)
+    stage_resblocks(d, i, x, xs, y, cc, tt, s, tr)
+}
+
+// The stage's n_kernels Snake residual blocks, each on a copy of the stage input, averaged.
+def private stage_resblocks(d : St2Decoder; i : int64; var x, xs, y : array<float>; cc, tt : int64; s : array<float>; var tr : StyleTts2Trace?) {
+    let n = cc * tt
+    var tc = 0l
     for (j in range64(d.n_kernels)) {
+        tc = ref_time_ticks()
         copy_floats_into(x, n, y)
+        asr_prof_add("tts.gen.copy", tc)
         gen_res_block(d.resblocks[i * d.n_kernels + j], y, tt, s)
         if (tr != null && i == 0l) {
             if (j == 0l) {
@@ -1090,14 +1186,18 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
                 transpose_tc(y, tt, cc, tr.rb2)
             }
         }
+        tc = ref_time_ticks()
         for (e in range64(n)) {
             xs[e] += y[e]
         }
+        asr_prof_add("tts.gen.stagesum", tc)
     }
     let inv = 1.0 / float(d.n_kernels)
+    tc = ref_time_ticks()
     for (e in range64(n)) {
         x[e] = xs[e] * inv
     }
+    asr_prof_add("tts.gen.stagesum", tc)
 }
 
 // ===== the generator GPU hook (a driver registers at [init] and requires this module for its
@@ -1144,6 +1244,7 @@ def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : a
     for (i in range64(long_length(d.ups))) {
         generator_stage(d, i, x, cc, tt, s, har_spec, har_frames, tr)
     }
+    let tc = ref_time_ticks()
     leaky_relu(x, cc * tt, 0.01)
     var inscope @exact_size y : array<float>
     conv1d_rows(d.conv_post, x, tt, y)
@@ -1153,6 +1254,7 @@ def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : a
     var inscope @exact_size re : array<float>
     var inscope @exact_size im : array<float>
     polar_to_rect_rows(y, d.conv_post.cout_s, d.bins, tt, re, im)
+    asr_prof_add("tts.gen.post", tc)
     var inscope @exact_size wr : array<float>
     var inscope @exact_size wi : array<float>
     conv1d(d.stft_bwd_re, re, tt, wr)

@@ -582,6 +582,37 @@ The generator hook slot (the sec.2.14 shape) closes the rung: `register_styletts
 spectrum and answering with the waveform or declining, the trace rail keeping the CPU chain;
 `test_kitten_generator_hook` proves decline and serve through the counters. No driver yet.
 
+Rung (e) receipt (2026-09-02): the q8 lane. `stage_styletts2(path, q8)` mints, for every rows
+conv whose widths quantize per 32 and every rows-only linear, the Q8_0 form of the weight (per
+tap [cout][cin] for a conv; the ONNX [nout][nin] for a linear) into an int8 blob plane,
+repacked in place for the box's backend, and drops the f32 served layout; `conv1d_rows` /
+`linear_rows` route off the loaded lane (`q8` per weight in the meta) to the backend's q8.q8
+batch kernel - a conv quantizes its input rows once, then one kernel call per tap over the
+rows whose shifted input exists, accumulated onto the bias-initialized output. The lane trio
+`set_tts_q8` / `reset_tts_q8` / `tts_serves_q8` (facade) pins it; tag `tts-q8` is
+config-bound (the repack is the backend's); policy default stays f32 until this receipt is
+ruled. Block test: q8 error 3-8% of a 2% dot-envelope bar. Rig, kokoro af_heart, 200
+sentences: WER 3.50% (f32 3.41, reference 3.18), UTMOS 4.500 (f32 4.501) - two words of
+2202, quality intact. Speed, same input, mapped, clean: nano 532 -> 499 ms (bert 108 -> 61,
+generator 307 -> 328), mini 1200 -> 1023 (bert 113 -> 60, generator 725 -> 602), kokoro
+1513 -> 1246 (bert 110 -> 53, generator 1079 -> 853). Kernel probe (`linear_rows`, 8 lanes):
+the f32 tile runs 275-330 GMAC/s (70-80% of NEON peak - the microkernel is not the
+bottleneck); q8 gives 1.55-1.65x at the 128/256-channel taps, 2.2-3.9x on bert, and 0.58x at
+nano's 64-channel taps. The generator profile through the encode-stage rail
+(`txt2wav --prof`, `tts.gen.*` buckets), kokoro q8 lane, 865 ms: conv 447, snake 104, copy
+70, residual adds 70, adain 50, noise branch 39, stage sums 32, upsamplers 24; f32 lane the
+same but conv 790. So after q8 the conv is half the generator, the other half is the passes
+around it, three of them single-threaded loops (copy, residual add, stage sums: 172 ms), and
+the q8 conv itself reaches 160 GMAC/s of the kernel's 455 because each tap pays a separate
+accumulate pass, the kernel's token block-sum pass and the requantize.
+
+Next rungs from that profile, cheapest first: (f) parallelize and fuse the elementwise
+passes (the copy into AdaIN's normalize, the residual add and stage sums as float4 row
+blocks) - ~130 ms on kokoro; (g) Snake's sin as the vecmath polynomial (JIT or a das
+`sin4`) - ~70 ms; (h) an accumulating q8 batch kernel entry with the token block-sums hoisted
+out of the per-tap call - ~150 ms; (i) one fused AdaIN statistics pass - ~20 ms. Together the
+kokoro q8 generator lands near 500 ms and the total near 900 ms, RTF ~0.10, torch parity.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the
