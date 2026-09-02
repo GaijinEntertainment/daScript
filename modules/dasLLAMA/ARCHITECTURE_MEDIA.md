@@ -74,7 +74,10 @@ stages, each its own file, and every stage is data-driven from the model store: 
   STFT pieces (edge pad, magnitude and phase, polar to rectangular, reflection pad). The
   token-major [T][C] "rows" forms are what the generator and bert run: a dense stride-1 conv is
   k tap-GEMMs on the tiled `gemm_f32_jo` over the shifted input rows (no im2col; the served
-  width `cout_s` on the 16-column tile), a transposed conv one GEMM plus a gather overlap-add,
+  width `cout_s` on the 16-column tile) - on the q8 lane one Q8·Q8 batch GEMM per chunk of
+  output rows over tap-stacked int8 rows, the k shifted input rows side by side (K = k*cin,
+  the weight baked [cout][k*cin], zero scales where a shift leaves the input), so nothing
+  accumulates across taps - a transposed conv one GEMM plus a gather overlap-add,
   the dense layer the same tiled GEMM off `wt`, Snake and AdaIN four channels a lane; every rows
   kernel splits its rows across lanes on tile-aligned block edges, and `tests/test_tts_blocks.das`
   holds each one to its channel-major twin at the dot-envelope bar. A weight is an ONNX-layout

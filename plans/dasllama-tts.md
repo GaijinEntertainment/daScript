@@ -640,6 +640,29 @@ emptiness) - `TtsNoise.captured` now decides, and the facade's streaming cell is
 retires the two bucket rails into the jobque markers as a follow-up PR, row 73 lists the
 `REVIEW.das` gates.
 
+Rung (h) receipt (2026-09-02, the ruling: "B. i'd like to keep gemms separate"): the q8 conv
+stacks its taps along K instead of accumulating across them. `conv1d_prepare_q8` bakes one
+[cout][k*cin] Q8_0 matrix (tap-major within a row, repacked for the backend; `q8_n` carries
+the row width and moves the layout fingerprint, so a stale q8 image declines and rebakes);
+`conv1d_rows_dense_q8` quantizes the input rows once, then per chunk of output rows (a 4 MB
+budget, so the stacked chunk stays cache-resident) copies the k shifted quantized rows side by
+side - zero scales where the shift leaves the input - and makes ONE batch-GEMM call with
+K = k*cin, adding the bias row-locally. No `ytap`, no per-tap accumulate pass, and on a
+bias128 stamp the token block sums are computed once per stacked row inside the one call.
+Same two-sentence kokoro input, warm, quiet: conv 476 -> 304 ms, generator 745 -> 573.
+
+Rung (g) receipt (2026-09-02, "lets do JIT sin change (gate on mac i guess?) - and see the
+gain"): `sin(floatN)` / `cos(floatN)` under the JIT emit the interpreter's own vecmath
+`v_sincos` as IR (`modules/dasLLVM/daslib/llvm_jit_intrin.das`, `build_vector_sincos`,
+gated aarch64 like the exp emitter; one ulp against libm out to |x| = 1e5, the dasLLVM test
+`llvm_vector_sincos.das` pins the bound over 83k samples; codegen version 0x6a). Snake in the
+generator 120 -> 31 ms. With (h): kokoro generator 745 -> 480, total 1158 -> 884-900 ms over
+four runs, RTF 0.096 - torch is 0.097 on this box. Nano on the same input: 15.0 s of audio in
+459-467 ms, RTF 0.031 - ORT f32 is 0.035. All four suites green (blocks 10, kitten 13,
+kokoro 4, facade 9). What remains on kokoro: conv 304 (63% of the generator), adain 43, noise
+38, ups 29, snake 31; outside the generator the decoder (182 ms, still channel-major) is the
+largest stage.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the

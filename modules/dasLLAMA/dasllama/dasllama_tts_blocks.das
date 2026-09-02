@@ -159,7 +159,7 @@ struct TtsConv1d {
     wt : array<float>    // [cout*k][cin] - the channel-major transposed conv's GEMM form
     wk : array<float>    // [k][cin][cout_s] - the rows form's per-tap B operand, cout_s on the 16-column tile
     wtr : array<float>   // [cin][k*cout] - the rows form's transposed-conv B operand
-    wq : array<int8>     // [k][cout][cin] Q8_0 quants, repacked for the backend - the q8 rows form's per-tap W
+    wq : array<int8>     // [cout][k*cin] Q8_0 quants, the taps stacked along K, repacked for the backend - the q8 rows form's W
     wqs : array<float>   // the Q8_0 scales of wq, one per 32
     b : array<float>
     w_span : TtsSpan = TtsSpan()
@@ -182,6 +182,7 @@ struct TtsConv1d {
     transposed : bool
     served_rows : bool
     q8 : bool
+    q8_n : int64         // the width of a wq row, k*cin - the K of the stacked GEMM
 }
 
 def serialize(var arch : Archive; var c : TtsConv1d) {
@@ -205,6 +206,7 @@ def serialize(var arch : Archive; var c : TtsConv1d) {
     arch |> serialize_raw(c.transposed)
     arch |> serialize_raw(c.served_rows)
     arch |> serialize_raw(c.q8)
+    arch |> serialize_raw(c.q8_n)
 }
 
 def finalize(var c : TtsConv1d) {
@@ -374,31 +376,33 @@ def conv1d_q8_eligible(c : TtsConv1d) : bool {
     return c.groups == 1l && !c.transposed && c.stride == 1l && c.cin % 32l == 0l && c.cout % 32l == 0l
 }
 
-// The q8 rows lane: each tap [cout][cin] quantized Q8_0 along cin, then repacked in place for
-// the backend when the box's backend wants it (`repack`).
+// The q8 rows lane: the taps stacked along K into one [cout][k*cin] matrix (tap-major within
+// a row), quantized Q8_0 per 32, then repacked in place for the backend when the box's backend
+// wants it (`repack`) - a conv is one GEMM over activation rows stacked the same way.
 def private conv1d_prepare_q8(var c : TtsConv1d; repack : bool) {
-    let tap = c.cout * c.cin
-    var inscope @scratch slab : array<float>
-    slab |> reserve_resize(tap)
-    c.wq |> reserve_resize(c.k * tap)
-    c.wqs |> reserve_resize(c.k * tap / 32l)
-    for (kk in range64(c.k)) {
-        for (co in range64(c.cout)) {
+    let kc = c.k * c.cin
+    var inscope slab : array<float>
+    slab |> reserve_resize(c.cout * kc)
+    for (co in range64(c.cout)) {
+        for (kk in range64(c.k)) {
             for (ci in range64(c.cin)) {
-                slab[co * c.cin + ci] = c.w[(co * c.cin + ci) * c.k + kk]
+                slab[co * kc + kk * c.cin + ci] = c.w[(co * c.cin + ci) * c.k + kk]
             }
         }
-        quantize_q8_0_into(slab, tap, c.wq, c.wqs, kk * tap, kk * tap / 32l)
-        if (repack) {
-            repack_q8q8_weight(c.wq, c.wqs, kk * tap, c.cin, c.cout)
-        }
     }
+    c.wq |> reserve_resize(c.cout * kc)
+    c.wqs |> reserve_resize(c.cout * kc / 32l)
+    quantize_q8_0_into(slab, c.cout * kc, c.wq, c.wqs, 0l, 0l)
+    if (repack) {
+        repack_q8q8_weight(c.wq, c.wqs, 0l, kc, c.cout)
+    }
+    c.q8_n = kc
     c.q8 = true
     delete c.w
 }
 
 //! Mint the one served layout of a dense conv and drop what the consumer never reads: the rows
-//! form takes `wk` (forward) or `wtr` (transposed) - or, with `q8`, the quantized per-tap form -
+//! form takes `wk` (forward) or `wtr` (transposed) - or, with `q8`, the quantized stacked form -
 //! and loses `w`; the channel-major form keeps `w`, a transposed one minting `wt` in its place.
 def conv1d_prepare(var c : TtsConv1d; q8 : bool = false; repack : bool = false) {
     c.cout_s = c.cout
@@ -484,7 +488,8 @@ var @scratch g_convt_v : array<float>
 var @scratch g_rows_v : array<float>
 var @scratch g_q8_xq : array<int8>
 var @scratch g_q8_xs : array<float>
-var @scratch g_q8_ytap : array<float>
+var @scratch g_q8_xst : array<int8>
+var @scratch g_q8_xss : array<float>
 var @scratch g_adain_h : array<float>
 var @scratch g_adain_mean : array<float>
 var @scratch g_adain_ssq : array<float>
@@ -739,58 +744,83 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
 // The q8 rows lane: the input rows quantized once (Q8_0 per 32 along cin), then each tap one
 // backend q8.q8 batch GEMM over the rows whose shifted input exists (the kernel splits its
 // weight rows across lanes itself), added onto the bias-initialized y.
+let private Q8_STACK_BYTES = 4l * 1024l * 1024l   // the stacked chunk stays cache-resident while the kernel reads it
+
+// One GEMM per chunk of output rows over stacked rows - the k shifted input rows side by side,
+// copied from the once-quantized input, zero scales where the shift leaves it - so the kernel
+// sees K = k*cin and nothing accumulates across taps.
 def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
     let cin = c.cin
     let cout = c.cout
     let nb = cin / 32l
-    let tap = cout * cin
+    let kc = c.q8_n
+    let knb = kc / 32l
     let nbias = empty(c.b) ? 0l : cout
     var xq & = g_q8_xq
     var xs & = g_q8_xs
-    var ytap & = g_q8_ytap
+    var xst & = g_q8_xst
+    var xss & = g_q8_xss
     xq |> reserve_resize(t_in * cin)
     xs |> reserve_resize(t_in * nb)
-    ytap |> reserve_resize(t_out * cout)
     quantize_q8_0_into(x, t_in * cin, xq, xs, 0l, 0l)
+    let chunk = clamp(Q8_STACK_BYTES / kc / 4l * 4l, 64l, t_out)
+    xst |> reserve_resize(chunk * kc)
+    xss |> reserve_resize(chunk * knb)
     var yp = unsafe(addr(y[0]))
-    var ytp = unsafe(addr(ytap[0]))
     let bp = nbias > 0l ? unsafe(addr<float const?>(c.b[0])) : null
     let wqp = unsafe(addr<int8 const?>(c.wq[0]))
     let wsp = unsafe(addr<float const?>(c.wqs[0]))
     let xqp = unsafe(addr<int8 const?>(xq[0]))
     let xsp = unsafe(addr<float const?>(xs[0]))
-    maybe_parallel_for(0, int(t_out), lanes_for_work(t_out * cout, 0)) $(rb, re) {
-        unsafe {
-            for (r in range64(int64(rb), int64(re))) {
-                var yrow = yp + r * cout
-                for (co in range64(cout)) {
-                    yrow[co] = co < nbias ? bp[co] : 0.0
-                }
-            }
-        }
-    }
-    for (kk in range64(c.k)) {
-        let shift = kk * c.dilation - c.pad_l
-        let r0 = max(0l, -shift)
-        let r1 = min(t_out, t_in - shift)
-        continue if (r1 <= r0)
-        let rows = r1 - r0
-        unsafe {
-            invoke(g_mm_q8q8_batch, ytp, wqp + kk * tap, wsp + kk * tap / 32l, xqp + (r0 + shift) * cin, xsp + (r0 + shift) * nb, cin, cout, rows)
-        }
-        maybe_parallel_for(0, int(rows), lanes_for_work(rows * cout, 0)) $(rb, re) {
+    var xstp = unsafe(addr(xst[0]))
+    var xssp = unsafe(addr(xss[0]))
+    let k = c.k
+    let dil = c.dilation
+    let pad = c.pad_l
+    var r0 = 0l
+    while (r0 < t_out) {
+        let rows = min(chunk, t_out - r0)
+        maybe_parallel_for(0, int(rows), lanes_for_work(rows * kc, 0)) $(rb, re) {
             unsafe {
-                let c4 = cout / 4l
                 for (r in range64(int64(rb), int64(re))) {
-                    var y4 = reinterpret<float4?>(yp + (r0 + r) * cout)
-                    let t4 = reinterpret<float4 const?>(ytp + r * cout)
-                    for (j in range64(c4)) {
-                        y4[j] += t4[j]
+                    var drow = xstp + r * kc
+                    var srow = xssp + r * knb
+                    for (kk in range64(k)) {
+                        let src = r0 + r + kk * dil - pad
+                        if (src >= 0l && src < t_in) {
+                            memcpy(drow + kk * cin, xqp + src * cin, cin)
+                            memcpy(srow + kk * nb, xsp + src * nb, nb * 4l)
+                        } else {
+                            for (j in range64(cin)) {
+                                drow[kk * cin + j] = int8(0)
+                            }
+                            for (j in range64(nb)) {
+                                srow[kk * nb + j] = 0.0
+                            }
+                        }
                     }
                 }
             }
         }
+        unsafe {
+            invoke(g_mm_q8q8_batch, yp + r0 * cout, wqp, wsp, xstp, xssp, kc, cout, rows)
+        }
+        if (nbias > 0l) {
+            maybe_parallel_for(0, int(rows), lanes_for_work(rows * cout, 0)) $(rb, re) {
+                unsafe {
+                    let c4 = cout / 4l
+                    let b4 = reinterpret<float4 const?>(bp)
+                    for (r in range64(int64(rb), int64(re))) {
+                        var y4 = reinterpret<float4?>(yp + (r0 + r) * cout)
+                        for (j in range64(c4)) {
+                            y4[j] += b4[j]
+                        }
+                    }
+                }
+            }
+        }
+        r0 += rows
     }
 }
 
