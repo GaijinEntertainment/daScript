@@ -103,6 +103,8 @@ def main():
     ap.add_argument("root")
     ap.add_argument("--out", required=True)
     ap.add_argument("--local-additions", help="json {word: misaki phonemes} merged over the gold tier")
+    ap.add_argument("--focus-words", help="also write the tag-keyed gold words, one per line, lowercased - the "
+                    "tagger's silver prose is sampled around them (mint_postag_silver.py --focus-words)")
     a = ap.parse_args()
     sys.path.insert(0, os.path.join(a.root, "scripts"))
     os.environ.setdefault("NLTK_DATA", os.path.join(a.root, ".nltk"))
@@ -115,6 +117,11 @@ def main():
     silver = json.load(open(os.path.join(data_dir, "us_silver.json"), encoding="utf8"))
     if a.local_additions:
         gold.update(json.load(open(a.local_additions, encoding="utf8")))
+    if a.focus_words:
+        focus = sorted({w.lower() for w, v in gold.items() if isinstance(v, dict)})
+        with open(a.focus_words, "w", encoding="utf8") as f:
+            f.write("\n".join(focus) + "\n")
+        print(f"wrote {a.focus_words}: {len(focus)} tag-keyed words")
     cmu_path = os.path.join(os.environ["NLTK_DATA"], "corpora", "cmudict", "cmudict")
     cmu = read_cmudict(cmu_path)
     calib = G.load_calibration()["arpabet_misaki"]

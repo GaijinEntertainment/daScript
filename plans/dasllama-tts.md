@@ -92,7 +92,7 @@ Hard-won facts phase 1 must not rediscover:
 | file | owns |
 |---|---|
 | `dasllama/dasllama_tts_types.das` | the floor: `TtsCaps` (voices, sample rate, langs, cloning=no), voice descriptors, synth request/result types. Family files require this, never each other. |
-| `dasllama/dasllama_tts_blocks.das` | the StyleTTS2-lineage block home (tower analogue): AdaIN1d, AdaLayerNorm, LSTM/BiLSTM wrappers over the VAD cell, Conv1d + weight-norm-folded readers, ConvTranspose1d, harmonic source (sine gen + noise), ISTFT/overlap-add, snake/leaky/tanh activations, the prosody predictor shapes, the seeded-RNG rail. One home: a family file re-implementing one of these is a defect. |
+| `dasllama/dasllama_tts_blocks.das` | the StyleTTS2-lineage block home (tower analogue): the PL-BERT encoder (one ALBERT layer group applied N times), AdaIN1d, AdaLayerNorm, a whole-sequence bidirectional LSTM (the VAD's cell is private to `dasllama_vad.das`, single-step and shape-pinned - it stays there untouched), Conv1d (dilated, strided, depthwise), ConvTranspose1d, harmonic source (sine gen + noise), STFT-as-conv and ISTFT/overlap-add, snake/leaky/gelu-tanh activations, the duration->alignment expansion, the prosody predictor shapes, the seeded-RNG rail with a captured-noise oracle mode. One home: a family file re-implementing one of these is a defect. |
 | `dasllama/dasllama_tts.das` | the facade: `load_tts_model(path)`, `caps`, `create_session`, `synthesize(m, s, text, voice, speed) : array<float>` (+ sentence-chunked streaming form), model-kind dispatch by GGUF metadata. Returns f32 PCM + rate; requires NO `audio` module - the REVIEW_PLACEMENT.md rule that no engine file but `dasllama_audio_io` requires `audio` stands; file output is the caller's job through `dasllama_audio_io`. |
 | `dasllama/dasllama_kitten.das` | KittenTTS family: config, weight map (ONNX-derived names), assembly, `speed_priors`, style-by-text-length, the calibrated misaki->espeak-IPA symbol map + KittenTTS `TextCleaner` token table (~180 symbols). Serves nano and mini from one code path. |
 | `dasllama/dasllama_kokoro.das` | Kokoro family: config, weight map, assembly, voice packs (510 x style rows per voice), style-by-phoneme-count, deterministic noise (own RNG, seed in the session; oracle mode reads captured noise). |
@@ -108,10 +108,14 @@ gains a 1.7c TTS section with these charters in the same PR that creates the fil
 
 `harness/` scripts (Silero-converter pattern: pinned revision in, deterministic file out):
 
-- `harness/convert_kitten.py` - ONNX initializers -> GGUF f32/f16. Fold weight-norm
-  (`weight_g`/`weight_v` -> one tensor; the g2p report verified folding bit-exact on Kokoro,
-  379dB). Embed the 8 voices from `voices.npz` as `voice.<name>` tensors and `speed_priors`
-  as metadata. One GGUF per size: `kitten-nano.gguf`, `kitten-mini.gguf`.
+- `harness/convert_kitten.py` - ONNX initializers -> GGUF f32/f16. The ONNX export already
+  carries weight-norm folded (no `weight_g`/`weight_v` initializers; the fold is
+  `convert_kokoro.py`'s job - the g2p report verified it bit-exact on Kokoro, 379dB). ONNX
+  LSTM weights arrive per direction in gate order i,o,f,c; the converter reorders to i,f,g,o
+  so both families share one cell. mini's uint8 weights are dequantized exactly
+  (`(q - zp) * scale`) - see the phase-2 step-0 receipt. Embed the 8 voices from `voices.npz`
+  as `voice.<name>` tensors and `speed_priors` as metadata. One GGUF per size:
+  `kitten-nano.gguf`, `kitten-mini.gguf`.
 - `harness/convert_kokoro.py` - safetensors + per-voice pack `.pt` -> `kokoro-82m.gguf`;
   weight-norm folded; voices as `voice.<name>` [510, style_dim] tensors. The converter takes
   the full roster (all 54 voice `.pt` files at the pinned revision are downloaded); the first
@@ -203,8 +207,11 @@ Steps:
    (the 96.5% first written here was a WSJ-class number) and reads spelled-out numbers -
    which the normalizer emits and treebanks of written text barely carry - as nouns; adding
    spaCy-tagged public-domain prose run through the normalizer (`harness/mint_postag_silver.py`,
-   Project Gutenberg texts) lifts corpus agreement from 93% to 96% at no gold cost. UD
-   English-GUM was rejected as training data: CC BY-NC-SA.
+   Project Gutenberg texts) lifts corpus agreement from 93% to 96% at no gold cost; sampling
+   that prose around the 789 tag-keyed lexicon words (every sentence carrying one is kept on
+   top of the random sample; `build_g2p_data.py --focus-words` emits the list) takes it to
+   97.4% and heteronym words to 70/78 - the tagger is trained where the lexicon consults it.
+   UD English-GUM was rejected as training data: CC BY-NC-SA.
 3. `dasllama_g2p.das` + `harness/build_g2p_data.py` - lexicon, rules, fallback chain,
    stress. Port misaki's `en.py` rules (0.03MB of Python - small); function words; the
    letter-name rule for single letters/acronyms.
@@ -218,29 +225,89 @@ phoneme JSON, compare token streams.
 Exit gates (measured 2026-09-02, receipts below):
 - Phoneme-identical with python arm E, fed the same normalized text, on the 200-sentence
   corpus and on a fresh 2,000-sentence sweep (`harness/tts_g2p_sweep.py` + `.das`, Project
-  Gutenberg prose the tagger never saw). Written as >= 99%; MEASURED 192/200 and 1932/2000
-  (96.6%). The tokenizer is token-identical with the reference on every sentence and the
-  lexicon rules agree wherever the tags agree; every remaining difference is a tag the
-  reference tagger read differently on a tag-keyed word (that/DT vs IN, in/IN vs RP, a
-  sentence-initial imperative, dove/VBD after dove/NN), plus reference quirks the das side
-  does not copy (a mid-sentence "!" the reference drops, non-ASCII letters it spells at
-  random). The test budget is 10 corpus sentences; the sweep receipt is the number.
+  Gutenberg prose the tagger never saw). Written as >= 99%; MEASURED 194/200 and 1937/2000
+  (96.85%). The tokenizer is token-identical with the reference on every sentence and the
+  lexicon rules agree wherever the tags agree; every one of the six remaining differences is
+  a tag the reference tagger read differently on a tag-keyed word (dove/VBD after dove/NN,
+  invalid, moped, entrance, houses/VBZ, "etc." tagged FW). The test budget is 8 corpus
+  sentences; the sweep receipt is the number.
 - Heteronym set: parity with misaki+spaCy in each inventory - 24/38 in the misaki inventory
   (Kokoro's, what the das test scores), 27/38 in the espeak inventory (Kitten's); espeak itself
-  is 11/38, the tagger-less pipeline 2/38. MEASURED 19/38: the five below parity are tag
-  calls on sentences built to defeat taggers. The test floor is 19; closing to 24 and beyond
+  is 11/38, the tagger-less pipeline 2/38. MEASURED 20/38: the four below parity are tag
+  calls on sentences built to defeat taggers. The test floor is 20; closing to 24 and beyond
   is the surpass program's first line item - the tagger is the lever, not the lexicon.
 - The textnorm defect tests green (twelve upstream defects, not six); no `num2words`, no espeak
   symbol in any error path. MET.
 - Startup: g2p data load < 50ms on the M1 (packed binary, no JSON). MEASURED 2 ms for the
-  13 MB pack (searched in place), 5 ms for the 11 MB tagger.
+  13 MB pack (searched in place), 5 ms for the 12.5 MB tagger.
 
-### Phase 2 - KittenTTS family (first bring-up: deterministic ONNX, smaller graph)
+### Phase 2 - KittenTTS family (first bring-up: smaller graph; NOT deterministic - step-0 receipt)
 
 Steps:
 0. Dump the ONNX graphs (nano + mini) - enumerate every op, shape, and initializer; write
    the block list into the PR (this is the real op inventory; the plan's list above is the
    expectation, the dump is the truth).
+
+   Step-0 receipt (2026-09-02, `harness/dump_onnx.py`; the raw dumps regenerate from it):
+   - nano: 2024 nodes / 61 ops / 706 initializers, 56.0 MB f32, opset 20, exported by
+     pytorch 2.5.1. mini: 3026 nodes / 63 ops, 77.2 MB, exported by `onnx.quantize` - a
+     DYNAMIC uint8 quantization of the same topology (MatMulInteger x135, DynamicQuantizeLinear
+     x125, ConvInteger x74, DynamicQuantizeLSTM x6 in the com.microsoft domain; the two
+     ConvTranspose upsamplers and the depthwise pools are f16). Widths: nano text 128 /
+     predictor LSTM 64 / decoder 256 / generator 128->64; mini 512 / 256 / 1024 /
+     512->256->128 with a third text-encoder conv and a third predictor BiLSTM. Both share the
+     ALBERT at 768 (ONE layer group applied 12 times, FFN 2048, 12 heads, gelu-tanh, LayerNorm
+     eps 1e-12, 512 positions), the 178-symbol embedding (= the TextCleaner table), and the
+     iSTFT head (n_fft 20, hop 5, 11 bins; 600 output samples per duration frame).
+   - The 61 ops collapse to: embedding gather; Gemm/MatMul (ALBERT, the AdaIN style fcs,
+     duration_proj 128->50, the 9->1 harmonic mix); Conv1d k1/3/5/7/11 at dilations 1/3/5,
+     k12 s6 and k20 s5 (the STFT as a conv pair); depthwise k3 s2 Conv and ConvTranspose (the
+     `pool` down/upsamplers, F0/N curves included); ConvTranspose k20 s10 and k12 s6 (`ups`)
+     and k20 s5 (the ISTFT); LayerNorm (eps 1e-5 over channels, 1e-12 in ALBERT);
+     InstanceNorm + AdaIN; bidirectional LSTM with sequence lengths (5 in nano, 6 in mini);
+     softmax attention; gelu-tanh, LeakyRelu 0.2/0.1/0.01, Snake (`x + sin(a x)^2 / a`,
+     per-channel `alpha1/alpha2`) in every generator resblock, sigmoid, tanh; Resize nearest
+     x2 and linear (SineGen); CumSum (phase accumulation); RandomUniformLike +
+     RandomNormalLike (SineGen initial phase and noise); atan2 spelled as Atan + three Wheres;
+     exp/sin/cos (magnitude/phase to ISTFT); Round + Clip (durations); the duration->alignment
+     expansion exported as Loop + Sequence ops + ScatterND (a plain index expansion in das);
+     two `If`s that only squeeze the batch dim; the pack_padded sort (TopK/ScatterElements)
+     that is the identity at batch 1. Everything is CPU arithmetic on channel-major [C][T]
+     buffers - no new GEMM kernel, no Metal work in this phase.
+   - PREMISE CORRECTIONS. (1) The graph is NOT deterministic: the RNG lives inside it
+     (SineGen), no seed attribute; two onnxruntime runs on identical inputs differ by max-abs
+     0.9 on a 0.59-peak nano waveform, 0.1 on mini. The 1e-4 gate needs the captured-noise
+     rail from day one: `harness/kitten_oracle.py` rewrites the two Random* nodes into graph
+     inputs, feeds and dumps the noise; das reads the same noise in oracle mode. (2) mini's
+     dynamic quantization is not reproducible even inside onnxruntime: its optimized and
+     unoptimized sessions disagree on the predicted DURATION (127800 vs 126600 samples) - the
+     uint8 accumulation order flips a rounding. A bit-faithful MatMulInteger /
+     DynamicQuantizeLSTM in das is a large, fragile, onnxruntime-internal target. RULING
+     NEEDED: the proposed mini oracle is the same graph with its weights dequantized to f32
+     (also by `kitten_oracle.py`) run in onnxruntime; das ships mini as f32/f16 weights (f16 =
+     77 MB, the size of today's uint8 file), the 1e-4 gate applies against that oracle, the rig
+     (WER/UTMOS) against the stock quantized python arm.
+   - onnxruntime CPU baseline, M1 Max, 8 threads, ~5.5 s of audio: nano 0.20 s (RTF 0.035),
+     mini 1.5 s (RTF 0.28). The written JIT gates (< 0.5 / < 1.0) sit 14x / 3.5x behind the
+     reference; parity with onnxruntime is the honest phase-5 number.
+   - Kitten's python driver, for the facade: tokens = [0] + TextCleaner(IPA with punctuation
+     re-spaced by `\w+|[^\w\s]`) + [10] + [0] (10 is the ellipsis symbol); style row =
+     voices[voice][min(len(chunk_text), 399)] - CHARACTER count of the chunk, not phoneme
+     count; speed x speed_priors[voice] (nano only); the output drops its last 5000 samples;
+     `chunk_text` splits long input first.
+   - Blast radius: additive. New `dasllama_tts_types.das`, `dasllama_tts_blocks.das`,
+     `dasllama_tts.das`, `harness/convert_kitten.py`, `harness/kitten_oracle.py`,
+     `tests/test_tts_blocks.das` (KB-sized fixture tensors) + `tests/test_tts_kitten.das`
+     (model-tier golden); `dasllama_kitten.das` grows from the symbol map into the family
+     file. Touched: `.das_module` (three rows), `ARCHITECTURE_MEDIA.md` 1.7c (block-home
+     charter = this inventory), `THIRD_PARTY_NOTICES.md` (KittenTTS weights), `tests/run.das` +
+     `tests/CLAUDE.md`, REVIEW_PLACEMENT.md's inventory (every new file needs its line - the
+     placement gate). Reused as-is: `matmul`/`gemm_f32`/`softmax` from `dasllama_math`,
+     `layernorm` and `gelu_tanh_lut` from `dasllama_tower`. Untouched: the LLM engine, ASR,
+     VAD, Metal/Vulkan, the server (phase 4), C++. House-rule cost: every activation buffer
+     is input-scaled, so the block home carries `@exact_size` + reserve discipline
+     (`skills/perf_lint.md`) from its first line, and the assembly splits per stage from the
+     start (STYLE037/038 and the activation-dump rail want the same seams).
 1. `harness/convert_kitten.py` -> GGUFs; loader in `dasllama_kitten.das` reading through
    `parse_gguf_meta` (bypass `resolve_arch` - TTS kinds get their own dispatch in the
    facade, precedent: the NanoCodec port study found `general.architecture` panics
@@ -255,7 +322,8 @@ stage, then end-to-end.
 
 Exit gates:
 - End-to-end waveform max-abs-diff <= 1e-4 vs onnxruntime on 20 sentences x 2 voices x both
-  sizes (fp32), including `speed_priors` applied.
+  sizes, captured noise both sizes, mini against the dequantized-f32 oracle (ruling pending,
+  step-0 receipt), including `speed_priors` applied.
 - The 200-sentence rig through das-Kitten-nano: WER within 0.3pp and UTMOS within 0.02 of
   the python arm-E numbers (4.22% / 4.035) - proves front end + engine compose.
 - dastest suite: per-block unit tests against fixture tensors + one end-to-end golden.

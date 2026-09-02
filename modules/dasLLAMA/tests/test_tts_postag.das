@@ -107,7 +107,7 @@ def test_tagger(t : T?) {
         }
         let rate = float(same) / float(n)
         to_log(LOG_INFO, "tts tagger: {same}/{n} tags agree with the reference ({rate}), heteronym words {het_same}/{het_n}\n")
-        t |> success(rate >= 0.92, "tag agreement {rate} over {n} tokens")
+        t |> success(rate >= 0.96, "tag agreement {rate} over {n} tokens")
         t |> success(het_same * 10 >= het_n * 8, "heteronym-word agreement {het_same}/{het_n}")
     }
     t |> run("spelled numbers, punctuation and the determiner") @(t : T?) {

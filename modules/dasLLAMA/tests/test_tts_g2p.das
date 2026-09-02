@@ -60,7 +60,7 @@ def test_corpus_phonemes(t : T?) {
         // every remaining difference is a tag the reference tagger read differently on a word
         // with a tag-keyed reading (the tagger agrees with it on 97 percent of tokens); the
         // tokenizer and the lexicon rules themselves are identical on the whole corpus
-        t |> success(mismatches <= 10, "{mismatches} sentences differ (budget 10 - tag calls)")
+        t |> success(mismatches <= 8, "{mismatches} sentences differ (budget 8 - tag calls)")
     }
     t |> run("heteronyms: both readings present") @(t : T?) {
         return if (!data_present(t))
@@ -84,9 +84,9 @@ def test_corpus_phonemes(t : T?) {
         to_log(LOG_INFO, "tts g2p: heteronyms both readings {both}/{n}\n")
         t |> equal(n, 38)
         // the reference front end scores 24/38 in this inventory (27/38 in the espeak one), the
-        // bare tagger-less pipeline 2/38, espeak 11/38; the gap to 24 is five tag calls on
+        // bare tagger-less pipeline 2/38, espeak 11/38; the gap to 24 is four tag calls on
         // sentences built to defeat taggers - the surpass program's first target
-        t |> success(both >= 19, "heteronyms {both}/{n} (reference front end 24 in this inventory)")
+        t |> success(both >= 20, "heteronyms {both}/{n} (reference front end 24 in this inventory)")
     }
 }
 
