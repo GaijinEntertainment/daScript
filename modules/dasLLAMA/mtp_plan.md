@@ -784,6 +784,53 @@ floor) - a real but narrow item; (c) decode attention past ~1k keys - a microben
   prefill declines and the bench throws "CPU batched prefill ... on a Metal-capable build"; the Q8_0
   head is the pair.)
 
+## Measurement day (2026-09-02, records grade: release exe on a fresh mint, stock llama.cpp 6fdd0ac)
+
+Both boxes minted, both rig exes rebuilt (`daspkg release`, sha e58e5a3ba), llama.cpp pinned at
+6fdd0ac89 (2026-08-27, `setup_lcpp_ref` worktree, stock + clean-cpu, `llama-server` added). Board
+rows through `gen_bench_records --only <model> --workload llm`; the MTP rows through
+`harness/mtp_ruler.das` (SpecBench-4 chat corpus, thinking off, greedy, 128 tokens, 3 reps, settle
+before every arm, our exe first, our greedy continuation as the text control).
+
+**Board rows landed (pp512 / tg128, das vs llama.cpp):**
+
+| box | model | Metal das / lcpp stock | CPU tuned das / lcpp clean | CPU accel das / lcpp stock |
+|---|---|---|---|---|
+| M5 Max | gemma-4-26B-A4B Q4_K_M | 3870 / 118.1 vs 3456 / 99.7 | 193 / 55.9 vs 123 / 46.6 | 220 / 55.8 vs - |
+| M4 Pro | gemma-4-26B-A4B Q4_K_M | 781 / 56.9 vs 732 / 54.2 | 319 / 57.2 vs 187 / 51.0 | 338 / 57.0 vs 180 / 49.8 |
+| M4 Pro | Qwen3.8-27B Q4_K_M | 126 / 12.9 vs 126 / 11.5 | 47.1 / 11.6 vs 40.3 / 10.9 | 48.2 / 11.6 vs 40.5 / 11.0 |
+
+(gemma-4-26B-A4B was `official = true` and on `records/m5.json` since 08-30; the M4 rows are new.)
+
+**Ruler, gemma-4-26B-A4B, M5 Max** (`records/mtp_m5_gemma-4-26B-A4B.json`): ours off 122.7,
+depth 1 145.9 (75.2%), depth 2 148.1 (62.6%); llama.cpp stock off 95.8-98.4 (llama-bench 99.7),
+n_max 1 119.8-145.8, n_max 2 126.0-163.4. Text control: math and summarization continuations are
+identical across engines and the acceptance counts match to the draft (math 180/201 on both);
+writing and qa diverge (the stock build's greedy path differs from ours there), so those two
+acceptance columns are flagged, not compared.
+
+**Ruler, gemma-4-26B-A4B, M4 Pro** (`records/mtp_m4_gemma-4-26B-A4B.json`): ours off 59.3, depth 1
+67.5 (74.6%, 1.14x), depth 2 55.7 (0.94x); llama.cpp off 51.2-53.2, n_max 1 62.1-72.4 (pooled 66.9)
+- a wash at depth 1 on this GPU. Only the math continuation matches there.
+
+**Ruler, Qwen3.8-27B + Q8_0 head, M5 Max**: llama.cpp off 24.8-25.8, n_max 1 32.8-35.0 (1.34x),
+n_max 2 30.0-36.7; ours off 27.5, depth 1 32.5 (1.18x, 77.4%), depth 2 29.9 - final rows pending
+the exe-first rerun. Round split (`DASLLAMA_MTP_DEBUG=time`, 1 rep, n 64): draft 3.0 ms, verify
+42-43 ms on a 36 ms plain step (**1.19x**), walk+commit 0.25 ms, replay 0.3-0.4 ms, 1.72-1.80
+tokens/round. Their dense two-row verify rides at ~1.05x a step, which is the whole difference at
+equal acceptance (followup #72). The CPU point (both engines `-ngl 0`, our NextN depth 1) is queued.
+
+**Two harness lessons, both now in the ruler:**
+- A heat-soaked box under-reads a memory-bound decode by 13-18% (llama.cpp Qwen3.8 off read 21-22
+  straight after our runs vs 25.5 cold; our own depth-2 baseline slid 26.9 -> 23.1 back to back).
+  Every arm settles (`--settle`, 180 s on the dense 27B) the way the board driver does.
+- A parent process that had just run the engine in-process read the exe's speculative arm 20% low
+  (27.5 -> 26.4 on the M5, 12.7 -> 11.0 on the 64 GB M4, plain arm unaffected); the same exe from a
+  clean shell read 32.5. The exe measures first, before the parent loads anything.
+- Also: `llama-cli` re-wraps a raw prompt as a chat turn even under `--no-jinja`; the NextN split
+  head rides the shard walk only under the exact trunk basename, so a `-Q8_0` head is pinned
+  through `DASLLAMA_MTP_HEAD`.
+
 ## Predictions (logged BEFORE each measurement)
 
 - **0.8B depth sweep (k = 1..4, `--mtp-ab --mtp-depth`, M5, logged 2026-09-01 before the run):**
