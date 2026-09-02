@@ -630,6 +630,11 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   two-row verify costs 25.6 ms against a 16.9 ms step (**1.51x**, vs 1.34x on M5), three rows 40.2 ms
   (2.4x) - on the smaller GPU the second row's expert union is paid in full, so depth 2 loses there.
   Against mlx.fast's recorded M4 Max: their 35.2 -> 68.5 tok/s vs our 59.1 -> 67.3 on half the GPU.
+  Rows probe on the M4 Pro (wall, distinct sessions): B=1 25.3 (the unpipelined single step; the
+  bench's pipelined step is 16.9), B=2 21.7, B=4 36.9 ms. So the two-row GPU step is ~1.28x a step
+  there (1.2x on M5) and the round's verify+commit at 25.6 ms carries ~4 ms of host work (join
+  landing, per-group command buffers, the slower CPU) against ~1 ms on M5. The depth default is a
+  per-box-class knob (M5 2, M4 Pro 1) - a box-profile field, not a runtime controller.
 - **The Q4 target is not what caps acceptance**: the Q8_0 target at depth 1 accepts 76.5% (vs 74.6%
   on Q4_K_M; off 109.6, on 126.0 = 1.15x; verify 12.33 ms vs step 9.13 = 1.35x again). 75% at
   position 1 is the head's own agreement with the target on SpecBench chat prompts.
