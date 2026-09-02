@@ -34,10 +34,11 @@ derive from the Silero VAD project (https://github.com/snakers4/silero-vad), Cop
 
 ## Text-to-speech front end
 
-The TTS front end reimplements, and packs data from, the following works. The packed files
-(`tts_g2p.bin`, `tts_postag.bin`) are built by the `harness/` scripts into the model store,
-each beside a `.LICENSE` sidecar naming these sources; nothing under this repository
-redistributes the data itself.
+The TTS front end and the KittenTTS family reimplement, and pack data from, the following
+works. The packed files (`tts_g2p.bin`, `tts_postag.bin`, `kitten-nano.gguf`,
+`kitten-mini.gguf`, the `tts_oracle/` dumps) are built by the `harness/` scripts into the
+model store (`performance/build_tts_data.das`), each beside a license file naming these
+sources; nothing under this repository redistributes the data itself.
 
 - **misaki** (https://github.com/hexgrad/misaki), Apache License 2.0 - see `LICENSE.APACHE-2.0`.
   The grapheme-to-phoneme rules of `dasllama/dasllama_g2p.das` derive from its English module,
@@ -50,7 +51,13 @@ redistributes the data itself.
   are packed into `tts_g2p.bin`; the decoder is reimplemented in `dasllama/dasllama_g2p.das`.
 - **KittenTTS** (https://github.com/KittenML/KittenTTS), Apache License 2.0 - see
   `LICENSE.APACHE-2.0`. The text normalizer of `dasllama/dasllama_textnorm.das` reimplements the
-  semantics of its `normalize_text`, with fixes.
+  semantics of its `normalize_text`, with fixes; `dasllama/dasllama_kitten.das` carries its
+  `TextCleaner` symbol table and driver conventions, and the model weights of
+  `KittenML/kitten-tts-nano-0.8` and `KittenML/kitten-tts-mini-0.8` (Apache License 2.0; ONNX
+  graphs, `voices.npz`, `config.json` at the revisions pinned in `harness/kitten_graph.py`) are
+  converted into `kitten-<size>.gguf` by `harness/convert_kitten.py`. The model architecture is
+  StyleTTS2 (Yinghao Aaron Li et al., MIT License) as the checkpoints instantiate it, reimplemented
+  in `dasllama/dasllama_tts_blocks.das`.
 - **spaCy** (https://github.com/explosion/spaCy), Copyright ExplosionAI GmbH, MIT License - see
   `LICENSE.SPACY`. Its English tokenizer exception table is exported into `tts_postag.bin`, and
   its `en_core_web_sm` tagger provides the silver part-of-speech tags the tagger trains on.

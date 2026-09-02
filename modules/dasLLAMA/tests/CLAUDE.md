@@ -375,8 +375,15 @@ header floors, and the load budget.
 grapheme-to-phoneme rail phoneme-identical with the reference front end on the corpus (fed the
 same normalized text), the heteronym gate (both annotated readings present, parity with the
 reference in this inventory), the fallback chain, stress helpers, and the load budget.
-`test_tts_kitten.das` - model-free: the KittenTTS symbol map (the front end's inventory into
-espeak-style IPA) against the reference rewrite over the corpus.
+`test_tts_kitten.das` - model-free suite; the symbol-map and token-rule cells run everywhere
+(the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
+the reference driver's re-spacing and wrapping), the oracle cells are model-gated
+(`kitten-<size>.gguf` + `tts_oracle/kitten_<size>/` under the models dir, both from
+`performance/build_tts_data.das`): per size, the token ids against the reference driver on every
+oracle case, identical durations on every case, and on the bring-up set every stage through the
+decoder output within 1e-4 of the oracle's peak, the sine source within 1e-4 fed the oracle's F0,
+the generator within 1e-4 fed the oracle's source and decoder output; the end-to-end waveform
+difference is logged, not gated (the F0 phase drift the header explains).
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference.

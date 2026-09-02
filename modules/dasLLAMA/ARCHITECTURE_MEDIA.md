@@ -60,10 +60,31 @@ stages, each its own file, and every stage is data-driven from the model store: 
   searched in place as byte-sorted string tables. The 200-sentence fixture under
   `tests/_tts_fixtures/` (minted by `harness/mint_tts_g2p_fixture.py` from the G2P fidelity
   experiment) is the parity rail for all three stages.
-- **`dasllama_kitten.das`** - the KittenTTS family: the rewrite of the front end's inventory
-  into the espeak-style IPA these models consume (the diphthong letters expand, the calibrated
-  length and rhotic rules apply). The model itself - config, weight map, assembly, voices - lands
-  here as the family comes up.
+- **`dasllama_tts_types.das`** - the TTS floor: `TtsCaps`, `TtsAudio` (f32 PCM + rate), `TtsNoise`
+  (the source noise a synthesis consumed - captured from the oracle, or drawn). Family files
+  require this, never each other.
+- **`dasllama_tts_blocks.das`** - the StyleTTS2-lineage block home, the TTS twin of
+  `dasllama_tower.das`: f32 channel-major [C][T] operators - Conv1d (dense as im2col + the
+  batched GEMM, depthwise direct, forward and transposed), the dense layer, LayerNorm over rows
+  and over channels, InstanceNorm and AdaIN, AdaLayerNorm, the bidirectional LSTM (gates
+  i,f,g,o, both bias halves pre-summed), LeakyReLU / Snake / sigmoid / tanh, nearest and
+  ONNX-half-pixel linear resampling, the duration-to-frame expansion, half-to-even rounding,
+  PCG32 with a polar normal, the harmonic-plus-noise sine source, and the STFT pieces (edge pad,
+  magnitude and phase, polar to rectangular, reflection pad). The sine source keeps the
+  reference's operation order exactly: its phase reaches 1e5 radians, where one float32 ulp is a
+  hundredth of a radian. One home: a family file re-implementing one of these is a defect, and
+  nothing here names a family type.
+- **`dasllama_kitten.das`** - the KittenTTS family (nano and mini from one code path): the
+  weight map of the converted GGUF (`harness/convert_kitten.py`; conv geometry rides as
+  `kitten.conv.<weight>` metadata, so the assembly hardcodes the wiring and reads the shapes), the
+  reference driver's symbol table, re-spacing rule and style-row rule, the voices with their
+  speed priors and aliases, the rewrite of the front end's inventory into the espeak-style IPA
+  these models consume, and the assembly: PL-BERT (one ALBERT layer applied twelve times) ->
+  text encoder -> duration encoder -> durations -> alignment -> prosody (F0, energy) -> decoder
+  -> iSTFTNet generator. `KittenTrace` collects the stage tensors the oracle test compares.
+- **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (family by `general.architecture`;
+  `tts_g2p.bin` and `tts_postag.bin` read from the GGUF's directory), `caps`, `synthesize` (text
+  -> normalize -> phonemize -> family symbols -> PCM). Requires no `audio` module.
 
 ### 1.7b Vision
 
