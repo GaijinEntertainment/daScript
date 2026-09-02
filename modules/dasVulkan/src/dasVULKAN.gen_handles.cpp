@@ -189,6 +189,10 @@ void das_vulkan_init_handles(Module & mod, ModuleLibrary & lib) {
     mod.addAnnotation(new DummyTypeAnnotation("VkShaderInstrumentationARM_T", "VkShaderInstrumentationARM_T", 1, 1));
     { auto td = makeType<VkShaderInstrumentationARM_T *>(lib); td->alias = "VkShaderInstrumentationARM"; mod.addAlias(td); }
 #endif
+#if defined(VK_AMD_gpa_interface)
+    mod.addAnnotation(new DummyTypeAnnotation("VkGpaSessionAMD_T", "VkGpaSessionAMD_T", 1, 1));
+    { auto td = makeType<VkGpaSessionAMD_T *>(lib); td->alias = "VkGpaSessionAMD"; mod.addAlias(td); }
+#endif
 #if defined(VK_KHR_display)
     mod.addAnnotation(new DummyTypeAnnotation("VkDisplayKHR_T", "VkDisplayKHR_T", 1, 1));
     { auto td = makeType<VkDisplayKHR_T *>(lib); td->alias = "VkDisplayKHR"; mod.addAlias(td); }

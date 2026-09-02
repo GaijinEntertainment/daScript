@@ -4,6 +4,120 @@
 
 namespace das {
 
+#if defined(VK_EXT_external_memory_metal) && defined(VK_USE_PLATFORM_METAL_EXT)
+static VkResult WRAP_vkGetMemoryMetalHandlePropertiesEXT ( VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, const void * pHandle, VkMemoryMetalHandlePropertiesEXT & pMemoryMetalHandleProperties ) {
+    return ::vkGetMemoryMetalHandlePropertiesEXT(device, handleType, pHandle, &pMemoryMetalHandleProperties);
+}
+#endif
+
+#if defined(VK_NV_cooperative_vector)
+static VkResult WRAP_vkGetPhysicalDeviceCooperativeVectorPropertiesNV ( VkPhysicalDevice physicalDevice, uint32_t & pPropertyCount, VkCooperativeVectorPropertiesNV * pProperties ) {
+    return ::vkGetPhysicalDeviceCooperativeVectorPropertiesNV(physicalDevice, (uint32_t *)&pPropertyCount, pProperties);
+}
+#endif
+
+#if defined(VK_NV_cooperative_vector)
+static VkResult WRAP_vkConvertCooperativeVectorMatrixNV ( VkDevice device, const VkConvertCooperativeVectorMatrixInfoNV & pInfo ) {
+    return ::vkConvertCooperativeVectorMatrixNV(device, &pInfo);
+}
+#endif
+
+#if defined(VK_NV_cooperative_vector)
+static void WRAP_vkCmdConvertCooperativeVectorMatrixNV ( VkCommandBuffer commandBuffer, uint32_t infoCount, const VkConvertCooperativeVectorMatrixInfoNV * pInfos ) {
+    ::vkCmdConvertCooperativeVectorMatrixNV(commandBuffer, infoCount, pInfos);
+}
+#endif
+
+#if defined(VK_QCOM_tile_shading)
+static void WRAP_vkCmdDispatchTileQCOM ( VkCommandBuffer commandBuffer, const VkDispatchTileInfoQCOM & pDispatchTileInfo ) {
+    ::vkCmdDispatchTileQCOM(commandBuffer, &pDispatchTileInfo);
+}
+#endif
+
+#if defined(VK_QCOM_tile_shading)
+static void WRAP_vkCmdBeginPerTileExecutionQCOM ( VkCommandBuffer commandBuffer, const VkPerTileBeginInfoQCOM & pPerTileBeginInfo ) {
+    ::vkCmdBeginPerTileExecutionQCOM(commandBuffer, &pPerTileBeginInfo);
+}
+#endif
+
+#if defined(VK_QCOM_tile_shading)
+static void WRAP_vkCmdEndPerTileExecutionQCOM ( VkCommandBuffer commandBuffer, const VkPerTileEndInfoQCOM & pPerTileEndInfo ) {
+    ::vkCmdEndPerTileExecutionQCOM(commandBuffer, &pPerTileEndInfo);
+}
+#endif
+
+#if defined(VK_NV_external_compute_queue)
+static VkResult WRAP_vkCreateExternalComputeQueueNV ( VkDevice device, const VkExternalComputeQueueCreateInfoNV & pCreateInfo, const VkAllocationCallbacks * pAllocator, VkExternalComputeQueueNV & pExternalQueue ) {
+    return ::vkCreateExternalComputeQueueNV(device, &pCreateInfo, pAllocator, &pExternalQueue);
+}
+#endif
+
+#if defined(VK_NV_external_compute_queue)
+static void WRAP_vkDestroyExternalComputeQueueNV ( VkDevice device, VkExternalComputeQueueNV externalQueue, const VkAllocationCallbacks * pAllocator ) {
+    ::vkDestroyExternalComputeQueueNV(device, externalQueue, pAllocator);
+}
+#endif
+
+#if defined(VK_NV_external_compute_queue)
+static void WRAP_vkGetExternalComputeQueueDataNV ( VkExternalComputeQueueNV externalQueue, VkExternalComputeQueueDataParamsNV & params, void * pData ) {
+    ::vkGetExternalComputeQueueDataNV(externalQueue, &params, pData);
+}
+#endif
+
+#if defined(VK_ARM_shader_instrumentation)
+static VkResult WRAP_vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM ( VkPhysicalDevice physicalDevice, uint32_t & pDescriptionCount, VkShaderInstrumentationMetricDescriptionARM * pDescriptions ) {
+    return ::vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM(physicalDevice, (uint32_t *)&pDescriptionCount, pDescriptions);
+}
+#endif
+
+#if defined(VK_ARM_shader_instrumentation)
+static VkResult WRAP_vkCreateShaderInstrumentationARM ( VkDevice device, const VkShaderInstrumentationCreateInfoARM & pCreateInfo, const VkAllocationCallbacks * pAllocator, VkShaderInstrumentationARM & pInstrumentation ) {
+    return ::vkCreateShaderInstrumentationARM(device, &pCreateInfo, pAllocator, &pInstrumentation);
+}
+#endif
+
+#if defined(VK_ARM_shader_instrumentation)
+static void WRAP_vkDestroyShaderInstrumentationARM ( VkDevice device, VkShaderInstrumentationARM instrumentation, const VkAllocationCallbacks * pAllocator ) {
+    ::vkDestroyShaderInstrumentationARM(device, instrumentation, pAllocator);
+}
+#endif
+
+#if defined(VK_ARM_shader_instrumentation)
+static void WRAP_vkCmdBeginShaderInstrumentationARM ( VkCommandBuffer commandBuffer, VkShaderInstrumentationARM instrumentation ) {
+    ::vkCmdBeginShaderInstrumentationARM(commandBuffer, instrumentation);
+}
+#endif
+
+#if defined(VK_ARM_shader_instrumentation)
+static void WRAP_vkCmdEndShaderInstrumentationARM ( VkCommandBuffer commandBuffer ) {
+    ::vkCmdEndShaderInstrumentationARM(commandBuffer);
+}
+#endif
+
+#if defined(VK_ARM_shader_instrumentation)
+static VkResult WRAP_vkGetShaderInstrumentationValuesARM ( VkDevice device, VkShaderInstrumentationARM instrumentation, uint32_t & pMetricBlockCount, void * pMetricValues, Bitfield flags ) {
+    return ::vkGetShaderInstrumentationValuesARM(device, instrumentation, (uint32_t *)&pMetricBlockCount, pMetricValues, (VkShaderInstrumentationValuesFlagsARM)(flags.value));
+}
+#endif
+
+#if defined(VK_ARM_shader_instrumentation)
+static void WRAP_vkClearShaderInstrumentationMetricsARM ( VkDevice device, VkShaderInstrumentationARM instrumentation ) {
+    ::vkClearShaderInstrumentationMetricsARM(device, instrumentation);
+}
+#endif
+
+#if defined(VK_ARM_tensors)
+static VkResult WRAP_vkCreateTensorARM ( VkDevice device, const VkTensorCreateInfoARM & pCreateInfo, const VkAllocationCallbacks * pAllocator, VkTensorARM & pTensor ) {
+    return ::vkCreateTensorARM(device, &pCreateInfo, pAllocator, &pTensor);
+}
+#endif
+
+#if defined(VK_ARM_tensors)
+static void WRAP_vkDestroyTensorARM ( VkDevice device, VkTensorARM tensor, const VkAllocationCallbacks * pAllocator ) {
+    ::vkDestroyTensorARM(device, tensor, pAllocator);
+}
+#endif
+
 #if defined(VK_ARM_tensors)
 static VkResult WRAP_vkCreateTensorViewARM ( VkDevice device, const VkTensorViewCreateInfoARM & pCreateInfo, const VkAllocationCallbacks * pAllocator, VkTensorViewARM & pView ) {
     return ::vkCreateTensorViewARM(device, &pCreateInfo, pAllocator, &pView);
@@ -130,103 +244,83 @@ static VkResult WRAP_vkQueueSetPerfHintQCOM ( VkQueue queue, const VkPerfHintInf
 }
 #endif
 
-#if defined(VK_ARM_performance_counters_by_region)
-static VkResult WRAP_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM ( VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, uint32_t & pCounterCount, VkPerformanceCounterARM * pCounters, VkPerformanceCounterDescriptionARM * pCounterDescriptions ) {
-    return ::vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM(physicalDevice, queueFamilyIndex, (uint32_t *)&pCounterCount, pCounters, pCounterDescriptions);
-}
-#endif
-
-#if defined(VK_NV_compute_occupancy_priority)
-static void WRAP_vkCmdSetComputeOccupancyPriorityNV ( VkCommandBuffer commandBuffer, const VkComputeOccupancyPriorityParametersNV & pParameters ) {
-    ::vkCmdSetComputeOccupancyPriorityNV(commandBuffer, &pParameters);
-}
-#endif
-
-#if defined(VK_EXT_descriptor_heap)
-static VkResult WRAP_vkWriteSamplerDescriptorsEXT ( VkDevice device, uint32_t samplerCount, const VkSamplerCreateInfo * pSamplers, const VkHostAddressRangeEXT * pDescriptors ) {
-    return ::vkWriteSamplerDescriptorsEXT(device, samplerCount, pSamplers, pDescriptors);
-}
-#endif
-
-#if defined(VK_EXT_descriptor_heap)
-static void WRAP_vkCmdPushDataEXT ( VkCommandBuffer commandBuffer, const VkPushDataInfoEXT & pPushDataInfo ) {
-    ::vkCmdPushDataEXT(commandBuffer, &pPushDataInfo);
-}
-#endif
-
-#if defined(VK_EXT_descriptor_heap)
-static VkResult WRAP_vkRegisterCustomBorderColorEXT ( VkDevice device, const VkSamplerCustomBorderColorCreateInfoEXT & pBorderColor, uint32_t requestIndex, uint32_t & pIndex ) {
-    return ::vkRegisterCustomBorderColorEXT(device, &pBorderColor, requestIndex, (uint32_t *)&pIndex);
-}
-#endif
-
-#if defined(VK_EXT_descriptor_heap)
-static void WRAP_vkUnregisterCustomBorderColorEXT ( VkDevice device, uint32_t index ) {
-    ::vkUnregisterCustomBorderColorEXT(device, index);
-}
-#endif
-
-#if defined(VK_EXT_descriptor_heap)
-static VkResult WRAP_vkGetImageOpaqueCaptureDataEXT ( VkDevice device, uint32_t imageCount, const VkImage * pImages, VkHostAddressRangeEXT * pDatas ) {
-    return ::vkGetImageOpaqueCaptureDataEXT(device, imageCount, pImages, pDatas);
-}
-#endif
-
-#if defined(VK_EXT_descriptor_heap)
-static uint64_t WRAP_vkGetPhysicalDeviceDescriptorSizeEXT ( VkPhysicalDevice physicalDevice, VkDescriptorType descriptorType ) {
-    return (uint64_t)::vkGetPhysicalDeviceDescriptorSizeEXT(physicalDevice, descriptorType);
-}
-#endif
-
-#if defined(VK_EXT_descriptor_heap)
-static VkResult WRAP_vkGetTensorOpaqueCaptureDataARM ( VkDevice device, uint32_t tensorCount, const VkTensorARM * pTensors, VkHostAddressRangeEXT * pDatas ) {
-    return ::vkGetTensorOpaqueCaptureDataARM(device, tensorCount, pTensors, pDatas);
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-static void WRAP_vkCmdCopyMemoryKHR ( VkCommandBuffer commandBuffer, const VkCopyDeviceMemoryInfoKHR * pCopyMemoryInfo ) {
-    ::vkCmdCopyMemoryKHR(commandBuffer, pCopyMemoryInfo);
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-static void WRAP_vkCmdCopyMemoryToImageKHR ( VkCommandBuffer commandBuffer, const VkCopyDeviceMemoryImageInfoKHR * pCopyMemoryInfo ) {
-    ::vkCmdCopyMemoryToImageKHR(commandBuffer, pCopyMemoryInfo);
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-static void WRAP_vkCmdCopyImageToMemoryKHR ( VkCommandBuffer commandBuffer, const VkCopyDeviceMemoryImageInfoKHR * pCopyMemoryInfo ) {
-    ::vkCmdCopyImageToMemoryKHR(commandBuffer, pCopyMemoryInfo);
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-static void WRAP_vkCmdUpdateMemoryKHR ( VkCommandBuffer commandBuffer, const VkDeviceAddressRangeKHR & pDstRange, Bitfield dstFlags, uint64_t dataSize, const void * pData ) {
-    ::vkCmdUpdateMemoryKHR(commandBuffer, &pDstRange, (VkAddressCommandFlagsKHR)(dstFlags.value), dataSize, pData);
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-static void WRAP_vkCmdFillMemoryKHR ( VkCommandBuffer commandBuffer, const VkDeviceAddressRangeKHR & pDstRange, Bitfield dstFlags, uint32_t data ) {
-    ::vkCmdFillMemoryKHR(commandBuffer, &pDstRange, (VkAddressCommandFlagsKHR)(dstFlags.value), data);
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-static void WRAP_vkCmdCopyQueryPoolResultsToMemoryKHR ( VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount, const VkStridedDeviceAddressRangeKHR & pDstRange, Bitfield dstFlags, Bitfield queryResultFlags ) {
-    ::vkCmdCopyQueryPoolResultsToMemoryKHR(commandBuffer, queryPool, firstQuery, queryCount, &pDstRange, (VkAddressCommandFlagsKHR)(dstFlags.value), (VkQueryResultFlags)(queryResultFlags.value));
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-static void WRAP_vkCmdBeginConditionalRendering2EXT ( VkCommandBuffer commandBuffer, const VkConditionalRenderingBeginInfo2EXT & pConditionalRenderingBegin ) {
-    ::vkCmdBeginConditionalRendering2EXT(commandBuffer, &pConditionalRenderingBegin);
-}
-#endif
-
 void das_vulkan_init_funcs_18(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_EXT_external_memory_metal) && defined(VK_USE_PLATFORM_METAL_EXT)
+    addExtern<DAS_BIND_FUN(WRAP_vkGetMemoryMetalHandlePropertiesEXT)>(mod, lib, "vkGetMemoryMetalHandlePropertiesEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetMemoryMetalHandlePropertiesEXT")
+        ->args({"device","handleType","pHandle","pMemoryMetalHandleProperties"});
+#endif
+#if defined(VK_NV_cooperative_vector)
+    addExtern<DAS_BIND_FUN(WRAP_vkGetPhysicalDeviceCooperativeVectorPropertiesNV)>(mod, lib, "vkGetPhysicalDeviceCooperativeVectorPropertiesNV", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetPhysicalDeviceCooperativeVectorPropertiesNV")
+        ->args({"physicalDevice","pPropertyCount","pProperties"});
+#endif
+#if defined(VK_NV_cooperative_vector)
+    addExtern<DAS_BIND_FUN(WRAP_vkConvertCooperativeVectorMatrixNV)>(mod, lib, "vkConvertCooperativeVectorMatrixNV", SideEffects::modifyArgumentAndExternal, "WRAP_vkConvertCooperativeVectorMatrixNV")
+        ->args({"device","pInfo"});
+#endif
+#if defined(VK_NV_cooperative_vector)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdConvertCooperativeVectorMatrixNV)>(mod, lib, "vkCmdConvertCooperativeVectorMatrixNV", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdConvertCooperativeVectorMatrixNV")
+        ->args({"commandBuffer","infoCount","pInfos"});
+#endif
+#if defined(VK_QCOM_tile_shading)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdDispatchTileQCOM)>(mod, lib, "vkCmdDispatchTileQCOM", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdDispatchTileQCOM")
+        ->args({"commandBuffer","pDispatchTileInfo"});
+#endif
+#if defined(VK_QCOM_tile_shading)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdBeginPerTileExecutionQCOM)>(mod, lib, "vkCmdBeginPerTileExecutionQCOM", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdBeginPerTileExecutionQCOM")
+        ->args({"commandBuffer","pPerTileBeginInfo"});
+#endif
+#if defined(VK_QCOM_tile_shading)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdEndPerTileExecutionQCOM)>(mod, lib, "vkCmdEndPerTileExecutionQCOM", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdEndPerTileExecutionQCOM")
+        ->args({"commandBuffer","pPerTileEndInfo"});
+#endif
+#if defined(VK_NV_external_compute_queue)
+    addExtern<DAS_BIND_FUN(WRAP_vkCreateExternalComputeQueueNV)>(mod, lib, "vkCreateExternalComputeQueueNV", SideEffects::modifyArgumentAndExternal, "WRAP_vkCreateExternalComputeQueueNV")
+        ->args({"device","pCreateInfo","pAllocator","pExternalQueue"});
+#endif
+#if defined(VK_NV_external_compute_queue)
+    addExtern<DAS_BIND_FUN(WRAP_vkDestroyExternalComputeQueueNV)>(mod, lib, "vkDestroyExternalComputeQueueNV", SideEffects::modifyArgumentAndExternal, "WRAP_vkDestroyExternalComputeQueueNV")
+        ->args({"device","externalQueue","pAllocator"});
+#endif
+#if defined(VK_NV_external_compute_queue)
+    addExtern<DAS_BIND_FUN(WRAP_vkGetExternalComputeQueueDataNV)>(mod, lib, "vkGetExternalComputeQueueDataNV", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetExternalComputeQueueDataNV")
+        ->args({"externalQueue","params","pData"});
+#endif
+#if defined(VK_ARM_shader_instrumentation)
+    addExtern<DAS_BIND_FUN(WRAP_vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM)>(mod, lib, "vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM")
+        ->args({"physicalDevice","pDescriptionCount","pDescriptions"});
+#endif
+#if defined(VK_ARM_shader_instrumentation)
+    addExtern<DAS_BIND_FUN(WRAP_vkCreateShaderInstrumentationARM)>(mod, lib, "vkCreateShaderInstrumentationARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkCreateShaderInstrumentationARM")
+        ->args({"device","pCreateInfo","pAllocator","pInstrumentation"});
+#endif
+#if defined(VK_ARM_shader_instrumentation)
+    addExtern<DAS_BIND_FUN(WRAP_vkDestroyShaderInstrumentationARM)>(mod, lib, "vkDestroyShaderInstrumentationARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkDestroyShaderInstrumentationARM")
+        ->args({"device","instrumentation","pAllocator"});
+#endif
+#if defined(VK_ARM_shader_instrumentation)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdBeginShaderInstrumentationARM)>(mod, lib, "vkCmdBeginShaderInstrumentationARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdBeginShaderInstrumentationARM")
+        ->args({"commandBuffer","instrumentation"});
+#endif
+#if defined(VK_ARM_shader_instrumentation)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdEndShaderInstrumentationARM)>(mod, lib, "vkCmdEndShaderInstrumentationARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdEndShaderInstrumentationARM")
+        ->args({"commandBuffer"});
+#endif
+#if defined(VK_ARM_shader_instrumentation)
+    addExtern<DAS_BIND_FUN(WRAP_vkGetShaderInstrumentationValuesARM)>(mod, lib, "vkGetShaderInstrumentationValuesARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetShaderInstrumentationValuesARM")
+        ->args({"device","instrumentation","pMetricBlockCount","pMetricValues","flags"});
+#endif
+#if defined(VK_ARM_shader_instrumentation)
+    addExtern<DAS_BIND_FUN(WRAP_vkClearShaderInstrumentationMetricsARM)>(mod, lib, "vkClearShaderInstrumentationMetricsARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkClearShaderInstrumentationMetricsARM")
+        ->args({"device","instrumentation"});
+#endif
+#if defined(VK_ARM_tensors)
+    addExtern<DAS_BIND_FUN(WRAP_vkCreateTensorARM)>(mod, lib, "vkCreateTensorARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkCreateTensorARM")
+        ->args({"device","pCreateInfo","pAllocator","pTensor"});
+#endif
+#if defined(VK_ARM_tensors)
+    addExtern<DAS_BIND_FUN(WRAP_vkDestroyTensorARM)>(mod, lib, "vkDestroyTensorARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkDestroyTensorARM")
+        ->args({"device","tensor","pAllocator"});
+#endif
 #if defined(VK_ARM_tensors)
     addExtern<DAS_BIND_FUN(WRAP_vkCreateTensorViewARM)>(mod, lib, "vkCreateTensorViewARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkCreateTensorViewARM")
         ->args({"device","pCreateInfo","pAllocator","pView"});
@@ -310,70 +404,6 @@ void das_vulkan_init_funcs_18(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_QCOM_queue_perf_hint)
     addExtern<DAS_BIND_FUN(WRAP_vkQueueSetPerfHintQCOM)>(mod, lib, "vkQueueSetPerfHintQCOM", SideEffects::modifyArgumentAndExternal, "WRAP_vkQueueSetPerfHintQCOM")
         ->args({"queue","pPerfHintInfo"});
-#endif
-#if defined(VK_ARM_performance_counters_by_region)
-    addExtern<DAS_BIND_FUN(WRAP_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM)>(mod, lib, "vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM")
-        ->args({"physicalDevice","queueFamilyIndex","pCounterCount","pCounters","pCounterDescriptions"});
-#endif
-#if defined(VK_NV_compute_occupancy_priority)
-    addExtern<DAS_BIND_FUN(WRAP_vkCmdSetComputeOccupancyPriorityNV)>(mod, lib, "vkCmdSetComputeOccupancyPriorityNV", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdSetComputeOccupancyPriorityNV")
-        ->args({"commandBuffer","pParameters"});
-#endif
-#if defined(VK_EXT_descriptor_heap)
-    addExtern<DAS_BIND_FUN(WRAP_vkWriteSamplerDescriptorsEXT)>(mod, lib, "vkWriteSamplerDescriptorsEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkWriteSamplerDescriptorsEXT")
-        ->args({"device","samplerCount","pSamplers","pDescriptors"});
-#endif
-#if defined(VK_EXT_descriptor_heap)
-    addExtern<DAS_BIND_FUN(WRAP_vkCmdPushDataEXT)>(mod, lib, "vkCmdPushDataEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdPushDataEXT")
-        ->args({"commandBuffer","pPushDataInfo"});
-#endif
-#if defined(VK_EXT_descriptor_heap)
-    addExtern<DAS_BIND_FUN(WRAP_vkRegisterCustomBorderColorEXT)>(mod, lib, "vkRegisterCustomBorderColorEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkRegisterCustomBorderColorEXT")
-        ->args({"device","pBorderColor","requestIndex","pIndex"});
-#endif
-#if defined(VK_EXT_descriptor_heap)
-    addExtern<DAS_BIND_FUN(WRAP_vkUnregisterCustomBorderColorEXT)>(mod, lib, "vkUnregisterCustomBorderColorEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkUnregisterCustomBorderColorEXT")
-        ->args({"device","index"});
-#endif
-#if defined(VK_EXT_descriptor_heap)
-    addExtern<DAS_BIND_FUN(WRAP_vkGetImageOpaqueCaptureDataEXT)>(mod, lib, "vkGetImageOpaqueCaptureDataEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetImageOpaqueCaptureDataEXT")
-        ->args({"device","imageCount","pImages","pDatas"});
-#endif
-#if defined(VK_EXT_descriptor_heap)
-    addExtern<DAS_BIND_FUN(WRAP_vkGetPhysicalDeviceDescriptorSizeEXT)>(mod, lib, "vkGetPhysicalDeviceDescriptorSizeEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetPhysicalDeviceDescriptorSizeEXT")
-        ->args({"physicalDevice","descriptorType"});
-#endif
-#if defined(VK_EXT_descriptor_heap)
-    addExtern<DAS_BIND_FUN(WRAP_vkGetTensorOpaqueCaptureDataARM)>(mod, lib, "vkGetTensorOpaqueCaptureDataARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetTensorOpaqueCaptureDataARM")
-        ->args({"device","tensorCount","pTensors","pDatas"});
-#endif
-#if defined(VK_KHR_device_address_commands)
-    addExtern<DAS_BIND_FUN(WRAP_vkCmdCopyMemoryKHR)>(mod, lib, "vkCmdCopyMemoryKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdCopyMemoryKHR")
-        ->args({"commandBuffer","pCopyMemoryInfo"});
-#endif
-#if defined(VK_KHR_device_address_commands)
-    addExtern<DAS_BIND_FUN(WRAP_vkCmdCopyMemoryToImageKHR)>(mod, lib, "vkCmdCopyMemoryToImageKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdCopyMemoryToImageKHR")
-        ->args({"commandBuffer","pCopyMemoryInfo"});
-#endif
-#if defined(VK_KHR_device_address_commands)
-    addExtern<DAS_BIND_FUN(WRAP_vkCmdCopyImageToMemoryKHR)>(mod, lib, "vkCmdCopyImageToMemoryKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdCopyImageToMemoryKHR")
-        ->args({"commandBuffer","pCopyMemoryInfo"});
-#endif
-#if defined(VK_KHR_device_address_commands)
-    addExtern<DAS_BIND_FUN(WRAP_vkCmdUpdateMemoryKHR)>(mod, lib, "vkCmdUpdateMemoryKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdUpdateMemoryKHR")
-        ->args({"commandBuffer","pDstRange","dstFlags","dataSize","pData"});
-#endif
-#if defined(VK_KHR_device_address_commands)
-    addExtern<DAS_BIND_FUN(WRAP_vkCmdFillMemoryKHR)>(mod, lib, "vkCmdFillMemoryKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdFillMemoryKHR")
-        ->args({"commandBuffer","pDstRange","dstFlags","data"});
-#endif
-#if defined(VK_KHR_device_address_commands)
-    addExtern<DAS_BIND_FUN(WRAP_vkCmdCopyQueryPoolResultsToMemoryKHR)>(mod, lib, "vkCmdCopyQueryPoolResultsToMemoryKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdCopyQueryPoolResultsToMemoryKHR")
-        ->args({"commandBuffer","queryPool","firstQuery","queryCount","pDstRange","dstFlags","queryResultFlags"});
-#endif
-#if defined(VK_KHR_device_address_commands)
-    addExtern<DAS_BIND_FUN(WRAP_vkCmdBeginConditionalRendering2EXT)>(mod, lib, "vkCmdBeginConditionalRendering2EXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdBeginConditionalRendering2EXT")
-        ->args({"commandBuffer","pConditionalRenderingBegin"});
 #endif
 }
 

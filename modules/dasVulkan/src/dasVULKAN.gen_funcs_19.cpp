@@ -4,6 +4,102 @@
 
 namespace das {
 
+#if defined(VK_ARM_performance_counters_by_region)
+static VkResult WRAP_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM ( VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, uint32_t & pCounterCount, VkPerformanceCounterARM * pCounters, VkPerformanceCounterDescriptionARM * pCounterDescriptions ) {
+    return ::vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM(physicalDevice, queueFamilyIndex, (uint32_t *)&pCounterCount, pCounters, pCounterDescriptions);
+}
+#endif
+
+#if defined(VK_NV_compute_occupancy_priority)
+static void WRAP_vkCmdSetComputeOccupancyPriorityNV ( VkCommandBuffer commandBuffer, const VkComputeOccupancyPriorityParametersNV & pParameters ) {
+    ::vkCmdSetComputeOccupancyPriorityNV(commandBuffer, &pParameters);
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+static VkResult WRAP_vkWriteSamplerDescriptorsEXT ( VkDevice device, uint32_t samplerCount, const VkSamplerCreateInfo * pSamplers, const VkHostAddressRangeEXT * pDescriptors ) {
+    return ::vkWriteSamplerDescriptorsEXT(device, samplerCount, pSamplers, pDescriptors);
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+static void WRAP_vkCmdPushDataEXT ( VkCommandBuffer commandBuffer, const VkPushDataInfoEXT & pPushDataInfo ) {
+    ::vkCmdPushDataEXT(commandBuffer, &pPushDataInfo);
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+static VkResult WRAP_vkRegisterCustomBorderColorEXT ( VkDevice device, const VkSamplerCustomBorderColorCreateInfoEXT & pBorderColor, uint32_t requestIndex, uint32_t & pIndex ) {
+    return ::vkRegisterCustomBorderColorEXT(device, &pBorderColor, requestIndex, (uint32_t *)&pIndex);
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+static void WRAP_vkUnregisterCustomBorderColorEXT ( VkDevice device, uint32_t index ) {
+    ::vkUnregisterCustomBorderColorEXT(device, index);
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+static VkResult WRAP_vkGetImageOpaqueCaptureDataEXT ( VkDevice device, uint32_t imageCount, const VkImage * pImages, VkHostAddressRangeEXT * pDatas ) {
+    return ::vkGetImageOpaqueCaptureDataEXT(device, imageCount, pImages, pDatas);
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+static uint64_t WRAP_vkGetPhysicalDeviceDescriptorSizeEXT ( VkPhysicalDevice physicalDevice, VkDescriptorType descriptorType ) {
+    return (uint64_t)::vkGetPhysicalDeviceDescriptorSizeEXT(physicalDevice, descriptorType);
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+static VkResult WRAP_vkGetTensorOpaqueCaptureDataARM ( VkDevice device, uint32_t tensorCount, const VkTensorARM * pTensors, VkHostAddressRangeEXT * pDatas ) {
+    return ::vkGetTensorOpaqueCaptureDataARM(device, tensorCount, pTensors, pDatas);
+}
+#endif
+
+#if defined(VK_KHR_device_address_commands)
+static void WRAP_vkCmdCopyMemoryKHR ( VkCommandBuffer commandBuffer, const VkCopyDeviceMemoryInfoKHR * pCopyMemoryInfo ) {
+    ::vkCmdCopyMemoryKHR(commandBuffer, pCopyMemoryInfo);
+}
+#endif
+
+#if defined(VK_KHR_device_address_commands)
+static void WRAP_vkCmdCopyMemoryToImageKHR ( VkCommandBuffer commandBuffer, const VkCopyDeviceMemoryImageInfoKHR * pCopyMemoryInfo ) {
+    ::vkCmdCopyMemoryToImageKHR(commandBuffer, pCopyMemoryInfo);
+}
+#endif
+
+#if defined(VK_KHR_device_address_commands)
+static void WRAP_vkCmdCopyImageToMemoryKHR ( VkCommandBuffer commandBuffer, const VkCopyDeviceMemoryImageInfoKHR * pCopyMemoryInfo ) {
+    ::vkCmdCopyImageToMemoryKHR(commandBuffer, pCopyMemoryInfo);
+}
+#endif
+
+#if defined(VK_KHR_device_address_commands)
+static void WRAP_vkCmdUpdateMemoryKHR ( VkCommandBuffer commandBuffer, const VkDeviceAddressRangeKHR & pDstRange, Bitfield dstFlags, uint64_t dataSize, const void * pData ) {
+    ::vkCmdUpdateMemoryKHR(commandBuffer, &pDstRange, (VkAddressCommandFlagsKHR)(dstFlags.value), dataSize, pData);
+}
+#endif
+
+#if defined(VK_KHR_device_address_commands)
+static void WRAP_vkCmdFillMemoryKHR ( VkCommandBuffer commandBuffer, const VkDeviceAddressRangeKHR & pDstRange, Bitfield dstFlags, uint32_t data ) {
+    ::vkCmdFillMemoryKHR(commandBuffer, &pDstRange, (VkAddressCommandFlagsKHR)(dstFlags.value), data);
+}
+#endif
+
+#if defined(VK_KHR_device_address_commands)
+static void WRAP_vkCmdCopyQueryPoolResultsToMemoryKHR ( VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount, const VkStridedDeviceAddressRangeKHR & pDstRange, Bitfield dstFlags, Bitfield queryResultFlags ) {
+    ::vkCmdCopyQueryPoolResultsToMemoryKHR(commandBuffer, queryPool, firstQuery, queryCount, &pDstRange, (VkAddressCommandFlagsKHR)(dstFlags.value), (VkQueryResultFlags)(queryResultFlags.value));
+}
+#endif
+
+#if defined(VK_KHR_device_address_commands)
+static void WRAP_vkCmdBeginConditionalRendering2EXT ( VkCommandBuffer commandBuffer, const VkConditionalRenderingBeginInfo2EXT & pConditionalRenderingBegin ) {
+    ::vkCmdBeginConditionalRendering2EXT(commandBuffer, &pConditionalRenderingBegin);
+}
+#endif
+
 #if defined(VK_KHR_device_address_commands)
 static void WRAP_vkCmdBindTransformFeedbackBuffers2EXT ( VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount, const VkBindTransformFeedbackBuffer2InfoEXT * pBindingInfos ) {
     ::vkCmdBindTransformFeedbackBuffers2EXT(commandBuffer, firstBinding, bindingCount, pBindingInfos);
@@ -113,6 +209,70 @@ static VkResult WRAP_vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageForm
 #endif
 
 void das_vulkan_init_funcs_19(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_ARM_performance_counters_by_region)
+    addExtern<DAS_BIND_FUN(WRAP_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM)>(mod, lib, "vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM")
+        ->args({"physicalDevice","queueFamilyIndex","pCounterCount","pCounters","pCounterDescriptions"});
+#endif
+#if defined(VK_NV_compute_occupancy_priority)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdSetComputeOccupancyPriorityNV)>(mod, lib, "vkCmdSetComputeOccupancyPriorityNV", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdSetComputeOccupancyPriorityNV")
+        ->args({"commandBuffer","pParameters"});
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    addExtern<DAS_BIND_FUN(WRAP_vkWriteSamplerDescriptorsEXT)>(mod, lib, "vkWriteSamplerDescriptorsEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkWriteSamplerDescriptorsEXT")
+        ->args({"device","samplerCount","pSamplers","pDescriptors"});
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdPushDataEXT)>(mod, lib, "vkCmdPushDataEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdPushDataEXT")
+        ->args({"commandBuffer","pPushDataInfo"});
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    addExtern<DAS_BIND_FUN(WRAP_vkRegisterCustomBorderColorEXT)>(mod, lib, "vkRegisterCustomBorderColorEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkRegisterCustomBorderColorEXT")
+        ->args({"device","pBorderColor","requestIndex","pIndex"});
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    addExtern<DAS_BIND_FUN(WRAP_vkUnregisterCustomBorderColorEXT)>(mod, lib, "vkUnregisterCustomBorderColorEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkUnregisterCustomBorderColorEXT")
+        ->args({"device","index"});
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    addExtern<DAS_BIND_FUN(WRAP_vkGetImageOpaqueCaptureDataEXT)>(mod, lib, "vkGetImageOpaqueCaptureDataEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetImageOpaqueCaptureDataEXT")
+        ->args({"device","imageCount","pImages","pDatas"});
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    addExtern<DAS_BIND_FUN(WRAP_vkGetPhysicalDeviceDescriptorSizeEXT)>(mod, lib, "vkGetPhysicalDeviceDescriptorSizeEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetPhysicalDeviceDescriptorSizeEXT")
+        ->args({"physicalDevice","descriptorType"});
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    addExtern<DAS_BIND_FUN(WRAP_vkGetTensorOpaqueCaptureDataARM)>(mod, lib, "vkGetTensorOpaqueCaptureDataARM", SideEffects::modifyArgumentAndExternal, "WRAP_vkGetTensorOpaqueCaptureDataARM")
+        ->args({"device","tensorCount","pTensors","pDatas"});
+#endif
+#if defined(VK_KHR_device_address_commands)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdCopyMemoryKHR)>(mod, lib, "vkCmdCopyMemoryKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdCopyMemoryKHR")
+        ->args({"commandBuffer","pCopyMemoryInfo"});
+#endif
+#if defined(VK_KHR_device_address_commands)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdCopyMemoryToImageKHR)>(mod, lib, "vkCmdCopyMemoryToImageKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdCopyMemoryToImageKHR")
+        ->args({"commandBuffer","pCopyMemoryInfo"});
+#endif
+#if defined(VK_KHR_device_address_commands)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdCopyImageToMemoryKHR)>(mod, lib, "vkCmdCopyImageToMemoryKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdCopyImageToMemoryKHR")
+        ->args({"commandBuffer","pCopyMemoryInfo"});
+#endif
+#if defined(VK_KHR_device_address_commands)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdUpdateMemoryKHR)>(mod, lib, "vkCmdUpdateMemoryKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdUpdateMemoryKHR")
+        ->args({"commandBuffer","pDstRange","dstFlags","dataSize","pData"});
+#endif
+#if defined(VK_KHR_device_address_commands)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdFillMemoryKHR)>(mod, lib, "vkCmdFillMemoryKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdFillMemoryKHR")
+        ->args({"commandBuffer","pDstRange","dstFlags","data"});
+#endif
+#if defined(VK_KHR_device_address_commands)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdCopyQueryPoolResultsToMemoryKHR)>(mod, lib, "vkCmdCopyQueryPoolResultsToMemoryKHR", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdCopyQueryPoolResultsToMemoryKHR")
+        ->args({"commandBuffer","queryPool","firstQuery","queryCount","pDstRange","dstFlags","queryResultFlags"});
+#endif
+#if defined(VK_KHR_device_address_commands)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdBeginConditionalRendering2EXT)>(mod, lib, "vkCmdBeginConditionalRendering2EXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdBeginConditionalRendering2EXT")
+        ->args({"commandBuffer","pConditionalRenderingBegin"});
+#endif
 #if defined(VK_KHR_device_address_commands)
     addExtern<DAS_BIND_FUN(WRAP_vkCmdBindTransformFeedbackBuffers2EXT)>(mod, lib, "vkCmdBindTransformFeedbackBuffers2EXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdBindTransformFeedbackBuffers2EXT")
         ->args({"commandBuffer","firstBinding","bindingCount","pBindingInfos"});

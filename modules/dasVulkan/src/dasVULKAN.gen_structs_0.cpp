@@ -777,6 +777,38 @@ void VkImageCreateInfo_Ann::init() {
 }
 #endif
 
+#if defined(VK_KHR_extended_flags)
+struct VkImageCreateFlags2CreateInfoKHR_Ann : ManagedStructureAnnotation<VkImageCreateFlags2CreateInfoKHR> {
+    VkImageCreateFlags2CreateInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImageCreateFlags2CreateInfoKHR", ml, "VkImageCreateFlags2CreateInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkImageCreateFlags2CreateInfoKHR_Ann * ann_VkImageCreateFlags2CreateInfoKHR = nullptr;
+void VkImageCreateFlags2CreateInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkImageCreateFlags2CreateInfoKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("flags", "flags", offsetof(VkImageCreateFlags2CreateInfoKHR, flags), makeVkFlags_VkImageCreateFlags2KHR());
+}
+#endif
+
+#if defined(VK_KHR_extended_flags)
+struct VkImageUsageFlags2CreateInfoKHR_Ann : ManagedStructureAnnotation<VkImageUsageFlags2CreateInfoKHR> {
+    VkImageUsageFlags2CreateInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImageUsageFlags2CreateInfoKHR", ml, "VkImageUsageFlags2CreateInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkImageUsageFlags2CreateInfoKHR_Ann * ann_VkImageUsageFlags2CreateInfoKHR = nullptr;
+void VkImageUsageFlags2CreateInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkImageUsageFlags2CreateInfoKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("usage", "usage", offsetof(VkImageUsageFlags2CreateInfoKHR, usage), makeVkFlags_VkImageUsageFlags2KHR());
+}
+#endif
+
 #if defined(VK_VERSION_1_0)
 struct VkSubresourceLayout_Ann : ManagedStructureAnnotation<VkSubresourceLayout> {
     VkSubresourceLayout_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSubresourceLayout", ml, "VkSubresourceLayout") {}
@@ -866,38 +898,6 @@ void VkSparseImageMemoryBind_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(memory)>("memory", "memory");
     addField<DAS_BIND_MANAGED_FIELD(memoryOffset)>("memoryOffset", "memoryOffset");
     addFieldEx("flags", "flags", offsetof(VkSparseImageMemoryBind, flags), makeVkFlags_VkSparseMemoryBindFlags());
-}
-#endif
-
-#if defined(VK_VERSION_1_0)
-struct VkSparseBufferMemoryBindInfo_Ann : ManagedStructureAnnotation<VkSparseBufferMemoryBindInfo> {
-    VkSparseBufferMemoryBindInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSparseBufferMemoryBindInfo", ml, "VkSparseBufferMemoryBindInfo") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkSparseBufferMemoryBindInfo_Ann * ann_VkSparseBufferMemoryBindInfo = nullptr;
-void VkSparseBufferMemoryBindInfo_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(buffer)>("buffer", "buffer");
-    addField<DAS_BIND_MANAGED_FIELD(bindCount)>("bindCount", "bindCount");
-    addFieldEx("pBinds", "pBinds", offsetof(VkSparseBufferMemoryBindInfo, pBinds), makeType<VkSparseMemoryBind *>(*mlib));
-}
-#endif
-
-#if defined(VK_VERSION_1_0)
-struct VkSparseImageOpaqueMemoryBindInfo_Ann : ManagedStructureAnnotation<VkSparseImageOpaqueMemoryBindInfo> {
-    VkSparseImageOpaqueMemoryBindInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSparseImageOpaqueMemoryBindInfo", ml, "VkSparseImageOpaqueMemoryBindInfo") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkSparseImageOpaqueMemoryBindInfo_Ann * ann_VkSparseImageOpaqueMemoryBindInfo = nullptr;
-void VkSparseImageOpaqueMemoryBindInfo_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(image)>("image", "image");
-    addField<DAS_BIND_MANAGED_FIELD(bindCount)>("bindCount", "bindCount");
-    addFieldEx("pBinds", "pBinds", offsetof(VkSparseImageOpaqueMemoryBindInfo, pBinds), makeType<VkSparseMemoryBind *>(*mlib));
 }
 #endif
 
@@ -1031,6 +1031,12 @@ void das_vulkan_add_structs_0(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_VERSION_1_0)
     ann_VkImageCreateInfo = new VkImageCreateInfo_Ann(lib); mod.addAnnotation(ann_VkImageCreateInfo);
 #endif
+#if defined(VK_KHR_extended_flags)
+    ann_VkImageCreateFlags2CreateInfoKHR = new VkImageCreateFlags2CreateInfoKHR_Ann(lib); mod.addAnnotation(ann_VkImageCreateFlags2CreateInfoKHR);
+#endif
+#if defined(VK_KHR_extended_flags)
+    ann_VkImageUsageFlags2CreateInfoKHR = new VkImageUsageFlags2CreateInfoKHR_Ann(lib); mod.addAnnotation(ann_VkImageUsageFlags2CreateInfoKHR);
+#endif
 #if defined(VK_VERSION_1_0)
     ann_VkSubresourceLayout = new VkSubresourceLayout_Ann(lib); mod.addAnnotation(ann_VkSubresourceLayout);
 #endif
@@ -1045,12 +1051,6 @@ void das_vulkan_add_structs_0(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_VERSION_1_0)
     ann_VkSparseImageMemoryBind = new VkSparseImageMemoryBind_Ann(lib); mod.addAnnotation(ann_VkSparseImageMemoryBind);
-#endif
-#if defined(VK_VERSION_1_0)
-    ann_VkSparseBufferMemoryBindInfo = new VkSparseBufferMemoryBindInfo_Ann(lib); mod.addAnnotation(ann_VkSparseBufferMemoryBindInfo);
-#endif
-#if defined(VK_VERSION_1_0)
-    ann_VkSparseImageOpaqueMemoryBindInfo = new VkSparseImageOpaqueMemoryBindInfo_Ann(lib); mod.addAnnotation(ann_VkSparseImageOpaqueMemoryBindInfo);
 #endif
 }
 
@@ -1184,6 +1184,12 @@ void das_vulkan_fill_structs_0(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_VERSION_1_0)
     ann_VkImageCreateInfo->mlib = &lib; ann_VkImageCreateInfo->init(); ann_VkImageCreateInfo->mlib = nullptr;
 #endif
+#if defined(VK_KHR_extended_flags)
+    ann_VkImageCreateFlags2CreateInfoKHR->mlib = &lib; ann_VkImageCreateFlags2CreateInfoKHR->init(); ann_VkImageCreateFlags2CreateInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_extended_flags)
+    ann_VkImageUsageFlags2CreateInfoKHR->mlib = &lib; ann_VkImageUsageFlags2CreateInfoKHR->init(); ann_VkImageUsageFlags2CreateInfoKHR->mlib = nullptr;
+#endif
 #if defined(VK_VERSION_1_0)
     ann_VkSubresourceLayout->mlib = &lib; ann_VkSubresourceLayout->init(); ann_VkSubresourceLayout->mlib = nullptr;
 #endif
@@ -1198,12 +1204,6 @@ void das_vulkan_fill_structs_0(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_VERSION_1_0)
     ann_VkSparseImageMemoryBind->mlib = &lib; ann_VkSparseImageMemoryBind->init(); ann_VkSparseImageMemoryBind->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_0)
-    ann_VkSparseBufferMemoryBindInfo->mlib = &lib; ann_VkSparseBufferMemoryBindInfo->init(); ann_VkSparseBufferMemoryBindInfo->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_0)
-    ann_VkSparseImageOpaqueMemoryBindInfo->mlib = &lib; ann_VkSparseImageOpaqueMemoryBindInfo->init(); ann_VkSparseImageOpaqueMemoryBindInfo->mlib = nullptr;
 #endif
 }
 

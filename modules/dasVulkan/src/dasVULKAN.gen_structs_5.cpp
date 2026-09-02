@@ -5,6 +5,44 @@
 namespace das {
 
 #if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
+struct VkImportFenceWin32HandleInfoKHR_Ann : ManagedStructureAnnotation<VkImportFenceWin32HandleInfoKHR> {
+    VkImportFenceWin32HandleInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImportFenceWin32HandleInfoKHR", ml, "VkImportFenceWin32HandleInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkImportFenceWin32HandleInfoKHR_Ann * ann_VkImportFenceWin32HandleInfoKHR = nullptr;
+void VkImportFenceWin32HandleInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkImportFenceWin32HandleInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(fence)>("fence", "fence");
+    addFieldEx("flags", "flags", offsetof(VkImportFenceWin32HandleInfoKHR, flags), makeVkFlags_VkFenceImportFlags());
+    addField<DAS_BIND_MANAGED_FIELD(handleType)>("handleType", "handleType");
+    addFieldEx("handle", "handle", offsetof(VkImportFenceWin32HandleInfoKHR, handle), makeType<void *>(*mlib));
+    addFieldEx("name", "name", offsetof(VkImportFenceWin32HandleInfoKHR, name), makeType<void *>(*mlib));
+}
+#endif
+
+#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
+struct VkExportFenceWin32HandleInfoKHR_Ann : ManagedStructureAnnotation<VkExportFenceWin32HandleInfoKHR> {
+    VkExportFenceWin32HandleInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkExportFenceWin32HandleInfoKHR", ml, "VkExportFenceWin32HandleInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkExportFenceWin32HandleInfoKHR_Ann * ann_VkExportFenceWin32HandleInfoKHR = nullptr;
+void VkExportFenceWin32HandleInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkExportFenceWin32HandleInfoKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("pAttributes", "pAttributes", offsetof(VkExportFenceWin32HandleInfoKHR, pAttributes), makeType<void *>(*mlib));
+    addFieldEx("dwAccess", "dwAccess", offsetof(VkExportFenceWin32HandleInfoKHR, dwAccess), makeType<uint32_t>(*mlib));
+    addFieldEx("name", "name", offsetof(VkExportFenceWin32HandleInfoKHR, name), makeType<void *>(*mlib));
+}
+#endif
+
+#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
 struct VkFenceGetWin32HandleInfoKHR_Ann : ManagedStructureAnnotation<VkFenceGetWin32HandleInfoKHR> {
     VkFenceGetWin32HandleInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkFenceGetWin32HandleInfoKHR", ml, "VkFenceGetWin32HandleInfoKHR") {}
     virtual bool isLocal() const override { return true; }
@@ -857,48 +895,13 @@ void VkPresentTimingInfoEXT_Ann::init() {
 }
 #endif
 
-#if defined(VK_EXT_present_timing)
-struct VkSwapchainCalibratedTimestampInfoEXT_Ann : ManagedStructureAnnotation<VkSwapchainCalibratedTimestampInfoEXT> {
-    VkSwapchainCalibratedTimestampInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSwapchainCalibratedTimestampInfoEXT", ml, "VkSwapchainCalibratedTimestampInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkSwapchainCalibratedTimestampInfoEXT_Ann * ann_VkSwapchainCalibratedTimestampInfoEXT = nullptr;
-void VkSwapchainCalibratedTimestampInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkSwapchainCalibratedTimestampInfoEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(swapchain)>("swapchain", "swapchain");
-    addFieldEx("presentStage", "presentStage", offsetof(VkSwapchainCalibratedTimestampInfoEXT, presentStage), makeVkFlags_VkPresentStageFlagsEXT());
-    addField<DAS_BIND_MANAGED_FIELD(timeDomainId)>("timeDomainId", "timeDomainId");
-}
-#endif
-
-#if defined(VK_EXT_hdr_metadata)
-struct VkHdrMetadataEXT_Ann : ManagedStructureAnnotation<VkHdrMetadataEXT> {
-    VkHdrMetadataEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkHdrMetadataEXT", ml, "VkHdrMetadataEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkHdrMetadataEXT_Ann * ann_VkHdrMetadataEXT = nullptr;
-void VkHdrMetadataEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkHdrMetadataEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(displayPrimaryRed)>("displayPrimaryRed", "displayPrimaryRed");
-    addField<DAS_BIND_MANAGED_FIELD(displayPrimaryGreen)>("displayPrimaryGreen", "displayPrimaryGreen");
-    addField<DAS_BIND_MANAGED_FIELD(displayPrimaryBlue)>("displayPrimaryBlue", "displayPrimaryBlue");
-    addField<DAS_BIND_MANAGED_FIELD(whitePoint)>("whitePoint", "whitePoint");
-    addField<DAS_BIND_MANAGED_FIELD(maxLuminance)>("maxLuminance", "maxLuminance");
-    addField<DAS_BIND_MANAGED_FIELD(minLuminance)>("minLuminance", "minLuminance");
-    addField<DAS_BIND_MANAGED_FIELD(maxContentLightLevel)>("maxContentLightLevel", "maxContentLightLevel");
-    addField<DAS_BIND_MANAGED_FIELD(maxFrameAverageLightLevel)>("maxFrameAverageLightLevel", "maxFrameAverageLightLevel");
-}
-#endif
-
 void das_vulkan_add_structs_5(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
+    ann_VkImportFenceWin32HandleInfoKHR = new VkImportFenceWin32HandleInfoKHR_Ann(lib); mod.addAnnotation(ann_VkImportFenceWin32HandleInfoKHR);
+#endif
+#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
+    ann_VkExportFenceWin32HandleInfoKHR = new VkExportFenceWin32HandleInfoKHR_Ann(lib); mod.addAnnotation(ann_VkExportFenceWin32HandleInfoKHR);
+#endif
 #if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
     ann_VkFenceGetWin32HandleInfoKHR = new VkFenceGetWin32HandleInfoKHR_Ann(lib); mod.addAnnotation(ann_VkFenceGetWin32HandleInfoKHR);
 #endif
@@ -1043,15 +1046,15 @@ void das_vulkan_add_structs_5(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_EXT_present_timing)
     ann_VkPresentTimingInfoEXT = new VkPresentTimingInfoEXT_Ann(lib); mod.addAnnotation(ann_VkPresentTimingInfoEXT);
 #endif
-#if defined(VK_EXT_present_timing)
-    ann_VkSwapchainCalibratedTimestampInfoEXT = new VkSwapchainCalibratedTimestampInfoEXT_Ann(lib); mod.addAnnotation(ann_VkSwapchainCalibratedTimestampInfoEXT);
-#endif
-#if defined(VK_EXT_hdr_metadata)
-    ann_VkHdrMetadataEXT = new VkHdrMetadataEXT_Ann(lib); mod.addAnnotation(ann_VkHdrMetadataEXT);
-#endif
 }
 
 void das_vulkan_fill_structs_5(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
+    ann_VkImportFenceWin32HandleInfoKHR->mlib = &lib; ann_VkImportFenceWin32HandleInfoKHR->init(); ann_VkImportFenceWin32HandleInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
+    ann_VkExportFenceWin32HandleInfoKHR->mlib = &lib; ann_VkExportFenceWin32HandleInfoKHR->init(); ann_VkExportFenceWin32HandleInfoKHR->mlib = nullptr;
+#endif
 #if defined(VK_KHR_external_fence_win32) && defined(VK_USE_PLATFORM_WIN32_KHR)
     ann_VkFenceGetWin32HandleInfoKHR->mlib = &lib; ann_VkFenceGetWin32HandleInfoKHR->init(); ann_VkFenceGetWin32HandleInfoKHR->mlib = nullptr;
 #endif
@@ -1195,12 +1198,6 @@ void das_vulkan_fill_structs_5(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_EXT_present_timing)
     ann_VkPresentTimingInfoEXT->mlib = &lib; ann_VkPresentTimingInfoEXT->init(); ann_VkPresentTimingInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_present_timing)
-    ann_VkSwapchainCalibratedTimestampInfoEXT->mlib = &lib; ann_VkSwapchainCalibratedTimestampInfoEXT->init(); ann_VkSwapchainCalibratedTimestampInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_hdr_metadata)
-    ann_VkHdrMetadataEXT->mlib = &lib; ann_VkHdrMetadataEXT->init(); ann_VkHdrMetadataEXT->mlib = nullptr;
 #endif
 }
 

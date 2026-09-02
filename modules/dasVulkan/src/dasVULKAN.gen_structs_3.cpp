@@ -4,6 +4,42 @@
 
 namespace das {
 
+#if defined(VK_EXT_validation_features)
+struct VkValidationFeaturesEXT_Ann : ManagedStructureAnnotation<VkValidationFeaturesEXT> {
+    VkValidationFeaturesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkValidationFeaturesEXT", ml, "VkValidationFeaturesEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkValidationFeaturesEXT_Ann * ann_VkValidationFeaturesEXT = nullptr;
+void VkValidationFeaturesEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkValidationFeaturesEXT, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(enabledValidationFeatureCount)>("enabledValidationFeatureCount", "enabledValidationFeatureCount");
+    addFieldEx("pEnabledValidationFeatures", "pEnabledValidationFeatures", offsetof(VkValidationFeaturesEXT, pEnabledValidationFeatures), makeType<VkValidationFeatureEnableEXT *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(disabledValidationFeatureCount)>("disabledValidationFeatureCount", "disabledValidationFeatureCount");
+    addFieldEx("pDisabledValidationFeatures", "pDisabledValidationFeatures", offsetof(VkValidationFeaturesEXT, pDisabledValidationFeatures), makeType<VkValidationFeatureDisableEXT *>(*mlib));
+}
+#endif
+
+#if defined(VK_EXT_layer_settings)
+struct VkLayerSettingsCreateInfoEXT_Ann : ManagedStructureAnnotation<VkLayerSettingsCreateInfoEXT> {
+    VkLayerSettingsCreateInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkLayerSettingsCreateInfoEXT", ml, "VkLayerSettingsCreateInfoEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkLayerSettingsCreateInfoEXT_Ann * ann_VkLayerSettingsCreateInfoEXT = nullptr;
+void VkLayerSettingsCreateInfoEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkLayerSettingsCreateInfoEXT, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(settingCount)>("settingCount", "settingCount");
+    addFieldEx("pSettings", "pSettings", offsetof(VkLayerSettingsCreateInfoEXT, pSettings), makeType<VkLayerSettingEXT *>(*mlib));
+}
+#endif
+
 #if defined(VK_EXT_layer_settings)
 struct VkLayerSettingEXT_Ann : ManagedStructureAnnotation<VkLayerSettingEXT> {
     VkLayerSettingEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkLayerSettingEXT", ml, "VkLayerSettingEXT") {}
@@ -860,38 +896,13 @@ void VkGeneratedCommandsMemoryRequirementsInfoNV_Ann::init() {
 }
 #endif
 
-#if defined(VK_NV_device_generated_commands_compute)
-struct VkPipelineIndirectDeviceAddressInfoNV_Ann : ManagedStructureAnnotation<VkPipelineIndirectDeviceAddressInfoNV> {
-    VkPipelineIndirectDeviceAddressInfoNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPipelineIndirectDeviceAddressInfoNV", ml, "VkPipelineIndirectDeviceAddressInfoNV") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPipelineIndirectDeviceAddressInfoNV_Ann * ann_VkPipelineIndirectDeviceAddressInfoNV = nullptr;
-void VkPipelineIndirectDeviceAddressInfoNV_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPipelineIndirectDeviceAddressInfoNV, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(pipelineBindPoint)>("pipelineBindPoint", "pipelineBindPoint");
-    addField<DAS_BIND_MANAGED_FIELD(pipeline)>("pipeline", "pipeline");
-}
-#endif
-
-#if defined(VK_NV_device_generated_commands_compute)
-struct VkBindPipelineIndirectCommandNV_Ann : ManagedStructureAnnotation<VkBindPipelineIndirectCommandNV> {
-    VkBindPipelineIndirectCommandNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkBindPipelineIndirectCommandNV", ml, "VkBindPipelineIndirectCommandNV") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkBindPipelineIndirectCommandNV_Ann * ann_VkBindPipelineIndirectCommandNV = nullptr;
-void VkBindPipelineIndirectCommandNV_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(pipelineAddress)>("pipelineAddress", "pipelineAddress");
-}
-#endif
-
 void das_vulkan_add_structs_3(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_EXT_validation_features)
+    ann_VkValidationFeaturesEXT = new VkValidationFeaturesEXT_Ann(lib); mod.addAnnotation(ann_VkValidationFeaturesEXT);
+#endif
+#if defined(VK_EXT_layer_settings)
+    ann_VkLayerSettingsCreateInfoEXT = new VkLayerSettingsCreateInfoEXT_Ann(lib); mod.addAnnotation(ann_VkLayerSettingsCreateInfoEXT);
+#endif
 #if defined(VK_EXT_layer_settings)
     ann_VkLayerSettingEXT = new VkLayerSettingEXT_Ann(lib); mod.addAnnotation(ann_VkLayerSettingEXT);
 #endif
@@ -1036,15 +1047,15 @@ void das_vulkan_add_structs_3(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_NV_device_generated_commands)
     ann_VkGeneratedCommandsMemoryRequirementsInfoNV = new VkGeneratedCommandsMemoryRequirementsInfoNV_Ann(lib); mod.addAnnotation(ann_VkGeneratedCommandsMemoryRequirementsInfoNV);
 #endif
-#if defined(VK_NV_device_generated_commands_compute)
-    ann_VkPipelineIndirectDeviceAddressInfoNV = new VkPipelineIndirectDeviceAddressInfoNV_Ann(lib); mod.addAnnotation(ann_VkPipelineIndirectDeviceAddressInfoNV);
-#endif
-#if defined(VK_NV_device_generated_commands_compute)
-    ann_VkBindPipelineIndirectCommandNV = new VkBindPipelineIndirectCommandNV_Ann(lib); mod.addAnnotation(ann_VkBindPipelineIndirectCommandNV);
-#endif
 }
 
 void das_vulkan_fill_structs_3(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_EXT_validation_features)
+    ann_VkValidationFeaturesEXT->mlib = &lib; ann_VkValidationFeaturesEXT->init(); ann_VkValidationFeaturesEXT->mlib = nullptr;
+#endif
+#if defined(VK_EXT_layer_settings)
+    ann_VkLayerSettingsCreateInfoEXT->mlib = &lib; ann_VkLayerSettingsCreateInfoEXT->init(); ann_VkLayerSettingsCreateInfoEXT->mlib = nullptr;
+#endif
 #if defined(VK_EXT_layer_settings)
     ann_VkLayerSettingEXT->mlib = &lib; ann_VkLayerSettingEXT->init(); ann_VkLayerSettingEXT->mlib = nullptr;
 #endif
@@ -1188,12 +1199,6 @@ void das_vulkan_fill_structs_3(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_NV_device_generated_commands)
     ann_VkGeneratedCommandsMemoryRequirementsInfoNV->mlib = &lib; ann_VkGeneratedCommandsMemoryRequirementsInfoNV->init(); ann_VkGeneratedCommandsMemoryRequirementsInfoNV->mlib = nullptr;
-#endif
-#if defined(VK_NV_device_generated_commands_compute)
-    ann_VkPipelineIndirectDeviceAddressInfoNV->mlib = &lib; ann_VkPipelineIndirectDeviceAddressInfoNV->init(); ann_VkPipelineIndirectDeviceAddressInfoNV->mlib = nullptr;
-#endif
-#if defined(VK_NV_device_generated_commands_compute)
-    ann_VkBindPipelineIndirectCommandNV->mlib = &lib; ann_VkBindPipelineIndirectCommandNV->init(); ann_VkBindPipelineIndirectCommandNV->mlib = nullptr;
 #endif
 }
 

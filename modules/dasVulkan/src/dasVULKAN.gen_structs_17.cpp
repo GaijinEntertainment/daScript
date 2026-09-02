@@ -4,6 +4,405 @@
 
 namespace das {
 
+#if defined(VK_KHR_video_encode_h264)
+struct VkVideoEncodeH264SessionParametersGetInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264SessionParametersGetInfoKHR> {
+    VkVideoEncodeH264SessionParametersGetInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264SessionParametersGetInfoKHR", ml, "VkVideoEncodeH264SessionParametersGetInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH264SessionParametersGetInfoKHR_Ann * ann_VkVideoEncodeH264SessionParametersGetInfoKHR = nullptr;
+void VkVideoEncodeH264SessionParametersGetInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264SessionParametersGetInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(writeStdSPS)>("writeStdSPS", "writeStdSPS");
+    addField<DAS_BIND_MANAGED_FIELD(writeStdPPS)>("writeStdPPS", "writeStdPPS");
+    addField<DAS_BIND_MANAGED_FIELD(stdSPSId)>("stdSPSId", "stdSPSId");
+    addField<DAS_BIND_MANAGED_FIELD(stdPPSId)>("stdPPSId", "stdPPSId");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h264)
+struct VkVideoEncodeH264SessionParametersFeedbackInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264SessionParametersFeedbackInfoKHR> {
+    VkVideoEncodeH264SessionParametersFeedbackInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264SessionParametersFeedbackInfoKHR", ml, "VkVideoEncodeH264SessionParametersFeedbackInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH264SessionParametersFeedbackInfoKHR_Ann * ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR = nullptr;
+void VkVideoEncodeH264SessionParametersFeedbackInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264SessionParametersFeedbackInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(hasStdSPSOverrides)>("hasStdSPSOverrides", "hasStdSPSOverrides");
+    addField<DAS_BIND_MANAGED_FIELD(hasStdPPSOverrides)>("hasStdPPSOverrides", "hasStdPPSOverrides");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h264)
+struct VkVideoEncodeH264RateControlInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264RateControlInfoKHR> {
+    VkVideoEncodeH264RateControlInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264RateControlInfoKHR", ml, "VkVideoEncodeH264RateControlInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH264RateControlInfoKHR_Ann * ann_VkVideoEncodeH264RateControlInfoKHR = nullptr;
+void VkVideoEncodeH264RateControlInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264RateControlInfoKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("flags", "flags", offsetof(VkVideoEncodeH264RateControlInfoKHR, flags), makeVkFlags_VkVideoEncodeH264RateControlFlagsKHR());
+    addField<DAS_BIND_MANAGED_FIELD(gopFrameCount)>("gopFrameCount", "gopFrameCount");
+    addField<DAS_BIND_MANAGED_FIELD(idrPeriod)>("idrPeriod", "idrPeriod");
+    addField<DAS_BIND_MANAGED_FIELD(consecutiveBFrameCount)>("consecutiveBFrameCount", "consecutiveBFrameCount");
+    addField<DAS_BIND_MANAGED_FIELD(temporalLayerCount)>("temporalLayerCount", "temporalLayerCount");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h264)
+struct VkVideoEncodeH264QpKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264QpKHR> {
+    VkVideoEncodeH264QpKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264QpKHR", ml, "VkVideoEncodeH264QpKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH264QpKHR_Ann * ann_VkVideoEncodeH264QpKHR = nullptr;
+void VkVideoEncodeH264QpKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(qpI)>("qpI", "qpI");
+    addField<DAS_BIND_MANAGED_FIELD(qpP)>("qpP", "qpP");
+    addField<DAS_BIND_MANAGED_FIELD(qpB)>("qpB", "qpB");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h264)
+struct VkVideoEncodeH264FrameSizeKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264FrameSizeKHR> {
+    VkVideoEncodeH264FrameSizeKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264FrameSizeKHR", ml, "VkVideoEncodeH264FrameSizeKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH264FrameSizeKHR_Ann * ann_VkVideoEncodeH264FrameSizeKHR = nullptr;
+void VkVideoEncodeH264FrameSizeKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(frameISize)>("frameISize", "frameISize");
+    addField<DAS_BIND_MANAGED_FIELD(framePSize)>("framePSize", "framePSize");
+    addField<DAS_BIND_MANAGED_FIELD(frameBSize)>("frameBSize", "frameBSize");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h264)
+struct VkVideoEncodeH264GopRemainingFrameInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264GopRemainingFrameInfoKHR> {
+    VkVideoEncodeH264GopRemainingFrameInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264GopRemainingFrameInfoKHR", ml, "VkVideoEncodeH264GopRemainingFrameInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH264GopRemainingFrameInfoKHR_Ann * ann_VkVideoEncodeH264GopRemainingFrameInfoKHR = nullptr;
+void VkVideoEncodeH264GopRemainingFrameInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264GopRemainingFrameInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(useGopRemainingFrames)>("useGopRemainingFrames", "useGopRemainingFrames");
+    addField<DAS_BIND_MANAGED_FIELD(gopRemainingI)>("gopRemainingI", "gopRemainingI");
+    addField<DAS_BIND_MANAGED_FIELD(gopRemainingP)>("gopRemainingP", "gopRemainingP");
+    addField<DAS_BIND_MANAGED_FIELD(gopRemainingB)>("gopRemainingB", "gopRemainingB");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h264)
+struct VkVideoEncodeH264RateControlLayerInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264RateControlLayerInfoKHR> {
+    VkVideoEncodeH264RateControlLayerInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264RateControlLayerInfoKHR", ml, "VkVideoEncodeH264RateControlLayerInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH264RateControlLayerInfoKHR_Ann * ann_VkVideoEncodeH264RateControlLayerInfoKHR = nullptr;
+void VkVideoEncodeH264RateControlLayerInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264RateControlLayerInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(useMinQp)>("useMinQp", "useMinQp");
+    addField<DAS_BIND_MANAGED_FIELD(minQp)>("minQp", "minQp");
+    addField<DAS_BIND_MANAGED_FIELD(useMaxQp)>("useMaxQp", "useMaxQp");
+    addField<DAS_BIND_MANAGED_FIELD(maxQp)>("maxQp", "maxQp");
+    addField<DAS_BIND_MANAGED_FIELD(useMaxFrameSize)>("useMaxFrameSize", "useMaxFrameSize");
+    addField<DAS_BIND_MANAGED_FIELD(maxFrameSize)>("maxFrameSize", "maxFrameSize");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h265)
+struct VkVideoEncodeH265QualityLevelPropertiesKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265QualityLevelPropertiesKHR> {
+    VkVideoEncodeH265QualityLevelPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265QualityLevelPropertiesKHR", ml, "VkVideoEncodeH265QualityLevelPropertiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH265QualityLevelPropertiesKHR_Ann * ann_VkVideoEncodeH265QualityLevelPropertiesKHR = nullptr;
+void VkVideoEncodeH265QualityLevelPropertiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265QualityLevelPropertiesKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("preferredRateControlFlags", "preferredRateControlFlags", offsetof(VkVideoEncodeH265QualityLevelPropertiesKHR, preferredRateControlFlags), makeVkFlags_VkVideoEncodeH265RateControlFlagsKHR());
+    addField<DAS_BIND_MANAGED_FIELD(preferredGopFrameCount)>("preferredGopFrameCount", "preferredGopFrameCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredIdrPeriod)>("preferredIdrPeriod", "preferredIdrPeriod");
+    addField<DAS_BIND_MANAGED_FIELD(preferredConsecutiveBFrameCount)>("preferredConsecutiveBFrameCount", "preferredConsecutiveBFrameCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredSubLayerCount)>("preferredSubLayerCount", "preferredSubLayerCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredConstantQp)>("preferredConstantQp", "preferredConstantQp");
+    addField<DAS_BIND_MANAGED_FIELD(preferredMaxL0ReferenceCount)>("preferredMaxL0ReferenceCount", "preferredMaxL0ReferenceCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredMaxL1ReferenceCount)>("preferredMaxL1ReferenceCount", "preferredMaxL1ReferenceCount");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h265)
+struct VkVideoEncodeH265SessionParametersGetInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265SessionParametersGetInfoKHR> {
+    VkVideoEncodeH265SessionParametersGetInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265SessionParametersGetInfoKHR", ml, "VkVideoEncodeH265SessionParametersGetInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH265SessionParametersGetInfoKHR_Ann * ann_VkVideoEncodeH265SessionParametersGetInfoKHR = nullptr;
+void VkVideoEncodeH265SessionParametersGetInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265SessionParametersGetInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(writeStdVPS)>("writeStdVPS", "writeStdVPS");
+    addField<DAS_BIND_MANAGED_FIELD(writeStdSPS)>("writeStdSPS", "writeStdSPS");
+    addField<DAS_BIND_MANAGED_FIELD(writeStdPPS)>("writeStdPPS", "writeStdPPS");
+    addField<DAS_BIND_MANAGED_FIELD(stdVPSId)>("stdVPSId", "stdVPSId");
+    addField<DAS_BIND_MANAGED_FIELD(stdSPSId)>("stdSPSId", "stdSPSId");
+    addField<DAS_BIND_MANAGED_FIELD(stdPPSId)>("stdPPSId", "stdPPSId");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h265)
+struct VkVideoEncodeH265SessionParametersFeedbackInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265SessionParametersFeedbackInfoKHR> {
+    VkVideoEncodeH265SessionParametersFeedbackInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265SessionParametersFeedbackInfoKHR", ml, "VkVideoEncodeH265SessionParametersFeedbackInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH265SessionParametersFeedbackInfoKHR_Ann * ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR = nullptr;
+void VkVideoEncodeH265SessionParametersFeedbackInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265SessionParametersFeedbackInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(hasStdVPSOverrides)>("hasStdVPSOverrides", "hasStdVPSOverrides");
+    addField<DAS_BIND_MANAGED_FIELD(hasStdSPSOverrides)>("hasStdSPSOverrides", "hasStdSPSOverrides");
+    addField<DAS_BIND_MANAGED_FIELD(hasStdPPSOverrides)>("hasStdPPSOverrides", "hasStdPPSOverrides");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h265)
+struct VkVideoEncodeH265RateControlInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265RateControlInfoKHR> {
+    VkVideoEncodeH265RateControlInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265RateControlInfoKHR", ml, "VkVideoEncodeH265RateControlInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH265RateControlInfoKHR_Ann * ann_VkVideoEncodeH265RateControlInfoKHR = nullptr;
+void VkVideoEncodeH265RateControlInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265RateControlInfoKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("flags", "flags", offsetof(VkVideoEncodeH265RateControlInfoKHR, flags), makeVkFlags_VkVideoEncodeH265RateControlFlagsKHR());
+    addField<DAS_BIND_MANAGED_FIELD(gopFrameCount)>("gopFrameCount", "gopFrameCount");
+    addField<DAS_BIND_MANAGED_FIELD(idrPeriod)>("idrPeriod", "idrPeriod");
+    addField<DAS_BIND_MANAGED_FIELD(consecutiveBFrameCount)>("consecutiveBFrameCount", "consecutiveBFrameCount");
+    addField<DAS_BIND_MANAGED_FIELD(subLayerCount)>("subLayerCount", "subLayerCount");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h265)
+struct VkVideoEncodeH265QpKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265QpKHR> {
+    VkVideoEncodeH265QpKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265QpKHR", ml, "VkVideoEncodeH265QpKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH265QpKHR_Ann * ann_VkVideoEncodeH265QpKHR = nullptr;
+void VkVideoEncodeH265QpKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(qpI)>("qpI", "qpI");
+    addField<DAS_BIND_MANAGED_FIELD(qpP)>("qpP", "qpP");
+    addField<DAS_BIND_MANAGED_FIELD(qpB)>("qpB", "qpB");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h265)
+struct VkVideoEncodeH265FrameSizeKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265FrameSizeKHR> {
+    VkVideoEncodeH265FrameSizeKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265FrameSizeKHR", ml, "VkVideoEncodeH265FrameSizeKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH265FrameSizeKHR_Ann * ann_VkVideoEncodeH265FrameSizeKHR = nullptr;
+void VkVideoEncodeH265FrameSizeKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(frameISize)>("frameISize", "frameISize");
+    addField<DAS_BIND_MANAGED_FIELD(framePSize)>("framePSize", "framePSize");
+    addField<DAS_BIND_MANAGED_FIELD(frameBSize)>("frameBSize", "frameBSize");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h265)
+struct VkVideoEncodeH265GopRemainingFrameInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265GopRemainingFrameInfoKHR> {
+    VkVideoEncodeH265GopRemainingFrameInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265GopRemainingFrameInfoKHR", ml, "VkVideoEncodeH265GopRemainingFrameInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH265GopRemainingFrameInfoKHR_Ann * ann_VkVideoEncodeH265GopRemainingFrameInfoKHR = nullptr;
+void VkVideoEncodeH265GopRemainingFrameInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265GopRemainingFrameInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(useGopRemainingFrames)>("useGopRemainingFrames", "useGopRemainingFrames");
+    addField<DAS_BIND_MANAGED_FIELD(gopRemainingI)>("gopRemainingI", "gopRemainingI");
+    addField<DAS_BIND_MANAGED_FIELD(gopRemainingP)>("gopRemainingP", "gopRemainingP");
+    addField<DAS_BIND_MANAGED_FIELD(gopRemainingB)>("gopRemainingB", "gopRemainingB");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_h265)
+struct VkVideoEncodeH265RateControlLayerInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265RateControlLayerInfoKHR> {
+    VkVideoEncodeH265RateControlLayerInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265RateControlLayerInfoKHR", ml, "VkVideoEncodeH265RateControlLayerInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH265RateControlLayerInfoKHR_Ann * ann_VkVideoEncodeH265RateControlLayerInfoKHR = nullptr;
+void VkVideoEncodeH265RateControlLayerInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265RateControlLayerInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(useMinQp)>("useMinQp", "useMinQp");
+    addField<DAS_BIND_MANAGED_FIELD(minQp)>("minQp", "minQp");
+    addField<DAS_BIND_MANAGED_FIELD(useMaxQp)>("useMaxQp", "useMaxQp");
+    addField<DAS_BIND_MANAGED_FIELD(maxQp)>("maxQp", "maxQp");
+    addField<DAS_BIND_MANAGED_FIELD(useMaxFrameSize)>("useMaxFrameSize", "useMaxFrameSize");
+    addField<DAS_BIND_MANAGED_FIELD(maxFrameSize)>("maxFrameSize", "maxFrameSize");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_av1)
+struct VkVideoEncodeAV1QualityLevelPropertiesKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1QualityLevelPropertiesKHR> {
+    VkVideoEncodeAV1QualityLevelPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1QualityLevelPropertiesKHR", ml, "VkVideoEncodeAV1QualityLevelPropertiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeAV1QualityLevelPropertiesKHR_Ann * ann_VkVideoEncodeAV1QualityLevelPropertiesKHR = nullptr;
+void VkVideoEncodeAV1QualityLevelPropertiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeAV1QualityLevelPropertiesKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("preferredRateControlFlags", "preferredRateControlFlags", offsetof(VkVideoEncodeAV1QualityLevelPropertiesKHR, preferredRateControlFlags), makeVkFlags_VkVideoEncodeAV1RateControlFlagsKHR());
+    addField<DAS_BIND_MANAGED_FIELD(preferredGopFrameCount)>("preferredGopFrameCount", "preferredGopFrameCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredKeyFramePeriod)>("preferredKeyFramePeriod", "preferredKeyFramePeriod");
+    addField<DAS_BIND_MANAGED_FIELD(preferredConsecutiveBipredictiveFrameCount)>("preferredConsecutiveBipredictiveFrameCount", "preferredConsecutiveBipredictiveFrameCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredTemporalLayerCount)>("preferredTemporalLayerCount", "preferredTemporalLayerCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredConstantQIndex)>("preferredConstantQIndex", "preferredConstantQIndex");
+    addField<DAS_BIND_MANAGED_FIELD(preferredMaxSingleReferenceCount)>("preferredMaxSingleReferenceCount", "preferredMaxSingleReferenceCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredSingleReferenceNameMask)>("preferredSingleReferenceNameMask", "preferredSingleReferenceNameMask");
+    addField<DAS_BIND_MANAGED_FIELD(preferredMaxUnidirectionalCompoundReferenceCount)>("preferredMaxUnidirectionalCompoundReferenceCount", "preferredMaxUnidirectionalCompoundReferenceCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredMaxUnidirectionalCompoundGroup1ReferenceCount)>("preferredMaxUnidirectionalCompoundGroup1ReferenceCount", "preferredMaxUnidirectionalCompoundGroup1ReferenceCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredUnidirectionalCompoundReferenceNameMask)>("preferredUnidirectionalCompoundReferenceNameMask", "preferredUnidirectionalCompoundReferenceNameMask");
+    addField<DAS_BIND_MANAGED_FIELD(preferredMaxBidirectionalCompoundReferenceCount)>("preferredMaxBidirectionalCompoundReferenceCount", "preferredMaxBidirectionalCompoundReferenceCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredMaxBidirectionalCompoundGroup1ReferenceCount)>("preferredMaxBidirectionalCompoundGroup1ReferenceCount", "preferredMaxBidirectionalCompoundGroup1ReferenceCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredMaxBidirectionalCompoundGroup2ReferenceCount)>("preferredMaxBidirectionalCompoundGroup2ReferenceCount", "preferredMaxBidirectionalCompoundGroup2ReferenceCount");
+    addField<DAS_BIND_MANAGED_FIELD(preferredBidirectionalCompoundReferenceNameMask)>("preferredBidirectionalCompoundReferenceNameMask", "preferredBidirectionalCompoundReferenceNameMask");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_av1)
+struct VkPhysicalDeviceVideoEncodeAV1FeaturesKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceVideoEncodeAV1FeaturesKHR> {
+    VkPhysicalDeviceVideoEncodeAV1FeaturesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceVideoEncodeAV1FeaturesKHR", ml, "VkPhysicalDeviceVideoEncodeAV1FeaturesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceVideoEncodeAV1FeaturesKHR_Ann * ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR = nullptr;
+void VkPhysicalDeviceVideoEncodeAV1FeaturesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVideoEncodeAV1FeaturesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(videoEncodeAV1)>("videoEncodeAV1", "videoEncodeAV1");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_av1)
+struct VkVideoEncodeAV1RateControlInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1RateControlInfoKHR> {
+    VkVideoEncodeAV1RateControlInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1RateControlInfoKHR", ml, "VkVideoEncodeAV1RateControlInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeAV1RateControlInfoKHR_Ann * ann_VkVideoEncodeAV1RateControlInfoKHR = nullptr;
+void VkVideoEncodeAV1RateControlInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeAV1RateControlInfoKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("flags", "flags", offsetof(VkVideoEncodeAV1RateControlInfoKHR, flags), makeVkFlags_VkVideoEncodeAV1RateControlFlagsKHR());
+    addField<DAS_BIND_MANAGED_FIELD(gopFrameCount)>("gopFrameCount", "gopFrameCount");
+    addField<DAS_BIND_MANAGED_FIELD(keyFramePeriod)>("keyFramePeriod", "keyFramePeriod");
+    addField<DAS_BIND_MANAGED_FIELD(consecutiveBipredictiveFrameCount)>("consecutiveBipredictiveFrameCount", "consecutiveBipredictiveFrameCount");
+    addField<DAS_BIND_MANAGED_FIELD(temporalLayerCount)>("temporalLayerCount", "temporalLayerCount");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_av1)
+struct VkVideoEncodeAV1QIndexKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1QIndexKHR> {
+    VkVideoEncodeAV1QIndexKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1QIndexKHR", ml, "VkVideoEncodeAV1QIndexKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeAV1QIndexKHR_Ann * ann_VkVideoEncodeAV1QIndexKHR = nullptr;
+void VkVideoEncodeAV1QIndexKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(intraQIndex)>("intraQIndex", "intraQIndex");
+    addField<DAS_BIND_MANAGED_FIELD(predictiveQIndex)>("predictiveQIndex", "predictiveQIndex");
+    addField<DAS_BIND_MANAGED_FIELD(bipredictiveQIndex)>("bipredictiveQIndex", "bipredictiveQIndex");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_av1)
+struct VkVideoEncodeAV1FrameSizeKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1FrameSizeKHR> {
+    VkVideoEncodeAV1FrameSizeKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1FrameSizeKHR", ml, "VkVideoEncodeAV1FrameSizeKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeAV1FrameSizeKHR_Ann * ann_VkVideoEncodeAV1FrameSizeKHR = nullptr;
+void VkVideoEncodeAV1FrameSizeKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(intraFrameSize)>("intraFrameSize", "intraFrameSize");
+    addField<DAS_BIND_MANAGED_FIELD(predictiveFrameSize)>("predictiveFrameSize", "predictiveFrameSize");
+    addField<DAS_BIND_MANAGED_FIELD(bipredictiveFrameSize)>("bipredictiveFrameSize", "bipredictiveFrameSize");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_av1)
+struct VkVideoEncodeAV1GopRemainingFrameInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1GopRemainingFrameInfoKHR> {
+    VkVideoEncodeAV1GopRemainingFrameInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1GopRemainingFrameInfoKHR", ml, "VkVideoEncodeAV1GopRemainingFrameInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeAV1GopRemainingFrameInfoKHR_Ann * ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR = nullptr;
+void VkVideoEncodeAV1GopRemainingFrameInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeAV1GopRemainingFrameInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(useGopRemainingFrames)>("useGopRemainingFrames", "useGopRemainingFrames");
+    addField<DAS_BIND_MANAGED_FIELD(gopRemainingIntra)>("gopRemainingIntra", "gopRemainingIntra");
+    addField<DAS_BIND_MANAGED_FIELD(gopRemainingPredictive)>("gopRemainingPredictive", "gopRemainingPredictive");
+    addField<DAS_BIND_MANAGED_FIELD(gopRemainingBipredictive)>("gopRemainingBipredictive", "gopRemainingBipredictive");
+}
+#endif
+
 #if defined(VK_KHR_video_encode_av1)
 struct VkVideoEncodeAV1RateControlLayerInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1RateControlLayerInfoKHR> {
     VkVideoEncodeAV1RateControlLayerInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1RateControlLayerInfoKHR", ml, "VkVideoEncodeAV1RateControlLayerInfoKHR") {}
@@ -542,409 +941,70 @@ void VkAccelerationStructureCaptureDescriptorDataInfoEXT_Ann::init() {
 }
 #endif
 
-#if defined(VK_EXT_descriptor_buffer)
-struct VkOpaqueCaptureDescriptorDataCreateInfoEXT_Ann : ManagedStructureAnnotation<VkOpaqueCaptureDescriptorDataCreateInfoEXT> {
-    VkOpaqueCaptureDescriptorDataCreateInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkOpaqueCaptureDescriptorDataCreateInfoEXT", ml, "VkOpaqueCaptureDescriptorDataCreateInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkOpaqueCaptureDescriptorDataCreateInfoEXT_Ann * ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT = nullptr;
-void VkOpaqueCaptureDescriptorDataCreateInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkOpaqueCaptureDescriptorDataCreateInfoEXT, pNext), makeType<void *>(*mlib));
-    addFieldEx("opaqueCaptureDescriptorData", "opaqueCaptureDescriptorData", offsetof(VkOpaqueCaptureDescriptorDataCreateInfoEXT, opaqueCaptureDescriptorData), makeType<void *>(*mlib));
-}
-#endif
-
-#if defined(VK_VERSION_1_3)
-struct VkPhysicalDeviceShaderIntegerDotProductFeatures_Ann : ManagedStructureAnnotation<VkPhysicalDeviceShaderIntegerDotProductFeatures> {
-    VkPhysicalDeviceShaderIntegerDotProductFeatures_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceShaderIntegerDotProductFeatures", ml, "VkPhysicalDeviceShaderIntegerDotProductFeatures") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceShaderIntegerDotProductFeatures_Ann * ann_VkPhysicalDeviceShaderIntegerDotProductFeatures = nullptr;
-void VkPhysicalDeviceShaderIntegerDotProductFeatures_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceShaderIntegerDotProductFeatures, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(shaderIntegerDotProduct)>("shaderIntegerDotProduct", "shaderIntegerDotProduct");
-}
-#endif
-
-#if defined(VK_VERSION_1_3)
-struct VkPhysicalDeviceShaderIntegerDotProductProperties_Ann : ManagedStructureAnnotation<VkPhysicalDeviceShaderIntegerDotProductProperties> {
-    VkPhysicalDeviceShaderIntegerDotProductProperties_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceShaderIntegerDotProductProperties", ml, "VkPhysicalDeviceShaderIntegerDotProductProperties") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceShaderIntegerDotProductProperties_Ann * ann_VkPhysicalDeviceShaderIntegerDotProductProperties = nullptr;
-void VkPhysicalDeviceShaderIntegerDotProductProperties_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceShaderIntegerDotProductProperties, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct8BitUnsignedAccelerated)>("integerDotProduct8BitUnsignedAccelerated", "integerDotProduct8BitUnsignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct8BitSignedAccelerated)>("integerDotProduct8BitSignedAccelerated", "integerDotProduct8BitSignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct8BitMixedSignednessAccelerated)>("integerDotProduct8BitMixedSignednessAccelerated", "integerDotProduct8BitMixedSignednessAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct4x8BitPackedUnsignedAccelerated)>("integerDotProduct4x8BitPackedUnsignedAccelerated", "integerDotProduct4x8BitPackedUnsignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct4x8BitPackedSignedAccelerated)>("integerDotProduct4x8BitPackedSignedAccelerated", "integerDotProduct4x8BitPackedSignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct4x8BitPackedMixedSignednessAccelerated)>("integerDotProduct4x8BitPackedMixedSignednessAccelerated", "integerDotProduct4x8BitPackedMixedSignednessAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct16BitUnsignedAccelerated)>("integerDotProduct16BitUnsignedAccelerated", "integerDotProduct16BitUnsignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct16BitSignedAccelerated)>("integerDotProduct16BitSignedAccelerated", "integerDotProduct16BitSignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct16BitMixedSignednessAccelerated)>("integerDotProduct16BitMixedSignednessAccelerated", "integerDotProduct16BitMixedSignednessAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct32BitUnsignedAccelerated)>("integerDotProduct32BitUnsignedAccelerated", "integerDotProduct32BitUnsignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct32BitSignedAccelerated)>("integerDotProduct32BitSignedAccelerated", "integerDotProduct32BitSignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct32BitMixedSignednessAccelerated)>("integerDotProduct32BitMixedSignednessAccelerated", "integerDotProduct32BitMixedSignednessAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct64BitUnsignedAccelerated)>("integerDotProduct64BitUnsignedAccelerated", "integerDotProduct64BitUnsignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct64BitSignedAccelerated)>("integerDotProduct64BitSignedAccelerated", "integerDotProduct64BitSignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProduct64BitMixedSignednessAccelerated)>("integerDotProduct64BitMixedSignednessAccelerated", "integerDotProduct64BitMixedSignednessAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating8BitUnsignedAccelerated)>("integerDotProductAccumulatingSaturating8BitUnsignedAccelerated", "integerDotProductAccumulatingSaturating8BitUnsignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating8BitSignedAccelerated)>("integerDotProductAccumulatingSaturating8BitSignedAccelerated", "integerDotProductAccumulatingSaturating8BitSignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated)>("integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated", "integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated)>("integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated", "integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated)>("integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated", "integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated)>("integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated", "integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating16BitUnsignedAccelerated)>("integerDotProductAccumulatingSaturating16BitUnsignedAccelerated", "integerDotProductAccumulatingSaturating16BitUnsignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating16BitSignedAccelerated)>("integerDotProductAccumulatingSaturating16BitSignedAccelerated", "integerDotProductAccumulatingSaturating16BitSignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated)>("integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated", "integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating32BitUnsignedAccelerated)>("integerDotProductAccumulatingSaturating32BitUnsignedAccelerated", "integerDotProductAccumulatingSaturating32BitUnsignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating32BitSignedAccelerated)>("integerDotProductAccumulatingSaturating32BitSignedAccelerated", "integerDotProductAccumulatingSaturating32BitSignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated)>("integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated", "integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating64BitUnsignedAccelerated)>("integerDotProductAccumulatingSaturating64BitUnsignedAccelerated", "integerDotProductAccumulatingSaturating64BitUnsignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating64BitSignedAccelerated)>("integerDotProductAccumulatingSaturating64BitSignedAccelerated", "integerDotProductAccumulatingSaturating64BitSignedAccelerated");
-    addField<DAS_BIND_MANAGED_FIELD(integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated)>("integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated", "integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated");
-}
-#endif
-
-#if defined(VK_EXT_physical_device_drm)
-struct VkPhysicalDeviceDrmPropertiesEXT_Ann : ManagedStructureAnnotation<VkPhysicalDeviceDrmPropertiesEXT> {
-    VkPhysicalDeviceDrmPropertiesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceDrmPropertiesEXT", ml, "VkPhysicalDeviceDrmPropertiesEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceDrmPropertiesEXT_Ann * ann_VkPhysicalDeviceDrmPropertiesEXT = nullptr;
-void VkPhysicalDeviceDrmPropertiesEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceDrmPropertiesEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(hasPrimary)>("hasPrimary", "hasPrimary");
-    addField<DAS_BIND_MANAGED_FIELD(hasRender)>("hasRender", "hasRender");
-    addField<DAS_BIND_MANAGED_FIELD(primaryMajor)>("primaryMajor", "primaryMajor");
-    addField<DAS_BIND_MANAGED_FIELD(primaryMinor)>("primaryMinor", "primaryMinor");
-    addField<DAS_BIND_MANAGED_FIELD(renderMajor)>("renderMajor", "renderMajor");
-    addField<DAS_BIND_MANAGED_FIELD(renderMinor)>("renderMinor", "renderMinor");
-}
-#endif
-
-#if defined(VK_KHR_fragment_shader_barycentric)
-struct VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR> {
-    VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR", ml, "VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR_Ann * ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR = nullptr;
-void VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(fragmentShaderBarycentric)>("fragmentShaderBarycentric", "fragmentShaderBarycentric");
-}
-#endif
-
-#if defined(VK_KHR_fragment_shader_barycentric)
-struct VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR> {
-    VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR", ml, "VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR_Ann * ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR = nullptr;
-void VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(triStripVertexOrderIndependentOfProvokingVertex)>("triStripVertexOrderIndependentOfProvokingVertex", "triStripVertexOrderIndependentOfProvokingVertex");
-}
-#endif
-
-#if defined(VK_KHR_shader_fma)
-struct VkPhysicalDeviceShaderFmaFeaturesKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceShaderFmaFeaturesKHR> {
-    VkPhysicalDeviceShaderFmaFeaturesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceShaderFmaFeaturesKHR", ml, "VkPhysicalDeviceShaderFmaFeaturesKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceShaderFmaFeaturesKHR_Ann * ann_VkPhysicalDeviceShaderFmaFeaturesKHR = nullptr;
-void VkPhysicalDeviceShaderFmaFeaturesKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceShaderFmaFeaturesKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(shaderFmaFloat16)>("shaderFmaFloat16", "shaderFmaFloat16");
-    addField<DAS_BIND_MANAGED_FIELD(shaderFmaFloat32)>("shaderFmaFloat32", "shaderFmaFloat32");
-    addField<DAS_BIND_MANAGED_FIELD(shaderFmaFloat64)>("shaderFmaFloat64", "shaderFmaFloat64");
-}
-#endif
-
-#if defined(VK_NV_ray_tracing_motion_blur)
-struct VkPhysicalDeviceRayTracingMotionBlurFeaturesNV_Ann : ManagedStructureAnnotation<VkPhysicalDeviceRayTracingMotionBlurFeaturesNV> {
-    VkPhysicalDeviceRayTracingMotionBlurFeaturesNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceRayTracingMotionBlurFeaturesNV", ml, "VkPhysicalDeviceRayTracingMotionBlurFeaturesNV") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceRayTracingMotionBlurFeaturesNV_Ann * ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV = nullptr;
-void VkPhysicalDeviceRayTracingMotionBlurFeaturesNV_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceRayTracingMotionBlurFeaturesNV, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(rayTracingMotionBlur)>("rayTracingMotionBlur", "rayTracingMotionBlur");
-    addField<DAS_BIND_MANAGED_FIELD(rayTracingMotionBlurPipelineTraceRaysIndirect)>("rayTracingMotionBlurPipelineTraceRaysIndirect", "rayTracingMotionBlurPipelineTraceRaysIndirect");
-}
-#endif
-
-#if defined(VK_NV_ray_tracing_validation)
-struct VkPhysicalDeviceRayTracingValidationFeaturesNV_Ann : ManagedStructureAnnotation<VkPhysicalDeviceRayTracingValidationFeaturesNV> {
-    VkPhysicalDeviceRayTracingValidationFeaturesNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceRayTracingValidationFeaturesNV", ml, "VkPhysicalDeviceRayTracingValidationFeaturesNV") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceRayTracingValidationFeaturesNV_Ann * ann_VkPhysicalDeviceRayTracingValidationFeaturesNV = nullptr;
-void VkPhysicalDeviceRayTracingValidationFeaturesNV_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceRayTracingValidationFeaturesNV, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(rayTracingValidation)>("rayTracingValidation", "rayTracingValidation");
-}
-#endif
-
-#if defined(VK_NV_ray_tracing_linear_swept_spheres)
-struct VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV_Ann : ManagedStructureAnnotation<VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV> {
-    VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV", ml, "VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV_Ann * ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV = nullptr;
-void VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(spheres)>("spheres", "spheres");
-    addField<DAS_BIND_MANAGED_FIELD(linearSweptSpheres)>("linearSweptSpheres", "linearSweptSpheres");
-}
-#endif
-
-#if defined(VK_NV_ray_tracing_motion_blur)
-struct VkAccelerationStructureGeometryMotionTrianglesDataNV_Ann : ManagedStructureAnnotation<VkAccelerationStructureGeometryMotionTrianglesDataNV> {
-    VkAccelerationStructureGeometryMotionTrianglesDataNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkAccelerationStructureGeometryMotionTrianglesDataNV", ml, "VkAccelerationStructureGeometryMotionTrianglesDataNV") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkAccelerationStructureGeometryMotionTrianglesDataNV_Ann * ann_VkAccelerationStructureGeometryMotionTrianglesDataNV = nullptr;
-void VkAccelerationStructureGeometryMotionTrianglesDataNV_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkAccelerationStructureGeometryMotionTrianglesDataNV, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(vertexData)>("vertexData", "vertexData");
-}
-#endif
-
-#if defined(VK_NV_ray_tracing_motion_blur)
-struct VkAccelerationStructureMotionInfoNV_Ann : ManagedStructureAnnotation<VkAccelerationStructureMotionInfoNV> {
-    VkAccelerationStructureMotionInfoNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkAccelerationStructureMotionInfoNV", ml, "VkAccelerationStructureMotionInfoNV") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkAccelerationStructureMotionInfoNV_Ann * ann_VkAccelerationStructureMotionInfoNV = nullptr;
-void VkAccelerationStructureMotionInfoNV_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkAccelerationStructureMotionInfoNV, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(maxInstances)>("maxInstances", "maxInstances");
-    addFieldEx("flags", "flags", offsetof(VkAccelerationStructureMotionInfoNV, flags), makeVkFlags_VkAccelerationStructureMotionInfoFlagsNV());
-}
-#endif
-
-#if defined(VK_NV_ray_tracing_motion_blur)
-struct VkSRTDataNV_Ann : ManagedStructureAnnotation<VkSRTDataNV> {
-    VkSRTDataNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSRTDataNV", ml, "VkSRTDataNV") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkSRTDataNV_Ann * ann_VkSRTDataNV = nullptr;
-void VkSRTDataNV_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sx)>("sx", "sx");
-    addField<DAS_BIND_MANAGED_FIELD(a)>("a", "a");
-    addField<DAS_BIND_MANAGED_FIELD(b)>("b", "b");
-    addField<DAS_BIND_MANAGED_FIELD(pvx)>("pvx", "pvx");
-    addField<DAS_BIND_MANAGED_FIELD(sy)>("sy", "sy");
-    addField<DAS_BIND_MANAGED_FIELD(c)>("c", "c");
-    addField<DAS_BIND_MANAGED_FIELD(pvy)>("pvy", "pvy");
-    addField<DAS_BIND_MANAGED_FIELD(sz)>("sz", "sz");
-    addField<DAS_BIND_MANAGED_FIELD(pvz)>("pvz", "pvz");
-    addField<DAS_BIND_MANAGED_FIELD(qx)>("qx", "qx");
-    addField<DAS_BIND_MANAGED_FIELD(qy)>("qy", "qy");
-    addField<DAS_BIND_MANAGED_FIELD(qz)>("qz", "qz");
-    addField<DAS_BIND_MANAGED_FIELD(qw)>("qw", "qw");
-    addField<DAS_BIND_MANAGED_FIELD(tx)>("tx", "tx");
-    addField<DAS_BIND_MANAGED_FIELD(ty)>("ty", "ty");
-    addField<DAS_BIND_MANAGED_FIELD(tz)>("tz", "tz");
-}
-#endif
-
-#if defined(VK_NV_external_memory_rdma)
-struct VkMemoryGetRemoteAddressInfoNV_Ann : ManagedStructureAnnotation<VkMemoryGetRemoteAddressInfoNV> {
-    VkMemoryGetRemoteAddressInfoNV_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkMemoryGetRemoteAddressInfoNV", ml, "VkMemoryGetRemoteAddressInfoNV") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkMemoryGetRemoteAddressInfoNV_Ann * ann_VkMemoryGetRemoteAddressInfoNV = nullptr;
-void VkMemoryGetRemoteAddressInfoNV_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkMemoryGetRemoteAddressInfoNV, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(memory)>("memory", "memory");
-    addField<DAS_BIND_MANAGED_FIELD(handleType)>("handleType", "handleType");
-}
-#endif
-
-#if defined(VK_EXT_rgba10x6_formats)
-struct VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT_Ann : ManagedStructureAnnotation<VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT> {
-    VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT", ml, "VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT_Ann * ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT = nullptr;
-void VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(formatRgba10x6WithoutYCbCrSampler)>("formatRgba10x6WithoutYCbCrSampler", "formatRgba10x6WithoutYCbCrSampler");
-}
-#endif
-
-#if defined(VK_VERSION_1_3)
-struct VkFormatProperties3_Ann : ManagedStructureAnnotation<VkFormatProperties3> {
-    VkFormatProperties3_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkFormatProperties3", ml, "VkFormatProperties3") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkFormatProperties3_Ann * ann_VkFormatProperties3 = nullptr;
-void VkFormatProperties3_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkFormatProperties3, pNext), makeType<void *>(*mlib));
-    addFieldEx("linearTilingFeatures", "linearTilingFeatures", offsetof(VkFormatProperties3, linearTilingFeatures), makeVkFlags_VkFormatFeatureFlags2());
-    addFieldEx("optimalTilingFeatures", "optimalTilingFeatures", offsetof(VkFormatProperties3, optimalTilingFeatures), makeVkFlags_VkFormatFeatureFlags2());
-    addFieldEx("bufferFeatures", "bufferFeatures", offsetof(VkFormatProperties3, bufferFeatures), makeVkFlags_VkFormatFeatureFlags2());
-}
-#endif
-
-#if defined(VK_EXT_image_drm_format_modifier)
-struct VkDrmFormatModifierPropertiesList2EXT_Ann : ManagedStructureAnnotation<VkDrmFormatModifierPropertiesList2EXT> {
-    VkDrmFormatModifierPropertiesList2EXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkDrmFormatModifierPropertiesList2EXT", ml, "VkDrmFormatModifierPropertiesList2EXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkDrmFormatModifierPropertiesList2EXT_Ann * ann_VkDrmFormatModifierPropertiesList2EXT = nullptr;
-void VkDrmFormatModifierPropertiesList2EXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkDrmFormatModifierPropertiesList2EXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(drmFormatModifierCount)>("drmFormatModifierCount", "drmFormatModifierCount");
-    addFieldEx("pDrmFormatModifierProperties", "pDrmFormatModifierProperties", offsetof(VkDrmFormatModifierPropertiesList2EXT, pDrmFormatModifierProperties), makeType<VkDrmFormatModifierProperties2EXT *>(*mlib));
-}
-#endif
-
-#if defined(VK_EXT_image_drm_format_modifier)
-struct VkDrmFormatModifierProperties2EXT_Ann : ManagedStructureAnnotation<VkDrmFormatModifierProperties2EXT> {
-    VkDrmFormatModifierProperties2EXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkDrmFormatModifierProperties2EXT", ml, "VkDrmFormatModifierProperties2EXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkDrmFormatModifierProperties2EXT_Ann * ann_VkDrmFormatModifierProperties2EXT = nullptr;
-void VkDrmFormatModifierProperties2EXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(drmFormatModifier)>("drmFormatModifier", "drmFormatModifier");
-    addField<DAS_BIND_MANAGED_FIELD(drmFormatModifierPlaneCount)>("drmFormatModifierPlaneCount", "drmFormatModifierPlaneCount");
-    addFieldEx("drmFormatModifierTilingFeatures", "drmFormatModifierTilingFeatures", offsetof(VkDrmFormatModifierProperties2EXT, drmFormatModifierTilingFeatures), makeVkFlags_VkFormatFeatureFlags2());
-}
-#endif
-
-#if defined(VK_VERSION_1_3)
-struct VkPipelineRenderingCreateInfo_Ann : ManagedStructureAnnotation<VkPipelineRenderingCreateInfo> {
-    VkPipelineRenderingCreateInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPipelineRenderingCreateInfo", ml, "VkPipelineRenderingCreateInfo") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPipelineRenderingCreateInfo_Ann * ann_VkPipelineRenderingCreateInfo = nullptr;
-void VkPipelineRenderingCreateInfo_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPipelineRenderingCreateInfo, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(viewMask)>("viewMask", "viewMask");
-    addField<DAS_BIND_MANAGED_FIELD(colorAttachmentCount)>("colorAttachmentCount", "colorAttachmentCount");
-    addFieldEx("pColorAttachmentFormats", "pColorAttachmentFormats", offsetof(VkPipelineRenderingCreateInfo, pColorAttachmentFormats), makeType<VkFormat *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(depthAttachmentFormat)>("depthAttachmentFormat", "depthAttachmentFormat");
-    addField<DAS_BIND_MANAGED_FIELD(stencilAttachmentFormat)>("stencilAttachmentFormat", "stencilAttachmentFormat");
-}
-#endif
-
-#if defined(VK_VERSION_1_3)
-struct VkRenderingInfo_Ann : ManagedStructureAnnotation<VkRenderingInfo> {
-    VkRenderingInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderingInfo", ml, "VkRenderingInfo") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkRenderingInfo_Ann * ann_VkRenderingInfo = nullptr;
-void VkRenderingInfo_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkRenderingInfo, pNext), makeType<void *>(*mlib));
-    addFieldEx("flags", "flags", offsetof(VkRenderingInfo, flags), makeVkFlags_VkRenderingFlags());
-    addField<DAS_BIND_MANAGED_FIELD(renderArea)>("renderArea", "renderArea");
-    addField<DAS_BIND_MANAGED_FIELD(layerCount)>("layerCount", "layerCount");
-    addField<DAS_BIND_MANAGED_FIELD(viewMask)>("viewMask", "viewMask");
-    addField<DAS_BIND_MANAGED_FIELD(colorAttachmentCount)>("colorAttachmentCount", "colorAttachmentCount");
-    addFieldEx("pColorAttachments", "pColorAttachments", offsetof(VkRenderingInfo, pColorAttachments), makeType<VkRenderingAttachmentInfo *>(*mlib));
-    addFieldEx("pDepthAttachment", "pDepthAttachment", offsetof(VkRenderingInfo, pDepthAttachment), makeType<VkRenderingAttachmentInfo *>(*mlib));
-    addFieldEx("pStencilAttachment", "pStencilAttachment", offsetof(VkRenderingInfo, pStencilAttachment), makeType<VkRenderingAttachmentInfo *>(*mlib));
-}
-#endif
-
-#if defined(VK_KHR_maintenance10)
-struct VkRenderingEndInfoKHR_Ann : ManagedStructureAnnotation<VkRenderingEndInfoKHR> {
-    VkRenderingEndInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderingEndInfoKHR", ml, "VkRenderingEndInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkRenderingEndInfoKHR_Ann * ann_VkRenderingEndInfoKHR = nullptr;
-void VkRenderingEndInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkRenderingEndInfoKHR, pNext), makeType<void *>(*mlib));
-}
-#endif
-
 void das_vulkan_add_structs_17(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264SessionParametersGetInfoKHR = new VkVideoEncodeH264SessionParametersGetInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264SessionParametersGetInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR = new VkVideoEncodeH264SessionParametersFeedbackInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264RateControlInfoKHR = new VkVideoEncodeH264RateControlInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264RateControlInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264QpKHR = new VkVideoEncodeH264QpKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264QpKHR);
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264FrameSizeKHR = new VkVideoEncodeH264FrameSizeKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264FrameSizeKHR);
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264GopRemainingFrameInfoKHR = new VkVideoEncodeH264GopRemainingFrameInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264GopRemainingFrameInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264RateControlLayerInfoKHR = new VkVideoEncodeH264RateControlLayerInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264RateControlLayerInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265QualityLevelPropertiesKHR = new VkVideoEncodeH265QualityLevelPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265QualityLevelPropertiesKHR);
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265SessionParametersGetInfoKHR = new VkVideoEncodeH265SessionParametersGetInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265SessionParametersGetInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR = new VkVideoEncodeH265SessionParametersFeedbackInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265RateControlInfoKHR = new VkVideoEncodeH265RateControlInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265RateControlInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265QpKHR = new VkVideoEncodeH265QpKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265QpKHR);
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265FrameSizeKHR = new VkVideoEncodeH265FrameSizeKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265FrameSizeKHR);
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265GopRemainingFrameInfoKHR = new VkVideoEncodeH265GopRemainingFrameInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265GopRemainingFrameInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265RateControlLayerInfoKHR = new VkVideoEncodeH265RateControlLayerInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265RateControlLayerInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkVideoEncodeAV1QualityLevelPropertiesKHR = new VkVideoEncodeAV1QualityLevelPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1QualityLevelPropertiesKHR);
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR = new VkPhysicalDeviceVideoEncodeAV1FeaturesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR);
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkVideoEncodeAV1RateControlInfoKHR = new VkVideoEncodeAV1RateControlInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1RateControlInfoKHR);
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkVideoEncodeAV1QIndexKHR = new VkVideoEncodeAV1QIndexKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1QIndexKHR);
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkVideoEncodeAV1FrameSizeKHR = new VkVideoEncodeAV1FrameSizeKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1FrameSizeKHR);
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR = new VkVideoEncodeAV1GopRemainingFrameInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR);
+#endif
 #if defined(VK_KHR_video_encode_av1)
     ann_VkVideoEncodeAV1RateControlLayerInfoKHR = new VkVideoEncodeAV1RateControlLayerInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1RateControlLayerInfoKHR);
 #endif
@@ -1032,72 +1092,72 @@ void das_vulkan_add_structs_17(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_EXT_descriptor_buffer)
     ann_VkAccelerationStructureCaptureDescriptorDataInfoEXT = new VkAccelerationStructureCaptureDescriptorDataInfoEXT_Ann(lib); mod.addAnnotation(ann_VkAccelerationStructureCaptureDescriptorDataInfoEXT);
 #endif
-#if defined(VK_EXT_descriptor_buffer)
-    ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT = new VkOpaqueCaptureDescriptorDataCreateInfoEXT_Ann(lib); mod.addAnnotation(ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT);
-#endif
-#if defined(VK_VERSION_1_3)
-    ann_VkPhysicalDeviceShaderIntegerDotProductFeatures = new VkPhysicalDeviceShaderIntegerDotProductFeatures_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceShaderIntegerDotProductFeatures);
-#endif
-#if defined(VK_VERSION_1_3)
-    ann_VkPhysicalDeviceShaderIntegerDotProductProperties = new VkPhysicalDeviceShaderIntegerDotProductProperties_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceShaderIntegerDotProductProperties);
-#endif
-#if defined(VK_EXT_physical_device_drm)
-    ann_VkPhysicalDeviceDrmPropertiesEXT = new VkPhysicalDeviceDrmPropertiesEXT_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceDrmPropertiesEXT);
-#endif
-#if defined(VK_KHR_fragment_shader_barycentric)
-    ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR = new VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR);
-#endif
-#if defined(VK_KHR_fragment_shader_barycentric)
-    ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR = new VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR);
-#endif
-#if defined(VK_KHR_shader_fma)
-    ann_VkPhysicalDeviceShaderFmaFeaturesKHR = new VkPhysicalDeviceShaderFmaFeaturesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceShaderFmaFeaturesKHR);
-#endif
-#if defined(VK_NV_ray_tracing_motion_blur)
-    ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV = new VkPhysicalDeviceRayTracingMotionBlurFeaturesNV_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV);
-#endif
-#if defined(VK_NV_ray_tracing_validation)
-    ann_VkPhysicalDeviceRayTracingValidationFeaturesNV = new VkPhysicalDeviceRayTracingValidationFeaturesNV_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceRayTracingValidationFeaturesNV);
-#endif
-#if defined(VK_NV_ray_tracing_linear_swept_spheres)
-    ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV = new VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV);
-#endif
-#if defined(VK_NV_ray_tracing_motion_blur)
-    ann_VkAccelerationStructureGeometryMotionTrianglesDataNV = new VkAccelerationStructureGeometryMotionTrianglesDataNV_Ann(lib); mod.addAnnotation(ann_VkAccelerationStructureGeometryMotionTrianglesDataNV);
-#endif
-#if defined(VK_NV_ray_tracing_motion_blur)
-    ann_VkAccelerationStructureMotionInfoNV = new VkAccelerationStructureMotionInfoNV_Ann(lib); mod.addAnnotation(ann_VkAccelerationStructureMotionInfoNV);
-#endif
-#if defined(VK_NV_ray_tracing_motion_blur)
-    ann_VkSRTDataNV = new VkSRTDataNV_Ann(lib); mod.addAnnotation(ann_VkSRTDataNV);
-#endif
-#if defined(VK_NV_external_memory_rdma)
-    ann_VkMemoryGetRemoteAddressInfoNV = new VkMemoryGetRemoteAddressInfoNV_Ann(lib); mod.addAnnotation(ann_VkMemoryGetRemoteAddressInfoNV);
-#endif
-#if defined(VK_EXT_rgba10x6_formats)
-    ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT = new VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT);
-#endif
-#if defined(VK_VERSION_1_3)
-    ann_VkFormatProperties3 = new VkFormatProperties3_Ann(lib); mod.addAnnotation(ann_VkFormatProperties3);
-#endif
-#if defined(VK_EXT_image_drm_format_modifier)
-    ann_VkDrmFormatModifierPropertiesList2EXT = new VkDrmFormatModifierPropertiesList2EXT_Ann(lib); mod.addAnnotation(ann_VkDrmFormatModifierPropertiesList2EXT);
-#endif
-#if defined(VK_EXT_image_drm_format_modifier)
-    ann_VkDrmFormatModifierProperties2EXT = new VkDrmFormatModifierProperties2EXT_Ann(lib); mod.addAnnotation(ann_VkDrmFormatModifierProperties2EXT);
-#endif
-#if defined(VK_VERSION_1_3)
-    ann_VkPipelineRenderingCreateInfo = new VkPipelineRenderingCreateInfo_Ann(lib); mod.addAnnotation(ann_VkPipelineRenderingCreateInfo);
-#endif
-#if defined(VK_VERSION_1_3)
-    ann_VkRenderingInfo = new VkRenderingInfo_Ann(lib); mod.addAnnotation(ann_VkRenderingInfo);
-#endif
-#if defined(VK_KHR_maintenance10)
-    ann_VkRenderingEndInfoKHR = new VkRenderingEndInfoKHR_Ann(lib); mod.addAnnotation(ann_VkRenderingEndInfoKHR);
-#endif
 }
 
 void das_vulkan_fill_structs_17(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264SessionParametersGetInfoKHR->mlib = &lib; ann_VkVideoEncodeH264SessionParametersGetInfoKHR->init(); ann_VkVideoEncodeH264SessionParametersGetInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR->mlib = &lib; ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR->init(); ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264RateControlInfoKHR->mlib = &lib; ann_VkVideoEncodeH264RateControlInfoKHR->init(); ann_VkVideoEncodeH264RateControlInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264QpKHR->mlib = &lib; ann_VkVideoEncodeH264QpKHR->init(); ann_VkVideoEncodeH264QpKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264FrameSizeKHR->mlib = &lib; ann_VkVideoEncodeH264FrameSizeKHR->init(); ann_VkVideoEncodeH264FrameSizeKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264GopRemainingFrameInfoKHR->mlib = &lib; ann_VkVideoEncodeH264GopRemainingFrameInfoKHR->init(); ann_VkVideoEncodeH264GopRemainingFrameInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h264)
+    ann_VkVideoEncodeH264RateControlLayerInfoKHR->mlib = &lib; ann_VkVideoEncodeH264RateControlLayerInfoKHR->init(); ann_VkVideoEncodeH264RateControlLayerInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265QualityLevelPropertiesKHR->mlib = &lib; ann_VkVideoEncodeH265QualityLevelPropertiesKHR->init(); ann_VkVideoEncodeH265QualityLevelPropertiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265SessionParametersGetInfoKHR->mlib = &lib; ann_VkVideoEncodeH265SessionParametersGetInfoKHR->init(); ann_VkVideoEncodeH265SessionParametersGetInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR->mlib = &lib; ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR->init(); ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265RateControlInfoKHR->mlib = &lib; ann_VkVideoEncodeH265RateControlInfoKHR->init(); ann_VkVideoEncodeH265RateControlInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265QpKHR->mlib = &lib; ann_VkVideoEncodeH265QpKHR->init(); ann_VkVideoEncodeH265QpKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265FrameSizeKHR->mlib = &lib; ann_VkVideoEncodeH265FrameSizeKHR->init(); ann_VkVideoEncodeH265FrameSizeKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265GopRemainingFrameInfoKHR->mlib = &lib; ann_VkVideoEncodeH265GopRemainingFrameInfoKHR->init(); ann_VkVideoEncodeH265GopRemainingFrameInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_h265)
+    ann_VkVideoEncodeH265RateControlLayerInfoKHR->mlib = &lib; ann_VkVideoEncodeH265RateControlLayerInfoKHR->init(); ann_VkVideoEncodeH265RateControlLayerInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkVideoEncodeAV1QualityLevelPropertiesKHR->mlib = &lib; ann_VkVideoEncodeAV1QualityLevelPropertiesKHR->init(); ann_VkVideoEncodeAV1QualityLevelPropertiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR->mlib = &lib; ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR->init(); ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkVideoEncodeAV1RateControlInfoKHR->mlib = &lib; ann_VkVideoEncodeAV1RateControlInfoKHR->init(); ann_VkVideoEncodeAV1RateControlInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkVideoEncodeAV1QIndexKHR->mlib = &lib; ann_VkVideoEncodeAV1QIndexKHR->init(); ann_VkVideoEncodeAV1QIndexKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkVideoEncodeAV1FrameSizeKHR->mlib = &lib; ann_VkVideoEncodeAV1FrameSizeKHR->init(); ann_VkVideoEncodeAV1FrameSizeKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_av1)
+    ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR->mlib = &lib; ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR->init(); ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR->mlib = nullptr;
+#endif
 #if defined(VK_KHR_video_encode_av1)
     ann_VkVideoEncodeAV1RateControlLayerInfoKHR->mlib = &lib; ann_VkVideoEncodeAV1RateControlLayerInfoKHR->init(); ann_VkVideoEncodeAV1RateControlLayerInfoKHR->mlib = nullptr;
 #endif
@@ -1184,69 +1244,6 @@ void das_vulkan_fill_structs_17(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_EXT_descriptor_buffer)
     ann_VkAccelerationStructureCaptureDescriptorDataInfoEXT->mlib = &lib; ann_VkAccelerationStructureCaptureDescriptorDataInfoEXT->init(); ann_VkAccelerationStructureCaptureDescriptorDataInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_descriptor_buffer)
-    ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT->mlib = &lib; ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT->init(); ann_VkOpaqueCaptureDescriptorDataCreateInfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_3)
-    ann_VkPhysicalDeviceShaderIntegerDotProductFeatures->mlib = &lib; ann_VkPhysicalDeviceShaderIntegerDotProductFeatures->init(); ann_VkPhysicalDeviceShaderIntegerDotProductFeatures->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_3)
-    ann_VkPhysicalDeviceShaderIntegerDotProductProperties->mlib = &lib; ann_VkPhysicalDeviceShaderIntegerDotProductProperties->init(); ann_VkPhysicalDeviceShaderIntegerDotProductProperties->mlib = nullptr;
-#endif
-#if defined(VK_EXT_physical_device_drm)
-    ann_VkPhysicalDeviceDrmPropertiesEXT->mlib = &lib; ann_VkPhysicalDeviceDrmPropertiesEXT->init(); ann_VkPhysicalDeviceDrmPropertiesEXT->mlib = nullptr;
-#endif
-#if defined(VK_KHR_fragment_shader_barycentric)
-    ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR->mlib = &lib; ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR->init(); ann_VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_fragment_shader_barycentric)
-    ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR->mlib = &lib; ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR->init(); ann_VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_shader_fma)
-    ann_VkPhysicalDeviceShaderFmaFeaturesKHR->mlib = &lib; ann_VkPhysicalDeviceShaderFmaFeaturesKHR->init(); ann_VkPhysicalDeviceShaderFmaFeaturesKHR->mlib = nullptr;
-#endif
-#if defined(VK_NV_ray_tracing_motion_blur)
-    ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV->mlib = &lib; ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV->init(); ann_VkPhysicalDeviceRayTracingMotionBlurFeaturesNV->mlib = nullptr;
-#endif
-#if defined(VK_NV_ray_tracing_validation)
-    ann_VkPhysicalDeviceRayTracingValidationFeaturesNV->mlib = &lib; ann_VkPhysicalDeviceRayTracingValidationFeaturesNV->init(); ann_VkPhysicalDeviceRayTracingValidationFeaturesNV->mlib = nullptr;
-#endif
-#if defined(VK_NV_ray_tracing_linear_swept_spheres)
-    ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV->mlib = &lib; ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV->init(); ann_VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV->mlib = nullptr;
-#endif
-#if defined(VK_NV_ray_tracing_motion_blur)
-    ann_VkAccelerationStructureGeometryMotionTrianglesDataNV->mlib = &lib; ann_VkAccelerationStructureGeometryMotionTrianglesDataNV->init(); ann_VkAccelerationStructureGeometryMotionTrianglesDataNV->mlib = nullptr;
-#endif
-#if defined(VK_NV_ray_tracing_motion_blur)
-    ann_VkAccelerationStructureMotionInfoNV->mlib = &lib; ann_VkAccelerationStructureMotionInfoNV->init(); ann_VkAccelerationStructureMotionInfoNV->mlib = nullptr;
-#endif
-#if defined(VK_NV_ray_tracing_motion_blur)
-    ann_VkSRTDataNV->mlib = &lib; ann_VkSRTDataNV->init(); ann_VkSRTDataNV->mlib = nullptr;
-#endif
-#if defined(VK_NV_external_memory_rdma)
-    ann_VkMemoryGetRemoteAddressInfoNV->mlib = &lib; ann_VkMemoryGetRemoteAddressInfoNV->init(); ann_VkMemoryGetRemoteAddressInfoNV->mlib = nullptr;
-#endif
-#if defined(VK_EXT_rgba10x6_formats)
-    ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT->mlib = &lib; ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT->init(); ann_VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_3)
-    ann_VkFormatProperties3->mlib = &lib; ann_VkFormatProperties3->init(); ann_VkFormatProperties3->mlib = nullptr;
-#endif
-#if defined(VK_EXT_image_drm_format_modifier)
-    ann_VkDrmFormatModifierPropertiesList2EXT->mlib = &lib; ann_VkDrmFormatModifierPropertiesList2EXT->init(); ann_VkDrmFormatModifierPropertiesList2EXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_image_drm_format_modifier)
-    ann_VkDrmFormatModifierProperties2EXT->mlib = &lib; ann_VkDrmFormatModifierProperties2EXT->init(); ann_VkDrmFormatModifierProperties2EXT->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_3)
-    ann_VkPipelineRenderingCreateInfo->mlib = &lib; ann_VkPipelineRenderingCreateInfo->init(); ann_VkPipelineRenderingCreateInfo->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_3)
-    ann_VkRenderingInfo->mlib = &lib; ann_VkRenderingInfo->init(); ann_VkRenderingInfo->mlib = nullptr;
-#endif
-#if defined(VK_KHR_maintenance10)
-    ann_VkRenderingEndInfoKHR->mlib = &lib; ann_VkRenderingEndInfoKHR->init(); ann_VkRenderingEndInfoKHR->mlib = nullptr;
 #endif
 }
 

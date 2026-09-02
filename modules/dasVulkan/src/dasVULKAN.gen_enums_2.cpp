@@ -4,6 +4,73 @@
 
 namespace das {
 
+#if defined(VK_VERSION_1_0)
+class Enumeration_VkInternalAllocationType : public Enumeration {
+public:
+    Enumeration_VkInternalAllocationType() : Enumeration("VkInternalAllocationType") {
+        external = true;
+        cppName = "VkInternalAllocationType";
+        baseType = (Type) ToBasicType< underlying_type<VkInternalAllocationType>::type >::type;
+        addI("EXECUTABLE", int64_t(VK_INTERNAL_ALLOCATION_TYPE_EXECUTABLE), LineInfo());
+    }
+};
+#endif
+
+#if defined(VK_NV_low_latency2)
+class Enumeration_VkLatencyMarkerNV : public Enumeration {
+public:
+    Enumeration_VkLatencyMarkerNV() : Enumeration("VkLatencyMarkerNV") {
+        external = true;
+        cppName = "VkLatencyMarkerNV";
+        baseType = (Type) ToBasicType< underlying_type<VkLatencyMarkerNV>::type >::type;
+        addI("SIMULATION_START_NV", int64_t(VK_LATENCY_MARKER_SIMULATION_START_NV), LineInfo());
+        addI("SIMULATION_END_NV", int64_t(VK_LATENCY_MARKER_SIMULATION_END_NV), LineInfo());
+        addI("RENDERSUBMIT_START_NV", int64_t(VK_LATENCY_MARKER_RENDERSUBMIT_START_NV), LineInfo());
+        addI("RENDERSUBMIT_END_NV", int64_t(VK_LATENCY_MARKER_RENDERSUBMIT_END_NV), LineInfo());
+        addI("PRESENT_START_NV", int64_t(VK_LATENCY_MARKER_PRESENT_START_NV), LineInfo());
+        addI("PRESENT_END_NV", int64_t(VK_LATENCY_MARKER_PRESENT_END_NV), LineInfo());
+        addI("INPUT_SAMPLE_NV", int64_t(VK_LATENCY_MARKER_INPUT_SAMPLE_NV), LineInfo());
+        addI("TRIGGER_FLASH_NV", int64_t(VK_LATENCY_MARKER_TRIGGER_FLASH_NV), LineInfo());
+        addI("OUT_OF_BAND_RENDERSUBMIT_START_NV", int64_t(VK_LATENCY_MARKER_OUT_OF_BAND_RENDERSUBMIT_START_NV), LineInfo());
+        addI("OUT_OF_BAND_RENDERSUBMIT_END_NV", int64_t(VK_LATENCY_MARKER_OUT_OF_BAND_RENDERSUBMIT_END_NV), LineInfo());
+        addI("OUT_OF_BAND_PRESENT_START_NV", int64_t(VK_LATENCY_MARKER_OUT_OF_BAND_PRESENT_START_NV), LineInfo());
+        addI("OUT_OF_BAND_PRESENT_END_NV", int64_t(VK_LATENCY_MARKER_OUT_OF_BAND_PRESENT_END_NV), LineInfo());
+    }
+};
+#endif
+
+#if defined(VK_EXT_layer_settings)
+class Enumeration_VkLayerSettingTypeEXT : public Enumeration {
+public:
+    Enumeration_VkLayerSettingTypeEXT() : Enumeration("VkLayerSettingTypeEXT") {
+        external = true;
+        cppName = "VkLayerSettingTypeEXT";
+        baseType = (Type) ToBasicType< underlying_type<VkLayerSettingTypeEXT>::type >::type;
+        addI("BOOL32_EXT", int64_t(VK_LAYER_SETTING_TYPE_BOOL32_EXT), LineInfo());
+        addI("INT32_EXT", int64_t(VK_LAYER_SETTING_TYPE_INT32_EXT), LineInfo());
+        addI("INT64_EXT", int64_t(VK_LAYER_SETTING_TYPE_INT64_EXT), LineInfo());
+        addI("UINT32_EXT", int64_t(VK_LAYER_SETTING_TYPE_UINT32_EXT), LineInfo());
+        addI("UINT64_EXT", int64_t(VK_LAYER_SETTING_TYPE_UINT64_EXT), LineInfo());
+        addI("FLOAT32_EXT", int64_t(VK_LAYER_SETTING_TYPE_FLOAT32_EXT), LineInfo());
+        addI("FLOAT64_EXT", int64_t(VK_LAYER_SETTING_TYPE_FLOAT64_EXT), LineInfo());
+        addI("STRING_EXT", int64_t(VK_LAYER_SETTING_TYPE_STRING_EXT), LineInfo());
+    }
+};
+#endif
+
+#if defined(VK_MSFT_layered_driver)
+class Enumeration_VkLayeredDriverUnderlyingApiMSFT : public Enumeration {
+public:
+    Enumeration_VkLayeredDriverUnderlyingApiMSFT() : Enumeration("VkLayeredDriverUnderlyingApiMSFT") {
+        external = true;
+        cppName = "VkLayeredDriverUnderlyingApiMSFT";
+        baseType = (Type) ToBasicType< underlying_type<VkLayeredDriverUnderlyingApiMSFT>::type >::type;
+        addI("NONE_MSFT", int64_t(VK_LAYERED_DRIVER_UNDERLYING_API_NONE_MSFT), LineInfo());
+        addI("D3D12_MSFT", int64_t(VK_LAYERED_DRIVER_UNDERLYING_API_D3D12_MSFT), LineInfo());
+    }
+};
+#endif
+
 #if defined(VK_VERSION_1_4)
 class Enumeration_VkLineRasterizationMode : public Enumeration {
 public:
@@ -188,6 +255,9 @@ public:
 #if defined(VK_EXT_debug_utils)
         addI("DEBUG_UTILS_MESSENGER_EXT", int64_t(VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT), LineInfo());
 #endif
+#if defined(VK_AMD_gpa_interface)
+        addI("GPA_SESSION_AMD", int64_t(VK_OBJECT_TYPE_GPA_SESSION_AMD), LineInfo());
+#endif
 #if defined(VK_KHR_acceleration_structure)
         addI("ACCELERATION_STRUCTURE_KHR", int64_t(VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR), LineInfo());
 #endif
@@ -258,30 +328,48 @@ public:
 };
 #endif
 
-#if defined(VK_EXT_opacity_micromap)
-class Enumeration_VkOpacityMicromapFormatEXT : public Enumeration {
+#if defined(VK_KHR_opacity_micromap)
+class Enumeration_VkOpacityMicromapFormatKHR : public Enumeration {
 public:
-    Enumeration_VkOpacityMicromapFormatEXT() : Enumeration("VkOpacityMicromapFormatEXT") {
+    Enumeration_VkOpacityMicromapFormatKHR() : Enumeration("VkOpacityMicromapFormatKHR") {
         external = true;
-        cppName = "VkOpacityMicromapFormatEXT";
-        baseType = (Type) ToBasicType< underlying_type<VkOpacityMicromapFormatEXT>::type >::type;
+        cppName = "VkOpacityMicromapFormatKHR";
+        baseType = (Type) ToBasicType< underlying_type<VkOpacityMicromapFormatKHR>::type >::type;
+        addI("_2_STATE_KHR", int64_t(VK_OPACITY_MICROMAP_FORMAT_2_STATE_KHR), LineInfo());
+        addI("_4_STATE_KHR", int64_t(VK_OPACITY_MICROMAP_FORMAT_4_STATE_KHR), LineInfo());
+#if defined(VK_EXT_opacity_micromap)
         addI("_2_STATE_EXT", int64_t(VK_OPACITY_MICROMAP_FORMAT_2_STATE_EXT), LineInfo());
+#endif
+#if defined(VK_EXT_opacity_micromap)
         addI("_4_STATE_EXT", int64_t(VK_OPACITY_MICROMAP_FORMAT_4_STATE_EXT), LineInfo());
+#endif
     }
 };
 #endif
 
-#if defined(VK_EXT_opacity_micromap)
-class Enumeration_VkOpacityMicromapSpecialIndexEXT : public Enumeration {
+#if defined(VK_KHR_opacity_micromap)
+class Enumeration_VkOpacityMicromapSpecialIndexKHR : public Enumeration {
 public:
-    Enumeration_VkOpacityMicromapSpecialIndexEXT() : Enumeration("VkOpacityMicromapSpecialIndexEXT") {
+    Enumeration_VkOpacityMicromapSpecialIndexKHR() : Enumeration("VkOpacityMicromapSpecialIndexKHR") {
         external = true;
-        cppName = "VkOpacityMicromapSpecialIndexEXT";
-        baseType = (Type) ToBasicType< underlying_type<VkOpacityMicromapSpecialIndexEXT>::type >::type;
+        cppName = "VkOpacityMicromapSpecialIndexKHR";
+        baseType = (Type) ToBasicType< underlying_type<VkOpacityMicromapSpecialIndexKHR>::type >::type;
+        addI("FULLY_TRANSPARENT_KHR", int64_t(VK_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_TRANSPARENT_KHR), LineInfo());
+        addI("FULLY_OPAQUE_KHR", int64_t(VK_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_OPAQUE_KHR), LineInfo());
+        addI("FULLY_UNKNOWN_TRANSPARENT_KHR", int64_t(VK_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_UNKNOWN_TRANSPARENT_KHR), LineInfo());
+        addI("FULLY_UNKNOWN_OPAQUE_KHR", int64_t(VK_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_UNKNOWN_OPAQUE_KHR), LineInfo());
+#if defined(VK_EXT_opacity_micromap)
         addI("FULLY_TRANSPARENT_EXT", int64_t(VK_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_TRANSPARENT_EXT), LineInfo());
+#endif
+#if defined(VK_EXT_opacity_micromap)
         addI("FULLY_OPAQUE_EXT", int64_t(VK_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_OPAQUE_EXT), LineInfo());
+#endif
+#if defined(VK_EXT_opacity_micromap)
         addI("FULLY_UNKNOWN_TRANSPARENT_EXT", int64_t(VK_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_UNKNOWN_TRANSPARENT_EXT), LineInfo());
+#endif
+#if defined(VK_EXT_opacity_micromap)
         addI("FULLY_UNKNOWN_OPAQUE_EXT", int64_t(VK_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_UNKNOWN_OPAQUE_EXT), LineInfo());
+#endif
 #if defined(VK_NV_cluster_acceleration_structure)
         addI("CLUSTER_GEOMETRY_DISABLE_OPACITY_MICROMAP_NV", int64_t(VK_OPACITY_MICROMAP_SPECIAL_INDEX_CLUSTER_GEOMETRY_DISABLE_OPACITY_MICROMAP_NV), LineInfo());
 #endif
@@ -786,138 +874,23 @@ public:
 };
 #endif
 
-#if defined(VK_VERSION_1_0)
-class Enumeration_VkQueryType : public Enumeration {
-public:
-    Enumeration_VkQueryType() : Enumeration("VkQueryType") {
-        external = true;
-        cppName = "VkQueryType";
-        baseType = (Type) ToBasicType< underlying_type<VkQueryType>::type >::type;
-        addI("OCCLUSION", int64_t(VK_QUERY_TYPE_OCCLUSION), LineInfo());
-        addI("PIPELINE_STATISTICS", int64_t(VK_QUERY_TYPE_PIPELINE_STATISTICS), LineInfo());
-        addI("TIMESTAMP", int64_t(VK_QUERY_TYPE_TIMESTAMP), LineInfo());
-#if defined(VK_KHR_video_queue)
-        addI("RESULT_STATUS_ONLY_KHR", int64_t(VK_QUERY_TYPE_RESULT_STATUS_ONLY_KHR), LineInfo());
-#endif
-#if defined(VK_EXT_transform_feedback)
-        addI("TRANSFORM_FEEDBACK_STREAM_EXT", int64_t(VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT), LineInfo());
-#endif
-#if defined(VK_KHR_performance_query)
-        addI("PERFORMANCE_QUERY_KHR", int64_t(VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR), LineInfo());
-#endif
-#if defined(VK_KHR_acceleration_structure)
-        addI("ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR", int64_t(VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR), LineInfo());
-#endif
-#if defined(VK_KHR_acceleration_structure)
-        addI("ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR", int64_t(VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR), LineInfo());
-#endif
-#if defined(VK_NV_ray_tracing)
-        addI("ACCELERATION_STRUCTURE_COMPACTED_SIZE_NV", int64_t(VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_NV), LineInfo());
-#endif
-#if defined(VK_INTEL_performance_query)
-        addI("PERFORMANCE_QUERY_INTEL", int64_t(VK_QUERY_TYPE_PERFORMANCE_QUERY_INTEL), LineInfo());
-#endif
-#if defined(VK_KHR_video_encode_queue)
-        addI("VIDEO_ENCODE_FEEDBACK_KHR", int64_t(VK_QUERY_TYPE_VIDEO_ENCODE_FEEDBACK_KHR), LineInfo());
-#endif
-#if defined(VK_EXT_mesh_shader)
-        addI("MESH_PRIMITIVES_GENERATED_EXT", int64_t(VK_QUERY_TYPE_MESH_PRIMITIVES_GENERATED_EXT), LineInfo());
-#endif
-#if defined(VK_EXT_primitives_generated_query)
-        addI("PRIMITIVES_GENERATED_EXT", int64_t(VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT), LineInfo());
-#endif
-#if defined(VK_KHR_ray_tracing_maintenance1)
-        addI("ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR", int64_t(VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR), LineInfo());
-#endif
-#if defined(VK_KHR_ray_tracing_maintenance1)
-        addI("ACCELERATION_STRUCTURE_SIZE_KHR", int64_t(VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR), LineInfo());
-#endif
-#if defined(VK_EXT_opacity_micromap)
-        addI("MICROMAP_SERIALIZATION_SIZE_EXT", int64_t(VK_QUERY_TYPE_MICROMAP_SERIALIZATION_SIZE_EXT), LineInfo());
-#endif
-#if defined(VK_EXT_opacity_micromap)
-        addI("MICROMAP_COMPACTED_SIZE_EXT", int64_t(VK_QUERY_TYPE_MICROMAP_COMPACTED_SIZE_EXT), LineInfo());
-#endif
-    }
-};
-#endif
-
-#if defined(VK_VERSION_1_4)
-class Enumeration_VkQueueGlobalPriority : public Enumeration {
-public:
-    Enumeration_VkQueueGlobalPriority() : Enumeration("VkQueueGlobalPriority") {
-        external = true;
-        cppName = "VkQueueGlobalPriority";
-        baseType = (Type) ToBasicType< underlying_type<VkQueueGlobalPriority>::type >::type;
-        addI("LOW", int64_t(VK_QUEUE_GLOBAL_PRIORITY_LOW), LineInfo());
-        addI("MEDIUM", int64_t(VK_QUEUE_GLOBAL_PRIORITY_MEDIUM), LineInfo());
-        addI("HIGH", int64_t(VK_QUEUE_GLOBAL_PRIORITY_HIGH), LineInfo());
-        addI("REALTIME", int64_t(VK_QUEUE_GLOBAL_PRIORITY_REALTIME), LineInfo());
-#if defined(VK_EXT_global_priority)
-        addI("LOW_EXT", int64_t(VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT), LineInfo());
-#endif
-#if defined(VK_EXT_global_priority)
-        addI("MEDIUM_EXT", int64_t(VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT), LineInfo());
-#endif
-#if defined(VK_EXT_global_priority)
-        addI("HIGH_EXT", int64_t(VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT), LineInfo());
-#endif
-#if defined(VK_EXT_global_priority)
-        addI("REALTIME_EXT", int64_t(VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT), LineInfo());
-#endif
-#if defined(VK_KHR_global_priority)
-        addI("LOW_KHR", int64_t(VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR), LineInfo());
-#endif
-#if defined(VK_KHR_global_priority)
-        addI("MEDIUM_KHR", int64_t(VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR), LineInfo());
-#endif
-#if defined(VK_KHR_global_priority)
-        addI("HIGH_KHR", int64_t(VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR), LineInfo());
-#endif
-#if defined(VK_KHR_global_priority)
-        addI("REALTIME_KHR", int64_t(VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR), LineInfo());
-#endif
-    }
-};
-#endif
-
-#if defined(VK_AMD_rasterization_order)
-class Enumeration_VkRasterizationOrderAMD : public Enumeration {
-public:
-    Enumeration_VkRasterizationOrderAMD() : Enumeration("VkRasterizationOrderAMD") {
-        external = true;
-        cppName = "VkRasterizationOrderAMD";
-        baseType = (Type) ToBasicType< underlying_type<VkRasterizationOrderAMD>::type >::type;
-        addI("STRICT_AMD", int64_t(VK_RASTERIZATION_ORDER_STRICT_AMD), LineInfo());
-        addI("RELAXED_AMD", int64_t(VK_RASTERIZATION_ORDER_RELAXED_AMD), LineInfo());
-    }
-};
-#endif
-
-#if defined(VK_EXT_ray_tracing_invocation_reorder)
-class Enumeration_VkRayTracingInvocationReorderModeEXT : public Enumeration {
-public:
-    Enumeration_VkRayTracingInvocationReorderModeEXT() : Enumeration("VkRayTracingInvocationReorderModeEXT") {
-        external = true;
-        cppName = "VkRayTracingInvocationReorderModeEXT";
-        baseType = (Type) ToBasicType< underlying_type<VkRayTracingInvocationReorderModeEXT>::type >::type;
-        addI("NONE_EXT", int64_t(VK_RAY_TRACING_INVOCATION_REORDER_MODE_NONE_EXT), LineInfo());
-        addI("REORDER_EXT", int64_t(VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_EXT), LineInfo());
-#if defined(VK_NV_ray_tracing_invocation_reorder)
-        addI("NONE_NV", int64_t(VK_RAY_TRACING_INVOCATION_REORDER_MODE_NONE_NV), LineInfo());
-#endif
-#if defined(VK_NV_ray_tracing_invocation_reorder)
-        addI("REORDER_NV", int64_t(VK_RAY_TRACING_INVOCATION_REORDER_MODE_REORDER_NV), LineInfo());
-#endif
-    }
-};
-#endif
-
 }
 
 namespace das {
 
 void das_vulkan_init_enums_2(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_VERSION_1_0)
+    mod.addEnumeration(new Enumeration_VkInternalAllocationType());
+#endif
+#if defined(VK_NV_low_latency2)
+    mod.addEnumeration(new Enumeration_VkLatencyMarkerNV());
+#endif
+#if defined(VK_EXT_layer_settings)
+    mod.addEnumeration(new Enumeration_VkLayerSettingTypeEXT());
+#endif
+#if defined(VK_MSFT_layered_driver)
+    mod.addEnumeration(new Enumeration_VkLayeredDriverUnderlyingApiMSFT());
+#endif
 #if defined(VK_VERSION_1_4)
     mod.addEnumeration(new Enumeration_VkLineRasterizationMode());
 #endif
@@ -936,11 +909,11 @@ void das_vulkan_init_enums_2(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_VERSION_1_0)
     mod.addEnumeration(new Enumeration_VkObjectType());
 #endif
-#if defined(VK_EXT_opacity_micromap)
-    mod.addEnumeration(new Enumeration_VkOpacityMicromapFormatEXT());
+#if defined(VK_KHR_opacity_micromap)
+    mod.addEnumeration(new Enumeration_VkOpacityMicromapFormatKHR());
 #endif
-#if defined(VK_EXT_opacity_micromap)
-    mod.addEnumeration(new Enumeration_VkOpacityMicromapSpecialIndexEXT());
+#if defined(VK_KHR_opacity_micromap)
+    mod.addEnumeration(new Enumeration_VkOpacityMicromapSpecialIndexKHR());
 #endif
 #if defined(VK_NV_optical_flow)
     mod.addEnumeration(new Enumeration_VkOpticalFlowPerformanceLevelNV());
@@ -1025,18 +998,6 @@ void das_vulkan_init_enums_2(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_KHR_video_queue)
     mod.addEnumeration(new Enumeration_VkQueryResultStatusKHR());
-#endif
-#if defined(VK_VERSION_1_0)
-    mod.addEnumeration(new Enumeration_VkQueryType());
-#endif
-#if defined(VK_VERSION_1_4)
-    mod.addEnumeration(new Enumeration_VkQueueGlobalPriority());
-#endif
-#if defined(VK_AMD_rasterization_order)
-    mod.addEnumeration(new Enumeration_VkRasterizationOrderAMD());
-#endif
-#if defined(VK_EXT_ray_tracing_invocation_reorder)
-    mod.addEnumeration(new Enumeration_VkRayTracingInvocationReorderModeEXT());
 #endif
 }
 

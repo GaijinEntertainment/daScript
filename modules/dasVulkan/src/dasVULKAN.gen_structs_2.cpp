@@ -4,6 +4,37 @@
 
 namespace das {
 
+#if defined(VK_KHR_pipeline_binary)
+struct VkPipelineBinaryDataInfoKHR_Ann : ManagedStructureAnnotation<VkPipelineBinaryDataInfoKHR> {
+    VkPipelineBinaryDataInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPipelineBinaryDataInfoKHR", ml, "VkPipelineBinaryDataInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPipelineBinaryDataInfoKHR_Ann * ann_VkPipelineBinaryDataInfoKHR = nullptr;
+void VkPipelineBinaryDataInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPipelineBinaryDataInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(pipelineBinary)>("pipelineBinary", "pipelineBinary");
+}
+#endif
+
+#if defined(VK_KHR_pipeline_binary)
+struct VkPipelineCreateInfoKHR_Ann : ManagedStructureAnnotation<VkPipelineCreateInfoKHR> {
+    VkPipelineCreateInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPipelineCreateInfoKHR", ml, "VkPipelineCreateInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPipelineCreateInfoKHR_Ann * ann_VkPipelineCreateInfoKHR = nullptr;
+void VkPipelineCreateInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPipelineCreateInfoKHR, pNext), makeType<void *>(*mlib));
+}
+#endif
+
 #if defined(VK_VERSION_1_0)
 struct VkPipelineLayoutCreateInfo_Ann : ManagedStructureAnnotation<VkPipelineLayoutCreateInfo> {
     VkPipelineLayoutCreateInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPipelineLayoutCreateInfo", ml, "VkPipelineLayoutCreateInfo") {}
@@ -1050,43 +1081,13 @@ void VkValidationFlagsEXT_Ann::init() {
 }
 #endif
 
-#if defined(VK_EXT_validation_features)
-struct VkValidationFeaturesEXT_Ann : ManagedStructureAnnotation<VkValidationFeaturesEXT> {
-    VkValidationFeaturesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkValidationFeaturesEXT", ml, "VkValidationFeaturesEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkValidationFeaturesEXT_Ann * ann_VkValidationFeaturesEXT = nullptr;
-void VkValidationFeaturesEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkValidationFeaturesEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(enabledValidationFeatureCount)>("enabledValidationFeatureCount", "enabledValidationFeatureCount");
-    addFieldEx("pEnabledValidationFeatures", "pEnabledValidationFeatures", offsetof(VkValidationFeaturesEXT, pEnabledValidationFeatures), makeType<VkValidationFeatureEnableEXT *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(disabledValidationFeatureCount)>("disabledValidationFeatureCount", "disabledValidationFeatureCount");
-    addFieldEx("pDisabledValidationFeatures", "pDisabledValidationFeatures", offsetof(VkValidationFeaturesEXT, pDisabledValidationFeatures), makeType<VkValidationFeatureDisableEXT *>(*mlib));
-}
-#endif
-
-#if defined(VK_EXT_layer_settings)
-struct VkLayerSettingsCreateInfoEXT_Ann : ManagedStructureAnnotation<VkLayerSettingsCreateInfoEXT> {
-    VkLayerSettingsCreateInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkLayerSettingsCreateInfoEXT", ml, "VkLayerSettingsCreateInfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkLayerSettingsCreateInfoEXT_Ann * ann_VkLayerSettingsCreateInfoEXT = nullptr;
-void VkLayerSettingsCreateInfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkLayerSettingsCreateInfoEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(settingCount)>("settingCount", "settingCount");
-    addFieldEx("pSettings", "pSettings", offsetof(VkLayerSettingsCreateInfoEXT, pSettings), makeType<VkLayerSettingEXT *>(*mlib));
-}
-#endif
-
 void das_vulkan_add_structs_2(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_KHR_pipeline_binary)
+    ann_VkPipelineBinaryDataInfoKHR = new VkPipelineBinaryDataInfoKHR_Ann(lib); mod.addAnnotation(ann_VkPipelineBinaryDataInfoKHR);
+#endif
+#if defined(VK_KHR_pipeline_binary)
+    ann_VkPipelineCreateInfoKHR = new VkPipelineCreateInfoKHR_Ann(lib); mod.addAnnotation(ann_VkPipelineCreateInfoKHR);
+#endif
 #if defined(VK_VERSION_1_0)
     ann_VkPipelineLayoutCreateInfo = new VkPipelineLayoutCreateInfo_Ann(lib); mod.addAnnotation(ann_VkPipelineLayoutCreateInfo);
 #endif
@@ -1231,15 +1232,15 @@ void das_vulkan_add_structs_2(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_EXT_validation_flags)
     ann_VkValidationFlagsEXT = new VkValidationFlagsEXT_Ann(lib); mod.addAnnotation(ann_VkValidationFlagsEXT);
 #endif
-#if defined(VK_EXT_validation_features)
-    ann_VkValidationFeaturesEXT = new VkValidationFeaturesEXT_Ann(lib); mod.addAnnotation(ann_VkValidationFeaturesEXT);
-#endif
-#if defined(VK_EXT_layer_settings)
-    ann_VkLayerSettingsCreateInfoEXT = new VkLayerSettingsCreateInfoEXT_Ann(lib); mod.addAnnotation(ann_VkLayerSettingsCreateInfoEXT);
-#endif
 }
 
 void das_vulkan_fill_structs_2(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_KHR_pipeline_binary)
+    ann_VkPipelineBinaryDataInfoKHR->mlib = &lib; ann_VkPipelineBinaryDataInfoKHR->init(); ann_VkPipelineBinaryDataInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_pipeline_binary)
+    ann_VkPipelineCreateInfoKHR->mlib = &lib; ann_VkPipelineCreateInfoKHR->init(); ann_VkPipelineCreateInfoKHR->mlib = nullptr;
+#endif
 #if defined(VK_VERSION_1_0)
     ann_VkPipelineLayoutCreateInfo->mlib = &lib; ann_VkPipelineLayoutCreateInfo->init(); ann_VkPipelineLayoutCreateInfo->mlib = nullptr;
 #endif
@@ -1383,12 +1384,6 @@ void das_vulkan_fill_structs_2(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_EXT_validation_flags)
     ann_VkValidationFlagsEXT->mlib = &lib; ann_VkValidationFlagsEXT->init(); ann_VkValidationFlagsEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_validation_features)
-    ann_VkValidationFeaturesEXT->mlib = &lib; ann_VkValidationFeaturesEXT->init(); ann_VkValidationFeaturesEXT->mlib = nullptr;
-#endif
-#if defined(VK_EXT_layer_settings)
-    ann_VkLayerSettingsCreateInfoEXT->mlib = &lib; ann_VkLayerSettingsCreateInfoEXT->init(); ann_VkLayerSettingsCreateInfoEXT->mlib = nullptr;
 #endif
 }
 

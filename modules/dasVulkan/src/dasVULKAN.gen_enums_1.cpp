@@ -4,6 +4,18 @@
 
 namespace das {
 
+#if defined(VK_ARM_data_graph)
+class Enumeration_VkDataGraphPipelineSessionBindPointTypeARM : public Enumeration {
+public:
+    Enumeration_VkDataGraphPipelineSessionBindPointTypeARM() : Enumeration("VkDataGraphPipelineSessionBindPointTypeARM") {
+        external = true;
+        cppName = "VkDataGraphPipelineSessionBindPointTypeARM";
+        baseType = (Type) ToBasicType< underlying_type<VkDataGraphPipelineSessionBindPointTypeARM>::type >::type;
+        addI("MEMORY_ARM", int64_t(VK_DATA_GRAPH_PIPELINE_SESSION_BIND_POINT_TYPE_MEMORY_ARM), LineInfo());
+    }
+};
+#endif
+
 #if defined(VK_ARM_data_graph_instruction_set_tosa)
 class Enumeration_VkDataGraphTOSALevelARM : public Enumeration {
 public:
@@ -421,6 +433,8 @@ public:
         addI("MESA_HONEYKRISP", int64_t(VK_DRIVER_ID_MESA_HONEYKRISP), LineInfo());
         addI("VULKAN_SC_EMULATION_ON_VULKAN", int64_t(VK_DRIVER_ID_VULKAN_SC_EMULATION_ON_VULKAN), LineInfo());
         addI("MESA_KOSMICKRISP", int64_t(VK_DRIVER_ID_MESA_KOSMICKRISP), LineInfo());
+        addI("MESA_GFXSTREAM", int64_t(VK_DRIVER_ID_MESA_GFXSTREAM), LineInfo());
+        addI("APE_SOFT", int64_t(VK_DRIVER_ID_APE_SOFT), LineInfo());
 #if defined(VK_KHR_driver_properties)
         addI("AMD_PROPRIETARY_KHR", int64_t(VK_DRIVER_ID_AMD_PROPRIETARY_KHR), LineInfo());
 #endif
@@ -1554,6 +1568,110 @@ public:
 #if defined(VK_AMDX_dense_geometry_format)
         addI("DENSE_GEOMETRY_FORMAT_TRIANGLES_AMDX", int64_t(VK_GEOMETRY_TYPE_DENSE_GEOMETRY_FORMAT_TRIANGLES_AMDX), LineInfo());
 #endif
+#if defined(VK_KHR_opacity_micromap)
+        addI("MICROMAP_KHR", int64_t(VK_GEOMETRY_TYPE_MICROMAP_KHR), LineInfo());
+#endif
+    }
+};
+#endif
+
+#if defined(VK_AMD_gpa_interface)
+class Enumeration_VkGpaDeviceClockModeAMD : public Enumeration {
+public:
+    Enumeration_VkGpaDeviceClockModeAMD() : Enumeration("VkGpaDeviceClockModeAMD") {
+        external = true;
+        cppName = "VkGpaDeviceClockModeAMD";
+        baseType = (Type) ToBasicType< underlying_type<VkGpaDeviceClockModeAMD>::type >::type;
+        addI("DEFAULT_AMD", int64_t(VK_GPA_DEVICE_CLOCK_MODE_DEFAULT_AMD), LineInfo());
+        addI("QUERY_AMD", int64_t(VK_GPA_DEVICE_CLOCK_MODE_QUERY_AMD), LineInfo());
+        addI("PROFILING_AMD", int64_t(VK_GPA_DEVICE_CLOCK_MODE_PROFILING_AMD), LineInfo());
+        addI("MIN_MEMORY_AMD", int64_t(VK_GPA_DEVICE_CLOCK_MODE_MIN_MEMORY_AMD), LineInfo());
+        addI("MIN_ENGINE_AMD", int64_t(VK_GPA_DEVICE_CLOCK_MODE_MIN_ENGINE_AMD), LineInfo());
+        addI("PEAK_AMD", int64_t(VK_GPA_DEVICE_CLOCK_MODE_PEAK_AMD), LineInfo());
+    }
+};
+#endif
+
+#if defined(VK_AMD_gpa_interface)
+class Enumeration_VkGpaPerfBlockAMD : public Enumeration {
+public:
+    Enumeration_VkGpaPerfBlockAMD() : Enumeration("VkGpaPerfBlockAMD") {
+        external = true;
+        cppName = "VkGpaPerfBlockAMD";
+        baseType = (Type) ToBasicType< underlying_type<VkGpaPerfBlockAMD>::type >::type;
+        addI("CPF_AMD", int64_t(VK_GPA_PERF_BLOCK_CPF_AMD), LineInfo());
+        addI("IA_AMD", int64_t(VK_GPA_PERF_BLOCK_IA_AMD), LineInfo());
+        addI("VGT_AMD", int64_t(VK_GPA_PERF_BLOCK_VGT_AMD), LineInfo());
+        addI("PA_AMD", int64_t(VK_GPA_PERF_BLOCK_PA_AMD), LineInfo());
+        addI("SC_AMD", int64_t(VK_GPA_PERF_BLOCK_SC_AMD), LineInfo());
+        addI("SPI_AMD", int64_t(VK_GPA_PERF_BLOCK_SPI_AMD), LineInfo());
+        addI("SQ_AMD", int64_t(VK_GPA_PERF_BLOCK_SQ_AMD), LineInfo());
+        addI("SX_AMD", int64_t(VK_GPA_PERF_BLOCK_SX_AMD), LineInfo());
+        addI("TA_AMD", int64_t(VK_GPA_PERF_BLOCK_TA_AMD), LineInfo());
+        addI("TD_AMD", int64_t(VK_GPA_PERF_BLOCK_TD_AMD), LineInfo());
+        addI("TCP_AMD", int64_t(VK_GPA_PERF_BLOCK_TCP_AMD), LineInfo());
+        addI("TCC_AMD", int64_t(VK_GPA_PERF_BLOCK_TCC_AMD), LineInfo());
+        addI("TCA_AMD", int64_t(VK_GPA_PERF_BLOCK_TCA_AMD), LineInfo());
+        addI("DB_AMD", int64_t(VK_GPA_PERF_BLOCK_DB_AMD), LineInfo());
+        addI("CB_AMD", int64_t(VK_GPA_PERF_BLOCK_CB_AMD), LineInfo());
+        addI("GDS_AMD", int64_t(VK_GPA_PERF_BLOCK_GDS_AMD), LineInfo());
+        addI("SRBM_AMD", int64_t(VK_GPA_PERF_BLOCK_SRBM_AMD), LineInfo());
+        addI("GRBM_AMD", int64_t(VK_GPA_PERF_BLOCK_GRBM_AMD), LineInfo());
+        addI("GRBM_SE_AMD", int64_t(VK_GPA_PERF_BLOCK_GRBM_SE_AMD), LineInfo());
+        addI("RLC_AMD", int64_t(VK_GPA_PERF_BLOCK_RLC_AMD), LineInfo());
+        addI("DMA_AMD", int64_t(VK_GPA_PERF_BLOCK_DMA_AMD), LineInfo());
+        addI("MC_AMD", int64_t(VK_GPA_PERF_BLOCK_MC_AMD), LineInfo());
+        addI("CPG_AMD", int64_t(VK_GPA_PERF_BLOCK_CPG_AMD), LineInfo());
+        addI("CPC_AMD", int64_t(VK_GPA_PERF_BLOCK_CPC_AMD), LineInfo());
+        addI("WD_AMD", int64_t(VK_GPA_PERF_BLOCK_WD_AMD), LineInfo());
+        addI("TCS_AMD", int64_t(VK_GPA_PERF_BLOCK_TCS_AMD), LineInfo());
+        addI("ATC_AMD", int64_t(VK_GPA_PERF_BLOCK_ATC_AMD), LineInfo());
+        addI("ATC_L2_AMD", int64_t(VK_GPA_PERF_BLOCK_ATC_L2_AMD), LineInfo());
+        addI("MC_VM_L2_AMD", int64_t(VK_GPA_PERF_BLOCK_MC_VM_L2_AMD), LineInfo());
+        addI("EA_AMD", int64_t(VK_GPA_PERF_BLOCK_EA_AMD), LineInfo());
+        addI("RPB_AMD", int64_t(VK_GPA_PERF_BLOCK_RPB_AMD), LineInfo());
+        addI("RMI_AMD", int64_t(VK_GPA_PERF_BLOCK_RMI_AMD), LineInfo());
+        addI("UMCCH_AMD", int64_t(VK_GPA_PERF_BLOCK_UMCCH_AMD), LineInfo());
+        addI("GE_AMD", int64_t(VK_GPA_PERF_BLOCK_GE_AMD), LineInfo());
+        addI("GL1A_AMD", int64_t(VK_GPA_PERF_BLOCK_GL1A_AMD), LineInfo());
+        addI("GL1C_AMD", int64_t(VK_GPA_PERF_BLOCK_GL1C_AMD), LineInfo());
+        addI("GL1CG_AMD", int64_t(VK_GPA_PERF_BLOCK_GL1CG_AMD), LineInfo());
+        addI("GL2A_AMD", int64_t(VK_GPA_PERF_BLOCK_GL2A_AMD), LineInfo());
+        addI("GL2C_AMD", int64_t(VK_GPA_PERF_BLOCK_GL2C_AMD), LineInfo());
+        addI("CHA_AMD", int64_t(VK_GPA_PERF_BLOCK_CHA_AMD), LineInfo());
+        addI("CHC_AMD", int64_t(VK_GPA_PERF_BLOCK_CHC_AMD), LineInfo());
+        addI("CHCG_AMD", int64_t(VK_GPA_PERF_BLOCK_CHCG_AMD), LineInfo());
+        addI("GUS_AMD", int64_t(VK_GPA_PERF_BLOCK_GUS_AMD), LineInfo());
+        addI("GCR_AMD", int64_t(VK_GPA_PERF_BLOCK_GCR_AMD), LineInfo());
+        addI("PH_AMD", int64_t(VK_GPA_PERF_BLOCK_PH_AMD), LineInfo());
+        addI("UTCL1_AMD", int64_t(VK_GPA_PERF_BLOCK_UTCL1_AMD), LineInfo());
+        addI("GE1_AMD", int64_t(VK_GPA_PERF_BLOCK_GE1_AMD), LineInfo());
+        addI("GE_DIST_AMD", int64_t(VK_GPA_PERF_BLOCK_GE_DIST_AMD), LineInfo());
+        addI("GE_SE_AMD", int64_t(VK_GPA_PERF_BLOCK_GE_SE_AMD), LineInfo());
+        addI("DF_MALL_AMD", int64_t(VK_GPA_PERF_BLOCK_DF_MALL_AMD), LineInfo());
+        addI("SQ_WGP_AMD", int64_t(VK_GPA_PERF_BLOCK_SQ_WGP_AMD), LineInfo());
+        addI("PC_AMD", int64_t(VK_GPA_PERF_BLOCK_PC_AMD), LineInfo());
+        addI("GL1XA_AMD", int64_t(VK_GPA_PERF_BLOCK_GL1XA_AMD), LineInfo());
+        addI("GL1XC_AMD", int64_t(VK_GPA_PERF_BLOCK_GL1XC_AMD), LineInfo());
+        addI("WGS_AMD", int64_t(VK_GPA_PERF_BLOCK_WGS_AMD), LineInfo());
+        addI("EACPWD_AMD", int64_t(VK_GPA_PERF_BLOCK_EACPWD_AMD), LineInfo());
+        addI("EASE_AMD", int64_t(VK_GPA_PERF_BLOCK_EASE_AMD), LineInfo());
+        addI("RLCUSER_AMD", int64_t(VK_GPA_PERF_BLOCK_RLCUSER_AMD), LineInfo());
+        addI("RLCLOCAL_AMD", int64_t(VK_GPA_PERF_BLOCK_RLCLOCAL_AMD), LineInfo());
+    }
+};
+#endif
+
+#if defined(VK_AMD_gpa_interface)
+class Enumeration_VkGpaSampleTypeAMD : public Enumeration {
+public:
+    Enumeration_VkGpaSampleTypeAMD() : Enumeration("VkGpaSampleTypeAMD") {
+        external = true;
+        cppName = "VkGpaSampleTypeAMD";
+        baseType = (Type) ToBasicType< underlying_type<VkGpaSampleTypeAMD>::type >::type;
+        addI("CUMULATIVE_AMD", int64_t(VK_GPA_SAMPLE_TYPE_CUMULATIVE_AMD), LineInfo());
+        addI("TRACE_AMD", int64_t(VK_GPA_SAMPLE_TYPE_TRACE_AMD), LineInfo());
+        addI("TIMING_AMD", int64_t(VK_GPA_SAMPLE_TYPE_TIMING_AMD), LineInfo());
     }
 };
 #endif
@@ -1839,78 +1957,14 @@ public:
 };
 #endif
 
-#if defined(VK_VERSION_1_0)
-class Enumeration_VkInternalAllocationType : public Enumeration {
-public:
-    Enumeration_VkInternalAllocationType() : Enumeration("VkInternalAllocationType") {
-        external = true;
-        cppName = "VkInternalAllocationType";
-        baseType = (Type) ToBasicType< underlying_type<VkInternalAllocationType>::type >::type;
-        addI("EXECUTABLE", int64_t(VK_INTERNAL_ALLOCATION_TYPE_EXECUTABLE), LineInfo());
-    }
-};
-#endif
-
-#if defined(VK_NV_low_latency2)
-class Enumeration_VkLatencyMarkerNV : public Enumeration {
-public:
-    Enumeration_VkLatencyMarkerNV() : Enumeration("VkLatencyMarkerNV") {
-        external = true;
-        cppName = "VkLatencyMarkerNV";
-        baseType = (Type) ToBasicType< underlying_type<VkLatencyMarkerNV>::type >::type;
-        addI("SIMULATION_START_NV", int64_t(VK_LATENCY_MARKER_SIMULATION_START_NV), LineInfo());
-        addI("SIMULATION_END_NV", int64_t(VK_LATENCY_MARKER_SIMULATION_END_NV), LineInfo());
-        addI("RENDERSUBMIT_START_NV", int64_t(VK_LATENCY_MARKER_RENDERSUBMIT_START_NV), LineInfo());
-        addI("RENDERSUBMIT_END_NV", int64_t(VK_LATENCY_MARKER_RENDERSUBMIT_END_NV), LineInfo());
-        addI("PRESENT_START_NV", int64_t(VK_LATENCY_MARKER_PRESENT_START_NV), LineInfo());
-        addI("PRESENT_END_NV", int64_t(VK_LATENCY_MARKER_PRESENT_END_NV), LineInfo());
-        addI("INPUT_SAMPLE_NV", int64_t(VK_LATENCY_MARKER_INPUT_SAMPLE_NV), LineInfo());
-        addI("TRIGGER_FLASH_NV", int64_t(VK_LATENCY_MARKER_TRIGGER_FLASH_NV), LineInfo());
-        addI("OUT_OF_BAND_RENDERSUBMIT_START_NV", int64_t(VK_LATENCY_MARKER_OUT_OF_BAND_RENDERSUBMIT_START_NV), LineInfo());
-        addI("OUT_OF_BAND_RENDERSUBMIT_END_NV", int64_t(VK_LATENCY_MARKER_OUT_OF_BAND_RENDERSUBMIT_END_NV), LineInfo());
-        addI("OUT_OF_BAND_PRESENT_START_NV", int64_t(VK_LATENCY_MARKER_OUT_OF_BAND_PRESENT_START_NV), LineInfo());
-        addI("OUT_OF_BAND_PRESENT_END_NV", int64_t(VK_LATENCY_MARKER_OUT_OF_BAND_PRESENT_END_NV), LineInfo());
-    }
-};
-#endif
-
-#if defined(VK_EXT_layer_settings)
-class Enumeration_VkLayerSettingTypeEXT : public Enumeration {
-public:
-    Enumeration_VkLayerSettingTypeEXT() : Enumeration("VkLayerSettingTypeEXT") {
-        external = true;
-        cppName = "VkLayerSettingTypeEXT";
-        baseType = (Type) ToBasicType< underlying_type<VkLayerSettingTypeEXT>::type >::type;
-        addI("BOOL32_EXT", int64_t(VK_LAYER_SETTING_TYPE_BOOL32_EXT), LineInfo());
-        addI("INT32_EXT", int64_t(VK_LAYER_SETTING_TYPE_INT32_EXT), LineInfo());
-        addI("INT64_EXT", int64_t(VK_LAYER_SETTING_TYPE_INT64_EXT), LineInfo());
-        addI("UINT32_EXT", int64_t(VK_LAYER_SETTING_TYPE_UINT32_EXT), LineInfo());
-        addI("UINT64_EXT", int64_t(VK_LAYER_SETTING_TYPE_UINT64_EXT), LineInfo());
-        addI("FLOAT32_EXT", int64_t(VK_LAYER_SETTING_TYPE_FLOAT32_EXT), LineInfo());
-        addI("FLOAT64_EXT", int64_t(VK_LAYER_SETTING_TYPE_FLOAT64_EXT), LineInfo());
-        addI("STRING_EXT", int64_t(VK_LAYER_SETTING_TYPE_STRING_EXT), LineInfo());
-    }
-};
-#endif
-
-#if defined(VK_MSFT_layered_driver)
-class Enumeration_VkLayeredDriverUnderlyingApiMSFT : public Enumeration {
-public:
-    Enumeration_VkLayeredDriverUnderlyingApiMSFT() : Enumeration("VkLayeredDriverUnderlyingApiMSFT") {
-        external = true;
-        cppName = "VkLayeredDriverUnderlyingApiMSFT";
-        baseType = (Type) ToBasicType< underlying_type<VkLayeredDriverUnderlyingApiMSFT>::type >::type;
-        addI("NONE_MSFT", int64_t(VK_LAYERED_DRIVER_UNDERLYING_API_NONE_MSFT), LineInfo());
-        addI("D3D12_MSFT", int64_t(VK_LAYERED_DRIVER_UNDERLYING_API_D3D12_MSFT), LineInfo());
-    }
-};
-#endif
-
 }
 
 namespace das {
 
 void das_vulkan_init_enums_1(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_ARM_data_graph)
+    mod.addEnumeration(new Enumeration_VkDataGraphPipelineSessionBindPointTypeARM());
+#endif
 #if defined(VK_ARM_data_graph_instruction_set_tosa)
     mod.addEnumeration(new Enumeration_VkDataGraphTOSALevelARM());
 #endif
@@ -1995,6 +2049,15 @@ void das_vulkan_init_enums_1(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_KHR_acceleration_structure)
     mod.addEnumeration(new Enumeration_VkGeometryTypeKHR());
 #endif
+#if defined(VK_AMD_gpa_interface)
+    mod.addEnumeration(new Enumeration_VkGpaDeviceClockModeAMD());
+#endif
+#if defined(VK_AMD_gpa_interface)
+    mod.addEnumeration(new Enumeration_VkGpaPerfBlockAMD());
+#endif
+#if defined(VK_AMD_gpa_interface)
+    mod.addEnumeration(new Enumeration_VkGpaSampleTypeAMD());
+#endif
 #if defined(VK_VERSION_1_0)
     mod.addEnumeration(new Enumeration_VkImageLayout());
 #endif
@@ -2018,18 +2081,6 @@ void das_vulkan_init_enums_1(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_EXT_device_generated_commands)
     mod.addEnumeration(new Enumeration_VkIndirectExecutionSetInfoTypeEXT());
-#endif
-#if defined(VK_VERSION_1_0)
-    mod.addEnumeration(new Enumeration_VkInternalAllocationType());
-#endif
-#if defined(VK_NV_low_latency2)
-    mod.addEnumeration(new Enumeration_VkLatencyMarkerNV());
-#endif
-#if defined(VK_EXT_layer_settings)
-    mod.addEnumeration(new Enumeration_VkLayerSettingTypeEXT());
-#endif
-#if defined(VK_MSFT_layered_driver)
-    mod.addEnumeration(new Enumeration_VkLayeredDriverUnderlyingApiMSFT());
 #endif
 }
 
