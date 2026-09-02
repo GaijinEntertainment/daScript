@@ -1502,6 +1502,10 @@ def main() : int {
             dispatch_census(t, fmt)
         }
         var s <- make_run_state(c, KVDtype.f16, KVDtype.f16)
+        // per-prompt tok/s of the OFF arm, so the ON arm can print its per-prompt ratio: a SpecBench
+        // corpus is a per-task table, never one number
+        var pp_off : array<double>
+        pp_off |> resize(length(toks))
         for (arm in range(ab ? 2 : 1)) {
             var dtag = ""
             if (ab) {
@@ -1516,6 +1520,14 @@ def main() : int {
                 var drafted = 0l
                 var accepted = 0l
                 var tps : array<double>
+                var pp_us : array<int64>      // per prompt across the reps: timed µs, tokens, drafts, accepts
+                var pp_gen : array<int64>
+                var pp_dr : array<int64>
+                var pp_ac : array<int64>
+                pp_us |> resize(length(toks))
+                pp_gen |> resize(length(toks))
+                pp_dr |> resize(length(toks))
+                pp_ac |> resize(length(toks))
                 for (_rep in range(reps)) {
                     var total_us = 0l
                     var rep_gen = 0l
@@ -1524,6 +1536,7 @@ def main() : int {
                         let pl = long_length(toks[pi])
                         forward_prefill(t, rs, toks[pi], pl, 0l)
                         let t0 = ref_time_ticks()
+                        var p_gen = ngen
                         if (mtp_on) {
                             rs.n_past = pl   // forward_prefill leaves n_past alone; the round drives it
                             var tok = argmax_logit(rs, c.vocab_size)
@@ -1532,28 +1545,46 @@ def main() : int {
                                 gen += 1l + mtp_spec_round(t, rs, tok)   // tok + the accepted drafts; only the advance is timed
                                 tok = argmax_logit(rs, c.vocab_size)
                             }
-                            rep_gen += gen   // a trailing accept may overshoot by 1 — count what ran
+                            p_gen = gen   // a trailing accept may overshoot by 1 — count what ran
                         } else {
                             var pos = pl
                             for (_g in range64(ngen)) {
                                 forward(t, rs, argmax_logit(rs, c.vocab_size), pos)
                                 pos++
                             }
-                            rep_gen += ngen
                         }
-                        total_us += int64(get_time_usec(t0))
+                        rep_gen += p_gen
+                        let p_us = int64(get_time_usec(t0))
+                        total_us += p_us
+                        pp_us[pi] += p_us
+                        pp_gen[pi] += p_gen
                         drafted += rs.mtp_drafted   // session-lifetime counters — harvest before the free
                         accepted += rs.mtp_accepted
+                        pp_dr[pi] += rs.mtp_drafted
+                        pp_ac[pi] += rs.mtp_accepted
                         delete rs
                     }
                     tps |> push(double(rep_gen) * 1.0e6lf / double(total_us))
                 }
                 let st = row_stat("tg-real{ngen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps, {length(toks)} prompts)\n")
+                if (!mtp_on) {
+                    for (pi in range(length(toks))) {
+                        pp_off[pi] = pp_us[pi] > 0l ? double(pp_gen[pi]) * 1.0e6lf / double(pp_us[pi]) : 0.0lf
+                    }
+                }
                 if (mtp_on) {
                     let rate = drafted > 0l ? double(accepted) * 100.0lf / double(drafted) : 0.0lf
                     say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}; {mtp_pos_report()}\n")
                     mtp_pos_reset()
+                    if (length(toks) > 1) {
+                        for (pi in range(length(toks))) {
+                            let on_tps = pp_us[pi] > 0l ? double(pp_gen[pi]) * 1.0e6lf / double(pp_us[pi]) : 0.0lf
+                            let ratio = pp_off[pi] > 0.0lf ? on_tps / pp_off[pi] : 0.0lf
+                            let prate = pp_dr[pi] > 0l ? double(pp_ac[pi]) * 100.0lf / double(pp_dr[pi]) : 0.0lf
+                            say(fmt, "    prompt {pi}: off {pp_off[pi]:.1f} -> on {on_tps:.1f} tok/s (x{ratio:.2f}), accept {pp_ac[pi]}/{pp_dr[pi]} ({prate:.1f}%)\n")
+                        }
+                    }
                     static_if (typeinfo builtin_module_exists(das_metal)) {
                         if (gemma_drafter_attached()) {
                             let gt = gemma_drafter_time()
@@ -1566,6 +1597,10 @@ def main() : int {
                 }
                 results |> push(st)
                 delete tps
+                delete pp_us
+                delete pp_gen
+                delete pp_dr
+                delete pp_ac
                 if (cfg.prof) {
                     // untimed bucket window for THIS arm — the prefill lands BEFORE the reset, so
                     // the report is pure decode (or pure draft+verify on the on arm). Running it

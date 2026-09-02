@@ -611,7 +611,11 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   | qa (qid 321) | 124.1 | 158.9 | 1.28x | 75.0% | 51.8% |
 
   Math reaches vLLM's 1.60x headline on the same model; creative writing is the floor. A SpecBench
-  report is a per-task table, never one number (the S6 harness = the bench printing per-prompt rows).
+  report is a per-task table, never one number - `lcpp_bench --mtp-ab` now prints one row per prompt
+  (off/on tok/s, ratio, accepts) under the arm's summary whenever the corpus has more than one
+  prompt (S6 in its honest form; the aggregate tok/s over a mixed corpus is time-weighted and reads
+  1.26x where the rows read 1.11 / 1.17 / 1.56 / 1.27). Post-#3924 the bench's tune-provenance gate
+  refuses an unproven cell: dev runs pass `DASLLAMA_ALLOW_UNTUNED=1`, record runs mint the sidecar.
 - **The Q4 target is not what caps acceptance**: the Q8_0 target at depth 1 accepts 76.5% (vs 74.6%
   on Q4_K_M; off 109.6, on 126.0 = 1.15x; verify 12.33 ms vs step 9.13 = 1.35x again). 75% at
   position 1 is the head's own agreement with the target on SpecBench chat prompts.
