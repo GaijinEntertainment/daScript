@@ -479,6 +479,71 @@ attribution+share-alike on the data file; separate ruling before use), homograph
 past misaki's 790, UK dialect (gb tiers exist in misaki), per-language expansion (Kokoro
 has non-English voices - out of scope until English is surpassed).
 
+#### Perf design rulings (Boris, 2026-09-02) and the ladder
+
+Receipts that set the ladder (one two-sentence input, quiet M1 Max, warm JIT, CLI under the
+jobque): nano 10.4 s of audio in 2267 ms (RTF 0.22) - bert 519, generator 1638, everything
+else 110; kokoro 9.1 s in 5995 ms (RTF 0.66) - bert 420, generator 5240, decoder 174. ORT
+runs nano in f32 (RTF 0.035, 8 threads); mini's ORT figure (0.28) is a dynamic-uint8 run
+(MatMulInteger x135, ConvInteger x74, DynamicQuantizeLSTM x6), so mini is not comparable
+until a quantized rung exists.
+
+Where the 5x is: the convs run im2col + `matmul_batch`, the dot-per-token GEMV form; the
+tiled f32 GEMM (`gemm_f32`, 4x16 float4 microkernel, `[tuned]`, C += A.B) is what the
+attention tiles use. In token-major [T][C] a stride-1 conv is k tap-GEMMs on that kernel
+with no im2col: tap kk's A operand is the input rows shifted by kk*dilation-pad (row stride
+cin, the kernel's own stride), B is the tap's [cin][cout] slice. Bert is the second cost on
+nano (23%): scalar attention + the same GEMV form.
+
+Rulings:
+1. Activations token-major [T][C] through decoder and generator (channels are multiples of
+   64 in all three models - the Metal mm tile, `ARCHITECTURE_MEDIA.md` sec.2.13); per-tap
+   weights [k][cin][cout] are the served layout, consumed by both routes.
+2. **The StyleTTS2 carrier goes on the `.dlim` image rail** - "it is the how-the-data-is-used
+   format": the served layouts (per-tap, transposed, padded) are minted at BAKE time, the
+   family maps planes (`PlaneF`) instead of owning arrays, the same way the ASR/vision
+   towers do. GGUF stays the interchange file.
+3. GPU seam = the family hook of `ARCHITECTURE_MEDIA.md` sec.2.14: whole-stage function
+   slots in `dasllama_styletts2.das` (generator first; decoder and bert later), filled by a
+   driver at `[init]`, declining `false`; the CPU block loop is the chain's specification.
+   The SineGen phase chain and the harmonic STFT stay on the CPU in both routes (the phase
+   law); the hook takes the generator input plus the source spectrum and returns the
+   waveform.
+4. The straightforward kernels stay in the block home as the reference forms (`*_ref`) -
+   the oracle for the fast CPU kernels and for a GPU chain alike; a block-level test gates
+   fast against reference at the dot-envelope tolerance of the Metal kernel tests
+   (`tests/_metal_kernel_common.das` `buf_mismatch_env`); the ORT/torch stage bars loosen to
+   a measured number (bit-exactness is not required).
+5. Threading domain = row blocks over T through `maybe_parallel_for`, the B strip L1-hot per
+   lane; inline when the jobque is inline (the server's TTS worker stays inline under
+   `hybrid` until its clean RTF says otherwise).
+6. Bert moves onto the tiled GEMM and tile attention; Accelerate rides the existing
+   float-batch override seam as the Mac tier once the TTS GEMMs reach it (today the
+   `array<float>` overload of `matmul_batch` bypasses the seam).
+7. **Experiment, ledgered:** re-quantize at `.dlim` bake time (q8 planes and the rest of the
+   format ladder) and score the rig - the fair comparison with ORT's uint8 mini.
+8. `sin(float4)` under the JIT scalarizes to libm (1.63 vs 1.71 ns/elem measured); the
+   interpreter and AOT run the vecmath polynomial (3e-8 max error, 1.8 ns interpreted).
+   Snake is a percent-level cost on Apple libm, so this is not a TTS rung: the JIT emitting
+   the vecmath polynomial for vector sin/cos is a dasLLVM follow-up (codegen-version bump).
+
+Ladder, in order, each rung a rig delta: (a) [T][C] + tap-GEMM convs + row-block threading
++ the reference/fast block test; (b) bert on tiles; (c) the `.dlim` bake with the served
+layouts and the generator hook slot; (d) the Accelerate tier measurement; (e) the bake-time
+quantization experiment. Predictions on this box if (a)-(b) land: nano 2267 -> ~550 ms
+(RTF 0.05, ORT parity), kokoro 5995 -> ~1400 ms (RTF 0.15).
+
+Rung (a) receipt (2026-09-02, same input and box): the generator runs token-major through
+`conv1d_rows` (tap-GEMMs on `gemm_f32_jo`, row blocks over `maybe_parallel_for`; conv_post's
+22 columns served at 32), `snake_rows`, `adain_rows` (float4 column sums per row block,
+combined in double, one folded affine), the transposed upsamplers as one GEMM plus a
+gather overlap-add; the noise convs, decoder, prosody and text encoder stay channel-major.
+nano generator 1638 -> 309 ms, total 2267 -> 941 ms (RTF 0.091); kokoro generator 5240 ->
+1101 ms, total 5995 -> 1855 ms (RTF 0.205). Both parity rigs green at the UNCHANGED bars
+(Kitten 40 cases, Kokoro 60); `tests/test_tts_blocks.das` holds every rows kernel to its
+channel-major twin at the dot-envelope bar (worst case 0.3% of the bar). Bert is now 54% of
+nano and the decoder 9% of kokoro - rung (b) next.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the

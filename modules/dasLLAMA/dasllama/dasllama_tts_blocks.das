@@ -7,24 +7,33 @@ module dasllama_tts_blocks shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_math
+require dasllama/dasllama_par
 require dasllama/dasllama_tower
 require dasllama/dasllama_common
 
 //! The StyleTTS2-lineage block home: every operator the TTS families assemble, on f32
-//! channel-major [C][T] buffers (a "row" form takes token-major [T][C] where the reference
-//! keeps that layout). One home: a family file re-implementing one of these is a defect.
-//! Convolutions run as im2col + the batched GEMM; the depthwise forms run direct.
+//! buffers in one of two layouts - channel-major [C][T] (the reference form, the oracle the
+//! parity rail and the block test hold the other form to) or token-major [T][C] (the "rows"
+//! form the generator runs: tap-GEMMs on the tiled kernel, row blocks across lanes). One home:
+//! a family file re-implementing one of these is a defect.
 
 // ===== weights =====
 
 //! One 1-D convolution, forward or transposed. `w` is the ONNX layout - [cout][cin][k] for a
-//! forward conv, [cin][cout][k] transposed; `wt` is the transposed conv's GEMM form
-//! [cout*k][cin], filled at load by `conv1d_prepare`.
+//! forward conv, [cin][cout][k] transposed. The served layouts, filled at load by
+//! `conv1d_prepare` for the dense (groups == 1) forms: `wt` [cout*k][cin] is the channel-major
+//! transposed conv's GEMM form; `wk` [k][cin][cout_s] is the rows form's per-tap B operand,
+//! its output width `cout_s` rounded up to the 16-column tile (zero columns past `cout`) so
+//! the tiled kernel never falls to the scalar strip; `wtr` [cin][k*cout] is the rows form's
+//! transposed-conv B operand (tap-major columns).
 struct TtsConv1d {
     w : array<float>
     wt : array<float>
+    wk : array<float>
+    wtr : array<float>
     b : array<float>
     cout : int64
+    cout_s : int64
     cin : int64
     k : int64
     stride : int64 = 1l
@@ -87,14 +96,34 @@ def conv1d_out_len(c : TtsConv1d; t_in : int64) : int64 {
     return (t_in + c.pad_l + c.pad_r - c.dilation * (c.k - 1l) - 1l) / c.stride + 1l
 }
 
-//! Build the transposed conv's GEMM weight [cout*k][cin] from the ONNX [cin][cout][k] layout.
+//! Mint the served layouts of a dense conv from its ONNX weight: `wt` and `wtr` for a
+//! transposed conv, `wk` for a forward one.
 def conv1d_prepare(var c : TtsConv1d) {
-    return if (!c.transposed || c.groups != 1l)
-    c.wt |> reserve_resize(c.cout * c.k * c.cin)
-    for (ci in range64(c.cin)) {
+    c.cout_s = c.cout
+    return if (c.groups != 1l)
+    if (c.transposed) {
+        c.wt |> reserve_resize(c.cout * c.k * c.cin)
+        c.wtr |> reserve_resize(c.cin * c.k * c.cout)
+        for (ci in range64(c.cin)) {
+            for (co in range64(c.cout)) {
+                for (kk in range64(c.k)) {
+                    let v = c.w[(ci * c.cout + co) * c.k + kk]
+                    c.wt[(co * c.k + kk) * c.cin + ci] = v
+                    c.wtr[(ci * c.k + kk) * c.cout + co] = v
+                }
+            }
+        }
+    } else {
+        c.cout_s = (c.cout + 15l) / 16l * 16l
+        c.wk |> reserve_resize(c.k * c.cin * c.cout_s)
+        for (i in range64(c.k * c.cin * c.cout_s)) {
+            c.wk[i] = 0.0
+        }
         for (co in range64(c.cout)) {
-            for (kk in range64(c.k)) {
-                c.wt[(co * c.k + kk) * c.cin + ci] = c.w[(ci * c.cout + co) * c.k + kk]
+            for (ci in range64(c.cin)) {
+                for (kk in range64(c.k)) {
+                    c.wk[(kk * c.cin + ci) * c.cout_s + co] = c.w[(co * c.cin + ci) * c.k + kk]
+                }
             }
         }
     }
@@ -115,9 +144,14 @@ def transpose_ct(x : array<float>; c, t : int64; var y : array<float>) {
 
 //! [T][C] -> [C][T]
 def transpose_tc(x : array<float>; t, c : int64; var y : array<float>) {
+    transpose_tc_strided(x, t, c, c, y)
+}
+
+//! [T][C] rows of stride `row_stride` (>= c; the served width's padding columns dropped) -> [C][T]
+def transpose_tc_strided(x : array<float>; t, c, row_stride : int64; var y : array<float>) {
     y |> reserve_resize(c * t)
     for (ti in range64(t)) {
-        let row = ti * c
+        let row = ti * row_stride
         for (ci in range64(c)) {
             y[ci * t + ti] = x[row + ci]
         }
@@ -252,6 +286,122 @@ def conv1d(c : TtsConv1d; x : array<float>; t_in : int64; @exact_size var y : ar
     }
 }
 
+// ===== convolution, rows form =====
+
+let private ROWS_OVERSPLIT = 2   // row-block chunks per lane: balance against the tap ranges' ragged ends
+
+//! Every rows-form kernel walks channels four at a time.
+def private rows_width_check(c : int64; what : string) {
+    if (c % 4l != 0l) {
+        panic("dasLLAMA tts: {what} needs a channel count divisible by 4, got {c}")
+    }
+}
+
+// Forward dense conv, stride 1: y rows start as the bias, then each tap accumulates one GEMM
+// over the rows whose shifted input row exists - no im2col, no bounds check inside the kernel.
+def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
+    let t_out = conv1d_out_len(c, t_in)
+    let cin = c.cin
+    let cout = c.cout_s
+    let nbias = empty(c.b) ? 0l : c.cout
+    let k = c.k
+    let dil = c.dilation
+    let pad_l = c.pad_l
+    var yp = unsafe(addr(y[0]))
+    let xp = unsafe(addr<float const?>(x[0]))
+    let wp = unsafe(addr<float const?>(c.wk[0]))
+    let bp = nbias > 0l ? unsafe(addr<float const?>(c.b[0])) : null
+    let chunks = matmul_chunks(int(t_out), ROWS_OVERSPLIT, t_out * cin * cout * k)
+    maybe_parallel_for(0, int(t_out), chunks) $(rb, re) {
+        unsafe {
+            for (r in range64(int64(rb), int64(re))) {
+                var yrow = yp + r * cout
+                for (co in range64(cout)) {
+                    yrow[co] = co < nbias ? bp[co] : 0.0
+                }
+            }
+            for (kk in range64(k)) {
+                let shift = kk * dil - pad_l
+                let r0 = max(int64(rb), -shift)
+                let r1 = min(int64(re), t_in - shift)
+                if (r1 > r0) {
+                    gemm_f32_jo(yp + r0 * cout, xp + (r0 + shift) * cin, wp + kk * cin * cout, r1 - r0, cin, cout)
+                }
+            }
+        }
+    }
+}
+
+// Transposed dense conv: one GEMM lifts every input row to its k taps [t_in][k*cout], then
+// each output row gathers the taps that land on it - disjoint rows, so both halves split
+// across lanes.
+def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
+    let t_out = conv1d_out_len(c, t_in)
+    let cin = c.cin
+    let cout = c.cout
+    let k = c.k
+    let dil = c.dilation
+    let pad_l = c.pad_l
+    let stride = c.stride
+    let d = k * cout
+    let has_bias = !empty(c.b)
+    var inscope @scratch v : array<float>
+    v |> reserve_resize(t_in * d)
+    var vp = unsafe(addr(v[0]))
+    let xp = unsafe(addr<float const?>(x[0]))
+    let wp = unsafe(addr<float const?>(c.wtr[0]))
+    let chunks_in = matmul_chunks(int(t_in), ROWS_OVERSPLIT, t_in * cin * d)
+    maybe_parallel_for(0, int(t_in), chunks_in) $(rb, re) {
+        unsafe {
+            for (i in range64(int64(rb) * d, int64(re) * d)) {
+                vp[i] = 0.0
+            }
+            gemm_f32_jo(vp + int64(rb) * d, xp + int64(rb) * cin, wp, int64(re - rb), cin, d)
+        }
+    }
+    var yp = unsafe(addr(y[0]))
+    let vcp = unsafe(addr<float const?>(v[0]))
+    let b4p = has_bias ? unsafe(addr<float4 const?>(c.b[0])) : null
+    let chunks_out = matmul_chunks(int(t_out), ROWS_OVERSPLIT, t_out * d)
+    maybe_parallel_for(0, int(t_out), chunks_out) $(rb, re) {
+        unsafe {
+            let c4 = cout / 4l
+            for (p in range64(int64(rb), int64(re))) {
+                var y4 = reinterpret<float4?>(yp + p * cout)
+                for (j in range64(c4)) {
+                    y4[j] = has_bias ? b4p[j] : float4(0.0)
+                }
+                for (kk in range64(k)) {
+                    let q = p + pad_l - kk * dil
+                    if (q >= 0l && q % stride == 0l && q / stride < t_in) {
+                        let v4 = reinterpret<float4 const?>(vcp + (q / stride) * d + kk * cout)
+                        for (j in range64(c4)) {
+                            y4[j] += v4[j]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! y [t_out][cout_s] = conv(x [t_in][cin]) in the rows form; the row stride is the served
+//! width `cout_s`. Dense convs only, forward at stride 1 or transposed; every other shape
+//! runs the channel-major `conv1d`.
+def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @exact_size var y : array<float>) {
+    if (c.groups != 1l || (!c.transposed && c.stride != 1l)) {
+        panic("dasLLAMA tts: the rows conv takes a dense conv (forward at stride 1, or transposed); got groups={c.groups} stride={c.stride} transposed={c.transposed}")
+    }
+    let t_out = conv1d_out_len(c, t_in)
+    y |> reserve_resize(t_out * c.cout_s)
+    if (c.transposed) {
+        rows_width_check(c.cout, "conv1d_rows (transposed)")
+        conv1d_rows_transposed(c, x, t_in, y)
+    } else {
+        conv1d_rows_dense(c, x, t_in, y)
+    }
+}
+
 // ===== dense =====
 
 //! y [t][nout] = x [t][nin] . w^T + b
@@ -352,6 +502,95 @@ def adain(a : TtsAdaIn; var x : array<float>; c, t : int64; style : array<float>
         let row = ci * t
         for (ti in range64(t)) {
             x[row + ti] = x[row + ti] * g + bb
+        }
+    }
+}
+
+// Per-channel sums over the rows of x [t][c] (of x itself, or of (x - center)^2), float4 lanes
+// per row block, the blocks combined in double: `out` [c].
+def private column_sums(x : array<float>; t, c : int64; center : array<float>; squared : bool; var out : array<float>) {
+    let nslot = int64(max(get_dispatch_slot_bound(), 1))
+    var inscope @scratch part : array<float>
+    part |> reserve_resize(nslot * c)
+    for (i in range64(nslot * c)) {
+        part[i] = 0.0
+    }
+    let xp = unsafe(addr<float const?>(x[0]))
+    var pp = unsafe(addr(part[0]))
+    let m4 = unsafe(addr<float4 const?>(center[0]))
+    let chunks = lanes_for_work(t * c, 0)
+    maybe_parallel_for_indexed(0, int(t), chunks) $(slot, rb, re) {
+        unsafe {
+            var acc4 = reinterpret<float4?>(pp + int64(slot) * c)
+            let c4 = c / 4l
+            if (squared) {
+                for (r in range64(int64(rb), int64(re))) {
+                    let row4 = reinterpret<float4 const?>(xp + r * c)
+                    for (j in range64(c4)) {
+                        let dv = row4[j] - m4[j]
+                        acc4[j] += dv * dv
+                    }
+                }
+            } else {
+                for (r in range64(int64(rb), int64(re))) {
+                    let row4 = reinterpret<float4 const?>(xp + r * c)
+                    for (j in range64(c4)) {
+                        acc4[j] += row4[j]
+                    }
+                }
+            }
+        }
+    }
+    out |> reserve_resize(c)
+    for (ci in range64(c)) {
+        var s = 0.0lf
+        for (k in range64(nslot)) {
+            s += double(part[k * c + ci])
+        }
+        out[ci] = float(s)
+    }
+}
+
+//! AdaIN1d in place on token-major x [T][C]: the instance-norm statistics per channel over
+//! the rows, then one per-channel affine that folds the norm's own scale and shift with
+//! (1 + gamma) and beta.
+def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<float>; eps : float) {
+    rows_width_check(c, "adain_rows")
+    var inscope @scratch h : array<float>
+    var inscope @scratch mean : array<float>
+    var inscope @scratch ssq : array<float>
+    var inscope @scratch scale : array<float>
+    var inscope @scratch shift : array<float>
+    linear_vec(a.fc, style, h)
+    column_sums(x, t, c, h, false, mean)
+    let inv_t = 1.0 / float(t)
+    for (ci in range64(c)) {
+        mean[ci] *= inv_t
+    }
+    column_sums(x, t, c, mean, true, ssq)
+    scale |> reserve_resize(c)
+    shift |> reserve_resize(c)
+    for (ci in range64(c)) {
+        let rs = 1.0 / sqrt(ssq[ci] * inv_t + eps)
+        let g = empty(a.norm.w) ? 1.0 : a.norm.w[ci]
+        let bb = empty(a.norm.b) ? 0.0 : a.norm.b[ci]
+        let gamma1 = 1.0 + h[ci]
+        scale[ci] = rs * g * gamma1
+        shift[ci] = (bb - mean[ci] * rs * g) * gamma1 + h[c + ci]
+    }
+    var xp = unsafe(addr(x[0]))
+    let s4 = unsafe(addr<float4 const?>(scale[0]))
+    let b4 = unsafe(addr<float4 const?>(shift[0]))
+    let chunks = lanes_for_work(t * c, 0)
+    maybe_parallel_for(0, int(t), chunks) $(rb, re) {
+        unsafe {
+            let c4 = c / 4l
+            for (r in range64(int64(rb), int64(re))) {
+                var row4 = reinterpret<float4?>(xp + r * c)
+                for (j in range64(c4)) {
+                    row4[j] = mad(row4[j], s4[j], b4[j])
+                }
+            }
         }
     }
 }
@@ -461,6 +700,32 @@ def snake(var x : array<float>; c, t : int64; alpha : array<float>) {
         for (ti in range64(t)) {
             let s = sin(a * x[row + ti])
             x[row + ti] += inv * (s * s)
+        }
+    }
+}
+
+//! Snake on token-major x [T][C]: four channels per lane, row blocks across lanes.
+def snake_rows(var x : array<float>; t, c : int64; alpha : array<float>) {
+    rows_width_check(c, "snake_rows")
+    var inscope @scratch inv : array<float>
+    inv |> reserve_resize(c)
+    for (ci in range64(c)) {
+        inv[ci] = 1.0 / alpha[ci]
+    }
+    var xp = unsafe(addr(x[0]))
+    let a4 = unsafe(addr<float4 const?>(alpha[0]))
+    let i4 = unsafe(addr<float4 const?>(inv[0]))
+    let chunks = lanes_for_work(t * c * 8l, 0)
+    maybe_parallel_for(0, int(t), chunks) $(rb, re) {
+        unsafe {
+            let c4 = c / 4l
+            for (r in range64(int64(rb), int64(re))) {
+                var row4 = reinterpret<float4?>(xp + r * c)
+                for (j in range64(c4)) {
+                    let s = sin(a4[j] * row4[j])
+                    row4[j] = mad(i4[j], s * s, row4[j])
+                }
+            }
         }
     }
 }
@@ -762,6 +1027,22 @@ def polar_to_rect(x : array<float>; bins, frames : int64; @exact_size var re : a
     }
 }
 
+//! `polar_to_rect` from token-major rows x [frames][stride] (magnitude columns then phase
+//! columns, `stride` >= 2*bins) into the channel-major pair the inverse conv consumes.
+def polar_to_rect_rows(x : array<float>; stride, bins, frames : int64; @exact_size var re : array<float>; @exact_size var im : array<float>) {
+    re |> reserve_resize(bins * frames)
+    im |> reserve_resize(bins * frames)
+    for (f in range64(frames)) {
+        let row = f * stride
+        for (b in range64(bins)) {
+            let mag = exp(x[row + b])
+            let ph = sin(x[row + bins + b])
+            re[b * frames + f] = mag * cos(ph)
+            im[b * frames + f] = mag * sin(ph)
+        }
+    }
+}
+
 //! Edge-pad a mono signal by `pad` samples on both sides.
 def pad_edge(x : array<float>; n, pad : int64; @exact_size var y : array<float>) {
     y |> reserve_resize(n + 2l * pad)
@@ -816,6 +1097,19 @@ def pad_reflect_left(x : array<float>; c, t, left : int64; @exact_size var y : a
         for (to in range64(t_out)) {
             let src = to - left
             y[ci * t_out + to] = x[ci * t + abs(src)]
+        }
+    }
+}
+
+//! The rows twin of `pad_reflect_left`: y [t + left][c] from x [t][c].
+def pad_reflect_left_rows(x : array<float>; t, c, left : int64; @exact_size var y : array<float>) {
+    let t_out = t + left
+    y |> reserve_resize(t_out * c)
+    for (to in range64(t_out)) {
+        let src = abs(to - left) * c
+        let dst = to * c
+        for (ci in range64(c)) {
+            y[dst + ci] = x[src + ci]
         }
     }
 }

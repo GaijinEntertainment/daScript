@@ -685,6 +685,7 @@ def styletts2_prosody(p : St2Predictor; en : array<float>; c, frames : int64; s 
     return f2
 }
 
+// One Snake residual block on token-major x [t][c].
 def private gen_res_block(b : St2GenResBlock; var x : array<float>; t : int64; s : array<float>) {
     let n = b.c * t
     var inscope @exact_size xt : array<float>
@@ -692,12 +693,12 @@ def private gen_res_block(b : St2GenResBlock; var x : array<float>; t : int64; s
     var inscope @exact_size y2 : array<float>
     for (j in range(length(b.convs1))) {
         copy_floats_into(x, n, xt)
-        adain(b.adain1[j], xt, b.c, t, s, LN_EPS)
-        snake(xt, b.c, t, b.alpha1[j])
-        conv1d(b.convs1[j], xt, t, y1)
-        adain(b.adain2[j], y1, b.c, t, s, LN_EPS)
-        snake(y1, b.c, t, b.alpha2[j])
-        conv1d(b.convs2[j], y1, t, y2)
+        adain_rows(b.adain1[j], xt, t, b.c, s, LN_EPS)
+        snake_rows(xt, t, b.c, b.alpha1[j])
+        conv1d_rows(b.convs1[j], xt, t, y1)
+        adain_rows(b.adain2[j], y1, t, b.c, s, LN_EPS)
+        snake_rows(y1, t, b.c, b.alpha2[j])
+        conv1d_rows(b.convs2[j], y1, t, y2)
         for (i in range64(n)) {
             x[i] += y2[i]
         }
@@ -744,29 +745,32 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
                             har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?) {
     var inscope @exact_size y : array<float>
     var inscope @exact_size xs : array<float>
+    var inscope @exact_size src_ct : array<float>
     var inscope @exact_size src : array<float>
     leaky_relu(x, cc * tt, 0.1)
-    conv1d(d.noise_convs[i], har_spec, har_frames, src)
+    conv1d(d.noise_convs[i], har_spec, har_frames, src_ct)
     let src_t = conv1d_out_len(d.noise_convs[i], har_frames)
+    let src_c = d.noise_convs[i].cout
     if (tr != null && i == 0l) {
-        tr.src0 := src
+        tr.src0 := src_ct
     }
+    transpose_ct(src_ct, src_c, src_t, src)
     gen_res_block(d.noise_res[i], src, src_t, s)
     if (tr != null && i == 0l) {
-        tr.nres0 := src
+        transpose_tc(src, src_t, src_c, tr.nres0)
     }
-    conv1d(d.ups[i], x, tt, y)
+    conv1d_rows(d.ups[i], x, tt, y)
     tt = conv1d_out_len(d.ups[i], tt)
     cc = d.ups[i].cout
     if (tr != null) {
         if (i == 0l) {
-            tr.ups0 := y
+            transpose_tc(y, tt, cc, tr.ups0)
         } else {
-            tr.ups1 := y
+            transpose_tc(y, tt, cc, tr.ups1)
         }
     }
     if (i == long_length(d.ups) - 1l) {
-        pad_reflect_left(y, cc, tt, 1l, x)
+        pad_reflect_left_rows(y, tt, cc, 1l, x)
         tt++
     } else {
         delete x
@@ -788,11 +792,11 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
         gen_res_block(d.resblocks[i * d.n_kernels + j], y, tt, s)
         if (tr != null && i == 0l) {
             if (j == 0l) {
-                tr.rb0 := y
+                transpose_tc(y, tt, cc, tr.rb0)
             } elif (j == 1l) {
-                tr.rb1 := y
+                transpose_tc(y, tt, cc, tr.rb1)
             } elif (j == 2l) {
-                tr.rb2 := y
+                transpose_tc(y, tt, cc, tr.rb2)
             }
         }
         for (e in range64(n)) {
@@ -810,7 +814,7 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; var
 def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : array<float>;
                         har_spec : array<float>; har_frames : int64; var tr : StyleTts2Trace?; @exact_size var wave : array<float>) : int64 {
     var inscope @exact_size x : array<float>
-    copy_floats_into(x_in, c * t, x)
+    transpose_ct(x_in, c, t, x)
     var cc = c
     var tt = t
     for (i in range64(long_length(d.ups))) {
@@ -818,13 +822,13 @@ def styletts2_generator(d : St2Decoder; x_in : array<float>; c, t : int64; s : a
     }
     leaky_relu(x, cc * tt, 0.01)
     var inscope @exact_size y : array<float>
-    conv1d(d.conv_post, x, tt, y)
+    conv1d_rows(d.conv_post, x, tt, y)
     if (tr != null) {
-        tr.conv_post := y
+        transpose_tc_strided(y, tt, d.conv_post.cout, d.conv_post.cout_s, tr.conv_post)
     }
     var inscope @exact_size re : array<float>
     var inscope @exact_size im : array<float>
-    polar_to_rect(y, d.bins, tt, re, im)
+    polar_to_rect_rows(y, d.conv_post.cout_s, d.bins, tt, re, im)
     var inscope @exact_size wr : array<float>
     var inscope @exact_size wi : array<float>
     conv1d(d.stft_bwd_re, re, tt, wr)
