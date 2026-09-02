@@ -813,9 +813,11 @@ acceptance columns are flagged, not compared.
 67.5 (74.6%, 1.14x), depth 2 55.7 (0.94x); llama.cpp off 51.2-53.2, n_max 1 62.1-72.4 (pooled 66.9)
 - a wash at depth 1 on this GPU. Only the math continuation matches there.
 
-**Ruler, Qwen3.8-27B + Q8_0 head, M5 Max**: llama.cpp off 24.8-25.8, n_max 1 32.8-35.0 (1.34x),
-n_max 2 30.0-36.7; ours off 27.5, depth 1 32.5 (1.18x, 77.4%), depth 2 29.9 - final rows pending
-the exe-first rerun. Round split (`DASLLAMA_MTP_DEBUG=time`, 1 rep, n 64): draft 3.0 ms, verify
+**Ruler, Qwen3.8-27B + Q8_0 head, M5 Max** (`records/mtp_m5_Qwen3.8-27B.json`, exe-first, settle
+180): ours off 27.6, depth 1 **33.0 (1.20x, 77.4%)**, depth 2 31.4 (1.14x; p1 83.9 p2 66.3);
+llama.cpp stock off 24.6-25.8 (llama-bench 25.9), n_max 1 32.9-35.0 (1.34x), n_max 2 30.0-36.7.
+Only the writing continuation matches across engines on this carrier (the Q4_K_M dequant paths
+differ more than gemma's), so three of four acceptance columns are flagged. Round split (`DASLLAMA_MTP_DEBUG=time`, 1 rep, n 64): draft 3.0 ms, verify
 42-43 ms on a 36 ms plain step (**1.19x**), walk+commit 0.25 ms, replay 0.3-0.4 ms, 1.72-1.80
 tokens/round. Their dense two-row verify rides at ~1.05x a step, which is the whole difference at
 equal acceptance (followup #72). The CPU point (both engines `-ngl 0`, our NextN depth 1) is queued.
