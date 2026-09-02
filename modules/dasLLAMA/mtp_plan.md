@@ -617,7 +617,9 @@ MTP verify is gated on the three qwen MTP twins. Still owed (ledgered):
   p1 81.3 p2 64.3 p3 34.5 p4 22.4** (off 27.4, on 19.4 = 0.71x at depth 4) - the same p1 as the 3.6's
   Q4 head, so head quantization is not the p1 limiter either; what is left between our ~81% and
   vLLM's 93.5% is the Q4_K_M TARGET, the corpus (SpecBench chat turns vs their ~2k-context samples)
-  and the acceptance definition.
+  and the acceptance definition. (The Q4_0 head is not a servable pair: with it in the image the metal
+  prefill declines and the bench throws "CPU batched prefill ... on a Metal-capable build"; the Q8_0
+  head is the pair.)
 
 ## Predictions (logged BEFORE each measurement)
 
