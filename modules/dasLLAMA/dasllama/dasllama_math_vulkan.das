@@ -300,6 +300,7 @@ def private vk_caps_fill(phys : VkPhysicalDevice; var v : DlimVulkanConfig) {
     let has_cm = cooperative_matrix_supported(phys)
     let has_cm2 = has_cm && cooperative_matrix2_supported(phys)
     v.coopmat_mode = resolve_coopmat_mode(has_cm, has_cm2)
+    v.decvec = v.coopmat_mode == 4 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(phys)
     v.subgroup_size = int(subgroup_properties(phys).subgroupSize)
     var props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(phys, props)

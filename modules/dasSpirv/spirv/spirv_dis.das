@@ -8,6 +8,7 @@ options gen2
 module spirv_dis shared public
 
 require spirv_grammar
+require spirv_builder   // string_words: the OpExtension literal the strip matches
 require strings
 
 // Walk instructions (header skipped). The block gets the opcode and a [opStart, opStart+opCount)
@@ -128,6 +129,103 @@ def public count_op_operand_at(words : array<uint>; op : SpvOp; idx : int; value
         }
     }
     return count
+}
+
+// The extra operand words a MemoryAccess mask carries (Aligned's literal, the two scope ids).
+def private memory_access_extra_words(mask : uint) : int {
+    var n = 0
+    if ((mask & uint(SpvMemoryAccess.Aligned)) != 0u) {
+        n++
+    }
+    if ((mask & uint(SpvMemoryAccess.MakePointerAvailable)) != 0u) {
+        n++
+    }
+    if ((mask & uint(SpvMemoryAccess.MakePointerVisible)) != 0u) {
+        n++
+    }
+    return n
+}
+
+// Remove the four-wide decode twin's use from a finished module, for a device that lacks
+// VK_NV_cooperative_matrix_decode_vector: the capability and extension declarations go, and every
+// OpCooperativeMatrixLoadTensorNV drops the DecodeVectorFunc bit and its operand. The twin's
+// OpFunction stays, unreferenced. Returns true when anything was stripped. The scalar DecodeFunc
+// the spec requires beside the twin is what serves the load afterwards.
+[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+def public strip_decode_vector(var words : array<uint>) : bool {
+    var out : array<uint>
+    out |> reserve(length(words))
+    for (i in range(5)) {
+        out |> push(words[i])
+    }
+    let ext_words <- string_words("SPV_NV_cooperative_matrix_decode_vector")
+    var stripped = false
+    var i = 5
+    let n = length(words)
+    while (i < n) {
+        let w0 = words[i]
+        let wc = int(w0 >> 16u)
+        let op = w0 & 0xFFFFu
+        if (wc == 0 || i + wc > n) {
+            break
+        }
+        var drop = false
+        var drop_at = -1   // operand index (0-based after word0) of the DecodeVectorFunc id to omit
+        if (op == uint(SpvOp.Capability) && wc == 2 && words[i + 1] == uint(SpvCapability.CooperativeMatrixDecodeVectorNV)) {
+            drop = true
+        } elif (op == uint(SpvOp.Extension) && wc == 1 + length(ext_words)) {
+            var same = true
+            for (k in range(length(ext_words))) {
+                if (words[i + 1 + k] != ext_words[k]) {
+                    same = false
+                }
+            }
+            drop = same
+        } elif (op == uint(SpvOp.CooperativeMatrixLoadTensorNV)) {
+            // operands: rtype, res, ptr, obj, layout, memop [memop extras], ta_mask [view] [decode] [decode_v]
+            let mi = 6 + memory_access_extra_words(words[i + 6])
+            if (mi < wc) {
+                let ta = words[i + 1 + mi]
+                if ((ta & uint(SpvTensorAddressingOperands.DecodeVectorFunc)) != 0u) {
+                    var pos = mi + 1
+                    if ((ta & uint(SpvTensorAddressingOperands.TensorView)) != 0u) {
+                        pos++
+                    }
+                    if ((ta & uint(SpvTensorAddressingOperands.DecodeFunc)) != 0u) {
+                        pos++
+                    }
+                    drop_at = pos
+                    let nwc = uint(wc - 1)
+                    out |> push((nwc << 16u) | op)
+                    for (k in range(wc - 1)) {
+                        if (k == mi) {
+                            out |> push(ta & ~uint(SpvTensorAddressingOperands.DecodeVectorFunc))
+                        } elif (k != drop_at) {
+                            out |> push(words[i + 1 + k])
+                        }
+                    }
+                    stripped = true
+                    i += wc
+                    continue
+                }
+            }
+        }
+        if (drop) {
+            stripped = true
+        } else {
+            for (k in range(wc)) {
+                out |> push(words[i + k])
+            }
+        }
+        i += wc
+    }
+    if (stripped) {
+        delete words
+        words <- out
+    } else {
+        delete out
+    }
+    return stripped
 }
 
 // Operand-role classifier for the symbolic dump: is operand `idx` (0-based, after the opcode name) of

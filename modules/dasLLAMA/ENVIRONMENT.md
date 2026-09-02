@@ -124,6 +124,7 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_MM_SMALLD` | number | 64 | Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument. |
 | `DASLLAMA_VK_FUSE` | flag | on | Fused add+rms+requant: the decode tail (plus qk-norm+rope) AND the prefill batch ar+rq pairs; 0 pins the split dispatches for a same-build A/B. |
 | `DASLLAMA_VK_XFERQ` | flag | on | Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail. |
+| `DASLLAMA_VK_DECVEC` | flag | on | Run the cm2 tiles' four-wide decode callback where the device has VK_NV_cooperative_matrix_decode_vector; 0 strips it and serves the scalar callback - the same-build A/B and the fallback probe. |
 | `DASLLAMA_VK_IMPORT` | flag | on | Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path. |
 | `DASLLAMA_TRIM` | flag | off | Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity). |
 | `DASLLAMA_VK_MEMPRIO` | flag | on | Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours. |

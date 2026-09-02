@@ -4908,14 +4908,14 @@ class template KqCm2BatchT : MoeCmBase {
                 var k = 0u
                 for (_i in range(int(pa.n / 512u))) {
                     for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, true)
                         coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                         acc = coopmatMulAdd(a, b, acc)
                         k += 64u
                     }
                 }
                 while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, true)
                     coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                     acc = coopmatMulAdd(a, b, acc)
                     k += 64u
@@ -4929,14 +4929,14 @@ class template KqCm2BatchT : MoeCmBase {
             var k = k0
             for (_i in range(int((k1 - k0) / 512u))) {
                 for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, true)
                     coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                     acc = coopmatMulAdd(a, b, acc)
                     k += 64u
                 }
             }
             while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, true)
                 coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                 acc = coopmatMulAdd(a, b, acc)
                 k += 64u

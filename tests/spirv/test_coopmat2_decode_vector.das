@@ -12,7 +12,8 @@ require dastest/testing_boost public
 require _spirv_common               // validate_spirv, coopmat2_words, Cm2BlockQ8, cm2_decode_q8
 require spirv/spirv_shader
 require spirv/spirv_builtins
-require spirv/spirv_dis             // count_op, op_has_operand, count_op_operand_at
+require spirv/spirv_dis             // count_op, op_has_operand, count_op_operand_at, strip_decode_vector
+require spirv/spirv_builder         // string_words
 require spirv/spirv_grammar         // SpvOp, SpvCapability, SpvTensorAddressingOperands
 
 var @ssbo @binding = 0 dv_a : array<Cm2BlockQ8>
@@ -152,6 +153,33 @@ def test_coopmat2_decode_vector_synth(t : T?) {
         if (r.ran) {
             t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
         }
+    }
+}
+
+[test]
+def test_coopmat2_decode_vector_strip(t : T?) {
+    t |> run("strip_decode_vector: the device-without-the-feature fallback leaves a scalar-only module") <| @(t : T?) {
+        var stripped := coopmat2_dv_synth_spv
+        t |> success(strip_decode_vector(stripped), "a module naming the twin reports the strip")
+        t |> success(!op_has_operand(stripped, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixDecodeVectorNV)),
+            "the capability is gone")
+        t |> success(count_op(stripped, SpvOp.Extension) == count_op(coopmat2_dv_synth_spv, SpvOp.Extension) - 1,
+            "the extension declaration is gone")
+        t |> success(count_op_operand_at(stripped, SpvOp.CooperativeMatrixLoadTensorNV, 6, uint(SpvTensorAddressingOperands.DecodeFunc)) == 1,
+            "the load's mask carries DecodeFunc alone")
+        t |> success(length(stripped) == length(coopmat2_dv_synth_spv) - 2 - (1 + length(string_words("SPV_NV_cooperative_matrix_decode_vector"))) - 1,
+            "exactly the capability, the extension and one operand word left the module")
+        t |> success(count_op(stripped, SpvOp.Function) == 3,
+            "the twin's OpFunction stays, unreferenced")
+        var again := stripped
+        t |> success(!strip_decode_vector(again), "a scalar-only module reports nothing to strip")
+        t |> success(length(again) == length(stripped), "and is left as it was")
+        let r = validate_spirv(stripped, "vulkan1.3")
+        if (r.ran) {
+            t |> success(r.ok, "spirv-val (vulkan1.3) on the stripped module: {r.msg}")
+        }
+        delete again
+        delete stripped
     }
 }
 

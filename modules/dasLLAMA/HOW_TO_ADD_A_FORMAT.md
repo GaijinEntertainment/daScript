@@ -199,7 +199,11 @@ verbatim; scales the 20 B `KQ_DEV_SSB` row) plus three eight-line width stamps, 
 `cm2_cls_ensure/set/enc` ladders, and `pf_f16_feed` admits it via `kq_sb` automatically. A
 codebook format raises the `IQLUT` axis - a gated `@workgroup` f16 table staged ahead of the
 tile loop (llama.cpp's `init_iq_shmem` form); never select codes out of a register vector per
-element inside a decode callback. Gate: a device-form CPU oracle (`<fmt>f16_gemm_oracle`) and
+element inside a decode callback. The four-wide decode twin comes with the template: its loads
+pass `true` as `coopmatLoadTensorDecode`'s tenth argument, so the emitter synthesizes the vector
+callback over `decode` and a format authors nothing for it; a hand-laid `half4` twin (a second
+`[spirv_decode]` method in that slot) is for a format whose probe shows the synthesized one
+trailing. Gate: a device-form CPU oracle (`<fmt>f16_gemm_oracle`) and
 an l/m/s cell in `tests/test_vulkan_kernels.das`. Payoff on the 1B: iq4xs pp512 5161 -> 15334,
 k3 5174 -> 14031 (0.90x / 0.80x llama.cpp's Vulkan, from 0.30x).
 
