@@ -56,7 +56,7 @@ def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : i
     let ncg = n / kgroup
     var tw : array<int8>
     var ts : array<float>
-    tw |> reserve(d * n)   // the plane-size scratch: reserve first, a bare resize past 64 MB trips max_unreserved_size
+    tw |> reserve(d * n)
     tw |> resize(d * n)
     ts |> reserve(d * nb)
     ts |> resize(d * nb)
@@ -293,6 +293,7 @@ def repack_k5_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete ts
 }
 
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def repack_k6_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let nsb = n / 256l
     let qrow = nsb * 192l
@@ -326,7 +327,7 @@ def repack_k6_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
                             }
                         }
                     }
-                    for (blk in range64(8l)) {   // qh re-packed per sub-block: column 2blk + half holds the four j sites' 2-bit fields at 2j
+                    for (blk in range64(8l)) {   // qh re-packed per sub-block
                         for (half in range64(2l)) {
                             for (t in range64(4l)) {
                                 var byte = 0u
@@ -443,6 +444,7 @@ def repack_iq4xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
 //! k3 grp layout: the qs bytes as 16 four-byte columns ([h 0..1][8 l-groups]) x mr rows, then the
 //! hmask as 8 columns x mr rows at 64*mr — the 2-bit lanes and mask bits stay in place (the
 //! kernels shift per block); scales interleave as k6's row ([16 x mr int8][mr x f16 d]).
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let nsb = n / 256l
     let qrow = nsb * 96l
@@ -466,7 +468,7 @@ def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
                 for (r in range64(mr)) {
                     let sq = (g * mr + r) * qrow + sbi * 96l
                     let ss = (g * mr + r) * srow + sbi * 18l
-                    for (blk in range64(8l)) {   // qs: column 2blk + half holds the sub-block's four j sites at 2j; hmask: column blk, its eight sites at bit s (lo j, hi 4 + j)
+                    for (blk in range64(8l)) {   // qs and hmask re-packed per sub-block
                         for (half in range64(2l)) {
                             for (t in range64(4l)) {
                                 var qbyte = 0u
@@ -994,6 +996,7 @@ def unpack_iq2xxs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int6
     }
 }
 
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
     if (fmt == 33l) {
         unpack_iq3s_panel_grp(kqg, dst, mr, nsb)
@@ -1025,7 +1028,7 @@ def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, n
             let qb = sbi * (fmt == 5l ? 160l : 192l) * mr
             let ob = sbi * 256l * mr
             for (blk in range64(8l)) {
-                let hbase = qb + 128l * mr + blk * 2l * mr * 4l   // k6 high plane: columns 2blk (lo half) and 2blk + 1 (hi); k5 ignores
+                let hbase = qb + 128l * mr + blk * 2l * mr * 4l   // k6 high plane (k5 ignores)
                 for (j in range64(4l)) {
                     let sj = uint64(2l * j)
                     let gcol = ((blk * 4l + j) * mr) * 4l

@@ -160,3 +160,32 @@ no model, no tuner, every arm gated against a CPU plane-dequant oracle before it
 chain every dispatch through ONE shared output buffer on purpose - the serialized regime is
 the instrument's probe shape, imitating the reference tool it is compared against - and its
 numbers reach the engine only through a human porting decision, never a minted crown.
+
+### 2.26 The gemv takes its own tune seat {#gemv-seat}
+
+A kq family's manifest entry is its tile-best row, and the gemv gets a SECOND entry when a different
+row serves the streamed decode better. Only same-mr rows can differ, because the layout companion
+pins the plane's interleave; of those the two best by tile time race, the winner takes the gemv only
+by the margin over the tile winner's own gemv, and the incumbent keeps a tie. Every family's perm grid
+therefore carries a 256-wide `mr = 16` alternate beside its 512-wide tile crown. The seat is decided
+at the engine's decode shape - a DRAM-bound plane streamed by every lane through the engine's own
+splitter - because the engine's row length moves the answer (k3 on Granite Rapids: the 256 seat wins
+at n=2048 and loses at 14336). The seat fixture is a 512-row build at the ffn width tiled 320 times,
+past the largest L3 a socket lends a slice of, and the seat takes the MEDIAN of seven rounds: a round
+that finds the plane in L3 must not crown it. In normal mode `llvm_tune` stamps a companion from its
+own manifest entry when one exists and is a perm this box can run, else from the tile's.
+
+### 2.27 The CPU kernel bench's fixture conditions {#cpu-kernel-bench-fixture}
+
+`benchmarks/matmul/kq_kernel_bench.das` times raw kernels on synthetic planes, and three fixture
+properties decide whether its numbers mean anything. Every plane of one format lives in ONE arena at
+fixed offsets, staggered so no two starts share their low 12 address bits: the heap places separate
+arrays at run-dependent relative addresses, and planes that alias in the L1/L2 set logic make a run's
+time depend on where the heap put them. Scale planes are filled with a byte that is a normal number in
+every scale form, never random bytes, because denormal math runs orders of magnitude slower. Each row
+is warmed before it is timed - three unmeasured rounds solo, six dispatches per row on the team arm -
+because a core ramps over several rounds and one warm call is not enough. The q8 row exists in two
+flavors: f32 group scales (the engine's own quantization) and `q8s16` over binary16 scales - the
+wscale_f16 rail a GGUF q8_0 tensor runs, and the like-for-like row against the reference's q8_0.
+Provenance for every figure in this section: `benchmarks/matmul/kq_kernel_bench.das` under
+`DAS_TUNE_MODE=tune`, one thread, its default `--fmt` / `-n` / `-d` shape.

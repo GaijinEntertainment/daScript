@@ -3,8 +3,8 @@
 # one thread, normal tune mode = the winner this box ships) against the reference exe's
 # test-backend-ops perf at the same shape, decode (n=1) and prefill (n=512) rows, joined with
 # the ratio (reference us / ours us; >= 1.0 = ours is faster). No model, no jobque: the kernel
-# and nothing else. The bench's arena sits page-aligned (--base-align 4096) - the engine's image
-# planes start on 16 KiB boundaries, and k6/k3 read 10-30% differently at the heap's random phase. The reference binary needs the GGML_BENCH_THREADS define (harness README).
+# and nothing else. The bench's arena sits page-aligned (--base-align 4096), the phase the engine's
+# image planes give the kernels. The reference binary needs the GGML_BENCH_THREADS define (harness README).
 #
 # Usage: kernel_ladder.sh [fmt,fmt,...]          (default: every format)
 #   KL_DASLANG the daslang binary (default: this tree's bin/daslang, or bin/Release/daslang.exe on

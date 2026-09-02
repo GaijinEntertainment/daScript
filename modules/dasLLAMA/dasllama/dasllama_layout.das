@@ -914,6 +914,7 @@ def q8_region_to_metal_blob(qp : int8 const?; sp : float const?; n, rows : int64
 // Gather one PREPARED K-quant weight stack into the GPU tier's device planes — quant payloads
 // row-major per superblock in the k/k+16 nibble pairing, plus DECODED 20B scale rows. Reads
 // whatever the load prepared (grp<mr> interleave or disk-order); device bytes are identical either way.
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
@@ -968,7 +969,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     for (m in range64(96l)) {
                                         dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                     }
-                                } elif (fmt == KqFmt.k3) {   // qs columns 2blk + half carry a sub-block's four j sites at 2j; hmask column blk its eight sites at bit s
+                                } elif (fmt == KqFmt.k3) {   // the sub-block-packed qs + hmask columns
                                     for (m in range64(64l)) {
                                         let half = (m % 32l) / 16l
                                         let j = (m % 16l) / 4l
@@ -1011,7 +1012,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     for (bj in range64(32l)) {
                                         dq[128l + bj] = gq[128l * mr + bj * mr + r]
                                     }
-                                } elif (fmt == KqFmt.k6) {   // qh columns 2blk + half carry one sub-block's four j sites at 2j; the disk byte h*32 + half*16 + j*4 + t carries sub-blocks 4h.. at 2b
+                                } elif (fmt == KqFmt.k6) {   // the sub-block-packed qh columns
                                     for (p in range64(64l)) {
                                         let half = (p % 32l) / 16l
                                         let j = (p % 16l) / 4l

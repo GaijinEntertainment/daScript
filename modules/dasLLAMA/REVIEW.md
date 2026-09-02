@@ -249,3 +249,8 @@ the tuning the profile was meant to save.
 root) - is a `def` returning it, never a module global with a declaration initializer (`let`
 or `var`).** A team lane never runs global initializers, so the global reads zero there while
 every single-threaded run reads the right value.
+- **A `resize` of a buffer whose element count scales with a model dimension in `dasllama/` is
+  preceded by a `reserve` of the same count** (`reserve_resize` / `grow_resize` /
+  `ensure_length` in `dasllama_common.das`, or the pair spelled out). A bare grow past 64 MB trips
+  the heap's unreserved-size cap and panics the load; `dasllama_repack.das`'s plane-size scratch
+  copies were the last bare ones.

@@ -451,9 +451,8 @@ def kq_tile_entry(fmt : int64) : string => fmt == 40l ? "q40q8_tile_gen" : (fmt 
 //! the gemv companion's own manifest entry: the tile's name with the tier swapped
 def kq_gemv_entry(fmt : int64) : string => replace(kq_tile_entry(fmt), "_tile_gen", "_gemv_gen")
 
-//! the gemv's seat: among the rows sharing the tile winner's layout (mr), the two best by tile time, the one
-//! with the best streamed-decode time takes the gemv - only by the margin over the tile winner's own gemv,
-//! and the incumbent keeps a tie; "" when the tile winner keeps it (no separate entry, the companion follows)
+//! the gemv's seat among the tile winner's same-layout rows; "" when the tile winner keeps it
+[arch(at = "../ARCHITECTURE_MEASUREMENT.md#gemv-seat")]
 def private kq_gemv_seat(fmt : int64; winner : int; names : array<string>; vmr : array<int64>; tile, gemv : array<double>) : string {
     var cand <- [for (i in range(length(names))); i; where vmr[i] == vmr[winner] && tile[i] < 1.0e29lf]
     cand |> sort() $(a, b) => tile[a] < tile[b]
@@ -1318,6 +1317,7 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
 // and the gemv (streamed + hot decode shapes), print the table, and return the tile-best
 // suffix ("" = a gate failed). The kq gemv is nrsplit-independent — same-mr rows share the
 // plane and the gemv shape — so the tile bench decides the family entry.
+[arch(at = "../ARCHITECTURE_MEASUREMENT.md#gemv-seat")]
 def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var gemv_out : string&) : string { // nolint:STYLE037,STYLE038 — one family race: shared repacked buffers couple gate, bench and the two picks
     // batch shape: fat STREAMING ffn (weights > the L2 budget, multi-token-block walk) — the shape
     // class that carries ~90% of prefill time. The old 2048x512x64 kv-projection probe was L2-hot
@@ -1444,8 +1444,6 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
     }
     var tnames <- [for (t in tvs); t._0]
     winner = gen_sticky(kq_tile_entry(fmt), tnames, best, winner)
-    // the seat is decided at the engine's decode shape - a DRAM-bound plane (the streamed fixture fits L3 on
-    // server parts) streamed by every lane through the engine's splitter; the one-lane box keeps the streamed time
     var tbest : array<double>
     tbest |> resize(nv)
     for (i in range(nv)) {
@@ -1453,10 +1451,6 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
     }
     with_job_que() {   // the lane count and the team dispatch both need the live jobque
         if (get_total_hw_jobs() > 1) {
-            // the engine's row length matters (k3 on Granite Rapids: 256_mr16 wins at n=2048, loses at 14336), so the
-            // seat fixture is a short one at the ffn width, tiled: 512 rows transcode in a blink; 320 tiles make 163840
-            // rows - 600 MB for the 2-bit grids, 1.9 GB for k6 - past the 504 MB L3 a Granite Rapids socket lends a
-            // slice (a 300 MB plane came back L3-resident in some rounds and the seat went to the cached-mode winner)
             var kefx <- build_kq_fixture(fmt, 14336l, 512l, 1l)
             let TILES = 320l
             var ktfx = KqFixture(fmt = kefx.fmt, n = kefx.n, d = kefx.d * TILES, ntok = 1l, nsb = kefx.nsb)
@@ -1488,7 +1482,7 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
                 }
             }
             for (vi in range(nv)) {
-                if (length(tsamples[vi]) > 0) {
+                if (!empty(tsamples[vi])) {
                     sort(tsamples[vi])
                     tbest[vi] = tsamples[vi][length(tsamples[vi]) / 2]
                 }
@@ -2218,12 +2212,10 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         print("aborting mid-run - no sidecar written\n")
         return false
     }
-    // the kq families tune separately — the tile-best row is the format's entry, and the gemv gets its
-    // own entry when a same-layout row beats the tile seat on the streamed decode shape (the layout
-    // companion pins the plane mr, so only same-mr rows can differ; the two best by tile time race). No
-    // child-process confirm gate here: the kq stamp only moves the kq planes' interleave,
-    // and the e2e exposure (a tile-optimal mr shaving decode kernel rate) is bounded by the
-    // decode path staying DRAM-bound — validated end-to-end when the entries first landed.
+    // the kq families tune separately — the tile-best row is the format's entry, and the gemv takes its
+    // own entry when its seat differs. No child-process confirm gate here: the kq stamp only moves the
+    // kq planes' interleave, and the e2e exposure (a tile-optimal mr shaving decode kernel rate) is
+    // bounded by the decode path staying DRAM-bound — validated end-to-end when the entries first landed.
     for (fmt in kqSel) {
         interrupt_gate("k{fmt}q8_tile_gen")
         let kq_t0 = ref_time_ticks()
