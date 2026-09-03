@@ -1,6 +1,5 @@
 options gen2
 
-// Fixture for test_c_header_emit: what -lib-export-all offers, and what it leaves out.
 
 def public_ok(x : int) : int {
     return x + 1

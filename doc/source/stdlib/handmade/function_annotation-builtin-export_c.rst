@@ -1,1 +1,0 @@
-An [export] which `daslang -lib` additionally surfaces as a C function in the header it generates. The signature has to be one C can spell: scalars, string, raw pointers, enumerations, plain structures, the float2..uint4 and range families, and fixed_array arguments. A generic function cannot carry it. `name="..."` picks the C symbol, which is how two overloads both reach C.

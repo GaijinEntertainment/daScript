@@ -165,12 +165,22 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
 ## 30. c_api_header
 
 - **`Function.flags.exports` is the whole selection truth.** `[export_c]`
-  (`ExportCFunctionAnnotation`, `src/builtin/module_builtin_runtime.cpp`) sets it, and
+  (`ExportCAnnotation`, `daslib/export_c.das` - a das `[function_macro]`, so the C surface is
+  decided entirely in daslang) sets it, and
   `policies.export_public_functions` sets it for every public entry-module function under
   `-lib-export-all` (`MarkSymbolUse::exportPublicFunctions`, `src/ast/ast_export.cpp`). The interpreter,
   AOT and the header emitter therefore all read one bit, and no second list can drift from
   it. Whether a signature CAN cross is decided here instead, after infer, because argument
   types do not exist when an annotation applies.
+- **`[export_c]` reaches a library source with no `require` because `daslib/export_c` is
+  `!inscope`.** The module declaration's `!inscope` marker sets `visibleEverywhere`, which
+  `Module::isVisibleDirectly` honors ahead of the require map - the same mechanism that makes
+  `daslib/builtin.das` universal. Being visible still needs the module LOADED, and
+  `daslib/just_in_time.das` - the extra module `main.cpp` injects whenever the JIT is on - requires
+  it, so `-lib`, `-jit` and `-exe` carry the annotation for free. A compile with no JIT loads
+  neither, so that source needs `require daslib/export_c`; the annotation lives in its own module
+  rather than in `c_api_header` because that require costs `ast_boost` alone, not the header
+  emitter's whole graph.
 - **Refusal is per stage, not per module**: `collect_c_exports` returns its rejections and
   logs its skips. An `[export_c]` that cannot cross comes back for the caller to report -
   `macro_error` during compilation, the jit error log during codegen - so this module needs

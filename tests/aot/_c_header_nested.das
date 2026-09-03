@@ -1,6 +1,7 @@
 options gen2
 
-// Fixture for test_c_header_emit: a structure closure the header has to order and lay out.
+require daslib/export_c
+
 
 enum Kind : int16 {
     one = 1

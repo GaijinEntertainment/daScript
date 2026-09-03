@@ -13,3 +13,4 @@ module just_in_time shared private
 */
 
 require llvm/daslib/llvm_macro
+require daslib/export_c

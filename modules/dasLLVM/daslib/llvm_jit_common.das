@@ -536,6 +536,15 @@ def public jit_extern_type(t : Type) : LLVMTypeRef {
     return t == Type.tVoid ? g_prim_t.t_void : base_type_to_llvm_type(t)
 }
 
+def public declare_extern_fn(name : string; typ : LLVMTypeRef) : LLVMOpaqueValue? {
+    var fn = LLVMGetNamedFunction(g_mod, name)
+    if (fn == null) {
+        fn = LLVMAddFunctionWithType(g_mod, name, typ)
+    }
+    return fn
+}
+
+
 def public jit_add_extern(name : string; typ : LLVMTypeRef; fnAddr : void?; attrs : LLVMOpaqueAttributeRef? []) {
     var f = LLVMAddFunctionWithType(g_mod, name, typ)
     LLVMAddGlobalMapping(g_engine, f, fnAddr)
@@ -970,7 +979,7 @@ def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host
         LLVMSetTarget(mod, LLVMGetDefaultTargetTriple())
         LLVMDisposeTargetData(dl)
         let error : string?
-        let file = add_obj_extension(out_path)
+        let file = artifact_path(out_path, JitArtifact.object)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         let failed = LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
         if (failed != 0) {
@@ -1008,7 +1017,7 @@ def public link_dll_from_objects(objs : array<string>; out_path : string; path_t
         return false
     }
     let phase_tm = ref_time_ticks()
-    let ok = create_shared_library(objs[0], add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", "\"@{rsp}\" {linker_string}", true, link_whole_lib, debug_info)
+    let ok = create_shared_library(objs[0], artifact_path(out_path, JitArtifact.jit_dll), "{path_to_dascript_lib}", "{path_to_linker}", "\"@{rsp}\" {linker_string}", true, link_whole_lib, debug_info)
     if (log_time) {
         to_log(LOG_INFO, "LLVM JIT time: link {jit_sec(get_time_usec(phase_tm))} ({length(objs)} objects)\n")
     }
@@ -1018,44 +1027,36 @@ def public link_dll_from_objects(objs : array<string>; out_path : string; path_t
 // @out_path - folder + file name, without extension. @path_to_dascript_lib - required on Windows,
 // no effect on Linux. @path_to_linker - linker override; Windows-MSVC defaults to lld-link (link.exe
 // flavor) from the LLVM package, c++/clang elsewhere.
-def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker, linker_string : string; link_whole_lib : bool; debug_info : bool = false; log_time : bool = false; codegen_opt_level : uint = 3u) {
-    // JIT DLL cache: emitted artifact only ever runs on this host.
-    with_default_target_machine(codegen_opt_level, true) $(targetMachine : LLVMTargetMachineRef) {
+def public write_artifact(mod : LLVMOpaqueModule?; out_path : string; kind : JitArtifact;
+                          path_to_dascript_lib, path_to_linker, linker_string : string;
+                          link_whole_lib : bool; use_host_cpu : bool; debug_info : bool = false;
+                          log_time : bool = false; codegen_opt_level : uint = 3u) {
+    with_default_target_machine(codegen_opt_level, kind == JitArtifact.jit_dll ? true : use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
-        let file = add_obj_extension(out_path)
-        let filetype = LLVMCodeGenFileType.LLVMObjectFile
+        let file = artifact_path(out_path, JitArtifact.object)
         var phase_tm = ref_time_ticks()
-        let failed = LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
-        if (failed != 0) {
-            panic("write_dll: LLVMTargetMachineEmitToFile failed for {file}")
+        if (LLVMTargetMachineEmitToFile(targetMachine, mod, file, LLVMCodeGenFileType.LLVMObjectFile, error) != 0) {
+            panic("write_artifact: LLVMTargetMachineEmitToFile failed for {file}")
         }
         let t_emit = get_time_usec(phase_tm)
         phase_tm = ref_time_ticks()
-        let ok = create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", "{linker_string}", true, link_whole_lib, debug_info)
+        let target = artifact_path(out_path, kind)
+        var ok = false
+        if (kind == JitArtifact.static_lib) {
+            ok = create_static_library(file, target, "{path_to_linker}")
+        } else {
+            ok = create_shared_library(file, target, "{path_to_dascript_lib}", "{path_to_linker}",
+                "{linker_string}", kind != JitArtifact.exe, link_whole_lib, debug_info)
+        }
         if (log_time) {
             to_log(LOG_INFO, "LLVM JIT time: emit-obj {jit_sec(t_emit)} link {jit_sec(get_time_usec(phase_tm))}\n")
         }
         if (!ok) {
-            panic("write_dll: link failed for {out_path}")
+            panic("write_artifact: {kind == JitArtifact.static_lib ? "archive" : "link"} failed for {target}")
         }
     }
 }
 
-def public write_exe(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker, linker_string : string; link_whole_lib : bool; use_host_cpu : bool; debug_info : bool = false) {
-    // Standalone exe: generic (redistributable) by default; use_host_cpu targets the box so
-    // tuner-generated host-specific IR legalizes (the generic target aborts codegen on it).
-    // Codegen level 3 deliberate: shipped artifacts, no cache guard (ARCHITECTURE.md 1.2)
-    with_default_target_machine(3u, use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
-        let error : string?
-        let file = add_obj_extension(out_path)
-        let filetype = LLVMCodeGenFileType.LLVMObjectFile
-        LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
-        let ok = create_shared_library(file, add_exe_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", "{linker_string}", false, link_whole_lib, debug_info)
-        if (!ok) {
-            panic("write_exe: link failed for {out_path}")
-        }
-    }
-}
 
 // Locate the wasm64 (memory64) libDaScript_runtime.a. Non-empty `override_path` wins (e.g.
 // --jit-runtime-lib CLI flag; a missing file logs a warning); otherwise auto-locate at
@@ -1096,7 +1097,7 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
         let error : string?
         // emit_object_only: write the object verbatim to out_path (no `.o.o`
         // double extension) so the caller has a predictable, linkable artifact.
-        let obj = emit_object_only ? out_path : add_obj_extension(out_path)
+        let obj = emit_object_only ? out_path : artifact_path(out_path, JitArtifact.object)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         LLVMTargetMachineEmitToFile(targetMachine, mod, obj, filetype, error)
         if (emit_object_only) {

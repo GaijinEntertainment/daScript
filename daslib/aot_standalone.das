@@ -357,15 +357,6 @@ def genStandaloneSrc(var program : ProgramPtr;
     return initFunctions
 }
 
-def private isMarkedNoAot(pfun : Function?) : bool {
-    for (ann in pfun.annotations) {
-        if (ann.annotation.name == "no_aot") {
-            return true
-        }
-    }
-    return false
-}
-
 def private checkAllUsedFunctionsCanAot(program : ProgramPtr) {
     program.get_ptr() |> for_each_module_no_order($(pm) {
         pm |> for_each_module_function($(pfun) {
@@ -373,7 +364,7 @@ def private checkAllUsedFunctionsCanAot(program : ProgramPtr) {
                 return
             }
             if (pfun.flags.noAot) {
-                if (isMarkedNoAot(pfun)) {
+                if ((pfun |> find_annotation("no_aot")) != null) {
                     macro_error(program, pfun.at, "standalone AOT cannot emit function {pfun.name}: it is [no_aot], and a standalone context has no interpreter")
                 } else {
                     macro_error(program, pfun.at, "standalone AOT cannot emit function {pfun.name}: it uses a type AOT cannot express, and a standalone context has no interpreter")

@@ -121,19 +121,20 @@ class public CollectExternVisitor : AstVisitor {
                 registered_modules[m] = true
             }
         } else {
-            // Register $ and strings unless inject_main's static sweep already emitted the (non-idempotent) call.
-            if (!(g_exe_emitted_reg |> key_exists("jit_register_Module_BuiltIn"))) {
-                g_exe_emitted_reg["jit_register_Module_BuiltIn"] = true
-                var reg_builtin = LLVMAddFunctionWithType(g_mod, "jit_register_Module_BuiltIn", register_mod_type)
-                LLVMBuildCall2(ib, register_mod_type, reg_builtin, array<LLVMValueRef>(), "")
+            // Register $ and strings unless inject_main's static sweep already emitted the call.
+            let once_type = jit_fn_type($(name, reg : void?) : void? {})
+            var once = declare_extern_fn("jit_register_module_once", once_type)
+            for (pair in fixed_array(fixed_array("$", "jit_register_Module_BuiltIn"),
+                                     fixed_array("strings", "jit_register_Module_Strings"))) {
+                if (!(g_exe_emitted_reg |> key_exists(pair[1]))) {
+                    g_exe_emitted_reg[pair[1]] = true
+                    var reg_fn = declare_extern_fn(pair[1], register_mod_type)
+                    LLVMBuildCall2(ib, once_type, once,
+                        array(get_string_constant_ptr(ib, pair[0]),
+                            LLVMBuildPointerCast(ib, reg_fn, g_prim_t.LLVMVoidPtrType(), "")), "")
+                }
+                registered_modules[pair[0]] = true
             }
-            registered_modules["$"] = true
-            if (!(g_exe_emitted_reg |> key_exists("jit_register_Module_Strings"))) {
-                g_exe_emitted_reg["jit_register_Module_Strings"] = true
-                var reg_strings = LLVMAddFunctionWithType(g_mod, "jit_register_Module_Strings", register_mod_type)
-                LLVMBuildCall2(ib, register_mod_type, reg_strings, array<LLVMValueRef>(), "")
-            }
-            registered_modules["strings"] = true
         }
         return ib
     }
@@ -933,17 +934,17 @@ def private emit_module_registration(m : Module?; dynamic_modules : table<string
     g_exe_emitted_reg[reg_fn_name] = true
     has_cpp_modules = true
     to_log(LOG_INFO, "LLVM EXE: NEED_MODULE({cpp_name}) for `{mod_name}`\n")
-    var reg_fn = LLVMGetNamedFunction(g_mod, reg_fn_name)
-    if (reg_fn == null) {
-        reg_fn = LLVMAddFunctionWithType(g_mod, reg_fn_name, register_mod_type)
-    }
-    LLVMBuildCall2(builder, register_mod_type, reg_fn, array<LLVMValueRef>(), "")
+    var reg_fn = declare_extern_fn(reg_fn_name, register_mod_type)
+    let once_type = jit_fn_type($(name, reg : void?) : void? {})
+    var once = declare_extern_fn("jit_register_module_once", once_type)
+    LLVMBuildCall2(builder, once_type, once,
+        array(get_string_constant_ptr(builder, mod_name),
+            LLVMBuildPointerCast(builder, reg_fn, g_prim_t.LLVMVoidPtrType(), "")), "")
 }
 
 // Creates main function that initializes a standalone JIT context, registers
 // all compiled functions, runs init scripts, then calls the program entry point.
 struct public StandaloneFunctions {
-    //! Every used function of a standalone artifact, and what its startup needs to know about them.
     funcs : array<FunctionPtr>
     used_modules : table<string; bool>
     any_pinvoke : bool
@@ -951,9 +952,6 @@ struct public StandaloneFunctions {
 }
 
 
-//! Every used function of the program, for a standalone artifact (exe or -lib): the whole set,
-//! not just the jit set, because the artifact carries no interpreter. `ok` false means a used
-//! function is [no_jit] and `strict` forbids that.
 def public collect_standalone_functions(prog : Program?; strict : bool) : StandaloneFunctions {
     // Collect ALL used functions from the program (not just JIT-compiled ones from `funcs`).
     // There shouldn't be any `das` functions in standalone_exe, otherwise it
@@ -968,7 +966,7 @@ def public collect_standalone_functions(prog : Program?; strict : bool) : Standa
             if (fun.flags.used) {
                 if (!fun.flags.builtIn && fun.moreFlags.requestNoJit) {
                     has_no_jit = true
-                    to_log(LOG_ERROR, "LLVM EXE: function '{fun.name}' is marked no_jit, and a standalone artifact carries no interpreter to run it - drop the annotation, or keep the function out of the used set (a -lib exports only what you ask it to)\n")
+                    to_log(LOG_ERROR, "LLVM EXE: function '{fun.name}' is marked no_jit but standalone exe requires all functions to be JIT-compiled\n")
                 }
                 if (fun.moreFlags.pinvoke) {
                     any_pinvoke = true
@@ -979,16 +977,13 @@ def public collect_standalone_functions(prog : Program?; strict : bool) : Standa
         }
     }
     if (strict && has_no_jit) {
-        to_log(LOG_ERROR, "Cannot build a standalone artifact: some functions are no_jit in strict mode\n")
+        to_log(LOG_ERROR, "Cannot build standalone exe: some functions are no_jit in strict mode\n")
         return <- StandaloneFunctions(funcs <- funcs, used_modules <- used_modules, any_pinvoke = any_pinvoke)
     }
     return <- StandaloneFunctions(funcs <- funcs, used_modules <- used_modules, any_pinvoke = any_pinvoke, ok = true)
 }
 
 
-//! The process-global half of a standalone artifact's startup: the environment, every static and
-//! dynamic module registration, the native paths, and initialize_modules(). An exe emits it into
-//! main; a -lib emits it into a once-guarded initializer, because N contexts share one registry.
 def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program?; var types : PrimitiveTypes?;   // nolint:STYLE038 - one linear registration sequence, in startup order; a split would hide which step runs when
                                         register_all_modules : bool; force_dynamic_modules : table<string; bool>;
                                         var used_modules : table<string; bool>&;
@@ -1124,8 +1119,6 @@ def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program
 }
 
 
-//! Creates the artifact's context. Mirrors Program::getContextStackSize for the stack, and asks
-//! for a mutex whenever a [pinvoke], `options threadlock_context` or the debugger needs one.
 def public emit_create_standalone_ctx(builder : LLVMBuilderRef; program_context : Context?; prog : Program?;
                                       var types : PrimitiveTypes?; any_pinvoke : bool) : LLVMOpaqueValue? {
     // Determine the context stack size from options (mirrors Program::getContextStackSize)
@@ -1166,9 +1159,6 @@ def public emit_create_standalone_ctx(builder : LLVMBuilderRef; program_context 
 }
 
 
-//! The per-context half of a standalone artifact's startup: globals initializers, extern resolution,
-//! this context's registrations, its [init] functions, the clone init script. Returns whether the
-//! artifact links the whole compiler library. `fusion_builder` takes the one process-global call.
 def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder : LLVMBuilderRef;   // nolint:STYLE038 - one linear startup sequence sharing the context value; a split would hide which step runs when
                                         program_context : Context ?; ctx : LLVMContextRef; prog : Program?;
                                         mod : LLVMOpaqueModule?; var types : PrimitiveTypes?; var uids : UidNodes?;
@@ -1223,11 +1213,8 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
     // Whole-compiler-lib link: register the fusion engine (needed by simulate). Skip on wasm —
     // cross-link only sees libDaScript_runtime.a (no jit_register_fusion), and exes never read it (#2805).
     if (needs_whole_lib && !g_target_is_wasm) {
-        let reg_fusion_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
-        var reg_fusion_fn = LLVMGetNamedFunction(g_mod, "jit_register_fusion")
-        if (reg_fusion_fn == null) {
-            reg_fusion_fn = LLVMAddFunctionWithType(g_mod, "jit_register_fusion", reg_fusion_type)
-        }
+        let reg_fusion_type = jit_fn_type($() : void {})
+        var reg_fusion_fn = declare_extern_fn("jit_register_fusion", reg_fusion_type)
         LLVMBuildCall2(fusion_builder, reg_fusion_type, reg_fusion_fn, array<LLVMValueRef>(), "")
     }
 
@@ -1324,7 +1311,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     var funcs <- std_fns.funcs
     var used_modules <- std_fns.used_modules
     let any_pinvoke = std_fns.any_pinvoke
-    if (!std_fns.ok) {   // the helper named every offending function
+    if (!std_fns.ok) {
         return (fn = null, link_whole_lib = false)
     }
 
@@ -1342,16 +1329,12 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     for (fn in funcs) {
         if (fn.name == entry_point && fn.arguments.empty()) {
             assume fnmna = uids.get_dll_fn_name(fn).impl()
-            if (fn.result.isVoid) {
+            let is_void = fn.result.isVoid
+            let is_bool = fn.result.baseType == Type.tBool
+            if (is_void || is_bool || fn.result.baseType == Type.tInt) {
                 start_fn_name = fnmna
-                no_return = true
-            } elif (fn.result.baseType == Type.tInt) {
-                start_fn_name = fnmna
-                no_return = false
-            } elif (fn.result.baseType == Type.tBool) {
-                start_fn_name = fnmna
-                no_return = false
-                bool_return = true
+                no_return = is_void
+                bool_return = is_bool
             }
         }
     }

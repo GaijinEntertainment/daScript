@@ -4,28 +4,17 @@ options indenting = 4
 module c_api_header shared private
 
 require daslib/ast_boost
-require daslib/match
 require daslib/rtti
 require daslib/fio
 require daslib/strings_boost
 require strings
 
-//! Emits the C header for `daslang -lib`, and decides which functions cross the C boundary.
-//!
-//! Selection reads ONE bit - `Function.flags.exports` - which `[export_c]` sets directly and
-//! `policies.export_public_functions` sets for every public entry-module function. Whether a
-//! signature has a C representation is decided here, after infer: `collect_c_exports` reports an
-//! unrepresentable `[export_c]` signature through `macro_error`, and skips a merely-public one
-//! with a warning. `build_c_header` then renders the accepted set. The LLVM side (llvm_lib.das)
-//! emits one thunk per `CExport` and never re-derives any of this.
 
 let C_KEYWORDS <- {"restrict", "_Bool", "_Complex", "_Imaginary", "_Alignas", "_Alignof",
     "_Atomic", "_Generic", "_Noreturn", "_Static_assert", "_Thread_local", "typeof"}
 
 
 def public c_ident(name : string) : string {
-    //! `name` reduced to a C identifier: anything outside [A-Za-z0-9_] becomes `_`, a leading digit
-    //! gains a `_` prefix, and a C or C++ keyword gains a `_` suffix. Empty in, empty out.
     if (name |> empty()) {
         return ""
     }
@@ -49,22 +38,19 @@ def public c_ident(name : string) : string {
 
 
 def public lib_prefix_from_path(input : string) : string {
-    //! The library's C symbol prefix: the input file's stem, reduced to a C identifier.
     let stem = input |> base_name() |> split(".")
     return c_ident(stem |> empty() ? "" : stem[0])
 }
 
 
 def public export_c_name_override(var fn : Function?) : string {
-    //! The `name=` argument of this function's `[export_c]`, or "" when there is none.
-    for (ann in fn.annotations) {
-        if (ann.annotation.name != "export_c") {
-            continue
-        }
-        for (arg in ann.arguments) {
-            if (arg.name == "name" && arg.basicType == Type.tString) {
-                return string(arg.sValue)
-            }
+    var ann = fn |> find_annotation("export_c")
+    if (ann == null) {
+        return ""
+    }
+    for (arg in ann.arguments) {
+        if (arg.name == "name" && arg.basicType == Type.tString) {
+            return string(arg.sValue)
         }
     }
     return ""
@@ -72,19 +58,11 @@ def public export_c_name_override(var fn : Function?) : string {
 
 
 def public has_export_c_annotation(var fn : Function?) : bool {
-    //! True when the function carries `[export_c]`.
-    for (ann in fn.annotations) {
-        if (ann.annotation.name == "export_c") {
-            return true
-        }
-    }
-    return false
+    return (fn |> find_annotation("export_c")) != null
 }
 
 
 def public c_export_symbol(prefix : string; var fn : Function?; name_override : string) : string {
-    //! The exported C symbol for one function: `<prefix>_<name>`, where the name is the `[export_c]`
-    //! override when given, else the das name (a generic instance reports its origin's name).
     if (!(name_override |> empty())) {
         return "{prefix}_{name_override}"
     }
@@ -94,8 +72,6 @@ def public c_export_symbol(prefix : string; var fn : Function?; name_override : 
 
 
 struct public CType {
-    //! One das type's C spelling. `ok` false means the type has no C representation.
-    //! `by_pointer` types cross the boundary as `T *`, never by value.
     ok : bool
     spelling : string
     by_pointer : bool
@@ -107,31 +83,60 @@ struct CVector {
     elem : string
     lanes : int
     span : bool
+    bytes : int
 }
+
+
+def private is_unsigned_type(t : Type) : bool {
+    return t == Type.tUInt || t == Type.tUInt8 || t == Type.tUInt16 || t == Type.tUInt64
+}
+
+
+def private c_int_name(is_signed : bool; bytes : int) : string {
+    return "{is_signed ? "" : "u"}int{bytes * 8}_t"
+}
+
+
+def private scalar_of(t : TypeDeclPtr) : string {
+    if (t.isBool) {
+        return "bool"
+    }
+    if (t.isInteger) {
+        return c_int_name(t.isSignedInteger, t.sizeOf)
+    }
+    if (t.isBitfield) {
+        return c_int_name(false, t.sizeOf)
+    }
+    if (t.isFloatOrDouble) {
+        return t.sizeOf == 4 ? "float" : "double"
+    }
+    return ""
+}
+
+
+def private vector_of(var t : TypeDeclPtr) : CVector {
+    if (t == null || !t.isVectorType) {
+        return CVector(ok = false)
+    }
+    let lanes = t.vectorDim
+    let bytes = t.sizeOf / lanes
+    let base = t.isRange ? t.rangeBaseType : t.vectorBaseType
+    let is_unsigned = is_unsigned_type(base)
+    var elem = c_int_name(!is_unsigned, bytes)
+    var name = "{is_unsigned ? "uint" : "int"}{lanes}"
+    if (base == Type.tFloat || base == Type.tDouble) {
+        elem = bytes == 4 ? "float" : "double"
+        name = "{elem}{lanes}"
+    }
+    if (t.isRange) {
+        name = "{is_unsigned ? "u" : ""}range{bytes == 8 ? "64" : ""}"
+    }
+    return CVector(ok = true, name = name, elem = elem, lanes = lanes, span = t.isRange, bytes = t.sizeOf)
+}
+
 
 let VEC_LANE_NAMES <- ["x", "y", "z", "w"]
 let SPAN_LANE_NAMES <- ["from", "to"]
-
-
-def private vector_of(t : Type) : CVector {
-    //! The C shape of a das vector or range type. `span` picks the from/to field names over x/y/z/w.
-    match (t) {
-        if (Type.tFloat2) { return CVector(ok = true, name = "float2", elem = "float", lanes = 2) }
-        if (Type.tFloat3) { return CVector(ok = true, name = "float3", elem = "float", lanes = 3) }
-        if (Type.tFloat4) { return CVector(ok = true, name = "float4", elem = "float", lanes = 4) }
-        if (Type.tInt2) { return CVector(ok = true, name = "int2", elem = "int32_t", lanes = 2) }
-        if (Type.tInt3) { return CVector(ok = true, name = "int3", elem = "int32_t", lanes = 3) }
-        if (Type.tInt4) { return CVector(ok = true, name = "int4", elem = "int32_t", lanes = 4) }
-        if (Type.tUInt2) { return CVector(ok = true, name = "uint2", elem = "uint32_t", lanes = 2) }
-        if (Type.tUInt3) { return CVector(ok = true, name = "uint3", elem = "uint32_t", lanes = 3) }
-        if (Type.tUInt4) { return CVector(ok = true, name = "uint4", elem = "uint32_t", lanes = 4) }
-        if (Type.tRange) { return CVector(ok = true, name = "range", elem = "int32_t", lanes = 2, span = true) }
-        if (Type.tURange) { return CVector(ok = true, name = "urange", elem = "uint32_t", lanes = 2, span = true) }
-        if (Type.tRange64) { return CVector(ok = true, name = "range64", elem = "int64_t", lanes = 2, span = true) }
-        if (Type.tURange64) { return CVector(ok = true, name = "urange64", elem = "uint64_t", lanes = 2, span = true) }
-    }
-    return CVector(ok = false)
-}
 
 
 def private vector_field_names(v : CVector) : array<string> {
@@ -139,39 +144,7 @@ def private vector_field_names(v : CVector) : array<string> {
 }
 
 
-def private scalar_of(t : Type) : string {
-    //! The C spelling of a das scalar that crosses the boundary by value, or "" for anything else.
-    match (t) {
-        if (Type.tBool) { return "bool" }
-        if (Type.tInt8) { return "int8_t" }
-        if (Type.tUInt8) { return "uint8_t" }
-        if (Type.tInt16) { return "int16_t" }
-        if (Type.tUInt16) { return "uint16_t" }
-        if (Type.tInt) { return "int32_t" }
-        if (Type.tUInt) { return "uint32_t" }
-        if (Type.tInt64) { return "int64_t" }
-        if (Type.tUInt64) { return "uint64_t" }
-        if (Type.tFloat) { return "float" }
-        if (Type.tDouble) { return "double" }
-        if (Type.tBitfield) { return "uint32_t" }
-        if (Type.tBitfield8) { return "uint8_t" }
-        if (Type.tBitfield16) { return "uint16_t" }
-        if (Type.tBitfield64) { return "uint64_t" }
-    }
-    return ""
-}
-
-
-def private enum_base_of(t : Type) : string {
-    //! The C integer a das enumeration's values are spelled as.
-    let s = scalar_of(t)
-    return s |> empty() ? "int32_t" : s
-}
-
-
 struct public CNames {
-    //! What the C spellings are built from: the library prefix and the entry module (whose types
-    //! are named `<prefix>_<Type>`; a required module's are `<prefix>_<module>_<Type>`).
     prefix : string
     @do_not_delete this_module : Module?
 }
@@ -186,8 +159,6 @@ def private c_type_name(names : CNames; var owner : Module?; name : das_string) 
 
 
 def private peel(var t : TypeDeclPtr) : TypeDeclPtr {
-    //! A distinct type is ABI-identical to what it wraps - the C boundary sees through it, the same
-    //! way `type_to_llvm_abi_type` does.
     if (t.baseType == Type.tDistinct && t.firstType != null) {
         return peel(t.firstType)
     }
@@ -201,8 +172,6 @@ def private is_pod_struct(var st : Structure?) : bool {
 
 
 def private pointee_ok(var t : TypeDeclPtr) : bool {
-    //! A pointer's target only has to be NAMEABLE in C - its fields are not walked here, so a
-    //! self-referential struct terminates and still gets its forward declaration.
     if (t == null) {
         return true
     }
@@ -213,7 +182,7 @@ def private pointee_ok(var t : TypeDeclPtr) : bool {
     if (pt.isEnumT) {
         return pt.enumType != null && !pt.enumType.external
     }
-    return !(scalar_of(pt.baseType) |> empty()) || vector_of(pt.baseType).ok || pt.isVoid
+    return !(scalar_of(pt) |> empty()) || vector_of(pt).ok || pt.isVoid
 }
 
 
@@ -229,8 +198,8 @@ def private pointer_c_type(var t : TypeDeclPtr; names : CNames) : CType {
     } elif (pt.isEnumT) {
         inner = c_type_name(names, pt.enumType._module, pt.enumType.name)
     } else {
-        let v = vector_of(pt.baseType)
-        inner = v.ok ? "{names.prefix}_{v.name}" : scalar_of(pt.baseType)
+        let v = vector_of(pt)
+        inner = v.ok ? "{names.prefix}_{v.name}" : scalar_of(pt)
     }
     let qual = pt.flags.constant ? "const " : ""
     return CType(ok = true, spelling = "{qual}{inner} *")
@@ -238,8 +207,6 @@ def private pointer_c_type(var t : TypeDeclPtr; names : CNames) : CType {
 
 
 def private field_c_type(var t : TypeDeclPtr; names : CNames; var visiting : table<string>) : CType {
-    //! A struct field's C type. A fixed_array field stays an array (`T name[N]`), so its dimension
-    //! is spelled by the caller; everything else answers as it would at the boundary.
     var ft = peel(t)
     if (ft.baseType == Type.tFixedArray) {
         let inner = ft.firstType == null ? CType(ok = false) : field_c_type(ft.firstType, names, visiting)
@@ -256,8 +223,6 @@ def private field_c_type(var t : TypeDeclPtr; names : CNames; var visiting : tab
 
 
 def private struct_c_ok(var st : Structure?; names : CNames; var visiting : table<string>) : bool {
-    //! Whether this structure crosses the C boundary: a plain struct, non-empty, every field
-    //! representable. A pointer field only needs a nameable target, which is what breaks cycles.
     if (!is_pod_struct(st)) {
         return false
     }
@@ -279,7 +244,6 @@ def private struct_c_ok(var st : Structure?; names : CNames; var visiting : tabl
 
 
 def private value_c_type(var t : TypeDeclPtr; names : CNames) : CType {
-    //! The C type of a das type that is NOT a structure and NOT a fixed array.
     if (t.isPointer) {
         return pointer_c_type(t, names)
     }
@@ -292,18 +256,16 @@ def private value_c_type(var t : TypeDeclPtr; names : CNames) : CType {
         }
         return CType(ok = true, spelling = c_type_name(names, t.enumType._module, t.enumType.name))
     }
-    let v = vector_of(t.baseType)
+    let v = vector_of(t)
     if (v.ok) {
         return CType(ok = true, spelling = "{names.prefix}_{v.name}", by_pointer = true)
     }
-    let sc = scalar_of(t.baseType)
+    let sc = scalar_of(t)
     return sc |> empty() ? CType(ok = false) : CType(ok = true, spelling = sc)
 }
 
 
 def public c_type_of(var t : TypeDeclPtr; names : CNames) : CType {
-    //! The C type one das type takes at the boundary. Structures and the vector/range families come
-    //! back `by_pointer`; scalars, `string`, pointers and enums come back by value.
     if (t == null) {
         return CType(ok = false)
     }
@@ -328,9 +290,6 @@ def public c_type_of(var t : TypeDeclPtr; names : CNames) : CType {
 
 
 struct public CParam {
-    //! One C parameter. `by_pointer` params are spelled `[const ]c_type *`; the rest by value.
-    //! `pointer_in_impl` is true when the das ABI already passes a pointer, so the thunk forwards
-    //! the C pointer unchanged instead of loading through it.
     name : string
     c_type : string
     by_pointer : bool
@@ -340,8 +299,6 @@ struct public CParam {
 
 
 struct public CResult {
-    //! The C result. `via_out` means the C function returns void and writes through a trailing
-    //! `c_type * out`; `cmres` means the das impl fills that pointer itself.
     c_type : string
     via_out : bool
     cmres : bool
@@ -349,8 +306,6 @@ struct public CResult {
 
 
 struct public CExport {
-    //! One function crossing the C boundary. `c_name` is the full exported symbol - the LLVM side
-    //! names its thunk exactly this.
     @do_not_delete fn : Function?
     c_name : string
     das_signature : string
@@ -360,7 +315,6 @@ struct public CExport {
 
 
 struct CReject {
-    //! Why one function cannot cross: `what` names the parameter or the result, `why` its das type.
     ok : bool
     what : string
     why : string
@@ -393,42 +347,42 @@ def private describe_params(var fn : Function?; names : CNames; var out : array<
 }
 
 
+def private returns_cmres(var fn : Function?) : bool {
+    return fn.flags.copyOnReturn || fn.flags.moveOnReturn
+}
+
+
 def public describe_c_signature(var fn : Function?; names : CNames; c_name : string) : tuple<exp : CExport; reject : CReject> {
-    //! Describes one function at the C boundary, or reports the first type that has no C spelling.
     var params : array<CParam>
     let bad = describe_params(fn, names, params)
     if (!bad.ok) {
         return (exp = CExport(), reject = bad)
     }
     let rt = c_type_of(fn.result, names)
-    // A fixed_array result would be a CMRES of an array; C takes it as a pointer nothing sizes.
     if (!rt.ok || peel(fn.result).baseType == Type.tFixedArray) {
         return (exp = CExport(), reject = CReject(what = "result", why = fn.result.describe()))
     }
-    let res = CResult(c_type = rt.spelling, via_out = rt.by_pointer, cmres = isCMRES_result(fn))
+    let res = CResult(c_type = rt.spelling, via_out = rt.by_pointer, cmres = returns_cmres(fn))
     return (exp = CExport(fn = fn, c_name = c_name, das_signature = das_signature_of(fn),
         params <- params, result = res), reject = CReject(ok = true))
 }
 
 
-def private isCMRES_result(var fn : Function?) : bool {
-    return fn.flags.copyOnReturn || fn.flags.moveOnReturn
-}
-
-
 def private das_signature_of(var fn : Function?) : string {
-    //! The das declaration, for the comment above each C prototype. The implicit ` const` every
-    //! by-value argument carries is dropped; a `var` argument keeps its `-const` marker.
     let args = [for (a in fn.arguments); "{a.name} : {a._type.describe() |> replace(" const", "")}"]
     return "def {fn.name}({args |> join("; ")}) : {fn.result.describe() |> replace(" const", "")}"
 }
 
 
+struct CEnum {
+    @do_not_delete en : Enumeration?
+    base : string
+}
+
+
 struct CTypeSet {
-    //! The types the accepted signatures reach, in emission order: enums, then vectors, then
-    //! structures post-order (a by-value field's structure lands before the structure holding it).
-    enums : array<Enumeration?>
-    vectors : array<Type>
+    enums : array<CEnum>
+    vectors : array<CVector>
     structs : array<Structure?>
     seen : table<string>
 }
@@ -447,16 +401,17 @@ def private collect_type(var t : TypeDeclPtr; names : CNames; var set : CTypeSet
         let key = "e:{pt.enumType._module.name}::{pt.enumType.name}"
         if (!(set.seen |> key_exists(key))) {
             set.seen |> insert(key)
-            set.enums |> push(pt.enumType)
+            set.enums |> push(CEnum(en = pt.enumType,
+                base = c_int_name(!is_unsigned_type(pt.enumType.baseType), pt.sizeOf)))
         }
         return
     }
-    let v = vector_of(pt.baseType)
+    let v = vector_of(pt)
     if (v.ok) {
         let key = "v:{v.name}"
         if (!(set.seen |> key_exists(key))) {
             set.seen |> insert(key)
-            set.vectors |> push(pt.baseType)
+            set.vectors |> push(v)
         }
         return
     }
@@ -483,7 +438,6 @@ def private collect_struct(var st : Structure?; names : CNames; var set : CTypeS
 
 
 def public collect_c_types(var exports : array<CExport>; names : CNames) : CTypeSet {
-    //! Every type the exported signatures reach, transitively, each once.
     var set : CTypeSet
     for (e in exports) {
         for (arg in e.fn.arguments) {
@@ -496,7 +450,6 @@ def public collect_c_types(var exports : array<CExport>; names : CNames) : CType
 
 
 def private enum_value_of(var value : ExpressionPtr) : string {
-    //! One enumeration entry's value, read off the folded constant the entry carries.
     if (value == null) {
         return "0"
     }
@@ -512,21 +465,21 @@ def private enum_value_of(var value : ExpressionPtr) : string {
 }
 
 
-def private write_enum(var writer : StringBuilderWriter; var en : Enumeration?; names : CNames) {
+def private write_enum(var writer : StringBuilderWriter; var e : CEnum; names : CNames) {
+    var en = e.en
     let cname = c_type_name(names, en._module, en.name)
-    write(writer, "\n// das: enum {en.name}\ntypedef {enum_base_of(en.baseType)} {cname};\n")
+    write(writer, "\n// das: enum {en.name}\ntypedef {e.base} {cname};\n")
     write(writer, "enum \{\n")
     let entries = [for (ee in en.list); "    {cname}_{c_ident(string(ee.name))} = {enum_value_of(ee.value)}"]
     write(writer, "{entries |> join(",\n")}\n\};\n")
 }
 
 
-def private write_vector(var writer : StringBuilderWriter; t : Type; names : CNames) {
-    let v = vector_of(t)
+def private write_vector(var writer : StringBuilderWriter; v : CVector; names : CNames) {
     let cname = "{names.prefix}_{v.name}"
     let fields = vector_field_names(v) |> join(", ")
     write(writer, "\n// das: {v.name}\ntypedef struct \{ {v.elem} {fields}; \} {cname};\n")
-    write(writer, "{names.prefix |> to_upper()}_STATIC_ASSERT(sizeof({cname}) == {v.elem == "int64_t" || v.elem == "uint64_t" ? v.lanes * 8 : v.lanes * 4}, \"{cname}: size differs from the daslang layout\");\n")
+    write(writer, "{names.prefix |> to_upper()}_STATIC_ASSERT(sizeof({cname}) == {v.bytes}, \"{cname}: size differs from the daslang layout\");\n")
 }
 
 
@@ -567,7 +520,6 @@ def private param_decl(p : CParam) : string {
 
 
 def public c_declaration(e : CExport; names : CNames) : string {
-    //! The C prototype for one export, without the trailing semicolon.
     var args = ["{names.prefix}_ctx * ctx"]
     args |> reserve(length(e.params) + 2)
     for (p in e.params) {
@@ -600,10 +552,9 @@ def private write_fixed_api(var writer : StringBuilderWriter; names : CNames) {
     write(writer, "// instance from one thread at a time, or make one per thread.\n")
     write(writer, "typedef struct {p}_ctx {p}_ctx;\n")
     write(writer, "\n// Creates an instance, then runs the script's global initializers and its [init] functions.\n")
-    write(writer, "// Callable from any thread. Returns NULL when the initializers raised, or when this\n")
-    write(writer, "// process already carries another daslang runtime - only one daslang library per process,\n")
-    write(writer, "// and a host that registers the daslang modules itself counts as one. {p}_last_error(NULL)\n")
-    write(writer, "// reports which.\n")
+    write(writer, "// Callable from any thread, and from a process that already carries a daslang runtime -\n")
+    write(writer, "// another such library, or a host that registered the daslang modules itself. Returns NULL\n")
+    write(writer, "// when the initializers raised; {p}_last_error(NULL) reports why.\n")
     write(writer, "{p}_ctx * {p}_create(void);\n")
     write(writer, "\n// Runs the script's [finalize] functions, then frees the instance and everything it\n")
     write(writer, "// allocated - every string and every pointer it returned included.\n")
@@ -623,8 +574,6 @@ def private write_fixed_api(var writer : StringBuilderWriter; names : CNames) {
 
 
 def public build_c_header(var exports : array<CExport>; names : CNames; input_path, output_path, link_note : string) : string {
-    //! The whole header text. Pure - nothing is written and nothing is validated here; the exports
-    //! reaching this point have already been accepted by `collect_c_exports`.
     var types <- collect_c_types(exports, names)
     return build_string() $(var writer) {
         write_prologue(writer, names, input_path, output_path)
@@ -661,7 +610,6 @@ def public build_c_header(var exports : array<CExport>; names : CNames; input_pa
 
 
 def public emit_c_header(var exports : array<CExport>; names : CNames; input_path, output_path, link_note : string) : bool {
-    //! Writes the header beside the library, as `<output_path>.h`.
     let text = build_c_header(exports, names, input_path, output_path, link_note)
     let path = "{output_path}.h"
     var ok = false
@@ -678,21 +626,13 @@ def public emit_c_header(var exports : array<CExport>; names : CNames; input_pat
 }
 
 
-let REPRESENTABLE_HINT = "allowed: bool, int8..uint64, int, uint, float, double, string, pointers, enums, POD structs, float2..uint4, range/urange/range64/urange64, fixed_array arguments"
-
-
 struct public CRejection {
-    //! One function that carries `[export_c]` and cannot cross the boundary. `message` already
-    //! names the site, so a caller that has no LineInfo to hand can report it as it stands.
     fn_name : string
     message : string
 }
 
 
 def public is_c_export_candidate(var fn : Function?; prog : Program?; export_all : bool) : bool {
-    //! Whether this function is offered to the C boundary at all. `exports` is the one selection
-    //! bit: `[export_c]` sets it, and `policies.export_public_functions` sets it for every public
-    //! entry-module function.
     if (fn._module != prog.getThisModule || !fn.flags.exports
             || fn.flags.builtIn || fn.flags.generated || fn.moreFlags.isTemplate || fn.fromGeneric != null
             || fn.flags.init || fn.flags.shutdown || fn.flags.macroInit || fn.moreFlags.macroFunction) {
@@ -709,9 +649,6 @@ def private reserved_c_names(names : CNames) : array<string> {
 
 
 def public collect_c_exports(prog : Program?; names : CNames; export_all : bool) : tuple<exports : array<CExport>; errors : array<CRejection>> {
-    //! Selects and describes every function crossing the C boundary. An unrepresentable or clashing
-    //! `[export_c]` comes back in `errors` for the caller to report; a merely-public one is skipped
-    //! here with a warning naming the function and the offending type.
     var accepted : array<CExport>
     var errors : array<CRejection>
     var claimed <- {for (r in reserved_c_names(names)); r => "the fixed library API"}
@@ -728,7 +665,9 @@ def public collect_c_exports(prog : Program?; names : CNames; export_all : bool)
         if (!(owner |> empty())) {
             why = "C symbol `{c_name}` is already taken by {owner}; C has no overloading - give one of them [export_c(name = \"...\")]"
         } elif (!sig.reject.ok) {
-            why = "{sig.reject.what} has type {sig.reject.why}, which has no C representation ({REPRESENTABLE_HINT})"
+            why = ("{sig.reject.what} has type {sig.reject.why}, which has no C representation "
+                + "(allowed: bool, int8..uint64, int, uint, float, double, string, pointers, enums, "
+                + "POD structs, float2..uint4, range/urange/range64/urange64, fixed_array arguments)")
         }
         if (!(why |> empty())) {
             if (is_explicit) {

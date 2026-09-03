@@ -1,6 +1,7 @@
 options gen2
 
-// Fixture for test_c_header_emit: [export_c] on signatures C cannot spell.
+require daslib/export_c
+
 
 class Klass {
     v : int

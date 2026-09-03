@@ -88,7 +88,7 @@ def set_debug_linkage(value : LLVMOpaqueValue?) {
     LLVMSetLinkage(value, LLVMLinkage.LLVMInternalLinkage)
 }
 
-def set_public_linkage(value : LLVMOpaqueValue?) {
+def public set_public_linkage(value : LLVMOpaqueValue?) {
     LLVMSetLinkage(value, LLVMLinkage.LLVMDLLExportLinkage)
     LLVMSetDLLStorageClass(value, LLVMDLLStorageClass.LLVMDLLExportStorageClass)
 }
@@ -8361,5 +8361,6 @@ def init_llvm_jit_module_options() {
         this_module() |> add_module_option("jit_target", Type.tString)
         this_module() |> add_module_option("jit_split_modules", Type.tInt)
         this_module() |> add_module_option("jit_obj_cache", Type.tBool)
+        this_module() |> add_module_option("jit_lib", Type.tBool)
     }
 }

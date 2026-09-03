@@ -12,7 +12,8 @@ cached DLL, compare per-function hashes), **irgen** (the das IR emitter over eve
 **optimize** (the LLVM pass pipeline at the requested level, plus the opt-in IR dump and the
 post-opt verify), **emit+link** (artifact production - for the DLL path `write_dll` in
 `llvm_jit_common.das`, which itself splits into **emit-obj**, machine-code emission, and
-**link**, the lld-link spawn), **install** (resolve externs, instrument sim nodes), and
+**link**, the lld-link spawn; for `-lib` `write_lib`, which links a shared library or archives a
+static one and writes the C header beside it), **install** (resolve externs, instrument sim nodes), and
 **finalize** (engine teardown / state install). On a cache hit irgen, optimize, and emit+link
 are skipped and read as zero.
 
@@ -52,9 +53,56 @@ one of those files visible (re-pin `LLVM_JIT_EMITTER_HASH`), and the bump is owe
 emitted code for identical inputs can differ - a comment, a nolint, or a same-value rewrite
 inside an emitter file re-pins without a bump.
 
+The per-artifact entry emitters are OUTSIDE that surface: `llvm_exe.das` (a standalone exe's
+`main`) and `llvm_lib.das` (a `-lib`'s C entry points and thunks) emit startup glue for artifacts
+nothing content-addresses, so neither is in `EMITTER_FILES` and neither owes a version bump. Both
+artifacts run in `LlvmJitMode.EXE`, which is what makes the exe startup shareable: the four
+`emit_standalone_*` helpers in `llvm_exe.das` are the shared halves, split so a library can put the
+process-global half behind a once guard and the per-context half behind its own catch boundary.
+
+### 1.3 A library's runtime is process-global, its environment is per-thread {#lib-runtime-scope}
+
+An exe owns its process: one thread runs `main`, registers the modules, and drains them on the way
+out. A library owns none of that, and three consequences shape `llvm_lib.das`.
+
+**The environment is thread-local** (`daScriptEnvironment::bound` / `owned`,
+`include/daScript/ast/ast.h`), but the module registration behind it happens once. So
+`jit_lib_run_once` does both jobs: the first caller registers, and every later caller - on any
+thread - is BOUND to that first registration's environment. Without the binding a second thread's
+`<P>_create` dereferences a null `getBound()->modules` inside `jit_init_extern_function`. The
+create-failure message (`g_jitLibCreateError`) is process-global for the same reason read from the
+other side: a C host reads it through `<P>_last_error(nullptr)`, and a per-thread copy would answer
+null on every thread but the one whose create failed.
+
+**One daslang runtime fits in a process, and every artifact in it shares that one.**
+`jit_register_Module_*` (`REGISTER_MODULE_IN_NAMESPACE`) carries no already-created guard and
+aborts on a second call, so every emitted registration goes through
+`jit_register_module_once(dasName, reg)`, which registers only when `Module::require(dasName)`
+finds nothing and otherwise hands back the module already there. A library that finds a populated
+environment is a GUEST (`g_jitLibGuest`, decided in `jit_lib_run_once` before the init call): it
+skips `Module::Initialize` so `g_envTotal` stays balanced, and it never drains what it did not
+create. Ownership is tracked separately (`g_jitLibOwner`, set by `jit_lib_arm_shutdown`) because
+the guest flag is process-global: a second library arriving later must not erase the first one's
+duty to drain.
+
+**Nothing calls the shutdown functions for a library.** A jitted `SimFunction` gets a zeroed
+`FuncInfo` (`jit_lib`'s `registerJitFunction`, `src/builtin/module_jit.cpp`), so
+`Context::runShutdownScript` - which selects on `FuncInfo::flag_shutdown`, set only by the
+interpreter's debug-info builder - finds none. `<P>_destroy` therefore emits the program's
+`[finalize]` / `[shutdown]` calls itself, the same way `<P>_create` emits its `[init]` calls. The
+process-level drain is an `atexit` hook armed beside the registration it balances, and it rebinds
+the recorded environment first so the draining thread need not be the creating one.
+
+Every linked artifact leaves through one emitter, `write_artifact` (`llvm_jit_common.das`): the
+`JitArtifact` kind picks the file name, the linker flavor (an archiver for a static library, no
+`-shared` for an exe) and the target CPU. A `jit_dll` always targets this host - it only ever runs
+on the box that emitted it - while a shipped artifact takes the caller's `use_host_cpu`: generic
+and redistributable by default, host-specific only when the build carries `[llvm_code]` kernels,
+whose tuner-generated IR a generic target refuses to legalize.
+
 `--jit-opt-level` (CLI, over `policies.jit_opt_level`, default 3) drives both the optimize
-pipeline and the DLL path's codegen-side target machine. `write_exe` and AOT-object emission
-(`emit_object_only`) deliberately stay at codegen level 3: shipped artifacts are not
+pipeline and the DLL path's codegen-side target machine. A shipped artifact and AOT-object
+emission (`emit_object_only`) deliberately stay at codegen level 3: shipped artifacts are not
 content-addressed, so a tier change there has no cache guard to catch it. At level 0 the
 injected tune-policy default becomes `fallback` (`jit_cli_opt_level()` in `llvm_tune.das`):
 tune winners are raced under O3 codegen, so an O0 run cannot represent them and must not block

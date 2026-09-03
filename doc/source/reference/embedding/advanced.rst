@@ -4,6 +4,7 @@
 .. index::
    single: Embedding; AOT
    single: Embedding; Advanced Topics
+   single: Embedding; C Libraries
    single: Embedding; Class Adapters
    single: Embedding; Coroutines
    single: Embedding; Standalone Contexts
@@ -272,6 +273,60 @@ Pipeline:
 
 See :ref:`tutorial_integration_cpp_standalone_contexts` for a complete
 example.
+
+
+C libraries
+===========
+
+``daslang -lib`` compiles a daslang program to a native library with a C
+API, so a host that only *calls* one script needs no daslang headers, no
+``Module``, and no compiler. The LLVM backend emits the library; a
+standalone context (above) emits C++ source your build compiles instead.
+
+Pipeline:
+
+1. ``daslang -lib script.das -output build/script``
+2. This writes ``build/script.so`` (``.dylib`` / ``.dll``) and
+   ``build/script.h``. Add ``-- --jit-lib-static`` for a ``.a`` / ``.lib``
+   archive instead; the header records what a host then links.
+3. Include the header, link the library, call it.
+
+Which functions cross the boundary is your choice: ``[export_c]`` marks
+them one at a time, and ``-lib-export-all`` offers every public function
+of the entry module whose signature C can spell, naming the ones it skips.
+
+Every library gets the same four entry points, prefixed with the script's
+name — one instance owns one daslang context, with its own globals and
+heap:
+
+.. code-block:: c
+
+   #include "script.h"
+
+   script_ctx * ctx = script_create();
+   if ( !ctx ) {
+       printf("%s\n", script_last_error(NULL));
+       return 1;
+   }
+   script_Vec3 v = { 1.0f, 2.0f, 3.0f };
+   script_Vec3 out;
+   script_scale(ctx, &v, 2.0f, &out);   /* a struct result uses a trailing out pointer */
+   script_destroy(ctx);
+
+A daslang panic never unwinds into C: the call returns zero and leaves
+``out`` untouched, and ``script_last_error(ctx)`` reports the text until
+the next call on that instance clears it. A ``const char *`` a function
+returns lives in that instance's string heap, so copy it if you need it
+past the next call.
+
+The generated header asserts the layout of every structure it declares
+(``_Static_assert`` in C11, ``static_assert`` in C++), so a host built
+for a different target fails to compile rather than misreading memory.
+
+Several such libraries coexist in one process, and so does a library inside a
+host that registered the daslang modules itself: whoever gets there first
+registers the runtime, and the rest bind to it. Several instances of one
+library are fine, on any thread.
 
 
 Serialization

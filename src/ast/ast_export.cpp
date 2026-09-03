@@ -131,8 +131,6 @@ namespace das {
                 return true;
             }, "*");
         }
-        //! Marks every public, non-generic function of the entry module `exports` - the BIT, not
-        //! merely `used`, so the interpreter, AOT and the C header emitter read one selection truth.
         void exportPublicFunctions( Module * thisModule ) {
             for ( auto & fn : thisModule->functions.each() ) {
                 if ( fn->privateFunction || fn->builtIn || fn->generated || fn->isTemplate ) continue;

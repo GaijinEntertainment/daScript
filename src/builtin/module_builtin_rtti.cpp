@@ -1072,7 +1072,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(jit_size_level)>("jit_size_level");
             addField<DAS_BIND_MANAGED_FIELD(jit_dll_mode)>("jit_dll_mode");
             addField<DAS_BIND_MANAGED_FIELD(jit_exe_mode)>("jit_exe_mode");
-            addField<DAS_BIND_MANAGED_FIELD(jit_lib_mode)>("jit_lib_mode");
             addField<DAS_BIND_MANAGED_FIELD(jit_emit_object)>("jit_emit_object");
             addField<DAS_BIND_MANAGED_FIELD(jit_emit_prologue)>("emit_prologue");
             addField<DAS_BIND_MANAGED_FIELD(jit_output_path)>("jit_output_path");

@@ -9,8 +9,6 @@ require daslib/rtti
 require strings
 require dastest/testing_boost public
 
-//! Covers the C-boundary half of `daslang -lib`: which functions are offered, which signatures are
-//! refused, and the exact text of the generated header. Runs on the interpreter, with no LLVM.
 
 struct private Emitted {
     ok : bool
@@ -167,6 +165,15 @@ def test_c_header_refuses_what_c_cannot_spell(t : T?) {
     t |> success(any_rejection_says(e.rejections, "result has type int[3]"), "a fixed_array result is refused")
     t |> success(any_rejection_says(e.rejections, "no C representation"), "each refusal says why")
     expect_not_in(t, e.header, "takes_array", "a refused function is not declared")
+}
+
+
+[test]
+def test_c_header_needs_the_annotation_module_without_jit(t : T?) {
+    let e <- emit_for("_c_header_no_require", false)
+    t |> success(!e.ok, "a non-JIT compile cannot see [export_c] on its own")
+    t |> success(any_rejection_says(e.rejections, "export_c"),
+        "the failure names the annotation, so the reader knows to require daslib/export_c")
 }
 
 

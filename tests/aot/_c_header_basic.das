@@ -1,6 +1,7 @@
 options gen2
 
-// Fixture for test_c_header_emit: one function per shape the C boundary has to spell.
+require daslib/export_c
+
 
 enum Axis8 : int8 {
     lo = -3
@@ -30,7 +31,7 @@ def scale(v : Vec3; k : float) : Vec3 {
 
 [export_c]
 def bump(var v : Vec3) {
-    v.x += 1.0
+    v.x ++
 }
 
 [export_c]

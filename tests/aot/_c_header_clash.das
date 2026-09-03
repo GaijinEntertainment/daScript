@@ -1,6 +1,7 @@
 options gen2
 
-// Fixture for test_c_header_emit: two exports competing for one C symbol, and a reserved name.
+require daslib/export_c
+
 
 [export_c]
 def twin(x : int) : int {
