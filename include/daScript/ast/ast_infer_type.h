@@ -517,7 +517,7 @@ namespace das {
         // Returns non-null on success (new ExprConst* of targetType, with promotedFromInt=true).
         // Sets rangeError=true and emits exceeds_constant_range when the literal exceeds the target range.
         // Returns nullptr+rangeError=false when promotion is not applicable.
-        ExpressionPtr tryPromoteConstInt(const ExpressionPtr &expr, const TypeDeclPtr &targetType, bool &rangeError);
+        ExpressionPtr tryPromoteConstInt(const ExpressionPtr &expr, const TypeDeclPtr &targetType, bool &rangeError, bool requireConstLiteral = false);
         string moveErrorInfo(ExprMove *expr) const;
         virtual void preVisit(ExprMove *expr) override;
         virtual ExpressionPtr visit(ExprMove *expr) override;

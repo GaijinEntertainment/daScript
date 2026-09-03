@@ -9,3 +9,4 @@ Base type of the constant expression (Type::tString)
 Value of the constant expression
 True when this constant resulted from implicit int-literal promotion
 True when int-literal promotion to float/double lost precision (round-trip check)
+True when the constant was typed in source or folded from such literals; only these adapt in a binary operator

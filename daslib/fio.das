@@ -116,7 +116,7 @@ def fread(f : file; buf : auto(BufType) const implicit) {
 def fread(f : file; buf : array<auto(BufType)> const implicit) {
     concept_assert(typeinfo is_raw(type<BufType>), "'fread' accepts only raw POD type arrays")
     return 0 if (empty(buf))
-    let nbytes = long_length(buf) * typeinfo sizeof(type<BufType>)
+    let nbytes = long_length(buf) * int64(typeinfo sizeof(type<BufType>))
     if (nbytes > int64(INT_MAX)) {
         panic("fread: {nbytes} bytes does not fit the int byte count - use long_fread")
     }
@@ -132,7 +132,7 @@ def long_fread(f : file; buf : array<auto(BufType)> const implicit) : int64 {
     concept_assert(typeinfo is_raw(type<BufType>), "'long_fread' accepts only raw POD type arrays")
     return 0l if (empty(buf))
     unsafe {
-        return _builtin_read64(f, addr(buf[0]), long_length(buf) * typeinfo sizeof(type<BufType>))
+        return _builtin_read64(f, addr(buf[0]), long_length(buf) * int64(typeinfo sizeof(type<BufType>)))
     }
 }
 
@@ -148,7 +148,7 @@ def fwrite(f : file; buf : auto(BufType) const implicit) {
 def fwrite(f : file; buf : array<auto(BufType)> const implicit) {
     concept_assert(typeinfo is_raw(type<BufType>), "'fwrite' accepts only raw POD type arrays")
     return 0 if (empty(buf))
-    let nbytes = long_length(buf) * typeinfo sizeof(type<BufType>)
+    let nbytes = long_length(buf) * int64(typeinfo sizeof(type<BufType>))
     if (nbytes > int64(INT_MAX)) {
         panic("fwrite: {nbytes} bytes does not fit the int byte count - use long_fwrite")
     }
@@ -164,7 +164,7 @@ def long_fwrite(f : file; buf : array<auto(BufType)> const implicit) : int64 {
     concept_assert(typeinfo is_raw(type<BufType>), "'long_fwrite' accepts only raw POD type arrays")
     return 0l if (empty(buf))
     unsafe {
-        return _builtin_write64(f, addr(buf[0]), long_length(buf) * typeinfo sizeof(type<BufType>))
+        return _builtin_write64(f, addr(buf[0]), long_length(buf) * int64(typeinfo sizeof(type<BufType>)))
     }
 }
 
