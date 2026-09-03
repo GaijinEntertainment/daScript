@@ -31,7 +31,7 @@ let PACK_VERSION = 1
 // A q8 region's blob bind offset (off/32)*34 lands 16B-aligned iff off % 256 == 0; a k6
 // region's d-plane bind (NSB*16 + (off/256)*2) needs 4B alignment iff off % 512 == 0.
 // k4/k5/q40 quant + scale binds are 16B-multiples by construction.
-[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
     if (off < 0l) return true
     if (fmt == KqFmt.q8) return off % 256l == 0l
@@ -160,7 +160,7 @@ def metal_blob_fill_blocks(t : Model; b0, nblk : int64; var dst : array<uint8>) 
 //! Put ONE kq scale plane into its metal device form, named by its Model field; false = not a kq
 //! scale plane. Per-plane because the streamed image walk applies each as its own turn comes,
 //! which is the only point where that plane's fills are done and its bytes are not yet written.
-[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def metal_blob_scale_plane(var t : Model; name : string) : bool {
     // k4/k5: the 16B verbatim disk scale block per superblock — the 4B pad is CPU-repack
     // scratch (see the plane-layout comment in dasllama_gguf) and a blob model never repacks

@@ -928,7 +928,7 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 //! One kq tensor's GPU-form scale bind (the gemv lab's layouts, pre-baked by the blob
 //! transform): k4/k5 = 16B compact blocks at soff; k6 = the split plane — sub-scale strips at
 //! soff, the packed f16 d plane at doff (the kernels bind the buffer twice, once per offset).
-[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64> {
     assert(t.metal_blob)
     let sb0 = off / 256l
