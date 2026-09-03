@@ -57,7 +57,8 @@
      the 93% verify share and the depth-2 7.9 -> 12.4 = the round clocks on the M4 Pro, 2026-09-03; the
      models are gemma-4-26B-A4B-it-Q4_K_M with mtp-gemma-4-26B-A4B-it-Q8_0 and Qwen3.8-27B-Q4_K_M with
      mtp-Qwen3.8-27B-Q8_0 (checksums in the records); "1 draft" = our --mtp-depth 1 and llama.cpp's
-     --spec-draft-n-max 1; the ruler is modules/dasLLAMA/harness/mtp_ruler.das -->
+     --spec-draft-n-max 1; the code prompt = mtp_m5_gemma-4-26B-A4B_code1.json (2026-09-02, das d96b153dd,
+     corpus benchmarks/data/code1_prompts.txt); the ruler is modules/dasLLAMA/harness/mtp_ruler.das -->
 <p>We turned speculative decoding on, and Anton's Mac mini got slower. That was the morning of
 the 2nd of September, and it is why this story has a second day.</p>
 <p>The idea first. A model generates one token at a time, and for a big model every token
@@ -86,15 +87,13 @@ places to read it from, before or after the final norm. After won on acceptance,
 ships.</p>
 <p>We also checked whether squeezing the main model harder hurts the drafter. The 8-bit Gemma
 accepted 76.5% of the drafts, the 4-bit one 74.6%. Not much, then.</p>
-<p>Then the kernels, which turned out to be the real story and get their own section.</p>
+<p>Then the kernels, which turned out to be the real story.</p>
 <h2>How we measured</h2>
 <p>The board on daslang.io uses llama-bench, and llama-bench cannot measure speculative
 decoding. So we built a small ruler for ourselves. It takes four chat prompts, renders each
 through the model's own chat template with thinking off, and runs two engines on the
-identical rendered text: greedy, exactly 128 new tokens each, three repetitions, one dated
-record per machine and model. Ours runs as the release build with a sidecar tuned for that
-machine the same day. llama.cpp runs as its own server, built from upstream exactly as they
-ship it, told to write exactly 128 tokens too; the ruler reads the server's own timings back.</p>
+identical rendered text for the same number of tokens - ours, and a stock llama.cpp built
+from upstream exactly as they ship it.</p>
 <p>We focused on two models, gemma-4-26B-A4B-it-Q4_K_M with its Q8_0 assistant and
 Qwen3.8-27B-Q4_K_M with its Q8_0 NextN head, and both engines read the same drafter file.</p>
 <p>The four prompts are the first turns of four tasks from
@@ -111,8 +110,8 @@ on the 27B before it measures. The release build also runs before anything else:
 measuring program had already run the engine in-process, everything it measured afterwards
 came out 20% low, for reasons we still find funny.</p>
 <h2>What we measured</h2>
-<p>So we ran it, and the drafter earns its keep: about one token in five, and not a token more.
-In parentheses, the acceptance rate.</p>
+<p>So we ran it, and the drafter earns its keep: about one extra token in five, and not a token
+more.</p>
 <table>
 <thead>
 <tr>
@@ -164,6 +163,7 @@ In parentheses, the acceptance rate.</p>
 </tr>
 </tbody>
 </table>
+<p><small>In parentheses, the acceptance rate.</small></p>
 <p>The same drafter drafts the same on both sides, 75 to 94% accepted at the first position
 depending on the prompt, in both engines. Whatever separates the two columns, it is not the
 drafting. The four prompts do not agree with each other at all. Gemma on the M5:</p>
@@ -314,7 +314,9 @@ gain at 1.1 to 1.2x on a dense 27B.</p>
 costs another half to a whole pass, and the second draft is accepted 51 to 66% of the time,
 which does not cover it. The math prompt is the exception: there the second draft lands 86
 to 88%, and depth 2 comes out ahead on every machine, 187.9 against 160.1 for Gemma on the
-M5.</p>
+M5. Code sits in between: asked for a bubble sort in C++, Gemma on the M5 had 86% of first
+drafts and 68% of second drafts accepted, and depth 2 came out ahead again, 174.0 against
+159.0 tokens per second, with llama.cpp at 153.7 against 140.0 on the same prompt.</p>
 <p>Acceptance is a property of the text. The cost of a row is a property of the box.
 Reconciling the two is a tricky business left for future us.</p>
 <p>The same arithmetic is why we never built the other idea, drafting wide: offering the two or

@@ -98,6 +98,7 @@
 .dio-story__body th{color:var(--fg-faint);font-weight:400;border-bottom:1px solid var(--amber-dim)}
 .dio-story__body td{color:var(--fg)}
 .dio-story__body td:first-child{color:var(--fg-dim)}
+.dio-story__body small{display:block;font-family:var(--font-mono);font-size:11.5px;color:var(--fg-faint);margin:-14px 0 22px}
 
 /* ── get-it block ────────────────────────────────────────────── */
 .dio-get__grid{display:grid;grid-template-columns:.85fr 1.35fr;gap:56px;align-items:start;margin-top:24px}
