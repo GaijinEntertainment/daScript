@@ -34,12 +34,6 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
   sideways between families.
 - **`dasllama_vad.das`** - Silero-VAD weights and per-stream state.
 
-### 1.7c Text-to-speech front end
-
-`ARCHITECTURE_TTS.md` carries this section - the TTS family mirrors the ASR one (a types floor,
-a shared block home, a facade, one file per model family) and adds the text front end no ASR
-family needs; every stage is data-driven from the model store, and nothing under `models/`
-carries TTS data.
 ### 1.7b Vision
 
 - **`dasllama_vision.das`** - the image preprocessing rail: dynamic-resolution geometry, the
@@ -148,6 +142,12 @@ reference's Metal "f32" GEMM stages half operands, its flash-attention path cast
 and the shipped bf16 mmproj rounds activations to bf16; its own four arms spread
 <= 6.5e-3 on the gemma4v tokens).
 
+### 1.7c Text-to-speech front end
+
+`ARCHITECTURE_TTS.md` carries this section - the TTS family mirrors the ASR one (a types floor,
+a shared block home, a facade, one file per model family) and adds the text front end no ASR
+family needs; every stage is data-driven from the model store, and nothing under `models/`
+carries TTS data.
 
 ### 2.13 Towers serve padded GEMM widths {#tower-padded-widths}
 

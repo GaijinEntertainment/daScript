@@ -761,6 +761,30 @@ heteronyms > 27 met; overall WER below the reference on all three met; textnorm 
 upstream normalizers met on the corpus; OOV met on kokoro (9.73 <= 10.90), one word short on
 nano (8.95 against 8.56); letters and acronyms have no fixture category yet.
 
+Review round receipt (2026-09-02, before the PR: the codex reviewer, a grounding pass, six
+checklist auditors, the TDD auditor, six surfacers, one prover, a flashlight queue of thirteen
+rulings). What it found and the batch fixed: the dense rows conv was not split-invariant - each
+tap's GEMM started at max(rb4, -shift), off the 4-row tile, so the FMA/scalar boundary moved
+with the worker count (40 of 248600 samples differed end to end on the served lane between one
+lane and many; the streaming cell named as the proof never varied the worker count) - the taps
+now peel to the tile edge and the block cell holds every rows kernel bit-equal at cap 1 and 0,
+red before the fix at 191 / 224 / 293 differing elements on three padded shapes; the server's
+TTS worker hung the boot forever on a load panic with no log line, ignored the TTS pending
+count in its drain gate, and `--tts` alone booted into setup mode; JIT vector tanh answered 1.0
+for NaN; a digit run past int64 read as a negative quintillion, the g2p number reader said
+"zero" past 2^31, the chunker counted bytes and never split a bare run, "1 cm" read "one
+centimeters", "the pipes lead out" got the metal; the AdaIN affines minted a tiled twin nothing
+read (dropping it moves the blob and IMAGE_VERSION to 32). The references' answer to an
+over-long chunk, measured for the ruling: Kokoro packs on the phoneme string after spaces and
+punctuation (greedy to 510, a punctuation-priority waterfall, then a hard break) and truncates
+an unbreakable span to 510 with a warning; KittenTTS caps nothing after its 400-character raw
+budget, and its own chunker emits pieces ("no... " x66 -> 728 ids, "x, " x133 -> 933) that die
+inside ONNX Runtime past the 512 positions. The port truncates at the encoder with a log line
+now; the token-budget packer is `followup_general.md` row 79. The rig after the batch
+(kitten-nano, this box, other agents running - quality only): 3.23 / 3.972, harvard 0.00,
+ljspeech 3.64, heteronym 1.00, oov 8.95, numeric 5.06 - the figure above. The rulings and what
+they left to the ledger: `modules/dasLLAMA/LAWS.md` (2026-09-02) and rows 76-82.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the

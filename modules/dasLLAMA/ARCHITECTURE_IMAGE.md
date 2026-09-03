@@ -46,7 +46,10 @@ place instead of reading it.
 The meta blob sits at the image tail and leads with two strings - the identity the image was baked
 for and its config JSON - then the section table and the walk's scalar stream. The strings lead so
 a peek, or a load that is about to decline, can print what the image was baked for without parsing
-anything else.
+anything else. The peek also reads the header's meta-layout fingerprint, so a family that
+registered its carrier's `layout_fingerprint` alongside its tag gets the `STALE layout` verdict
+for an image `parse_image` would refuse; without the registration a peek calls such an image
+CURRENT and the GC keeps it.
 
 ### 2.1c Array payloads reach the archive in bulk {#image-bulk-serialize}
 
@@ -88,9 +91,10 @@ identity is computed or compared. `image_identity` is a pure formatter over `Dli
 the backend select happens inside the config's CPU source, so a caller needs no ordering ritual of
 its own. A load pins the box profile first because that pin can change the backend, and the parse
 runs the same load select the gguf loader runs, before any kernel touches planes packed for that
-backend. A family whose plane bytes no CPU knob shapes (the TTS carrier: f32 layouts minted from
-the model's own geometry) registers its tag config-free, and `image_config_for` keys its identity
-by the default configuration instead: one image per box, not one per tune state - two processes
+backend. A family whose plane bytes no box property shapes (the TTS f32 carrier: layouts minted
+from the model's own geometry) registers its tag config-free, and `image_config_for` keys its
+identity by the default configuration instead: one identity on every box, not one per tune
+state - two processes
 on one box with different tune manifests would otherwise bake different identities in the same
 lane and reap each other's image on every switch.
 

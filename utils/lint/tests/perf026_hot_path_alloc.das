@@ -25,7 +25,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // sink several frames deep is still reported — anchored on the deepest line
 // written in the root's own file, not on the daslib internal that allocates.
 
-expect 31208:8
+expect 31208:10
 
 require daslib/perf_lint
 require strings
@@ -166,4 +166,16 @@ def good_chain_middle_nolint(var a : array<int>) {
 [no_alloc]
 def bad_temp_string_builtin(c : int) : bool {
     return strings::to_char(c) == "a"                       // PERF026
+}
+
+// 14. the sizing builtins that reserve for a @scratch destination are the declared strategy
+//     too; on an unmarked buffer each one is the reserve it wraps
+[no_alloc]
+def bad_sizing_builtins_on_the_unmarked_buffer(var sc : Scratch; n : int) {
+    sc.reused |> ensure_capacity(n)
+    unsafe(sc.reused |> scratch_reserve(n))
+    unsafe(sc.reused |> scratch_ensure_capacity(n))
+    unsafe(sc.reused |> scratch_resize(n))
+    sc.fresh |> ensure_capacity(n)                          // PERF026
+    unsafe(sc.fresh |> scratch_resize(n))                   // PERF026
 }

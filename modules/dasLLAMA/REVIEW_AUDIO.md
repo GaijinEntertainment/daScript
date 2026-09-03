@@ -1,7 +1,7 @@
 # dasLLAMA audio and ASR Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_MEDIA.md`.
+doc: `ARCHITECTURE_MEDIA.md`. Planned work: `followup_general.md`.
 
 **Routed from `REVIEW.md`: a diff touching `dasllama/dasllama_asr.das`,
 `dasllama/dasllama_asr_types.das`, `dasllama/dasllama_tower.das` (with `REVIEW_VISION.md` - the

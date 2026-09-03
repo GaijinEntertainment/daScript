@@ -127,3 +127,23 @@ normalizer's defects (a correct "kilograms" counted as an error against an expec
 it" - the fixture's expected forms are hand-corrected where the upstream reading is not what
 a person says, the minter carries the table, and the reference arms are re-scored on the same
 forms (`ARCHITECTURE_MEDIA.md` sec 1.7c).
+
+- **2026-09-02** (`REVIEW_TTS.md`, `REVIEW_IMAGE.md`, `REVIEW.md`, `REVIEW_AUDIO.md`,
+  `REVIEW_PLACEMENT.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_MEASUREMENT.md`,
+  `ARCHITECTURE_IMAGE.md`, `ARCHITECTURE_MEDIA.md`, `followup_general.md`): the TTS arc's
+  review round, presented as a flashlight queue ("read flashlight agent, and lets go through
+  the rest of the info where necessary. and one thing at a time with recommendations").
+  Rulings: an over-long chunk truncates at the encoder with a log line, Kokoro's way ("A now,
+  B ledger" - the token-budget packer is row 79); a speech-only server is a serving server,
+  not setup mode; the JIT's vector `pow` inherits the dropped sign, the three tiers agreeing
+  is the contract; the sin/cos and tan emitters use `fptosi.sat`; the `_M_ARM64` C++ line is
+  ledgered (row 80); the ASR worker gets the TTS worker's load catch; the control page gains
+  the `tts` field now and the TTS counters land on `/stats`; a digit run past 18 digits reads
+  digit by digit; `mw` keeps "megawatts"; the `[hot_path]` rule names the model stages, and
+  the pin rule gains the cross-context clause ("a pin never crosses a `new_thread` boundary");
+  the rewordings above land as one batch. Earlier in the round: the facade tutorial and the
+  server demo are follow-ups (row 76), `model_specs()` rows for the three TTS models land,
+  the board cell is ledgered (row 77), the licence suffix leaves the GGUF metadata and
+  `THIRD_PARTY_NOTICES.md` carries the attribution with the licences installed ("we need to
+  add THIRD_PARTY_NOTICES for sure, and CMAKE install the licenses"), the noise seed folds the
+  chunk index, and the three reasoned kernel constants are ledgered (row 78).

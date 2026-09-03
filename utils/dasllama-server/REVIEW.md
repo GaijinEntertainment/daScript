@@ -30,3 +30,9 @@ set of items a route returns while the fixtures record the old set, is a defect 
 the fixture and list a new key in that route's `README.md` row, in the same change.** The
 fixtures are the recorded response shape, and the row is where a consumer learns the key
 exists.
+
+**A Playwright `.spec.js` under `tests/` (beside this file) never spells out a value the
+fixture carries - it reads the value from the fixture.** A capture is box-shaped (the hardware
+line, the detected GPU tier, model and tool paths, the models-dir listing), so a re-capture on
+another box moves those values, and a spec that hard-codes one goes red for a reason that has
+nothing to do with the page.

@@ -11,14 +11,20 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   currency, percentages, clock times, dates, fractions, units, abbreviations, URLs and e-mail
   addresses become the words a reader says; prosodic punctuation and apostrophes survive,
   everything else becomes a space. The defects of the reference normalizer are fixed here and
-  pinned by the tests. Pure code, no data file.
+  pinned by the tests. A digit run wider than eighteen digits reads digit by digit: the reader
+  accumulates in int64, so past that width there is no number to say, and a reader says a
+  number that long one digit at a time anyway. A unit carries both its forms and the literal
+  picks: exactly one is singular ("1 cm" is one centimeter), anything else - a fraction of one
+  included - is plural. Pure code, no data file.
 - **`dasllama_postag.das`** - the tokenizer and part-of-speech tagger. The tokenizer reproduces
   the reference pipeline's English tokenization over normalized text (the exception table for
   contractions and abbreviations, prefix and suffix punctuation, infix hyphens); the tagger is
   a greedy averaged perceptron over the PTB tagset. Both load from `tts_postag.bin`
   (`harness/train_postag.py`: UD English-EWT gold plus normalizer-shaped prose tagged by the
   reference tagger, `harness/mint_postag_silver.py`). Tags matter downstream only through the
-  lexicon's part-of-speech entries and the punctuation phonemes.
+  lexicon's part-of-speech entries and the punctuation phonemes. The tagger's word class is
+  the trainer's own `normalize`: a hyphen anywhere in a token that does not start with one, so
+  "--" and "-well-known" are ordinary words, not `!HYPHEN`.
 - **`dasllama_g2p.das`** - grapheme-to-phoneme into the 45-symbol US inventory: a gold lexicon
   with part-of-speech keyed entries, a silver lexicon, function-word rules that read what
   follows (the pass runs right to left), the heteronym rules of sec.2.34, inflection stemming,
@@ -40,7 +46,7 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   source, multi-head attention, and the STFT pieces (edge pad, magnitude and phase, polar to
   rectangular, reflection pad). A weight is an ONNX-layout array plus the served layout
   `conv1d_prepare` / `linear_prepare` mint for the consumer the reader names (`served_rows`,
-  `rows_only`), the unread one dropped; beside every weight array sits its `TtsSpan` into the
+  `rows_only`, `vec_only`), the unread one dropped; beside every weight array sits its `TtsSpan` into the
   model's blob, and `weights_walk` is the one walk that moves weights into a staging blob or
   binds them as borrowed views over a served plane (`release_weight` is the one teardown). One
   home: the block home holds the operators, and it names no family type.
@@ -64,7 +70,9 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
 - **`dasllama_kitten.das`** - the KittenTTS family (nano and mini): the reference driver's symbol
   table, re-spacing rule and style-row rule (the chunk's character count), its speed priors and
   voice aliases (`kitten.*` metadata), its 5000-sample tail trim, and the rewrite of the front
-  end's inventory into the espeak-style IPA these models consume.
+  end's inventory into the espeak-style IPA these models consume. A phoneme the symbol table
+  does not carry takes its separator space with it, so a dropped symbol never leaves a doubled
+  space token where the model was trained on none.
 - **`dasllama_kokoro.das`** - the Kokoro family (Kokoro-82M): the reference pipeline's
   vocabulary (`kokoro.symbol_*` metadata - the front end's own inventory, no rewrite), its token
   wrapping and style-row rule (the phoneme string's character count less one). Fifty-four voice
@@ -72,10 +80,15 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
   picked by `general.architecture`; `tts_g2p.bin` and `tts_postag.bin` read from the GGUF's
   directory), `caps`, the lane pin (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`),
-  `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 characters a
-  chunk, abbreviations and decimals never split -> per chunk: phonemize -> the family's symbols
+  `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
+  chunk - `length()` on a string is bytes, and an em dash costs three of them - abbreviations
+  and decimals never split, a whitespace-free run longer than the cap hard-split at the cap on
+  a codepoint boundary -> per chunk: phonemize -> the family's symbols
   and style row -> PCM, timed, delivered to the caller's block as it lands) and `synthesize`
-  (the same, concatenated, timings summed). Requires no `audio` module.
+  (the same, concatenated, timings summed). Every chunk draws its own source noise: the seed
+  is the facade's constant plus the chunk's index, so consecutive sentences of one request
+  never share a draw, and `synthesize` and `synthesize_stream` stay sample-identical because
+  both walk the same chunk list in the same order. Requires no `audio` module.
 
 Every local container on the TTS path is `var inscope`: the persistent heap frees nothing at
 scope exit, and a bare local holding a per-sentence buffer is a per-sentence leak that ends in
@@ -101,20 +114,23 @@ four channels a lane. Served widths sit on the tile: a conv's output width pads 
 (`cout_s`), so `conv_post`'s 22 columns are served at 32 and read back strided. The F0 and
 energy curves and their single-channel projections stay channel-major - one channel is a
 column either way. `tests/test_tts_blocks.das` holds every rows form to its channel-major twin
-at the dot-envelope bar (a tolerance times the sum of |w|·|x| feeding each output).
+at the dot-envelope bar (a tolerance times the sum of |w|*|x| feeding each output).
 
 A rows kernel's result never depends on how its rows split across the parallel workers: block
-edges snap to the 4-row tile (`tile_edge`), so a row is tiled or scalar-remainder the same way
-in every split, and a reduction accumulates per fixed 256-row block (`STAT_BLOCK`) and merges
-the blocks in a fixed order. The facade's streaming cell compares two syntheses sample for
-sample while the worker count differs between them; per-dispatch-slot partials broke it.
+edges snap to the 4-row tile (`tile_edge`), a conv tap whose shifted range starts inside a
+block peels the rows up to the next tile edge through the scalar path before its GEMM, so
+every GEMM base sits on the tile and a row is tiled or scalar-remainder the same way in every
+split, and a reduction accumulates per fixed 256-row block (`STAT_BLOCK`) and merges the blocks
+in a fixed order. `tests/test_tts_blocks.das` runs each rows kernel at one lane and at the
+box's lanes and asserts bit equality, and the facade's streaming cell does the same for a whole
+synthesis; per-dispatch-slot partials and an off-tile GEMM base each broke it once.
 
 ### 2.29 Tap stacking: one GEMM per chunk, nothing accumulates across taps {#tts-tap-stacking}
 
 On the q8 lane a conv's weight bakes as one [cout][k*cin] Q8_0 matrix, tap-major within a
 row, repacked for the box's backend. The conv quantizes its input rows once, then per chunk of
 output rows copies the k shifted quantized rows side by side - zero scales where a shift leaves
-the input - and makes one Q8·Q8 batch-GEMM call with K = k*cin, the bias added row-locally
+the input - and makes one Q8*Q8 batch-GEMM call with K = k*cin, the bias added row-locally
 while the chunk is still in cache. The strided f32 convs (the generator's noise branch, k =
 2*stride) use the same shape over float rows and the tiled f32 kernel reading the served
 weight as [k*cin][cout_s]. The chunk stays inside a 4 MB budget, so the stacked rows live in
@@ -123,7 +139,7 @@ cache while the kernel reads them.
 The per-tap alternative - one short-K GEMM per tap that stores a fresh output, then a pass that
 adds it into the accumulator - paid three sweeps of the output plane per tap and, on a bias128
 stamp, a fresh token block-sum pass per call. Stacking removes both without touching the kernel
-backends: the TTS convs are consumers of the LLM's Q8·Q8 batch entry, never a variant of it.
+backends: the TTS convs are consumers of the LLM's Q8*Q8 batch entry, never a variant of it.
 
 ### 2.30 The decoder's concat rows pad to the q8 lane's 32 {#tts-padded-input-width}
 
@@ -132,9 +148,11 @@ asr residual reads 514 or 1090 channels - off the 32 the q8 lane quantizes per. 
 serves a padded input width instead: at bake, conv1, the 1x1 shortcut and the depthwise pool
 zero-pad their input channels before their served layouts mint (the reader learns the width
 from the tensor dims first, since the mint drops the ONNX weight), the AdaIN affine re-lays its
-two halves at the padded width with zero gamma, beta, scale and shift for the pad, and the
-concat writes the zero columns. A pad channel is exactly zero through the norm, the LeakyReLU
-and the conv, so the parity bars do not move, and the decoder's four largest convs serve q8.
+two halves at the padded width with a zero row for each pad channel, and the concat writes the
+zero columns. The zero rests on the producer: an `affine=False` instance norm gives a pad
+channel the scale 1/sqrt(eps), so the column must arrive exactly zero - then it stays zero
+through the norm, the LeakyReLU and the conv, the parity bars do not move, and the decoder's
+four largest convs serve q8.
 The rows AdaIN kernels also take a width off the four-lane one channel at a time, which is
 what a block without the padding runs on.
 
@@ -186,7 +204,9 @@ are tried in an order those neighbours set: the infinitive after "to" reads the 
 a determiner a verb tag is a mis-tag (the noun, then the default) and an adjective before a
 non-noun is the noun. A small collocation table settles the readings no tag carries ("lead
 pipe", "get the lead out", "bass player", "minute detail"), and keyed entries the lexicon holds
-as one reading join it ("the does", "my resume"). The corpus cell names the sentences these
+as one reading join it ("the does", "my resume"). Every collocation names a noun reading, so a
+verb tag out-ranks the table: "the pipes lead out" is the verb whatever follows it. The corpus
+cell names the sentences these
 rules and the lexicon additions read past the reference front end and keeps a budget of tag
 calls for the rest.
 

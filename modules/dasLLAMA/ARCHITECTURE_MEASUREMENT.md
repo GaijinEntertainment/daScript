@@ -107,7 +107,11 @@ a report leg, never the served path). A new clock read paired with a print of th
 interval bypasses the aggregation - it measures one call site once, is not filterable, and rots
 where a rail entry would keep serving. Where a timed line IS the deliverable - `benchmarks/`,
 `performance/`, `harness/`, and cold one-shot load/mint progress logs (image bake/map, load
-stages, tokenizer build) - the rails do not apply. A clock whose value feeds logic is control
+stages, tokenizer build) - the rails do not apply. A timing that is part of an API's answer -
+the facade's `TtsTimings`, the per-stage walls a synthesis returns to its caller and the
+server logs per request - is a deliverable of the same kind, not instrumentation, and the
+one-rail follow-up (`followup_general.md` row 72) keeps it that way while it retires the
+duplicate rails. A clock whose value feeds logic is control
 flow, not instrumentation; it is marked `// clock: control` so the sweep and any future lint
 leave it alone.
 
