@@ -66,9 +66,9 @@ asr_workers = 2    # two independent transcription requests; each worker owns an
 ## Setup mode and the model catalog
 
 A start with **no LLM model at all** (no `--model`, no config, or every configured path
-missing) **and no `--tts`** does not exit - it boots into **setup mode**: the port opens, the
-control page serves, every inference route answers with a clean error, and the page leads
-with the **model catalog** (sec. 03) - a curated, sha-pinned list of current models
+missing) **and no servable `--tts`** does not exit - it boots into **setup mode**: the port
+opens, the control page serves, every inference route answers with a clean error, and the
+page leads with the **model catalog** (sec. 03) - a curated, sha-pinned list of current models
 (`model_catalog.das`; commit-pinned
 HF URLs, canonical sha256, one download at a time, `curl -C -` resume). A finished download
 is verified against its pinned sha before it is renamed into `models_dir` (default
@@ -81,6 +81,12 @@ models.
 **`--tts` alone is a serving start, not a setup start.** A speech-only server has no LLM slot,
 so `/v1/stats` answers the slotless shape - but its `setup` reads `false`, and the page keeps
 its serving surface instead of leading with the catalog.
+
+**A `--tts` whose files are not all there degrades, it does not die.** The missing file (the
+GGUF, or `tts_g2p.bin` / `tts_postag.bin` beside it) is logged as an error, the speech route is
+dropped, and the boot serves whatever is left - the LLM slots if any loaded, else setup mode by
+the rule above. Nothing panics: a crash-looping boot under the watchdog never gets a page to fix
+the config from.
 
 Catalog entries carry their **towers**: a vision-capable row offers its pinned mmproj
 (download -> **enable vision** -> restart wires `image_mmproj`), and a **dictation** strip

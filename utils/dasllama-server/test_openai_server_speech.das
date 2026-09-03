@@ -8,7 +8,7 @@ require openai_server                                   // configure_tts / run_s
 require dasllama/dasllama_common
 require daslib/jobque_boost                             // with_job_status / with_channel (server-thread lifecycle, the burst fan-out)
 require daslib/fio
-require daslib/rtti                                     // this_context().last_exception — the configure_tts refusals
+require daslib/rtti                                     // this_context().last_exception — proving configure_tts does NOT panic
 require strings
 require dasllama/dasllama_env
 
@@ -16,7 +16,7 @@ require dasllama/dasllama_env
 // header, the raw pcm form, the declined mp3, the missing input, the unknown voice, the TTS id
 // on /v1/models, the input cap and the speed range, and the queue's refusal past its cap.
 // Model-gated (kitten-nano.gguf + tts_g2p.bin + tts_postag.bin beside it) and JIT-only; skips
-// cleanly otherwise. The boot refusals and the no-TTS 503 are model-free and always run.
+// cleanly otherwise. The boot degrade and the no-TTS 503 are model-free and always run.
 
 let TEST_PORT = 18136   // 18097/18098/18099/18101/18102/18120/18121/18131/18135 belong to the sibling suites
 let SPEECHLESS_PORT = 18137
@@ -26,6 +26,7 @@ def private models_dir() : string {
     return models_dir_resolved()
 }
 let TTS_PATH = path_join(models_dir(), "kitten-nano.gguf")
+let BOGUS_TTS_PATH = path_join(models_dir(), "no-such-tts-model.gguf")   // never on disk: the degrade path
 
 struct private BurstAnswer {
     status : int
@@ -77,11 +78,14 @@ def private le32(b : array<uint8>; o : int) : int {
     return int(b[o]) | (int(b[o + 1]) << 8) | (int(b[o + 2]) << 16) | (int(b[o + 3]) << 24)
 }
 
-// a slotless, TTS-less boot: the speech route is registered on every server, so it is the one
-// place the not-ready arm is reachable without a model
+// a slotless boot whose --tts names a file set that is not there: configure_tts drops the route
+// instead of panicking the boot, so this doubles as the TTS-less server (the speech route is
+// registered on every server, and it is the one place the not-ready arm is reachable without a
+// model) and as the degraded one - a panic here would strand the join below
 def private with_speechless_server(t : T?; port : int; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
+            configure_tts(BOGUS_TTS_PATH)
             set_setup_mode(true)
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
@@ -108,7 +112,7 @@ def private with_speechless_server(t : T?; port : int; blk : block<(base_url : s
     }
 }
 
-def private refusal_of(blk : block<() : void>) : string {
+def private panic_text_of(blk : block<() : void>) : string {
     var why = ""
     try {
         invoke(blk)
@@ -119,16 +123,18 @@ def private refusal_of(blk : block<() : void>) : string {
 }
 
 [test]
-def test_configure_tts_refuses_a_boot_it_cannot_serve(t : T?) {
-    t |> run("a missing model file is named, not discovered on the worker thread") @(t : T?) {
-        let bogus = path_join(models_dir(), "no-such-tts-model.gguf")
-        let why = refusal_of() {
-            configure_tts(bogus)
+def test_configure_tts_degrades_a_boot_it_cannot_serve(t : T?) {
+    t |> run("a missing model file drops the route instead of panicking") @(t : T?) {
+        t |> equal(tts_missing_file(BOGUS_TTS_PATH), BOGUS_TTS_PATH, "the probe names the missing model")
+        t |> success(!tts_files_present(BOGUS_TTS_PATH), "the boot's setup-mode probe reads unservable")
+        let why = panic_text_of() {
+            configure_tts(BOGUS_TTS_PATH)
         }
-        t |> success(find(why, "no-such-tts-model.gguf") >= 0, "the refusal names the missing model: {why}")
+        t |> equal(why, "", "configure_tts panicked instead of degrading")
+        t |> success(!server_has_tts(), "the speech route is dropped, not armed")
         configure_tts("")
     }
-    t |> run("a missing front-end pack is named") @(t : T?) {
+    t |> run("a missing front-end pack drops the route instead of panicking") @(t : T?) {
         var terr : string
         let tmp = temp_directory(terr)
         let dir = path_join(empty(tmp) ? "." : tmp, "dasllama_speech_packless_{ref_time_ticks()}")
@@ -139,10 +145,14 @@ def test_configure_tts_refuses_a_boot_it_cannot_serve(t : T?) {
                 f |> fwrite("GGUF")
             }
         }
-        let why = refusal_of() {
+        let missing = tts_missing_file(packless)
+        t |> success(find(missing, "tts_g2p.bin") >= 0, "the probe names the missing pack: {missing}")
+        t |> success(!tts_files_present(packless), "the boot's setup-mode probe reads unservable")
+        let why = panic_text_of() {
             configure_tts(packless)
         }
-        t |> success(find(why, "tts_g2p.bin") >= 0, "the refusal names the missing pack: {why}")
+        t |> equal(why, "", "configure_tts panicked instead of degrading")
+        t |> success(!server_has_tts(), "the speech route is dropped, not armed")
         configure_tts("")
         remove(packless)
         rmdir(dir)
@@ -151,7 +161,7 @@ def test_configure_tts_refuses_a_boot_it_cannot_serve(t : T?) {
 
 [test]
 def test_speech_route_without_a_model(t : T?) {
-    t |> run("a server with no TTS refuses the speech route instead of serving silence") @(t : T?) {
+    t |> run("a boot whose TTS file set is missing serves on and refuses the speech route") @(t : T?) {
         with_speechless_server(t, SPEECHLESS_PORT) $(base_url) {
             speech_request(base_url, "\{\"input\": \"Hello.\"}") $(status, _ctype, _bytes, text) {
                 t |> equal(status, 503, text)

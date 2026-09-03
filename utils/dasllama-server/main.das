@@ -709,9 +709,10 @@ def parse_args() {
         request_exit()
         return
     }
-    // a [[models]] roster needs no flat model key; a --tts start is a SERVING server (the speech
-    // route), so it never enters setup mode
-    if (empty(g_cfg.model) && empty(g_models) && empty(g_cfg.tts)) {
+    // a [[models]] roster needs no flat model key; a --tts start with its file set complete is a
+    // SERVING server (the speech route), so it never enters setup mode - an incomplete set is one
+    // configure_tts drops, which leaves this boot nothing to serve
+    if (empty(g_cfg.model) && empty(g_models) && !tts_files_present(g_cfg.tts)) {
         g_setup_mode = true
         print("no model configured - starting in setup mode (open the control page to download one from the catalog)\n")
     }
@@ -909,10 +910,10 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     delete g_models
     g_models <- roster
-    if (empty(g_models) && !g_setup_mode && empty(g_cfg.tts)) {
+    if (empty(g_models) && !g_setup_mode && !tts_files_present(g_cfg.tts)) {
         // not an exit: a crash-looping boot under the watchdog never gets a page to fix the config from
         g_setup_mode = true
-        to_log(LOG_ERROR, "dasllama-server: no loadable model - every roster path failed its file check; starting in setup mode\n")
+        to_log(LOG_ERROR, "dasllama-server: no loadable model - no configured path survived its file check (roster entries, and the --tts file set); starting in setup mode\n")
     } elif (empty(g_models) && !g_setup_mode) {
         to_log(LOG_WARNING, "dasllama-server: no loadable LLM model - serving the speech route only (the TTS model still loads)\n")
     }

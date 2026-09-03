@@ -460,10 +460,39 @@ def configure_asr_workers(path, mmproj : string; workers : int = 1) {
     g_has_asr = !empty(path)
 }
 
+//! The first file of a TTS model's set that is absent — the GGUF at `path`, then each front-end
+//! pack (``tts_g2p.bin``, ``tts_postag.bin``) beside it. "" when the set is complete, and for an
+//! empty `path` (no TTS configured). This is the file ``configure_tts`` drops the route over.
+def tts_missing_file(path : string) : string {
+    if (empty(path)) {
+        return ""
+    }
+    if (!stat(path).is_valid) {
+        return path
+    }
+    let dir = dir_name(path)
+    for (pack in TTS_FRONT_END_PACKS) {
+        let pack_path = path_join(dir, pack)
+        if (!stat(pack_path).is_valid) {
+            return pack_path
+        }
+    }
+    return ""
+}
+
+//! True when `path` names a TTS model with its front-end packs beside it — the outcome
+//! ``configure_tts`` will reach, answerable BEFORE the call (an empty path reads false: nothing
+//! to serve). A boot that decides setup mode ahead of ``configure_tts`` reads this.
+def tts_files_present(path : string) : bool {
+    return !empty(path) && empty(tts_missing_file(path))
+}
+
 //! Configure the TTS model ``/v1/audio/speech`` serves: one worker thread loads and owns it in
-//! its own context, the route id is the file's stem. Call once before ``run_server``. Panics
-//! naming the missing file when the GGUF or either front-end pack is absent — the worker loads
-//! on its own thread, where a loader panic would otherwise be an unattributed dead worker.
+//! its own context, the route id is the file's stem. Call once before ``run_server``. A missing
+//! GGUF or front-end pack DEGRADES instead of panicking — the missing file is logged at
+//! LOG_ERROR and the speech route is dropped (``server_has_tts`` then reads false), because a
+//! crash-looping boot under the watchdog never gets a page to fix the config from. The rest of
+//! the boot serves on; ``tts_files_present`` answers the same file check before the call.
 def configure_tts(path : string) {
     g_tts_path = path
     g_has_tts = !empty(path)
@@ -471,16 +500,19 @@ def configure_tts(path : string) {
     if (!g_has_tts) {
         return
     }
-    if (!stat(path).is_valid) {
-        panic("dasllama-server: the TTS model file was not found: {path}")
+    let missing = tts_missing_file(path)
+    if (!empty(missing)) {
+        to_log(LOG_ERROR, "dasllama-server: dropping the speech route - a TTS file was not found: {missing} (the model GGUF and the front-end packs tts_g2p.bin + tts_postag.bin sit in one directory; fix the config, then POST /restart)\n")
+        g_has_tts = false
+        g_tts_path = ""
+        g_tts_id = ""
     }
-    let dir = dir_name(path)
-    for (pack in TTS_FRONT_END_PACKS) {
-        let pack_path = path_join(dir, pack)
-        if (!stat(pack_path).is_valid) {
-            panic("dasllama-server: the TTS front-end pack was not found: {pack_path} (tts_g2p.bin and tts_postag.bin sit beside the model GGUF)")
-        }
-    }
+}
+
+//! True when ``configure_tts`` armed the speech route: false when no TTS was configured, and
+//! false when its file set was incomplete and the route was dropped.
+def server_has_tts : bool {
+    return g_has_tts
 }
 
 //! Stop admitting new inference/ASR work and exit after all accepted work finishes. Also wired to
