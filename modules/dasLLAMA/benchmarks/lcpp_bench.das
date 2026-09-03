@@ -20,6 +20,7 @@ require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower eng
 require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require ?das_metal dasllama/dasllama_metal_prefill   // --asr --ngl: the chat-decoder prefill engage witness
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // --mtp-ab on a gemma-4 target: the assistant drafter sidecar attaches here
+require ?das_metal dasllama/dasllama_metal_common   // --prof: the decode drivers' per-step stage report (setup / encode / wait / gpu / readback)
 require dasllama/dasllama_mtp_gemma   // nolint:STYLE030,LINT019 — gemma_drafter_sidecar is read in the das_metal half
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
 require dasllama/dasllama_vision_embedder   // --image: the vision embedder (any family) + encode_image_
@@ -1608,6 +1609,9 @@ def main() : int {
                     let pl0 = long_length(toks[0])
                     forward_prefill(t, ps, toks[0], pl0, 0l)
                     forward_profile_reset()
+                    static_if (typeinfo builtin_module_exists(das_metal)) {
+                        metal_decode_stage_reset()   // the stage report below covers this window alone
+                    }
                     if (mtp_on) {
                         ps.n_past = pl0
                         var ptok = argmax_logit(ps, c.vocab_size)
@@ -1625,6 +1629,9 @@ def main() : int {
                     }
                     say(fmt, "--- forward_profile: {st.test} ---\n")
                     forward_profile_report()
+                    static_if (typeinfo builtin_module_exists(das_metal)) {
+                        metal_decode_stage_report()
+                    }
                     delete ps
                 }
                 continue

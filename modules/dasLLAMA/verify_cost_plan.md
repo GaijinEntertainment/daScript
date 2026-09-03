@@ -326,6 +326,30 @@ the encode 0.03). Three candidate levers, measured or sized:
 Net: the Qwen round has no small lever worth more than 3%; its depth-3 speedup stays 1.31x until
 the verify rows get cheaper, and S2.4 says the K-quant forms cannot make them so on this GPU.
 
+## S2.6 - the gemma round's verify, split (Boris: "switch to gemma and see if there is anything to pick up")
+
+The batch driver's per-step stage report over the depth-1 round's profile window (75 two-row
+verifies, prompt 0, `lcpp_bench --prof` now prints it): setup 1.5 us, host encode 459 us, wait
+10769 us, GPU envelope 10065 us, inter-step handoff 923 us, readback 107 us - 11.4 ms per verify of
+which 10.1 ms is GPU time and the draft chain another ~0.9 ms of GPU behind it. The plain step's
+GPU time is 8.0 ms (wall 8.1, encode 0.4 hidden by the chain). So the two-row verify costs 2.0 ms
+of GPU over a step, and the host is under 0.6 ms. Where the 2.0 ms is, from the S0 knockouts on
+this model (rows 1 -> 2: routed experts +1.0 ms, dense GEMV +0.0, elementwise -0.4, residual
++0.7): the second row's non-shared experts (+1.0) and the batch driver's forms at two rows (the
+two-column twins over the single pass, the per-row router and gather, the 4-cb split; ~1.0).
+
+**The expert gather (S2 #1) is refuted by the same numbers.** Two rows' top-8 of 128 experts
+overlap by about half on consecutive tokens, so the union is ~12 experts = 1.5x one row's expert
+stream = 2.6 ms; the measured two-row expert cost is 2.76 ms, and four rows (union ~22 = 2.75x)
+measure 4.73 against 1.75 x 2.7 = 4.7. The cache already serves the duplicate expert reads; a
+gather that streams the union once buys nothing on this box. Struck.
+
+What is left on gemma, each under 5% of the round: the drafter's 262k-vocab classifier (~0.6 ms
+of the 0.9 ms draft; the checkpoint's centroid lm_head mask would cut it ~60x - a data question,
+not a kernel), the B2 twin's second column (~0.6 ms, the crowned per-box form already), the batch
+driver's fixed step overhead over the single-row driver (~0.5 ms). The ceiling with a free verify
+is 1.52x at depth 1 (1.69 tokens over a 1.11-step round); today's 1.24x sits 2 ms of GPU below it.
+
 ## S3 - the CPU verify
 
 Instrument: `benchmarks/verify_batch_probe.das` (the marginal cost `b` of one extra row through
