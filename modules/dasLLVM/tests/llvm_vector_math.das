@@ -99,7 +99,6 @@ def private reference_op(x, y : float; which : int) : float {
     return float(cosh(double(x)))
 }
 
-// the worker under test - jitted whenever the run is jitted
 def private apply_op(xs, ys : array<float4>; which : int) : array<float4> {
     var r : array<float4>
     r |> reserve(length(xs))

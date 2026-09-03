@@ -82,3 +82,10 @@
   (`ARCHITECTURE.md#x64-tier-gates`). A name the cpuid table does not know answers false on
   every box, so every perm that requires it silently declines to its fallback and no error names
   the cause.
+
+- **A vector-math emitter on the inline-polynomial rail (`build_vector_*` in
+  `daslib/llvm_jit_intrin.das`) emits every Horner step vecmath writes unfused through
+  `vmath_poly_step`, and `vmath_fma` only where vecmath fuses; a new emitter ships a
+  `tests/llvm_vector_math.das` cell comparing it lane for lane with the interpreted twin.**
+  (`ARCHITECTURE.md#vector-poly-fusion`). One contracted step in a sign-alternating chain moves
+  the result by several ulp, and the rail's point is that the three tiers agree.

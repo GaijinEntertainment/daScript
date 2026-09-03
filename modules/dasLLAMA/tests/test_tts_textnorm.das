@@ -165,7 +165,7 @@ def test_upstream_defects_fixed(t : T?) {
     }
 }
 
-[test]
+[test, arch(at = "../ARCHITECTURE_TTS.md#tts-rig-scoring")]
 def test_corpus(t : T?) {
     t |> run("200 sentences match the reference normalizer") @(t : T?) {
         let rows <- load_tts_corpus()

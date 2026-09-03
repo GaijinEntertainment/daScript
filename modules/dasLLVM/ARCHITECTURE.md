@@ -192,3 +192,55 @@ constant's memory when the fold happened - `LLVMSetIsInBounds` was the instance 
 the context (heap damage surfacing in `LLVMContextDispose` at teardown). The in-bounds form is
 requested at build time (`LLVMBuildInBoundsGEP2`), which folds to an in-bounds `ConstantExpr`
 correctly; the `llvm_boost` wrapper's `inbounds` default rides that builder.
+
+## 8. The inline-polynomial rail {#vector-poly-rail}
+
+`math::exp`, `sin`, `cos`, `tan`, `exp2`, `log2`, `log`, `pow` and the three hyperbolics on a
+float VECTOR type are emitted as inline IR by the `build_vector_*` emitters in
+`llvm_jit_intrin.das`, all behind one gate (`vmath_poly_gate`). The default lowering is
+`@llvm.<op>.vNf32`, which scalarizes to N libm calls on any target without a vector libm -
+Darwin-ARM and most others. Each emitter replaces that call with the SAME polynomial the
+interpreter and AOT already run (vecmath, `include/vecmath/`), written as generic vector IR
+(`fmuladd`, `trunc`, `roundeven`, `copysign`, integer masks and selects) that the backend lowers
+to one NEON instruction apiece - so the three rails agree instead of merely being close; the
+one family that cannot mirror vecmath is sec.8.3. sin and cos mirror `v_sincos` (quadrant =
+round(x*2/pi), the two-constant Cody-Waite reduction, a degree-3-in-x^2 pair); tan mirrors
+`v_tan` (4/pi octants, three reduction constants, its own minimax - not sin over cos); exp2,
+log2, log and pow mirror `v_exp2`, `v_log2_est_p5`, `v_log` and `v_pow`. The gate is aarch64 by
+measurement, not by portability: on x64 the always-computed guard branches of these kernels
+cost more than they save. Scalar float and double keep the libm intrinsic on every target -
+libm is correctly rounded and one scalar call carries no scalarization penalty. exp keeps the
+ggml polynomial it had and differs from the interpreter by 3.9e-6 relative; routing it through
+the exp2 emitter is the one change that would make it exact.
+
+### 8.1 Fusion is part of the polynomial {#vector-poly-fusion}
+
+A Horner step vecmath writes as `v_add(v_mul(..))` is emitted unfused - `vmath_poly_step`, an
+fmul then an fadd - and only the chains vecmath writes as `v_madd` / `v_nmsub` go through
+`vmath_fma`. The exp2 and log2 chains alternate sign heavily enough that one contracted step
+moves the result by several ulp, so emitting `@llvm.fmuladd` for them costs bit-exact agreement
+with the interpreter and AOT: measured over 200k lanes, unfused is identical and fused is up to
+1.9e-6 apart. Where vecmath does fuse, fusion is load-bearing rather than optional - the sincos
+Cody-Waite reduction rounds `x - qf*KC1` into noise at |x| ~ 1e5 without it.
+
+### 8.2 log2 is an estimate, and its specials are not IEEE {#vector-log2-estimate}
+
+`build_vector_log2` mirrors vecmath's `v_log2_est_p5` (`dag_vecMath_common.h`): the exponent
+field gives the integer part, the mantissa is forced into [1,2) and fed to a degree-5 minimax,
+and the `p*(m-1)` shape is what makes log2(1) exactly 0. It is an ESTIMATE, materially looser
+than libm - about 3.7e-5 relative at its worst, just below x == 1 where that combine cancels -
+and the interpreter and AOT have always used it, so the JIT matching it is the point: the
+tiers agreeing is the property that wins, and a better log2 goes into vecmath for every tier,
+never into one rail. `math::log` is this estimate scaled by ln2 and `math::pow` is
+`exp2(log2_est(x) * y)`, so both inherit the error, pow amplified by |y|. The estimate reads
+the exponent through a mask and therefore never produces -inf or NaN: log2(0) is -127 and
+log2(-x) == log2(|x|). `tests/llvm_vector_math.das` pins the bounds and the special values.
+
+### 8.3 The hyperbolics have no interpreter twin {#vector-hyperbolic-divergence}
+
+vecmath carries no vector sinh/cosh/tanh, so `SimPolicy` binds `vsinh`/`vcosh`/`vtanh`
+(`aot_builtin_math.h`), which call libm once per lane. `build_vector_hyper` builds all three on
+`build_vector_expf` instead, so on this one family the JIT diverges from interp and AOT by the
+exp polynomial's error rather than agreeing with them - the opposite trade from every other
+emitter on the rail, taken because the consumer (GELU over float4 rows) otherwise pays four
+libm calls per vector. `tests/llvm_vector_math.das` asserts the size of that divergence.

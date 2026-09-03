@@ -31,13 +31,13 @@ struct TtsSpan {
     n : int64
 }
 
-let BLOB_ALIGN = 64l   // floats: every span starts on a 256-byte boundary, a legal GPU buffer offset
+let BLOB_ALIGN_FLOATS = 64l   // every span starts on a 256-byte boundary, a legal GPU buffer offset
 
 //! Append `src` to a staging blob on the alignment boundary; the span it landed in.
 def blob_push(var blob : array<float>; src : array<float>) : TtsSpan {
     let n = long_length(src)
     return TtsSpan() if (n == 0l)
-    let off = (long_length(blob) + BLOB_ALIGN - 1l) / BLOB_ALIGN * BLOB_ALIGN
+    let off = (long_length(blob) + BLOB_ALIGN_FLOATS - 1l) / BLOB_ALIGN_FLOATS * BLOB_ALIGN_FLOATS
     blob |> ensure_capacity(off + n)
     blob |> resize(off + n)
     for (i in range64(n)) {
@@ -92,7 +92,7 @@ def weight_slot(var io : TtsBlobIo; var a : array<float>; var span : TtsSpan) {
 def blob_push_q8(var qblob : array<int8>; src : array<int8>) : TtsSpan {
     let n = long_length(src)
     return TtsSpan() if (n == 0l)
-    let off = (long_length(qblob) + BLOB_ALIGN - 1l) / BLOB_ALIGN * BLOB_ALIGN
+    let off = (long_length(qblob) + BLOB_ALIGN_FLOATS - 1l) / BLOB_ALIGN_FLOATS * BLOB_ALIGN_FLOATS
     qblob |> ensure_capacity(off + n)
     qblob |> resize(off + n)
     for (i in range64(n)) {
@@ -182,7 +182,7 @@ struct TtsConv1d {
     transposed : bool
     served_rows : bool
     q8 : bool
-    q8_n : int64         // the width of a wq row, k*cin - the K of the stacked GEMM
+    q8_k : int64         // k*cin
 }
 
 def serialize(var arch : Archive; var c : TtsConv1d) {
@@ -206,7 +206,7 @@ def serialize(var arch : Archive; var c : TtsConv1d) {
     arch |> serialize_raw(c.transposed)
     arch |> serialize_raw(c.served_rows)
     arch |> serialize_raw(c.q8)
-    arch |> serialize_raw(c.q8_n)
+    arch |> serialize_raw(c.q8_k)
 }
 
 def finalize(var c : TtsConv1d) {
@@ -374,6 +374,7 @@ def conv1d_out_len(c : TtsConv1d; t_in : int64) : int64 {
 //! Pad a forward conv's input channels to `cin_s` with zero weights, the ONNX layout kept (a
 //! depthwise conv pads its channel count and bias with it), so the conv reads rows padded to
 //! the same width - the bake-time transform that puts a concat width on the q8 lane's 32.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-padded-input-width")]
 def conv1d_pad_cin(var c : TtsConv1d; cin_s : int64) {
     return if (cin_s == c.cin)
     let depthwise = c.groups != 1l
@@ -462,9 +463,7 @@ def conv1d_q8_eligible(c : TtsConv1d) : bool {
     return c.groups == 1l && !c.transposed && c.stride == 1l && c.cin % 32l == 0l && c.cout % 32l == 0l
 }
 
-// The q8 rows lane: the taps stacked along K into one [cout][k*cin] matrix (tap-major within
-// a row), quantized Q8_0 per 32, then repacked in place for the backend when the box's backend
-// wants it (`repack`) - a conv is one GEMM over activation rows stacked the same way.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
 def private conv1d_prepare_q8(var c : TtsConv1d; repack : bool) {
     let kc = c.k * c.cin
     var inscope slab : array<float>
@@ -482,7 +481,7 @@ def private conv1d_prepare_q8(var c : TtsConv1d; repack : bool) {
     if (repack) {
         repack_q8q8_weight(c.wq, c.wqs, 0l, kc, c.cout)
     }
-    c.q8_n = kc
+    c.q8_k = kc
     c.q8 = true
     delete c.w
 }
@@ -564,9 +563,7 @@ def transpose_tc_strided(x : array<float>; t, c, row_stride : int64; @scratch va
 
 // ===== convolution =====
 
-// ===== kernel-private scratch: module globals, one per buffer, sized to the current call and
-// reused across calls - a context runs one synthesis at a time and lanes never size them, so a
-// kernel's transient buffer costs one growth per context, not one per call =====
+// ===== kernel-private scratch: module globals, one per buffer (ARCHITECTURE_TTS.md sec.2.31) =====
 var @scratch g_conv_col : array<float>
 var @scratch g_conv_ytm : array<float>
 var @scratch g_convt_xtm : array<float>
@@ -593,18 +590,18 @@ var @scratch @exact_size g_sine_rad : array<float>
 var @scratch @exact_size g_sine_low : array<float>
 var @scratch @exact_size g_sine_phase : array<float>
 
-let private CONV_CHUNK = 1024l   // im2col rows per GEMM
+let private CONV_IM2COL_ROWS = 1024l
 
 def private conv1d_dense(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
     let kw = c.cin * c.k
     var col & = g_conv_col
     var ytm & = g_conv_ytm
-    col |> reserve_resize(CONV_CHUNK * kw)
-    ytm |> reserve_resize(CONV_CHUNK * c.cout)
+    col |> reserve_resize(CONV_IM2COL_ROWS * kw)
+    ytm |> reserve_resize(CONV_IM2COL_ROWS * c.cout)
     var t0 = 0l
     while (t0 < t_out) {
-        let rows = min(CONV_CHUNK, t_out - t0)
+        let rows = min(CONV_IM2COL_ROWS, t_out - t0)
         for (r in range64(rows)) {
             let base = (t0 + r) * c.stride - c.pad_l
             for (ci in range64(c.cin)) {
@@ -734,8 +731,7 @@ def private rows_width_check(c : int64; what : string) {
     }
 }
 
-// Forward dense conv, stride 1: y rows start as the bias, then each tap accumulates one GEMM
-// over the rows whose shifted input row exists - no im2col, no bounds check inside the kernel.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-two-layouts")]
 def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
     let cin = c.cin
@@ -828,14 +824,9 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
     }
 }
 
-// The q8 rows lane: the input rows quantized once (Q8_0 per 32 along cin), then each tap one
-// backend q8.q8 batch GEMM over the rows whose shifted input exists (the kernel splits its
-// weight rows across lanes itself), added onto the bias-initialized y.
 let private ROWS_STACK_BYTES = 4l * 1024l * 1024l   // a stacked chunk stays cache-resident while the GEMM reads it
 
-// A strided forward conv on rows, f32: per chunk of output rows the k tap rows stack side by
-// side (zero where a tap leaves the input) and one tiled GEMM with K = k*cin reads `wk` as
-// [k*cin][cout_s]; the bias seeds the rows the GEMM accumulates onto.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
 def private conv1d_rows_dense_strided(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
     let cin = c.cin
@@ -894,15 +885,13 @@ def private conv1d_rows_dense_strided(c : TtsConv1d; x : array<float>; t_in : in
     }
 }
 
-// One GEMM per chunk of output rows over stacked rows - the k shifted input rows side by side,
-// copied from the once-quantized input, zero scales where the shift leaves it - so the kernel
-// sees K = k*cin and nothing accumulates across taps.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
 def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
     let cin = c.cin
     let cout = c.cout
     let nb = cin / 32l
-    let kc = c.q8_n
+    let kc = c.q8_k
     let knb = kc / 32l
     let nbias = empty(c.b) ? 0l : cout
     var xq & = g_q8_xq
@@ -1306,6 +1295,7 @@ def adain(a : TtsAdaIn; var x : array<float>; c, t : int64; style : array<float>
 // one-pass variance from cancelling), and the blocks merge in double, lane-split invariant.
 let private STAT_BLOCK = 256l
 
+[arch(at = "../ARCHITECTURE_TTS.md#tts-two-layouts")]
 def private column_stats(x : array<float>; t, c : int64; var mean : array<float>; var ssq : array<float>) {
     let nblk = (t + STAT_BLOCK - 1l) / STAT_BLOCK
     var part & = g_colsum_part
@@ -1896,10 +1886,12 @@ struct SineSourceCfg {
     torch_math : bool   // the reference's arithmetic: PyTorch's (double-accumulated cumsum, its resampler), else onnxruntime's
 }
 
+[arch(at = "../ARCHITECTURE_TTS.md#tts-phase-law")]
 def private source_resize(cfg : SineSourceCfg; x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
     return cfg.torch_math ? resize_linear_torch(x, c, t, scale, y) : resize_linear(x, c, t, scale, y)
 }
 
+[arch(at = "../ARCHITECTURE_TTS.md#tts-phase-law")]
 def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u, noise_n : array<float>;
                 @exact_size var out : array<float>) : int64 {
     let n = frames * cfg.upsample
@@ -1918,8 +1910,6 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u,
     }
     var low & = g_sine_low
     let nlow = source_resize(cfg, rad, nh, n, 1.0 / float(cfg.upsample), low)
-    // the reference's operation order, kept exactly: the phase reaches 1e5 radians, where one
-    // float32 ulp is a hundredth of a radian, so a reassociated product is an audible change
     for (h in range64(nh)) {
         var acc = 0.0
         var acc64 = 0.0lf

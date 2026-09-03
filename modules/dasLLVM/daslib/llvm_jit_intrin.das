@@ -1179,14 +1179,7 @@ def private vmath_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMO
 }
 
 // ===== the inline-polynomial rail =====
-// The default lowering of a transcendental on a vector type is @llvm.<op>.vNf32, which scalarizes
-// to N libm calls on any target without a vector libm (Darwin-ARM and most others). Each emitter
-// below replaces one such call with the SAME polynomial the interpreter and AOT already run
-// (vecmath, include/vecmath/), so the three rails agree instead of merely being close. The gate is
-// aarch64 by measurement, not by portability: on x64 the always-computed guard branches of these
-// kernels cost more than they save (see build_vector_expf).
-// One exception is flagged at its emitter: vecmath has no vector sinh/cosh/tanh, so those three
-// have no interpreter twin to mirror and the JIT necessarily diverges there.
+[arch(at = "../ARCHITECTURE.md#vector-poly-rail")]
 def private vmath_poly_gate(opType : TypeDeclPtr) : bool {
     return g_target_is_aarch64 && opType.isVectorType && opType.vectorBaseType == Type.tFloat
 }
@@ -1196,12 +1189,7 @@ def private vmath_fma_decl(opType : TypeDeclPtr; lt : LLVMOpaqueType?) : LLVMOpa
     return fid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, fid, [ lt]) : null
 }
 
-// One Horner step of a vecmath POLY macro: a*b + c, deliberately NOT fused. The POLY0..POLY5
-// macros spell v_add(v_mul(..)) rather than v_madd, and the exp2/log2 chains alternate sign
-// heavily enough that one contracted step moves the result by several ulp. Emitting @llvm.fmuladd
-// here costs bit-exact agreement with the interpreter and AOT (measured: 200k lanes identical
-// unfused, up to 1.9e-6 apart fused) - so the polynomials that vecmath writes unfused stay
-// unfused, and only the chains vecmath writes as v_madd/v_nmsub take vmath_fma.
+[arch(at = "../ARCHITECTURE.md#vector-poly-fusion")]
 def private vmath_poly_step(bld : LLVMOpaqueBuilder?; a, b, c : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     return LLVMBuildFAdd(bld, LLVMBuildFMul(bld, a, b, ""), c, "")
 }
@@ -1276,9 +1264,7 @@ def intrinsic_math_exp(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array
 // Cody-Waite reduction (KC1 + KC2 sums to pi/2 within 1.8e-15, so the reduction still holds at
 // |x| = 1e5), a degree-3-in-x^2 minimax pair for sin and cos of the reduced argument, and a
 // branchless quadrant select. Both polynomials are always evaluated — the select is per lane —
-// so sin and cos cost the same. The default lowering (@llvm.sin.vNf32) scalarizes to N libm
-// calls on targets without a vector libm (Darwin-ARM), which is why this exists; the gate in
-// intrinsic_math_sincos keeps it aarch64-only, matching build_vector_expf above.
+// so sin and cos cost the same.
 // FMA is load-bearing, not an optimization: without fusion x - qf*KC1 rounds the product at
 // |x| ~ 1e5 and the reduced argument is noise. aarch64 always fuses @llvm.fmuladd.
 def private build_vector_sincos(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqueValue?; wantCos : bool) : LLVMOpaqueValue? {
@@ -1319,8 +1305,6 @@ def private build_vector_sincos(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaq
     return LLVMBuildSelect(bld, pos, res, LLVMBuildFNeg(bld, res, ""), "")
 }
 
-// sin/cos: aarch64 vector-float takes the inline polynomial (rationale at build_vector_sincos
-// above); scalar float/double and all non-aarch64 vector sin/cos keep @llvm.sin / @llvm.cos.
 def intrinsic_math_sincos(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     let name = string(expr.name)
@@ -1410,12 +1394,7 @@ def intrinsic_math_exp2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : arra
     return intrinsic_math_any_float_op1("exp2", ctx.builder, expr, arguments)
 }
 
-// Vectorized log2f as inline IR - vecmath v_log2_est_p5 (dag_vecMath_common.h): the exponent
-// field gives the integer part, the mantissa is forced into [1,2) and fed to a degree-5 minimax,
-// and the p*(m-1) shape is what makes log2(1) exactly 0. It is an ESTIMATE, materially looser
-// than libm - the interpreter and AOT have always used it, so the JIT matching it is the whole
-// point. It reads the exponent through a mask, so it never produces -inf or NaN: log2(0) is -127
-// and log2(-x) == log2(x). That is the interpreter's behaviour and the test pins it.
+[arch(at = "../ARCHITECTURE.md#vector-log2-estimate")]
 def private build_vector_log2(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let bld = ctx.builder
     let dim = opType.vectorDim
@@ -1466,15 +1445,10 @@ def intrinsic_math_pow(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array
     return LLVMBuildSelect(ctx.builder, y0, vmath_fsplat(ctx, opType, 1.0lf), r, "")
 }
 
-// Vectorized sinh/cosh/tanh built on build_vector_expf. THIS ONE HAS NO INTERPRETER TWIN:
-// vecmath has no vector hyperbolics, so SimPolicy binds vsinh/vcosh/vtanh (aot_builtin_math.h),
-// which call libm once per lane. The JIT therefore diverges from interp and AOT here by the
-// exp polynomial's error rather than agreeing with them - the opposite trade from every other
-// emitter on this rail, taken because the consumer (GELU over float4 rows) pays four libm calls
-// per vector otherwise. The bound is measured in llvm_vector_math.das.
 // Near zero the exp forms of sinh and tanh cancel catastrophically, so |x| < 0.25 takes the odd
 // Taylor series instead; cosh is well conditioned everywhere and needs no such arm. tanh clamps
 // to +-9 first: exp(18) cannot overflow, and (t-1)/(t+1) there already rounds to exactly +-1.
+[arch(at = "../ARCHITECTURE.md#vector-hyperbolic-divergence")]
 def private build_vector_hyper(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqueValue?; op_name : string) : LLVMOpaqueValue? {
     let bld = ctx.builder
     let lt = type_to_llvm_type(opType)

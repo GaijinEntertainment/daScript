@@ -3968,7 +3968,6 @@ def private tts_worker_main(model_path : string; team_dispatch : bool; var jobs 
 }
 
 // POST /v1/audio/speech: {"model"?, "input", "voice"?, "speed"?, "response_format"?: "wav" | "pcm"}.
-// The OpenAI shape; the compressed formats need an encoder this server does not carry.
 def private queue_speech(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
     if (reject_deferred_while_draining(srv, writer)) {
         return
@@ -4800,7 +4799,6 @@ def update_server() : bool {
     return true
 }
 
-//! Release every lifecycle-owned object in dependency order. Safe after a partially failed init.
 // a stopped worker's channel pair: both released, either may already be null
 def private remove_worker_channels(var jobs : Channel?; var events : Channel?) {
     unsafe {
@@ -4813,6 +4811,7 @@ def private remove_worker_channels(var jobs : Channel?; var events : Channel?) {
     }
 }
 
+//! Release every lifecycle-owned object in dependency order. Safe after a partially failed init.
 def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers stop before their channels, VRAM drops before the slots, the jobque dies last
     if (g_server_started && g_server != null) {
         g_server->stop()

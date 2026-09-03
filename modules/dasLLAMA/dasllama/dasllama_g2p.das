@@ -555,8 +555,7 @@ let private HETERONYM_OVERRIDES <- {
     "resume" => { "DEFAULT" => "ɹəzˈum", "NOUN" => "ɹˈɛzəmˌA" }   // nolint:STYLE039
 }
 
-// the entry keys to try, in order: the infinitive after "to" reads as the verb; after a
-// determiner a verb tag is a mis-tag and an adjective before a non-noun is the noun
+[arch(at = "../ARCHITECTURE_TTS.md#tts-heteronym-context")]
 def private key_order(tag : string; ctx : TokenContext; has_ctx : bool) : array<string> {
     var keys : array<string>
     if (has_ctx && ctx.prev_text == "to" && ctx.prev_tag == "TO") {

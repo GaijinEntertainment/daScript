@@ -171,7 +171,7 @@ Existing (cite, don't rewrite):
 
 New in `dasllama_tts_blocks.das`:
 
-- ConvTranspose1d (stride-2/­stride-N upsample; weight-norm folded at convert).
+- ConvTranspose1d (stride-2/stride-N upsample; weight-norm folded at convert).
 - AdaIN1d / AdaLayerNorm (style-conditioned scale+shift - trivial given norm rows).
 - Harmonic source module (f0 -> sine harmonics + noise mix; Kokoro istftnet + Kitten twin).
 - ISTFT/overlap-add with window compensation.

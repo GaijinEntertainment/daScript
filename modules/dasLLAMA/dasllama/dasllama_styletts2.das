@@ -415,6 +415,7 @@ def private read_arr(m : GGUFMeta; bytes : array<uint8> | #; name : string) : ar
     return <- a
 }
 
+[arch(at = "../ARCHITECTURE_TTS.md#tts-padded-input-width")]
 def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : string; rows : bool = false; cin_s : int64 = 0l) : TtsConv1d {
     var c = TtsConv1d()
     c.w <- read_arr(m, bytes, wname)
@@ -440,7 +441,7 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
         c.cout = d2
         c.cin = d1 * c.groups
     }
-    if (cin_s > 0l) {   // pad before the served layout is minted - the mint drops the ONNX weight
+    if (cin_s > 0l) {
         conv1d_pad_cin(c, cin_s)
     }
     c.served_rows = rows
@@ -672,6 +673,7 @@ def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) :
 //! Read a converted StyleTTS2-lineage GGUF (harness/convert_kitten.py, harness/convert_kokoro.py)
 //! into the mint-side carrier: served layouts minted, voices and STFT convention read, every
 //! weight moved into the staging blob. Family keys are the family file's to read.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail")]
 def stage_styletts2(path : string; q8 : bool = false) : St2Staging {
     var inscope st = St2Staging()
     st.e.q8 = q8
@@ -721,13 +723,14 @@ def mint_styletts2(var st : St2Staging; var out : StyleTts2Model) {
 //! Load a converted StyleTTS2-lineage GGUF through its prepared image on the current lane: the
 //! sibling `.dlim` maps when it exists, else the GGUF stages, bakes and maps
 //! (``DASLLAMA_IMAGE=0`` mints in memory).
+[arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def load_styletts2(path : string) : StyleTts2Model {
     var inscope m = StyleTts2Model()
     let q8 = st2_serve_q8()
     let tag = st2_tag()
     st2_announce_lane()
     if (g_env_engine.image) {
-        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
+        apply_box_profile_runtime()
         let img = image_path_for(path, tag)
         let ts = ref_time_ticks()
         if (load_image(img, m, tag)) {
@@ -1505,7 +1508,7 @@ def private styletts2_decode(d : St2Decoder; text_c : int64; source : SineSource
 //! Synthesize from token ids: the full StyleTTS2 pass into `sc.wave` (the facade trims the
 //! tail), the sample count back. `noise` supplies the source noise (empty = drawn from `seed`),
 //! `tr` collects the stage tensors when not null, `tm` the stage walls, `sc` every buffer.
-[hot_path]
+[hot_path, arch(at = "../ARCHITECTURE_TTS.md#tts-scratch-carrier")]
 def styletts2_synthesize(m : StyleTts2Model; ids : array<int>; style : array<float>; speed : float;
                          var noise : TtsNoise; seed : uint64; var tr : StyleTts2Trace?; var tm : TtsTimings; var sc : St2Scratch) : int64 {
     let start = ref_time_ticks()

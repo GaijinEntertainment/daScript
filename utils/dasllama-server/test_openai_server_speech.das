@@ -7,7 +7,6 @@ require dastest/testing_boost public
 require openai_server                                   // configure_tts / run_server (sibling)
 require dasllama/dasllama_common
 require daslib/jobque_boost                             // with_job_status (server-thread lifecycle)
-require daslib/json_boost                               // read_json / write_json
 require daslib/fio
 require strings
 require dasllama/dasllama_env

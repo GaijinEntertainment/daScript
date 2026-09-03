@@ -162,7 +162,7 @@ struct DlimImageInfo {
 }
 
 var private g_family_tags : array<string>
-var private g_config_free_tags : array<string>   // the family tags keyed by the default configuration
+var private g_config_free_tags : array<string>
 
 var private g_image_frozen = false
 

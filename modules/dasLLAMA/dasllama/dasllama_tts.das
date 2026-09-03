@@ -205,7 +205,6 @@ def private add_timings(var acc : TtsTimings; t : TtsTimings) {
     acc.samples += t.samples
 }
 
-// one chunk of normalized text through the family's symbols and the shared assembly
 def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; speed : float) : TtsAudio {
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
