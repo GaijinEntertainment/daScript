@@ -79,8 +79,11 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   packs of 510 rows.
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
   picked by `general.architecture`; `tts_g2p.bin` and `tts_postag.bin` read from the GGUF's
-  directory), `caps`, the lane pin (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`),
-  `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
+  directory), `caps`, the front-end pair `tts_normalize` (the normalization pass alone - the
+  spoken form a synthesis reads, and it consults no pack) and `tts_phonemize` (one already
+  normalized sentence in the front end's own 45-symbol inventory, the string each chunk
+  carries before a family rewrites it into its own symbols), the lane pin (`set_tts_q8`,
+  `reset_tts_q8`, `tts_serves_q8`), `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
   chunk - `length()` on a string is bytes, and an em dash costs three of them - abbreviations
   and decimals never split, a whitespace-free run longer than the cap hard-split at the cap on
   a codepoint boundary -> per chunk: phonemize -> the family's symbols

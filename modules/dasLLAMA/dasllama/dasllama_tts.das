@@ -91,6 +91,18 @@ def caps(m : TtsModel) : TtsCaps {
     return <- c
 }
 
+// ===== front end =====
+
+//! The spoken form of `text`: the normalization pass every synthesis runs first
+//! (`dasllama_textnorm`, rules alone - it reads no pack), where "Dr." reads "Doctor", "3.5"
+//! reads "three point five" and "$12" reads "twelve dollars".
+def tts_normalize(text : string) : string => normalize_text(text)
+
+//! The phonemes one already-normalized sentence becomes, in the front end's own 45-symbol US
+//! inventory: the tagger of `tts_postag.bin` labels the tokens, the grapheme-to-phoneme pass of
+//! `tts_g2p.bin` reads them. A family wanting other symbols rewrites this string into them.
+def tts_phonemize(m : TtsModel; text : string) : string => g2p_phonemize(m.g2p, m.tagger, text)
+
 // ===== chunking =====
 
 //! The longest chunk of normalized text one synthesis takes: the reference driver's limit, and

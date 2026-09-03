@@ -84,6 +84,29 @@ into the 45 US phoneme symbols the model was trained on. The tag is what
 settles a heteronym — ``read`` as a verb and ``read`` as a past tense are the
 same letters and different sounds.
 
+``synthesize`` runs all three for you. Two facade calls run them alone, so you
+can see what the model is asked to say. ``tts_normalize`` is the first pass,
+and it needs no model — the normalizer is rules, not a pack.
+
+.. code-block:: das
+
+   print("{tts_normalize("Dr. Chen read 3.5 pages and paid $12.")}\n")
+   // output: Doctor Chen read three point five pages and paid twelve dollars.
+
+``tts_phonemize`` is the last pass, and it takes one already-normalized
+sentence — the same piece ``synthesize`` hands the model. It answers in the
+front end's own inventory, before any family rewrites those symbols into the
+ones it was trained on, so two models with different symbol tables give you the
+same string here.
+
+.. code-block:: das
+
+   let spoken = tts_normalize("Dr. Chen read 3.5 pages and paid $12.")
+   print("{tts_phonemize(m, spoken)}\n")
+   // output: dˈɑktəɹ ʧˈɛn ɹˈɛd θɹˈi pˈYnt fˈIv pˈAʤᵻz ænd pˈAd twˈɛlv dˈɑləɹz.
+
+``read`` comes out ``ɹˈɛd``, the past tense, because the tagger called it one.
+
 The front end is where ``synthesize`` spends its first microseconds, and
 ``TtsTimings`` counts them separately from the model stages.
 

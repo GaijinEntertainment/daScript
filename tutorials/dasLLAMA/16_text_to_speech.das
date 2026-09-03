@@ -12,6 +12,7 @@ require strings
 // This tutorial covers:
 //   - load_tts_model — one loader for every TTS family, the front-end packs read beside the GGUF
 //   - caps() — the voices, the languages and the PCM rate a loaded model serves
+//   - tts_normalize / tts_phonemize — the text front end on its own, without synthesizing
 //   - set_tts_q8 / reset_tts_q8 / tts_serves_q8 — the two weight lanes, and the pin discipline
 //   - synthesize — text in, PCM out; write_wav_pcm16 puts it on disk
 //   - synthesize_stream — the same audio delivered sentence by sentence, as each piece lands
@@ -107,7 +108,25 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     let vname = empty(voice) ? c.voices[0] : voice
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Section 3 — the sentence chunker
+    // Section 3 — what the model receives
+    // ──────────────────────────────────────────────────────────────────────────
+    //
+    // The two packs beside the GGUF are the text front end, and they run before any model
+    // weight is touched. tts_normalize is the first pass — it rewrites numbers, money, dates,
+    // times and abbreviations into the words a reader says. tts_phonemize is the last one: the
+    // tagger of tts_postag.bin labels every token, and the grapheme-to-phoneme pass of
+    // tts_g2p.bin turns the labelled tokens into the 45 US phoneme symbols. The tag is what
+    // settles a heteronym — "read" the past tense and "read" the present tense are the same
+    // letters and two different sounds. synthesize runs both passes for you; run them alone and
+    // you see what the model is asked to say.
+    let sentence = "Dr. Chen read 3.5 pages and paid $12."
+    let spoken = tts_normalize(sentence)
+    print("\ntext:       {sentence}\n")
+    print("normalized: {spoken}\n")
+    print("phonemes:   {tts_phonemize(m, spoken)}\n")
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Section 4 — the sentence chunker
     // ──────────────────────────────────────────────────────────────────────────
     //
     // One synthesis takes one sentence-sized piece. tts_chunks is the splitter synthesize
@@ -124,7 +143,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         setup_dasllama_jobque()
 
         // ──────────────────────────────────────────────────────────────────────
-        // Section 4 — one call: text in, a WAV out
+        // Section 5 — one call: text in, a WAV out
         // ──────────────────────────────────────────────────────────────────────
         //
         // synthesize normalizes the whole text once, chunks it, speaks each chunk and
@@ -141,7 +160,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         }
 
         // ──────────────────────────────────────────────────────────────────────
-        // Section 5 — the same audio, one chunk at a time
+        // Section 6 — the same audio, one chunk at a time
         // ──────────────────────────────────────────────────────────────────────
         //
         // synthesize_stream hands each chunk to the block as soon as it exists, in order, so
@@ -160,7 +179,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         print("\n{n} chunk(s), {streamed} samples; synthesize returned {length(audio.pcm)}\n")
 
         // ──────────────────────────────────────────────────────────────────────
-        // Section 6 — speed and voice
+        // Section 7 — speed and voice
         // ──────────────────────────────────────────────────────────────────────
         //
         // speed scales the predicted durations, so the same words come out in less time

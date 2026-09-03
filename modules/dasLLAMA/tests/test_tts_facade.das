@@ -17,6 +17,7 @@ require strings
 require daslib/strings_boost
 require math
 require _model_tier
+require _tts_corpus   // the 200-sentence front-end fixture: the phonemes arm E was scored against
 
 def private cpt_count(s : string) : int {
     var inscope c <- utf8_to_cpts(s)
@@ -25,9 +26,11 @@ def private cpt_count(s : string) : int {
 
 // The TTS facade above the families. Model-free: the sentence chunker (the reference driver's
 // boundary rule - abbreviations, decimals, a.m./p.m. - the 400-CODEPOINT cap, the hard split of
-// a whitespace-free run, the appended punctuation), the WAV writer's container (header fields,
-// sample round trip), the timings' own rtf guard, and the kitten symbol table's drop rule.
-// Model-gated (`kitten-nano.gguf` + the front-end packs under models_dir()): the streaming
+// a whitespace-free run, the appended punctuation), the normalizer the facade exposes
+// (`tts_normalize`), the WAV writer's container (header fields, sample round trip), the timings'
+// own rtf guard, and the kitten symbol table's drop rule.
+// Model-gated (`kitten-nano.gguf` + the front-end packs under models_dir()): the facade's
+// phonemes (`tts_phonemize`) against the corpus fixture's own inventory, and the streaming
 // form's chunks concatenate to the buffered form's audio with summed timings, the two
 // syntheses run at different worker counts.
 
@@ -112,6 +115,22 @@ def test_chunker(t : T?) {
 }
 
 [test]
+def test_facade_normalizer(t : T?) {
+    t |> run("the facade reaches the normalizer every synthesis runs first") @(t : T?) {
+        t |> equal(tts_normalize("Dr. Chen read 3.5 pages and paid $12."),
+            "Doctor Chen read three point five pages and paid twelve dollars.",
+            "an abbreviation, a decimal and an amount of money")
+        t |> equal(tts_normalize("Prof. Lee owes $1.50."), "Professor Lee owes one dollar and fifty cents.")
+        t |> equal(tts_normalize("It started at 9 a.m. on Feb. 3, 2021."),
+            "It started at nine a.m. on February third, twenty twenty-one.", "a clock time and a date")
+        t |> equal(tts_normalize("The 1st of May, 75% off, 3 km away."),
+            "The first of May, seventy-five percent off, three kilometers away.",
+            "an ordinal, a percentage and a unit")
+        t |> equal(tts_normalize(""), "", "empty text stays empty")
+    }
+}
+
+[test]
 def test_kitten_symbol_drop(t : T?) {
     t |> run("an unknown phoneme takes its separator space with it") @(t : T?) {
         // 'a' and 'b' are in the table, '\x01' is in no table: the ids around it must read as
@@ -164,6 +183,34 @@ def test_wav_writer(t : T?) {
         t |> equal(length(raw), 4800)
         let removed = remove_result(path)
         t |> success(removed is value, "temp file removed")
+    }
+}
+
+// corpus rows the daslang front end reproduces phoneme for phoneme, so a facade wrapper that
+// reached a family's rewrite instead of the front end's own inventory reds here
+let private PINNED_CORPUS_ROWS <- {"lj000", "lj002", "lj003"}
+
+[test]
+def test_facade_phonemizer(t : T?) {
+    t |> run("the facade phonemizes into the front end's own inventory, on the corpus rail") @(t : T?) {
+        let gguf = path_join(models_dir(), "kitten-nano.gguf")
+        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
+            t |> skip("kitten-nano.gguf or the front-end packs not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope m <- load_tts_model(gguf)
+            var inscope rows <- load_tts_corpus()
+            var seen = 0
+            for (r in rows) {
+                continue if (!key_exists(PINNED_CORPUS_ROWS, r.id))
+                seen++
+                t |> equal(strip(tts_phonemize(m, r.norm)), r.ps_misaki,
+                    "{r.id}: the 45-symbol US inventory the corpus pins, never a family's own symbols")
+            }
+            t |> equal(seen, length(PINNED_CORPUS_ROWS), "every pinned row is in the fixture")
+        }
     }
 }
 
