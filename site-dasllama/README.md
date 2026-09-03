@@ -8,9 +8,11 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
 ## Layout
 
 - `index.html` - news-first home (identity masthead, feed, how-to-get, ladder teaser)
-- `stories.html` - the long-form arc stories (what we tried, how we measured, the tables,
-  the commands, the date and sha), generated from `_stories/` between the `stories:begin`
-  markers by `build_news.py`; plain "we", llama.cpp named as the yardstick
+- `stories.html` - the stories index (title, date, tag, lede per story), generated from
+  `_stories/` between the `stories:begin` markers by `build_news.py`
+- `stories/<slug>.html` - one page per story, generated from `_stories/<slug>.md` through
+  `_stories/template.html` (`{{root}}` = `../`, so the shared chrome's links work one level
+  down); the deploy copies the directory whole; plain "we", llama.cpp named as the yardstick
 - `ladder.html` - ALL measurements (official + community); daslang.io/dasllama.html stays
   official-only
 - `sidecars.html` - the sidecar exchange: finder, kernel-win viewer, downloads
@@ -23,9 +25,10 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
 - `_stories/` - the stories as dated markdown (front matter: date, tag, title, lede; fenced
   code and tables render)
 - `build_news.py` - regenerates the index.html news region (between the `news:begin`
-  markers), the stories.html region (`stories:begin`), `feed.xml` (Atom, news and stories)
-  and `sitemap.xml` from `_news/` and `_stories/`; output is checked in so the preview
-  matches production, and the deploy re-runs it anyway
+  markers), the stories.html index (`stories:begin`), the `stories/*.html` pages (stale
+  ones removed), `feed.xml` (Atom, news and stories) and `sitemap.xml` from `_news/` and
+  `_stories/`; output is checked in so the preview matches production, and the deploy
+  re-runs it anyway
 - `robots.txt` - static
 
 The public home URL is `https://dasllama.io/`. All pages link home with `/`, each page

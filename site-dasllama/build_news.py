@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Build the dasllama.io news feed from _news/*.md and the stories page from _stories/*.md.
+Build the dasllama.io news feed from _news/*.md and the stories from _stories/*.md.
 
-Rewrites index.html between the `<!-- news:begin -->` / `<!-- news:end -->` markers,
-stories.html between `<!-- stories:begin -->` / `<!-- stories:end -->`, and regenerates
-feed.xml (Atom, news and stories together) and sitemap.xml next to them. Entries live ON
-their page — there are no per-entry pages; feed entries link to the entry's anchor.
+Rewrites index.html between the `<!-- news:begin -->` / `<!-- news:end -->` markers (the
+news live ON the home page, feed entries link to their anchor), writes the stories index
+into stories.html between `<!-- stories:begin -->` / `<!-- stories:end -->` and one page per
+story into stories/<slug>.html from _stories/template.html (stale pages there are removed),
+and regenerates feed.xml (Atom, news and stories together) and sitemap.xml next to them.
 
 The generated output is CHECKED IN (unlike daslang.io's blog, which builds into _site
 only): the preview rig serves the repo tree directly, and the site must preview exactly
@@ -104,9 +105,9 @@ def entry_html(e: dict, lead: bool) -> str:
 
 
 def story_index_html(stories: list[dict]) -> str:
-    # the contents list at the top of the page: the shared blog-list language from forge.css
+    # the stories index: the shared blog-list language from forge.css, one row per story page
     rows = ''.join(
-        f'<a class="forge-blog-item" href="#s-{html.escape(s["slug"])}">'
+        f'<a class="forge-blog-item" href="stories/{html.escape(s["slug"])}.html">'
         f'<span class="forge-blog-item__date">{html.escape(s["date"])}</span>'
         f'<span class="forge-blog-item__tag">{html.escape(s["tag"])}</span>'
         f'<span class="forge-blog-item__title">{html.escape(s["title"])}</span>'
@@ -115,18 +116,39 @@ def story_index_html(stories: list[dict]) -> str:
     return f'<div class="forge-blog-list dio-story-list">\n{rows}</div>'
 
 
-def story_html(s: dict) -> str:
-    body = render_md(s['body_md'])
-    lede = f'<p class="dio-story__lede">{html.escape(s["lede"])}</p>\n' if s['lede'] else ''
-    return (
-        f'<article class="dio-story" id="s-{html.escape(s["slug"])}">\n'
-        f'<div class="dio-story__eyebrow"><span class="dio-item__date">{html.escape(s["date"])}</span>'
-        f'<span class="dio-item__tag">{html.escape(s["tag"])}</span></div>\n'
-        f'<h2 class="dio-story__title">{html.escape(s["title"])}</h2>\n'
-        f'{lede}'
-        f'<div class="dio-story__body">{body}</div>\n'
-        f'</article>'
-    )
+def story_page_html(s: dict, template: str, site_url: str) -> str:
+    # one story page from _stories/template.html; {{root}} is the page's path back to the site
+    # root, so the chrome's relative links work one directory down
+    lede = f'<p class="dio-story__lede">{html.escape(s["lede"])}</p>' if s['lede'] else ''
+    slots = {
+        '{{title}}': html.escape(s['title']),
+        '{{description}}': html.escape(s['lede'] or s['title']),
+        '{{canonical}}': f'{site_url}/stories/{html.escape(s["slug"])}.html',
+        '{{root}}': '../',
+        '{{date}}': html.escape(s['date']),
+        '{{tag}}': html.escape(s['tag']),
+        '{{lede}}': lede,
+        '{{body}}': render_md(s['body_md']),
+    }
+    out = template
+    for slot, value in slots.items():
+        out = out.replace(slot, value)
+    return out
+
+
+def write_story_pages(root: Path, stories: list[dict], site_url: str) -> None:
+    template = (root / '_stories' / 'template.html').read_text(encoding='utf-8')
+    for slot in ('{{title}}', '{{description}}', '{{canonical}}', '{{root}}', '{{body}}'):
+        if slot not in template:
+            sys.exit(f"{root / '_stories' / 'template.html'}: missing the {slot} slot")
+    out_dir = root / 'stories'
+    out_dir.mkdir(exist_ok=True)
+    keep = {f'{s["slug"]}.html' for s in stories}
+    for stale in out_dir.glob('*.html'):
+        if stale.name not in keep:
+            stale.unlink()   # a renamed or removed story must not leave its old page deployed
+    for s in stories:
+        write_lf(out_dir / f'{s["slug"]}.html', story_page_html(s, template, site_url))
 
 
 def write_lf(path: Path, text: str) -> None:
@@ -157,8 +179,7 @@ def rewrite_index(index: Path, entries: list[dict]) -> None:
 
 
 def rewrite_stories(page: Path, stories: list[dict]) -> None:
-    rewrite_region(page, STORY_BEGIN, STORY_END,
-                   story_index_html(stories) + '\n' + '\n'.join(story_html(s) for s in stories))
+    rewrite_region(page, STORY_BEGIN, STORY_END, story_index_html(stories))
 
 
 def write_feed(root: Path, entries: list[dict], stories: list[dict], site_url: str) -> None:
@@ -166,7 +187,7 @@ def write_feed(root: Path, entries: list[dict], stories: list[dict], site_url: s
         return f'{date}T00:00:00Z'
     items = []
     feed_entries = ([dict(e, link=f'{site_url}/#n-{e["slug"]}') for e in entries]
-                    + [dict(s, link=f'{site_url}/stories.html#s-{s["slug"]}') for s in stories])
+                    + [dict(s, link=f'{site_url}/stories/{s["slug"]}.html') for s in stories])
     feed_entries.sort(key=lambda e: (e['date'], e['slug']), reverse=True)
     for e in feed_entries:
         link = e['link']
@@ -199,8 +220,9 @@ def write_feed(root: Path, entries: list[dict], stories: list[dict], site_url: s
 def write_sitemap(root: Path, entries: list[dict], stories: list[dict], site_url: str) -> None:
     newest = entries[0]['date'] if entries else None
     newest_story = stories[0]['date'] if stories else None
-    # ONE line: site-dasllama/REVIEW.das reads it as the page census
+    # ONE line: site-dasllama/REVIEW.das reads it as the top-level page census
     urls = [('', newest), ('stories.html', newest_story), ('ladder.html', None), ('sidecars.html', None)]
+    urls += [(f'stories/{s["slug"]}.html', s['date']) for s in stories]
     body = '\n'.join(
         f'<url><loc>{site_url}/{page}</loc>'
         + (f'<lastmod>{lastmod}</lastmod>' if lastmod else '')
@@ -225,9 +247,10 @@ def main() -> None:
     stories = load_entries(root / '_stories')
     rewrite_index(root / 'index.html', entries)
     rewrite_stories(root / 'stories.html', stories)
+    write_story_pages(root, stories, args.site_url)
     write_feed(root, entries, stories, args.site_url)
     write_sitemap(root, entries, stories, args.site_url)
-    print(f'news: {len(entries)} entries, {len(stories)} stories -> index.html, stories.html, feed.xml, sitemap.xml')
+    print(f'news: {len(entries)} entries, {len(stories)} stories -> index.html, stories.html, stories/*.html, feed.xml, sitemap.xml')
 
 
 if __name__ == '__main__':

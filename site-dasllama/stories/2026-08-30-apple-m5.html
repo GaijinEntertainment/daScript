@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Boris got a new laptop. — dasllama.io</title>
+<meta name="description" content="An M5 Max, an engine that had never seen one, and sixty-two kernels that had to earn their place on it again."/>
+<meta property="og:title" content="Boris got a new laptop."/>
+<meta property="og:description" content="An M5 Max, an engine that had never seen one, and sixty-two kernels that had to earn their place on it again."/>
+<meta property="og:type" content="article"/>
+<meta property="og:url" content="https://dasllama.io/stories/2026-08-30-apple-m5.html"/>
+<link rel="canonical" href="https://dasllama.io/stories/2026-08-30-apple-m5.html"/>
+<link rel="icon" href="../files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="stylesheet" href="../files/fonts/fonts.css"/>
+<link rel="stylesheet" href="../files/forge.css"/>
+<link rel="stylesheet" href="../files/dasllama-table.css"/>
+<link rel="stylesheet" href="../files/dasllama-io.css"/>
+<script src="../files/dasllama-io.js" defer></script>
+<script src="../files/github-star.js" defer></script>
+<!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a><a class="dio-tab" href="../sidecars.html">sidecars</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+</div></div></nav>
+
+<section class="forge-section" style="padding:20px 0 64px;border-top:0">
+<div class="forge-container">
+<article class="dio-story dio-story--page">
+<div class="dio-story__eyebrow"><span class="dio-item__date">2026-08-30</span><span class="dio-item__tag">hardware</span></div>
+<h1 class="dio-story__title">Boris got a new laptop.</h1>
+<p class="dio-story__lede">An M5 Max, an engine that had never seen one, and sixty-two kernels that had to earn their place on it again.</p>
+<div class="dio-story__body"><!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max Metal rows measured 2026-08-30, das
+     build 345dcd667; the gemma-4-26B-A4B row 2026-09-02, e58e5a3ba) and m4.json (Anton's M4 Pro Metal
+     rows: 2026-07-29 das 0c8200a72, gemma-4-12B 2026-08-10 39a1f5192, Qwen3.8-27B 2026-09-03 8a03da431);
+     62 = the kernel families in performance/m5.tune.json, 23 = its runtime.metal_tensor picks; core
+     tiers = sysctl hw.perflevel0 (Super, 6) / hw.perflevel1 (Performance, 12) on the M5 Max; the image
+     reference is llama.cpp's multimodal path, the Canary reference NVIDIA's NeMo on Torch MPS -->
+<p>Boris got a new laptop. An M5 Max, at the end of August, and it became the main machine
+the same afternoon. dasLLAMA had never run on an M5. Anton lent us his Mac mini - an M4
+Pro, the previous generation, sitting on the other side of the globe and reached over ssh -
+so we could watch the two chips side by side. And we got to work.</p>
+<h2>What a new chip is, to this engine</h2>
+<p>dasLLAMA does not ship kernels tuned for a chip. For every heavy operation - a matrix
+multiply, an attention step, a normalization - it ships several ways of computing the same
+thing. The first time it runs on a machine it tries them all, keeps the fastest of each,
+and writes the picks into a small file called a sidecar. Sixty-two such choices for the M5
+Max. So "supporting the M5" was not a port. It was letting the tuner run and then looking
+hard at every place where the pick had changed.</p>
+<p>Three places did.</p>
+<p>The M5's GPU has tensor units - dedicated matrix hardware, reached through Apple's Metal 4
+tensor API. For each matrix multiply in the engine we wrote a tensor-unit version next to
+the plain one and let the machine choose. On the M5 Max the tensor version came out ahead
+in 23 of them: every multiply over the compressed 4-, 5-, 6- and 8-bit weights, the 16-bit
+ones, the expert layers of the mixture-of-experts models, and the attention scores. The
+choice lives in the sidecar, not in the code: a machine that never tried keeps the plain
+version, and one that tried and found it slower keeps it too.</p>
+<p>On the CPU side, the M5 Max has no Efficiency cores at all. It has 6 cores Apple calls Super
+and 12 it calls Performance, and all of them are the real thing. On Anton's M4 we had taught
+the CPU lane to leave the Efficiency cores out of the worker pool, because they only slowed
+everyone down. On the M5 that habit would have quietly thrown away a third of the chip. Now
+all 18 work on a prompt, and token generation keeps the six Super cores and parks the
+twelve Performance ones, which would only get in the way of the fast six. We could not believe our eyes, so
+we checked it twice, on both machines.</p>
+<p>The vision towers and the speech-to-text encoders run on the GPU on the M5 the way the text
+path does. Nothing new in the design - the same GPU plumbing - but each one had to be tried
+again and its picks re-made.</p>
+<h2>What we measured</h2>
+<p>So we measured it on the M5 and - look at that. What a beast of a machine.</p>
+<table>
+<thead>
+<tr>
+<th>model</th>
+<th>Anton's M4 Pro (pp512 / tg128)</th>
+<th>Boris's M5 Max (pp512 / tg128)</th>
+<th>M5 / M4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gemma-4-E4B Q8_0</td>
+<td>769.7 / 45.4</td>
+<td>5303.2 / 90.1</td>
+<td>6.9x / 2.0x</td>
+</tr>
+<tr>
+<td>gemma-4-12B Q4_K_M</td>
+<td>290.8 / 29.9</td>
+<td>2077.0 / 63.7</td>
+<td>7.1x / 2.1x</td>
+</tr>
+<tr>
+<td>gemma-4-26B-A4B Q4_K_M</td>
+<td>778.2 / 56.4</td>
+<td>3870.0 / 118.1</td>
+<td>5.0x / 2.1x</td>
+</tr>
+<tr>
+<td>gpt-oss-20b mxfp4</td>
+<td>853.4 / 78.7</td>
+<td>3995.1 / 162.7</td>
+<td>4.7x / 2.1x</td>
+</tr>
+<tr>
+<td>Mistral-Small-24B Q4_K_M</td>
+<td>141.2 / 17.3</td>
+<td>1163.7 / 38.3</td>
+<td>8.2x / 2.2x</td>
+</tr>
+<tr>
+<td>Qwen3-30B-A3B Q4_K_M</td>
+<td>771.1 / 86.1</td>
+<td>3752.9 / 165.7</td>
+<td>4.9x / 1.9x</td>
+</tr>
+<tr>
+<td>Qwen3.8-27B Q4_K_M</td>
+<td>126.4 / 12.9</td>
+<td>913.9 / 27.8</td>
+<td>7.2x / 2.2x</td>
+</tr>
+</tbody>
+</table>
+<p>One chip generation apart, the same models, the same engine. Prompt processing moved five to
+eight times. Token generation, which is bound by memory bandwidth, about twice.</p>
+<p>The models that do more than text ride the same machine, the same day. gemma-4-12B's vision
+tower takes 7.1 ms where llama.cpp's multimodal path takes 95 ms; Qwen2.5-Omni's window
+vision transformer 106 ms against 118 ms.</p>
+<p>Speech, too. whisper large-v3-turbo transcribes the short JFK clip that whisper.cpp ships as
+its sample in 140 ms, against whisper-cli's 153 ms on the same GPU. Canary-Qwen, NVIDIA's
+speech-to-text model, in its new 8-bit form does the same clip in 307.6 ms on the M5 and
+512.9 ms on the M4, where NVIDIA's own NeMo on Torch MPS takes 704.7 ms and 1076.5 ms. On
+the long gb1 clip we read 6484 ms and NeMo 4383 ms, which gives us something to do during
+the long winter evenings.</p>
+<p>Glad we have llama.cpp, whisper.cpp and NeMo numbers next to ours. Those are the industry
+standard for this kind of thing, and they are the only way we know whether we are fast, and
+the only way we know when to stop. Without a yardstick a new chip is just a machine that
+runs, and every one of these numbers would be a little worse.</p>
+<h2>Sixty-two kernels walked into a new chip.</h2>
+<p>Most walked out the same. Twenty-three swapped to the tensor units. A few found out, in
+the first afternoon, that the form that had carried them for two generations was now the
+slow one, and had to be rewritten before the tuner had anything worth picking. None of this
+is visible from a spec sheet. It all happily went into the tuner log, and so did our last
+week - which probably says something about us.</p></div>
+<a class="dio-story__back" href="../stories.html">← all stories</a>
+</article>
+</div>
+</section>
+
+<footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="../sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+<div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>
+
+</div></body></html>

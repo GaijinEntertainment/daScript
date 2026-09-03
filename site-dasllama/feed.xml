@@ -16,12 +16,12 @@ on, and the depth is a per-box knob the tuner mints. Measured against a stock ll
 identical rendered prompts: gemma-4-26B-A4B on an M5 Max goes 122.7 to 145.9 tok/s at depth
 1 (llama.cpp 97.7 to 133.7), Qwen3.8-27B on an M4 Pro 12.7 to 14.0 (llama.cpp 11.5 to 13.8).
 How we measured, what we tried, and why the gain is as small as it is:
-&lt;a href=&quot;stories.html#s-2026-09-03-mtp-on-mac&quot;&gt;the story&lt;/a&gt;.&lt;/p&gt;</content>
+&lt;a href=&quot;stories/2026-09-03-mtp-on-mac.html&quot;&gt;the story&lt;/a&gt;.&lt;/p&gt;</content>
 </entry>
 <entry>
 <title>The model that drafts its own next token.</title>
-<link href="https://dasllama.io/stories.html#s-2026-09-03-mtp-on-mac"/>
-<id>https://dasllama.io/stories.html#s-2026-09-03-mtp-on-mac</id>
+<link href="https://dasllama.io/stories/2026-09-03-mtp-on-mac.html"/>
+<id>https://dasllama.io/stories/2026-09-03-mtp-on-mac.html</id>
 <updated>2026-09-03T00:00:00Z</updated>
 <content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/mtp_m5_gemma-4-26B-A4B.json (2026-09-02, das ecf965ce5),
      mtp_m4_gemma-4-26B-A4B.json (2026-09-02, das e58e5a3ba), mtp_m5_Qwen3.8-27B.json (2026-09-02, das 59cad510c),
@@ -332,12 +332,12 @@ M5 Max&#x27;s all-compute core layout. The full M5 Max board is re-minted and on
 &lt;a href=&quot;https://daslang.io/dasllama.html&quot;&gt;board&lt;/a&gt; - gemma-4-E2B Q8_0 at 9074.3 / 161.3 tok/s
 (llama.cpp 7413.4 / 137.0), Qwen3.8-27B at 913.9 / 27.8 (752.1 / 25.4), pp512 / tg128 on
 Metal. Bringing a chip up one model at a time, and why it was fun:
-&lt;a href=&quot;stories.html#s-2026-08-30-apple-m5&quot;&gt;the story&lt;/a&gt;.&lt;/p&gt;</content>
+&lt;a href=&quot;stories/2026-08-30-apple-m5.html&quot;&gt;the story&lt;/a&gt;.&lt;/p&gt;</content>
 </entry>
 <entry>
 <title>Boris got a new laptop.</title>
-<link href="https://dasllama.io/stories.html#s-2026-08-30-apple-m5"/>
-<id>https://dasllama.io/stories.html#s-2026-08-30-apple-m5</id>
+<link href="https://dasllama.io/stories/2026-08-30-apple-m5.html"/>
+<id>https://dasllama.io/stories/2026-08-30-apple-m5.html</id>
 <updated>2026-08-30T00:00:00Z</updated>
 <content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max Metal rows measured 2026-08-30, das
      build 345dcd667; the gemma-4-26B-A4B row 2026-09-02, e58e5a3ba) and m4.json (Anton&#x27;s M4 Pro Metal

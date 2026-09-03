@@ -80,6 +80,8 @@
 .dio-story-list{margin-bottom:34px}
 .dio-story-list .forge-blog-item__excerpt{grid-column:3;margin-top:0}
 .dio-story{border-top:1px solid var(--rule);padding:44px 0 26px;max-width:900px}
+.dio-story--page{border-top:0;padding-top:24px}
+.dio-story__back{display:inline-block;margin-top:34px;font-family:var(--font-mono);font-size:12px;color:var(--amber);border-bottom:1px solid var(--amber-dim)}
 .dio-story__eyebrow{display:flex;gap:14px;align-items:baseline;margin-bottom:14px}
 .dio-story__title{font-family:var(--font-sans);font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.2;color:var(--fg);margin:0 0 12px}
 .dio-story__lede{font-family:var(--font-sans);font-size:18px;line-height:1.45;color:var(--fg-dim);margin:0 0 26px}

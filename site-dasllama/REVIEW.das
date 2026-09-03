@@ -90,6 +90,28 @@ def private check_page_census {
             gate_finding(path, "is not in {TEST_METADATA}'s page list - the page deploys unchecked")
         }
     }
+    // the per-story pages one level down: the deploy copies the directory whole, the sitemap
+    // names each page, and the metadata test globs the directory
+    var story_pages : array<string>
+    dir("site-dasllama/stories") $(name) {
+        if (name |> ends_with(".html")) {
+            story_pages |> push(name)
+        }
+    }
+    return if (empty(story_pages))
+    let yml = fread(PAGES_YML)
+    if (find(yml, "site-dasllama/stories/.") < 0) {
+        gate_finding("site-dasllama/stories", "has no directory copy line in {PAGES_YML}'s dasllama.io deploy step - the story pages never reach the site")
+    }
+    if (find(meta, "\"stories\"") < 0) {
+        gate_finding(TEST_METADATA, "does not glob the stories/ directory - the story pages deploy unchecked")
+    }
+    let sitemap = fread("site-dasllama/sitemap.xml")
+    for (name in story_pages) {
+        if (find(sitemap, "/stories/{name}") < 0) {
+            gate_finding("site-dasllama/stories/{name}", "is not in sitemap.xml - the page deploys uncrawled")
+        }
+    }
 }
 
 [export]

@@ -62,3 +62,9 @@ compacted, or cited as rules.
   competition". The two `_news` truth rules extend to `_stories`, and a story figure without
   its date and sha is a defect. (Entry re-worded 2026-09-02 on Boris's ruling that the
   project's authorship stays out of the public repo's documents.)
+
+- **2026-09-03** (`REVIEW.md`): Boris ruled the stories take the daslang.io blog's shape -
+  "each story gets its own subpage. there is RSS feed i guess. and a story page which lists
+  them all. so basically split format - not combined." The page definition now covers
+  `stories/`, and the census residue names the story pages' three registrations (directory
+  copy line, sitemap entry, metadata glob).

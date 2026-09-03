@@ -3,8 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasllama_io_site.md`.
 
-In this checklist "a page" means every served `.html` page in this directory, the generated
-news region inside index.html included.
+In this checklist "a page" means every served `.html` page in this directory and in
+`stories/`, the generated news region inside index.html and the generated story pages
+included.
 
 **A shell command, flag, or output line shown on a page is a defect unless the command runs
 verbatim and produces the result the page shows.**
@@ -57,7 +58,8 @@ quoted-attribute values, `Number(...)` for anything numeric, and `safeApiHref()`
 `<title>`, a meta description, the OpenGraph tags, or the Atom `<link>` - is a defect.**
 
 **Weakening `REVIEW.das`'s page census - the gate that reports a top-level served file with
-no copy line in the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root), or a
-page missing from `build_news.py`'s sitemap list or `test_metadata.py`'s page list - is a
-defect.** Local preview serves the tree directly, so no miss shows there: the page deploys
-unlisted, uncrawled, or unchecked.
+no copy line in the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root), a
+page missing from `build_news.py`'s sitemap list or `test_metadata.py`'s page list, or a
+story page in `stories/` with no directory copy line, no sitemap entry, or no glob in the
+metadata test - is a defect.** Local preview serves the tree directly, so no miss shows
+there: the page deploys unlisted, uncrawled, or unchecked.
