@@ -282,7 +282,7 @@ struct public MetalEnv {
     prefill_skip : string = ""
 
     @clarg_env = "DASLLAMA_MTP_DEBUG"
-    @clarg_doc = "MTP bring-up bisect: cold logs the failing gate, reject forces the reject path."
+    @clarg_doc = "MTP bring-up bisect: cold logs the failing gate, reject forces the reject path, trace logs drafts vs truth per round."
     mtp_debug : string = ""
 
     @clarg_doc = "Batch size at which batched decode switches from GEMV to GEMM; floor 2."

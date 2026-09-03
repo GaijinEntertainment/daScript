@@ -7,12 +7,13 @@ one-arm fix into an afternoon.
 ## Run suites ONLY through the runner
 
 ```
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|mtp|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate, no --arm
 ```
 
-`all` (the default) runs the parity suites, the support matrix, the kernel files and
-`test_model_image` - it omits `image-vulkan`, `coverage` and `model-free`.
+`all` (the default) runs the decode, MTP and prefill parity files, the support matrix, the kernel
+files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vulkan`, `coverage`
+and `model-free`.
 
 Every suite but `model-free` needs `--arm`. `--full` parses and is then refused, so `--arm` is
 the only way in. `--suite model-free` takes neither - it is the whole gate. The runner redirects
@@ -45,34 +46,41 @@ arm6-churn arm7-q8kv arm7b-tq4kv arm8-s16 arm9-reload arm10-kq arm11-depth arm12
 arm13-conc arm14-poison` (arm14 = the shared-region collision gate: a foreign GPU prefill must
 not degrade a later forced-feed decode - Qwen2.5-0.5B, its own `[test]` block),
 batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`, `batch-ff` (real-text forced feed,
-GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance). MTP parity
-(`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag> mtp-count-<tag>` per
-fixture tag `0.8b 27b 35b 3.8-27b` (3.8-27b = the Qwen3.8-27B trunk + its split Q8_0 head; ctrl = plain-vs-plain forced feed must be bit-identical; ff = the
+GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance).
+
+MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
+mtp-vff-<tag> mtp-count-<tag>` per fixture tag `0.8b 27b 35b 3.8-27b` (3.8-27b = the Qwen3.8-27B
+trunk + its split Q8_0 head; ctrl = plain-vs-plain forced feed must be bit-identical; ff = the
 verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose openers; ffk = the
-same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay; count = speculative
-free-run == plain free-run, token-exact, counting prompt, at depth 1, 2 and 4). The same file carries
-the BATCH RAIL's parity arms per verify-fixture tag `l1b g12 q30 g26` (Llama-3.2-1B, gemma-4-12B,
-Qwen3-30B-A3B, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single
-step at B=2/B=4 on identical real-text tokens plus one CPU reference row (the batch rail's logits
-gate - the support matrix's batch cell only proves ENGAGE); `mtp-vff-<tag>` = the same-slab batch
-verify's four rows vs four plain steps; `mtp-vff1-<tag>` = one row through the batch driver (the
-encoder alone, no row mixing); `mtp-vff5-<tag>` = five rows (the mv8 / GEMM rails, mp 8 / 32);
-`mtp-dff8-<tag>` = distinct sessions at B=5 and B=8 (the same rails, one session per row).
-`mtp-count-<tag>` on a gemma-4 target with an `mtp-*` assistant sidecar beside it attaches the
-drafter and runs the counting free-run at depth 1, 2, 4 (speculative == plain); `mtp-count-cpu`
-routes the drafts through the CPU oracle and `mtp-count-trace` logs drafts vs truth per round
-(bring-up levers, pass them with the fixture arm). Bars: 0.5 dense, 2.0 plain MoE, 24.0 gemma-MoE = the support
-matrix's own Q4_K_M forced-step bar (the routed experts amplify a float-class difference at a
-near-tie into the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips). The pairs prefill on
-the GPU twin through the metal prefill override (a planar 27B prefill costs minutes per session),
-so the fixture shuts down BOTH drivers before its leak gate.
-The `mtp` suite also carries `test_mtp_gemma_drafter.das` (the gemma-4 assistant drafter, also in
-the model-free suite): `mtp-gdraft-refuse` (needs no file - the loader's no-panic refusal contract
-and the sidecar resolver's two refusals), `mtp-gdraft-load` (the 440 MiB
+same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay, which re-runs row 0
+from the pre-verify recurrent state; vff = the same-slab batch verify's four rows vs four plain
+steps; count = speculative free-run == plain free-run, token-exact, counting prompt, at depth 1, 2
+and 4). The same file carries the BATCH RAIL's parity arms per verify-fixture tag `l1b g12 q30 q38
+g26` (Llama-3.2-1B, gemma-4-12B, Qwen3-30B-A3B, Qwen3.8-27B head-less - the hybrid graph the rail
+declines, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single step
+at B=2/B=4 on identical real-text tokens plus one CPU reference row (the batch rail's logits gate -
+the support matrix's batch cell only proves ENGAGE); `mtp-vff-<tag>` takes both tag families;
+`mtp-vff1-<tag>` = one row through the batch driver (the encoder alone, no row mixing);
+`mtp-vff5-<tag>` = five rows through the batch driver; `mtp-dff8-<tag>` = distinct sessions at
+B=5 and B=8. `mtp-count-<tag>` on a verify tag attaches the `mtp-*` assistant sidecar beside a
+gemma-4 target first (skips when none) and runs the counting free-run at depth 1, 2, 4; the
+diagnostic arms `mtp-count-cpu` (drafts through the CPU oracle), `mtp-count-trace` (drafts vs
+truth logged per round) and `mtp-count-pre` (the pre-norm residual as the drafter's h) ride along
+with the fixture arm. Bars: 0.5 dense, 2.0 plain MoE, 24.0 gemma-MoE = the support matrix's own
+Q4_K_M forced-step bar (the routed experts amplify a float-class difference at a near-tie into
+the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips). Each fixture's
+trunk-and-served-twin pair prefills on the GPU twin through the metal prefill override (a planar
+27B prefill costs minutes per session), so the fixture shuts down BOTH drivers before its leak
+gate. The `mtp` suite also carries `test_mtp_gemma_drafter.das` (the gemma-4 assistant drafter,
+also in the model-free suite): `mtp-gdraft-refuse` (the loader's no-panic refusal contract and
+the sidecar resolver's two refusals), `mtp-gdraft-load` (the 440 MiB
 `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` sidecar's whole struct - geometry, per-layer head/kv classes,
-blob and fblob sizes against the tensor sum, 32-byte tensor alignment, the p-RoPE table) and
+blob and fblob sizes against the tensor sum, 32-byte tensor alignment, the p-RoPE table),
 `mtp-gdraft-cpu` (the CPU oracle's one step over a live gemma-4-26B-A4B session - PARITY_FULL,
-finiteness and range only; no numeric oracle for the drafter exists yet). Prefill parity: `base mm-tail s16
+finiteness and range only; it carries no numeric oracle) and `mtp-gdraft-gpu` (attach plus one
+GPU draft step with Metal required).
+
+Prefill parity: `base mm-tail s16
 kq cont span span-fused span-mrope span-ds dim qkv` (mm-tail = the GEMV-tail residue peel -
 four fixtures, npos % 32 == 1 (the lone row rides the reduction-split GEMV), == 2 (the b4
 form at 2 rows), == 5 (two b4 dispatches, 4 rows + 1) and npos == 5 (the pure-tail leg,
@@ -221,8 +229,8 @@ with no escape compiles; an internal require does not) via spawned compiles,
 synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call still works), and
 `gemma4a_probe_proj_dim`'s 0-not-panic contract on `.dlim` / missing / non-GGUF inputs.
 `test_mtp_snapshot.das` - model-free: the speculative round's deltanet rollback sizes its two
-snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB, past the 64 MB
-unreserved-growth guard) and restores from it.
+snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB, past the
+`max_unreserved_size` guard) and restores the state from them.
 `test_think_split.das` - the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
 `test_tool_formats.das` - the per-ToolMode wire codecs (dasllama_tools), model-free: defs
@@ -251,8 +259,8 @@ mels across calls); its ungated cells are the model-free half.
 gemma4a / canary: the un-pinned default against the predicate the policy itself consults, both
 pins, and reset from the EXACT pin), and parakeet's SPM detokenizer over a toy vocab.
 `test_mtp_gemma_drafter.das` - model-free suite AND the `mtp` suite: the gemma-4 assistant
-drafter (`dasllama/dasllama_mtp_gemma`). Its `mtp-gdraft-refuse` arm runs with no model; the
-sidecar-shape and CPU-oracle arms gate on the files.
+drafter (`dasllama/dasllama_mtp_gemma`); only `mtp-gdraft-refuse` runs with no model, the other
+arms gate on the files and on `--family gemma4moe`.
 `test_model_specs.das` - model-free: the model-set table's shape invariants
 (`../performance/model_specs.das`: unique file/display keys, official => provenance pinned,
 parity-evidence shape), the derived provenance view's invariants (unique names, sha-or-recipe,

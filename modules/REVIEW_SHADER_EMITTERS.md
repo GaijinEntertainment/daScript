@@ -18,11 +18,12 @@ reports a compile error that names the construct.**
 constant.** A shape constant is any value that fixes the kernel's tiling: a tile row count, a
 tile column count, a cooperating-simdgroup count, a staged chunk depth.
 
-**Never pass a matmul reduction width known only at run time into a kernel any way but through
-the emitter's runtime-extent descriptor - `dynamic_extent` on Metal, and on SPIR-V a
-`tensorLayout2D` or `tensorLayout2DPad` whose dimension `tensorLayoutSetDimension` sets.** The
-reduction width is the K dimension - the length of the loop the kernel accumulates over; it
-does not fix tiling, so it is not a shape constant.
+**Never pass a matmul reduction width known only at run time into a kernel that accumulates
+through the emitter's matrix or tensor ops any way but through the emitter's runtime-extent
+descriptor - `dynamic_extent` on Metal, and on SPIR-V a `tensorLayout2D` or `tensorLayout2DPad`
+whose dimension `tensorLayoutSetDimension` sets.** The reduction width is the K dimension - the
+length of the loop the kernel accumulates over; it does not fix tiling, so it is not a shape
+constant. A hand-written reduction loop takes K as a plain uniform.
 
 **A diff that adds a kernel capability needing a runtime shape value ships a specialization
 path, or records in the module's `ARCHITECTURE.md` that the capability cannot have one.** A

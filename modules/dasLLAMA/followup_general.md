@@ -889,12 +889,13 @@
    BUFFER (`bk` on the mul_mm) is invisible to a scalar check - a `requires=` on a bound-buffer
    value needs a readback the dispatch must never pay, so that contract stays with the caller.
 71. **gemma-26B: small-M prefill and decode attention past ~1k keys.** The context sweep
-   (mtp_plan.md, "#71 context sweep") dissolved the prefill half of the original item - the halving
+   (`history/dasLLAMA/mtp_plan.md`, "#71 context sweep") dissolved the prefill half of the original item - the halving
    was the untuned dev rail serving no `runtime.metal_tensor` crowns, and on tuned kernels ours
-   leads llama.cpp 3124/3965/4551 vs 2809/3037/3175 tok/s at 256/700/2048 tokens. Two residuals:
-   pp35 reads 611 vs their 721 (the one-tile small-M regime of the GEMM ladder), and the plain step
-   drops 11.5% from 35 to 2048 keys where theirs drops 6% (`ATTN_CHUNK_ROWS` = 64 keys per
-   threadgroup plus the combine pass; ours still leads 110 vs 94 at 2048). Done = the small-M
+   leads llama.cpp 3124/3965/4551 vs 2809/3037/3175 tok/s at 256/700/2048 tokens (`lcpp_bench`
+   -jit vs `llama-bench`, M5 Max, the tuned m5 mint; direction-grade). Two residuals, same
+   instrument: pp35 reads 611 vs their 721 (the one-tile small-M regime of the GEMM ladder), and
+   the plain step drops 11.5% from 35 to 2048 keys where theirs drops 6% (`ATTN_CHUNK_ROWS` = 64
+   keys per threadgroup plus the combine pass; ours still leads 110 vs 94 at 2048). Done = the small-M
    prefill profiled at M = 32/64/128 against their pp rows, and the decode attention microbenched
    at 512/1024/2048/4096 keys against `test-backend-ops` FLASH_ATTN_EXT rows.
 72. **Dense 27B: the two-row verify streams the weights twice.** Records day (M5, Qwen3.8-27B +
@@ -929,7 +930,8 @@
    threadgroups). Each is one measured lever on the S3 rail (`lcpp_bench --mtp-ab --prompts
    specbench4 --chat-prompts -n 128 -r 3`), promoted only on a win over the fused round.
 75. **MoE verify rows dedup the expert union.** The two-row gemma verify costs 1.45x a step on
-   the M5 and 1.51x on the M4 Pro because the batched expert GEMV streams every (row, slot) plane
+   the M5 and 1.51x on the M4 Pro (the round clocks, gemma-4-26B-A4B Q4_K_M, `--ngl 99`,
+   SpecBench-4 chat) because the batched expert GEMV streams every (row, slot) plane
    and the shared experts twice; a gathered GEMV over the union of selected experts (the prefill
    bucket kernels at M = 2..9) streams each expert once. The physics that caps depth 2 on every
    MoE carrier measured - Qwen3-30B-A3B at B=2 already pays 1.37x.
@@ -989,3 +991,31 @@
    product of one, on a destination with no `reserve` / `ensure_capacity` / `overwrite_resize`
    earlier in the function, is a finding regardless of annotation; the fix text names
    `overwrite_resize`. Authoring: `skills/internal/perf_lint_authoring.md`. Ruled a follow-up PR.
+83. **Fold the k4 two-row register tile into the K4 twin template.** `MetalKqMvB2K4R2`
+   (`dasllama/dasllama_metal_kernels.das`) is the k4 twin body written a second time by hand for two
+   weight rows per thread; `REVIEW_GPU.md`'s twin rule wants one `class template` with rows-per-thread
+   as the stamp axis. The tile is crowned and measured as it stands (the m4 mint), so the fold is a
+   refactor plus a re-race, not a kernel change. Done = one template stamps `MetalKqMvB2K4` and the
+   tile, and the tile's emitted MSL is byte-identical or both boxes re-race it.
+84. **The K-quant crown races time one width and check no CPU reference.** `race_kq_rows` and
+   `race_kq_k4_form` (`dasllama/dasllama_metal_kernels.das`) time two rows only, while the
+   `kq_rows_<fmt>` crown gates the four- and eight-column forms at 3..8 rows (`REVIEW_GPU_RACE.md`'s
+   verify-width rule), and neither race checks its baseline arm against a CPU reference in-process
+   (`benchmarks/REVIEW.md`). The kernels themselves are CPU-checked per format by `kq_mvb_gate` and
+   the pair-walk gate in `tests/test_metal_gemv_kernels.das`. Done = the rows race times 2 / 4 / 8
+   and crowns on all three, a CPU dot over each rig's planes checks the baseline arm, and both boxes
+   re-mint (the m4 / m5 sidecars carry crowns from the two-row race).
+85. **Branches the MTP arc left untested (the tdd audit).** (a) the batch rail's `kv_dtype` decline
+   for partial rope on a block-codec KV (`batch_decode_decline`) - no fixture pairs a partial-rope
+   model with q8_0 / tq4 KV; (b) `generate_mtp_greedy`'s multi-accept loop runs only on the CPU rail,
+   where a round returns 0 or 1; (c) `tune_gate_bypassed()` and the `untuned:` flavor stamp; (d) the
+   lens tripwire's panic arm (no hook installed) needs a spawned must-panic fixture; (e)
+   `site-dasllama/build_news.py`'s stale-page unlink and missing-slot exit; (f) the harness
+   instruments' accept-rate arithmetic and llama-server client. Done = each has a test that fails
+   without it, or is struck here as accepted.
+86. **The split head is folded into the image PATH, not the baked identity.** `image_path_for` hashes
+   `|mtp:<head>:<size>` into the `.dlim` filename, but `image_identity_of` / `dlim_identity` (the
+   header string) do not carry it, so on the direct-`.dlim` route (`load_model_cached` on a `.dlim`
+   path) a head-baked and a head-less image share one identity: the trunk-alone image loads silently
+   on an MTP run, and `dlim_image_verdict` calls both CURRENT. Done = the head fold lives in
+   `image_identity`, with the one-time re-mint of the headed images that implies.

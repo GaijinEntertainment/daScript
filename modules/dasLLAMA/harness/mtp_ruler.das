@@ -505,43 +505,52 @@ def private render_table(path : string) {
     delete_json(doc)
 }
 
+//! --head names the draft head or assistant sidecar; "-" runs without one; empty resolves the
+//! assistant sidecar first, then the `mtp-<model>` sibling beside the trunk
+def private resolve_head(cfg : Args) : string {
+    if (cfg.head == "-") {
+        return ""
+    }
+    if (!empty(cfg.head)) {
+        return cfg.head
+    }
+    let side = gemma_drafter_sidecar(cfg.model)
+    if (!empty(side)) {
+        return side
+    }
+    let sib = path_join(dir_name(cfg.model), "mtp-{base_name(cfg.model)}")
+    return fexist(sib) ? sib : ""
+}
+
 [export]
-def main() {
+def main() : int {
     if (!jit_enabled()) {
         print("This ruler is JIT-only - run with: daslang -jit <file>\n")
-        return
+        return 1
     }
     var r <- parse_args(type<Args>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
         print_help(get_command_info(type<Args>), "mtp_ruler")
-        return
+        return 1
     }
     let cfg <- r |> move_unwrap
     if (!empty(cfg.render)) {
         render_table(cfg.render)
-        return
+        return 0
     }
     if (cfg.help || empty(cfg.model)) {
         print_help(get_command_info(type<Args>), "mtp_ruler")
-        return
+        return cfg.help ? 0 : 1
     }
-    var head = cfg.head
-    if (empty(head)) {
-        head = gemma_drafter_sidecar(cfg.model)
-        if (empty(head)) {
-            let sib = path_join(dir_name(cfg.model), "mtp-{base_name(cfg.model)}")
-            head = fexist(sib) ? sib : ""
-        }
-    } elif (head == "-") {
-        head = ""
-    }
+    let head = resolve_head(cfg)
     let texts <- load_corpus(cfg.prompts)
     print("ruler: {length(texts)} prompts from {cfg.prompts}; head = {empty(head) ? "(none)" : head}\n")
     var rows : array<string>
     let depths <- parse_depths(cfg.depths)
     //! the exe measures FIRST, from a parent that has loaded nothing: a parent that had just run
-    //! the engine in-process read the exe's speculative arm 20% low (27.5 -> 26.4 vs 32.5 clean)
+    //! the engine in-process read the exe's speculative arm about a fifth low (this ruler on the
+    //! M5, gemma-4-26B-A4B Q4_K_M, --ngl 99, depth 1, before the order was fixed)
     if (!empty(cfg.exe)) {
         for (d in depths) {
             run_das(cfg, head, d, rows)
@@ -568,11 +577,16 @@ def main() {
             run_lcpp_arm(cfg, head, d, rendered, ours, rows)
         }
     }
-    write_report(cfg, head, rows)
+    if (empty(rows)) {
+        print("ruler: no result rows - nothing was measured (check --exe, --server, --no-greedy and the model)\n")
+        return 1
+    }
+    return write_report(cfg, head, rows) ? 0 : 1
 }
 
 //! the dated, sha-stamped record: provenance of both engines, the model and its head, then the rows
-def private write_report(cfg : Args; head : string; rows : array<string>) {
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#ruler-records")]
+def private write_report(cfg : Args; head : string; rows : array<string>) : bool {
     let meta = JV((date = format_time(get_clock(), "%Y-%m-%d %H:%M"), host = first_line(sh("hostname")),
         cpu = first_line(sh("sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m")),
         das_sha = first_line(sh("git rev-parse --short HEAD")), das_exe = cfg.exe,
@@ -584,7 +598,7 @@ def private write_report(cfg : Args; head : string; rows : array<string>) {
     var doc = read_json(text, err)
     if (doc == null) {
         print("ruler: assembled JSON does not parse ({err}) - raw follows\n{text}\n")
-        return
+        return false
     }
     let pretty = write_json(doc)
     if (!empty(cfg.out)) {
@@ -594,4 +608,5 @@ def private write_report(cfg : Args; head : string; rows : array<string>) {
         print("{pretty}\n")
     }
     delete_json(doc)
+    return true
 }

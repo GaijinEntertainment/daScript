@@ -8,7 +8,7 @@ require dasllama/dasllama   // the public facade — engine + arch registrations
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
 require dasllama/dasllama_image   // load_model_cached — the served (image) flavor for the GPU twin
 require dasllama/dasllama_gguf   // set_mtp_head_path — the split-head fixture names its head explicitly
-require dasllama/dasllama_batch   // eval_verify_batch_ + create_batch_workspace_ — the batch-rail verify arm
+require dasllama/dasllama_batch   // verify_batch_step + create_batch_workspace_ — the batch-rail verify arm
 require dasllama/dasllama_mtp_gemma   // gemma_drafter_sidecar — the assistant drafter beside a gemma-4 target
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // attach_gemma_drafter — the gemma spec round rides the verify fixtures
 require ?das_metal dasllama/dasllama_metal_decode   // stats + the forced-reject lever + shutdown
@@ -314,7 +314,7 @@ def private compare_row(plain, store : array<float>; soff, n : int64; var st : R
     }
 }
 
-// The batch-rail verify (eval_verify_batch_: ONE session at nr consecutive positions through the
+// The batch-rail verify (verify_batch_step: ONE session at nr consecutive positions through the
 // batch driver's same-slab mode) against the plain GPU step, forced-feed: A plain-steps the
 // reference tokens (recording every step's logits); B verifies the same nr tokens per round and
 // each row's logits are compared to A's step at that position. Any model, head or not - this is
@@ -360,7 +360,7 @@ def private vff_pair(tr, trg : Model; prompt : array<int64>; nrounds, nr : int64
                     tok = greedy_top(sa.logits, vocab)
                 }
                 // B: the same nr tokens as one same-slab verify; row i is the step on toks[i]
-                if (!eval_verify_batch_(trg, ws, sb, toks, pos, nr)) {
+                if (!verify_batch_step(trg, ws, sb, toks, pos, nr)) {
                     break
                 }
                 sb.n_past = pos + nr

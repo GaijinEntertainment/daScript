@@ -103,7 +103,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_PIPE_DEBUG` | flag | off | Per-step pipeline trace: GPU envelope and true inter-step handoff idle, first steps plus outliers. |
 | `DASLLAMA_METAL_DECODE_SKIP` | text | unset | Comma-separated dispatch names to skip in decode - a bring-up bisect that breaks correctness. |
 | `DASLLAMA_METAL_PREFILL_SKIP` | text | unset | Prefill twin of DASLLAMA_METAL_DECODE_SKIP. |
-| `DASLLAMA_MTP_DEBUG` | text | unset | MTP bring-up bisect: cold logs the failing gate, reject forces the reject path. |
+| `DASLLAMA_MTP_DEBUG` | text | unset | MTP bring-up bisect: cold logs the failing gate, reject forces the reject path, trace logs drafts vs truth per round. |
 | `DASLLAMA_METAL_BATCH_GEMM_MIN` | number | 5 | Batch size at which batched decode switches from GEMV to GEMM; floor 2. |
 | `DASLLAMA_METAL_BATCH_SK` | flag | on | Split-K in the batched decode GEMM. |
 | `DASLLAMA_METAL_BATCH_NCB` | number | 4 | Command buffers per batched decode step, clamped 1..16. |

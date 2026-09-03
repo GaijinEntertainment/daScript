@@ -216,23 +216,34 @@ def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<
 //! The SAME-SLAB verify: nrows rows of ONE session at pos..pos+nrows-1 in one batch step (row i attends
 //! rows < i this step writes). True when the metal batch rail served it; rows' logits land in
 //! s.mtp_logits_b (row 0 also in s.mtp_logits), post-norm hidden rows in s.mtp_hrows; n_past is the caller's.
-def eval_verify_batch_(t : Model; var ws : BatchWorkspace; var s : Session; tokens : array<int64>; pos, nrows : int64) : bool {
+var private @scratch g_verify_sessions : array<Session?>   // the same-slab verify's row handles: one session, nrows times
+
+//! the scratch session mirrors the verified session's KV codec tables (signs, per-layer byte prefixes);
+//! they change only when a different session arrives, so the copy runs once per switch
+[cold_path]
+def private verify_bind_codec(var ws : BatchWorkspace; s : Session) {
+    ws.scr.kv_signs := s.kv_signs
+    ws.scr.kv_bprefix_k := s.kv_bprefix_k
+    ws.scr.kv_bprefix_v := s.kv_bprefix_v
+    ws.verify_bound_uid = s.uid
+}
+
+def verify_batch_step(t : Model; var ws : BatchWorkspace; var s : Session; tokens : array<int64>; pos, nrows : int64) : bool {
     let c = t.config
     if (nrows <= 0l || long_length(tokens) < nrows || pos + nrows > c.seq_len || !batch_decode_override_armed()) {
         return false
     }
-    var sessions : array<Session?>
-    sessions |> reserve(nrows)
+    g_verify_sessions |> grow_resize(nrows)
     unsafe {
-        for (_i in range64(nrows)) {
-            sessions |> push(addr(s))
+        for (i in range64(nrows)) {
+            g_verify_sessions[i] = addr(s)
         }
     }
     ws.scr.kv_dtype_k = s.kv_dtype_k
     ws.scr.kv_dtype_v = s.kv_dtype_v
-    ws.scr.kv_signs := s.kv_signs
-    ws.scr.kv_bprefix_k := s.kv_bprefix_k
-    ws.scr.kv_bprefix_v := s.kv_bprefix_v
+    if (ws.verify_bound_uid != s.uid) {
+        verify_bind_codec(ws, s)
+    }
     ws.scr.kv_pool = s.kv_pool
     ws.positions |> grow_resize(nrows)
     ws.rope_positions |> grow_resize(nrows)
@@ -255,12 +266,9 @@ def eval_verify_batch_(t : Model; var ws : BatchWorkspace; var s : Session; toke
     batch_rows_prep_(t, ws, tokens, nrows)
     batch_decode_logits_reset()
     set_batch_same_slab(true)
-    let done = batch_decode_override_invoke(t, ws, sessions, nrows)
+    let done = batch_decode_override_invoke(t, ws, g_verify_sessions, nrows)
     set_batch_same_slab(false)
-    sessions |> clear()   // borrowed handles - clear so the delete frees only the buffer
-    unsafe {
-        delete sessions
-    }
+    g_verify_sessions |> clear()   // borrowed handles - the pointees are never this array's to free
     return done && batch_decode_logits_done()
 }
 

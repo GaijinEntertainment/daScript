@@ -34,7 +34,7 @@ struct Args {
     @clarg_doc = "Comma list of row counts"
     bs : string = "1,2,4,8"
 
-    @clarg_doc = "Same-slab mode: the rows are B consecutive positions of ONE session through the verify entry (eval_verify_batch_) instead of B sessions"
+    @clarg_doc = "Same-slab mode: the rows are B consecutive positions of ONE session through the verify entry (verify_batch_step) instead of B sessions"
     sameslab : bool
 
     @clarg_short = "?"
@@ -90,7 +90,7 @@ def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sames
             sess[0].n_past++
         } elif (sameslab) {
             let pos = sess[0].n_past
-            if (!eval_verify_batch_(t, ws, sess[0], cur, pos, nb)) {
+            if (!verify_batch_step(t, ws, sess[0], cur, pos, nb)) {
                 panic("batch_rows_probe: the same-slab verify declined at B={nb}")
             }
             sess[0].n_past = pos + nb
@@ -116,25 +116,29 @@ def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sames
 }
 
 [export]
-def main() {
+def main() : int {
     if (!jit_enabled()) {
         print("This probe is JIT-only - run with: daslang -jit <file>\n")
-        return
+        return 1
     }
     var r <- parse_args(type<Args>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
         print_help(get_command_info(type<Args>), "batch_rows_probe")
-        return
+        return 1
     }
     let cfg <- r |> move_unwrap
     if (cfg.help || empty(cfg.model)) {
         print_help(get_command_info(type<Args>), "batch_rows_probe")
-        return
+        return cfg.help ? 0 : 1
     }
     apply_box_profile_runtime()
+    if (!tune_gate()) {   // never measure the ladder on fallback winners
+        panic("batch_rows_probe: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
+    }
     set_metal_mode(MetalMode.required)
     let tk <- load_tokenizer_auto(cfg.model)
+    var measured = 0
     with_job_que() {
         setup_dasllama_jobque_()
         var t <- load_model_cached(cfg.model, QuantMode.q8)
@@ -153,6 +157,7 @@ def main() {
             let ratio = base > 0.0lf ? ms / base : 0.0lf
             let mode = cfg.sameslab && nb > 1l ? " same-slab" : ""
             print("B={nb}{mode}: {ms:.2f} ms/step  x{ratio:.2f} of the single step  ({ms / double(nb):.2f} ms per row)\n")
+            measured++
         }
         static_if (typeinfo builtin_module_exists(das_metal)) {
             metal_decode_shutdown()
@@ -161,4 +166,9 @@ def main() {
         delete prompt
         delete t
     }
+    if (measured == 0) {
+        print("batch_rows_probe: no row count measured - --bs names none >= 1\n")
+        return 1
+    }
+    return 0
 }

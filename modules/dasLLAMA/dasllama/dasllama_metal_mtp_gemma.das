@@ -363,29 +363,21 @@ def public gemma_draft_step_gpu(t : Model; s : Session; tok, anchor : int64; h :
             memcpy(addr < void? >(h_next[0]), metal_buffer_contents(g.bhnext), uint64(dr.tdim) * 4ul)
         }
     } else {
-        to_log(LOG_ERROR, "dasLLAMA gemma drafter: dispatch failed ({cb_error_text(cb)})\n")
+        gemma_dispatch_failed(cb)
     }
     metal_release(cb)
     return ok
 }
 
-def private row_argmax(v : array<float>; row, n : int64) : int64 {
-    let base = row * n
-    var best = 0l
-    var bv = v[base]
-    for (i in range64(1l, n)) {
-        if (v[base + i] > bv) {
-            bv = v[base + i]
-            best = i
-        }
-    }
-    return best
+[cold_path]
+def private gemma_dispatch_failed(cb : MetalCommandBuffer?) {
+    to_log(LOG_ERROR, "dasLLAMA gemma drafter: dispatch failed ({cb_error_text(cb)})\n")
 }
 
 //! The last GPU draft step's full-vocab logits (the oracle comparison reads them; the round never does).
 def public gemma_drafter_last_logits(var dst : array<float>) {
     let dr & = g_gemma_drafter
-    dst |> resize(dr.vocab)
+    dst |> reserve_resize(dr.vocab)
     unsafe {
         memcpy(addr < void? >(dst[0]), metal_buffer_contents(g_gemma_gpu.blog), uint64(dr.vocab) * 4ul)
     }
@@ -476,6 +468,9 @@ def public gemma_drafter_time() : tuple<draft_us : int64; verify_us : int64; col
 //! (the target's live K/V, the same inputs), `set_gemma_trace(true)` logs drafts vs truth per round.
 def public set_gemma_draft_on_cpu(on : bool) {
     g_gemma_draft_cpu = on
+    if (on) {
+        to_log(LOG_INFO, "dasLLAMA: gemma drafts route through the CPU oracle (set_gemma_draft_on_cpu)\n")
+    }
 }
 
 def public set_gemma_trace(on : bool) {
@@ -487,6 +482,9 @@ def public set_gemma_trace(on : bool) {
 def public set_gemma_carry_pre_norm(on : bool) {
     if (g_gemma_attached) {
         set_metal_mtp_carry_hidden(true, on)
+        if (on) {
+            to_log(LOG_INFO, "dasLLAMA: gemma drafter reads the pre-norm residual (set_gemma_carry_pre_norm)\n")
+        }
     }
 }
 
@@ -511,7 +509,7 @@ def private gemma_trace_round(s : Session; pos, drafted, a, vocab : int64) {
         }
         w |> write(" ] truth=[")
         for (i in range64(drafted)) {
-            w |> write(" {row_argmax(s.mtp_logits_b, i, vocab)}")
+            w |> write(" {argmax_row(s.mtp_logits_b, i, vocab)}")
         }
         w |> write(" ] a={a}")
     }
@@ -532,7 +530,7 @@ def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) : int
 //! [tok, d_1 .. d_k], the accept walk, the commit. Same contract as metal_mtp_spec_round: returns a,
 //! the accepted drafts are s.mtp_vbatch[1..a], tok is always committed; a cold round takes one
 //! plain GPU step and returns 0. A model without a drafter (the NextN carriers) takes the metal round.
-[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
 def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {
     if (!g_gemma_attached) {
         return metal_mtp_spec_round(t, s, tok, k_req)
@@ -542,10 +540,10 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     let k = clamp(k_req, 1l, MTP_MAX_ROWS - 1l)
     let dr & = g_gemma_drafter
     if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {   // sized for the NextN carriers only at make_run_state
-        s.mtp_vbatch |> resize(MTP_MAX_ROWS)
+        s.mtp_vbatch |> reserve_resize(MTP_MAX_ROWS)   // nolint:PERF026 — once per session
     }
-    g_gemma_h |> resize(dr.tdim)
-    g_gemma_hn |> resize(dr.tdim)
+    g_gemma_h |> grow_resize(dr.tdim)
+    g_gemma_hn |> grow_resize(dr.tdim)
     var cold = (g_dev == null || !t.metal_blob || pos < 1l || s.mtp_h_pos1 != pos || long_length(s.mtp_h) < dr.tdim ||
         pos + k + 1l > c.seq_len || s.kv_dtype_k != KVDtype.f16 || s.kv_dtype_v != KVDtype.f16 || !key_exists(g_mirrors, s.uid))
     if (!cold) {
@@ -569,7 +567,7 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     if (gpu_chain) {
         set_batch_same_slab_tokens(g_gemma_gpu.bvtok)
     }
-    let vok = eval_verify_batch_(t, g_gemma_ws, s, s.mtp_vbatch, pos, nr)
+    let vok = verify_batch_step(t, g_gemma_ws, s, s.mtp_vbatch, pos, nr)
     set_batch_same_slab_tokens(null)
     if (!vok) {
         return gemma_plain_step(t, s, tok, pos)
@@ -609,4 +607,5 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
 [init]
 def gemma_mtp_init {
     register_mtp_round_override("metal", @@gemma_mtp_spec_round)
+    register_reload_prep(@@detach_gemma_drafter)   // the drafter is sized to the target it attached to
 }

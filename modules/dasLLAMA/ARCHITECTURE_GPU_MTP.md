@@ -19,8 +19,9 @@ argmax (`enc_argmax_rows`) with the logits, and the host reads tokens and winner
 verify's join - queue order completes the chain first. The drafter's h input is the target's
 post-output_norm hidden, carried in `s.mtp_h` by the decode on head-less models
 (`set_metal_mtp_carry_hidden`); the pre-norm residual is a lever that measured worse. The two-row
-verify's GPU cost is ~1.2x a one-row step on this model (the rows' weight stream), the physics the
-round cannot recover; everything the host did between the drafts and the verify was.
+verify's GPU cost over a one-row step (the rows' weight stream; the per-box margins are in
+`PERF_LEDGER.md`'s MTP section) is the physics the round cannot recover; everything the host did
+between the drafts and the verify was.
 
 **The accept walk and the commit.** Row i of the verify is the truth for draft i+1, so the walk
 takes `a` = the length of the leading run where a row's argmax equals the draft it verifies. The
@@ -37,8 +38,8 @@ serves an explicit setting (`set_mtp_depth`, the `--mtp-depth` flag) when one wa
 box profile's `runtime.mtp_depth_assistant` or `runtime.mtp_depth_nextn` by the `MtpRoundKind` the
 assistant drafter's attach and detach select. The per-position acceptance curve has the same shape
 on every task (p2/p1 about 0.7), so nothing a controller could observe changes the depth ranking;
-what does is the box's k-row verify cost - the M5's two-row gemma verify is ~1.2x a step and depth 2
-ties depth 1, the M4 Pro's is 1.5x and depth 2 loses - so the tuner mints the assistant knob as a
+what does is the box's k-row verify cost - on the M5 depth 2 ties depth 1, on the M4 Pro depth 2
+loses (`PERF_LEDGER.md`, the MTP section) - so the tuner mints the assistant knob as a
 serving race of depth 1 against depth 2 on the SpecBench chat corpus with a gemma-4 vehicle and its
 `mtp-` head (depth 2 must beat by 2% - its downside is asymmetric and a tie is not worth the longer
 round; a synthetic 32-token prompt is not the site shape, the drafter accepts less of incoherent
@@ -72,7 +73,8 @@ on the M4 Pro 1.35-1.5 for k4 while k6's twin still wins. The mint races the pro
 per format (`race_kq_rows`, twin against two passes) and crowns `kq_rows_<fmt>` where the passes
 win; `metal_decode_init` reads the crowns once into `g_kq_rows_crowned` and the dispatcher takes
 the passes exactly there. An unraced box keeps the twin. The M4 Pro's Qwen3.8-27B round paid
-2.06x a step for its two verify rows under the twin - the reason its depth-1 speculation lost.
+about two steps for its two verify rows under the twin (the round clocks, `PERF_LEDGER.md`'s MTP
+section) - the reason its depth-1 speculation lost.
 
 The k4 twin itself has two forms, and the form is the box's too. The ext twin gives a thread one
 weight row and two x columns; the two-row register tile (`MetalKqMvB2K4R2`) gives it two weight
@@ -84,9 +86,10 @@ wins; `enc_kq_mvb` takes the tile at two rows exactly there, and the k4 rows rac
 meets the box's twin form. An unraced box keeps the ext twin. Where the tile is crowned, three to
 eight k4 rows never take the four- or eight-column forms either: `enc_kq_mvb_k4_pairs` walks the
 tile over the column pairs and gives an odd tail one single-row pass. The wide forms are the ext
-algorithm at more columns, and on the box that crowned the tile they cost 1.3-1.5x of B single
-passes while two tiles do four rows in 0.6x of the four-column kernel's time; a third verify row
-under the four-column form cost the M4 Pro's Qwen3.8-27B round 2.3 steps. In both races the
+algorithm at more columns, and on the box that crowned the tile they cost more than B single
+passes while two tiles do four rows in well under the four-column kernel's time; a third verify
+row under the four-column form cost that box's Qwen3.8-27B round more than two extra steps (the
+round clocks and the row ladder, `PERF_LEDGER.md`'s MTP section). In both races the
 first arm is the incumbent and the second is the "tensor" side whose win crowns: `race_kq_rows`
 times the twin against B single passes (the passes are "tensor"), `race_kq_k4_form` the ext twin
 against the tile (the tile is "tensor").
@@ -161,7 +164,7 @@ position. Each attention class ropes on its own terms: the full class over `hs` 
 ### 2.37 The batch driver's same-slab mode {#batch-same-slab}
 
 **In same-slab mode every batch row is the SAME session at consecutive positions, so the mirror is
-prepared once and the whole step lands on one session.** `eval_verify_batch_` fills the workspace
+prepared once and the whole step lands on one session.** `verify_batch_step` fills the workspace
 with `nrows` copies of one session handle at `pos .. pos+nrows-1` and arms
 `set_batch_same_slab(true)`; the Metal batch driver then calls `mirror_prepare` only for row 0, at
 the base position, and every row shares that slab - the rows above the base are exactly what this

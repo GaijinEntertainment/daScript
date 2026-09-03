@@ -51,10 +51,11 @@ script that measures a benchmark process from outside.
 
 **Only the reference cells of `../performance/gen_bench_records.das` - the cells that time a
 binary this repository does not build on a board workload - write such a binary's wall time
-into `../performance/records/<box>.json` or `../PERF_LEDGER.md`.**
+into `../performance/records/<box>.json` or `../PERF_LEDGER.md`; only `../harness/mtp_ruler.das`
+writes one into `../performance/records/mtp/`.**
 
-**A file holding a third-party wall outside `../performance/records/<box>.json` and
-`../PERF_LEDGER.md` - a reference leg's recovery file, a pinned reference tsv an instrument
+**A file holding a third-party wall outside `../performance/records/` and `../PERF_LEDGER.md`
+- a reference leg's recovery file, a pinned reference tsv an instrument
 reads back - is scratch: untracked, owned by exactly one instrument, re-derivable from a
 command written where the owning instrument documents its flags, and never an input to a
 board cell.** A tracked or shared copy of a third-party wall becomes a stale baseline nobody
@@ -79,11 +80,12 @@ with zero result rows - wrong flags, failed load, a device that declines.** A ru
 nothing and reported success leaves a sidecar or a record untouched, and its caller cannot
 tell.
 
-**A diff that adds or changes an A/B arm - one of the two runs an instrument makes with one
-named lever off, then on - makes that instrument exit non-zero when the lever does not change
-what the run executes.** A lever is the flag or environment switch the ON arm turns on; a lever
-that silently no-ops prints a 1.00x row nobody can tell from a real tie.
+**A diff that adds or changes an A/B arm - one of the runs an instrument makes with one named
+lever at a setting the other run does not use, off/on or graded - makes that instrument exit
+non-zero when the lever does not change what the run executes.** A lever is the flag or
+environment switch that names the arm; a lever that silently no-ops prints a 1.00x row nobody
+can tell from a real tie.
 
-**An A/B instrument over a prompt corpus reports one row per prompt, never one aggregate
-ratio alone.** Prompts differ in how much the toggled flag helps, so a per-prompt loss hides
-inside a winning mean.
+**A diff that adds or changes an A/B arm of an instrument over a prompt corpus makes that arm
+report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the
+lever helps, so a per-prompt loss hides inside a winning mean.

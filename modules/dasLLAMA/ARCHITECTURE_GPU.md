@@ -114,7 +114,9 @@ that a question answered for one backend has an obvious address in the other. Th
   integer). Backend-specific lowering stays in that backend's lens.
 
 **PSO lifecycle - the family shares ONE device and queue** (`metal_common_init`; the second-device
-question was surveyed and closed against). The decode PSO set lives as `g_pso_*` in
+question was surveyed and closed against). A race arm (`metal_tensor_race_*`) is the one exception:
+it owns a transient command queue for its timed pairs and releases it before returning, so the
+tune-time race never queues behind served work. The decode PSO set lives as `g_pso_*` in
 `dasllama_metal_common`, is compiled by `metal_decode_init` in `dasllama_metal_kernels` and
 released by `metal_kernels_release` there - the kernels module owns its set's lifecycle even
 though the vars live with the device state. Prefill's `g_pf_pso_*` set is prefill-private end to
@@ -152,6 +154,11 @@ entry here:**
   `discard_pre`), quiesces, and releases the address-keyed region caches. Vulkan's reload
   story is the unmap notify (`set_moe_gpu_unmap_notify`) - a different seam for a different
   ownership model.
+- **The speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one
+  registrant, `dasllama_metal_mtp_gemma`'s `gemma_mtp_spec_round` (which falls through to
+  `metal_mtp_spec_round` when no assistant drafter is attached); the batched same-slab verify and
+  the NextN draft forward exist only in the Metal decode driver. Vulkan serves the CPU round
+  (`mtp_spec_round`'s CPU arm) - `ARCHITECTURE_GPU_MTP.md`.
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes - Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants; the
   class-kernel arc retired the hand-built 6-slot set ladders outright) - and both speak the

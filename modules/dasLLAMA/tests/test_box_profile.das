@@ -298,6 +298,28 @@ def test_kernels_only_sidecar_declines_as_no_runtime(t : T?) {
     restore_defaults()
 }
 
+[test]
+def test_apply_status_describes_the_last_checked_apply(t : T?) {
+    var terr = ""
+    let dir = temp_directory(terr)
+    t |> success(terr == "", "temp_directory resolves")
+    let foreign = path_join(dir, "dasllama_test_box_profile_last_foreign.json")
+    let own = path_join(dir, "dasllama_test_box_profile_last_own.json")
+    t |> success(fwrite(foreign, "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"dasllama-test-foreign-box\"\}\}"), "foreign profile written")
+    t |> success(fwrite(own, "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"{tune_box_identity()}\"\}\}"), "own profile written")
+    apply_box_profile_runtime_checked(foreign)
+    t |> equal(box_profile_runtime_declined(), "foreign_box", "the first apply declines")
+    apply_box_profile_runtime_checked(own)
+    t |> success(box_profile_runtime_applied(), "the second apply applies")
+    t |> equal(box_profile_runtime_declined(), "", "a later apply clears the earlier decline reason")
+    apply_box_profile_runtime_checked(foreign)
+    t |> success(!box_profile_runtime_applied(), "a later decline lowers the applied flag")
+    t |> equal(box_profile_runtime_declined(), "foreign_box", "and names its reason")
+    remove(foreign)
+    remove(own)
+    restore_defaults()
+}
+
 // The speculative depth: the box knobs decide per round kind until an explicit set wins.
 [test]
 def test_mtp_depth_knobs_apply_per_round_kind(t : T?) {

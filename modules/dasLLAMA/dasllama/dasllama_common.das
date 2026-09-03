@@ -371,6 +371,7 @@ typedef DecodeOverrideFn = function<(t : Model; var s : Session; token, pos : in
 //! apply unchanged; per call it impersonates the batch's cache geometry (dtypes + byte prefixes).
 struct BatchWorkspace {
     scr : Session             // *_b scratch, rope tables, ple scratch — no KV cache / sampler state
+    verify_bound_uid : uint64   // the session whose KV codec tables scr currently mirrors (the same-slab verify rebinds on a switch)
     positions : array<int64>  // row i's absolute KV position (sessions[i].n_past at entry)
     rope_positions : array<int64>   // row i's ROPE position (n_past + rope_pos_delta — mrope streams diverge)
     logits_b : array<float>   // B x vocab classifier output, scattered per session after softcap
@@ -1405,6 +1406,8 @@ def apply_box_profile_runtime(path : string = "") {
 //! state and applies nothing; one that merely predates the binary keeps its runtime section - the
 //! knobs are this box's state, only the kernel winners died with the rebuild.
 def apply_box_profile_runtime_checked(path : string) {
+    g_box_profile_runtime_applied = false   // both flags describe THIS apply, never an earlier one
+    g_box_profile_runtime_declined = ""
     let reason = box_profile_verdict_at(path)
     if (reason == TuneSidecarReason.absent) {
         g_box_profile_runtime_declined = "{reason}"
@@ -2199,9 +2202,9 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
         s.dn_qgate |> resize(qd)
     }
     if (c.n_layer_nextn > 0l) {   // MTP/NextN: h_nextn handoff + eh_proj concat input + verify row-0 outputs
-        s.mtp_h |> resize(c.dim)
-        s.mtp_h0 |> resize(c.dim)
-        s.mtp_cat |> resize(2l * MTP_MAX_ROWS * c.dim)   // the verify's embeds (row per verify row) and the warm's cat image
+        s.mtp_h |> reserve_resize(c.dim)
+        s.mtp_h0 |> reserve_resize(c.dim)
+        s.mtp_cat |> reserve_resize(2l * MTP_MAX_ROWS * c.dim)   // the verify's embeds (row per verify row) and the warm's cat image
         s.mtp_logits |> resize(c.vocab_size)
         s.mtp_vbatch |> resize(MTP_MAX_ROWS)
     }

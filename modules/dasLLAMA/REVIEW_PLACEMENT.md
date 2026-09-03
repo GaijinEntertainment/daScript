@@ -16,9 +16,10 @@ checklist's own.
 **A disk-order -> compute-order transform lands per scope: kernel-layout in
 `dasllama/dasllama_repack.das`, load-scope in `dasllama/dasllama_layout.das`.**
 
-**A CPU KV-cache store, read, score dot, or V-accumulate lands in
-`dasllama/dasllama_kv_codec.das`, its format family kept whole.** GPU twins land in their
-backend kernel file.
+**A CPU KV-cache store, read, score dot, or V-accumulate OVER CACHE BYTES - a codec primitive
+that knows the K/V element format - lands in `dasllama/dasllama_kv_codec.das`, its format
+family kept whole.** A dot over an already-decoded f32 row is not a codec primitive. GPU twins
+land in their backend kernel file.
 
 **A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its
 backend file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
@@ -28,8 +29,9 @@ its pipeline state object (PSO) is compiled and released. A CPU-tier kernel body
 tier's `dasllama/dasllama_math_<tier>.das`. A kernel body never lands in
 `dasllama/dasllama_math.das` or in a file whose job is declaring kernels and routing dispatch.
 
-**A family quirk lands in the family file; a piece two families need moves UP into the
-concern's shared file (its own file when none exists)** - never sideways into a sibling.
+**A quirk of one family - one model architecture's file, or one backend driver's - lands in that
+file; a piece two files need lands in their nearest shared file (its own file when none
+exists)** - never a second copy, never sideways into a sibling.
 
 **A family gaining an arm for a media kind adds that kind's span markers to that family's chat
 template, never to a second renderer.** Span markers are the template text that opens and
@@ -67,11 +69,20 @@ the engine back. It lives in `dasllama/dasllama_common.das` instead when code in
 program root (test, harness, benchmark, tool) requires the registration module it needs
 directly.
 
+**A `dasllama/` module whose `[init]` registers a hook the engine dispatches through is
+required from `dasllama/dasllama_transformer.das` in the same change that adds it** - a
+registration no umbrella reaches never fires for a consumer of the `dasllama.das` facade.
+
+**A diff that adds a file under `dasllama/` adds that file's charter line to the
+`ARCHITECTURE_*.md` sec.1 that owns its concern in the same change.**
+
 **An architecture file (`dasllama/dasllama_arch_*.das`) that changes a forward loop, or tests a
 family name on a shared path, is a defect - it carries declarative registration only.**
 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
 file.**
 
-**A diff that adds a new engine concern that is not `Model`/`Session`/`Config` state to
-`dasllama/dasllama_common.das` is a defect - give the concern its own file.**
+**A diff that adds to `dasllama/dasllama_common.das` a module-global variable and its accessor
+set that none of the file's charter headings (`ARCHITECTURE_ENGINE.md` sec.1: `Model`/`Session`
+/`Config` state, the forward loops, the override registries, the runtime knobs) names is a
+defect - give the concern its own file, or extend the charter line in the same change.**

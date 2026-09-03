@@ -334,6 +334,7 @@ def gemma_drafter_bind_target(var dr : GemmaDrafter; target_n_layers : int64) {
 //! Load the gemma-4 assistant drafter sidecar at `path`. Never panics: any refusal - a wrong
 //! architecture, a missing or non-Q8_0 weight, a stray K/V tensor - lands as `ok = false` plus a
 //! `why`. `target_n_layers > 0` binds `kv_layer` in the same call.
+[arch(at="../ARCHITECTURE_IMAGE.md#drafter-non-image-lane")]
 def load_gemma_drafter(path : string; target_n_layers : int64 = 0l) : GemmaDrafter {
     var dr : GemmaDrafter
     if (!fexist(path)) {
@@ -488,9 +489,10 @@ def private drafter_attention(t : Model; var s : Session; dr : GemmaDrafter; l, 
     }
 }
 
-//! The drafter's CPU oracle: one step at `anchor` (the seed's position = the target's n_past: the
-//! query ropes there and sees the target keys [0, anchor)) from token `tok` and target hidden `h`.
-//! Fills `out` with the greedy token, the full-vocab logits and the 2816 hidden the next step feeds.
+//! The drafter's CPU oracle, not a serving rail (it sizes its scratch per call): one step at `anchor`
+//! (the seed's position = the target's n_past: the query ropes there and sees the target keys [0, anchor))
+//! from token `tok` and target hidden `h`; fills `out` with the greedy token, the logits and the next h.
+[cold_path]
 def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : int64;   // nolint:STYLE038 - one forward pass; the phases share the scratch and must stay in order
                          h : array<float>; anchor : int64; var out : GemmaDraftOut) {
     if (!dr.ok) {
@@ -505,7 +507,7 @@ def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : in
     let dim = dr.dim
     let eps = dr.eps
     var xcat : array<float>
-    xcat |> resize(2l * dr.tdim)
+    xcat |> reserve_resize(2l * dr.tdim)
     embed_row(t, tok, unsafe(addr(xcat[0])))
     let escale = sqrt(float(dr.tdim))
     for (i in range64(dr.tdim)) {
@@ -513,31 +515,31 @@ def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : in
     }
     copy_floats(h, 0l, xcat, dr.tdim, dr.tdim)
     var xin : array<float>
-    xin |> resize(dim)
+    xin |> reserve_resize(dim)
     mv_q8_blob(xin, dr.blob, dr.pre_proj_off, xcat, 2l * dr.tdim, dim)
 
     var nrm : array<float>
-    nrm |> resize(dim)
+    nrm |> reserve_resize(dim)
     var o : array<float>
-    o |> resize(dim)
+    o |> reserve_resize(dim)
     var x1 : array<float>
-    x1 |> resize(dim)
+    x1 |> reserve_resize(dim)
     var g : array<float>
-    g |> resize(dr.hidden)
+    g |> reserve_resize(dr.hidden)
     var u : array<float>
-    u |> resize(dr.hidden)
+    u |> reserve_resize(dr.hidden)
     var maxhs = 0l
     for (v in dr.hs) {
         maxhs = max(maxhs, v)
     }
     var q : array<float>
-    q |> resize(dr.n_heads * maxhs)
+    q |> reserve_resize(dr.n_heads * maxhs)
     var attn : array<float>
-    attn |> resize(dr.n_heads * maxhs)
+    attn |> reserve_resize(dr.n_heads * maxhs)
     var kvrow : array<float>
-    kvrow |> resize(maxhs)
+    kvrow |> reserve_resize(maxhs)
     var scores : array<float>
-    scores |> resize(anchor + 1l)
+    scores |> reserve_resize(anchor + 1l)
     var cosr : array<float>
     var sinr : array<float>
     var ff : array<float>
@@ -576,7 +578,7 @@ def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : in
         }
     }
     rms_f(nrm, xin, dr.fblob, dr.out_norm_off, dim, eps)
-    out.logits |> resize(dr.vocab)
+    out.logits |> reserve_resize(dr.vocab)
     mv_q8_blob(out.logits, dr.blob, dr.tok_emb_off, nrm, dim, dr.vocab)
     var best = 0l
     var bv = out.logits[0]
@@ -587,6 +589,6 @@ def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : in
         }
     }
     out.token = best
-    out.h_next |> resize(dr.tdim)
+    out.h_next |> reserve_resize(dr.tdim)
     mv_q8_blob(out.h_next, dr.blob, dr.post_proj_off, nrm, dim, dr.tdim)
 }

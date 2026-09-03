@@ -143,7 +143,19 @@ without it the f16 arm silently stays unavailable and every encode takes the f32
 ### 2.1j A split head is part of the image's identity {#image-identity-head-fold}
 
 **An image path folds in the split NextN head that rides the load.** `image_path_for` resolves
-`mtp_head_sidecar` for the gguf and, when one exists, hashes `|mtp:<basename>:<size>` alongside the
-configuration identity, so a trunk loaded alone and the same trunk loaded with its head never share
-a `.dlim` path. The head's tensors are baked INSIDE the minted image - one file serves both - so two
-identities sharing a path would re-save over each other forever.
+`mtp_head_sidecar` for the gguf - the resolver excludes an assistant drafter (`gguf_is_assistant`),
+whose weights never enter the trunk's image - and, when a head exists, hashes
+`|mtp:<basename>:<size>` alongside the configuration identity, so a trunk loaded alone and the same
+trunk loaded with its head never share a `.dlim` path. The head's tensors are baked INSIDE the
+minted image - one file serves both - so two identities sharing a path would re-save over each
+other forever. Because the fold changes the path, the head's arrival needed no `IMAGE_VERSION`
+bump: no image at an unchanged path changed content. The fold lives in the path and not yet in
+the baked identity string (`followup_general.md` #86).
+
+### 2.1k The assistant drafter is a ledgered non-image lane {#drafter-non-image-lane}
+
+**The gemma-4 assistant drafter (`dasllama_mtp_gemma.das`) reads its Q8_0 sidecar straight into
+its own blob and never mints a `.dlim`.** The sidecar is 440 MiB, its Q8_0 blocks are already the
+34-byte form the Metal encoder uploads unrepacked, and the copy takes a fraction of a second - an
+image would shorten nothing. The lane is optional (no sidecar, no drafter) and invisible to
+`dasllama-convert`'s list and GC by design.

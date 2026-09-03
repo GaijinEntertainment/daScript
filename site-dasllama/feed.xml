@@ -23,7 +23,7 @@ How we measured, what we tried, and why the gain is as small as it is:
 <link href="https://dasllama.io/stories/2026-09-03-mtp-on-mac.html"/>
 <id>https://dasllama.io/stories/2026-09-03-mtp-on-mac.html</id>
 <updated>2026-09-03T00:00:00Z</updated>
-<content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/mtp_m5_gemma-4-26B-A4B.json (2026-09-02, das 7907b133c),
+<content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/mtp/mtp_m5_gemma-4-26B-A4B.json (2026-09-02, das 7907b133c),
      mtp_m4_gemma-4-26B-A4B.json (2026-09-02, das fa0b0eac4), mtp_m5_Qwen3.8-27B.json (2026-09-02, das 497dcf10a),
      mtp_m4_Qwen3.8-27B.json (2026-09-03, das f591c4c13); llama.cpp = stock upstream commit 6fdd0ac89 on both
      boxes, run as llama-server on the same rendered prompt via /completion with ignore_eos; the M4 morning

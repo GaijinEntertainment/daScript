@@ -3581,7 +3581,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         return false
     }
     if (!box_profile_runtime_applied() && !empty(box_profile_runtime_declined()) && empty(get_metal_tensor_crowns())) {
-        to_log(LOG_WARNING, "dasLLAMA metal: no box profile applied ({box_profile_runtime_declined()}) - no metal_tensor crowns, every tensor mul_mm twin runs its base form; on a tensor-lane GPU prefill measures ~2x slower (gemma-26B pp512 on an M5: 1662 vs 3835 tok/s). Mint: DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=<repo>/modules/dasLLAMA/performance/<box>.tune.json bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das -dasroot <repo>\n")
+        to_log(LOG_WARNING, "dasLLAMA metal: no box profile applied ({box_profile_runtime_declined()}) - no metal_tensor crowns, every tensor mul_mm twin runs its base form; on a tensor-lane GPU prefill measures well under half its board cell. Mint: DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=<repo>/modules/dasLLAMA/performance/<box>.tune.json bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das -dasroot <repo>\n")
     }
     var ok = true
     // the GEMV / rms / add / swiglu MSL sources are the prefill module's, verbatim (own PSOs)
@@ -4842,13 +4842,14 @@ def private race_kq_rows(queue : MetalCommandQueue?; fmt : KqFmt; qu_per_sb : in
     var rig <- kq_race_rig(qu_per_sb, sform, n, rows)
     var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(rows), nr = 2u)
     race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
-        for (_r in range(8)) {
-            enc_kq_mvb(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, rig.by_a, 0ul, ka, int64(rows), 2l)
+        for (r in range(8)) {
+            enc_kq_mvb(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, (r & 1) == 0 ? rig.by_a : rig.by_a2, 0ul, ka, int64(rows), 2l)
         }
     }, $(enc) {
-        for (_r in range(8)) {
-            enc_kq_gemv(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, rig.by_b, rig.bn, rig.bd, int64(rows), int64(n))
-            enc_kq_gemv(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, rig.by_b, rig.bn, rig.bd, int64(rows), int64(n), uint64(rows * 4), uint64(n * 4))
+        for (r in range(8)) {
+            let by = (r & 1) == 0 ? rig.by_b : rig.by_b2
+            enc_kq_gemv(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, by, rig.bn, rig.bd, int64(rows), int64(n))
+            enc_kq_gemv(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, by, rig.bn, rig.bd, int64(rows), int64(n), uint64(rows * 4), uint64(n * 4))
         }
     })
     kq_race_verdict(res, rig.by_a, rig.by_b, 2 * rows)
@@ -4864,12 +4865,12 @@ def private race_kq_k4_form(queue : MetalCommandQueue?) : MetalTensorRaceResult 
     var rig <- kq_race_rig(32, KqRaceScaleForm.compact, n, rows)
     var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(rows), nr = 2u)
     race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
-        for (_r in range(8)) {
-            enc_kq_mvb2_k4_c(enc, rig.bs, 0ul, rig.bs, 0ul, rig.bq, 0ul, rig.bx, rig.by_a, 0ul, ka, int64(rows))
+        for (r in range(8)) {
+            enc_kq_mvb2_k4_c(enc, rig.bs, 0ul, rig.bs, 0ul, rig.bq, 0ul, rig.bx, (r & 1) == 0 ? rig.by_a : rig.by_a2, 0ul, ka, int64(rows))
         }
     }, $(enc) {
-        for (_r in range(8)) {
-            enc_kq_mvb2_k4r2_c(enc, rig.bs, 0ul, rig.bs, 0ul, rig.bq, 0ul, rig.bx, 0ul, rig.by_b, 0ul, ka, int64(rows))
+        for (r in range(8)) {
+            enc_kq_mvb2_k4r2_c(enc, rig.bs, 0ul, rig.bs, 0ul, rig.bq, 0ul, rig.bx, 0ul, (r & 1) == 0 ? rig.by_b : rig.by_b2, 0ul, ka, int64(rows))
         }
     })
     kq_race_verdict(res, rig.by_a, rig.by_b, 2 * rows)
@@ -4877,9 +4878,10 @@ def private race_kq_k4_form(queue : MetalCommandQueue?) : MetalTensorRaceResult 
     return res
 }
 
-// the K-quant races' fixture: one format's planes at n x rows, two x columns, two y planes, the n/d uniforms
+// the K-quant races' fixture: one format's planes at n x rows, two x columns, two y planes per arm
+// (consecutive dispatches alternate, as the served graph overlaps them), the n/d uniforms
 struct private KqRaceRig {
-    bq, bs, bx, by_a, by_b, bn, bd : MetalBuffer?
+    bq, bs, bx, by_a, by_a2, by_b, by_b2, bn, bd : MetalBuffer?
     doff : uint64
     xa : array<float>
 }
@@ -4893,7 +4895,9 @@ def private kq_race_rig(qu_per_sb : int; sform : KqRaceScaleForm; n, rows : int)
     rig.xa <- race_x_f32(2 * n)
     rig.bx = race_buf(g_dev, uint64(2 * n * 4), unsafe(addr<void?>(rig.xa[0])))
     rig.by_a = race_buf(g_dev, uint64(2 * rows * 4), null)
+    rig.by_a2 = race_buf(g_dev, uint64(2 * rows * 4), null)
     rig.by_b = race_buf(g_dev, uint64(2 * rows * 4), null)
+    rig.by_b2 = race_buf(g_dev, uint64(2 * rows * 4), null)
     rig.bn = race_uniform_u32(g_dev, uint(n))
     rig.bd = race_uniform_u32(g_dev, uint(rows))
     return <- rig
@@ -4904,7 +4908,9 @@ def private release_kq_race_rig(var rig : KqRaceRig) {
     metal_release(rig.bs)
     metal_release(rig.bx)
     metal_release(rig.by_a)
+    metal_release(rig.by_a2)
     metal_release(rig.by_b)
+    metal_release(rig.by_b2)
     metal_release(rig.bn)
     metal_release(rig.bd)
     delete rig.xa
@@ -10641,7 +10647,7 @@ class MetalKqMvB2K4 : MetalKqMvK4T {
 }
 
 //! the k4 twin's two-row register tile: a thread owns TWO weight rows and both x columns, so every x float4 load feeds two rows
-[metal_dispatch(name = "enc_kq_mvb2_k4r2_c", pso = "g_pso_kq_mvb2_k4r2", tg = 64, grid = "rows/16", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_k4r2_c", pso = "g_pso_kq_mvb2_k4r2", tg = 64, grid = "rows/16", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2K4R2 {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>

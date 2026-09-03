@@ -79,14 +79,17 @@ Safe operators never crash, even on null. **`js?.value` reads the struct field
 `JsonValue.value`** (the underlying `JsValue` variant), *not* a JSON key named `"value"` - for that
 key write `js?["value"]`.
 
-A missing key or index through `?[]` / `?.` yields a NON-null node of the `_null` case, not a null
-pointer: `js?["absent"] == null` is false. Test presence with `v != null && v.value is _object`
-(or the `?? default` fold), never with `== null` (probe-verified 2026-09-02).
-
 `is` / `as` test the underlying variant through the pointer; `as` on the wrong case crashes.
 
 Cases: `_object` (`table<string; JsonValue?>`), `_array` (`array<JsonValue?>`), `_string`
 (`string`), `_number` (`double`), `_longint` (`int64`), `_bool` (`bool`), `_null` (`void?`).
+
+A missing key or index through `?[]` / `?.` yields a NON-null node of the `_null` case, not a null
+pointer: `js?["absent"] == null` is false, so `== null` cannot detect a missing key (`read_json`
+still returns null on failure). Test presence with `let v = js?["absent"]; v != null && !(v is _null)`,
+or read the value with `?? default`, which yields `default` for a `_null` node. A present key whose
+JSON value is `null` is indistinguishable from a missing one. The miss node is a single shared
+per-context node - never `delete` it, mutate it, or store it into a tree. (probe-verified 2026-09-02)
 
 An integer literal is `_longint` only while it fits `int64`; past that it parses as `_number`. So a
 wire format carrying `uint64` ids above `INT64_MAX` loses precision - send those as strings. Any

@@ -1397,7 +1397,7 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     let dim = c.dim
     let nr = r.nrows
     let esz = uint64(kv_row_bytes(r.kdt, 1l))   // nolint:LINT021 — divides uint64 arena offsets; only the quotient narrows
-    g_vrt |> resize((c.n_layers + c.n_layer_nextn) * 4l * nr)
+    g_vrt |> grow_resize((c.n_layers + c.n_layer_nextn) * 4l * nr)
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
         let lb = uint((r.koff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
         let vb = uint((r.voff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
@@ -1482,9 +1482,7 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
                 }
             }
             let vb = c.vocab_size * 4l
-            if (long_length(s.mtp_logits_b) < nr * c.vocab_size) {
-                s.mtp_logits_b |> resize(nr * c.vocab_size)
-            }
+            s.mtp_logits_b |> ensure_length(nr * c.vocab_size)
             var lg = reinterpret<uint8?>(metal_buffer_contents(r.blog))
             memcpy(addr < void? >(s.mtp_logits_b[0]), reinterpret<void?>(lg), uint64(nr * vb))
             memcpy(addr < void? >(s.mtp_logits[0]), reinterpret<void?>(lg), uint64(vb))
@@ -1497,18 +1495,6 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
 }
 
 // argmax over row `row` of a [rows x n] flat logits image
-def private argmax_row(v : array<float>; row, n : int64) : int64 {
-    let off = row * n
-    var best = 0l
-    var bv = v[off]
-    for (i in range64(1l, n)) {
-        if (v[off + i] > bv) {
-            bv = v[off + i]
-            best = i
-        }
-    }
-    return best
-}
 
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay")]
 def private encode_dn_replay(t : Model; var r : StepRes; nrun : int64) {
@@ -1547,21 +1533,6 @@ def private encode_dn_replay(t : Model; var r : StepRes; nrun : int64) {
     metal_commit(cb)
     metal_wait_until_completed(cb)
     metal_release(cb)
-}
-
-// DASLLAMA_MTP_DEBUG=time: the round's wall split, accumulated and printed every 64 rounds
-var private g_mtpt_rounds = 0l
-var private g_mtpt_draft_us = 0l
-var private g_mtpt_verify_us = 0l
-var private g_mtpt_walk_us = 0l
-var private g_mtpt_replay_us = 0l
-var private g_mtpt_accepted = 0l
-var private g_mtpt_k = 0l
-
-[cold_path]
-def private mtp_time_report() {
-    let r = double(max(g_mtpt_rounds, 1l))
-    to_log(LOG_INFO, "mtp time k={g_mtpt_k} rounds={g_mtpt_rounds} per round: draft {double(g_mtpt_draft_us) / r:.0f} us | verify {double(g_mtpt_verify_us) / r:.0f} us | walk+commit {double(g_mtpt_walk_us) / r:.0f} us | replay {double(g_mtpt_replay_us) / r:.0f} us | tokens/round {1.0lf + double(g_mtpt_accepted) / r:.2f}\n")
 }
 
 [cold_path]
@@ -1609,8 +1580,7 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         to_log(LOG_INFO, "mtp cold: pos={pos} h_pos1={s.mtp_h_pos1} seq={c.seq_len} verify_ok={vok_g} dn_pos={dnp} watermark={wm}\n")   // nolint:PERF028,PERF026 — behind the DASLLAMA_MTP_DEBUG=cold bring-up gate
     }
     s.mtp_vbatch[0] = tok
-    let timed = g_env_mtp_debug == "time"
-    let ts_draft = timed ? ref_time_ticks() : 0l
+    let ts_draft = prof_ticks()
     if (!cold) {
         s.mtp_xb_save |> resize(c.dim)
         unsafe {
@@ -1638,7 +1608,8 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
     }
     s.mtp_drafted += k
     let nr = k + 1l
-    let ts_verify = timed ? ref_time_ticks() : 0l
+    prof_add("mtp.draft", ts_draft)
+    let ts_verify = prof_ticks()
     mtp_verify_prep_n(t, s, s.mtp_vbatch, nr, pos)
     finish_pending_step()
     let mr = g_mirrors[s.uid]
@@ -1698,7 +1669,8 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         s.n_past = pos + 1l
         return 0l
     }
-    let ts_walk = timed ? ref_time_ticks() : 0l
+    prof_add("mtp.verify", ts_verify)
+    let ts_walk = prof_ticks()
     var a = 0l
     while (a < k && argmax_row(s.mtp_logits_b, a, c.vocab_size) == s.mtp_vbatch[a + 1l]) {
         a++
@@ -1711,7 +1683,8 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx + a * c.dim * 4l), c.dim * 4l)
         memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits_b[a * c.vocab_size]), c.vocab_size * 4l)
     }
-    let ts_replay = timed ? ref_time_ticks() : 0l
+    prof_add("mtp.walk", ts_walk)
+    let ts_replay = prof_ticks()
     if (r.dn) {
         if (a < k) {
             encode_dn_replay(t, r, a + 1l)
@@ -1719,18 +1692,7 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         dn_mirror_flip(s.uid, pos + a + 1l)
     }
     release_step(r)
-    if (timed) {
-        g_mtpt_rounds++
-        g_mtpt_k = k
-        g_mtpt_accepted += a
-        g_mtpt_draft_us += int64(get_time_usec(ts_draft)) - int64(get_time_usec(ts_verify))
-        g_mtpt_verify_us += int64(get_time_usec(ts_verify)) - int64(get_time_usec(ts_walk))
-        g_mtpt_walk_us += int64(get_time_usec(ts_walk)) - int64(get_time_usec(ts_replay))
-        g_mtpt_replay_us += int64(get_time_usec(ts_replay))
-        if (g_mtpt_rounds % 64l == 0l) {
-            mtp_time_report()
-        }
-    }
+    prof_add("mtp.replay", ts_replay)
     s.mtp_h_pos1 = pos + a + 1l
     g_mirrors[s.uid].watermark = pos + a + 1l
     s.mtp_accepted += a
@@ -1877,7 +1839,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
             }
             if (r.gpu_logits && (c.n_layer_nextn > 0l || g_mtp_carry_hidden)) {
                 if (long_length(s.mtp_h) < c.dim) {
-                    s.mtp_h |> resize(c.dim)   // nolint:PERF026 — once per session on a head-less model
+                    s.mtp_h |> reserve_resize(c.dim)   // nolint:PERF026 — once per session on a head-less model
                 }
                 memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(g_mtp_carry_pre && c.n_layer_nextn <= 0l ? r.bx : r.bxf), r.bytes_x)
             }

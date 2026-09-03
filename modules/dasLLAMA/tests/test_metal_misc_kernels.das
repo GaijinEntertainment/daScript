@@ -106,6 +106,50 @@ def private argmax_gate(t : T?; dev, queue; n, hi1, hi2 : int) {
     delete lg
 }
 
+def private argmax_rows_gate(t : T?; dev, queue; nrows, n : int) {
+    let tag = "argmax_rows nrows={nrows} n={n}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_argmax_rows_msl, metal_argmax_rows_msl_entry, metal_argmax_rows_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var lg : array<float>
+    lg |> resize(nrows * n)
+    var want : array<uint>
+    want |> resize(nrows)
+    for (r in range(nrows)) {
+        for (i in range(n)) {
+            lg[r * n + i] = 0.07 * float((i + 3 * r) % 89) - 5.0
+        }
+        let hi = (r * 37 + 11) % n
+        lg[r * n + hi] = 9.5
+        if (r % 2 == 1) {   // an exact tie at a HIGHER index - the lower one keeps the row (the CPU sampler's rule)
+            lg[r * n + min(hi + 5, n - 1)] = 9.5
+        }
+        want[r] = uint(hi)
+    }
+    var blg = buf_upload(dev, lg)
+    var btok = buf_fill(dev, nrows, 0xFFFFFFFFu)
+    var bn = buf_u32(dev, uint(n))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_argmax_rows_msl_tgmem, 0)
+        metal_set_buffer(enc, blg, 0ul, 0)
+        metal_set_buffer(enc, btok, 0ul, 1)
+        metal_set_buffer(enc, bn, 0ul, 2)
+        metal_dispatch_threadgroups(enc, uint3(uint(nrows), 1u, 1u), uint3(1024u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(btok, want, tag), 0)
+    }
+    metal_release(blg)
+    metal_release(btok)
+    metal_release(bn)
+    metal_release(pso)
+    delete lg
+    delete want
+}
+
 def private embed_q8_gate(t : T?; dev, queue; dim, vocab, tok : int) {
     let tag = "embed_q8 dim={dim} vocab={vocab} tok={tok}"
     var err : string
@@ -1868,6 +1912,8 @@ def test_metal_misc_kernels(t : T?) {
                 copy_row_gate(t, dev, queue, 1000)
                 argmax_gate(t, dev, queue, 5000, 4321, 1234)    // exact tie — lower index wins
                 argmax_gate(t, dev, queue, 700, 0, 699)         // winner at index 0
+                argmax_rows_gate(t, dev, queue, 5, 5000)        // the same-slab verify's per-row accept walk
+                argmax_rows_gate(t, dev, queue, 9, 700)         // MTP_MAX_ROWS rows, n below one threadgroup
                 embed_q8_gate(t, dev, queue, 512, 3, 2)
                 embed_k6_gate(t, dev, queue, 512, 3, 1)
                 add_rms_gate(t, dev, queue, false, 1500, 1, 1.0)

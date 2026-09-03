@@ -156,10 +156,14 @@ def private skip_array(b : array<uint8> | #; off : int64; arr_type : int; count 
     return off + count * gguf_scalar_size(arr_type)
 }
 
+def gguf_magic_ok(bytes : array<uint8> | #) : bool {
+    return long_length(bytes) >= 4l && int(bytes[0]) == 'G' && int(bytes[1]) == 'G' && int(bytes[2]) == 'U' && int(bytes[3]) == 'F'
+}
+
 //! Parse the GGUF header, KV metadata, and tensor-info table out of `bytes`.
 def parse_gguf_meta(bytes : array<uint8> | #) : GGUFMeta {
     var m : GGUFMeta
-    if (!(int(bytes[0]) == 'G' && int(bytes[1]) == 'G' && int(bytes[2]) == 'U' && int(bytes[3]) == 'F')) {
+    if (!gguf_magic_ok(bytes)) {
         panic("gguf: bad magic (not a GGUF file)")
     }
     m.version = rd_u32(bytes, 4l)
@@ -252,7 +256,9 @@ var private g_mtp_head_override_set = false
 def public set_mtp_head_path(path : string) {
     g_mtp_head_override = path
     g_mtp_head_override_set = true
-    to_log(LOG_INFO, "dasLLAMA: MTP head pinned to {path} (set_mtp_head_path)\n")
+    if (!empty(path)) {
+        to_log(LOG_INFO, "dasLLAMA: MTP head pinned to {path} (set_mtp_head_path)\n")
+    }
 }
 
 def public clear_mtp_head_path() {
@@ -261,7 +267,8 @@ def public clear_mtp_head_path() {
 }
 
 //! The split NextN/MTP head that rides `path`'s shard walk: the override / `DASLLAMA_MTP_HEAD` when
-//! set, else the `mtp-<trunk basename>` sibling beside the trunk (the published split-head layout), else "".
+//! set, else the `mtp-<trunk basename>` sibling beside the trunk (the published split-head layout),
+//! else "". An assistant drafter is never a head - its weights ride their own lane.
 def mtp_head_sidecar(path : string) : string {
     let name = base_name(path)
     if (name |> starts_with("mtp-")) {   // a head loaded on its own never recurses onto itself
@@ -269,10 +276,16 @@ def mtp_head_sidecar(path : string) : string {
     }
     let over = g_mtp_head_override_set ? g_mtp_head_override : g_env_engine.mtp_head
     if (!empty(over)) {
-        return fexist(over) ? over : ""
+        if (!g_mtp_head_override_set) {
+            to_log(LOG_INFO, "dasLLAMA: MTP head pinned to {over} (DASLLAMA_MTP_HEAD)\n")
+        }
+        return head_file_or_empty(over)
     }
-    let side = path_join(dir_name(path), "mtp-{name}")
-    return fexist(side) ? side : ""
+    return head_file_or_empty(path_join(dir_name(path), "mtp-{name}"))
+}
+
+def private head_file_or_empty(side : string) : string {
+    return fexist(side) && !gguf_is_assistant(side) ? side : ""
 }
 
 //! Expand a model path into its shard list: a GGUF split name ("<prefix>-00001-of-00003.gguf") yields
@@ -282,7 +295,7 @@ def gguf_shard_paths(path : string; missing_ok : bool = false) : array<string> {
     var res <- gguf_split_paths(path, missing_ok)
     if (!empty(res)) {
         let side = mtp_head_sidecar(path)
-        if (!empty(side) && !gguf_is_assistant(side)) {
+        if (!empty(side)) {
             res |> push(side)   // the head is the LAST shard: first-match lookups keep the trunk's tables
         }
     }
@@ -297,6 +310,7 @@ def gguf_file_arch(path : string) : string {
             return
         }
         fmap(f) $(var bytes : array<uint8>#) {
+            return if (!gguf_magic_ok(bytes))   // not a GGUF: unreadable, not a panic
             var inscope m <- parse_gguf_meta(bytes)
             if (gguf_has(m, "general.architecture")) {
                 arch = gguf_str(m, bytes, "general.architecture")

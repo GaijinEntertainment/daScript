@@ -5,19 +5,20 @@ doc: `ARCHITECTURE_ENGINE.md`.
 
 **Routed from `REVIEW.md`: a change to the sidecar-exchange client
 (`dasllama/dasllama_exchange.das`), or to a tune-boot path that reaches it, applies this
-list together with `REVIEW.md`'s.**
+list together with `REVIEW.md`'s.** A `dashv` call under `harness/` answers to
+`harness/REVIEW.md`; the gate that keeps the engine to one exchange client answers to
+`performance/REVIEW.md`.
 
 **Never add a second HTTP path to the sidecar exchange - every HTTP call (lookup, download,
-submit) goes through `dasllama/dasllama_exchange.das`.** Weakening `performance/REVIEW.das`
-is a defect.
+submit) goes through `dasllama/dasllama_exchange.das`.**
 
 **Weakening the exchange download gate, the submission strip, or the submit rails is a
 defect.** The download gate checks content sha, schema, and `DASLLAMA_RELEASE`. The submission
 strip (`exchange_strip_private`) drops `provenance.binary` and every other path-shaped
 provenance value before a sidecar is submitted. The submit rails stop a sidecar that came from
 the exchange, or was minted on another box, from being submitted.
-`utils/dasllama-server/test_exchange_client.das` enforces the download gate, the strip, and
-the rails.
+`utils/dasllama-server/test_exchange_client.das` (repo root) enforces the download gate, the
+strip, and the rails.
 
 **A diff that adds a submission path around `exchange_strip_private` is a defect, even where
 the strip itself is intact.**

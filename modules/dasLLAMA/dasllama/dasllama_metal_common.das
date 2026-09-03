@@ -1883,6 +1883,20 @@ var @scratch g_sameslab_arg : array<int64>
 
 //! The same-slab verify's per-row argmax as the join landed it (row i = the truth for draft i+1).
 def sameslab_argmax(i : int64) : int64 => g_sameslab_arg[i]
+
+//! argmax of row `row` in a [rows x n] logits image; the lowest index wins a tie (the CPU sampler's rule)
+def argmax_row(v : array<float>; row, n : int64) : int64 {
+    let off = row * n
+    var best = 0l
+    var bv = v[off]
+    for (i in range64(1l, n)) {
+        if (v[off + i] > bv) {
+            bv = v[off + i]
+            best = i
+        }
+    }
+    return best
+}
 var g_lp_xb : MetalBuffer?      // production sync + CPU-classifier path: x_b writeback
 var g_lp_xb_dst : void?         // ... into the caller's workspace (borrowed, sync-only)
 var g_lp_xb_bytes = 0l
@@ -1911,9 +1925,7 @@ def private land_sameslab_rows(lgp : uint8?) {
     let vb = g_lp_vocab * 4l
     unsafe {
         if (lgp != null) {
-            if (long_length(s0.mtp_logits_b) < g_lp_nrows * g_lp_vocab) {
-                s0.mtp_logits_b |> resize(g_lp_nrows * g_lp_vocab)
-            }
+            s0.mtp_logits_b |> ensure_length(g_lp_nrows * g_lp_vocab)
             memcpy(addr < void? >(s0.mtp_logits_b[0]), reinterpret<void?>(lgp), g_lp_nrows * vb)
             if (long_length(s0.mtp_logits) >= g_lp_vocab) {   // sized only on NextN-headed sessions
                 memcpy(addr < void? >(s0.mtp_logits[0]), reinterpret<void?>(lgp), vb)
@@ -2386,6 +2398,7 @@ def race_envelope_ok(ba, bb : MetalBuffer?; count : int; var note : string&) : b
         note = "twin OUTPUT MISMATCH maxdiff={maxdiff} maxref={maxref}"
         return false
     }
+    note = "twin within envelope: maxdiff={maxdiff} <= 5% of maxref={maxref}"
     return true
 }
 

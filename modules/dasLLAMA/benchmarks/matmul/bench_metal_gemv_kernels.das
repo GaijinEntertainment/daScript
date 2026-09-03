@@ -5248,8 +5248,6 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
                        b_list <- [2], kq = 6, kq16 = true, tgsz = 64, rtg = 2),
             LabVariant(name = "k4_ext2", src = lab_k4_ext2_msl, entry = lab_k4_ext2_msl_entry,
                        b_list <- [2], kq = 4, kq16 = true, tgsz = 64, rtg = 8),
-            LabVariant(name = "k4_r2c2", src = lab_k4_r2c2_msl, entry = lab_k4_r2c2_msl_entry,
-                       b_list <- [2], kq = 4, kq16 = true, tgsz = 64, rtg = 16),
             LabVariant(name = "k4_ext4", src = lab_k4_ext4_msl, entry = lab_k4_ext4_msl_entry,
                        b_list <- [4], kq = 4, kq16 = true, tgsz = 64, rtg = 8),
             LabVariant(name = "k6_ext2", src = lab_k6_ext2_msl, entry = lab_k6_ext2_msl_entry,

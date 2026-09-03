@@ -1,8 +1,7 @@
 # dasLLAMA GPU Race Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned
-work: `followup_metal.md`.
+doc: `ARCHITECTURE_GPU.md`. Planned work: `followup_metal.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff touching a GPU kernel A/B race, knockout, or
 hand-binding arm - or changing a kernel class such an arm mirrors (binding numbers, kargs
@@ -27,9 +26,12 @@ geometry - fixes or deletes every such arm in the same change.** An arm left dis
 stale geometry measures the wrong kernel silently.
 
 **Race code inside the engine (`dasllama/`) sits in the file that owns its kernel family and
-never in another engine file; every piece of scaffolding two race sites share sits in
-`dasllama/dasllama_<gpu>_common.das`.** Race code is the base-vs-twin check that times both
-kernels on one queue and compares their outputs.
+never in another engine file.** Race code is the base-vs-twin check that times both kernels on
+one queue and compares their outputs.
+
+**Scaffolding that race sites in two DIFFERENT engine files share sits in
+`dasllama/dasllama_<gpu>_common.das`.** Scaffolding two races in one file share stays in that
+file.
 
 **Race code sizes its operands at a real model shape - never at a small square slab.** A slab
 small enough to sit in cache ranks the kernels by an effect production never sees, and the
@@ -39,8 +41,9 @@ race then picks the slower kernel.
 (`dasllama/dasllama_common.das`), the rows one speculative round checks in one batch - when it
 mints that kernel's runtime crown or tune-sidecar row and the batched decode driver
 (`dasllama/dasllama_<gpu>_decode.das`) dispatches it.** A runtime crown - the winner the box
-profile records and the served graph dispatches - timed at one row alone sends the verify
-through the single-row form.
+profile records and the served graph dispatches - timed at one width alone is dispatched at
+widths it was never ranked at. A kernel the driver dispatches at one fixed width per tile (a
+two-row tile walked over pairs) is timed at that width.
 
 **A kernel A/B race arm that mints a runtime crown or a tune-sidecar row binds a DIFFERENT
 output buffer for consecutive dispatches of its chain, never one shared output.** One shared

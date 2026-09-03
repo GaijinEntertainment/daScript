@@ -1182,79 +1182,69 @@ group; wording kept.
   is clean with those two attribution lines (the NAX arc's steel_attention_nax credit is the
   house pattern); model weights are not in the repo and carry their own terms.
 
-### From the MTP depth-N arc (2026-09-02, M5 Max, dev rail debug-jit unless noted)
+### From the MTP depth-N arc (2026-09-02)
 
-- **gemma-4-26B-A4B-it-Q4_K_M + the Q8_0 assistant drafter, SpecBench-4 chat, -n 128 -r 3:**
-  off 122.6, depth 1 143.4 (1.17x, accept 74.6%), depth 2 145.4 (1.19x, 63.3%; p1 74.7 p2
-  52.0), depth 3 0.79x, depth 4 0.84x. Per prompt at depth 1: writing 1.12x (64.9%),
-  summarization 1.12x (71.6%), math 1.27x (89.6%), qa 1.18x (74.0%). Round clocks: draft chain
-  0.05 ms, verify+commit 11.8 ms against an 8.15 ms step - the two-row verify is 1.45x a step on
-  the MoE expert union; that, not the drafter, caps the gain. The Q8_0 target accepts 76.5% vs
-  74.6% on Q4_K_M: the target quant is not what caps acceptance. Pre-norm target hidden lost to
-  post-norm.
-- **Same corpus on the M4 Pro (14-core, 64 GB):** off 59.1, depth 1 67.3 (1.14x), depth 2 55.7
-  (0.94x) - the two-row verify is 1.51x a step there; depth is a box knob, minted (S4).
-- **llama.cpp b4-98c4764b6 through `llama-server /completion` on the identical rendered
-  thinking-off prompt, greedy, 128 tokens, identical continuation text:** gemma off 102.2,
-  n_max 1 127.5 / 134.8 / 148.7 / 133.0 (writing / summarization / math / qa; accept 65.8 / 78.9 /
-  95.0 / 72.6%), n_max 2 123.2 / 134.7 / 169.9 / 137.6. Ours off 124.1 / 118.0 / 123.9 / 124.8,
-  depth 1 139.0 / 132.4 / 157.4 / 147.2, depth 2 130.5 / 129.0 / 183.4 / 149.8. Same drafter
-  acceptance (pooled 77.1% vs 74.6%); ours ahead ON on three prompts, behind 2-4% on the
-  700-token one. Qwen3.6-27B-MTP dense: lcpp 28.4 -> 40.5 (n1) -> 45.6-48.9 (n3) vs ours 26.7 ->
-  34.9 (k1); their 4-row verify is ~1.05x a step, ours 1.3-1.8x (followup #72). An earlier
-  llama-cli pass with THINKING ON on their side only was discarded - its 91% acceptance was an
-  outline, not the blog post.
-- **Context sweep, tuned kernels (fresh m5 mint):** prefill ours 611 / 3124 / 3965 / 4551 vs
-  llama-bench 721 / 2809 / 3037 / 3175 tok/s at 35 / 256 / 700 / 2048 tokens; decode at depth
-  ours 124.0 / 122.0 / 117.8 / 109.8 vs 99.8 / 99.5 / 98.4 / 93.9. The dev rail with a
-  binary-stale sidecar read 506 / 1397 / 1733 / 1858 - no `runtime.metal_tensor` crowns (the
-  K-quant tensor mul_mm twins race base 0.18 ms vs tensor 0.065 ms) - fixed by keeping the runtime
-  section of a binary-stale sidecar (followup #73 step 1); decode never moved. The 08-30 rig exe
-  read pp512 3861 the same day - the board row (3868) stands.
-- **Depth race on the box (the S4 mint):** synthetic 32-token prompt depth 2 137.5 vs depth 1
-  152.2 (loss: incoherent text is not the site shape); SpecBench chat corpus 145.55 vs 145.29
-  (tie) - the M5 sidecar carries `mtp_depth_assistant = 1`.
-- **The k4 two-row twin, GEMV lab `bench_metal_gemv_kernels` (3 rounds best-of, B=2 ms; two b1c
-  passes as the bar):** M4 Pro q3b / w2_3b / cls3b: bar 0.0456 / 0.1028 / 1.671; ext twin
-  (production, `k4_ext2`) 0.0620 / 0.153 / 2.32 = 1.36 / 1.49 / 1.39x; the two-row register tile
-  (`k4_r2c2`) 0.0385 / 0.0983 / 1.245 = 0.85 / 0.96 / 0.74x; the lcpp-shaped `k4_mvb2` 0.96 /
-  1.05 / 0.89x. M5 Max: bar 0.01482 / 0.03488 / 0.7466; ext 0.82 / 0.89 / 0.52x; tile 0.94 / 1.07
-  / 0.63x; mvb2 0.78 / 0.80 / 0.54x. The tile is the M4's form, the ext twin the M5's - the
-  `kq_mvb2_k4_r2` crown. Production race on the M4 mint before the tile (n 2048 x 8192 rows, 8
-  dispatches): twin 0.83 ms vs two passes 0.51 (k4), 0.90 vs 0.70 (k6), 0.82 vs 0.40 (k2), k5
-  0.84 vs 0.94 and k3 0.85 vs 0.86 keep the twin; on the M5 the twin wins every K-quant
-  (k4 0.152 vs 0.187) and loses iq4xs (0.243 vs 0.202) and iq4nl only. With the tile in the
-  race: M4 form ext 0.844 vs tile 0.482 ms (tile crowned), then k4 rows tile-twin 0.484 vs two
-  passes 0.551 (the twin keeps k4 on the M4 again); M5 form ext 0.492 vs tile 0.528 (ext keeps).
-- **M4 Pro Qwen3.8-27B-Q4_K_M ruler on the tile (rig 47422ea68 on its fresh mint, stock llama.cpp
-  6fdd0ac, exe-first, settle 180, -n 128 -r 3, SpecBench-4 chat):** ours off 12.7 -> depth 1 13.9
-  (1.09x, accept 77.4%) -> depth 2 7.9 (0.62x); per prompt depth 1 13.4 / 14.0 / 15.4 / 13.2
-  (writing / summarization / math / qa). llama.cpp off 11.5 -> n_max 1 13.6 / 13.8 / 14.4 / 13.5
-  (pooled 13.8, accept 82.3%) -> n_max 2 12.3 / 12.4 / 13.9 / 11.5. Before the tile on the same
-  box (measurement day): ours 12.9 -> 11.5 at depth 1 (0.89x). Round cost from the pooled numbers:
-  ours (1 + 0.774) / 1.094 = 1.62x a step (was 2.06x), theirs (1 + 0.823) / 1.20 = 1.52x. Plain
-  decode ours +10%; speculation ON at parity (13.9 vs 13.8).
-- **M4 Pro Qwen3.8-27B round split (`DASLLAMA_MTP_DEBUG=time`, the tile rig, -n 64 -r 2, plain
-  step 78.7 ms):** depth 1 per round draft 7.4 ms, verify 119.0 ms (59.5 per row, 1.51x a step),
-  walk+commit 1.0, replay 0.7, tokens/round 1.80 -> 14.0 tok/s (1.10x); depth 2 draft 14.1, verify
-  302.5 (100.8 per row, 3.84x a step), walk 0.45, replay 1.1, tokens/round 2.38 -> 7.7 tok/s
-  (0.61x). The third verify row leaves the crowned pair path for the four-column form (followup
-  #80). GEMV lab, the four-column forms on the M4 (B=4 vs four b1c passes, q3b / w2_3b / cls3b):
-  `k4_ext4` 1.31 / 1.46 / 1.33x, `k4_extb4` 1.27 / 1.42 / 1.27x; two tiles (2 x `k4_r2c2`) 0.078 /
-  0.190 / 2.49 ms against `k4_extb4` 0.114 / 0.290 / 4.26. CPU rails on the same box: off 11.56 ->
-  MTP 10.66 (0.92x, 78.6% accept) at depth 1, and the identical numbers at `--mtp-depth 2` (#81).
-- **The k4 pair walk (`enc_kq_mvb_k4_pairs`, commit f591c4c13), M4 Pro, gemma-4-12B-it-Q4_K_M
-  same-slab step (`batch_rows_probe --sameslab`, 16 steps), ms per step / x a single step, before ->
-  after:** 1 row 44.1 / 1.00x both; 2 rows 52.9 / 1.20x both (the tile); 3 rows 148.1 / 3.36x ->
-  83.1 / 1.88x; 4 rows 156.7 / 3.55x -> 103.1 / 2.34x; 5 rows 166.6 / 3.78x -> 133.5 / 3.03x. A
-  tile pair costs 1.2 single passes and the step is nearly all weight streaming, so pairs add
-  linearly (4 rows = 2.34x, not the 1.6x a shared-overhead model predicted). The batch-rail
-  parity arms on gemma-12B at 4 and 5 rows pass through the walk. Qwen3.8-27B depth-2 round split
-  on the box: verify 302.5 -> 194.4 ms (the third row 2.3 steps -> 0.96), round 4.04x -> 2.65x a
-  step, depth 2 7.7 -> 11.7 tok/s (0.61x -> 0.92x of plain); depth 1 stays the box's winner. The
-  records-grade ruler on that rig (f591c4c13, exe-first, settle 180, -n 128 -r 3): ours off 12.7 ->
-  depth 1 14.0 (1.10x, 77.4%) -> depth 2 12.4 (0.97x; was 7.9), llama.cpp unchanged at 11.5 ->
-  13.8 -> 12.5. The
-  M5 Max has no three-row cliff (gemma-12B same-slab 1 / 2 / 3 / 4 / 5 / 8 rows = 20.8 / 17.3 /
-  24.7 / 24.6 / 42.1 / 42.7 ms = 1.00 / 0.83 / 1.19 / 1.19 / 2.03 / 2.06x; lab per-column cost at
-  cls: single 0.373, twin 0.196, four-column 0.140 ms) - the walk stays off there by the crown.
+Instruments: `harness/mtp_ruler.das` (both engines in one run, our released `dasllama-bench` exe
+first from a parent that has loaded nothing, then a stock llama.cpp `llama-server` at the ref pin
+6fdd0ac89, settle 180 s, `-n 128 -r 3`, the SpecBench-4 chat corpus, greedy on the identical
+rendered thinking-off prompt; one record per box and model under `performance/records/mtp/`,
+`--render` prints it); the round clocks (`DASLLAMA_MTP_DEBUG=time` on the exe at measurement time,
+since folded into the `mtp.draft` / `mtp.verify` / `mtp.walk` / `mtp.replay` profiler sections
+under `--jobque-profiling`); `harness/batch_rows_probe.das --sameslab` (ms per same-slab step at
+B rows, `-jit`). Every ours-vs-llama.cpp pair is two processes and every before/after is two
+commits: direction-grade.
+
+- **gemma-4-26B-A4B-it-Q4_K_M + the Q8_0 assistant drafter, ruler on the M5 Max (7907b133c):**
+  ours off 122.7 -> depth 1 145.9 (1.19x, accept 75.2%) -> depth 2 148.1 (1.22x; p1 73.9 p2
+  51.3); per prompt depth 1 144.0 / 133.4 / 160.1 / 148.6 (writing / summarization / math / qa).
+  llama.cpp off 98.2 / 95.8 / 98.4 / 98.2 -> n_max 1 139.6 / 119.8 / 145.8 / 129.5 (accept 81.4 /
+  70.3 / 89.6 / 76.4%) -> n_max 2 130.8 / 126.0 / 163.4 / 147.9. Same drafter, same acceptance
+  shape. Direction-grade.
+- **Same pair on the M4 Pro (fa0b0eac4):** ours off 59.2 -> depth 1 67.5 (1.14x, 74.6%) ->
+  depth 2 55.6 (0.93x); llama.cpp off 53.1 / 51.7 / 53.2 / 53.0 -> n_max 1 67.5 / 63.4 / 72.5 /
+  65.4 -> n_max 2 58.0 / 56.0 / 72.6 / 63.4. Depth is a box knob the tuner mints
+  (`mtp_depth_assistant`): 1 on the M4 Pro, a tie on the M5. Direction-grade.
+- **Round clocks, gemma (`--ngl 99`, SpecBench-4 chat):** M5 plain step 8.15 ms, draft chain
+  0.05 ms, verify+commit 11.8 ms - the two-row verify is 1.45x a step on the MoE expert union
+  (1.51x on the M4 Pro); that, not the drafter, caps the gain (#75). The Q8_0 target accepts
+  76.5% vs 74.6% on Q4_K_M (`lcpp_bench --mtp-ab`, M5): the target quant is not what caps
+  acceptance. The pre-norm target hidden lost to post-norm on the same rail (#82).
+- **Qwen3.8-27B-Q4_K_M + its split Q8_0 NextN head, ruler on the M5 Max (497dcf10a):** ours off
+  27.6 -> depth 1 33.0 (1.20x, 77.4%) -> depth 2 31.4 (1.14x; p1 83.9 p2 66.3); llama.cpp off
+  25.8 / 25.4 / 24.9 / 24.6 -> n_max 1 35.1 / 33.5 / 35.0 / 32.9 -> n_max 2 34.4 / 32.7 / 36.7 /
+  30.0. Their verify row is cheaper on this dense hybrid (#72). Direction-grade.
+- **Same pair on the M4 Pro (f591c4c13, the k4 pair walk in):** ours off 12.7 -> depth 1 14.0
+  (1.10x, 77.4%) -> depth 2 12.4 (0.97x); llama.cpp off 11.5 -> n_max 1 13.6 / 13.8 / 14.5 / 13.5
+  -> n_max 2 12.3 / 12.4 / 13.9 / 11.5. On the same box before the pair walk (47422ea68): depth 1
+  13.9 (1.09x), depth 2 7.9 (0.62x). Direction-grade.
+- **Round clocks, Qwen3.8-27B on the M4 Pro (`--ngl 99`, `-n 64 -r 2`, plain step 78.7 ms):**
+  depth 1 per round draft 7.4 ms, verify 119.0 (59.5 per row, 1.51x a step), walk+commit 1.0,
+  replay 0.7, tokens/round 1.80. Depth 2 before the pair walk: draft 14.1, verify 302.5 (the third
+  row on the four-column form; 3.84x a step); after it: verify 194.4, the round 4.04x -> 2.65x a
+  step. Direction-grade. CPU rails on the same box (ruler `--ngl 0`): off 11.56 -> depth 1 10.66
+  (0.92x, 78.6% accept), identical at `--mtp-depth 2` (#81).
+- **Row ladder, gemma-4-12B-it-Q4_K_M same-slab step on the M4 Pro (`batch_rows_probe --sameslab`,
+  16 steps; ms per step / x a single step, before -> after the pair walk):** 1 row 44.1 / 1.00x
+  both; 2 rows 52.9 / 1.20x both (the tile); 3 rows 148.1 / 3.36x -> 83.1 / 1.88x; 4 rows 156.7 /
+  3.55x -> 103.1 / 2.34x; 5 rows 166.6 / 3.78x -> 133.5 / 3.03x; 8 rows (after only, the
+  rebuilt tree on the archived m4 mint) 204.7 / 4.65x. A tile pair costs 1.2 single passes and
+  the step is nearly all weight streaming, so pairs add linearly out to the eighth row. The M5 Max has no
+  three-row cliff: 1 / 2 / 3 / 4 / 5 / 8 rows = 20.8 / 17.3 / 24.7 / 24.6 / 42.1 / 42.7 ms = 1.00 /
+  0.83 / 1.19 / 1.19 / 2.03 / 2.06x - the walk stays off there by the crown. Direction-grade.
+- **A code prompt, gemma on the M5 (c3239b46c, `benchmarks/data/code1_prompts.txt`):** ours off
+  123.4 -> depth 1 159.0 (1.29x, 85.5%) -> depth 2 174.0 (1.41x; p1 86.0 p2 68.0); llama.cpp off
+  99.7 -> n_max 1 140.0 (84.1%) -> n_max 2 153.7. Acceptance is a property of the text: code
+  drafts a fifth better than chat. Direction-grade.
+- **CPU ruler leg, Qwen3.8-27B on the M5 (4da0045f0, `--ngl 0`; llama.cpp arms only - our
+  in-process CPU greedy dies on this model, #78):** llama.cpp off 9.6 / 9.4 / 9.6 / 9.6 -> n_max 1
+  8.4 / 9.0 / 9.5 / 8.4. Speculation loses on their CPU rail too.
+- **Context sweep on the tuned m5 mint:** the dev rail under a binary-stale sidecar served no
+  `runtime.metal_tensor` crowns and read prefill at well under half the board (fixed: the runtime
+  section of a binary-stale sidecar now applies, #73 step 1); the 08-30 rig exe read gemma-26B
+  pp512 3861 the same day - the board row (3868) stands. The sweep's own rows are #71's,
+  direction-grade on the dev rail.
+- **Footprint:** the assistant drafter is a 440 MiB Q8_0 sidecar resident for the session (the
+  `mtp-gdraft-load` arm asserts its size) plus its GPU workspace; a session with a head or drafter
+  grows `mtp_cat` to 2 x 9 x dim floats (Qwen3.8-27B: 370 KB) and `mtp_logits_b` to 9 x vocab
+  floats once (about 5 MB). Decision: taken - the round's gain rides on the drafter's presence, and
+  the sidecar is a fraction of a percent of the target it drafts for.

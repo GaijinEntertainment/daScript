@@ -4,7 +4,8 @@ options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_common   // Session, mtp_state_snapshot / mtp_state_restore
+require dasllama/dasllama_common   // Session, mtp_state_snapshot / mtp_state_restore, mtp_pos_*
+require strings
 
 // The speculative round's deltanet rollback: the snapshot sizes its two buffers to the session's
 // recurrent state on the first call. A 27B hybrid (48 recurrent layers x 32 heads x 128 x 192) is
@@ -37,4 +38,22 @@ def test_first_snapshot_of_a_large_recurrent_state(t : T?) {
     t |> equal(s.dn_state[ns - 1l], 1.5, "restore puts the snapshot back")
     t |> equal(s.dn_pos, 17l, "restore rewinds the position")
     delete s
+}
+
+// The per-position accept telemetry both round drivers feed: hit[i] / try[i] over the rounds
+// since the last reset, one entry per drafted depth, silent past the deepest draft.
+[test]
+def test_per_position_accept_telemetry(t : T?) {
+    mtp_pos_reset()
+    mtp_pos_note(3l, 2l)   // three drafts, the first two accepted
+    mtp_pos_note(2l, 0l)   // two drafts, none
+    mtp_pos_note(1l, 1l)
+    let rep = mtp_pos_report()
+    t |> success(find(rep, "p1 66.7% (2/3)") >= 0, "p1 is two hits in three tries: {rep}")
+    t |> success(find(rep, "p2 50.0% (1/2)") >= 0, "p2 is one hit in two tries: {rep}")
+    t |> success(find(rep, "p3 0.0% (0/1)") >= 0, "p3 is no hit in one try: {rep}")
+    t |> success(find(rep, "p4") < 0, "a depth never drafted stays out of the report: {rep}")
+    mtp_pos_reset()
+    let clean = mtp_pos_report()
+    t |> success(find(clean, "p1") < 0, "reset clears every counter: {clean}")
 }

@@ -66,7 +66,7 @@ the tensor mul_mm twins on) are properties of the box, not of the binary. The en
 `apply_box_profile_runtime()` therefore takes the checked route: `stale_binary` applies the
 runtime section and says so; `foreign_box` and `unreadable` apply nothing, because those knobs
 are the minting box's state; `absent` is an unminted box. Without the crowns the twins run their
-base forms - gemma-26B pp512 on an M5 reads 1662 against 3835 tok/s - so `metal_decode_init`
+base forms - a prefill reads well under half its board cell - so `metal_decode_init`
 warns when a profile was asked for, declined, and no crowns are set, and `lcpp_bench` stamps a
 cell that passed `tune_gate()` on `DASLLAMA_ALLOW_UNTUNED=1` with an `untuned:` flavor prefix.
 
@@ -205,3 +205,18 @@ flavors: f32 group scales (the engine's own quantization) and `q8s16` over binar
 wscale_f16 rail a GGUF q8_0 tensor runs, and the like-for-like row against the reference's q8_0.
 Provenance for every figure in this section: `benchmarks/matmul/kq_kernel_bench.das` under
 `DAS_TUNE_MODE=tune`, one thread, its default `--fmt` / `-n` / `-d` shape.
+
+### 2.28 The speculative round's cell is a ruler record {#ruler-records}
+
+**`performance/records/mtp/mtp_<box>_<model>[_variant].json` is a ruler record: one file per box
+and model, written only by `harness/mtp_ruler.das`.** The board (`records/<box>.json`) has no
+speculative column, because a speculative rate is not one engine's number: acceptance is a property
+of the text and of the drafter both engines share, so the honest cell is the two engines on the
+identical rendered prompt in one run. The ruler measures our released exe FIRST from a parent that
+has loaded nothing (a parent that had just run the engine in-process read the exe's speculative arm
+a fifth low), then the reference server at the ref pin, every arm settled, and writes `meta` (date,
+box, `das_sha`, `das_exe`, `lcpp_server`, `lcpp_version`, the model and head with their shas, the
+corpus, `ngen`, `reps`, `depths`) plus one row per engine, depth and prompt. The shape is the ruler's,
+not the board's - `list_record_stores` and the records gate read `records/` one level deep and never
+see the folder - and `mtp_ruler --render <record>` prints the table. A third-party wall lives here
+only as the other half of a pair taken in the same run.

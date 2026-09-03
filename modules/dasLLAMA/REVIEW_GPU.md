@@ -1,7 +1,7 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: the folder's `ARCHITECTURE_GPU*.md` set.
+doc: `ARCHITECTURE_GPU.md`.
 
 **Routed from `REVIEW.md`: a diff touching a GPU kernel, driver, dispatch class, or the K/V
 mirrors applies this list together with `REVIEW.md`.**
@@ -35,8 +35,12 @@ field.** The generated builder then trips on the first misaligned dispatch inste
 the next row.
 
 **A driver that keeps misaligned shapes off a kernel whose main loop steps one fixed-size chunk
-and never checks for a partial last chunk gates each dispatch site on the chunk size that
-site's kernel steps, never on one gate covering every site.**
+and never checks for a partial last chunk gates every dispatch site of that kernel on that
+site's own K, never on one gate covering every site.**
+
+**Such a site's gate divides by a multiple of the chunk the site's kernel steps** - a kernel
+that steps 128 behind a gate that checks 256 is a shape it never sees, and a kernel that steps
+256 behind a gate that checks 128 is a tail it silently drops.
 
 **Never let a `matmul2d` left or right operand reach the op as `float` outside a kernel class
 stamped `[metal_kernel(float_a_ok=true)]` - convert it in the pass that writes the operand's
@@ -194,10 +198,11 @@ own init/release pair.
 **A diff that adds or removes a Metal-only or Vulkan-only hook, role, served path, or
 backend-only capability - anything that changes what one backend can serve and the other
 cannot, where one backend serving the same path faster or slower is not such a change - lands
-its `ARCHITECTURE_GPU.md` sec.1.5 edit in the same change - including when
-sec.1.5 already carries that class of asymmetry, and including sec.1.5's per-driver lists of
-registered hooks and borrowed kernels.** sec.1.5 is the closed list; an asymmetry it does not
-carry does not exist.
+its entry in `ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the same change -
+including when that list already carries the class of asymmetry, and including sec.1.5's
+per-driver lists of registered hooks and borrowed kernels.** The role row a new driver file
+gets (the rule above) does not discharge this duty; an asymmetry the closed list does not carry
+does not exist.
 
 **A hand-written Vulkan pipeline build anywhere in the engine is a defect - a Vulkan pipeline
 is created only by a `[vk_dispatch]`-generated `ensure_*` and torn down by
@@ -213,9 +218,8 @@ served GPU decode or prefill call executes OR that selects what it executes - a 
 kernel class it dispatches, that class's builder, a servability gate, a kernel crown race, a
 forwarder default, a weight-region or residency path, the tier forwarders and engine seams
 the call routes through; never the bake paths, never a comment. The parity
-run is `harness/parity.das` on either backend, or - on Metal only - the in-suite instruments
-`tests/test_metal_decode_parity.das` / `tests/test_metal_prefill_parity.das` through
-`tests/run.das`.
+run is `harness/parity.das` on either backend, or - on Metal only - an in-suite
+`tests/test_metal_*_parity.das` instrument (decode, prefill, mtp) run through `tests/run.das`.
 
 **Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
 Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows the tier that serves

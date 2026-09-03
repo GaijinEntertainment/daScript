@@ -11,7 +11,9 @@ load, identity, or flavor concern wherever the diff puts it, applies this list t
 it belongs to the mint.** Going live is `parse_image` pointing a live carrier's planes into the
 mapped `.dlim`.
 
-**A missing `.dlim` is minted first, and the model is served from what was minted.**
+**A weight carrier - anything that reads weights from a file and serves inference from them -
+whose `.dlim` is missing mints it first and is served from what was minted.** A carrier the
+image rail does not carry is a ledgered lane in `ARCHITECTURE_IMAGE.md`, never a silent one.
 
 **A weight carrier becomes live only through `build_image` and `parse_image` in
 `dasllama/dasllama_image.das`: reading weights into a live carrier, or releasing an image
@@ -28,8 +30,9 @@ either refuses it or streams it the way a decoder mint does.** A refusal names t
 staged form holds source and image at once, and this rule caps that doubled peak.
 
 **A path that reinterprets a mismatched image, or widens an identity so that more files match,
-is a defect.** `image_identity` names the box profile, the knobs, and the flavor a file was
-baked for, and a mismatch declines loudly.
+is a defect.** Anything that changes what an image contains - the box profile, the knobs, the
+flavor, a head that rides the load - goes into `image_identity`, the string the header bakes,
+not only into the image path; a mismatch declines loudly.
 
 **An image save drops AT MOST its own lane's dead siblings plus BROKEN/version-stale images in
 any lane.** A lane is an identity's (quant, tag) pair.
@@ -46,10 +49,11 @@ decides that, not the load.**
 **A flavor takes its image file through `image_path_for` and its tag through
 `register_image_family_tag`.**
 
-**A diff that changes the `.dlim` layout or serialization, or changes which tensors the gguf
-loader puts into an image, bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) in the same
-change.**
-Without the bump a stale image stays structurally valid and silently serves a different model.
+**A diff that changes the `.dlim` layout or serialization, or changes what an image at an
+UNCHANGED path contains, bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) in the same
+change.** Without the bump a stale image stays structurally valid and silently serves a
+different model; a content change that also changes the path cannot be reinterpreted and needs
+no bump.
 
 **Weakening the `serialize_image_meta` field-count tripwire (`IMAGE_META_FIELDS`,
 `dasllama/dasllama_image.das`) is a defect** - raising the constant without adding the field to

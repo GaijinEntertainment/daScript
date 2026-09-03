@@ -9,8 +9,9 @@ the followup ledgers).
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
 
-**A timing rig - a script whose output is a measured wall or rate - wherever the diff puts
-it, answers to this folder's `benchmarks/REVIEW.md`.**
+**A timing rig - a script whose output is a measured wall or rate - or a kernel race, wherever
+the diff puts it (`harness/`, `dasllama/`, a test), answers to this folder's
+`benchmarks/REVIEW.md`.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
 code comment, or a PR body - or adds a servable capability applies `REVIEW_MEASUREMENT.md`.**
@@ -185,9 +186,10 @@ re-exports an engine module OUT of an escaped file, beyond what that consumer's 
 (`ARCHITECTURE_ENGINE.md` sec.1.8) grants, breaks this rule too.
 
 **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, adding a name to
-a check's licensed set - the names that check does not flag - or a finding text that no
-longer names what failed. What the gate enforces is read from the gate itself; each check's
-finding text states its own rule.
+a check's licensed set - the names that check does not flag - unless the check's own finding
+text names that set as its extension point and the diff lands the paired architecture edit it
+asks for, or a finding text that no longer names what failed. What the gate enforces is read
+from the gate itself; each check's finding text states its own rule.
 
 **A new `REVIEW.das` check ships its sec.1 charter line in the same change, on the charter of
 the file it checks - in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`, or
@@ -196,8 +198,9 @@ is one that check does not flag. When the check licenses no names, the line says
 
 **Checked-in prose this module owns - docs and comments, any language - that is not locating, patching,
 or reproducing work against the reference build describes an upstream mechanism in our own
-terms: no "lifted/ported verbatim from", and no upstream symbol, header, constant, or binary
-name - write "the reference exe" or "upstream" instead.** The reference build is the
+terms: no "lifted/ported verbatim from", and no name belonging to the reference build -
+symbol, header, constant, binary, project or organization - write "the reference exe" or
+"upstream" instead.** The reference build is the
 third-party engine this module measures itself against - the checkout
 `benchmarks/setup_lcpp_ref.das` pins. A symbol the file carrying that prose calls or holds as
 a value is its own name, not attribution.
