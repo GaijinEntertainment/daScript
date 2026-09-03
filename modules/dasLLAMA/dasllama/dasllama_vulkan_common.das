@@ -151,12 +151,12 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
     return tiles_m * waves_l > tiles_l * waves_m ? 128l : 256l
 }
 
+//! workgroups a (d, cnt) GEMM takes at the token column `tc`
+def cm2_tiles_at(d, cnt, tc : int64) : int64 => ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc)
+
 //! workgroups a (d, cnt) GEMM takes at its own tile pick
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-def cm2_tiles(d, cnt : int64) : int64 {
-    let tc = cm2_tile_cols(d, cnt)
-    return ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc)
-}
+def cm2_tiles(d, cnt : int64) : int64 => cm2_tiles_at(d, cnt, cm2_tile_cols(d, cnt))
 
 //! Returns (chunks, 256-aligned chunk); (1, 0) = off. `sib_tiles` = the workgroups of the roles this one co-runs beside.
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
@@ -167,7 +167,7 @@ def cm2_split_k(d, cnt, n, tc : int64; sib_tiles : int64 = 0l) : tuple<nsplit : 
     if (forced > 0l) {
         sk = forced
     } elif (cores != 0l && n >= 2048l && d >= 128l && cnt >= tc) {
-        let tiles = ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc) + sib_tiles
+        let tiles = cm2_tiles_at(d, cnt, tc) + sib_tiles
         if (tiles <= cores / 2l) {
             sk = cores / tiles
         } elif (tiles <= cores * 2l / 3l) {

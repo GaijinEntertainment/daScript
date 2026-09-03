@@ -311,7 +311,7 @@ struct ActArgs {
     nelem : uint   // element count (4-wide kernels; always a 32-multiple, the guard is exact)
     gelu : uint    // activation select: 0 = silu, else tanh-gelu
     nblk : uint    // 32-block / superblock count (the requant kernels' guard)
-    base : uint    // element base; a 32-multiple
+    elem0 : uint   // a 32-multiple; ActF16 only - the requant classes ignore it
 }
 
 // the one activation formula (silu or tanh-gelu on v, times u) — the classes' act_mul
@@ -414,8 +414,8 @@ class ActF16 {
 
     [spirv_kernel(local_size_x = 256, name = "actf16_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
-        let e = pa.base + gl_GlobalInvocationID.x * 4u
-        if (e < pa.base + pa.nelem) {
+        let e = pa.elem0 + gl_GlobalInvocationID.x * 4u
+        if (e < pa.elem0 + pa.nelem) {
             outh[e] = float16(clamp(act_mul(gate[e], up[e]), -65504.0, 65504.0))
             outh[e + 1u] = float16(clamp(act_mul(gate[e + 1u], up[e + 1u]), -65504.0, 65504.0))
             outh[e + 2u] = float16(clamp(act_mul(gate[e + 2u], up[e + 2u]), -65504.0, 65504.0))
@@ -4811,7 +4811,7 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant BN : uint = 256u                   // the token column
     @template_constant STILE : bool = false               // the 32-row column's partial-column fast path
     @template_constant BLKW : uint = 256u                 // elements per weight block
-    @template_constant DECVEC : bool = true               //!< the four-wide decode twin rides the loads; false serves the scalar callback only
+    @template_constant DECVEC : bool = true               //!< when DECV4 is off: the synthesized four-wide twin rides the loads; false serves the scalar callback only
     @template_constant DECV4 : bool = false               //!< the format's hand-laid `decode_v4` is the twin instead of the synthesized one
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
     @workgroup @template_gate = IQLUT iq4lut : float16[16]   // kvalues_iq4nl as f16
@@ -5069,10 +5069,10 @@ class template K4Cm2T : KqCm2BatchT {
         let sh = (e >> 4u) * 4u
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let dm = unpackHalf2x16(ws[srow])
-        let sc = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        let mn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        return half4(float4(sc * float((l0 >> sh) & 0xFu) - mn, sc * float((l0 >> (sh + 8u)) & 0xFu) - mn,
-            sc * float((l1 >> sh) & 0xFu) - mn, sc * float((l1 >> (sh + 8u)) & 0xFu) - mn))
+        let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+        let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+        return half4(float4(ds * float((l0 >> sh) & 0xFu) - dmn, ds * float((l0 >> (sh + 8u)) & 0xFu) - dmn,
+            ds * float((l1 >> sh) & 0xFu) - dmn, ds * float((l1 >> (sh + 8u)) & 0xFu) - dmn))
     }
 }
 
@@ -5168,9 +5168,9 @@ class template K5Cm2T : KqCm2BatchT {
         let q3 = ((l1 >> (sh + 8u)) & 0xFu) | (((hb >> 3u) & 1u) << 4u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let dm = unpackHalf2x16(ws[srow])
-        let sc = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        let mn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        return half4(float4(sc * float(q0) - mn, sc * float(q1) - mn, sc * float(q2) - mn, sc * float(q3) - mn))
+        let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+        let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+        return half4(float4(ds * float(q0) - dmn, ds * float(q1) - dmn, ds * float(q2) - dmn, ds * float(q3) - dmn))
     }
 }
 
@@ -5324,10 +5324,10 @@ class template K2Cm2T : KqCm2BatchT {
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let dm = unpackHalf2x16(ws[srow])
         let pb = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        let sc = dm.x * float(pb & 15u)
-        let mn = dm.y * float(pb >> 4u)
-        return half4(float4(sc * float((q0w >> qs2) & 3u) - mn, sc * float((q0w >> (qs2 + 8u)) & 3u) - mn,
-            sc * float((q1w >> qs2) & 3u) - mn, sc * float((q1w >> (qs2 + 8u)) & 3u) - mn))
+        let ds = dm.x * float(pb & 15u)
+        let dmn = dm.y * float(pb >> 4u)
+        return half4(float4(ds * float((q0w >> qs2) & 3u) - dmn, ds * float((q0w >> (qs2 + 8u)) & 3u) - dmn,
+            ds * float((q1w >> qs2) & 3u) - dmn, ds * float((q1w >> (qs2 + 8u)) & 3u) - dmn))
     }
 }
 
@@ -5373,13 +5373,13 @@ class template Iq3sCm2T : KqCm2BatchT {
         let d = unpackHalf2x16(ws[srow]).x
         let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
         let ds = d * float(sc)
-        let s = sgb >> (((r >> 2u) & 1u) * 4u)
+        let sgn = sgb >> (((r >> 2u) & 1u) * 4u)
         let g0 = float(gw & 0xFFu)
         let g1 = float((gw >> 8u) & 0xFFu)
         let g2 = float((gw >> 16u) & 0xFFu)
         let g3 = float(gw >> 24u)
-        return half4(float4(ds * ((s & 1u) != 0u ? -g0 : g0), ds * (((s >> 1u) & 1u) != 0u ? -g1 : g1),
-            ds * (((s >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((s >> 3u) & 1u) != 0u ? -g3 : g3)))
+        return half4(float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+            ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
     }
 }
 
@@ -5439,13 +5439,13 @@ class template Iq3xxsCm2T : KqCm2BatchT {
         let d = unpackHalf2x16(ws[srow]).x
         let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
         let ds = d * float(sc)
-        let s = sgb >> (r & 7u)
+        let sgn = sgb >> (r & 7u)
         let g0 = float(gw & 0xFFu)
         let g1 = float((gw >> 8u) & 0xFFu)
         let g2 = float((gw >> 16u) & 0xFFu)
         let g3 = float(gw >> 24u)
-        return half4(float4(ds * ((s & 1u) != 0u ? -g0 : g0), ds * (((s >> 1u) & 1u) != 0u ? -g1 : g1),
-            ds * (((s >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((s >> 3u) & 1u) != 0u ? -g3 : g3)))
+        return half4(float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+            ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
     }
 }
 
@@ -5529,13 +5529,13 @@ class template Iq2sCm2T : KqCm2BatchT {
         let si = g * 2u + (r >> 4u)
         let sc = (ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu
         let ds = d * float(sc)
-        let s = sgb >> j
+        let sgn = sgb >> j
         let g0 = float(gw & 0xFFu)
         let g1 = float((gw >> 8u) & 0xFFu)
         let g2 = float((gw >> 16u) & 0xFFu)
         let g3 = float(gw >> 24u)
-        return half4(float4(ds * ((s & 1u) != 0u ? -g0 : g0), ds * (((s >> 1u) & 1u) != 0u ? -g1 : g1),
-            ds * (((s >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((s >> 3u) & 1u) != 0u ? -g3 : g3)))
+        return half4(float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+            ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
     }
 }
 
@@ -5582,13 +5582,13 @@ class template Iq2xsCm2T : KqCm2BatchT {
         let si = e >> 4u
         let sc = (ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu
         let ds = dv * float(sc)
-        let s = sgb >> j
+        let sgn = sgb >> j
         let g0 = float(gw & 0xFFu)
         let g1 = float((gw >> 8u) & 0xFFu)
         let g2 = float((gw >> 16u) & 0xFFu)
         let g3 = float(gw >> 24u)
-        return half4(float4(ds * ((s & 1u) != 0u ? -g0 : g0), ds * (((s >> 1u) & 1u) != 0u ? -g1 : g1),
-            ds * (((s >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((s >> 3u) & 1u) != 0u ? -g3 : g3)))
+        return half4(float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+            ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
     }
 }
 
@@ -5647,13 +5647,13 @@ class template Iq2xxsCm2T : KqCm2BatchT {
         let dv = unpackHalf2x16(ws[srow]).x
         let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
         let ds = dv * float(sc)
-        let s = sgb >> j
+        let sgn = sgb >> j
         let g0 = float(gw & 0xFFu)
         let g1 = float((gw >> 8u) & 0xFFu)
         let g2 = float((gw >> 16u) & 0xFFu)
         let g3 = float(gw >> 24u)
-        return half4(float4(ds * ((s & 1u) != 0u ? -g0 : g0), ds * (((s >> 1u) & 1u) != 0u ? -g1 : g1),
-            ds * (((s >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((s >> 3u) & 1u) != 0u ? -g3 : g3)))
+        return half4(float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+            ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
     }
 }
 

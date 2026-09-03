@@ -1136,8 +1136,10 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   our_prof_q4km.log.
 
 - 2026-09-02: Vulkan gap 1 (b) landed - the split-k pick counts the dispatch group. The force-knob
-  sweep on the Q4_K_M window (`DASLLAMA_CM2_TILE` x `DASLLAMA_CM2_SPLITK`, plain runs bracketing
-  every arm) showed the k and v roles' 2.2x was not the tile: with split-k off and the same m
+  sweep on the Q4_K_M window (`DASLLAMA_CM2_TILE` x `DASLLAMA_CM2_SPLITK` over `lcpp_bench
+  --for-debug-purposes --plen 512 --ngen 0 --reps 2` under `DASLLAMA_GPU=1 DASLLAMA_GPU_PROF=1`,
+  the per-role stamps of the last window, plain runs bracketing every arm; every window figure
+  in the bullets below is that rig's) showed the k and v roles' 2.2x was not the tile: with split-k off and the same m
   tile, k+v fell from 1917 to 1264 us, because k and v stop serializing through the shared
   split-k scratch and co-run under the hazard rail (the v stamp then reads only v's tail, 184 us).
   Forced split-k 4 or 8 and the s tile run 2-3x slower on every big role (one 512x8192 f32 plane
@@ -1218,7 +1220,8 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   embedding on the device (GET_ROWS, 6 us). The device gather rail exists
   (`vk_rdec_prefill_ids`, `vk_rdec_set_emb`) but the embed gate keeps this model on the CPU
   embed: the gather kernel serves q8 tied planes and the f32 table only, and the 1B ties a
-  q6_K plane (followup_vulkan 37 = the kq gather). Landed instead, the cheap half:
+  q6_K plane (followup_vulkan 37 = the kq gather; the 6 us is llama.cpp's `GGML_VK_PERF_LOGGER=1`
+  GET_ROWS row). Landed instead, the cheap half:
   `forward_prefill`'s embed loop runs across the dispatch lanes (`maybe_parallel_for` with
   hoisted raw pointers - a parallel block cannot capture the model). Embed bucket 2179 -> 295
   us, profiled window wall 25728 -> 24106. Timed windows after (two runs that read 24.3-24.4 ms
@@ -1251,4 +1254,25 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   are Q3_K_L 0.90 (a 6% spread on our side), IQ3_M 0.90 and IQ2_XXS 0.94 - the k3, iq3s and
   iq2xxs tiles, whose per-shape reference rows (llama.cpp's perf-logger MUL_MAT rows per format)
   are the next mirror-bench pass. tg128 is gap 3 (the grid tg tails: IQ2_XS 0.56, IQ2_XXS 0.71,
-  IQ3_M 0.87; followup_vulkan 35), untouched by this arc.
+  IQ3_M 0.87; followup_vulkan 35), untouched by this arc. Every figure here is a stage reading
+  of the debug rig named in its heading, not a board cell; the board rows the arc owes are in
+  `modules/dasLLAMA/PERF_LEDGER.md` (the record stamp refuses this box while the remote-access
+  daemon runs).
+
+- 2026-09-02: the audit round's witnesses. The frozen parity fixtures' prompts are 5-20 tokens
+  and never reach the 32-row slice, so `tests/test_parity_pregate.das` gains a cell that prefills
+  512 tokens each way on the resident driver (the `g_pf_ffn_slice` hook; `DASLLAMA_VK_FFN_SLICE=0`
+  is the same arm from the environment) and compares the logits exactly; cls_ar and actf16 gain
+  cells with their new bases non-zero; the slice row and the split pick are pure functions with
+  pins. Two lessons from running the pregate file with the models present: (a) gemma-4-E2B Q8_0,
+  Qwen3-0.6B Q8_0 and Qwen3-4B Q4_K_M diverge or assert (`decode attention block geometry
+  changed under a live model`) when loaded back to back in ONE dastest process under
+  `DASLLAMA_GPU=1`, and each reproduces 40/40 alone through `lcpp_bench --parity` - the test
+  file's multi-model process state, pre-existing, not this diff; (b) the parallel embed's job
+  dispatch needs a job queue, which the bench and server arm and a dastest cell must arm itself
+  (`with_job_que()`), because no test had reached a `maybe_parallel_for` arm in-process before
+  (the small carriers stay under every threshold); (c) a session built with the default f32
+  cache codec is declined by the resident driver silently (the armed mirror is f16), so the
+  cell's first shape compared the CPU rail against itself for twenty minutes and passed - a
+  two-arm compare on the driver builds f16 sessions like the bench and asserts the driver's
+  session stamp (`rdec_gen != 0`) on both arms, or it proves nothing.

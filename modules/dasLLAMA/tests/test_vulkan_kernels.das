@@ -13,6 +13,7 @@ require ?vulkan vulkan/vulkan_boost
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_env   // g_env_vulkan.coopmat - the resolved-default ladder cell pins and restores it
 require ?vulkan dasllama/dasllama_vulkan_classes
+require ?vulkan dasllama/dasllama_vulkan_prefill
 require ?vulkan dasllama/dasllama_vulkan_seams
 require ?vulkan dasllama/dasllama_kqformat
 require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane (only vulkan-guarded arms replay)
@@ -180,6 +181,203 @@ def test_vkd_ar_class(t0 : T?) {
             delete yc
             delete xc
             delete ysent
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+[test]
+def test_vkd_cls_ar_row0(t0 : T?) {
+    t0 |> run("cls_ar with a row base lands on the rows from row0 and leaves the rows below untouched") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_cls_ar()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            let dim = 1024
+            let rows = 3
+            let row0 = 1
+            let total = dim * rows
+            let bytes = int64(total) * 4l
+            let wbytes = int64(dim) * 4l
+            let eps = 1e-5
+            var x : array<float>
+            var a : array<float>
+            var w : array<float>
+            x |> resize(total)
+            a |> resize(total)
+            w |> resize(dim)
+            for (i in range(total)) {
+                x[i] = float((i * 37) % 101) * 0.11 - 5.0
+                a[i] = float((i * 13) % 89) * 0.07 - 3.0
+            }
+            for (i in range(dim)) {
+                w[i] = 0.5 + float(i % 17) * 0.05
+            }
+            // the reference: the seam row by row from row0; rows below keep x and a sentinel y
+            var x2 := x
+            var y2 : array<float>
+            y2 |> resize(total)
+            for (i in range(total)) {
+                y2[i] = -999.25
+            }
+            for (r in range(row0, rows)) {
+                var xr : array<float>
+                var ar : array<float>
+                var yr : array<float>
+                xr |> resize(dim)
+                ar |> resize(dim)
+                yr |> resize(dim)
+                for (i in range(dim)) {
+                    xr[i] = x[r * dim + i]
+                    ar[i] = a[r * dim + i]
+                }
+                vk_add_rms(xr, ar, w, yr, int64(dim), eps, 1.0, true)
+                for (i in range(dim)) {
+                    x2[r * dim + i] = xr[i]
+                    y2[r * dim + i] = yr[i]
+                }
+                delete xr
+                delete ar
+                delete yr
+            }
+            let xd = make_device_buf(bytes)
+            let ad = make_device_buf(bytes)
+            let wd = make_device_buf(wbytes)
+            let yd = make_device_buf(bytes)
+            var host = make_host_buf(bytes, true, [cached = true])
+            var yc : array<float>
+            var xc : array<float>
+            yc |> resize(total)
+            xc |> resize(total)
+            var ysent : array<float>
+            ysent |> resize(total)
+            for (i in range(total)) {
+                ysent[i] = -999.25
+            }
+            unsafe {
+                upload_region_at(yd, 0l, addr<uint8 const?>(ysent[0]), bytes)
+                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bytes)
+                upload_region_at(ad, 0l, addr<uint8 const?>(a[0]), bytes)
+                upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), wbytes)
+                var s = set_cls_ar(fixed_array(xd, ad, wd, yd), fixed_array(bytes, bytes, wbytes, bytes), fixed_array(1u, 2u, 4u, 8u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                var pc = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = 1.0, row0 = uint(row0))
+                enc_cls_ar(raw, h, s, pc, int64(rows - row0))
+                vhz_dep(raw, h, 8u | 1u, 0u, true)
+                cmd_copy_whole(raw, yd, host.buf, bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                submit_wait(raw)
+                memcpy(addr<void?>(yc[0]), host.mapped, bytes)
+                var raw2 = alloc_cmd()
+                vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                cmd_copy_whole(raw2, xd, host.buf, bytes)
+                vk_check(vkEndCommandBuffer(raw2), null)
+                submit_wait(raw2)
+                memcpy(addr<void?>(xc[0]), host.mapped, bytes)
+            }
+            let bad_y = mismatch_exact(yc, y2)
+            let bad_x = mismatch_exact(xc, x2)
+            t |> success(bad_y == 0, "normed rows from row0 bit-exact, the row below still the sentinel ({bad_y} of {total} diverge)")
+            t |> success(bad_x == 0, "residual rows from row0 bit-exact, the row below untouched ({bad_x} of {total} diverge)")
+            delete x
+            delete a
+            delete w
+            delete x2
+            delete y2
+            delete yc
+            delete xc
+            delete ysent
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+[test]
+def test_vkd_actf16_base(t0 : T?) {
+    t0 |> run("actf16 with an element base == the same row dispatched from zero; the halves below the base keep their sentinel") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_actf16_cls()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            let nelem = 2048
+            let total = nelem * 2
+            let g_bytes = int64(total) * 4l
+            let h_bytes = int64(total) * 2l
+            var gh : array<float>
+            var uh : array<float>
+            gh |> resize(total)
+            uh |> resize(total)
+            for (i in range(total)) {
+                gh[i] = float((i * 29) % 61) * 0.06 - 1.9
+                uh[i] = float((i * 43) % 83) * 0.05 - 2.1
+            }
+            // arm 0: the second row's data at the front, base 0; arm 1: the plane as is, base nelem
+            var g0 : array<float>
+            var u0 : array<float>
+            g0 |> resize(total)
+            u0 |> resize(total)
+            for (i in range(nelem)) {
+                g0[i] = gh[nelem + i]
+                u0[i] = uh[nelem + i]
+            }
+            var hsent : array<uint>
+            hsent |> resize(total / 2)
+            for (i in range(total / 2)) {
+                hsent[i] = 0xFC00FC00u
+            }
+            let gd = make_device_buf(g_bytes)
+            let ud = make_device_buf(g_bytes)
+            let hd = make_device_buf(h_bytes)
+            var host = make_host_buf(h_bytes, true, [cached = true])
+            var h0 : array<uint>
+            var h1 : array<uint>
+            h0 |> resize(total / 2)
+            h1 |> resize(total / 2)
+            for (arm in range(2)) {
+                unsafe {
+                    upload_region_at(gd, 0l, addr<uint8 const?>(arm == 0 ? g0[0] : gh[0]), g_bytes)
+                    upload_region_at(ud, 0l, addr<uint8 const?>(arm == 0 ? u0[0] : uh[0]), g_bytes)
+                    upload_region_at(hd, 0l, addr<uint8 const?>(hsent[0]), h_bytes)
+                    var sc = set_actf16_cls(fixed_array(gd, ud, hd), fixed_array(g_bytes, g_bytes, h_bytes), fixed_array(1u, 2u, 4u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    var pc = ActArgs(nelem = uint(nelem), gelu = 1u, nblk = 0u, elem0 = arm == 0 ? 0u : uint(nelem))
+                    enc_actf16_cls(raw, h, sc, pc, int64((nelem / 4 + 255) / 256))
+                    vhz_dep(raw, h, 4u, 0u, true)
+                    cmd_copy_whole(raw, hd, host.buf, h_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(arm == 0 ? h0[0] : h1[0]), host.mapped, h_bytes)
+                }
+            }
+            var bad_row = 0
+            var bad_sent = 0
+            for (i in range(nelem / 2)) {
+                if (h1[nelem / 2 + i] != h0[i]) {
+                    bad_row++
+                }
+                if (h1[i] != 0xFC00FC00u) {
+                    bad_sent++
+                }
+            }
+            t |> success(bad_row == 0, "the based row equals the same row dispatched from zero ({bad_row} of {nelem / 2} words diverge)")
+            t |> success(bad_sent == 0, "the halves below the base keep the sentinel ({bad_sent} of {nelem / 2} words written)")
+            delete gh
+            delete uh
+            delete g0
+            delete u0
+            delete hsent
+            delete h0
+            delete h1
         } else {
             feint("dasVulkan not present - skipping\n")
         }
@@ -1342,7 +1540,7 @@ def test_vkd_cm_batch_family(t0 : T?) {
                 y_ref |> resize(rows * d)
                 q8_gemm_oracle(wqh, wsh, xqh, xsh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm batch variant {v}: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm batch variant {v}: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm batch variant {v} matches the CPU oracle ({bad} of {rows * d} off)")
                 delete sched
                 delete y_ref
@@ -1460,7 +1658,7 @@ def test_vkd_kq_q40_cm_batch(t0 : T?) {
             y_ref |> resize(rows * d)
             kq_gemm_oracle(int(KqFmt.q40), wqh, wsuh, xqh, xsh, sched, 2, n, d, y_ref)
             let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-            to_log(LOG_INFO, "q40 cm batch: {bad} of {rows * d} off the oracle\n")
+            to_log(LOG_INFO, "q40 cm batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
             t |> success(bad == 0, "q40 cm batch matches the CPU oracle ({bad} of {rows * d} off)")
             delete sched
             delete y_ref
@@ -1566,7 +1764,7 @@ def test_vkd_cm2l_batch(t0 : T?) {
             y_ref |> resize(rows * d)
             q8f16_gemm_oracle(wqh, wsh, xfh, sched, 2, n, d, y_ref)
             let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-            to_log(LOG_INFO, "cm2 l-tile batch: {bad} of {rows * d} off the oracle\n")
+            to_log(LOG_INFO, "cm2 l-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
             t |> success(bad == 0, "cm2 l-tile batch matches the CPU oracle ({bad} of {rows * d} off)")
             delete sched
             delete y_ref
@@ -1685,7 +1883,7 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
                     memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
                     let bad = mismatch_bars(y_cls, y_ref, 2e-2, floor)
                     let what = arm == 0 ? "stripped (scalar callback)" : (twin_device ? "the four-wide twin" : "the twin stamp on a device without the callback")
-                    to_log(LOG_INFO, "cm2 decode pair, {what}: {bad} of {rows * d} off the oracle\n")
+                    to_log(LOG_INFO, "cm2 decode pair, {what}: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                     t |> success(bad == 0, "{what} matches the CPU oracle ({bad} of {rows * d} off)")
                     var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                     y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -1816,7 +2014,7 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
                 }
                 k4f16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 k4 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 k4 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 k4 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -1945,7 +2143,7 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
                 }
                 k5f16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 k5 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 k5 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 k5 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -2073,7 +2271,7 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
                 }
                 q40f16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 q40 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 q40 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 q40 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -2200,7 +2398,7 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
                 }
                 k2f16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 k2 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 k2 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 k2 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -2328,7 +2526,7 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
                 }
                 iq4nlf16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 iq4nl {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 iq4nl {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 iq4nl {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -2456,7 +2654,7 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
                 }
                 iq4xsf16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 iq4xs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 iq4xs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 iq4xs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -2583,7 +2781,7 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
                 }
                 k3f16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 k3 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 k3 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 k3 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -2711,7 +2909,7 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
                 }
                 iq3sf16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 iq3s {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 iq3s {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 iq3s {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -2839,7 +3037,7 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
                 }
                 iq2sf16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 iq2s {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 iq2s {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 iq2s {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -2967,7 +3165,7 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
                 }
                 iq2xsf16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 iq2xs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 iq2xs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 iq2xs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -3095,7 +3293,7 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
                 }
                 iq2xxsf16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 iq2xxs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 iq2xxs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 iq2xxs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -3223,7 +3421,7 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
                 }
                 iq3xxsf16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 iq3xxs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 iq3xxs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 iq3xxs {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -3350,7 +3548,7 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
                 }
                 k6f16_gemm_oracle(wqh, wsuh, xfh, sched, 2, n, d, y_ref)
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-                to_log(LOG_INFO, "cm2 k6 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle\n")
+                to_log(LOG_INFO, "cm2 k6 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm2 k6 {ml == 0 ? "l" : (ml == 1 ? "m" : "s")}-tile matches the CPU oracle ({bad} of {rows * d} off)")
                 var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -3459,7 +3657,7 @@ def test_vkd_cm2m_batch(t0 : T?) {
             y_ref |> resize(rows * d)
             q8f16_gemm_oracle(wqh, wsh, xfh, sched, 2, n, d, y_ref)
             let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-            to_log(LOG_INFO, "cm2 m-tile batch: {bad} of {rows * d} off the oracle\n")
+            to_log(LOG_INFO, "cm2 m-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
             t |> success(bad == 0, "cm2 m-tile batch matches the CPU oracle ({bad} of {rows * d} off)")
             delete sched
             delete y_ref
@@ -3563,7 +3761,7 @@ def test_vkd_cm2s_batch(t0 : T?) {
             y_ref |> resize(rows * d)
             q8f16_gemm_oracle(wqh, wsh, xfh, sched, 2, n, d, y_ref)
             let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-            to_log(LOG_INFO, "cm2 s-tile batch: {bad} of {rows * d} off the oracle\n")
+            to_log(LOG_INFO, "cm2 s-tile batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
             t |> success(bad == 0, "cm2 s-tile batch matches the CPU oracle ({bad} of {rows * d} off)")
             var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
             y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
@@ -3676,7 +3874,7 @@ def test_vkd_cm2l_split(t0 : T?) {
             y_ref |> resize(rows * d)
             q8f16_gemm_oracle(wqh, wsh, xfh, sched, 1, n, d, y_ref)
             let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
-            to_log(LOG_INFO, "cm2 l-tile split-k: {bad} of {rows * d} off the oracle\n")
+            to_log(LOG_INFO, "cm2 l-tile split-k: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
             t |> success(bad == 0, "cm2 l-tile split-k matches the CPU oracle ({bad} of {rows * d} off)")
             delete sched
             delete y_ref
@@ -6555,6 +6753,10 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
                 t |> skip("no Vulkan device for the tile pick (it reads the device's SM count)")
                 return
             }
+            if (g_env_vulkan.cm2_tile != 0l || g_env_vulkan.cm2_splitk != 0l) {
+                t |> skip("DASLLAMA_CM2_TILE or DASLLAMA_CM2_SPLITK is set - the picks below are forced, not the heuristic")
+                return
+            }
             let saved_sm = g_gpu.sm_count
             g_gpu.sm_count = 36
             t |> equal(cm2_tile_cols(3072l, 128l), 128l)    // a short window never takes the half-empty l column
@@ -6566,8 +6768,14 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(cm2_tile_cols(768l, 65l), 128l)      // past it an m column is more than half full
             t |> equal(cm2_tiles(512l, 512l), 16l)                             // the 1B k/v shape: four m columns of four
             t |> equal(cm2_split_k(512l, 512l, 2048l, 128l).nsplit, 2l)        // ... alone it fills under half the SMs: split in two
-            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 80l).nsplit, 1l)   // ... beside q and its twin (96 in the group): never
+            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 80l).nsplit, 1l)   // ... beside q and the other kv projection (96 in the group): never
             t |> equal(cm2_split_k(2048l, 512l, 2048l, 128l).nsplit, 1l)       // the 1B q shape: 64 workgroups, no split
+            t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 0l, 0l).nsplit, 2l)     // the sliced down shape from row 0 would split in two
+            t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 480l, 0l).nsplit, 1l)   // ... from row 480 it never splits
+            t |> equal(pf_ffn_slice_row0(15l, 16l, 512l, true, true), 480l)   // the last layer on the f16 route starts 32 rows below the window's end
+            t |> equal(pf_ffn_slice_row0(15l, 16l, 20l, true, true), 0l)      // a window under 32 rows runs whole
+            t |> equal(pf_ffn_slice_row0(14l, 16l, 512l, true, true), 0l)     // an earlier layer runs whole
+            t |> equal(pf_ffn_slice_row0(15l, 16l, 512l, false, true), 0l)    // a feed off the f16 route runs whole
             g_gpu.sm_count = 0
             t |> equal(cm2_tile_cols(3072l, 64l), 32l)      // unknown SM count: the bucket rule still fires
             t |> equal(cm2_tile_cols(3072l, 100l), 128l)    // unknown SM count: the short-window rule still fires

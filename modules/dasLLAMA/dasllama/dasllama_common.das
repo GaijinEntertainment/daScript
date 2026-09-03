@@ -4638,6 +4638,8 @@ var g_kv_store_par_threshold = 256_000l
 // Thread the per-position FFN activation (silu/gelu) once hidden × npos clears this. Lower than the
 // memory-bound passes — each element pays a transcendental (exp/tanh), so the compute justifies threading sooner.
 var g_act_par_threshold = 100_000l
+// Thread the prefill's CPU embed (a dequantized row per token) once dim × npos clears this.
+var g_embed_par_threshold = 64_000l
 
 def set_attn_par_threshold(v : int64) { g_attn_par_threshold = max(v, 0l) }
 def get_attn_par_threshold() : int64 => g_attn_par_threshold
@@ -4651,6 +4653,8 @@ def set_kv_store_par_threshold(v : int64) { g_kv_store_par_threshold = max(v, 0l
 def get_kv_store_par_threshold() : int64 => g_kv_store_par_threshold
 def set_act_par_threshold(v : int64) { g_act_par_threshold = max(v, 0l) }
 def get_act_par_threshold() : int64 => g_act_par_threshold
+def set_embed_par_threshold(v : int64) { g_embed_par_threshold = max(v, 0l) }
+def get_embed_par_threshold() : int64 => g_embed_par_threshold
 
 // Decode attention threads work-proportionally; the M1-measured threshold knob is now owned per
 // box by target_chunk_work.
@@ -5095,7 +5099,7 @@ def private embed_rows(t : Model; var s : Session; tokens : array<int64>; npos :
     let tp = unsafe(addr(t))
     let tkp = unsafe(addr(tokens[0]))
     var xp = unsafe(addr(s.x_b[0]))
-    maybe_parallel_for(npos >= 32l, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+    maybe_parallel_for(dim * npos >= g_embed_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
         unsafe {
             for (p in range(rb, re)) {
                 var dp = xp + int64(p) * dim

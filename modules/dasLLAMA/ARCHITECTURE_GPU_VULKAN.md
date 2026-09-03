@@ -26,11 +26,15 @@ mirrors were stored before the FFN, and a later window starts from fresh embeddi
 gate, up and down GEMMs, the activation and the residual step of the last layer take a region
 starting 32 rows below the window's end (`fill_arena_batch_sched`'s `row0`, `ActArgs.base`,
 `ArArgs.row0`). Thirty-two, not one, because the s tile's fast path loads a whole 32-row
-column unclamped and the resident planes carry no read slack past the window. Rows below the
-slice keep stale gate, up, hidden and residual values that nothing reads. A sliced GEMM never
-splits k: the split-k reduce sums dense partial planes from row 0, so a region starting below
-the window's end would reduce the wrong rows. The slice takes the f16-fed cm2 route only
-(`gu6 && dn6`); the other feeds run the full window.
+column unclamped and the resident prefill's activation planes (`pf_xf`, `pf_hf`) carry no read
+slack past the window - unlike the MoE chain's gathered image and hidden plane, which sec.2.2l
+sizes with 32 rows of slack past their last region. Rows below the
+slice keep stale gate, up, hidden and residual values that nothing reads. The sliced GEMMs do
+not split k: the split-k reduce sums partial planes from row 0, so a region starting below the
+window's end would reduce the wrong rows. The slice takes the f16-fed cm2 route only
+(`gu6 && dn6`); the other feeds run the full window. Only the plain residual step (`cls_ar`)
+and the f16 activation honor the row base: the fused residual twins feed the NEXT layer's
+projections and never run on the last layer, so they index from row 0 by design.
 
 **The k and v GEMMs merge into ONE dispatch when the layer's q, k and v weight planes are all
 q8 and the k and v planes sit adjacent in the arena.** The bump allocator places them
@@ -101,8 +105,8 @@ format's twin looks its grid word up once and takes the four bytes and the four 
 it. The synthesized twin (`DECVEC`, the axis a new format starts on) repeats the whole scalar
 body four times - the lane selects, the scale-plane words, the grid lookup and the sign parity
 - and on the grid formats it lost to the scalar callback for exactly that reason. The twin
-computes each element in the scalar's operation order, so the tile's oracle holds bit for bit
-under either callback.
+computes each element in the scalar's operation order, so the tile's CPU oracle holds under
+either callback; which callback a box runs is the `device ready` line's `four-wide decode`.
 
 ### 2.2l The cm2 tile pick and the coopmat default ladder {#cm2-tile-pick-and-default}
 
