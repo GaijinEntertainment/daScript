@@ -38,6 +38,14 @@
   (`ARCHITECTURE.md` sec.5). An unpinned compile-time file read serves stale macro output
   from the module cache until an unrelated source file changes - silently.
 
+- **A diff that adds a `-lib` entry point, or work to one, keeps the C boundary's three promises:
+  a raise reaches the caller as a return value and never an unwind, `<P>_create` answers null
+  rather than aborting, and `<P>_destroy` runs what the runtime's own shutdown cannot find**
+  (`ARCHITECTURE.md#lib-runtime-scope`). A library is called by code that cannot catch anything.
+
+- **A `-lib` build that writes no artifact exits non-zero.** A build rule reads the exit code, and
+  a silent success lets it link the previous run's library against this run's header.
+
 - **A change to a `[tune]`-family annotation is reviewed with `skills/tune.md`.**
 
 - **A change to the tune framework - `daslib/llvm_tune.das` or its tests - is reviewed with

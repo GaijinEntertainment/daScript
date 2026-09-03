@@ -1300,8 +1300,33 @@ extern "C" {
         #endif
         return run_link_cmd(cmd.c_str(), libraryName, "Library", context);
     }
+
+    //! Archives one object into `libraryName`, REPLACING any archive already there - ar and lib both
+    //! add to an existing one, which would keep objects the current emission never produced.
+    bool create_static_library ( const char * objFilePath, const char * libraryName, const char * customTool, Context * context ) {
+        if ( !check_file_present(objFilePath) ) {
+            LOG(LogLevel::error) << "File '" << objFilePath << "' , containing compiled definitions, does not exist\n";
+            return false;
+        }
+        remove(libraryName);
+        std::string cmd;
+        #if defined(_WIN32) || defined(_WIN64)
+            #if defined(_MSC_VER)
+                const auto tool = find_linker(customTool, "llvm-lib.exe", "lib");
+                cmd = fmt::format(FMT_STRING("\"\"{}\" /nologo /OUT:\"{}\" \"{}\" 2>&1\""), tool.c_str(), libraryName, objFilePath);
+            #else
+                const auto tool = find_linker(customTool, "llvm-ar.exe", "ar");
+                cmd = fmt::format(FMT_STRING("\"\"{}\" rcs \"{}\" \"{}\" 2>&1\""), tool.c_str(), libraryName, objFilePath);
+            #endif
+        #else
+            const auto tool = find_linker(customTool, "llvm-ar", "ar");
+            cmd = fmt::format(FMT_STRING("\"{}\" rcs \"{}\" \"{}\" 2>&1"), tool.c_str(), libraryName, objFilePath);
+        #endif
+        return run_link_cmd(cmd.c_str(), libraryName, "Archive", context);
+    }
 #else
     bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, bool debugInfo, Context *context ) { return true; }
+    bool create_static_library ( const char * objFilePath, const char * libraryName, const char * customTool, Context * context ) { return true; }
 #endif
 
     // ===== --jit-split-modules parallel optimize+emit =====
@@ -1670,6 +1695,9 @@ extern "C" {
             addExternInline<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","dasLib","customLinker","extraLinkerArgs","isShared","linkWholeLib","debugInfo","context"});
+            addExternInline<DAS_BIND_FUN(create_static_library)>(*this, lib,  "create_static_library",
+                SideEffects::worstDefault, "create_static_library")
+                    ->args({"objFilePath","libraryName","customTool","context"});
             addExternInline<DAS_BIND_FUN(jit_par_emit_begin)>(*this, lib,  "jit_par_emit_begin",
                 SideEffects::worstDefault, "jit_par_emit_begin");
             addExternInline<DAS_BIND_FUN(jit_par_emit_add)>(*this, lib,  "jit_par_emit_add",
@@ -1908,6 +1936,102 @@ DAS_API int32_t jit_run_main_guarded ( das::Context * ctx, void * mainFn, int32_
 
 DAS_API void das_ensure_environment () {
     das::daScriptEnvironment::ensure();
+}
+
+static das::atomic<int> g_jitLibShutdown(0);
+static das::string g_jitLibCreateError;
+static das::daScriptEnvironment * g_jitLibEnv = nullptr;
+
+//! Drains the daslang runtime once, whoever asks first: the host through <P>_shutdown_runtime, or
+//! the atexit hook. Binds the library's environment first, so the draining thread need not be the
+//! thread that created. Does nothing in a process where this library registered nothing.
+DAS_API void jit_lib_shutdown () {
+    if ( !g_jitLibEnv ) return;
+    int expected = 0;
+    if ( !g_jitLibShutdown.compare_exchange_strong(expected, 1) ) return;
+    if ( das::daScriptEnvironment::getBound()!=g_jitLibEnv ) {
+        das::daScriptEnvironment::setBound(g_jitLibEnv);
+    }
+    if ( !das::daScriptEnvironment::getOwned() ) {
+        das::daScriptEnvironment::setOwned(g_jitLibEnv);
+    }
+    das::Module::ShutdownStandalone();
+    g_jitLibEnv = nullptr;
+}
+
+static void jit_lib_atexit_shutdown () {
+    jit_lib_shutdown();
+}
+
+//! A library has no end of main, so process exit is where its runtime drains. Called right after
+//! the module registration it balances, which puts it ahead of the environment audit - atexit runs
+//! its hooks in reverse order - and records the environment those modules went into.
+DAS_API void jit_lib_arm_shutdown () {
+    g_jitLibEnv = das::daScriptEnvironment::getBound();
+    static bool armed = (atexit(&jit_lib_atexit_shutdown), true);
+    (void)armed;
+}
+
+//! Runs `fn` once per process for the given guard word, so N contexts of one library register its
+//! modules once, and binds that registration's environment on every later thread. 0 = this process
+//! already carries another daslang runtime, and jit_lib_last_error(nullptr) says so.
+DAS_API int32_t jit_lib_run_once ( int32_t * guard, void (*fn)() ) {
+    static das::mutex once_mutex;
+    das::lock_guard<das::mutex> lock(once_mutex);
+    if ( *guard ) {
+        if ( g_jitLibEnv && das::daScriptEnvironment::getBound()!=g_jitLibEnv ) {
+            das::daScriptEnvironment::setBound(g_jitLibEnv);
+        }
+        return 1;
+    }
+    das::daScriptEnvironment::ensure();
+    if ( das::daScriptEnvironment::getBound()->modules ) {
+        g_jitLibCreateError = "this process already carries a daslang runtime (another daslang "
+            "library, or a host that registered the modules itself); one daslang library per process";
+        return 0;
+    }
+    fn();
+    *guard = 1;
+    return 1;
+}
+
+//! Runs one generated C entry's body under the context's catch boundary; 0 = the body raised, and
+//! jit_lib_last_error(ctx) then answers for it. Clears any previous exception first.
+DAS_API int32_t jit_lib_invoke_guarded ( das::Context * ctx, void (*tramp)(das::Context *, void *), void * frame ) {
+    if ( !ctx ) return 0;
+    ctx->clearException();
+    if ( ctx->contextMutex ) {
+        das::lock_guard<das::recursive_mutex> guard(*ctx->contextMutex);
+        return ctx->runWithCatch([&]() { tramp(ctx, frame); }) ? 1 : 0;
+    }
+    return ctx->runWithCatch([&]() { tramp(ctx, frame); }) ? 1 : 0;
+}
+
+//! Keeps `ctx` when its init succeeded; otherwise moves the message where
+//! jit_lib_last_error(nullptr) reads it, deletes the context, and returns null.
+DAS_API das::Context * jit_lib_create_finish ( das::Context * ctx, int32_t ok ) {
+    if ( ok ) {
+        g_jitLibCreateError.clear();
+        return ctx;
+    }
+    if ( ctx ) {
+        g_jitLibCreateError = ctx->getException() ? ctx->getException() : "unknown exception";
+        delete ctx;
+    } else {
+        g_jitLibCreateError = "out of memory";
+    }
+    return nullptr;
+}
+
+//! The exception text of the last call on `ctx`, or of the failed <P>_create when ctx is null.
+//! Null when that call completed normally.
+DAS_API const char * jit_lib_last_error ( das::Context * ctx ) {
+    if ( !ctx ) return g_jitLibCreateError.empty() ? nullptr : g_jitLibCreateError.c_str();
+    return ctx->getException();
+}
+
+DAS_API void jit_destroy_standalone_ctx ( das::Context * ctx ) {
+    delete ctx;
 }
 
 DAS_API void jit_initialize_modules () {

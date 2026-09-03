@@ -37,6 +37,12 @@ functionality.  The C API covers the most common embedding scenarios
 but does not expose every C++ feature (e.g. class adapters, custom
 annotations).
 
+This API embeds the daslang *compiler*: the host loads sources, compiles
+them, and calls what it finds by name.  A host that only needs to call
+one fixed script wants ``daslang -lib`` instead — it compiles that script
+to a native library with its own generated C header, and the host links
+no daslang API at all.  See :ref:`embedding_advanced` (C libraries).
+
 
 Linking
 =======

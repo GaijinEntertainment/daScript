@@ -22,7 +22,9 @@ def main { print("ok\n") }
 The only enforced ordering is `module` before any type declaration; `options` / `module` /
 `require` otherwise interleave. A file with no `module` line is a program, named by its file stem.
 
-`[export]` makes a function callable from the host by name; `[init]` / `[finalize]` run at context
+`[export]` makes a function callable from the host by name, and `[export_c]` is an `[export]` that
+`daslang -lib` also surfaces as a C function in the header it generates (`[export_c(name = "...")]`
+picks the C symbol, which is how two overloads both reach C); `[init]` / `[finalize]` run at context
 init / shutdown (no arguments, no return). `main` is a convention, not a keyword: it returns `void`
 unless declared `def main() : int`, whose return value is the process exit code (do not `panic` to
 force one). (probe-verified 2026-08-16)

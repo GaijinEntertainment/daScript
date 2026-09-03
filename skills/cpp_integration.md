@@ -315,6 +315,43 @@ compiler, and cross-compiling for bare metal still needs portability work in the
 
 `nano/README.md` is the build recipe and `nano/ARCHITECTURE.md` lists what nano trades away.
 
+## Calling daslang from C - `daslang -lib`
+
+When the host is C, or wants no daslang API at all, compile the script to a native library with a
+generated C header instead:
+
+```sh
+daslang -lib script.das -output build/script     # build/script.so (.dylib/.dll) + build/script.h
+daslang -lib script.das -output build/script -- --jit-lib-static   # build/script.a instead
+```
+
+Mark each function that crosses with `[export_c]` (an `[export]` the library also surfaces in C),
+or pass `-lib-export-all` to offer every public function of the entry module whose signature C can
+spell - the build names the ones it skips. Then:
+
+```c
+#include "script.h"
+
+script_ctx * ctx = script_create();          /* one instance = one context, globals and heap */
+script_Vec3 v = { 1.0f, 2.0f, 3.0f }, out;
+script_scale(ctx, &v, 2.0f, &out);           /* a struct or vector result uses a trailing out ptr */
+if ( script_last_error(ctx) ) { /* the call raised; out is untouched */ }
+script_destroy(ctx);
+```
+
+Scalars, `string` (as `const char *`), pointers and enums cross by value; everything else
+representable crosses as `const T *`. A daslang panic returns zero and reports through
+`script_last_error(ctx)` - it never unwinds into C. A returned `const char *` lives in that
+instance's string heap, so copy it if you need it past the next call. The header asserts the
+layout of every structure it declares, so a host built for a different target fails to compile.
+One process runs one daslang library at a time - a second library's `_create` returns NULL with
+the reason in `_last_error(NULL)`, as does a `_create` in a host that registered the daslang
+modules itself. Several instances of one library are fine, created and driven on any thread.
+
+Choosing between the three: **nano** when the host is C++ and you want the smallest runtime;
+**`-lib`** when the host is C, or wants a plain ABI boundary and no daslang headers; the **C API**
+(`daScriptC.h`) when the host has to compile daslang itself at run time.
+
 ## Diagnostics - `TextPrinter`, never `fprintf(stderr, ...)`
 
 ```cpp

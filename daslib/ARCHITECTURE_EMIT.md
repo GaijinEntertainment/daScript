@@ -161,3 +161,40 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   arm.** `unpack8` carries `int16 -> byte2` and `uint16 -> ubyte2` beside the 32-bit pair; every
   overload is the same `reinterpret` on the host and the same single `OpBitcast` on the SPIR-V
   rail, so the emitter matches the name and reads the width off the operand type.
+
+## 30. c_api_header
+
+- **`Function.flags.exports` is the whole selection truth.** `[export_c]`
+  (`ExportCFunctionAnnotation`, `src/builtin/module_builtin_runtime.cpp`) sets it, and
+  `policies.export_public_functions` sets it for every public entry-module function under
+  `-lib-export-all` (`MarkSymbolUse::exportPublicFunctions`, `src/ast/ast_export.cpp`). The interpreter,
+  AOT and the header emitter therefore all read one bit, and no second list can drift from
+  it. Whether a signature CAN cross is decided here instead, after infer, because argument
+  types do not exist when an annotation applies.
+- **Refusal is per stage, not per module**: `collect_c_exports` returns its rejections and
+  logs its skips. An `[export_c]` that cannot cross comes back for the caller to report -
+  `macro_error` during compilation, the jit error log during codegen - so this module needs
+  no `ProgramPtr` and no reporting policy of its own. A merely-public function is skipped
+  with a warning naming it and the type.
+- **The scalar widths and the vector layouts are C++-side facts this emitter mirrors.**
+  `bool` is one byte (the `static_assert(sizeof(bool)==1)` in `getTypeBaseSize`,
+  `src/simulate/debug_info.cpp`), so das `bool` meets C as `bool`. `float3` is `{x, y, z}` at
+  12 bytes and 4-byte alignment, because `vec3<TT>` (`include/daScript/misc/vectypes.h`)
+  is a plain three-field struct with no `alignas` - the 16-byte vec4f shape is the JIT's
+  register ABI, not the memory layout a header has to mirror. So no alignment attribute is
+  emitted anywhere, and every declared struct carries a size assert plus one offset assert
+  per field. `Structure.sizeOf` is already rounded to the struct's alignment
+  (`Structure::getSizeOf`, `src/ast/ast.cpp`), so `sizeof` in C matches it directly.
+- **An enumeration is a typedef of its base integer plus loose enumerators, never a C
+  `enum`** - a C enum's underlying type is implementation-defined, which would break the
+  size assert on the 8/16/64-bit bases and on negative values. The values are read off the
+  entry's folded constant, so no smart pointer is needed to reach `find_enum_value`.
+- **Types are emitted only when a signature reaches them, in post-order.** A by-value
+  field's structure is defined before the structure holding it; every structure also gets a
+  forward typedef ahead of all definitions, which is what lets a self-referential
+  (`Node?`) field compile. A pointer's target only has to be NAMEABLE - its fields are not
+  walked - so a cycle terminates, and a pointer to something C cannot spell degrades to
+  `void *` rather than refusing the function.
+- **A `fixed_array` argument crosses (as `const T *`, which is what the das ABI already
+  passes) but a `fixed_array` result does not** - that would be a CMRES of an array, a
+  pointer nothing on the C side sizes.

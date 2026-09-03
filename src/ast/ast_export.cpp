@@ -131,6 +131,16 @@ namespace das {
                 return true;
             }, "*");
         }
+        //! Marks every public, non-generic function of the entry module `exports` - the BIT, not
+        //! merely `used`, so the interpreter, AOT and the C header emitter read one selection truth.
+        void exportPublicFunctions( Module * thisModule ) {
+            for ( auto & fn : thisModule->functions.each() ) {
+                if ( fn->privateFunction || fn->builtIn || fn->generated || fn->isTemplate ) continue;
+                if ( fn->macroInit || fn->macroFunction || fn->init || fn->shutdown ) continue;
+                if ( fn->isClassMethod || fn->lambda || fn->generator || fn->fromGeneric ) continue;
+                fn->exports = true;
+            }
+        }
         void markModuleVarsUsed( ModuleLibrary &, Module * inWhichModule ) {
             for ( auto & var : inWhichModule->globals.each() ) {
                 var->used = false;
@@ -351,6 +361,7 @@ namespace das {
         MarkSymbolUse vis(false);
         vis.tw = logs;
         visit(vis);
+        if ( policies.export_public_functions ) vis.exportPublicFunctions(thisModule.get());
         vis.markUsedFunctions(library, false, false, nullptr);
         vis.markVarsUsed(library, false);
     }

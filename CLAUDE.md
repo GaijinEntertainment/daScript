@@ -96,7 +96,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/internal/documentation_rst.md` | Editing RST in `doc/source/`, `//!` doc-comments in `daslib/*.das`, tutorial RST pages |
 | `skills/internal/tutorials.md` | Anything that looks like a tutorial - they live under `/tutorials/<area>/`, NEVER `modules/<X>/tutorial/` |
 | `skills/internal/tutorial_prose.md` | WRITING or revising general-reader doc/tutorial prose (`documentation_rst.md` is mechanics, this is the words) |
-| `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums; shipping without the compiler (`libDaScriptNano`) |
+| `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums; shipping without the compiler (`libDaScriptNano`); calling daslang from C (`daslang -lib`) |
 | `skills/internal/cpp_codebase_notes.md` | Working on daslang's own C++ - where inference/builtins/errors/parser live, AST function flags |
 | `skills/internal/clang_bind_build.md` | Enabling `dasClangBind` / bumping the libclang SDK / running any `bind_*.das` self-binder |
 | `skills/daslib_modules.md` | Working with `daslib/` modules or extending the stdlib |
