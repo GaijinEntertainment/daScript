@@ -10,18 +10,19 @@ require strings
 require daslib/strings_boost
 require daslib/fio
 require daslib/utf8_utils
+require llvm/daslib/f16_cvt  // the pack stores the GRU as f16; the reader widens it once at load
 require dasllama/dasllama_unicode
 require dasllama/dasllama_postag
 require dasllama/dasllama_textnorm
 
-//! Grapheme-to-phoneme conversion for the TTS front end, emitting the 45-symbol US-English
-//! inventory the StyleTTS2-lineage models were trained on. A gold lexicon (part-of-speech
-//! conditioned entries first), a silver lexicon, function-word rules keyed on what follows
-//! (a/an/the/to weak forms, "used to"), inflection stemming (-s, -ed, -ing, possessives),
-//! capitalization and acronym stress, then a fallback chain - CMUdict pre-rendered into the
-//! same inventory, then a GRU sequence-to-sequence spelling model - so no word is ever
-//! dropped. Data loads from tts_g2p.bin (harness/build_g2p_data.py); tokens and tags come
-//! from dasllama_postag.
+//! Grapheme-to-phoneme conversion for the TTS front end, emitting the English inventory the
+//! StyleTTS2-lineage models were trained on - American by default, British under the
+//! `british` flag. A gold lexicon (part-of-speech conditioned entries first), a silver
+//! lexicon, function-word rules keyed on what follows (a/an/the/to weak forms, "used to"),
+//! inflection stemming (-s, -ed, -ing, possessives), capitalization and acronym stress, then
+//! a fallback chain - CMUdict pre-rendered into the American inventory, then a GRU
+//! sequence-to-sequence spelling model - so no word is ever dropped. Data loads from
+//! tts_g2p.bin (harness/build_g2p_data.py); tokens and tags come from dasllama_postag.
 
 //! One byte-sorted string table of the pack: offsets into the mapped file
 struct LexTable {
@@ -74,6 +75,8 @@ struct G2pToken {
 }
 
 let private G2P_MAGIC = 0x50324754u
+let private G2P_VERSION = 2
+let private TENSOR_F16 = 1
 let private PRIMARY = 712   // ˈ
 let private SECONDARY = 716   // ˌ
 let private NO_STRESS = -99.0
@@ -102,6 +105,29 @@ let private ARPA_TO_MISAKI <- {
     "V" => "v", "W" => "w", "Y" => "j", "Z" => "z", "ZH" => "ʒ"   // nolint:STYLE039
 }
 let private ARPA_VOWELS <- { "AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY", "IH", "IY", "OW", "OY", "UH", "UW" }
+
+let private RHOTIC = 633   // ɹ
+let private LENGTH_MARK = 720   // ː
+let private SCHWA = 601   // ə
+
+//! A vowel plus the rhotic, before a consonant or a word end: the British inventory drops the
+//! ɹ into the vowel it leaves. Keyed by the American vowel's codepoint.
+let private GB_RHOTIC_PRE_C <- {
+    601 => "ə", 604 => "ɜː", 596 => "ɔː", 593 => "ɑː", 603 => "ɛː", 618 => "ɪə", 650 => "ʊə"   // nolint:STYLE039
+}
+
+//! The same pair before a vowel, where the ɹ links and survives
+let private GB_RHOTIC_PRE_V <- {
+    601 => "əɹ", 604 => "ʌɹ", 596 => "ɔːɹ", 593 => "ɑːɹ", 603 => "ɛːɹ", 618 => "ɪəɹ", 650 => "ʊəɹ",   // nolint:STYLE039
+    230 => "aɹ", 105 => "iːɹ", 117 => "ʊəɹ", 'O' => "Qɹ", 7547 => "ɪɹ"   // nolint:STYLE039
+}
+
+//! The symbols the British inventory spells differently outside the rhotic pairs - the flap
+//! under both its spellings, since the pipeline folds `ɾ` to `T` on its way out. `i` is the
+//! exception the table cannot carry: it lengthens only under stress.
+let private GB_SYMBOL <- {
+    230 => "a", 'O' => "Q", 593 => "ɒ", 596 => "ɔː", 117 => "uː", 7547 => "ɪ", 638 => "t", 660 => "t", 'T' => "t"   // nolint:STYLE039
+}
 
 // ---------------------------------------------------------------- the packed file
 
@@ -137,7 +163,9 @@ def private read_lex_table(b : array<uint8>; var o : int64&) : LexTable {
     return t
 }
 
-def private read_f32_tensor(b : array<uint8>; var o : int64&; var dst : array<float>) : int {
+//! One GRU tensor, widened from the f16 the pack stores it as (dtype 0 is f32, kept so a
+//! future pack can carry a tensor at full width without a version bump).
+def private read_tensor(b : array<uint8>; var o : int64&; var dst : array<float>) : int {
     let name_len = rd_u8(b, o)
     o += 1l + int64(name_len)
     let ndims = rd_u8(b, o)
@@ -147,12 +175,21 @@ def private read_f32_tensor(b : array<uint8>; var o : int64&; var dst : array<fl
         n *= rd_i32(b, o)
         o += 4l
     }
+    let dtype = rd_u8(b, o)
+    o++
     dst |> reserve(n)
     dst |> resize(n)
-    unsafe {
-        memcpy(addr(dst[0]), addr(b[o]), n * 4)
+    if (dtype == TENSOR_F16) {
+        for (i in range(n)) {
+            dst[i] = f16_to_f32(uint(rd_u16(b, o + int64(i) * 2l)))
+        }
+        o += int64(n) * 2l
+    } else {
+        unsafe {
+            memcpy(addr(dst[0]), addr(b[o]), n * 4)
+        }
+        o += int64(n) * 4l
     }
-    o += int64(n) * 4l
     return n
 }
 
@@ -192,8 +229,8 @@ def load_g2p(path : string) : G2pModel {
     o += 4l
     let version = rd_i32(g.data, o)
     o += 4l
-    if (version != 1) {
-        panic("dasLLAMA tts: unsupported tts_g2p.bin version {version}")
+    if (version != G2P_VERSION) {
+        panic("dasLLAMA tts: '{path}' is a tts_g2p.bin version {version} pack, and this build reads version {G2P_VERSION} - rebuild it with harness/build_g2p_data.py")
     }
     let src_len = rd_u16(g.data, o)
     o += 2l
@@ -207,18 +244,18 @@ def load_g2p(path : string) : G2pModel {
     if (n_tensors != 12) {
         panic("dasLLAMA tts: '{path}' carries {n_tensors} spelling-model tensors, expected 12")
     }
-    read_f32_tensor(g.data, o, g.enc_emb)
-    read_f32_tensor(g.data, o, g.enc_w_ih)
-    read_f32_tensor(g.data, o, g.enc_w_hh)
-    g.hidden = read_f32_tensor(g.data, o, g.enc_b_ih) / 3
-    read_f32_tensor(g.data, o, g.enc_b_hh)
-    read_f32_tensor(g.data, o, g.dec_emb)
-    read_f32_tensor(g.data, o, g.dec_w_ih)
-    read_f32_tensor(g.data, o, g.dec_w_hh)
-    read_f32_tensor(g.data, o, g.dec_b_ih)
-    read_f32_tensor(g.data, o, g.dec_b_hh)
-    read_f32_tensor(g.data, o, g.fc_w)
-    read_f32_tensor(g.data, o, g.fc_b)
+    read_tensor(g.data, o, g.enc_emb)
+    read_tensor(g.data, o, g.enc_w_ih)
+    read_tensor(g.data, o, g.enc_w_hh)
+    g.hidden = read_tensor(g.data, o, g.enc_b_ih) / 3
+    read_tensor(g.data, o, g.enc_b_hh)
+    read_tensor(g.data, o, g.dec_emb)
+    read_tensor(g.data, o, g.dec_w_ih)
+    read_tensor(g.data, o, g.dec_w_hh)
+    read_tensor(g.data, o, g.dec_b_ih)
+    read_tensor(g.data, o, g.dec_b_hh)
+    read_tensor(g.data, o, g.fc_w)
+    read_tensor(g.data, o, g.fc_b)
     var inscope graphemes <- read_alphabet(g.data, o)
     g.emb = length(g.enc_emb) / length(graphemes)
     g.grapheme_id |> resize(128)
@@ -272,32 +309,73 @@ def private lex_value_span(g : G2pModel; t : LexTable; i : int; var a : int64&; 
     b = t.val_blob + int64(rd_u32(g.data, t.val_off + int64(i + 1) * 4l))
 }
 
-def private lex_is_dict(g : G2pModel; t : LexTable; i : int) : bool {
+//! One dialect's part of a merged entry as the span [a, b) over the mapped bytes, false when
+//! the entry carries no reading for it. A key of the merged table exists for either dialect;
+//! only the part says whether THIS one knows the word.
+def private lex_part(g : G2pModel; t : LexTable; i : int; british : bool; var a : int64&; var b : int64&) : bool {
+    var v0 = 0l
+    var v1 = 0l
+    lex_value_span(g, t, i, v0, v1)
+    let flags = rd_u8(g.data, v0)
+    var o = v0 + 1l
+    if ((flags & 1) != 0) {
+        let us_len = rd_u16(g.data, o)
+        o += 2l
+        if (!british) {
+            a = o
+            b = o + int64(us_len)
+            return true
+        }
+        o += int64(us_len)
+    } elif (!british) {
+        return false
+    }
+    return false if ((flags & 2) == 0)
+    a = o
+    b = v1
+    return true
+}
+
+def private lex_has(g : G2pModel; t : LexTable; i : int; british : bool) : bool {
     var a = 0l
     var b = 0l
-    lex_value_span(g, t, i, a, b)
+    return lex_part(g, t, i, british, a, b)
+}
+
+def private lex_is_dict(g : G2pModel; t : LexTable; i : int; british : bool) : bool {
+    var a = 0l
+    var b = 0l
+    return false if (!lex_part(g, t, i, british, a, b))
     return g.data[a] == uint8(1)
 }
 
-//! a plain entry's phonemes
-def private lex_plain(g : G2pModel; t : LexTable; i : int) : string {
+//! a single-dialect table's entry: the CMUdict section, whose values carry no dialect part
+def private lex_plain_single(g : G2pModel; t : LexTable; i : int) : string {
     var a = 0l
     var b = 0l
     lex_value_span(g, t, i, a, b)
     return bytes_str(g.data, a + 1l, int(b - a - 1l))
 }
 
-//! a part-of-speech entry's reading for `tag`: `found` says the tag has a row, `present` that
-//! the row carries phonemes (a row may deliberately carry none)
-def private lex_dict_get(g : G2pModel; t : LexTable; i : int; tag : string; var found : bool&; var present : bool&) : string {
+//! a plain entry's phonemes
+def private lex_plain(g : G2pModel; t : LexTable; i : int; british : bool) : string {
     var a = 0l
     var b = 0l
-    lex_value_span(g, t, i, a, b)
+    return "" if (!lex_part(g, t, i, british, a, b))
+    return bytes_str(g.data, a + 1l, int(b - a - 1l))
+}
+
+//! a part-of-speech entry's reading for `tag`: `found` says the tag has a row, `present` that
+//! the row carries phonemes (a row may deliberately carry none)
+def private lex_dict_get(g : G2pModel; t : LexTable; i : int; british : bool; tag : string; var found : bool&; var present : bool&) : string {
+    var a = 0l
+    var b = 0l
+    found = false
+    present = false
+    return "" if (!lex_part(g, t, i, british, a, b))
     var o = a + 1l
     let n_pairs = rd_u8(g.data, o)
     o++
-    found = false
-    present = false
     var inscope tag_bytes <- to_bytes(tag)
     for (_p in range(n_pairs)) {
         let tl = rd_u8(g.data, o)
@@ -439,6 +517,56 @@ def private second_last_cp(s : string) : int {
     return length(c) >= 2 ? c[length(c) - 2] : -1
 }
 
+def private next_is_vowel(c : array<int>; from : int) : bool {
+    var j = from
+    while (j < length(c) && (c[j] == PRIMARY || c[j] == SECONDARY)) {
+        j++
+    }
+    return j < length(c) && key_exists(VOWELS, c[j])
+}
+
+//! one American symbol in the British inventory: the table, `i` lengthened under stress. A
+//! vowel already carrying the length mark passes through, which makes the rewrite idempotent -
+//! the American inventory has no length mark, so the guard is inert on American input.
+def private gb_symbol(c : array<int>; i : int) : string {
+    let cp = c[i]
+    return cpt_to_utf8(cp) if (i + 1 < length(c) && c[i + 1] == LENGTH_MARK)
+    if (cp == 'i') {
+        return (i > 0 && (c[i - 1] == PRIMARY || c[i - 1] == SECONDARY)) ? "iː" : "i"   // nolint:STYLE039
+    }
+    return GB_SYMBOL?[cp] ?? cpt_to_utf8(cp)
+}
+
+def misaki_us_to_gb(ps : string) : string {
+    //! The American inventory's phonemes in the British one: a post-vocalic ɹ drops into the
+    //! vowel it leaves and links before a vowel, then the symbols the two spell differently.
+    //! What the American fallback chain owes a British voice, aligned off us_gold/gb_gold.
+    var inscope c <- utf8_to_cpts(ps)
+    let n = length(c)
+    return build_string() $(var w) {
+        var i = 0
+        while (i < n) {
+            let cp = c[i]
+            if (i + 1 < n && c[i + 1] == RHOTIC && key_exists(VOWELS, cp)) {
+                let linking = next_is_vowel(c, i + 2)
+                let pair = linking ? (GB_RHOTIC_PRE_V?[cp] ?? "") : (GB_RHOTIC_PRE_C?[cp] ?? "")
+                if (!empty(pair)) {
+                    w |> write(pair)
+                } else {
+                    w |> write(gb_symbol(c, i))
+                    if (linking) {
+                        w |> write(cpt_to_utf8(RHOTIC))
+                    }
+                }
+                i += 2
+                continue
+            }
+            w |> write(gb_symbol(c, i))
+            i++
+        }
+    }
+}
+
 // ---------------------------------------------------------------- word shape
 
 def private is_ascii_alpha(cp : int) : bool => cp < 128 && is_alpha(cp)
@@ -578,25 +706,32 @@ def private key_order(tag : string; ctx : TokenContext; has_ctx : bool) : array<
     return <- keys
 }
 
+//! the entry of `word` this dialect knows: the key alone is not enough, since the merged table
+//! holds a key either dialect carries
+def private lex_find_part(g : G2pModel; t : LexTable; word : string; british : bool) : int {
+    let i = lex_find(g, t, word)
+    return (i >= 0 && lex_has(g, t, i, british)) ? i : -1
+}
+
 //! the grown lexicon: a word, then its capitalized or lowercased twin the way the reference
 //! grows its dictionaries (the twin only for keys of two or more characters)
-def private grown_find(g : G2pModel; t : LexTable; word : string) : int {
-    let i = lex_find(g, t, word)
+def private grown_find(g : G2pModel; t : LexTable; word : string; british : bool) : int {
+    let i = lex_find_part(g, t, word, british)
     return i if (i >= 0)
     return -1 if (cp_count(word) < 2)
     let lower = lower_word(word)
     let cap = capitalize_word(word)
     if (word == cap && lower != cap) {
-        return lex_find(g, t, lower)
+        return lex_find_part(g, t, lower, british)
     }
     if (word == lower && cap != lower) {
-        return lex_find(g, t, cap)
+        return lex_find_part(g, t, cap, british)
     }
     return -1
 }
 
-def private in_golds(g : G2pModel; word : string) : bool => grown_find(g, g.gold, word) >= 0
-def private in_silvers(g : G2pModel; word : string) : bool => grown_find(g, g.silver, word) >= 0
+def private in_golds(g : G2pModel; word : string; british : bool) : bool => grown_find(g, g.gold, word, british) >= 0
+def private in_silvers(g : G2pModel; word : string; british : bool) : bool => grown_find(g, g.silver, word, british) >= 0
 
 def private parent_tag(tag : string) : string {
     return "VERB" if (starts_with(tag, "VB"))
@@ -607,34 +742,34 @@ def private parent_tag(tag : string) : string {
 }
 
 //! resolve one table entry (plain or part-of-speech keyed) for a tag and context
-def private entry_ps(g : G2pModel; t : LexTable; i : int; tag : string; ctx : TokenContext; has_ctx : bool; var present : bool&) : string {
-    if (!lex_is_dict(g, t, i)) {
+def private entry_ps(g : G2pModel; t : LexTable; i : int; tag : string; ctx : TokenContext; has_ctx, british : bool; var present : bool&) : string {
+    if (!lex_is_dict(g, t, i, british)) {
         present = true
-        return lex_plain(g, t, i)
+        return lex_plain(g, t, i, british)
     }
     var found = false
     if (has_ctx && ctx.future_vowel < 0) {
-        let none_ps = lex_dict_get(g, t, i, "None", found, present)
+        let none_ps = lex_dict_get(g, t, i, british, "None", found, present)
         return none_ps if (found)
     }
     var inscope keys <- key_order(tag, ctx, has_ctx)
     var ps = ""
     for (key in keys) {
-        ps = lex_dict_get(g, t, i, key, found, present)
+        ps = lex_dict_get(g, t, i, british, key, found, present)
         return ps if (found)
     }
     return ps
 }
 
 //! a name or acronym spelled letter by letter, the last letter carrying the primary stress
-def private get_nnp(g : G2pModel; word : string) : PsResult {
+def private get_nnp(g : G2pModel; word : string; british : bool) : PsResult {
     var inscope c <- utf8_to_cpts(word)
     var inscope parts : array<string>
     for (cp in c) {
         continue if (!(cp >= 0 && cpt_is_letter(cp)))
-        let i = lex_find(g, g.gold, cpt_to_utf8(upper_cp(cp)))
-        return none_ps() if (i < 0 || lex_is_dict(g, g.gold, i))
-        parts |> push(lex_plain(g, g.gold, i))
+        let i = lex_find_part(g, g.gold, cpt_to_utf8(upper_cp(cp)), british)
+        return none_ps() if (i < 0 || lex_is_dict(g, g.gold, i, british))
+        parts |> push(lex_plain(g, g.gold, i, british))
     }
     let ps = apply_stress(join(parts, ""), 0.0)
     let sec = cpt_to_utf8(SECONDARY)
@@ -643,11 +778,11 @@ def private get_nnp(g : G2pModel; word : string) : PsResult {
     return some_ps("{slice(ps, 0, last)}{cpt_to_utf8(PRIMARY)}{slice(ps, last + length(sec))}", 3)
 }
 
-def private lookup(g : G2pModel; word_in : string; tag : string; stress : float; ctx : TokenContext; has_ctx : bool) : PsResult {
+def private lookup(g : G2pModel; word_in : string; tag : string; stress : float; ctx : TokenContext; has_ctx, british : bool) : PsResult {
     var word = word_in
     var is_nnp = false
     var nnp_case = false
-    if (is_upper_word(word) && !in_golds(g, word)) {
+    if (is_upper_word(word) && !in_golds(g, word, british)) {
         word = lower_word(word)
         nnp_case = true
         is_nnp = tag == "NNP"
@@ -663,7 +798,8 @@ def private lookup(g : G2pModel; word_in : string; tag : string; stress : float;
                 }
             }
         }
-        return some_ps(apply_stress(hit, stress), 4) if (!empty(hit))
+        // the collocation and override readings are written in the American inventory
+        return some_ps(apply_stress(british ? misaki_us_to_gb(hit) : hit, stress), 4) if (!empty(hit))
         HETERONYM_OVERRIDES |> get(wl) $(ov) {
             var inscope keys <- key_order(tag, ctx, has_ctx)
             for (key in keys) {
@@ -673,96 +809,106 @@ def private lookup(g : G2pModel; word_in : string; tag : string; stress : float;
                 break if (!empty(hit))
             }
         }
-        return some_ps(apply_stress(hit, stress), 4) if (!empty(hit))
+        return some_ps(apply_stress(british ? misaki_us_to_gb(hit) : hit, stress), 4) if (!empty(hit))
     }
     var rating = 4
-    var i = grown_find(g, g.gold, word)
+    var i = grown_find(g, g.gold, word, british)
     var t = g.gold
     if (i < 0 && !is_nnp) {
-        i = grown_find(g, g.silver, word)
+        i = grown_find(g, g.silver, word, british)
         t = g.silver
         rating = 3
     }
     var present = false
     var ps = ""
     if (i >= 0) {
-        ps = entry_ps(g, t, i, tag, ctx, has_ctx, present)
+        ps = entry_ps(g, t, i, tag, ctx, has_ctx, british, present)
     }
     if (!present || (is_nnp && !has_primary(ps))) {
-        let nnp = get_nnp(g, word)
+        let nnp = get_nnp(g, word, british)
         return nnp if (nnp.ok)
     }
     return none_ps() if (!present)
     return some_ps(apply_stress(ps, stress), rating)
 }
 
-def private is_known(g : G2pModel; word : string; _tag : string) : bool {
-    return true if (in_golds(g, word) || key_exists(SYMBOLS, word) || in_silvers(g, word))
+def private is_known(g : G2pModel; word : string; _tag : string; british : bool) : bool {
+    return true if (in_golds(g, word, british) || key_exists(SYMBOLS, word) || in_silvers(g, word, british))
     return false if (!is_alpha_word(word) || !all_lexicon_cps(word))
-    return true if (cp_count(word) == 1 || (is_upper_word(word) && in_golds(g, lower_word(word))))
+    return true if (cp_count(word) == 1 || (is_upper_word(word) && in_golds(g, lower_word(word), british)))
     let rest = tail_from(word, 1)
     return rest == upper_word(rest)
 }
 
-def private suffix_s(stem : string) : string {
+def private suffix_s(stem : string; british : bool) : string {
     return "" if (empty(stem))
     let last = last_cp(stem)
     return "{stem}s" if (last == 'p' || last == 't' || last == 'k' || last == 'f' || last == 952)
     if (last == 's' || last == 'z' || last == 643 || last == 658 || last == 679 || last == 676) {
-        return "{stem}ᵻz"   // nolint:STYLE039
+        return british ? "{stem}ɪz" : "{stem}ᵻz"   // nolint:STYLE039
     }
     return "{stem}z"
 }
 
-def private suffix_ed(stem : string) : string {
+def private suffix_ed(stem : string; british : bool) : string {
     return "" if (empty(stem))
     let last = last_cp(stem)
     return "{stem}t" if (last == 'p' || last == 'k' || last == 'f' || last == 952 || last == 643 || last == 's' || last == 679)
-    return "{stem}ᵻd" if (last == 'd')   // nolint:STYLE039
+    if (last == 'd') {
+        return british ? "{stem}ɪd" : "{stem}ᵻd"   // nolint:STYLE039
+    }
     return "{stem}d" if (last != 't')
-    return "{stem}ɪd" if (cp_count(stem) < 2)   // nolint:STYLE039
+    return "{stem}ɪd" if (british || cp_count(stem) < 2)   // nolint:STYLE039
     return "{drop_last_cp(stem)}ɾᵻd" if (key_exists(US_TAUS, second_last_cp(stem)))   // nolint:STYLE039
     return "{stem}ᵻd"   // nolint:STYLE039
 }
 
-def private suffix_ing(stem : string) : string {
+//! British declines a stem already ending in a schwa or a length mark - the reference has no
+//! rule for the linking r such a stem wants, and answers unknown rather than guess
+def private suffix_ing(stem : string; british : bool) : string {
     return "" if (empty(stem))
+    if (british) {
+        return "" if (last_cp(stem) == SCHWA || last_cp(stem) == LENGTH_MARK)
+        return "{stem}ɪŋ"   // nolint:STYLE039
+    }
     if (cp_count(stem) > 1 && last_cp(stem) == 't' && key_exists(US_TAUS, second_last_cp(stem))) {
         return "{drop_last_cp(stem)}ɾɪŋ"   // nolint:STYLE039
     }
     return "{stem}ɪŋ"   // nolint:STYLE039
 }
 
-def private stem_s(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext; has_ctx : bool) : PsResult {
+def private suffixed_ps(ps : string; rating : int) : PsResult => empty(ps) ? none_ps() : some_ps(ps, rating)
+
+def private stem_s(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext; has_ctx, british : bool) : PsResult {
     return none_ps() if (cp_count(word) < 3 || !ends_with(word, "s"))
     var stem = ""
-    if (!ends_with(word, "ss") && is_known(g, chop_end(word, 1), tag)) {
+    if (!ends_with(word, "ss") && is_known(g, chop_end(word, 1), tag, british)) {
         stem = chop_end(word, 1)
-    } elif ((ends_with(word, "'s") || (cp_count(word) > 4 && ends_with(word, "es") && !ends_with(word, "ies"))) && is_known(g, chop_end(word, 2), tag)) {
+    } elif ((ends_with(word, "'s") || (cp_count(word) > 4 && ends_with(word, "es") && !ends_with(word, "ies"))) && is_known(g, chop_end(word, 2), tag, british)) {
         stem = chop_end(word, 2)
-    } elif (cp_count(word) > 4 && ends_with(word, "ies") && is_known(g, "{chop_end(word, 3)}y", tag)) {
+    } elif (cp_count(word) > 4 && ends_with(word, "ies") && is_known(g, "{chop_end(word, 3)}y", tag, british)) {
         stem = "{chop_end(word, 3)}y"
     } else {
         return none_ps()
     }
-    let r = lookup(g, stem, tag, stress, ctx, has_ctx)
+    let r = lookup(g, stem, tag, stress, ctx, has_ctx, british)
     return none_ps() if (!r.ok)
-    return some_ps(suffix_s(r.ps), r.rating)
+    return suffixed_ps(suffix_s(r.ps, british), r.rating)
 }
 
-def private stem_ed(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext; has_ctx : bool) : PsResult {
+def private stem_ed(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext; has_ctx, british : bool) : PsResult {
     return none_ps() if (cp_count(word) < 4 || !ends_with(word, "d"))
     var stem = ""
-    if (!ends_with(word, "dd") && is_known(g, chop_end(word, 1), tag)) {
+    if (!ends_with(word, "dd") && is_known(g, chop_end(word, 1), tag, british)) {
         stem = chop_end(word, 1)
-    } elif (cp_count(word) > 4 && ends_with(word, "ed") && !ends_with(word, "eed") && is_known(g, chop_end(word, 2), tag)) {
+    } elif (cp_count(word) > 4 && ends_with(word, "ed") && !ends_with(word, "eed") && is_known(g, chop_end(word, 2), tag, british)) {
         stem = chop_end(word, 2)
     } else {
         return none_ps()
     }
-    let r = lookup(g, stem, tag, stress, ctx, has_ctx)
+    let r = lookup(g, stem, tag, stress, ctx, has_ctx, british)
     return none_ps() if (!r.ok)
-    return some_ps(suffix_ed(r.ps), r.rating)
+    return suffixed_ps(suffix_ed(r.ps, british), r.rating)
 }
 
 //! "([bcdgklmnprstvxz])\1ing$|cking$" - a doubled consonant before -ing, or "cking"
@@ -776,58 +922,58 @@ def private doubled_before_ing(word : string) : bool {
     return a == b && find("bcdgklmnprstvxz", a) >= 0
 }
 
-def private stem_ing(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext; has_ctx : bool) : PsResult {
+def private stem_ing(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext; has_ctx, british : bool) : PsResult {
     return none_ps() if (cp_count(word) < 5 || !ends_with(word, "ing"))
     var stem = ""
-    if (cp_count(word) > 5 && is_known(g, chop_end(word, 3), tag)) {
+    if (cp_count(word) > 5 && is_known(g, chop_end(word, 3), tag, british)) {
         stem = chop_end(word, 3)
-    } elif (is_known(g, "{chop_end(word, 3)}e", tag)) {
+    } elif (is_known(g, "{chop_end(word, 3)}e", tag, british)) {
         stem = "{chop_end(word, 3)}e"
-    } elif (cp_count(word) > 5 && doubled_before_ing(word) && is_known(g, chop_end(word, 4), tag)) {
+    } elif (cp_count(word) > 5 && doubled_before_ing(word) && is_known(g, chop_end(word, 4), tag, british)) {
         stem = chop_end(word, 4)
     } else {
         return none_ps()
     }
-    let r = lookup(g, stem, tag, stress, ctx, has_ctx)
+    let r = lookup(g, stem, tag, stress, ctx, has_ctx, british)
     return none_ps() if (!r.ok)
-    return some_ps(suffix_ing(r.ps), r.rating)
+    return suffixed_ps(suffix_ing(r.ps, british), r.rating)
 }
 
-def private gold_plain(g : G2pModel; word : string) : string {
-    let i = lex_find(g, g.gold, word)
-    return i >= 0 && !lex_is_dict(g, g.gold, i) ? lex_plain(g, g.gold, i) : ""
+def private gold_plain(g : G2pModel; word : string; british : bool) : string {
+    let i = lex_find_part(g, g.gold, word, british)
+    return i >= 0 && !lex_is_dict(g, g.gold, i, british) ? lex_plain(g, g.gold, i, british) : ""
 }
 
-def private gold_dict(g : G2pModel; word, tag : string) : string {
-    let i = lex_find(g, g.gold, word)
-    return "" if (i < 0 || !lex_is_dict(g, g.gold, i))
+def private gold_dict(g : G2pModel; word, tag : string; british : bool) : string {
+    let i = lex_find_part(g, g.gold, word, british)
+    return "" if (i < 0 || !lex_is_dict(g, g.gold, i, british))
     var found = false
     var present = false
-    return lex_dict_get(g, g.gold, i, tag, found, present)
+    return lex_dict_get(g, g.gold, i, british, tag, found, present)
 }
 
 //! the function words and symbols whose reading depends on what follows or on their tag
-def private special_case(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext) : PsResult {   // nolint:STYLE037 - one arm per function word, the reference's flat ladder
+def private special_case(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext; british : bool) : PsResult {   // nolint:STYLE037 - one arm per function word, the reference's flat ladder
     if (tag == "ADD" && key_exists(ADD_SYMBOLS, word)) {
-        return lookup(g, ADD_SYMBOLS?[word] ?? "", "", -0.5, ctx, true)
+        return lookup(g, ADD_SYMBOLS?[word] ?? "", "", -0.5, ctx, true, british)
     }
     if (key_exists(SYMBOLS, word)) {
-        return lookup(g, SYMBOLS?[word] ?? "", "", NO_STRESS, ctx, true)
+        return lookup(g, SYMBOLS?[word] ?? "", "", NO_STRESS, ctx, true, british)
     }
     // an interior dot between short letter runs (U.S., a.m.) spells the letters out
     if (find(trim_dots(word), '.') >= 0 && is_alpha_word(replace(word, ".", "")) && longest_dot_piece(word) < 3) {
-        return get_nnp(g, word)
+        return get_nnp(g, word, british)
     }
     if (word == "a" || word == "A") {
         return tag == "DT" ? some_ps("ɐ", 4) : some_ps("ˈA", 4)   // nolint:STYLE039
     }
     if (word == "am" || word == "Am" || word == "AM") {
-        return get_nnp(g, word) if (starts_with(tag, "NN"))
-        return some_ps(gold_plain(g, "am"), 4) if (ctx.future_vowel < 0 || word != "am" || (stress != NO_STRESS && stress > 0.0))
+        return get_nnp(g, word, british) if (starts_with(tag, "NN"))
+        return some_ps(gold_plain(g, "am", british), 4) if (ctx.future_vowel < 0 || word != "am" || (stress != NO_STRESS && stress > 0.0))
         return some_ps("ɐm", 4)   // nolint:STYLE039
     }
     if (word == "an" || word == "An" || word == "AN") {
-        return get_nnp(g, word) if (word == "AN" && starts_with(tag, "NN"))
+        return get_nnp(g, word, british) if (word == "AN" && starts_with(tag, "NN"))
         return some_ps("ɐn", 4)   // nolint:STYLE039
     }
     if (word == "I" && tag == "PRP") {
@@ -837,7 +983,7 @@ def private special_case(g : G2pModel; word : string; tag : string; stress : flo
         return some_ps("b{cpt_to_utf8(PRIMARY)}I", 4)
     }
     if (word == "to" || word == "To" || (word == "TO" && (tag == "TO" || tag == "IN"))) {
-        return some_ps(gold_plain(g, "to"), 4) if (ctx.future_vowel < 0)
+        return some_ps(gold_plain(g, "to", british), 4) if (ctx.future_vowel < 0)
         return some_ps(ctx.future_vowel == 1 ? "tʊ" : "tə", 4)   // nolint:STYLE039
     }
     if (word == "in" || word == "In" || (word == "IN" && tag != "NNP")) {
@@ -848,13 +994,13 @@ def private special_case(g : G2pModel; word : string; tag : string; stress : flo
         return some_ps(ctx.future_vowel == 1 ? "ði" : "ðə", 4)   // nolint:STYLE039
     }
     if (tag == "IN" && (to_lower(word) == "vs" || to_lower(word) == "vs.")) {
-        return lookup(g, "versus", "", NO_STRESS, ctx, true)
+        return lookup(g, "versus", "", NO_STRESS, ctx, true, british)
     }
     if (word == "used" || word == "Used" || word == "USED") {
         if ((tag == "VBD" || tag == "JJ") && ctx.future_to) {
-            return some_ps(gold_dict(g, "used", "VBD"), 4)
+            return some_ps(gold_dict(g, "used", "VBD", british), 4)
         }
-        return some_ps(gold_dict(g, "used", "DEFAULT"), 4)
+        return some_ps(gold_dict(g, "used", "DEFAULT", british), 4)
     }
     return none_ps()
 }
@@ -883,35 +1029,35 @@ def private longest_dot_piece(w : string) : int {
 
 //! a word through the lexicon: special cases, then the case-folded form when the exact one is
 //! unknown, then the entry itself, a possessive, or an inflected stem
-def private get_word(g : G2pModel; word_in : string; tag : string; stress : float; ctx : TokenContext) : PsResult {
-    let sp = special_case(g, word_in, tag, stress, ctx)
+def private get_word(g : G2pModel; word_in : string; tag : string; stress : float; ctx : TokenContext; british : bool) : PsResult {
+    let sp = special_case(g, word_in, tag, stress, ctx, british)
     return sp if (sp.ok)
     var word = word_in
     let wl = lower_word(word)
     if (cp_count(word) > 1 && is_alpha_word(replace(word, "'", "")) && word != wl && (tag != "NNP" || cp_count(word) > 7)
-            && !in_golds(g, word) && !in_silvers(g, word) && (is_upper_word(word) || is_lower_word(tail_from(word, 1)))) {
-        if (in_golds(g, wl) || in_silvers(g, wl) || stem_s(g, wl, tag, stress, ctx, true).ok
-                || stem_ed(g, wl, tag, stress, ctx, true).ok || stem_ing(g, wl, tag, stress, ctx, true).ok) {
+            && !in_golds(g, word, british) && !in_silvers(g, word, british) && (is_upper_word(word) || is_lower_word(tail_from(word, 1)))) {
+        if (in_golds(g, wl, british) || in_silvers(g, wl, british) || stem_s(g, wl, tag, stress, ctx, true, british).ok
+                || stem_ed(g, wl, tag, stress, ctx, true, british).ok || stem_ing(g, wl, tag, stress, ctx, true, british).ok) {
             word = wl
         }
     }
-    return lookup(g, word, tag, stress, ctx, true) if (is_known(g, word, tag))
-    if (ends_with(word, "s'") && is_known(g, "{chop_end(word, 2)}'s", tag)) {
-        return lookup(g, "{chop_end(word, 2)}'s", tag, stress, ctx, true)
+    return lookup(g, word, tag, stress, ctx, true, british) if (is_known(g, word, tag, british))
+    if (ends_with(word, "s'") && is_known(g, "{chop_end(word, 2)}'s", tag, british)) {
+        return lookup(g, "{chop_end(word, 2)}'s", tag, stress, ctx, true, british)
     }
-    if (ends_with(word, "'") && is_known(g, chop_end(word, 1), tag)) {
-        return lookup(g, chop_end(word, 1), tag, stress, ctx, true)
+    if (ends_with(word, "'") && is_known(g, chop_end(word, 1), tag, british)) {
+        return lookup(g, chop_end(word, 1), tag, stress, ctx, true, british)
     }
-    let s = stem_s(g, word, tag, stress, ctx, true)
+    let s = stem_s(g, word, tag, stress, ctx, true, british)
     return s if (s.ok)
-    let ed = stem_ed(g, word, tag, stress, ctx, true)
+    let ed = stem_ed(g, word, tag, stress, ctx, true, british)
     return ed if (ed.ok)
-    return stem_ing(g, word, tag, stress == NO_STRESS ? 0.5 : stress, ctx, true)
+    return stem_ing(g, word, tag, stress == NO_STRESS ? 0.5 : stress, ctx, true, british)
 }
 
 //! a digit string the normalizer left behind (a glued alphanumeric's number half): read as
 //! words, each through the lexicon, ordinal and inflection suffixes honored
-def private get_number(g : G2pModel; word_in : string) : PsResult {
+def private get_number(g : G2pModel; word_in : string; british : bool) : PsResult {
     var word = word_in
     var suffix = ""
     var inscope c <- utf8_to_cpts(word)
@@ -926,7 +1072,7 @@ def private get_number(g : G2pModel; word_in : string) : PsResult {
     var inscope result : array<string>
     var rating = 4
     if (starts_with(word, "-")) {
-        let m = lookup(g, "minus", "", NO_STRESS, TokenContext(future_vowel = -1, future_to = false), false)
+        let m = lookup(g, "minus", "", NO_STRESS, TokenContext(future_vowel = -1, future_to = false), false, british)
         result |> push(m.ps)
         word = slice(word, 1)
     }
@@ -942,16 +1088,16 @@ def private get_number(g : G2pModel; word_in : string) : PsResult {
     var inscope words <- split_by_chars(replace(spoken, "-", " "), " ")
     for (w in words) {
         continue if (empty(w))
-        let r = lookup(g, w, "", NO_STRESS, TokenContext(future_vowel = -1, future_to = false), false)
+        let r = lookup(g, w, "", NO_STRESS, TokenContext(future_vowel = -1, future_to = false), false, british)
         return none_ps() if (!r.ok)
         result |> push(r.ps)
         rating = min(rating, r.rating)
     }
     return none_ps() if (empty(result))
     let ps = join(result, " ")
-    return some_ps(suffix_s(ps), rating) if (suffix == "s" || suffix == "'s")
-    return some_ps(suffix_ed(ps), rating) if (suffix == "ed" || suffix == "'d")
-    return some_ps(suffix_ing(ps), rating) if (suffix == "ing")
+    return suffixed_ps(suffix_s(ps, british), rating) if (suffix == "s" || suffix == "'s")
+    return suffixed_ps(suffix_ed(ps, british), rating) if (suffix == "ed" || suffix == "'d")
+    return suffixed_ps(suffix_ing(ps, british), rating) if (suffix == "ing")
     return some_ps(ps, rating)
 }
 
@@ -978,16 +1124,16 @@ def private is_number_word(word_in : string; is_head : bool) : bool {
 }
 
 //! the lexicon's verdict on one token: word first, then a number, else nothing
-def private lexicon(g : G2pModel; tk : G2pToken; ctx : TokenContext) : PsResult {
+def private lexicon(g : G2pModel; tk : G2pToken; ctx : TokenContext; british : bool) : PsResult {
     let word = replace(replace(empty(tk.alias) ? tk.text : tk.alias, "‘", "'"), "’", "'")   // nolint:STYLE039
     var stress = NO_STRESS
     if (word != lower_word(word)) {
         stress = is_upper_word(word) ? 2.0 : 0.5
     }
-    let r = get_word(g, word, tk.tag, stress, ctx)
+    let r = get_word(g, word, tk.tag, stress, ctx, british)
     return r if (r.ok)
     if (is_number_word(word, tk.is_head)) {
-        return get_number(g, word)
+        return get_number(g, word, british)
     }
     return none_ps()
 }
@@ -1107,8 +1253,9 @@ def g2p_predict(g : G2pModel; word : string) : array<string> {
 }
 
 //! The permissive fallback: each letter run of the token through CMUdict, else the spelling
-//! model; pieces join with no space. Rating 2.
-def private fallback(g : G2pModel; text : string) : PsResult {
+//! model; pieces join with no space, and a British caller takes the whole through the
+//! inventory rewrite - both sources answer in the American one. Rating 2.
+def private fallback(g : G2pModel; text : string; british : bool) : PsResult {
     var inscope c <- utf8_to_cpts(text)
     var inscope parts : array<string>
     var i = 0
@@ -1125,15 +1272,16 @@ def private fallback(g : G2pModel; text : string) : PsResult {
         let low = lower_word(cpts_to_utf8(c, i, j))
         let k = lex_find(g, g.cmu, low)
         if (k >= 0) {
-            parts |> push(lex_plain(g, g.cmu, k))
+            parts |> push(lex_plain_single(g, g.cmu, k))
         } else {
             var inscope phones <- g2p_predict(g, low)
             parts |> push(arpabet_to_misaki(phones))
         }
         i = j
     }
-    let ps = join(parts, "")
-    return empty(ps) ? none_ps() : some_ps(ps, 2)
+    let us = join(parts, "")
+    return none_ps() if (empty(us))
+    return some_ps(british ? misaki_us_to_gb(us) : us, 2)
 }
 
 // ---------------------------------------------------------------- tokens and groups
@@ -1474,7 +1622,7 @@ def private resolve_group(var toks : array<G2pToken>; a, b : int) {
 
 //! resolve one glued group [a, b): the longest prefix the lexicon knows as a whole, repeated
 //! on the rest; an unresolvable piece sends the WHOLE group to the fallback
-def private resolve_pieces(g : G2pModel; var toks : array<G2pToken>; a, b : int; var ctx : TokenContext&) {
+def private resolve_pieces(g : G2pModel; var toks : array<G2pToken>; a, b : int; british : bool; var ctx : TokenContext&) {
     var left = a
     var right = b
     var should_fallback = false
@@ -1487,7 +1635,7 @@ def private resolve_pieces(g : G2pModel; var toks : array<G2pToken>; a, b : int;
         var merged = make_token("", "", false)
         if (!taken) {
             merged = merge_tokens(toks, left, right, false)
-            r = lexicon(g, merged, ctx)
+            r = lexicon(g, merged, ctx, british)
         }
         if (r.ok) {
             toks[left].phonemes = r.ps
@@ -1520,7 +1668,7 @@ def private resolve_pieces(g : G2pModel; var toks : array<G2pToken>; a, b : int;
     }
     if (should_fallback) {
         let merged = merge_tokens(toks, a, b, false)
-        let r = fallback(g, merged.text)
+        let r = fallback(g, merged.text, british)
         toks[a].phonemes = r.ps
         toks[a].has_ps = r.ok
         toks[a].rating = r.rating
@@ -1534,10 +1682,10 @@ def private resolve_pieces(g : G2pModel; var toks : array<G2pToken>; a, b : int;
     }
 }
 
-//! Phonemize tagged tokens: right to left so every word sees what follows it, glued groups
-//! resolved as wholes first, the fallback chain for whatever the lexicon does not know.
-//! Returns one token per input token with its phonemes.
-def g2p_tokens(g : G2pModel; tagged : array<PosToken>) : array<G2pToken> {
+//! Phonemize tagged tokens, one per input token: right to left so every word sees what follows
+//! it, glued groups resolved as wholes first, the fallback chain for what the lexicon misses.
+//! `british` reads the British half of every entry, its inflection rules and its rewrite.
+def g2p_tokens(g : G2pModel; tagged : array<PosToken>; british : bool = false) : array<G2pToken> {
     var inscope pieces <- retokenize(tagged)
     let n = length(pieces)
     var ctx = TokenContext(future_vowel = -1, future_to = false)
@@ -1551,13 +1699,13 @@ def g2p_tokens(g : G2pModel; tagged : array<PosToken>) : array<G2pToken> {
         ctx.prev_tag = a > 0 ? pieces[a - 1].tag : ""
         if (b - a == 1) {
             if (!pieces[a].has_ps) {
-                let r = lexicon(g, pieces[a], ctx)
+                let r = lexicon(g, pieces[a], ctx, british)
                 if (r.ok) {
                     pieces[a].phonemes = r.ps
                     pieces[a].has_ps = true
                     pieces[a].rating = r.rating
                 } else {
-                    let fb = fallback(g, pieces[a].text)
+                    let fb = fallback(g, pieces[a].text, british)
                     pieces[a].phonemes = fb.ps
                     pieces[a].has_ps = fb.ok
                     pieces[a].rating = fb.rating
@@ -1565,7 +1713,7 @@ def g2p_tokens(g : G2pModel; tagged : array<PosToken>) : array<G2pToken> {
             }
             ctx = token_context(ctx, pieces[a].phonemes, pieces[a].has_ps, pieces[a])
         } else {
-            resolve_pieces(g, pieces, a, b, ctx)
+            resolve_pieces(g, pieces, a, b, british, ctx)
         }
         b = a
     }
@@ -1586,10 +1734,11 @@ def g2p_tokens(g : G2pModel; tagged : array<PosToken>) : array<G2pToken> {
     return <- out
 }
 
-//! Phonemes for normalized text, in the inventory: tokens joined with the source spacing.
-def g2p_phonemize(g : G2pModel; tg : PosTagger; text : string) : string {
+//! Phonemes for normalized text, in the inventory `british` names: tokens joined with the
+//! source spacing.
+def g2p_phonemize(g : G2pModel; tg : PosTagger; text : string; british : bool = false) : string {
     var inscope tagged <- pos_tokenize_tag(tg, text)
-    var inscope toks <- g2p_tokens(g, tagged)
+    var inscope toks <- g2p_tokens(g, tagged, british)
     return build_string() $(var w) {
         for (tk in toks) {
             w |> write(tk.has_ps ? tk.phonemes : "")

@@ -42,7 +42,10 @@ sources; nothing under this repository redistributes the data itself.
 
 - **misaki** (https://github.com/hexgrad/misaki), Apache License 2.0 - see `LICENSE.APACHE-2.0`.
   The grapheme-to-phoneme rules of `dasllama/dasllama_g2p.das` derive from its English module,
-  and its `us_gold.json` / `us_silver.json` lexicons are packed into `tts_g2p.bin`.
+  its `us_gold.json` / `us_silver.json` lexicons are packed into `tts_g2p.bin`, and so are its
+  British `gb_gold.json` / `gb_silver.json` lexicons - the two dialects merged into one table
+  per tier. The British half of the front-end test fixture
+  (`tests/_tts_fixtures/g2p_corpus_gb.json`) is its British front end's own output.
 - **CMUdict 0.7a**, Copyright (C) 1993-2008 Carnegie Mellon University, BSD 2-Clause - see
   `LICENSE.CMUDICT`. First pronunciations, rendered into the front end's inventory, are packed
   into `tts_g2p.bin` as the fallback lexicon.

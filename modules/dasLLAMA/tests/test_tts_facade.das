@@ -212,6 +212,36 @@ def test_facade_phonemizer(t : T?) {
             t |> equal(seen, length(PINNED_CORPUS_ROWS), "every pinned row is in the fixture")
         }
     }
+    t |> run("the language form answers for a language the model declares and panics for one it does not") @(t : T?) {
+        let gguf = path_join(models_dir(), "kitten-nano.gguf")
+        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
+            t |> skip("kitten-nano.gguf or the front-end packs not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope m <- load_tts_model(gguf)
+            var inscope c <- caps(m)
+            var inscope rows <- load_tts_corpus()
+            // Kitten speaks American English alone, so its front end declares one language and
+            // refuses the other rather than answering in the wrong dialect
+            t |> success(length(c.langs) == 1 && c.langs[0] == "en-us", "{length(c.langs)} language(s), first '{c.langs[0]}'")
+            var seen = 0
+            for (r in rows) {
+                continue if (!key_exists(PINNED_CORPUS_ROWS, r.id))
+                seen++
+                t |> equal(strip(tts_phonemize(m, r.norm, "en-us")), r.ps_misaki, "{r.id}: the declared language reads the same as the bare form")
+            }
+            t |> equal(seen, length(PINNED_CORPUS_ROWS), "every pinned row is in the fixture")
+            var refused = false
+            try {
+                t |> failure("phonemized {tts_phonemize(m, "the water tower", "en-gb")} for a language this front end does not declare")
+            } recover {
+                refused = true
+            }
+            t |> success(refused, "an undeclared language panics at the call site")
+        }
+    }
 }
 
 [test, arch(at = "../ARCHITECTURE_TTS.md#tts-two-layouts")]

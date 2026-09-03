@@ -1211,7 +1211,16 @@
    beside the Apache-2 and MIT packs without a licence ruling or another lexicon source.
    Every one of them also needs its own number and abbreviation normalizer. Until a language
    lands, `caps` lists only the voices the front end can drive and a request for another is
-   refused with the reason.
+   refused with the reason. British landed as pack v2; its two known gaps: the bath-trap
+   split reaches lexicon words only (the fallback rewrite always maps the trap vowel to its
+   British symbol; 3% of the aligned pairs go to the long back vowel instead), and an
+   unstressed medial "i" keeps the American value (the aligned data splits 59/17/15 between
+   the short, plain and long forms, too weak to rule on).
+104. **`tests/run.das` cannot run from a worktree.** Its children spawn `dastest/dastest.das`
+   with no `-dasroot` pass-through, so a worktree session's suites resolve every module
+   against the MAIN tree - the same silent cross-tree answer the MCP lint gives. Forwarding
+   the parent's dasroot (the doc-verify fix's shape) closes it; until then a worktree runs
+   each suite file under `dastest` with `-dasroot <worktree>` by hand.
 101. **The tagger pack on a permissive corpus.** `tts_postag.bin` trains on UD English-EWT (CC
    BY-SA 4.0) plus spaCy-tagged Gutenberg prose; published on Hugging Face it carries the CC BY-SA
    label (Boris, 2026-09-03). Owed: a retrain on the permissive silver prose alone, scored by the

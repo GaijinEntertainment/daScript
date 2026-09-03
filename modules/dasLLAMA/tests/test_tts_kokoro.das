@@ -100,13 +100,18 @@ def test_kokoro_facade(t : T?) {
             var inscope m <- load_tts_model(gguf_path())
             var inscope c <- caps(m)
             t |> equal(c.sample_rate, 24000)
-            t |> equal(length(c.voices), 20)   // the American packs; the other languages wait for their front end
-            t |> success(length(c.langs) == 1 && c.langs[0] == "en-us", "{length(c.langs)} language(s), first '{c.langs[0]}'")
-            var american = true
+            t |> equal(length(c.voices), 28)   // the American and British packs; the other languages wait for their front end
+            t |> success(length(c.langs) == 2 && c.langs[0] == "en-us" && c.langs[1] == "en-gb",
+                "{length(c.langs)} language(s), first '{c.langs[0]}'")
+            var british = 0
+            var english = true
             for (v in c.voices) {
-                american = american && kokoro_voice_lang(v) == "en-us"
+                let lang = kokoro_voice_lang(v)
+                english = english && (lang == "en-us" || lang == "en-gb")
+                british += lang == "en-gb" ? 1 : 0
             }
-            t |> success(american, "every listed voice is American English")
+            t |> success(english, "every listed voice is English")
+            t |> equal(british, 8, "the British packs")
             var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "af_heart")
             t |> equal(audio.sample_rate, 24000)
             t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
@@ -119,6 +124,43 @@ def test_kokoro_facade(t : T?) {
             t |> success(finite, "every sample finite")
             t |> success(peak > 0.05, "peak {peak}: the model spoke")
             to_log(LOG_INFO, "kokoro facade: {length(audio.pcm)} samples, peak {peak}; {timings_line(audio.timings, audio.sample_rate)}\n")
+        }
+    }
+    t |> run("a British voice speaks the British inventory, and the vocabulary carries it") @(t : T?) {
+        if (!stat(gguf_path()).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid ||
+            !stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
+            t |> skip("kokoro-82m.gguf or the front-end packs not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope m <- load_tts_model(gguf_path())
+            let line = "The doctor barked orders at the water tower."
+            let ps_us = strip(tts_phonemize(m, line, "en-us"))
+            let ps_gb = strip(tts_phonemize(m, line, "en-gb"))
+            to_log(LOG_INFO, "kokoro dialects: us {ps_us}\n                gb {ps_gb}\n")
+            t |> equal(ps_us, "ðə dˈɑktəɹ bˈɑɹkt ˈɔɹdəɹz æt ðə wˈɔTəɹ tˈWəɹ.")   // nolint:STYLE039
+            t |> equal(ps_gb, "ðə dˈɒktə bˈɑːkt ˈɔːdəz at ðə wˈɔːtə tˈWə.")   // nolint:STYLE039
+            // every British symbol has to be in the model's own vocabulary, or the token
+            // builder drops it silently and the voice speaks a shortened line
+            var inscope cps <- utf8_to_cpts(ps_gb)
+            var inscope ids_gb <- kokoro_token_ids(m.kokoro, ps_gb)
+            var inscope ids_us <- kokoro_token_ids(m.kokoro, ps_us)
+            t |> equal(length(ids_gb), length(cps) + 2, "no British symbol falls out of the vocabulary")
+            var same_tokens = length(ids_us) == length(ids_gb)
+            for (a, b in ids_us, ids_gb) {
+                same_tokens = same_tokens && a == b
+            }
+            t |> success(!same_tokens, "the two dialects feed the model different tokens")
+            var inscope audio <- synthesize(m, line, "bf_emma")
+            var finite = true
+            var peak = 0.0
+            for (v in audio.pcm) {
+                finite = finite && abs(v) < 10.0   // a NaN fails the comparison too
+                peak = max(peak, abs(v))
+            }
+            t |> success(finite, "every sample finite")
+            t |> success(peak > 0.05 && length(audio.pcm) > 24000, "bf_emma spoke {length(audio.pcm)} samples, peak {peak}")
         }
     }
 }

@@ -91,10 +91,13 @@ def tts_serves_q8() : bool {
 
 def private front_end_langs(m : TtsModel) : array<string> {
     //! The languages the front end phonemizes for this model, as the reference pipeline's
-    //! codes. Both families ship American English; a family speaks a language only once its
-    //! lexicon rung lands here.
+    //! codes. Both families ship American English; Kokoro adds British, which its ``bf_*`` and
+    //! ``bm_*`` packs speak. A family speaks a language only once its lexicon rung lands here.
     var inscope langs : array<string>
     langs |> push("en-us")
+    if (m.kind == TtsKind.kokoro) {
+        langs |> push("en-gb")
+    }
     return <- langs
 }
 
@@ -108,11 +111,9 @@ def caps(m : TtsModel) : TtsCaps {
     //! What the loaded model offers: the canonical voice names the front end can drive (a voice
     //! whose language it does not phonemize is left out; a family's aliases resolve at
     //! synthesis), the PCM sample rate, the languages, and whether it clones a voice from audio.
-    var c = TtsCaps()
+    var c = TtsCaps(sample_rate = m.model.sample_rate, cloning = false)
     c.langs <- front_end_langs(m)
     c.voices <- [for (v in m.model.voice_names); v; where find_index(c.langs, voice_lang(m, v)) >= 0]
-    c.sample_rate = m.model.sample_rate
-    c.cloning = false
     return <- c
 }
 
@@ -126,10 +127,21 @@ def tts_normalize(text : string) : string {
 }
 
 def tts_phonemize(m : TtsModel; text : string) : string {
-    //! The phonemes one already-normalized sentence becomes, in the front end's own 45-symbol US
+    //! The phonemes one already-normalized sentence becomes, in the front end's own American
     //! inventory: the tagger of ``tts_postag.bin`` labels the tokens, the grapheme-to-phoneme pass
     //! of ``tts_g2p.bin`` reads them. A family wanting other symbols rewrites this string into them.
     return g2p_phonemize(m.g2p, m.tagger, text)
+}
+
+def tts_phonemize(m : TtsModel; text : string; lang : string) : string {
+    //! The same, in the inventory ``lang`` names - a language code from ``caps``, ``"en-us"`` or
+    //! ``"en-gb"``. A language this model's front end does not phonemize panics rather than
+    //! answering in the wrong dialect.
+    var inscope langs <- front_end_langs(m)
+    if (find_index(langs, lang) < 0) {
+        panic("dasLLAMA tts: this front end does not phonemize '{lang}'")
+    }
+    return g2p_phonemize(m.g2p, m.tagger, text, lang == "en-gb")
 }
 
 // ===== chunking =====
@@ -280,7 +292,7 @@ def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; sp
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
     let clock = ref_time_ticks()
-    let ps_misaki = g2p_phonemize(m.g2p, m.tagger, norm)
+    let ps_misaki = g2p_phonemize(m.g2p, m.tagger, norm, voice_lang(m, vname) == "en-gb")
     let is_kitten = m.kind == TtsKind.kitten
     var inscope ids <- is_kitten ? kitten_token_ids(kitten_phonemes_from_misaki(ps_misaki)) : kokoro_token_ids(m.kokoro, ps_misaki)
     let row = is_kitten ? kitten_style_row(norm, m.model.style_rows) : kokoro_style_row(ps_misaki, m.model.style_rows)

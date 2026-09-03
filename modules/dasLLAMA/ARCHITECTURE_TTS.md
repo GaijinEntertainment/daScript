@@ -25,15 +25,27 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   lexicon's part-of-speech entries and the punctuation phonemes. The tagger's word class is
   the trainer's own `normalize`: a hyphen anywhere in a token that does not start with one, so
   "--" and "-well-known" are ordinary words, not `!HYPHEN`.
-- **`dasllama_g2p.das`** - grapheme-to-phoneme into the 45-symbol US inventory: a gold lexicon
-  with part-of-speech keyed entries, a silver lexicon, function-word rules that read what
-  follows (the pass runs right to left), the heteronym rules of sec.2.34, inflection stemming,
-  capitalization and acronym stress, then a fallback chain - CMUdict pre-rendered into the same
-  inventory, then a GRU spelling model - so no word is ever dropped. Loads `tts_g2p.bin`
-  (`harness/build_g2p_data.py`, the gold tier extended by `harness/g2p_local_additions.json`),
-  searched in place as byte-sorted string tables. The 200-sentence fixture under
-  `tests/_tts_fixtures/` (minted by `harness/mint_tts_g2p_fixture.py` from the G2P fidelity
-  experiment) is the parity rail for all three stages.
+- **`dasllama_g2p.das`** - grapheme-to-phoneme into the reference front end's inventory, in
+  either English dialect: a gold lexicon with part-of-speech keyed entries, a silver lexicon,
+  function-word rules that read what follows (the pass runs right to left), the heteronym
+  rules of sec.2.34, inflection stemming, capitalization and acronym stress, then a fallback
+  chain - CMUdict pre-rendered into the same inventory, then a GRU spelling model - so no word
+  is ever dropped. The `british` flag picks the dialect: the gold and silver tables carry an
+  American and a British value per key (a key present for one dialect only reads as unknown to
+  the other, as the reference does), the inflection rules switch their suffix vowels and drop
+  the American flap, and the fallback chain - American by construction - rewrites its answer
+  into the British inventory through a table derived from aligning the two lexicons (the
+  non-rhotic rule keyed on whether a vowel follows, the goat, trap, lot and reduced vowels
+  onto their British symbols, the length marks); the bath-trap split reaches only lexicon
+  words. Loads `tts_g2p.bin`, pack
+  version 2 (`harness/build_g2p_data.py`: the gold tier extended by
+  `harness/g2p_local_additions.json`, the US and GB keys merged into one string table per
+  tier, the GRU stored as f16, CMUdict pruned of the words both dialects' lexicons carry),
+  searched in place as byte-sorted string tables; a version 1 pack is refused by name. The
+  200-sentence fixtures under `tests/_tts_fixtures/` (American, minted by
+  `harness/mint_tts_g2p_fixture.py` from the G2P fidelity experiment; British, minted by
+  `harness/mint_tts_g2p_gb_fixture.py` from the reference's own British front end) are the
+  parity rails for all three stages.
 - **`dasllama_tts_types.das`** - the TTS floor: `TtsCaps`, `TtsAudio` (f32 PCM + rate), `TtsNoise`
   (the source noise a synthesis consumed - captured from the oracle, or drawn into a reused
   carrier). Family files require this, never each other.
@@ -79,11 +91,14 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   packs of 510 rows.
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
   picked by `general.architecture`; `tts_g2p.bin` and `tts_postag.bin` read from the GGUF's
-  directory), `caps`, the front-end pair `tts_normalize` (the normalization pass alone - the
-  spoken form a synthesis reads, and it consults no pack) and `tts_phonemize` (one already
-  normalized sentence in the front end's own 45-symbol inventory, the string each chunk
-  carries before a family rewrites it into its own symbols), the lane pin (`set_tts_q8`,
-  `reset_tts_q8`, `tts_serves_q8`), `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
+  directory), `caps` (the voices the front end can drive - a Kokoro pack's name carries its
+  language, and only the languages the family declares are listed or accepted; the rest
+  refuse with the language in the message), the front-end pair `tts_normalize` (the
+  normalization pass alone - the spoken form a synthesis reads, and it consults no pack) and
+  `tts_phonemize` (one already normalized sentence in the front end's own inventory, the
+  string each chunk carries before a family rewrites it into its own symbols; the language
+  form takes a code from `caps` and refuses one the family does not declare), the lane pin
+  (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`), `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
   chunk - `length()` on a string is bytes, and an em dash costs three of them - abbreviations
   and decimals never split, a whitespace-free run longer than the cap hard-split at the cap on
   a codepoint boundary -> per chunk: phonemize -> the family's symbols

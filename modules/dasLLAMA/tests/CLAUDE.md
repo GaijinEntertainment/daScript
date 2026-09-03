@@ -416,14 +416,25 @@ missing-pack panic; model-gated (`tts_postag.bin` in the models dir): the TTS to
 token-for-token against the reference tokenizer on the corpus, the tagger's agreement with the
 reference tagger (overall and on the heteronym words), the packed file's header floors, and
 the load budget.
-`test_tts_g2p.das` - model-free: the missing-pack panic; model-gated (`tts_g2p.bin` +
-`tts_postag.bin`): the grapheme-to-phoneme rail phoneme-identical with the reference front end
+`test_tts_g2p.das` - model-free: the missing-pack panic, the pack-version refusal (a synthetic
+version 1 header in a per-process temp dir; the stocked pack is its positive control) and the
+American-to-British rewrite table over pinned strings, idempotence included; model-gated
+(`tts_g2p.bin` + `tts_postag.bin`): the grapheme-to-phoneme rail phoneme-identical with the
+reference front end
 on the corpus (fed the same normalized text) except the sentences its heteronym rules and the
 lexicon additions of `harness/g2p_local_additions.json` read past it (named in the cell), the
 heteronym gate (both annotated readings present, 32 of 38 against the reference's 24; a verb
 tag out-ranks the collocation table), the function-word, splitter, inflection and number arms
 (a glued number past 2^31 reads its digits, never "zero"), the fallback chain, stress helpers,
-and the load budget.
+the load budget and the pack's size budget; then the BRITISH half against
+`_tts_fixtures/g2p_corpus_gb.json` (loaded by `_tts_corpus_gb.das`, minted by
+`harness/mint_tts_g2p_gb_fixture.py` from the reference's own `british=True` front end with its
+espeak `en-gb` fallback): phoneme-identical on the 157 rows the reference answered from its
+lexicon alone (an `oov` row is not a lexicon-parity row - our own fallback is American
+rewritten), the inventory sweep - no American-only symbol and nothing outside `gb_gold`'s
+inventory survives in 200 sentences, with the same sweep over the American output as the
+must-EXCEED control - the inflection rules the flag switches, and the fallback rewrite on the
+fixture's probe words with the reference's espeak readings logged beside ours.
 `test_tts_kitten.das` - model-free suite; the symbol-map and token-rule cells run everywhere
 (the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
 the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-<size>.gguf` +
@@ -433,13 +444,18 @@ sentence and checks the PCM is finite, non-silent, of speech length, and carries
 `test_tts_kokoro.das` - model-free: the symbol map over a synthetic phoneme string, the
 out-of-vocabulary drop, and the style-row clamps; model-gated (`kokoro-82m.gguf` +
 `tts_oracle/kokoro/`): the vocabulary and style-row rule, the parity rail of `_tts_parity.das`
-against the PyTorch reference, and a facade smoke cell through the front end's own inventory.
+against the PyTorch reference, a facade smoke cell through the front end's own inventory (the
+28 English packs, two declared languages, 8 of them British), and the British voice cell - one
+line phonemized in both dialects, every British symbol proven to be in the model's own
+vocabulary by the token count, and `bf_emma` speaking.
 `test_tts_facade.das` - model-free suite: the sentence chunker (the reference driver's boundary
 rule, the cap counted in codepoints, the hard split of a whitespace-free run, the appended
 punctuation), the WAV container, the codec's malformed-lead and astral arms, kitten's
 dropped-symbol rule, and the `rtf` guard; model-gated (`kitten-nano.gguf` + the front-end
 packs): the streaming form's chunks concatenate to the buffered synthesis sample for sample,
-one synthesis at one lane and the other at the box's lanes.
+one synthesis at one lane and the other at the box's lanes, the phonemizer on the corpus rail,
+and the language form of `tts_phonemize` - the declared language reads as the bare form does,
+an undeclared one panics at the call site.
 `test_tts_blocks.das` - model-free: the block home's two layouts against each other - every
 rows form (token-major [T][C]) held to its channel-major twin at the dot-envelope bar (a
 tolerance times the sum of |w|*|x| feeding each output, with a zeroed-tap poison leg that must

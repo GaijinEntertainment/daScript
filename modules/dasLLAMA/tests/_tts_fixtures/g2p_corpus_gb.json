@@ -1,0 +1,1237 @@
+{
+"gb_vocab": "AIQWYabdfhijklmnpstuvwzðŋɑɒɔəɛɜɡɪɹʃʊʌʒʤʧˈˌːθᵊ",
+"rows": [
+{
+"id": "lj000",
+"norm": "Printing, in the only sense with which we are at present concerned, differs from most if not from all the arts and crafts represented in the Exhibition",
+"ps_gb": "pɹˈɪntɪŋ, ɪn ði ˈQnli sˈɛns wɪð wˌɪʧ wiː ɑː at pɹˈɛzᵊnt kənsˈɜːnd, dˈɪfəz fɹɒm mˈQst ɪf nˌɒt fɹɒm ˈɔːl ði ˈɑːts and kɹˈɑːfts ɹˌɛpɹɪzˈɛntɪd ɪn ði ˌɛksɪbˈɪʃᵊn",
+"oov": false
+},
+{
+"id": "lj001",
+"norm": "For although the Chinese took impressions from wood blocks engraved in relief for centuries before the woodcutters of the Netherlands, by a similar process",
+"ps_gb": "fˌɔː ɔːlðˈQ ðə ʧˌInˈiːz tˈʊk ɪmpɹˈɛʃᵊnz fɹɒm wˈʊd blˈɒks ɪnɡɹˈAvd ɪn ɹɪlˈiːf fɔː sˈɛnʧʊɹiz bɪfˈɔː ðə wˈʊdkˌʌtəz ɒv ðə nˈɛðələndz, bI ɐ sˈɪmɪlə pɹˈQsɛs",
+"oov": false
+},
+{
+"id": "lj002",
+"norm": "produced the block books, which were the immediate predecessors of the true printed book,",
+"ps_gb": "pɹədjˈuːst ðə blˈɒk bˈʊks, wˌɪʧ wɜː ði ɪmˈiːdɪət pɹˈiːdɪsɛsəz ɒv ðə tɹˈuː pɹˈɪntɪd bˈʊk,",
+"oov": false
+},
+{
+"id": "lj003",
+"norm": "the invention of movable metal letters in the middle of the fifteenth century may justly be considered as the invention of the art of printing.",
+"ps_gb": "ði ɪnvˈɛnʃᵊn ɒv mˈuːvəbᵊl mˈɛtᵊl lˈɛtəz ɪn ðə mˈɪdᵊl ɒv ðə fˌɪftˈiːnθ sˈɛnʧʊɹi mˈA ʤˈʌstli biː kənsˈɪdəd az ði ɪnvˈɛnʃᵊn ɒv ði ˈɑːt ɒv pɹˈɪntɪŋ.",
+"oov": false
+},
+{
+"id": "lj004",
+"norm": "And it is worth mention in passing that, as an example of fine typography,",
+"ps_gb": "ˌand ɪt ɪz wˈɜːθ mˈɛnʃᵊn ɪn pˈɑːsɪŋ ðˈat, az ɐn ɪɡzˈɑːmpᵊl ɒv fˈIn tIpˈɒɡɹəfi,",
+"oov": false
+},
+{
+"id": "lj005",
+"norm": "the earliest book printed with movable types, the Gutenberg, or forty-two line Bible of about fourteen fifty-five,",
+"ps_gb": "ði ˈɜːliɪst bˈʊk pɹˈɪntɪd wɪð mˈuːvəbᵊl tˈIps, ðə ɡjˈuːtənbˌɜːɡ, ɔː fˈɔːtitˌuː lˈIn bˈIbᵊl ɒv əbˈWt fˌɔːtˈiːn fˈɪftifˌIv,",
+"oov": true
+},
+{
+"id": "lj006",
+"norm": "Printing, then, for our purpose, may be considered as the art of making books by means of movable types.",
+"ps_gb": "pɹˈɪntɪŋ, ðˈɛn, fɔː ˌWə pˈɜːpəs, mˈA biː kənsˈɪdəd az ði ˈɑːt ɒv mˈAkɪŋ bˈʊks bI mˈiːnz ɒv mˈuːvəbᵊl tˈIps.",
+"oov": false
+},
+{
+"id": "lj007",
+"norm": "Now, as all books not primarily intended as picture-books consist principally of types composed to form letterpress,",
+"ps_gb": "nˈW, az ˈɔːl bˈʊks nˌɒt pɹˈIməɹɪli ɪntˈɛndɪd az pˈɪkʧəbˌʊks kənsˈɪst pɹˈɪnsɪpəli ɒv tˈIps kəmpˈQzd tə fˈɔːm lˈɛtəpɹɛs,",
+"oov": false
+},
+{
+"id": "lj008",
+"norm": "it is of the first importance that the letter used should be fine in form;",
+"ps_gb": "ɪt ɪz ɒv ðə fˈɜːst ɪmpˈɔːtᵊns ðat ðə lˈɛtə jˈuːzd ʃˌʊd biː fˈIn ɪn fˈɔːm;",
+"oov": false
+},
+{
+"id": "lj009",
+"norm": "especially as no more time is occupied, or cost incurred, in casting, setting, or printing beautiful letters",
+"ps_gb": "ɪspˈɛʃəli az nˈQ mˈɔː tˈIm ɪz ˈɒkjʊpId, ɔː kˈɒst ɪŋkˈɜːd, ɪn kˈɑːstɪŋ, sˈɛtɪŋ, ɔː pɹˈɪntɪŋ bjˈuːtɪfʊl lˈɛtəz",
+"oov": true
+},
+{
+"id": "lj010",
+"norm": "And it was a matter of course that in the Middle Ages, when the craftsmen took care that beautiful form should always be a part of their productions whatever they were,",
+"ps_gb": "ˌand ɪt wɒz ɐ mˈatə ɒv kˈɔːs ðat ɪn ðə mˈɪdᵊl ˈAʤɪz, wˌɛn ðə kɹˈaftsmɛn tˈʊk kˈɛː ðat bjˈuːtɪfʊl fˈɔːm ʃˌʊd ˈɔːlwAz biː ɐ pˈɑːt ɒv ðɛː pɹədˈʌkʃᵊnz wɒtˈɛvə ðA wɜː,",
+"oov": true
+},
+{
+"id": "lj011",
+"norm": "the forms of printed letters should be beautiful, and that their arrangement on the page should be reasonable and a help to the shapeliness of the letters themselves.",
+"ps_gb": "ðə fˈɔːmz ɒv pɹˈɪntɪd lˈɛtəz ʃˌʊd biː bjˈuːtɪfʊl, and ðat ðɛː əɹˈAnʤmᵊnt ˌɒn ðə pˈAʤ ʃˌʊd biː ɹˈiːzənəbᵊl and ɐ hˈɛlp tə ðə ʃˈAplɪnɪs ɒv ðə lˈɛtəz ðəmsˈɛlvz.",
+"oov": false
+},
+{
+"id": "lj012",
+"norm": "The Middle Ages brought calligraphy to perfection, and it was natural therefore",
+"ps_gb": "ðə mˈɪdᵊl ˈAʤɪz bɹˈɔːt kəlˈɪɡɹəfi tə pəfˈɛkʃᵊn, and ɪt wɒz nˈaʧəɹəl ðˈɛːfɔː",
+"oov": false
+},
+{
+"id": "lj013",
+"norm": "that the forms of printed letters should follow more or less closely those of the written character, and they followed them very closely.",
+"ps_gb": "ðat ðə fˈɔːmz ɒv pɹˈɪntɪd lˈɛtəz ʃˌʊd fˈɒlQ mˈɔː ɔː lˈɛs klˈQsli ðQz ɒv ðə ɹˈɪtᵊn kˈaɹɪktə, and ðA fˈɒlQd ðˌɛm vˈɛɹi klˈQsli.",
+"oov": false
+},
+{
+"id": "lj014",
+"norm": "The first books were printed in black letter, i.e. the letter which was a Gothic development of the ancient Roman character,",
+"ps_gb": "ðə fˈɜːst bˈʊks wɜː pɹˈɪntɪd ɪn blˈak lˈɛtə, ˌIˈiː ðə lˈɛtə wˌɪʧ wɒz ɐ ɡˈɒθɪk dɪvˈɛləpmᵊnt ɒv ði ˈAnʃᵊnt ɹˈQmən kˈaɹɪktə,",
+"oov": false
+},
+{
+"id": "lj015",
+"norm": "and which developed more completely and satisfactorily on the side of the lower-case than the capital letters;",
+"ps_gb": "and wˌɪʧ dɪvˈɛləpt mˈɔː kəmplˈiːtli and sˌatɪsfˈaktəɹɪli ˌɒn ðə sˈId ɒv ðə lˌQəkˈAs ðən ðə kˈapɪtᵊl lˈɛtəz;",
+"oov": false
+},
+{
+"id": "lj016",
+"norm": "the lower-case being in fact invented in the early Middle Ages.",
+"ps_gb": "ðə lˌQəkˈAs bˈiːɪŋ ɪn fˈakt ɪnvˈɛntɪd ɪn ði ˈɜːli mˈɪdᵊl ˈAʤɪz.",
+"oov": false
+},
+{
+"id": "lj017",
+"norm": "The earliest book printed with movable type, the aforesaid Gutenberg Bible, is printed in letters which are an exact imitation",
+"ps_gb": "ði ˈɜːliɪst bˈʊk pɹˈɪntɪd wɪð mˈuːvəbᵊl tˈIp, ði əfˈɔːsɛd ɡjˈuːtənbˌɜːɡ bˈIbᵊl, ɪz pɹˈɪntɪd ɪn lˈɛtəz wˌɪʧ ɑː ɐn ɪɡzˈakt ˌɪmɪtˈAʃᵊn",
+"oov": true
+},
+{
+"id": "lj018",
+"norm": "of the more formal ecclesiastical writing which obtained at that time; this has since been called missal type,",
+"ps_gb": "ɒv ðə mˈɔː fˈɔːmᵊl ɪklˌiːzɪˈastɪkᵊl ɹˈItɪŋ wˌɪʧ əbtˈAnd at ðˈat tˈIm; ðɪs haz sˈɪns biːn kˈɔːld mˈɪsᵊl tˈIp,",
+"oov": false
+},
+{
+"id": "lj019",
+"norm": "and was in fact the kind of letter used in the many splendid missals, psalters, etc., produced by printing in the fifteenth century.",
+"ps_gb": "and wɒz ɪn fˈakt ðə kˈInd ɒv lˈɛtə jˈuːzd ɪn ðə mˈɛni splˈɛndɪd mˈɪsᵊlz, sˈɔːltəz, ɛtsˈɛtəɹə, pɹədjˈuːst bI pɹˈɪntɪŋ ɪn ðə fˌɪftˈiːnθ sˈɛnʧʊɹi.",
+"oov": false
+},
+{
+"id": "lj020",
+"norm": "But the first Bible actually dated which also was printed at Maintz by Peter Schoeffer in the year fourteen sixty-two",
+"ps_gb": "bˌʌt ðə fˈɜːst bˈIbᵊl ˈakʧʊəli dˈAtɪd wˌɪʧ ˈɔːlsQ wɒz pɹˈɪntɪd at mˈAnts bI pˈiːtə skˈQfə ɪn ðə jˈɪə fˌɔːtˈiːn sˈɪkstitˌuː",
+"oov": true
+},
+{
+"id": "lj021",
+"norm": "imitates a much freer hand, simpler, rounder, and less spiky, and therefore far pleasanter and easier to read.",
+"ps_gb": "ˈɪmɪtAts ɐ mˈʌʧ fɹˈiːə hˈand, sˈɪmpᵊlə, ɹˈWndə, and lˈɛs spˈIki, and ðˈɛːfɔː fˈɑː plˈɛzantə and ˈiːzɪə tə ɹˈiːd.",
+"oov": true
+},
+{
+"id": "lj022",
+"norm": "On the whole the type of this book may be considered the ne-plus-ultra of Gothic type,",
+"ps_gb": "ˌɒn ðə hˈQl ðə tˈIp ɒv ðɪs bˈʊk mˈA biː kənsˈɪdəd ðə nˈiːplˈʌsˈʌltɹə ɒv ɡˈɒθɪk tˈIp,",
+"oov": true
+},
+{
+"id": "lj023",
+"norm": "especially as regards the lower-case letters; and type very similar was used during the next fifteen or twenty years not only by Schoeffer,",
+"ps_gb": "ɪspˈɛʃəli az ɹɪɡˈɑːdz ðə lˌQəkˈAs lˈɛtəz; and tˈIp vˈɛɹi sˈɪmɪlə wɒz jˈuːzd djˈʊəɹɪŋ ðə nˈɛkst fˌɪftˈiːn ɔː twˈɛnti jˈɪəz nˌɒt ˈQnli bI skˈQfə,",
+"oov": true
+},
+{
+"id": "lj024",
+"norm": "but by printers in Strasburg, Basle, Paris, Lubeck, and other cities.",
+"ps_gb": "bˌʌt bI pɹˈɪntəz ɪn stɹˈasbɜːɡ, bˈɑːl, pˈaɹɪs, lˈuːbɛk, and ˈʌðə sˈɪtiz.",
+"oov": true
+},
+{
+"id": "lj025",
+"norm": "But though on the whole, except in Italy, Gothic letter was most often used",
+"ps_gb": "bˌʌt ðˌQ ˌɒn ðə hˈQl, ɪksˈɛpt ɪn ˈɪtəli, ɡˈɒθɪk lˈɛtə wɒz mˈQst ˈɒfᵊn jˈuːzd",
+"oov": false
+},
+{
+"id": "lj026",
+"norm": "a very few years saw the birth of Roman character not only in Italy, but in Germany and France.",
+"ps_gb": "ɐ vˈɛɹi fjˈuː jˈɪəz sˈɔː ðə bˈɜːθ ɒv ɹˈQmən kˈaɹɪktə nˌɒt ˈQnli ɪn ˈɪtəli, bˌʌt ɪn ʤˈɜːməni and fɹˈɑːns.",
+"oov": false
+},
+{
+"id": "lj027",
+"norm": "In fourteen sixty-five Sweynheim and Pannartz began printing in the monastery of Subiaco near Rome,",
+"ps_gb": "ɪn fˌɔːtˈiːn sˈɪkstifˌIv swˈAnhIm and pˈanɑːts bɪɡˈan pɹˈɪntɪŋ ɪn ðə mˈɒnəstəɹi ɒv sˌʌbɪˈɑːkQ nˌɪə ɹˈQm,",
+"oov": true
+},
+{
+"id": "lj028",
+"norm": "and used an exceedingly beautiful type, which is indeed to look at a transition between Gothic and Roman,",
+"ps_gb": "and jˈuːzd ɐn ɪksˈiːdɪŋli bjˈuːtɪfʊl tˈIp, wˌɪʧ ɪz ɪndˈiːd tə lˈʊk at ɐ tɹanzˈɪʃᵊn bɪtwˈiːn ɡˈɒθɪk and ɹˈQmən,",
+"oov": false
+},
+{
+"id": "lj029",
+"norm": "but which must certainly have come from the study of the twelfth or even the eleventh century MSS.",
+"ps_gb": "bˌʌt wˌɪʧ mˈʌst sˈɜːtɪnli hav kˈʌm fɹɒm ðə stˈʌdi ɒv ðə twˈɛlfθ ɔː ˈiːvᵊn ði ɪlˈɛvnθ sˈɛnʧʊɹi ˌɛmˌɛsˈɛs.",
+"oov": false
+},
+{
+"id": "lj030",
+"norm": "They printed very few books in this type, three only; but in their very first books in Rome, beginning with the year fourteen sixty-eight,",
+"ps_gb": "ðˌA pɹˈɪntɪd vˈɛɹi fjˈuː bˈʊks ɪn ðɪs tˈIp, θɹˈiː ˈQnli; bˌʌt ɪn ðɛː vˈɛɹi fˈɜːst bˈʊks ɪn ɹˈQm, bɪɡˈɪnɪŋ wɪð ðə jˈɪə fˌɔːtˈiːn sˈɪkstiˌAt,",
+"oov": false
+},
+{
+"id": "lj031",
+"norm": "they discarded this for a more completely Roman and far less beautiful letter.",
+"ps_gb": "ðA dɪskˈɑːdɪd ðɪs fɔː ɐ mˈɔː kəmplˈiːtli ɹˈQmən and fˈɑː lˈɛs bjˈuːtɪfʊl lˈɛtə.",
+"oov": false
+},
+{
+"id": "lj032",
+"norm": "But about the same year Mentelin at Strasburg began to print in a type which is distinctly Roman;",
+"ps_gb": "bˌʌt əbˈWt ðə sˈAm jˈɪə mˈɛntɪlˌɪn at stɹˈasbɜːɡ bɪɡˈan tə pɹˈɪnt ɪn ɐ tˈIp wˌɪʧ ɪz dɪstˈɪŋktli ɹˈQmən;",
+"oov": true
+},
+{
+"id": "lj033",
+"norm": "and the next year Gunther Zeiner at Augsburg followed suit;",
+"ps_gb": "and ðə nˈɛkst jˈɪə ɡˈʊntə zˈInə at ˈWɡzbəːɡ fˈɒlQd sˈuːt;",
+"oov": true
+},
+{
+"id": "lj034",
+"norm": "while in fourteen seventy at Paris Udalric Gering and his associates turned out the first books printed in France, also in Roman character.",
+"ps_gb": "wˌIl ɪn fˌɔːtˈiːn sˈɛvnti at pˈaɹɪs juːdˈalɹɪk ʤˈɜːɹɪŋ and hɪz əsˈQʃɪəts tˈɜːnd ˈWt ðə fˈɜːst bˈʊks pɹˈɪntɪd ɪn fɹˈɑːns, ˈɔːlsQ ɪn ɹˈQmən kˈaɹɪktə.",
+"oov": true
+},
+{
+"id": "lj035",
+"norm": "The Roman type of all these printers is similar in character,",
+"ps_gb": "ðə ɹˈQmən tˈIp ɒv ˈɔːl ðiːz pɹˈɪntəz ɪz sˈɪmɪlə ɪn kˈaɹɪktə,",
+"oov": false
+},
+{
+"id": "lj036",
+"norm": "and is very simple and legible, and unaffectedly designed for use; but it is by no means without beauty.",
+"ps_gb": "and ɪz vˈɛɹi sˈɪmpᵊl and lˈɛʤɪbᵊl, and ˌʌnəfˈɛktɪdli dɪzˈInd fɔː jˈuːs; bˌʌt ɪt ɪz bI nˈQ mˈiːnz wɪðˈWt bjˈuːti.",
+"oov": false
+},
+{
+"id": "lj037",
+"norm": "It must be said that it is in no way like the transition type of Subiaco,",
+"ps_gb": "ˌɪt mˈʌst biː sˈɛd ðat ɪt ɪz ɪn nˈQ wˈA lˈIk ðə tɹanzˈɪʃᵊn tˈIp ɒv sˌʌbɪˈɑːkQ,",
+"oov": true
+},
+{
+"id": "lj038",
+"norm": "and though more Roman than that, yet scarcely more like the complete Roman type of the earliest printers of Rome.",
+"ps_gb": "and ðˌQ mˈɔː ɹˈQmən ðən ðˈat, jˈɛt skˈɛːsli mˈɔː lˈIk ðə kəmplˈiːt ɹˈQmən tˈIp ɒv ði ˈɜːliɪst pɹˈɪntəz ɒv ɹˈQm.",
+"oov": false
+},
+{
+"id": "lj039",
+"norm": "A further development of the Roman letter took place at Venice.",
+"ps_gb": "ɐ fˈɜːðə dɪvˈɛləpmᵊnt ɒv ðə ɹˈQmən lˈɛtə tˈʊk plˈAs at vˈɛnɪs.",
+"oov": false
+},
+{
+"id": "hv000",
+"norm": "The birch canoe slid on the smooth planks.",
+"ps_gb": "ðə bˈɜːʧ kənˈuː slˈɪd ˌɒn ðə smˈuːð plˈaŋks.",
+"oov": false
+},
+{
+"id": "hv001",
+"norm": "Glue the sheet to the dark blue background.",
+"ps_gb": "ɡlˈuː ðə ʃˈiːt tə ðə dˈɑːk blˈuː bˈakɡɹWnd.",
+"oov": false
+},
+{
+"id": "hv002",
+"norm": "It is easy to tell the depth of a well.",
+"ps_gb": "ˌɪt ɪz ˈiːzi tə tˈɛl ðə dˈɛpθ ɒv ɐ wˈɛl.",
+"oov": false
+},
+{
+"id": "hv003",
+"norm": "These days a chicken leg is a rare dish.",
+"ps_gb": "ðˌiːz dˈAz ɐ ʧˈɪkɪn lˈɛɡ ɪz ɐ ɹˈɛː dˈɪʃ.",
+"oov": false
+},
+{
+"id": "hv004",
+"norm": "Rice is often served in round bowls.",
+"ps_gb": "ɹˈIs ɪz ˈɒfᵊn sˈɜːvd ɪn ɹˈWnd bˈQlz.",
+"oov": false
+},
+{
+"id": "hv005",
+"norm": "The juice of lemons makes fine punch.",
+"ps_gb": "ðə ʤˈuːs ɒv lˈɛmənz mˌAks fˈIn pˈʌnʧ.",
+"oov": false
+},
+{
+"id": "hv006",
+"norm": "The box was thrown beside the parked truck.",
+"ps_gb": "ðə bˈɒks wɒz θɹˈQn bɪsˈId ðə pˈɑːkt tɹˈʌk.",
+"oov": false
+},
+{
+"id": "hv007",
+"norm": "The hogs were fed chopped corn and garbage.",
+"ps_gb": "ðə hˈɒɡz wɜː fˈɛd ʧˈɒpt kˈɔːn and ɡˈɑːbɪʤ.",
+"oov": false
+},
+{
+"id": "hv008",
+"norm": "Four hours of steady work faced us.",
+"ps_gb": "fˈɔː ˈWəz ɒv stˈɛdi wˈɜːk fˈAst ˌʌs.",
+"oov": false
+},
+{
+"id": "hv009",
+"norm": "A large size in stockings is hard to sell.",
+"ps_gb": "ɐ lˈɑːʤ sˈIz ɪn stˈɒkɪŋz ɪz hˈɑːd tə sˈɛl.",
+"oov": false
+},
+{
+"id": "hv010",
+"norm": "The boy was there when the sun rose.",
+"ps_gb": "ðə bˈY wɒz ðɛː wˌɛn ðə sˈʌn ɹˈQz.",
+"oov": false
+},
+{
+"id": "hv011",
+"norm": "A rod is used to catch pink salmon.",
+"ps_gb": "ɐ ɹˈɒd ɪz jˈuːzd tə kˈaʧ pˈɪŋk sˈamən.",
+"oov": false
+},
+{
+"id": "hv012",
+"norm": "The source of the huge river is the clear spring.",
+"ps_gb": "ðə sˈɔːs ɒv ðə hjˈuːʤ ɹˈɪvə ɪz ðə klˈɪə spɹˈɪŋ.",
+"oov": false
+},
+{
+"id": "hv013",
+"norm": "Kick the ball straight and follow through.",
+"ps_gb": "kˈɪk ðə bˈɔːl stɹˈAt and fˈɒlQ θɹˈuː.",
+"oov": false
+},
+{
+"id": "hv014",
+"norm": "Help the woman get back to her feet.",
+"ps_gb": "hˈɛlp ðə wˈʊmən ɡɛt bˈak tə hɜː fˈiːt.",
+"oov": false
+},
+{
+"id": "hv015",
+"norm": "A pot of tea helps to pass the evening.",
+"ps_gb": "ɐ pˈɒt ɒv tˈiː hˈɛlps tə pˈɑːs ði ˈiːvnɪŋ.",
+"oov": false
+},
+{
+"id": "hv016",
+"norm": "Smoky fires lack flame and heat.",
+"ps_gb": "smˈQki fˈIəz lˈak flˈAm and hˈiːt.",
+"oov": false
+},
+{
+"id": "hv017",
+"norm": "The soft cushion broke the man s fall.",
+"ps_gb": "ðə sˈɒft kˈʊʃᵊn bɹˈQk ðə mˈan ˈɛs fˈɔːl.",
+"oov": false
+},
+{
+"id": "hv018",
+"norm": "The salt breeze came across from the sea.",
+"ps_gb": "ðə sˈɒlt bɹˈiːz kˈAm əkɹˈɒs fɹɒm ðə sˈiː.",
+"oov": false
+},
+{
+"id": "hv019",
+"norm": "The girl at the booth sold fifty bonds.",
+"ps_gb": "ðə ɡˈɜːl at ðə bˈuːð sˈQld fˈɪfti bˈɒndz.",
+"oov": false
+},
+{
+"id": "hv020",
+"norm": "The small pup gnawed a hole in the sock.",
+"ps_gb": "ðə smˈɔːl pˈʌp nˈɔːd ɐ hˈQl ɪn ðə sˈɒk.",
+"oov": false
+},
+{
+"id": "hv021",
+"norm": "The fish twisted and turned on the bent hook.",
+"ps_gb": "ðə fˈɪʃ twˈɪstɪd and tˈɜːnd ˌɒn ðə bˈɛnt hˈʊk.",
+"oov": false
+},
+{
+"id": "hv022",
+"norm": "Press the pants and sew a button on the vest.",
+"ps_gb": "pɹˈɛs ðə pˈants and sˈQ ɐ bˈʌtᵊn ˌɒn ðə vˈɛst.",
+"oov": false
+},
+{
+"id": "hv023",
+"norm": "The swan dive was far short of perfect.",
+"ps_gb": "ðə swˈɒn dˈIv wɒz fˈɑː ʃˈɔːt ɒv pˈɜːfɪkt.",
+"oov": false
+},
+{
+"id": "hv024",
+"norm": "The beauty of the view stunned the young boy.",
+"ps_gb": "ðə bjˈuːti ɒv ðə vjˈuː stˈʌnd ðə jˈʌŋ bˈY.",
+"oov": false
+},
+{
+"id": "hv025",
+"norm": "Two blue fish swam in the tank.",
+"ps_gb": "tˈuː blˈuː fˈɪʃ swˈam ɪn ðə tˈaŋk.",
+"oov": false
+},
+{
+"id": "hv026",
+"norm": "Her purse was full of useless trash.",
+"ps_gb": "hˌɜː pˈɜːs wɒz fˈʊl ɒv jˈuːsləs tɹˈaʃ.",
+"oov": false
+},
+{
+"id": "hv027",
+"norm": "The colt reared and threw the tall rider.",
+"ps_gb": "ðə kˈQlt ɹˈɪəd and θɹˈuː ðə tˈɔːl ɹˈIdə.",
+"oov": false
+},
+{
+"id": "hv028",
+"norm": "It snowed, rained, and hailed the same morning.",
+"ps_gb": "ˌɪt snˈQd, ɹˈAnd, and hˈAld ðə sˈAm mˈɔːnɪŋ.",
+"oov": false
+},
+{
+"id": "hv029",
+"norm": "Read verse out loud for pleasure.",
+"ps_gb": "ɹˈiːd vˈɜːs ˈWt lˈWd fɔː plˈɛʒə.",
+"oov": false
+},
+{
+"id": "hv030",
+"norm": "Hoist the load to your left shoulder.",
+"ps_gb": "hˈYst ðə lˈQd tə jɔː lˈɛft ʃˈQldə.",
+"oov": false
+},
+{
+"id": "hv031",
+"norm": "Take the winding path to reach the lake.",
+"ps_gb": "tˈAk ðə wˈIndɪŋ pˈɑːθ tə ɹˈiːʧ ðə lˈAk.",
+"oov": false
+},
+{
+"id": "hv032",
+"norm": "Note closely the size of the gas tank.",
+"ps_gb": "nˈQt klˈQsli ðə sˈIz ɒv ðə ɡˈas tˈaŋk.",
+"oov": false
+},
+{
+"id": "hv033",
+"norm": "Wipe the grease off his dirty face.",
+"ps_gb": "wˈIp ðə ɡɹˈiːs ˈɒf hɪz dˈɜːti fˈAs.",
+"oov": false
+},
+{
+"id": "hv034",
+"norm": "Mend the coat before you go out.",
+"ps_gb": "mˈɛnd ðə kˈQt bɪfˈɔː juː ɡˌQ ˈWt.",
+"oov": false
+},
+{
+"id": "hv035",
+"norm": "The wrist was badly strained and hung limp.",
+"ps_gb": "ðə ɹˈɪst wɒz bˈadli stɹˈAnd and hˈʌŋ lˈɪmp.",
+"oov": false
+},
+{
+"id": "hv036",
+"norm": "The stray cat gave birth to kittens.",
+"ps_gb": "ðə stɹˈA kˈat ɡˈAv bˈɜːθ tə kˈɪtᵊnz.",
+"oov": false
+},
+{
+"id": "hv037",
+"norm": "The young girl gave no clear response.",
+"ps_gb": "ðə jˈʌŋ ɡˈɜːl ɡˈAv nˈQ klˈɪə ɹɪspˈɒns.",
+"oov": false
+},
+{
+"id": "hv038",
+"norm": "The meal was cooked before the bell rang.",
+"ps_gb": "ðə mˈiːl wɒz kˈʊkt bɪfˈɔː ðə bˈɛl ɹˈaŋ.",
+"oov": false
+},
+{
+"id": "hv039",
+"norm": "What joy there is in living.",
+"ps_gb": "wˌɒt ʤˈY ðɛː ɪz ɪn lˈɪvɪŋ.",
+"oov": false
+},
+{
+"id": "hv040",
+"norm": "A king ruled the state in the early days.",
+"ps_gb": "ɐ kˈɪŋ ɹˈuːld ðə stˈAt ɪn ði ˈɜːli dˈAz.",
+"oov": false
+},
+{
+"id": "hv041",
+"norm": "The ship was torn apart on the sharp reef.",
+"ps_gb": "ðə ʃˈɪp wɒz tˈɔːn əpˈɑːt ˌɒn ðə ʃˈɑːp ɹˈiːf.",
+"oov": false
+},
+{
+"id": "hv042",
+"norm": "Sickness kept him home the third week.",
+"ps_gb": "sˈɪknɪs kˈɛpt hˌɪm hˈQm ðə θˈɜːd wˈiːk.",
+"oov": false
+},
+{
+"id": "hv043",
+"norm": "The wide road shimmered in the hot sun.",
+"ps_gb": "ðə wˈId ɹˈQd ʃˈɪməd ɪn ðə hˈɒt sˈʌn.",
+"oov": false
+},
+{
+"id": "hv044",
+"norm": "The lazy cow lay in the cool grass.",
+"ps_gb": "ðə lˈAzi kˈW lˈA ɪn ðə kˈuːl ɡɹˈɑːs.",
+"oov": false
+},
+{
+"id": "hv045",
+"norm": "Lift the square stone over the fence.",
+"ps_gb": "lˈɪft ðə skwˈɛː stˈQn ˈQvə ðə fˈɛns.",
+"oov": false
+},
+{
+"id": "hv046",
+"norm": "The rope will bind the seven books at once.",
+"ps_gb": "ðə ɹˈQp wɪl bˈInd ðə sˈɛvᵊn bˈʊks at wˈʌns.",
+"oov": false
+},
+{
+"id": "hv047",
+"norm": "Hop over the fence and plunge in.",
+"ps_gb": "hˈɒp ˈQvə ðə fˈɛns and plˈʌnʤ ˈɪn.",
+"oov": false
+},
+{
+"id": "hv048",
+"norm": "The friendly gang left the drug store.",
+"ps_gb": "ðə fɹˈɛndli ɡˈaŋ lˈɛft ðə dɹˈʌɡ stˈɔː.",
+"oov": false
+},
+{
+"id": "hv049",
+"norm": "Mesh wire keeps chicks inside.",
+"ps_gb": "mˈɛʃ wˈIə kˈiːps ʧˈɪks ˌɪnsˈId.",
+"oov": false
+},
+{
+"id": "hv050",
+"norm": "The frosty air passed through the coat.",
+"ps_gb": "ðə fɹˈɒsti ˈɛː pˈɑːst θɹuː ðə kˈQt.",
+"oov": false
+},
+{
+"id": "hv051",
+"norm": "The crooked maze failed to fool the mouse.",
+"ps_gb": "ðə kɹˈʊkɪd mˈAz fˈAld tə fˈuːl ðə mˈWs.",
+"oov": false
+},
+{
+"id": "hv052",
+"norm": "Adding fast leads to wrong sums.",
+"ps_gb": "ˈadɪŋ fˈɑːst lˈiːdz tə ɹˈɒŋ sˈʌmz.",
+"oov": false
+},
+{
+"id": "hv053",
+"norm": "The show was a flop from the very start.",
+"ps_gb": "ðə ʃˈQ wɒz ɐ flˈɒp fɹɒm ðə vˈɛɹi stˈɑːt.",
+"oov": false
+},
+{
+"id": "hv054",
+"norm": "A saw is a tool used for making boards.",
+"ps_gb": "ɐ sˈɔː ɪz ɐ tˈuːl jˈuːzd fɔː mˈAkɪŋ bˈɔːdz.",
+"oov": false
+},
+{
+"id": "hv055",
+"norm": "The wagon moved on well oiled wheels.",
+"ps_gb": "ðə wˈaɡᵊn mˈuːvd ˌɒn wˈɛl ˈYld wˈiːlz.",
+"oov": false
+},
+{
+"id": "hv056",
+"norm": "March the soldiers past the next hill.",
+"ps_gb": "mˈɑːʧ ðə sˈQlʤəz pˈɑːst ðə nˈɛkst hˈɪl.",
+"oov": false
+},
+{
+"id": "hv057",
+"norm": "A cup of sugar makes sweet fudge.",
+"ps_gb": "ɐ kˈʌp ɒv ʃˈʊɡə mˌAks swˈiːt fˈʌʤ.",
+"oov": false
+},
+{
+"id": "hv058",
+"norm": "Place a rosebush near the porch steps.",
+"ps_gb": "plˈAs ɐ ɹˈQzbʊʃ nˌɪə ðə pˈɔːʧ stˈɛps.",
+"oov": true
+},
+{
+"id": "hv059",
+"norm": "Both lost their lives in the raging storm.",
+"ps_gb": "bˈQθ lˈɒst ðɛː lˈIvz ɪn ðə ɹˈAʤɪŋ stˈɔːm.",
+"oov": false
+},
+{
+"id": "ht000",
+"norm": "I read the book last night, and tonight I will read it again.",
+"ps_gb": "ˌI ɹˈɛd ðə bˈʊk lˈɑːst nˈIt, and tənˈIt ˌI wɪl ɹˈiːd ɪt əɡˈɛn.",
+"oov": false
+},
+{
+"id": "ht001",
+"norm": "The lead singer carried the lead pipe across the stage.",
+"ps_gb": "ðə lˈiːd sˈɪŋə kˈaɹid ðə lˈiːd pˈIp əkɹˈɒs ðə stˈAʤ.",
+"oov": false
+},
+{
+"id": "ht002",
+"norm": "They live in a house where live music plays every night.",
+"ps_gb": "ðˌA lˈɪv ɪn ɐ hˈWs wˌɛː lˈIv mjˈuːzɪk plˈAz ˈɛvəɹi nˈIt.",
+"oov": false
+},
+{
+"id": "ht003",
+"norm": "The bass player hooked an enormous bass in the shallow lake.",
+"ps_gb": "ðə bˈas plˈAə hˈʊkt ɐn ɪnˈɔːməs bˈas ɪn ðə ʃˈalQ lˈAk.",
+"oov": false
+},
+{
+"id": "ht004",
+"norm": "Wind the clock before the wind picks up outside.",
+"ps_gb": "wˈInd ðə klˈɒk bɪfˈɔː ðə wˈɪnd pˈɪks ˌʌp ˌWtsˈId.",
+"oov": false
+},
+{
+"id": "ht005",
+"norm": "A single tear rolled down her cheek as she began to tear the letter.",
+"ps_gb": "ɐ sˈɪŋɡᵊl tˈɪə ɹˈQld dˌWn hɜː ʧˈiːk az ʃiː bɪɡˈan tə tˈɛː ðə lˈɛtə.",
+"oov": false
+},
+{
+"id": "ht006",
+"norm": "Close the heavy door and stand close to the fire.",
+"ps_gb": "klˈQz ðə hˈɛvi dˈɔː and stˈand klˈQs tə ðə fˈIə.",
+"oov": false
+},
+{
+"id": "ht007",
+"norm": "We will record a new record before the summer ends.",
+"ps_gb": "wˌiː wɪl ɹɪkˈɔːd ɐ njˈuː ɹˈɛkɔːd bɪfˈɔː ðə sˈʌmə ˈɛndz.",
+"oov": false
+},
+{
+"id": "ht008",
+"norm": "The present committee will present the award at present.",
+"ps_gb": "ðə pɹˈɛzᵊnt kəmˈɪti wɪl pɹɪzˈɛnt ði əwˈɔːd at pɹˈɛzᵊnt.",
+"oov": false
+},
+{
+"id": "ht009",
+"norm": "Do not object to the object resting on the table.",
+"ps_gb": "dˈuː nˌɒt əbʤˈɛkt tə ði ˈɒbʤɛkt ɹˈɛstɪŋ ˌɒn ðə tˈAbᵊl.",
+"oov": false
+},
+{
+"id": "ht010",
+"norm": "Wait a minute while I examine this minute detail.",
+"ps_gb": "wˈAt ɐ mˈɪnɪt wˌIl ˌI ɪɡzˈamɪn ðɪs mˈɪnɪt dˈiːtAl.",
+"oov": false
+},
+{
+"id": "ht011",
+"norm": "He made a deep bow after the bow of the ship swung around.",
+"ps_gb": "hˌiː mˌAd ɐ dˈiːp bˈQ ˈɑːftə ðə bˈQ ɒv ðə ʃˈɪp swˈʌŋ əɹˈWnd.",
+"oov": false
+},
+{
+"id": "ht012",
+"norm": "The dove dove into the bushes to escape the hawk.",
+"ps_gb": "ðə dˈʌv dˈQv ˈɪntuː ðə bˈʊʃɪz tʊ ɪskˈAp ðə hˈɔːk.",
+"oov": false
+},
+{
+"id": "ht013",
+"norm": "The farm was used to produce produce for the market.",
+"ps_gb": "ðə fˈɑːm wɒz jˈuːzd tə pɹədjˈuːs pɹˈɒdjuːs fɔː ðə mˈɑːkɪt.",
+"oov": false
+},
+{
+"id": "ht014",
+"norm": "The soldier chose to desert his dessert in the desert.",
+"ps_gb": "ðə sˈQlʤə ʧˈQz tə dɪzˈɜːt hɪz dɪzˈɜːt ɪn ðə dˈɛzət.",
+"oov": false
+},
+{
+"id": "ht015",
+"norm": "The insurance was invalid for the invalid in the ward.",
+"ps_gb": "ði ɪnʃˈʊəɹəns wɒz ɪnvˈalɪd fɔː ði ˈɪnvəlɪd ɪn ðə wˈɔːd.",
+"oov": false
+},
+{
+"id": "ht016",
+"norm": "They were too close to the door to close it.",
+"ps_gb": "ðˌA wɜː tˈuː klˈQs tə ðə dˈɔː tə klˈQz ɪt.",
+"oov": false
+},
+{
+"id": "ht017",
+"norm": "The buck does funny things when the does are watching.",
+"ps_gb": "ðə bˈʌk dˈʌz fˈʌni θˈɪŋz wˌɛn ðə dˈʌz ɑː wˈɒʧɪŋ.",
+"oov": false
+},
+{
+"id": "ht018",
+"norm": "A tired sewer worker fell asleep beside the open sewer.",
+"ps_gb": "ɐ tˈIəd sˈuːə wˈɜːkə fˈɛl əslˈiːp bɪsˈId ði ˈQpᵊn sˈuːə.",
+"oov": false
+},
+{
+"id": "ht019",
+"norm": "To help with planting, the farmer taught his sow to sow.",
+"ps_gb": "tə hˈɛlp wɪð plˈantɪŋ, ðə fˈɑːmə tˈɔːt hɪz sˈW tə sˈQ.",
+"oov": false
+},
+{
+"id": "ht020",
+"norm": "Upon seeing the tear in the painting I shed a tear.",
+"ps_gb": "əpˈɒn sˈiːɪŋ ðə tˈɪə ɪn ðə pˈAntɪŋ ˌI ʃˈɛd ɐ tˈɪə.",
+"oov": false
+},
+{
+"id": "ht021",
+"norm": "I had to subject the subject to a series of tests.",
+"ps_gb": "ˌI had tə səbʤˈɛkt ðə sˈʌbʤɛkt tə ɐ sˈɪəɹiːz ɒv tˈɛsts.",
+"oov": false
+},
+{
+"id": "ht022",
+"norm": "How can I intimate this to my most intimate friend?",
+"ps_gb": "hˌW kan ˌI ˈɪntɪmAt ðɪs tə mI mˈQst ˈɪntɪmət fɹˈɛnd?",
+"oov": false
+},
+{
+"id": "ht023",
+"norm": "The bandage was wound around the wound.",
+"ps_gb": "ðə bˈandɪʤ wɒz wˈWnd əɹˈWnd ðə wˈuːnd.",
+"oov": false
+},
+{
+"id": "ht024",
+"norm": "He could lead the team if he would get the lead out.",
+"ps_gb": "hˌiː kʊd lˈiːd ðə tˈiːm ɪf hiː wʊd ɡɛt ðə lˈiːd ˈWt.",
+"oov": false
+},
+{
+"id": "ht025",
+"norm": "The dump was so full that it had to refuse more refuse.",
+"ps_gb": "ðə dˈʌmp wɒz sˌQ fˈʊl ðat ɪt had tə ɹɪfjˈuːz mˈɔː ɹˈɛfjuːs.",
+"oov": false
+},
+{
+"id": "ht026",
+"norm": "There is no time like the present to present the present.",
+"ps_gb": "ðˌɛː ɪz nˈQ tˈIm lˈIk ðə pɹˈɛzᵊnt tə pɹɪzˈɛnt ðə pɹˈɛzᵊnt.",
+"oov": false
+},
+{
+"id": "ht027",
+"norm": "The contract will contract sharply if we do not sign today.",
+"ps_gb": "ðə kˈɒntɹakt wɪl kəntɹˈakt ʃˈɑːpli ɪf wiː dˈuː nˌɒt sˈIn tədˈA.",
+"oov": false
+},
+{
+"id": "ht028",
+"norm": "They rebel against every rebel who breaks the rules.",
+"ps_gb": "ðˌA ɹɪbˈɛl əɡˈɛnst ˈɛvəɹi ɹˈɛbᵊl hˌuː bɹˈAks ðə ɹˈuːlz.",
+"oov": false
+},
+{
+"id": "ht029",
+"norm": "The suspect will suspect nothing about the plan.",
+"ps_gb": "ðə sˈʌspɛkt wɪl səspˈɛkt nˈʌθɪŋ əbˈWt ðə plˈan.",
+"oov": false
+},
+{
+"id": "ht030",
+"norm": "The project managers project a modest gain this year.",
+"ps_gb": "ðə pɹˈɒʤɛkt mˈanɪʤəz pɹəʤˈɛkt ɐ mˈɒdɪst ɡˈAn ðɪs jˈɪə.",
+"oov": false
+},
+{
+"id": "ht031",
+"norm": "Please separate the separate piles before you leave.",
+"ps_gb": "plˈiːz sˈɛpəɹAt ðə sˈɛpəɹət pˈIlz bɪfˈɔː juː lˈiːv.",
+"oov": false
+},
+{
+"id": "ht032",
+"norm": "The estimate they estimate is deliberately conservative.",
+"ps_gb": "ði ˈɛstɪmət ðA ˈɛstɪmAt ɪz dɪlˈɪbəɹətli kənsˈɜːvətɪv.",
+"oov": false
+},
+{
+"id": "ht033",
+"norm": "The conductor will conduct the orchestra, and his conduct was flawless.",
+"ps_gb": "ðə kəndˈʌktə wɪl kəndˈʌkt ði ˈɔːkɪstɹə, and hɪz kˈɒndʌkt wɒz flˈɔːləs.",
+"oov": false
+},
+{
+"id": "ht034",
+"norm": "The moped rider moped around the parking lot all afternoon.",
+"ps_gb": "ðə mˈQpɛd ɹˈIdə mˈQpt əɹˈWnd ðə pˈɑːkɪŋ lˈɒt ˈɔːl ˌɑːftənˈuːn.",
+"oov": false
+},
+{
+"id": "ht035",
+"norm": "The entrance was designed to entrance every visitor.",
+"ps_gb": "ði ˈɛntɹəns wɒz dɪzˈInd tʊ ɪntɹˈɑːns ˈɛvəɹi vˈɪzɪtə.",
+"oov": false
+},
+{
+"id": "ht036",
+"norm": "He was content with the content of the report.",
+"ps_gb": "hˌiː wɒz kəntˈɛnt wɪð ðə kˈɒntɛnt ɒv ðə ɹɪpˈɔːt.",
+"oov": false
+},
+{
+"id": "ht037",
+"norm": "Please attribute this attribute to the original author.",
+"ps_gb": "plˈiːz ətɹˈɪbjuːt ðɪs ˈatɹɪbjuːt tə ði əɹˈɪʤənᵊl ˈɔːθə.",
+"oov": false
+},
+{
+"id": "ht038",
+"norm": "I will resume writing my resume after lunch.",
+"ps_gb": "ˌI wɪl ɹɪzjˈuːm ɹˈItɪŋ mI ɹɪzjˈuːm ˈɑːftə lˈʌnʧ.",
+"oov": false
+},
+{
+"id": "ht039",
+"norm": "The august committee met in August to weigh the evidence.",
+"ps_gb": "ði ɔːɡˈʌst kəmˈɪti mˈɛt ɪn ˈɔːɡəst tə wˈA ði ˈɛvɪdᵊns.",
+"oov": false
+},
+{
+"id": "ov000",
+"norm": "Nguyen and Chalamet arrived in Reykjavik on a freezing morning.",
+"ps_gb": "nˈuːjɛn and ʧˈalamɪt əɹˈIvd ɪn ɹˈAkjəvɪk ˌɒn ɐ fɹˈiːzɪŋ mˈɔːnɪŋ.",
+"oov": true
+},
+{
+"id": "ov001",
+"norm": "The Kubernetes cluster failed to reconcile the resource stored in etcd.",
+"ps_gb": "ðə kˌuːbənˈɛtiːz klˈʌstə fˈAld tə ɹˈɛkᵊnsIl ðə ɹɪzˈɔːs stˈɔːd ɪn ɛtsˈɛtəɹəd.",
+"oov": true
+},
+{
+"id": "ov002",
+"norm": "Worcestershire sauce is named after Worcestershire in England.",
+"ps_gb": "wˈʊstəʃɪə sˈɔːs ɪz nˈAmd ˈɑːftə wˈʊstəʃɪə ɪn ˈɪŋɡlənd.",
+"oov": false
+},
+{
+"id": "ov003",
+"norm": "Siobhan drove from Ouagadougou toward Ljubljana without a map.",
+"ps_gb": "ʃɪvˈɔːn dɹˈQv fɹɒm wˌɑːɡədˈuːɡuː təwˈɔːd ljuːbljˈɑːnə wɪðˈWt ɐ mˈap.",
+"oov": true
+},
+{
+"id": "ov004",
+"norm": "The PyTorch model runs quantized kernels on every available accelerator.",
+"ps_gb": "ðə pˈI tˈɔːʧ mˈɒdᵊl ɹˈʌnz kwˈɒntIzd kˈɜːnᵊlz ˌɒn ˈɛvəɹi əvˈAləbᵊl əksˈɛləɹAtə.",
+"oov": true
+},
+{
+"id": "ov005",
+"norm": "Xylophone repairs in Poughkeepsie are surprisingly expensive.",
+"ps_gb": "zˈIləfQn ɹɪpˈɛːz ɪn pˈQkiːpsi ɑː səpɹˈIzɪŋli ɪkspˈɛnsɪv.",
+"oov": true
+},
+{
+"id": "ov006",
+"norm": "Zbigniew Brzezinski wrote at length about geopolitics and Eurasia.",
+"ps_gb": "zˈɛdbˈɪɡnjuː bɹzɛzˈɪnskɪ ɹˈQt at lˈɛŋθ əbˈWt ʤˌiːQpˈɒlɪtɪks and jʊəɹˈAʒə.",
+"oov": true
+},
+{
+"id": "ov007",
+"norm": "The tokenizer emitted an unexpected sentencepiece for the whole corpus.",
+"ps_gb": "ðə tˈQkənˌIzə ɪmˈɪtɪd ɐn ˌʌnɪkspˈɛktɪd sˈɛntənspˌiːs fɔː ðə hˈQl kˈɔːpəs.",
+"oov": true
+},
+{
+"id": "ov008",
+"norm": "Beijing, Guangzhou, and Chongqing are enormous Chinese cities.",
+"ps_gb": "bˌAʤˈɪŋ, ɡwaŋʤˈQ, and ʧʊŋʧˈɪŋ ɑː ɪnˈɔːməs ʧˌInˈiːz sˈɪtiz.",
+"oov": false
+},
+{
+"id": "ov009",
+"norm": "Yosemite and Tuolumne draw enormous crowds every summer.",
+"ps_gb": "jQsˈɛməti and tjˈuːəlˌʌmnɪ dɹˈɔː ɪnˈɔːməs kɹˈWdz ˈɛvəɹi sˈʌmə.",
+"oov": true
+},
+{
+"id": "ov010",
+"norm": "The eigenvalue decomposition converged after a handful of iterations.",
+"ps_gb": "ði ˈIɡᵊnvˌaljuː dˌiːkɒmpəzˈɪʃᵊn kənvˈɜːʤd ˈɑːftə ɐ hˈandfʊl ɒv ˌɪtəɹˈAʃᵊnz.",
+"oov": false
+},
+{
+"id": "ov011",
+"norm": "Mbappe scored twice against Wolverhampton in the second half.",
+"ps_gb": "ˈɛmbˈap skˈɔːd twˈIs əɡˈɛnst wˌʊlvəhˈamptᵊn ɪn ðə sˈɛkᵊnd hˈɑːf.",
+"oov": true
+},
+{
+"id": "ov012",
+"norm": "Anaesthesiologists in Edinburgh discussed the revised protocol.",
+"ps_gb": "ˌanɪsθiːziːˈɒləɡɪsts ɪn ˈɛdɪnbəɹə dɪskˈʌst ðə ɹɪvˈIzd pɹˈQtəkɒl.",
+"oov": false
+},
+{
+"id": "ov013",
+"norm": "Hermione and Nietzsche would have argued bitterly about aesthetics.",
+"ps_gb": "hɜːmˈIəni and nˈiːʧə wʊd hav ˈɑːɡjuːd bˈɪtəli əbˈWt iːsθˈɛtɪks.",
+"oov": true
+},
+{
+"id": "ov014",
+"norm": "The daslang compiler emits optimized machine code without an interpreter.",
+"ps_gb": "ðə dˈaslaŋ kəmpˈIlə ɪmˈɪts ˈɒptɪmIzd məʃˈiːn kˈQd wɪðˈWt ɐn ɪntˈɜːpɹɪtə.",
+"oov": true
+},
+{
+"id": "ov015",
+"norm": "Onnxruntime loaded the quantized transformer checkpoint in milliseconds.",
+"ps_gb": "ˈɒŋŋksɹəntˌIm lˈQdɪd ðə kwˈɒntIzd tɹansfˈɔːmə ʧˈɛkpYnt ɪn mˈɪlɪsˌɛkᵊndz.",
+"oov": true
+},
+{
+"id": "ov016",
+"norm": "Schenectady and Skaneateles are hard to spell and harder to say.",
+"ps_gb": "ʃˈɛnɪktˌadi and skˈAnAtᵊlz ɑː hˈɑːd tə spˈɛl and hˈɑːdə tə sˈA.",
+"oov": true
+},
+{
+"id": "ov017",
+"norm": "Phuket and Chiang Mai attract tourists from Kuala Lumpur.",
+"ps_gb": "pˌuːkˈɛt and ʧjˈaŋ mˈI ətɹˈakt tˈʊəɹɪsts fɹɒm kwˈɑːlə lˈʌmpʊə.",
+"oov": true
+},
+{
+"id": "ov018",
+"norm": "Doctor Chaudhary examined the patient at Cedars Sinai.",
+"ps_gb": "dˈɒktə ʃˈQhəɹi ɪɡzˈamɪnd ðə pˈAʃᵊnt at sˈiːdəz sˈInI.",
+"oov": true
+},
+{
+"id": "ov019",
+"norm": "The Rijksmuseum houses paintings by Vermeer and Rembrandt.",
+"ps_gb": "ðə ɹˈIksmuːzˌAəm hˈWzɪz pˈAntɪŋz bI vɜːmˈiə and ɹˈɛmbɹant.",
+"oov": true
+},
+{
+"id": "ov020",
+"norm": "Quantum chromodynamics predicts asymptotic freedom at short distances.",
+"ps_gb": "kwˈɒntəm kɹˌQmədInˈamɪks pɹɪdˈɪkts ˌasɪmptˈɒtɪk fɹˈiːdəm at ʃˈɔːt dˈɪstᵊnsɪz.",
+"oov": true
+},
+{
+"id": "ov021",
+"norm": "The Llanfairpwllgwyngyll station sign is famously long.",
+"ps_gb": "ðə lanfˈAəpwlɡwɪŋˌɪl stˈAʃᵊn sˈIn ɪz fˈAməsli lˈɒŋ.",
+"oov": true
+},
+{
+"id": "ov022",
+"norm": "Kierkegaard influenced Heidegger, Sartre, and Camus.",
+"ps_gb": "kˌiəkɪɡˈɑːd ˈɪnflʊənst hˈIdɛɡə, sˈɑːtə, and kˈaməs.",
+"oov": true
+},
+{
+"id": "ov023",
+"norm": "Ubuntu, Debian, and Fedora ship rather different kernels.",
+"ps_gb": "uːbˈʊntuː, dˈɛbiən, and fɪdˈɔːɹə ʃˈɪp ɹˈɑːðə dˈɪfəɹənt kˈɜːnᵊlz.",
+"oov": true
+},
+{
+"id": "ov024",
+"norm": "The mitochondrion generates adenosine triphosphate for the cell.",
+"ps_gb": "ðə mˌItQkˈɒndɹɪən ʤˈɛnəɹAts ədˈɛnQsiːn tɹIfˈɒsfAt fɔː ðə sˈɛl.",
+"oov": false
+},
+{
+"id": "ov025",
+"norm": "Tchaikovsky and Rachmaninoff dominated the concert program.",
+"ps_gb": "tˈiːʧAkˈɒvski and ɹˈaʧmənˌɪnɒf dˈɒmɪnAtɪd ðə kˈɒnsət pɹˈQɡɹam.",
+"oov": true
+},
+{
+"id": "ov026",
+"norm": "The Higgs boson was confirmed at CERN near Geneva.",
+"ps_gb": "ðə hˈɪɡz bˈQsɒn wɒz kənfˈɜːmd at sˈɜːn nˌɪə ʤɪnˈiːvə.",
+"oov": true
+},
+{
+"id": "ov027",
+"norm": "Saoirse and Caoimhe travelled from Galway to Dun Laoghaire.",
+"ps_gb": "sˈAəʃə and kˈiːvə tɹˈavld fɹɒm ɡˈɔːlwA tə dˈʌn lˌAəɡhˈAə.",
+"oov": true
+},
+{
+"id": "ov028",
+"norm": "GitHub, GitLab, and Bitbucket all host source repositories.",
+"ps_gb": "ɡˌɪthˈʌb, ɡˌɪtlˈab, and bˈɪtbʌkɪt ˈɔːl hˈQst sˈɔːs ɹɪpˈɒzɪtəɹiz.",
+"oov": true
+},
+{
+"id": "ov029",
+"norm": "The photolithography stepper aligned the reticle with nanometre precision.",
+"ps_gb": "ðə fˌQtQlɪθˈɒɡɹəfi stˈɛpə əlˈInd ðə ɹˈɛtɪkᵊl wɪð nˈanQmˌiːtə pɹɪsˈɪʒᵊn.",
+"oov": false
+},
+{
+"id": "nm000",
+"norm": "The invoice totaled one thousand two hundred thirty-four dollars and fifty-six cents and remains unpaid.",
+"ps_gb": "ði ˈɪnvYs tˈQtᵊld wˈʌn θˈWzᵊnd tˈuː hˈʌndɹəd θˈɜːtifˌɔː dˈɒləz and fˈɪftisˌɪks sˈɛnts and ɹɪmˈAnz ʌnpˈAd.",
+"oov": false
+},
+{
+"id": "nm001",
+"norm": "She paid nineteen dollars and ninety-nine cents for the paperback edition.",
+"ps_gb": "ʃˌiː pˈAd nˌIntˈiːn dˈɒləz and nˌIntɪnˈIn sˈɛnts fɔː ðə pˈApəbak ɪdˈɪʃᵊn.",
+"oov": false
+},
+{
+"id": "nm002",
+"norm": "The meeting starts at three forty-five p m on Tuesday.",
+"ps_gb": "ðə mˈiːtɪŋ stˈɑːts at θɹˈiː fˈɔːtifˌIv pˈiː ˈɛm ˌɒn tjˈuːzdA.",
+"oov": false
+},
+{
+"id": "nm003",
+"norm": "Doctor Smith arrived at eight a m sharp.",
+"ps_gb": "dˈɒktə smˈɪθ əɹˈIvd at ˈAt ɐ ˈɛm ʃˈɑːp.",
+"oov": false
+},
+{
+"id": "nm004",
+"norm": "The treaty was signed on July fourth, one thousand seven hundred seventy-six.",
+"ps_gb": "ðə tɹˈiːti wɒz sˈInd ˌɒn ʤʊlˈI fˈɔːθ, wˈʌn θˈWzᵊnd sˈɛvᵊn hˈʌndɹəd sˈɛvntisˌɪks.",
+"oov": false
+},
+{
+"id": "nm005",
+"norm": "Our revenue grew twenty-seven percent over the previous quarter.",
+"ps_gb": "ˌWə ɹˈɛvɪnjuː ɡɹˈuː twˈɛntisˌɛvᵊn pəsˈɛnt ˈQvə ðə pɹˈiːvɪəs kwˈɔːtə.",
+"oov": false
+},
+{
+"id": "nm006",
+"norm": "The package weighs two point five kg and ships tomorrow.",
+"ps_gb": "ðə pˈakɪʤ wˈAz tˈuː pˈYnt fˈIv kˌAʤˈiː and ʃˈɪps tʊmˈɒɹQ.",
+"oov": true
+},
+{
+"id": "nm007",
+"norm": "He ran the marathon in three twelve and forty-five secondslast spring.",
+"ps_gb": "hˌiː ɹˈan ðə mˈaɹəθᵊn ɪn θɹˈiː twˈɛlv and fˈɔːtifˌIv sˈɛkəndslˌast spɹˈɪŋ.",
+"oov": true
+},
+{
+"id": "nm008",
+"norm": "The server has sixty-four GB of memory and twelve cores.",
+"ps_gb": "ðə sˈɜːvə haz sˈɪkstifˌɔː ʤˌiːbˈiː ɒv mˈɛməɹi and twˈɛlv kˈɔːz.",
+"oov": false
+},
+{
+"id": "nm009",
+"norm": "Water boils at one hundred C at sea level.",
+"ps_gb": "wˈɔːtə bˈYlz at wˈʌn hˈʌndɹəd sˈiː at sˈiː lˈɛvᵊl.",
+"oov": false
+},
+{
+"id": "nm010",
+"norm": "The album sold three point two million copies worldwide.",
+"ps_gb": "ði ˈalbəm sˈQld θɹˈiː pˈYnt tˈuː mˈɪljən kˈɒpiz wˌɜːldwˈId.",
+"oov": false
+},
+{
+"id": "nm011",
+"norm": "Please read chapter twelve pages three hundred forty to three hundred fifty-eight.",
+"ps_gb": "plˈiːz ɹˈiːd ʧˈaptə twˈɛlv pˈAʤɪz θɹˈiː hˈʌndɹəd fˈɔːti tə θɹˈiː hˈʌndɹəd fˈɪftiˌAt.",
+"oov": false
+},
+{
+"id": "nm012",
+"norm": "The flight departs at six fifteen a m from gate twenty-seven.",
+"ps_gb": "ðə flˈIt dɪpˈɑːts at sˈɪks fˌɪftˈiːn ɐ ˈɛm fɹɒm ɡˈAt twˈɛntisˌɛvᵊn.",
+"oov": false
+},
+{
+"id": "nm013",
+"norm": "Version two point fourteen point three fixed forty-seven outstanding defects.",
+"ps_gb": "vˈɜːʃᵊn tˈuː pˈYnt fˌɔːtˈiːn pˈYnt θɹˈiː fˈɪkst fˌɔːtisˈɛvᵊn Wtstˈandɪŋ dˈiːfɛkts.",
+"oov": false
+},
+{
+"id": "nm014",
+"norm": "The building was completed in nineteen twenty-nine and renovated in twenty eleven.",
+"ps_gb": "ðə bˈɪldɪŋ wɒz kəmplˈiːtɪd ɪn nˌIntˈiːn twˈɛntinˌIn and ɹˈɛnəvAtɪd ɪn twˈɛnti ɪlˈɛvᵊn.",
+"oov": false
+},
+{
+"id": "nm015",
+"norm": "The recipe calls for one two cup of sugar.",
+"ps_gb": "ðə ɹˈɛsɪpi kˈɔːlz fɔː wˈʌn tˈuː kˈʌp ɒv ʃˈʊɡə.",
+"oov": false
+},
+{
+"id": "nm016",
+"norm": "Interest rates fell to four point seven five percent in March twenty twenty.",
+"ps_gb": "ˈɪntɹɪst ɹˈAts fˈɛl tə fˈɔː pˈYnt sˈɛvᵊn fˈIv pəsˈɛnt ɪn mˈɑːʧ twˈɛnti twˈɛnti.",
+"oov": false
+},
+{
+"id": "nm017",
+"norm": "The car costs thirty-two thousand five hundred euros before taxes.",
+"ps_gb": "ðə kˈɑː kˈɒsts θˈɜːtitˌuː θˈWzᵊnd fˈIv hˈʌndɹəd jˈʊəɹQz bɪfˈɔː tˈaksɪz.",
+"oov": false
+},
+{
+"id": "nm018",
+"norm": "The signal arrived one hundred fifty ms after the trigger.",
+"ps_gb": "ðə sˈɪɡnᵊl əɹˈIvd wˈʌn hˈʌndɹəd fˈɪfti ˌɛmˈɛs ˈɑːftə ðə tɹˈɪɡə.",
+"oov": true
+},
+{
+"id": "nm019",
+"norm": "About three thousand people attended the ceremony.",
+"ps_gb": "əbˈWt θɹˈiː θˈWzᵊnd pˈiːpᵊl ətˈɛndɪd ðə sˈɛɹɪməni.",
+"oov": false
+},
+{
+"id": "nm020",
+"norm": "The processor runs at three point two GHz under load.",
+"ps_gb": "ðə pɹˈQsɛsə ɹˈʌnz at θɹˈiː pˈYnt tˈuː ɡˈɪɡəhˌɜːts ˈʌndə lˈQd.",
+"oov": true
+},
+{
+"id": "nm021",
+"norm": "He was born on March third, nineteen eighty-five, in Ohio.",
+"ps_gb": "hˌiː wɒz bˈɔːn ˌɒn mˈɑːʧ θˈɜːd, nˌIntˈiːn ˌAtifˈIv, ɪn QhˈIQ.",
+"oov": false
+},
+{
+"id": "nm022",
+"norm": "The population grew from twelve hundred to forty-five thousand in a decade.",
+"ps_gb": "ðə pˌɒpjʊlˈAʃᵊn ɡɹˈuː fɹɒm twˈɛlv hˈʌndɹəd tə fˈɔːtifˌIv θˈWzᵊnd ɪn ɐ dˈɛkAd.",
+"oov": false
+},
+{
+"id": "nm023",
+"norm": "The nineteen sixtys produced remarkable music.",
+"ps_gb": "ðə nˌIntˈiːn sˈɪkstiz pɹədjˈuːst ɹɪmˈɑːkəbᵊl mjˈuːzɪk.",
+"oov": false
+},
+{
+"id": "nm024",
+"norm": "Professor Lee published eighteen papers between twenty fifteen and twenty twenty-two.",
+"ps_gb": "pɹəfˈɛsə lˈiː pˈʌblɪʃt ˌAtˈiːn pˈApəz bɪtwˈiːn twˈɛnti fˌɪftˈiːn and twˈɛnti twˈɛntitˌuː.",
+"oov": false
+},
+{
+"id": "nm025",
+"norm": "The temperature dropped to five F overnight.",
+"ps_gb": "ðə tˈɛmpɹɪʧə dɹˈɒpt tə fˈIv ˈɛf ˌQvənˈIt.",
+"oov": false
+},
+{
+"id": "nm026",
+"norm": "We shipped two hundred fifty units at fourteen pounds and fifty cents each.",
+"ps_gb": "wˌiː ʃˈɪpt tˈuː hˈʌndɹəd fˈɪfti jˈuːnɪts at fˌɔːtˈiːn pˈWndz and fˈɪfti sˈɛnts ˈiːʧ.",
+"oov": false
+},
+{
+"id": "nm027",
+"norm": "The measurement was zero point seven five mm plus or minus zero point zero two mm.",
+"ps_gb": "ðə mˈɛʒəmᵊnt wɒz zˈɪəɹQ pˈYnt sˈɛvᵊn fˈIv m plˈʌs ɔː mˈInəs zˈɪəɹQ pˈYnt zˈɪəɹQ tˈuː m.",
+"oov": false
+},
+{
+"id": "nm028",
+"norm": "The train leaves at eleven fifty-nine p m on December thirty-first, nineteen ninety-nine.",
+"ps_gb": "ðə tɹˈAn lˈiːvz at ɪlˈɛvᵊn fˈɪftinˌIn pˈiː ˈɛm ˌɒn dɪsˈɛmbə θˌɜːtifˈɜːst, nˌIntˈiːn nˌIntɪnˈIn.",
+"oov": false
+},
+{
+"id": "nm029",
+"norm": "Roughly twelve percent of the eight thousand four hundred samples were discarded.",
+"ps_gb": "ɹˈʌfli twˈɛlv pəsˈɛnt ɒv ði ˈAt θˈWzᵊnd fˈɔː hˈʌndɹəd sˈɑːmpᵊlz wɜː dɪskˈɑːdɪd.",
+"oov": false
+}
+],
+"oov_words": [
+{
+"word": "flombastic",
+"ps_us_ref": "fləmbˈæstɪk",
+"ps_gb_ref": "fləmbˈastɪk"
+},
+{
+"word": "zymurgical",
+"ps_us_ref": "zImˈɜɹʤɪkᵊl",
+"ps_gb_ref": "zImˈɜːʤɪkᵊl"
+},
+{
+"word": "gorbleflax",
+"ps_us_ref": "ɡˈɔɹbᵊlflˌæks",
+"ps_gb_ref": "ɡˈɔːbᵊlflˌaks"
+},
+{
+"word": "sprindle",
+"ps_us_ref": "spɹˈɪndᵊl",
+"ps_gb_ref": "spɹˈɪndᵊl"
+},
+{
+"word": "thromberly",
+"ps_us_ref": "θɹˈɑməɹli",
+"ps_gb_ref": "θɹˈɒməli"
+},
+{
+"word": "quastive",
+"ps_us_ref": "kwˈæstɪv",
+"ps_gb_ref": "kwˈastɪv"
+}
+]
+}
