@@ -760,6 +760,34 @@ def vk_view_destroy(var b : ImageCreateInfo) {
     delete b._vk_view_pQueueFamilyIndices
 }
 
+struct ImageCreateFlags2CreateInfoKHR {
+    next : void?
+    flags : VkImageCreateFlags2KHR
+}
+def vk_view_create_unsafe(b : ImageCreateFlags2CreateInfoKHR) : VkImageCreateFlags2CreateInfoKHR {
+    var vk = VkImageCreateFlags2CreateInfoKHR()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    return <- vk
+}
+def vk_view_destroy(_b : ImageCreateFlags2CreateInfoKHR) {
+    pass
+}
+
+struct ImageUsageFlags2CreateInfoKHR {
+    next : void?
+    usage : VkImageUsageFlags2KHR
+}
+def vk_view_create_unsafe(b : ImageUsageFlags2CreateInfoKHR) : VkImageUsageFlags2CreateInfoKHR {
+    var vk = VkImageUsageFlags2CreateInfoKHR()
+    vk.pNext = b.next
+    vk.usage = b.usage
+    return <- vk
+}
+def vk_view_destroy(_b : ImageUsageFlags2CreateInfoKHR) {
+    pass
+}
+
 struct SubresourceLayout {
     offset : uint64
     size : uint64
@@ -6193,6 +6221,34 @@ def vk_view_destroy(_b : SharedPresentSurfaceCapabilitiesKHR) {
     pass
 }
 
+struct SwapchainFlagsSurfaceCapabilitiesEXT {
+    next : void?
+    swapchainSupportedFlags : VkSwapchainCreateFlagsKHR
+}
+def vk_view_create_unsafe(b : SwapchainFlagsSurfaceCapabilitiesEXT) : VkSwapchainFlagsSurfaceCapabilitiesEXT {
+    var vk = VkSwapchainFlagsSurfaceCapabilitiesEXT()
+    vk.pNext = b.next
+    vk.swapchainSupportedFlags = b.swapchainSupportedFlags
+    return <- vk
+}
+def vk_view_destroy(_b : SwapchainFlagsSurfaceCapabilitiesEXT) {
+    pass
+}
+
+struct SharedPresentSurfaceCapabilities2KHR {
+    next : void?
+    sharedPresentSupportedUsageFlags : VkImageUsageFlags2KHR
+}
+def vk_view_create_unsafe(b : SharedPresentSurfaceCapabilities2KHR) : VkSharedPresentSurfaceCapabilities2KHR {
+    var vk = VkSharedPresentSurfaceCapabilities2KHR()
+    vk.pNext = b.next
+    vk.sharedPresentSupportedUsageFlags = b.sharedPresentSupportedUsageFlags
+    return <- vk
+}
+def vk_view_destroy(_b : SharedPresentSurfaceCapabilities2KHR) {
+    pass
+}
+
 struct PhysicalDevice16BitStorageFeatures {
     next : void?
     storageBuffer16BitAccess : uint
@@ -6426,6 +6482,20 @@ def vk_view_create_unsafe(b : ImageViewUsageCreateInfo) : VkImageViewUsageCreate
     return <- vk
 }
 def vk_view_destroy(_b : ImageViewUsageCreateInfo) {
+    pass
+}
+
+struct ImageViewUsage2CreateInfoKHR {
+    next : void?
+    usage : VkImageUsageFlags2KHR
+}
+def vk_view_create_unsafe(b : ImageViewUsage2CreateInfoKHR) : VkImageViewUsage2CreateInfoKHR {
+    var vk = VkImageViewUsage2CreateInfoKHR()
+    vk.pNext = b.next
+    vk.usage = b.usage
+    return <- vk
+}
+def vk_view_destroy(_b : ImageViewUsage2CreateInfoKHR) {
     pass
 }
 
@@ -7567,6 +7637,20 @@ def vk_view_create_unsafe(b : ShaderStatisticsInfoAMD) : VkShaderStatisticsInfoA
     return <- vk
 }
 def vk_view_destroy(_b : ShaderStatisticsInfoAMD) {
+    pass
+}
+
+struct PhysicalDeviceElapsedTimerQueryFeaturesQCOM {
+    next : void?
+    elapsedTimerQuery : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceElapsedTimerQueryFeaturesQCOM) : VkPhysicalDeviceElapsedTimerQueryFeaturesQCOM {
+    var vk = VkPhysicalDeviceElapsedTimerQueryFeaturesQCOM()
+    vk.pNext = b.next
+    vk.elapsedTimerQuery = b.elapsedTimerQuery
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceElapsedTimerQueryFeaturesQCOM) {
     pass
 }
 
@@ -10054,6 +10138,20 @@ def vk_view_destroy(_b : ImageStencilUsageCreateInfo) {
     pass
 }
 
+struct ImageStencilUsage2CreateInfoKHR {
+    next : void?
+    stencilUsage : VkImageUsageFlags2KHR
+}
+def vk_view_create_unsafe(b : ImageStencilUsage2CreateInfoKHR) : VkImageStencilUsage2CreateInfoKHR {
+    var vk = VkImageStencilUsage2CreateInfoKHR()
+    vk.pNext = b.next
+    vk.stencilUsage = b.stencilUsage
+    return <- vk
+}
+def vk_view_destroy(_b : ImageStencilUsage2CreateInfoKHR) {
+    pass
+}
+
 struct DeviceMemoryOverallocationCreateInfoAMD {
     next : void?
     overallocationBehavior : VkMemoryOverallocationBehaviorAMD
@@ -12018,6 +12116,208 @@ def vk_view_destroy(_b : PhysicalDeviceCoherentMemoryFeaturesAMD) {
     pass
 }
 
+struct GpaPerfBlockPropertiesAMD {
+    blockType : VkGpaPerfBlockAMD
+    flags : VkGpaPerfBlockPropertiesFlagsAMD
+    instanceCount : uint
+    maxEventID : uint
+    maxGlobalOnlyCounters : uint
+    maxGlobalSharedCounters : uint
+    maxStreamingCounters : uint
+}
+def vk_view_create_unsafe(b : GpaPerfBlockPropertiesAMD) : VkGpaPerfBlockPropertiesAMD {
+    var vk = VkGpaPerfBlockPropertiesAMD()
+    vk.blockType = b.blockType
+    vk.flags = b.flags
+    vk.instanceCount = b.instanceCount
+    vk.maxEventID = b.maxEventID
+    vk.maxGlobalOnlyCounters = b.maxGlobalOnlyCounters
+    vk.maxGlobalSharedCounters = b.maxGlobalSharedCounters
+    vk.maxStreamingCounters = b.maxStreamingCounters
+    return <- vk
+}
+def vk_view_destroy(_b : GpaPerfBlockPropertiesAMD) {
+    pass
+}
+
+struct PhysicalDeviceGpaFeaturesAMD {
+    next : void?
+    perfCounters : uint
+    streamingPerfCounters : uint
+    sqThreadTracing : uint
+    clockModes : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceGpaFeaturesAMD) : VkPhysicalDeviceGpaFeaturesAMD {
+    var vk = VkPhysicalDeviceGpaFeaturesAMD()
+    vk.pNext = b.next
+    vk.perfCounters = b.perfCounters
+    vk.streamingPerfCounters = b.streamingPerfCounters
+    vk.sqThreadTracing = b.sqThreadTracing
+    vk.clockModes = b.clockModes
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceGpaFeaturesAMD) {
+    pass
+}
+
+struct PhysicalDeviceGpaPropertiesAMD {
+    next : void?
+    flags : VkPhysicalDeviceGpaPropertiesFlagsAMD
+    maxSqttSeBufferSize : uint64
+    shaderEngineCount : uint
+    pPerfBlocks : array<GpaPerfBlockPropertiesAMD>
+    _vk_view_pPerfBlocks : array<VkGpaPerfBlockPropertiesAMD>
+}
+def vk_view_create_unsafe(var b : PhysicalDeviceGpaPropertiesAMD) : VkPhysicalDeviceGpaPropertiesAMD {
+    var vk = VkPhysicalDeviceGpaPropertiesAMD()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    vk.maxSqttSeBufferSize = b.maxSqttSeBufferSize
+    vk.shaderEngineCount = b.shaderEngineCount
+    b._vk_view_pPerfBlocks |> resize(length(b.pPerfBlocks))
+    for (vkv, vke in b._vk_view_pPerfBlocks, b.pPerfBlocks) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    vk.pPerfBlocks = array_addr(b._vk_view_pPerfBlocks)
+    vk.perfBlockCount = uint(length(b.pPerfBlocks))
+    return <- vk
+}
+def vk_view_destroy(var b : PhysicalDeviceGpaPropertiesAMD) {
+    for (vki in range(length(b.pPerfBlocks))) {
+        vk_view_destroy(b.pPerfBlocks[vki])
+    }
+    delete b._vk_view_pPerfBlocks
+}
+
+struct PhysicalDeviceGpaProperties2AMD {
+    next : void?
+    revisionId : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceGpaProperties2AMD) : VkPhysicalDeviceGpaProperties2AMD {
+    var vk = VkPhysicalDeviceGpaProperties2AMD()
+    vk.pNext = b.next
+    vk.revisionId = b.revisionId
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceGpaProperties2AMD) {
+    pass
+}
+
+struct GpaPerfCounterAMD {
+    blockType : VkGpaPerfBlockAMD
+    blockInstance : uint
+    eventID : uint
+}
+def vk_view_create_unsafe(b : GpaPerfCounterAMD) : VkGpaPerfCounterAMD {
+    var vk = VkGpaPerfCounterAMD()
+    vk.blockType = b.blockType
+    vk.blockInstance = b.blockInstance
+    vk.eventID = b.eventID
+    return <- vk
+}
+def vk_view_destroy(_b : GpaPerfCounterAMD) {
+    pass
+}
+
+struct GpaSampleBeginInfoAMD {
+    next : void?
+    sampleType : VkGpaSampleTypeAMD
+    sampleInternalOperations : uint
+    cacheFlushOnCounterCollection : uint
+    sqShaderMaskEnable : uint
+    sqShaderMask : VkGpaSqShaderStageFlagsAMD
+    pPerfCounters : array<GpaPerfCounterAMD>
+    streamingPerfTraceSampleInterval : uint
+    perfCounterDeviceMemoryLimit : uint64
+    sqThreadTraceEnable : uint
+    sqThreadTraceSuppressInstructionTokens : uint
+    sqThreadTraceDeviceMemoryLimit : uint64
+    timingPreSample : VkPipelineStageFlags
+    timingPostSample : VkPipelineStageFlags
+    _vk_view_pPerfCounters : array<VkGpaPerfCounterAMD>
+}
+def vk_view_create_unsafe(var b : GpaSampleBeginInfoAMD) : VkGpaSampleBeginInfoAMD {
+    var vk = VkGpaSampleBeginInfoAMD()
+    vk.pNext = b.next
+    vk.sampleType = b.sampleType
+    vk.sampleInternalOperations = b.sampleInternalOperations
+    vk.cacheFlushOnCounterCollection = b.cacheFlushOnCounterCollection
+    vk.sqShaderMaskEnable = b.sqShaderMaskEnable
+    vk.sqShaderMask = b.sqShaderMask
+    b._vk_view_pPerfCounters |> resize(length(b.pPerfCounters))
+    for (vkv, vke in b._vk_view_pPerfCounters, b.pPerfCounters) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    vk.pPerfCounters = array_addr(b._vk_view_pPerfCounters)
+    vk.streamingPerfTraceSampleInterval = b.streamingPerfTraceSampleInterval
+    vk.perfCounterDeviceMemoryLimit = b.perfCounterDeviceMemoryLimit
+    vk.sqThreadTraceEnable = b.sqThreadTraceEnable
+    vk.sqThreadTraceSuppressInstructionTokens = b.sqThreadTraceSuppressInstructionTokens
+    vk.sqThreadTraceDeviceMemoryLimit = b.sqThreadTraceDeviceMemoryLimit
+    vk.timingPreSample = b.timingPreSample
+    vk.timingPostSample = b.timingPostSample
+    vk.perfCounterCount = uint(length(b.pPerfCounters))
+    return <- vk
+}
+def vk_view_destroy(var b : GpaSampleBeginInfoAMD) {
+    for (vki in range(length(b.pPerfCounters))) {
+        vk_view_destroy(b.pPerfCounters[vki])
+    }
+    delete b._vk_view_pPerfCounters
+}
+
+struct GpaDeviceClockModeInfoAMD {
+    next : void?
+    clockMode : VkGpaDeviceClockModeAMD
+    memoryClockRatioToPeak : float
+    engineClockRatioToPeak : float
+}
+def vk_view_create_unsafe(b : GpaDeviceClockModeInfoAMD) : VkGpaDeviceClockModeInfoAMD {
+    var vk = VkGpaDeviceClockModeInfoAMD()
+    vk.pNext = b.next
+    vk.clockMode = b.clockMode
+    vk.memoryClockRatioToPeak = b.memoryClockRatioToPeak
+    vk.engineClockRatioToPeak = b.engineClockRatioToPeak
+    return <- vk
+}
+def vk_view_destroy(_b : GpaDeviceClockModeInfoAMD) {
+    pass
+}
+
+struct GpaDeviceGetClockInfoAMD {
+    next : void?
+    memoryClockRatioToPeak : float
+    engineClockRatioToPeak : float
+    memoryClockFrequency : uint
+    engineClockFrequency : uint
+}
+def vk_view_create_unsafe(b : GpaDeviceGetClockInfoAMD) : VkGpaDeviceGetClockInfoAMD {
+    var vk = VkGpaDeviceGetClockInfoAMD()
+    vk.pNext = b.next
+    vk.memoryClockRatioToPeak = b.memoryClockRatioToPeak
+    vk.engineClockRatioToPeak = b.engineClockRatioToPeak
+    vk.memoryClockFrequency = b.memoryClockFrequency
+    vk.engineClockFrequency = b.engineClockFrequency
+    return <- vk
+}
+def vk_view_destroy(_b : GpaDeviceGetClockInfoAMD) {
+    pass
+}
+
+struct GpaSessionCreateInfoAMD {
+    next : void?
+    secondaryCopySource : GpaSessionAMD
+}
+def vk_view_create_unsafe(b : GpaSessionCreateInfoAMD) : VkGpaSessionCreateInfoAMD {
+    var vk = VkGpaSessionCreateInfoAMD()
+    vk.pNext = b.next
+    vk.secondaryCopySource = boost_value_to_vk(b.secondaryCopySource)
+    return <- vk
+}
+def vk_view_destroy(_b : GpaSessionCreateInfoAMD) {
+    pass
+}
+
 struct PhysicalDeviceToolProperties {
     next : void?
     name : int8[VK_MAX_EXTENSION_NAME_SIZE]
@@ -12587,6 +12887,20 @@ def vk_view_create_unsafe(b : PhysicalDeviceExtendedDynamicState3PropertiesEXT) 
     return <- vk
 }
 def vk_view_destroy(_b : PhysicalDeviceExtendedDynamicState3PropertiesEXT) {
+    pass
+}
+
+struct PhysicalDeviceExtendedFlagsFeaturesKHR {
+    next : void?
+    extendedFlags : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceExtendedFlagsFeaturesKHR) : VkPhysicalDeviceExtendedFlagsFeaturesKHR {
+    var vk = VkPhysicalDeviceExtendedFlagsFeaturesKHR()
+    vk.pNext = b.next
+    vk.extendedFlags = b.extendedFlags
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceExtendedFlagsFeaturesKHR) {
     pass
 }
 
@@ -14827,6 +15141,20 @@ def vk_view_destroy(_b : MultisampledRenderToSingleSampledInfoEXT) {
     pass
 }
 
+struct PhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT {
+    next : void?
+    multisampledRenderToSwapchain : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT) : VkPhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT {
+    var vk = VkPhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT()
+    vk.pNext = b.next
+    vk.multisampledRenderToSwapchain = b.multisampledRenderToSwapchain
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT) {
+    pass
+}
+
 struct PhysicalDevicePipelineProtectedAccessFeatures {
     next : void?
     pipelineProtectedAccess : uint
@@ -15728,6 +16056,52 @@ def vk_view_create_unsafe(b : VideoEncodeCapabilitiesKHR) : VkVideoEncodeCapabil
     return <- vk
 }
 def vk_view_destroy(_b : VideoEncodeCapabilitiesKHR) {
+    pass
+}
+
+struct PhysicalDeviceVideoEncodeFeedback2FeaturesKHR {
+    next : void?
+    videoEncodeFeedback2 : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceVideoEncodeFeedback2FeaturesKHR) : VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR {
+    var vk = VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR()
+    vk.pNext = b.next
+    vk.videoEncodeFeedback2 = b.videoEncodeFeedback2
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceVideoEncodeFeedback2FeaturesKHR) {
+    pass
+}
+
+struct VideoEncodeFeedback2CapabilitiesKHR {
+    next : void?
+    maxPerPartitionFeedbackEntries : uint
+    supportedPerPartitionEncodeFeedbackFlags : VkVideoEncodePerPartitionFeedbackFlagsKHR
+}
+def vk_view_create_unsafe(b : VideoEncodeFeedback2CapabilitiesKHR) : VkVideoEncodeFeedback2CapabilitiesKHR {
+    var vk = VkVideoEncodeFeedback2CapabilitiesKHR()
+    vk.pNext = b.next
+    vk.maxPerPartitionFeedbackEntries = b.maxPerPartitionFeedbackEntries
+    vk.supportedPerPartitionEncodeFeedbackFlags = b.supportedPerPartitionEncodeFeedbackFlags
+    return <- vk
+}
+def vk_view_destroy(_b : VideoEncodeFeedback2CapabilitiesKHR) {
+    pass
+}
+
+struct QueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR {
+    next : void?
+    maxPerPartitionFeedbackEntries : uint
+    perPartitionEncodeFeedbackFlags : VkVideoEncodePerPartitionFeedbackFlagsKHR
+}
+def vk_view_create_unsafe(b : QueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR) : VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR {
+    var vk = VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR()
+    vk.pNext = b.next
+    vk.maxPerPartitionFeedbackEntries = b.maxPerPartitionFeedbackEntries
+    vk.perPartitionEncodeFeedbackFlags = b.perPartitionEncodeFeedbackFlags
+    return <- vk
+}
+def vk_view_destroy(_b : QueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR) {
     pass
 }
 
@@ -17017,6 +17391,24 @@ def vk_view_destroy(_b : FormatProperties3) {
     pass
 }
 
+struct FormatProperties4KHR {
+    next : void?
+    linearTilingFeatures : VkFormatFeatureFlags4KHR
+    optimalTilingFeatures : VkFormatFeatureFlags4KHR
+    bufferFeatures : VkFormatFeatureFlags4KHR
+}
+def vk_view_create_unsafe(b : FormatProperties4KHR) : VkFormatProperties4KHR {
+    var vk = VkFormatProperties4KHR()
+    vk.pNext = b.next
+    vk.linearTilingFeatures = b.linearTilingFeatures
+    vk.optimalTilingFeatures = b.optimalTilingFeatures
+    vk.bufferFeatures = b.bufferFeatures
+    return <- vk
+}
+def vk_view_destroy(_b : FormatProperties4KHR) {
+    pass
+}
+
 struct DrmFormatModifierPropertiesList2EXT {
     next : void?
     drmFormatModifierCount : uint
@@ -17487,6 +17879,42 @@ def vk_view_destroy(_b : DataGraphPipelineSessionNeuralStatisticsCreateInfoARM) 
     pass
 }
 
+struct TensorExplicitTilingFormatPropertiesARM {
+    next : void?
+    brick16TilingTensorFeatures : VkFormatFeatureFlags2
+    brick8TilingTensorFeatures : VkFormatFeatureFlags2
+    brick4TilingTensorFeatures : VkFormatFeatureFlags2
+    blockUTilingTensorFeatures : VkFormatFeatureFlags2
+    blockU64kTilingTensorFeatures : VkFormatFeatureFlags2
+}
+def vk_view_create_unsafe(b : TensorExplicitTilingFormatPropertiesARM) : VkTensorExplicitTilingFormatPropertiesARM {
+    var vk = VkTensorExplicitTilingFormatPropertiesARM()
+    vk.pNext = b.next
+    vk.brick16TilingTensorFeatures = b.brick16TilingTensorFeatures
+    vk.brick8TilingTensorFeatures = b.brick8TilingTensorFeatures
+    vk.brick4TilingTensorFeatures = b.brick4TilingTensorFeatures
+    vk.blockUTilingTensorFeatures = b.blockUTilingTensorFeatures
+    vk.blockU64kTilingTensorFeatures = b.blockU64kTilingTensorFeatures
+    return <- vk
+}
+def vk_view_destroy(_b : TensorExplicitTilingFormatPropertiesARM) {
+    pass
+}
+
+struct TensorRollingBackingCreateInfoARM {
+    next : void?
+    wraps : uint[VK_MAX_TENSOR_CREATE_INFO_ROLLING_BACKING_WRAP_COUNT_ARM]
+}
+def vk_view_create_unsafe(b : TensorRollingBackingCreateInfoARM) : VkTensorRollingBackingCreateInfoARM {
+    var vk = VkTensorRollingBackingCreateInfoARM()
+    vk.pNext = b.next
+    vk.wraps = b.wraps
+    return <- vk
+}
+def vk_view_destroy(_b : TensorRollingBackingCreateInfoARM) {
+    pass
+}
+
 struct PhysicalDeviceDescriptorSetHostMappingFeaturesVALVE {
     next : void?
     descriptorSetHostMapping : uint
@@ -17811,6 +18239,35 @@ def vk_view_destroy(var b : MicromapBuildInfoEXT) {
     delete b._vk_view_pUsageCounts
 }
 
+struct AccelerationStructureGeometryMicromapDataKHR {
+    next : void?
+    pUsageCounts : array<MicromapUsageKHR>
+    data : uint64
+    triangleArray : uint64
+    triangleArrayStride : uint64
+    _vk_view_pUsageCounts : array<VkMicromapUsageKHR>
+}
+def vk_view_create_unsafe(var b : AccelerationStructureGeometryMicromapDataKHR) : VkAccelerationStructureGeometryMicromapDataKHR {
+    var vk = VkAccelerationStructureGeometryMicromapDataKHR()
+    vk.pNext = b.next
+    b._vk_view_pUsageCounts |> resize(length(b.pUsageCounts))
+    for (vkv, vke in b._vk_view_pUsageCounts, b.pUsageCounts) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    vk.pUsageCounts = array_addr(b._vk_view_pUsageCounts)
+    vk.data = b.data
+    vk.triangleArray = b.triangleArray
+    vk.triangleArrayStride = b.triangleArrayStride
+    vk.usageCountsCount = uint(length(b.pUsageCounts))
+    return <- vk
+}
+def vk_view_destroy(var b : AccelerationStructureGeometryMicromapDataKHR) {
+    for (vki in range(length(b.pUsageCounts))) {
+        vk_view_destroy(b.pUsageCounts[vki])
+    }
+    delete b._vk_view_pUsageCounts
+}
+
 struct MicromapCreateInfoEXT {
     next : void?
     createFlags : VkMicromapCreateFlagsEXT
@@ -17907,6 +18364,22 @@ def vk_view_destroy(_b : MicromapBuildSizesInfoEXT) {
     pass
 }
 
+struct MicromapUsageKHR {
+    count : uint
+    subdivisionLevel : uint
+    format : VkOpacityMicromapFormatKHR
+}
+def vk_view_create_unsafe(b : MicromapUsageKHR) : VkMicromapUsageKHR {
+    var vk = VkMicromapUsageKHR()
+    vk.count = b.count
+    vk.subdivisionLevel = b.subdivisionLevel
+    vk.format = b.format
+    return <- vk
+}
+def vk_view_destroy(_b : MicromapUsageKHR) {
+    pass
+}
+
 struct MicromapUsageEXT {
     count : uint
     subdivisionLevel : uint
@@ -17923,19 +18396,33 @@ def vk_view_destroy(_b : MicromapUsageEXT) {
     pass
 }
 
-struct MicromapTriangleEXT {
+struct MicromapTriangleKHR {
     dataOffset : uint
     subdivisionLevel : uint16
     format : uint16
 }
-def vk_view_create_unsafe(b : MicromapTriangleEXT) : VkMicromapTriangleEXT {
-    var vk = VkMicromapTriangleEXT()
+def vk_view_create_unsafe(b : MicromapTriangleKHR) : VkMicromapTriangleKHR {
+    var vk = VkMicromapTriangleKHR()
     vk.dataOffset = b.dataOffset
     vk.subdivisionLevel = b.subdivisionLevel
     vk.format = b.format
     return <- vk
 }
-def vk_view_destroy(_b : MicromapTriangleEXT) {
+def vk_view_destroy(_b : MicromapTriangleKHR) {
+    pass
+}
+
+struct PhysicalDeviceOpacityMicromapFeaturesKHR {
+    next : void?
+    micromap : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceOpacityMicromapFeaturesKHR) : VkPhysicalDeviceOpacityMicromapFeaturesKHR {
+    var vk = VkPhysicalDeviceOpacityMicromapFeaturesKHR()
+    vk.pNext = b.next
+    vk.micromap = b.micromap
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceOpacityMicromapFeaturesKHR) {
     pass
 }
 
@@ -17957,6 +18444,26 @@ def vk_view_destroy(_b : PhysicalDeviceOpacityMicromapFeaturesEXT) {
     pass
 }
 
+struct PhysicalDeviceOpacityMicromapPropertiesKHR {
+    next : void?
+    maxOpacity2StateSubdivisionLevel : uint
+    maxOpacity4StateSubdivisionLevel : uint
+    maxOpacityLossy4StateSubdivisionLevel : uint
+    maxMicromapTriangles : uint64
+}
+def vk_view_create_unsafe(b : PhysicalDeviceOpacityMicromapPropertiesKHR) : VkPhysicalDeviceOpacityMicromapPropertiesKHR {
+    var vk = VkPhysicalDeviceOpacityMicromapPropertiesKHR()
+    vk.pNext = b.next
+    vk.maxOpacity2StateSubdivisionLevel = b.maxOpacity2StateSubdivisionLevel
+    vk.maxOpacity4StateSubdivisionLevel = b.maxOpacity4StateSubdivisionLevel
+    vk.maxOpacityLossy4StateSubdivisionLevel = b.maxOpacityLossy4StateSubdivisionLevel
+    vk.maxMicromapTriangles = b.maxMicromapTriangles
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceOpacityMicromapPropertiesKHR) {
+    pass
+}
+
 struct PhysicalDeviceOpacityMicromapPropertiesEXT {
     next : void?
     maxOpacity2StateSubdivisionLevel : uint
@@ -17970,6 +18477,28 @@ def vk_view_create_unsafe(b : PhysicalDeviceOpacityMicromapPropertiesEXT) : VkPh
     return <- vk
 }
 def vk_view_destroy(_b : PhysicalDeviceOpacityMicromapPropertiesEXT) {
+    pass
+}
+
+struct AccelerationStructureTrianglesOpacityMicromapKHR {
+    next : void?
+    indexType : VkIndexType
+    indexBuffer : uint64
+    indexStride : uint64
+    baseTriangle : uint
+    micromap : AccelerationStructureKHR
+}
+def vk_view_create_unsafe(b : AccelerationStructureTrianglesOpacityMicromapKHR) : VkAccelerationStructureTrianglesOpacityMicromapKHR {
+    var vk = VkAccelerationStructureTrianglesOpacityMicromapKHR()
+    vk.pNext = b.next
+    vk.indexType = b.indexType
+    vk.indexBuffer = b.indexBuffer
+    vk.indexStride = b.indexStride
+    vk.baseTriangle = b.baseTriangle
+    vk.micromap = boost_value_to_vk(b.micromap)
+    return <- vk
+}
+def vk_view_destroy(_b : AccelerationStructureTrianglesOpacityMicromapKHR) {
     pass
 }
 
@@ -18145,6 +18674,34 @@ def vk_view_create_unsafe(b : ImageViewSampleWeightCreateInfoQCOM) : VkImageView
     return <- vk
 }
 def vk_view_destroy(_b : ImageViewSampleWeightCreateInfoQCOM) {
+    pass
+}
+
+struct PhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM {
+    next : void?
+    shaderMultipleWaitQueues : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM) : VkPhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM {
+    var vk = VkPhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM()
+    vk.pNext = b.next
+    vk.shaderMultipleWaitQueues = b.shaderMultipleWaitQueues
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM) {
+    pass
+}
+
+struct PhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM {
+    next : void?
+    maxShaderWaitQueues : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM) : VkPhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM {
+    var vk = VkPhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM()
+    vk.pNext = b.next
+    vk.maxShaderWaitQueues = b.maxShaderWaitQueues
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM) {
     pass
 }
 
@@ -19866,6 +20423,24 @@ def vk_view_destroy(_b : SamplerBlockMatchWindowCreateInfoQCOM) {
     pass
 }
 
+struct PhysicalDeviceImageProcessing3FeaturesQCOM {
+    next : void?
+    imageGatherLinear : uint
+    imageGatherExtendedModes : uint
+    blockMatchExtendedClampToEdge : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceImageProcessing3FeaturesQCOM) : VkPhysicalDeviceImageProcessing3FeaturesQCOM {
+    var vk = VkPhysicalDeviceImageProcessing3FeaturesQCOM()
+    vk.pNext = b.next
+    vk.imageGatherLinear = b.imageGatherLinear
+    vk.imageGatherExtendedModes = b.imageGatherExtendedModes
+    vk.blockMatchExtendedClampToEdge = b.blockMatchExtendedClampToEdge
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceImageProcessing3FeaturesQCOM) {
+    pass
+}
+
 struct PhysicalDeviceDescriptorPoolOverallocationFeaturesNV {
     next : void?
     descriptorPoolOverallocation : uint
@@ -20651,6 +21226,20 @@ def vk_view_create_unsafe(b : CooperativeMatrixFlexibleDimensionsPropertiesNV) :
     return <- vk
 }
 def vk_view_destroy(_b : CooperativeMatrixFlexibleDimensionsPropertiesNV) {
+    pass
+}
+
+struct PhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV {
+    next : void?
+    cooperativeMatrixDecodeVector : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV) : VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV {
+    var vk = VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV()
+    vk.pNext = b.next
+    vk.cooperativeMatrixDecodeVector = b.cooperativeMatrixDecodeVector
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV) {
     pass
 }
 
@@ -22722,6 +23311,34 @@ def vk_view_destroy(_b : SubsampledImageFormatPropertiesEXT) {
     pass
 }
 
+struct PhysicalDeviceShaderSplitBarrierFeaturesEXT {
+    next : void?
+    shaderSplitBarrier : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceShaderSplitBarrierFeaturesEXT) : VkPhysicalDeviceShaderSplitBarrierFeaturesEXT {
+    var vk = VkPhysicalDeviceShaderSplitBarrierFeaturesEXT()
+    vk.pNext = b.next
+    vk.shaderSplitBarrier = b.shaderSplitBarrier
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceShaderSplitBarrierFeaturesEXT) {
+    pass
+}
+
+struct PhysicalDeviceShaderSplitBarrierPropertiesEXT {
+    next : void?
+    splitBarrierReservedSharedMemory : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceShaderSplitBarrierPropertiesEXT) : VkPhysicalDeviceShaderSplitBarrierPropertiesEXT {
+    var vk = VkPhysicalDeviceShaderSplitBarrierPropertiesEXT()
+    vk.pNext = b.next
+    vk.splitBarrierReservedSharedMemory = b.splitBarrierReservedSharedMemory
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceShaderSplitBarrierPropertiesEXT) {
+    pass
+}
+
 struct PhysicalDeviceDescriptorHeapFeaturesEXT {
     next : void?
     descriptorHeap : uint
@@ -23472,6 +24089,26 @@ def vk_view_create_unsafe(b : DataGraphPipelineOpticalFlowDispatchInfoARM) : VkD
     return <- vk
 }
 def vk_view_destroy(_b : DataGraphPipelineOpticalFlowDispatchInfoARM) {
+    pass
+}
+
+struct PhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT {
+    next : void?
+    shaderFloat4 : uint
+    shaderFloat6 : uint
+    shaderFloat8UnsignedE8M0 : uint
+    shaderMXInt8 : uint
+}
+def vk_view_create_unsafe(b : PhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT) : VkPhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT {
+    var vk = VkPhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT()
+    vk.pNext = b.next
+    vk.shaderFloat4 = b.shaderFloat4
+    vk.shaderFloat6 = b.shaderFloat6
+    vk.shaderFloat8UnsignedE8M0 = b.shaderFloat8UnsignedE8M0
+    vk.shaderMXInt8 = b.shaderMXInt8
+    return <- vk
+}
+def vk_view_destroy(_b : PhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT) {
     pass
 }
 

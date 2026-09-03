@@ -3,8 +3,9 @@
 # das MOVES a non-copyable element out of an array literal, zeroing the caller's
 # local, so a struct arriving in this list changes every such call site silently.
 
-== non-copyable boost structs: 170 ==
+== non-copyable boost structs: 173 ==
 AccelerationStructureBuildGeometryInfoKHR: pGeometries : array<AccelerationStructureGeometryKHR>
+AccelerationStructureGeometryMicromapDataKHR: pUsageCounts : array<MicromapUsageKHR>
 AccelerationStructureTrianglesOpacityMicromapEXT: pUsageCounts : array<MicromapUsageEXT>
 AttachmentSampleCountInfoAMD: pColorAttachmentSamples : array<VkSampleCountFlags>
 BindAccelerationStructureMemoryInfoNV: pDeviceIndices : array<uint>
@@ -58,6 +59,7 @@ FramebufferCreateInfo: pAttachments : array<ImageView>
 GeneratedCommandsInfoNV: pStreams : array<IndirectCommandsStreamNV>
 GeneratedCommandsShaderInfoEXT: pShaders : array<ShaderEXT>
 GetLatencyMarkerInfoNV: pTimings : array<LatencyTimingsFrameReportNV>
+GpaSampleBeginInfoAMD: pPerfCounters : array<GpaPerfCounterAMD>
 GraphicsPipelineCreateInfo: pStages : array<PipelineShaderStageCreateInfo>
 GraphicsPipelineShaderGroupsCreateInfoNV: pGroups : array<GraphicsShaderGroupCreateInfoNV>, pPipelines : array<Pipeline>
 GraphicsShaderGroupCreateInfoNV: pStages : array<PipelineShaderStageCreateInfo>
@@ -82,6 +84,7 @@ MutableDescriptorTypeListEXT: pDescriptorTypes : array<VkDescriptorType>
 OpticalFlowExecuteInfoNV: pRegions : array<Rect2D>
 PastPresentationTimingEXT: pPresentStages : array<PresentStageTimeEXT>
 PastPresentationTimingPropertiesEXT: pPresentationTimings : array<PastPresentationTimingEXT>
+PhysicalDeviceGpaPropertiesAMD: pPerfBlocks : array<GpaPerfBlockPropertiesAMD>
 PhysicalDeviceHostImageCopyProperties: pCopySrcLayouts : array<VkImageLayout>, pCopyDstLayouts : array<VkImageLayout>
 PhysicalDeviceImageDrmFormatModifierInfoEXT: pQueueFamilyIndices : array<uint>
 PhysicalDeviceLayeredApiPropertiesListKHR: pLayeredApis : array<PhysicalDeviceLayeredApiPropertiesKHR>

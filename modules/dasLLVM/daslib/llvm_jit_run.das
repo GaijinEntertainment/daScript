@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options strict_smart_pointers = false
 options stack = 4_194_304
+options no_global_variables = false
 
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_dll_utils
@@ -36,11 +37,11 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x6bul   // every string argument of an extern is substituted, not just the ones which asked (0x68: the grid formats' gemv applies signs as one masked negate per weight vector) (0x6a: aarch64 vector sin/cos ride the inline polynomial) (0x6b: tan/exp2/log2/log/pow join it bit-exactly, sinh/cosh/tanh ride the exp one)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x6cul   // aarch64 vector tan/exp2/log2/log/pow join the inline polynomial rail bit-exactly with the interpreter, sinh/cosh/tanh ride the exp one (0x6b: aarch64 vector sin/cos ride the inline polynomial; 0x6a: srem/urem for 32-bit %; 0x69: every string argument of an extern is substituted, not just the ones which asked)
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xc5c0cd9b11bd8374ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xd4b7201c5c5a5175ul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -187,6 +188,8 @@ def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_
     }
     h = (h ^ uint64(CONTEXT_OFFSET_OF_GLOBALS)) * JIT_FNV_PRIME
     h = (h ^ uint64(CONTEXT_OFFSET_OF_SHARED)) * JIT_FNV_PRIME
+    h = (h ^ uint64(CONTEXT_OFFSET_OF_STOP_FLAGS)) * JIT_FNV_PRIME
+    h = (h ^ uint64(CONTEXT_OFFSET_OF_EVAL_TOP)) * JIT_FNV_PRIME
     // full host-CPU identity when the TargetMachine bakes it - the cpuid bits below cover only the matrix-tier features; a wider box's object is an illegal instruction on a narrower one
     if (use_host_cpu) {
         let host_cpu = LLVMGetHostCPUName()
@@ -693,17 +696,21 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     return <- (objs <- objs, t_irgen = tIr, t_optemit = tOptEmit)
 }
 
+def private jit_selects(fun : FunctionPtr; rqj : bool; aot_host : bool; jit_all : bool; var ctx : Context?) : bool {
+    if (rqj) return true
+    if (!aot_host) return jit_all
+    return !is_aot_function(get_function_by_mangled_name_hash(hash(get_mangled_name(fun)), *ctx))
+}
+
 //! Run the full JIT backend for an already-compiled & simulated program: collect the functions to
 //! JIT (honoring [jit]/[no_jit] and jit_all), content-address the DLL, generate and optimize IR,
 //! and emit a .dll / .exe / .wasm per the program's jit policies. Returns true.
 [macro_function]
 def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYLE037,STYLE038 - the JIT backend driver: flat policy/flag resolution feeding one linear codegen pipeline; the phases share the module/target state and do not survive a split
-    // AOT-object host binding: compiled jit-aware + policies.aot, so linkCppAot binds each
-    // function from the statically-linked .o (SimNode_Jit) -- no in-memory codegen needed
-    // here. (Emit mode sets jit_emit_object, never aot, so it skips this.)
-    if (prog.policies.aot && !prog.policies.jit_emit_object) {
+    if (prog.policies.aot && !prog.policies.jit_emit_object && !prog.policies.jit_enabled) {
         return true
     }
+    let aot_host = prog.policies.aot && prog.policies.jit_enabled
     var funcs : array<FunctionPtr>
     var disabled : array<FunctionPtr>
     var visitorDisabled = 0
@@ -827,7 +834,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 // In object mode emit the whole used, non-noAot set (all modules +
                 // per-program generic instantiations), mirroring C++ AOT whole-program
                 // coverage; noAot functions interpret as Program::linkCppAot skips them.
-                if (fun.flags.used && (jit_all_functions || rqj) && (!emit_aot_object || !fun.flags.noAot)) {
+                if (fun.flags.used && (!emit_aot_object || !fun.flags.noAot) && jit_selects(fun, rqj, aot_host, jit_all_functions, ctx)) {
                     if (!fun.moreFlags.requestNoJit) {
                         disableJitVisitor.disable = false
                         // if DisableJitVisitor ever grows a preVisitFunction check again, it must
@@ -971,6 +978,14 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 aot_dtor = pair._1
             }
             generate_global_ctors_dtors(g_prim_t, emit_aot_object ? false : !(use_dll || gen_exe), aot_ctor, aot_dtor)
+            if (emit_aot_object) {
+                // before optimization: the folding this catches also deletes the evidence
+                let unresolved = collect_unresolved_address_globals(g_mod)
+                if (!(unresolved |> empty())) {
+                    reset_jit_globals_after_failure()
+                    panic("Internal jit error. AOT address globals left unresolved by the globinit ctor: {join(unresolved, ", ")}\n")
+                }
+            }
             if (g_jit_fast_math) {
                 apply_fast_math_to_module(g_mod)   // EXPERIMENT: stamp all FP ops fast (non-bit-exact ceiling)
             }
@@ -1057,9 +1072,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         jit_log_report(funcs, recompile_prog, opt_level, tier_known, jit_split, split_parts, log_jit_time, totalTime,
             t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, t_install, t_finalize)
     } else {
-        // a -jit run that jitted NOTHING is indistinguishable from jit working (just slower) -
-        // the whole-program interpret must be loud, not inferred from timings
-        to_log(LOG_ERROR, "LLVM JIT: 0 functions to jit ({length(disabled)} marked no_jit, {visitorDisabled} disabled by content) - the WHOLE program runs interpreted\n")
+        to_log(LOG_INFO, "LLVM JIT: 0 functions to jit ({length(disabled)} marked no_jit, {visitorDisabled} disabled by content) - the WHOLE program runs interpreted\n")
     }
     return true
 }

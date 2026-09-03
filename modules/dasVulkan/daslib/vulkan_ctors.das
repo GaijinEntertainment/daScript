@@ -113,6 +113,20 @@ def VkImageCreateInfo() : VkImageCreateInfo {
     return self
 }
 
+//! construct a VkImageCreateFlags2CreateInfoKHR with sType pre-filled
+def VkImageCreateFlags2CreateInfoKHR() : VkImageCreateFlags2CreateInfoKHR {
+    var self : VkImageCreateFlags2CreateInfoKHR
+    self.sType = VkStructureType.IMAGE_CREATE_FLAGS_2_CREATE_INFO_KHR
+    return self
+}
+
+//! construct a VkImageUsageFlags2CreateInfoKHR with sType pre-filled
+def VkImageUsageFlags2CreateInfoKHR() : VkImageUsageFlags2CreateInfoKHR {
+    var self : VkImageUsageFlags2CreateInfoKHR
+    self.sType = VkStructureType.IMAGE_USAGE_FLAGS_2_CREATE_INFO_KHR
+    return self
+}
+
 //! construct a VkImageViewCreateInfo with sType pre-filled
 def VkImageViewCreateInfo() : VkImageViewCreateInfo {
     var self : VkImageViewCreateInfo
@@ -1415,6 +1429,20 @@ def VkSharedPresentSurfaceCapabilitiesKHR() : VkSharedPresentSurfaceCapabilities
     return self
 }
 
+//! construct a VkSwapchainFlagsSurfaceCapabilitiesEXT with sType pre-filled
+def VkSwapchainFlagsSurfaceCapabilitiesEXT() : VkSwapchainFlagsSurfaceCapabilitiesEXT {
+    var self : VkSwapchainFlagsSurfaceCapabilitiesEXT
+    self.sType = VkStructureType.SWAPCHAIN_FLAGS_SURFACE_CAPABILITIES_EXT
+    return self
+}
+
+//! construct a VkSharedPresentSurfaceCapabilities2KHR with sType pre-filled
+def VkSharedPresentSurfaceCapabilities2KHR() : VkSharedPresentSurfaceCapabilities2KHR {
+    var self : VkSharedPresentSurfaceCapabilities2KHR
+    self.sType = VkStructureType.SHARED_PRESENT_SURFACE_CAPABILITIES_2_KHR
+    return self
+}
+
 //! construct a VkPhysicalDevice16BitStorageFeatures with sType pre-filled
 def VkPhysicalDevice16BitStorageFeatures() : VkPhysicalDevice16BitStorageFeatures {
     var self : VkPhysicalDevice16BitStorageFeatures
@@ -1510,6 +1538,13 @@ def VkMemoryDedicatedAllocateInfo() : VkMemoryDedicatedAllocateInfo {
 def VkImageViewUsageCreateInfo() : VkImageViewUsageCreateInfo {
     var self : VkImageViewUsageCreateInfo
     self.sType = VkStructureType.IMAGE_VIEW_USAGE_CREATE_INFO
+    return self
+}
+
+//! construct a VkImageViewUsage2CreateInfoKHR with sType pre-filled
+def VkImageViewUsage2CreateInfoKHR() : VkImageViewUsage2CreateInfoKHR {
+    var self : VkImageViewUsage2CreateInfoKHR
+    self.sType = VkStructureType.IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR
     return self
 }
 
@@ -1930,6 +1965,13 @@ def VkPhysicalDeviceFloatControlsProperties() : VkPhysicalDeviceFloatControlsPro
 def VkPhysicalDeviceHostQueryResetFeatures() : VkPhysicalDeviceHostQueryResetFeatures {
     var self : VkPhysicalDeviceHostQueryResetFeatures
     self.sType = VkStructureType.PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES
+    return self
+}
+
+//! construct a VkPhysicalDeviceElapsedTimerQueryFeaturesQCOM with sType pre-filled
+def VkPhysicalDeviceElapsedTimerQueryFeaturesQCOM() : VkPhysicalDeviceElapsedTimerQueryFeaturesQCOM {
+    var self : VkPhysicalDeviceElapsedTimerQueryFeaturesQCOM
+    self.sType = VkStructureType.PHYSICAL_DEVICE_ELAPSED_TIMER_QUERY_FEATURES_QCOM
     return self
 }
 
@@ -2668,6 +2710,13 @@ def VkImageStencilUsageCreateInfo() : VkImageStencilUsageCreateInfo {
     return self
 }
 
+//! construct a VkImageStencilUsage2CreateInfoKHR with sType pre-filled
+def VkImageStencilUsage2CreateInfoKHR() : VkImageStencilUsage2CreateInfoKHR {
+    var self : VkImageStencilUsage2CreateInfoKHR
+    self.sType = VkStructureType.IMAGE_STENCIL_USAGE_2_CREATE_INFO_KHR
+    return self
+}
+
 //! construct a VkDeviceMemoryOverallocationCreateInfoAMD with sType pre-filled
 def VkDeviceMemoryOverallocationCreateInfoAMD() : VkDeviceMemoryOverallocationCreateInfoAMD {
     var self : VkDeviceMemoryOverallocationCreateInfoAMD
@@ -3347,6 +3396,55 @@ def VkPhysicalDeviceCoherentMemoryFeaturesAMD() : VkPhysicalDeviceCoherentMemory
     return self
 }
 
+//! construct a VkPhysicalDeviceGpaFeaturesAMD with sType pre-filled
+def VkPhysicalDeviceGpaFeaturesAMD() : VkPhysicalDeviceGpaFeaturesAMD {
+    var self : VkPhysicalDeviceGpaFeaturesAMD
+    self.sType = VkStructureType.PHYSICAL_DEVICE_GPA_FEATURES_AMD
+    return self
+}
+
+//! construct a VkPhysicalDeviceGpaPropertiesAMD with sType pre-filled
+def VkPhysicalDeviceGpaPropertiesAMD() : VkPhysicalDeviceGpaPropertiesAMD {
+    var self : VkPhysicalDeviceGpaPropertiesAMD
+    self.sType = VkStructureType.PHYSICAL_DEVICE_GPA_PROPERTIES_AMD
+    return self
+}
+
+//! construct a VkPhysicalDeviceGpaProperties2AMD with sType pre-filled
+def VkPhysicalDeviceGpaProperties2AMD() : VkPhysicalDeviceGpaProperties2AMD {
+    var self : VkPhysicalDeviceGpaProperties2AMD
+    self.sType = VkStructureType.PHYSICAL_DEVICE_GPA_PROPERTIES_2_AMD
+    return self
+}
+
+//! construct a VkGpaSampleBeginInfoAMD with sType pre-filled
+def VkGpaSampleBeginInfoAMD() : VkGpaSampleBeginInfoAMD {
+    var self : VkGpaSampleBeginInfoAMD
+    self.sType = VkStructureType.GPA_SAMPLE_BEGIN_INFO_AMD
+    return self
+}
+
+//! construct a VkGpaDeviceClockModeInfoAMD with sType pre-filled
+def VkGpaDeviceClockModeInfoAMD() : VkGpaDeviceClockModeInfoAMD {
+    var self : VkGpaDeviceClockModeInfoAMD
+    self.sType = VkStructureType.GPA_DEVICE_CLOCK_MODE_INFO_AMD
+    return self
+}
+
+//! construct a VkGpaDeviceGetClockInfoAMD with sType pre-filled
+def VkGpaDeviceGetClockInfoAMD() : VkGpaDeviceGetClockInfoAMD {
+    var self : VkGpaDeviceGetClockInfoAMD
+    self.sType = VkStructureType.GPA_DEVICE_GET_CLOCK_INFO_AMD
+    return self
+}
+
+//! construct a VkGpaSessionCreateInfoAMD with sType pre-filled
+def VkGpaSessionCreateInfoAMD() : VkGpaSessionCreateInfoAMD {
+    var self : VkGpaSessionCreateInfoAMD
+    self.sType = VkStructureType.GPA_SESSION_CREATE_INFO_AMD
+    return self
+}
+
 //! construct a VkPhysicalDeviceToolProperties with sType pre-filled
 def VkPhysicalDeviceToolProperties() : VkPhysicalDeviceToolProperties {
     var self : VkPhysicalDeviceToolProperties
@@ -3519,6 +3617,13 @@ def VkPhysicalDeviceExtendedDynamicState3FeaturesEXT() : VkPhysicalDeviceExtende
 def VkPhysicalDeviceExtendedDynamicState3PropertiesEXT() : VkPhysicalDeviceExtendedDynamicState3PropertiesEXT {
     var self : VkPhysicalDeviceExtendedDynamicState3PropertiesEXT
     self.sType = VkStructureType.PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT
+    return self
+}
+
+//! construct a VkPhysicalDeviceExtendedFlagsFeaturesKHR with sType pre-filled
+def VkPhysicalDeviceExtendedFlagsFeaturesKHR() : VkPhysicalDeviceExtendedFlagsFeaturesKHR {
+    var self : VkPhysicalDeviceExtendedFlagsFeaturesKHR
+    self.sType = VkStructureType.PHYSICAL_DEVICE_EXTENDED_FLAGS_FEATURES_KHR
     return self
 }
 
@@ -4278,6 +4383,13 @@ def VkMultisampledRenderToSingleSampledInfoEXT() : VkMultisampledRenderToSingleS
     return self
 }
 
+//! construct a VkPhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT with sType pre-filled
+def VkPhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT() : VkPhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT {
+    var self : VkPhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT
+    self.sType = VkStructureType.PHYSICAL_DEVICE_MULTISAMPLED_RENDER_TO_SWAPCHAIN_FEATURES_EXT
+    return self
+}
+
 //! construct a VkPhysicalDevicePipelineProtectedAccessFeatures with sType pre-filled
 def VkPhysicalDevicePipelineProtectedAccessFeatures() : VkPhysicalDevicePipelineProtectedAccessFeatures {
     var self : VkPhysicalDevicePipelineProtectedAccessFeatures
@@ -4597,6 +4709,27 @@ def VkVideoEncodeRateControlLayerInfoKHR() : VkVideoEncodeRateControlLayerInfoKH
 def VkVideoEncodeCapabilitiesKHR() : VkVideoEncodeCapabilitiesKHR {
     var self : VkVideoEncodeCapabilitiesKHR
     self.sType = VkStructureType.VIDEO_ENCODE_CAPABILITIES_KHR
+    return self
+}
+
+//! construct a VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR with sType pre-filled
+def VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR() : VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR {
+    var self : VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR
+    self.sType = VkStructureType.PHYSICAL_DEVICE_VIDEO_ENCODE_FEEDBACK_2_FEATURES_KHR
+    return self
+}
+
+//! construct a VkVideoEncodeFeedback2CapabilitiesKHR with sType pre-filled
+def VkVideoEncodeFeedback2CapabilitiesKHR() : VkVideoEncodeFeedback2CapabilitiesKHR {
+    var self : VkVideoEncodeFeedback2CapabilitiesKHR
+    self.sType = VkStructureType.VIDEO_ENCODE_FEEDBACK_2_CAPABILITIES_KHR
+    return self
+}
+
+//! construct a VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR with sType pre-filled
+def VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR() : VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR {
+    var self : VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR
+    self.sType = VkStructureType.QUERY_POOL_VIDEO_ENCODE_PER_PARTITION_FEEDBACK_CREATE_INFO_KHR
     return self
 }
 
@@ -5013,6 +5146,13 @@ def VkFormatProperties3() : VkFormatProperties3 {
     return self
 }
 
+//! construct a VkFormatProperties4KHR with sType pre-filled
+def VkFormatProperties4KHR() : VkFormatProperties4KHR {
+    var self : VkFormatProperties4KHR
+    self.sType = VkStructureType.FORMAT_PROPERTIES_4_KHR
+    return self
+}
+
 //! construct a VkDrmFormatModifierPropertiesList2EXT with sType pre-filled
 def VkDrmFormatModifierPropertiesList2EXT() : VkDrmFormatModifierPropertiesList2EXT {
     var self : VkDrmFormatModifierPropertiesList2EXT
@@ -5181,6 +5321,20 @@ def VkDataGraphPipelineSessionNeuralStatisticsCreateInfoARM() : VkDataGraphPipel
     return self
 }
 
+//! construct a VkTensorExplicitTilingFormatPropertiesARM with sType pre-filled
+def VkTensorExplicitTilingFormatPropertiesARM() : VkTensorExplicitTilingFormatPropertiesARM {
+    var self : VkTensorExplicitTilingFormatPropertiesARM
+    self.sType = VkStructureType.TENSOR_EXPLICIT_TILING_FORMAT_PROPERTIES_ARM
+    return self
+}
+
+//! construct a VkTensorRollingBackingCreateInfoARM with sType pre-filled
+def VkTensorRollingBackingCreateInfoARM() : VkTensorRollingBackingCreateInfoARM {
+    var self : VkTensorRollingBackingCreateInfoARM
+    self.sType = VkStructureType.TENSOR_ROLLING_BACKING_CREATE_INFO_ARM
+    return self
+}
+
 //! construct a VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE with sType pre-filled
 def VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE() : VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE {
     var self : VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE
@@ -5321,6 +5475,13 @@ def VkMicromapBuildInfoEXT() : VkMicromapBuildInfoEXT {
     return self
 }
 
+//! construct a VkAccelerationStructureGeometryMicromapDataKHR with sType pre-filled
+def VkAccelerationStructureGeometryMicromapDataKHR() : VkAccelerationStructureGeometryMicromapDataKHR {
+    var self : VkAccelerationStructureGeometryMicromapDataKHR
+    self.sType = VkStructureType.ACCELERATION_STRUCTURE_GEOMETRY_MICROMAP_DATA_KHR
+    return self
+}
+
 //! construct a VkMicromapCreateInfoEXT with sType pre-filled
 def VkMicromapCreateInfoEXT() : VkMicromapCreateInfoEXT {
     var self : VkMicromapCreateInfoEXT
@@ -5363,6 +5524,13 @@ def VkMicromapBuildSizesInfoEXT() : VkMicromapBuildSizesInfoEXT {
     return self
 }
 
+//! construct a VkPhysicalDeviceOpacityMicromapFeaturesKHR with sType pre-filled
+def VkPhysicalDeviceOpacityMicromapFeaturesKHR() : VkPhysicalDeviceOpacityMicromapFeaturesKHR {
+    var self : VkPhysicalDeviceOpacityMicromapFeaturesKHR
+    self.sType = VkStructureType.PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_KHR
+    return self
+}
+
 //! construct a VkPhysicalDeviceOpacityMicromapFeaturesEXT with sType pre-filled
 def VkPhysicalDeviceOpacityMicromapFeaturesEXT() : VkPhysicalDeviceOpacityMicromapFeaturesEXT {
     var self : VkPhysicalDeviceOpacityMicromapFeaturesEXT
@@ -5370,10 +5538,24 @@ def VkPhysicalDeviceOpacityMicromapFeaturesEXT() : VkPhysicalDeviceOpacityMicrom
     return self
 }
 
+//! construct a VkPhysicalDeviceOpacityMicromapPropertiesKHR with sType pre-filled
+def VkPhysicalDeviceOpacityMicromapPropertiesKHR() : VkPhysicalDeviceOpacityMicromapPropertiesKHR {
+    var self : VkPhysicalDeviceOpacityMicromapPropertiesKHR
+    self.sType = VkStructureType.PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_KHR
+    return self
+}
+
 //! construct a VkPhysicalDeviceOpacityMicromapPropertiesEXT with sType pre-filled
 def VkPhysicalDeviceOpacityMicromapPropertiesEXT() : VkPhysicalDeviceOpacityMicromapPropertiesEXT {
     var self : VkPhysicalDeviceOpacityMicromapPropertiesEXT
     self.sType = VkStructureType.PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT
+    return self
+}
+
+//! construct a VkAccelerationStructureTrianglesOpacityMicromapKHR with sType pre-filled
+def VkAccelerationStructureTrianglesOpacityMicromapKHR() : VkAccelerationStructureTrianglesOpacityMicromapKHR {
+    var self : VkAccelerationStructureTrianglesOpacityMicromapKHR
+    self.sType = VkStructureType.ACCELERATION_STRUCTURE_TRIANGLES_OPACITY_MICROMAP_KHR
     return self
 }
 
@@ -5444,6 +5626,20 @@ def VkPhysicalDevicePipelineRobustnessProperties() : VkPhysicalDevicePipelineRob
 def VkImageViewSampleWeightCreateInfoQCOM() : VkImageViewSampleWeightCreateInfoQCOM {
     var self : VkImageViewSampleWeightCreateInfoQCOM
     self.sType = VkStructureType.IMAGE_VIEW_SAMPLE_WEIGHT_CREATE_INFO_QCOM
+    return self
+}
+
+//! construct a VkPhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM with sType pre-filled
+def VkPhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM() : VkPhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM {
+    var self : VkPhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM
+    self.sType = VkStructureType.PHYSICAL_DEVICE_SHADER_MULTIPLE_WAIT_QUEUES_FEATURES_QCOM
+    return self
+}
+
+//! construct a VkPhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM with sType pre-filled
+def VkPhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM() : VkPhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM {
+    var self : VkPhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM
+    self.sType = VkStructureType.PHYSICAL_DEVICE_SHADER_MULTIPLE_WAIT_QUEUES_PROPERTIES_QCOM
     return self
 }
 
@@ -6119,6 +6315,13 @@ def VkSamplerBlockMatchWindowCreateInfoQCOM() : VkSamplerBlockMatchWindowCreateI
     return self
 }
 
+//! construct a VkPhysicalDeviceImageProcessing3FeaturesQCOM with sType pre-filled
+def VkPhysicalDeviceImageProcessing3FeaturesQCOM() : VkPhysicalDeviceImageProcessing3FeaturesQCOM {
+    var self : VkPhysicalDeviceImageProcessing3FeaturesQCOM
+    self.sType = VkStructureType.PHYSICAL_DEVICE_IMAGE_PROCESSING_3_FEATURES_QCOM
+    return self
+}
+
 //! construct a VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV with sType pre-filled
 def VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV() : VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV {
     var self : VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV
@@ -6445,6 +6648,13 @@ def VkPhysicalDeviceCooperativeMatrix2PropertiesNV() : VkPhysicalDeviceCooperati
 def VkCooperativeMatrixFlexibleDimensionsPropertiesNV() : VkCooperativeMatrixFlexibleDimensionsPropertiesNV {
     var self : VkCooperativeMatrixFlexibleDimensionsPropertiesNV
     self.sType = VkStructureType.COOPERATIVE_MATRIX_FLEXIBLE_DIMENSIONS_PROPERTIES_NV
+    return self
+}
+
+//! construct a VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV with sType pre-filled
+def VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV() : VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV {
+    var self : VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV
+    self.sType = VkStructureType.PHYSICAL_DEVICE_COOPERATIVE_MATRIX_DECODE_VECTOR_FEATURES_NV
     return self
 }
 
@@ -7183,6 +7393,20 @@ def VkSubsampledImageFormatPropertiesEXT() : VkSubsampledImageFormatPropertiesEX
     return self
 }
 
+//! construct a VkPhysicalDeviceShaderSplitBarrierFeaturesEXT with sType pre-filled
+def VkPhysicalDeviceShaderSplitBarrierFeaturesEXT() : VkPhysicalDeviceShaderSplitBarrierFeaturesEXT {
+    var self : VkPhysicalDeviceShaderSplitBarrierFeaturesEXT
+    self.sType = VkStructureType.PHYSICAL_DEVICE_SHADER_SPLIT_BARRIER_FEATURES_EXT
+    return self
+}
+
+//! construct a VkPhysicalDeviceShaderSplitBarrierPropertiesEXT with sType pre-filled
+def VkPhysicalDeviceShaderSplitBarrierPropertiesEXT() : VkPhysicalDeviceShaderSplitBarrierPropertiesEXT {
+    var self : VkPhysicalDeviceShaderSplitBarrierPropertiesEXT
+    self.sType = VkStructureType.PHYSICAL_DEVICE_SHADER_SPLIT_BARRIER_PROPERTIES_EXT
+    return self
+}
+
 //! construct a VkPhysicalDeviceDescriptorHeapFeaturesEXT with sType pre-filled
 def VkPhysicalDeviceDescriptorHeapFeaturesEXT() : VkPhysicalDeviceDescriptorHeapFeaturesEXT {
     var self : VkPhysicalDeviceDescriptorHeapFeaturesEXT
@@ -7432,6 +7656,13 @@ def VkDataGraphPipelineOpticalFlowCreateInfoARM() : VkDataGraphPipelineOpticalFl
 def VkDataGraphPipelineOpticalFlowDispatchInfoARM() : VkDataGraphPipelineOpticalFlowDispatchInfoARM {
     var self : VkDataGraphPipelineOpticalFlowDispatchInfoARM
     self.sType = VkStructureType.DATA_GRAPH_PIPELINE_OPTICAL_FLOW_DISPATCH_INFO_ARM
+    return self
+}
+
+//! construct a VkPhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT with sType pre-filled
+def VkPhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT() : VkPhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT {
+    var self : VkPhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT
+    self.sType = VkStructureType.PHYSICAL_DEVICE_SHADER_OCP_MICROSCALING_TYPES_FEATURES_EXT
     return self
 }
 

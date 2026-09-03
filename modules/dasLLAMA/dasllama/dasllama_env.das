@@ -330,6 +330,9 @@ struct public VulkanEnv {
     @clarg_doc = "Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail."
     vk_xferq : bool = true
 
+    @clarg_doc = "Run the cm2 tiles' four-wide decode callback where the device has VK_NV_cooperative_matrix_decode_vector; 0 strips it and serves the scalar callback - the same-build A/B and the fallback probe."
+    vk_decvec : bool = true
+
     @clarg_doc = "Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path."
     vk_import : bool = true
 

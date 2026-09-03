@@ -31,4 +31,14 @@ def test_enumerate(t : T?) {
     vkGetPhysicalDeviceMemoryProperties(phys, mem)
     t |> success(mem.memoryHeapCount >= 1u, "at least one memory heap")
     t |> success(mem.memoryTypeCount >= 1u, "at least one memory type")
+
+    // the cm2 capability ladder: each rung implies the one below it, and the top rung implies
+    // the extension it names (lavapipe answers false all the way down; an NV box climbs it)
+    let cm2 = cooperative_matrix2_supported(phys)
+    let fa = cooperative_matrix2_fa_supported(phys)
+    let dv = cooperative_matrix2_decode_vector_supported(phys)
+    t |> success(!fa || cm2, "the fa trio implies coopmat2")
+    t |> success(!dv || cm2, "the four-wide decode implies coopmat2")
+    t |> success(!dv || device_extension_available(phys, "VK_NV_cooperative_matrix_decode_vector"),
+        "the four-wide decode implies its extension")
 }

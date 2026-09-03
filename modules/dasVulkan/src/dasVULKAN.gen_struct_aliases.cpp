@@ -707,6 +707,9 @@ void das_vulkan_init_struct_aliases(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_EXT_host_image_copy)
     { auto td = makeType<VkSubresourceLayout2>(lib); td->alias = "VkSubresourceLayout2EXT"; mod.addAlias(td); }
 #endif
+#if defined(VK_EXT_opacity_micromap)
+    { auto td = makeType<VkMicromapTriangleKHR>(lib); td->alias = "VkMicromapTriangleEXT"; mod.addAlias(td); }
+#endif
 #if defined(VK_EXT_pipeline_robustness)
     { auto td = makeType<VkPhysicalDevicePipelineRobustnessFeatures>(lib); td->alias = "VkPhysicalDevicePipelineRobustnessFeaturesEXT"; mod.addAlias(td); }
 #endif

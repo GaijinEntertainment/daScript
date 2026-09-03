@@ -4,6 +4,86 @@
 
 namespace das {
 
+#if defined(VK_VERSION_1_1)
+struct VkBindImagePlaneMemoryInfo_Ann : ManagedStructureAnnotation<VkBindImagePlaneMemoryInfo> {
+    VkBindImagePlaneMemoryInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkBindImagePlaneMemoryInfo", ml, "VkBindImagePlaneMemoryInfo") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkBindImagePlaneMemoryInfo_Ann * ann_VkBindImagePlaneMemoryInfo = nullptr;
+void VkBindImagePlaneMemoryInfo_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkBindImagePlaneMemoryInfo, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(planeAspect)>("planeAspect", "planeAspect");
+}
+#endif
+
+#if defined(VK_VERSION_1_1)
+struct VkImagePlaneMemoryRequirementsInfo_Ann : ManagedStructureAnnotation<VkImagePlaneMemoryRequirementsInfo> {
+    VkImagePlaneMemoryRequirementsInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImagePlaneMemoryRequirementsInfo", ml, "VkImagePlaneMemoryRequirementsInfo") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkImagePlaneMemoryRequirementsInfo_Ann * ann_VkImagePlaneMemoryRequirementsInfo = nullptr;
+void VkImagePlaneMemoryRequirementsInfo_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkImagePlaneMemoryRequirementsInfo, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(planeAspect)>("planeAspect", "planeAspect");
+}
+#endif
+
+#if defined(VK_VERSION_1_1)
+struct VkPhysicalDeviceSamplerYcbcrConversionFeatures_Ann : ManagedStructureAnnotation<VkPhysicalDeviceSamplerYcbcrConversionFeatures> {
+    VkPhysicalDeviceSamplerYcbcrConversionFeatures_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceSamplerYcbcrConversionFeatures", ml, "VkPhysicalDeviceSamplerYcbcrConversionFeatures") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceSamplerYcbcrConversionFeatures_Ann * ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures = nullptr;
+void VkPhysicalDeviceSamplerYcbcrConversionFeatures_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceSamplerYcbcrConversionFeatures, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(samplerYcbcrConversion)>("samplerYcbcrConversion", "samplerYcbcrConversion");
+}
+#endif
+
+#if defined(VK_VERSION_1_1)
+struct VkSamplerYcbcrConversionImageFormatProperties_Ann : ManagedStructureAnnotation<VkSamplerYcbcrConversionImageFormatProperties> {
+    VkSamplerYcbcrConversionImageFormatProperties_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSamplerYcbcrConversionImageFormatProperties", ml, "VkSamplerYcbcrConversionImageFormatProperties") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkSamplerYcbcrConversionImageFormatProperties_Ann * ann_VkSamplerYcbcrConversionImageFormatProperties = nullptr;
+void VkSamplerYcbcrConversionImageFormatProperties_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkSamplerYcbcrConversionImageFormatProperties, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(combinedImageSamplerDescriptorCount)>("combinedImageSamplerDescriptorCount", "combinedImageSamplerDescriptorCount");
+}
+#endif
+
+#if defined(VK_AMD_texture_gather_bias_lod)
+struct VkTextureLODGatherFormatPropertiesAMD_Ann : ManagedStructureAnnotation<VkTextureLODGatherFormatPropertiesAMD> {
+    VkTextureLODGatherFormatPropertiesAMD_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkTextureLODGatherFormatPropertiesAMD", ml, "VkTextureLODGatherFormatPropertiesAMD") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkTextureLODGatherFormatPropertiesAMD_Ann * ann_VkTextureLODGatherFormatPropertiesAMD = nullptr;
+void VkTextureLODGatherFormatPropertiesAMD_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkTextureLODGatherFormatPropertiesAMD, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(supportsTextureGatherLODBiasAMD)>("supportsTextureGatherLODBiasAMD", "supportsTextureGatherLODBiasAMD");
+}
+#endif
+
 #if defined(VK_EXT_conditional_rendering)
 struct VkConditionalRenderingBeginInfoEXT_Ann : ManagedStructureAnnotation<VkConditionalRenderingBeginInfoEXT> {
     VkConditionalRenderingBeginInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkConditionalRenderingBeginInfoEXT", ml, "VkConditionalRenderingBeginInfoEXT") {}
@@ -781,91 +861,22 @@ void VkPhysicalDeviceMaintenance10PropertiesKHR_Ann::init() {
 }
 #endif
 
-#if defined(VK_KHR_maintenance10)
-struct VkPhysicalDeviceMaintenance10FeaturesKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceMaintenance10FeaturesKHR> {
-    VkPhysicalDeviceMaintenance10FeaturesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceMaintenance10FeaturesKHR", ml, "VkPhysicalDeviceMaintenance10FeaturesKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceMaintenance10FeaturesKHR_Ann * ann_VkPhysicalDeviceMaintenance10FeaturesKHR = nullptr;
-void VkPhysicalDeviceMaintenance10FeaturesKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceMaintenance10FeaturesKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(maintenance10)>("maintenance10", "maintenance10");
-}
-#endif
-
-#if defined(VK_KHR_maintenance9)
-struct VkQueueFamilyOwnershipTransferPropertiesKHR_Ann : ManagedStructureAnnotation<VkQueueFamilyOwnershipTransferPropertiesKHR> {
-    VkQueueFamilyOwnershipTransferPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkQueueFamilyOwnershipTransferPropertiesKHR", ml, "VkQueueFamilyOwnershipTransferPropertiesKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkQueueFamilyOwnershipTransferPropertiesKHR_Ann * ann_VkQueueFamilyOwnershipTransferPropertiesKHR = nullptr;
-void VkQueueFamilyOwnershipTransferPropertiesKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkQueueFamilyOwnershipTransferPropertiesKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(optimalImageTransferToQueueFamilies)>("optimalImageTransferToQueueFamilies", "optimalImageTransferToQueueFamilies");
-}
-#endif
-
-#if defined(VK_KHR_maintenance11)
-struct VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR_Ann : ManagedStructureAnnotation<VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR> {
-    VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR", ml, "VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR_Ann * ann_VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR = nullptr;
-void VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(optimalImageTransferGranularity)>("optimalImageTransferGranularity", "optimalImageTransferGranularity");
-}
-#endif
-
-#if defined(VK_VERSION_1_4)
-struct VkRenderingAreaInfo_Ann : ManagedStructureAnnotation<VkRenderingAreaInfo> {
-    VkRenderingAreaInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkRenderingAreaInfo", ml, "VkRenderingAreaInfo") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkRenderingAreaInfo_Ann * ann_VkRenderingAreaInfo = nullptr;
-void VkRenderingAreaInfo_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkRenderingAreaInfo, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(viewMask)>("viewMask", "viewMask");
-    addField<DAS_BIND_MANAGED_FIELD(colorAttachmentCount)>("colorAttachmentCount", "colorAttachmentCount");
-    addFieldEx("pColorAttachmentFormats", "pColorAttachmentFormats", offsetof(VkRenderingAreaInfo, pColorAttachmentFormats), makeType<VkFormat *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(depthAttachmentFormat)>("depthAttachmentFormat", "depthAttachmentFormat");
-    addField<DAS_BIND_MANAGED_FIELD(stencilAttachmentFormat)>("stencilAttachmentFormat", "stencilAttachmentFormat");
-}
-#endif
-
-#if defined(VK_VERSION_1_1)
-struct VkDescriptorSetLayoutSupport_Ann : ManagedStructureAnnotation<VkDescriptorSetLayoutSupport> {
-    VkDescriptorSetLayoutSupport_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkDescriptorSetLayoutSupport", ml, "VkDescriptorSetLayoutSupport") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkDescriptorSetLayoutSupport_Ann * ann_VkDescriptorSetLayoutSupport = nullptr;
-void VkDescriptorSetLayoutSupport_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkDescriptorSetLayoutSupport, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(supported)>("supported", "supported");
-}
-#endif
-
 void das_vulkan_add_structs_7(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_VERSION_1_1)
+    ann_VkBindImagePlaneMemoryInfo = new VkBindImagePlaneMemoryInfo_Ann(lib); mod.addAnnotation(ann_VkBindImagePlaneMemoryInfo);
+#endif
+#if defined(VK_VERSION_1_1)
+    ann_VkImagePlaneMemoryRequirementsInfo = new VkImagePlaneMemoryRequirementsInfo_Ann(lib); mod.addAnnotation(ann_VkImagePlaneMemoryRequirementsInfo);
+#endif
+#if defined(VK_VERSION_1_1)
+    ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures = new VkPhysicalDeviceSamplerYcbcrConversionFeatures_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures);
+#endif
+#if defined(VK_VERSION_1_1)
+    ann_VkSamplerYcbcrConversionImageFormatProperties = new VkSamplerYcbcrConversionImageFormatProperties_Ann(lib); mod.addAnnotation(ann_VkSamplerYcbcrConversionImageFormatProperties);
+#endif
+#if defined(VK_AMD_texture_gather_bias_lod)
+    ann_VkTextureLODGatherFormatPropertiesAMD = new VkTextureLODGatherFormatPropertiesAMD_Ann(lib); mod.addAnnotation(ann_VkTextureLODGatherFormatPropertiesAMD);
+#endif
 #if defined(VK_EXT_conditional_rendering)
     ann_VkConditionalRenderingBeginInfoEXT = new VkConditionalRenderingBeginInfoEXT_Ann(lib); mod.addAnnotation(ann_VkConditionalRenderingBeginInfoEXT);
 #endif
@@ -1001,24 +1012,24 @@ void das_vulkan_add_structs_7(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_KHR_maintenance10)
     ann_VkPhysicalDeviceMaintenance10PropertiesKHR = new VkPhysicalDeviceMaintenance10PropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceMaintenance10PropertiesKHR);
 #endif
-#if defined(VK_KHR_maintenance10)
-    ann_VkPhysicalDeviceMaintenance10FeaturesKHR = new VkPhysicalDeviceMaintenance10FeaturesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceMaintenance10FeaturesKHR);
-#endif
-#if defined(VK_KHR_maintenance9)
-    ann_VkQueueFamilyOwnershipTransferPropertiesKHR = new VkQueueFamilyOwnershipTransferPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkQueueFamilyOwnershipTransferPropertiesKHR);
-#endif
-#if defined(VK_KHR_maintenance11)
-    ann_VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR = new VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR);
-#endif
-#if defined(VK_VERSION_1_4)
-    ann_VkRenderingAreaInfo = new VkRenderingAreaInfo_Ann(lib); mod.addAnnotation(ann_VkRenderingAreaInfo);
-#endif
-#if defined(VK_VERSION_1_1)
-    ann_VkDescriptorSetLayoutSupport = new VkDescriptorSetLayoutSupport_Ann(lib); mod.addAnnotation(ann_VkDescriptorSetLayoutSupport);
-#endif
 }
 
 void das_vulkan_fill_structs_7(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_VERSION_1_1)
+    ann_VkBindImagePlaneMemoryInfo->mlib = &lib; ann_VkBindImagePlaneMemoryInfo->init(); ann_VkBindImagePlaneMemoryInfo->mlib = nullptr;
+#endif
+#if defined(VK_VERSION_1_1)
+    ann_VkImagePlaneMemoryRequirementsInfo->mlib = &lib; ann_VkImagePlaneMemoryRequirementsInfo->init(); ann_VkImagePlaneMemoryRequirementsInfo->mlib = nullptr;
+#endif
+#if defined(VK_VERSION_1_1)
+    ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures->mlib = &lib; ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures->init(); ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures->mlib = nullptr;
+#endif
+#if defined(VK_VERSION_1_1)
+    ann_VkSamplerYcbcrConversionImageFormatProperties->mlib = &lib; ann_VkSamplerYcbcrConversionImageFormatProperties->init(); ann_VkSamplerYcbcrConversionImageFormatProperties->mlib = nullptr;
+#endif
+#if defined(VK_AMD_texture_gather_bias_lod)
+    ann_VkTextureLODGatherFormatPropertiesAMD->mlib = &lib; ann_VkTextureLODGatherFormatPropertiesAMD->init(); ann_VkTextureLODGatherFormatPropertiesAMD->mlib = nullptr;
+#endif
 #if defined(VK_EXT_conditional_rendering)
     ann_VkConditionalRenderingBeginInfoEXT->mlib = &lib; ann_VkConditionalRenderingBeginInfoEXT->init(); ann_VkConditionalRenderingBeginInfoEXT->mlib = nullptr;
 #endif
@@ -1153,21 +1164,6 @@ void das_vulkan_fill_structs_7(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_KHR_maintenance10)
     ann_VkPhysicalDeviceMaintenance10PropertiesKHR->mlib = &lib; ann_VkPhysicalDeviceMaintenance10PropertiesKHR->init(); ann_VkPhysicalDeviceMaintenance10PropertiesKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_maintenance10)
-    ann_VkPhysicalDeviceMaintenance10FeaturesKHR->mlib = &lib; ann_VkPhysicalDeviceMaintenance10FeaturesKHR->init(); ann_VkPhysicalDeviceMaintenance10FeaturesKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_maintenance9)
-    ann_VkQueueFamilyOwnershipTransferPropertiesKHR->mlib = &lib; ann_VkQueueFamilyOwnershipTransferPropertiesKHR->init(); ann_VkQueueFamilyOwnershipTransferPropertiesKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_maintenance11)
-    ann_VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR->mlib = &lib; ann_VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR->init(); ann_VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_4)
-    ann_VkRenderingAreaInfo->mlib = &lib; ann_VkRenderingAreaInfo->init(); ann_VkRenderingAreaInfo->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_1)
-    ann_VkDescriptorSetLayoutSupport->mlib = &lib; ann_VkDescriptorSetLayoutSupport->init(); ann_VkDescriptorSetLayoutSupport->mlib = nullptr;
 #endif
 }
 

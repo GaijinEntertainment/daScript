@@ -6,7 +6,7 @@ options no_unused_function_arguments = false
 // Shared fixtures + gates for the dasSpirv test suite. The Phase-1 `[compute_shader] square`
 // lives here so its emitted blob (`square_spv`) has a single source shared by the opcode-shape,
 // census, and spirv-val tests. validate_spirv shells out to SPIRV-Tools' spirv-val (the real
-// correctness oracle); it soft-skips when the tool is absent locally and CI enforces presence.
+// witness); it soft-skips when the tool is absent, and CI carries none - the words assertions gate.
 
 module _spirv_common shared public
 

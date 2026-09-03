@@ -4,6 +4,47 @@
 
 namespace das {
 
+#if defined(VK_EXT_present_timing)
+struct VkSwapchainCalibratedTimestampInfoEXT_Ann : ManagedStructureAnnotation<VkSwapchainCalibratedTimestampInfoEXT> {
+    VkSwapchainCalibratedTimestampInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSwapchainCalibratedTimestampInfoEXT", ml, "VkSwapchainCalibratedTimestampInfoEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkSwapchainCalibratedTimestampInfoEXT_Ann * ann_VkSwapchainCalibratedTimestampInfoEXT = nullptr;
+void VkSwapchainCalibratedTimestampInfoEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkSwapchainCalibratedTimestampInfoEXT, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(swapchain)>("swapchain", "swapchain");
+    addFieldEx("presentStage", "presentStage", offsetof(VkSwapchainCalibratedTimestampInfoEXT, presentStage), makeVkFlags_VkPresentStageFlagsEXT());
+    addField<DAS_BIND_MANAGED_FIELD(timeDomainId)>("timeDomainId", "timeDomainId");
+}
+#endif
+
+#if defined(VK_EXT_hdr_metadata)
+struct VkHdrMetadataEXT_Ann : ManagedStructureAnnotation<VkHdrMetadataEXT> {
+    VkHdrMetadataEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkHdrMetadataEXT", ml, "VkHdrMetadataEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkHdrMetadataEXT_Ann * ann_VkHdrMetadataEXT = nullptr;
+void VkHdrMetadataEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkHdrMetadataEXT, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(displayPrimaryRed)>("displayPrimaryRed", "displayPrimaryRed");
+    addField<DAS_BIND_MANAGED_FIELD(displayPrimaryGreen)>("displayPrimaryGreen", "displayPrimaryGreen");
+    addField<DAS_BIND_MANAGED_FIELD(displayPrimaryBlue)>("displayPrimaryBlue", "displayPrimaryBlue");
+    addField<DAS_BIND_MANAGED_FIELD(whitePoint)>("whitePoint", "whitePoint");
+    addField<DAS_BIND_MANAGED_FIELD(maxLuminance)>("maxLuminance", "maxLuminance");
+    addField<DAS_BIND_MANAGED_FIELD(minLuminance)>("minLuminance", "minLuminance");
+    addField<DAS_BIND_MANAGED_FIELD(maxContentLightLevel)>("maxContentLightLevel", "maxContentLightLevel");
+    addField<DAS_BIND_MANAGED_FIELD(maxFrameAverageLightLevel)>("maxFrameAverageLightLevel", "maxFrameAverageLightLevel");
+}
+#endif
+
 #if defined(VK_HUAWEI_hdr_vivid)
 struct VkHdrVividDynamicMetadataHUAWEI_Ann : ManagedStructureAnnotation<VkHdrVividDynamicMetadataHUAWEI> {
     VkHdrVividDynamicMetadataHUAWEI_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkHdrVividDynamicMetadataHUAWEI", ml, "VkHdrVividDynamicMetadataHUAWEI") {}
@@ -447,6 +488,38 @@ void VkSharedPresentSurfaceCapabilitiesKHR_Ann::init() {
 }
 #endif
 
+#if defined(VK_EXT_multisampled_render_to_swapchain)
+struct VkSwapchainFlagsSurfaceCapabilitiesEXT_Ann : ManagedStructureAnnotation<VkSwapchainFlagsSurfaceCapabilitiesEXT> {
+    VkSwapchainFlagsSurfaceCapabilitiesEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSwapchainFlagsSurfaceCapabilitiesEXT", ml, "VkSwapchainFlagsSurfaceCapabilitiesEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkSwapchainFlagsSurfaceCapabilitiesEXT_Ann * ann_VkSwapchainFlagsSurfaceCapabilitiesEXT = nullptr;
+void VkSwapchainFlagsSurfaceCapabilitiesEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkSwapchainFlagsSurfaceCapabilitiesEXT, pNext), makeType<void *>(*mlib));
+    addFieldEx("swapchainSupportedFlags", "swapchainSupportedFlags", offsetof(VkSwapchainFlagsSurfaceCapabilitiesEXT, swapchainSupportedFlags), makeVkFlags_VkSwapchainCreateFlagsKHR());
+}
+#endif
+
+#if defined(VK_KHR_extended_flags)
+struct VkSharedPresentSurfaceCapabilities2KHR_Ann : ManagedStructureAnnotation<VkSharedPresentSurfaceCapabilities2KHR> {
+    VkSharedPresentSurfaceCapabilities2KHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSharedPresentSurfaceCapabilities2KHR", ml, "VkSharedPresentSurfaceCapabilities2KHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkSharedPresentSurfaceCapabilities2KHR_Ann * ann_VkSharedPresentSurfaceCapabilities2KHR = nullptr;
+void VkSharedPresentSurfaceCapabilities2KHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkSharedPresentSurfaceCapabilities2KHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("sharedPresentSupportedUsageFlags", "sharedPresentSupportedUsageFlags", offsetof(VkSharedPresentSurfaceCapabilities2KHR, sharedPresentSupportedUsageFlags), makeVkFlags_VkImageUsageFlags2KHR());
+}
+#endif
+
 #if defined(VK_VERSION_1_1)
 struct VkPhysicalDevice16BitStorageFeatures_Ann : ManagedStructureAnnotation<VkPhysicalDevice16BitStorageFeatures> {
     VkPhysicalDevice16BitStorageFeatures_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDevice16BitStorageFeatures", ml, "VkPhysicalDevice16BitStorageFeatures") {}
@@ -680,6 +753,22 @@ void VkImageViewUsageCreateInfo_Ann::init() {
 }
 #endif
 
+#if defined(VK_KHR_extended_flags)
+struct VkImageViewUsage2CreateInfoKHR_Ann : ManagedStructureAnnotation<VkImageViewUsage2CreateInfoKHR> {
+    VkImageViewUsage2CreateInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImageViewUsage2CreateInfoKHR", ml, "VkImageViewUsage2CreateInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkImageViewUsage2CreateInfoKHR_Ann * ann_VkImageViewUsage2CreateInfoKHR = nullptr;
+void VkImageViewUsage2CreateInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkImageViewUsage2CreateInfoKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("usage", "usage", offsetof(VkImageViewUsage2CreateInfoKHR, usage), makeVkFlags_VkImageUsageFlags2KHR());
+}
+#endif
+
 #if defined(VK_EXT_image_sliced_view_of_3d)
 struct VkImageViewSlicedCreateInfoEXT_Ann : ManagedStructureAnnotation<VkImageViewSlicedCreateInfoEXT> {
     VkImageViewSlicedCreateInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImageViewSlicedCreateInfoEXT", ml, "VkImageViewSlicedCreateInfoEXT") {}
@@ -752,87 +841,13 @@ void VkSamplerYcbcrConversionCreateInfo_Ann::init() {
 }
 #endif
 
-#if defined(VK_VERSION_1_1)
-struct VkBindImagePlaneMemoryInfo_Ann : ManagedStructureAnnotation<VkBindImagePlaneMemoryInfo> {
-    VkBindImagePlaneMemoryInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkBindImagePlaneMemoryInfo", ml, "VkBindImagePlaneMemoryInfo") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkBindImagePlaneMemoryInfo_Ann * ann_VkBindImagePlaneMemoryInfo = nullptr;
-void VkBindImagePlaneMemoryInfo_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkBindImagePlaneMemoryInfo, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(planeAspect)>("planeAspect", "planeAspect");
-}
-#endif
-
-#if defined(VK_VERSION_1_1)
-struct VkImagePlaneMemoryRequirementsInfo_Ann : ManagedStructureAnnotation<VkImagePlaneMemoryRequirementsInfo> {
-    VkImagePlaneMemoryRequirementsInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImagePlaneMemoryRequirementsInfo", ml, "VkImagePlaneMemoryRequirementsInfo") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkImagePlaneMemoryRequirementsInfo_Ann * ann_VkImagePlaneMemoryRequirementsInfo = nullptr;
-void VkImagePlaneMemoryRequirementsInfo_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkImagePlaneMemoryRequirementsInfo, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(planeAspect)>("planeAspect", "planeAspect");
-}
-#endif
-
-#if defined(VK_VERSION_1_1)
-struct VkPhysicalDeviceSamplerYcbcrConversionFeatures_Ann : ManagedStructureAnnotation<VkPhysicalDeviceSamplerYcbcrConversionFeatures> {
-    VkPhysicalDeviceSamplerYcbcrConversionFeatures_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceSamplerYcbcrConversionFeatures", ml, "VkPhysicalDeviceSamplerYcbcrConversionFeatures") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceSamplerYcbcrConversionFeatures_Ann * ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures = nullptr;
-void VkPhysicalDeviceSamplerYcbcrConversionFeatures_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceSamplerYcbcrConversionFeatures, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(samplerYcbcrConversion)>("samplerYcbcrConversion", "samplerYcbcrConversion");
-}
-#endif
-
-#if defined(VK_VERSION_1_1)
-struct VkSamplerYcbcrConversionImageFormatProperties_Ann : ManagedStructureAnnotation<VkSamplerYcbcrConversionImageFormatProperties> {
-    VkSamplerYcbcrConversionImageFormatProperties_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSamplerYcbcrConversionImageFormatProperties", ml, "VkSamplerYcbcrConversionImageFormatProperties") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkSamplerYcbcrConversionImageFormatProperties_Ann * ann_VkSamplerYcbcrConversionImageFormatProperties = nullptr;
-void VkSamplerYcbcrConversionImageFormatProperties_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkSamplerYcbcrConversionImageFormatProperties, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(combinedImageSamplerDescriptorCount)>("combinedImageSamplerDescriptorCount", "combinedImageSamplerDescriptorCount");
-}
-#endif
-
-#if defined(VK_AMD_texture_gather_bias_lod)
-struct VkTextureLODGatherFormatPropertiesAMD_Ann : ManagedStructureAnnotation<VkTextureLODGatherFormatPropertiesAMD> {
-    VkTextureLODGatherFormatPropertiesAMD_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkTextureLODGatherFormatPropertiesAMD", ml, "VkTextureLODGatherFormatPropertiesAMD") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkTextureLODGatherFormatPropertiesAMD_Ann * ann_VkTextureLODGatherFormatPropertiesAMD = nullptr;
-void VkTextureLODGatherFormatPropertiesAMD_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkTextureLODGatherFormatPropertiesAMD, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(supportsTextureGatherLODBiasAMD)>("supportsTextureGatherLODBiasAMD", "supportsTextureGatherLODBiasAMD");
-}
-#endif
-
 void das_vulkan_add_structs_6(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_EXT_present_timing)
+    ann_VkSwapchainCalibratedTimestampInfoEXT = new VkSwapchainCalibratedTimestampInfoEXT_Ann(lib); mod.addAnnotation(ann_VkSwapchainCalibratedTimestampInfoEXT);
+#endif
+#if defined(VK_EXT_hdr_metadata)
+    ann_VkHdrMetadataEXT = new VkHdrMetadataEXT_Ann(lib); mod.addAnnotation(ann_VkHdrMetadataEXT);
+#endif
 #if defined(VK_HUAWEI_hdr_vivid)
     ann_VkHdrVividDynamicMetadataHUAWEI = new VkHdrVividDynamicMetadataHUAWEI_Ann(lib); mod.addAnnotation(ann_VkHdrVividDynamicMetadataHUAWEI);
 #endif
@@ -914,6 +929,12 @@ void das_vulkan_add_structs_6(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_KHR_shared_presentable_image)
     ann_VkSharedPresentSurfaceCapabilitiesKHR = new VkSharedPresentSurfaceCapabilitiesKHR_Ann(lib); mod.addAnnotation(ann_VkSharedPresentSurfaceCapabilitiesKHR);
 #endif
+#if defined(VK_EXT_multisampled_render_to_swapchain)
+    ann_VkSwapchainFlagsSurfaceCapabilitiesEXT = new VkSwapchainFlagsSurfaceCapabilitiesEXT_Ann(lib); mod.addAnnotation(ann_VkSwapchainFlagsSurfaceCapabilitiesEXT);
+#endif
+#if defined(VK_KHR_extended_flags)
+    ann_VkSharedPresentSurfaceCapabilities2KHR = new VkSharedPresentSurfaceCapabilities2KHR_Ann(lib); mod.addAnnotation(ann_VkSharedPresentSurfaceCapabilities2KHR);
+#endif
 #if defined(VK_VERSION_1_1)
     ann_VkPhysicalDevice16BitStorageFeatures = new VkPhysicalDevice16BitStorageFeatures_Ann(lib); mod.addAnnotation(ann_VkPhysicalDevice16BitStorageFeatures);
 #endif
@@ -956,6 +977,9 @@ void das_vulkan_add_structs_6(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_VERSION_1_1)
     ann_VkImageViewUsageCreateInfo = new VkImageViewUsageCreateInfo_Ann(lib); mod.addAnnotation(ann_VkImageViewUsageCreateInfo);
 #endif
+#if defined(VK_KHR_extended_flags)
+    ann_VkImageViewUsage2CreateInfoKHR = new VkImageViewUsage2CreateInfoKHR_Ann(lib); mod.addAnnotation(ann_VkImageViewUsage2CreateInfoKHR);
+#endif
 #if defined(VK_EXT_image_sliced_view_of_3d)
     ann_VkImageViewSlicedCreateInfoEXT = new VkImageViewSlicedCreateInfoEXT_Ann(lib); mod.addAnnotation(ann_VkImageViewSlicedCreateInfoEXT);
 #endif
@@ -968,24 +992,15 @@ void das_vulkan_add_structs_6(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_VERSION_1_1)
     ann_VkSamplerYcbcrConversionCreateInfo = new VkSamplerYcbcrConversionCreateInfo_Ann(lib); mod.addAnnotation(ann_VkSamplerYcbcrConversionCreateInfo);
 #endif
-#if defined(VK_VERSION_1_1)
-    ann_VkBindImagePlaneMemoryInfo = new VkBindImagePlaneMemoryInfo_Ann(lib); mod.addAnnotation(ann_VkBindImagePlaneMemoryInfo);
-#endif
-#if defined(VK_VERSION_1_1)
-    ann_VkImagePlaneMemoryRequirementsInfo = new VkImagePlaneMemoryRequirementsInfo_Ann(lib); mod.addAnnotation(ann_VkImagePlaneMemoryRequirementsInfo);
-#endif
-#if defined(VK_VERSION_1_1)
-    ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures = new VkPhysicalDeviceSamplerYcbcrConversionFeatures_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures);
-#endif
-#if defined(VK_VERSION_1_1)
-    ann_VkSamplerYcbcrConversionImageFormatProperties = new VkSamplerYcbcrConversionImageFormatProperties_Ann(lib); mod.addAnnotation(ann_VkSamplerYcbcrConversionImageFormatProperties);
-#endif
-#if defined(VK_AMD_texture_gather_bias_lod)
-    ann_VkTextureLODGatherFormatPropertiesAMD = new VkTextureLODGatherFormatPropertiesAMD_Ann(lib); mod.addAnnotation(ann_VkTextureLODGatherFormatPropertiesAMD);
-#endif
 }
 
 void das_vulkan_fill_structs_6(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_EXT_present_timing)
+    ann_VkSwapchainCalibratedTimestampInfoEXT->mlib = &lib; ann_VkSwapchainCalibratedTimestampInfoEXT->init(); ann_VkSwapchainCalibratedTimestampInfoEXT->mlib = nullptr;
+#endif
+#if defined(VK_EXT_hdr_metadata)
+    ann_VkHdrMetadataEXT->mlib = &lib; ann_VkHdrMetadataEXT->init(); ann_VkHdrMetadataEXT->mlib = nullptr;
+#endif
 #if defined(VK_HUAWEI_hdr_vivid)
     ann_VkHdrVividDynamicMetadataHUAWEI->mlib = &lib; ann_VkHdrVividDynamicMetadataHUAWEI->init(); ann_VkHdrVividDynamicMetadataHUAWEI->mlib = nullptr;
 #endif
@@ -1067,6 +1082,12 @@ void das_vulkan_fill_structs_6(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_KHR_shared_presentable_image)
     ann_VkSharedPresentSurfaceCapabilitiesKHR->mlib = &lib; ann_VkSharedPresentSurfaceCapabilitiesKHR->init(); ann_VkSharedPresentSurfaceCapabilitiesKHR->mlib = nullptr;
 #endif
+#if defined(VK_EXT_multisampled_render_to_swapchain)
+    ann_VkSwapchainFlagsSurfaceCapabilitiesEXT->mlib = &lib; ann_VkSwapchainFlagsSurfaceCapabilitiesEXT->init(); ann_VkSwapchainFlagsSurfaceCapabilitiesEXT->mlib = nullptr;
+#endif
+#if defined(VK_KHR_extended_flags)
+    ann_VkSharedPresentSurfaceCapabilities2KHR->mlib = &lib; ann_VkSharedPresentSurfaceCapabilities2KHR->init(); ann_VkSharedPresentSurfaceCapabilities2KHR->mlib = nullptr;
+#endif
 #if defined(VK_VERSION_1_1)
     ann_VkPhysicalDevice16BitStorageFeatures->mlib = &lib; ann_VkPhysicalDevice16BitStorageFeatures->init(); ann_VkPhysicalDevice16BitStorageFeatures->mlib = nullptr;
 #endif
@@ -1109,6 +1130,9 @@ void das_vulkan_fill_structs_6(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_VERSION_1_1)
     ann_VkImageViewUsageCreateInfo->mlib = &lib; ann_VkImageViewUsageCreateInfo->init(); ann_VkImageViewUsageCreateInfo->mlib = nullptr;
 #endif
+#if defined(VK_KHR_extended_flags)
+    ann_VkImageViewUsage2CreateInfoKHR->mlib = &lib; ann_VkImageViewUsage2CreateInfoKHR->init(); ann_VkImageViewUsage2CreateInfoKHR->mlib = nullptr;
+#endif
 #if defined(VK_EXT_image_sliced_view_of_3d)
     ann_VkImageViewSlicedCreateInfoEXT->mlib = &lib; ann_VkImageViewSlicedCreateInfoEXT->init(); ann_VkImageViewSlicedCreateInfoEXT->mlib = nullptr;
 #endif
@@ -1120,21 +1144,6 @@ void das_vulkan_fill_structs_6(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_VERSION_1_1)
     ann_VkSamplerYcbcrConversionCreateInfo->mlib = &lib; ann_VkSamplerYcbcrConversionCreateInfo->init(); ann_VkSamplerYcbcrConversionCreateInfo->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_1)
-    ann_VkBindImagePlaneMemoryInfo->mlib = &lib; ann_VkBindImagePlaneMemoryInfo->init(); ann_VkBindImagePlaneMemoryInfo->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_1)
-    ann_VkImagePlaneMemoryRequirementsInfo->mlib = &lib; ann_VkImagePlaneMemoryRequirementsInfo->init(); ann_VkImagePlaneMemoryRequirementsInfo->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_1)
-    ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures->mlib = &lib; ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures->init(); ann_VkPhysicalDeviceSamplerYcbcrConversionFeatures->mlib = nullptr;
-#endif
-#if defined(VK_VERSION_1_1)
-    ann_VkSamplerYcbcrConversionImageFormatProperties->mlib = &lib; ann_VkSamplerYcbcrConversionImageFormatProperties->init(); ann_VkSamplerYcbcrConversionImageFormatProperties->mlib = nullptr;
-#endif
-#if defined(VK_AMD_texture_gather_bias_lod)
-    ann_VkTextureLODGatherFormatPropertiesAMD->mlib = &lib; ann_VkTextureLODGatherFormatPropertiesAMD->init(); ann_VkTextureLODGatherFormatPropertiesAMD->mlib = nullptr;
 #endif
 }
 

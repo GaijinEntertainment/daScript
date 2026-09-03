@@ -18,6 +18,10 @@ DAS_BIND_ENUM_CAST(VkAccelerationStructureMemoryRequirementsTypeNV)
 DAS_BASE_BIND_ENUM_FACTORY(VkAccelerationStructureMotionInstanceTypeNV, "VkAccelerationStructureMotionInstanceTypeNV")
 DAS_BIND_ENUM_CAST(VkAccelerationStructureMotionInstanceTypeNV)
 #endif
+#if defined(VK_KHR_opacity_micromap)
+DAS_BASE_BIND_ENUM_FACTORY(VkAccelerationStructureSerializedBlockTypeKHR, "VkAccelerationStructureSerializedBlockTypeKHR")
+DAS_BIND_ENUM_CAST(VkAccelerationStructureSerializedBlockTypeKHR)
+#endif
 #if defined(VK_KHR_acceleration_structure)
 DAS_BASE_BIND_ENUM_FACTORY(VkAccelerationStructureTypeKHR, "VkAccelerationStructureTypeKHR")
 DAS_BIND_ENUM_CAST(VkAccelerationStructureTypeKHR)
@@ -274,6 +278,18 @@ DAS_BIND_ENUM_CAST(VkFullScreenExclusiveEXT)
 DAS_BASE_BIND_ENUM_FACTORY(VkGeometryTypeKHR, "VkGeometryTypeKHR")
 DAS_BIND_ENUM_CAST(VkGeometryTypeKHR)
 #endif
+#if defined(VK_AMD_gpa_interface)
+DAS_BASE_BIND_ENUM_FACTORY(VkGpaDeviceClockModeAMD, "VkGpaDeviceClockModeAMD")
+DAS_BIND_ENUM_CAST(VkGpaDeviceClockModeAMD)
+#endif
+#if defined(VK_AMD_gpa_interface)
+DAS_BASE_BIND_ENUM_FACTORY(VkGpaPerfBlockAMD, "VkGpaPerfBlockAMD")
+DAS_BIND_ENUM_CAST(VkGpaPerfBlockAMD)
+#endif
+#if defined(VK_AMD_gpa_interface)
+DAS_BASE_BIND_ENUM_FACTORY(VkGpaSampleTypeAMD, "VkGpaSampleTypeAMD")
+DAS_BIND_ENUM_CAST(VkGpaSampleTypeAMD)
+#endif
 #if defined(VK_VERSION_1_0)
 DAS_BASE_BIND_ENUM_FACTORY(VkImageLayout, "VkImageLayout")
 DAS_BIND_ENUM_CAST(VkImageLayout)
@@ -346,13 +362,13 @@ DAS_BIND_ENUM_CAST(VkNeuralAcceleratorStatisticsModeARM)
 DAS_BASE_BIND_ENUM_FACTORY(VkObjectType, "VkObjectType")
 DAS_BIND_ENUM_CAST(VkObjectType)
 #endif
-#if defined(VK_EXT_opacity_micromap)
-DAS_BASE_BIND_ENUM_FACTORY(VkOpacityMicromapFormatEXT, "VkOpacityMicromapFormatEXT")
-DAS_BIND_ENUM_CAST(VkOpacityMicromapFormatEXT)
+#if defined(VK_KHR_opacity_micromap)
+DAS_BASE_BIND_ENUM_FACTORY(VkOpacityMicromapFormatKHR, "VkOpacityMicromapFormatKHR")
+DAS_BIND_ENUM_CAST(VkOpacityMicromapFormatKHR)
 #endif
-#if defined(VK_EXT_opacity_micromap)
-DAS_BASE_BIND_ENUM_FACTORY(VkOpacityMicromapSpecialIndexEXT, "VkOpacityMicromapSpecialIndexEXT")
-DAS_BIND_ENUM_CAST(VkOpacityMicromapSpecialIndexEXT)
+#if defined(VK_KHR_opacity_micromap)
+DAS_BASE_BIND_ENUM_FACTORY(VkOpacityMicromapSpecialIndexKHR, "VkOpacityMicromapSpecialIndexKHR")
+DAS_BIND_ENUM_CAST(VkOpacityMicromapSpecialIndexKHR)
 #endif
 #if defined(VK_NV_optical_flow)
 DAS_BASE_BIND_ENUM_FACTORY(VkOpticalFlowPerformanceLevelNV, "VkOpticalFlowPerformanceLevelNV")
@@ -1259,6 +1275,9 @@ namespace das { TypeDeclPtr makeVkFlags_VkAccelerationStructureMotionInstanceFla
 #if defined(VK_VERSION_1_3)
 namespace das { TypeDeclPtr makeVkFlags_VkFormatFeatureFlags2(); }
 #endif
+#if defined(VK_KHR_extended_flags)
+namespace das { TypeDeclPtr makeVkFlags_VkFormatFeatureFlags4KHR(); }
+#endif
 #if defined(VK_VERSION_1_3)
 namespace das { TypeDeclPtr makeVkFlags_VkRenderingFlags(); }
 namespace das {
@@ -1325,6 +1344,12 @@ namespace das { TypeDeclPtr makeVkFlags_VkPipelineCreateFlags2(); }
 #if defined(VK_VERSION_1_4)
 namespace das { TypeDeclPtr makeVkFlags_VkBufferUsageFlags2(); }
 #endif
+#if defined(VK_KHR_extended_flags)
+namespace das { TypeDeclPtr makeVkFlags_VkImageUsageFlags2KHR(); }
+#endif
+#if defined(VK_KHR_extended_flags)
+namespace das { TypeDeclPtr makeVkFlags_VkImageCreateFlags2KHR(); }
+#endif
 #if defined(VK_KHR_copy_memory_indirect)
 namespace das { TypeDeclPtr makeVkFlags_VkAddressCopyFlagsKHR(); }
 namespace das {
@@ -1384,6 +1409,21 @@ namespace das {
     };
     template <> struct cast<VkSpirvResourceTypeFlagBitsEXT> : cast_enum<VkSpirvResourceTypeFlagBitsEXT> {};
 }
+#endif
+#if defined(VK_AMD_gpa_interface)
+namespace das { TypeDeclPtr makeVkFlags_VkGpaSqShaderStageFlagsAMD(); }
+namespace das {
+    template <> struct typeFactory<VkGpaSqShaderStageFlagBitsAMD> {
+        static TypeDeclPtr make(const ModuleLibrary &) { return makeVkFlags_VkGpaSqShaderStageFlagsAMD(); }
+    };
+    template <> struct cast<VkGpaSqShaderStageFlagBitsAMD> : cast_enum<VkGpaSqShaderStageFlagBitsAMD> {};
+}
+#endif
+#if defined(VK_AMD_gpa_interface)
+namespace das { TypeDeclPtr makeVkFlags_VkGpaPerfBlockPropertiesFlagsAMD(); }
+#endif
+#if defined(VK_AMD_gpa_interface)
+namespace das { TypeDeclPtr makeVkFlags_VkPhysicalDeviceGpaPropertiesFlagsAMD(); }
 #endif
 #if defined(VK_KHR_device_address_commands)
 namespace das { TypeDeclPtr makeVkFlags_VkAddressCommandFlagsKHR(); }
@@ -2066,6 +2106,15 @@ namespace das {
     template <> struct cast<VkVideoEncodeFeedbackFlagBitsKHR> : cast_enum<VkVideoEncodeFeedbackFlagBitsKHR> {};
 }
 #endif
+#if defined(VK_KHR_video_encode_feedback2)
+namespace das { TypeDeclPtr makeVkFlags_VkVideoEncodePerPartitionFeedbackFlagsKHR(); }
+namespace das {
+    template <> struct typeFactory<VkVideoEncodePerPartitionFeedbackFlagBitsKHR> {
+        static TypeDeclPtr make(const ModuleLibrary &) { return makeVkFlags_VkVideoEncodePerPartitionFeedbackFlagsKHR(); }
+    };
+    template <> struct cast<VkVideoEncodePerPartitionFeedbackFlagBitsKHR> : cast_enum<VkVideoEncodePerPartitionFeedbackFlagBitsKHR> {};
+}
+#endif
 #if defined(VK_KHR_video_encode_queue)
 namespace das { TypeDeclPtr makeVkFlags_VkVideoEncodeRateControlFlagsKHR(); }
 #endif
@@ -2354,6 +2403,9 @@ MAKE_TYPE_FACTORY(VkDataGraphPipelineSessionARM_T, VkDataGraphPipelineSessionARM
 #if defined(VK_ARM_shader_instrumentation)
 MAKE_TYPE_FACTORY(VkShaderInstrumentationARM_T, VkShaderInstrumentationARM_T)
 #endif
+#if defined(VK_AMD_gpa_interface)
+MAKE_TYPE_FACTORY(VkGpaSessionAMD_T, VkGpaSessionAMD_T)
+#endif
 #if defined(VK_KHR_display)
 MAKE_TYPE_FACTORY(VkDisplayKHR_T, VkDisplayKHR_T)
 #endif
@@ -2509,6 +2561,12 @@ MAKE_TYPE_FACTORY(VkImageMemoryBarrier, VkImageMemoryBarrier)
 #endif
 #if defined(VK_VERSION_1_0)
 MAKE_TYPE_FACTORY(VkImageCreateInfo, VkImageCreateInfo)
+#endif
+#if defined(VK_KHR_extended_flags)
+MAKE_TYPE_FACTORY(VkImageCreateFlags2CreateInfoKHR, VkImageCreateFlags2CreateInfoKHR)
+#endif
+#if defined(VK_KHR_extended_flags)
+MAKE_TYPE_FACTORY(VkImageUsageFlags2CreateInfoKHR, VkImageUsageFlags2CreateInfoKHR)
 #endif
 #if defined(VK_VERSION_1_0)
 MAKE_TYPE_FACTORY(VkSubresourceLayout, VkSubresourceLayout)
@@ -3362,6 +3420,12 @@ MAKE_TYPE_FACTORY(VkDisplayPlaneCapabilities2KHR, VkDisplayPlaneCapabilities2KHR
 #if defined(VK_KHR_shared_presentable_image)
 MAKE_TYPE_FACTORY(VkSharedPresentSurfaceCapabilitiesKHR, VkSharedPresentSurfaceCapabilitiesKHR)
 #endif
+#if defined(VK_EXT_multisampled_render_to_swapchain)
+MAKE_TYPE_FACTORY(VkSwapchainFlagsSurfaceCapabilitiesEXT, VkSwapchainFlagsSurfaceCapabilitiesEXT)
+#endif
+#if defined(VK_KHR_extended_flags)
+MAKE_TYPE_FACTORY(VkSharedPresentSurfaceCapabilities2KHR, VkSharedPresentSurfaceCapabilities2KHR)
+#endif
 #if defined(VK_VERSION_1_1)
 MAKE_TYPE_FACTORY(VkPhysicalDevice16BitStorageFeatures, VkPhysicalDevice16BitStorageFeatures)
 #endif
@@ -3403,6 +3467,9 @@ MAKE_TYPE_FACTORY(VkMemoryDedicatedAllocateInfo, VkMemoryDedicatedAllocateInfo)
 #endif
 #if defined(VK_VERSION_1_1)
 MAKE_TYPE_FACTORY(VkImageViewUsageCreateInfo, VkImageViewUsageCreateInfo)
+#endif
+#if defined(VK_KHR_extended_flags)
+MAKE_TYPE_FACTORY(VkImageViewUsage2CreateInfoKHR, VkImageViewUsage2CreateInfoKHR)
 #endif
 #if defined(VK_EXT_image_sliced_view_of_3d)
 MAKE_TYPE_FACTORY(VkImageViewSlicedCreateInfoEXT, VkImageViewSlicedCreateInfoEXT)
@@ -3598,6 +3665,9 @@ MAKE_TYPE_FACTORY(VkShaderResourceUsageAMD, VkShaderResourceUsageAMD)
 #endif
 #if defined(VK_AMD_shader_info)
 MAKE_TYPE_FACTORY(VkShaderStatisticsInfoAMD, VkShaderStatisticsInfoAMD)
+#endif
+#if defined(VK_QCOM_elapsed_timer_query)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceElapsedTimerQueryFeaturesQCOM, VkPhysicalDeviceElapsedTimerQueryFeaturesQCOM)
 #endif
 #if defined(VK_VERSION_1_4)
 MAKE_TYPE_FACTORY(VkDeviceQueueGlobalPriorityCreateInfo, VkDeviceQueueGlobalPriorityCreateInfo)
@@ -3947,6 +4017,9 @@ MAKE_TYPE_FACTORY(VkImageDrmFormatModifierPropertiesEXT, VkImageDrmFormatModifie
 #if defined(VK_VERSION_1_2)
 MAKE_TYPE_FACTORY(VkImageStencilUsageCreateInfo, VkImageStencilUsageCreateInfo)
 #endif
+#if defined(VK_KHR_extended_flags)
+MAKE_TYPE_FACTORY(VkImageStencilUsage2CreateInfoKHR, VkImageStencilUsage2CreateInfoKHR)
+#endif
 #if defined(VK_AMD_memory_overallocation_behavior)
 MAKE_TYPE_FACTORY(VkDeviceMemoryOverallocationCreateInfoAMD, VkDeviceMemoryOverallocationCreateInfoAMD)
 #endif
@@ -4262,6 +4335,33 @@ MAKE_TYPE_FACTORY(VkPipelineCompilerControlCreateInfoAMD, VkPipelineCompilerCont
 #if defined(VK_AMD_device_coherent_memory)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceCoherentMemoryFeaturesAMD, VkPhysicalDeviceCoherentMemoryFeaturesAMD)
 #endif
+#if defined(VK_AMD_gpa_interface)
+MAKE_TYPE_FACTORY(VkGpaPerfBlockPropertiesAMD, VkGpaPerfBlockPropertiesAMD)
+#endif
+#if defined(VK_AMD_gpa_interface)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceGpaFeaturesAMD, VkPhysicalDeviceGpaFeaturesAMD)
+#endif
+#if defined(VK_AMD_gpa_interface)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceGpaPropertiesAMD, VkPhysicalDeviceGpaPropertiesAMD)
+#endif
+#if defined(VK_AMD_gpa_interface)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceGpaProperties2AMD, VkPhysicalDeviceGpaProperties2AMD)
+#endif
+#if defined(VK_AMD_gpa_interface)
+MAKE_TYPE_FACTORY(VkGpaPerfCounterAMD, VkGpaPerfCounterAMD)
+#endif
+#if defined(VK_AMD_gpa_interface)
+MAKE_TYPE_FACTORY(VkGpaSampleBeginInfoAMD, VkGpaSampleBeginInfoAMD)
+#endif
+#if defined(VK_AMD_gpa_interface)
+MAKE_TYPE_FACTORY(VkGpaDeviceClockModeInfoAMD, VkGpaDeviceClockModeInfoAMD)
+#endif
+#if defined(VK_AMD_gpa_interface)
+MAKE_TYPE_FACTORY(VkGpaDeviceGetClockInfoAMD, VkGpaDeviceGetClockInfoAMD)
+#endif
+#if defined(VK_AMD_gpa_interface)
+MAKE_TYPE_FACTORY(VkGpaSessionCreateInfoAMD, VkGpaSessionCreateInfoAMD)
+#endif
 #if defined(VK_VERSION_1_3)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceToolProperties, VkPhysicalDeviceToolProperties)
 #endif
@@ -4354,6 +4454,9 @@ MAKE_TYPE_FACTORY(VkPhysicalDeviceExtendedDynamicState3FeaturesEXT, VkPhysicalDe
 #endif
 #if defined(VK_EXT_extended_dynamic_state3)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceExtendedDynamicState3PropertiesEXT, VkPhysicalDeviceExtendedDynamicState3PropertiesEXT)
+#endif
+#if defined(VK_KHR_extended_flags)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceExtendedFlagsFeaturesKHR, VkPhysicalDeviceExtendedFlagsFeaturesKHR)
 #endif
 #if defined(VK_EXT_extended_dynamic_state3)
 MAKE_TYPE_FACTORY(VkColorBlendEquationEXT, VkColorBlendEquationEXT)
@@ -4727,6 +4830,9 @@ MAKE_TYPE_FACTORY(VkSubpassResolvePerformanceQueryEXT, VkSubpassResolvePerforman
 #if defined(VK_EXT_multisampled_render_to_single_sampled)
 MAKE_TYPE_FACTORY(VkMultisampledRenderToSingleSampledInfoEXT, VkMultisampledRenderToSingleSampledInfoEXT)
 #endif
+#if defined(VK_EXT_multisampled_render_to_swapchain)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT, VkPhysicalDeviceMultisampledRenderToSwapchainFeaturesEXT)
+#endif
 #if defined(VK_VERSION_1_4)
 MAKE_TYPE_FACTORY(VkPhysicalDevicePipelineProtectedAccessFeatures, VkPhysicalDevicePipelineProtectedAccessFeatures)
 #endif
@@ -4864,6 +4970,15 @@ MAKE_TYPE_FACTORY(VkVideoEncodeRateControlLayerInfoKHR, VkVideoEncodeRateControl
 #endif
 #if defined(VK_KHR_video_encode_queue)
 MAKE_TYPE_FACTORY(VkVideoEncodeCapabilitiesKHR, VkVideoEncodeCapabilitiesKHR)
+#endif
+#if defined(VK_KHR_video_encode_feedback2)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR, VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR)
+#endif
+#if defined(VK_KHR_video_encode_feedback2)
+MAKE_TYPE_FACTORY(VkVideoEncodeFeedback2CapabilitiesKHR, VkVideoEncodeFeedback2CapabilitiesKHR)
+#endif
+#if defined(VK_KHR_video_encode_feedback2)
+MAKE_TYPE_FACTORY(VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR, VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR)
 #endif
 #if defined(VK_KHR_video_encode_h264)
 MAKE_TYPE_FACTORY(VkVideoEncodeH264QualityLevelPropertiesKHR, VkVideoEncodeH264QualityLevelPropertiesKHR)
@@ -5066,6 +5181,9 @@ MAKE_TYPE_FACTORY(VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT, VkPhysicalDeviceRG
 #if defined(VK_VERSION_1_3)
 MAKE_TYPE_FACTORY(VkFormatProperties3, VkFormatProperties3)
 #endif
+#if defined(VK_KHR_extended_flags)
+MAKE_TYPE_FACTORY(VkFormatProperties4KHR, VkFormatProperties4KHR)
+#endif
 #if defined(VK_EXT_image_drm_format_modifier)
 MAKE_TYPE_FACTORY(VkDrmFormatModifierPropertiesList2EXT, VkDrmFormatModifierPropertiesList2EXT)
 #endif
@@ -5141,6 +5259,12 @@ MAKE_TYPE_FACTORY(VkDataGraphPipelineNeuralStatisticsCreateInfoARM, VkDataGraphP
 #if defined(VK_ARM_data_graph_neural_accelerator_statistics)
 MAKE_TYPE_FACTORY(VkDataGraphPipelineSessionNeuralStatisticsCreateInfoARM, VkDataGraphPipelineSessionNeuralStatisticsCreateInfoARM)
 #endif
+#if defined(VK_ARM_tensor_controls)
+MAKE_TYPE_FACTORY(VkTensorExplicitTilingFormatPropertiesARM, VkTensorExplicitTilingFormatPropertiesARM)
+#endif
+#if defined(VK_ARM_tensor_controls)
+MAKE_TYPE_FACTORY(VkTensorRollingBackingCreateInfoARM, VkTensorRollingBackingCreateInfoARM)
+#endif
 #if defined(VK_VALVE_descriptor_set_host_mapping)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE, VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE)
 #endif
@@ -5207,6 +5331,9 @@ MAKE_TYPE_FACTORY(VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT, VkPhysicalDev
 #if defined(VK_EXT_opacity_micromap)
 MAKE_TYPE_FACTORY(VkMicromapBuildInfoEXT, VkMicromapBuildInfoEXT)
 #endif
+#if defined(VK_KHR_opacity_micromap)
+MAKE_TYPE_FACTORY(VkAccelerationStructureGeometryMicromapDataKHR, VkAccelerationStructureGeometryMicromapDataKHR)
+#endif
 #if defined(VK_EXT_opacity_micromap)
 MAKE_TYPE_FACTORY(VkMicromapCreateInfoEXT, VkMicromapCreateInfoEXT)
 #endif
@@ -5225,17 +5352,29 @@ MAKE_TYPE_FACTORY(VkCopyMemoryToMicromapInfoEXT, VkCopyMemoryToMicromapInfoEXT)
 #if defined(VK_EXT_opacity_micromap)
 MAKE_TYPE_FACTORY(VkMicromapBuildSizesInfoEXT, VkMicromapBuildSizesInfoEXT)
 #endif
+#if defined(VK_KHR_opacity_micromap)
+MAKE_TYPE_FACTORY(VkMicromapUsageKHR, VkMicromapUsageKHR)
+#endif
 #if defined(VK_EXT_opacity_micromap)
 MAKE_TYPE_FACTORY(VkMicromapUsageEXT, VkMicromapUsageEXT)
 #endif
-#if defined(VK_EXT_opacity_micromap)
-MAKE_TYPE_FACTORY(VkMicromapTriangleEXT, VkMicromapTriangleEXT)
+#if defined(VK_KHR_opacity_micromap)
+MAKE_TYPE_FACTORY(VkMicromapTriangleKHR, VkMicromapTriangleKHR)
+#endif
+#if defined(VK_KHR_opacity_micromap)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceOpacityMicromapFeaturesKHR, VkPhysicalDeviceOpacityMicromapFeaturesKHR)
 #endif
 #if defined(VK_EXT_opacity_micromap)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceOpacityMicromapFeaturesEXT, VkPhysicalDeviceOpacityMicromapFeaturesEXT)
 #endif
+#if defined(VK_KHR_opacity_micromap)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceOpacityMicromapPropertiesKHR, VkPhysicalDeviceOpacityMicromapPropertiesKHR)
+#endif
 #if defined(VK_EXT_opacity_micromap)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceOpacityMicromapPropertiesEXT, VkPhysicalDeviceOpacityMicromapPropertiesEXT)
+#endif
+#if defined(VK_KHR_opacity_micromap)
+MAKE_TYPE_FACTORY(VkAccelerationStructureTrianglesOpacityMicromapKHR, VkAccelerationStructureTrianglesOpacityMicromapKHR)
 #endif
 #if defined(VK_EXT_opacity_micromap)
 MAKE_TYPE_FACTORY(VkAccelerationStructureTrianglesOpacityMicromapEXT, VkAccelerationStructureTrianglesOpacityMicromapEXT)
@@ -5302,6 +5441,12 @@ MAKE_TYPE_FACTORY(VkPhysicalDevicePipelineRobustnessProperties, VkPhysicalDevice
 #endif
 #if defined(VK_QCOM_image_processing)
 MAKE_TYPE_FACTORY(VkImageViewSampleWeightCreateInfoQCOM, VkImageViewSampleWeightCreateInfoQCOM)
+#endif
+#if defined(VK_QCOM_shader_multiple_wait_queues)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM, VkPhysicalDeviceShaderMultipleWaitQueuesFeaturesQCOM)
+#endif
+#if defined(VK_QCOM_shader_multiple_wait_queues)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM, VkPhysicalDeviceShaderMultipleWaitQueuesPropertiesQCOM)
 #endif
 #if defined(VK_QCOM_image_processing)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceImageProcessingFeaturesQCOM, VkPhysicalDeviceImageProcessingFeaturesQCOM)
@@ -5606,6 +5751,9 @@ MAKE_TYPE_FACTORY(VkPhysicalDeviceImageProcessing2PropertiesQCOM, VkPhysicalDevi
 #if defined(VK_QCOM_image_processing2)
 MAKE_TYPE_FACTORY(VkSamplerBlockMatchWindowCreateInfoQCOM, VkSamplerBlockMatchWindowCreateInfoQCOM)
 #endif
+#if defined(VK_QCOM_image_processing3)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceImageProcessing3FeaturesQCOM, VkPhysicalDeviceImageProcessing3FeaturesQCOM)
+#endif
 #if defined(VK_NV_descriptor_pool_overallocation)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV, VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV)
 #endif
@@ -5749,6 +5897,9 @@ MAKE_TYPE_FACTORY(VkPhysicalDeviceCooperativeMatrix2PropertiesNV, VkPhysicalDevi
 #endif
 #if defined(VK_NV_cooperative_matrix2)
 MAKE_TYPE_FACTORY(VkCooperativeMatrixFlexibleDimensionsPropertiesNV, VkCooperativeMatrixFlexibleDimensionsPropertiesNV)
+#endif
+#if defined(VK_NV_cooperative_matrix_decode_vector)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV, VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV)
 #endif
 #if defined(VK_HUAWEI_hdr_vivid)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceHdrVividFeaturesHUAWEI, VkPhysicalDeviceHdrVividFeaturesHUAWEI)
@@ -6101,6 +6252,12 @@ MAKE_TYPE_FACTORY(VkIndirectCommandsLayoutPushDataTokenNV, VkIndirectCommandsLay
 #if defined(VK_EXT_descriptor_heap)
 MAKE_TYPE_FACTORY(VkSubsampledImageFormatPropertiesEXT, VkSubsampledImageFormatPropertiesEXT)
 #endif
+#if defined(VK_EXT_shader_split_barrier)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceShaderSplitBarrierFeaturesEXT, VkPhysicalDeviceShaderSplitBarrierFeaturesEXT)
+#endif
+#if defined(VK_EXT_shader_split_barrier)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceShaderSplitBarrierPropertiesEXT, VkPhysicalDeviceShaderSplitBarrierPropertiesEXT)
+#endif
 #if defined(VK_EXT_descriptor_heap)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceDescriptorHeapFeaturesEXT, VkPhysicalDeviceDescriptorHeapFeaturesEXT)
 #endif
@@ -6218,6 +6375,9 @@ MAKE_TYPE_FACTORY(VkDataGraphPipelineOpticalFlowCreateInfoARM, VkDataGraphPipeli
 #if defined(VK_ARM_data_graph_optical_flow)
 MAKE_TYPE_FACTORY(VkDataGraphPipelineOpticalFlowDispatchInfoARM, VkDataGraphPipelineOpticalFlowDispatchInfoARM)
 #endif
+#if defined(VK_EXT_shader_ocp_microscaling_types)
+MAKE_TYPE_FACTORY(VkPhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT, VkPhysicalDeviceShaderOCPMicroscalingTypesFeaturesEXT)
+#endif
 
 namespace das {
 void das_vulkan_init_consts(Module & mod, ModuleLibrary & lib);
@@ -6253,6 +6413,7 @@ void das_vulkan_add_structs_22(Module & mod, ModuleLibrary & lib);
 void das_vulkan_add_structs_23(Module & mod, ModuleLibrary & lib);
 void das_vulkan_add_structs_24(Module & mod, ModuleLibrary & lib);
 void das_vulkan_add_structs_25(Module & mod, ModuleLibrary & lib);
+void das_vulkan_add_structs_26(Module & mod, ModuleLibrary & lib);
 void das_vulkan_init_struct_aliases(Module & mod, ModuleLibrary & lib);
 void das_vulkan_fill_structs_0(Module & mod, ModuleLibrary & lib);
 void das_vulkan_fill_structs_1(Module & mod, ModuleLibrary & lib);
@@ -6280,6 +6441,7 @@ void das_vulkan_fill_structs_22(Module & mod, ModuleLibrary & lib);
 void das_vulkan_fill_structs_23(Module & mod, ModuleLibrary & lib);
 void das_vulkan_fill_structs_24(Module & mod, ModuleLibrary & lib);
 void das_vulkan_fill_structs_25(Module & mod, ModuleLibrary & lib);
+void das_vulkan_fill_structs_26(Module & mod, ModuleLibrary & lib);
 void das_vulkan_init_funcs_0(Module & mod, ModuleLibrary & lib);
 void das_vulkan_init_funcs_1(Module & mod, ModuleLibrary & lib);
 void das_vulkan_init_funcs_2(Module & mod, ModuleLibrary & lib);

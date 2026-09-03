@@ -38,6 +38,7 @@ void das_vulkan_init_generated(Module & mod, ModuleLibrary & lib) {
     das_vulkan_add_structs_23(mod, lib);
     das_vulkan_add_structs_24(mod, lib);
     das_vulkan_add_structs_25(mod, lib);
+    das_vulkan_add_structs_26(mod, lib);
     das_vulkan_init_struct_aliases(mod, lib);
     das_vulkan_fill_structs_0(mod, lib);
     das_vulkan_fill_structs_1(mod, lib);
@@ -65,6 +66,7 @@ void das_vulkan_init_generated(Module & mod, ModuleLibrary & lib) {
     das_vulkan_fill_structs_23(mod, lib);
     das_vulkan_fill_structs_24(mod, lib);
     das_vulkan_fill_structs_25(mod, lib);
+    das_vulkan_fill_structs_26(mod, lib);
     das_vulkan_init_funcs_0(mod, lib);
     das_vulkan_init_funcs_1(mod, lib);
     das_vulkan_init_funcs_2(mod, lib);

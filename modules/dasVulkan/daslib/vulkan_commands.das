@@ -613,6 +613,17 @@ def create_shaders_e_x_t(device : Device; var create_infos : array<ShaderCreateI
     return <- blist
 }
 
+def create_gpa_session_a_m_d(device : Device; create_info : GpaSessionCreateInfoAMD; var result : VkResult? = null) : GpaSessionAMD {
+    let vci = vk_view_create_unsafe(create_info)
+    defer() { vk_view_destroy(create_info) }
+    var h : VkGpaSessionAMD
+    vk_check(vkCreateGpaSessionAMD(boost_value_to_vk(device), vci, null, h), result)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
 def create_external_compute_queue_n_v(device : Device; create_info : ExternalComputeQueueCreateInfoNV; var result : VkResult? = null) : ExternalComputeQueueNV {
     let vci = vk_view_create_unsafe(create_info)
     defer() { vk_view_destroy(create_info) }

@@ -207,7 +207,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Bit operations", mod, %regex~(popcnt|clz|ctz|mul128|__bit_set)$%%),
         group_by_regex("Intervals", mod, %regex~(interval)$%%),
         group_by_regex("RTTI", mod, %regex~(class_rtti_size)$%%),
-        hide_group(group_by_regex("Jit", mod,%regex~(invoke_code|.*jit.*)$%%)),
+        hide_group(group_by_regex("Jit", mod,%regex~(invoke_code|is_aot_function|.*jit.*)$%%)),
         group_by_regex("Initialization and finalization", mod, %regex~(using|clone|finalize)$%%),
         group_by_regex("Algorithms", mod, %regex~(swap|iter_range|count|ucount|long_iter_range)$%%),
         group_by_regex("Memset", mod, %regex~(memset.*)$%%),

@@ -88,7 +88,8 @@ without macro plumbing.
 
 **`[spirv_decode]` method form.** The decode callback's SPIR-V signature is a rigid three
 parameters. The method form erases the das-level `self` from it, so the decode body still reads
-its class members - a separate scale plane, push constants, `@workgroup` staging.
+its class members - a separate scale plane, push constants, `@workgroup` staging. The four-wide
+twin of that callback is section 3.3.
 
 **Cooperative-matrix element loops carry `Unroll`.** `coopmatClamp` walks a coopmat local
 element by element through a hand-emitted structured loop bounded by
@@ -124,10 +125,47 @@ NAMES carry their geometry - `coopmatWg{A|B|Acc}_{f16|f32|s8|s32}_{R}x{C}` - and
 shape is therefore one struct declaration plus the overload that types the das call
 (`coopmatMulAdd` for a multiply tile, `coopmatConvert` for an accumulator-only tile): no
 emitter arm changes, because every cm2 arm reads rows, columns and component width out of the
-parse. The tile markers are empty structs with no storage, so the CPU bodies of `coopmatMulAdd`
-(returns `c`) and `coopmatConvert` (writes nothing) cannot compute what the emitted form
-computes: a coopmat kernel's device test takes a plain CPU reference as its oracle, the one
-sanctioned exception to the emitter checklist's CPU-body rule.
+parse. The tile markers are empty structs with no storage, so every builtin over them - the
+tensor loads and stores, the decode forms, `coopmatMulAdd`, `coopmatConvert`, `coopmatClamp`,
+the reductions - has an inert CPU body that cannot compute what the emitted form computes: a
+coopmat kernel's device test takes a plain CPU reference as its oracle, the one sanctioned
+exception class `modules/REVIEW_SHADER_EMITTERS.md` admits. A reduction width
+known only at run time reaches a SPIR-V kernel through a `tensorLayout2D` or
+`tensorLayout2DPad` whose dimension `tensorLayoutSetDimension` sets - that layout is this
+emitter's runtime-extent descriptor.
+
+### 3.3 The four-wide decode twin {#cm2-decode-vector}
+
+`SPV_NV_cooperative_matrix_decode_vector` adds no opcode: one capability and the
+`DecodeVectorFunc` bit of the tensor-load's addressing mask, whose operand names a second decode
+function returning the 4-lane vector of the tile component type, called for four consecutive
+elements along the block's last dimension from a multiple of four. The scalar `DecodeFunc` stays
+mandatory beside it and the driver picks per call site, so one module serves devices with and
+without the feature. `coopmatLoadTensorDecode`'s tenth argument selects the twin: `true` has the
+emitter synthesize it as four `OpFunctionCall`s of the scalar body at `coordInBlock.y + 0..3`
+composed into the vector (the driver's compiler inlines the calls and merges the loads they
+share), `false` is the scalar-only load, and a `[spirv_decode]` function returning `half4`
+over a `float16` decode, with the scalar contract's parameters, is a hand-laid twin (daslang
+spells no int8 or 32-bit four-vector the tiles would take, so the hand-laid form is f16-only;
+the synthesized twin covers every scalar type a decode may return). Twins register in their own
+table keyed by the function they came from, so one scalar body yields one twin however many loads
+name it, and emit after the scalar bodies they call.
+
+The extension stands apart from the cm2 base: a module that uses the twin declares the
+`CooperativeMatrixDecodeVectorNV` capability and the `SPV_NV_cooperative_matrix_decode_vector`
+extension name, and the device must have its own
+`VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV` bit enabled.
+
+The tensor-addressing operands follow the mask word in bit order - `TensorView`, then
+`DecodeFunc`, then `DecodeVectorFunc` - after the load's fixed prefix: result type, result,
+pointer, object, layout, memory-access mask and that mask's own extra words. The emitter appends
+them in that order and the strip counts forward to the operand it removes by the same rule.
+
+A finished module is downgraded rather than recompiled. `strip_decode_vector` walks the word
+stream and removes the capability, the extension declaration, and each
+`OpCooperativeMatrixLoadTensorNV`'s `DecodeVectorFunc` bit together with its operand word; the
+twin's `OpFunction` stays in the module, unreferenced, and the mandatory scalar `DecodeFunc`
+serves the load. One emitted blob therefore runs on a device without the feature.
 
 ## 4. Test architecture - "every emitted instruction has a test"
 
@@ -139,10 +177,15 @@ real-driver layer, which lives in dasVulkan):
    expected numeric opcode present/absent/operand-at-offset/decoration present. One test per
    emittable instruction kind. A `_golden/` disassembly snapshot of our own validated output
    is the forward regression guard - byte-identical where id allocation is stable,
-   id-isomorphic (`check_iso`) where it is not.
-2. **`spirv-val` gate.** Every blob the suite produces is validated with the SPIRV-Tools
-   `spirv-val` resolved through `VULKAN_SDK`. Soft-skip if absent locally, hard-required in
-   CI - the real correctness oracle for structured-CFG and define-before-use bugs.
+   id-isomorphic (`check_iso`) where it is not. A new capability's fixture is a kernel in
+   `_spirv_common.das` with a row in `_gen_golden.das` and its `_golden/<name>.txt`, or a
+   test file of its own asserting on the emitted words; an extension that adds an operand
+   bit rather than an opcode is invisible to the census and takes the words form.
+2. **`spirv-val` witness.** Every blob the suite produces is validated with the SPIRV-Tools
+   `spirv-val` resolved through `VULKAN_SDK` where one is present and knows the blob's
+   extensions - a local witness for structured-CFG and define-before-use bugs. It skips where
+   the tool is absent or predates an extension, and CI carries none, so the words assertions
+   are the gate and a spirv-val-only claim checks nothing there.
 3. **Real-driver behavioral regression.** A one-call framework in dasVulkan,
    `run_compute_spirv(words, n) : array<uint>` over `compute_boost`, runs any emitted blob;
    `compute_image_rgba8` + `assert_pixels_exact` are its image-readback twin. The

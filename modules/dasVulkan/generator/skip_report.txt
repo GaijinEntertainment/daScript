@@ -197,7 +197,7 @@ VkRenderPassCreationFeedbackCreateInfoEXT: member pRenderPassFeedback (VkRenderP
 VkRenderPassSubpassFeedbackCreateInfoEXT: member pSubpassFeedback (VkRenderPassSubpassFeedbackInfoEXT x1) not mappable
 VkShaderModuleCreateInfo: member pCode (uint32_t x1) not mappable
 
-== boost commands skipped: 82 ==
+== boost commands skipped: 83 ==
 vkCmdBeginCustomResolveEXT: pointer param pBeginCustomResolveInfo (VkBeginCustomResolveInfoEXT) not mappable
 vkCmdBeginRenderPass2: pointer param pRenderPassBegin (VkRenderPassBeginInfo) not mappable
 vkCmdBeginRenderPass: pointer param pRenderPassBegin (VkRenderPassBeginInfo) not mappable
@@ -253,6 +253,7 @@ vkGetImageOpaqueCaptureDataEXT: pointer param pDatas (VkHostAddressRangeEXT) not
 vkGetImageOpaqueCaptureDescriptorDataEXT: pointer param pData (void) not mappable
 vkGetImageViewOpaqueCaptureDescriptorDataEXT: pointer param pData (void) not mappable
 vkGetInstanceProcAddr: return type PFN_vkVoidFunction not mappable
+vkGetLatencyTimingsLegacyNV: pointer param pTimings (void) not mappable
 vkGetMemoryHostPointerPropertiesEXT: pointer param pHostPointer (void) not mappable
 vkGetMemoryRemoteAddressNV: out param pAddress (VkRemoteAddressNV) not a ref-mappable value
 vkGetPhysicalDeviceCooperativeMatrixPropertiesNV: pointer param pProperties (VkCooperativeMatrixPropertiesNV) not mappable

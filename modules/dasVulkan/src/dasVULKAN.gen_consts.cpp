@@ -110,6 +110,9 @@ void das_vulkan_init_consts(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_ARM_data_graph_instruction_set_tosa)
     addConstant<uint32_t>(mod, "VK_MAX_DATA_GRAPH_TOSA_NAME_SIZE_ARM", uint32_t(VK_MAX_DATA_GRAPH_TOSA_NAME_SIZE_ARM));
 #endif
+#if defined(VK_ARM_tensor_controls)
+    addConstant<uint32_t>(mod, "VK_MAX_TENSOR_CREATE_INFO_ROLLING_BACKING_WRAP_COUNT_ARM", uint32_t(VK_MAX_TENSOR_CREATE_INFO_ROLLING_BACKING_WRAP_COUNT_ARM));
+#endif
 }
 
 }

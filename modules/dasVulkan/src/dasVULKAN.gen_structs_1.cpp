@@ -5,6 +5,38 @@
 namespace das {
 
 #if defined(VK_VERSION_1_0)
+struct VkSparseBufferMemoryBindInfo_Ann : ManagedStructureAnnotation<VkSparseBufferMemoryBindInfo> {
+    VkSparseBufferMemoryBindInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSparseBufferMemoryBindInfo", ml, "VkSparseBufferMemoryBindInfo") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkSparseBufferMemoryBindInfo_Ann * ann_VkSparseBufferMemoryBindInfo = nullptr;
+void VkSparseBufferMemoryBindInfo_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(buffer)>("buffer", "buffer");
+    addField<DAS_BIND_MANAGED_FIELD(bindCount)>("bindCount", "bindCount");
+    addFieldEx("pBinds", "pBinds", offsetof(VkSparseBufferMemoryBindInfo, pBinds), makeType<VkSparseMemoryBind *>(*mlib));
+}
+#endif
+
+#if defined(VK_VERSION_1_0)
+struct VkSparseImageOpaqueMemoryBindInfo_Ann : ManagedStructureAnnotation<VkSparseImageOpaqueMemoryBindInfo> {
+    VkSparseImageOpaqueMemoryBindInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSparseImageOpaqueMemoryBindInfo", ml, "VkSparseImageOpaqueMemoryBindInfo") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkSparseImageOpaqueMemoryBindInfo_Ann * ann_VkSparseImageOpaqueMemoryBindInfo = nullptr;
+void VkSparseImageOpaqueMemoryBindInfo_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(image)>("image", "image");
+    addField<DAS_BIND_MANAGED_FIELD(bindCount)>("bindCount", "bindCount");
+    addFieldEx("pBinds", "pBinds", offsetof(VkSparseImageOpaqueMemoryBindInfo, pBinds), makeType<VkSparseMemoryBind *>(*mlib));
+}
+#endif
+
+#if defined(VK_VERSION_1_0)
 struct VkSparseImageMemoryBindInfo_Ann : ManagedStructureAnnotation<VkSparseImageMemoryBindInfo> {
     VkSparseImageMemoryBindInfo_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkSparseImageMemoryBindInfo", ml, "VkSparseImageMemoryBindInfo") {}
     virtual bool isLocal() const override { return true; }
@@ -900,38 +932,13 @@ void VkReleaseCapturedPipelineDataInfoKHR_Ann::init() {
 }
 #endif
 
-#if defined(VK_KHR_pipeline_binary)
-struct VkPipelineBinaryDataInfoKHR_Ann : ManagedStructureAnnotation<VkPipelineBinaryDataInfoKHR> {
-    VkPipelineBinaryDataInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPipelineBinaryDataInfoKHR", ml, "VkPipelineBinaryDataInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPipelineBinaryDataInfoKHR_Ann * ann_VkPipelineBinaryDataInfoKHR = nullptr;
-void VkPipelineBinaryDataInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPipelineBinaryDataInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(pipelineBinary)>("pipelineBinary", "pipelineBinary");
-}
-#endif
-
-#if defined(VK_KHR_pipeline_binary)
-struct VkPipelineCreateInfoKHR_Ann : ManagedStructureAnnotation<VkPipelineCreateInfoKHR> {
-    VkPipelineCreateInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPipelineCreateInfoKHR", ml, "VkPipelineCreateInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPipelineCreateInfoKHR_Ann * ann_VkPipelineCreateInfoKHR = nullptr;
-void VkPipelineCreateInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPipelineCreateInfoKHR, pNext), makeType<void *>(*mlib));
-}
-#endif
-
 void das_vulkan_add_structs_1(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_VERSION_1_0)
+    ann_VkSparseBufferMemoryBindInfo = new VkSparseBufferMemoryBindInfo_Ann(lib); mod.addAnnotation(ann_VkSparseBufferMemoryBindInfo);
+#endif
+#if defined(VK_VERSION_1_0)
+    ann_VkSparseImageOpaqueMemoryBindInfo = new VkSparseImageOpaqueMemoryBindInfo_Ann(lib); mod.addAnnotation(ann_VkSparseImageOpaqueMemoryBindInfo);
+#endif
 #if defined(VK_VERSION_1_0)
     ann_VkSparseImageMemoryBindInfo = new VkSparseImageMemoryBindInfo_Ann(lib); mod.addAnnotation(ann_VkSparseImageMemoryBindInfo);
 #endif
@@ -1076,15 +1083,15 @@ void das_vulkan_add_structs_1(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_KHR_pipeline_binary)
     ann_VkReleaseCapturedPipelineDataInfoKHR = new VkReleaseCapturedPipelineDataInfoKHR_Ann(lib); mod.addAnnotation(ann_VkReleaseCapturedPipelineDataInfoKHR);
 #endif
-#if defined(VK_KHR_pipeline_binary)
-    ann_VkPipelineBinaryDataInfoKHR = new VkPipelineBinaryDataInfoKHR_Ann(lib); mod.addAnnotation(ann_VkPipelineBinaryDataInfoKHR);
-#endif
-#if defined(VK_KHR_pipeline_binary)
-    ann_VkPipelineCreateInfoKHR = new VkPipelineCreateInfoKHR_Ann(lib); mod.addAnnotation(ann_VkPipelineCreateInfoKHR);
-#endif
 }
 
 void das_vulkan_fill_structs_1(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_VERSION_1_0)
+    ann_VkSparseBufferMemoryBindInfo->mlib = &lib; ann_VkSparseBufferMemoryBindInfo->init(); ann_VkSparseBufferMemoryBindInfo->mlib = nullptr;
+#endif
+#if defined(VK_VERSION_1_0)
+    ann_VkSparseImageOpaqueMemoryBindInfo->mlib = &lib; ann_VkSparseImageOpaqueMemoryBindInfo->init(); ann_VkSparseImageOpaqueMemoryBindInfo->mlib = nullptr;
+#endif
 #if defined(VK_VERSION_1_0)
     ann_VkSparseImageMemoryBindInfo->mlib = &lib; ann_VkSparseImageMemoryBindInfo->init(); ann_VkSparseImageMemoryBindInfo->mlib = nullptr;
 #endif
@@ -1228,12 +1235,6 @@ void das_vulkan_fill_structs_1(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_KHR_pipeline_binary)
     ann_VkReleaseCapturedPipelineDataInfoKHR->mlib = &lib; ann_VkReleaseCapturedPipelineDataInfoKHR->init(); ann_VkReleaseCapturedPipelineDataInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_pipeline_binary)
-    ann_VkPipelineBinaryDataInfoKHR->mlib = &lib; ann_VkPipelineBinaryDataInfoKHR->init(); ann_VkPipelineBinaryDataInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_pipeline_binary)
-    ann_VkPipelineCreateInfoKHR->mlib = &lib; ann_VkPipelineCreateInfoKHR->init(); ann_VkPipelineCreateInfoKHR->mlib = nullptr;
 #endif
 }
 

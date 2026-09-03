@@ -245,3 +245,9 @@ committed .spv" - `modules/dasSpirv/ARCHITECTURE.md`). Decision (2026-07-16): sh
 always das-authored, the helper goes; deletion deferred ~2 weeks in case a
 consumer objects. Delete the file + the include line; nothing else references
 it.
+
+The generator emits every pointer-to-struct command parameter as an out-parameter it zeroes
+and fills, so a command whose struct is IN/OUT loses its input: `vkSetGpaDeviceClockModeAMD`
+(vulkan-sdk-1.4.357.0's AMD GPA extension) can only request the default clock mode through the
+boost wrapper. Teach the generator the in/out class (the registry does not mark it; a per-command
+list is the honest form) or hand-write the wrapper in `vulkan_boost.das`.

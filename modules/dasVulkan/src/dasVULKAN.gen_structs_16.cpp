@@ -4,6 +4,321 @@
 
 namespace das {
 
+#if defined(VK_VERSION_1_4)
+struct VkPhysicalDevicePipelineProtectedAccessFeatures_Ann : ManagedStructureAnnotation<VkPhysicalDevicePipelineProtectedAccessFeatures> {
+    VkPhysicalDevicePipelineProtectedAccessFeatures_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDevicePipelineProtectedAccessFeatures", ml, "VkPhysicalDevicePipelineProtectedAccessFeatures") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDevicePipelineProtectedAccessFeatures_Ann * ann_VkPhysicalDevicePipelineProtectedAccessFeatures = nullptr;
+void VkPhysicalDevicePipelineProtectedAccessFeatures_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDevicePipelineProtectedAccessFeatures, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(pipelineProtectedAccess)>("pipelineProtectedAccess", "pipelineProtectedAccess");
+}
+#endif
+
+#if defined(VK_KHR_video_queue)
+struct VkQueueFamilyVideoPropertiesKHR_Ann : ManagedStructureAnnotation<VkQueueFamilyVideoPropertiesKHR> {
+    VkQueueFamilyVideoPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkQueueFamilyVideoPropertiesKHR", ml, "VkQueueFamilyVideoPropertiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkQueueFamilyVideoPropertiesKHR_Ann * ann_VkQueueFamilyVideoPropertiesKHR = nullptr;
+void VkQueueFamilyVideoPropertiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkQueueFamilyVideoPropertiesKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("videoCodecOperations", "videoCodecOperations", offsetof(VkQueueFamilyVideoPropertiesKHR, videoCodecOperations), makeVkFlags_VkVideoCodecOperationFlagsKHR());
+}
+#endif
+
+#if defined(VK_KHR_video_queue)
+struct VkQueueFamilyQueryResultStatusPropertiesKHR_Ann : ManagedStructureAnnotation<VkQueueFamilyQueryResultStatusPropertiesKHR> {
+    VkQueueFamilyQueryResultStatusPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkQueueFamilyQueryResultStatusPropertiesKHR", ml, "VkQueueFamilyQueryResultStatusPropertiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkQueueFamilyQueryResultStatusPropertiesKHR_Ann * ann_VkQueueFamilyQueryResultStatusPropertiesKHR = nullptr;
+void VkQueueFamilyQueryResultStatusPropertiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkQueueFamilyQueryResultStatusPropertiesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(queryResultStatusSupport)>("queryResultStatusSupport", "queryResultStatusSupport");
+}
+#endif
+
+#if defined(VK_KHR_video_queue)
+struct VkVideoProfileListInfoKHR_Ann : ManagedStructureAnnotation<VkVideoProfileListInfoKHR> {
+    VkVideoProfileListInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoProfileListInfoKHR", ml, "VkVideoProfileListInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoProfileListInfoKHR_Ann * ann_VkVideoProfileListInfoKHR = nullptr;
+void VkVideoProfileListInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoProfileListInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(profileCount)>("profileCount", "profileCount");
+    addFieldEx("pProfiles", "pProfiles", offsetof(VkVideoProfileListInfoKHR, pProfiles), makeType<VkVideoProfileInfoKHR *>(*mlib));
+}
+#endif
+
+#if defined(VK_KHR_video_queue)
+struct VkPhysicalDeviceVideoFormatInfoKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceVideoFormatInfoKHR> {
+    VkPhysicalDeviceVideoFormatInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceVideoFormatInfoKHR", ml, "VkPhysicalDeviceVideoFormatInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceVideoFormatInfoKHR_Ann * ann_VkPhysicalDeviceVideoFormatInfoKHR = nullptr;
+void VkPhysicalDeviceVideoFormatInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVideoFormatInfoKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("imageUsage", "imageUsage", offsetof(VkPhysicalDeviceVideoFormatInfoKHR, imageUsage), makeVkFlags_VkImageUsageFlags());
+}
+#endif
+
+#if defined(VK_KHR_video_queue)
+struct VkVideoFormatPropertiesKHR_Ann : ManagedStructureAnnotation<VkVideoFormatPropertiesKHR> {
+    VkVideoFormatPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoFormatPropertiesKHR", ml, "VkVideoFormatPropertiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoFormatPropertiesKHR_Ann * ann_VkVideoFormatPropertiesKHR = nullptr;
+void VkVideoFormatPropertiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoFormatPropertiesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(format)>("format", "format");
+    addField<DAS_BIND_MANAGED_FIELD(componentMapping)>("componentMapping", "componentMapping");
+    addFieldEx("imageCreateFlags", "imageCreateFlags", offsetof(VkVideoFormatPropertiesKHR, imageCreateFlags), makeVkFlags_VkImageCreateFlags());
+    addField<DAS_BIND_MANAGED_FIELD(imageType)>("imageType", "imageType");
+    addField<DAS_BIND_MANAGED_FIELD(imageTiling)>("imageTiling", "imageTiling");
+    addFieldEx("imageUsageFlags", "imageUsageFlags", offsetof(VkVideoFormatPropertiesKHR, imageUsageFlags), makeVkFlags_VkImageUsageFlags());
+}
+#endif
+
+#if defined(VK_KHR_video_encode_quantization_map)
+struct VkVideoEncodeQuantizationMapCapabilitiesKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeQuantizationMapCapabilitiesKHR> {
+    VkVideoEncodeQuantizationMapCapabilitiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeQuantizationMapCapabilitiesKHR", ml, "VkVideoEncodeQuantizationMapCapabilitiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeQuantizationMapCapabilitiesKHR_Ann * ann_VkVideoEncodeQuantizationMapCapabilitiesKHR = nullptr;
+void VkVideoEncodeQuantizationMapCapabilitiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeQuantizationMapCapabilitiesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(maxQuantizationMapExtent)>("maxQuantizationMapExtent", "maxQuantizationMapExtent");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_quantization_map)
+struct VkVideoEncodeH264QuantizationMapCapabilitiesKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264QuantizationMapCapabilitiesKHR> {
+    VkVideoEncodeH264QuantizationMapCapabilitiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264QuantizationMapCapabilitiesKHR", ml, "VkVideoEncodeH264QuantizationMapCapabilitiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH264QuantizationMapCapabilitiesKHR_Ann * ann_VkVideoEncodeH264QuantizationMapCapabilitiesKHR = nullptr;
+void VkVideoEncodeH264QuantizationMapCapabilitiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264QuantizationMapCapabilitiesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(minQpDelta)>("minQpDelta", "minQpDelta");
+    addField<DAS_BIND_MANAGED_FIELD(maxQpDelta)>("maxQpDelta", "maxQpDelta");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_quantization_map)
+struct VkVideoEncodeH265QuantizationMapCapabilitiesKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265QuantizationMapCapabilitiesKHR> {
+    VkVideoEncodeH265QuantizationMapCapabilitiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265QuantizationMapCapabilitiesKHR", ml, "VkVideoEncodeH265QuantizationMapCapabilitiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeH265QuantizationMapCapabilitiesKHR_Ann * ann_VkVideoEncodeH265QuantizationMapCapabilitiesKHR = nullptr;
+void VkVideoEncodeH265QuantizationMapCapabilitiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265QuantizationMapCapabilitiesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(minQpDelta)>("minQpDelta", "minQpDelta");
+    addField<DAS_BIND_MANAGED_FIELD(maxQpDelta)>("maxQpDelta", "maxQpDelta");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_quantization_map)
+struct VkVideoEncodeAV1QuantizationMapCapabilitiesKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1QuantizationMapCapabilitiesKHR> {
+    VkVideoEncodeAV1QuantizationMapCapabilitiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1QuantizationMapCapabilitiesKHR", ml, "VkVideoEncodeAV1QuantizationMapCapabilitiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeAV1QuantizationMapCapabilitiesKHR_Ann * ann_VkVideoEncodeAV1QuantizationMapCapabilitiesKHR = nullptr;
+void VkVideoEncodeAV1QuantizationMapCapabilitiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeAV1QuantizationMapCapabilitiesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(minQIndexDelta)>("minQIndexDelta", "minQIndexDelta");
+    addField<DAS_BIND_MANAGED_FIELD(maxQIndexDelta)>("maxQIndexDelta", "maxQIndexDelta");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_quantization_map)
+struct VkVideoFormatQuantizationMapPropertiesKHR_Ann : ManagedStructureAnnotation<VkVideoFormatQuantizationMapPropertiesKHR> {
+    VkVideoFormatQuantizationMapPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoFormatQuantizationMapPropertiesKHR", ml, "VkVideoFormatQuantizationMapPropertiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoFormatQuantizationMapPropertiesKHR_Ann * ann_VkVideoFormatQuantizationMapPropertiesKHR = nullptr;
+void VkVideoFormatQuantizationMapPropertiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoFormatQuantizationMapPropertiesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(quantizationMapTexelSize)>("quantizationMapTexelSize", "quantizationMapTexelSize");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_quantization_map)
+struct VkVideoFormatH265QuantizationMapPropertiesKHR_Ann : ManagedStructureAnnotation<VkVideoFormatH265QuantizationMapPropertiesKHR> {
+    VkVideoFormatH265QuantizationMapPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoFormatH265QuantizationMapPropertiesKHR", ml, "VkVideoFormatH265QuantizationMapPropertiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoFormatH265QuantizationMapPropertiesKHR_Ann * ann_VkVideoFormatH265QuantizationMapPropertiesKHR = nullptr;
+void VkVideoFormatH265QuantizationMapPropertiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoFormatH265QuantizationMapPropertiesKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("compatibleCtbSizes", "compatibleCtbSizes", offsetof(VkVideoFormatH265QuantizationMapPropertiesKHR, compatibleCtbSizes), makeVkFlags_VkVideoEncodeH265CtbSizeFlagsKHR());
+}
+#endif
+
+#if defined(VK_KHR_video_encode_quantization_map)
+struct VkVideoFormatAV1QuantizationMapPropertiesKHR_Ann : ManagedStructureAnnotation<VkVideoFormatAV1QuantizationMapPropertiesKHR> {
+    VkVideoFormatAV1QuantizationMapPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoFormatAV1QuantizationMapPropertiesKHR", ml, "VkVideoFormatAV1QuantizationMapPropertiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoFormatAV1QuantizationMapPropertiesKHR_Ann * ann_VkVideoFormatAV1QuantizationMapPropertiesKHR = nullptr;
+void VkVideoFormatAV1QuantizationMapPropertiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoFormatAV1QuantizationMapPropertiesKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("compatibleSuperblockSizes", "compatibleSuperblockSizes", offsetof(VkVideoFormatAV1QuantizationMapPropertiesKHR, compatibleSuperblockSizes), makeVkFlags_VkVideoEncodeAV1SuperblockSizeFlagsKHR());
+}
+#endif
+
+#if defined(VK_KHR_video_queue)
+struct VkVideoProfileInfoKHR_Ann : ManagedStructureAnnotation<VkVideoProfileInfoKHR> {
+    VkVideoProfileInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoProfileInfoKHR", ml, "VkVideoProfileInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoProfileInfoKHR_Ann * ann_VkVideoProfileInfoKHR = nullptr;
+void VkVideoProfileInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoProfileInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(videoCodecOperation)>("videoCodecOperation", "videoCodecOperation");
+    addFieldEx("chromaSubsampling", "chromaSubsampling", offsetof(VkVideoProfileInfoKHR, chromaSubsampling), makeVkFlags_VkVideoChromaSubsamplingFlagsKHR());
+    addFieldEx("lumaBitDepth", "lumaBitDepth", offsetof(VkVideoProfileInfoKHR, lumaBitDepth), makeVkFlags_VkVideoComponentBitDepthFlagsKHR());
+    addFieldEx("chromaBitDepth", "chromaBitDepth", offsetof(VkVideoProfileInfoKHR, chromaBitDepth), makeVkFlags_VkVideoComponentBitDepthFlagsKHR());
+}
+#endif
+
+#if defined(VK_KHR_video_queue)
+struct VkVideoCapabilitiesKHR_Ann : ManagedStructureAnnotation<VkVideoCapabilitiesKHR> {
+    VkVideoCapabilitiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoCapabilitiesKHR", ml, "VkVideoCapabilitiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoCapabilitiesKHR_Ann * ann_VkVideoCapabilitiesKHR = nullptr;
+void VkVideoCapabilitiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoCapabilitiesKHR, pNext), makeType<void *>(*mlib));
+    addFieldEx("flags", "flags", offsetof(VkVideoCapabilitiesKHR, flags), makeVkFlags_VkVideoCapabilityFlagsKHR());
+    addField<DAS_BIND_MANAGED_FIELD(minBitstreamBufferOffsetAlignment)>("minBitstreamBufferOffsetAlignment", "minBitstreamBufferOffsetAlignment");
+    addField<DAS_BIND_MANAGED_FIELD(minBitstreamBufferSizeAlignment)>("minBitstreamBufferSizeAlignment", "minBitstreamBufferSizeAlignment");
+    addField<DAS_BIND_MANAGED_FIELD(pictureAccessGranularity)>("pictureAccessGranularity", "pictureAccessGranularity");
+    addField<DAS_BIND_MANAGED_FIELD(minCodedExtent)>("minCodedExtent", "minCodedExtent");
+    addField<DAS_BIND_MANAGED_FIELD(maxCodedExtent)>("maxCodedExtent", "maxCodedExtent");
+    addField<DAS_BIND_MANAGED_FIELD(maxDpbSlots)>("maxDpbSlots", "maxDpbSlots");
+    addField<DAS_BIND_MANAGED_FIELD(maxActiveReferencePictures)>("maxActiveReferencePictures", "maxActiveReferencePictures");
+    addField<DAS_BIND_MANAGED_FIELD(stdHeaderVersion)>("stdHeaderVersion", "stdHeaderVersion");
+}
+#endif
+
+#if defined(VK_KHR_video_queue)
+struct VkVideoSessionMemoryRequirementsKHR_Ann : ManagedStructureAnnotation<VkVideoSessionMemoryRequirementsKHR> {
+    VkVideoSessionMemoryRequirementsKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoSessionMemoryRequirementsKHR", ml, "VkVideoSessionMemoryRequirementsKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoSessionMemoryRequirementsKHR_Ann * ann_VkVideoSessionMemoryRequirementsKHR = nullptr;
+void VkVideoSessionMemoryRequirementsKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoSessionMemoryRequirementsKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(memoryBindIndex)>("memoryBindIndex", "memoryBindIndex");
+    addField<DAS_BIND_MANAGED_FIELD(memoryRequirements)>("memoryRequirements", "memoryRequirements");
+}
+#endif
+
+#if defined(VK_KHR_video_queue)
+struct VkBindVideoSessionMemoryInfoKHR_Ann : ManagedStructureAnnotation<VkBindVideoSessionMemoryInfoKHR> {
+    VkBindVideoSessionMemoryInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkBindVideoSessionMemoryInfoKHR", ml, "VkBindVideoSessionMemoryInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkBindVideoSessionMemoryInfoKHR_Ann * ann_VkBindVideoSessionMemoryInfoKHR = nullptr;
+void VkBindVideoSessionMemoryInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkBindVideoSessionMemoryInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(memoryBindIndex)>("memoryBindIndex", "memoryBindIndex");
+    addField<DAS_BIND_MANAGED_FIELD(memory)>("memory", "memory");
+    addField<DAS_BIND_MANAGED_FIELD(memoryOffset)>("memoryOffset", "memoryOffset");
+    addField<DAS_BIND_MANAGED_FIELD(memorySize)>("memorySize", "memorySize");
+}
+#endif
+
+#if defined(VK_KHR_video_queue)
+struct VkVideoPictureResourceInfoKHR_Ann : ManagedStructureAnnotation<VkVideoPictureResourceInfoKHR> {
+    VkVideoPictureResourceInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoPictureResourceInfoKHR", ml, "VkVideoPictureResourceInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoPictureResourceInfoKHR_Ann * ann_VkVideoPictureResourceInfoKHR = nullptr;
+void VkVideoPictureResourceInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoPictureResourceInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(codedOffset)>("codedOffset", "codedOffset");
+    addField<DAS_BIND_MANAGED_FIELD(codedExtent)>("codedExtent", "codedExtent");
+    addField<DAS_BIND_MANAGED_FIELD(baseArrayLayer)>("baseArrayLayer", "baseArrayLayer");
+    addField<DAS_BIND_MANAGED_FIELD(imageViewBinding)>("imageViewBinding", "imageViewBinding");
+}
+#endif
+
 #if defined(VK_KHR_video_queue)
 struct VkVideoReferenceSlotInfoKHR_Ann : ManagedStructureAnnotation<VkVideoReferenceSlotInfoKHR> {
     VkVideoReferenceSlotInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoReferenceSlotInfoKHR", ml, "VkVideoReferenceSlotInfoKHR") {}
@@ -503,6 +818,56 @@ void VkVideoEncodeCapabilitiesKHR_Ann::init() {
 }
 #endif
 
+#if defined(VK_KHR_video_encode_feedback2)
+struct VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR> {
+    VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR", ml, "VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR_Ann * ann_VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR = nullptr;
+void VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(videoEncodeFeedback2)>("videoEncodeFeedback2", "videoEncodeFeedback2");
+}
+#endif
+
+#if defined(VK_KHR_video_encode_feedback2)
+struct VkVideoEncodeFeedback2CapabilitiesKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeFeedback2CapabilitiesKHR> {
+    VkVideoEncodeFeedback2CapabilitiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeFeedback2CapabilitiesKHR", ml, "VkVideoEncodeFeedback2CapabilitiesKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkVideoEncodeFeedback2CapabilitiesKHR_Ann * ann_VkVideoEncodeFeedback2CapabilitiesKHR = nullptr;
+void VkVideoEncodeFeedback2CapabilitiesKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeFeedback2CapabilitiesKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(maxPerPartitionFeedbackEntries)>("maxPerPartitionFeedbackEntries", "maxPerPartitionFeedbackEntries");
+    addFieldEx("supportedPerPartitionEncodeFeedbackFlags", "supportedPerPartitionEncodeFeedbackFlags", offsetof(VkVideoEncodeFeedback2CapabilitiesKHR, supportedPerPartitionEncodeFeedbackFlags), makeVkFlags_VkVideoEncodePerPartitionFeedbackFlagsKHR());
+}
+#endif
+
+#if defined(VK_KHR_video_encode_feedback2)
+struct VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR_Ann : ManagedStructureAnnotation<VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR> {
+    VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR", ml, "VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR_Ann * ann_VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR = nullptr;
+void VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(maxPerPartitionFeedbackEntries)>("maxPerPartitionFeedbackEntries", "maxPerPartitionFeedbackEntries");
+    addFieldEx("perPartitionEncodeFeedbackFlags", "perPartitionEncodeFeedbackFlags", offsetof(VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR, perPartitionEncodeFeedbackFlags), makeVkFlags_VkVideoEncodePerPartitionFeedbackFlagsKHR());
+}
+#endif
+
 #if defined(VK_KHR_video_encode_h264)
 struct VkVideoEncodeH264QualityLevelPropertiesKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264QualityLevelPropertiesKHR> {
     VkVideoEncodeH264QualityLevelPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264QualityLevelPropertiesKHR", ml, "VkVideoEncodeH264QualityLevelPropertiesKHR") {}
@@ -527,406 +892,61 @@ void VkVideoEncodeH264QualityLevelPropertiesKHR_Ann::init() {
 }
 #endif
 
-#if defined(VK_KHR_video_encode_h264)
-struct VkVideoEncodeH264SessionParametersGetInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264SessionParametersGetInfoKHR> {
-    VkVideoEncodeH264SessionParametersGetInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264SessionParametersGetInfoKHR", ml, "VkVideoEncodeH264SessionParametersGetInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH264SessionParametersGetInfoKHR_Ann * ann_VkVideoEncodeH264SessionParametersGetInfoKHR = nullptr;
-void VkVideoEncodeH264SessionParametersGetInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264SessionParametersGetInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(writeStdSPS)>("writeStdSPS", "writeStdSPS");
-    addField<DAS_BIND_MANAGED_FIELD(writeStdPPS)>("writeStdPPS", "writeStdPPS");
-    addField<DAS_BIND_MANAGED_FIELD(stdSPSId)>("stdSPSId", "stdSPSId");
-    addField<DAS_BIND_MANAGED_FIELD(stdPPSId)>("stdPPSId", "stdPPSId");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h264)
-struct VkVideoEncodeH264SessionParametersFeedbackInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264SessionParametersFeedbackInfoKHR> {
-    VkVideoEncodeH264SessionParametersFeedbackInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264SessionParametersFeedbackInfoKHR", ml, "VkVideoEncodeH264SessionParametersFeedbackInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH264SessionParametersFeedbackInfoKHR_Ann * ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR = nullptr;
-void VkVideoEncodeH264SessionParametersFeedbackInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264SessionParametersFeedbackInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(hasStdSPSOverrides)>("hasStdSPSOverrides", "hasStdSPSOverrides");
-    addField<DAS_BIND_MANAGED_FIELD(hasStdPPSOverrides)>("hasStdPPSOverrides", "hasStdPPSOverrides");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h264)
-struct VkVideoEncodeH264RateControlInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264RateControlInfoKHR> {
-    VkVideoEncodeH264RateControlInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264RateControlInfoKHR", ml, "VkVideoEncodeH264RateControlInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH264RateControlInfoKHR_Ann * ann_VkVideoEncodeH264RateControlInfoKHR = nullptr;
-void VkVideoEncodeH264RateControlInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264RateControlInfoKHR, pNext), makeType<void *>(*mlib));
-    addFieldEx("flags", "flags", offsetof(VkVideoEncodeH264RateControlInfoKHR, flags), makeVkFlags_VkVideoEncodeH264RateControlFlagsKHR());
-    addField<DAS_BIND_MANAGED_FIELD(gopFrameCount)>("gopFrameCount", "gopFrameCount");
-    addField<DAS_BIND_MANAGED_FIELD(idrPeriod)>("idrPeriod", "idrPeriod");
-    addField<DAS_BIND_MANAGED_FIELD(consecutiveBFrameCount)>("consecutiveBFrameCount", "consecutiveBFrameCount");
-    addField<DAS_BIND_MANAGED_FIELD(temporalLayerCount)>("temporalLayerCount", "temporalLayerCount");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h264)
-struct VkVideoEncodeH264QpKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264QpKHR> {
-    VkVideoEncodeH264QpKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264QpKHR", ml, "VkVideoEncodeH264QpKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH264QpKHR_Ann * ann_VkVideoEncodeH264QpKHR = nullptr;
-void VkVideoEncodeH264QpKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(qpI)>("qpI", "qpI");
-    addField<DAS_BIND_MANAGED_FIELD(qpP)>("qpP", "qpP");
-    addField<DAS_BIND_MANAGED_FIELD(qpB)>("qpB", "qpB");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h264)
-struct VkVideoEncodeH264FrameSizeKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264FrameSizeKHR> {
-    VkVideoEncodeH264FrameSizeKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264FrameSizeKHR", ml, "VkVideoEncodeH264FrameSizeKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH264FrameSizeKHR_Ann * ann_VkVideoEncodeH264FrameSizeKHR = nullptr;
-void VkVideoEncodeH264FrameSizeKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(frameISize)>("frameISize", "frameISize");
-    addField<DAS_BIND_MANAGED_FIELD(framePSize)>("framePSize", "framePSize");
-    addField<DAS_BIND_MANAGED_FIELD(frameBSize)>("frameBSize", "frameBSize");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h264)
-struct VkVideoEncodeH264GopRemainingFrameInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264GopRemainingFrameInfoKHR> {
-    VkVideoEncodeH264GopRemainingFrameInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264GopRemainingFrameInfoKHR", ml, "VkVideoEncodeH264GopRemainingFrameInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH264GopRemainingFrameInfoKHR_Ann * ann_VkVideoEncodeH264GopRemainingFrameInfoKHR = nullptr;
-void VkVideoEncodeH264GopRemainingFrameInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264GopRemainingFrameInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(useGopRemainingFrames)>("useGopRemainingFrames", "useGopRemainingFrames");
-    addField<DAS_BIND_MANAGED_FIELD(gopRemainingI)>("gopRemainingI", "gopRemainingI");
-    addField<DAS_BIND_MANAGED_FIELD(gopRemainingP)>("gopRemainingP", "gopRemainingP");
-    addField<DAS_BIND_MANAGED_FIELD(gopRemainingB)>("gopRemainingB", "gopRemainingB");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h264)
-struct VkVideoEncodeH264RateControlLayerInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH264RateControlLayerInfoKHR> {
-    VkVideoEncodeH264RateControlLayerInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH264RateControlLayerInfoKHR", ml, "VkVideoEncodeH264RateControlLayerInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH264RateControlLayerInfoKHR_Ann * ann_VkVideoEncodeH264RateControlLayerInfoKHR = nullptr;
-void VkVideoEncodeH264RateControlLayerInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH264RateControlLayerInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(useMinQp)>("useMinQp", "useMinQp");
-    addField<DAS_BIND_MANAGED_FIELD(minQp)>("minQp", "minQp");
-    addField<DAS_BIND_MANAGED_FIELD(useMaxQp)>("useMaxQp", "useMaxQp");
-    addField<DAS_BIND_MANAGED_FIELD(maxQp)>("maxQp", "maxQp");
-    addField<DAS_BIND_MANAGED_FIELD(useMaxFrameSize)>("useMaxFrameSize", "useMaxFrameSize");
-    addField<DAS_BIND_MANAGED_FIELD(maxFrameSize)>("maxFrameSize", "maxFrameSize");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h265)
-struct VkVideoEncodeH265QualityLevelPropertiesKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265QualityLevelPropertiesKHR> {
-    VkVideoEncodeH265QualityLevelPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265QualityLevelPropertiesKHR", ml, "VkVideoEncodeH265QualityLevelPropertiesKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH265QualityLevelPropertiesKHR_Ann * ann_VkVideoEncodeH265QualityLevelPropertiesKHR = nullptr;
-void VkVideoEncodeH265QualityLevelPropertiesKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265QualityLevelPropertiesKHR, pNext), makeType<void *>(*mlib));
-    addFieldEx("preferredRateControlFlags", "preferredRateControlFlags", offsetof(VkVideoEncodeH265QualityLevelPropertiesKHR, preferredRateControlFlags), makeVkFlags_VkVideoEncodeH265RateControlFlagsKHR());
-    addField<DAS_BIND_MANAGED_FIELD(preferredGopFrameCount)>("preferredGopFrameCount", "preferredGopFrameCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredIdrPeriod)>("preferredIdrPeriod", "preferredIdrPeriod");
-    addField<DAS_BIND_MANAGED_FIELD(preferredConsecutiveBFrameCount)>("preferredConsecutiveBFrameCount", "preferredConsecutiveBFrameCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredSubLayerCount)>("preferredSubLayerCount", "preferredSubLayerCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredConstantQp)>("preferredConstantQp", "preferredConstantQp");
-    addField<DAS_BIND_MANAGED_FIELD(preferredMaxL0ReferenceCount)>("preferredMaxL0ReferenceCount", "preferredMaxL0ReferenceCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredMaxL1ReferenceCount)>("preferredMaxL1ReferenceCount", "preferredMaxL1ReferenceCount");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h265)
-struct VkVideoEncodeH265SessionParametersGetInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265SessionParametersGetInfoKHR> {
-    VkVideoEncodeH265SessionParametersGetInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265SessionParametersGetInfoKHR", ml, "VkVideoEncodeH265SessionParametersGetInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH265SessionParametersGetInfoKHR_Ann * ann_VkVideoEncodeH265SessionParametersGetInfoKHR = nullptr;
-void VkVideoEncodeH265SessionParametersGetInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265SessionParametersGetInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(writeStdVPS)>("writeStdVPS", "writeStdVPS");
-    addField<DAS_BIND_MANAGED_FIELD(writeStdSPS)>("writeStdSPS", "writeStdSPS");
-    addField<DAS_BIND_MANAGED_FIELD(writeStdPPS)>("writeStdPPS", "writeStdPPS");
-    addField<DAS_BIND_MANAGED_FIELD(stdVPSId)>("stdVPSId", "stdVPSId");
-    addField<DAS_BIND_MANAGED_FIELD(stdSPSId)>("stdSPSId", "stdSPSId");
-    addField<DAS_BIND_MANAGED_FIELD(stdPPSId)>("stdPPSId", "stdPPSId");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h265)
-struct VkVideoEncodeH265SessionParametersFeedbackInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265SessionParametersFeedbackInfoKHR> {
-    VkVideoEncodeH265SessionParametersFeedbackInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265SessionParametersFeedbackInfoKHR", ml, "VkVideoEncodeH265SessionParametersFeedbackInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH265SessionParametersFeedbackInfoKHR_Ann * ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR = nullptr;
-void VkVideoEncodeH265SessionParametersFeedbackInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265SessionParametersFeedbackInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(hasStdVPSOverrides)>("hasStdVPSOverrides", "hasStdVPSOverrides");
-    addField<DAS_BIND_MANAGED_FIELD(hasStdSPSOverrides)>("hasStdSPSOverrides", "hasStdSPSOverrides");
-    addField<DAS_BIND_MANAGED_FIELD(hasStdPPSOverrides)>("hasStdPPSOverrides", "hasStdPPSOverrides");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h265)
-struct VkVideoEncodeH265RateControlInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265RateControlInfoKHR> {
-    VkVideoEncodeH265RateControlInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265RateControlInfoKHR", ml, "VkVideoEncodeH265RateControlInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH265RateControlInfoKHR_Ann * ann_VkVideoEncodeH265RateControlInfoKHR = nullptr;
-void VkVideoEncodeH265RateControlInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265RateControlInfoKHR, pNext), makeType<void *>(*mlib));
-    addFieldEx("flags", "flags", offsetof(VkVideoEncodeH265RateControlInfoKHR, flags), makeVkFlags_VkVideoEncodeH265RateControlFlagsKHR());
-    addField<DAS_BIND_MANAGED_FIELD(gopFrameCount)>("gopFrameCount", "gopFrameCount");
-    addField<DAS_BIND_MANAGED_FIELD(idrPeriod)>("idrPeriod", "idrPeriod");
-    addField<DAS_BIND_MANAGED_FIELD(consecutiveBFrameCount)>("consecutiveBFrameCount", "consecutiveBFrameCount");
-    addField<DAS_BIND_MANAGED_FIELD(subLayerCount)>("subLayerCount", "subLayerCount");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h265)
-struct VkVideoEncodeH265QpKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265QpKHR> {
-    VkVideoEncodeH265QpKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265QpKHR", ml, "VkVideoEncodeH265QpKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH265QpKHR_Ann * ann_VkVideoEncodeH265QpKHR = nullptr;
-void VkVideoEncodeH265QpKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(qpI)>("qpI", "qpI");
-    addField<DAS_BIND_MANAGED_FIELD(qpP)>("qpP", "qpP");
-    addField<DAS_BIND_MANAGED_FIELD(qpB)>("qpB", "qpB");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h265)
-struct VkVideoEncodeH265FrameSizeKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265FrameSizeKHR> {
-    VkVideoEncodeH265FrameSizeKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265FrameSizeKHR", ml, "VkVideoEncodeH265FrameSizeKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH265FrameSizeKHR_Ann * ann_VkVideoEncodeH265FrameSizeKHR = nullptr;
-void VkVideoEncodeH265FrameSizeKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(frameISize)>("frameISize", "frameISize");
-    addField<DAS_BIND_MANAGED_FIELD(framePSize)>("framePSize", "framePSize");
-    addField<DAS_BIND_MANAGED_FIELD(frameBSize)>("frameBSize", "frameBSize");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h265)
-struct VkVideoEncodeH265GopRemainingFrameInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265GopRemainingFrameInfoKHR> {
-    VkVideoEncodeH265GopRemainingFrameInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265GopRemainingFrameInfoKHR", ml, "VkVideoEncodeH265GopRemainingFrameInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH265GopRemainingFrameInfoKHR_Ann * ann_VkVideoEncodeH265GopRemainingFrameInfoKHR = nullptr;
-void VkVideoEncodeH265GopRemainingFrameInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265GopRemainingFrameInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(useGopRemainingFrames)>("useGopRemainingFrames", "useGopRemainingFrames");
-    addField<DAS_BIND_MANAGED_FIELD(gopRemainingI)>("gopRemainingI", "gopRemainingI");
-    addField<DAS_BIND_MANAGED_FIELD(gopRemainingP)>("gopRemainingP", "gopRemainingP");
-    addField<DAS_BIND_MANAGED_FIELD(gopRemainingB)>("gopRemainingB", "gopRemainingB");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_h265)
-struct VkVideoEncodeH265RateControlLayerInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeH265RateControlLayerInfoKHR> {
-    VkVideoEncodeH265RateControlLayerInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeH265RateControlLayerInfoKHR", ml, "VkVideoEncodeH265RateControlLayerInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeH265RateControlLayerInfoKHR_Ann * ann_VkVideoEncodeH265RateControlLayerInfoKHR = nullptr;
-void VkVideoEncodeH265RateControlLayerInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeH265RateControlLayerInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(useMinQp)>("useMinQp", "useMinQp");
-    addField<DAS_BIND_MANAGED_FIELD(minQp)>("minQp", "minQp");
-    addField<DAS_BIND_MANAGED_FIELD(useMaxQp)>("useMaxQp", "useMaxQp");
-    addField<DAS_BIND_MANAGED_FIELD(maxQp)>("maxQp", "maxQp");
-    addField<DAS_BIND_MANAGED_FIELD(useMaxFrameSize)>("useMaxFrameSize", "useMaxFrameSize");
-    addField<DAS_BIND_MANAGED_FIELD(maxFrameSize)>("maxFrameSize", "maxFrameSize");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_av1)
-struct VkVideoEncodeAV1QualityLevelPropertiesKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1QualityLevelPropertiesKHR> {
-    VkVideoEncodeAV1QualityLevelPropertiesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1QualityLevelPropertiesKHR", ml, "VkVideoEncodeAV1QualityLevelPropertiesKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeAV1QualityLevelPropertiesKHR_Ann * ann_VkVideoEncodeAV1QualityLevelPropertiesKHR = nullptr;
-void VkVideoEncodeAV1QualityLevelPropertiesKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeAV1QualityLevelPropertiesKHR, pNext), makeType<void *>(*mlib));
-    addFieldEx("preferredRateControlFlags", "preferredRateControlFlags", offsetof(VkVideoEncodeAV1QualityLevelPropertiesKHR, preferredRateControlFlags), makeVkFlags_VkVideoEncodeAV1RateControlFlagsKHR());
-    addField<DAS_BIND_MANAGED_FIELD(preferredGopFrameCount)>("preferredGopFrameCount", "preferredGopFrameCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredKeyFramePeriod)>("preferredKeyFramePeriod", "preferredKeyFramePeriod");
-    addField<DAS_BIND_MANAGED_FIELD(preferredConsecutiveBipredictiveFrameCount)>("preferredConsecutiveBipredictiveFrameCount", "preferredConsecutiveBipredictiveFrameCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredTemporalLayerCount)>("preferredTemporalLayerCount", "preferredTemporalLayerCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredConstantQIndex)>("preferredConstantQIndex", "preferredConstantQIndex");
-    addField<DAS_BIND_MANAGED_FIELD(preferredMaxSingleReferenceCount)>("preferredMaxSingleReferenceCount", "preferredMaxSingleReferenceCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredSingleReferenceNameMask)>("preferredSingleReferenceNameMask", "preferredSingleReferenceNameMask");
-    addField<DAS_BIND_MANAGED_FIELD(preferredMaxUnidirectionalCompoundReferenceCount)>("preferredMaxUnidirectionalCompoundReferenceCount", "preferredMaxUnidirectionalCompoundReferenceCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredMaxUnidirectionalCompoundGroup1ReferenceCount)>("preferredMaxUnidirectionalCompoundGroup1ReferenceCount", "preferredMaxUnidirectionalCompoundGroup1ReferenceCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredUnidirectionalCompoundReferenceNameMask)>("preferredUnidirectionalCompoundReferenceNameMask", "preferredUnidirectionalCompoundReferenceNameMask");
-    addField<DAS_BIND_MANAGED_FIELD(preferredMaxBidirectionalCompoundReferenceCount)>("preferredMaxBidirectionalCompoundReferenceCount", "preferredMaxBidirectionalCompoundReferenceCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredMaxBidirectionalCompoundGroup1ReferenceCount)>("preferredMaxBidirectionalCompoundGroup1ReferenceCount", "preferredMaxBidirectionalCompoundGroup1ReferenceCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredMaxBidirectionalCompoundGroup2ReferenceCount)>("preferredMaxBidirectionalCompoundGroup2ReferenceCount", "preferredMaxBidirectionalCompoundGroup2ReferenceCount");
-    addField<DAS_BIND_MANAGED_FIELD(preferredBidirectionalCompoundReferenceNameMask)>("preferredBidirectionalCompoundReferenceNameMask", "preferredBidirectionalCompoundReferenceNameMask");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_av1)
-struct VkPhysicalDeviceVideoEncodeAV1FeaturesKHR_Ann : ManagedStructureAnnotation<VkPhysicalDeviceVideoEncodeAV1FeaturesKHR> {
-    VkPhysicalDeviceVideoEncodeAV1FeaturesKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceVideoEncodeAV1FeaturesKHR", ml, "VkPhysicalDeviceVideoEncodeAV1FeaturesKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkPhysicalDeviceVideoEncodeAV1FeaturesKHR_Ann * ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR = nullptr;
-void VkPhysicalDeviceVideoEncodeAV1FeaturesKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVideoEncodeAV1FeaturesKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(videoEncodeAV1)>("videoEncodeAV1", "videoEncodeAV1");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_av1)
-struct VkVideoEncodeAV1RateControlInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1RateControlInfoKHR> {
-    VkVideoEncodeAV1RateControlInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1RateControlInfoKHR", ml, "VkVideoEncodeAV1RateControlInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeAV1RateControlInfoKHR_Ann * ann_VkVideoEncodeAV1RateControlInfoKHR = nullptr;
-void VkVideoEncodeAV1RateControlInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeAV1RateControlInfoKHR, pNext), makeType<void *>(*mlib));
-    addFieldEx("flags", "flags", offsetof(VkVideoEncodeAV1RateControlInfoKHR, flags), makeVkFlags_VkVideoEncodeAV1RateControlFlagsKHR());
-    addField<DAS_BIND_MANAGED_FIELD(gopFrameCount)>("gopFrameCount", "gopFrameCount");
-    addField<DAS_BIND_MANAGED_FIELD(keyFramePeriod)>("keyFramePeriod", "keyFramePeriod");
-    addField<DAS_BIND_MANAGED_FIELD(consecutiveBipredictiveFrameCount)>("consecutiveBipredictiveFrameCount", "consecutiveBipredictiveFrameCount");
-    addField<DAS_BIND_MANAGED_FIELD(temporalLayerCount)>("temporalLayerCount", "temporalLayerCount");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_av1)
-struct VkVideoEncodeAV1QIndexKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1QIndexKHR> {
-    VkVideoEncodeAV1QIndexKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1QIndexKHR", ml, "VkVideoEncodeAV1QIndexKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeAV1QIndexKHR_Ann * ann_VkVideoEncodeAV1QIndexKHR = nullptr;
-void VkVideoEncodeAV1QIndexKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(intraQIndex)>("intraQIndex", "intraQIndex");
-    addField<DAS_BIND_MANAGED_FIELD(predictiveQIndex)>("predictiveQIndex", "predictiveQIndex");
-    addField<DAS_BIND_MANAGED_FIELD(bipredictiveQIndex)>("bipredictiveQIndex", "bipredictiveQIndex");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_av1)
-struct VkVideoEncodeAV1FrameSizeKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1FrameSizeKHR> {
-    VkVideoEncodeAV1FrameSizeKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1FrameSizeKHR", ml, "VkVideoEncodeAV1FrameSizeKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeAV1FrameSizeKHR_Ann * ann_VkVideoEncodeAV1FrameSizeKHR = nullptr;
-void VkVideoEncodeAV1FrameSizeKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(intraFrameSize)>("intraFrameSize", "intraFrameSize");
-    addField<DAS_BIND_MANAGED_FIELD(predictiveFrameSize)>("predictiveFrameSize", "predictiveFrameSize");
-    addField<DAS_BIND_MANAGED_FIELD(bipredictiveFrameSize)>("bipredictiveFrameSize", "bipredictiveFrameSize");
-}
-#endif
-
-#if defined(VK_KHR_video_encode_av1)
-struct VkVideoEncodeAV1GopRemainingFrameInfoKHR_Ann : ManagedStructureAnnotation<VkVideoEncodeAV1GopRemainingFrameInfoKHR> {
-    VkVideoEncodeAV1GopRemainingFrameInfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkVideoEncodeAV1GopRemainingFrameInfoKHR", ml, "VkVideoEncodeAV1GopRemainingFrameInfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkVideoEncodeAV1GopRemainingFrameInfoKHR_Ann * ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR = nullptr;
-void VkVideoEncodeAV1GopRemainingFrameInfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkVideoEncodeAV1GopRemainingFrameInfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(useGopRemainingFrames)>("useGopRemainingFrames", "useGopRemainingFrames");
-    addField<DAS_BIND_MANAGED_FIELD(gopRemainingIntra)>("gopRemainingIntra", "gopRemainingIntra");
-    addField<DAS_BIND_MANAGED_FIELD(gopRemainingPredictive)>("gopRemainingPredictive", "gopRemainingPredictive");
-    addField<DAS_BIND_MANAGED_FIELD(gopRemainingBipredictive)>("gopRemainingBipredictive", "gopRemainingBipredictive");
-}
-#endif
-
 void das_vulkan_add_structs_16(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_VERSION_1_4)
+    ann_VkPhysicalDevicePipelineProtectedAccessFeatures = new VkPhysicalDevicePipelineProtectedAccessFeatures_Ann(lib); mod.addAnnotation(ann_VkPhysicalDevicePipelineProtectedAccessFeatures);
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkQueueFamilyVideoPropertiesKHR = new VkQueueFamilyVideoPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkQueueFamilyVideoPropertiesKHR);
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkQueueFamilyQueryResultStatusPropertiesKHR = new VkQueueFamilyQueryResultStatusPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkQueueFamilyQueryResultStatusPropertiesKHR);
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoProfileListInfoKHR = new VkVideoProfileListInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoProfileListInfoKHR);
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkPhysicalDeviceVideoFormatInfoKHR = new VkPhysicalDeviceVideoFormatInfoKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceVideoFormatInfoKHR);
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoFormatPropertiesKHR = new VkVideoFormatPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoFormatPropertiesKHR);
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoEncodeQuantizationMapCapabilitiesKHR = new VkVideoEncodeQuantizationMapCapabilitiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeQuantizationMapCapabilitiesKHR);
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoEncodeH264QuantizationMapCapabilitiesKHR = new VkVideoEncodeH264QuantizationMapCapabilitiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264QuantizationMapCapabilitiesKHR);
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoEncodeH265QuantizationMapCapabilitiesKHR = new VkVideoEncodeH265QuantizationMapCapabilitiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265QuantizationMapCapabilitiesKHR);
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoEncodeAV1QuantizationMapCapabilitiesKHR = new VkVideoEncodeAV1QuantizationMapCapabilitiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1QuantizationMapCapabilitiesKHR);
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoFormatQuantizationMapPropertiesKHR = new VkVideoFormatQuantizationMapPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoFormatQuantizationMapPropertiesKHR);
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoFormatH265QuantizationMapPropertiesKHR = new VkVideoFormatH265QuantizationMapPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoFormatH265QuantizationMapPropertiesKHR);
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoFormatAV1QuantizationMapPropertiesKHR = new VkVideoFormatAV1QuantizationMapPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoFormatAV1QuantizationMapPropertiesKHR);
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoProfileInfoKHR = new VkVideoProfileInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoProfileInfoKHR);
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoCapabilitiesKHR = new VkVideoCapabilitiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoCapabilitiesKHR);
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoSessionMemoryRequirementsKHR = new VkVideoSessionMemoryRequirementsKHR_Ann(lib); mod.addAnnotation(ann_VkVideoSessionMemoryRequirementsKHR);
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkBindVideoSessionMemoryInfoKHR = new VkBindVideoSessionMemoryInfoKHR_Ann(lib); mod.addAnnotation(ann_VkBindVideoSessionMemoryInfoKHR);
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoPictureResourceInfoKHR = new VkVideoPictureResourceInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoPictureResourceInfoKHR);
+#endif
 #if defined(VK_KHR_video_queue)
     ann_VkVideoReferenceSlotInfoKHR = new VkVideoReferenceSlotInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoReferenceSlotInfoKHR);
 #endif
@@ -1011,75 +1031,75 @@ void das_vulkan_add_structs_16(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_KHR_video_encode_queue)
     ann_VkVideoEncodeCapabilitiesKHR = new VkVideoEncodeCapabilitiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeCapabilitiesKHR);
 #endif
+#if defined(VK_KHR_video_encode_feedback2)
+    ann_VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR = new VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR);
+#endif
+#if defined(VK_KHR_video_encode_feedback2)
+    ann_VkVideoEncodeFeedback2CapabilitiesKHR = new VkVideoEncodeFeedback2CapabilitiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeFeedback2CapabilitiesKHR);
+#endif
+#if defined(VK_KHR_video_encode_feedback2)
+    ann_VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR = new VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR_Ann(lib); mod.addAnnotation(ann_VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR);
+#endif
 #if defined(VK_KHR_video_encode_h264)
     ann_VkVideoEncodeH264QualityLevelPropertiesKHR = new VkVideoEncodeH264QualityLevelPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264QualityLevelPropertiesKHR);
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264SessionParametersGetInfoKHR = new VkVideoEncodeH264SessionParametersGetInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264SessionParametersGetInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR = new VkVideoEncodeH264SessionParametersFeedbackInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264RateControlInfoKHR = new VkVideoEncodeH264RateControlInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264RateControlInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264QpKHR = new VkVideoEncodeH264QpKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264QpKHR);
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264FrameSizeKHR = new VkVideoEncodeH264FrameSizeKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264FrameSizeKHR);
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264GopRemainingFrameInfoKHR = new VkVideoEncodeH264GopRemainingFrameInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264GopRemainingFrameInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264RateControlLayerInfoKHR = new VkVideoEncodeH264RateControlLayerInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH264RateControlLayerInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265QualityLevelPropertiesKHR = new VkVideoEncodeH265QualityLevelPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265QualityLevelPropertiesKHR);
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265SessionParametersGetInfoKHR = new VkVideoEncodeH265SessionParametersGetInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265SessionParametersGetInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR = new VkVideoEncodeH265SessionParametersFeedbackInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265RateControlInfoKHR = new VkVideoEncodeH265RateControlInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265RateControlInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265QpKHR = new VkVideoEncodeH265QpKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265QpKHR);
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265FrameSizeKHR = new VkVideoEncodeH265FrameSizeKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265FrameSizeKHR);
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265GopRemainingFrameInfoKHR = new VkVideoEncodeH265GopRemainingFrameInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265GopRemainingFrameInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265RateControlLayerInfoKHR = new VkVideoEncodeH265RateControlLayerInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeH265RateControlLayerInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkVideoEncodeAV1QualityLevelPropertiesKHR = new VkVideoEncodeAV1QualityLevelPropertiesKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1QualityLevelPropertiesKHR);
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR = new VkPhysicalDeviceVideoEncodeAV1FeaturesKHR_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR);
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkVideoEncodeAV1RateControlInfoKHR = new VkVideoEncodeAV1RateControlInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1RateControlInfoKHR);
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkVideoEncodeAV1QIndexKHR = new VkVideoEncodeAV1QIndexKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1QIndexKHR);
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkVideoEncodeAV1FrameSizeKHR = new VkVideoEncodeAV1FrameSizeKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1FrameSizeKHR);
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR = new VkVideoEncodeAV1GopRemainingFrameInfoKHR_Ann(lib); mod.addAnnotation(ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR);
 #endif
 }
 
 void das_vulkan_fill_structs_16(Module & mod, ModuleLibrary & lib) {
+#if defined(VK_VERSION_1_4)
+    ann_VkPhysicalDevicePipelineProtectedAccessFeatures->mlib = &lib; ann_VkPhysicalDevicePipelineProtectedAccessFeatures->init(); ann_VkPhysicalDevicePipelineProtectedAccessFeatures->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkQueueFamilyVideoPropertiesKHR->mlib = &lib; ann_VkQueueFamilyVideoPropertiesKHR->init(); ann_VkQueueFamilyVideoPropertiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkQueueFamilyQueryResultStatusPropertiesKHR->mlib = &lib; ann_VkQueueFamilyQueryResultStatusPropertiesKHR->init(); ann_VkQueueFamilyQueryResultStatusPropertiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoProfileListInfoKHR->mlib = &lib; ann_VkVideoProfileListInfoKHR->init(); ann_VkVideoProfileListInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkPhysicalDeviceVideoFormatInfoKHR->mlib = &lib; ann_VkPhysicalDeviceVideoFormatInfoKHR->init(); ann_VkPhysicalDeviceVideoFormatInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoFormatPropertiesKHR->mlib = &lib; ann_VkVideoFormatPropertiesKHR->init(); ann_VkVideoFormatPropertiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoEncodeQuantizationMapCapabilitiesKHR->mlib = &lib; ann_VkVideoEncodeQuantizationMapCapabilitiesKHR->init(); ann_VkVideoEncodeQuantizationMapCapabilitiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoEncodeH264QuantizationMapCapabilitiesKHR->mlib = &lib; ann_VkVideoEncodeH264QuantizationMapCapabilitiesKHR->init(); ann_VkVideoEncodeH264QuantizationMapCapabilitiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoEncodeH265QuantizationMapCapabilitiesKHR->mlib = &lib; ann_VkVideoEncodeH265QuantizationMapCapabilitiesKHR->init(); ann_VkVideoEncodeH265QuantizationMapCapabilitiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoEncodeAV1QuantizationMapCapabilitiesKHR->mlib = &lib; ann_VkVideoEncodeAV1QuantizationMapCapabilitiesKHR->init(); ann_VkVideoEncodeAV1QuantizationMapCapabilitiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoFormatQuantizationMapPropertiesKHR->mlib = &lib; ann_VkVideoFormatQuantizationMapPropertiesKHR->init(); ann_VkVideoFormatQuantizationMapPropertiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoFormatH265QuantizationMapPropertiesKHR->mlib = &lib; ann_VkVideoFormatH265QuantizationMapPropertiesKHR->init(); ann_VkVideoFormatH265QuantizationMapPropertiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_quantization_map)
+    ann_VkVideoFormatAV1QuantizationMapPropertiesKHR->mlib = &lib; ann_VkVideoFormatAV1QuantizationMapPropertiesKHR->init(); ann_VkVideoFormatAV1QuantizationMapPropertiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoProfileInfoKHR->mlib = &lib; ann_VkVideoProfileInfoKHR->init(); ann_VkVideoProfileInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoCapabilitiesKHR->mlib = &lib; ann_VkVideoCapabilitiesKHR->init(); ann_VkVideoCapabilitiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoSessionMemoryRequirementsKHR->mlib = &lib; ann_VkVideoSessionMemoryRequirementsKHR->init(); ann_VkVideoSessionMemoryRequirementsKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkBindVideoSessionMemoryInfoKHR->mlib = &lib; ann_VkBindVideoSessionMemoryInfoKHR->init(); ann_VkBindVideoSessionMemoryInfoKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_queue)
+    ann_VkVideoPictureResourceInfoKHR->mlib = &lib; ann_VkVideoPictureResourceInfoKHR->init(); ann_VkVideoPictureResourceInfoKHR->mlib = nullptr;
+#endif
 #if defined(VK_KHR_video_queue)
     ann_VkVideoReferenceSlotInfoKHR->mlib = &lib; ann_VkVideoReferenceSlotInfoKHR->init(); ann_VkVideoReferenceSlotInfoKHR->mlib = nullptr;
 #endif
@@ -1164,71 +1184,17 @@ void das_vulkan_fill_structs_16(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_KHR_video_encode_queue)
     ann_VkVideoEncodeCapabilitiesKHR->mlib = &lib; ann_VkVideoEncodeCapabilitiesKHR->init(); ann_VkVideoEncodeCapabilitiesKHR->mlib = nullptr;
 #endif
+#if defined(VK_KHR_video_encode_feedback2)
+    ann_VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR->mlib = &lib; ann_VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR->init(); ann_VkPhysicalDeviceVideoEncodeFeedback2FeaturesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_feedback2)
+    ann_VkVideoEncodeFeedback2CapabilitiesKHR->mlib = &lib; ann_VkVideoEncodeFeedback2CapabilitiesKHR->init(); ann_VkVideoEncodeFeedback2CapabilitiesKHR->mlib = nullptr;
+#endif
+#if defined(VK_KHR_video_encode_feedback2)
+    ann_VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR->mlib = &lib; ann_VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR->init(); ann_VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR->mlib = nullptr;
+#endif
 #if defined(VK_KHR_video_encode_h264)
     ann_VkVideoEncodeH264QualityLevelPropertiesKHR->mlib = &lib; ann_VkVideoEncodeH264QualityLevelPropertiesKHR->init(); ann_VkVideoEncodeH264QualityLevelPropertiesKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264SessionParametersGetInfoKHR->mlib = &lib; ann_VkVideoEncodeH264SessionParametersGetInfoKHR->init(); ann_VkVideoEncodeH264SessionParametersGetInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR->mlib = &lib; ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR->init(); ann_VkVideoEncodeH264SessionParametersFeedbackInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264RateControlInfoKHR->mlib = &lib; ann_VkVideoEncodeH264RateControlInfoKHR->init(); ann_VkVideoEncodeH264RateControlInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264QpKHR->mlib = &lib; ann_VkVideoEncodeH264QpKHR->init(); ann_VkVideoEncodeH264QpKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264FrameSizeKHR->mlib = &lib; ann_VkVideoEncodeH264FrameSizeKHR->init(); ann_VkVideoEncodeH264FrameSizeKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264GopRemainingFrameInfoKHR->mlib = &lib; ann_VkVideoEncodeH264GopRemainingFrameInfoKHR->init(); ann_VkVideoEncodeH264GopRemainingFrameInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h264)
-    ann_VkVideoEncodeH264RateControlLayerInfoKHR->mlib = &lib; ann_VkVideoEncodeH264RateControlLayerInfoKHR->init(); ann_VkVideoEncodeH264RateControlLayerInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265QualityLevelPropertiesKHR->mlib = &lib; ann_VkVideoEncodeH265QualityLevelPropertiesKHR->init(); ann_VkVideoEncodeH265QualityLevelPropertiesKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265SessionParametersGetInfoKHR->mlib = &lib; ann_VkVideoEncodeH265SessionParametersGetInfoKHR->init(); ann_VkVideoEncodeH265SessionParametersGetInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR->mlib = &lib; ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR->init(); ann_VkVideoEncodeH265SessionParametersFeedbackInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265RateControlInfoKHR->mlib = &lib; ann_VkVideoEncodeH265RateControlInfoKHR->init(); ann_VkVideoEncodeH265RateControlInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265QpKHR->mlib = &lib; ann_VkVideoEncodeH265QpKHR->init(); ann_VkVideoEncodeH265QpKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265FrameSizeKHR->mlib = &lib; ann_VkVideoEncodeH265FrameSizeKHR->init(); ann_VkVideoEncodeH265FrameSizeKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265GopRemainingFrameInfoKHR->mlib = &lib; ann_VkVideoEncodeH265GopRemainingFrameInfoKHR->init(); ann_VkVideoEncodeH265GopRemainingFrameInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_h265)
-    ann_VkVideoEncodeH265RateControlLayerInfoKHR->mlib = &lib; ann_VkVideoEncodeH265RateControlLayerInfoKHR->init(); ann_VkVideoEncodeH265RateControlLayerInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkVideoEncodeAV1QualityLevelPropertiesKHR->mlib = &lib; ann_VkVideoEncodeAV1QualityLevelPropertiesKHR->init(); ann_VkVideoEncodeAV1QualityLevelPropertiesKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR->mlib = &lib; ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR->init(); ann_VkPhysicalDeviceVideoEncodeAV1FeaturesKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkVideoEncodeAV1RateControlInfoKHR->mlib = &lib; ann_VkVideoEncodeAV1RateControlInfoKHR->init(); ann_VkVideoEncodeAV1RateControlInfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkVideoEncodeAV1QIndexKHR->mlib = &lib; ann_VkVideoEncodeAV1QIndexKHR->init(); ann_VkVideoEncodeAV1QIndexKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkVideoEncodeAV1FrameSizeKHR->mlib = &lib; ann_VkVideoEncodeAV1FrameSizeKHR->init(); ann_VkVideoEncodeAV1FrameSizeKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_video_encode_av1)
-    ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR->mlib = &lib; ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR->init(); ann_VkVideoEncodeAV1GopRemainingFrameInfoKHR->mlib = nullptr;
 #endif
 }
 

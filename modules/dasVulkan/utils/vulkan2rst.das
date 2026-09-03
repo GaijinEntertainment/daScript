@@ -58,7 +58,7 @@ def document_module_vulkan_commands() {
         group_by_regex("Commands & queries", mod, %regex~^(create_(command_pool|query_pool|indirect_commands_layout_e_x_t|indirect_commands_layout_n_v|indirect_execution_set_e_x_t)|allocate_command_buffers)$%%),
         group_by_regex("Synchronization",   mod, %regex~^create_(fence|semaphore|event)$%%),
         group_by_regex("Surfaces & swapchains", mod, %regex~^create_(display_mode_k_h_r|display_plane_surface_k_h_r|headless_surface_e_x_t|swapchain.*|shared_swapchains_k_h_r)$%%),
-        group_by_regex("Acceleration & advanced", mod, %regex~^create_(acceleration_structure.*|micromap_e_x_t|optical_flow_session_n_v|external_compute_queue_n_v|cu_function_n_v_x|cu_module_n_v_x|tensor_view_a_r_m|tensor_a_r_m|video_session_k_h_r|video_session_parameters_k_h_r)$%%)
+        group_by_regex("Acceleration & advanced", mod, %regex~^create_(acceleration_structure.*|micromap_e_x_t|optical_flow_session_n_v|gpa_session_a_m_d|external_compute_queue_n_v|cu_function_n_v_x|cu_module_n_v_x|tensor_view_a_r_m|tensor_a_r_m|video_session_k_h_r|video_session_parameters_k_h_r)$%%)
     )
     document("Commands — RAII creators returning owning handle wrappers", mod, "vulkan_commands.rst", groups)
 }
@@ -76,7 +76,7 @@ def document_module_vulkan_boost() {
         group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|record_render_pass|record_rendering|map_memory_to_array|read_memory|with_mapped_memory|with_push_staging|write_field|upload_bytes)$%%),
         group_by_regex("Command recording", mod, %regex~^(cmd_bind_pipeline|cmd_bind_vertex_buffer|cmd_draw|cmd_push_constants|copy_image_to_buffer|transition_image|transition_depth_image|transition_image_aspect)$%%),
         group_by_regex("Conveniences",     mod, %regex~^(full_area|clear_color|clear_depth)$%%),
-        group_by_regex("Compute tier & device capabilities", mod, %regex~^(storage_8_16_supported|compute_full_subgroups_supported|subgroup_properties|subgroup_compute_ops_supported|integer_dot_product_supported|cooperative_matrix_supported|cooperative_matrix2_supported|cooperative_matrix2_fa_supported|cooperative_matrix2_properties|cooperative_vector_supported|memory_priority_supported|timeline_semaphore_supported|external_memory_host_supported|external_memory_host_min_alignment|select_transfer_queue_family|create_device_(storage_8_16.*|cooperative_matrix|coopmat_full_subgroups))$%%),
+        group_by_regex("Compute tier & device capabilities", mod, %regex~^(storage_8_16_supported|compute_full_subgroups_supported|subgroup_properties|subgroup_compute_ops_supported|integer_dot_product_supported|cooperative_matrix_supported|cooperative_matrix2_supported|cooperative_matrix2_fa_supported|cooperative_matrix2_decode_vector_supported|cooperative_matrix2_properties|cooperative_vector_supported|memory_priority_supported|timeline_semaphore_supported|external_memory_host_supported|external_memory_host_min_alignment|select_transfer_queue_family|create_device_(storage_8_16.*|cooperative_matrix|coopmat_full_subgroups))$%%),
         group_by_regex("Pipeline introspection", mod, %regex~^(pipeline_exec_props_supported|dump_pipeline_executables)$%%),
         hide_group(group_by_regex("Finalizers", mod, %regex~^finalize$%%))
     )
