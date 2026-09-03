@@ -383,43 +383,41 @@ what winter evenings are for.</p></div>
      performance/m5.tune.json, 23 = its runtime.metal_tensor picks; the image reference is llama.cpp's
      multimodal path, the Canary reference NVIDIA's NeMo on Torch MPS -->
 <p>Boris got a new laptop. An M5 Max, at the end of August, and it became the main machine
-the same afternoon. dasLLAMA - our inference engine, written top to bottom in daslang,
-because the language is the thing we are actually building here - had never run on an M5.
-Anton lent us his Mac mini, an M4 Pro of the previous generation that sits on the other side
-of the globe and answers over ssh, so we could watch the two chips side by side. And we got
-to work.</p>
+the same afternoon. dasLLAMA had never run on an M5. Anton lent us his Mac mini - an M4
+Pro, the previous generation, sitting on the other side of the globe and reached over ssh -
+so we could watch the two chips side by side. And we got to work.</p>
 <h2>What a new chip is, to this engine</h2>
-<p>dasLLAMA tunes itself to whatever chip it lands on. For every heavy operation - a matrix
-multiply, an attention step, a normalization - it ships several small GPU programs, kernels,
-that compute the same thing in different ways. The first time it runs on a machine it tries
-them all, keeps the fastest of each, and writes the picks into a small file called a
-sidecar. Sixty-two such choices on the M5 Max. So supporting the M5 meant letting the tuner
-run, and then looking hard at every place where the pick had changed.</p>
+<p>dasLLAMA does not ship kernels tuned for a chip. For every heavy operation - a matrix
+multiply, an attention step, a normalization - it ships several ways of computing the same
+thing. The first time it runs on a machine it tries them all, keeps the fastest of each,
+and writes the picks into a small file called a sidecar. Sixty-two such choices for the M5
+Max. So "supporting the M5" was not a port. It was letting the tuner run and then looking
+hard at every place where the pick had changed.</p>
 <p>Three places did.</p>
-<p>The M5's GPU has tensor units: dedicated matrix hardware, reached through Apple's Metal 4
+<p>The M5's GPU has tensor units - dedicated matrix hardware, reached through Apple's Metal 4
 tensor API. For each matrix multiply in the engine we wrote a tensor-unit version next to
-the plain one and let the machine choose. On the M5 Max the tensor version came out ahead in
-23 of them. That covers every multiply over the compressed 4-, 5-, 6- and 8-bit weights and
-the 16-bit ones, the expert layers of the mixture-of-experts models, and the attention
-scores. The choice lives in the sidecar. A machine that never tried keeps the plain version,
-and one that tried and found it slower keeps it too.</p>
-<p>On the CPU side, the M5 Max has no efficiency cores at all. It has 6 cores Apple calls
-Super and 12 it calls Performance, and all 18 are the real thing. On Anton's M4 we had
-taught the CPU lane to leave the efficiency cores out of the worker pool, because they only
-slowed everyone down. On the M5 that habit would have quietly thrown away a third of the
-chip. Now all 18 work, and token generation parks the six slower ones. We could not believe
-our eyes, so we checked it twice, on both machines.</p>
-<p>The parts that look at pictures and the parts that listen run on the GPU on the M5 the way
-the text path does. Nothing new in the design, the same GPU plumbing, but each one had to be
-tried again and its picks re-made.</p>
+the plain one and let the machine choose. On the M5 Max the tensor version came out ahead
+in 23 of them: every multiply over the compressed 4-, 5-, 6- and 8-bit weights, the 16-bit
+ones, the expert layers of the mixture-of-experts models, and the attention scores. The
+choice lives in the sidecar, not in the code: a machine that never tried keeps the plain
+version, and one that tried and found it slower keeps it too.</p>
+<p>On the CPU side, the M5 Max has no Efficiency cores at all. It has 6 cores Apple calls Super
+and 12 it calls Performance, and all of them are the real thing. On Anton's M4 we had taught
+the CPU lane to leave the Efficiency cores out of the worker pool, because they only slowed
+everyone down. On the M5 that habit would have quietly thrown away a third of the chip. Now
+all 18 work, and token generation parks the six slower ones. We could not believe our eyes, so
+we checked it twice, on both machines.</p>
+<p>The vision towers and the speech-to-text encoders run on the GPU on the M5 the way the text
+path does. Nothing new in the design - the same GPU plumbing - but each one had to be tried
+again and its picks re-made.</p>
 <h2>What we measured</h2>
 <p>So we measured it on the M5 and - look at that. What a beast of a machine.</p>
 <table>
 <thead>
 <tr>
 <th>model</th>
-<th>dasLLAMA (prompt / generation)</th>
-<th>llama.cpp (prompt / generation)</th>
+<th>dasLLAMA (pp512 / tg128)</th>
+<th>llama.cpp (pp512 / tg128)</th>
 </tr>
 </thead>
 <tbody>
@@ -445,34 +443,30 @@ tried again and its picks re-made.</p>
 </tr>
 </tbody>
 </table>
-<p>Tokens per second, reading a 512-token prompt and then writing 128 tokens, on Metal,
-measured on 2026-08-30; the full M5 Max board is on the
-<a href="https://daslang.io/dasllama.html">board</a>.</p>
 <p>Before and after, one chip generation apart, on the same 27B model: Anton's M4 Pro reads
-126.4 / 12.9, the new laptop 913.9 / 27.8. Reading the prompt got seven times faster.
-Writing the answer got a bit more than twice as fast - that one is limited by how quickly
-memory can feed the chip, and there is only so much a new chip can do about memory.
-llama.cpp shows the same picture, 126.3 / 11.5 on the M4 and 752.1 / 25.4 on the M5.</p>
-<p>The parts that look at pictures ride the same machine, the same day. gemma-4-12B's image
-encoder, the piece that turns a picture into tokens the language model can read, takes
+126.4 / 12.9, the new laptop 913.9 / 27.8. Prompt processing moved seven times. Token
+generation, which is bound by memory bandwidth, a little over twice. llama.cpp shows the same
+picture, 126.3 / 11.5 on the M4 and 752.1 / 25.4 on the M5.</p>
+<p>The models that do more than text ride the same machine, the same day. gemma-4-12B's image
+encoder - the part that turns a picture into tokens the language model can read - takes
 7.1 ms where llama.cpp's multimodal path takes 95 ms. The part of Qwen2.5-Omni that looks at
-images, its window vision transformer, takes 106 ms against 118 ms.</p>
-<p>The parts that listen, too. whisper large-v3-turbo transcribes the short JFK clip that
-whisper.cpp ships as its sample in 140 ms, against whisper-cli's 153 ms on the same GPU.
-Canary-Qwen, NVIDIA's speech-to-text model, in its new 8-bit form does the same clip in
-307.6 ms on the M5 and 512.9 ms on the M4, where NVIDIA's own NeMo on Torch MPS takes 704.7
-and 1076.5. On a much longer clip we read 6484 ms and NeMo 4383 ms, which gives us something
-to do during the long winter evenings.</p>
+images, its window vision transformer, 106 ms against 118 ms.</p>
+<p>Speech, too. whisper large-v3-turbo transcribes the short JFK clip that whisper.cpp ships as
+its sample in 140 ms, against whisper-cli's 153 ms on the same GPU. Canary-Qwen, NVIDIA's
+speech-to-text model, in its new 8-bit form does the same clip in 307.6 ms on the M5 and
+512.9 ms on the M4, where NVIDIA's own NeMo on Torch MPS takes 704.7 ms and 1076.5 ms. On
+the long gb1 clip we read 6484 ms and NeMo 4383 ms, which gives us something to do during
+the long winter evenings.</p>
 <p>Glad we have llama.cpp, whisper.cpp and NeMo numbers next to ours. Those are the industry
 standard for this kind of thing, and they are the only way we know whether we are fast, and
 the only way we know when to stop. Without a yardstick a new chip is just a machine that
 runs, and every one of these numbers would be a little worse.</p>
 <h2>Sixty-two kernels walked into a new chip.</h2>
-<p>Most walked out the same. Twenty-three came out wearing tensor units. A few found out, in
-the first afternoon, that the form that had carried them for two chip generations was now
-the slow one, and they did not get a vote: they were rewritten before the tuner had anything
-worth picking. A spec sheet shows none of this. The tuner's log shows all of it, and the log
-is where the week went - happily, which probably says something about us.</p></div>
+<p>Most walked out the same. Twenty-three swapped to the tensor units. A few found out, in
+the first afternoon, that the form that had carried them for two generations was now the
+slow one, and had to be rewritten before the tuner had anything worth picking. None of this
+is visible from a spec sheet. It all happily went into the tuner log, and so did our last
+week - which probably says something about us.</p></div>
 </article>
 <!-- stories:end -->
 </div>
