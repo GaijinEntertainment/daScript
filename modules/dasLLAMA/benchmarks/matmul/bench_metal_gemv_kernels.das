@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options _dasllama_internal = true
+options max_unreserved_size = 1073741824   // the synthetic planes are hundreds of MB by design (cls3b's q8 blob is 418 MB)
 
 require dastest/testing_boost
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
@@ -2512,6 +2513,99 @@ class MetalKqLabK4Ext2 {
             s += simd_shuffle_down(s, 1u)
             if (tx == 0u && row < ddim) {
                 y[uint(b) * ddim + row] = s
+            }
+        }
+    }
+}
+
+class MetalKqLabK4R2C2 {
+    @ssbo @binding = 0 ksh : array<float16>
+    @ssbo @binding = 1 ks4 : array<uint4>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="lab_k4_r2c2_msl")]
+    def lab_k4_r2c2 {   // nolint:STYLE038 — the ext2 body written for two rows
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row0 = gl_WorkGroupID.x * 16u + gl_SubgroupID * 8u + ty * 2u   // this thread's row pair
+        let nb = ndim / 256u
+        let q4i = tx / 4u
+        let hp = (tx % 4u) / 2u
+        let lo = (tx % 2u) * 4u
+        let jl = 2u * q4i + hp
+        let nib = (tx % 4u) < 2u
+        let nsh = nib ? 0u : 4u
+        let nb4 = ndim / 4u
+        var sumf : float[4]                 // [b * 2 + r]
+        var sb = 0u
+        while (sb < nb) {
+            let blkA = row0 * nb + sb
+            let blkB = blkA + nb
+            let svA = ks4[blkA]
+            let svB = ks4[blkB]
+            let ddA = float(ksh[blkA * 8u])
+            let dmA = float(ksh[blkA * 8u + 1u])
+            let ddB = float(ksh[blkB * 8u])
+            let dmB = float(ksh[blkB * 8u + 1u])
+            for [unroll_full] (ch in range(2)) {
+                let syA = (svA.y >> (8u * jl)) & 255u
+                let szA = (svA.z >> (8u * jl)) & 255u
+                let swA = (svA.w >> (8u * jl)) & 255u
+                let syB = (svB.y >> (8u * jl)) & 255u
+                let szB = (svB.z >> (8u * jl)) & 255u
+                let swB = (svB.w >> (8u * jl)) & 255u
+                let scA = ch == 0 ? (syA & 63u) : ((swA & 0x0Fu) | ((syA >> 6u) << 4u))
+                let mnA = ch == 0 ? (szA & 63u) : ((swA >> 4u) | ((szA >> 6u) << 4u))
+                let scB = ch == 0 ? (syB & 63u) : ((swB & 0x0Fu) | ((syB >> 6u) << 4u))
+                let mnB = ch == 0 ? (szB & 63u) : ((swB >> 4u) | ((szB >> 6u) << 4u))
+                let dlA = ddA * float(scA)
+                let mlA = dmA * float(mnA)
+                let dlB = ddB * float(scB)
+                let mlB = dmB * float(mnB)
+                let qoff = (q4i + uint(ch) * 2u) * 8u + lo
+                let qbA = blkA * 32u + qoff
+                let qbB = blkB * 32u + qoff
+                var wa : float[16]
+                var wb : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qvA = kqu[qbA + uint(u)]
+                    let qvB = kqu[qbB + uint(u)]
+                    for [unroll_full] (e in range(4)) {
+                        let byA = (qvA >> (8u * uint(e))) & 255u
+                        let byB = (qvB >> (8u * uint(e))) & 255u
+                        wa[4 * u + e] = float((byA >> nsh) & 0x0Fu) * dlA - mlA
+                        wb[4 * u + e] = float((byB >> nsh) & 0x0Fu) * dlB - mlB
+                    }
+                }
+                let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo
+                for [unroll_full] (b in range(2)) {
+                    let xb4 = uint(b) * nb4 + cx4
+                    var accA = 0.0
+                    var accB = 0.0
+                    for [unroll_full] (u in range(4)) {
+                        let v = x[xb4 + uint(u)]   // one x load feeds both rows
+                        accA += v.x * wa[4 * u] + v.y * wa[4 * u + 1] + v.z * wa[4 * u + 2] + v.w * wa[4 * u + 3]
+                        accB += v.x * wb[4 * u] + v.y * wb[4 * u + 1] + v.z * wb[4 * u + 2] + v.w * wb[4 * u + 3]
+                    }
+                    sumf[b * 2] += accA
+                    sumf[b * 2 + 1] += accB
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (i in range(4)) {
+            var s = sumf[i]
+            s += simd_shuffle_down(s, 4u)
+            s += simd_shuffle_down(s, 2u)
+            s += simd_shuffle_down(s, 1u)
+            let row = row0 + uint(i % 2)
+            if (tx == 0u && row < ddim) {
+                y[uint(i / 2) * ddim + row] = s
             }
         }
     }

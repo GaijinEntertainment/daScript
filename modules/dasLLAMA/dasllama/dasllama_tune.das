@@ -290,6 +290,13 @@ def box_profile_stale() : bool {
     return tune_sidecar_stale(tune_manifest_path())
 }
 
+//! Why the sidecar at `path` would not serve this box: `stale_binary` (a rebuild killed the
+//! kernel winners; the runtime knobs are still this box's state), `foreign_box` / `unreadable`
+//! (another box's state, or not a sidecar), `absent`; anything else reads as fresh and ours.
+def box_profile_verdict_at(path : string) : TuneSidecarReason {
+    return tune_sidecar_verdict(path, "runtime").reason
+}
+
 // Compile-time read of the sidecar's "kernels" section written by the tuner harness:
 // function name -> winning perm suffix. "" when the sidecar is absent, stale, or lacks
 // the key (macros can do fio).

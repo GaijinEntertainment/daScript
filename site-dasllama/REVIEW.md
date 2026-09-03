@@ -3,7 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasllama_io_site.md`.
 
-In this checklist "a page" means every served `.html` page in this directory, the generated
+In this checklist "a page" means every served `.html` page under this directory, the generated
 news region inside index.html included.
 
 **A shell command, flag, or output line shown on a page is a defect unless the command runs
@@ -32,17 +32,22 @@ name.
 visitor sends that host and whether the host sets cookies.**
 
 **Weakening `REVIEW.das`'s `dl-*` census - the gate that reports a `dl-*` name used in a
-page, script or stylesheet here that no selector of `site/files/dasllama-table.css` (repo
-root) defines and no `id="..."` in those files declares - is a defect.**
+top-level `.html` page here, or in a script or stylesheet under `files/`, that no selector of
+`site/files/dasllama-table.css` (repo root) defines and no `id="..."` in those files declares -
+is a defect.**
 
 **A statement on a page here about what a shipped tool does is a defect unless it matches
 the current code.**
 
-**A claim in a `_news/*.md` entry that is not true at publish time is a defect, including a
-claim about what a page here renders - check that one against the page's markup and
-`files/dasllama-io.js`.**
+**A claim in a `_news/*.md` or `_stories/*.md` entry that is not true at publish time is a
+defect, including a claim about what a page here renders - check that one against the
+page's markup and `files/dasllama-io.js`.**
 
-**A `_news/*.md` entry for something not yet shipped is a defect.**
+**A `_news/*.md` or `_stories/*.md` entry for something not yet shipped is a defect.**
+
+**A figure in a `_stories/*.md` entry that names no date and build sha for the run it came
+from - in the entry's own text or its `<!-- figures: ... -->` comment - is a defect** - a
+number without its date reads as a standing claim.
 
 **A value `files/dasllama-io.js` takes from `/api/*` and puts into markup without the
 context-correct escape is a defect: `esc()` (which escapes `< > & " '`) for text and for
@@ -52,8 +57,8 @@ quoted-attribute values, `Number(...)` for anything numeric, and `safeApiHref()`
 **Weakening `test_metadata.py`'s per-page assertions - the test that fails a page without a
 `<title>`, a meta description, the OpenGraph tags, or the Atom `<link>` - is a defect.**
 
-**Weakening `REVIEW.das`'s page census - the gate that reports a top-level served file with
-no copy line in the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root), or a
-page missing from `build_news.py`'s sitemap list or `test_metadata.py`'s page list - is a
-defect.** Local preview serves the tree directly, so no miss shows there: the page deploys
+**Weakening `REVIEW.das`'s page census - the gate that reports a served page, or the `stories/`
+directory, missing from the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root),
+from `build_news.py`'s sitemap list or `sitemap.xml`, or from `test_metadata.py`'s page list -
+is a defect.** Local preview serves the tree directly, so no miss shows there: the page deploys
 unlisted, uncrawled, or unchecked.

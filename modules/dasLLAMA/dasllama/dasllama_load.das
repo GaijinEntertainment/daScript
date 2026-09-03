@@ -1647,15 +1647,18 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // GGUF uses the architecture name as the metadata key prefix (llama.*, qwen2.*, gemma2.*, ...)
         let dim = gguf_int(m, bytes, "{arch}.embedding_length")
-        // MTP/NextN: block_count INCLUDES the appended draft block(s);
-        // `layers` below is the TRUNK count — every per-layer validation/mask walks the trunk only.
-        let nextn = gguf_has(m, "{arch}.nextn_predict_layers") ? gguf_int(m, bytes, "{arch}.nextn_predict_layers") : 0l
+        //! an in-file head's block_count includes the draft block(s), a split head's does not - `layers` is the TRUNK count every per-layer walk uses
+        let nextn_in = gguf_has(m, "{arch}.nextn_predict_layers") ? gguf_int(m, bytes, "{arch}.nextn_predict_layers") : 0l
+        let nextn = m.nextn_sidecar > 0l ? m.nextn_sidecar : nextn_in
         if (nextn < 0l || nextn > 1l) {
             panic("dasLLAMA: nextn_predict_layers = {nextn} not supported (single NextN head only)")
         }
-        let layers = gguf_int(m, bytes, "{arch}.block_count") - nextn
+        if (m.nextn_sidecar > 0l) {
+            to_log(LOG_INFO, "dasLLAMA: NextN draft head attached from a split head shard\n")
+        }
+        let layers = gguf_int(m, bytes, "{arch}.block_count") - nextn_in
         if (layers < 1l) {   // fail closed on a malformed file before "blk.-1..." confusion downstream
-            panic("dasLLAMA: {arch}.block_count = {layers + nextn} with nextn_predict_layers = {nextn} leaves no trunk layers")
+            panic("dasLLAMA: {arch}.block_count = {layers + nextn_in} with nextn_predict_layers = {nextn_in} leaves no trunk layers")
         }
         t.config.n_layer_nextn = nextn
         // FFN width: a scalar for uniform arches, or a per-layer array (gemma-4 E2B: the elastic

@@ -20,6 +20,7 @@ require dasllama/dasllama_math_aarch64_neon   // laneq4x4 template (the repack b
 require dasllama/dasllama_kv_codec   // nolint:STYLE030 — side-effect: the KV-codec *_template kernels for the cross-module scan
 require dasllama/dasllama_convert    // side-effect: the f16 row-convert templates for the cross-module scan
 require dasllama/dasllama_common // the runtime-knob getters (the profile's "runtime" section snapshots them)
+require dasllama/dasllama_mtp_gemma   // gemma_drafter_sidecar - the assistant-depth confirm's vehicle test
 require dasllama/dasllama_tune   // [dasllama_grid] emitter
 require llvm/daslib/llvm_tune    // tune_sidecar_merge — the app-sidecar upsert writer
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_tensor_race (Apple static_if half)
@@ -2390,8 +2391,56 @@ def private confirm_decode_model() : string {
     return empty(best) ? "" : "{md}{best}"
 }
 
+//! the margin depth 2 must beat depth 1 by on the chat corpus to be minted
+let MTP_DEPTH_TG_MARGIN = 1.02lf
+let MTP_DEPTH_CORPUS = "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt"
+
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-depth-knob")]
+def private confirm_mtp_depth_assistant(wins : array<string>) {
+    let model = confirm_assistant_model()
+    if (empty(model)) {
+        print("MTP_DEPTH assistant: confirm SKIPPED - no gemma-4 vehicle with an mtp- head in '{models_dir_resolved()}' (DASLLAMA_CONFIRM_MTP_GEMMA=<gguf> provisions one) - depth 1 serves\n")
+        set_mtp_depth_assistant(1l)
+        return
+    }
+    print("MTP_DEPTH assistant: confirm on {model}\n")
+    let corpus = " --prompts \"{get_das_root()}/{MTP_DEPTH_CORPUS}\" --chat-prompts"
+    let d1 = confirm_tg_run(model, wins, "", " --mtp-ab --mtp-depth 1{corpus}", "mtp=on: ")
+    let d2 = confirm_tg_run(model, wins, "", " --mtp-ab --mtp-depth 2{corpus}", "mtp=on: ")
+    if (d1 <= 0.0lf || d2 <= 0.0lf) {
+        print("MTP_DEPTH assistant: a confirm arm produced no tg number (depth 1 {d1}, depth 2 {d2}) - depth 1 serves\n")
+        set_mtp_depth_assistant(1l)
+        return
+    }
+    if (d2 > d1 * MTP_DEPTH_TG_MARGIN) {
+        print("MTP_DEPTH assistant: depth 2 {d2} tok/s BEATS depth 1 {d1} tok/s x{MTP_DEPTH_TG_MARGIN} - the box serves depth 2\n")
+        set_mtp_depth_assistant(2l)
+    } else {
+        print("MTP_DEPTH assistant: depth 2 {d2} tok/s does not beat depth 1 {d1} tok/s x{MTP_DEPTH_TG_MARGIN} - depth 1 serves\n")
+        set_mtp_depth_assistant(1l)
+    }
+}
+
+def private confirm_assistant_model() : string {
+    let envm = g_env_harness.confirm_mtp_gemma
+    if (!empty(envm)) {
+        print("confirm: DASLLAMA_CONFIRM_MTP_GEMMA={envm} - the operator pins the assistant-depth vehicle\n")
+        return envm
+    }
+    let md = models_dir_resolved()
+    var best = ""
+    dir(md) $(name : string) {
+        return if (!(name |> starts_with("gemma-4")) || !ends_with(name, ".gguf") || find(name, "mmproj") >= 0
+            || empty(gemma_drafter_sidecar("{md}{name}")))
+        if (empty(best) || name < best) {
+            best = name
+        }
+    }
+    return empty(best) ? "" : "{md}{best}"
+}
+
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
-def private confirm_tg_run(model : string; wins : array<string>; extra : string) : double {
+def private confirm_tg_run(model : string; wins : array<string>; extra : string; bench_args : string = ""; tag : string = "tg128: ") : double {
     var crowns = join(wins, ",")
     if (!empty(extra)) {
         crowns = empty(crowns) ? extra : "{crowns},{extra}"
@@ -2417,7 +2466,7 @@ def private confirm_tg_run(model : string; wins : array<string>; extra : string)
         return 0.0lf
     }
     let tmpo = tmpoRes as value
-    let cmd = "{envp}\"{get_das_exe()}\" -jit \"{get_das_root()}/modules/dasLLAMA/benchmarks/lcpp_bench.das\" -dasroot \"{get_das_root()}\" -- --for-debug-purposes -m \"{model}\" --ngl 99 -p 32 -n 128 -r 3 > \"{tmpo}\" 2>&1"
+    let cmd = "{envp}\"{get_das_exe()}\" -jit \"{get_das_root()}/modules/dasLLAMA/benchmarks/lcpp_bench.das\" -dasroot \"{get_das_root()}\" -- --for-debug-purposes -m \"{model}\" --ngl 99 -p 32 -n 128 -r 3{bench_args} > \"{tmpo}\" 2>&1"
     let crc = unsafe(popen_timeout(cmd, 1800.0, $(f) {
         if (f != null) {
             fread(f)
@@ -2436,7 +2485,6 @@ def private confirm_tg_run(model : string; wins : array<string>; extra : string)
         remove(tmpo)
     }
     remove(tmpm)
-    let tag = "tg128: "
     for (ln in split(outp, "\n")) {
         let ix = find(ln, tag)
         if (ix >= 0) {
@@ -2445,7 +2493,7 @@ def private confirm_tg_run(model : string; wins : array<string>; extra : string)
             return try_to_double(sp > 0 ? slice(rest, 0, sp) : rest) ?? 0.0lf
         }
     }
-    print("confirm arm ({empty(extra) ? "base" : extra}): no tg128 line - child output tail:\n")
+    print("confirm arm ({empty(extra) ? "base" : extra}{bench_args}): no '{tag}' line - child output tail:\n")
     var lns <- split(outp, "\n")
     let n = length(lns)
     for (i in range(max(0, n - 5), n)) {
@@ -2590,6 +2638,9 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
             if (mt_ran) {
                 confirm_serving_crown("kq_gemv_iq2xxs_f4", mt_wins)
             }
+            {
+                confirm_mtp_depth_assistant(mt_wins)
+            }
         }
         if (!mt_ran && !partialMint) {
             tune_detail("METAL_TWIN: no Metal device - tensor race skipped\n")
@@ -2618,6 +2669,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         q4_chunks_per_job = get_q4_chunks_per_job(), q8_batch_chunks_per_job = get_q8_batch_chunks_per_job(),
         jobque_spin_us = get_jobque_spin_us(), jobque_join_poll = get_jobque_join_poll(),
         threads = get_total_hw_jobs() + 1, metal_tensor = metal_crowns,
+        mtp_depth_nextn = get_mtp_depth_nextn(), mtp_depth_assistant = get_mtp_depth_assistant(),
     metal_tall_floor = metal_tall_floor(), metal_devw_small_panel_mb = metal_devw_small_panel_mb(),
     metal_cvt_min_rows = metal_cvt_min_rows()))   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
     if (partialMint) {

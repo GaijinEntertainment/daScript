@@ -1,0 +1,5 @@
+# One code-generation turn, the high-acceptance end of the drafter's range (the stories page's
+# "the code will likely be even higher" check). Raw user turn; the bench wraps it in the model's
+# chat template (--chat-prompts).
+%%
+Write a bubble sort implementation in C++.

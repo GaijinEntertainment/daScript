@@ -491,6 +491,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-26B-A4B-it-Q4_K_M.gguf", display = "gemma-4-26B-A4B-q4k", quant_label = "q4_k_m", official = true,
             url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
             bytes = 16947541728l, sha256 = "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
+            // the assistant drafter rides as a companion: the mtp suite and the ruler attach it beside this target
+            companions <- [
+                ProvEntry(name = "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", root = "llm",
+                    url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/main/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+                    bytes = 461766784l, sha256 = "ea4f772ffb70e02127c5f142f9ed9af97add7ca0f2bcc7b277244a9771b436bd")],
             // the q51 tier gate: this recipe's ffn_down_exps are Q5_1 on 29 layers, riding the
             // native q51 planes; the Q4_K gate_up stacks ride the kq planes
             parity <- ev_gemma4_26b_q4km()),
@@ -512,6 +517,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3.8-27B-Q4_K_M.gguf", display = "Qwen3.8-27B", quant_label = "q4_k_m", official = true,
             url = "{HF}/ggml-org/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-Q4_K_M.gguf",
             bytes = 18973870432l, sha256 = "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+            // the split NextN head rides as a companion: the mtp suite's 3.8-27b fixture and the ruler load it as the trunk's last shard
+            companions <- [
+                ProvEntry(name = "mtp-Qwen3.8-27B-Q8_0.gguf", root = "llm",
+                    url = "{HF}/ggml-org/Qwen3.8-27B-GGUF/resolve/main/mtp-Qwen3.8-27B-Q8_0.gguf",
+                    bytes = 3164006688l, sha256 = "cbf60a0c48b431bb61f1d49b8948dc88ac29c398d6dbdbbb2e6e89ef77eacc9a")],
             // the qwen35 hybrid dense at scale, native K-quant planes
             parity <- ev_qwen_count([dn_chunked = true])),
         // the same UD-Q4_K_M weights under two local names: the MTP-stem file carries the MTP

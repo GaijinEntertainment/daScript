@@ -30,7 +30,8 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   the benches, and the facade chain (`dasllama_common` re-exports it) all reach it without
   weight.
 - **`dasllama_common.das`** - the engine: `Model`/`Session`/`Config`, the forward loops, the
-  override registries, the runtime knobs. **Not** the load walk (sec.1.3) and **not** GPU residency
+  override registries, the runtime knobs, and the MTP per-position accept telemetry (`mtp_pos_*`)
+  the round-override registry's rounds feed. **Not** the load walk (sec.1.3) and **not** GPU residency
   (`ARCHITECTURE_GPU.md` sec.1.5) - both left, and the seam each left behind is a registered hook,
   so neither comes back.
   It remains the module's debt sink; what sits here that is family-specific or platform-specific is
@@ -55,6 +56,15 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   implementation.
 - **`dasllama_batch.das`** - the batched decode step: one pass of the weights over B sessions,
   GEMVs widened to B-row GEMMs, attention still per-(row, head) against each session's own cache.
+- **`dasllama_mtp_gemma.das`** - the gemma-4 assistant drafter (`gemma4-assistant`), which is a
+  SIDECAR head, not a trunk block: it owns no K/V projection and borrows the target trunk's cache
+  at two capture layers, so it never rides the arch registry or `forward_mtp`. The file holds the
+  sidecar resolver, the refusing loader (`GemmaDrafter`, whose `blob` is raw GGUF Q8_0 = the Metal
+  34B form, so the GPU encoder uploads it with no repack), and the CPU reference forward the GPU
+  encoder is scored against. That oracle carries its own Q8_0 dot and GEMV and its own attention
+  dot over decoded rows - reference arithmetic, not a tier kernel or a codec primitive, so no
+  tier specializes it. A refusal is `ok = false` plus a `why`, never a panic - a drafter is
+  optional and a bad sidecar must degrade to plain decode.
 - **`dasllama_sampling.das`** - token sampling and the generation drivers. A leaf on top of
   `forward`/`eval_batch`; the engine never calls back in.
 - **`dasllama_ple.das`** - gemma-4 E-series per-layer embeddings and the gemma4 MoE FFN. The
@@ -146,6 +156,15 @@ breaks the cycle. That re-export is what keeps every consumer on the facade.
   through the single release path in `dasllama_common` that the carrier finalizers call - never
   an ad-hoc unmap.
 
+A split NextN/MTP head (the published split-head layout: an `mtp-<model>.gguf` beside a trunk
+converted without its head) rides the load as the LAST shard of the trunk's shard walk: `gguf_shard_paths` appends the
+`mtp-<trunk basename>` sibling, or the `DASLLAMA_MTP_HEAD` file, and `parse_gguf_meta_shards`
+promotes the head shard's `nextn_predict_layers` onto the meta when the trunk's KVs lack it. The
+head's `blk.<n_layers>.*` tensors are the draft block; its copies of the trunk's embedding,
+classifier and final norm are dead by construction (tensor lookup is first-match and the head
+is last). The prepared image folds the head's name and size into its path hash, so the
+trunk-only and trunk+head images never collide and one image file serves both trunk and head.
+
 ### 1.4 CPU kernel tiers
 
 - **`dasllama_math.das`** - the numeric ABSTRACTION: typedefs, active backend pointers, public
@@ -208,7 +227,10 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   it touches no tune state (`tune_policy(missing="fallback")`). BRINGUP.md sec.2 is the runbook.
 - **`dasllama/dasllama_exchange_schema.das`** - engine-free validation for exchange submissions
   (record stores + tune sidecars); the dasllama.io ladder service builds on it.
-- **`dasllama/dasllama_exchange.das`** - the sidecar-exchange client (a sanctioned public entry point): the boot-time
+- **`dasllama/dasllama_exchange.das`** - the sidecar-exchange client (a sanctioned public entry point,
+  and the engine's only `dashv` requirer: `performance/REVIEW.das` walks `dasllama/` for a second
+  one; a measurement harness under `harness/` talking HTTP to a reference engine's server sits
+  outside that walk by design): the boot-time
   lookup/apply (llvm_tune's scope resolver - a verified per-box match downloads instead of a
   ~12-minute tune), the privacy-stripped submit rails, and the control-page surface
   dasllama-server serves at `/exchange`. The first-contact consent gate (GDPR) sits ahead of

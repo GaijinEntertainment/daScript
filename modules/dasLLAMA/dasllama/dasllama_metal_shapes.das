@@ -236,7 +236,7 @@ def dn_metal_ok(t : Model) : bool {
 }
 
 // (q8 32-blocks, kq 256-superblocks — the expert shift is index math, no base multiple)
-[arch(at = "../ARCHITECTURE_GPU.md#metal-kq-split-scale-plane")]
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.q8) {
         return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l

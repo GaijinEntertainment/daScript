@@ -192,7 +192,7 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
 // The backend-role partition, mechanically: every dasllama_<gpu>_*.das file's suffix is a role
 // ARCHITECTURE_GPU.md sec.1.5's role table carries — a new role file adds its role to BOTH.
 var private GPU_ROLES_METAL <- {
-    "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "lens"
+    "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "lens", "mtp_gemma"
 }
 
 var private GPU_ROLES_VULKAN <- {

@@ -315,8 +315,7 @@ var g_dispatch_caller_lane = true
 def public set_dispatch_caller_lane(v : bool) { g_dispatch_caller_lane = v }
 def public get_dispatch_caller_lane() : bool { return g_dispatch_caller_lane }
 def public get_dispatch_lanes() : int {
-    // Que-less process: the calling thread is the only lane, so every shaper answers "inline"
-    // (the bool-gated form never reaches its parallel arm without a queue either).
+    // Que-less process: the calling thread is the only lane, so every shaper answers "inline".
     if (!is_job_que_available()) {
         return 1
     }

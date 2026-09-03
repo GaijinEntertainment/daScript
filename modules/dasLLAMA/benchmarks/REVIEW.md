@@ -10,13 +10,15 @@ everything else.
 pipeline the dasLLAMA engine selected also calls `tune_gate()`
 (`../performance/profile_common.das`) before that instrument's first timed rep.** A pipeline
 the instrument compiled itself - or a reference tool's own runtime - is not one the engine
-selected. Without the gate the instrument measures fallback kernels silently. An instrument is a script whose output is a measured wall or rate.
+selected. Without the gate the instrument measures fallback kernels silently. An instrument is a
+script whose output is a measured wall or rate.
 
 **A diff that adds or changes a race alternates its arms within one process - one timed round
 per arm, best-of across rounds.** A race is an instrument that compares two implementations.
 Two separate runs measure how the machine changed between them as much as they measure the
 arms; `race_pair_ms` (`../dasllama/dasllama_metal_common.das`) is the engine-side helper that
-carries both properties, and `../REVIEW_GPU_RACE.md` binds the clock burn.
+carries both properties. A diff that adds or changes a GPU race arm applies
+`../REVIEW_GPU_RACE.md` too.
 
 **A diff that adds or changes a race arm offered as the reason to adopt a change proves the
 arm's output on its report line, by what the arm computes:** an arm producing no comparable
@@ -24,7 +26,8 @@ output carries the literal token `timing-only`; an arm whose result is bit-ident
 baseline's prints the bit-exact compare over the sampled region - the set of output elements
 the run compares - on the report's "bit-exact vs ..." line; every other arm prints a
 bounded-difference compare (against the baseline arm or the CPU reference) plus the bound it
-passed. How the arm orders its sums, and whether its multiply-adds fuse, decide bit-identity - not the declared precision.
+passed. How the arm orders its sums, and whether its multiply-adds fuse, decide bit-identity -
+not the declared precision.
 
 **A diff that adds or changes a race also checks the race's baseline arm against a CPU
 reference.** The baseline arm is the arm running the implementation already in use. The
@@ -48,14 +51,15 @@ script that measures a benchmark process from outside.
 
 **Only the reference cells of `../performance/gen_bench_records.das` - the cells that time a
 binary this repository does not build on a board workload - write such a binary's wall time
-into `../performance/records/<box>.json` or `../PERF_LEDGER.md`.**
+into `../performance/records/<box>.json` or `../PERF_LEDGER.md`; only `../harness/mtp_ruler.das`
+writes one into `../performance/records/mtp/`.**
 
-**A file holding a third-party wall outside `../performance/records/<box>.json` and
-`../PERF_LEDGER.md` - a reference leg's recovery file, a pinned reference tsv an instrument
+**A file holding a third-party wall outside `../performance/records/` and `../PERF_LEDGER.md`
+- a reference leg's recovery file, a pinned reference tsv an instrument
 reads back - is scratch: untracked, owned by exactly one instrument, re-derivable from a
 command written where the owning instrument documents its flags, and never an input to a
-board cell.** A
-tracked or shared copy of a third-party wall becomes a stale baseline nobody re-derives.
+board cell.** A tracked or shared copy of a third-party wall becomes a stale baseline nobody
+re-derives.
 
 **A diff that adds or changes an instrument that prints the difference of two walls also
 prints both of those walls on that report line.** A plain elapsed-time row - one clock pair,
@@ -75,3 +79,13 @@ moves the measured quantity. The re-mint or withdrawal lands in
 with zero result rows - wrong flags, failed load, a device that declines.** A run that matched
 nothing and reported success leaves a sidecar or a record untouched, and its caller cannot
 tell.
+
+**A diff that adds or changes an A/B arm - one of the runs an instrument makes with one named
+lever at a setting the other run does not use, off/on or graded - makes that instrument exit
+non-zero when the lever does not change what the run executes.** A lever is the flag or
+environment switch that names the arm; a lever that silently no-ops prints a 1.00x row nobody
+can tell from a real tie.
+
+**A diff that adds or changes an A/B arm of an instrument over a prompt corpus makes that arm
+report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the
+lever helps, so a per-prompt loss hides inside a winning mean.

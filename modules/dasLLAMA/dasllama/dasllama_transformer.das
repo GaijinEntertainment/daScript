@@ -36,4 +36,5 @@ require ?das_metal dasllama/dasllama_metal_prefill  // [init]-only: registers pr
 require ?das_metal dasllama/dasllama_metal_decode  // [init]-only: registers decode override "metal" (same contract as the prefill line above)
 require ?das_metal dasllama/dasllama_metal_tower  // [init]-only: registers the gemma4uv GPU tower encode (same contract as the prefill line above)
 require ?das_metal dasllama/dasllama_metal_asr_dec  // [init]-only: registers the whisper cross-KV GPU driver (same contract as the prefill line above)
+require ?das_metal dasllama/dasllama_metal_mtp_gemma  // [init]-only: registers the "metal" speculative round (the gemma assistant drafter, falling through to the NextN round; same contract as the prefill line above)
 require ?vulkan dasllama/dasllama_math_vulkan  // [init]-only: registers "vulkan" (the GPU tier). STRICT guard: the C++ vulkan module is linked only where dasVulkan is installed. LAST on purpose: the vulkan drivers are the hot-edit modules, and require order is the jit obj-cache layout — a late position keeps the fat module prefix cached across driver edits

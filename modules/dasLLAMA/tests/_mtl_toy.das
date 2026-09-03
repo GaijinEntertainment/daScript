@@ -22,8 +22,8 @@ struct MtToyArgs {
     gain : float
 }
 
-[metal_dispatch(name = "enc_mtl_toy_scale", pso = "g_mtl_toy_scale_pso", kernel = "kscale", tg = 64, grid = "n/64", params = "n : int64"),
- metal_dispatch(name = "enc_mtl_toy_shift", pso = "g_mtl_toy_shift_pso", kernel = "kshift", tg = 64, grid = "n/64", params = "n : int64")]
+[metal_dispatch(name = "enc_mtl_toy_scale", pso = "g_mtl_toy_scale_pso", kernel = "kscale", tg = 64, grid = "n/64", params = "n : int64", requires = "n % 8"),
+ metal_dispatch(name = "enc_mtl_toy_shift", pso = "g_mtl_toy_shift_pso", kernel = "kshift", tg = 64, grid = "n/64", params = "n : int64", requires = "ka.n % 8")]
 class MtlToy {
     @ssbo @binding = 0 @role = "read" xs : array<float>
     @ssbo @binding = 1 ys : array<float>

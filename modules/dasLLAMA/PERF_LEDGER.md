@@ -1193,3 +1193,70 @@ group; wording kept.
   Layr Labs, vendored mlx-swift incl. Metal kernels (c) 2023 ml-explore/Apple - so adoption
   is clean with those two attribution lines (the NAX arc's steel_attention_nax credit is the
   house pattern); model weights are not in the repo and carry their own terms.
+
+### From the MTP depth-N arc (2026-09-02)
+
+Instruments: `harness/mtp_ruler.das` (both engines in one run, our released `dasllama-bench` exe
+first from a parent that has loaded nothing, then a stock llama.cpp `llama-server` at the ref pin
+6fdd0ac89, settle 180 s, `-n 128 -r 3`, the SpecBench-4 chat corpus, greedy on the identical
+rendered thinking-off prompt; one record per box and model under `performance/records/mtp/`,
+`--render` prints it); the round clocks (`DASLLAMA_MTP_DEBUG=time` on the exe at measurement time,
+since folded into the `mtp.draft` / `mtp.verify` / `mtp.walk` / `mtp.replay` profiler sections
+under `--jobque-profiling`); `harness/batch_rows_probe.das --sameslab` (ms per same-slab step at
+B rows, `-jit`). Every ours-vs-llama.cpp pair is two processes and every before/after is two
+commits: direction-grade.
+
+- **gemma-4-26B-A4B-it-Q4_K_M + the Q8_0 assistant drafter, ruler on the M5 Max (7907b133c):**
+  ours off 122.7 -> depth 1 145.9 (1.19x, accept 75.2%) -> depth 2 148.1 (1.22x; p1 73.9 p2
+  51.3); per prompt depth 1 144.0 / 133.4 / 160.1 / 148.6 (writing / summarization / math / qa).
+  llama.cpp off 98.2 / 95.8 / 98.4 / 98.2 -> n_max 1 139.6 / 119.8 / 145.8 / 129.5 (accept 81.4 /
+  70.3 / 89.6 / 76.4%) -> n_max 2 130.8 / 126.0 / 163.4 / 147.9. Same drafter, same acceptance
+  shape. Direction-grade.
+- **Same pair on the M4 Pro (fa0b0eac4):** ours off 59.2 -> depth 1 67.5 (1.14x, 74.6%) ->
+  depth 2 55.6 (0.93x); llama.cpp off 53.1 / 51.7 / 53.2 / 53.0 -> n_max 1 67.5 / 63.4 / 72.5 /
+  65.4 -> n_max 2 58.0 / 56.0 / 72.6 / 63.4. Depth is a box knob the tuner mints
+  (`mtp_depth_assistant`): 1 on the M4 Pro, a tie on the M5. Direction-grade.
+- **Round clocks, gemma (`--ngl 99`, SpecBench-4 chat):** M5 plain step 8.15 ms, draft chain
+  0.05 ms, verify+commit 11.8 ms - the two-row verify is 1.45x a step on the MoE expert union
+  (1.51x on the M4 Pro); that, not the drafter, caps the gain (#88). The Q8_0 target accepts
+  76.5% vs 74.6% on Q4_K_M (`lcpp_bench --mtp-ab`, M5): the target quant is not what caps
+  acceptance. The pre-norm target hidden lost to post-norm on the same rail (#95).
+- **Qwen3.8-27B-Q4_K_M + its split Q8_0 NextN head, ruler on the M5 Max (497dcf10a):** ours off
+  27.6 -> depth 1 33.0 (1.20x, 77.4%) -> depth 2 31.4 (1.14x; p1 83.9 p2 66.3); llama.cpp off
+  25.8 / 25.4 / 24.9 / 24.6 -> n_max 1 35.1 / 33.5 / 35.0 / 32.9 -> n_max 2 34.4 / 32.7 / 36.7 /
+  30.0. Their verify row is cheaper on this dense hybrid (#85). Direction-grade.
+- **Same pair on the M4 Pro (f591c4c13, the k4 pair walk in):** ours off 12.7 -> depth 1 14.0
+  (1.10x, 77.4%) -> depth 2 12.4 (0.97x); llama.cpp off 11.5 -> n_max 1 13.6 / 13.8 / 14.5 / 13.5
+  -> n_max 2 12.3 / 12.4 / 13.9 / 11.5. On the same box before the pair walk (47422ea68): depth 1
+  13.9 (1.09x), depth 2 7.9 (0.62x). Direction-grade.
+- **Round clocks, Qwen3.8-27B on the M4 Pro (`--ngl 99`, `-n 64 -r 2`, plain step 78.7 ms):**
+  depth 1 per round draft 7.4 ms, verify 119.0 (59.5 per row, 1.51x a step), walk+commit 1.0,
+  replay 0.7, tokens/round 1.80. Depth 2 before the pair walk: draft 14.1, verify 302.5 (the third
+  row on the four-column form; 3.84x a step); after it: verify 194.4, the round 4.04x -> 2.65x a
+  step. Direction-grade. CPU rails on the same box (ruler `--ngl 0`): off 11.56 -> depth 1 10.66
+  (0.92x, 78.6% accept), identical at `--mtp-depth 2` (#94).
+- **Row ladder, gemma-4-12B-it-Q4_K_M same-slab step on the M4 Pro (`batch_rows_probe --sameslab`,
+  16 steps; ms per step / x a single step, before -> after the pair walk):** 1 row 44.1 / 1.00x
+  both; 2 rows 52.9 / 1.20x both (the tile); 3 rows 148.1 / 3.36x -> 83.1 / 1.88x; 4 rows 156.7 /
+  3.55x -> 103.1 / 2.34x; 5 rows 166.6 / 3.78x -> 133.5 / 3.03x; 8 rows (after only, the
+  rebuilt tree on the archived m4 mint) 204.7 / 4.65x. A tile pair costs 1.2 single passes and
+  the step is nearly all weight streaming, so pairs add linearly out to the eighth row. The M5 Max has no
+  three-row cliff: 1 / 2 / 3 / 4 / 5 / 8 rows = 20.8 / 17.3 / 24.7 / 24.6 / 42.1 / 42.7 ms = 1.00 /
+  0.83 / 1.19 / 1.19 / 2.03 / 2.06x - the walk stays off there by the crown. Direction-grade.
+- **A code prompt, gemma on the M5 (c3239b46c, `benchmarks/data/code1_prompts.txt`):** ours off
+  123.4 -> depth 1 159.0 (1.29x, 85.5%) -> depth 2 174.0 (1.41x; p1 86.0 p2 68.0); llama.cpp off
+  99.7 -> n_max 1 140.0 (84.1%) -> n_max 2 153.7. Acceptance is a property of the text: code
+  drafts a fifth better than chat. Direction-grade.
+- **CPU ruler leg, Qwen3.8-27B on the M5 (4da0045f0, `--ngl 0`; llama.cpp arms only - our
+  in-process CPU greedy dies on this model, #91):** llama.cpp off 9.6 / 9.4 / 9.6 / 9.6 -> n_max 1
+  8.4 / 9.0 / 9.5 / 8.4. Speculation loses on their CPU rail too.
+- **Context sweep on the tuned m5 mint:** the dev rail under a binary-stale sidecar served no
+  `runtime.metal_tensor` crowns and read prefill at well under half the board (fixed: the runtime
+  section of a binary-stale sidecar now applies, #86 step 1); the 08-30 rig exe read gemma-26B
+  pp512 3861 the same day - the board row (3868) stands. The sweep's own rows are #84's,
+  direction-grade on the dev rail.
+- **Footprint:** the assistant drafter is a 440 MiB Q8_0 sidecar resident for the session (the
+  `mtp-gdraft-load` arm asserts its size) plus its GPU workspace; a session with a head or drafter
+  grows `mtp_cat` to 2 x 9 x dim floats (Qwen3.8-27B: 370 KB) and `mtp_logits_b` to 9 x vocab
+  floats once (about 5 MB). Decision: taken - the round's gain rides on the drafter's presence, and
+  the sidecar is a fraction of a percent of the target it drafts for.

@@ -371,6 +371,7 @@ typedef DecodeOverrideFn = function<(t : Model; var s : Session; token, pos : in
 //! apply unchanged; per call it impersonates the batch's cache geometry (dtypes + byte prefixes).
 struct BatchWorkspace {
     scr : Session             // *_b scratch, rope tables, ple scratch — no KV cache / sampler state
+    scr_codec_uid : uint64
     positions : array<int64>  // row i's absolute KV position (sessions[i].n_past at entry)
     rope_positions : array<int64>   // row i's ROPE position (n_past + rope_pos_delta — mrope streams diverge)
     logits_b : array<float>   // B x vocab classifier output, scattered per session after softcap
@@ -413,6 +414,28 @@ def register_mtp_spec_override(name : string; fn : MtpSpecOverrideFn) {
 // tail overwrites mtp_h, so the seam must consume the pre-window handoff first
 typedef MtpSeamOverrideFn = function<(t : Model; var s : Session; token, pos : int64) : bool>
 var private g_mtp_seam_overrides : table<string; MtpSeamOverrideFn>
+
+typedef MtpRoundOverrideFn = function<(t : Model; var s : Session; tok : int64; k : int64) : int64>
+var private g_mtp_round_overrides : table<string; MtpRoundOverrideFn>
+
+def register_mtp_round_override(name : string; fn : MtpRoundOverrideFn) {
+    g_mtp_round_overrides[name] = fn
+}
+
+//! One speculative round at the configured depth (get_mtp_depth): commits `tok`, returns the
+//! accepted draft count a with the accepted drafts in s.mtp_vbatch[1..a]. The metal round serves
+//! any depth for blob models; every other rail is the depth-1 mtp_spec_eval.
+def mtp_spec_round(t : Model; var s : Session; tok : int64) : int64 {
+    if (t.metal_blob && !empty(g_decode_override_name) && key_exists(g_mtp_round_overrides, g_decode_override_name)) {
+        return invoke(g_mtp_round_overrides[g_decode_override_name], t, s, tok, get_mtp_depth())
+    }
+    var acc = 0l
+    if (mtp_spec_eval(t, s, tok, acc)) {
+        s.mtp_vbatch[1] = acc
+        return 1l
+    }
+    return 0l
+}
 
 def register_mtp_seam_override(name : string; fn : MtpSeamOverrideFn) {
     g_mtp_seam_overrides[name] = fn
@@ -581,6 +604,14 @@ def select_decode_override(name : string) : bool {
 
 //! The armed batch-decode override, or none — eval_batch_ (dasllama_batch) dispatches through these
 //! two rather than the registry going public.
+var private g_batch_same_slab = false
+
+def set_batch_same_slab(on : bool) {
+    g_batch_same_slab = on
+}
+
+def batch_same_slab() : bool => g_batch_same_slab
+
 def batch_decode_override_armed() : bool => !empty(g_batch_decode_override_name)
 
 def batch_decode_override_invoke(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
@@ -1348,13 +1379,53 @@ def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v :
 //! Apply the runtime knobs from the app tune sidecar's optional "runtime" section (see
 //! tune_for_this_box.md): token block, L2 budget, threading thresholds, chunk multipliers, and an
 //! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
-[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
-def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a flat knob catalog; a split would invent seams
-    if (path == "" && box_profile_stale()) {
-        to_log(LOG_INFO, "dasLLAMA: tune sidecar is older than the binary - runtime knobs not applied (re-tune)\n")
+var private g_box_profile_runtime_applied = false
+var private g_box_profile_runtime_declined = ""
+
+//! True once a sidecar's runtime section was applied in this process.
+def public box_profile_runtime_applied() : bool {
+    return g_box_profile_runtime_applied
+}
+
+//! Why the checked apply declined the box sidecar - the `TuneSidecarReason` name, "" when it
+//! did not decline (or was never asked).
+def public box_profile_runtime_declined() : string {
+    return g_box_profile_runtime_declined
+}
+
+//! The default (no path) route checks the sidecar's standing; an explicit path applies as given.
+def apply_box_profile_runtime(path : string = "") {
+    if (path == "") {
+        apply_box_profile_runtime_checked(box_profile_path())
+    } else {
+        apply_box_profile_runtime_at(path)
+    }
+}
+
+//! A sidecar another box minted, or one that does not read as a sidecar, is somewhere else's box
+//! state and applies nothing; one that merely predates the binary keeps its runtime section - the
+//! knobs are this box's state, only the kernel winners died with the rebuild.
+def apply_box_profile_runtime_checked(path : string) {
+    g_box_profile_runtime_applied = false   // both flags describe THIS apply, never an earlier one
+    g_box_profile_runtime_declined = ""
+    let reason = box_profile_verdict_at(path)
+    if (reason == TuneSidecarReason.absent) {
+        g_box_profile_runtime_declined = "{reason}"
         return
     }
-    let ppath = path != "" ? path : box_profile_path()
+    if (reason == TuneSidecarReason.foreign_box || reason == TuneSidecarReason.unreadable) {
+        g_box_profile_runtime_declined = "{reason}"
+        to_log(LOG_INFO, "dasLLAMA: tune sidecar {path} not applied ({reason}) - its runtime knobs are the minting box's state\n")
+        return
+    }
+    if (reason == TuneSidecarReason.stale_binary) {
+        to_log(LOG_INFO, "dasLLAMA: tune sidecar predates the binary - kernel winners fall back; the runtime knobs are box state and apply\n")
+    }
+    apply_box_profile_runtime_at(path)
+}
+
+[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a flat knob catalog; a split would invent seams
     let text = fread(ppath)
     if (empty(text)) return
     var err = ""
@@ -1363,7 +1434,12 @@ def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a f
         to_log(LOG_WARNING, "dasLLAMA: {ppath} is not valid JSON ({err}) - runtime knobs not applied\n")
         return
     }
-    let rt = jv?["runtime"]   // null-sentinel when absent — every read below then keeps its default
+    let rt = jv?["runtime"]   // a null-KIND node when absent (not a null pointer) — every read below then keeps its default
+    if (rt != null && rt.value is _object) {
+        g_box_profile_runtime_applied = true
+    } else {
+        g_box_profile_runtime_declined = "no_runtime_section"   //! a fallback-stamp sidecar: kernels, no box state
+    }
     apply_i64_knob(rt, "q8_token_block") $(v) { set_q8_token_block(v) }
     apply_i64_knob(rt, "q8_l2_budget") $(v) { set_q8_l2_budget(v) }
     apply_i64_knob(rt, "target_chunk_work") $(v) { set_target_chunk_work(v) }
@@ -1406,6 +1482,8 @@ def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a f
     apply_i64_knob(rt, "metal_tall_floor") $(v) { set_metal_tall_floor(v) }
     apply_i64_knob(rt, "metal_devw_small_panel_mb") $(v) { set_metal_devw_small_panel_mb(v) }
     apply_i64_knob(rt, "metal_cvt_min_rows") $(v) { set_metal_cvt_min_rows(v) }
+    apply_i64_knob(rt, "mtp_depth_nextn") $(v) { set_mtp_depth_nextn(v) }
+    apply_i64_knob(rt, "mtp_depth_assistant") $(v) { set_mtp_depth_assistant(v) }
     let mtc = read_json_field(rt, "metal_tensor", "")
     if (mtc != "" && !g_tensor_crowns_pinned) {
         set_metal_tensor_crowns(mtc)
@@ -2002,12 +2080,13 @@ struct Session {
     mtp_logits : array<float>      // verify-batch row-0 logits (vocab; the draft check reads its argmax)
     mtp_vbatch : array<int64>      // the 2-row verify batch [tok, draft] (persistent — no per-step alloc)
     mtp_norm_b : array<float>      // verify-batch final-normed rows (npos x dim), input to the batched classifier
-    mtp_logits_b : array<float>    // verify-batch logits (npos x vocab) — ONE classifier pass covers every row
+    @scratch mtp_logits_b : array<float>   // verify-batch logits (rows x vocab), grown once to the round's width
+    @scratch mtp_hrows : array<float>      // verify-batch post-final-norm hidden rows (rows x dim) — the drafter's next input / the carry
     mtp_drafted : int64            // session-lifetime telemetry: drafts attempted / accepted
     mtp_accepted : int64
-    // deltanet rollback for a rejected verify batch (sized lazily on first snapshot)
-    mtp_snap_conv : array<float>
-    mtp_snap_state : array<float>
+    // deltanet rollback for a rejected verify batch, sized lazily on the first snapshot (a 27B hybrid's state is 151 MB)
+    @scratch mtp_snap_conv : array<float>
+    @scratch mtp_snap_state : array<float>
     mtp_snap_pos : int64
 }
 
@@ -2123,11 +2202,11 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
         s.dn_qgate |> resize(qd)
     }
     if (c.n_layer_nextn > 0l) {   // MTP/NextN: h_nextn handoff + eh_proj concat input + verify row-0 outputs
-        s.mtp_h |> resize(c.dim)
-        s.mtp_h0 |> resize(c.dim)
-        s.mtp_cat |> resize(2l * c.dim)
+        s.mtp_h |> reserve_resize(c.dim)
+        s.mtp_h0 |> reserve_resize(c.dim)
+        s.mtp_cat |> reserve_resize(2l * MTP_MAX_ROWS * c.dim)   // the verify's embeds (row per verify row) and the warm's cat image
         s.mtp_logits |> resize(c.vocab_size)
-        s.mtp_vbatch |> resize(2)
+        s.mtp_vbatch |> resize(MTP_MAX_ROWS)
     }
     s.ffn_offs |> resize(4)
     s.ffn_gu |> resize(2l * ffw)
@@ -4339,6 +4418,94 @@ def get_mtp_spec() : bool => g_mtp_spec
 
 var private g_mtp_batch_cls = true
 
+//! the verify's row cap: depth k runs k+1 rows, so the deepest round drafts MTP_MAX_ROWS-1
+let MTP_MAX_ROWS = 9l
+//! Which speculative round serves: the native NextN head (qwen) or the assistant drafter (gemma-4).
+enum public MtpRoundKind {
+    nextn
+    assistant
+}
+var private g_mtp_depth = 1l
+var private g_mtp_depth_explicit = false
+var private g_mtp_depth_nextn = 1l        //! box knob `runtime.mtp_depth_nextn`
+var private g_mtp_depth_assistant = 1l    //! box knob `runtime.mtp_depth_assistant`
+var private g_mtp_round_kind = MtpRoundKind.nextn
+
+var private @scratch g_mtp_pos_try : array<int64>   // rounds that drafted position i (0-based)
+var private @scratch g_mtp_pos_hit : array<int64>   // ... and accepted it
+
+//! Per-position acceptance telemetry (vLLM's survival-curve instrument): position i's rate is
+//! hit[i] / try[i] over every round since the last reset - the conditional rate given the round
+//! drafted that deep. Both round drivers note every round; the bench prints the report per arm.
+def mtp_pos_reset {
+    g_mtp_pos_try |> resize(MTP_MAX_ROWS)
+    g_mtp_pos_hit |> resize(MTP_MAX_ROWS)
+    for (i in range64(MTP_MAX_ROWS)) {
+        g_mtp_pos_try[i] = 0l
+        g_mtp_pos_hit[i] = 0l
+    }
+}
+
+def mtp_pos_note(drafted, accepted : int64) {
+    if (long_length(g_mtp_pos_try) < MTP_MAX_ROWS) {
+        mtp_pos_reset()
+    }
+    for (i in range64(min(drafted, MTP_MAX_ROWS))) {
+        g_mtp_pos_try[i]++
+        if (i < accepted) {
+            g_mtp_pos_hit[i]++
+        }
+    }
+}
+
+[cold_path]
+def mtp_pos_report() : string {
+    return build_string() $(var w) {
+        w |> write("per-position accept:")
+        for (i in range64(long_length(g_mtp_pos_try))) {
+            if (g_mtp_pos_try[i] > 0l) {
+                let pct = double(g_mtp_pos_hit[i]) * 100.0lf / double(g_mtp_pos_try[i])
+                w |> write(" p{i + 1l} {pct:.1f}% ({g_mtp_pos_hit[i]}/{g_mtp_pos_try[i]})")
+            }
+        }
+    }
+}
+
+//! An explicit depth (a `--mtp-depth` flag, an API caller) wins over the box defaults.
+def set_mtp_depth(k : int64) {
+    g_mtp_depth = clamp(k, 1l, MTP_MAX_ROWS - 1l)
+    g_mtp_depth_explicit = true
+}
+
+//! Back to the box defaults - the per-kind knobs decide again.
+def clear_mtp_depth {
+    g_mtp_depth_explicit = false
+}
+
+def set_mtp_depth_nextn(k : int64) {
+    g_mtp_depth_nextn = clamp(k, 1l, MTP_MAX_ROWS - 1l)
+}
+
+def get_mtp_depth_nextn() : int64 => g_mtp_depth_nextn
+
+def set_mtp_depth_assistant(k : int64) {
+    g_mtp_depth_assistant = clamp(k, 1l, MTP_MAX_ROWS - 1l)
+}
+
+def get_mtp_depth_assistant() : int64 => g_mtp_depth_assistant
+
+def set_mtp_round_kind(k : MtpRoundKind) {
+    g_mtp_round_kind = k
+}
+
+def get_mtp_round_kind() : MtpRoundKind => g_mtp_round_kind
+
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-depth-knob")]
+def get_mtp_depth() : int64 {
+    if (g_mtp_depth_explicit) return g_mtp_depth
+    return g_mtp_round_kind == MtpRoundKind.assistant ? g_mtp_depth_assistant : g_mtp_depth_nextn
+}
+
 //! One batched classifier pass over the whole MTP verify window instead of a per-row GEMV each —
 //! the plane (vocab x dim) is a step's largest weight read. Pure perf lever; A/B only.
 def set_mtp_batch_cls(on : bool) {
@@ -4399,13 +4566,23 @@ def mtp_draft_prep(t : Model; var s : Session; token, pos : int64) {
 //! CPU-side input prep for a GPU 2-row verify: embed rows for [tok@pos, d@pos+1] into s.mtp_cat
 //! (2*dim scratch — row-major) and the 2-row rope table, for the metal MTP arm
 def mtp_verify_prep(t : Model; var s : Session; tok, d, pos : int64) {
+    s.mtp_vbatch |> resize(2)
+    s.mtp_vbatch[0] = tok
+    s.mtp_vbatch[1] = d
+    mtp_verify_prep_n(t, s, s.mtp_vbatch, 2l, pos)
+}
+
+//! The verify batch's inputs for n rows [tok, d_1..d_{n-1}] at pos..pos+n-1: their embeddings
+//! land in mtp_cat rows [0, n) and the rope tables cover the n positions.
+def mtp_verify_prep_n(t : Model; var s : Session; toks : array<int64>; n, pos : int64) {
     let c = t.config
-    embed_row(t, tok, unsafe(addr(s.mtp_cat[0])))
-    embed_row(t, d, unsafe(addr(s.mtp_cat[c.dim])))
-    if (c.embed_scale != 1.0) {
-        scale_inplace(unsafe(addr(s.mtp_cat[0])), c.embed_scale, 2l * c.dim)
+    for (i in range64(n)) {
+        embed_row(t, toks[i], unsafe(addr(s.mtp_cat[i * c.dim])))
     }
-    build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, pos, 2l,
+    if (c.embed_scale != 1.0) {
+        scale_inplace(unsafe(addr(s.mtp_cat[0])), c.embed_scale, n * c.dim)
+    }
+    build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, pos, n,
                      c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
 }
 
@@ -4416,8 +4593,8 @@ def mtp_state_snapshot(var s : Session) {
     dn_flush_all(s)   // the snapshot must capture device-resident decode-step state
     let nc = long_length(s.dn_conv_state)
     let ns = long_length(s.dn_state)
-    s.mtp_snap_conv |> resize(nc)   // no-op after the first call
-    s.mtp_snap_state |> resize(ns)
+    s.mtp_snap_conv |> overwrite_resize(nc)   // reserves once, a no-op after the first call
+    s.mtp_snap_state |> overwrite_resize(ns)
     copy_floats(s.dn_conv_state, 0l, s.mtp_snap_conv, 0l, nc)
     copy_floats(s.dn_state, 0l, s.mtp_snap_state, 0l, ns)
     s.mtp_snap_pos = s.dn_pos
@@ -4570,9 +4747,9 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     return false
 }
 
-//! Greedy decode with MTP/NextN depth-1 self-speculation. Mirrors generate()'s contract (echo +
-//! greedy continuation, `total` ids) and is OUTPUT-INVARIANT vs plain greedy decode — the draft
-//! only decides batched-two-token vs plain-one-token stepping. Accept telemetry in the out params.
+//! Greedy decode with MTP/NextN self-speculation at the configured depth (set_mtp_depth). Mirrors
+//! generate()'s contract (echo + greedy continuation, `total` ids) and is OUTPUT-INVARIANT vs plain
+//! greedy decode — the drafts only decide how many tokens a round commits. Accept telemetry in the out params.
 def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total : int64;
                         var n_drafted, n_accepted : int64&) : array<int64> {
     let c = t.config
@@ -4605,12 +4782,17 @@ def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total
         break if (tok == 1l)   // BOS delimits sequences (generate()'s contract)
         ids |> push(tok)
         break if (long_length(ids) >= total)
-        var acc = 0l
-        if (mtp_spec_eval(t, s, tok, acc)) {
-            break if (acc == 1l)   // BOS: generate() stops before emitting it — mirror that
+        let a = mtp_spec_round(t, s, tok)
+        var stop = false
+        for (i in range64(a)) {
+            let acc = s.mtp_vbatch[i + 1l]
+            if (acc == 1l || long_length(ids) >= total) {   // BOS: generate() stops before emitting it — mirror that
+                stop = true
+                break
+            }
             ids |> push(acc)
-            break if (long_length(ids) >= total)
         }
+        break if (stop || long_length(ids) >= total)
         tok = parallel_argmax(s.logits, c.vocab_size)
     }
     n_drafted = s.mtp_drafted - d0

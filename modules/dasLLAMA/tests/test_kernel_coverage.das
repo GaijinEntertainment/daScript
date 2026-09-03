@@ -93,7 +93,13 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalKqMulMmK3T", "MetalKqMulMmK3TH", "MetalKqMulMmK2T", "MetalKqMulMmK2TH",
     "MetalKqMulMmIq3sT", "MetalKqMulMmIq3sTH", "MetalKqMulMmIq3xxsT", "MetalKqMulMmIq3xxsTH",
     "MetalKqMulMmIq2sT", "MetalKqMulMmIq2sTH", "MetalKqMulMmIq2xsT", "MetalKqMulMmIq2xsTH",
-    "MetalKqMulMmIq2xxsT", "MetalKqMulMmIq2xxsTH"
+    "MetalKqMulMmIq2xxsT", "MetalKqMulMmIq2xxsTH",
+    // the MTP round's kernels: the same-slab verify's per-row argmax dispatches only inside a
+    // speculative round (the census prompt never speculates), and the k4 two-row tile only under
+    // the kq_mvb2_k4_r2 crown. Their coverage is the argmax_rows gate in test_metal_misc_kernels.das,
+    // the r2 arm of kq_mvb_gate plus the pair-walk gate in test_metal_gemv_kernels.das, and the
+    // mtp suite's parity arms
+    "MetalArgmaxRows", "MetalKqMvB2K4R2"
 ]
 
 def private counting_prompt(start, last : int) : string {

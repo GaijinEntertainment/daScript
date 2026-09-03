@@ -19,6 +19,8 @@ require dasllama/dasllama_tower   // the encode-stage prof rail (set_asr_prof/as
 require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
 require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require ?das_metal dasllama/dasllama_metal_prefill   // --asr --ngl: the chat-decoder prefill engage witness
+require ?das_metal dasllama/dasllama_metal_mtp_gemma   // --mtp-ab on a gemma-4 target: the assistant drafter sidecar attaches here
+require dasllama/dasllama_mtp_gemma   // nolint:STYLE030,LINT019 — gemma_drafter_sidecar is read in the das_metal half
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
 require dasllama/dasllama_vision_embedder   // --image: the vision embedder (any family) + encode_image_
 require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
@@ -123,6 +125,14 @@ struct Args {
 
     @clarg_doc = "A/B the GPU MoE prefill arm in-process: every row runs twice, device-side prefill OFF then ON. Needs resident expert layers (DASLLAMA_GPU_MOE_LAYERS); decode has no npos gate so tg reads as a wash. Mutually exclusive with the other A/B levers"
     prefill_ab : bool
+
+    @clarg_name = "chat-prompts"
+    @clarg_doc = "Wrap each tg-real corpus segment as one user turn in the model's chat template (thinking off) instead of feeding it as raw text - the shape instruct models are used in (Spec-Bench prompts)"
+    chat_prompts : bool
+
+    @clarg_name = "mtp-depth"
+    @clarg_doc = "Speculative depth for the --mtp-ab ON arm: drafts per round (the verify runs depth+1 rows). 0 = the box profile's default for the round kind (runtime.mtp_depth_nextn / mtp_depth_assistant, 1 when unminted)"
+    mtp_depth : int = 0
 
     @clarg_name = "mtp-ab"
     @clarg_doc = "A/B MTP/NextN self-speculation in-process, OFF then ON (needs a NextN head in the GGUF). Runs the tg-real row, NOT the llama-bench tg row — acceptance is meaningless on synthetic ids. Reports the draft accept rate; mutually exclusive with the other A/B levers"
@@ -1036,6 +1046,20 @@ def private bench_output_gate(t : Model; s : Session; fmt : OutFmt; tag : string
     return true
 }
 
+// one tg-real corpus segment's ids: raw text, or one user turn in the model's chat template
+// (thinking off) - the shape instruct models are actually used in
+def private corpus_ids(t : Model; tk : Tokenizer; tx : string; chat : bool) : array<int64> {
+    if (!chat) {
+        return <- encode(tk, tx, false)
+    }
+    var cs <- create_chat_renderer_(t, "", 0l)
+    set_thinking_(cs, false)
+    add_user_(cs, tx)
+    var ids <- render_turn_(t, cs)
+    finalize(cs)
+    return <- ids
+}
+
 // Greedy pick over the last logits — the tg-real row's sampler. Runs INSIDE the timed window, but
 // both A/B arms pay it identically so it cancels for judging.
 def private argmax_logit(s : Session; vocab : int64) : int64 {
@@ -1242,7 +1266,8 @@ def private tests_of(rows : array<RowStat>) : table<string; BenchTest> {
 var private g_debug_run = false
 
 def private flavor_stamp(base : string) : string {
-    return g_debug_run ? "debug-jit:{base}" : base
+    let b = tune_gate_bypassed() ? "untuned:{base}" : base
+    return g_debug_run ? "debug-jit:{b}" : b
 }
 
 [export]
@@ -1436,7 +1461,7 @@ def main() : int {
                 ? path_join(get_this_module_dir(), "data/wikitext2_prompts.txt") : cfg.prompts)
             var maxlen = 0l
             for (tx in texts) {
-                var ids <- encode(tk, tx, false)
+                var ids <- corpus_ids(t, tk, tx, cfg.chat_prompts)
                 maxlen = max(maxlen, long_length(ids))
                 toks |> emplace(ids)
             }
@@ -1451,9 +1476,20 @@ def main() : int {
         }
         let c = t.config
         // a model with no NextN head silently no-ops set_mtp_spec — both arms would be identical
-        // and the row would read as a valid 1.00x result. Fail closed instead.
         if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
-            panic("lcpp_bench: --mtp-ab needs a NextN draft head, and {mpath} has none")
+            var attached = false   // nolint:LINT003,LINT019 — assigned in the das_metal half
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                let side = gemma_drafter_sidecar(mpath)
+                if (!empty(side)) {
+                    attached = attach_gemma_drafter(t, side)
+                }
+            }
+            if (!attached) {
+                panic("lcpp_bench: --mtp-ab needs a NextN draft head or an assistant drafter sidecar, and {mpath} has neither")
+            }
+        }
+        if (cfg.mtp_depth > 0) {
+            set_mtp_depth(int64(cfg.mtp_depth))
         }
         // the exec REQUEST (exe-native / -jit / interpreted) + the armed GPU tier are stamped;
         // a jit run that produced nothing logs its own LLVM JIT error beside this
@@ -1467,6 +1503,8 @@ def main() : int {
             dispatch_census(t, fmt)
         }
         var s <- make_run_state(c, KVDtype.f16, KVDtype.f16)
+        var pp_off : array<double>
+        pp_off |> resize(length(toks))
         for (arm in range(ab ? 2 : 1)) {
             var dtag = ""
             if (ab) {
@@ -1481,6 +1519,14 @@ def main() : int {
                 var drafted = 0l
                 var accepted = 0l
                 var tps : array<double>
+                var pp_us : array<int64>      // per prompt across the reps: timed µs, tokens, drafts, accepts
+                var pp_gen : array<int64>
+                var pp_dr : array<int64>
+                var pp_ac : array<int64>
+                pp_us |> resize(length(toks))
+                pp_gen |> resize(length(toks))
+                pp_dr |> resize(length(toks))
+                pp_ac |> resize(length(toks))
                 for (_rep in range(reps)) {
                     var total_us = 0l
                     var rep_gen = 0l
@@ -1489,39 +1535,71 @@ def main() : int {
                         let pl = long_length(toks[pi])
                         forward_prefill(t, rs, toks[pi], pl, 0l)
                         let t0 = ref_time_ticks()
+                        var p_gen = ngen
                         if (mtp_on) {
-                            rs.n_past = pl   // forward_prefill leaves n_past alone; mtp_spec_eval drives it
+                            rs.n_past = pl   // forward_prefill leaves n_past alone; the round drives it
                             var tok = argmax_logit(rs, c.vocab_size)
                             var gen = 0l
                             while (gen < ngen) {
-                                var acc = 0l   // the id is unused — only the 1-vs-2 advance is timed
-                                gen += mtp_spec_eval(t, rs, tok, acc) ? 2l : 1l
+                                gen += 1l + mtp_spec_round(t, rs, tok)   // tok + the accepted drafts; only the advance is timed
                                 tok = argmax_logit(rs, c.vocab_size)
                             }
-                            rep_gen += gen   // a trailing accept may overshoot by 1 — count what ran
+                            p_gen = gen   // a trailing accept may overshoot by 1 — count what ran
                         } else {
                             var pos = pl
                             for (_g in range64(ngen)) {
                                 forward(t, rs, argmax_logit(rs, c.vocab_size), pos)
                                 pos++
                             }
-                            rep_gen += ngen
                         }
-                        total_us += int64(get_time_usec(t0))
+                        rep_gen += p_gen
+                        let p_us = int64(get_time_usec(t0))
+                        total_us += p_us
+                        pp_us[pi] += p_us
+                        pp_gen[pi] += p_gen
                         drafted += rs.mtp_drafted   // session-lifetime counters — harvest before the free
                         accepted += rs.mtp_accepted
+                        pp_dr[pi] += rs.mtp_drafted
+                        pp_ac[pi] += rs.mtp_accepted
                         delete rs
                     }
                     tps |> push(double(rep_gen) * 1.0e6lf / double(total_us))
                 }
                 let st = row_stat("tg-real{ngen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps, {length(toks)} prompts)\n")
+                if (!mtp_on) {
+                    for (pi in range(length(toks))) {
+                        pp_off[pi] = pp_us[pi] > 0l ? double(pp_gen[pi]) * 1.0e6lf / double(pp_us[pi]) : 0.0lf
+                    }
+                }
                 if (mtp_on) {
                     let rate = drafted > 0l ? double(accepted) * 100.0lf / double(drafted) : 0.0lf
-                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%)\n")
+                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}; {mtp_pos_report()}\n")
+                    mtp_pos_reset()
+                    if (length(toks) > 1) {
+                        for (pi in range(length(toks))) {
+                            let on_tps = pp_us[pi] > 0l ? double(pp_gen[pi]) * 1.0e6lf / double(pp_us[pi]) : 0.0lf
+                            let ratio = pp_off[pi] > 0.0lf ? on_tps / pp_off[pi] : 0.0lf
+                            let prate = pp_dr[pi] > 0l ? double(pp_ac[pi]) * 100.0lf / double(pp_dr[pi]) : 0.0lf
+                            say(fmt, "    prompt {pi}: off {pp_off[pi]:.1f} -> on {on_tps:.1f} tok/s (x{ratio:.2f}), accept {pp_ac[pi]}/{pp_dr[pi]} ({prate:.1f}%)\n")
+                        }
+                    }
+                    static_if (typeinfo builtin_module_exists(das_metal)) {
+                        if (gemma_drafter_attached()) {
+                            let gt = gemma_drafter_time()
+                            let gs = gemma_drafter_stats()
+                            let per = gs.rounds > 0l ? double(gt.draft_us) / double(gs.rounds) / 1000.0lf : 0.0lf
+                            let pver = gs.rounds > 0l ? double(gt.verify_us) / double(gs.rounds) / 1000.0lf : 0.0lf
+                            say(fmt, "  gemma drafter: {gs.rounds} rounds, draft chain {per:.2f} ms/round, verify+commit {pver:.2f} ms/round, cold {double(gt.cold_us) / 1000.0lf:.1f} ms total\n")
+                        }
+                    }
                 }
                 results |> push(st)
                 delete tps
+                delete pp_us
+                delete pp_gen
+                delete pp_dr
+                delete pp_ac
                 if (cfg.prof) {
                     // untimed bucket window for THIS arm — the prefill lands BEFORE the reset, so
                     // the report is pure decode (or pure draft+verify on the on arm). Running it
@@ -1535,8 +1613,7 @@ def main() : int {
                         var ptok = argmax_logit(ps, c.vocab_size)
                         var pgen = 0l
                         while (pgen < ngen) {
-                            var pacc = 0l
-                            pgen += mtp_spec_eval(t, ps, ptok, pacc) ? 2l : 1l
+                            pgen += 1l + mtp_spec_round(t, ps, ptok)
                             ptok = argmax_logit(ps, c.vocab_size)
                         }
                     } else {

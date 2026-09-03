@@ -11,9 +11,16 @@ REPO_ROOT = ROOT.parent
 # and REVIEW.das reads this list to hold each served .html to it
 PAGES = {
     "index.html": "https://dasllama.io/",
+    "stories.html": "https://dasllama.io/stories.html",
     "ladder.html": "https://dasllama.io/ladder.html",
     "sidecars.html": "https://dasllama.io/sidecars.html",
 }
+
+STORY_PAGES = {
+    f"stories/{p.name}": f"https://dasllama.io/stories/{p.name}"
+    for p in sorted((ROOT / "stories").glob("*.html"))
+}
+ALL_PAGES = {**PAGES, **STORY_PAGES}
 
 
 class MetadataParser(HTMLParser):
@@ -53,17 +60,23 @@ class MetadataParser(HTMLParser):
 
 class SiteMetadataTest(unittest.TestCase):
     def test_pages_have_one_canonical_home_identity(self):
-        for filename, expected in PAGES.items():
+        for filename, expected in ALL_PAGES.items():
             with self.subTest(filename=filename):
                 parser = MetadataParser()
                 parser.feed((ROOT / filename).read_text(encoding="utf-8"))
                 self.assertEqual(parser.canonical, expected)
                 self.assertNotIn("index.html", parser.hrefs)
 
+    def test_there_is_a_page_per_story(self):
+        stories = sorted(p.stem for p in (ROOT / "_stories").glob("*.md"))
+        pages = sorted(p.stem for p in (ROOT / "stories").glob("*.html"))
+        self.assertTrue(stories, "no stories")
+        self.assertEqual(pages, stories)
+
     def test_pages_carry_head_metadata(self):
         # the per-page metadata the site checklist requires: a title, a description, the
         # OpenGraph quartet, and the Atom link - a new or renamed page included
-        for filename in PAGES:
+        for filename in ALL_PAGES:
             with self.subTest(filename=filename):
                 parser = MetadataParser()
                 parser.feed((ROOT / filename).read_text(encoding="utf-8"))
@@ -78,7 +91,8 @@ class SiteMetadataTest(unittest.TestCase):
         tree = ET.parse(ROOT / "sitemap.xml")
         namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
         urls = [node.text for node in tree.findall("sm:url/sm:loc", namespace)]
-        self.assertEqual(urls, list(PAGES.values()))
+        self.assertEqual(urls[:len(PAGES)], list(PAGES.values()))
+        self.assertEqual(sorted(urls[len(PAGES):]), sorted(STORY_PAGES.values()))
 
     def test_feed_links_to_home_page_anchors(self):
         feed = (ROOT / "feed.xml").read_text(encoding="utf-8")

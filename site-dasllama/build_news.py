@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-Build the dasllama.io news feed from _news/*.md.
+Build the dasllama.io news feed from _news/*.md and the stories from _stories/*.md.
 
-Rewrites index.html between the `<!-- news:begin -->` / `<!-- news:end -->` markers and
-regenerates feed.xml (Atom) and sitemap.xml next to it. Entries live ON the home page —
-there are no per-entry pages; feed entries link to the entry's anchor on the home page.
+Rewrites index.html between the `<!-- news:begin -->` / `<!-- news:end -->` markers (the
+news live ON the home page, feed entries link to their anchor), writes the stories index
+into stories.html between `<!-- stories:begin -->` / `<!-- stories:end -->` and one page per
+story into stories/<slug>.html from _stories/template.html (stale pages there are removed),
+and regenerates feed.xml (Atom, news and stories together) and sitemap.xml next to them.
 
 The generated output is CHECKED IN (unlike daslang.io's blog, which builds into _site
 only): the preview rig serves the repo tree directly, and the site must preview exactly
 as it deploys. The deploy step runs this same script so a forgotten local run cannot
-ship a stale board — the deploy regenerates from _news/ either way.
+ship a stale board — the deploy regenerates from _news/ and _stories/ either way.
 
-Front matter keys: date (YYYY-MM-DD), tag, title. Body is Markdown.
+Front matter keys: date (YYYY-MM-DD), tag, title; stories add lede. Body is Markdown
+(fenced code and tables).
 
 Usage:
     python3 build_news.py [--root site-dasllama] [--site-url https://dasllama.io]
@@ -34,6 +37,9 @@ KEY_RE = re.compile(r'^([a-zA-Z_]+):\s*(.*)$')
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 MARK_BEGIN = '<!-- news:begin'
 MARK_END = '<!-- news:end -->'
+STORY_BEGIN = '<!-- stories:begin'
+STORY_END = '<!-- stories:end -->'
+MD_EXTENSIONS = ['fenced_code', 'tables']
 
 
 def parse_front_matter(text: str) -> tuple[dict, str]:
@@ -72,15 +78,19 @@ def load_entries(news_dir: Path) -> list[dict]:
             'date': meta['date'],
             'tag': meta.get('tag', ''),
             'title': meta['title'],
+            'lede': meta.get('lede', ''),
             'body_md': body.strip(),
         })
     out.sort(key=lambda e: (e['date'], e['slug']), reverse=True)
     return out
 
 
+def render_md(body_md: str) -> str:
+    return markdown.Markdown(extensions=MD_EXTENSIONS).convert(body_md) if body_md else ''
+
+
 def entry_html(e: dict, lead: bool) -> str:
-    md = markdown.Markdown(extensions=['fenced_code'])
-    body = md.convert(e['body_md']) if e['body_md'] else ''
+    body = render_md(e['body_md'])
     cls = 'dio-item dio-item--lead is-open' if lead else 'dio-item'
     latest = '<span class="dio-latest">latest</span>' if lead else ''
     return (
@@ -94,6 +104,50 @@ def entry_html(e: dict, lead: bool) -> str:
     )
 
 
+def story_index_html(stories: list[dict]) -> str:
+    rows = ''.join(
+        f'<a class="forge-blog-item" href="stories/{html.escape(s["slug"])}.html">'
+        f'<span class="forge-blog-item__date">{html.escape(s["date"])}</span>'
+        f'<span class="forge-blog-item__tag">{html.escape(s["tag"])}</span>'
+        f'<span class="forge-blog-item__title">{html.escape(s["title"])}</span>'
+        f'<span class="forge-blog-item__excerpt">{html.escape(s["lede"])}</span></a>\n'
+        for s in stories)
+    return f'<div class="forge-blog-list dio-story-list">\n{rows}</div>'
+
+
+def story_page_html(s: dict, template: str, site_url: str) -> str:
+    lede = f'<p class="dio-story__lede">{html.escape(s["lede"])}</p>' if s['lede'] else ''
+    slots = {
+        '{{title}}': html.escape(s['title']),
+        '{{description}}': html.escape(s['lede'] or s['title']),
+        '{{canonical}}': f'{site_url}/stories/{html.escape(s["slug"])}.html',
+        '{{root}}': '../',
+        '{{date}}': html.escape(s['date']),
+        '{{tag}}': html.escape(s['tag']),
+        '{{lede}}': lede,
+        '{{body}}': render_md(s['body_md']),
+    }
+    out = template
+    for slot, value in slots.items():
+        out = out.replace(slot, value)
+    return out
+
+
+def write_story_pages(root: Path, stories: list[dict], site_url: str) -> None:
+    template = (root / '_stories' / 'template.html').read_text(encoding='utf-8')
+    for slot in ('{{title}}', '{{description}}', '{{canonical}}', '{{root}}', '{{body}}'):
+        if slot not in template:
+            sys.exit(f"{root / '_stories' / 'template.html'}: missing the {slot} slot")
+    out_dir = root / 'stories'
+    out_dir.mkdir(exist_ok=True)
+    keep = {f'{s["slug"]}.html' for s in stories}
+    for stale in out_dir.glob('*.html'):
+        if stale.name not in keep:
+            stale.unlink()   # a renamed or removed story must not leave its old page deployed
+    for s in stories:
+        write_lf(out_dir / f'{s["slug"]}.html', story_page_html(s, template, site_url))
+
+
 def write_lf(path: Path, text: str) -> None:
     # not Path.write_text(newline=...): that keyword needs Python 3.10+, and the checklist
     # tells authors to re-run this script on the stock macOS interpreter (3.9)
@@ -101,31 +155,40 @@ def write_lf(path: Path, text: str) -> None:
         f.write(text)
 
 
-def rewrite_index(index: Path, entries: list[dict]) -> None:
-    text = index.read_text(encoding='utf-8')
-    if MARK_BEGIN not in text or MARK_END not in text:
-        sys.exit(f"{index}: missing the news:begin/news:end markers")
-    begin = text.index(MARK_BEGIN)
+def rewrite_region(page: Path, mark_begin: str, mark_end: str, items: str) -> None:
+    text = page.read_text(encoding='utf-8')
+    if mark_begin not in text or mark_end not in text:
+        sys.exit(f"{page}: missing the {mark_begin[5:]}/{mark_end[5:-4]} markers")
+    begin = text.index(mark_begin)
     begin = text.index('-->', begin) + len('-->')
     # LAST end marker is the structural closer: an entry body may legitimately contain the
-    # literal '<!-- news:end -->', and it always sits BEFORE the real closer (inside the region),
-    # so rfind picks the real one and a build cannot append an orphan </article> fragment
-    end = text.rfind(MARK_END)
+    # literal end marker, and it always sits BEFORE the real closer (inside the region), so
+    # rfind picks the real one and a build cannot append an orphan </article> fragment
+    end = text.rfind(mark_end)
     if end < begin:
-        sys.exit(f"{index}: news:end precedes news:begin")
-    items = '\n'.join(entry_html(e, i == 0) for i, e in enumerate(entries))
-    write_lf(index, text[:begin] + '\n' + items + '\n' + text[end:])
+        sys.exit(f"{page}: the end marker precedes the begin marker")
+    write_lf(page, text[:begin] + '\n' + items + '\n' + text[end:])
 
 
-def write_feed(root: Path, entries: list[dict], site_url: str) -> None:
+def rewrite_index(index: Path, entries: list[dict]) -> None:
+    rewrite_region(index, MARK_BEGIN, MARK_END,
+                   '\n'.join(entry_html(e, i == 0) for i, e in enumerate(entries)))
+
+
+def rewrite_stories(page: Path, stories: list[dict]) -> None:
+    rewrite_region(page, STORY_BEGIN, STORY_END, story_index_html(stories))
+
+
+def write_feed(root: Path, entries: list[dict], stories: list[dict], site_url: str) -> None:
     def iso(date: str) -> str:
         return f'{date}T00:00:00Z'
-    md = markdown.Markdown(extensions=['fenced_code'])
     items = []
-    for e in entries:
-        link = f'{site_url}/#n-{e["slug"]}'
-        body = md.convert(e['body_md']) if e['body_md'] else ''
-        md.reset()
+    feed_entries = ([dict(e, link=f'{site_url}/#n-{e["slug"]}') for e in entries]
+                    + [dict(s, link=f'{site_url}/stories/{s["slug"]}.html') for s in stories])
+    feed_entries.sort(key=lambda e: (e['date'], e['slug']), reverse=True)
+    for e in feed_entries:
+        link = e['link']
+        body = render_md(e['body_md'])
         items.append(
             f'<entry>\n'
             f'<title>{html.escape(e["title"])}</title>\n'
@@ -135,11 +198,11 @@ def write_feed(root: Path, entries: list[dict], site_url: str) -> None:
             f'<content type="html">{html.escape(body)}</content>\n'
             f'</entry>'
         )
-    newest = iso(entries[0]['date']) if entries else '1970-01-01T00:00:00Z'
+    newest = iso(feed_entries[0]['date']) if feed_entries else '1970-01-01T00:00:00Z'
     feed = (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<feed xmlns="http://www.w3.org/2005/Atom">\n'
-        '<title>dasllama.io news</title>\n'
+        '<title>dasllama.io news and stories</title>\n'
         '<author><name>dasllama.io</name></author>\n'   # RFC 4287 §4.1.1 requires a feed-level author
         f'<link href="{site_url}/"/>\n'
         f'<link href="{site_url}/feed.xml" rel="self"/>\n'
@@ -151,9 +214,12 @@ def write_feed(root: Path, entries: list[dict], site_url: str) -> None:
     write_lf(root / 'feed.xml', feed)
 
 
-def write_sitemap(root: Path, entries: list[dict], site_url: str) -> None:
+def write_sitemap(root: Path, entries: list[dict], stories: list[dict], site_url: str) -> None:
     newest = entries[0]['date'] if entries else None
-    urls = [('', newest), ('ladder.html', None), ('sidecars.html', None)]
+    newest_story = stories[0]['date'] if stories else None
+    # ONE line: site-dasllama/REVIEW.das reads it as the top-level page census
+    urls = [('', newest), ('stories.html', newest_story), ('ladder.html', None), ('sidecars.html', None)]
+    urls += [(f'stories/{s["slug"]}.html', s['date']) for s in stories]
     body = '\n'.join(
         f'<url><loc>{site_url}/{page}</loc>'
         + (f'<lastmod>{lastmod}</lastmod>' if lastmod else '')
@@ -175,10 +241,13 @@ def main() -> None:
 
     root = Path(args.root)
     entries = load_entries(root / '_news')
+    stories = load_entries(root / '_stories')
     rewrite_index(root / 'index.html', entries)
-    write_feed(root, entries, args.site_url)
-    write_sitemap(root, entries, args.site_url)
-    print(f'news: {len(entries)} entries -> index.html, feed.xml, sitemap.xml')
+    rewrite_stories(root / 'stories.html', stories)
+    write_story_pages(root, stories, args.site_url)
+    write_feed(root, entries, stories, args.site_url)
+    write_sitemap(root, entries, stories, args.site_url)
+    print(f'news: {len(entries)} entries, {len(stories)} stories -> index.html, stories.html, stories/*.html, feed.xml, sitemap.xml')
 
 
 if __name__ == '__main__':

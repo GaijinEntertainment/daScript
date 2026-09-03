@@ -1,0 +1,277 @@
+{
+	"meta" : {
+		"model_sha" : "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f\t0x3f226f6e0\t2026-07-20T19:30:57",
+		"head" : "~/Work/llama.cpp/models/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+		"depths" : "1,2",
+		"date" : "2026-09-02 11:12",
+		"cpu" : "Apple M5 Max",
+		"model" : "~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+		"lcpp_server" : "~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
+		"das_exe" : "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench",
+		"lcpp_version" : "version: 0.3.0-dev (build 832, commit 6fdd0ac89)",
+		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",
+		"threads" : 6,
+		"das_sha" : "7907b133c",
+		"ngen" : 128,
+		"head_sha" : "ea4f772ffb70e02127c5f142f9ed9af97add7ca0f2bcc7b277244a9771b436bd",
+		"reps" : 3
+	},
+	"rows" : [
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 0,
+			"text" : "# Aloha State of Mind: Finding the Soul of Hawaii Beyond the Beach 🌺\n\nThey say you don’t ju"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 1,
+			"text" : "During a campaign stop in Norwalk, Iowa, Hillary Clinton’s security detail utilized two nearly"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 2,
+			"text" : "To find out how much the travel costs, follow these steps:\n\n1.  **Identify the cost of supplies:"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 3,
+			"text" : "There was no character named **Anna** in the television series *Once Upon a Time*.\n\nIt is possib"
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 0,
+			"off_tps" : 124.2,
+			"on_tps" : 144,
+			"drafted" : 225,
+			"accepted" : 156
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 1,
+			"off_tps" : 118.1,
+			"on_tps" : 133.4,
+			"drafted" : 225,
+			"accepted" : 156
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 2,
+			"off_tps" : 123.9,
+			"on_tps" : 160.1,
+			"drafted" : 201,
+			"accepted" : 180
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 3,
+			"off_tps" : 124.8,
+			"on_tps" : 148.6,
+			"drafted" : 219,
+			"accepted" : 162
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : -1,
+			"off_tps" : 122.69,
+			"on_tps" : 145.88,
+			"note" : "mtp: 654/870 drafts accepted (75.2%) at depth 1; per-position accept: p1 75.2% (654/870)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 0,
+			"off_tps" : 124.1,
+			"on_tps" : 138.3,
+			"drafted" : 378,
+			"accepted" : 192
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 1,
+			"off_tps" : 117.9,
+			"on_tps" : 124.6,
+			"drafted" : 366,
+			"accepted" : 201
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 2,
+			"off_tps" : 120.1,
+			"on_tps" : 187.9,
+			"drafted" : 276,
+			"accepted" : 243
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 3,
+			"off_tps" : 124.6,
+			"on_tps" : 155.5,
+			"drafted" : 336,
+			"accepted" : 213
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : -1,
+			"off_tps" : 121.63,
+			"on_tps" : 148.14,
+			"note" : "mtp: 849/1356 drafts accepted (62.6%) at depth 2; per-position accept: p1 73.9% (501/678) p2 51.3% (348/678)"
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "# Aloha State of Mind: My Unforgettable Journey Through the Heart of Hawaii 🌺🌴\n\nThey say y",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 0,
+			"engine" : "llama.cpp",
+			"tps" : 98.22510065402975,
+			"same_text_as_das" : false,
+			"accepted" : 0,
+			"prompt_n" : 32
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "During a campaign stop in Norwalk, Iowa, Hillary Clinton’s security detail utilized two nearly",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 1,
+			"engine" : "llama.cpp",
+			"tps" : 95.80583051679288,
+			"same_text_as_das" : true,
+			"accepted" : 0,
+			"prompt_n" : 697
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "To find out how much the travel costs, follow these steps:\n\n1.  **Identify the cost of supplies:",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 2,
+			"engine" : "llama.cpp",
+			"tps" : 98.3717775225926,
+			"same_text_as_das" : true,
+			"accepted" : 0,
+			"prompt_n" : 64
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "In the TV series *Once Upon a Time*, the character Anna (the daughter of Elsa in the *Frozen* un",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 3,
+			"engine" : "llama.cpp",
+			"tps" : 98.17018611386369,
+			"same_text_as_das" : false,
+			"accepted" : 0,
+			"prompt_n" : 19
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "# Aloha State of Mind: My Unforgettable Journey Through the Heart of Hawaii 🌺🌴\n\nThey say y",
+			"depth" : 1,
+			"drafted" : 210,
+			"prompt" : 0,
+			"engine" : "llama.cpp",
+			"tps" : 139.57341274933438,
+			"same_text_as_das" : false,
+			"accepted" : 171,
+			"prompt_n" : 32
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "During a campaign stop in Norwalk, Iowa, Hillary Clinton’s security detail utilized two nearly",
+			"depth" : 1,
+			"drafted" : 222,
+			"prompt" : 1,
+			"engine" : "llama.cpp",
+			"tps" : 119.81513033068467,
+			"same_text_as_das" : true,
+			"accepted" : 156,
+			"prompt_n" : 697
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "To find out how much the travel costs, follow these steps:\n\n1.  **Identify the cost of supplies:",
+			"depth" : 1,
+			"drafted" : 201,
+			"prompt" : 2,
+			"engine" : "llama.cpp",
+			"tps" : 145.78154948853953,
+			"same_text_as_das" : true,
+			"accepted" : 180,
+			"prompt_n" : 64
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "In the TV series *Once Upon a Time*, the character Anna (the daughter of Elsa in the *Frozen* un",
+			"depth" : 1,
+			"drafted" : 216,
+			"prompt" : 3,
+			"engine" : "llama.cpp",
+			"tps" : 129.52111712149375,
+			"same_text_as_das" : false,
+			"accepted" : 165,
+			"prompt_n" : 19
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "# Aloha State of Mind: My Unforgettable Journey Through the Heart of Hawaii 🌺🌴\n\nThey say y",
+			"depth" : 2,
+			"drafted" : 345,
+			"prompt" : 0,
+			"engine" : "llama.cpp",
+			"tps" : 130.776160704076,
+			"same_text_as_das" : false,
+			"accepted" : 207,
+			"prompt_n" : 32
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "During a campaign stop in Norwalk, Iowa, Hillary Clinton’s security detail utilized two nearly",
+			"depth" : 2,
+			"drafted" : 354,
+			"prompt" : 1,
+			"engine" : "llama.cpp",
+			"tps" : 126.0274637767459,
+			"same_text_as_das" : true,
+			"accepted" : 201,
+			"prompt_n" : 697
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "To find out how much the travel costs, follow these steps:\n\n1.  **Identify the cost of supplies:",
+			"depth" : 2,
+			"drafted" : 282,
+			"prompt" : 2,
+			"engine" : "llama.cpp",
+			"tps" : 163.38488633783038,
+			"same_text_as_das" : true,
+			"accepted" : 237,
+			"prompt_n" : 64
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "In the TV series *Once Upon a Time*, the character Anna (the daughter of Elsa in the *Frozen* un",
+			"depth" : 2,
+			"drafted" : 315,
+			"prompt" : 3,
+			"engine" : "llama.cpp",
+			"tps" : 147.87308043336893,
+			"same_text_as_das" : false,
+			"accepted" : 222,
+			"prompt_n" : 19
+		}
+	]
+}

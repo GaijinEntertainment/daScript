@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>The model that drafts its own next token. — dasllama.io</title>
+<meta name="description" content="Qwen 3.8 and Gemma 4 ship with a drafter built in. We taught dasLLAMA to use it on Metal, then spent two days with a ruler finding out what a draft is worth."/>
+<meta property="og:title" content="The model that drafts its own next token."/>
+<meta property="og:description" content="Qwen 3.8 and Gemma 4 ship with a drafter built in. We taught dasLLAMA to use it on Metal, then spent two days with a ruler finding out what a draft is worth."/>
+<meta property="og:type" content="article"/>
+<meta property="og:url" content="https://dasllama.io/stories/2026-09-03-mtp-on-mac.html"/>
+<link rel="canonical" href="https://dasllama.io/stories/2026-09-03-mtp-on-mac.html"/>
+<link rel="icon" href="../files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="stylesheet" href="../files/fonts/fonts.css"/>
+<link rel="stylesheet" href="../files/forge.css"/>
+<link rel="stylesheet" href="../files/dasllama-table.css"/>
+<link rel="stylesheet" href="../files/dasllama-io.css"/>
+<script src="../files/dasllama-io.js" defer></script>
+<script src="../files/github-star.js" defer></script>
+<!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a><a class="dio-tab" href="../sidecars.html">sidecars</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+</div></div></nav>
+
+<section class="forge-section" style="padding:20px 0 64px;border-top:0">
+<div class="forge-container">
+<article class="dio-story dio-story--page">
+<div class="dio-story__eyebrow"><span class="dio-item__date">2026-09-03</span><span class="dio-item__tag">engine</span></div>
+<h1 class="dio-story__title">The model that drafts its own next token.</h1>
+<p class="dio-story__lede">Qwen 3.8 and Gemma 4 ship with a drafter built in. We taught dasLLAMA to use it on Metal, then spent two days with a ruler finding out what a draft is worth.</p>
+<div class="dio-story__body"><!-- figures: modules/dasLLAMA/performance/records/mtp/mtp_m5_gemma-4-26B-A4B.json (2026-09-02, das 7907b133c),
+     mtp_m4_gemma-4-26B-A4B.json (2026-09-02, das fa0b0eac4), mtp_m5_Qwen3.8-27B.json (2026-09-02, das 497dcf10a),
+     mtp_m4_Qwen3.8-27B.json (2026-09-03, das f591c4c13); llama.cpp = stock upstream commit 6fdd0ac89 on both
+     boxes, run as llama-server on the same rendered prompt via /completion with ignore_eos; the M4 morning
+     row (12.7 -> 11.0) = the measurement-day ruler at das 4da0045f0, superseded in the record by f591c4c13;
+     the 93% verify share and the depth-2 7.9 -> 12.4 = the round clocks on the M4 Pro, 2026-09-03; the
+     models are gemma-4-26B-A4B-it-Q4_K_M with mtp-gemma-4-26B-A4B-it-Q8_0 and Qwen3.8-27B-Q4_K_M with
+     mtp-Qwen3.8-27B-Q8_0 (checksums in the records); "1 draft" = our --mtp-depth 1 and llama.cpp's
+     --spec-draft-n-max 1; the code prompt = mtp_m5_gemma-4-26B-A4B_code1.json (2026-09-02, das c3239b46c,
+     corpus benchmarks/data/code1_prompts.txt); the ruler is modules/dasLLAMA/harness/mtp_ruler.das -->
+<p>We turned speculative decoding on, and Anton's Mac mini got slower. That was the morning of
+the 2nd of September, and it is why this story has a second day.</p>
+<p>The idea first. A model generates one token at a time, and for a big model every token
+costs a full pass over the weights. Speculative decoding lets a smaller model (the drafter)
+propose a few tokens ahead and has the big model verify them all in one pass. Right guesses
+give you two or three tokens for the price of one pass and a bit; wrong guesses cost you the
+bit. The output does not change either way: the big model only keeps a drafted token it
+would have produced itself.</p>
+<p>Two current models ship with their own drafter. Qwen 3.8 carries a NextN head, one extra
+layer that predicts the token after the next one. Gemma 4 ships a four-layer assistant
+model next to the 26B main model. Both now run in dasLLAMA on Metal. The drafter is a second
+file you load next to the model. We measured on Boris's new M5 Max laptop and on Anton's
+M4 Pro Mac mini, which answers over ssh from the other side of the globe.</p>
+<h2>What we tried</h2>
+<p>How deep to draft, first of all. One draft token means the big model computes two positions
+in one pass: the position it was at anyway, where its own answer either matches the draft or
+replaces it, and the position after the draft, which only counts if the draft matched. So a
+round always yields one token and, when the draft was right, a second. Two draft tokens mean
+three positions, and the second draft only pays if it is accepted often enough to cover that
+third row.</p>
+<p>We tried one against two on each machine and let the tuner decide, the way it decides
+everything else on a box, and every machine we own settled on one. Three and four were so far
+behind on the development build that they never reached the ruler.</p>
+<p>The Gemma assistant reads the main model's hidden state as its input, and there are two
+places to read it from, before or after the final norm. After won on acceptance, so after
+ships.</p>
+<p>We also checked whether squeezing the main model harder hurts the drafter. The 8-bit Gemma
+accepted 76.5% of the drafts, the 4-bit one 74.6%. Not much, then.</p>
+<p>Then the kernels, which turned out to be the real story.</p>
+<h2>How we measured</h2>
+<p>The board on daslang.io uses llama-bench, and llama-bench cannot measure speculative
+decoding. So we built a small ruler for ourselves. It takes four chat prompts, renders each
+through the model's own chat template with thinking off, and runs two engines on the
+identical rendered text for the same number of tokens - ours, and a stock llama.cpp built
+from upstream exactly as they ship it.</p>
+<p>We focused on two models, gemma-4-26B-A4B-it-Q4_K_M with its Q8_0 assistant and
+Qwen3.8-27B-Q4_K_M with its Q8_0 NextN head, and both engines read the same drafter file.</p>
+<p>The four prompts are the first turns of four tasks from
+<a href="https://github.com/hemingkx/Spec-Bench">hemingkx/Spec-Bench</a>: a travel blog post to write,
+a news article to summarize, a GSM8K arithmetic problem, and a trivia question.</p>
+<p>Two of the ruler's rules exist because each one cost us an afternoon.</p>
+<p>Rule 1. Same thinking mode on both sides. Our very first llama.cpp run had thinking on while
+ours had it off, and its acceptance read 91%. A thinking-on answer is an outline, not a blog
+post - a different text with a different acceptance rate. The ruler now renders one prompt
+and hands the same bytes to both engines.</p>
+<p>Rule 2. Let the box cool down. Surprisingly, a Mac that has been working hard for ten
+minutes decodes 13 to 18% slower than a cool one. Who knew. Every arm now waits three minutes
+on the 27B before it measures. The release build also runs before anything else: when the
+measuring program had already run the engine in-process, everything it measured afterwards
+came out 20% low, for reasons we still find funny.</p>
+<h2>What we measured</h2>
+<p>So we ran it, and the drafter earns its keep: about one extra token in five, and not a token
+more.</p>
+<table>
+<thead>
+<tr>
+<th>tokens/s</th>
+<th>dasLLAMA off</th>
+<th>1 draft</th>
+<th>2 drafts</th>
+<th>llama.cpp off</th>
+<th>1 draft</th>
+<th>2 drafts</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gemma, M5</td>
+<td>122.7</td>
+<td>145.9 (75.2%)</td>
+<td>148.1 (62.6%)</td>
+<td>97.7</td>
+<td>133.7</td>
+<td>142.0</td>
+</tr>
+<tr>
+<td>Gemma, M4</td>
+<td>59.2</td>
+<td>67.5 (74.6%)</td>
+<td>55.6 (62.9%)</td>
+<td>52.8</td>
+<td>67.2</td>
+<td>62.5</td>
+</tr>
+<tr>
+<td>Qwen, M5</td>
+<td>27.6</td>
+<td>33.0 (77.4%)</td>
+<td>31.4 (75.1%)</td>
+<td>25.2</td>
+<td>34.1</td>
+<td>33.5</td>
+</tr>
+<tr>
+<td>Qwen, M4</td>
+<td>12.7</td>
+<td>14.0 (77.4%)</td>
+<td>12.4 (75.1%)</td>
+<td>11.5</td>
+<td>13.8</td>
+<td>12.5</td>
+</tr>
+</tbody>
+</table>
+<p><small>In parentheses, the acceptance rate.</small></p>
+<p>The same drafter drafts the same on both sides, 75 to 94% accepted at the first position
+depending on the prompt, in both engines. Whatever separates the two columns, it is not the
+drafting. The four prompts do not agree with each other at all. Gemma on the M5:</p>
+<table>
+<thead>
+<tr>
+<th>tokens/s</th>
+<th>dasLLAMA off</th>
+<th>1 draft</th>
+<th>2 drafts</th>
+<th>llama.cpp off</th>
+<th>1 draft</th>
+<th>2 drafts</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>writing</td>
+<td>124.2</td>
+<td>144.0 (69.3%)</td>
+<td>138.3 (50.8%)</td>
+<td>98.2</td>
+<td>139.6 (81.4%)</td>
+<td>130.8 (60.0%)</td>
+</tr>
+<tr>
+<td>summarization</td>
+<td>118.1</td>
+<td>133.4 (69.3%)</td>
+<td>124.6 (54.9%)</td>
+<td>95.8</td>
+<td>119.8 (70.3%)</td>
+<td>126.0 (56.8%)</td>
+</tr>
+<tr>
+<td>math</td>
+<td>123.9</td>
+<td>160.1 (89.6%)</td>
+<td>187.9 (88.0%)</td>
+<td>98.4</td>
+<td>145.8 (89.6%)</td>
+<td>163.4 (84.0%)</td>
+</tr>
+<tr>
+<td>qa</td>
+<td>124.8</td>
+<td>148.6 (74.0%)</td>
+<td>155.5 (63.4%)</td>
+<td>98.2</td>
+<td>129.5 (76.4%)</td>
+<td>147.9 (70.5%)</td>
+</tr>
+</tbody>
+</table>
+<p>Qwen on the M4, the machine that started the second day:</p>
+<table>
+<thead>
+<tr>
+<th>tokens/s</th>
+<th>dasLLAMA off</th>
+<th>1 draft</th>
+<th>2 drafts</th>
+<th>llama.cpp off</th>
+<th>1 draft</th>
+<th>2 drafts</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>writing</td>
+<td>12.8</td>
+<td>13.5 (70.7%)</td>
+<td>10.9 (59.3%)</td>
+<td>11.5</td>
+<td>13.6 (75.0%)</td>
+<td>12.3 (66.7%)</td>
+</tr>
+<tr>
+<td>summarization</td>
+<td>12.6</td>
+<td>14.0 (80.3%)</td>
+<td>12.0 (71.7%)</td>
+<td>11.5</td>
+<td>13.8 (81.4%)</td>
+<td>12.4 (69.8%)</td>
+</tr>
+<tr>
+<td>math</td>
+<td>12.8</td>
+<td>15.4 (93.9%)</td>
+<td>13.6 (86.2%)</td>
+<td>11.5</td>
+<td>14.5 (93.8%)</td>
+<td>13.9 (87.0%)</td>
+</tr>
+<tr>
+<td>qa</td>
+<td>12.8</td>
+<td>13.2 (67.1%)</td>
+<td>13.8 (88.0%)</td>
+<td>11.5</td>
+<td>13.5 (80.0%)</td>
+<td>11.5 (62.5%)</td>
+</tr>
+</tbody>
+</table>
+<h2>The arithmetic of a round</h2>
+<p>Here is the part we most wanted to write down. A round with one draft token produces, on
+average, <code>1 + a</code> tokens, where <code>a</code> is the acceptance rate. So its speedup over plain decoding
+is <code>(1 + a) / c</code>, with <code>c</code> the cost of the round in plain passes. Turn it around and the
+tables tell you what a round costs: <code>c = (1 + a) / speedup</code>.</p>
+<table>
+<thead>
+<tr>
+<th>round cost, in plain passes</th>
+<th>dasLLAMA</th>
+<th>llama.cpp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gemma, M5</td>
+<td>1.75 / 1.19 = 1.47</td>
+<td>1.79 / 1.37 = 1.31</td>
+</tr>
+<tr>
+<td>Gemma, M4</td>
+<td>1.75 / 1.14 = 1.53</td>
+<td>1.83 / 1.27 = 1.44</td>
+</tr>
+<tr>
+<td>Qwen, M5</td>
+<td>1.77 / 1.20 = 1.48</td>
+<td>1.83 / 1.35 = 1.35</td>
+</tr>
+<tr>
+<td>Qwen, M4</td>
+<td>1.77 / 1.10 = 1.61</td>
+<td>1.82 / 1.20 = 1.52</td>
+</tr>
+</tbody>
+</table>
+<p>Timed on the M4, a round is the draft, the verify, the accept-and-commit and the state
+replay, and the verify is ninety-three percent of it. Checking two positions at once costs
+both engines about one and a half plain passes, and that, not the drafter, is what caps the
+gain at 1.1 to 1.2x on a dense 27B.</p>
+<p>It is also why depth 2 falls behind on the M4 and only breaks even on the M5. A third row
+costs another half to a whole pass, and the second draft is accepted 51 to 66% of the time,
+which does not cover it. The math prompt is the exception: there the second draft lands 86
+to 88%, and depth 2 comes out ahead on every machine, 187.9 against 160.1 for Gemma on the
+M5. Code sits in between: asked for a bubble sort in C++, Gemma on the M5 had 86% of first
+drafts and 68% of second drafts accepted, and depth 2 came out ahead again, 174.0 against
+159.0 tokens per second, with llama.cpp at 153.7 against 140.0 on the same prompt.</p>
+<p>Acceptance is a property of the text. The cost of a row is a property of the box.
+Reconciling the two is a tricky business left for future us.</p>
+<p>The same arithmetic is why we never built the other idea, drafting wide: offering the two or
+three most likely tokens at one position instead of a chain. Every candidate is another row
+to verify, at half a pass to a whole pass each, and a runner-up only earns its row when the
+first candidate was wrong - one time in four on these prompts. It lost on paper before it
+could lose on the box.</p>
+<h2>Where the two days went</h2>
+<p>Back to that morning. The M4 read 12.7 tokens per second plain and 11.0 with the drafter on.
+llama.cpp on the same machine read 11.5 and 13.6. Without that second pair, a verify that
+cost two full passes for two rows would have looked like the price of a smaller GPU. With
+it, it looked like what it was. It is a lot easier when you have an oracle; otherwise how do
+you know you are slow?</p>
+<p>The kernel that verifies two rows in one pass over the weights turned out to be a good fit
+for the M5 and a bad one for the M4, because the two chips have very different amounts of
+arithmetic per byte of memory bandwidth. So a new M4-specific kernel was written, the tuner
+picks it where it is the faster one, and the M4 row went to 13.9.</p>
+<p>Then the depth-2 row, which was dropping like crazy, 7.9 tokens per second against 12.7
+plain. Same story, one row up: three rows took a kernel nobody had ever tried on this chip.
+We already had all the pieces - two rows on the new kernel, one on the old single pass - and
+1 + 2 turned out to be better than 3. Depth 2 went from 7.9 to 12.4, depth 1 to 14.0, by the
+evening of the 3rd. About a hundred lines and a test.</p>
+<h2>What a draft is worth</h2>
+<p>Exactly what the verify costs. The drafter's quality, the depth, the box, the quantization -
+each of them moves the number a few percent around that one fact. The models ship with the
+drafter built in, so the question was never whether to use it. The question was how cheap we
+could make the check, and the answer so far is one and a half passes for two tokens, on both
+engines, on both chips.</p></div>
+<a class="dio-story__back" href="../stories.html">← all stories</a>
+</article>
+</div>
+</section>
+
+<footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="../sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+<div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>
+
+</div></body></html>
