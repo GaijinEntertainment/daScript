@@ -178,6 +178,41 @@ none poisoned.
 
 ## S2 - the kernels the split names (ranked by the report, re-ranked by S0)
 
+Boris: depth past 4 is unrealistic, so the verify widths that matter are 2 to 5 rows.
+
+**S2.0 - their K-quant ladder, measured, not inferred.** The report's "1.05x at M = 4" for
+K-quants is an inference from kernel selection. Read side by side, llama.cpp's
+`kernel_mul_mv_ext_q4x4_f32_impl` has our twin's structure exactly: 8 threads per weight row, 4
+rows per simdgroup, 2 simdgroups, a 16-weight dequant per thread per chunk dotted against `r1ptg`
+x columns read from device memory - the same x-load-per-column pattern as `MetalKqMvK4T`. Nothing
+in it explains a free fourth column. Prediction before measuring: their Q4_K step at M = 4 costs
+1.35-1.5x their M = 1 step (ours: 1.59x), at M = 2 about 1.9x (plain mul_mv, two streams; ours
+1.13x), at M = 5 about 1.5x (ours 2.73x). Instrument: `llama-batched-bench -npl 1,2,3,4,5,8` on
+gemma-4-12B Q4_K_M, the per-step time = T_TG / ntg at each parallel count. If their M = 4 really
+reads near 1.05x, our twin has a defect to find; if it reads where predicted, the gap to close is
+the five-row point (a 5-column form) and the four-column form's ALU, not a missing trick.
+
+Measured (llama-batched-bench b10659, Metal, gemma-4-12B Q4_K_M, M5 Max, npp 128, ntg 32, one
+process; ms per step = T_TG / 32) against our same-slab ladder from S0:
+
+| rows | 1 | 2 | 3 | 4 | 5 | 8 |
+|---|---|---|---|---|---|---|
+| llama.cpp ms/step | 16.6 | 19.5 | 26.9 | 26.8 | 28.3 | 45.7 |
+| llama.cpp x one row | 1.00 | 1.17 | 1.62 | 1.61 | 1.70 | 2.75 |
+| ours x one row | 1.00 | 1.13 | 1.59 | 1.59 | 2.73 | 2.77 |
+
+The two ladders are the same curve. The report's 1.05x at M = 4 is refuted (1.61x), and so is
+its "K-quant M = 2 falls to plain mul_mv" (1.17x - the ext gate reads differently in this build,
+or the plain kernel is not two streams; either way the number is the number). Through four rows
+we are at parity; the one point where they are ahead is five rows, where their `r1ptg = 5` stamp
+keeps one weight stream (1.70x) and our ladder jumps to the eight-column form (2.73x). Both
+engines pay 1.6x for four columns because both kernels are instruction-bound, not byte-bound:
+per 16 weights a thread issues about 64 dequant instructions once and 4 x loads plus 16 FMAs per
+column, so each column adds a quarter of the one-column cost - exactly the 1.17 / 1.6 / 2.75
+shape. A five-column stamp buys the depth-4 point (2.73x to about 1.7x); beating 1.6x at four
+rows needs a kernel that does not spend 20 instructions per column per 16 weights - the
+simdgroup-matrix form (S2.4 below).
+
 1. MoE expert gather on Metal - rows bucketed by expert so an expert plane streams once per
    verify (the CPU path already buckets). Predicted: gemma-26B two-row verify 1.45x -> 1.15-1.25x.
 2. K-quant twin 3- and 5-column forms (today 3 rows pay the 4-column kernel, 5 rows re-grid).
@@ -185,6 +220,20 @@ none poisoned.
    2b. The batch driver's `nrows > 8` kq mul_mm rail (measured 5.41x at nine rows against 2.77x
    at eight): route nine to sixteen rows as eight-row forms plus passes, or give the kq mul_mm an
    M = 32 form that fills the part. Predicted: nine rows 5.41x -> ~3.5x.
+   2c. **S2.4 - the eight-column simdgroup-matrix form.** The mul_mm at M-pad 32 already dequantizes
+   each weight ONCE into a half tile and lets the matrix unit do the columns, but its 32x64 tile
+   leaves d/64 threadgroups (60 on gemma-12B) - the occupancy failure behind 5.41x at nine rows.
+   A verify-shaped twin: one simdgroup owns 8 weight rows x K, dequantizes its K-quant superblocks
+   to half once, and multiply-accumulates against the x panel staged as 8 half columns (M padded
+   to 8) - `simdgroup_multiply_accumulate` over 8x8x8 tiles, grid d/8 rows per simdgroup so the
+   part fills at any d. Per 16 weights the column cost becomes one matrix instruction per 8
+   columns instead of 20 scalar instructions per column, so the ladder should flatten: predicted
+   1.15-1.3x at 2..8 rows (the dequant issue stays, the x loads and FMAs go), against 1.6x at
+   four and 2.7x at five to eight today. The depth-4 verify would cost ~1.2 steps instead of 2.7,
+   which roughly doubles what speculation returns at that depth. Numerics: the half x panel is
+   the mul_mm's (maxd 0.6, zero flips - `MM_TOL`). Order: a k4 lab stamp raced against the
+   four-column form on the M5 first; k6 and iq4xs next; the crown per box as the kq forms have
+   today (the M4 Pro has no tensor unit to speak of - its simdgroup matmul may not win).
 3. The twin's occupancy on ALU-short parts (the M4 Pro crowns single passes around it).
    Predicted: retires the per-box crown; M4 Pro 2-row 1.20x -> ~0.9x.
 4. Pair-walk 4+1 / 4+2 forms. Predicted: M4 Pro 4-row 2.34x -> ~1.6x.
