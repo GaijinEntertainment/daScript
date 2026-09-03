@@ -62,6 +62,7 @@ def main() : int {
                 prose |> push(path_join(args.root, "work/gutenberg/{name}"))
             }
         }
+        prose |> sort()   //! the mint samples under a fixed seed, so the directory's order must not reach it
         var inscope mint <- [py, path_join(harness, "mint_postag_silver.py"), args.root, silver]
         mint |> push_from(prose)
         mint |> push("--max-sents")

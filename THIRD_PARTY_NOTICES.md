@@ -1,9 +1,10 @@
 # Third-party notices
 
 daslang redistributes the components below under their own licences. Every licence text is
-installed with the SDK: the core components' into the documentation directory under the name
-in the last column, a tool's or example's beside that tool or example. The source-tree path
-is in the same column. Module-specific notices live with the module and install beside these.
+installed with the SDK. A core component's licence goes into the documentation directory
+under the name in the last column; a tool's or an example's licence is installed beside that
+tool or example. The same column gives the source-tree path. Module-specific notices live with
+the module and install beside these.
 
 ## Core runtime and tools
 
