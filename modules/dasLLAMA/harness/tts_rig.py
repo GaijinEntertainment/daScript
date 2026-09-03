@@ -55,6 +55,9 @@ UTMOS_SCRIPT = textwrap.dedent('''
 ''')
 
 
+CATEGORIES = ["harvard", "ljspeech", "heteronym", "oov", "numeric"]   # the fixture's tags, in its order
+
+
 def run(cmd, env=None):
     print("+", " ".join(cmd), flush=True)
     t0 = time.time()
@@ -73,7 +76,7 @@ def score_wer(norm_words, edit_ops, rows, hyps):
     for r in rows:
         if r["id"] not in hyps:
             continue
-        ref = norm_words(r["text"])
+        ref = norm_words(r["norm"])   # the expected spoken form, as the experiment's scorer and the reference line count it
         hyp = norm_words(hyps[r["id"]])
         d = edit_ops(ref, hyp)
         errs += d[len(ref)][len(hyp)] if isinstance(d, list) else d
@@ -128,7 +131,13 @@ def main():
         gen = sum(t["gen_ms"] for t in tim) / 1000.0
         mos_mean = sum(mos.values()) / max(len(mos), 1)
         print(f"{spec:24s} {wer:7.2f} {mos_mean:7.3f} {audio:8.1f} {gen:7.1f} {gen / max(audio, 1e-9):6.3f}  {len(hyps)} ({words} words)")
-    print("\nreference (python arm E, same sentences, same scorers): kitten-nano 4.22% / 4.035, kitten-mini 4.00% / 3.996, kokoro 3.18% / 4.499")
+        cats = []
+        for cat in CATEGORIES:
+            cw, cn = score_wer(norm_words, edit_ops, [r for r in rows if r.get("category") == cat], hyps)
+            cats.append(f"{cat} {cw:.2f} ({cn})")
+        print(f"{'':24s} by category: " + ", ".join(cats))
+    print("\nreference (python arm E, same sentences, same scorers): kitten-nano 4.22% / 4.035, kitten-mini 4.00% / 3.996, kokoro 3.18% / 4.499;"
+          " arm E oov: kitten-nano 9.34, kokoro 12.06; the espeak arms' oov: kitten-nano 8.56, kokoro 10.90")
 
 
 if __name__ == "__main__":

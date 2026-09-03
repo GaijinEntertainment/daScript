@@ -62,12 +62,12 @@ def test_corpus_phonemes(t : T?) {
                 }
             }
         }
-        to_log(LOG_INFO, "tts g2p: {200 - mismatches - beyond}/200 sentences phoneme-identical with the reference, {beyond} read a heteronym the reference misses\n")
+        to_log(LOG_INFO, "tts g2p: {200 - mismatches - beyond}/200 sentences phoneme-identical with the reference, {beyond} read a heteronym or a name the reference misses\n")
         // every remaining difference is a tag the reference tagger read differently on a word
         // with a tag-keyed reading (the tagger agrees with it on 97 percent of tokens); the
         // tokenizer and the lexicon rules themselves are identical on the whole corpus
         t |> success(mismatches <= 3, "{mismatches} sentences differ (budget 3 - tag calls)")
-        t |> equal(beyond, length(BEYOND_REFERENCE), "the heteronym sentences the rules settle beyond the reference")
+        t |> equal(beyond, length(BEYOND_REFERENCE), "the sentences the rules and the lexicon additions read beyond the reference")
     }
     t |> run("heteronyms: both readings present") @(t : T?) {
         return if (!data_present(t))
@@ -98,9 +98,12 @@ def test_corpus_phonemes(t : T?) {
     }
 }
 
-// the heteronym sentences the front end reads past the reference: "lead pipe" and "get the
-// lead out", "bass player", "minute detail", "the does", "my resume"
-let private BEYOND_REFERENCE <- { "ht001", "ht003", "ht010", "ht017", "ht024", "ht038" }
+// the sentences the front end reads past the reference: the heteronyms its rules settle ("lead
+// pipe" and "get the lead out", "bass player", "minute detail", "the does", "my resume") and the
+// names the lexicon additions of harness/g2p_local_additions.json carry
+let private BEYOND_REFERENCE <- { "ht001", "ht003", "ht010", "ht017", "ht024", "ht038",
+    "lj024", "lj027", "lj037", "ov000", "ov001", "ov006", "ov009", "ov012", "ov016", "ov017", "ov018", "ov019",
+    "ov020", "ov021", "ov022", "ov025", "ov027", "ov028" }
 
 [test]
 def test_pieces(t : T?) {

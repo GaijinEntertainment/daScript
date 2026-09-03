@@ -54,7 +54,7 @@ def main() : int {
     let silver = path_join(args.root, "work/silver_focus")
     let focus = path_join(args.root, "work/focus_words.txt")
     return 1 if (!step("pack the G2P data", [py, path_join(harness, "build_g2p_data.py"), args.root, "--out", path_join(store, "tts_g2p.bin"),
-        "--focus-words", focus]))
+        "--local-additions", path_join(harness, "g2p_local_additions.json"), "--focus-words", focus]))
     if (args.silver_sents > 0) {
         var inscope prose : array<string>
         dir(path_join(args.root, "work/gutenberg")) $(name) {
