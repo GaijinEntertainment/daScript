@@ -1185,3 +1185,16 @@
    takes the kq mm with no such gate. `mp % 32` is declared; `rows` is not. Done = a census of every
    kq mul_mm site's `rows` (decode, prefill, the `_t` / `_th` twins), `rows % 64` declared where the
    census clears, a site gate where it does not.
+101. **The speculative round serves greedy streams only.** The accept walk compares each verify
+   row's argmax with the draft, so the scheduler runs the MTP tick only at temp 0 with no penalties
+   (`dasllama/dasllama_scheduler.das`) and a sampled stream decodes plain. llama.cpp's server
+   speculates under temperature by sampling each verify row with the stream's own sampler and
+   accepting while the sample equals the draft (`common_sampler_sample_and_accept_n`) - every emitted
+   token is a genuine draw from the target row, so the distribution is exact and no draft
+   probabilities are needed. The acceptance rate becomes the target's probability of the draft
+   token (lower than the argmax match: ~0.6 against 0.77 at depth 1), so the gain is (1 + a) / c
+   with c the round's cost in steps - about 1.3x on a dense carrier at c = 1.2, a wash on
+   Qwen3.8-27B at today's c = 1.5 until the verify gets cheaper. Done = the walk samples row i
+   through `sample_` (the row copied into `s.logits`, `s.recent` advanced per accepted token) and
+   accepts while the draw equals the draft, the scheduler gate drops to "MTP on", and a seeded
+   counting run at temp 0.8 matches plain sampled decode token for token.
