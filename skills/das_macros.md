@@ -71,8 +71,7 @@ those symbols by name - that resolves at the user's splice site and is unaffecte
   and the loop continues only while a macro returns true or inference progresses, so a late binder
   **must** return true when it changes the tree, or the current errors become final.
 - StructureAnnotation `finish` / `patch` do NOT run for a struct whose inference failed; `apply` is
-  the only guaranteed hook, so a deferred better-error cannot live in `finish`. (probe-verified
-  2026-08-07)
+  the only guaranteed hook, so a deferred better-error cannot live in `finish`.
 - **A `[simulate_macro]` in a shared macro module NEVER fires for the user's program** - it only
   sees the program its own module was compiled as. The hooks that do see the user program:
   `[infer_macro]`, `[dirty_infer_macro]`, `[optimization_macro]`, `[post_rewrite_macro]`,
@@ -93,7 +92,7 @@ only-one restriction is for handled-type annotations.
 
 - **`[|> foo]` marks an annotation inherited** - copied to every DERIVED struct down the parent
   chain and PREPENDED before the child's own, so it always applies first. It fires on the carrying
-  struct too; discriminate with `st.flags.isTemplate`. (probe-verified 2026-08-08)
+  struct too; discriminate with `st.flags.isTemplate`.
 - **`typedef NAME = <type>` inside a struct body is grammar** - it registers a structure alias
   readable at apply time via `get_structure_alias(st, name)`; infer resolves alias-typed fields
   against the owning struct's aliases.
@@ -103,8 +102,7 @@ only-one restriction is for handled-type annotations.
 - **Annotation argument NAMES accept only three keywords** - `type`, `in`, `default`. Any other
   keyword or type token is `error[30151] syntax error, unexpected <token>, expecting type or in or
   default or name`, and the same whitelist governs field annotations, so `@range = 5` fails too -
-  pick a synonym (`span`, `kind`, `fallback`). (probe-verified 2026-08-16)
-  Extending the whitelist is one `src/parser/ds2_parser.ypp` line plus the twin `_annotation_argument_name` line in `tree-sitter-daslang/grammar.js`; keep both grammars in lockstep. (repo-only)
+  pick a synonym (`span`, `kind`, `fallback`). Extending the whitelist is one `src/parser/ds2_parser.ypp` line plus the twin `_annotation_argument_name` line in `tree-sitter-daslang/grammar.js`; keep both grammars in lockstep. (repo-only)
 - **`add_structure_field(st, name, type, default)`** (in `daslib/templates_boost`, not `ast`)
   returns the new field's **index** - keep it when you must touch the field again.
 - **`ExprFieldFieldFlags.no_promotion` / `ExprAtFlags.no_promotion`** stop the compiler promoting a
@@ -114,7 +112,7 @@ only-one restriction is for handled-type annotations.
   for the concrete, fully typed case.
 - **Never certify a macro rail green while ANY other compile error is present** - final-verify
   errors are masked when an earlier unrelated error stops compilation first, so two runs differing
-  only by that error can flip a green macro red. (probe-verified 2026-08-08)
+  only by that error can flip a green macro red.
 - **Generated functions take `fn.flags.generated = true`** - the field form;
   `fn.flags |= FunctionFlags.generated` is what STYLE022 flags.
 - **Per-field operations must assume non-copyable fields** (`array<T>`, `table<K;V>`, lambdas):

@@ -252,7 +252,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 199;   // 199: MoreFunctionFlags lost needStringCast, so the flag bits shifted
+            return 200;   // 200: the constant stream carries ExprConst::isConstLiteral
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

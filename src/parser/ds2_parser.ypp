@@ -2073,14 +2073,14 @@ expr_full_block_assumed_piped
     ;
 
 expr_numeric_const
-    :   INTEGER[const]                        { $$ = new ExprConstInt(tokAt(scanner,@const),(int32_t)$const); }
-    |   UNSIGNED_INTEGER[const]               { $$ = new ExprConstUInt(tokAt(scanner,@const),(uint32_t)$const); }
-    |   LONG_INTEGER[const]                   { $$ = new ExprConstInt64(tokAt(scanner,@const),(int64_t)$const); }
-    |   UNSIGNED_LONG_INTEGER[const]          { $$ = new ExprConstUInt64(tokAt(scanner,@const),(uint64_t)$const); }
-    |   UNSIGNED_INT8[const]                  { $$ = new ExprConstUInt8(tokAt(scanner,@const),(uint8_t)$const); }
-    |   DAS_FLOAT[const]                      { $$ = new ExprConstFloat(tokAt(scanner,@const),(float)$const); }
-    |   DAS_FLOAT16_CONST[const]              { $$ = new ExprConstFloat16(tokAt(scanner,@const),(float)$const); }
-    |   DOUBLE[const]                         { $$ = new ExprConstDouble(tokAt(scanner,@const),(double)$const); }
+    :   INTEGER[const]                        { $$ = newConstLiteral<ExprConstInt>(tokAt(scanner,@const),(int32_t)$const); }
+    |   UNSIGNED_INTEGER[const]               { $$ = newConstLiteral<ExprConstUInt>(tokAt(scanner,@const),(uint32_t)$const); }
+    |   LONG_INTEGER[const]                   { $$ = newConstLiteral<ExprConstInt64>(tokAt(scanner,@const),(int64_t)$const); }
+    |   UNSIGNED_LONG_INTEGER[const]          { $$ = newConstLiteral<ExprConstUInt64>(tokAt(scanner,@const),(uint64_t)$const); }
+    |   UNSIGNED_INT8[const]                  { $$ = newConstLiteral<ExprConstUInt8>(tokAt(scanner,@const),(uint8_t)$const); }
+    |   DAS_FLOAT[const]                      { $$ = newConstLiteral<ExprConstFloat>(tokAt(scanner,@const),(float)$const); }
+    |   DAS_FLOAT16_CONST[const]              { $$ = newConstLiteral<ExprConstFloat16>(tokAt(scanner,@const),(float)$const); }
+    |   DOUBLE[const]                         { $$ = newConstLiteral<ExprConstDouble>(tokAt(scanner,@const),(double)$const); }
     ;
 
 expr_assign_no_bracket

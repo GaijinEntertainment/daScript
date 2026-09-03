@@ -413,6 +413,10 @@ namespace das {
         auto fieldVariant = mkBaseT->findArgumentIndex(decl->name);
         if (fieldVariant != -1) {
             auto fieldType = mkBaseT->argTypes[fieldVariant];
+            if (decl->cloneSemantics) {
+                convertCloneFieldToMove(fieldType, decl);
+                return Visitor::visitMakeVariantField(expr, index, decl, last);
+            }
             {
                 bool rangeError = false;
                 if (auto promoted = tryPromoteConstInt(decl->value, fieldType, rangeError)) {
@@ -632,19 +636,44 @@ namespace das {
         reportAstChanged();
         return true;
     }
+    void InferTypes::convertCloneFieldToMove(const TypeDeclPtr &fieldType, MakeFieldDecl *decl) {
+        if (fieldType) {
+            bool rangeError = false;
+            if (auto promoted = tryPromoteConstInt(decl->value, fieldType, rangeError)) {
+                decl->value = promoted;
+            } else if (rangeError) {
+                return;
+            }
+        }
+        auto cloneCall = new ExprCall(decl->at, "builtin::clone_to_move");
+        cloneCall->arguments.push_back(decl->value);
+        decl->value = cloneCall;
+        decl->cloneSemantics = false;
+        decl->moveSemantics = !(fieldType && fieldType->canCopy());
+        reportAstChanged();
+    }
     MakeFieldDeclPtr InferTypes::visitMakeStructureField(ExprMakeStruct *expr, int index, MakeFieldDecl *decl, bool last) {
         if (!decl->value->type) {
             return Visitor::visitMakeStructureField(expr, index, decl, last);
         }
-        if (decl->cloneSemantics) {
-            if ( convertCloneSemanticsToExpression(expr, index, decl) ) {
-                return nullptr;
-            } else {
-                return Visitor::visitMakeStructureField(expr, index, decl, last);
-            }
-        }
         auto mkBaseT = expr->makeType;
         while (mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType) mkBaseT = mkBaseT->firstType;
+        if (decl->cloneSemantics) {
+            if (mkBaseT->isAutoOrAlias() || mkBaseT->isExprType()) {
+                return Visitor::visitMakeStructureField(expr, index, decl, last);
+            }
+            if (mkBaseT->baseType == Type::tVariant || mkBaseT->baseType == Type::tTuple) {
+                auto fieldIndex = mkBaseT->findArgumentIndex(decl->name);
+                if (fieldIndex != -1) {
+                    convertCloneFieldToMove(mkBaseT->argTypes[fieldIndex], decl);
+                }
+                return Visitor::visitMakeStructureField(expr, index, decl, last);
+            }
+            if (convertCloneSemanticsToExpression(expr, index, decl)) {
+                return nullptr;
+            }
+            return Visitor::visitMakeStructureField(expr, index, decl, last);
+        }
         if (mkBaseT->baseType == Type::tStructure) {
             if (auto field = mkBaseT->structType->findField(decl->name)) {
                 auto copyFieldType = field->type;
@@ -802,6 +831,9 @@ namespace das {
                       fld->at, CompilationError::already_declared_tuple_field);
                 return nullptr;
             } else {
+                if (fld->cloneSemantics) {
+                    convertCloneFieldToMove(makeType->argTypes[idx], fld);
+                }
                 mkt->values[idx] = fld->value->clone();
             }
         }
@@ -1246,6 +1278,16 @@ namespace das {
                 error("tuple element _" + to_string(index) + " out of element range", "", "",
                       init->at, CompilationError::exceeds_tuple_index);
                 return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
+            }
+            {
+                bool rangeError = false;
+                if (auto promoted = tryPromoteConstInt(ExpressionPtr(init), expr->recordType->argTypes[index], rangeError)) {
+                    reportAstChanged();
+                    return promoted;
+                }
+                if (rangeError) {
+                    return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
+                }
             }
             if (!canCopyOrMoveType(expr->recordType->argTypes[index], init->type, TemporaryMatters::no, init,
                                    "can't initialize tuple element " + to_string(index), CompilationError::cant_copy, init->at)) {

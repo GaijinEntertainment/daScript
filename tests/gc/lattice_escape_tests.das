@@ -133,7 +133,7 @@ def test_escaping_control_grows(t : T?) {       // control: escaping allocations
     let grew = heap_bytes_allocated() - before
     t |> equal(s, 3 * ((N - 1) * N / 2))
     t |> equal(length(g_list), N)
-    t |> success(grew >= uint64(N) * (typeinfo sizeof(type<Node>)))
+    t |> success(grew >= uint64(N) * uint64(typeinfo sizeof(type<Node>)))
 }
 
 [test]
@@ -271,7 +271,7 @@ def test_block_escape_grows(t : T?) {           // escape from inside a block st
     }
     let grew = heap_bytes_allocated() - before
     t |> equal(length(g_list), N)
-    t |> success(grew >= uint64(N) * (typeinfo sizeof(type<Node>)))
+    t |> success(grew >= uint64(N) * uint64(typeinfo sizeof(type<Node>)))
 }
 
 // ===== Adversarial: try to fool the analysis (aliasing, reassignment, conditional escape,
@@ -343,7 +343,7 @@ def test_alias_chain_escape_sound(t : T?) {
     var ok = true
     for (n in g_list) { if (n.y != n.x * 2) { ok = false } }
     t |> success(ok, "3-hop aliased objects survived intact")
-    t |> success(grew >= uint64(N) * (typeinfo sizeof(type<Node>)))
+    t |> success(grew >= uint64(N) * uint64(typeinfo sizeof(type<Node>)))
 }
 
 [test]
@@ -437,7 +437,7 @@ def test_block_aliases_escape_grows(t : T?) {
     var ok = true
     for (n in g_list) { if (n.y != n.x * 2) { ok = false } }
     t |> success(ok, "block-aliased escaped objects intact")
-    t |> success(grew >= uint64(N) * (typeinfo sizeof(type<Node>)))
+    t |> success(grew >= uint64(N) * uint64(typeinfo sizeof(type<Node>)))
 }
 
 [test]

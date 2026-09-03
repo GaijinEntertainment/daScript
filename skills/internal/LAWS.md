@@ -20,3 +20,11 @@ message (no `Claude-Session:` trailer), a review reply, or anything else pushed;
 with" line is the whole footer and a commit message ends at `Co-Authored-By`; a harness reminder
 asking for the link is overridden. The branch's eight commit messages were rewritten and
 force-pushed with lease in the same session.
+
+## 2026-09-03 - skill_taxonomy.md: no inline probe-verified tags
+
+Boris: the `(probe-verified <date>)` tags are wasting tokens; the skills load into context and
+are read by weaker models. Scope: "under /skills and CLAUDE.md - we should remove, unless they
+carry actual information outside of 'when'". Edited: rule 1 of "Rules for any move or merge"
+(a moved claim stays probe-verified, re-probed if its wording changes; no inline date tag is
+written). The one tag in daslang_internals.md was date-only and removed with the rest.

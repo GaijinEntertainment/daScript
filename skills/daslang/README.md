@@ -13,7 +13,9 @@ sessions - the repo's own CLAUDE.md supersedes it here.
 
 - **Every code example is probe-verified**: it was compiled (and, for semantic claims, run)
   against the current binary before landing. Keep that bar - no example or behavioral claim
-  goes in without a probe. Probes live in session scratchpads, not in the tree.
+  goes in without a probe. Probes live in session scratchpads, not in the tree. Do not write
+  inline `(probe-verified <date>)` tags in these files: they are loaded into context and read
+  by weaker models, so every token must carry meaning.
 - **SDK-free**: no repo paths, no `bin/`, no MCP, no CI, no lint rule IDs, no tutorials
   paths. Idioms are stated as best practice, not as house lint policy.
 - **gen2 only.** gen1 gets one mention (the `options gen2 = false` opt-out) and no examples.

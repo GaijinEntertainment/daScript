@@ -384,6 +384,16 @@ def private lower_loop_exit(var ctx : FlatCtx?; structPred : ExpressionPtr; var 
     emit_narrow(out, nm, live_pred(ctx, structPred, nm))
 }
 
+def private typed_one(at : LineInfo; bt : Type) : ExpressionPtr {
+    if (bt == Type.tInt) return new ExprConstInt(at = at, value = 1)
+    if (bt == Type.tUInt) return new ExprConstUInt(at = at, value = 1u)
+    if (bt == Type.tInt64) return new ExprConstInt64(at = at, value = 1l)
+    if (bt == Type.tUInt64) return new ExprConstUInt64(at = at, value = 1ul)
+    if (bt == Type.tFloat) return new ExprConstFloat(at = at, value = 1.0)
+    if (bt == Type.tDouble) return new ExprConstDouble(at = at, value = 1.0lf)
+    return null
+}
+
 def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {   // nolint:STYLE037 - exact-type `is` ladder, one arm per statement kind
     if (stmt is ExprReturn) {
         let r = stmt as ExprReturn
@@ -438,10 +448,15 @@ def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : Ex
         out |> push <| qmacro_expr(${ $e(o.left) = $e(pred) ? $e(combined) : $e(o.left); })
     } elif (stmt is ExprOp1 && ("{(stmt as ExprOp1).op}" == "++" || "{(stmt as ExprOp1).op}" == "--")) {
         let o = stmt as ExprOp1
+        var one = typed_one(o.at, expr_bt(o.subexpr))
+        if (one == null) {
+            ctx.ok = false
+            ctx.err = "flatten: {o.op} on {describe(o.subexpr._type)} cannot be predicated"
+            return
+        }
         let bop = "{o.op}" == "++" ? "+" : "-"
         let pred = live_pred(ctx, structPred)
-        var combined = new ExprOp2(at = o.at, op := bop, left = clone_expression(o.subexpr),
-            right = new ExprConstInt(at = o.at, value = 1))
+        var combined = new ExprOp2(at = o.at, op := bop, left = clone_expression(o.subexpr), right <- one)
         out |> push <| qmacro_expr(${ $e(o.subexpr) = $e(pred) ? $e(combined) : $e(o.subexpr); })
     } elif (stmt is ExprBlock) {
         lower_list(ctx, stmt as ExprBlock, structPred, out)
@@ -523,12 +538,12 @@ def private for_source_substs(var ctx : FlatCtx?; src : Expression?; at : LineIn
     var substs : array<ExpressionPtr>
     if (src is ExprConstRange) {
         for (i in (src as ExprConstRange).value) {
-            var e : ExpressionPtr = new ExprConstInt(at = at, value = i)
+            var e : ExpressionPtr = new ExprConstInt(at = at, value = i, isConstLiteral = true)
             substs |> push(e)   // nolint:PERF006 -- macro-time, count is the (small) unroll bound
         }
     } elif (src is ExprConstURange) {
         for (i in (src as ExprConstURange).value) {
-            var e : ExpressionPtr = new ExprConstUInt(at = at, value = i)
+            var e : ExpressionPtr = new ExprConstUInt(at = at, value = i, isConstLiteral = true)
             substs |> push(e)   // nolint:PERF006 -- macro-time, count is the (small) unroll bound
         }
     } else {

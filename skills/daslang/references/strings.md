@@ -138,7 +138,7 @@ heap string - a slice-per-element loop over a big string is O(n^2).
 - **Escape a literal brace as `\{` / `\}`** - an unescaped `{` starts an interpolation even in
   JSON-looking text, and the errors point somewhere else entirely.
 - **A nested string literal inside an interpolation is written plain** - `"{s == "abc"}"` works;
-  *escaping* the inner quotes (`"{s == \"abc\"}"`) is the syntax error. (probe-verified 2026-08-20)
+  *escaping* the inner quotes (`"{s == \"abc\"}"`) is the syntax error.
 - **`das_string` compares with `string` directly** - `das_str == "foo"`, `empty(das_str)`; never
   `string(das_str) == "foo"`. `to_int(s, true)` is the accept-hex parse.
 - `:=` on a string clones only under `options multiple_contexts` (see memory.md).

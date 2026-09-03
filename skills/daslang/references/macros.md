@@ -134,7 +134,7 @@ tracked by the compiler's node GC, not a `smart_ptr`:
 
 Types still refcounted as `smart_ptr` do use `var inscope` / `<-`: `ProgramPtr`,
 `FileAccessPtr`, and the adapter `make_visitor` returns (the block form hides it). `ContextPtr`
-is a C++-side typedef only - `var c : ContextPtr` does not compile. (probe-verified 2026-08-16)
+is a C++-side typedef only - `var c : ContextPtr` does not compile.
 
 An emitted `Variable` **must** have `_type` - `new TypeDecl(baseType = Type.autoinfer)` lets
 inference fill it. An emitted `ExprVar` needs one too when it flows into a generic call;
@@ -186,7 +186,7 @@ work even when one source feeds several slots. `describe(node)` renders any AST 
 
 `$c(name)` cannot be qualified - `_::$c(name)(...)` is
 `error[30151] syntax error, unexpected $c, expecting name`. The spliced name resolves at the splice
-site, in the user's require chain. (probe-verified 2026-08-16)
+site, in the user's require chain.
 
 ## Matching AST - `qmatch`
 
@@ -263,7 +263,7 @@ class Foo {
 `@name` also goes on variables - after `let`/`var` (and `inscope`), before the name:
 `var @exact_size buf : array<float>`, `let @tag = "x" n = 3` - and on parameters:
 `def f(@scratch var a : array<int>&)`. It surfaces as `Variable.annotation` in macros and lints;
-no runtime effect (probe-verified 2026-08-18).
+no runtime effect.
 
 Visibility is never an annotation: `def private helper`, `struct private Foo`, `enum private E`.
 
@@ -272,7 +272,7 @@ Visibility is never an annotation: `def private helper`, `struct private Foo`, `
 - **Annotation-argument names allow exactly three keywords - `type`, `in`, `default` - plus
   plain names.** `[myanno(default = "x", type = "y", in = "z")]` compiles and the macro reads
   all three; any other keyword or type token is `error[30151]` (`@range = 5` fails - pick a
-  synonym). (probe-verified 2026-08-16)
+  synonym).
 - **A generated `var x : $t(st)` with no initializer trips
   `error[31016] uninitialized variable is unsafe`** for any struct type - field initializers do
   not exempt it. Add `= default<$t(st)>` when the type is default-constructible; for a bound
