@@ -4024,13 +4024,19 @@ enum private TtsEventKind {
     failed       // the worker could not load its model: `body` carries the panic text
 }
 
+enum private TtsJobKind {
+    speak        // zero value — the channel pops zeroed clones
+    phonemes     // the front end alone: normalize, chunk, phonemize. No synthesis, no temp file
+    stop         // worker exits
+}
+
 struct private TtsJob {
+    kind : TtsJobKind
     id : int64
     text : string
     voice : string
     speed : float
     format : string      // wav | pcm
-    stop : bool
 }
 
 struct private TtsEvent {
@@ -4038,8 +4044,8 @@ struct private TtsEvent {
     id : int64
     status : int
     content_type : string
-    body : string        // the error body on a failure
-    file_path : string   // the served audio on success
+    body : string        // the error body on a failure, the phonemes document on that route's success
+    file_path : string   // the served audio on a synthesis — empty on every body-carrying answer
     audio_s : float
     // the ready event's payload: what the loaded model can say, and the lane it was loaded on.
     // The worker owns the model, so this is the only crossing where the main context learns them.
@@ -4072,6 +4078,7 @@ let TTS_QUEUE_LIMIT = 16
 let TTS_WRITER_KEEPALIVE_MS = 600000
 let TTS_MAX_INPUT_CHARS = 4096
 let SPEECH_FIELDS : table<string> <- { "model", "input", "voice", "speed", "response_format", "instructions", "stream_format" }
+let PHONEMES_FIELDS : table<string> <- { "input" }
 
 def private emit_tts_event(events : Channel?; event : TtsEvent) {
     events |> push_clone(event)
@@ -4097,6 +4104,27 @@ def private process_tts_job(var model : TtsModel; job : TtsJob; events : Channel
         kind = TtsEventKind.completed, id = job.id, status = int(http_status.OK),
         content_type = job.format == "pcm" ? "audio/pcm" : "audio/wav", file_path = path,
         audio_s = float(length(audio.pcm)) / float(audio.sample_rate)))
+}
+
+// The front end alone, on the same worker because the packs live with the model: the spoken form
+// the normalizer produces, then one row per chunk the synthesis would take, each row carrying that
+// chunk's text and the 45-symbol phoneme string the g2p pass reads out of it.
+def private process_tts_phonemes(model : TtsModel; job : TtsJob; events : Channel?) {
+    let norm = tts_normalize(job.text)
+    var inscope chunks <- tts_chunks(norm)
+    let doc = build_string() $(w) {
+        w |> write("\{\"normalized\":{json_str(norm)},\"chunks\":[")
+        for (i in range(length(chunks))) {
+            if (i > 0) {
+                w |> write(",")
+            }
+            w |> write("\{\"text\":{json_str(chunks[i])},\"phonemes\":{json_str(tts_phonemize(model, chunks[i]))}}")
+        }
+        w |> write("]}")
+    }
+    emit_tts_event(events, TtsEvent(
+        kind = TtsEventKind.completed, id = job.id, status = int(http_status.OK),
+        content_type = "application/json", body = doc))
 }
 
 // what the main context is told about the loaded model: the voices it will accept, the rate its
@@ -4134,14 +4162,18 @@ def private tts_worker_main(model_path : string; lane : string; team_dispatch : 
     var stopping = false
     while (!stopping) {
         jobs |> pop_with_timeout_clone(250) $(job : TtsJob#) {
-            if (job.stop) {
+            if (job.kind == TtsJobKind.stop) {
                 stopping = true
             } else {
                 var job_copy : TtsJob
                 job_copy := job
                 var failure = ""
                 let failed = catch_worker_panic(failure) {
-                    process_tts_job(model, job_copy, events)
+                    if (job_copy.kind == TtsJobKind.phonemes) {
+                        process_tts_phonemes(model, job_copy, events)
+                    } else {
+                        process_tts_job(model, job_copy, events)
+                    }
                 }
                 if (failed) {
                     // a voice the model lacks is the caller's mistake; anything else is ours
@@ -4163,17 +4195,72 @@ def private tts_worker_main(model_path : string; lane : string; team_dispatch : 
     events |> release
 }
 
-// POST /v1/audio/speech: {"model"?, "input", "voice"?, "speed"?, "response_format"?: "wav" | "pcm"}.
-def private queue_speech(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
+// The readiness gate both TTS routes answer with, since both ride the one worker queue. True when
+// the request has already been refused.
+def private tts_route_unavailable(srv : WebSocketServer; var writer : HttpResponseWriter?) : bool {
     if (reject_deferred_while_draining(srv, writer)) {
-        return
+        return true
     }
     if (!g_has_tts || g_tts_ready < 1) {
         service_unavailable(srv, writer, "no TTS model is served — start with --tts <model.gguf>")
-        return
+        return true
     }
     if (g_tts_pending >= TTS_QUEUE_LIMIT) {
         service_unavailable(srv, writer, "the TTS queue is at capacity ({TTS_QUEUE_LIMIT}) — retry shortly")
+        return true
+    }
+    return false
+}
+
+// the `input` field both TTS routes take, under the one cap; "" back means already refused
+def private tts_input_field(srv : WebSocketServer; var writer : HttpResponseWriter?; js : JsonValue?; verb : string) : string {
+    let input = js?["input"] ?? ""
+    if (empty(input)) {
+        bad_request(srv, writer, "'input' is required (the text to {verb})")
+        return ""
+    }
+    if (length(input) > TTS_MAX_INPUT_CHARS) {
+        bad_request(srv, writer, "'input' exceeds {TTS_MAX_INPUT_CHARS} characters — split the text")
+        return ""
+    }
+    return input
+}
+
+// the wire and the queue slot a deferred TTS answer needs, plus the keepalive the synthesis outlives
+def private enqueue_tts_job(srv : WebSocketServer; var writer : HttpResponseWriter?; job : TtsJob; note : string) {
+    set_writer_keepalive_timeout(srv, writer, TTS_WRITER_KEEPALIVE_MS)
+    g_tts_wires[job.id] <- TtsWire(writer = writer)
+    g_tts_pending++
+    g_tts_jobs |> push_clone(job)
+    to_log(LOG_INFO, "[req {job.id}] tts: {note} (pending={g_tts_pending})\n")
+}
+
+// POST /v1/audio/phonemes: {"input"} -> {"normalized", "chunks":[{"text","phonemes"}]}. The front
+// end's own view of what a synthesis of the same text would say, answered by the worker that owns
+// the packs; the control page draws it under the studio's waveform.
+def private queue_phonemes(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
+    if (tts_route_unavailable(srv, writer)) {
+        return
+    }
+    var perr = ""
+    var js = read_json(string(req.body), perr)
+    if (js == null) {
+        bad_request(srv, writer, "invalid JSON: {perr}")
+        return
+    }
+    defer() { unsafe { delete js } }
+    warn_ignored_fields(js, PHONEMES_FIELDS, "/v1/audio/phonemes")
+    let input = tts_input_field(srv, writer, js, "phonemize")
+    if (empty(input)) {
+        return
+    }
+    enqueue_tts_job(srv, writer, TtsJob(kind = TtsJobKind.phonemes, id = next_id(), text = input),
+        "phonemes queued ({length(input)} chars)")
+}
+
+// POST /v1/audio/speech: {"model"?, "input", "voice"?, "speed"?, "response_format"?: "wav" | "pcm"}.
+def private queue_speech(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
+    if (tts_route_unavailable(srv, writer)) {
         return
     }
     var perr = ""
@@ -4190,13 +4277,8 @@ def private queue_speech(srv : WebSocketServer; var req : HttpRequest?; var writ
             error_body("model '{want_model}' is not the served TTS model ('{g_tts_id}') — GET /v1/models lists the ids", "invalid_request_error"))
         return
     }
-    let input = js?["input"] ?? ""
+    let input = tts_input_field(srv, writer, js, "speak")
     if (empty(input)) {
-        bad_request(srv, writer, "'input' is required (the text to speak)")
-        return
-    }
-    if (length(input) > TTS_MAX_INPUT_CHARS) {
-        bad_request(srv, writer, "'input' exceeds {TTS_MAX_INPUT_CHARS} characters — split the text")
         return
     }
     let fmt = js?["response_format"] ?? "wav"
@@ -4209,12 +4291,9 @@ def private queue_speech(srv : WebSocketServer; var req : HttpRequest?; var writ
         bad_request(srv, writer, "'speed' must be between 0.25 and 4.0")
         return
     }
-    set_writer_keepalive_timeout(srv, writer, TTS_WRITER_KEEPALIVE_MS)
-    let rid = next_id()
-    g_tts_wires[rid] <- TtsWire(writer = writer)
-    g_tts_pending++
-    g_tts_jobs |> push_clone(TtsJob(id = rid, text = input, voice = js?["voice"] ?? "", speed = speed, format = fmt))
-    to_log(LOG_INFO, "[req {rid}] tts: queued (pending={g_tts_pending}, {length(input)} chars, {fmt})\n")
+    enqueue_tts_job(srv, writer,
+        TtsJob(id = next_id(), text = input, voice = js?["voice"] ?? "", speed = speed, format = fmt),
+        "queued ({length(input)} chars, {fmt})")
 }
 
 // the ready event's payload into main-context storage: every string is cloned, because the popped
@@ -4266,7 +4345,10 @@ def private drain_tts_events(srv : WebSocketServer) {
         draining = g_tts_events |> try_pop_clone() $(event : TtsEvent#) {
             if (event.kind == TtsEventKind.completed) {
                 g_tts_pending = max(g_tts_pending - 1, 0)
-                if (event.status == int(http_status.OK)) {
+                // a temp file means a synthesis landed; a refusal and a phonemes document both
+                // answer as a body, and neither is speech the counters may claim
+                let synthesized = !empty(event.file_path)
+                if (synthesized) {
                     g_tts_done_jobs++
                     g_tts_audio_s += event.audio_s
                 }
@@ -4274,7 +4356,7 @@ def private drain_tts_events(srv : WebSocketServer) {
                 if (wire != null) {
                     if (is_writer_connected(srv, wire.writer)) {
                         set_writer_keepalive_timeout(srv, wire.writer, DEFAULT_WRITER_KEEPALIVE_MS)
-                        if (event.status == int(http_status.OK)) {
+                        if (synthesized) {
                             set_header(srv, wire.writer, "Content-Type", event.content_type)
                             SERVE_FILE(srv, wire.writer, event.file_path)
                         } else {
@@ -4327,7 +4409,7 @@ def private stop_tts_worker() {
     if (!g_has_tts || g_tts_ready < 1) {
         return
     }
-    g_tts_jobs |> push_clone(TtsJob(stop = true))
+    g_tts_jobs |> push_clone(TtsJob(kind = TtsJobKind.stop))
     var stopped = false
     let since = ref_time_ticks()
     while (!stopped && get_time_nsec(since) < WORKER_STOP_WAIT_NS) {
@@ -4656,6 +4738,9 @@ class OpenAiServer : HvWebServer {
         }
         STREAM("/v1/audio/speech") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
             queue_speech(server, req, writer)
+        }
+        STREAM("/v1/audio/phonemes") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
+            queue_phonemes(server, req, writer)
         }
         POST("/v1/embeddings") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (g_shutdown_requested) {

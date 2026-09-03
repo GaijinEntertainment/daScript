@@ -64,6 +64,7 @@ Speech fixtures (the same server, restarted with
 | `config_tts.json` | `curl $B/config` on that same boot - the `tts` path and `tts_lane` as the speech studio's offer card reads them |
 | `speech.wav` | `curl -X POST $S -d '{"input":"Hi.","voice":"expr-voice-2-f","response_format":"wav"}' -o speech.wav` - raw bytes, keep the exact RIFF header. Say ONE short word: the answer is uncompressed 16-bit PCM, so every second costs ~48 KB |
 | `speech_error.json` | `curl -X POST $S -d '{"input":"Hi.","response_format":"mp3"}'` (the declined-format 400 body) |
+| `phonemes.json` | `curl -X POST $B/v1/audio/phonemes -d '{"input":"Dr. Chen paid $12. The quick brown fox jumps over the lazy dog."}'` - the front-end document the studio draws under the waveform. Say something the normalizer REWRITES and that chunks in two, so the panel's specs see both halves |
 
 `sse_expected.json` pairs the SSE captures with the text the page must render:
 `{content, think, think_content}` = the concatenated `delta.content` of

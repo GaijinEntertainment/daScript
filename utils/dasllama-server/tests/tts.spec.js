@@ -1,10 +1,12 @@
 // §08 speech studio: the section is gated on the `tts` block of /v1/stats, the voice select is
-// that block's list, Speak posts the route's own body shape and reports the decoded audio, and
-// the §03 offer card walks the speech set's download ladder before the three path-mode states.
+// that block's list, Speak posts the route's own body shape and reports the decoded audio, the
+// phoneme panel under the waveform is the /v1/audio/phonemes document, and the §03 offer card
+// walks the speech set's download ladder before the three path-mode states.
 
 const { test, expect, fx, bin, openControl, lastJson } = require('./fixtures');
 
 const SPEECH = '/v1/audio/speech';
+const PHONEMES = '/v1/audio/phonemes';
 
 function statsWithoutTts() {
     const s = JSON.parse(JSON.stringify(fx('stats_tts')));
@@ -44,6 +46,12 @@ function wavSeconds(buf) {
 
 function wavAnswer() {
     return { responses: { [SPEECH]: { status: 200, body: bin('speech.wav'), contentType: 'audio/wav' } } };
+}
+
+// the wav and the phoneme document the one Speak click asks for
+function speechAnswers() {
+    return { responses: Object.assign({ [PHONEMES]: { status: 200, json: fx('phonemes') } },
+                                      wavAnswer().responses) };
 }
 
 test('a boot with no speech model keeps the studio hidden', async ({ page }) => {
@@ -93,6 +101,34 @@ test('speak posts the route body and the status line reports the decoded audio',
     const secs = Number(note.match(/^([\d.]+)s of audio/)[1]);
     expect(Math.abs(secs - wavSeconds(bin('speech.wav')))).toBeLessThan(0.05);
     expect(note).toMatch(/rtf \d/);
+});
+
+test('speak asks the phonemes route for the same text and draws the document under the wave', async ({ page }) => {
+    const doc = fx('phonemes');
+    const { posts } = await openControl(page, Object.assign({ stats: fx('stats_tts') }, speechAnswers()));
+    await expect(page.locator('#s-phon')).toBeHidden();
+    await page.locator('#s-text').fill('speak and phonemize this');
+    await page.locator('#s-run').click();
+    await expect(page.locator('#s-phon')).toBeVisible();
+    await expect(page.locator('#s-phon .norm')).toHaveText(doc.normalized);
+    const rows = page.locator('#s-phon .chunk');
+    await expect(rows).toHaveCount(doc.chunks.length);
+    for (let i = 0; i < doc.chunks.length; i++) {
+        await expect(rows.nth(i).locator('.t')).toHaveText(doc.chunks[i].text);
+        await expect(rows.nth(i).locator('.p')).toHaveText(doc.chunks[i].phonemes);
+    }
+    expect(lastJson(posts.filter(p => p.path === PHONEMES))).toEqual({ input: 'speak and phonemize this' });
+});
+
+test('a refused phonemes call leaves the panel hidden and does not disturb the audio', async ({ page }) => {
+    await openControl(page, {
+        stats: fx('stats_tts'),
+        responses: Object.assign({ [PHONEMES]: { status: 503, json: fx('speech_error') } }, wavAnswer().responses),
+    });
+    await page.locator('#s-text').fill('speak this');
+    await page.locator('#s-run').click();
+    await expect(page.locator('#s-note')).toContainText('of audio in');
+    await expect(page.locator('#s-phon')).toBeHidden();
 });
 
 test('the picked voice survives a reload', async ({ page }) => {

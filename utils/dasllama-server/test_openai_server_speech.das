@@ -14,11 +14,13 @@ require daslib/rtti                                     // this_context().last_e
 require math                                            // max: the child's captured tail is clamped to its last bytes
 require strings
 require dasllama/dasllama_env
+require dasllama/dasllama_tts                           // tts_normalize / tts_chunks — the /v1/audio/phonemes answer is compared against the facade itself
 
 // /v1/audio/speech on a TTS-only boot (no LLM slot): a WAV answer of speech length with a RIFF
 // header, the raw pcm form, the declined mp3, the missing input, the unknown voice, the TTS id
 // on /v1/models, the input cap and the speed range, the queue's refusal past its cap, the `tts`
-// block on /v1/stats, and the weight lane the worker pins.
+// block on /v1/stats, the /v1/audio/phonemes document on the same queue, and the weight lane the
+// worker pins.
 // Model-gated (kitten-nano.gguf + tts_g2p.bin + tts_postag.bin beside it) and JIT-only; skips
 // cleanly otherwise. The boot degrade, the no-TTS 503, the lane normalization and the catalog's
 // tts download arm are model-free and always run.
@@ -89,6 +91,16 @@ def private speech_request(base_url : string; body : string; blk : block<(status
     }
 }
 
+def private phonemes_request(base_url : string; body : string; blk : block<(status : int; text : string) : void>) {
+    POST("{base_url}/v1/audio/phonemes", body) $(resp) {
+        if (resp == null) {
+            invoke(blk, 0, "")
+        } else {
+            invoke(blk, int(resp.status_code), string(resp.body))
+        }
+    }
+}
+
 def private le32(b : array<uint8>; o : int) : int {
     return int(b[o]) | (int(b[o + 1]) << 8) | (int(b[o + 2]) << 16) | (int(b[o + 3]) << 24)
 }
@@ -118,6 +130,18 @@ def private json_strings(v : JsonValue?) : array<string> {
         out |> reserve(length(v.value as _array))
         for (e in v.value as _array) {
             out |> push(e ?? "")
+        }
+    }
+    return <- out
+}
+
+// one field lifted out of every object in a JSON array — the phonemes document's chunk rows
+def private json_row_field(v : JsonValue?; field : string) : array<string> {
+    var out : array<string>
+    if (v != null && (v.value is _array)) {
+        out |> reserve(length(v.value as _array))
+        for (e in v.value as _array) {
+            out |> push(e?[field] ?? "")
         }
     }
     return <- out
@@ -209,6 +233,11 @@ def test_speech_route_without_a_model(t : T?) {
     t |> run("a boot whose TTS file set is missing serves on and refuses the speech route") @(t : T?) {
         with_speechless_server(t, SPEECHLESS_PORT) $(base_url) {
             speech_request(base_url, "\{\"input\": \"Hello.\"}") $(status, _ctype, _bytes, text) {
+                t |> equal(status, 503, text)
+                t |> success(find(text, "--tts") >= 0, "the refusal names the flag that arms the route: {text}")
+            }
+            // the phonemes route rides the same worker, so it refuses the same way
+            phonemes_request(base_url, "\{\"input\": \"Hello.\"}") $(status, text) {
                 t |> equal(status, 503, text)
                 t |> success(find(text, "--tts") >= 0, "the refusal names the flag that arms the route: {text}")
             }
@@ -381,6 +410,35 @@ def private check_tts_stats_block(t : T?; base_url : string; want_lane : string)
     }
 }
 
+// The front-end view the speech studio draws under its waveform. The expected values are the
+// facade's OWN normalizer and chunker run here, so the route is proved to answer what a synthesis
+// of the same text would actually say — not a transcription of today's tables.
+def private check_phonemes(t : T?; base_url : string) {
+    let input = "Dr. Chen paid $12."
+    let want_norm = tts_normalize(input)
+    var inscope want <- tts_chunks(want_norm)
+    t |> equal(want_norm, "Doctor Chen paid twelve dollars.", "the normalizer's spoken form of the probe")
+    phonemes_request(base_url, "\{\"input\": \"{input}\"}") $(status, text) {
+        t |> equal(status, 200, text)
+        var err = ""
+        var js = read_json(text, err)
+        t |> success(js != null, "the answer parses as JSON: {err}")
+        if (js != null) {
+            t |> equal(js?["normalized"] ?? "", want_norm, "the document carries the normalized text")
+            var inscope texts <- json_row_field(js?["chunks"], "text")
+            var inscope phons <- json_row_field(js?["chunks"], "phonemes")
+            t |> equal(length(texts), length(want), "one row per chunk the synthesis would take")
+            for (i in range(min(length(texts), length(want)))) {
+                t |> equal(texts[i], want[i], "row {i} carries the chunk itself")
+                t |> success(!empty(phons[i]), "row {i} carries a phoneme string")
+            }
+            unsafe {
+                delete js
+            }
+        }
+    }
+}
+
 [test]
 def test_speech_route(t : T?) {
     if (speech_model_missing(t)) {
@@ -416,6 +474,9 @@ def test_speech_route(t : T?) {
         }
         t |> run("the tts block on /v1/stats") @(t : T?) {
             check_tts_stats_block(t, base_url, "q8")
+        }
+        t |> run("the phonemes route answers the normalized text and a phoneme string per chunk") @(t : T?) {
+            check_phonemes(t, base_url)
         }
         t |> run("the declined and malformed requests") @(t : T?) {
             speech_request(base_url, "\{\"input\": \"Hello.\", \"response_format\": \"mp3\"}") $(status, _ctype, _bytes, text) {
