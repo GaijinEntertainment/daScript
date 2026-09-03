@@ -70,7 +70,7 @@
 		"noise_floor_cv_pct" : "1.02",
 		"features" : "neon;dotprod;i8mm;bf16;fullfp16;lse",
 		"box" : "darwin|arm64|Mac17,6|25G72|Apple M5 Max",
-		"engine_sha" : "e58e5a3ba",
+		"engine_sha" : "fa0b0eac4",
 		"written" : "2026-09-02T17:12:06.082Z",
 		"validation_demoted" : "0",
 		"mode" : "normal",

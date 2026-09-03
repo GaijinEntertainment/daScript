@@ -12,7 +12,7 @@
 		"lcpp_version" : "version: 0.3.0-dev (build 832, commit 6fdd0ac89)",
 		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",
 		"threads" : 6,
-		"das_sha" : "ecf965ce5",
+		"das_sha" : "7907b133c",
 		"ngen" : 128,
 		"head_sha" : "ea4f772ffb70e02127c5f142f9ed9af97add7ca0f2bcc7b277244a9771b436bd",
 		"reps" : 3

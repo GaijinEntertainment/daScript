@@ -8,15 +8,14 @@ doc: `ARCHITECTURE_ENGINE.md`.
 list together with `REVIEW.md`'s.**
 
 **Never add a second HTTP path to the sidecar exchange - every HTTP call (lookup, download,
-submit) goes through `dasllama/dasllama_exchange.das`.** The mechanical half (no second
-`dashv` requirer in the engine; `harness/` is out of its scope, since a measurement harness
-talks HTTP to a reference server, never to the exchange) is `performance/REVIEW.das`'s to
-enforce.
+submit) goes through `dasllama/dasllama_exchange.das`.** The mechanical half is
+`performance/REVIEW.das`'s to enforce; weakening that gate is a defect.
 
 **Weakening the exchange download gate, the submission strip, or the submit rails is a
-defect.** The download gate checks content sha, schema, and `DASLLAMA_RELEASE`. The submit
-rails stop a sidecar that came from the exchange, or was minted on another box, from being
-submitted. `utils/dasllama-server/test_exchange_client.das` enforces the download gate, the
+defect.** The download gate checks content sha, schema, and `DASLLAMA_RELEASE`. The submission
+strip (`exchange_strip_private`) drops `provenance.binary` and every other path-shaped
+provenance value before a sidecar is submitted. The submit rails stop a sidecar that came from
+the exchange, or was minted on another box, from being submitted. `utils/dasllama-server/test_exchange_client.das` enforces the download gate, the
 strip, and the rails.
 
 **A diff that adds a submission path around `exchange_strip_private` is a defect, even where
@@ -24,7 +23,7 @@ the strip itself is intact.**
 
 **A tune-boot path (`exchange_scope_resolver` / `exchange_boot_submit_check`,
 `dasllama/dasllama_exchange.das`) that fails when `exchange_lookup` fails is a defect - it
-falls through to the local sidecar and the baked winners.**
+falls back to the sidecar on the box and the winners built into the binary.**
 
 **A diff that adds an outbound exchange request reachable from a tune-boot path
 (`exchange_scope_resolver` / `exchange_boot_submit_check`) without routing it through

@@ -1226,7 +1226,7 @@ group; wording kept.
   (k4 0.152 vs 0.187) and loses iq4xs (0.243 vs 0.202) and iq4nl only. With the tile in the
   race: M4 form ext 0.844 vs tile 0.482 ms (tile crowned), then k4 rows tile-twin 0.484 vs two
   passes 0.551 (the twin keeps k4 on the M4 again); M5 form ext 0.492 vs tile 0.528 (ext keeps).
-- **M4 Pro Qwen3.8-27B-Q4_K_M ruler on the tile (rig 8a03da431 on its fresh mint, stock llama.cpp
+- **M4 Pro Qwen3.8-27B-Q4_K_M ruler on the tile (rig 47422ea68 on its fresh mint, stock llama.cpp
   6fdd0ac, exe-first, settle 180, -n 128 -r 3, SpecBench-4 chat):** ours off 12.7 -> depth 1 13.9
   (1.09x, accept 77.4%) -> depth 2 7.9 (0.62x); per prompt depth 1 13.4 / 14.0 / 15.4 / 13.2
   (writing / summarization / math / qa). llama.cpp off 11.5 -> n_max 1 13.6 / 13.8 / 14.4 / 13.5
@@ -1243,7 +1243,7 @@ group; wording kept.
   `k4_ext4` 1.31 / 1.46 / 1.33x, `k4_extb4` 1.27 / 1.42 / 1.27x; two tiles (2 x `k4_r2c2`) 0.078 /
   0.190 / 2.49 ms against `k4_extb4` 0.114 / 0.290 / 4.26. CPU rails on the same box: off 11.56 ->
   MTP 10.66 (0.92x, 78.6% accept) at depth 1, and the identical numbers at `--mtp-depth 2` (#81).
-- **The k4 pair walk (`enc_kq_mvb_k4_pairs`, commit 24d13f1d2), M4 Pro, gemma-4-12B-it-Q4_K_M
+- **The k4 pair walk (`enc_kq_mvb_k4_pairs`, commit f591c4c13), M4 Pro, gemma-4-12B-it-Q4_K_M
   same-slab step (`batch_rows_probe --sameslab`, 16 steps), ms per step / x a single step, before ->
   after:** 1 row 44.1 / 1.00x both; 2 rows 52.9 / 1.20x both (the tile); 3 rows 148.1 / 3.36x ->
   83.1 / 1.88x; 4 rows 156.7 / 3.55x -> 103.1 / 2.34x; 5 rows 166.6 / 3.78x -> 133.5 / 3.03x. A
@@ -1252,7 +1252,7 @@ group; wording kept.
   parity arms on gemma-12B at 4 and 5 rows pass through the walk. Qwen3.8-27B depth-2 round split
   on the box: verify 302.5 -> 194.4 ms (the third row 2.3 steps -> 0.96), round 4.04x -> 2.65x a
   step, depth 2 7.7 -> 11.7 tok/s (0.61x -> 0.92x of plain); depth 1 stays the box's winner. The
-  records-grade ruler on that rig (24d13f1d2, exe-first, settle 180, -n 128 -r 3): ours off 12.7 ->
+  records-grade ruler on that rig (f591c4c13, exe-first, settle 180, -n 128 -r 3): ours off 12.7 ->
   depth 1 14.0 (1.10x, 77.4%) -> depth 2 12.4 (0.97x; was 7.9), llama.cpp unchanged at 11.5 ->
   13.8 -> 12.5. The
   M5 Max has no three-row cliff (gemma-12B same-slab 1 / 2 / 3 / 4 / 5 / 8 rows = 20.8 / 17.3 /

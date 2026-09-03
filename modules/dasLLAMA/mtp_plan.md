@@ -786,7 +786,7 @@ floor) - a real but narrow item; (c) decode attention past ~1k keys - a microben
 
 ## Measurement day (2026-09-02, records grade: release exe on a fresh mint, stock llama.cpp 6fdd0ac)
 
-Both boxes minted, both rig exes rebuilt (`daspkg release`, sha e58e5a3ba), llama.cpp pinned at
+Both boxes minted, both rig exes rebuilt (`daspkg release`, sha fa0b0eac4), llama.cpp pinned at
 6fdd0ac89 (2026-08-27, `setup_lcpp_ref` worktree, stock + clean-cpu, `llama-server` added). Board
 rows through `gen_bench_records --only <model> --workload llm`; the MTP rows through
 `harness/mtp_ruler.das` (SpecBench-4 chat corpus, thinking off, greedy, 128 tokens, 3 reps, settle

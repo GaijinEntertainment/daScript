@@ -10,7 +10,8 @@ everything else.
 pipeline the dasLLAMA engine selected also calls `tune_gate()`
 (`../performance/profile_common.das`) before that instrument's first timed rep.** A pipeline
 the instrument compiled itself - or a reference tool's own runtime - is not one the engine
-selected. Without the gate the instrument measures fallback kernels silently. An instrument is a script whose output is a measured wall or rate.
+selected. Without the gate the instrument measures fallback kernels silently. An instrument is a
+script whose output is a measured wall or rate.
 
 **A diff that adds or changes a race alternates its arms within one process - one timed round
 per arm, best-of across rounds.** A race is an instrument that compares two implementations.
@@ -24,7 +25,8 @@ output carries the literal token `timing-only`; an arm whose result is bit-ident
 baseline's prints the bit-exact compare over the sampled region - the set of output elements
 the run compares - on the report's "bit-exact vs ..." line; every other arm prints a
 bounded-difference compare (against the baseline arm or the CPU reference) plus the bound it
-passed. How the arm orders its sums, and whether its multiply-adds fuse, decide bit-identity - not the declared precision.
+passed. How the arm orders its sums, and whether its multiply-adds fuse, decide bit-identity -
+not the declared precision.
 
 **A diff that adds or changes a race also checks the race's baseline arm against a CPU
 reference.** The baseline arm is the arm running the implementation already in use. The
@@ -54,8 +56,8 @@ into `../performance/records/<box>.json` or `../PERF_LEDGER.md`.**
 `../PERF_LEDGER.md` - a reference leg's recovery file, a pinned reference tsv an instrument
 reads back - is scratch: untracked, owned by exactly one instrument, re-derivable from a
 command written where the owning instrument documents its flags, and never an input to a
-board cell.** A
-tracked or shared copy of a third-party wall becomes a stale baseline nobody re-derives.
+board cell.** A tracked or shared copy of a third-party wall becomes a stale baseline nobody
+re-derives.
 
 **A diff that adds or changes an instrument that prints the difference of two walls also
 prints both of those walls on that report line.** A plain elapsed-time row - one clock pair,
@@ -76,10 +78,11 @@ with zero result rows - wrong flags, failed load, a device that declines.** A ru
 nothing and reported success leaves a sidecar or a record untouched, and its caller cannot
 tell.
 
-**A diff that adds or changes an A/B arm makes the run fail when the lever that arm names
-cannot engage - never let both arms run the same code and report the ratio.** A lever that
-silently no-ops turns an unmeasured cell into a 1.00x row nobody can tell from a real tie.
+**A diff that adds or changes an A/B arm - one of the two runs an instrument makes with one
+named lever off, then on - makes that instrument exit non-zero when the lever does not change
+what the run executes.** A lever is the flag or environment switch the ON arm turns on; a lever
+that silently no-ops turns an unmeasured cell into a 1.00x row nobody can tell from a real tie.
 
 **An A/B instrument over a prompt corpus reports one row per prompt, never one aggregate
-ratio alone.** A corpus whose prompts differ in acceptance hides a per-task loss inside a
+ratio alone.** Prompts differ in how much the lever helps, so a per-prompt loss hides inside a
 winning mean.

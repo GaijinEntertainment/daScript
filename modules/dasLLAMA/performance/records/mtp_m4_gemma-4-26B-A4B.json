@@ -7,7 +7,7 @@
 		"lcpp_server" : "~/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
 		"das_exe" : "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench",
 		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",
-		"das_sha" : "e58e5a3ba",
+		"das_sha" : "fa0b0eac4",
 		"head_sha" : "",
 		"reps" : 3,
 		"model_sha" : "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f\t0x3f226f6e0\t2026-07-26T20:11:40",

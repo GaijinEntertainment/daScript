@@ -10,3 +10,7 @@ everything else.
 pairs `main` declares up front, or any later mutation of that list - keeps `dot_q8q8_laneq4x4`
 last.** Running that bench pins one matmul backend for the rest of the process, so a row after
 it is timed against the pinned backend instead of the one it would have picked.
+
+**A `dashv` requirer under this folder talks HTTP to a reference server, never to the sidecar
+exchange - an exchange call goes through `../dasllama/dasllama_exchange.das`.** The module's
+single-exchange-client gate does not read this folder, so the checklist is what holds the line.

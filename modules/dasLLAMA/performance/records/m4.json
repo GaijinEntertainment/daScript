@@ -4961,7 +4961,7 @@
           }
         },
         "source":"official",
-        "sha":"8a03da431",
+        "sha":"47422ea68",
         "version":"0.6.4",
         "dasllama_version":15,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
@@ -5050,7 +5050,7 @@
           }
         },
         "source":"official",
-        "sha":"8a03da431",
+        "sha":"47422ea68",
         "version":"0.6.4",
         "dasllama_version":15,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
@@ -5139,7 +5139,7 @@
           }
         },
         "source":"official",
-        "sha":"8a03da431",
+        "sha":"47422ea68",
         "version":"0.6.4",
         "dasllama_version":15,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",

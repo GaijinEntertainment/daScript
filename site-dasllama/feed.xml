@@ -23,15 +23,15 @@ How we measured, what we tried, and why the gain is as small as it is:
 <link href="https://dasllama.io/stories/2026-09-03-mtp-on-mac.html"/>
 <id>https://dasllama.io/stories/2026-09-03-mtp-on-mac.html</id>
 <updated>2026-09-03T00:00:00Z</updated>
-<content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/mtp_m5_gemma-4-26B-A4B.json (2026-09-02, das ecf965ce5),
-     mtp_m4_gemma-4-26B-A4B.json (2026-09-02, das e58e5a3ba), mtp_m5_Qwen3.8-27B.json (2026-09-02, das 59cad510c),
-     mtp_m4_Qwen3.8-27B.json (2026-09-03, das 24d13f1d2); llama.cpp = stock upstream commit 6fdd0ac89 on both
+<content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/mtp_m5_gemma-4-26B-A4B.json (2026-09-02, das 7907b133c),
+     mtp_m4_gemma-4-26B-A4B.json (2026-09-02, das fa0b0eac4), mtp_m5_Qwen3.8-27B.json (2026-09-02, das 497dcf10a),
+     mtp_m4_Qwen3.8-27B.json (2026-09-03, das f591c4c13); llama.cpp = stock upstream commit 6fdd0ac89 on both
      boxes, run as llama-server on the same rendered prompt via /completion with ignore_eos; the M4 morning
-     row (12.7 -&gt; 11.0) = the measurement-day ruler at das 6bacf485d, superseded in the record by 24d13f1d2;
+     row (12.7 -&gt; 11.0) = the measurement-day ruler at das 4da0045f0, superseded in the record by f591c4c13;
      the 93% verify share and the depth-2 7.9 -&gt; 12.4 = the round clocks on the M4 Pro, 2026-09-03; the
      models are gemma-4-26B-A4B-it-Q4_K_M with mtp-gemma-4-26B-A4B-it-Q8_0 and Qwen3.8-27B-Q4_K_M with
      mtp-Qwen3.8-27B-Q8_0 (checksums in the records); &quot;1 draft&quot; = our --mtp-depth 1 and llama.cpp&#x27;s
-     --spec-draft-n-max 1; the code prompt = mtp_m5_gemma-4-26B-A4B_code1.json (2026-09-02, das d96b153dd,
+     --spec-draft-n-max 1; the code prompt = mtp_m5_gemma-4-26B-A4B_code1.json (2026-09-02, das c3239b46c,
      corpus benchmarks/data/code1_prompts.txt); the ruler is modules/dasLLAMA/harness/mtp_ruler.das --&gt;
 &lt;p&gt;We turned speculative decoding on, and Anton&#x27;s Mac mini got slower. That was the morning of
 the 2nd of September, and it is why this story has a second day.&lt;/p&gt;
@@ -340,8 +340,8 @@ Metal. Bringing a chip up one model at a time, and why it was fun:
 <id>https://dasllama.io/stories/2026-08-30-apple-m5.html</id>
 <updated>2026-08-30T00:00:00Z</updated>
 <content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max Metal rows measured 2026-08-30, das
-     build 345dcd667; the gemma-4-26B-A4B row 2026-09-02, e58e5a3ba) and m4.json (Anton&#x27;s M4 Pro Metal
-     rows: 2026-07-29 das 0c8200a72, gemma-4-12B 2026-08-10 39a1f5192, Qwen3.8-27B 2026-09-03 8a03da431);
+     build 345dcd667; the gemma-4-26B-A4B row 2026-09-02, fa0b0eac4) and m4.json (Anton&#x27;s M4 Pro Metal
+     rows: 2026-07-29 das 0c8200a72, gemma-4-12B 2026-08-10 39a1f5192, Qwen3.8-27B 2026-09-03 47422ea68);
      62 = the kernel families in performance/m5.tune.json, 23 = its runtime.metal_tensor picks; core
      tiers = sysctl hw.perflevel0 (Super, 6) / hw.perflevel1 (Performance, 12) on the M5 Max; the image
      reference is llama.cpp&#x27;s multimodal path, the Canary reference NVIDIA&#x27;s NeMo on Torch MPS --&gt;

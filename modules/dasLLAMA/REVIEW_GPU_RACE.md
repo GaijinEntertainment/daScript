@@ -1,7 +1,8 @@
 # dasLLAMA GPU Race Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_metal.md`.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned
+work: `followup_metal.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff touching a GPU kernel A/B race, knockout, or
 hand-binding arm - or changing a kernel class such an arm mirrors (binding numbers, kargs
@@ -34,11 +35,12 @@ kernels on one queue and compares their outputs.
 small enough to sit in cache ranks the kernels by an effect production never sees, and the
 race then picks the slower kernel.
 
-**A race or mint that crowns a kernel the batched decode driver serves at verify widths runs
-its M axis at every width the speculative round can dispatch - 2 through `MTP_MAX_ROWS - 1`
-rows - never at M = 1 or the prefill tile alone.** A crown chosen at one row served the k+1
-verify rows through the single-row GEMV gate at -25.8%; the verify rows are a production shape
-of their own.
+**A race or tune sweep that mints a runtime crown (the winner recorded in the box profile,
+which the served graph then dispatches) or a tune-sidecar row for a kernel the batched decode
+driver (`dasllama/dasllama_<gpu>_decode.das`) dispatches times that kernel at every verify
+width - every row count from 2 to `MTP_MAX_ROWS - 1` (`dasllama/dasllama_common.das`), the rows
+one speculative round checks in one batch.** The verify widths are a production shape of their
+own, and a crown timed at one row alone sends the verify through the single-row form.
 
 **A kernel A/B race arm that mints a runtime crown or a tune-sidecar row binds a DIFFERENT
 output buffer for consecutive dispatches of its chain, never one shared output.** One shared

@@ -70,7 +70,7 @@
 		"noise_floor_cv_pct" : "0.63",
 		"features" : "neon;dotprod;i8mm;bf16;fullfp16;lse",
 		"box" : "darwin|arm64|Mac16,11|25F84|Apple M4 Pro",
-		"engine_sha" : "8a03da431",
+		"engine_sha" : "47422ea68",
 		"written" : "2026-09-02T22:26:07.155Z",
 		"validation_demoted" : "0",
 		"mode" : "normal",
