@@ -55,7 +55,7 @@ def private parse_watcher_args() {
     g_config_path = option_value("--config=", repository_default_config_path())
     g_ptyhost_root = option_value("--ptyhost-root=",
         path_join(get_das_root(), "logs/dasHerd/ptyhosts"))
-    g_exit_after_ms = max(0l, int64(to_int(option_value("--exit-after-ms=", "0"))))
+    g_exit_after_ms = max(0l, to_int64(option_value("--exit-after-ms=", "0"), false))
 }
 
 // The detached PTY host command: the released AOT bundle when present (its

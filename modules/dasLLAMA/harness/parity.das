@@ -55,7 +55,7 @@ struct Args {
 }
 
 def private parse_ids(s : string) : array<int64> {
-    var ids <- [for (part in split(s, ",")); int64(to_int(part)); where !empty(part)]
+    var ids <- [for (part in split(s, ",")); to_int64(part, false); where !empty(part)]
     return <- ids
 }
 

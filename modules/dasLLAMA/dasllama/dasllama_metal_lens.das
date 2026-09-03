@@ -123,7 +123,7 @@ def private mk_range_len(at : LineInfo; spec : string) : Expression? {
         let t = strip(tok)
         var f : Expression?
         if (is_digit_tok(t)) {
-            f = new ExprConstInt64(at = at, value = int64(to_int(t)))
+            f = new ExprConstInt64(at = at, value = to_int64(t, false))
         } else {
             f = new ExprVar(at = at, name := t)
         }
@@ -173,7 +173,7 @@ def private mk_tg_dim(at : LineInfo; tgi : int; tgs : string) : Expression? {
         return mk_uint_cast(at, new ExprVar(at = at, name := strip(tgs)))
     }
     let name = strip(parts[0])
-    let mult = int64(to_int(strip(parts[1])))
+    let mult = to_int64(strip(parts[1]), false)
     var mul = new ExprOp2(at = at, op := "*", left = new ExprVar(at = at, name := name), right = new ExprConstInt64(at = at, value = mult))
     return mk_uint_cast(at, mul)
 }

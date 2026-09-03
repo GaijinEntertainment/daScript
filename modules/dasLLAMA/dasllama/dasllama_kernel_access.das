@@ -718,7 +718,7 @@ def mk_grid_dim(at : LineInfo; spec : string) : Expression? {
     let cov = strip(parts[1])
     var div : Expression?
     if (is_digit_tok(cov)) {
-        let cv = int64(to_int(cov))
+        let cv = to_int64(cov, false)
         var add = new ExprOp2(at = at, op := "+", left = new ExprVar(at = at, name := nm), right = new ExprConstInt64(at = at, value = cv - 1l))
         div = new ExprOp2(at = at, op := "/", left = add, right = new ExprConstInt64(at = at, value = cv))
     } else {

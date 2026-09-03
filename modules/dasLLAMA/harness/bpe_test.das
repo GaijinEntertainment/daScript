@@ -19,7 +19,7 @@ let SEP = "\n__ggml_vocab_test__\n"
 
 // Parse one .out line (" 1142 220 19 ...") into token ids; tolerant of the leading space.
 def parse_out_ids(line : string) : array<int64> {
-    return <- [for (tok in split(line, " ")); int64(to_int(tok)); where !empty(tok)]
+    return <- [for (tok in split(line, " ")); to_int64(tok, false); where !empty(tok)]
 }
 
 // Drop a single trailing empty element (both fixture files end with a trailing

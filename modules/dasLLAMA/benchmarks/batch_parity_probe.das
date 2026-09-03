@@ -257,7 +257,7 @@ def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, the
     with_job_que() {
         setup_dasllama_jobque_()
         for (tok in split(cfg.bs, ",")) {
-            let nb = int64(to_int(tok))
+            let nb = to_int64(tok, false)
             if (nb < 1l) {
                 continue
             }

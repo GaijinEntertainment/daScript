@@ -22,7 +22,7 @@ def private models_dir() : string {
 }
 
 def private parse_out_ids(line : string) : array<int64> {
-    return <- [for (tok in split(line, " ")); int64(to_int(tok)); where !empty(tok)]
+    return <- [for (tok in split(line, " ")); to_int64(tok, false); where !empty(tok)]
 }
 
 def private drop_trailing_empty(var xs : array<string>) {
