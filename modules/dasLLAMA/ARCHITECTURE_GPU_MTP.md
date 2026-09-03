@@ -73,4 +73,9 @@ live registers. The tile wins where ALU is short (M4 Pro: 0.74-0.96 of two passe
 twin's 1.36-1.49) and loses where it is not (M5 Max: 0.63-1.07 against 0.52-0.89). The mint races
 the two production twins first (`race_kq_k4_form`) and crowns `kq_mvb2_k4_r2` where the tile
 wins; `enc_kq_mvb` takes the tile at two rows exactly there, and the k4 rows race that follows
-meets the box's twin form. An unraced box keeps the ext twin.
+meets the box's twin form. An unraced box keeps the ext twin. Where the tile is crowned, three to
+eight k4 rows never take the four- or eight-column forms either: `enc_kq_mvb_k4_pairs` walks the
+tile over the column pairs and gives an odd tail one single-row pass. The wide forms are the ext
+algorithm at more columns, and on the box that crowned the tile they cost 1.3-1.5x of B single
+passes while two tiles do four rows in 0.6x of the four-column kernel's time; a third verify row
+under the four-column form cost the M4 Pro's Qwen3.8-27B round 2.3 steps.

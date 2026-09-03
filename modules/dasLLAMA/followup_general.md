@@ -940,17 +940,12 @@
    whose round loses cannot mint the honest default of no speculation. Done = 0 admitted as "off" on
    both knobs and in `get_mtp_depth()` (the round takes the plain step), and the tuner's confirm
    racing the NextN carrier too (a Qwen vehicle with its `mtp-` head: 0 vs 1, the same 2% margin).
-80. **Three to eight verify rows on an ALU-short GPU take the wide form nobody raced.** The
-   two-row crown decides two rows only; at three rows `enc_kq_mvb` takes the four-column form
-   (`enc_kq_mvb4`, the ext algorithm at four x columns, the fourth dead padding), which the GEMV lab
-   puts at 1.27-1.46x of four single passes on the M4 Pro (`k4_extb4` / `k4_ext4`, q3b / w2_3b /
-   cls3b) while two of the crowned tiles do four rows in 2.49 ms against its 4.26 at cls. The round
-   split on the M4 (Qwen3.8-27B, 78.7 ms step): depth 1 verify 119 ms (59.5 per row), depth 2 verify
-   302 ms (100.8 per row) - the third row costs 2.3 steps and the round 4.04x a step (llama.cpp's
-   n_max 2 round 2.22x). Depth 2 loses on acceptance anyway, but the same dispatcher serves batched
-   decode of independent sessions at 3-8 rows. Done = where `kq_mvb2_k4_r2` is crowned, `enc_kq_site_b`
-   decomposes rows into tile pairs plus one single pass (3 = 2+1, 4 = 2+2, ...) - or the four-column
-   and eight-column forms get their own form race - with the rows probe at B=3,4 on the M4 as proof.
+80. **The k5 / k6 wide forms on an ALU-short GPU: no tile, no race.** The k4 pair walk
+   (`enc_kq_mvb_k4_pairs`, this arc) keeps three to eight k4 rows off the four- and eight-column
+   forms where the tile is crowned; k5 and k6 have no two-row tile, so a box that crowned
+   `kq_rows_k6` takes B single passes at every width and one that did not takes the wide ext forms
+   unraced. Done = the tile written for k5 / k6 (the k4 body with their scale decode) and their form
+   race, or the wide forms raced against B passes per format at four and eight rows.
 81. **The CPU speculative round runs depth 1 whatever the knob says.** M4 Pro, Qwen3.8-27B on the
    CPU rails (`--ngl` unset): `--mtp-depth 1` and `--mtp-depth 2` both report 228/290 drafts
    accepted "at depth 1 / 2" with identical per-prompt numbers (off 11.56 -> on 10.66, 0.92x). The

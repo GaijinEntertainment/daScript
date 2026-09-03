@@ -3984,7 +3984,7 @@ def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff 
             enc_kq_mvb8_k4_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
         } elif (two) {
             if (g_kq_k4_r2_crowned) {
-                enc_kq_mvb2_k4r2_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+                enc_kq_mvb2_k4r2_c(enc, bs, soff, bs, soff, bq, qoff, bx, 0ul, by, yoff, ka, rows)
             } else {
                 enc_kq_mvb2_k4_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
             }
@@ -4059,6 +4059,10 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
     }
     if (nrows >= 2l && !g_kq_rows_crowned[int(fmt)]) {
         assert(xstride == n)
+        if (nrows > 2l && fmt == KqFmt.k4 && g_kq_k4_r2_crowned) {
+            enc_kq_mvb_k4_pairs(enc, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bd, rows, n, ystride, nrows)
+            return
+        }
         var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(ystride), nr = uint(nrows))
         enc_kq_mvb(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), ka, rows, nrows)
         return
@@ -4066,6 +4070,23 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
     for (b in range64(nrows)) {
         enc_kq_gemv(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, bn, bd, rows, n,
             uint64((b * ystride + ycol) * 4l), uint64(b * xstride * 4l))
+    }
+}
+
+//! Three to eight k4 verify rows on a box that crowned the two-row tile: the tile over each column
+//! pair (x and y advance a pair at a time) and one single-row pass for an odd tail - never the four-
+//! or eight-column form, which costs 1.3-1.5x of B single passes where the tile is the box's form.
+[arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
+def enc_kq_mvb_k4_pairs(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff, doff : uint64;
+                        bx, by : MetalBuffer?; yoff : uint64; bn, bd : MetalBuffer?; rows, n, ystride, nlive : int64) {
+    var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(ystride), nr = 2u)
+    var b = 0l
+    while (b + 1l < nlive) {
+        enc_kq_mvb2_k4r2_c(enc, bs, soff, bs, soff, bq, qoff, bx, uint64(b * n * 4l), by, yoff + uint64(b * ystride * 4l), ka, rows)
+        b += 2l
+    }
+    if (b < nlive) {
+        enc_kq_gemv(enc, KqFmt.k4, bq, qoff, bs, soff, doff, bx, by, bn, bd, rows, n, yoff + uint64(b * ystride * 4l), uint64(b * n * 4l))
     }
 }
 
@@ -4863,7 +4884,7 @@ def private race_kq_k4_form(queue : MetalCommandQueue?) : MetalTensorRaceResult 
         }
     }, $(enc) {
         for (_r in range(8)) {
-            enc_kq_mvb2_k4r2_c(enc, rig.bs, 0ul, rig.bs, 0ul, rig.bq, 0ul, rig.bx, rig.by_b, 0ul, ka, int64(rows))
+            enc_kq_mvb2_k4r2_c(enc, rig.bs, 0ul, rig.bs, 0ul, rig.bq, 0ul, rig.bx, 0ul, rig.by_b, 0ul, ka, int64(rows))
         }
     })
     kq_race_verdict(res, rig.by_a, rig.by_b, 2 * rows)
@@ -10634,15 +10655,15 @@ class MetalKqMvB2K4 : MetalKqMvK4T {
     override TILED = false
 }
 
-//! The k4 twin's two-row register tile: a thread owns TWO weight rows and both x columns, so every
-//! x float4 load feeds two rows. Wins where ALU is short (M4 Pro), loses where it is not (M5 Max);
-//! `kq_mvb2_k4_r2` is its crown and `enc_kq_mvb` takes it at two rows exactly there.
+//! The k4 twin's two-row register tile: a thread owns TWO weight rows and both x columns, so every x
+//! float4 load feeds two rows. Wins where ALU is short (M4 Pro), loses where it is not (M5 Max); the
+//! `kq_mvb2_k4_r2` crown selects it at two rows, `enc_kq_mvb_k4_pairs` walks it over wider verifies.
 [metal_dispatch(name = "enc_kq_mvb2_k4r2_c", pso = "g_pso_kq_mvb2_k4r2", tg = 64, grid = "rows/16", params = "rows : int64")]
 class MetalKqMvB2K4R2 {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
-    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : KqMvArgs
 

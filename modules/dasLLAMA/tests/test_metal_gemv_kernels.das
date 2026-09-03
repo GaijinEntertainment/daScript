@@ -6,6 +6,8 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require ?das_metal dasllama/dasllama_metal_kernels  // the kq GEMV / KqMv / MoeGemv kernel set (Apple builds)
+require ?das_metal dasllama/dasllama_metal_common   // g_dev - the pair walk rides the decode PSOs, so its buffers live on the decode device
+require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown - the decode set is released before the leak gate of the next test
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers, kq plane builders + eyeball-dump compares
 require math
@@ -207,6 +209,92 @@ def private kq_mvb_gate(t : T?; dev, queue; fmt, bwidth, n, d, nr, ys : int; r2 
     delete want
     delete env
     delete wrow
+}
+
+// the k4 pair walk (enc_kq_mvb_k4_pairs): nr columns as two-row tiles plus an odd single pass, on the
+// production decode PSOs; ys > d so a misplaced pair lands in the guard band
+def private kq_k4_pairs_gate(t : T?; queue; n, d, nr, ys : int) {
+    let tag = "kq_mvb_k4_pairs n={n} d={d} nr={nr} ys={ys}"
+    var err : string
+    let nb = n / 256
+    let nsb = d * nb
+    var kq : array<uint8>
+    var ks : array<uint8>
+    kq_fill_planes(4, nsb, kq, ks)
+    var xv : array<float>
+    xv |> resize(nr * n)
+    for (i in range(nr * n)) {
+        xv[i] = 0.09 * float(i % 43) - 1.8
+    }
+    var want : array<float>
+    var env : array<float>
+    var wrow : array<float>
+    want |> resize(nr * ys)
+    env |> resize(nr * ys)
+    wrow |> resize(n)
+    for (i in range(nr * ys)) {
+        want[i] = -1000.0
+        env[i] = 0.0
+    }
+    for (r in range(d)) {
+        kq_row_ref(4, r * nb, nb, nsb, kq, ks, wrow)
+        for (col in range(nr)) {
+            var acc = 0.0lf
+            var ev = 0.0lf
+            for (c in range(n)) {
+                let p = double(wrow[c]) * double(xv[col * n + c])
+                acc += p
+                ev += abs(p)
+            }
+            want[col * ys + r] = float(acc)
+            env[col * ys + r] = float(ev)
+        }
+    }
+    var bks = buf_upload(g_dev, ks)
+    var bkq = buf_upload(g_dev, kq)
+    var bx = buf_upload(g_dev, xv)
+    var by = buf_fill(g_dev, nr * ys, -1000.0)
+    var bn = buf_u32(g_dev, uint(n))
+    var bd = buf_u32(g_dev, uint(d))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        enc_kq_mvb_k4_pairs(enc, bkq, 0ul, bks, 0ul, 0ul, bx, by, 0ul, bn, bd, int64(d), int64(n), int64(ys), int64(nr))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
+    }
+    metal_release(bks)
+    metal_release(bkq)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bn)
+    metal_release(bd)
+    delete kq
+    delete ks
+    delete xv
+    delete want
+    delete env
+    delete wrow
+}
+
+[test]
+def test_metal_kq_k4_pair_walk(t : T?) {
+    t |> run("the k4 pair walk matches the CPU reference at 3, 4 and 5 columns") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!metal_decode_init()) {
+                t |> skip("no Metal device")
+                return
+            }
+            var queue = metal_new_command_queue(g_dev)
+            kq_k4_pairs_gate(t, queue, 768, 17, 3, 22)   // one pair + an odd tail; d=17 leaves a tail row pair
+            kq_k4_pairs_gate(t, queue, 768, 32, 4, 40)   // two pairs, no tail
+            kq_k4_pairs_gate(t, queue, 512, 33, 5, 40)   // two pairs + an odd tail
+            metal_release(queue)
+            metal_decode_shutdown()
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
 }
 
 // ===== the expert-indexed MoeGemv kq trio (MetalMoeGemvK4 / K5 / K6) =====

@@ -859,8 +859,11 @@ row bought nothing. Two findings, both fixed in the arc:
   -> 13.9 at depth 1 (1.09x; was 12.9 -> 11.5, 0.89x) vs llama.cpp 11.5 -> 13.8 - ON at parity,
   plain +10%; round 1.62x a step (was 2.06x) vs their 1.52x. Depth 2 still loses (7.9): the round
   split on the box says verify 119 -> 302 ms for the third row - three rows take the four-column
-  form, which the lab puts at 1.27-1.46x of four passes on the M4 (ledger #80: tile pairs + a
-  single pass where the tile is crowned). The CPU round ignores depth 2 there (#81).
+  form, which the lab puts at 1.27-1.46x of four passes on the M4. Ruled in-arc (Boris: "the golden
+  nail"): `enc_kq_mvb_k4_pairs` walks the tile over the column pairs plus one single pass for an odd
+  tail wherever the tile is crowned (3 = 2+1, 4 = 2+2, ...); direct parity gate at 3 / 4 / 5 columns
+  with a negative control; the M4 proof (rows probe B=1..5 on gemma-12B, the Qwen3.8 round split and
+  ruler at depth 2) follows. The CPU round ignores depth 2 there (#81); k5 / k6 have no tile (#80).
 
 **Two harness lessons, both now in the ruler:**
 - A heat-soaked box under-reads a memory-bound decode by 13-18% (llama.cpp Qwen3.8 off read 21-22
