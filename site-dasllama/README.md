@@ -9,7 +9,9 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
 
 - `index.html` - news-first home (identity masthead, feed, how-to-get, ladder teaser)
 - `stories.html` - the stories index (title, date, tag, lede per story), generated from
-  `_stories/` between the `stories:begin` markers by `build_news.py`
+  `_stories/` between the `stories:begin` markers by `build_news.py`; the index rows use
+  `forge.css`'s shared blog-list language (`forge-blog-*`), so their styling is shared with
+  daslang.io
 - `stories/<slug>.html` - one page per story, generated from `_stories/<slug>.md` through
   `_stories/template.html` (`{{root}}` = `../`, so the shared chrome's links work one level
   down); the deploy copies the directory whole; plain "we", llama.cpp named as the yardstick

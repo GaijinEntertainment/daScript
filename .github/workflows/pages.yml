@@ -567,7 +567,6 @@ jobs:
 
         cp site-dasllama/index.html _site_dasllama/
         cp site-dasllama/stories.html _site_dasllama/
-        # one page per story, generated into stories/ by build_news.py above
         mkdir -p _site_dasllama/stories
         cp -R site-dasllama/stories/. _site_dasllama/stories/
         cp site-dasllama/ladder.html _site_dasllama/

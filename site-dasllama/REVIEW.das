@@ -90,8 +90,6 @@ def private check_page_census {
             gate_finding(path, "is not in {TEST_METADATA}'s page list - the page deploys unchecked")
         }
     }
-    // the per-story pages one level down: the deploy copies the directory whole, the sitemap
-    // names each page, and the metadata test globs the directory
     var story_pages : array<string>
     dir("site-dasllama/stories") $(name) {
         if (name |> ends_with(".html")) {

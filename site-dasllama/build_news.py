@@ -105,7 +105,6 @@ def entry_html(e: dict, lead: bool) -> str:
 
 
 def story_index_html(stories: list[dict]) -> str:
-    # the stories index: the shared blog-list language from forge.css, one row per story page
     rows = ''.join(
         f'<a class="forge-blog-item" href="stories/{html.escape(s["slug"])}.html">'
         f'<span class="forge-blog-item__date">{html.escape(s["date"])}</span>'
@@ -117,8 +116,6 @@ def story_index_html(stories: list[dict]) -> str:
 
 
 def story_page_html(s: dict, template: str, site_url: str) -> str:
-    # one story page from _stories/template.html; {{root}} is the page's path back to the site
-    # root, so the chrome's relative links work one directory down
     lede = f'<p class="dio-story__lede">{html.escape(s["lede"])}</p>' if s['lede'] else ''
     slots = {
         '{{title}}': html.escape(s['title']),

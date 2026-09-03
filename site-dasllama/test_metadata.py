@@ -16,8 +16,6 @@ PAGES = {
     "sidecars.html": "https://dasllama.io/sidecars.html",
 }
 
-# the per-story pages build_news.py writes into stories/ from _stories/*.md - every one of them is
-# held to the same head metadata, and the sitemap must list each
 STORY_PAGES = {
     f"stories/{p.name}": f"https://dasllama.io/stories/{p.name}"
     for p in sorted((ROOT / "stories").glob("*.html"))
