@@ -367,11 +367,12 @@ round is cheaper than ours. That one is ours to fix, and it is what winter eveni
 <div class="dio-story__eyebrow"><span class="dio-item__date">2026-08-30</span><span class="dio-item__tag">hardware</span></div>
 <h2 class="dio-story__title">Boris got a new laptop.</h2>
 <p class="dio-story__lede">An M5 Max, an engine that had never seen one, and sixty-two kernels that had to earn their place on it again.</p>
-<div class="dio-story__body"><!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max, measured 2026-08-30, das build
-     345dcd667, llama.cpp 6fdd0ac89) and m4.json (Anton's M4 Pro, the Qwen3.8-27B row re-stamped
-     2026-09-03, das build 8a03da431, llama.cpp 6fdd0ac89); 62 = the kernel families in
-     performance/m5.tune.json, 23 = its runtime.metal_tensor picks; the image reference is llama.cpp's
-     multimodal path, the Canary reference NVIDIA's NeMo on Torch MPS -->
+<div class="dio-story__body"><!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max Metal rows measured 2026-08-30, das
+     build 345dcd667; the gemma-4-26B-A4B row 2026-09-02, e58e5a3ba) and m4.json (Anton's M4 Pro Metal
+     rows: 2026-07-29 das 0c8200a72, gemma-4-12B 2026-08-10 39a1f5192, Qwen3.8-27B 2026-09-03 8a03da431);
+     62 = the kernel families in performance/m5.tune.json, 23 = its runtime.metal_tensor picks; core
+     tiers = sysctl hw.perflevel0 (Super, 6) / hw.perflevel1 (Performance, 12) on the M5 Max; the image
+     reference is llama.cpp's multimodal path, the Canary reference NVIDIA's NeMo on Torch MPS -->
 <p>Boris got a new laptop. An M5 Max, at the end of August, and it became the main machine
 the same afternoon. dasLLAMA had never run on an M5. Anton lent us his Mac mini - an M4
 Pro, the previous generation, sitting on the other side of the globe and reached over ssh -
@@ -395,7 +396,8 @@ version, and one that tried and found it slower keeps it too.</p>
 and 12 it calls Performance, and all of them are the real thing. On Anton's M4 we had taught
 the CPU lane to leave the Efficiency cores out of the worker pool, because they only slowed
 everyone down. On the M5 that habit would have quietly thrown away a third of the chip. Now
-all 18 work, and token generation parks the six slower ones. We could not believe our eyes, so
+all 18 work on a prompt, and token generation keeps the six Super cores and parks the
+twelve Performance ones, which would only get in the way of the fast six. We could not believe our eyes, so
 we checked it twice, on both machines.</p>
 <p>The vision towers and the speech-to-text encoders run on the GPU on the M5 the way the text
 path does. Nothing new in the design - the same GPU plumbing - but each one had to be tried
@@ -406,37 +408,58 @@ again and its picks re-made.</p>
 <thead>
 <tr>
 <th>model</th>
-<th>dasLLAMA (pp512 / tg128)</th>
-<th>llama.cpp (pp512 / tg128)</th>
+<th>Anton's M4 Pro (pp512 / tg128)</th>
+<th>Boris's M5 Max (pp512 / tg128)</th>
+<th>M5 / M4</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>gemma-4-E2B Q8_0</td>
-<td>9074.3 / 161.3</td>
-<td>7413.4 / 137.0</td>
+<td>gemma-4-E4B Q8_0</td>
+<td>769.7 / 45.4</td>
+<td>5303.2 / 90.1</td>
+<td>6.9x / 2.0x</td>
 </tr>
 <tr>
-<td>Qwen3.8-27B Q4_K_M</td>
-<td>913.9 / 27.8</td>
-<td>752.1 / 25.4</td>
+<td>gemma-4-12B Q4_K_M</td>
+<td>290.8 / 29.9</td>
+<td>2077.0 / 63.7</td>
+<td>7.1x / 2.1x</td>
 </tr>
 <tr>
-<td>Qwen3-30B-A3B Q4_K_M</td>
-<td>3752.9 / 165.7</td>
-<td>3422.4 / 137.0</td>
+<td>gemma-4-26B-A4B Q4_K_M</td>
+<td>778.2 / 56.4</td>
+<td>3870.0 / 118.1</td>
+<td>5.0x / 2.1x</td>
 </tr>
 <tr>
 <td>gpt-oss-20b mxfp4</td>
+<td>853.4 / 78.7</td>
 <td>3995.1 / 162.7</td>
-<td>3476.6 / 149.0</td>
+<td>4.7x / 2.1x</td>
+</tr>
+<tr>
+<td>Mistral-Small-24B Q4_K_M</td>
+<td>141.2 / 17.3</td>
+<td>1163.7 / 38.3</td>
+<td>8.2x / 2.2x</td>
+</tr>
+<tr>
+<td>Qwen3-30B-A3B Q4_K_M</td>
+<td>771.1 / 86.1</td>
+<td>3752.9 / 165.7</td>
+<td>4.9x / 1.9x</td>
+</tr>
+<tr>
+<td>Qwen3.8-27B Q4_K_M</td>
+<td>126.4 / 12.9</td>
+<td>913.9 / 27.8</td>
+<td>7.2x / 2.2x</td>
 </tr>
 </tbody>
 </table>
-<p>Before and after, one chip generation apart, on the same 27B model: Anton's M4 Pro reads
-126.4 / 12.9, the new laptop 913.9 / 27.8. Prompt processing moved seven times. Token
-generation, which is bound by memory bandwidth, a little over twice. llama.cpp shows the same
-picture, 126.3 / 11.5 on the M4 and 752.1 / 25.4 on the M5.</p>
+<p>One chip generation apart, the same models, the same engine. Prompt processing moved five to
+eight times. Token generation, which is bound by memory bandwidth, about twice.</p>
 <p>The models that do more than text ride the same machine, the same day. gemma-4-12B's vision
 tower takes 7.1 ms where llama.cpp's multimodal path takes 95 ms; Qwen2.5-Omni's window
 vision transformer 106 ms against 118 ms.</p>
