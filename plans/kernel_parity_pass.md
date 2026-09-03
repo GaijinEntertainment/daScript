@@ -1268,10 +1268,14 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   Qwen3-0.6B Q8_0 and Qwen3-4B Q4_K_M diverge or assert (`decode attention block geometry
   changed under a live model`) when loaded back to back in ONE dastest process under
   `DASLLAMA_GPU=1`, and each reproduces 40/40 alone through `lcpp_bench --parity` - the test
-  file's multi-model process state, pre-existing, not this diff; (b) the parallel embed's job
-  dispatch needs a job queue, which the bench and server arm and a dastest cell must arm itself
-  (`with_job_que()`), because no test had reached a `maybe_parallel_for` arm in-process before
-  (the small carriers stay under every threshold); (c) a session built with the default f32
+  file's multi-model process state, pre-existing, not this diff; (b) the bool form of
+  `maybe_parallel_for` dispatched jobs whenever its flag was true, queue or not, so the first
+  que-less process to cross a prefill threshold (this cell, on the embed) died in
+  `new_job_invoke`; twenty sibling prefill sites share the shape and none had been reached
+  without a queue before (the small carriers stay under every threshold). The form now runs
+  inline in a que-less process (`dasllama_par.das`, one guard in the macro; the cell in
+  `tests/test_par_indexed.das` pins it); the slice cell arms a queue anyway to mirror the
+  bench; (c) a session built with the default f32
   cache codec is declined by the resident driver silently (the armed mirror is f16), so the
   cell's first shape compared the CPU rail against itself for twenty minutes and passed - a
   two-arm compare on the driver builds f16 sessions like the bench and asserts the driver's
