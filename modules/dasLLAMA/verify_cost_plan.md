@@ -187,11 +187,31 @@ rounds: about 75-85% / 50-66% / 35% / 22% on BOTH carriers, so tokens per round 
 quarter of a token; the five-row verify serves depth 4 alone. Speed today: Qwen 1.23 / 1.18 /
 1.31 / 0.76x, gemma 1.16 / 1.20 / 1.14 / 0.92x - depth 3 is the best Qwen point on this box, depth
 4 loses on both. Implied round costs (tokens per round over the speedup, in steps): Qwen 1.44 /
-2.12 / 2.21 / 3.97 = the verify ladder (1.13 / 1.59 / 1.59 / 2.73) plus 0.25-0.3 step PER NEXTN
-DRAFT; gemma 1.51 / 1.88 / 2.21 / 2.99. Two consequences: the five-column stamp (S2.2) is struck -
-its only customer is depth 4; and the NextN draft overhead (item 5 below) is as large a lever as
-the verify at depths 2-3: a flat 1.2x verify alone takes Qwen depth 3 from 1.31x to ~1.6x, the
-draft fix alone to ~1.5x, both to ~2.0x.
+2.12 / 2.21 / 3.97, gemma 1.51 / 1.88 / 2.21 / 2.99. Consequence: the five-column stamp (S2.2) is
+struck - its only customer is depth 4.
+
+**S2.-1b - the round profiled (`lcpp_bench --prof`, prompt 0, 128 tokens, Qwen3.8-27B, M5, plain
+step 37 ms).** Depth 1: 75 rounds, draft 3.1 ms per draft, two-row verify 45.7 ms (1.24x a step),
+walk 0.3, replay 0.5. Depth 3: 54 rounds, 3.0 ms per draft (9 ms per round), four-row verify 66 ms
+(1.79x a step), walk 0.6, replay 1.3. The verify is 85-92% of the round, the draft chain 6-11% -
+the earlier inference of 0.3 step per draft from the ruler ratios was wrong; a NextN draft costs
+0.08 step. The round's four-row verify also costs 13% more than the batch driver's four-row
+same-slab step (66 vs 59 ms): the head layer, the serial encoder in `encode_verify_step`, the
+host prep. So the verify is the lever, twice over: the K-quant row forms (1.59x -> ~1.2x, S2.4)
+and the round's own overhead over the batch driver (~0.2 step). A flat 1.2x verify takes Qwen
+depth 3 from 1.31x to ~1.9x; the draft chain fix alone is worth ~5%.
+
+The gemma round profiled the same way (plain step 8.1 ms - the greedy chain hits here, which is
+why S0's 12.2 ms "plain step" read high): depth 1, 75 rounds, draft 0.03 ms per draft (the fused
+chain), two-row verify 11.4 ms (1.41x a step), walk 0.01; depth 2, 63 rounds, three-row verify
+13.9 ms (1.72x). The verify is 99% of the gemma round: the routed experts re-streamed per row
+(S2 #1) on top of the batch step's fixed overhead (10.4 ms same-slab two-row step against the 8.1
+ms step). Baseline table for the arc, ms per round phase (M5, prompt 0, 128 tokens):
+
+| carrier | plain step | verify 2 rows | verify 3 rows | verify 4 rows | draft per draft | walk + replay |
+|---|---|---|---|---|---|---|
+| Qwen3.8-27B + Q8 head | 37 | 45.7 (1.24x) | - | 66 (1.79x) | 3.1 | 0.8-1.9 |
+| gemma-26B + drafter | 8.1 | 11.4 (1.41x) | 13.9 (1.72x) | - | 0.03 | 0.01 |
 
 **S2.0 - their K-quant ladder, measured, not inferred.** The report's "1.05x at M = 4" for
 K-quants is an inference from kernel selection. Read side by side, llama.cpp's

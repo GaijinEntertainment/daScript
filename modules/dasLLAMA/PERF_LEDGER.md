@@ -1253,9 +1253,21 @@ commits: direction-grade.
   122.5 -> 146.5 (1.20x), depth 3 122.4 -> 139.5 (1.14x), depth 4 121.5 -> 112.1 (0.92x); at depth
   4: p1 71.7 p2 47.6 p3 33.2 p4 22.5%. Tokens per round 1.77 / 2.50 / 2.90 / 3.02 (Qwen) and 1.75 /
   2.25 / 2.52 / 2.75 (gemma): the fourth draft adds a tenth to a quarter of a token. The implied
-  round cost in steps (tokens per round over the speedup) is 1.44 / 2.12 / 2.21 / 3.97 on Qwen -
-  the five-row verify (2.73x) plus about 0.3 step per NextN draft; on gemma 1.51 / 1.88 / 2.21 /
-  2.99. Depth 3 is the best Qwen point on this box today. Direction-grade.
+  round cost in steps (tokens per round over the speedup) is 1.44 / 2.12 / 2.21 / 3.97 on Qwen
+  and 1.51 / 1.88 / 2.21 / 2.99 on gemma. Depth 3 is the best Qwen point on this box today.
+  Direction-grade.
+- **Where the NextN round's time goes (`lcpp_bench --prof`, `-jit` debug rail, Qwen3.8-27B on the
+  M5, prompt 0 of the corpus, 128 tokens, plain step 37 ms):** depth 1, 75 rounds: draft 3.1 ms
+  per draft (0.08 step), the two-row verify 45.7 ms (1.24x a step), walk 0.3, replay 0.5; depth 3,
+  54 rounds: draft 3.0 ms per draft (9 ms per round), the four-row verify 66 ms (1.79x a step),
+  walk 0.6, replay 1.3. The verify is 85-92% of the round; the draft chain is 6-11%. The round's
+  four-row verify costs 13% more than the batch driver's four-row same-slab step (1.59x) - the
+  head layer, the serial encoder and the host prep. **The gemma round the same way (gemma-26B +
+  the assistant drafter, prompt 0, plain step 8.1 ms):** depth 1, 75 rounds: the fused draft chain
+  0.03 ms per draft, the two-row verify 11.4 ms (1.41x a step), walk 0.01; depth 2, 63 rounds:
+  the three-row verify 13.9 ms (1.72x). The verify is 99% of the gemma round - the routed experts
+  re-streamed per row plus the batch step's own overhead (the batch driver's same-slab two-row step
+  reads 10.4 ms against this 8.1 ms greedy step). Direction-grade.
 - **A code prompt, gemma on the M5 (c3239b46c, `benchmarks/data/code1_prompts.txt`):** ours off
   123.4 -> depth 1 159.0 (1.29x, 85.5%) -> depth 2 174.0 (1.41x; p1 86.0 p2 68.0); llama.cpp off
   99.7 -> n_max 1 140.0 (84.1%) -> n_max 2 153.7. Acceptance is a property of the text: code
