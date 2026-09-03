@@ -1112,6 +1112,7 @@ def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam
             !key_exists(g_mirrors, s.uid)) {
         return false
     }
+    let ts_prep = prof_ticks()
     finish_pending_step()
     let mr = g_mirrors[s.uid]
     let dpos = pos - 1l
@@ -1131,8 +1132,13 @@ def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam
         memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), r.bytes_tab)
         memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), r.bytes_tab)
     }
+    prof_add("mtp.draft.prep", ts_prep)
+    let ts_enc = prof_ticks()
     encode_draft_step(t, r, !seam)
+    prof_add("mtp.draft.enc", ts_enc)
+    let ts_fin = prof_ticks()
     let ok = finish_draft_step(t, s, r, seam)
+    prof_add("mtp.draft.wait", ts_fin)
     release_step(r)
     return ok
 }
@@ -1416,6 +1422,7 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
         memcpy(metal_buffer_contents(brt), addr < void? >(g_vrt[0]), bytes_rt)
     }
     var cb = metal_new_command_buffer_unretained(g_queue)
+    //! the serial encoder: the concurrent rail measured the same GPU time here and doubled the host encode
     var enc = metal_new_compute_encoder(cb)
     unsafe {
         var bw_att0 = upload_region(addr < void? >(t.fblob[t.rms_att_off]), uint64(dim * 4l))
@@ -1463,7 +1470,10 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
 
 //! lands nrows KV rows + every row's logits; accept/reject bookkeeping is the caller's
 def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : int64) : bool {
+    let ts_wait = prof_ticks()
     metal_wait_until_completed(r.cb)
+    prof_add("mtp.verify.wait", ts_wait)
+    let ts_land = prof_ticks()
     let ok = !metal_command_buffer_failed(r.cb)
     if (ok) {
         let c = t.config
@@ -1492,6 +1502,7 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
         to_log(LOG_ERROR, "dasLLAMA metal MTP verify: dispatch failed ({cb_error_text(r.cb)})\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalDecodeDecline.gpu_error)
     }
+    prof_add("mtp.verify.land", ts_land)
     return ok
 }
 
@@ -1593,7 +1604,9 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
                 }
                 break
             }
+            let ts_amax = prof_ticks()
             var d = parallel_argmax(s.logits, c.vocab_size)
+            prof_add("mtp.draft.argmax", ts_amax)
             if (g_env_mtp_debug == "reject") {
                 d = 0l
             }
@@ -1611,6 +1624,8 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
     let ts_verify = prof_ticks()
     mtp_verify_prep_n(t, s, s.mtp_vbatch, nr, pos)
     finish_pending_step()
+    prof_add("mtp.verify.prep", ts_verify)
+    let ts_poke = prof_ticks()
     let mr = g_mirrors[s.uid]
     var r = acquire_step(t, s, pos + 1l, mr.koff, mr.voff, mr.cap_rows, [nrows = nr])
     if (!r.gpu_logits) {   // verify has no CPU classifier fallback (blog/bxf live under gpu_logits)
@@ -1655,7 +1670,10 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         memcpy(reinterpret<void?>(bc), addr < void? >(s.mtp_cat[0]), uint64(nr * rowb))
         memcpy(reinterpret<void?>(bc + nr * rowb), addr < void? >(s.mtp_xb_save[0]), uint64(rowb))
     }
+    prof_add("mtp.verify.poke", ts_poke)
+    let ts_enc = prof_ticks()
     encode_verify_step(t, r, pos)
+    prof_add("mtp.verify.enc", ts_enc)
     let vok = finish_verify_step(t, s, r, pos)
     if (!vok) {
         release_step(r)

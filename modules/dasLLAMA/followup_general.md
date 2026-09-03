@@ -1198,3 +1198,12 @@
    through `sample_` (the row copied into `s.logits`, `s.recent` advanced per accepted token) and
    accepts while the draw equals the draft, the scheduler gate drops to "MTP on", and a seeded
    counting run at temp 0.8 matches plain sampled decode token for token.
+102. **The NextN draft chain is k command buffers because untied embeddings have no GPU gather.**
+   `metal_mtp_spec_round` runs k `metal_mtp_draft_forward` calls - a submit, a wait, a 1 MB logits
+   readback and a CPU argmax each (about 0.4 ms of a 2.8 ms draft on Qwen3.8-27B, M5) - where the
+   gemma round chains its drafts in one command buffer with `enc_argmax` and `enc_embed` on the
+   device. The NextN chain cannot: `embed_row` for an untied model reads the fp32 token table in
+   `fblob` (`t.tok_emb_off`; 5 GB on Qwen3.8-27B, carried in the image), and the GPU gathers exist
+   only for tied Q8 (`MetalEmbedQ8`) and tied K6 (`MetalEmbedK6`). Done = a K-quant embed gather
+   over the token table's own plane (k4 first) that also retires the fp32 table from blob images,
+   then the round in the gemma shape: one command buffer, `bvtok` chaining, one wait.

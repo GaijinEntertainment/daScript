@@ -300,6 +300,32 @@ simdgroup-matrix form (S2.4 below).
 5. The NextN round in the gemma round's shape: one command buffer, in-graph argmax, one join.
 6. Attention rows sharing one KV read (their Q = 2..4 buckets).
 
+## S2.5 - the Qwen round's own overhead (Boris: finish the small stuff on Qwen first)
+
+The sub-section profile (depth 3, prompt 0, 54 rounds): the verify is 99% GPU wait (66.7 ms per
+verify; host encode 0.47 ms, landing 0.13, prep and poke under 0.02), the draft 95% GPU wait (2.8
+ms per draft, of which the Q6_K classifier's 1.04 GB stream is about 2.1 ms; the CPU argmax 0.11,
+the encode 0.03). Three candidate levers, measured or sized:
+
+1. **The verify's serial encoder** (the one place the decode path did not use the concurrent
+   rail): switched, parity green under strict hazards, GPU time unchanged (3654 against 3604 ms
+   over the window) and the host encode doubled. Reverted; the serial encoder is not a cost here.
+   The "13% over the batch driver" it was meant to explain was a cross-model comparison - the
+   batch rail declines the hybrid Qwen graph, so the round's verify is Qwen's only multi-row path
+   and its per-row cost (0.28 step per extra row at 2 to 4 rows against the dense driver's 0.23)
+   most likely sits in the deltanet layers' per-row scan. No cheap lever; not confirmed.
+2. **One command buffer for the k drafts** (the gemma round's shape): saves k-1 submits and waits,
+   k CPU argmaxes and k logits readbacks - about 0.4 ms per draft, 1.2 ms of a 72 ms round. It
+   needs the next draft's embedding gathered on the GPU, and Qwen3.8-27B's token table is fp32 in
+   the CPU-side fblob (untied model; only tied Q8 and K6 tables have GPU gathers). A K-quant embed
+   gather plus the plane plumbing for a 2% gain: ledgered, not built.
+3. **The draft's classifier stream**: 2.1 of the 2.8 ms per draft is the Q6_K output.weight read
+   once per draft. A Q4_K drafting copy would save about 0.7 ms per draft (3% of a depth-3 round)
+   at some cost in draft quality; a shortlist classifier is not exact. Boris's call.
+
+Net: the Qwen round has no small lever worth more than 3%; its depth-3 speedup stays 1.31x until
+the verify rows get cheaper, and S2.4 says the K-quant forms cannot make them so on this GPU.
+
 ## S3 - the CPU verify
 
 Instrument: `benchmarks/verify_batch_probe.das` (the marginal cost `b` of one extra row through
