@@ -5,7 +5,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // dasllama-server: it requires dasLLAMA and so inherits the shared [tune_scope]. The front end's
 // packs (tts_g2p.bin, tts_postag.bin) are read from the model's directory.
 //
-//   bin/daslang -jit utils/dasllama-server/txt2wav.das -- --tts <kokoro-82m.gguf> --text "Hello." --out hello.wav [--voice af_heart] [--speed 1.0]
+//   bin/daslang -jit utils/dasllama-server/txt2wav.das -- --tts <kitten-nano.gguf> --text "Hello." --out hello.wav [--voice expr-voice-2-f] [--speed 1.0]
 
 require dasllama/dasllama            // load_tts_model / synthesize / write_wav_pcm16 / the shared [tune_scope]
 require llvm/daslib/llvm_tune        // [tune_policy] + log_tune_status

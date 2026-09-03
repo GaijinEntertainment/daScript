@@ -46,16 +46,19 @@ reference lane.
 
 ```
 dasllama-server --tts kitten-nano.gguf          # POST /v1/audio/speech, the OpenAI shape
-daslang utils/dasllama-server/txt2wav.das -- --model kokoro-82m.gguf --voice af_heart --text "Hello." --out hello.wav
+daslang utils/dasllama-server/txt2wav.das -- --tts kitten-nano.gguf --voice expr-voice-2-f --text "Hello." --out hello.wav
 ```
 
-Kitten's eight voices are `expr-voice-2-m` through `expr-voice-5-f`, and the upstream's alias
-names (`Bella`, `Jasper`, ...) are accepted for them. Kokoro ships 54 packs, of which the front
-end drives the 28 English ones: the 20 American (`af_*`, `am_*` - `af_heart`, `am_adam`, ...)
-and the 8 British (`bf_*`, `bm_*` - `bf_emma`, `bm_george`, ...), each phonemized in its own
+Kitten nano is the served default: 59 MB, eight voices, a real-time factor of 0.03 on an Apple
+M1 Max (the measured rows are the module's `PERF_LEDGER.md`). Its voices are `expr-voice-2-m` through `expr-voice-5-f`, and the upstream's alias names
+(`Bella`, `Jasper`, ...) are accepted for them. Kokoro ships 54 packs, of which the front end
+drives the 28 English ones: the 20 American (`af_*`, `am_*` - `af_heart`, `am_adam`, ...) and
+the 8 British (`bf_*`, `bm_*` - `bf_emma`, `bm_george`, ...), each phonemized in its own
 dialect. The other 26 packs speak languages the front end does not phonemize yet, so they are
-not listed and are refused. Every model speaks at 24 kHz. `GET /v1/stats` on the server lists
-the served model's voices.
+not listed and are refused. Some Kokoro packs, the British ones most audibly, render a comma or
+a full stop as a breath; the reference pipeline does the same, so it is the pack, not the
+engine. Every model speaks at 24 kHz. `GET /v1/stats` on the server lists the served model's
+voices.
 
 ## Provenance
 
