@@ -493,7 +493,8 @@ ship a per-carrier default (gemma 2, Qwen NextN 1), keep `--mtp-depth` as the ov
   hemingkx/Spec-Bench, qids 81/241/401/321). The 480-prompt freeze and the per-sequence p95 /
   temp-0 accuracy counters are ledgered, not this arc.
 
-### S7 - close: the stories (ruled 2026-09-02, LAST thing in the arc)
+### S7 - close: the stories (ruled 2026-09-02, LAST thing in the arc; LANDED 2026-09-03 - the
+### stories page in the daslang.io blog shape, two stories, three review passes each)
 
 - dasllama.io gains a **stories** page. Voice: plain engineering "we"; the authorship of the
   project is not a topic for the site or this repo (Boris's ruling, 2026-09-02).
