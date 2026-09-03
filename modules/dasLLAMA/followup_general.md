@@ -1178,3 +1178,10 @@
    path) a head-baked and a head-less image share one identity: the trunk-alone image loads silently
    on an MTP run, and `dlim_image_verdict` calls both CURRENT. Done = the head fold lives in
    `image_identity`, with the one-time re-mint of the headed images that implies.
+100. **The K-quant mul_mm twins carry no `rows % 64` contract.** Their grid is `rows/64` and the
+   kernel stores whole 64-column tiles (`dasllama/dasllama_metal_kernels.das`, `MetalKqMulMmK45T`),
+   so a weight-row count off 64 drops the last columns silently at every kq mul_mm site: the batch
+   driver's `use_mm` gate checks `% 64` for the q8 mm only, and `enc_kq_site_b` at nine rows and up
+   takes the kq mm with no such gate. `mp % 32` is declared; `rows` is not. Done = a census of every
+   kq mul_mm site's `rows` (decode, prefill, the `_t` / `_th` twins), `rows % 64` declared where the
+   census clears, a site gate where it does not.

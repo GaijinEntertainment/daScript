@@ -55,7 +55,8 @@ verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose 
 same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay, which re-runs row 0
 from the pre-verify recurrent state; vff = the same-slab batch verify's four rows vs four plain
 steps; count = speculative free-run == plain free-run, token-exact, counting prompt, at depth 1, 2
-and 4). The same file carries the BATCH RAIL's parity arms per verify-fixture tag `l1b g12 q30 q38
+and 4; `mtp-count8-<tag>` = the same at depth 8, the deepest round - nine verify rows). The same
+file carries the BATCH RAIL's parity arms per verify-fixture tag `l1b g12 q30 q38
 g26` (Llama-3.2-1B, gemma-4-12B, Qwen3-30B-A3B, Qwen3.8-27B head-less - the hybrid graph the rail
 declines, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single step
 at B=2/B=4 on identical real-text tokens plus one CPU reference row (the batch rail's logits gate -

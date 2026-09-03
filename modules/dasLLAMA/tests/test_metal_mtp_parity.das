@@ -240,6 +240,9 @@ def private served_twin(path : string; seq_cap : int64) : Model {
 // GPU-vs-GPU forced-feed envelope: two metal rails on the same feeds differ by kernel spelling
 // only (the standing kernel-swap gates sit near 0.01); 0.5 is the one-step decode gate's bar.
 let FF_TOL = 0.5
+// the batch driver's kq mul_mm (nine rows and up) stages x to half - a wider envelope than the
+// f32-x GEMV forms', flips still zero
+let MM_TOL = 1.0
 let FF_STEPS = 48l
 let COUNT_STEPS = 40l
 
@@ -624,6 +627,11 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
             count_cell(t, tr, trg, tag, count, 2l)
             count_cell(t, tr, trg, tag, count, 4l)
         }
+
+        // the deepest round: depth 8 verifies MTP_MAX_ROWS rows, one past the eight-row GEMV rail
+        if (arm_on(t, "mtp-count8-{tag}")) {
+            count_cell(t, tr, trg, tag, count, 8l)
+        }
     }
 }
 
@@ -706,8 +714,8 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
         if (arm_on(t, "mtp-vff5-{tag}")) {   // five rows: the batch driver's GEMM rail (mp 32) under the same-slab verify
             vff_cell(t, tr, trg, tag, prose_a, tol, 5l, must_serve, expect_decline)
         }
-        if (arm_on(t, "mtp-vff9-{tag}")) {   // nine rows = MTP_MAX_ROWS, the deepest verify the round can ask for
-            vff_cell(t, tr, trg, tag, prose_a, tol, 9l, must_serve, expect_decline)
+        if (arm_on(t, "mtp-vff9-{tag}")) {   // nine rows = MTP_MAX_ROWS: the batch driver's mul_mm rail (kq planes stage x to half)
+            vff_cell(t, tr, trg, tag, prose_a, trg.kquant_native ? max(tol, MM_TOL) : tol, 9l, must_serve, expect_decline)
         }
         // the assistant drafter's round (gemma-4 targets with an mtp-* sidecar beside them): counting
         // free-run, speculative == plain at depth 1, 2 and 4

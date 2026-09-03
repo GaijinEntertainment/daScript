@@ -57,8 +57,8 @@ tail-guard-free main loop and the DRIVER does the shape routing: the fixed-B mul
 K in 256 (B2) / 128 (B4) element chunks, and the batched decode driver gates each mv site on its
 own K (`mv_kdim`, `mv_wo`, `mv_w2`), falling to the tail-exact GEMV form where the alignment
 fails (gemma-4-26B-A4B's dense hidden 2112 on the w2 site). Every `[metal_dispatch]` GEMM form
-carries its grid divisors the same way - the production mul_mm `mp % 32, d % 64`, the 32- and
-64-wide GEMM-B forms and their tensor twins `ka.ndim % 32|64` with the q8 block `ka.kdim % 32`,
+carries its grid divisors the same way - the production mul_mm `mp % 32, d % 64`, the K-quant
+mul_mm twins `mp % 32`, the 32- and 64-wide GEMM-B forms and their tensor twins `ka.ndim % 32|64` with the q8 block `ka.kdim % 32`,
 the split-K pair `d % 32` - so a grid that would have truncated silently now names the site.
 A contract on a value that reaches the builder only as a bound uniform BUFFER (the mul_mm's K)
 stays with the caller: the dispatch never pays a readback.
@@ -94,16 +94,24 @@ first arm is the incumbent and the second is the "tensor" side whose win crowns:
 times the twin against B single passes (the passes are "tensor"), `race_kq_k4_form` the ext twin
 against the tile (the tile is "tensor").
 
+Past eight rows the form is the panel's. The kq mul_mm twins dispatch `mp / 32` threadgroups
+along M, so `enc_kq_site_b` takes them only over a panel padded to that tile (`mp` a multiple of
+32) - the batch driver's at nine rows and up. The verify's panel is padded to the GEMV forms'
+4-row tile (sec.2.32), so its nine rows (`MTP_MAX_ROWS`, depth 8) ride the small-batch forms: the
+first eight as the eight-row dispatch, each row past eight as a single pass at its own x and y row
+offsets. An unpadded nine-row panel handed to the mul_mm dispatches no threadgroup at all; the
+twins' `mp % 32` contract names that site instead of leaving the output unwritten.
+
 ### 2.32 The verify's row buffers are padded to the GEMV form's row tile {#verify-row-pad}
 
 **A multi-row verify sizes every row buffer to a whole 4-row tile, and the pad rows are owned
 scratch.** `acquire_step` takes `mp = ceil(nrows / 4) * 4` (a single-row step stays at 1) and sizes
 `bx`, `bxb`, `bqkv`, `bh12`, `blog` and the deltanet rows to `mp` rows; the rope tables stay at the
 live `nrows`. The fixed-B GEMV forms write a full tile - `enc_gemv_rows` dispatches the B2 form at
-one or two rows, the B4 form at three or four, and two B4 tiles at five to eight, the second
-offsetting x by four rows of n floats and y by four rows of the site's y stride - so the spare rows
-of the last tile compute garbage that must land inside an allocation this step owns and nobody
-reads. A row buffer sized to the live count puts that garbage on whatever the pool put next to it.
+one or two rows, the B4 form at three or four, two B4 tiles at five to eight and three at nine to
+twelve, each tile past the first offsetting x by its first row's count of n floats and y by the
+same rows of the site's y stride - so the spare rows of the last tile compute garbage that must
+land inside an allocation this step owns and nobody reads. A row buffer sized to the live count puts that garbage on whatever the pool put next to it.
 
 ### 2.33 The NextN draft chain reads only what its own chain wrote {#mtp-nextn-chain}
 

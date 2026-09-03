@@ -1177,6 +1177,7 @@ def private enc_verify_site(t : Model; enc : MetalComputeEncoder?; fmt : KqFmt;
         let bw = blob_of(g_dev, t, woff)
         enc_gemv_rows(enc, nrows, bw.buf, bw.boff, bx, by, bn, bd, bys, n, rows, ys, uint64(ycol * 4l))
     } else {
+        //! mp = the live count: the verify's panel is padded to the 4-row GEMV tile, so nine rows take the small-batch forms, not the mul_mm
         enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, n, by, ys, ycol, bn, bd, bys, nrows, nrows)
     }
 }

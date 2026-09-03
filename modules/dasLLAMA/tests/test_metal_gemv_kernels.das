@@ -909,3 +909,138 @@ def test_metal_kq_gemv_kernels(t : T?) {
         }
     }
 }
+
+// ===== the verify's q8 row tilers (enc_gemv_rows / enc_gemv_w13sw_rows over the decode PSOs) =====
+
+// the rows a tiler writes at nrows live rows: the B2 form covers two, every B4 tile four
+def private tiler_rows_written(nrows : int) : int {
+    return nrows <= 2 ? 2 : ((nrows + 3) / 4) * 4
+}
+
+// nrows live rows through the production tiler against the CPU dot. The x panel is padded to the
+// 4-row tile with zero rows and y holds the padded rows; the compare covers the whole panel, so a
+// live row the tiler skipped keeps its sentinel and reads as a mismatch.
+def private gemv_rows_gate(t : T?; queue; nrows, ndim, ddim, ys : int) {
+    let tag = "gemv_rows nrows={nrows} n={ndim} d={ddim} ys={ys}"
+    var err : string
+    let mp = ((nrows + 3) / 4) * 4
+    let wrote = tiler_rows_written(nrows)
+    var blob : array<uint8>
+    var wdeq : array<float>
+    q8_blob_fill(ddim, ndim / 32, blob, wdeq)
+    var xf : array<float>
+    q8_x_fill(nrows * ndim, xf)
+    xf |> resize(mp * ndim)
+    var want : array<float>
+    want |> resize(mp * ys)
+    for (i in range(mp * ys)) {
+        want[i] = -1000.0
+    }
+    for (b in range(wrote)) {
+        for (r in range(ddim)) {
+            var acc = 0.0lf
+            for (c in range(ndim)) {
+                acc += double(wdeq[r * ndim + c]) * double(xf[b * ndim + c])
+            }
+            want[b * ys + r] = float(acc)
+        }
+    }
+    var bw = buf_upload(g_dev, blob)
+    var bx = buf_upload(g_dev, xf)
+    var by = buf_fill(g_dev, mp * ys, -1000.0)
+    var bn = buf_u32(g_dev, uint(ndim))
+    var bd = buf_u32(g_dev, uint(ddim))
+    var bys = buf_u32(g_dev, uint(ys))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        enc_gemv_rows(enc, int64(nrows), bw, 0ul, bx, by, bn, bd, bys, int64(ndim), int64(ddim), int64(ys))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(by, want, tag), 0)
+    }
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bn)
+    metal_release(bd)
+    metal_release(bys)
+    delete blob
+    delete wdeq
+    delete xf
+    delete want
+}
+
+// the fused W1|W3 + swiglu tiler on one blob holding the w1 rows then the w3 rows
+def private w13sw_rows_gate(t : T?; queue; nrows, ndim, hidden : int) {
+    let tag = "w13sw_rows nrows={nrows} n={ndim} h={hidden}"
+    var err : string
+    let mp = ((nrows + 3) / 4) * 4
+    let wrote = tiler_rows_written(nrows)
+    let nb = ndim / 32
+    var blob : array<uint8>
+    var wdeq : array<float>
+    q8_blob_fill(2 * hidden, nb, blob, wdeq)
+    let w3off = uint64(hidden * nb * 34)
+    var xf : array<float>
+    q8_x_fill(nrows * ndim, xf)
+    xf |> resize(mp * ndim)
+    var want : array<float>
+    want |> resize(mp * hidden)
+    for (i in range(mp * hidden)) {
+        want[i] = -1000.0
+    }
+    for (b in range(wrote)) {
+        for (r in range(hidden)) {
+            var g = 0.0lf
+            var u = 0.0lf
+            for (c in range(ndim)) {
+                g += double(wdeq[r * ndim + c]) * double(xf[b * ndim + c])
+                u += double(wdeq[(hidden + r) * ndim + c]) * double(xf[b * ndim + c])
+            }
+            want[b * hidden + r] = silu_gelu_ref(g, u, false)
+        }
+    }
+    var bw = buf_upload(g_dev, blob)
+    var bx = buf_upload(g_dev, xf)
+    var by = buf_fill(g_dev, mp * hidden, -1000.0)
+    var bn = buf_u32(g_dev, uint(ndim))
+    var bhid = buf_u32(g_dev, uint(hidden))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        enc_gemv_w13sw_rows(enc, int64(nrows), bw, 0ul, w3off, bx, by, bn, bhid, int64(ndim), int64(hidden))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(by, want, tag), 0)
+    }
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bn)
+    metal_release(bhid)
+    delete blob
+    delete wdeq
+    delete xf
+    delete want
+}
+
+[test]
+def test_metal_gemv_rows_tiles(t : T?) {
+    t |> run("the verify's q8 row tilers write every live row at 2, 5 and 9 rows") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!metal_decode_init()) {
+                t |> skip("no Metal device")
+                return
+            }
+            var queue = metal_new_command_queue(g_dev)
+            gemv_rows_gate(t, queue, 2, 256, 8, 24)
+            gemv_rows_gate(t, queue, 5, 256, 8, 24)
+            gemv_rows_gate(t, queue, 9, 256, 8, 24)   // MTP_MAX_ROWS: the third tile
+            w13sw_rows_gate(t, queue, 5, 320, 18)
+            w13sw_rows_gate(t, queue, 9, 320, 18)
+            metal_release(queue)
+            metal_decode_shutdown()
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}

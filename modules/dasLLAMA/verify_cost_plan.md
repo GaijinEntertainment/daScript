@@ -121,10 +121,17 @@ second dispatch joins it. S2's first kernel is the expert gather.
 
 ## S1 - the depth-8 rail hole (a failing test first)
 
-`MTP_MAX_ROWS = 9` and the round clamps k to 8, so depth 8 verifies 9 rows; the NextN site wrapper
-has no rail switch past 8 rows and a K-quant site would reach the GEMM with mp = 9 against a
-32-row grid. Test: a same-slab verify at 9 rows on a K-quant carrier (`mtp-vff9-<tag>`), expected
-red today; the fix follows the test.
+`MTP_MAX_ROWS = 9` and the round clamps k to 8, so depth 8 verifies 9 rows. Found red by
+`mtp-count8-3.8-27b`: the Qwen3.8-27B round at depth 8 decodes garbage from the third token. Two
+holes, both silent: the K-quant site handed the mul_mm an unpadded nine-row panel (mp = 9, a 9/32
+grid dispatches nothing, the twins carried no `requires`), and the q8 site computed rows 0..7 only
+(two four-row tiles; `mtp-count8-0.8b` passed because eight straight accepts never happened in 40
+tokens). Fix: kq sites ride the eight-row form plus a single pass per row past eight, q8 sites a
+third four-row tile, and the kq mul_mm dispatchers carry `mp % 32`. Tests: `mtp-count8-<tag>` (the
+round) and `test_metal_gemv_rows_tiles` (the q8 tiler at 2 / 5 / 9 rows). The batch driver's own
+nine-row route was already right (mp 32); its kq mul_mm reads maxd 0.60 with zero flips on
+gemma-12B, so `mtp-vff9` takes `MM_TOL` on kq carriers. Ruler records hold depths 1 and 2 only -
+none poisoned.
 
 ## S2 - the kernels the split names (ranked by the report, re-ranked by S0)
 

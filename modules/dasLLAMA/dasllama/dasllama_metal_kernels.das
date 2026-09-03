@@ -3887,6 +3887,7 @@ def private kq_b8_on : bool {
 def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64;   // nolint:STYLE037,STYLE038 — the flat per-format ladder (one arm per kq format) is the honest shape
                bs : MetalBuffer ?; soff, doff : uint64; bx, by : MetalBuffer?; yoff : uint64;
                var ka : KqMvArgs; rows, nlive : int64) {
+    assert(nlive <= 8l, "the small-batch forms cover eight rows")
     let two = nlive == 2l
     let b8 = nlive >= 5l && kq_b8_on()
     let gcols = (nlive + 3l) / 4l
@@ -4041,7 +4042,8 @@ def enc_site_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
 var private g_kq_rows_crowned : bool[16]
 var private g_kq_k4_r2_crowned : bool
 
-//! B >= 9 leaves the crown behind and takes the kq mul_mm twin over the M-padded x panel
+//! B >= 9 over a panel padded to the mul_mm's 32-row tile takes the kq mul_mm twin; an unpadded
+//! nine-row panel (the verify's) rides the eight-row form plus a single pass per row past eight
 [arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
 def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
                   bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
@@ -4049,7 +4051,15 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
     if (nrows > 8l) {
-        enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bys, mp, rows)
+        if (mp % 32l == 0l) {
+            enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bys, mp, rows)
+            return
+        }
+        enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, xstride, by, ystride, ycol, bn, bd, bys, 8l, 8l)
+        for (b in range64(8l, nrows)) {
+            enc_kq_gemv(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, bn, bd, rows, n,
+                uint64((b * ystride + ycol) * 4l), uint64(b * xstride * 4l))
+        }
         return
     }
     if (nrows >= 2l && !g_kq_rows_crowned[int(fmt)]) {
@@ -4277,6 +4287,9 @@ def enc_gemv_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; 
     if (nrows > 4l) {
         enc_gemv_b(enc, true, bw, boff, bx, by, bn, bd, bys, d, yoff + uint64(4l * ys * 4l), uint64(4l * n * 4l))
     }
+    if (nrows > 8l) {
+        enc_gemv_b(enc, true, bw, boff, bx, by, bn, bd, bys, d, yoff + uint64(8l * ys * 4l), uint64(8l * n * 4l))
+    }
 }
 
 // the mul_mv-shape fixed-B GEMV on an interleaved 34B blob (dual views of the SAME buffer);
@@ -4328,6 +4341,9 @@ def enc_gemv_w13sw_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuf
     enc_gemv_w13sw_b(enc, nrows > 2l, bw, w1off, w3off, bx, by, bn, bhid, hidden)
     if (nrows > 4l) {
         enc_gemv_w13sw_b(enc, true, bw, w1off, w3off, bx, by, bn, bhid, hidden, uint64(4l * n * 4l), uint64(4l * hidden * 4l))
+    }
+    if (nrows > 8l) {
+        enc_gemv_w13sw_b(enc, true, bw, w1off, w3off, bx, by, bn, bhid, hidden, uint64(8l * n * 4l), uint64(8l * hidden * 4l))
     }
 }
 
@@ -6326,13 +6342,13 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mm_k4_c", pso = "g_pso_kq_mm_b4", tgmem = "MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_k4_c", pso = "g_pso_kq_mm_b4", tgmem = "MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmK4 : MetalKqMulMmK45T {
     override BLK = 32u
     override QH = false
 }
 
-[metal_dispatch(name = "enc_kq_mm_k5_c", pso = "g_pso_kq_mm_b5", tgmem = "MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_k5_c", pso = "g_pso_kq_mm_b5", tgmem = "MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmK5 : MetalKqMulMmK45T {
     override BLK = 40u
     override QH = true
@@ -6340,53 +6356,53 @@ class MetalKqMulMmK5 : MetalKqMulMmK45T {
 
 // q6_K rides the SIXBIT arm; scalars reload per kb — the cached form cost an occupancy tier
 // (896 vs 1024 max_threads; bench_metal_kq_mm_lab measured -1.7..-10% per shape).
-[metal_dispatch(name = "enc_kq_mm_k6_c", pso = "g_pso_kq_mm_b6", tgmem = "MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_k6_c", pso = "g_pso_kq_mm_b6", tgmem = "MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmK6 : MetalKqMulMmK45T {
     override SIXBIT = true
 }
 
-[metal_dispatch(name = "enc_kq_mm_iq4xs_c", pso = "g_pso_kq_mm_b44", tgmem = "MetalKqMulMmIq4xs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_iq4xs_c", pso = "g_pso_kq_mm_b44", tgmem = "MetalKqMulMmIq4xs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmIq4xs : MetalKqMulMmK45T {
     override IQ4XS = true
 }
 
-[metal_dispatch(name = "enc_kq_mm_k3_c", pso = "g_pso_kq_mm_b3", tgmem = "MetalKqMulMmK3_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_k3_c", pso = "g_pso_kq_mm_b3", tgmem = "MetalKqMulMmK3_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmK3 : MetalKqMulMmK45T {
     override K3 = true
 }
 
-[metal_dispatch(name = "enc_kq_mm_iq3s_c", pso = "g_pso_kq_mm_b33", tgmem = "MetalKqMulMmIq3s_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_iq3s_c", pso = "g_pso_kq_mm_b33", tgmem = "MetalKqMulMmIq3s_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmIq3s : MetalKqMulMmK45T {
     override IQ3S = true
 }
 
-[metal_dispatch(name = "enc_kq_mm_iq3xxs_c", pso = "g_pso_kq_mm_b34", tgmem = "MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_iq3xxs_c", pso = "g_pso_kq_mm_b34", tgmem = "MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmIq3xxs : MetalKqMulMmK45T {
     override IQ3XXS = true
 }
 
-[metal_dispatch(name = "enc_kq_mm_k2_c", pso = "g_pso_kq_mm_b2", tgmem = "MetalKqMulMmK2_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_k2_c", pso = "g_pso_kq_mm_b2", tgmem = "MetalKqMulMmK2_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmK2 : MetalKqMulMmK45T {
     override K2 = true
 }
 
-[metal_dispatch(name = "enc_kq_mm_iq2s_c", pso = "g_pso_kq_mm_b23", tgmem = "MetalKqMulMmIq2s_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_iq2s_c", pso = "g_pso_kq_mm_b23", tgmem = "MetalKqMulMmIq2s_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmIq2s : MetalKqMulMmK45T {
     override IQ2S = true
 }
 
-[metal_dispatch(name = "enc_kq_mm_iq2xs_c", pso = "g_pso_kq_mm_b24", tgmem = "MetalKqMulMmIq2xs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_iq2xs_c", pso = "g_pso_kq_mm_b24", tgmem = "MetalKqMulMmIq2xs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmIq2xs : MetalKqMulMmK45T {
     override IQ2XS = true
 }
 
-[metal_dispatch(name = "enc_kq_mm_iq2xxs_c", pso = "g_pso_kq_mm_b25", tgmem = "MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_iq2xxs_c", pso = "g_pso_kq_mm_b25", tgmem = "MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmIq2xxs : MetalKqMulMmK45T {
     override IQ2XXS = true
 }
 
 // IQ4NL flips the scale read to q40's per-32-block d plane
-[metal_dispatch(name = "enc_kq_mm_iq4nl_c", pso = "g_pso_kq_mm_b45", tgmem = "MetalKqMulMmIq4nl_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
+[metal_dispatch(name = "enc_kq_mm_iq4nl_c", pso = "g_pso_kq_mm_b45", tgmem = "MetalKqMulMmIq4nl_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64", requires = "mp % 32")]
 class MetalKqMulMmIq4nl : MetalKqMulMmK45T {
     override IQ4XS = true
     override IQ4NL = true
