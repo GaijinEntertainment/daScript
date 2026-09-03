@@ -725,6 +725,9 @@ function renderModels(s) {
             (m.is_default ? '<span class="def">default</span>' : '') +
             '<span class="st' + (m.is_active ? ' active' : '') + '">' + (m.is_active ? 'active' : 'idle') + '</span>' +
             (m.holds_gpu ? '<span class="chip">gpu · ' + esc(m.backend_effective) + '</span>' : '') +
+            (m.vision || m.audio
+                ? '<span class="chip good tower" title="the towers this slot serves: images as image_url parts' +
+                  (m.audio ? ', clips as input_audio parts' : '') + '">' + [m.vision ? 'vision' : '', m.audio ? 'audio' : ''].filter(Boolean).join(' + ') + '</span>' : '') +
             '<span class="spacer"></span>' +
             (!m.is_active && slots.length > 1
                 ? '<button class="mini xs" type="button" data-activate="' + esc(m.name).replace(/"/g, "&quot;") + '">activate</button>' : '') +
@@ -1467,11 +1470,28 @@ function renderAudioStrip() {
     strip.append(note, x);
 }
 
+function audioNote(text) {
+    const strip = $("aud-strip");
+    strip.textContent = "";
+    strip.style.display = "";
+    const note = document.createElement("span");
+    note.className = "note";
+    note.textContent = text;
+    strip.append(note);
+}
+
 async function micToggle() {
     const btn = $("b-mic");
     if (btn.classList.contains("off")) {
-        towerHint(ASR_OFFER);
-        return;
+        // the button wears the LAST poll's verdict; a slot activated a moment ago has not reached
+        // it yet, so ask once more before sending the user to the catalog
+        const s = await fetch("/v1/stats").then(r => r.ok ? r.json() : null).catch(() => null);
+        if (!s || !(s.asr_workers > 0 || s.audio)) {
+            towerHint(ASR_OFFER);
+            return;
+        }
+        micNativeAudio = !!s.audio && !(s.asr_workers > 0);
+        btn.classList.remove("off");
     }
     if (micRec) {
         const { ctx, node, stream, chunks } = micRec;
@@ -1482,7 +1502,10 @@ async function micToggle() {
         stream.getTracks().forEach(t => t.stop());
         const rate = ctx.sampleRate;
         await ctx.close();
-        if (!chunks.length) return;
+        if (!chunks.length) {
+            audioNote("no audio captured — allow the microphone when the browser asks, then record again");
+            return;
+        }
         if (micNativeAudio) {
             // native audio: the wav attaches to the next chat message as an input_audio part —
             // the model hears the clip itself, no transcription pass
@@ -1512,6 +1535,7 @@ async function micToggle() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const ctx = new AudioContext();
+        if (ctx.state === "suspended") await ctx.resume();   // Safari starts a context suspended; still inside the click
         const src = ctx.createMediaStreamSource(stream);
         const node = ctx.createScriptProcessor(4096, 1, 1);
         const chunks = [];
@@ -1627,6 +1651,7 @@ $("a-rec").addEventListener("click", async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const ctx = new AudioContext();
+        if (ctx.state === "suspended") await ctx.resume();   // Safari starts a context suspended; still inside the click
         const src = ctx.createMediaStreamSource(stream);
         const node = ctx.createScriptProcessor(4096, 1, 1);
         const chunks = [];
@@ -3002,8 +3027,13 @@ function visionControl(e, dl) {
     }
     const s = document.createElement("span");
     s.className = "chip good";
-    s.textContent = i >= 0 ? "vision ✓" : "vision ready";
-    s.title = i >= 0 ? "the tower is wired into this model's config" : "tower downloaded - add the model to the roster to wire it";
+    // a slot loaded at runtime carries the tower without a roster row: the live stats are the truth
+    // there, and they also know whether the same mmproj brought an audio encoder along
+    const live = ((last && last.models) || []).find(m => m.name === e.file && m.vision);
+    const towers = live && live.audio ? "vision + audio" : "vision";
+    s.textContent = live ? towers + " ✓" : (i >= 0 ? "vision ✓" : "vision ready");
+    s.title = live ? "the tower is live on this slot" + (live.audio ? "; the same mmproj carries the audio encoder, so the chat mic attaches a clip" : "")
+        : (i >= 0 ? "the tower is wired into this model's config" : "tower downloaded - add the model to the roster to wire it");
     return s;
 }
 
