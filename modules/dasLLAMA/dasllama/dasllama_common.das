@@ -1528,7 +1528,7 @@ def dlim_config_sources_register() {
 }
 
 //! The Model's plane pair for a kq format - the dispatcher every plane-form consumer keys on.
-def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks : array<uint8> const?&) {   // nolint:STYLE037 — the format ladder
+def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks : array<uint8> const?&) {
     unsafe {
         if (fmt == KqFmt.k4) {
             kq = addr(t.k4q)
@@ -4638,6 +4638,8 @@ var g_kv_store_par_threshold = 256_000l
 // Thread the per-position FFN activation (silu/gelu) once hidden × npos clears this. Lower than the
 // memory-bound passes — each element pays a transcendental (exp/tanh), so the compute justifies threading sooner.
 var g_act_par_threshold = 100_000l
+// Thread the prefill's CPU embed (a dequantized row per token) once dim × npos clears this.
+var g_embed_par_threshold = 64_000l
 
 def set_attn_par_threshold(v : int64) { g_attn_par_threshold = max(v, 0l) }
 def get_attn_par_threshold() : int64 => g_attn_par_threshold
@@ -4651,6 +4653,8 @@ def set_kv_store_par_threshold(v : int64) { g_kv_store_par_threshold = max(v, 0l
 def get_kv_store_par_threshold() : int64 => g_kv_store_par_threshold
 def set_act_par_threshold(v : int64) { g_act_par_threshold = max(v, 0l) }
 def get_act_par_threshold() : int64 => g_act_par_threshold
+def set_embed_par_threshold(v : int64) { g_embed_par_threshold = max(v, 0l) }
+def get_embed_par_threshold() : int64 => g_embed_par_threshold
 
 // Decode attention threads work-proportionally; the M1-measured threshold knob is now owned per
 // box by target_chunk_work.
@@ -5090,6 +5094,21 @@ def attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64) {
     prof_add("act_resid", ts_resid0)
 }
 
+def private embed_rows(t : Model; var s : Session; tokens : array<int64>; npos : int64) {
+    let dim = t.config.dim
+    let tp = unsafe(addr(t))
+    let tkp = unsafe(addr(tokens[0]))
+    var xp = unsafe(addr(s.x_b[0]))
+    maybe_parallel_for(dim * npos >= g_embed_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+        unsafe {
+            for (p in range(rb, re)) {
+                var dp = xp + int64(p) * dim
+                embed_row(*tp, tkp[p], dp)
+            }
+        }
+    }
+}
+
 // The GPU arm shared by the std and gated prefill blocks: the whole attention block (GEMMs,
 // qk-norm, rope, flash-style attention, wo) as one device chain per window; norm, activation
 // image, KV-store, and residual stay CPU. Numerics: GPU f32 tile accumulation — drift-class vs CPU flash.
@@ -5124,9 +5143,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         s.embed_gpu_pending = true
     } else {
         s.embed_gpu_pending = false
-        for (p in range64(npos)) {
-            embed_row(t, tokens[p], unsafe(addr(s.x_b[p * dim])))
-        }
+        embed_rows(t, s, tokens, npos)
         if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
             scale_inplace(unsafe(addr(s.x_b[0])), c.embed_scale, npos * dim)
         }

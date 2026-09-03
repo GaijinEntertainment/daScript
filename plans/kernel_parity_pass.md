@@ -1104,3 +1104,179 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   DECVEC overrides stand on the in-process instrument. The instrument's own first run caught a seat
   defect: the strip mutated the class's emitted words in place, so a later rebuild with the twin on
   served stripped words - the seat now strips a copy.
+
+- 2026-09-02: Vulkan gap 1, the budget split (queue item 1; measurement only). One pp512 window
+  of Llama-3.2-1B Q4_K_M on the 5060 Ti, driver 616.56, both engines on the four-wide decode:
+  llama.cpp's `GGML_VK_PERF_LOGGER=1` op rows (`llama-bench -p 512 -n 0 -r 2 -ngl 99`, the last
+  graph) against our `DASLLAMA_GPU_PROF=1` role stamps (`lcpp_bench --for-debug-purposes --plen
+  512 --ngen 0 --reps 2`, three windows within 3%). GPU time per window, us:
+
+  | role | ours | llama.cpp | ratio |
+  |---|---|---|---|
+  | q + wo (2048 <- 2048) | 3251 | 2617 | 1.24 |
+  | k + v (512 <- 2048) | 2111 | 964 | 2.19 |
+  | gate + up (8192 <- 2048) | 12496 | 8858 (30 of 32 at n=512) | 1.32 normalized |
+  | down (2048 <- 8192) | 6372 | 4914 (15 of 16 at n=512) | 1.22 normalized |
+  | classifier (last row) | 528 | 536 | 0.99 |
+  | GEMM total | 24758 | 17985 | 1.38 |
+  | attention | 903 | 902 | 1.00 |
+  | everything else (norms, rope, act, requant, residual) | 2116 | 3415 | 0.62 |
+  | window total | 27777 | 22302 | 1.25 |
+
+  Verdict: the gap is the GEMM and nothing else - our non-GEMM side is 1.3 ms AHEAD and the
+  attention is at parity. The 6.8 ms GEMM gap splits three ways: (a) the big tiles run 1.22-1.32x
+  slower (4.8 ms; 41-47 TFLOPS against llama.cpp's 50-58 - the memo's scale-hoist territory);
+  (b) the narrow k/v shape (d = 512) runs 2.2x slower (1.1 ms): `cm2_tile_cols` picks the 128-tile
+  and `cm2_split_k` doubles it to 32 workgroups on 36 SMs - one wave, one workgroup per SM, 18.7
+  TFLOPS; (c) llama.cpp slices to the last token after the last layer's attention, so its
+  last-layer gate/up/down/act run at n=1 while ours run the whole window and requantize one row
+  (0.9 ms, 3%). Beyond the GPU: our wall per window is 33.5 ms (15295 tok/s) against a 27.8 ms
+  GPU total, llama.cpp's 25.2 ms (20309) against 22.3 - 5.7 ms of host per window against 2.9,
+  a further 2.8 ms (8% of our wall) outside every kernel. Logs: scratchpad lcpp_perf_q4km.log,
+  our_prof_q4km.log.
+
+- 2026-09-02: Vulkan gap 1 (b) landed - the split-k pick counts the dispatch group. The force-knob
+  sweep on the Q4_K_M window (`DASLLAMA_CM2_TILE` x `DASLLAMA_CM2_SPLITK` over `lcpp_bench
+  --for-debug-purposes --plen 512 --ngen 0 --reps 2` under `DASLLAMA_GPU=1 DASLLAMA_GPU_PROF=1`,
+  the per-role stamps of the last window, plain runs bracketing every arm; every window figure
+  in the bullets below is that rig's) showed the k and v roles' 2.2x was not the tile: with split-k off and the same m
+  tile, k+v fell from 1917 to 1264 us, because k and v stop serializing through the shared
+  split-k scratch and co-run under the hazard rail (the v stamp then reads only v's tail, 184 us).
+  Forced split-k 4 or 8 and the s tile run 2-3x slower on every big role (one 512x8192 f32 plane
+  per split written and re-read; the path costs 2.4x its bandwidth estimate - not pursued, no big
+  role splits by heuristic), and the l tile with split 4 made attention 4.7x slower (4303 us): an
+  aliasing smell in the split-k scratch to look at before split-k is ever widened. The fix:
+  `cm2_split_k` takes the neighbours' workgroups (`cm2_tiles`) - q beside k and v, gate beside up.
+  After, two windows: k 921-931 + v 217-219 = 1140-1148 us against 1913-1917 before (-40% on the
+  pair; llama.cpp 964, so 1.18x, in line with the other shapes), window 27183-27289 against
+  27651-27727, pp512 16045-16190 tok/s against 15671-15841 (+2.3%). The lone k GEMM at 16
+  workgroups unsplit costs the same 921 us as split in two over 32: the split never bought the
+  lone role anything on this box. Drift note: a plain window ranged 27.6-30.2 ms across the hour
+  (wo, down and rope_kv drift together), so every A/B on this box is bracketed by plain runs.
+
+- 2026-09-02: Vulkan gap 1 (a), the scale hoist measured and killed for k6; the lever is the twin
+  body. The probe's `k6x` ladder at the 3B q6k shapes (l tile, TF/s, gate | down): constant
+  decode 60.1 | 42.3, nibble-only compose 47.3 | 36.1, full compose without scale reads 38.7 |
+  30.0, shipped 38.5 | 28.3. The scale plane costs 0-6%; the decode compose costs a third of the
+  ceiling. Same rows un-barriered (16 dispatches overlapping): 45.3 | 48.6 - the lone-dispatch
+  wave tail at the 3B shapes (down: 40 tiles on 36 SMs) is worth as much as the decode, a 3B
+  story, not the 1B's (its down GEMM is 32 l-tiles in one wave). So delta 1 (shAscales) is dead
+  for k6 and untested for k4, because the cheaper lever came first: the synthesized four-wide twin
+  repeats the whole scalar body four times, and a HAND-LAID twin shares what four consecutive
+  elements share. The template gains a `DECV4` axis (the format's own `decode_v4` rides the loads
+  instead of the synthesized twin); k4's twin reads its four nibbles as two 16-bit lanes and
+  extracts `(d*sc, dmin*mn)` once, scalar operation order kept. `cm2:k4`, two rounds, hand-laid
+  twin | stripped (TF/s): gate l 47.0/45.4 | 33.9/35.4, gate m 48.1/40.1 | 26.7/27.4, down l
+  37.6/33.4 | 25.6, down m 43.0/38.1 | 23.2, q/wo l 52.4/48.2 | 36.0. Against the synthesized
+  twin's rows above (gate l 41.4/40.8, down l 31.5): +10-19% at the tile. Oracle suite 88/88
+  under the hand-laid twin (bit-exact). The Q4_K_M window with the k4 twin alone, two runs (us):
+  q 1382 (was 1688), k+v 912-1050 (1140), wo 1297 (1553), gate 5612 (6658), up 4782 (5905),
+  down 5345-5836 (6396), window 22852-23500 (27183-27289), pp512 18176-18722 tok/s (16045-16190,
+  +14%). The window now sits at 1.02-1.05x of llama.cpp's 22302; the wall (0.92x of 20309 tok/s)
+  carries the host gap, item 4. The same twin for the other K-quants, `cm2:<fmt>` two rounds,
+  l tile ms/dispatch hand-laid | stripped (gate, down, q/wo): k6 0.569-0.572 | 0.748, 0.780-0.784
+  | 1.015-1.034, 0.214 | 0.291 (gate 44.8 TF/s against the synthesized twin's 38.5, +16%; down
+  32.7 against 28.3); k5 0.552-0.559 | 0.831-0.838, 0.725-0.730 | 1.102-1.108, 0.210-0.213 |
+  0.324; k3 0.524-0.538 | 0.658-0.676, 0.723 | 0.902-0.905, 0.212-0.215 | 0.276; k2 0.484-0.491
+  | 0.651-0.662, 0.660-0.664 | 0.887-0.897, 0.199-0.200 | 0.273-0.274. The m tile follows the
+  same sign on every row. Every K-quant's hand-laid twin beats the stripped arm by 25-50% where
+  the synthesized one managed 7-37%. The rest, l tile TF/s hand-laid | stripped (gate, down,
+  q/wo; two rounds): q40 51.0-51.6 | 44.8-45.2, 39.3-40.1 | 34.9-35.1, 56.3-58.0 | 48.8-49.0;
+  iq4xs 46.3-48.9 | 39.1-39.3, 37.5 | 30.1, 53.0-53.5 | 42.8; iq4nl 44.2-51.8 | 44.5-44.6, 39.9
+  | 34.5, 55.8-56.5 | 48.1-48.3; iq3xxs 46.5-47.4 | 28.1-29.0, 34.5 | 21.1, 48.4-50.5 |
+  30.3-30.5; iq3s 43.4-48.1 | 29.2-30.1, 36.1-36.3 | 22.5-22.6, 50.6-51.3 | 32.4-32.5; iq2s
+  48.9-50.4 | 30.2-32.5, 35.8-35.9 | 23.6-24.0, 51.1-52.6 | 33.2-33.3; iq2xxs 43.6-45.8 |
+  33.8-35.2, 32.5-32.6 | 25.4, 45.8-46.2 | 35.4-35.5; iq2xs 47.9-53.4 | 35.1-37.8, 37.5 |
+  28.0, 52.6-52.7 | 38.1-38.2. Every grid format's hand-laid twin wins 30-65% where the
+  synthesized one was flat (iq3xxs, iq2xs) or lost (iq3s, iq2s, iq2xxs): the grid lookup and
+  the sign parity are per four elements, and the synthesized twin ran them four times. The
+  three `DECVEC` opt-outs are retired; followup_vulkan 36 closes with this. All thirteen kq
+  formats now ship a hand-laid twin. With every twin, the Q4_K_M window: 22787-23034 us,
+  pp512 18382-18544 tok/s; oracle 88/88, lint green.
+
+- 2026-09-02: Vulkan gap 1 (c) landed - the last layer's FFN runs on the window's last 32
+  rows. Only the classifier's row is read past the final layer (the KV mirrors were stored
+  before the FFN; a later window starts from fresh embeddings), so gate, up, down, the
+  activation and the residual step of the last layer take a region 32 rows below the window's
+  end: 32 rather than one because the s tile's fast path loads a whole 32-row column unclamped
+  and the resident planes carry no read slack. Plumbing: `fill_arena_batch_sched` row base,
+  `ActArgs.elem0`, `ArArgs.row0`; f16-fed cm2 route only. The first cut shipped a bug the tier
+  suite (36/36) did not see and the bench's sanity line did: the sliced down GEMM (2048 wide,
+  K 8192) still qualified for split-k, and the split-k reduce sums dense planes from row 0, so
+  the classifier read stale rows (argmax 2242 " config" against every earlier run's 319). A
+  sliced region never splits k now; sanity back to argmax 319 and the tg4 logit 8.516193, bit
+  for bit the pre-slice value. Two windows: 22076-22085 us (from 22787-23034), pp512
+  18786-19457 tok/s. THE GPU WINDOW NOW READS 0.99x OF llama.cpp's 22302 us. LESSON for the
+  next slice-shaped change: the tier suite's small model never reaches the split-k branch -
+  a golden-output witness at the 1B shapes is the parity pregate (frozen fixture, Q8_0 has
+  one) or the bench's sanity argmax/logit against a recorded value. Q8_0 with the slice:
+  parity pregate 40/40 token-for-token, window 19954 us, pp512 23827 tok/s - past llama.cpp's
+  20237 tok/s on that vehicle.
+
+- 2026-09-02: Vulkan gap 1 (d), the host budget measured. `JOBQUE_PROFILING=1 lcpp_bench
+  --prof` on the Q4_K_M window: wall 25728 us against a 22.1 ms GPU window; buckets embed 2179
+  us (the CPU `embed_row` over 512 tokens plus the 4 MB x upload), rope_build 152, alloc 17;
+  the driver's own prep 460 and record 570 sit outside the buckets. llama.cpp gathers the
+  embedding on the device (GET_ROWS, 6 us). The device gather rail exists
+  (`vk_rdec_prefill_ids`, `vk_rdec_set_emb`) but the embed gate keeps this model on the CPU
+  embed: the gather kernel serves q8 tied planes and the f32 table only, and the 1B ties a
+  q6_K plane (followup_vulkan 37 = the kq gather; the 6 us is llama.cpp's `GGML_VK_PERF_LOGGER=1`
+  GET_ROWS row). Landed instead, the cheap half:
+  `forward_prefill`'s embed loop runs across the dispatch lanes (`maybe_parallel_for` with
+  hoisted raw pointers - a parallel block cannot capture the model). Embed bucket 2179 -> 295
+  us, profiled window wall 25728 -> 24106. Timed windows after (two runs that read 24.3-24.4 ms
+  GPU were drift - wo, gate, down and act inflated together - and a bracket brought the same
+  binary back): GPU 22065-22118 us, pp512 20812-20822 tok/s, sanity argmax 319 / tg logit
+  8.516193, Q8_0 parity 40/40. llama.cpp on the same box, same driver, four-wide decode: pp512
+  20309 tok/s. Q4_K_M 1B pp512 stands at 1.025x of llama.cpp; the day's ladder on the window:
+  27.8 ms (morning) -> 27.2 (group-aware split-k) -> 22.9 (hand-laid twins) -> 22.1 (last-layer
+  slice), wall 15.3k -> 20.8k tok/s (embed parallel). Left on the table: the kq device gather
+  (embed 295 us + the 4 MB x upload inside prep 460), rope_build 151 us, record 570 us.
+
+- 2026-09-02: the ten-vehicle board on the branch tip (`lcpp_bench --for-debug-purposes --plen
+  512 --ngen 128 --reps 6`, the bench's mean +- sd) against the llama.cpp rows above (vector
+  build, medians of six, same box and driver):
+
+  | format | pp512 ours | pp512 llama.cpp | ratio | tg128 ours | tg128 llama.cpp | ratio |
+  |---|---|---|---|---|---|---|
+  | Q4_K_M | 21023 +- 296 | 20309 | 1.04 | 338.0 | 354.2 | 0.95 |
+  | Q3_K_L | 16984 +- 1031 | 18883 | 0.90 | 351.0 | 332.7 | 1.06 |
+  | Q2_K | 21824 +- 395 | 19684 | 1.11 | 410.0 | 400.7 | 1.02 |
+  | IQ4_XS | 19443 +- 1874 | 19515 | 1.00 | 321.5 | 331.4 | 0.97 |
+  | IQ4_NL | 22042 +- 435 | 20488 | 1.08 | 326.1 | 344.8 | 0.95 |
+  | IQ3_M | 17692 +- 677 | 19638 | 0.90 | 267.2 | 306.4 | 0.87 |
+  | IQ3_XXS | 19684 +- 513 | 19488 | 1.01 | 347.5 | 355.4 | 0.98 |
+  | IQ2_XS | 21828 +- 284 | 20011 | 1.09 | 183.0 | 329.4 | 0.56 |
+  | IQ2_XXS | 18870 +- 409 | 20052 | 0.94 | 278.6 | 390.8 | 0.71 |
+  | Q8_0 | 23974 +- 172 | 20237 | 1.19 | 233.5 +- 42 | 249.9 | 0.93 |
+
+  pp512 (this arc's gap 1): seven of ten at or past 1.0 from a 0.67-0.90 start; the three below
+  are Q3_K_L 0.90 (a 6% spread on our side), IQ3_M 0.90 and IQ2_XXS 0.94 - the k3, iq3s and
+  iq2xxs tiles, whose per-shape reference rows (llama.cpp's perf-logger MUL_MAT rows per format)
+  are the next mirror-bench pass. tg128 is gap 3 (the grid tg tails: IQ2_XS 0.56, IQ2_XXS 0.71,
+  IQ3_M 0.87; followup_vulkan 35), untouched by this arc. Every figure here is a stage reading
+  of the debug rig named in its heading, not a board cell; the board rows the arc owes are in
+  `modules/dasLLAMA/PERF_LEDGER.md` (the record stamp refuses this box while the remote-access
+  daemon runs).
+
+- 2026-09-02: the audit round's witnesses. The frozen parity fixtures' prompts are 5-20 tokens
+  and never reach the 32-row slice, so `tests/test_parity_pregate.das` gains a cell that prefills
+  512 tokens each way on the resident driver (the `g_pf_ffn_slice` hook; `DASLLAMA_VK_FFN_SLICE=0`
+  is the same arm from the environment) and compares the logits exactly; cls_ar and actf16 gain
+  cells with their new bases non-zero; the slice row and the split pick are pure functions with
+  pins. Two lessons from running the pregate file with the models present: (a) gemma-4-E2B Q8_0,
+  Qwen3-0.6B Q8_0 and Qwen3-4B Q4_K_M diverge or assert (`decode attention block geometry
+  changed under a live model`) when loaded back to back in ONE dastest process under
+  `DASLLAMA_GPU=1`, and each reproduces 40/40 alone through `lcpp_bench --parity` - the test
+  file's multi-model process state, pre-existing, not this diff; (b) the bool form of
+  `maybe_parallel_for` dispatched jobs whenever its flag was true, queue or not, so the first
+  que-less process to cross a prefill threshold (this cell, on the embed) died in
+  `new_job_invoke`; twenty sibling prefill sites share the shape and none had been reached
+  without a queue before (the small carriers stay under every threshold). The form now runs
+  inline in a que-less process (`dasllama_par.das`, one guard in the macro; the cell in
+  `tests/test_par_indexed.das` pins it); the slice cell arms a queue anyway to mirror the
+  bench; (c) a session built with the default f32
+  cache codec is declined by the resident driver silently (the armed mirror is f16), so the
+  cell's first shape compared the CPU rail against itself for twenty minutes and passed - a
+  two-arm compare on the driver builds f16 sessions like the bench and asserts the driver's
+  session stamp (`rdec_gen != 0`) on both arms, or it proves nothing.

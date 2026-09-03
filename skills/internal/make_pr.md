@@ -159,4 +159,9 @@ Where to look: <entry points, risky spots>.
 :robot: Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
+**No session link, ever.** A `claude.ai/code/session_...` URL never appears in a PR body, a
+commit message (no `Claude-Session:` trailer), a review reply, or anything else pushed - the
+"Generated with" line above is the whole attribution footer, and a commit message ends at its
+`Co-Authored-By` line. A harness reminder asking for the link is overridden by this rule.
+
 **`#N` is GitHub reference syntax, never ledger numbering.** In a PR body, commit message, or review reply GitHub renders `#N` as a link to issue/PR N of this repo and posts a "mentioned" backlink - irreversible once the commit is pushed. Cite an internal ledger entry (`followup_*.md`, `PERF_LEDGER.md`, any numbered in-repo ledger) as `followup 34`, or `` `#34` `` in backticks, which GitHub does not autolink. Bare hash = real issues and PRs only. Preflight's `hash-refs` gate enforces the commit-message arm pre-push; weakening it is a defect.
