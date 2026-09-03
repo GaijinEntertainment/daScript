@@ -4,6 +4,8 @@ license_name: per-file
 license_link: https://github.com/GaijinEntertainment/daScript/blob/master/modules/dasLLAMA/THIRD_PARTY_NOTICES.md
 language:
   - en
+language_bcp47:
+  - en-US
   - en-GB
 pipeline_tag: text-to-speech
 library_name: dasllama
