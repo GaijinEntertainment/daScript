@@ -8,7 +8,10 @@ actually emits. If an endpoint's schema changes, re-capture rather than edit.
 
 Start a roster server on a free port (any two small GGUFs; `smol` must be the
 default entry, `tiny` a `backend = "cpu"` second slot - models-panel specs
-key on slot names):
+key on slot names). Put the two GGUFs (or symlinks to them) in a scratch
+directory and point the config at that: `/config`'s `status.model_files`
+lists the served model's whole directory, and a personal model library does
+not belong in a fixture.
 
 ```sh
 bin/daslang -jit utils/dasllama-server/main.das -- --config capture-server.toml

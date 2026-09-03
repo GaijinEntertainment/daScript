@@ -215,27 +215,68 @@ def utf8_to_cpts(s : string) : array<int> {
         var i = 0
         while (i < n) {
             let b0 = int(d[i])
-            var cp = b0
+            var lead = b0
             var extra = 0
             if (b0 >= 240) {
-                cp = b0 & 7; extra = 3
+                lead = b0 & 7; extra = 3
             } elif (b0 >= 224) {
-                cp = b0 & 15; extra = 2
+                lead = b0 & 15; extra = 2
             } elif (b0 >= 192) {
-                cp = b0 & 31; extra = 1
+                lead = b0 & 31; extra = 1
             }
-            i++
+            // count the continuations before consuming any: a short sequence is a malformed
+            // lead, which passes through as its own byte and leaves the rest to later steps
             var k = 0
-            while (k < extra && i < n && (int(d[i]) & 192) == 128) {
-                cp = (cp << 6) | (int(d[i]) & 63)
-                i++
+            while (k < extra && i + 1 + k < n && (int(d[i + 1 + k]) & 192) == 128) {
                 k++
             }
-            cpts |> push(cp)
+            if (k == extra) {
+                var cp = lead
+                for (j in range(extra)) {
+                    cp = (cp << 6) | (int(d[i + 1 + j]) & 63)
+                }
+                cpts |> push(cp)
+                i += extra + 1
+            } else {
+                cpts |> push(b0)
+                i++
+            }
         }
     }
     return <- cpts
 }
+
+let private REPLACEMENT_CPT : int = 0xFFFD   // what a value outside the unicode range encodes as
+let private MAX_CPT : int = 0x10FFFF
+
+//! Encode codepoints [a, b) of an array to a UTF-8 string. A value outside [0, U+10FFFF]
+//! encodes as U+FFFD.
+def cpts_to_utf8(c : array<int>; a, b : int) : string {
+    var inscope bytes : array<uint8>
+    bytes |> reserve((b - a) * 4)
+    for (i in range(a, b)) {
+        let cp = (c[i] < 0 || c[i] > MAX_CPT) ? REPLACEMENT_CPT : c[i]
+        if (cp < 128) {
+            bytes |> push(uint8(cp))
+        } elif (cp < 2048) {
+            bytes |> push(uint8(192 + (cp >> 6)))
+            bytes |> push(uint8(128 + (cp & 63)))
+        } elif (cp < 65536) {
+            bytes |> push(uint8(224 + (cp >> 12)))
+            bytes |> push(uint8(128 + ((cp >> 6) & 63)))
+            bytes |> push(uint8(128 + (cp & 63)))
+        } else {
+            bytes |> push(uint8(240 + (cp >> 18)))
+            bytes |> push(uint8(128 + ((cp >> 12) & 63)))
+            bytes |> push(uint8(128 + ((cp >> 6) & 63)))
+            bytes |> push(uint8(128 + (cp & 63)))
+        }
+    }
+    return string(bytes)
+}
+
+//! Encode a whole codepoint array to a UTF-8 string.
+def cpts_to_utf8(c : array<int>) : string => cpts_to_utf8(c, 0, length(c))
 
 //! Encode a single codepoint to its UTF-8 bytes as a string.
 def cpt_to_utf8(cpt : int) : string {

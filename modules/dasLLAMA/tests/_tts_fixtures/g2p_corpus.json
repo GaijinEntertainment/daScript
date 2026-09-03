@@ -1,0 +1,14645 @@
+[
+{
+"id": "lj000",
+"category": "ljspeech",
+"text": "Printing, in the only sense with which we are at present concerned, differs from most if not from all the arts and crafts represented in the Exhibition",
+"norm": "Printing, in the only sense with which we are at present concerned, differs from most if not from all the arts and crafts represented in the Exhibition",
+"ps_misaki": "pɹˈɪntɪŋ, ɪn ði ˈOnli sˈɛns wɪð wˌɪʧ wi ɑɹ æt pɹˈɛzᵊnt kənsˈɜɹnd, dˈɪfəɹz fɹʌm mˈOst ɪf nˌɑt fɹʌm ˈɔl ði ˈɑɹts ænd kɹˈæfts ɹˌɛpɹəzˈɛntᵻd ɪn ði ˌɛksəbˈɪʃən",
+"ps_espeak": "pɹˈɪntɪŋ, ɪn ði ˈoʊnli sˈɛns wɪð wˌɪtʃ wi ɑːɹ æt pɹˈɛzənt kənsˈɜːnd, dˈɪfɚz fɹʌm mˈoʊst ɪf nˌɑːt fɹʌm ˈɔːl ði ˈɑːɹts ænd kɹˈæfts ɹˌɛpɹəzˈɛntᵻd ɪn ði ˌɛksəbˈɪʃən",
+"tokens": [
+[
+"Printing",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"only",
+"JJ",
+" "
+],
+[
+"sense",
+"NN",
+" "
+],
+[
+"with",
+"IN",
+" "
+],
+[
+"which",
+"WDT",
+" "
+],
+[
+"we",
+"PRP",
+" "
+],
+[
+"are",
+"VBP",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"present",
+"JJ",
+" "
+],
+[
+"concerned",
+"VBN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"differs",
+"VBZ",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"most",
+"JJS",
+" "
+],
+[
+"if",
+"IN",
+" "
+],
+[
+"not",
+"RB",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"all",
+"PDT",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"arts",
+"NNS",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"crafts",
+"NNS",
+" "
+],
+[
+"represented",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"Exhibition",
+"NN",
+""
+]
+]
+},
+{
+"id": "lj001",
+"category": "ljspeech",
+"text": "For although the Chinese took impressions from wood blocks engraved in relief for centuries before the woodcutters of the Netherlands, by a similar process",
+"norm": "For although the Chinese took impressions from wood blocks engraved in relief for centuries before the woodcutters of the Netherlands, by a similar process",
+"ps_misaki": "fˌɔɹ ɔlðˈO ðə ʧˌInˈiz tˈʊk ɪmpɹˈɛʃənz fɹʌm wˈʊd blˈɑks ɪnɡɹˈAvd ɪn ɹəlˈif fɔɹ sˈɛnʧəɹiz bəfˈɔɹ ðə wˈʊdkˌʌTəɹz ʌv ðə nˈɛðəɹləndz, bI ɐ sˈɪmᵊləɹ pɹˈɑsˌɛs",
+"ps_espeak": "fˌɔːɹ ɔːlðˈoʊ ðə tʃˌaɪnˈiz tˈʊk ɪmpɹˈɛʃənz fɹʌm wˈʊd blˈɑːks ɪnɡɹˈeɪvd ɪn ɹəlˈif fɔːɹ sˈɛntʃɚiz bəfˈɔːɹ ðə wˈʊdkˌʌɾɚz ʌv ðə nˈɛðɚləndz, baɪ ɐ sˈɪməlɚ pɹˈɑːsˌɛs",
+"tokens": [
+[
+"For",
+"IN",
+" "
+],
+[
+"although",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"Chinese",
+"NNPS",
+" "
+],
+[
+"took",
+"VBD",
+" "
+],
+[
+"impressions",
+"NNS",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"wood",
+"NN",
+" "
+],
+[
+"blocks",
+"NNS",
+" "
+],
+[
+"engraved",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"relief",
+"NN",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"centuries",
+"NNS",
+" "
+],
+[
+"before",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"woodcutters",
+"NNS",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"Netherlands",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"by",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"similar",
+"JJ",
+" "
+],
+[
+"process",
+"NN",
+""
+]
+]
+},
+{
+"id": "lj002",
+"category": "ljspeech",
+"text": "produced the block books, which were the immediate predecessors of the true printed book,",
+"norm": "produced the block books, which were the immediate predecessors of the true printed book,",
+"ps_misaki": "pɹədˈust ðə blˈɑk bˈʊks, wˌɪʧ wɜɹ ði ɪmˈidiət pɹˈɛdəsˌɛsəɹz ʌv ðə tɹˈu pɹˈɪntᵻd bˈʊk,",
+"ps_espeak": "pɹədˈuːst ðə blˈɑːk bˈʊks, wˌɪtʃ wɜː ði ɪmˈidiət pɹˈɛdəsˌɛsɚz ʌv ðə tɹˈuː pɹˈɪntᵻd bˈʊk,",
+"tokens": [
+[
+"produced",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"block",
+"NN",
+" "
+],
+[
+"books",
+"NNS",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"which",
+"WDT",
+" "
+],
+[
+"were",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"immediate",
+"JJ",
+" "
+],
+[
+"predecessors",
+"NNS",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"true",
+"JJ",
+" "
+],
+[
+"printed",
+"VBN",
+" "
+],
+[
+"book",
+"NN",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj003",
+"category": "ljspeech",
+"text": "the invention of movable metal letters in the middle of the fifteenth century may justly be considered as the invention of the art of printing.",
+"norm": "the invention of movable metal letters in the middle of the fifteenth century may justly be considered as the invention of the art of printing.",
+"ps_misaki": "ði ɪnvˈɛnʃən ʌv mˈuvəbᵊl mˈɛTᵊl lˈɛTəɹz ɪn ðə mˈɪdᵊl ʌv ðə fˌɪftˈinθ sˈɛnʧəɹi mˈA ʤˈʌstli bi kənsˈɪdəɹd æz ði ɪnvˈɛnʃən ʌv ði ˈɑɹt ʌv pɹˈɪntɪŋ.",
+"ps_espeak": "ði ɪnvˈɛnʃən ʌv mˈuːvəbəl mˈɛɾəl lˈɛɾɚz ɪn ðə mˈɪdəl ʌv ðə fˌɪftˈinθ sˈɛntʃɚi mˈeɪ dʒˈʌstli bi kənsˈɪdɚd æz ði ɪnvˈɛnʃən ʌv ði ˈɑːɹt ʌv pɹˈɪntɪŋ.",
+"tokens": [
+[
+"the",
+"DT",
+" "
+],
+[
+"invention",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"movable",
+"JJ",
+" "
+],
+[
+"metal",
+"NN",
+" "
+],
+[
+"letters",
+"NNS",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"middle",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"fifteenth",
+"JJ",
+" "
+],
+[
+"century",
+"NN",
+" "
+],
+[
+"may",
+"MD",
+" "
+],
+[
+"justly",
+"RB",
+" "
+],
+[
+"be",
+"VB",
+" "
+],
+[
+"considered",
+"VBN",
+" "
+],
+[
+"as",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"invention",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"art",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"printing",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj004",
+"category": "ljspeech",
+"text": "And it is worth mention in passing that, as an example of fine typography,",
+"norm": "And it is worth mention in passing that, as an example of fine typography,",
+"ps_misaki": "ˌænd ɪt ɪz wˈɜɹθ mˈɛnʧᵊn ɪn pˈæsɪŋ ðˈæt, æz ɐn ɪɡzˈæmpəl ʌv fˈIn tIpˈɑɡɹəfi,",
+"ps_espeak": "ˌænd ɪt ɪz wˈɜːθ mˈɛntʃən ɪn pˈæsɪŋ ðˈæt, æz ɐn ɪɡzˈæmpəl ʌv fˈaɪn taɪpˈɑːɡɹəfi,",
+"tokens": [
+[
+"And",
+"CC",
+" "
+],
+[
+"it",
+"PRP",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"worth",
+"JJ",
+" "
+],
+[
+"mention",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"passing",
+"VBG",
+" "
+],
+[
+"that",
+"DT",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"as",
+"IN",
+" "
+],
+[
+"an",
+"DT",
+" "
+],
+[
+"example",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"fine",
+"JJ",
+" "
+],
+[
+"typography",
+"NN",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj005",
+"category": "ljspeech",
+"text": "the earliest book printed with movable types, the Gutenberg, or \"forty-two line Bible\" of about fourteen fifty-five,",
+"norm": "the earliest book printed with movable types, the Gutenberg, or forty-two line Bible of about fourteen fifty-five,",
+"ps_misaki": "ði ˈɜɹliᵻst bˈʊk pɹˈɪntᵻd wɪð mˈuvəbᵊl tˈIps, ðə ɡˈutənbəɹɡ, ɔɹ fˈɔɹTitˌu lˈIn bˈIbᵊl ʌv əbˈWt fˌɔɹtˈin fˈɪftifˌIv,",
+"ps_espeak": "ði ˈɜːliᵻst bˈʊk pɹˈɪntᵻd wɪð mˈuːvəbəl tˈaɪps, ðə ɡˈuːtənbɚɡ, ɔːɹ fˈɔːɹɾitˌuː lˈaɪn bˈaɪbəl ʌv əbˈaʊt fˌɔːɹtˈin fˈɪftifˌaɪv,",
+"tokens": [
+[
+"the",
+"DT",
+" "
+],
+[
+"earliest",
+"JJS",
+" "
+],
+[
+"book",
+"NN",
+" "
+],
+[
+"printed",
+"VBN",
+" "
+],
+[
+"with",
+"IN",
+" "
+],
+[
+"movable",
+"JJ",
+" "
+],
+[
+"types",
+"NNS",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"Gutenberg",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"or",
+"CC",
+" "
+],
+[
+"forty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"two",
+"CD",
+" "
+],
+[
+"line",
+"NN",
+" "
+],
+[
+"Bible",
+"NNP",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"about",
+"RB",
+" "
+],
+[
+"fourteen",
+"CD",
+" "
+],
+[
+"fifty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"five",
+"CD",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj006",
+"category": "ljspeech",
+"text": "Printing, then, for our purpose, may be considered as the art of making books by means of movable types.",
+"norm": "Printing, then, for our purpose, may be considered as the art of making books by means of movable types.",
+"ps_misaki": "pɹˈɪntɪŋ, ðˈɛn, fɔɹ ˌWəɹ pˈɜɹpəs, mˈA bi kənsˈɪdəɹd æz ði ˈɑɹt ʌv mˈAkɪŋ bˈʊks bI mˈinz ʌv mˈuvəbᵊl tˈIps.",
+"ps_espeak": "pɹˈɪntɪŋ, ðˈɛn, fɔːɹ ˌaʊɚ pˈɜːpəs, mˈeɪ bi kənsˈɪdɚd æz ði ˈɑːɹt ʌv mˈeɪkɪŋ bˈʊks baɪ mˈinz ʌv mˈuːvəbəl tˈaɪps.",
+"tokens": [
+[
+"Printing",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"then",
+"RB",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"our",
+"PRP$",
+" "
+],
+[
+"purpose",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"may",
+"MD",
+" "
+],
+[
+"be",
+"VB",
+" "
+],
+[
+"considered",
+"VBN",
+" "
+],
+[
+"as",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"art",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"making",
+"VBG",
+" "
+],
+[
+"books",
+"NNS",
+" "
+],
+[
+"by",
+"IN",
+" "
+],
+[
+"means",
+"NNS",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"movable",
+"JJ",
+" "
+],
+[
+"types",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj007",
+"category": "ljspeech",
+"text": "Now, as all books not primarily intended as picture-books consist principally of types composed to form letterpress,",
+"norm": "Now, as all books not primarily intended as picture-books consist principally of types composed to form letterpress,",
+"ps_misaki": "nˈW, æz ˈɔl bˈʊks nˌɑt pɹImˈɛɹəli ɪntˈɛndᵻd æz pˈɪkʧəɹbˌʊks kənsˈɪst pɹˈɪnsəpᵊli ʌv tˈIps kəmpˈOzd tə fˈɔɹm lˈɛTəɹpɹˌɛs,",
+"ps_espeak": "nˈaʊ, æz ˈɔːl bˈʊks nˌɑːt pɹaɪmˈɛɹəli ɪntˈɛndᵻd æz pˈɪktʃɚbˌʊks kənsˈɪst pɹˈɪnsəpəli ʌv tˈaɪps kəmpˈoʊzd tə fˈɔːɹm lˈɛɾɚpɹˌɛs,",
+"tokens": [
+[
+"Now",
+"RB",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"as",
+"IN",
+" "
+],
+[
+"all",
+"DT",
+" "
+],
+[
+"books",
+"NNS",
+" "
+],
+[
+"not",
+"RB",
+" "
+],
+[
+"primarily",
+"RB",
+" "
+],
+[
+"intended",
+"VBN",
+" "
+],
+[
+"as",
+"IN",
+" "
+],
+[
+"picture",
+"NN",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"books",
+"NNS",
+" "
+],
+[
+"consist",
+"VBP",
+" "
+],
+[
+"principally",
+"RB",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"types",
+"NNS",
+" "
+],
+[
+"composed",
+"VBN",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"form",
+"VB",
+" "
+],
+[
+"letterpress",
+"NN",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj008",
+"category": "ljspeech",
+"text": "it is of the first importance that the letter used should be fine in form;",
+"norm": "it is of the first importance that the letter used should be fine in form;",
+"ps_misaki": "ɪt ɪz ʌv ðə fˈɜɹst ɪmpˈɔɹtᵊns ðæt ðə lˈɛTəɹ jˈuzd ʃˌʊd bi fˈIn ɪn fˈɔɹm;",
+"ps_espeak": "ɪt ɪz ʌv ðə fˈɜːst ɪmpˈɔːɹtəns ðæt ðə lˈɛɾɚ jˈuːzd ʃˌʊd bi fˈaɪn ɪn fˈɔːɹm;",
+"tokens": [
+[
+"it",
+"PRP",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"first",
+"JJ",
+" "
+],
+[
+"importance",
+"NN",
+" "
+],
+[
+"that",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"letter",
+"NN",
+" "
+],
+[
+"used",
+"VBN",
+" "
+],
+[
+"should",
+"MD",
+" "
+],
+[
+"be",
+"VB",
+" "
+],
+[
+"fine",
+"JJ",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"form",
+"NN",
+""
+],
+[
+";",
+":",
+""
+]
+]
+},
+{
+"id": "lj009",
+"category": "ljspeech",
+"text": "especially as no more time is occupied, or cost incurred, in casting, setting, or printing beautiful letters",
+"norm": "especially as no more time is occupied, or cost incurred, in casting, setting, or printing beautiful letters",
+"ps_misaki": "əspˈɛʃəli æz nˈO mˈɔɹ tˈIm ɪz ˈɑkjəpˌId, ɔɹ kˈɔst ɪnkˈɜɹd, ɪn kˈæstɪŋ, sˈɛTɪŋ, ɔɹ pɹˈɪntɪŋ bjˈuTəfəl lˈɛTəɹz",
+"ps_espeak": "əspˈɛʃəli æz nˈoʊ mˈɔːɹ tˈaɪm ɪz ˈɑːkjəpˌaɪd, ɔːɹ kˈɔːst ɪnkˈɜːd, ɪn kˈæstɪŋ, sˈɛɾɪŋ, ɔːɹ pɹˈɪntɪŋ bjˈuːɾəfəl lˈɛɾɚz",
+"tokens": [
+[
+"especially",
+"RB",
+" "
+],
+[
+"as",
+"IN",
+" "
+],
+[
+"no",
+"DT",
+" "
+],
+[
+"more",
+"JJR",
+" "
+],
+[
+"time",
+"NN",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"occupied",
+"VBN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"or",
+"CC",
+" "
+],
+[
+"cost",
+"NN",
+" "
+],
+[
+"incurred",
+"VBN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"casting",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"setting",
+"VBG",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"or",
+"CC",
+" "
+],
+[
+"printing",
+"VBG",
+" "
+],
+[
+"beautiful",
+"JJ",
+" "
+],
+[
+"letters",
+"NNS",
+""
+]
+]
+},
+{
+"id": "lj010",
+"category": "ljspeech",
+"text": "And it was a matter of course that in the Middle Ages, when the craftsmen took care that beautiful form should always be a part of their productions whatever they were,",
+"norm": "And it was a matter of course that in the Middle Ages, when the craftsmen took care that beautiful form should always be a part of their productions whatever they were,",
+"ps_misaki": "ˌænd ɪt wʌz ɐ mˈæTəɹ ʌv kˈɔɹs ðæt ɪn ðə mˈɪdᵊl ˈAʤᵻz, wˌɛn ðə kɹˈæftsmɛn tˈʊk kˈɛɹ ðæt bjˈuTəfəl fˈɔɹm ʃˌʊd ˈɔlwˌAz bi ɐ pˈɑɹt ʌv ðɛɹ pɹədˈʌkʃənz wəTˈɛvəɹ ðA wɜɹ,",
+"ps_espeak": "ˌænd ɪt wʌz ɐ mˈæɾɚ ʌv kˈɔːɹs ðæt ɪn ðə mˈɪdəl ˈeɪdʒᵻz, wˌɛn ðə kɹˈæftsmɛn tˈʊk kˈɛɹ ðæt bjˈuːɾəfəl fˈɔːɹm ʃˌʊd ˈɔːlwˌeɪz bi ɐ pˈɑːɹt ʌv ðɛɹ pɹədˈʌkʃənz wəɾˈɛvɚ ðeɪ wɜː,",
+"tokens": [
+[
+"And",
+"CC",
+" "
+],
+[
+"it",
+"PRP",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"matter",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"course",
+"NN",
+" "
+],
+[
+"that",
+"IN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"Middle",
+"NNP",
+" "
+],
+[
+"Ages",
+"NNPS",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"when",
+"WRB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"craftsmen",
+"NNS",
+" "
+],
+[
+"took",
+"VBD",
+" "
+],
+[
+"care",
+"NN",
+" "
+],
+[
+"that",
+"IN",
+" "
+],
+[
+"beautiful",
+"JJ",
+" "
+],
+[
+"form",
+"NN",
+" "
+],
+[
+"should",
+"MD",
+" "
+],
+[
+"always",
+"RB",
+" "
+],
+[
+"be",
+"VB",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"part",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"their",
+"PRP$",
+" "
+],
+[
+"productions",
+"NNS",
+" "
+],
+[
+"whatever",
+"WDT",
+" "
+],
+[
+"they",
+"PRP",
+" "
+],
+[
+"were",
+"VBD",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj011",
+"category": "ljspeech",
+"text": "the forms of printed letters should be beautiful, and that their arrangement on the page should be reasonable and a help to the shapeliness of the letters themselves.",
+"norm": "the forms of printed letters should be beautiful, and that their arrangement on the page should be reasonable and a help to the shapeliness of the letters themselves.",
+"ps_misaki": "ðə fˈɔɹmz ʌv pɹˈɪntᵻd lˈɛTəɹz ʃˌʊd bi bjˈuTəfəl, ænd ðæt ðɛɹ əɹˈAnʤmənt ˌɔn ðə pˈAʤ ʃˌʊd bi ɹˈizənəbᵊl ænd ɐ hˈɛlp tə ðə ʃˈAplinəs ʌv ðə lˈɛTəɹz ðəmsˈɛlvz.",
+"ps_espeak": "ðə fˈɔːɹmz ʌv pɹˈɪntᵻd lˈɛɾɚz ʃˌʊd bi bjˈuːɾəfəl, ænd ðæt ðɛɹ ɚˈeɪndʒmənt ˌɔːn ðə pˈeɪdʒ ʃˌʊd bi ɹˈizənəbəl ænd ɐ hˈɛlp tə ðə ʃˈeɪplinəs ʌv ðə lˈɛɾɚz ðəmsˈɛlvz.",
+"tokens": [
+[
+"the",
+"DT",
+" "
+],
+[
+"forms",
+"NNS",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"printed",
+"VBN",
+" "
+],
+[
+"letters",
+"NNS",
+" "
+],
+[
+"should",
+"MD",
+" "
+],
+[
+"be",
+"VB",
+" "
+],
+[
+"beautiful",
+"JJ",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"that",
+"IN",
+" "
+],
+[
+"their",
+"PRP$",
+" "
+],
+[
+"arrangement",
+"NN",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"page",
+"NN",
+" "
+],
+[
+"should",
+"MD",
+" "
+],
+[
+"be",
+"VB",
+" "
+],
+[
+"reasonable",
+"JJ",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"help",
+"NN",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"shapeliness",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"letters",
+"NNS",
+" "
+],
+[
+"themselves",
+"PRP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj012",
+"category": "ljspeech",
+"text": "The Middle Ages brought calligraphy to perfection, and it was natural therefore",
+"norm": "The Middle Ages brought calligraphy to perfection, and it was natural therefore",
+"ps_misaki": "ðə mˈɪdᵊl ˈAʤᵻz bɹˈɔt kəlˈɪɡɹəfi tə pəɹfˈɛkʃən, ænd ɪt wʌz nˈæʧəɹᵊl ðˈɛɹfˌɔɹ",
+"ps_espeak": "ðə mˈɪdəl ˈeɪdʒᵻz bɹˈɔːt kəlˈɪɡɹəfi tə pɚfˈɛkʃən, ænd ɪt wʌz nˈætʃɚəl ðˈɛɹfˌɔːɹ",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"Middle",
+"NNP",
+" "
+],
+[
+"Ages",
+"NNPS",
+" "
+],
+[
+"brought",
+"VBD",
+" "
+],
+[
+"calligraphy",
+"NN",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"perfection",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"it",
+"PRP",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"natural",
+"JJ",
+" "
+],
+[
+"therefore",
+"RB",
+""
+]
+]
+},
+{
+"id": "lj013",
+"category": "ljspeech",
+"text": "that the forms of printed letters should follow more or less closely those of the written character, and they followed them very closely.",
+"norm": "that the forms of printed letters should follow more or less closely those of the written character, and they followed them very closely.",
+"ps_misaki": "ðæt ðə fˈɔɹmz ʌv pɹˈɪntᵻd lˈɛTəɹz ʃˌʊd fˈɑlO mˈɔɹ ɔɹ lˈɛs klˈOsli ðOz ʌv ðə ɹˈɪtn kˈɛɹəktəɹ, ænd ðA fˈɑlOd ðˌɛm vˈɛɹi klˈOsli.",
+"ps_espeak": "ðæt ðə fˈɔːɹmz ʌv pɹˈɪntᵻd lˈɛɾɚz ʃˌʊd fˈɑːloʊ mˈɔːɹ ɔːɹ lˈɛs klˈoʊsli ðoʊz ʌv ðə ɹˈɪtn kˈɛɹəktɚ, ænd ðeɪ fˈɑːloʊd ðˌɛm vˈɛɹi klˈoʊsli.",
+"tokens": [
+[
+"that",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"forms",
+"NNS",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"printed",
+"VBN",
+" "
+],
+[
+"letters",
+"NNS",
+" "
+],
+[
+"should",
+"MD",
+" "
+],
+[
+"follow",
+"VB",
+" "
+],
+[
+"more",
+"RBR",
+" "
+],
+[
+"or",
+"CC",
+" "
+],
+[
+"less",
+"RBR",
+" "
+],
+[
+"closely",
+"RB",
+" "
+],
+[
+"those",
+"DT",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"written",
+"VBN",
+" "
+],
+[
+"character",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"they",
+"PRP",
+" "
+],
+[
+"followed",
+"VBD",
+" "
+],
+[
+"them",
+"PRP",
+" "
+],
+[
+"very",
+"RB",
+" "
+],
+[
+"closely",
+"RB",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj014",
+"category": "ljspeech",
+"text": "The first books were printed in black letter, i.e. the letter which was a Gothic development of the ancient Roman character,",
+"norm": "The first books were printed in black letter, i.e. the letter which was a Gothic development of the ancient Roman character,",
+"ps_misaki": "ðə fˈɜɹst bˈʊks wɜɹ pɹˈɪntᵻd ɪn blˈæk lˈɛTəɹ, ˌIˈi ðə lˈɛTəɹ wˌɪʧ wʌz ɐ ɡˈɑθɪk dəvˈɛləpmənt ʌv ði ˈAnʧənt ɹˈOmən kˈɛɹəktəɹ,",
+"ps_espeak": "ðə fˈɜːst bˈʊks wɜː pɹˈɪntᵻd ɪn blˈæk lˈɛɾɚ, ˌaɪˈi ðə lˈɛɾɚ wˌɪtʃ wʌz ɐ ɡˈɑːθɪk dəvˈɛləpmənt ʌv ði ˈeɪntʃənt ɹˈoʊmən kˈɛɹəktɚ,",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"first",
+"JJ",
+" "
+],
+[
+"books",
+"NNS",
+" "
+],
+[
+"were",
+"VBD",
+" "
+],
+[
+"printed",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"black",
+"JJ",
+" "
+],
+[
+"letter",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"i.e.",
+"FW",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"letter",
+"NN",
+" "
+],
+[
+"which",
+"WDT",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"Gothic",
+"NNP",
+" "
+],
+[
+"development",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"ancient",
+"JJ",
+" "
+],
+[
+"Roman",
+"JJ",
+" "
+],
+[
+"character",
+"NN",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj015",
+"category": "ljspeech",
+"text": "and which developed more completely and satisfactorily on the side of the \"lower-case\" than the capital letters;",
+"norm": "and which developed more completely and satisfactorily on the side of the lower-case than the capital letters;",
+"ps_misaki": "ænd wˌɪʧ dəvˈɛləpt mˈɔɹ kəmplˈitli ænd sˌæTəsfˈæktəɹəli ˌɔn ðə sˈId ʌv ðə lˈOəɹkˌAs ðən ðə kˈæpəTᵊl lˈɛTəɹz;",
+"ps_espeak": "ænd wˌɪtʃ dəvˈɛləpt mˈɔːɹ kəmplˈitli ænd sˌæɾəsfˈæktɚəli ˌɔːn ðə sˈaɪd ʌv ðə lˈoʊɚkˌeɪs ðən ðə kˈæpəɾəl lˈɛɾɚz;",
+"tokens": [
+[
+"and",
+"CC",
+" "
+],
+[
+"which",
+"WDT",
+" "
+],
+[
+"developed",
+"VBD",
+" "
+],
+[
+"more",
+"RBR",
+" "
+],
+[
+"completely",
+"RB",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"satisfactorily",
+"RB",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"side",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"lower",
+"JJR",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"case",
+"NN",
+" "
+],
+[
+"than",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"capital",
+"NN",
+" "
+],
+[
+"letters",
+"NNS",
+""
+],
+[
+";",
+":",
+""
+]
+]
+},
+{
+"id": "lj016",
+"category": "ljspeech",
+"text": "the \"lower-case\" being in fact invented in the early Middle Ages.",
+"norm": "the lower-case being in fact invented in the early Middle Ages.",
+"ps_misaki": "ðə lˈOəɹkˌAs bˈiɪŋ ɪn fˈækt ɪnvˈɛntᵻd ɪn ði ˈɜɹli mˈɪdᵊl ˈAʤᵻz.",
+"ps_espeak": "ðə lˈoʊɚkˌeɪs bˈiɪŋ ɪn fˈækt ɪnvˈɛntᵻd ɪn ði ˈɜːli mˈɪdəl ˈeɪdʒᵻz.",
+"tokens": [
+[
+"the",
+"DT",
+" "
+],
+[
+"lower",
+"JJR",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"case",
+"NN",
+" "
+],
+[
+"being",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"fact",
+"NN",
+" "
+],
+[
+"invented",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"early",
+"JJ",
+" "
+],
+[
+"Middle",
+"NNP",
+" "
+],
+[
+"Ages",
+"NNPS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj017",
+"category": "ljspeech",
+"text": "The earliest book printed with movable type, the aforesaid Gutenberg Bible, is printed in letters which are an exact imitation",
+"norm": "The earliest book printed with movable type, the aforesaid Gutenberg Bible, is printed in letters which are an exact imitation",
+"ps_misaki": "ði ˈɜɹliᵻst bˈʊk pɹˈɪntᵻd wɪð mˈuvəbᵊl tˈIp, ði əfˈɔɹsˌɛd ɡˈutənbəɹɡ bˈIbᵊl, ɪz pɹˈɪntᵻd ɪn lˈɛTəɹz wˌɪʧ ɑɹ ɐn ɪɡzˈækt ˌɪmətˈAʃən",
+"ps_espeak": "ði ˈɜːliᵻst bˈʊk pɹˈɪntᵻd wɪð mˈuːvəbəl tˈaɪp, ði əfˈɔːɹsˌɛd ɡˈuːtənbɚɡ bˈaɪbəl, ɪz pɹˈɪntᵻd ɪn lˈɛɾɚz wˌɪtʃ ɑːɹ ɐn ɪɡzˈækt ˌɪmətˈeɪʃən",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"earliest",
+"JJS",
+" "
+],
+[
+"book",
+"NN",
+" "
+],
+[
+"printed",
+"VBN",
+" "
+],
+[
+"with",
+"IN",
+" "
+],
+[
+"movable",
+"JJ",
+" "
+],
+[
+"type",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"aforesaid",
+"JJ",
+" "
+],
+[
+"Gutenberg",
+"NNP",
+" "
+],
+[
+"Bible",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"printed",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"letters",
+"NNS",
+" "
+],
+[
+"which",
+"WDT",
+" "
+],
+[
+"are",
+"VBP",
+" "
+],
+[
+"an",
+"DT",
+" "
+],
+[
+"exact",
+"JJ",
+" "
+],
+[
+"imitation",
+"NN",
+""
+]
+]
+},
+{
+"id": "lj018",
+"category": "ljspeech",
+"text": "of the more formal ecclesiastical writing which obtained at that time; this has since been called \"missal type,\"",
+"norm": "of the more formal ecclesiastical writing which obtained at that time; this has since been called missal type,",
+"ps_misaki": "ʌv ðə mˈɔɹ fˈɔɹmᵊl əklˌiziˈæstəkᵊl ɹˈITɪŋ wˌɪʧ əbtˈAnd æt ðˈæt tˈIm; ðɪs hæz sˈɪns bɪn kˈɔld mˈɪsᵊl tˈIp,",
+"ps_espeak": "ʌv ðə mˈɔːɹ fˈɔːɹməl əklˌiziˈæstəkəl ɹˈaɪɾɪŋ wˌɪtʃ əbtˈeɪnd æt ðˈæt tˈaɪm; ðɪs hæz sˈɪns bɪn kˈɔːld mˈɪsəl tˈaɪp,",
+"tokens": [
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"more",
+"RBR",
+" "
+],
+[
+"formal",
+"JJ",
+" "
+],
+[
+"ecclesiastical",
+"JJ",
+" "
+],
+[
+"writing",
+"NN",
+" "
+],
+[
+"which",
+"WDT",
+" "
+],
+[
+"obtained",
+"VBD",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"that",
+"DT",
+" "
+],
+[
+"time",
+"NN",
+""
+],
+[
+";",
+":",
+" "
+],
+[
+"this",
+"DT",
+" "
+],
+[
+"has",
+"VBZ",
+" "
+],
+[
+"since",
+"IN",
+" "
+],
+[
+"been",
+"VBN",
+" "
+],
+[
+"called",
+"VBN",
+" "
+],
+[
+"missal",
+"NN",
+" "
+],
+[
+"type",
+"NN",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj019",
+"category": "ljspeech",
+"text": "and was in fact the kind of letter used in the many splendid missals, psalters, etc., produced by printing in the fifteenth century.",
+"norm": "and was in fact the kind of letter used in the many splendid missals, psalters, etc., produced by printing in the fifteenth century.",
+"ps_misaki": "ænd wʌz ɪn fˈækt ðə kˈInd ʌv lˈɛTəɹ jˈuzd ɪn ðə mˈɛni splˈɛndəd mˈɪsᵊlz, sˈɔltəɹz, ɛtsˈɛTəɹə, pɹədˈust bI pɹˈɪntɪŋ ɪn ðə fˌɪftˈinθ sˈɛnʧəɹi.",
+"ps_espeak": "ænd wʌz ɪn fˈækt ðə kˈaɪnd ʌv lˈɛɾɚ jˈuːzd ɪn ðə mˈɛni splˈɛndəd mˈɪsəlz, sˈɔːltɚz, ɛtsˈɛɾɚə, pɹədˈuːst baɪ pɹˈɪntɪŋ ɪn ðə fˌɪftˈinθ sˈɛntʃɚi.",
+"tokens": [
+[
+"and",
+"CC",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"fact",
+"NN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"kind",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"letter",
+"NN",
+" "
+],
+[
+"used",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"many",
+"JJ",
+" "
+],
+[
+"splendid",
+"JJ",
+" "
+],
+[
+"missals",
+"NNS",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"psalters",
+"NNS",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"etc",
+"FW",
+""
+],
+[
+".",
+"FW",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"produced",
+"VBN",
+" "
+],
+[
+"by",
+"IN",
+" "
+],
+[
+"printing",
+"VBG",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"fifteenth",
+"JJ",
+" "
+],
+[
+"century",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj020",
+"category": "ljspeech",
+"text": "But the first Bible actually dated (which also was printed at Maintz by Peter Schoeffer in the year fourteen sixty-two)",
+"norm": "But the first Bible actually dated which also was printed at Maintz by Peter Schoeffer in the year fourteen sixty-two",
+"ps_misaki": "bˌʌt ðə fˈɜɹst bˈIbᵊl ˈækʧəwəli dˈATᵻd wˌɪʧ ˈɔlsO wʌz pɹˈɪntᵻd æt mˈAnts bI pˈiTəɹ ʃˈOfəɹ ɪn ðə jˈɪɹ fˌɔɹtˈin sˈɪkstitˌu",
+"ps_espeak": "bˌʌt ðə fˈɜːst bˈaɪbəl ˈæktʃəwəli dˈeɪɾᵻd wˌɪtʃ ˈɔːlsoʊ wʌz pɹˈɪntᵻd æt mˈeɪnts baɪ pˈiɾɚ ʃˈoʊfɚ ɪn ðə jˈɪɹ fˌɔːɹtˈin sˈɪkstitˌuː",
+"tokens": [
+[
+"But",
+"CC",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"first",
+"JJ",
+" "
+],
+[
+"Bible",
+"NNP",
+" "
+],
+[
+"actually",
+"RB",
+" "
+],
+[
+"dated",
+"VBN",
+" "
+],
+[
+"which",
+"WDT",
+" "
+],
+[
+"also",
+"RB",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"printed",
+"VBN",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"Maintz",
+"NNP",
+" "
+],
+[
+"by",
+"IN",
+" "
+],
+[
+"Peter",
+"NNP",
+" "
+],
+[
+"Schoeffer",
+"NNP",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"year",
+"NN",
+" "
+],
+[
+"fourteen",
+"CD",
+" "
+],
+[
+"sixty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"two",
+"CD",
+""
+]
+]
+},
+{
+"id": "lj021",
+"category": "ljspeech",
+"text": "imitates a much freer hand, simpler, rounder, and less spiky, and therefore far pleasanter and easier to read.",
+"norm": "imitates a much freer hand, simpler, rounder, and less spiky, and therefore far pleasanter and easier to read.",
+"ps_misaki": "ˈɪmətˌAts ɐ mˈʌʧ fɹˈiəɹ hˈænd, sˈɪmpᵊləɹ, ɹˈWndəɹ, ænd lˈɛs spˈIki, ænd ðˈɛɹfˌɔɹ fˈɑɹ plˈɛzəntəɹ ænd ˈiziəɹ tə ɹˈid.",
+"ps_espeak": "ˈɪmətˌeɪts ɐ mˈʌtʃ fɹˈiɚ hˈænd, sˈɪmpəlɚ, ɹˈaʊndɚ, ænd lˈɛs spˈaɪki, ænd ðˈɛɹfˌɔːɹ fˈɑːɹ plˈɛzəntɚ ænd ˈiziɚ tə ɹˈid.",
+"tokens": [
+[
+"imitates",
+"VBZ",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"much",
+"RB",
+" "
+],
+[
+"freer",
+"JJR",
+" "
+],
+[
+"hand",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"simpler",
+"JJR",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"rounder",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"less",
+"JJR",
+" "
+],
+[
+"spiky",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"therefore",
+"RB",
+" "
+],
+[
+"far",
+"RB",
+" "
+],
+[
+"pleasanter",
+"VB",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"easier",
+"JJR",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"read",
+"VB",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj022",
+"category": "ljspeech",
+"text": "On the whole the type of this book may be considered the ne-plus-ultra of Gothic type,",
+"norm": "On the whole the type of this book may be considered the ne-plus-ultra of Gothic type,",
+"ps_misaki": "ˌɔn ðə hˈOl ðə tˈIp ʌv ðɪs bˈʊk mˈA bi kənsˈɪdəɹd ðə nˈiplˈʌsˈʌltɹə ʌv ɡˈɑθɪk tˈIp,",
+"ps_espeak": "ˌɔːn ðə hˈoʊl ðə tˈaɪp ʌv ðɪs bˈʊk mˈeɪ bi kənsˈɪdɚd ðə nˈiplˈʌsˈʌltɹə ʌv ɡˈɑːθɪk tˈaɪp,",
+"tokens": [
+[
+"On",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"whole",
+"NN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"type",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"this",
+"DT",
+" "
+],
+[
+"book",
+"NN",
+" "
+],
+[
+"may",
+"MD",
+" "
+],
+[
+"be",
+"VB",
+" "
+],
+[
+"considered",
+"VBN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"ne",
+"NN",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"plus",
+"CC",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"ultra",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"Gothic",
+"NNP",
+" "
+],
+[
+"type",
+"NN",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj023",
+"category": "ljspeech",
+"text": "especially as regards the lower-case letters; and type very similar was used during the next fifteen or twenty years not only by Schoeffer,",
+"norm": "especially as regards the lower-case letters; and type very similar was used during the next fifteen or twenty years not only by Schoeffer,",
+"ps_misaki": "əspˈɛʃəli æz ɹəɡˈɑɹdz ðə lˈOəɹkˌAs lˈɛTəɹz; ænd tˈIp vˈɛɹi sˈɪmᵊləɹ wʌz jˈuzd dˈʊɹɪŋ ðə nˈɛkst fˌɪftˈin ɔɹ twˈɛnti jˈɪɹz nˌɑt ˈOnli bI ʃˈOfəɹ,",
+"ps_espeak": "əspˈɛʃəli æz ɹəɡˈɑːɹdz ðə lˈoʊɚkˌeɪs lˈɛɾɚz; ænd tˈaɪp vˈɛɹi sˈɪməlɚ wʌz jˈuːzd dˈʊɹɪŋ ðə nˈɛkst fˌɪftˈin ɔːɹ twˈɛnti jˈɪɹz nˌɑːt ˈoʊnli baɪ ʃˈoʊfɚ,",
+"tokens": [
+[
+"especially",
+"RB",
+" "
+],
+[
+"as",
+"IN",
+" "
+],
+[
+"regards",
+"VBZ",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"lower",
+"JJR",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"case",
+"NN",
+" "
+],
+[
+"letters",
+"NNS",
+""
+],
+[
+";",
+":",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"type",
+"VB",
+" "
+],
+[
+"very",
+"RB",
+" "
+],
+[
+"similar",
+"JJ",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"used",
+"VBN",
+" "
+],
+[
+"during",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"next",
+"JJ",
+" "
+],
+[
+"fifteen",
+"CD",
+" "
+],
+[
+"or",
+"CC",
+" "
+],
+[
+"twenty",
+"CD",
+" "
+],
+[
+"years",
+"NNS",
+" "
+],
+[
+"not",
+"RB",
+" "
+],
+[
+"only",
+"RB",
+" "
+],
+[
+"by",
+"IN",
+" "
+],
+[
+"Schoeffer",
+"NNP",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj024",
+"category": "ljspeech",
+"text": "but by printers in Strasburg, Basle, Paris, Lubeck, and other cities.",
+"norm": "but by printers in Strasburg, Basle, Paris, Lubeck, and other cities.",
+"ps_misaki": "bˌʌt bI pɹˈɪntəɹz ɪn stɹˈæsbəɹɡ, bˈɑl, pˈɛɹəs, lˈubˌɛk, ænd ˈʌðəɹ sˈɪTiz.",
+"ps_espeak": "bˌʌt baɪ pɹˈɪntɚz ɪn stɹˈæsbɚɡ, bˈɑːl, pˈɛɹəs, lˈuːbˌɛk, ænd ˈʌðɚ sˈɪɾiz.",
+"tokens": [
+[
+"but",
+"CC",
+" "
+],
+[
+"by",
+"IN",
+" "
+],
+[
+"printers",
+"NNS",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"Strasburg",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"Basle",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"Paris",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"Lubeck",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"other",
+"JJ",
+" "
+],
+[
+"cities",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj025",
+"category": "ljspeech",
+"text": "But though on the whole, except in Italy, Gothic letter was most often used",
+"norm": "But though on the whole, except in Italy, Gothic letter was most often used",
+"ps_misaki": "bˌʌt ðˌO ˌɔn ðə hˈOl, ɪksˈɛpt ɪn ˈɪTəli, ɡˈɑθɪk lˈɛTəɹ wʌz mˈOst ˈɔfᵊn jˈuzd",
+"ps_espeak": "bˌʌt ðˌoʊ ˌɔːn ðə hˈoʊl, ɪksˈɛpt ɪn ˈɪɾəli, ɡˈɑːθɪk lˈɛɾɚ wʌz mˈoʊst ˈɔːfən jˈuːzd",
+"tokens": [
+[
+"But",
+"CC",
+" "
+],
+[
+"though",
+"IN",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"whole",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"except",
+"IN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"Italy",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"Gothic",
+"NNP",
+" "
+],
+[
+"letter",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"most",
+"RBS",
+" "
+],
+[
+"often",
+"RB",
+" "
+],
+[
+"used",
+"VBN",
+""
+]
+]
+},
+{
+"id": "lj026",
+"category": "ljspeech",
+"text": "a very few years saw the birth of Roman character not only in Italy, but in Germany and France.",
+"norm": "a very few years saw the birth of Roman character not only in Italy, but in Germany and France.",
+"ps_misaki": "ɐ vˈɛɹi fjˈu jˈɪɹz sˈɔ ðə bˈɜɹθ ʌv ɹˈOmən kˈɛɹəktəɹ nˌɑt ˈOnli ɪn ˈɪTəli, bˌʌt ɪn ʤˈɜɹməni ænd fɹˈæns.",
+"ps_espeak": "ɐ vˈɛɹi fjˈuː jˈɪɹz sˈɔː ðə bˈɜːθ ʌv ɹˈoʊmən kˈɛɹəktɚ nˌɑːt ˈoʊnli ɪn ˈɪɾəli, bˌʌt ɪn dʒˈɜːməni ænd fɹˈæns.",
+"tokens": [
+[
+"a",
+"DT",
+" "
+],
+[
+"very",
+"RB",
+" "
+],
+[
+"few",
+"JJ",
+" "
+],
+[
+"years",
+"NNS",
+" "
+],
+[
+"saw",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"birth",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"Roman",
+"JJ",
+" "
+],
+[
+"character",
+"NN",
+" "
+],
+[
+"not",
+"RB",
+" "
+],
+[
+"only",
+"RB",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"Italy",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"but",
+"CC",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"Germany",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"France",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj027",
+"category": "ljspeech",
+"text": "In fourteen sixty-five Sweynheim and Pannartz began printing in the monastery of Subiaco near Rome,",
+"norm": "In fourteen sixty-five Sweynheim and Pannartz began printing in the monastery of Subiaco near Rome,",
+"ps_misaki": "ɪn fˌɔɹtˈin sˈɪkstifˌIv swˈAnhˌIm ænd pˈænθəɹts bəɡˈæn pɹˈɪntɪŋ ɪn ðə mˈɑnəstˌɛɹi ʌv subiˈɑkO nˌɪɹ ɹˈOm,",
+"ps_espeak": "ɪn fˌɔːɹtˈin sˈɪkstifˌaɪv swˈeɪnhˌaɪm ænd pˈænθɚts bəɡˈæn pɹˈɪntɪŋ ɪn ðə mˈɑːnəstˌɛɹi ʌv suːbiˈɑːkoʊ nˌɪɹ ɹˈoʊm,",
+"tokens": [
+[
+"In",
+"IN",
+" "
+],
+[
+"fourteen",
+"CD",
+" "
+],
+[
+"sixty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"five",
+"CD",
+" "
+],
+[
+"Sweynheim",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Pannartz",
+"NNP",
+" "
+],
+[
+"began",
+"VBD",
+" "
+],
+[
+"printing",
+"VBG",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"monastery",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"Subiaco",
+"NNP",
+" "
+],
+[
+"near",
+"IN",
+" "
+],
+[
+"Rome",
+"NNP",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj028",
+"category": "ljspeech",
+"text": "and used an exceedingly beautiful type, which is indeed to look at a transition between Gothic and Roman,",
+"norm": "and used an exceedingly beautiful type, which is indeed to look at a transition between Gothic and Roman,",
+"ps_misaki": "ænd jˈuzd ɐn ɪksˈidɪŋli bjˈuTəfəl tˈIp, wˌɪʧ ɪz ɪndˈid tə lˈʊk æt ɐ tɹænzˈɪʃən bətwˈin ɡˈɑθɪk ænd ɹˈOmən,",
+"ps_espeak": "ænd jˈuːzd ɐn ɪksˈidɪŋli bjˈuːɾəfəl tˈaɪp, wˌɪtʃ ɪz ɪndˈid tə lˈʊk æt ɐ tɹænzˈɪʃən bətwˈin ɡˈɑːθɪk ænd ɹˈoʊmən,",
+"tokens": [
+[
+"and",
+"CC",
+" "
+],
+[
+"used",
+"VBD",
+" "
+],
+[
+"an",
+"DT",
+" "
+],
+[
+"exceedingly",
+"RB",
+" "
+],
+[
+"beautiful",
+"JJ",
+" "
+],
+[
+"type",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"which",
+"WDT",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"indeed",
+"RB",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"look",
+"VB",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"transition",
+"NN",
+" "
+],
+[
+"between",
+"IN",
+" "
+],
+[
+"Gothic",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Roman",
+"NNP",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj029",
+"category": "ljspeech",
+"text": "but which must certainly have come from the study of the twelfth or even the eleventh century MSS.",
+"norm": "but which must certainly have come from the study of the twelfth or even the eleventh century MSS.",
+"ps_misaki": "bˌʌt wˌɪʧ mˈʌst sˈɜɹtnli hæv kˈʌm fɹʌm ðə stˈʌdi ʌv ðə twˈɛlfθ ɔɹ ˈivən ði əlˈɛvənθ sˈɛnʧəɹi ˌɛmˌɛsˈɛs.",
+"ps_espeak": "bˌʌt wˌɪtʃ mˈʌst sˈɜːtnli hæv kˈʌm fɹʌm ðə stˈʌdi ʌv ðə twˈɛlfθ ɔːɹ ˈivən ði əlˈɛvənθ sˈɛntʃɚi ˌɛmˌɛsˈɛs.",
+"tokens": [
+[
+"but",
+"CC",
+" "
+],
+[
+"which",
+"WDT",
+" "
+],
+[
+"must",
+"MD",
+" "
+],
+[
+"certainly",
+"RB",
+" "
+],
+[
+"have",
+"VB",
+" "
+],
+[
+"come",
+"VBN",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"study",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"twelfth",
+"JJ",
+" "
+],
+[
+"or",
+"CC",
+" "
+],
+[
+"even",
+"RB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"eleventh",
+"JJ",
+" "
+],
+[
+"century",
+"NN",
+" "
+],
+[
+"MSS",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj030",
+"category": "ljspeech",
+"text": "They printed very few books in this type, three only; but in their very first books in Rome, beginning with the year fourteen sixty-eight,",
+"norm": "They printed very few books in this type, three only; but in their very first books in Rome, beginning with the year fourteen sixty-eight,",
+"ps_misaki": "ðˌA pɹˈɪntᵻd vˈɛɹi fjˈu bˈʊks ɪn ðɪs tˈIp, θɹˈi ˈOnli; bˌʌt ɪn ðɛɹ vˈɛɹi fˈɜɹst bˈʊks ɪn ɹˈOm, bəɡˈɪnɪŋ wɪð ðə jˈɪɹ fˌɔɹtˈin sˈɪkstiˌAt,",
+"ps_espeak": "ðˌeɪ pɹˈɪntᵻd vˈɛɹi fjˈuː bˈʊks ɪn ðɪs tˈaɪp, θɹˈi ˈoʊnli; bˌʌt ɪn ðɛɹ vˈɛɹi fˈɜːst bˈʊks ɪn ɹˈoʊm, bəɡˈɪnɪŋ wɪð ðə jˈɪɹ fˌɔːɹtˈin sˈɪkstiˌeɪt,",
+"tokens": [
+[
+"They",
+"PRP",
+" "
+],
+[
+"printed",
+"VBD",
+" "
+],
+[
+"very",
+"RB",
+" "
+],
+[
+"few",
+"JJ",
+" "
+],
+[
+"books",
+"NNS",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"this",
+"DT",
+" "
+],
+[
+"type",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"three",
+"CD",
+" "
+],
+[
+"only",
+"RB",
+""
+],
+[
+";",
+":",
+" "
+],
+[
+"but",
+"CC",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"their",
+"PRP$",
+" "
+],
+[
+"very",
+"RB",
+" "
+],
+[
+"first",
+"JJ",
+" "
+],
+[
+"books",
+"NNS",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"Rome",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"beginning",
+"VBG",
+" "
+],
+[
+"with",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"year",
+"NN",
+" "
+],
+[
+"fourteen",
+"CD",
+" "
+],
+[
+"sixty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"eight",
+"CD",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj031",
+"category": "ljspeech",
+"text": "they discarded this for a more completely Roman and far less beautiful letter.",
+"norm": "they discarded this for a more completely Roman and far less beautiful letter.",
+"ps_misaki": "ðA dəskˈɑɹdᵻd ðɪs fɔɹ ɐ mˈɔɹ kəmplˈitli ɹˈOmən ænd fˈɑɹ lˈɛs bjˈuTəfəl lˈɛTəɹ.",
+"ps_espeak": "ðeɪ dəskˈɑːɹdᵻd ðɪs fɔːɹ ɐ mˈɔːɹ kəmplˈitli ɹˈoʊmən ænd fˈɑːɹ lˈɛs bjˈuːɾəfəl lˈɛɾɚ.",
+"tokens": [
+[
+"they",
+"PRP",
+" "
+],
+[
+"discarded",
+"VBD",
+" "
+],
+[
+"this",
+"DT",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"more",
+"RBR",
+" "
+],
+[
+"completely",
+"RB",
+" "
+],
+[
+"Roman",
+"JJ",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"far",
+"RB",
+" "
+],
+[
+"less",
+"RBR",
+" "
+],
+[
+"beautiful",
+"JJ",
+" "
+],
+[
+"letter",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj032",
+"category": "ljspeech",
+"text": "But about the same year Mentelin at Strasburg began to print in a type which is distinctly Roman;",
+"norm": "But about the same year Mentelin at Strasburg began to print in a type which is distinctly Roman;",
+"ps_misaki": "bˌʌt əbˈWt ðə sˈAm jˈɪɹ mˈɛntɪlɪn æt stɹˈæsbəɹɡ bəɡˈæn tə pɹˈɪnt ɪn ɐ tˈIp wˌɪʧ ɪz dəstˈɪŋktli ɹˈOmən;",
+"ps_espeak": "bˌʌt əbˈaʊt ðə sˈeɪm jˈɪɹ mˈɛntɪlɪn æt stɹˈæsbɚɡ bəɡˈæn tə pɹˈɪnt ɪn ɐ tˈaɪp wˌɪtʃ ɪz dəstˈɪŋktli ɹˈoʊmən;",
+"tokens": [
+[
+"But",
+"CC",
+" "
+],
+[
+"about",
+"RB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"same",
+"JJ",
+" "
+],
+[
+"year",
+"NN",
+" "
+],
+[
+"Mentelin",
+"NNP",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"Strasburg",
+"NNP",
+" "
+],
+[
+"began",
+"VBD",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"print",
+"VB",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"type",
+"NN",
+" "
+],
+[
+"which",
+"WDT",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"distinctly",
+"RB",
+" "
+],
+[
+"Roman",
+"JJ",
+""
+],
+[
+";",
+":",
+""
+]
+]
+},
+{
+"id": "lj033",
+"category": "ljspeech",
+"text": "and the next year Gunther Zeiner at Augsburg followed suit;",
+"norm": "and the next year Gunther Zeiner at Augsburg followed suit;",
+"ps_misaki": "ænd ðə nˈɛkst jˈɪɹ ɡˈʊntəɹ zˈInəɹ æt ˈɔɡzbəɹɡ fˈɑlOd sˈut;",
+"ps_espeak": "ænd ðə nˈɛkst jˈɪɹ ɡˈʊntɚ zˈaɪnɚ æt ˈɔːɡzbɚɡ fˈɑːloʊd sˈuːt;",
+"tokens": [
+[
+"and",
+"CC",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"next",
+"JJ",
+" "
+],
+[
+"year",
+"NN",
+" "
+],
+[
+"Gunther",
+"NNP",
+" "
+],
+[
+"Zeiner",
+"NNP",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"Augsburg",
+"NNP",
+" "
+],
+[
+"followed",
+"VBD",
+" "
+],
+[
+"suit",
+"NN",
+""
+],
+[
+";",
+":",
+""
+]
+]
+},
+{
+"id": "lj034",
+"category": "ljspeech",
+"text": "while in fourteen seventy at Paris Udalric Gering and his associates turned out the first books printed in France, also in Roman character.",
+"norm": "while in fourteen seventy at Paris Udalric Gering and his associates turned out the first books printed in France, also in Roman character.",
+"ps_misaki": "wˌIl ɪn fˌɔɹtˈin sˈɛvənti æt pˈɛɹəs judˈælɹɪk ʤˈɜɹɪŋ ænd hɪz əsˈOsiəts tˈɜɹnd ˈWt ðə fˈɜɹst bˈʊks pɹˈɪntᵻd ɪn fɹˈæns, ˈɔlsO ɪn ɹˈOmən kˈɛɹəktəɹ.",
+"ps_espeak": "wˌaɪl ɪn fˌɔːɹtˈin sˈɛvənti æt pˈɛɹəs juːdˈælɹɪk dʒˈɜːɪŋ ænd hɪz əsˈoʊsiəts tˈɜːnd ˈaʊt ðə fˈɜːst bˈʊks pɹˈɪntᵻd ɪn fɹˈæns, ˈɔːlsoʊ ɪn ɹˈoʊmən kˈɛɹəktɚ.",
+"tokens": [
+[
+"while",
+"IN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"fourteen",
+"CD",
+" "
+],
+[
+"seventy",
+"CD",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"Paris",
+"NNP",
+" "
+],
+[
+"Udalric",
+"NNP",
+" "
+],
+[
+"Gering",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"his",
+"PRP$",
+" "
+],
+[
+"associates",
+"NNS",
+" "
+],
+[
+"turned",
+"VBD",
+" "
+],
+[
+"out",
+"RP",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"first",
+"JJ",
+" "
+],
+[
+"books",
+"NNS",
+" "
+],
+[
+"printed",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"France",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"also",
+"RB",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"Roman",
+"JJ",
+" "
+],
+[
+"character",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj035",
+"category": "ljspeech",
+"text": "The Roman type of all these printers is similar in character,",
+"norm": "The Roman type of all these printers is similar in character,",
+"ps_misaki": "ðə ɹˈOmən tˈIp ʌv ˈɔl ðiz pɹˈɪntəɹz ɪz sˈɪmᵊləɹ ɪn kˈɛɹəktəɹ,",
+"ps_espeak": "ðə ɹˈoʊmən tˈaɪp ʌv ˈɔːl ðiz pɹˈɪntɚz ɪz sˈɪməlɚ ɪn kˈɛɹəktɚ,",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"Roman",
+"JJ",
+" "
+],
+[
+"type",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"all",
+"PDT",
+" "
+],
+[
+"these",
+"DT",
+" "
+],
+[
+"printers",
+"NNS",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"similar",
+"JJ",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"character",
+"NN",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj036",
+"category": "ljspeech",
+"text": "and is very simple and legible, and unaffectedly designed for use; but it is by no means without beauty.",
+"norm": "and is very simple and legible, and unaffectedly designed for use; but it is by no means without beauty.",
+"ps_misaki": "ænd ɪz vˈɛɹi sˈɪmpəl ænd lˈɛʤəbəl, ænd ˌʌnəfˈɛktədli dəzˈInd fɔɹ jˈus; bˌʌt ɪt ɪz bI nˈO mˈinz wɪðˈWt bjˈuTi.",
+"ps_espeak": "ænd ɪz vˈɛɹi sˈɪmpəl ænd lˈɛdʒəbəl, ænd ˌʌnəfˈɛktədli dəzˈaɪnd fɔːɹ jˈuːs; bˌʌt ɪt ɪz baɪ nˈoʊ mˈinz wɪðˈaʊt bjˈuːɾi.",
+"tokens": [
+[
+"and",
+"CC",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"very",
+"RB",
+" "
+],
+[
+"simple",
+"JJ",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"legible",
+"JJ",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"unaffectedly",
+"RB",
+" "
+],
+[
+"designed",
+"VBN",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"use",
+"NN",
+""
+],
+[
+";",
+":",
+" "
+],
+[
+"but",
+"CC",
+" "
+],
+[
+"it",
+"PRP",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"by",
+"IN",
+" "
+],
+[
+"no",
+"DT",
+" "
+],
+[
+"means",
+"NNS",
+" "
+],
+[
+"without",
+"IN",
+" "
+],
+[
+"beauty",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj037",
+"category": "ljspeech",
+"text": "It must be said that it is in no way like the transition type of Subiaco,",
+"norm": "It must be said that it is in no way like the transition type of Subiaco,",
+"ps_misaki": "ˌɪt mˈʌst bi sˈɛd ðæt ɪt ɪz ɪn nˈO wˈA lˈIk ðə tɹænzˈɪʃən tˈIp ʌv subiˈɑkO,",
+"ps_espeak": "ˌɪt mˈʌst bi sˈɛd ðæt ɪt ɪz ɪn nˈoʊ wˈeɪ lˈaɪk ðə tɹænzˈɪʃən tˈaɪp ʌv suːbiˈɑːkoʊ,",
+"tokens": [
+[
+"It",
+"PRP",
+" "
+],
+[
+"must",
+"MD",
+" "
+],
+[
+"be",
+"VB",
+" "
+],
+[
+"said",
+"VBN",
+" "
+],
+[
+"that",
+"IN",
+" "
+],
+[
+"it",
+"PRP",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"no",
+"DT",
+" "
+],
+[
+"way",
+"NN",
+" "
+],
+[
+"like",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"transition",
+"NN",
+" "
+],
+[
+"type",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"Subiaco",
+"NNP",
+""
+],
+[
+",",
+",",
+""
+]
+]
+},
+{
+"id": "lj038",
+"category": "ljspeech",
+"text": "and though more Roman than that, yet scarcely more like the complete Roman type of the earliest printers of Rome.",
+"norm": "and though more Roman than that, yet scarcely more like the complete Roman type of the earliest printers of Rome.",
+"ps_misaki": "ænd ðˌO mˈɔɹ ɹˈOmən ðən ðˈæt, jˈɛt skˈɛɹsli mˈɔɹ lˈIk ðə kəmplˈit ɹˈOmən tˈIp ʌv ði ˈɜɹliᵻst pɹˈɪntəɹz ʌv ɹˈOm.",
+"ps_espeak": "ænd ðˌoʊ mˈɔːɹ ɹˈoʊmən ðən ðˈæt, jˈɛt skˈɛɹsli mˈɔːɹ lˈaɪk ðə kəmplˈit ɹˈoʊmən tˈaɪp ʌv ði ˈɜːliᵻst pɹˈɪntɚz ʌv ɹˈoʊm.",
+"tokens": [
+[
+"and",
+"CC",
+" "
+],
+[
+"though",
+"IN",
+" "
+],
+[
+"more",
+"JJR",
+" "
+],
+[
+"Roman",
+"JJ",
+" "
+],
+[
+"than",
+"IN",
+" "
+],
+[
+"that",
+"DT",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"yet",
+"CC",
+" "
+],
+[
+"scarcely",
+"RB",
+" "
+],
+[
+"more",
+"RBR",
+" "
+],
+[
+"like",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"complete",
+"JJ",
+" "
+],
+[
+"Roman",
+"JJ",
+" "
+],
+[
+"type",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"earliest",
+"JJS",
+" "
+],
+[
+"printers",
+"NNS",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"Rome",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "lj039",
+"category": "ljspeech",
+"text": "A further development of the Roman letter took place at Venice.",
+"norm": "A further development of the Roman letter took place at Venice.",
+"ps_misaki": "ɐ fˈɜɹðəɹ dəvˈɛləpmənt ʌv ðə ɹˈOmən lˈɛTəɹ tˈʊk plˈAs æt vˈɛnəs.",
+"ps_espeak": "ɐ fˈɜːðɚ dəvˈɛləpmənt ʌv ðə ɹˈoʊmən lˈɛɾɚ tˈʊk plˈeɪs æt vˈɛnəs.",
+"tokens": [
+[
+"A",
+"DT",
+" "
+],
+[
+"further",
+"JJ",
+" "
+],
+[
+"development",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"Roman",
+"JJ",
+" "
+],
+[
+"letter",
+"NN",
+" "
+],
+[
+"took",
+"VBD",
+" "
+],
+[
+"place",
+"NN",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"Venice",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv000",
+"category": "harvard",
+"text": "The birch canoe slid on the smooth planks.",
+"norm": "The birch canoe slid on the smooth planks.",
+"ps_misaki": "ðə bˈɜɹʧ kənˈu slˈɪd ˌɔn ðə smˈuð plˈæŋks.",
+"ps_espeak": "ðə bˈɜːtʃ kənˈuː slˈɪd ˌɔːn ðə smˈuːð plˈæŋks.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"birch",
+"NN",
+" "
+],
+[
+"canoe",
+"NN",
+" "
+],
+[
+"slid",
+"VBD",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"smooth",
+"JJ",
+" "
+],
+[
+"planks",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv001",
+"category": "harvard",
+"text": "Glue the sheet to the dark blue background.",
+"norm": "Glue the sheet to the dark blue background.",
+"ps_misaki": "ɡlˈu ðə ʃˈit tə ðə dˈɑɹk blˈu bˈækɡɹˌWnd.",
+"ps_espeak": "ɡlˈuː ðə ʃˈit tə ðə dˈɑːɹk blˈuː bˈækɡɹˌaʊnd.",
+"tokens": [
+[
+"Glue",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"sheet",
+"NN",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"dark",
+"JJ",
+" "
+],
+[
+"blue",
+"JJ",
+" "
+],
+[
+"background",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv002",
+"category": "harvard",
+"text": "It is easy to tell the depth of a well.",
+"norm": "It is easy to tell the depth of a well.",
+"ps_misaki": "ˌɪt ɪz ˈizi tə tˈɛl ðə dˈɛpθ ʌv ɐ wˈɛl.",
+"ps_espeak": "ˌɪt ɪz ˈizi tə tˈɛl ðə dˈɛpθ ʌv ɐ wˈɛl.",
+"tokens": [
+[
+"It",
+"PRP",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"easy",
+"JJ",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"tell",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"depth",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"well",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv003",
+"category": "harvard",
+"text": "These days a chicken leg is a rare dish.",
+"norm": "These days a chicken leg is a rare dish.",
+"ps_misaki": "ðˌiz dˈAz ɐ ʧˈɪkən lˈɛɡ ɪz ɐ ɹˈɛɹ dˈɪʃ.",
+"ps_espeak": "ðˌiz dˈeɪz ɐ tʃˈɪkən lˈɛɡ ɪz ɐ ɹˈɛɹ dˈɪʃ.",
+"tokens": [
+[
+"These",
+"DT",
+" "
+],
+[
+"days",
+"NNS",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"chicken",
+"NN",
+" "
+],
+[
+"leg",
+"NN",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"rare",
+"JJ",
+" "
+],
+[
+"dish",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv004",
+"category": "harvard",
+"text": "Rice is often served in round bowls.",
+"norm": "Rice is often served in round bowls.",
+"ps_misaki": "ɹˈIs ɪz ˈɔfᵊn sˈɜɹvd ɪn ɹˈWnd bˈOlz.",
+"ps_espeak": "ɹˈaɪs ɪz ˈɔːfən sˈɜːvd ɪn ɹˈaʊnd bˈoʊlz.",
+"tokens": [
+[
+"Rice",
+"NNP",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"often",
+"RB",
+" "
+],
+[
+"served",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"round",
+"JJ",
+" "
+],
+[
+"bowls",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv005",
+"category": "harvard",
+"text": "The juice of lemons makes fine punch.",
+"norm": "The juice of lemons makes fine punch.",
+"ps_misaki": "ðə ʤˈus ʌv lˈɛmənz mˌAks fˈIn pˈʌnʧ.",
+"ps_espeak": "ðə dʒˈuːs ʌv lˈɛmənz mˌeɪks fˈaɪn pˈʌntʃ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"juice",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"lemons",
+"NNS",
+" "
+],
+[
+"makes",
+"VBZ",
+" "
+],
+[
+"fine",
+"JJ",
+" "
+],
+[
+"punch",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv006",
+"category": "harvard",
+"text": "The box was thrown beside the parked truck.",
+"norm": "The box was thrown beside the parked truck.",
+"ps_misaki": "ðə bˈɑks wʌz θɹˈOn bəsˈId ðə pˈɑɹkt tɹˈʌk.",
+"ps_espeak": "ðə bˈɑːks wʌz θɹˈoʊn bəsˈaɪd ðə pˈɑːɹkt tɹˈʌk.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"box",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"thrown",
+"VBN",
+" "
+],
+[
+"beside",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"parked",
+"VBN",
+" "
+],
+[
+"truck",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv007",
+"category": "harvard",
+"text": "The hogs were fed chopped corn and garbage.",
+"norm": "The hogs were fed chopped corn and garbage.",
+"ps_misaki": "ðə hˈɔɡz wɜɹ fˈɛd ʧˈɑpt kˈɔɹn ænd ɡˈɑɹbɪʤ.",
+"ps_espeak": "ðə hˈɔːɡz wɜː fˈɛd tʃˈɑːpt kˈɔːɹn ænd ɡˈɑːɹbɪdʒ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"hogs",
+"NNS",
+" "
+],
+[
+"were",
+"VBD",
+" "
+],
+[
+"fed",
+"VBN",
+" "
+],
+[
+"chopped",
+"VBN",
+" "
+],
+[
+"corn",
+"NN",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"garbage",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv008",
+"category": "harvard",
+"text": "Four hours of steady work faced us.",
+"norm": "Four hours of steady work faced us.",
+"ps_misaki": "fˈɔɹ ˈWəɹz ʌv stˈɛdi wˈɜɹk fˈAst ˌʌs.",
+"ps_espeak": "fˈɔːɹ ˈaʊɚz ʌv stˈɛdi wˈɜːk fˈeɪst ˌʌs.",
+"tokens": [
+[
+"Four",
+"CD",
+" "
+],
+[
+"hours",
+"NNS",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"steady",
+"JJ",
+" "
+],
+[
+"work",
+"NN",
+" "
+],
+[
+"faced",
+"VBD",
+" "
+],
+[
+"us",
+"PRP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv009",
+"category": "harvard",
+"text": "A large size in stockings is hard to sell.",
+"norm": "A large size in stockings is hard to sell.",
+"ps_misaki": "ɐ lˈɑɹʤ sˈIz ɪn stˈɑkɪŋz ɪz hˈɑɹd tə sˈɛl.",
+"ps_espeak": "ɐ lˈɑːɹdʒ sˈaɪz ɪn stˈɑːkɪŋz ɪz hˈɑːɹd tə sˈɛl.",
+"tokens": [
+[
+"A",
+"DT",
+" "
+],
+[
+"large",
+"JJ",
+" "
+],
+[
+"size",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"stockings",
+"NNS",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"hard",
+"JJ",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"sell",
+"VB",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv010",
+"category": "harvard",
+"text": "The boy was there when the sun rose.",
+"norm": "The boy was there when the sun rose.",
+"ps_misaki": "ðə bˈY wʌz ðɛɹ wˌɛn ðə sˈʌn ɹˈOz.",
+"ps_espeak": "ðə bˈɔːɪ wʌz ðɛɹ wˌɛn ðə sˈʌn ɹˈoʊz.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"boy",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"there",
+"RB",
+" "
+],
+[
+"when",
+"WRB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"sun",
+"NN",
+" "
+],
+[
+"rose",
+"VBD",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv011",
+"category": "harvard",
+"text": "A rod is used to catch pink salmon.",
+"norm": "A rod is used to catch pink salmon.",
+"ps_misaki": "ɐ ɹˈɑd ɪz jˈuzd tə kˈɛʧ pˈɪŋk sˈæmən.",
+"ps_espeak": "ɐ ɹˈɑːd ɪz jˈuːzd tə kˈɛtʃ pˈɪŋk sˈæmən.",
+"tokens": [
+[
+"A",
+"DT",
+" "
+],
+[
+"rod",
+"NN",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"used",
+"VBN",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"catch",
+"VB",
+" "
+],
+[
+"pink",
+"JJ",
+" "
+],
+[
+"salmon",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv012",
+"category": "harvard",
+"text": "The source of the huge river is the clear spring.",
+"norm": "The source of the huge river is the clear spring.",
+"ps_misaki": "ðə sˈɔɹs ʌv ðə hjˈuʤ ɹˈɪvəɹ ɪz ðə klˈɪɹ spɹˈɪŋ.",
+"ps_espeak": "ðə sˈɔːɹs ʌv ðə hjˈuːdʒ ɹˈɪvɚ ɪz ðə klˈɪɹ spɹˈɪŋ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"source",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"huge",
+"JJ",
+" "
+],
+[
+"river",
+"NN",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"clear",
+"JJ",
+" "
+],
+[
+"spring",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv013",
+"category": "harvard",
+"text": "Kick the ball straight and follow through.",
+"norm": "Kick the ball straight and follow through.",
+"ps_misaki": "kˈɪk ðə bˈɔl stɹˈAt ænd fˈɑlO θɹˈu.",
+"ps_espeak": "kˈɪk ðə bˈɔːl stɹˈeɪt ænd fˈɑːloʊ θɹˈuː.",
+"tokens": [
+[
+"Kick",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"ball",
+"NN",
+" "
+],
+[
+"straight",
+"RB",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"follow",
+"VB",
+" "
+],
+[
+"through",
+"RB",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv014",
+"category": "harvard",
+"text": "Help the woman get back to her feet.",
+"norm": "Help the woman get back to her feet.",
+"ps_misaki": "hˈɛlp ðə wˈʊmən ɡɛt bˈæk tə hɜɹ fˈit.",
+"ps_espeak": "hˈɛlp ðə wˈʊmən ɡɛt bˈæk tə hɜː fˈit.",
+"tokens": [
+[
+"Help",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"woman",
+"NN",
+" "
+],
+[
+"get",
+"VB",
+" "
+],
+[
+"back",
+"RB",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"her",
+"PRP$",
+" "
+],
+[
+"feet",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv015",
+"category": "harvard",
+"text": "A pot of tea helps to pass the evening.",
+"norm": "A pot of tea helps to pass the evening.",
+"ps_misaki": "ɐ pˈɑt ʌv tˈi hˈɛlps tə pˈæs ði ˈivnɪŋ.",
+"ps_espeak": "ɐ pˈɑːt ʌv tˈi hˈɛlps tə pˈæs ði ˈivnɪŋ.",
+"tokens": [
+[
+"A",
+"DT",
+" "
+],
+[
+"pot",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"tea",
+"NN",
+" "
+],
+[
+"helps",
+"VBZ",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"pass",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"evening",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv016",
+"category": "harvard",
+"text": "Smoky fires lack flame and heat.",
+"norm": "Smoky fires lack flame and heat.",
+"ps_misaki": "smˈOki fˈIəɹz lˈæk flˈAm ænd hˈit.",
+"ps_espeak": "smˈoʊki fˈaɪɚz lˈæk flˈeɪm ænd hˈit.",
+"tokens": [
+[
+"Smoky",
+"JJ",
+" "
+],
+[
+"fires",
+"NNS",
+" "
+],
+[
+"lack",
+"VBP",
+" "
+],
+[
+"flame",
+"NN",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"heat",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv017",
+"category": "harvard",
+"text": "The soft cushion broke the man's fall.",
+"norm": "The soft cushion broke the man s fall.",
+"expected": "The soft cushion broke the man's fall.",
+"ps_misaki": "ðə sˈɔft kˈʊʃən bɹˈOk ðə mˈæn ˈɛs fˈɔl.",
+"ps_espeak": "ðə sˈɔːft kˈʊʃən bɹˈoʊk ðə mˈæn ˈɛs fˈɔːl.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"soft",
+"JJ",
+" "
+],
+[
+"cushion",
+"NN",
+" "
+],
+[
+"broke",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"man",
+"NN",
+" "
+],
+[
+"s",
+"POS",
+" "
+],
+[
+"fall",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv018",
+"category": "harvard",
+"text": "The salt breeze came across from the sea.",
+"norm": "The salt breeze came across from the sea.",
+"ps_misaki": "ðə sˈɔlt bɹˈiz kˈAm əkɹˈɔs fɹʌm ðə sˈi.",
+"ps_espeak": "ðə sˈɔːlt bɹˈiz kˈeɪm əkɹˈɔːs fɹʌm ðə sˈi.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"salt",
+"NN",
+" "
+],
+[
+"breeze",
+"NN",
+" "
+],
+[
+"came",
+"VBD",
+" "
+],
+[
+"across",
+"RP",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"sea",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv019",
+"category": "harvard",
+"text": "The girl at the booth sold fifty bonds.",
+"norm": "The girl at the booth sold fifty bonds.",
+"ps_misaki": "ðə ɡˈɜɹl æt ðə bˈuθ sˈOld fˈɪfti bˈɑndz.",
+"ps_espeak": "ðə ɡˈɜːl æt ðə bˈuːθ sˈoʊld fˈɪfti bˈɑːndz.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"girl",
+"NN",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"booth",
+"NN",
+" "
+],
+[
+"sold",
+"VBD",
+" "
+],
+[
+"fifty",
+"CD",
+" "
+],
+[
+"bonds",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv020",
+"category": "harvard",
+"text": "The small pup gnawed a hole in the sock.",
+"norm": "The small pup gnawed a hole in the sock.",
+"ps_misaki": "ðə smˈɔl pˈʌp nˈɔd ɐ hˈOl ɪn ðə sˈɑk.",
+"ps_espeak": "ðə smˈɔːl pˈʌp nˈɔːd ɐ hˈoʊl ɪn ðə sˈɑːk.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"small",
+"JJ",
+" "
+],
+[
+"pup",
+"NN",
+" "
+],
+[
+"gnawed",
+"VBD",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"hole",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"sock",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv021",
+"category": "harvard",
+"text": "The fish twisted and turned on the bent hook.",
+"norm": "The fish twisted and turned on the bent hook.",
+"ps_misaki": "ðə fˈɪʃ twˈɪstᵻd ænd tˈɜɹnd ˌɔn ðə bˈɛnt hˈʊk.",
+"ps_espeak": "ðə fˈɪʃ twˈɪstᵻd ænd tˈɜːnd ˌɔːn ðə bˈɛnt hˈʊk.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"fish",
+"NN",
+" "
+],
+[
+"twisted",
+"VBD",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"turned",
+"VBD",
+" "
+],
+[
+"on",
+"RP",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"bent",
+"JJ",
+" "
+],
+[
+"hook",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv022",
+"category": "harvard",
+"text": "Press the pants and sew a button on the vest.",
+"norm": "Press the pants and sew a button on the vest.",
+"ps_misaki": "pɹˈɛs ðə pˈænts ænd sˈO ɐ bˈʌtn ˌɔn ðə vˈɛst.",
+"ps_espeak": "pɹˈɛs ðə pˈænts ænd sˈoʊ ɐ bˈʌtn ˌɔːn ðə vˈɛst.",
+"tokens": [
+[
+"Press",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"pants",
+"NNS",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"sew",
+"VB",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"button",
+"NN",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"vest",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv023",
+"category": "harvard",
+"text": "The swan dive was far short of perfect.",
+"norm": "The swan dive was far short of perfect.",
+"ps_misaki": "ðə swˈɑn dˈIv wʌz fˈɑɹ ʃˈɔɹt ʌv pˈɜɹfəkt.",
+"ps_espeak": "ðə swˈɑːn dˈaɪv wʌz fˈɑːɹ ʃˈɔːɹt ʌv pˈɜːfəkt.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"swan",
+"NN",
+" "
+],
+[
+"dive",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"far",
+"RB",
+" "
+],
+[
+"short",
+"JJ",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"perfect",
+"JJ",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv024",
+"category": "harvard",
+"text": "The beauty of the view stunned the young boy.",
+"norm": "The beauty of the view stunned the young boy.",
+"ps_misaki": "ðə bjˈuTi ʌv ðə vjˈu stˈʌnd ðə jˈʌŋ bˈY.",
+"ps_espeak": "ðə bjˈuːɾi ʌv ðə vjˈuː stˈʌnd ðə jˈʌŋ bˈɔːɪ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"beauty",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"view",
+"NN",
+" "
+],
+[
+"stunned",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"young",
+"JJ",
+" "
+],
+[
+"boy",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv025",
+"category": "harvard",
+"text": "Two blue fish swam in the tank.",
+"norm": "Two blue fish swam in the tank.",
+"ps_misaki": "tˈu blˈu fˈɪʃ swˈæm ɪn ðə tˈæŋk.",
+"ps_espeak": "tˈuː blˈuː fˈɪʃ swˈæm ɪn ðə tˈæŋk.",
+"tokens": [
+[
+"Two",
+"CD",
+" "
+],
+[
+"blue",
+"JJ",
+" "
+],
+[
+"fish",
+"NN",
+" "
+],
+[
+"swam",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"tank",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv026",
+"category": "harvard",
+"text": "Her purse was full of useless trash.",
+"norm": "Her purse was full of useless trash.",
+"ps_misaki": "hˌɜɹ pˈɜɹs wʌz fˈʊl ʌv jˈusləs tɹˈæʃ.",
+"ps_espeak": "hˌɜː pˈɜːs wʌz fˈʊl ʌv jˈuːsləs tɹˈæʃ.",
+"tokens": [
+[
+"Her",
+"PRP$",
+" "
+],
+[
+"purse",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"full",
+"JJ",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"useless",
+"JJ",
+" "
+],
+[
+"trash",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv027",
+"category": "harvard",
+"text": "The colt reared and threw the tall rider.",
+"norm": "The colt reared and threw the tall rider.",
+"ps_misaki": "ðə kˈOlt ɹˈɪɹd ænd θɹˈu ðə tˈɔl ɹˈIdəɹ.",
+"ps_espeak": "ðə kˈoʊlt ɹˈɪɹd ænd θɹˈuː ðə tˈɔːl ɹˈaɪdɚ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"colt",
+"NN",
+" "
+],
+[
+"reared",
+"VBD",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"threw",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"tall",
+"JJ",
+" "
+],
+[
+"rider",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv028",
+"category": "harvard",
+"text": "It snowed, rained, and hailed the same morning.",
+"norm": "It snowed, rained, and hailed the same morning.",
+"ps_misaki": "ˌɪt snˈOd, ɹˈAnd, ænd hˈAld ðə sˈAm mˈɔɹnɪŋ.",
+"ps_espeak": "ˌɪt snˈoʊd, ɹˈeɪnd, ænd hˈeɪld ðə sˈeɪm mˈɔːɹnɪŋ.",
+"tokens": [
+[
+"It",
+"PRP",
+" "
+],
+[
+"snowed",
+"VBD",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"rained",
+"VBD",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"hailed",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"same",
+"JJ",
+" "
+],
+[
+"morning",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv029",
+"category": "harvard",
+"text": "Read verse out loud for pleasure.",
+"norm": "Read verse out loud for pleasure.",
+"ps_misaki": "ɹˈid vˈɜɹs ˈWt lˈWd fɔɹ plˈɛʒəɹ.",
+"ps_espeak": "ɹˈid vˈɜːs ˈaʊt lˈaʊd fɔːɹ plˈɛʒɚ.",
+"tokens": [
+[
+"Read",
+"VB",
+" "
+],
+[
+"verse",
+"NN",
+" "
+],
+[
+"out",
+"RB",
+" "
+],
+[
+"loud",
+"RB",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"pleasure",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv030",
+"category": "harvard",
+"text": "Hoist the load to your left shoulder.",
+"norm": "Hoist the load to your left shoulder.",
+"ps_misaki": "hˈYst ðə lˈOd tə jʊɹ lˈɛft ʃˈOldəɹ.",
+"ps_espeak": "hˈɔːɪst ðə lˈoʊd tə jʊɹ lˈɛft ʃˈoʊldɚ.",
+"tokens": [
+[
+"Hoist",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"load",
+"NN",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"your",
+"PRP$",
+" "
+],
+[
+"left",
+"JJ",
+" "
+],
+[
+"shoulder",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv031",
+"category": "harvard",
+"text": "Take the winding path to reach the lake.",
+"norm": "Take the winding path to reach the lake.",
+"ps_misaki": "tˈAk ðə wˈIndɪŋ pˈæθ tə ɹˈiʧ ðə lˈAk.",
+"ps_espeak": "tˈeɪk ðə wˈaɪndɪŋ pˈæθ tə ɹˈitʃ ðə lˈeɪk.",
+"tokens": [
+[
+"Take",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"winding",
+"VBG",
+" "
+],
+[
+"path",
+"NN",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"reach",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"lake",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv032",
+"category": "harvard",
+"text": "Note closely the size of the gas tank.",
+"norm": "Note closely the size of the gas tank.",
+"ps_misaki": "nˈOt klˈOsli ðə sˈIz ʌv ðə ɡˈæs tˈæŋk.",
+"ps_espeak": "nˈoʊt klˈoʊsli ðə sˈaɪz ʌv ðə ɡˈæs tˈæŋk.",
+"tokens": [
+[
+"Note",
+"VB",
+" "
+],
+[
+"closely",
+"RB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"size",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"gas",
+"NN",
+" "
+],
+[
+"tank",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv033",
+"category": "harvard",
+"text": "Wipe the grease off his dirty face.",
+"norm": "Wipe the grease off his dirty face.",
+"ps_misaki": "wˈIp ðə ɡɹˈis ˈɔf hɪz dˈɜɹTi fˈAs.",
+"ps_espeak": "wˈaɪp ðə ɡɹˈis ˈɔːf hɪz dˈɜːɾi fˈeɪs.",
+"tokens": [
+[
+"Wipe",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"grease",
+"NN",
+" "
+],
+[
+"off",
+"IN",
+" "
+],
+[
+"his",
+"PRP$",
+" "
+],
+[
+"dirty",
+"JJ",
+" "
+],
+[
+"face",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv034",
+"category": "harvard",
+"text": "Mend the coat before you go out.",
+"norm": "Mend the coat before you go out.",
+"ps_misaki": "mˈɛnd ðə kˈOt bəfˈɔɹ ju ɡˌO ˈWt.",
+"ps_espeak": "mˈɛnd ðə kˈoʊt bəfˈɔːɹ juː ɡˌoʊ ˈaʊt.",
+"tokens": [
+[
+"Mend",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"coat",
+"NN",
+" "
+],
+[
+"before",
+"IN",
+" "
+],
+[
+"you",
+"PRP",
+" "
+],
+[
+"go",
+"VBP",
+" "
+],
+[
+"out",
+"RP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv035",
+"category": "harvard",
+"text": "The wrist was badly strained and hung limp.",
+"norm": "The wrist was badly strained and hung limp.",
+"ps_misaki": "ðə ɹˈɪst wʌz bˈædli stɹˈAnd ænd hˈʌŋ lˈɪmp.",
+"ps_espeak": "ðə ɹˈɪst wʌz bˈædli stɹˈeɪnd ænd hˈʌŋ lˈɪmp.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"wrist",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"badly",
+"RB",
+" "
+],
+[
+"strained",
+"JJ",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"hung",
+"VBN",
+" "
+],
+[
+"limp",
+"JJ",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv036",
+"category": "harvard",
+"text": "The stray cat gave birth to kittens.",
+"norm": "The stray cat gave birth to kittens.",
+"ps_misaki": "ðə stɹˈA kˈæt ɡˈAv bˈɜɹθ tə kˈɪtnz.",
+"ps_espeak": "ðə stɹˈeɪ kˈæt ɡˈeɪv bˈɜːθ tə kˈɪtnz.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"stray",
+"JJ",
+" "
+],
+[
+"cat",
+"NN",
+" "
+],
+[
+"gave",
+"VBD",
+" "
+],
+[
+"birth",
+"NN",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"kittens",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv037",
+"category": "harvard",
+"text": "The young girl gave no clear response.",
+"norm": "The young girl gave no clear response.",
+"ps_misaki": "ðə jˈʌŋ ɡˈɜɹl ɡˈAv nˈO klˈɪɹ ɹəspˈɑns.",
+"ps_espeak": "ðə jˈʌŋ ɡˈɜːl ɡˈeɪv nˈoʊ klˈɪɹ ɹəspˈɑːns.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"young",
+"JJ",
+" "
+],
+[
+"girl",
+"NN",
+" "
+],
+[
+"gave",
+"VBD",
+" "
+],
+[
+"no",
+"DT",
+" "
+],
+[
+"clear",
+"JJ",
+" "
+],
+[
+"response",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv038",
+"category": "harvard",
+"text": "The meal was cooked before the bell rang.",
+"norm": "The meal was cooked before the bell rang.",
+"ps_misaki": "ðə mˈil wʌz kˈʊkt bəfˈɔɹ ðə bˈɛl ɹˈæŋ.",
+"ps_espeak": "ðə mˈil wʌz kˈʊkt bəfˈɔːɹ ðə bˈɛl ɹˈæŋ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"meal",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"cooked",
+"VBN",
+" "
+],
+[
+"before",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"bell",
+"NN",
+" "
+],
+[
+"rang",
+"VBD",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv039",
+"category": "harvard",
+"text": "What joy there is in living.",
+"norm": "What joy there is in living.",
+"ps_misaki": "wˌʌt ʤˈY ðɛɹ ɪz ɪn lˈɪvɪŋ.",
+"ps_espeak": "wˌʌt dʒˈɔːɪ ðɛɹ ɪz ɪn lˈɪvɪŋ.",
+"tokens": [
+[
+"What",
+"WP",
+" "
+],
+[
+"joy",
+"NN",
+" "
+],
+[
+"there",
+"EX",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"living",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv040",
+"category": "harvard",
+"text": "A king ruled the state in the early days.",
+"norm": "A king ruled the state in the early days.",
+"ps_misaki": "ɐ kˈɪŋ ɹˈuld ðə stˈAt ɪn ði ˈɜɹli dˈAz.",
+"ps_espeak": "ɐ kˈɪŋ ɹˈuːld ðə stˈeɪt ɪn ði ˈɜːli dˈeɪz.",
+"tokens": [
+[
+"A",
+"DT",
+" "
+],
+[
+"king",
+"NN",
+" "
+],
+[
+"ruled",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"state",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"early",
+"JJ",
+" "
+],
+[
+"days",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv041",
+"category": "harvard",
+"text": "The ship was torn apart on the sharp reef.",
+"norm": "The ship was torn apart on the sharp reef.",
+"ps_misaki": "ðə ʃˈɪp wʌz tˈɔɹn əpˈɑɹt ˌɔn ðə ʃˈɑɹp ɹˈif.",
+"ps_espeak": "ðə ʃˈɪp wʌz tˈɔːɹn əpˈɑːɹt ˌɔːn ðə ʃˈɑːɹp ɹˈif.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"ship",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"torn",
+"VBN",
+" "
+],
+[
+"apart",
+"RB",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"sharp",
+"JJ",
+" "
+],
+[
+"reef",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv042",
+"category": "harvard",
+"text": "Sickness kept him home the third week.",
+"norm": "Sickness kept him home the third week.",
+"ps_misaki": "sˈɪknəs kˈɛpt hˌɪm hˈOm ðə θˈɜɹd wˈik.",
+"ps_espeak": "sˈɪknəs kˈɛpt hˌɪm hˈoʊm ðə θˈɜːd wˈik.",
+"tokens": [
+[
+"Sickness",
+"NNP",
+" "
+],
+[
+"kept",
+"VBD",
+" "
+],
+[
+"him",
+"PRP",
+" "
+],
+[
+"home",
+"RB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"third",
+"JJ",
+" "
+],
+[
+"week",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv043",
+"category": "harvard",
+"text": "The wide road shimmered in the hot sun.",
+"norm": "The wide road shimmered in the hot sun.",
+"ps_misaki": "ðə wˈId ɹˈOd ʃˈɪməɹd ɪn ðə hˈɑt sˈʌn.",
+"ps_espeak": "ðə wˈaɪd ɹˈoʊd ʃˈɪmɚd ɪn ðə hˈɑːt sˈʌn.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"wide",
+"JJ",
+" "
+],
+[
+"road",
+"NN",
+" "
+],
+[
+"shimmered",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"hot",
+"JJ",
+" "
+],
+[
+"sun",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv044",
+"category": "harvard",
+"text": "The lazy cow lay in the cool grass.",
+"norm": "The lazy cow lay in the cool grass.",
+"ps_misaki": "ðə lˈAzi kˈW lˈA ɪn ðə kˈul ɡɹˈæs.",
+"ps_espeak": "ðə lˈeɪzi kˈaʊ lˈeɪ ɪn ðə kˈuːl ɡɹˈæs.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"lazy",
+"JJ",
+" "
+],
+[
+"cow",
+"NN",
+" "
+],
+[
+"lay",
+"VBD",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"cool",
+"JJ",
+" "
+],
+[
+"grass",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv045",
+"category": "harvard",
+"text": "Lift the square stone over the fence.",
+"norm": "Lift the square stone over the fence.",
+"ps_misaki": "lˈɪft ðə skwˈɛɹ stˈOn ˈOvəɹ ðə fˈɛns.",
+"ps_espeak": "lˈɪft ðə skwˈɛɹ stˈoʊn ˈoʊvɚ ðə fˈɛns.",
+"tokens": [
+[
+"Lift",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"square",
+"JJ",
+" "
+],
+[
+"stone",
+"NN",
+" "
+],
+[
+"over",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"fence",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv046",
+"category": "harvard",
+"text": "The rope will bind the seven books at once.",
+"norm": "The rope will bind the seven books at once.",
+"ps_misaki": "ðə ɹˈOp wɪl bˈInd ðə sˈɛvən bˈʊks æt wˈʌns.",
+"ps_espeak": "ðə ɹˈoʊp wɪl bˈaɪnd ðə sˈɛvən bˈʊks æt wˈʌns.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"rope",
+"NN",
+" "
+],
+[
+"will",
+"MD",
+" "
+],
+[
+"bind",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"seven",
+"CD",
+" "
+],
+[
+"books",
+"NNS",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"once",
+"RB",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv047",
+"category": "harvard",
+"text": "Hop over the fence and plunge in.",
+"norm": "Hop over the fence and plunge in.",
+"ps_misaki": "hˈɑp ˈOvəɹ ðə fˈɛns ænd plˈʌnʤ ˈɪn.",
+"ps_espeak": "hˈɑːp ˈoʊvɚ ðə fˈɛns ænd plˈʌndʒ ˈɪn.",
+"tokens": [
+[
+"Hop",
+"VB",
+" "
+],
+[
+"over",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"fence",
+"NN",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"plunge",
+"VB",
+" "
+],
+[
+"in",
+"RP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv048",
+"category": "harvard",
+"text": "The friendly gang left the drug store.",
+"norm": "The friendly gang left the drug store.",
+"ps_misaki": "ðə fɹˈɛndli ɡˈæŋ lˈɛft ðə dɹˈʌɡ stˈɔɹ.",
+"ps_espeak": "ðə fɹˈɛndli ɡˈæŋ lˈɛft ðə dɹˈʌɡ stˈɔːɹ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"friendly",
+"JJ",
+" "
+],
+[
+"gang",
+"NN",
+" "
+],
+[
+"left",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"drug",
+"NN",
+" "
+],
+[
+"store",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv049",
+"category": "harvard",
+"text": "Mesh wire keeps chicks inside.",
+"norm": "Mesh wire keeps chicks inside.",
+"ps_misaki": "mˈɛʃ wˈIəɹ kˈips ʧˈɪks ɪnsˈId.",
+"ps_espeak": "mˈɛʃ wˈaɪɚ kˈips tʃˈɪks ɪnsˈaɪd.",
+"tokens": [
+[
+"Mesh",
+"JJ",
+" "
+],
+[
+"wire",
+"NN",
+" "
+],
+[
+"keeps",
+"VBZ",
+" "
+],
+[
+"chicks",
+"NNS",
+" "
+],
+[
+"inside",
+"RB",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv050",
+"category": "harvard",
+"text": "The frosty air passed through the coat.",
+"norm": "The frosty air passed through the coat.",
+"ps_misaki": "ðə fɹˈɔsti ˈɛɹ pˈæst θɹu ðə kˈOt.",
+"ps_espeak": "ðə fɹˈɔːsti ˈɛɹ pˈæst θɹuː ðə kˈoʊt.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"frosty",
+"JJ",
+" "
+],
+[
+"air",
+"NN",
+" "
+],
+[
+"passed",
+"VBD",
+" "
+],
+[
+"through",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"coat",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv051",
+"category": "harvard",
+"text": "The crooked maze failed to fool the mouse.",
+"norm": "The crooked maze failed to fool the mouse.",
+"ps_misaki": "ðə kɹˈʊkɪd mˈAz fˈAld tə fˈul ðə mˈWs.",
+"ps_espeak": "ðə kɹˈʊkɪd mˈeɪz fˈeɪld tə fˈuːl ðə mˈaʊs.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"crooked",
+"JJ",
+" "
+],
+[
+"maze",
+"NN",
+" "
+],
+[
+"failed",
+"VBD",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"fool",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"mouse",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv052",
+"category": "harvard",
+"text": "Adding fast leads to wrong sums.",
+"norm": "Adding fast leads to wrong sums.",
+"ps_misaki": "ˈædɪŋ fˈæst lˈidz tə ɹˈɔŋ sˈʌmz.",
+"ps_espeak": "ˈædɪŋ fˈæst lˈidz tə ɹˈɔːŋ sˈʌmz.",
+"tokens": [
+[
+"Adding",
+"VBG",
+" "
+],
+[
+"fast",
+"JJ",
+" "
+],
+[
+"leads",
+"VBZ",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"wrong",
+"JJ",
+" "
+],
+[
+"sums",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv053",
+"category": "harvard",
+"text": "The show was a flop from the very start.",
+"norm": "The show was a flop from the very start.",
+"ps_misaki": "ðə ʃˈO wʌz ɐ flˈɑp fɹʌm ðə vˈɛɹi stˈɑɹt.",
+"ps_espeak": "ðə ʃˈoʊ wʌz ɐ flˈɑːp fɹʌm ðə vˈɛɹi stˈɑːɹt.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"show",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"flop",
+"NN",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"very",
+"JJ",
+" "
+],
+[
+"start",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv054",
+"category": "harvard",
+"text": "A saw is a tool used for making boards.",
+"norm": "A saw is a tool used for making boards.",
+"ps_misaki": "ɐ sˈɔ ɪz ɐ tˈul jˈuzd fɔɹ mˈAkɪŋ bˈɔɹdz.",
+"ps_espeak": "ɐ sˈɔː ɪz ɐ tˈuːl jˈuːzd fɔːɹ mˈeɪkɪŋ bˈɔːɹdz.",
+"tokens": [
+[
+"A",
+"DT",
+" "
+],
+[
+"saw",
+"NN",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"tool",
+"NN",
+" "
+],
+[
+"used",
+"VBN",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"making",
+"VBG",
+" "
+],
+[
+"boards",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv055",
+"category": "harvard",
+"text": "The wagon moved on well oiled wheels.",
+"norm": "The wagon moved on well oiled wheels.",
+"ps_misaki": "ðə wˈæɡᵊn mˈuvd ˌɔn wˈɛl ˈYld wˈilz.",
+"ps_espeak": "ðə wˈæɡən mˈuːvd ˌɔːn wˈɛl ˈɔːɪld wˈilz.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"wagon",
+"NN",
+" "
+],
+[
+"moved",
+"VBD",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"well",
+"RB",
+" "
+],
+[
+"oiled",
+"VBN",
+" "
+],
+[
+"wheels",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv056",
+"category": "harvard",
+"text": "March the soldiers past the next hill.",
+"norm": "March the soldiers past the next hill.",
+"ps_misaki": "mˈɑɹʧ ðə sˈOlʤəɹz pˈæst ðə nˈɛkst hˈɪl.",
+"ps_espeak": "mˈɑːɹtʃ ðə sˈoʊldʒɚz pˈæst ðə nˈɛkst hˈɪl.",
+"tokens": [
+[
+"March",
+"NNP",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"soldiers",
+"NNS",
+" "
+],
+[
+"past",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"next",
+"JJ",
+" "
+],
+[
+"hill",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv057",
+"category": "harvard",
+"text": "A cup of sugar makes sweet fudge.",
+"norm": "A cup of sugar makes sweet fudge.",
+"ps_misaki": "ɐ kˈʌp ʌv ʃˈʊɡəɹ mˌAks swˈit fˈʌʤ.",
+"ps_espeak": "ɐ kˈʌp ʌv ʃˈʊɡɚ mˌeɪks swˈit fˈʌdʒ.",
+"tokens": [
+[
+"A",
+"DT",
+" "
+],
+[
+"cup",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"sugar",
+"NN",
+" "
+],
+[
+"makes",
+"VBZ",
+" "
+],
+[
+"sweet",
+"JJ",
+" "
+],
+[
+"fudge",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv058",
+"category": "harvard",
+"text": "Place a rosebush near the porch steps.",
+"norm": "Place a rosebush near the porch steps.",
+"ps_misaki": "plˈAs ɐ ɹˈOzbˌʊʃ nˌɪɹ ðə pˈɔɹʧ stˈɛps.",
+"ps_espeak": "plˈeɪs ɐ ɹˈoʊzbˌʊʃ nˌɪɹ ðə pˈɔːɹtʃ stˈɛps.",
+"tokens": [
+[
+"Place",
+"VB",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"rosebush",
+"NN",
+" "
+],
+[
+"near",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"porch",
+"NN",
+" "
+],
+[
+"steps",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "hv059",
+"category": "harvard",
+"text": "Both lost their lives in the raging storm.",
+"norm": "Both lost their lives in the raging storm.",
+"ps_misaki": "bˈOθ lˈɔst ðɛɹ lˈIvz ɪn ðə ɹˈAʤɪŋ stˈɔɹm.",
+"ps_espeak": "bˈoʊθ lˈɔːst ðɛɹ lˈaɪvz ɪn ðə ɹˈeɪdʒɪŋ stˈɔːɹm.",
+"tokens": [
+[
+"Both",
+"DT",
+" "
+],
+[
+"lost",
+"VBD",
+" "
+],
+[
+"their",
+"PRP$",
+" "
+],
+[
+"lives",
+"NNS",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"raging",
+"VBG",
+" "
+],
+[
+"storm",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ht000",
+"category": "heteronym",
+"text": "I read the book last night, and tonight I will read it again.",
+"norm": "I read the book last night, and tonight I will read it again.",
+"ps_misaki": "ˌI ɹˈɛd ðə bˈʊk lˈæst nˈIt, ænd tənˈIt ˌI wɪl ɹˈid ɪt əɡˈɛn.",
+"ps_espeak": "ˌaɪ ɹˈɛd ðə bˈʊk lˈæst nˈaɪt, ænd tənˈaɪt ˌaɪ wɪl ɹˈid ɪt əɡˈɛn.",
+"tokens": [
+[
+"I",
+"PRP",
+" "
+],
+[
+"read",
+"VBP",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"book",
+"NN",
+" "
+],
+[
+"last",
+"JJ",
+" "
+],
+[
+"night",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"tonight",
+"NN",
+" "
+],
+[
+"I",
+"PRP",
+" "
+],
+[
+"will",
+"MD",
+" "
+],
+[
+"read",
+"VB",
+" "
+],
+[
+"it",
+"PRP",
+" "
+],
+[
+"again",
+"RB",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "read",
+"form1": "ɹˈɛd",
+"form2": "ɹˈid"
+}
+},
+{
+"id": "ht001",
+"category": "heteronym",
+"text": "The lead singer carried the lead pipe across the stage.",
+"norm": "The lead singer carried the lead pipe across the stage.",
+"ps_misaki": "ðə lˈid sˈɪŋəɹ kˈɛɹid ðə lˈid pˈIp əkɹˈɔs ðə stˈAʤ.",
+"ps_espeak": "ðə lˈid sˈɪŋɚ kˈɛɹid ðə lˈid pˈaɪp əkɹˈɔːs ðə stˈeɪdʒ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"lead",
+"NN",
+" "
+],
+[
+"singer",
+"NN",
+" "
+],
+[
+"carried",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"lead",
+"JJ",
+" "
+],
+[
+"pipe",
+"NN",
+" "
+],
+[
+"across",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"stage",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "lead",
+"form1": "lˈid",
+"form2": "lˈɛd"
+}
+},
+{
+"id": "ht002",
+"category": "heteronym",
+"text": "They live in a house where live music plays every night.",
+"norm": "They live in a house where live music plays every night.",
+"ps_misaki": "ðˌA lˈɪv ɪn ɐ hˈWs wˌɛɹ lˈIv mjˈuzɪk plˈAz ˈɛvəɹi nˈIt.",
+"ps_espeak": "ðˌeɪ lˈɪv ɪn ɐ hˈaʊs wˌɛɹ lˈaɪv mjˈuːzɪk plˈeɪz ˈɛvɚi nˈaɪt.",
+"tokens": [
+[
+"They",
+"PRP",
+" "
+],
+[
+"live",
+"VBP",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"house",
+"NN",
+" "
+],
+[
+"where",
+"WRB",
+" "
+],
+[
+"live",
+"JJ",
+" "
+],
+[
+"music",
+"NN",
+" "
+],
+[
+"plays",
+"VBZ",
+" "
+],
+[
+"every",
+"DT",
+" "
+],
+[
+"night",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "live",
+"form1": "lˈɪv",
+"form2": "lˈIv"
+}
+},
+{
+"id": "ht003",
+"category": "heteronym",
+"text": "The bass player hooked an enormous bass in the shallow lake.",
+"norm": "The bass player hooked an enormous bass in the shallow lake.",
+"ps_misaki": "ðə bˈæs plˈAəɹ hˈʊkt ɐn ɪnˈɔɹməs bˈæs ɪn ðə ʃˈælO lˈAk.",
+"ps_espeak": "ðə bˈæs plˈeɪɚ hˈʊkt ɐn ɪnˈɔːɹməs bˈæs ɪn ðə ʃˈæloʊ lˈeɪk.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"bass",
+"NN",
+" "
+],
+[
+"player",
+"NN",
+" "
+],
+[
+"hooked",
+"VBD",
+" "
+],
+[
+"an",
+"DT",
+" "
+],
+[
+"enormous",
+"JJ",
+" "
+],
+[
+"bass",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"shallow",
+"JJ",
+" "
+],
+[
+"lake",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "bass",
+"form1": "bˈAs",
+"form2": "bˈæs"
+}
+},
+{
+"id": "ht004",
+"category": "heteronym",
+"text": "Wind the clock before the wind picks up outside.",
+"norm": "Wind the clock before the wind picks up outside.",
+"ps_misaki": "wˈInd ðə klˈɑk bəfˈɔɹ ðə wˈɪnd pˈɪks ˌʌp ˌWtsˈId.",
+"ps_espeak": "wˈaɪnd ðə klˈɑːk bəfˈɔːɹ ðə wˈɪnd pˈɪks ˌʌp ˌaʊtsˈaɪd.",
+"tokens": [
+[
+"Wind",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"clock",
+"NN",
+" "
+],
+[
+"before",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"wind",
+"NN",
+" "
+],
+[
+"picks",
+"VBZ",
+" "
+],
+[
+"up",
+"RP",
+" "
+],
+[
+"outside",
+"RB",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "wind",
+"form1": "wˈInd",
+"form2": "wˈɪnd"
+}
+},
+{
+"id": "ht005",
+"category": "heteronym",
+"text": "A single tear rolled down her cheek as she began to tear the letter.",
+"norm": "A single tear rolled down her cheek as she began to tear the letter.",
+"ps_misaki": "ɐ sˈɪŋɡᵊl tˈɪɹ ɹˈOld dˌWn hɜɹ ʧˈik æz ʃi bəɡˈæn tə tˈɛɹ ðə lˈɛTəɹ.",
+"ps_espeak": "ɐ sˈɪŋɡəl tˈɪɹ ɹˈoʊld dˌaʊn hɜː tʃˈik æz ʃi bəɡˈæn tə tˈɛɹ ðə lˈɛɾɚ.",
+"tokens": [
+[
+"A",
+"DT",
+" "
+],
+[
+"single",
+"JJ",
+" "
+],
+[
+"tear",
+"NN",
+" "
+],
+[
+"rolled",
+"VBD",
+" "
+],
+[
+"down",
+"RP",
+" "
+],
+[
+"her",
+"PRP$",
+" "
+],
+[
+"cheek",
+"NN",
+" "
+],
+[
+"as",
+"IN",
+" "
+],
+[
+"she",
+"PRP",
+" "
+],
+[
+"began",
+"VBD",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"tear",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"letter",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "tear",
+"form1": "tˈɪɹ",
+"form2": "tˈɛɹ"
+}
+},
+{
+"id": "ht006",
+"category": "heteronym",
+"text": "Close the heavy door and stand close to the fire.",
+"norm": "Close the heavy door and stand close to the fire.",
+"ps_misaki": "klˈOz ðə hˈɛvi dˈɔɹ ænd stˈænd klˈOs tə ðə fˈIəɹ.",
+"ps_espeak": "klˈoʊz ðə hˈɛvi dˈɔːɹ ænd stˈænd klˈoʊs tə ðə fˈaɪɚ.",
+"tokens": [
+[
+"Close",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"heavy",
+"JJ",
+" "
+],
+[
+"door",
+"NN",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"stand",
+"VB",
+" "
+],
+[
+"close",
+"RB",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"fire",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "close",
+"form1": "klˈOz",
+"form2": "klˈOs"
+}
+},
+{
+"id": "ht007",
+"category": "heteronym",
+"text": "We will record a new record before the summer ends.",
+"norm": "We will record a new record before the summer ends.",
+"ps_misaki": "wˌi wɪl ɹəkˈɔɹd ɐ nˈu ɹˈɛkəɹd bəfˈɔɹ ðə sˈʌməɹ ˈɛndz.",
+"ps_espeak": "wˌi wɪl ɹəkˈɔːɹd ɐ nˈuː ɹˈɛkɚd bəfˈɔːɹ ðə sˈʌmɚ ˈɛndz.",
+"tokens": [
+[
+"We",
+"PRP",
+" "
+],
+[
+"will",
+"MD",
+" "
+],
+[
+"record",
+"VB",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"new",
+"JJ",
+" "
+],
+[
+"record",
+"NN",
+" "
+],
+[
+"before",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"summer",
+"NN",
+" "
+],
+[
+"ends",
+"VBZ",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "record",
+"form1": "ɹɪkˈɔɹd",
+"form2": "ɹˈɛkəɹd"
+}
+},
+{
+"id": "ht008",
+"category": "heteronym",
+"text": "The present committee will present the award at present.",
+"norm": "The present committee will present the award at present.",
+"ps_misaki": "ðə pɹˈɛzᵊnt kəmˈɪTi wɪl pɹizˈɛnt ði əwˈɔɹd æt pɹˈɛzᵊnt.",
+"ps_espeak": "ðə pɹˈɛzənt kəmˈɪɾi wɪl pɹizˈɛnt ði əwˈɔːɹd æt pɹˈɛzənt.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"present",
+"JJ",
+" "
+],
+[
+"committee",
+"NN",
+" "
+],
+[
+"will",
+"MD",
+" "
+],
+[
+"present",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"award",
+"NN",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"present",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "present",
+"form1": "pɹˈɛzənt",
+"form2": "pɹizˈɛnt"
+}
+},
+{
+"id": "ht009",
+"category": "heteronym",
+"text": "Do not object to the object resting on the table.",
+"norm": "Do not object to the object resting on the table.",
+"ps_misaki": "dˈu nˌɑt əbʤˈɛkt tə ði ˈɑbʤəkt ɹˈɛstɪŋ ˌɔn ðə tˈAbᵊl.",
+"ps_espeak": "dˈuː nˌɑːt əbdʒˈɛkt tə ði ˈɑːbdʒəkt ɹˈɛstɪŋ ˌɔːn ðə tˈeɪbəl.",
+"tokens": [
+[
+"Do",
+"VBP",
+" "
+],
+[
+"not",
+"RB",
+" "
+],
+[
+"object",
+"VB",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"object",
+"NN",
+" "
+],
+[
+"resting",
+"VBG",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"table",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "object",
+"form1": "əbʤˈɛkt",
+"form2": "ˈɑbʤɛkt"
+}
+},
+{
+"id": "ht010",
+"category": "heteronym",
+"text": "Wait a minute while I examine this minute detail.",
+"norm": "Wait a minute while I examine this minute detail.",
+"ps_misaki": "wˈAt ɐ mˈɪnət wˌIl ˌI ɪɡzˈæmən ðɪs mˈɪnət dətˈAl.",
+"ps_espeak": "wˈeɪt ɐ mˈɪnət wˌaɪl ˌaɪ ɪɡzˈæmən ðɪs mˈɪnət dətˈeɪl.",
+"tokens": [
+[
+"Wait",
+"VB",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"minute",
+"NN",
+" "
+],
+[
+"while",
+"IN",
+" "
+],
+[
+"I",
+"PRP",
+" "
+],
+[
+"examine",
+"VBP",
+" "
+],
+[
+"this",
+"DT",
+" "
+],
+[
+"minute",
+"NN",
+" "
+],
+[
+"detail",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "minute",
+"form1": "mˈɪnət",
+"form2": "mInˈut"
+}
+},
+{
+"id": "ht011",
+"category": "heteronym",
+"text": "He made a deep bow after the bow of the ship swung around.",
+"norm": "He made a deep bow after the bow of the ship swung around.",
+"ps_misaki": "hˌi mˌAd ɐ dˈip bˈO ˈæftəɹ ðə bˈO ʌv ðə ʃˈɪp swˈʌŋ əɹˈWnd.",
+"ps_espeak": "hˌi mˌeɪd ɐ dˈip bˈoʊ ˈæftɚ ðə bˈoʊ ʌv ðə ʃˈɪp swˈʌŋ ɚˈaʊnd.",
+"tokens": [
+[
+"He",
+"PRP",
+" "
+],
+[
+"made",
+"VBD",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"deep",
+"JJ",
+" "
+],
+[
+"bow",
+"NN",
+" "
+],
+[
+"after",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"bow",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"ship",
+"NN",
+" "
+],
+[
+"swung",
+"VBD",
+" "
+],
+[
+"around",
+"RP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ht012",
+"category": "heteronym",
+"text": "The dove dove into the bushes to escape the hawk.",
+"norm": "The dove dove into the bushes to escape the hawk.",
+"ps_misaki": "ðə dˈʌv dˈOv ˈɪntu ðə bˈʊʃᵻz tʊ əskˈAp ðə hˈɔk.",
+"ps_espeak": "ðə dˈʌv dˈoʊv ˈɪntuː ðə bˈʊʃᵻz tʊ əskˈeɪp ðə hˈɔːk.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"dove",
+"NN",
+" "
+],
+[
+"dove",
+"VBD",
+" "
+],
+[
+"into",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"bushes",
+"NNS",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"escape",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"hawk",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "dove",
+"form1": "dˈʌv",
+"form2": "dˈOv"
+}
+},
+{
+"id": "ht013",
+"category": "heteronym",
+"text": "The farm was used to produce produce for the market.",
+"norm": "The farm was used to produce produce for the market.",
+"ps_misaki": "ðə fˈɑɹm wʌz jˈuzd tə pɹədˈus pɹˈOdˌus fɔɹ ðə mˈɑɹkət.",
+"ps_espeak": "ðə fˈɑːɹm wʌz jˈuːzd tə pɹədˈuːs pɹˈoʊdˌuːs fɔːɹ ðə mˈɑːɹkət.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"farm",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"used",
+"VBN",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"produce",
+"VB",
+" "
+],
+[
+"produce",
+"NN",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"market",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "produce",
+"form1": "pɹədˈus",
+"form2": "pɹˈOdus"
+}
+},
+{
+"id": "ht014",
+"category": "heteronym",
+"text": "The soldier chose to desert his dessert in the desert.",
+"norm": "The soldier chose to desert his dessert in the desert.",
+"ps_misaki": "ðə sˈOlʤəɹ ʧˈOz tə dəzˈɜɹt hɪz dəzˈɜɹt ɪn ðə dˈɛzəɹt.",
+"ps_espeak": "ðə sˈoʊldʒɚ tʃˈoʊz tə dəzˈɜːt hɪz dəzˈɜːt ɪn ðə dˈɛzɚt.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"soldier",
+"NN",
+" "
+],
+[
+"chose",
+"VBD",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"desert",
+"VB",
+" "
+],
+[
+"his",
+"PRP$",
+" "
+],
+[
+"dessert",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"desert",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "desert",
+"form1": "dˈɛzəɹt",
+"form2": "dɪzˈɜɹt"
+}
+},
+{
+"id": "ht015",
+"category": "heteronym",
+"text": "The insurance was invalid for the invalid in the ward.",
+"norm": "The insurance was invalid for the invalid in the ward.",
+"ps_misaki": "ði ɪnʃˈʊɹəns wʌz ɪnvˈælɪd fɔɹ ði ˈɪnvəlɪd ɪn ðə wˈɔɹd.",
+"ps_espeak": "ði ɪnʃˈʊɹəns wʌz ɪnvˈælɪd fɔːɹ ði ˈɪnvəlɪd ɪn ðə wˈɔːɹd.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"insurance",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"invalid",
+"JJ",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"invalid",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"ward",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "invalid",
+"form1": "ɪnvˈæləd",
+"form2": "ˈɪnvələd"
+}
+},
+{
+"id": "ht016",
+"category": "heteronym",
+"text": "They were too close to the door to close it.",
+"norm": "They were too close to the door to close it.",
+"ps_misaki": "ðˌA wɜɹ tˈu klˈOs tə ðə dˈɔɹ tə klˈOz ɪt.",
+"ps_espeak": "ðˌeɪ wɜː tˈuː klˈoʊs tə ðə dˈɔːɹ tə klˈoʊz ɪt.",
+"tokens": [
+[
+"They",
+"PRP",
+" "
+],
+[
+"were",
+"VBD",
+" "
+],
+[
+"too",
+"RB",
+" "
+],
+[
+"close",
+"JJ",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"door",
+"NN",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"close",
+"VB",
+" "
+],
+[
+"it",
+"PRP",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "close",
+"form1": "klˈOs",
+"form2": "klˈOz"
+}
+},
+{
+"id": "ht017",
+"category": "heteronym",
+"text": "The buck does funny things when the does are watching.",
+"norm": "The buck does funny things when the does are watching.",
+"ps_misaki": "ðə bˈʌk dˈʌz fˈʌni θˈɪŋz wˌɛn ðə dˈʌz ɑɹ wˈɑʧɪŋ.",
+"ps_espeak": "ðə bˈʌk dˈʌz fˈʌni θˈɪŋz wˌɛn ðə dˈʌz ɑːɹ wˈɑːtʃɪŋ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"buck",
+"NN",
+" "
+],
+[
+"does",
+"VBZ",
+" "
+],
+[
+"funny",
+"JJ",
+" "
+],
+[
+"things",
+"NNS",
+" "
+],
+[
+"when",
+"WRB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"does",
+"VBZ",
+" "
+],
+[
+"are",
+"VBP",
+" "
+],
+[
+"watching",
+"VBG",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "does",
+"form1": "dˈʌz",
+"form2": "dˈOz"
+}
+},
+{
+"id": "ht018",
+"category": "heteronym",
+"text": "A tired sewer worker fell asleep beside the open sewer.",
+"norm": "A tired sewer worker fell asleep beside the open sewer.",
+"ps_misaki": "ɐ tˈIəɹd sˈuəɹ wˈɜɹkəɹ fˈɛl əslˈip bəsˈId ði ˈOpᵊn sˈuəɹ.",
+"ps_espeak": "ɐ tˈaɪɚd sˈuːɚ wˈɜːkɚ fˈɛl əslˈip bəsˈaɪd ði ˈoʊpən sˈuːɚ.",
+"tokens": [
+[
+"A",
+"DT",
+" "
+],
+[
+"tired",
+"JJ",
+" "
+],
+[
+"sewer",
+"NN",
+" "
+],
+[
+"worker",
+"NN",
+" "
+],
+[
+"fell",
+"VBD",
+" "
+],
+[
+"asleep",
+"JJ",
+" "
+],
+[
+"beside",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"open",
+"JJ",
+" "
+],
+[
+"sewer",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ht019",
+"category": "heteronym",
+"text": "To help with planting, the farmer taught his sow to sow.",
+"norm": "To help with planting, the farmer taught his sow to sow.",
+"ps_misaki": "tə hˈɛlp wɪð plˈæntɪŋ, ðə fˈɑɹməɹ tˈɔt hɪz sˈW tə sˈO.",
+"ps_espeak": "tə hˈɛlp wɪð plˈæntɪŋ, ðə fˈɑːɹmɚ tˈɔːt hɪz sˈaʊ tə sˈoʊ.",
+"tokens": [
+[
+"To",
+"TO",
+" "
+],
+[
+"help",
+"VB",
+" "
+],
+[
+"with",
+"IN",
+" "
+],
+[
+"planting",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"farmer",
+"NN",
+" "
+],
+[
+"taught",
+"VBD",
+" "
+],
+[
+"his",
+"PRP$",
+" "
+],
+[
+"sow",
+"NN",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"sow",
+"VB",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "sow",
+"form1": "sˈW",
+"form2": "sˈO"
+}
+},
+{
+"id": "ht020",
+"category": "heteronym",
+"text": "Upon seeing the tear in the painting I shed a tear.",
+"norm": "Upon seeing the tear in the painting I shed a tear.",
+"ps_misaki": "əpˈɑn sˈiɪŋ ðə tˈɪɹ ɪn ðə pˈAntɪŋ ˌI ʃˈɛd ɐ tˈɪɹ.",
+"ps_espeak": "əpˈɑːn sˈiɪŋ ðə tˈɪɹ ɪn ðə pˈeɪntɪŋ ˌaɪ ʃˈɛd ɐ tˈɪɹ.",
+"tokens": [
+[
+"Upon",
+"IN",
+" "
+],
+[
+"seeing",
+"VBG",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"tear",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"painting",
+"NN",
+" "
+],
+[
+"I",
+"PRP",
+" "
+],
+[
+"shed",
+"VBD",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"tear",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "tear",
+"form1": "tˈɛɹ",
+"form2": "tˈɪɹ"
+}
+},
+{
+"id": "ht021",
+"category": "heteronym",
+"text": "I had to subject the subject to a series of tests.",
+"norm": "I had to subject the subject to a series of tests.",
+"ps_misaki": "ˌI hæd tə səbʤˈɛkt ðə sˈʌbʤɛkt tə ɐ sˈɪɹiz ʌv tˈɛsts.",
+"ps_espeak": "ˌaɪ hæd tə səbdʒˈɛkt ðə sˈʌbdʒɛkt tə ɐ sˈɪɹiz ʌv tˈɛsts.",
+"tokens": [
+[
+"I",
+"PRP",
+" "
+],
+[
+"had",
+"VBD",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"subject",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"subject",
+"NN",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"series",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"tests",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "subject",
+"form1": "səbʤˈɛkt",
+"form2": "sˈʌbʤɪkt"
+}
+},
+{
+"id": "ht022",
+"category": "heteronym",
+"text": "How can I intimate this to my most intimate friend?",
+"norm": "How can I intimate this to my most intimate friend?",
+"ps_misaki": "hˌW kæn ˌI ˈɪntəmˌAt ðɪs tə mI mˈOst ˈɪntəmət fɹˈɛnd?",
+"ps_espeak": "hˌaʊ kæn ˌaɪ ˈɪntəmˌeɪt ðɪs tə maɪ mˈoʊst ˈɪntəmət fɹˈɛnd?",
+"tokens": [
+[
+"How",
+"WRB",
+" "
+],
+[
+"can",
+"MD",
+" "
+],
+[
+"I",
+"PRP",
+" "
+],
+[
+"intimate",
+"VB",
+" "
+],
+[
+"this",
+"DT",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"my",
+"PRP$",
+" "
+],
+[
+"most",
+"RBS",
+" "
+],
+[
+"intimate",
+"JJ",
+" "
+],
+[
+"friend",
+"NN",
+""
+],
+[
+"?",
+".",
+""
+]
+],
+"heteronym": {
+"word": "intimate",
+"form1": "ˈɪntəmˌAt",
+"form2": "ˈɪntəmət"
+}
+},
+{
+"id": "ht023",
+"category": "heteronym",
+"text": "The bandage was wound around the wound.",
+"norm": "The bandage was wound around the wound.",
+"ps_misaki": "ðə bˈændɪʤ wʌz wˈWnd əɹˈWnd ðə wˈund.",
+"ps_espeak": "ðə bˈændɪdʒ wʌz wˈaʊnd ɚˈaʊnd ðə wˈuːnd.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"bandage",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"wound",
+"VBN",
+" "
+],
+[
+"around",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"wound",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "wound",
+"form1": "wˈWnd",
+"form2": "wˈund"
+}
+},
+{
+"id": "ht024",
+"category": "heteronym",
+"text": "He could lead the team if he would get the lead out.",
+"norm": "He could lead the team if he would get the lead out.",
+"ps_misaki": "hˌi kʊd lˈid ðə tˈim ɪf hi wʊd ɡɛt ðə lˈid ˈWt.",
+"ps_espeak": "hˌi kʊd lˈid ðə tˈim ɪf hi wʊd ɡɛt ðə lˈid ˈaʊt.",
+"tokens": [
+[
+"He",
+"PRP",
+" "
+],
+[
+"could",
+"MD",
+" "
+],
+[
+"lead",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"team",
+"NN",
+" "
+],
+[
+"if",
+"IN",
+" "
+],
+[
+"he",
+"PRP",
+" "
+],
+[
+"would",
+"MD",
+" "
+],
+[
+"get",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"lead",
+"NN",
+" "
+],
+[
+"out",
+"RP",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "lead",
+"form1": "lˈid",
+"form2": "lˈɛd"
+}
+},
+{
+"id": "ht025",
+"category": "heteronym",
+"text": "The dump was so full that it had to refuse more refuse.",
+"norm": "The dump was so full that it had to refuse more refuse.",
+"ps_misaki": "ðə dˈʌmp wʌz sˌO fˈʊl ðæt ɪt hæd tə ɹəfjˈuz mˈɔɹ ɹˈɛfjˌus.",
+"ps_espeak": "ðə dˈʌmp wʌz sˌoʊ fˈʊl ðæt ɪt hæd tə ɹəfjˈuːz mˈɔːɹ ɹˈɛfjˌuːs.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"dump",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"so",
+"RB",
+" "
+],
+[
+"full",
+"JJ",
+" "
+],
+[
+"that",
+"IN",
+" "
+],
+[
+"it",
+"PRP",
+" "
+],
+[
+"had",
+"VBD",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"refuse",
+"VB",
+" "
+],
+[
+"more",
+"JJR",
+" "
+],
+[
+"refuse",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "refuse",
+"form1": "ɹɪfjˈuz",
+"form2": "ɹˈɛfjus"
+}
+},
+{
+"id": "ht026",
+"category": "heteronym",
+"text": "There is no time like the present to present the present.",
+"norm": "There is no time like the present to present the present.",
+"ps_misaki": "ðˌɛɹ ɪz nˈO tˈIm lˈIk ðə pɹˈɛzᵊnt tə pɹizˈɛnt ðə pɹˈɛzᵊnt.",
+"ps_espeak": "ðˌɛɹ ɪz nˈoʊ tˈaɪm lˈaɪk ðə pɹˈɛzənt tə pɹizˈɛnt ðə pɹˈɛzənt.",
+"tokens": [
+[
+"There",
+"EX",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"no",
+"DT",
+" "
+],
+[
+"time",
+"NN",
+" "
+],
+[
+"like",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"present",
+"NN",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"present",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"present",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "present",
+"form1": "pɹˈɛzənt",
+"form2": "pɹizˈɛnt"
+}
+},
+{
+"id": "ht027",
+"category": "heteronym",
+"text": "The contract will contract sharply if we do not sign today.",
+"norm": "The contract will contract sharply if we do not sign today.",
+"ps_misaki": "ðə kˈɑntɹˌækt wɪl kəntɹˈækt ʃˈɑɹpli ɪf wi dˈu nˌɑt sˈIn tədˈA.",
+"ps_espeak": "ðə kˈɑːntɹˌækt wɪl kəntɹˈækt ʃˈɑːɹpli ɪf wi dˈuː nˌɑːt sˈaɪn tədˈeɪ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"contract",
+"NN",
+" "
+],
+[
+"will",
+"MD",
+" "
+],
+[
+"contract",
+"VB",
+" "
+],
+[
+"sharply",
+"RB",
+" "
+],
+[
+"if",
+"IN",
+" "
+],
+[
+"we",
+"PRP",
+" "
+],
+[
+"do",
+"VBP",
+" "
+],
+[
+"not",
+"RB",
+" "
+],
+[
+"sign",
+"VB",
+" "
+],
+[
+"today",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "contract",
+"form1": "kəntɹˈækt",
+"form2": "kˈɑntɹˌækt"
+}
+},
+{
+"id": "ht028",
+"category": "heteronym",
+"text": "They rebel against every rebel who breaks the rules.",
+"norm": "They rebel against every rebel who breaks the rules.",
+"ps_misaki": "ðˌA ɹəbˈɛl əɡˈɛnst ˈɛvəɹi ɹˈɛbᵊl hˌu bɹˈAks ðə ɹˈulz.",
+"ps_espeak": "ðˌeɪ ɹəbˈɛl əɡˈɛnst ˈɛvɚi ɹˈɛbəl hˌuː bɹˈeɪks ðə ɹˈuːlz.",
+"tokens": [
+[
+"They",
+"PRP",
+" "
+],
+[
+"rebel",
+"VBP",
+" "
+],
+[
+"against",
+"IN",
+" "
+],
+[
+"every",
+"DT",
+" "
+],
+[
+"rebel",
+"NN",
+" "
+],
+[
+"who",
+"WP",
+" "
+],
+[
+"breaks",
+"VBZ",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"rules",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "rebel",
+"form1": "ɹɪbˈɛl",
+"form2": "ɹˈɛbəl"
+}
+},
+{
+"id": "ht029",
+"category": "heteronym",
+"text": "The suspect will suspect nothing about the plan.",
+"norm": "The suspect will suspect nothing about the plan.",
+"ps_misaki": "ðə sˈʌspˌɛkt wɪl səspˈɛkt nˈʌθɪŋ əbˈWt ðə plˈæn.",
+"ps_espeak": "ðə sˈʌspˌɛkt wɪl səspˈɛkt nˈʌθɪŋ əbˈaʊt ðə plˈæn.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"suspect",
+"NN",
+" "
+],
+[
+"will",
+"MD",
+" "
+],
+[
+"suspect",
+"VB",
+" "
+],
+[
+"nothing",
+"NN",
+" "
+],
+[
+"about",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"plan",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "suspect",
+"form1": "sˈʌspɛkt",
+"form2": "səspˈɛkt"
+}
+},
+{
+"id": "ht030",
+"category": "heteronym",
+"text": "The project managers project a modest gain this year.",
+"norm": "The project managers project a modest gain this year.",
+"ps_misaki": "ðə pɹˈɑʤˌɛkt mˈænɪʤəɹz pɹəʤˈɛkt ɐ mˈɑdəst ɡˈAn ðɪs jˈɪɹ.",
+"ps_espeak": "ðə pɹˈɑːdʒˌɛkt mˈænɪdʒɚz pɹədʒˈɛkt ɐ mˈɑːdəst ɡˈeɪn ðɪs jˈɪɹ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"project",
+"NN",
+" "
+],
+[
+"managers",
+"NNS",
+" "
+],
+[
+"project",
+"VBP",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"modest",
+"JJ",
+" "
+],
+[
+"gain",
+"NN",
+" "
+],
+[
+"this",
+"DT",
+" "
+],
+[
+"year",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "project",
+"form1": "pɹəʤˈɛkt",
+"form2": "pɹˈɑʤɛkt"
+}
+},
+{
+"id": "ht031",
+"category": "heteronym",
+"text": "Please separate the separate piles before you leave.",
+"norm": "Please separate the separate piles before you leave.",
+"ps_misaki": "plˈiz sˈɛpəɹˌAt ðə sˈɛpəɹət pˈIlz bəfˈɔɹ ju lˈiv.",
+"ps_espeak": "plˈiz sˈɛpɚˌeɪt ðə sˈɛpɚət pˈaɪlz bəfˈɔːɹ juː lˈiv.",
+"tokens": [
+[
+"Please",
+"UH",
+" "
+],
+[
+"separate",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"separate",
+"JJ",
+" "
+],
+[
+"piles",
+"NNS",
+" "
+],
+[
+"before",
+"IN",
+" "
+],
+[
+"you",
+"PRP",
+" "
+],
+[
+"leave",
+"VBP",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "separate",
+"form1": "sˈɛpəɹˌAt",
+"form2": "sˈɛpɹət"
+}
+},
+{
+"id": "ht032",
+"category": "heteronym",
+"text": "The estimate they estimate is deliberately conservative.",
+"norm": "The estimate they estimate is deliberately conservative.",
+"ps_misaki": "ði ˈɛstəmət ðA ˈɛstəmˌAt ɪz dəlˈɪbəɹətli kənsˈɜɹvəTɪv.",
+"ps_espeak": "ði ˈɛstəmət ðeɪ ˈɛstəmˌeɪt ɪz dəlˈɪbɚətli kənsˈɜːvəɾɪv.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"estimate",
+"NN",
+" "
+],
+[
+"they",
+"PRP",
+" "
+],
+[
+"estimate",
+"VBP",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"deliberately",
+"RB",
+" "
+],
+[
+"conservative",
+"JJ",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "estimate",
+"form1": "ˈɛstəmət",
+"form2": "ˈɛstəmˌAt"
+}
+},
+{
+"id": "ht033",
+"category": "heteronym",
+"text": "The conductor will conduct the orchestra, and his conduct was flawless.",
+"norm": "The conductor will conduct the orchestra, and his conduct was flawless.",
+"ps_misaki": "ðə kəndˈʌktəɹ wɪl kəndˈʌkt ði ˈɔɹkəstɹə, ænd hɪz kˈɑndˌʌkt wʌz flˈɔləs.",
+"ps_espeak": "ðə kəndˈʌktɚ wɪl kəndˈʌkt ði ˈɔːɹkəstɹə, ænd hɪz kˈɑːndˌʌkt wʌz flˈɔːləs.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"conductor",
+"NN",
+" "
+],
+[
+"will",
+"MD",
+" "
+],
+[
+"conduct",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"orchestra",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"his",
+"PRP$",
+" "
+],
+[
+"conduct",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"flawless",
+"JJ",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "conduct",
+"form1": "kəndˈʌkt",
+"form2": "kˈɑndəkt"
+}
+},
+{
+"id": "ht034",
+"category": "heteronym",
+"text": "The moped rider moped around the parking lot all afternoon.",
+"norm": "The moped rider moped around the parking lot all afternoon.",
+"ps_misaki": "ðə mˈOpˌɛd ɹˈIdəɹ mˈOpt əɹˈWnd ðə pˈɑɹkɪŋ lˈɑt ˈɔl ˌæftəɹnˈun.",
+"ps_espeak": "ðə mˈoʊpˌɛd ɹˈaɪdɚ mˈoʊpt ɚˈaʊnd ðə pˈɑːɹkɪŋ lˈɑːt ˈɔːl ˌæftɚnˈuːn.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"moped",
+"JJ",
+" "
+],
+[
+"rider",
+"NN",
+" "
+],
+[
+"moped",
+"VBD",
+" "
+],
+[
+"around",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"parking",
+"NN",
+" "
+],
+[
+"lot",
+"NN",
+" "
+],
+[
+"all",
+"DT",
+" "
+],
+[
+"afternoon",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "moped",
+"form1": "mˈOpɛd",
+"form2": "mˈOpt"
+}
+},
+{
+"id": "ht035",
+"category": "heteronym",
+"text": "The entrance was designed to entrance every visitor.",
+"norm": "The entrance was designed to entrance every visitor.",
+"ps_misaki": "ði ˈɛntɹəns wʌz dəzˈInd tʊ ɪntɹˈæns ˈɛvəɹi vˈɪzəTəɹ.",
+"ps_espeak": "ði ˈɛntɹəns wʌz dəzˈaɪnd tʊ ɪntɹˈæns ˈɛvɚi vˈɪzəɾɚ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"entrance",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"designed",
+"VBN",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"entrance",
+"VB",
+" "
+],
+[
+"every",
+"DT",
+" "
+],
+[
+"visitor",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "entrance",
+"form1": "ˈɛntɹəns",
+"form2": "ɪntɹˈæns"
+}
+},
+{
+"id": "ht036",
+"category": "heteronym",
+"text": "He was content with the content of the report.",
+"norm": "He was content with the content of the report.",
+"ps_misaki": "hˌi wʌz kəntˈɛnt wɪð ðə kˈɑntɛnt ʌv ðə ɹəpˈɔɹt.",
+"ps_espeak": "hˌi wʌz kəntˈɛnt wɪð ðə kˈɑːntɛnt ʌv ðə ɹəpˈɔːɹt.",
+"tokens": [
+[
+"He",
+"PRP",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"content",
+"JJ",
+" "
+],
+[
+"with",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"content",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"report",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "content",
+"form1": "kəntˈɛnt",
+"form2": "kˈɑntɛnt"
+}
+},
+{
+"id": "ht037",
+"category": "heteronym",
+"text": "Please attribute this attribute to the original author.",
+"norm": "Please attribute this attribute to the original author.",
+"ps_misaki": "plˈiz ətɹˈɪbjˌut ðɪs ˈætɹəbjˌut tə ði əɹˈɪʤənᵊl ˈɔθəɹ.",
+"ps_espeak": "plˈiz ətɹˈɪbjˌuːt ðɪs ˈætɹəbjˌuːt tə ði ɚˈɪdʒənəl ˈɔːθɚ.",
+"tokens": [
+[
+"Please",
+"UH",
+" "
+],
+[
+"attribute",
+"VB",
+" "
+],
+[
+"this",
+"DT",
+" "
+],
+[
+"attribute",
+"NN",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"original",
+"JJ",
+" "
+],
+[
+"author",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "attribute",
+"form1": "ətɹˈɪbjut",
+"form2": "ˈætɹəbjˌut"
+}
+},
+{
+"id": "ht038",
+"category": "heteronym",
+"text": "I will resume writing my resume after lunch.",
+"norm": "I will resume writing my resume after lunch.",
+"ps_misaki": "ˌI wɪl ɹəzˈum ɹˈITɪŋ mI ɹəzˈum ˈæftəɹ lˈʌnʧ.",
+"ps_espeak": "ˌaɪ wɪl ɹəzˈuːm ɹˈaɪɾɪŋ maɪ ɹəzˈuːm ˈæftɚ lˈʌntʃ.",
+"tokens": [
+[
+"I",
+"PRP",
+" "
+],
+[
+"will",
+"MD",
+" "
+],
+[
+"resume",
+"VB",
+" "
+],
+[
+"writing",
+"VBG",
+" "
+],
+[
+"my",
+"PRP$",
+" "
+],
+[
+"resume",
+"NN",
+" "
+],
+[
+"after",
+"IN",
+" "
+],
+[
+"lunch",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "resume",
+"form1": "ɹɪzˈum",
+"form2": "ɹˈɛzəmˌA"
+}
+},
+{
+"id": "ht039",
+"category": "heteronym",
+"text": "The august committee met in August to weigh the evidence.",
+"norm": "The august committee met in August to weigh the evidence.",
+"ps_misaki": "ði ɔɡˈʌst kəmˈɪTi mˈɛt ɪn ˈɔɡəst tə wˈA ði ˈɛvədᵊns.",
+"ps_espeak": "ði ɔːɡˈʌst kəmˈɪɾi mˈɛt ɪn ˈɔːɡəst tə wˈeɪ ði ˈɛvədəns.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"august",
+"NNP",
+" "
+],
+[
+"committee",
+"NN",
+" "
+],
+[
+"met",
+"VBD",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"August",
+"NNP",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"weigh",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"evidence",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+],
+"heteronym": {
+"word": "august",
+"form1": "ɔɡˈʌst",
+"form2": "ˈɔɡəst"
+}
+},
+{
+"id": "ov000",
+"category": "oov",
+"text": "Nguyen and Chalamet arrived in Reykjavik on a freezing morning.",
+"norm": "Nguyen and Chalamet arrived in Reykjavik on a freezing morning.",
+"ps_misaki": "nujˈɛn ænd ʧˈæləmɛt əɹˈIvd ɪn ɹˈAkjəvˌɪk ˌɔn ɐ fɹˈizɪŋ mˈɔɹnɪŋ.",
+"ps_espeak": "nuːjˈɛn ænd tʃˈæləmɛt ɚˈaɪvd ɪn ɹˈeɪkjəvˌɪk ˌɔːn ɐ fɹˈizɪŋ mˈɔːɹnɪŋ.",
+"tokens": [
+[
+"Nguyen",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Chalamet",
+"NNP",
+" "
+],
+[
+"arrived",
+"VBD",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"Reykjavik",
+"NNP",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"freezing",
+"JJ",
+" "
+],
+[
+"morning",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov001",
+"category": "oov",
+"text": "The Kubernetes cluster failed to reconcile the resource stored in etcd.",
+"norm": "The Kubernetes cluster failed to reconcile the resource stored in etcd.",
+"ps_misaki": "ðə kəbˈɜɹnəts klˈʌstəɹ fˈAld tə ɹˈɛkənsˌIl ðə ɹˈisˌɔɹs stˈɔɹd ɪn ɛtsˈɛTəɹəd.",
+"ps_espeak": "ðə kəbˈɜːnəts klˈʌstɚ fˈeɪld tə ɹˈɛkənsˌaɪl ðə ɹˈisˌɔːɹs stˈɔːɹd ɪn ɛtsˈɛɾɚəd.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"Kubernetes",
+"NNP",
+" "
+],
+[
+"cluster",
+"NN",
+" "
+],
+[
+"failed",
+"VBD",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"reconcile",
+"VB",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"resource",
+"NN",
+" "
+],
+[
+"stored",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"etcd",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov002",
+"category": "oov",
+"text": "Worcestershire sauce is named after Worcestershire in England.",
+"norm": "Worcestershire sauce is named after Worcestershire in England.",
+"ps_misaki": "wˈʊstəɹʃˌɪɹ sˈɔs ɪz nˈAmd ˈæftəɹ wˈʊstəɹʃˌɪɹ ɪn ˈɪŋɡlənd.",
+"ps_espeak": "wˈʊstɚʃˌɪɹ sˈɔːs ɪz nˈeɪmd ˈæftɚ wˈʊstɚʃˌɪɹ ɪn ˈɪŋɡlənd.",
+"tokens": [
+[
+"Worcestershire",
+"NNP",
+" "
+],
+[
+"sauce",
+"NN",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"named",
+"VBN",
+" "
+],
+[
+"after",
+"IN",
+" "
+],
+[
+"Worcestershire",
+"NNP",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"England",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov003",
+"category": "oov",
+"text": "Siobhan drove from Ouagadougou toward Ljubljana without a map.",
+"norm": "Siobhan drove from Ouagadougou toward Ljubljana without a map.",
+"ps_misaki": "ʃˈWbˌɑn dɹˈOv fɹʌm wˌɑɡədˈuɡu tˈɔɹd ljˌʊbliˈɑnə wɪðˈWt ɐ mˈæp.",
+"ps_espeak": "ʃˈaʊbˌɑːn dɹˈoʊv fɹʌm wˌɑːɡədˈuːɡuː tˈɔːɹd ljˌʊbliˈɑːnə wɪðˈaʊt ɐ mˈæp.",
+"tokens": [
+[
+"Siobhan",
+"NNP",
+" "
+],
+[
+"drove",
+"VBD",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"Ouagadougou",
+"NNP",
+" "
+],
+[
+"toward",
+"IN",
+" "
+],
+[
+"Ljubljana",
+"NNP",
+" "
+],
+[
+"without",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"map",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov004",
+"category": "oov",
+"text": "The PyTorch model runs quantized kernels on every available accelerator.",
+"norm": "The PyTorch model runs quantized kernels on every available accelerator.",
+"ps_misaki": "ðə pˈɪtəɹk mˈɑdᵊl ɹˈʌnz kwˈɑntˌIzd kˈɜɹnᵊlz ˌɔn ˈɛvəɹi əvˈAləbᵊl əksˈɛləɹˌATəɹ.",
+"ps_espeak": "ðə pˈɪtɚk mˈɑːdəl ɹˈʌnz kwˈɑːntˌaɪzd kˈɜːnəlz ˌɔːn ˈɛvɚi əvˈeɪləbəl əksˈɛlɚˌeɪɾɚ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"PyTorch",
+"NNP",
+" "
+],
+[
+"model",
+"NN",
+" "
+],
+[
+"runs",
+"VBZ",
+" "
+],
+[
+"quantized",
+"VBD",
+" "
+],
+[
+"kernels",
+"NNS",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"every",
+"DT",
+" "
+],
+[
+"available",
+"JJ",
+" "
+],
+[
+"accelerator",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov005",
+"category": "oov",
+"text": "Xylophone repairs in Poughkeepsie are surprisingly expensive.",
+"norm": "Xylophone repairs in Poughkeepsie are surprisingly expensive.",
+"ps_misaki": "zˈIləfˌOn ɹəpˈɛɹz ɪn pəkˈɪpsi ɑɹ səɹpɹˈIzɪŋli ɪkspˈɛnsɪv.",
+"ps_espeak": "zˈaɪləfˌoʊn ɹəpˈɛɹz ɪn pəkˈɪpsi ɑːɹ sɚpɹˈaɪzɪŋli ɪkspˈɛnsɪv.",
+"tokens": [
+[
+"Xylophone",
+"NNP",
+" "
+],
+[
+"repairs",
+"NNS",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"Poughkeepsie",
+"NNP",
+" "
+],
+[
+"are",
+"VBP",
+" "
+],
+[
+"surprisingly",
+"RB",
+" "
+],
+[
+"expensive",
+"JJ",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov006",
+"category": "oov",
+"text": "Zbigniew Brzezinski wrote at length about geopolitics and Eurasia.",
+"norm": "Zbigniew Brzezinski wrote at length about geopolitics and Eurasia.",
+"ps_misaki": "zbˈɪɡnu bɹɪzˈɪnski ɹˈOt æt lˈɛŋθ əbˈWt ʤˌiOpˈɑləTɪks ænd jʊɹˈAʒə.",
+"ps_espeak": "zbˈɪɡnuː bɹɪzˈɪnski ɹˈoʊt æt lˈɛŋθ əbˈaʊt dʒˌioʊpˈɑːləɾɪks ænd jʊɹˈeɪʒə.",
+"tokens": [
+[
+"Zbigniew",
+"NNP",
+" "
+],
+[
+"Brzezinski",
+"NNP",
+" "
+],
+[
+"wrote",
+"VBD",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"length",
+"NN",
+" "
+],
+[
+"about",
+"IN",
+" "
+],
+[
+"geopolitics",
+"NNS",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Eurasia",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov007",
+"category": "oov",
+"text": "The tokenizer emitted an unexpected sentencepiece for the whole corpus.",
+"norm": "The tokenizer emitted an unexpected sentencepiece for the whole corpus.",
+"ps_misaki": "ðə tˈOkənˌIzəɹ əmˈɪTᵻd ɐn ˌʌnəkspˈɛktᵻd sˈɛntənspˌis fɔɹ ðə hˈOl kˈɔɹpəs.",
+"ps_espeak": "ðə tˈoʊkənˌaɪzɚ əmˈɪɾᵻd ɐn ˌʌnəkspˈɛktᵻd sˈɛntənspˌis fɔːɹ ðə hˈoʊl kˈɔːɹpəs.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"tokenizer",
+"NN",
+" "
+],
+[
+"emitted",
+"VBD",
+" "
+],
+[
+"an",
+"DT",
+" "
+],
+[
+"unexpected",
+"JJ",
+" "
+],
+[
+"sentencepiece",
+"NN",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"whole",
+"JJ",
+" "
+],
+[
+"corpus",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov008",
+"category": "oov",
+"text": "Beijing, Guangzhou, and Chongqing are enormous Chinese cities.",
+"norm": "Beijing, Guangzhou, and Chongqing are enormous Chinese cities.",
+"ps_misaki": "bˌAʤˈɪŋ, ɡwˌɑŋʤˈO, ænd ʧˌʊŋʧˈɪŋ ɑɹ ɪnˈɔɹməs ʧˌInˈiz sˈɪTiz.",
+"ps_espeak": "bˌeɪdʒˈɪŋ, ɡwˌɑːŋdʒˈoʊ, ænd tʃˌʊŋtʃˈɪŋ ɑːɹ ɪnˈɔːɹməs tʃˌaɪnˈiz sˈɪɾiz.",
+"tokens": [
+[
+"Beijing",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"Guangzhou",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Chongqing",
+"NNP",
+" "
+],
+[
+"are",
+"VBP",
+" "
+],
+[
+"enormous",
+"JJ",
+" "
+],
+[
+"Chinese",
+"JJ",
+" "
+],
+[
+"cities",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov009",
+"category": "oov",
+"text": "Yosemite and Tuolumne draw enormous crowds every summer.",
+"norm": "Yosemite and Tuolumne draw enormous crowds every summer.",
+"ps_misaki": "jOsˈɛmɪti ænd twˈɔlum dɹˈɔ ɪnˈɔɹməs kɹˈWdz ˈɛvəɹi sˈʌməɹ.",
+"ps_espeak": "joʊsˈɛmɪti ænd twˈɔːluːm dɹˈɔː ɪnˈɔːɹməs kɹˈaʊdz ˈɛvɚi sˈʌmɚ.",
+"tokens": [
+[
+"Yosemite",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Tuolumne",
+"NNP",
+" "
+],
+[
+"draw",
+"VB",
+" "
+],
+[
+"enormous",
+"JJ",
+" "
+],
+[
+"crowds",
+"NNS",
+" "
+],
+[
+"every",
+"DT",
+" "
+],
+[
+"summer",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov010",
+"category": "oov",
+"text": "The eigenvalue decomposition converged after a handful of iterations.",
+"norm": "The eigenvalue decomposition converged after a handful of iterations.",
+"ps_misaki": "ði ˈIɡənvˌælju dˌikˌɑmpəzˈɪʃən kənvˈɜɹʤd ˈæftəɹ ɐ hˈændfˌʊl ʌv ˌɪTəɹˈAʃənz.",
+"ps_espeak": "ði ˈaɪɡənvˌæljuː dˌikˌɑːmpəzˈɪʃən kənvˈɜːdʒd ˈæftɚ ɐ hˈændfˌʊl ʌv ˌɪɾɚˈeɪʃənz.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"eigenvalue",
+"NN",
+" "
+],
+[
+"decomposition",
+"NN",
+" "
+],
+[
+"converged",
+"VBN",
+" "
+],
+[
+"after",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"handful",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"iterations",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov011",
+"category": "oov",
+"text": "Mbappe scored twice against Wolverhampton in the second half.",
+"norm": "Mbappe scored twice against Wolverhampton in the second half.",
+"ps_misaki": "bəpˈæp skˈɔɹd twˈIs əɡˈɛnst wˈʊlvəɹhˌæmptᵊn ɪn ðə sˈɛkənd hˈæf.",
+"ps_espeak": "bəpˈæp skˈɔːɹd twˈaɪs əɡˈɛnst wˈʊlvɚhˌæmptən ɪn ðə sˈɛkənd hˈæf.",
+"tokens": [
+[
+"Mbappe",
+"NNP",
+" "
+],
+[
+"scored",
+"VBD",
+" "
+],
+[
+"twice",
+"RB",
+" "
+],
+[
+"against",
+"IN",
+" "
+],
+[
+"Wolverhampton",
+"NNP",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"second",
+"JJ",
+" "
+],
+[
+"half",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov012",
+"category": "oov",
+"text": "Anaesthesiologists in Edinburgh discussed the revised protocol.",
+"norm": "Anaesthesiologists in Edinburgh discussed the revised protocol.",
+"ps_misaki": "ˌænəsthIlˈAʃədəs ɪn ˈɛdənbəɹə dəskˈʌst ðə ɹəvˈIzd pɹˈOTəkˌɔl.",
+"ps_espeak": "ˌænəsthaɪlˈeɪʃədəs ɪn ˈɛdənbɚə dəskˈʌst ðə ɹəvˈaɪzd pɹˈoʊɾəkˌɔːl.",
+"tokens": [
+[
+"Anaesthesiologists",
+"NNS",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"Edinburgh",
+"NNP",
+" "
+],
+[
+"discussed",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"revised",
+"VBN",
+" "
+],
+[
+"protocol",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov013",
+"category": "oov",
+"text": "Hermione and Nietzsche would have argued bitterly about aesthetics.",
+"norm": "Hermione and Nietzsche would have argued bitterly about aesthetics.",
+"ps_misaki": "hˈɜɹmiˌOn ænd nˈiʧə wʊd hæv ˈɑɹɡjud bˈɪTəɹli əbˈWt ɛsθˈɛTɪks.",
+"ps_espeak": "hˈɜːmiˌoʊn ænd nˈitʃə wʊd hæv ˈɑːɹɡjuːd bˈɪɾɚli əbˈaʊt ɛsθˈɛɾɪks.",
+"tokens": [
+[
+"Hermione",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Nietzsche",
+"NNP",
+" "
+],
+[
+"would",
+"MD",
+" "
+],
+[
+"have",
+"VB",
+" "
+],
+[
+"argued",
+"VBN",
+" "
+],
+[
+"bitterly",
+"RB",
+" "
+],
+[
+"about",
+"IN",
+" "
+],
+[
+"aesthetics",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov014",
+"category": "oov",
+"text": "The daslang compiler emits optimized machine code without an interpreter.",
+"norm": "The daslang compiler emits optimized machine code without an interpreter.",
+"ps_misaki": "ðə dˈæslæŋ kəmpˈIləɹ əmˈɪts ˈɑptəmˌIzd məʃˈin kˈOd wɪðˈWt ɐn ɪntˈɜɹpɹəTəɹ.",
+"ps_espeak": "ðə dˈæslæŋ kəmpˈaɪlɚ əmˈɪts ˈɑːptəmˌaɪzd məʃˈin kˈoʊd wɪðˈaʊt ɐn ɪntˈɜːpɹəɾɚ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"daslang",
+"NN",
+" "
+],
+[
+"compiler",
+"NN",
+" "
+],
+[
+"emits",
+"VBZ",
+" "
+],
+[
+"optimized",
+"VBN",
+" "
+],
+[
+"machine",
+"NN",
+" "
+],
+[
+"code",
+"NN",
+" "
+],
+[
+"without",
+"IN",
+" "
+],
+[
+"an",
+"DT",
+" "
+],
+[
+"interpreter",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov015",
+"category": "oov",
+"text": "Onnxruntime loaded the quantized transformer checkpoint in milliseconds.",
+"norm": "Onnxruntime loaded the quantized transformer checkpoint in milliseconds.",
+"ps_misaki": "ɑnkɹˈʌstmənt lˈOdᵻd ðə kwˈɑntˌIzd tɹænsfˈɔɹməɹ ʧˈɛkpˌYnt ɪn mˈɪləsˌɛkəndz.",
+"ps_espeak": "ɑːnkɹˈʌstmənt lˈoʊdᵻd ðə kwˈɑːntˌaɪzd tɹænsfˈɔːɹmɚ tʃˈɛkpˌɔːɪnt ɪn mˈɪləsˌɛkəndz.",
+"tokens": [
+[
+"Onnxruntime",
+"NNP",
+" "
+],
+[
+"loaded",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"quantized",
+"VBN",
+" "
+],
+[
+"transformer",
+"NN",
+" "
+],
+[
+"checkpoint",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"milliseconds",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov016",
+"category": "oov",
+"text": "Schenectady and Skaneateles are hard to spell and harder to say.",
+"norm": "Schenectady and Skaneateles are hard to spell and harder to say.",
+"ps_misaki": "skənˈɛktədi ænd skˈAnətˌilz ɑɹ hˈɑɹd tə spˈɛl ænd hˈɑɹdəɹ tə sˈA.",
+"ps_espeak": "skənˈɛktədi ænd skˈeɪnətˌilz ɑːɹ hˈɑːɹd tə spˈɛl ænd hˈɑːɹdɚ tə sˈeɪ.",
+"tokens": [
+[
+"Schenectady",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Skaneateles",
+"NNP",
+" "
+],
+[
+"are",
+"VBP",
+" "
+],
+[
+"hard",
+"JJ",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"spell",
+"VB",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"harder",
+"JJR",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"say",
+"VB",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov017",
+"category": "oov",
+"text": "Phuket and Chiang Mai attract tourists from Kuala Lumpur.",
+"norm": "Phuket and Chiang Mai attract tourists from Kuala Lumpur.",
+"ps_misaki": "pˌukˈɛt ænd ʧˈæŋ mˈI ətɹˈækt tˈʊɹɪsts fɹʌm kwˈɑlə lˌʌmpˈʊɹ.",
+"ps_espeak": "pˌuːkˈɛt ænd tʃˈæŋ mˈaɪ ətɹˈækt tˈʊɹɪsts fɹʌm kwˈɑːlə lˌʌmpˈʊɹ.",
+"tokens": [
+[
+"Phuket",
+"NN",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Chiang",
+"NNP",
+" "
+],
+[
+"Mai",
+"NNP",
+" "
+],
+[
+"attract",
+"VB",
+" "
+],
+[
+"tourists",
+"NNS",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"Kuala",
+"NNP",
+" "
+],
+[
+"Lumpur",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov018",
+"category": "oov",
+"text": "Doctor Chaudhary examined the patient at Cedars Sinai.",
+"norm": "Doctor Chaudhary examined the patient at Cedars Sinai.",
+"ps_misaki": "dˈɑktəɹ ʃˈOdɹˌAhi ɪɡzˈæmənd ðə pˈAʃənt æt sˈidəɹz sˈInI.",
+"ps_espeak": "dˈɑːktɚ ʃˈoʊdɹˌeɪhi ɪɡzˈæmənd ðə pˈeɪʃənt æt sˈidɚz sˈaɪnaɪ.",
+"tokens": [
+[
+"Doctor",
+"NNP",
+" "
+],
+[
+"Chaudhary",
+"NNP",
+" "
+],
+[
+"examined",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"patient",
+"NN",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"Cedars",
+"NNP",
+" "
+],
+[
+"Sinai",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov019",
+"category": "oov",
+"text": "The Rijksmuseum houses paintings by Vermeer and Rembrandt.",
+"norm": "The Rijksmuseum houses paintings by Vermeer and Rembrandt.",
+"ps_misaki": "ðə ɹˈɪʤkəsməs hˈWzᵻz pˈAntɪŋz bI vˈɜɹmɪɹ ænd ɹˈɛmbɹˌænt.",
+"ps_espeak": "ðə ɹˈɪdʒkəsməs hˈaʊzᵻz pˈeɪntɪŋz baɪ vˈɜːmɪɹ ænd ɹˈɛmbɹˌænt.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"Rijksmuseum",
+"NNP",
+" "
+],
+[
+"houses",
+"VBZ",
+" "
+],
+[
+"paintings",
+"NNS",
+" "
+],
+[
+"by",
+"IN",
+" "
+],
+[
+"Vermeer",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Rembrandt",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov020",
+"category": "oov",
+"text": "Quantum chromodynamics predicts asymptotic freedom at short distances.",
+"norm": "Quantum chromodynamics predicts asymptotic freedom at short distances.",
+"ps_misaki": "kwˈɑntəm kɹOmOdˌɛniˈæsəmɪnz pɹidˈɪkts ˌæsəmptˈɑTɪk fɹˈidəm æt ʃˈɔɹt dˈɪstᵊnsᵻz.",
+"ps_espeak": "kwˈɑːntəm kɹoʊmoʊdˌɛniˈæsəmɪnz pɹidˈɪkts ˌæsəmptˈɑːɾɪk fɹˈidəm æt ʃˈɔːɹt dˈɪstənsᵻz.",
+"tokens": [
+[
+"Quantum",
+"NNP",
+" "
+],
+[
+"chromodynamics",
+"NNS",
+" "
+],
+[
+"predicts",
+"VBZ",
+" "
+],
+[
+"asymptotic",
+"JJ",
+" "
+],
+[
+"freedom",
+"NN",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"short",
+"JJ",
+" "
+],
+[
+"distances",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov021",
+"category": "oov",
+"text": "The Llanfairpwllgwyngyll station sign is famously long.",
+"norm": "The Llanfairpwllgwyngyll station sign is famously long.",
+"ps_misaki": "ðə lənfˈɔɹpjˌuɡənd stˈAʃən sˈIn ɪz fˈAməsli lˈɔŋ.",
+"ps_espeak": "ðə lənfˈɔːɹpjˌuːɡənd stˈeɪʃən sˈaɪn ɪz fˈeɪməsli lˈɔːŋ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"Llanfairpwllgwyngyll",
+"NNP",
+" "
+],
+[
+"station",
+"NN",
+" "
+],
+[
+"sign",
+"NN",
+" "
+],
+[
+"is",
+"VBZ",
+" "
+],
+[
+"famously",
+"RB",
+" "
+],
+[
+"long",
+"JJ",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov022",
+"category": "oov",
+"text": "Kierkegaard influenced Heidegger, Sartre, and Camus.",
+"norm": "Kierkegaard influenced Heidegger, Sartre, and Camus.",
+"ps_misaki": "kˈɜɹkəɡˌɑɹd ˈɪnflʊənst hˈIdɡəɹ, sˈɑɹtɹə, ænd kˈæməs.",
+"ps_espeak": "kˈɜːkəɡˌɑːɹd ˈɪnflʊənst hˈaɪdɡɚ, sˈɑːɹtɹə, ænd kˈæməs.",
+"tokens": [
+[
+"Kierkegaard",
+"NNP",
+" "
+],
+[
+"influenced",
+"VBD",
+" "
+],
+[
+"Heidegger",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"Sartre",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Camus",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov023",
+"category": "oov",
+"text": "Ubuntu, Debian, and Fedora ship rather different kernels.",
+"norm": "Ubuntu, Debian, and Fedora ship rather different kernels.",
+"ps_misaki": "ubˈuntu, dˈɛbiən, ænd fədˈɔɹə ʃˈɪp ɹˈæðəɹ dˈɪfəɹənt kˈɜɹnᵊlz.",
+"ps_espeak": "uːbˈuːntuː, dˈɛbiən, ænd fədˈɔːɹə ʃˈɪp ɹˈæðɚ dˈɪfɚənt kˈɜːnəlz.",
+"tokens": [
+[
+"Ubuntu",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"Debian",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Fedora",
+"NNP",
+" "
+],
+[
+"ship",
+"NN",
+" "
+],
+[
+"rather",
+"RB",
+" "
+],
+[
+"different",
+"JJ",
+" "
+],
+[
+"kernels",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov024",
+"category": "oov",
+"text": "The mitochondrion generates adenosine triphosphate for the cell.",
+"norm": "The mitochondrion generates adenosine triphosphate for the cell.",
+"ps_misaki": "ðə mˌITəkˈɑndɹiən ʤˈɛnəɹˌAts ədˈɛnəsˌin tɹIfˈɑsfˌAt fɔɹ ðə sˈɛl.",
+"ps_espeak": "ðə mˌaɪɾəkˈɑːndɹiən dʒˈɛnɚˌeɪts ədˈɛnəsˌin tɹaɪfˈɑːsfˌeɪt fɔːɹ ðə sˈɛl.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"mitochondrion",
+"NN",
+" "
+],
+[
+"generates",
+"VBZ",
+" "
+],
+[
+"adenosine",
+"NN",
+" "
+],
+[
+"triphosphate",
+"VB",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"cell",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov025",
+"category": "oov",
+"text": "Tchaikovsky and Rachmaninoff dominated the concert program.",
+"norm": "Tchaikovsky and Rachmaninoff dominated the concert program.",
+"ps_misaki": "ʧˌAkˈɑvski ænd ɹækmˈænɪnɔf dˈɑmənˌATᵻd ðə kˈɑnsəɹt pɹˈOɡɹˌæm.",
+"ps_espeak": "tʃˌeɪkˈɑːvski ænd ɹækmˈænɪnɔːf dˈɑːmənˌeɪɾᵻd ðə kˈɑːnsɚt pɹˈoʊɡɹˌæm.",
+"tokens": [
+[
+"Tchaikovsky",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Rachmaninoff",
+"NNP",
+" "
+],
+[
+"dominated",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"concert",
+"NN",
+" "
+],
+[
+"program",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov026",
+"category": "oov",
+"text": "The Higgs boson was confirmed at CERN near Geneva.",
+"norm": "The Higgs boson was confirmed at CERN near Geneva.",
+"ps_misaki": "ðə hˈɪɡz bˈOsˌɑn wʌz kənfˈɜɹmd æt sˈɜɹn nˌɪɹ ʤənˈivə.",
+"ps_espeak": "ðə hˈɪɡz bˈoʊsˌɑːn wʌz kənfˈɜːmd æt sˈɜːn nˌɪɹ dʒənˈivə.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"Higgs",
+"NNP",
+" "
+],
+[
+"boson",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"confirmed",
+"VBN",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"CERN",
+"NNP",
+" "
+],
+[
+"near",
+"IN",
+" "
+],
+[
+"Geneva",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov027",
+"category": "oov",
+"text": "Saoirse and Caoimhe travelled from Galway to Dun Laoghaire.",
+"norm": "Saoirse and Caoimhe travelled from Galway to Dun Laoghaire.",
+"ps_misaki": "səwˈɜɹs ænd kəhˈIm tɹˈævəld fɹʌm ɡˈɔlwˌA tə dˈʌn lɑɡhˈɛɹ.",
+"ps_espeak": "səwˈɜːs ænd kəhˈaɪm tɹˈævəld fɹʌm ɡˈɔːlwˌeɪ tə dˈʌn lɑːɡhˈɛɹ.",
+"tokens": [
+[
+"Saoirse",
+"NNP",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Caoimhe",
+"NNP",
+" "
+],
+[
+"travelled",
+"VBD",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"Galway",
+"NNP",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"Dun",
+"NNP",
+" "
+],
+[
+"Laoghaire",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov028",
+"category": "oov",
+"text": "GitHub, GitLab, and Bitbucket all host source repositories.",
+"norm": "GitHub, GitLab, and Bitbucket all host source repositories.",
+"ps_misaki": "ɡˌɪthˈʌb, ɡˌɪtlˈæb, ænd bˈɪtbəkət ˈɔl hˈOst sˈɔɹs ɹəpˈɑzətˌɔɹiz.",
+"ps_espeak": "ɡˌɪthˈʌb, ɡˌɪtlˈæb, ænd bˈɪtbəkət ˈɔːl hˈoʊst sˈɔːɹs ɹəpˈɑːzətˌɔːɹiz.",
+"tokens": [
+[
+"GitHub",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"GitLab",
+"NNP",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"Bitbucket",
+"NNP",
+" "
+],
+[
+"all",
+"DT",
+" "
+],
+[
+"host",
+"NN",
+" "
+],
+[
+"source",
+"NN",
+" "
+],
+[
+"repositories",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "ov029",
+"category": "oov",
+"text": "The photolithography stepper aligned the reticle with nanometre precision.",
+"norm": "The photolithography stepper aligned the reticle with nanometre precision.",
+"ps_misaki": "ðə fˌOTOləθˈɑɡɹəfi stˈɛpəɹ əlˈInd ðə ɹˈɛTəkᵊl wɪð nˌænOmˈiTəɹ pɹisˈɪʒᵊn.",
+"ps_espeak": "ðə fˌoʊɾoʊləθˈɑːɡɹəfi stˈɛpɚ əlˈaɪnd ðə ɹˈɛɾəkəl wɪð nˌænoʊmˈiɾɚ pɹisˈɪʒən.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"photolithography",
+"NN",
+" "
+],
+[
+"stepper",
+"NN",
+" "
+],
+[
+"aligned",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"reticle",
+"NN",
+" "
+],
+[
+"with",
+"IN",
+" "
+],
+[
+"nanometre",
+"NNP",
+" "
+],
+[
+"precision",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm000",
+"category": "numeric",
+"text": "The invoice totaled $1,234.56 and remains unpaid.",
+"norm": "The invoice totaled one thousand two hundred thirty-four dollars and fifty-six cents and remains unpaid.",
+"ps_misaki": "ði ˈɪnvˌYs tˈOTᵊld wˈʌn θˈWzᵊnd tˈu hˈʌndɹəd θˈɜɹTifˌɔɹ dˈɑləɹz ænd fˈɪftisˌɪks sˈɛnts ænd ɹəmˈAnz ˌʌnpˈAd.",
+"ps_espeak": "ði ˈɪnvˌɔːɪs tˈoʊɾəld wˈʌn θˈaʊzənd tˈuː hˈʌndɹəd θˈɜːɾifˌɔːɹ dˈɑːlɚz ænd fˈɪftisˌɪks sˈɛnts ænd ɹəmˈeɪnz ˌʌnpˈeɪd.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"invoice",
+"NN",
+" "
+],
+[
+"totaled",
+"VBD",
+" "
+],
+[
+"one",
+"CD",
+" "
+],
+[
+"thousand",
+"CD",
+" "
+],
+[
+"two",
+"CD",
+" "
+],
+[
+"hundred",
+"CD",
+" "
+],
+[
+"thirty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"four",
+"CD",
+" "
+],
+[
+"dollars",
+"NNS",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"fifty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"six",
+"CD",
+" "
+],
+[
+"cents",
+"NNS",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"remains",
+"VBZ",
+" "
+],
+[
+"unpaid",
+"JJ",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm001",
+"category": "numeric",
+"text": "She paid $19.99 for the paperback edition.",
+"norm": "She paid nineteen dollars and ninety-nine cents for the paperback edition.",
+"ps_misaki": "ʃˌi pˈAd nˌIntˈin dˈɑləɹz ænd nˈIndinˌIn sˈɛnts fɔɹ ðə pˈApəɹbˌæk ədˈɪʃən.",
+"ps_espeak": "ʃˌi pˈeɪd nˌaɪntˈin dˈɑːlɚz ænd nˈaɪndinˌaɪn sˈɛnts fɔːɹ ðə pˈeɪpɚbˌæk ədˈɪʃən.",
+"tokens": [
+[
+"She",
+"PRP",
+" "
+],
+[
+"paid",
+"VBD",
+" "
+],
+[
+"nineteen",
+"CD",
+" "
+],
+[
+"dollars",
+"NNS",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"ninety",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"nine",
+"CD",
+" "
+],
+[
+"cents",
+"NNS",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"paperback",
+"NN",
+" "
+],
+[
+"edition",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm002",
+"category": "numeric",
+"text": "The meeting starts at 3:45 pm on Tuesday.",
+"norm": "The meeting starts at three forty-five p m on Tuesday.",
+"ps_misaki": "ðə mˈiTɪŋ stˈɑɹts æt θɹˈi fˌɔɹTifˈIv pˈi ˈɛm ˌɔn tˈuzdˌA.",
+"ps_espeak": "ðə mˈiɾɪŋ stˈɑːɹts æt θɹˈi fˌɔːɹɾifˈaɪv pˈi ˈɛm ˌɔːn tˈuːzdˌeɪ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"meeting",
+"NN",
+" "
+],
+[
+"starts",
+"VBZ",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"three",
+"CD",
+" "
+],
+[
+"forty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"five",
+"CD",
+" "
+],
+[
+"p",
+"NN",
+" "
+],
+[
+"m",
+"NN",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"Tuesday",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm003",
+"category": "numeric",
+"text": "Dr. Smith arrived at 8:00 am sharp.",
+"norm": "Doctor Smith arrived at eight a m sharp.",
+"ps_misaki": "dˈɑktəɹ smˈɪθ əɹˈIvd æt ˈAt ɐ ˈɛm ʃˈɑɹp.",
+"ps_espeak": "dˈɑːktɚ smˈɪθ ɚˈaɪvd æt ˈeɪt ɐ ˈɛm ʃˈɑːɹp.",
+"tokens": [
+[
+"Doctor",
+"NNP",
+" "
+],
+[
+"Smith",
+"NNP",
+" "
+],
+[
+"arrived",
+"VBD",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"eight",
+"CD",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"m",
+"NN",
+" "
+],
+[
+"sharp",
+"JJ",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm004",
+"category": "numeric",
+"text": "The treaty was signed on July 4, 1776.",
+"norm": "The treaty was signed on July fourth, one thousand seven hundred seventy-six.",
+"ps_misaki": "ðə tɹˈiTi wʌz sˈInd ˌɔn ʤəlˈI fˈɔɹθ, wˈʌn θˈWzᵊnd sˈɛvən hˈʌndɹəd sˈɛvəntisˌɪks.",
+"ps_espeak": "ðə tɹˈiɾi wʌz sˈaɪnd ˌɔːn dʒəlˈaɪ fˈɔːɹθ, wˈʌn θˈaʊzənd sˈɛvən hˈʌndɹəd sˈɛvəntisˌɪks.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"treaty",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"signed",
+"VBN",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"July",
+"NNP",
+" "
+],
+[
+"fourth",
+"RB",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"one",
+"CD",
+" "
+],
+[
+"thousand",
+"CD",
+" "
+],
+[
+"seven",
+"CD",
+" "
+],
+[
+"hundred",
+"CD",
+" "
+],
+[
+"seventy",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"six",
+"CD",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm005",
+"category": "numeric",
+"text": "Our revenue grew 27% over the previous quarter.",
+"norm": "Our revenue grew twenty-seven percent over the previous quarter.",
+"ps_misaki": "ˌWəɹ ɹˈɛvənˌu ɡɹˈu twˈɛntisˌɛvən pəɹsˈɛnt ˈOvəɹ ðə pɹˈiviəs kwˈɔɹTəɹ.",
+"ps_espeak": "ˌaʊɚ ɹˈɛvənˌuː ɡɹˈuː twˈɛntisˌɛvən pɚsˈɛnt ˈoʊvɚ ðə pɹˈiviəs kwˈɔːɹɾɚ.",
+"tokens": [
+[
+"Our",
+"PRP$",
+" "
+],
+[
+"revenue",
+"NN",
+" "
+],
+[
+"grew",
+"VBD",
+" "
+],
+[
+"twenty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"seven",
+"CD",
+" "
+],
+[
+"percent",
+"NN",
+" "
+],
+[
+"over",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"previous",
+"JJ",
+" "
+],
+[
+"quarter",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm006",
+"category": "numeric",
+"text": "The package weighs 2.5 kg and ships tomorrow.",
+"norm": "The package weighs two point five kg and ships tomorrow.",
+"expected": "The package weighs two point five kilograms and ships tomorrow.",
+"ps_misaki": "ðə pˈækɪʤ wˈAz tˈu pˈYnt fˈIv kˈAʤ ænd ʃˈɪps təmˈɑɹO.",
+"ps_espeak": "ðə pˈækɪdʒ wˈeɪz tˈuː pˈɔːɪnt fˈaɪv kˈeɪdʒ ænd ʃˈɪps təmˈɑːɹoʊ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"package",
+"NN",
+" "
+],
+[
+"weighs",
+"VBZ",
+" "
+],
+[
+"two",
+"CD",
+" "
+],
+[
+"point",
+"NN",
+" "
+],
+[
+"five",
+"CD",
+" "
+],
+[
+"kg",
+"NNS",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"ships",
+"NNS",
+" "
+],
+[
+"tomorrow",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm007",
+"category": "numeric",
+"text": "He ran the marathon in 3:12:45 last spring.",
+"norm": "He ran the marathon in three twelve and forty-five secondslast spring.",
+"expected": "He ran the marathon in three twelve and forty-five seconds last spring.",
+"ps_misaki": "hˌi ɹˈæn ðə mˈɛɹəθˌɑn ɪn θɹˈi twˈɛlv ænd fˌɔɹTifˈIv sˈɛkənstləds spɹˈɪŋ.",
+"ps_espeak": "hˌi ɹˈæn ðə mˈɛɹəθˌɑːn ɪn θɹˈi twˈɛlv ænd fˌɔːɹɾifˈaɪv sˈɛkənstləds spɹˈɪŋ.",
+"tokens": [
+[
+"He",
+"PRP",
+" "
+],
+[
+"ran",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"marathon",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"three",
+"CD",
+" "
+],
+[
+"twelve",
+"CD",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"forty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"five",
+"CD",
+" "
+],
+[
+"secondslast",
+"JJ",
+" "
+],
+[
+"spring",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm008",
+"category": "numeric",
+"text": "The server has 64 GB of memory and 12 cores.",
+"norm": "The server has sixty-four GB of memory and twelve cores.",
+"expected": "The server has sixty-four gigabytes of memory and twelve cores.",
+"ps_misaki": "ðə sˈɜɹvəɹ hæz sˈɪkstifˌɔɹ ʤˌibˈi ʌv mˈɛməɹi ænd twˈɛlv kˈɔɹz.",
+"ps_espeak": "ðə sˈɜːvɚ hæz sˈɪkstifˌɔːɹ dʒˌibˈi ʌv mˈɛmɚi ænd twˈɛlv kˈɔːɹz.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"server",
+"NN",
+" "
+],
+[
+"has",
+"VBZ",
+" "
+],
+[
+"sixty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"four",
+"CD",
+" "
+],
+[
+"GB",
+"NNP",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"memory",
+"NN",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"twelve",
+"CD",
+" "
+],
+[
+"cores",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm009",
+"category": "numeric",
+"text": "Water boils at 100 °C at sea level.",
+"norm": "Water boils at one hundred C at sea level.",
+"expected": "Water boils at one hundred degrees Celsius at sea level.",
+"ps_misaki": "wˈɔTəɹ bˈYlz æt wˈʌn hˈʌndɹəd sˈi æt sˈi lˈɛvᵊl.",
+"ps_espeak": "wˈɔːɾɚ bˈɔːɪlz æt wˈʌn hˈʌndɹəd sˈi æt sˈi lˈɛvəl.",
+"tokens": [
+[
+"Water",
+"NN",
+" "
+],
+[
+"boils",
+"VBZ",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"one",
+"CD",
+" "
+],
+[
+"hundred",
+"CD",
+" "
+],
+[
+"C",
+"NN",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"sea",
+"NN",
+" "
+],
+[
+"level",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm010",
+"category": "numeric",
+"text": "The album sold 3.2 million copies worldwide.",
+"norm": "The album sold three point two million copies worldwide.",
+"ps_misaki": "ði ˈælbəm sˈOld θɹˈi pˈYnt tˈu mˈɪljᵊn kˈɑpiz wˈɜɹᵊldwˌId.",
+"ps_espeak": "ði ˈælbəm sˈoʊld θɹˈi pˈɔːɪnt tˈuː mˈɪljən kˈɑːpiz wˈɜːəldwˌaɪd.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"album",
+"NN",
+" "
+],
+[
+"sold",
+"VBD",
+" "
+],
+[
+"three",
+"CD",
+" "
+],
+[
+"point",
+"NN",
+" "
+],
+[
+"two",
+"CD",
+" "
+],
+[
+"million",
+"CD",
+" "
+],
+[
+"copies",
+"NNS",
+" "
+],
+[
+"worldwide",
+"RB",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm011",
+"category": "numeric",
+"text": "Please read chapter 12, pages 340 to 358.",
+"norm": "Please read chapter twelve pages three hundred forty to three hundred fifty-eight.",
+"expected": "Please read chapter twelve, pages three hundred forty to three hundred fifty-eight.",
+"ps_misaki": "plˈiz ɹˈid ʧˈæptəɹ twˈɛlv pˈAʤᵻz θɹˈi hˈʌndɹəd fˈɔɹTi tə θɹˈi hˈʌndɹəd fˈɪftiˌAt.",
+"ps_espeak": "plˈiz ɹˈid tʃˈæptɚ twˈɛlv pˈeɪdʒᵻz θɹˈi hˈʌndɹəd fˈɔːɹɾi tə θɹˈi hˈʌndɹəd fˈɪftiˌeɪt.",
+"tokens": [
+[
+"Please",
+"UH",
+" "
+],
+[
+"read",
+"VB",
+" "
+],
+[
+"chapter",
+"NN",
+" "
+],
+[
+"twelve",
+"CD",
+" "
+],
+[
+"pages",
+"NNS",
+" "
+],
+[
+"three",
+"CD",
+" "
+],
+[
+"hundred",
+"CD",
+" "
+],
+[
+"forty",
+"CD",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"three",
+"CD",
+" "
+],
+[
+"hundred",
+"CD",
+" "
+],
+[
+"fifty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"eight",
+"CD",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm012",
+"category": "numeric",
+"text": "The flight departs at 6:15 am from gate 27.",
+"norm": "The flight departs at six fifteen a m from gate twenty-seven.",
+"ps_misaki": "ðə flˈIt dəpˈɑɹts æt sˈɪks fˌɪftˈin ɐ ˈɛm fɹʌm ɡˈAt twˈɛntisˌɛvən.",
+"ps_espeak": "ðə flˈaɪt dəpˈɑːɹts æt sˈɪks fˌɪftˈin ɐ ˈɛm fɹʌm ɡˈeɪt twˈɛntisˌɛvən.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"flight",
+"NN",
+" "
+],
+[
+"departs",
+"NNS",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"six",
+"CD",
+" "
+],
+[
+"fifteen",
+"CD",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"m",
+"NN",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"gate",
+"NN",
+" "
+],
+[
+"twenty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"seven",
+"CD",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm013",
+"category": "numeric",
+"text": "Version 2.14.3 fixed 47 outstanding defects.",
+"norm": "Version two point fourteen point three fixed forty-seven outstanding defects.",
+"ps_misaki": "vˈɜɹʒən tˈu pˈYnt fˌɔɹtˈin pˈYnt θɹˈi fˈɪkst fˌɔɹTisˈɛvən ˌWtstˈændɪŋ dˈifɛkts.",
+"ps_espeak": "vˈɜːʒən tˈuː pˈɔːɪnt fˌɔːɹtˈin pˈɔːɪnt θɹˈi fˈɪkst fˌɔːɹɾisˈɛvən ˌaʊtstˈændɪŋ dˈifɛkts.",
+"tokens": [
+[
+"Version",
+"NN",
+" "
+],
+[
+"two",
+"CD",
+" "
+],
+[
+"point",
+"NN",
+" "
+],
+[
+"fourteen",
+"CD",
+" "
+],
+[
+"point",
+"NN",
+" "
+],
+[
+"three",
+"CD",
+" "
+],
+[
+"fixed",
+"VBN",
+" "
+],
+[
+"forty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"seven",
+"CD",
+" "
+],
+[
+"outstanding",
+"JJ",
+" "
+],
+[
+"defects",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm014",
+"category": "numeric",
+"text": "The building was completed in 1929 and renovated in 2011.",
+"norm": "The building was completed in nineteen twenty-nine and renovated in twenty eleven.",
+"ps_misaki": "ðə bˈɪldɪŋ wʌz kəmplˈiTᵻd ɪn nˌIntˈin twˈɛntinˌIn ænd ɹˈɛnəvˌATᵻd ɪn twˈɛnti əlˈɛvᵊn.",
+"ps_espeak": "ðə bˈɪldɪŋ wʌz kəmplˈiɾᵻd ɪn nˌaɪntˈin twˈɛntinˌaɪn ænd ɹˈɛnəvˌeɪɾᵻd ɪn twˈɛnti əlˈɛvən.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"building",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"completed",
+"VBN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"nineteen",
+"CD",
+" "
+],
+[
+"twenty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"nine",
+"CD",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"renovated",
+"VBD",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"twenty",
+"CD",
+" "
+],
+[
+"eleven",
+"CD",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm015",
+"category": "numeric",
+"text": "The recipe calls for 1/2 cup of sugar.",
+"norm": "The recipe calls for one two cup of sugar.",
+"expected": "The recipe calls for one half cup of sugar.",
+"ps_misaki": "ðə ɹˈɛsəpˌi kˈɔlz fɔɹ wˈʌn tˈu kˈʌp ʌv ʃˈʊɡəɹ.",
+"ps_espeak": "ðə ɹˈɛsəpˌi kˈɔːlz fɔːɹ wˈʌn tˈuː kˈʌp ʌv ʃˈʊɡɚ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"recipe",
+"NN",
+" "
+],
+[
+"calls",
+"VBZ",
+" "
+],
+[
+"for",
+"IN",
+" "
+],
+[
+"one",
+"CD",
+" "
+],
+[
+"two",
+"CD",
+" "
+],
+[
+"cup",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"sugar",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm016",
+"category": "numeric",
+"text": "Interest rates fell to 4.75% in March 2020.",
+"norm": "Interest rates fell to four point seven five percent in March twenty twenty.",
+"ps_misaki": "ˈɪntɹəst ɹˈAts fˈɛl tə fˈɔɹ pˈYnt sˈɛvən fˈIv pəɹsˈɛnt ɪn mˈɑɹʧ twˈɛnti twˈɛnti.",
+"ps_espeak": "ˈɪntɹəst ɹˈeɪts fˈɛl tə fˈɔːɹ pˈɔːɪnt sˈɛvən fˈaɪv pɚsˈɛnt ɪn mˈɑːɹtʃ twˈɛnti twˈɛnti.",
+"tokens": [
+[
+"Interest",
+"NN",
+" "
+],
+[
+"rates",
+"NNS",
+" "
+],
+[
+"fell",
+"VBD",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"four",
+"CD",
+" "
+],
+[
+"point",
+"NN",
+" "
+],
+[
+"seven",
+"CD",
+" "
+],
+[
+"five",
+"CD",
+" "
+],
+[
+"percent",
+"NN",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"March",
+"NNP",
+" "
+],
+[
+"twenty",
+"CD",
+" "
+],
+[
+"twenty",
+"CD",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm017",
+"category": "numeric",
+"text": "The car costs €32,500 before taxes.",
+"norm": "The car costs thirty-two thousand five hundred euros before taxes.",
+"ps_misaki": "ðə kˈɑɹ kˈɔsts θˈɜɹTitˌu θˈWzᵊnd fˈIv hˈʌndɹəd jˈʊɹOz bəfˈɔɹ tˈæksᵻz.",
+"ps_espeak": "ðə kˈɑːɹ kˈɔːsts θˈɜːɾitˌuː θˈaʊzənd fˈaɪv hˈʌndɹəd jˈʊɹoʊz bəfˈɔːɹ tˈæksᵻz.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"car",
+"NN",
+" "
+],
+[
+"costs",
+"VBZ",
+" "
+],
+[
+"thirty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"two",
+"CD",
+" "
+],
+[
+"thousand",
+"CD",
+" "
+],
+[
+"five",
+"CD",
+" "
+],
+[
+"hundred",
+"CD",
+" "
+],
+[
+"euros",
+"NNS",
+" "
+],
+[
+"before",
+"IN",
+" "
+],
+[
+"taxes",
+"NNS",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm018",
+"category": "numeric",
+"text": "The signal arrived 150 ms after the trigger.",
+"norm": "The signal arrived one hundred fifty ms after the trigger.",
+"expected": "The signal arrived one hundred fifty milliseconds after the trigger.",
+"ps_misaki": "ðə sˈɪɡnᵊl əɹˈIvd wˈʌn hˈʌndɹəd fˈɪfti mˈɪz ˈæftəɹ ðə tɹˈɪɡəɹ.",
+"ps_espeak": "ðə sˈɪɡnəl ɚˈaɪvd wˈʌn hˈʌndɹəd fˈɪfti mˈɪz ˈæftɚ ðə tɹˈɪɡɚ.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"signal",
+"NN",
+" "
+],
+[
+"arrived",
+"VBD",
+" "
+],
+[
+"one",
+"CD",
+" "
+],
+[
+"hundred",
+"CD",
+" "
+],
+[
+"fifty",
+"CD",
+" "
+],
+[
+"ms",
+"NN",
+" "
+],
+[
+"after",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"trigger",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm019",
+"category": "numeric",
+"text": "About 3,000 people attended the ceremony.",
+"norm": "About three thousand people attended the ceremony.",
+"ps_misaki": "əbˈWt θɹˈi θˈWzᵊnd pˈipᵊl ətˈɛndᵻd ðə sˈɛɹəmˌOni.",
+"ps_espeak": "əbˈaʊt θɹˈi θˈaʊzənd pˈipəl ətˈɛndᵻd ðə sˈɛɹəmˌoʊni.",
+"tokens": [
+[
+"About",
+"RB",
+" "
+],
+[
+"three",
+"CD",
+" "
+],
+[
+"thousand",
+"CD",
+" "
+],
+[
+"people",
+"NNS",
+" "
+],
+[
+"attended",
+"VBD",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"ceremony",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm020",
+"category": "numeric",
+"text": "The processor runs at 3.2 GHz under load.",
+"norm": "The processor runs at three point two GHz under load.",
+"expected": "The processor runs at three point two gigahertz under load.",
+"ps_misaki": "ðə pɹˈɑsˌɛsəɹ ɹˈʌnz æt θɹˈi pˈYnt tˈu ɡˈɛz ˈʌndəɹ lˈOd.",
+"ps_espeak": "ðə pɹˈɑːsˌɛsɚ ɹˈʌnz æt θɹˈi pˈɔːɪnt tˈuː ɡˈɛz ˈʌndɚ lˈoʊd.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"processor",
+"NN",
+" "
+],
+[
+"runs",
+"VBZ",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"three",
+"CD",
+" "
+],
+[
+"point",
+"NN",
+" "
+],
+[
+"two",
+"CD",
+" "
+],
+[
+"GHz",
+"NNS",
+" "
+],
+[
+"under",
+"IN",
+" "
+],
+[
+"load",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm021",
+"category": "numeric",
+"text": "He was born on March 3, 1985, in Ohio.",
+"norm": "He was born on March third, nineteen eighty-five, in Ohio.",
+"ps_misaki": "hˌi wʌz bˈɔɹn ˌɔn mˈɑɹʧ θˈɜɹd, nˌIntˈin ˌATifˈIv, ɪn OhˈIO.",
+"ps_espeak": "hˌi wʌz bˈɔːɹn ˌɔːn mˈɑːɹtʃ θˈɜːd, nˌaɪntˈin ˌeɪɾifˈaɪv, ɪn oʊhˈaɪoʊ.",
+"tokens": [
+[
+"He",
+"PRP",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"born",
+"VBN",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"March",
+"NNP",
+" "
+],
+[
+"third",
+"NN",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"nineteen",
+"CD",
+" "
+],
+[
+"eighty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"five",
+"CD",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"Ohio",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm022",
+"category": "numeric",
+"text": "The population grew from 1,200 to 45,000 in a decade.",
+"norm": "The population grew from twelve hundred to forty-five thousand in a decade.",
+"ps_misaki": "ðə pˌɑpjəlˈAʃən ɡɹˈu fɹʌm twˈɛlv hˈʌndɹəd tə fˌɔɹTifˈIv θˈWzᵊnd ɪn ɐ dˈɛkˌAd.",
+"ps_espeak": "ðə pˌɑːpjəlˈeɪʃən ɡɹˈuː fɹʌm twˈɛlv hˈʌndɹəd tə fˌɔːɹɾifˈaɪv θˈaʊzənd ɪn ɐ dˈɛkˌeɪd.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"population",
+"NN",
+" "
+],
+[
+"grew",
+"VBD",
+" "
+],
+[
+"from",
+"IN",
+" "
+],
+[
+"twelve",
+"CD",
+" "
+],
+[
+"hundred",
+"CD",
+" "
+],
+[
+"to",
+"TO",
+" "
+],
+[
+"forty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"five",
+"CD",
+" "
+],
+[
+"thousand",
+"CD",
+" "
+],
+[
+"in",
+"IN",
+" "
+],
+[
+"a",
+"DT",
+" "
+],
+[
+"decade",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm023",
+"category": "numeric",
+"text": "The 1960s produced remarkable music.",
+"norm": "The nineteen sixtys produced remarkable music.",
+"expected": "The nineteen sixties produced remarkable music.",
+"ps_misaki": "ðə nˌIntˈin sˈɪkstiz pɹədˈust ɹəmˈɑɹkəbᵊl mjˈuzɪk.",
+"ps_espeak": "ðə nˌaɪntˈin sˈɪkstiz pɹədˈuːst ɹəmˈɑːɹkəbəl mjˈuːzɪk.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"nineteen",
+"CD",
+" "
+],
+[
+"sixtys",
+"NN",
+" "
+],
+[
+"produced",
+"VBD",
+" "
+],
+[
+"remarkable",
+"JJ",
+" "
+],
+[
+"music",
+"NN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm024",
+"category": "numeric",
+"text": "Prof. Lee published 18 papers between 2015 and 2022.",
+"norm": "Professor Lee published eighteen papers between twenty fifteen and twenty twenty-two.",
+"ps_misaki": "pɹəfˈɛsəɹ lˈi pˈʌblɪʃt ˌAtˈin pˈApəɹz bətwˈin twˈɛnti fˌɪftˈin ænd twˈɛnti twˈɛntitˌu.",
+"ps_espeak": "pɹəfˈɛsɚ lˈi pˈʌblɪʃt ˌeɪtˈin pˈeɪpɚz bətwˈin twˈɛnti fˌɪftˈin ænd twˈɛnti twˈɛntitˌuː.",
+"tokens": [
+[
+"Professor",
+"NNP",
+" "
+],
+[
+"Lee",
+"NNP",
+" "
+],
+[
+"published",
+"VBD",
+" "
+],
+[
+"eighteen",
+"CD",
+" "
+],
+[
+"papers",
+"NNS",
+" "
+],
+[
+"between",
+"IN",
+" "
+],
+[
+"twenty",
+"CD",
+" "
+],
+[
+"fifteen",
+"CD",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"twenty",
+"CD",
+" "
+],
+[
+"twenty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"two",
+"CD",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm025",
+"category": "numeric",
+"text": "The temperature dropped to 5 °F overnight.",
+"norm": "The temperature dropped to five F overnight.",
+"expected": "The temperature dropped to five degrees Fahrenheit overnight.",
+"ps_misaki": "ðə tˈɛmpɹəʧəɹ dɹˈɑpt tə fˈIv ˈɛf ˌOvəɹnˈIt.",
+"ps_espeak": "ðə tˈɛmpɹətʃɚ dɹˈɑːpt tə fˈaɪv ˈɛf ˌoʊvɚnˈaɪt.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"temperature",
+"NN",
+" "
+],
+[
+"dropped",
+"VBD",
+" "
+],
+[
+"to",
+"IN",
+" "
+],
+[
+"five",
+"CD",
+" "
+],
+[
+"F",
+"NN",
+" "
+],
+[
+"overnight",
+"RB",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm026",
+"category": "numeric",
+"text": "We shipped 250 units at £14.50 each.",
+"norm": "We shipped two hundred fifty units at fourteen pounds and fifty cents each.",
+"expected": "We shipped two hundred fifty units at fourteen pounds and fifty pence each.",
+"ps_misaki": "wˌi ʃˈɪpt tˈu hˈʌndɹəd fˈɪfti jˈunəts æt fˌɔɹtˈin pˈWndz ænd fˈɪfti sˈɛnts ˈiʧ.",
+"ps_espeak": "wˌi ʃˈɪpt tˈuː hˈʌndɹəd fˈɪfti jˈuːnəts æt fˌɔːɹtˈin pˈaʊndz ænd fˈɪfti sˈɛnts ˈitʃ.",
+"tokens": [
+[
+"We",
+"PRP",
+" "
+],
+[
+"shipped",
+"VBD",
+" "
+],
+[
+"two",
+"CD",
+" "
+],
+[
+"hundred",
+"CD",
+" "
+],
+[
+"fifty",
+"CD",
+" "
+],
+[
+"units",
+"NNS",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"fourteen",
+"CD",
+" "
+],
+[
+"pounds",
+"NNS",
+" "
+],
+[
+"and",
+"CC",
+" "
+],
+[
+"fifty",
+"CD",
+" "
+],
+[
+"cents",
+"NNS",
+" "
+],
+[
+"each",
+"DT",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm027",
+"category": "numeric",
+"text": "The measurement was 0.75 mm plus or minus 0.02 mm.",
+"norm": "The measurement was zero point seven five mm plus or minus zero point zero two mm.",
+"expected": "The measurement was zero point seven five millimeters plus or minus zero point zero two millimeters.",
+"ps_misaki": "ðə mˈɛʒəɹmᵊnt wʌz zˈɪɹO pˈYnt sˈɛvən fˈIv m plˈʌs ɔɹ mˈInəs zˈɪɹO pˈYnt zˈɪɹO tˈu m.",
+"ps_espeak": "ðə mˈɛʒɚmənt wʌz zˈɪɹoʊ pˈɔːɪnt sˈɛvən fˈaɪv m plˈʌs ɔːɹ mˈaɪnəs zˈɪɹoʊ pˈɔːɪnt zˈɪɹoʊ tˈuː m.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"measurement",
+"NN",
+" "
+],
+[
+"was",
+"VBD",
+" "
+],
+[
+"zero",
+"CD",
+" "
+],
+[
+"point",
+"NN",
+" "
+],
+[
+"seven",
+"CD",
+" "
+],
+[
+"five",
+"CD",
+" "
+],
+[
+"mm",
+"NN",
+" "
+],
+[
+"plus",
+"CC",
+" "
+],
+[
+"or",
+"CC",
+" "
+],
+[
+"minus",
+"NN",
+" "
+],
+[
+"zero",
+"CD",
+" "
+],
+[
+"point",
+"NN",
+" "
+],
+[
+"zero",
+"CD",
+" "
+],
+[
+"two",
+"CD",
+" "
+],
+[
+"mm",
+"NNP",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm028",
+"category": "numeric",
+"text": "The train leaves at 11:59 pm on December 31, 1999.",
+"norm": "The train leaves at eleven fifty-nine p m on December thirty-first, nineteen ninety-nine.",
+"ps_misaki": "ðə tɹˈAn lˈivz æt əlˈɛvᵊn fˈɪftinˌIn pˈi ˈɛm ˌɔn disˈɛmbəɹ θˌɜɹTifˈɜɹst, nˌIntˈin nˈIndinˌIn.",
+"ps_espeak": "ðə tɹˈeɪn lˈivz æt əlˈɛvən fˈɪftinˌaɪn pˈi ˈɛm ˌɔːn disˈɛmbɚ θˌɜːɾifˈɜːst, nˌaɪntˈin nˈaɪndinˌaɪn.",
+"tokens": [
+[
+"The",
+"DT",
+" "
+],
+[
+"train",
+"NN",
+" "
+],
+[
+"leaves",
+"VBZ",
+" "
+],
+[
+"at",
+"IN",
+" "
+],
+[
+"eleven",
+"CD",
+" "
+],
+[
+"fifty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"nine",
+"CD",
+" "
+],
+[
+"p",
+"NN",
+" "
+],
+[
+"m",
+"NNP",
+" "
+],
+[
+"on",
+"IN",
+" "
+],
+[
+"December",
+"NNP",
+" "
+],
+[
+"thirty",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"first",
+"JJ",
+""
+],
+[
+",",
+",",
+" "
+],
+[
+"nineteen",
+"CD",
+" "
+],
+[
+"ninety",
+"CD",
+""
+],
+[
+"-",
+"HYPH",
+""
+],
+[
+"nine",
+"CD",
+""
+],
+[
+".",
+".",
+""
+]
+]
+},
+{
+"id": "nm029",
+"category": "numeric",
+"text": "Roughly 12% of the 8,400 samples were discarded.",
+"norm": "Roughly twelve percent of the eight thousand four hundred samples were discarded.",
+"ps_misaki": "ɹˈʌfli twˈɛlv pəɹsˈɛnt ʌv ði ˈAt θˈWzᵊnd fˈɔɹ hˈʌndɹəd sˈæmpᵊlz wɜɹ dəskˈɑɹdᵻd.",
+"ps_espeak": "ɹˈʌfli twˈɛlv pɚsˈɛnt ʌv ði ˈeɪt θˈaʊzənd fˈɔːɹ hˈʌndɹəd sˈæmpəlz wɜː dəskˈɑːɹdᵻd.",
+"tokens": [
+[
+"Roughly",
+"RB",
+" "
+],
+[
+"twelve",
+"CD",
+" "
+],
+[
+"percent",
+"NN",
+" "
+],
+[
+"of",
+"IN",
+" "
+],
+[
+"the",
+"DT",
+" "
+],
+[
+"eight",
+"CD",
+" "
+],
+[
+"thousand",
+"CD",
+" "
+],
+[
+"four",
+"CD",
+" "
+],
+[
+"hundred",
+"CD",
+" "
+],
+[
+"samples",
+"NNS",
+" "
+],
+[
+"were",
+"VBD",
+" "
+],
+[
+"discarded",
+"VBN",
+""
+],
+[
+".",
+".",
+""
+]
+]
+}
+]

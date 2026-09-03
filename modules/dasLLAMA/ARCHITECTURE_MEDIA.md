@@ -23,7 +23,8 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
 - **`dasllama_audio.das`** - the audio encoder tower: the mel front-ends (mtmd and whisper.cpp
   flavors), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`, and the
   whisper-class encode + block loop with its GPU hooks. Composes `dasllama_tower.das`.
-- **`dasllama_audio_io.das`** - decode-any-format -> 16 kHz mono f32 PCM. The only file that talks to
+- **`dasllama_audio_io.das`** - decode-any-format -> 16 kHz mono f32 PCM, and the reverse leg the TTS
+  facade hands out: f32 samples -> 16-bit PCM bytes / a RIFF WAV file. The only file that talks to
   miniaudio.
 - **`dasllama_asr.das`** - the ASR facade: capability declaration, timestamp granularity, the
   backend-neutral entry points.
@@ -141,6 +142,12 @@ reference's Metal "f32" GEMM stages half operands, its flash-attention path cast
 and the shipped bf16 mmproj rounds activations to bf16; its own four arms spread
 <= 6.5e-3 on the gemma4v tokens).
 
+### 1.7c Text-to-speech front end
+
+`ARCHITECTURE_TTS.md` carries this section - the TTS family mirrors the ASR one (a types floor,
+a shared block home, a facade, one file per model family) and adds the text front end no ASR
+family needs; every stage is data-driven from the model store, and nothing under `models/`
+carries TTS data.
 
 ### 2.13 Towers serve padded GEMM widths {#tower-padded-widths}
 

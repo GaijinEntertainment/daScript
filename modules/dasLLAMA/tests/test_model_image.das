@@ -2182,6 +2182,8 @@ def test_fp32_decoder_image_roundtrip(t : T?) {
 // is un-recomputable here — the verdict must say FOREIGN (kept), never OTHER (reaped). The
 // 2026-08-02 bring-up lost every two-flavor model to exactly this: the metal save reaped the
 // planar sibling, then --clean reaped the metal images.
+def private probe_layout() : uint64 => 0xf00dcafeul
+
 [test]
 def test_dlim_flavor_lanes(t : T?) {
     t |> run("flavor lanes: another bake context's image is never judged from here") @(t : T?) {
@@ -2220,6 +2222,42 @@ def test_dlim_flavor_lanes(t : T?) {
         p.valid = false
         t |> equal(dlim_image_verdict(p, current), "BROKEN", "invalid peek")
         delete current
+    }
+    t |> run("a registered layout fingerprint judges an image parse_image would refuse") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        // the family half of the header: a served-layout change that keeps the version bumps the
+        // meta layout fingerprint, and a peek that cannot read it calls a dead image CURRENT
+        register_image_family_tag("img-probe-layout", false, @@probe_layout)
+        var current <- dlim_current_identities()
+        var p = DlimPeek(valid = true, version = IMAGE_VERSION, identity = image_identity("img-probe-layout"),
+            layout = 0xf00dcafeul)
+        t |> equal(dlim_image_verdict(p, current), "CURRENT", "this build's layout fingerprint")
+        p.layout = 0xdeadbeeful
+        t |> equal(dlim_image_verdict(p, current), "STALE layout", "a drifted layout outranks the identity match")
+        p.version = IMAGE_VERSION - 1
+        t |> equal(dlim_image_verdict(p, current), "STALE v{IMAGE_VERSION - 1}", "the version still wins")
+        // a family that registered no fingerprint is judged exactly as before
+        let q = DlimPeek(valid = true, version = IMAGE_VERSION, identity = image_identity("whisper-q8"))
+        t |> equal(dlim_image_verdict(q, current), "CURRENT", "an unregistered layout never reads STALE layout")
+        delete current
+    }
+    t |> run("a config-free tag's identity is the default configuration's, a config-bound one the box's") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        register_image_family_tag("img-probe-free", true)
+        register_image_family_tag("img-probe-bound")
+        let default_cfg = DlimConfiguration(quant = "q8")
+        let box_cfg = dlim_config_current("q8")
+        t |> success(image_identity_of(default_cfg, "img-probe-free") != image_identity_of(box_cfg, "img-probe-free"),
+            "this box's configuration differs from the default - the claim below is not vacuous")
+        t |> equal(image_identity("img-probe-free"), image_identity_of(default_cfg, "img-probe-free"),
+            "a config-free tag ignores dlim_config_current: one file per box, not one per tune state")
+        t |> equal(image_identity("img-probe-bound"), image_identity_of(box_cfg, "img-probe-bound"),
+            "a config-bound tag moves with dlim_config_current")
+        t |> equal(dlim_identity_tag(image_identity("img-probe-free")), "img-probe-free", "the tag reads back off the identity")
     }
 }
 

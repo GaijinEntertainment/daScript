@@ -279,6 +279,10 @@ let REF_Q8_RECIPE = "derive: setup_asr_rig.das --refs quantizes it from the fp b
 let PARAKEET_V2_NOTE = "historic nemo-venv conversion (rail retired); present only on boxes that converted it - v3 is the fetched carrier"
 let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack - sha canonical everywhere)"
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
+let TTS_KITTEN_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kitten.py over KittenML/kitten-tts-nano-0.8 @ 7a1db645b1f3ab9420761d87428e042b9cec3f26 and kitten-tts-mini-0.8 @ c02725660cea441db4c383af69f1f26f5cd00947 (the ONNX weights into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the terms"
+let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the terms"
+let TTS_PACKS_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/build_g2p_data.py (misaki 0.9.4 gold/silver + CMUdict 0.7a + the g2p_en 2.1.0 GRU + harness/g2p_local_additions.json into tts_g2p.bin) and harness/train_postag.py (UD English-EWT + spaCy-labelled silver prose into tts_postag.bin)"
+let TTS_ORACLE_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs the PyTorch / ONNX reference per model over the bring-up sentences and dumps every stage the parity rail (tests/_tts_parity.das) compares"
 
 // The text-model set, ascending size. Absent files skip at run time, so one table serves every
 // box; each view measures/verifies the subset it actually has. Audio models live in
@@ -540,7 +544,21 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3-Coder-Next-Q4_K_M.gguf", display = "Qwen3-Coder-Next-q4k", quant_label = "q4_k_m",
             // arch qwen3next: the FILE layout differs from qwen35 (fused Q4_K ssm_ba, HF
             // grouped v-head order) — this fixture proves the loader's grouped->tiled permutes
-            parity <- ev_qwen_count([dn_chunked = true]))
+            parity <- ev_qwen_count([dn_chunked = true])),
+        // the text-to-speech carriers: local conversions with no board row (followup_general.md
+        // row 77); the front-end packs every TTS model loads ride the kitten-nano row, the
+        // per-model oracle dumps ride their own rows
+        ModelSpec(file = "kitten-nano.gguf", recipe = TTS_KITTEN_RECIPE,
+            companions <- [
+                ProvEntry(name = "tts_g2p.bin", root = "llm", recipe = TTS_PACKS_RECIPE),
+                ProvEntry(name = "tts_postag.bin", root = "llm", recipe = TTS_PACKS_RECIPE),
+                ProvEntry(name = "tts_oracle/kitten_nano", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
+        ModelSpec(file = "kitten-mini.gguf", recipe = TTS_KITTEN_RECIPE,
+            companions <- [
+                ProvEntry(name = "tts_oracle/kitten_mini", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
+        ModelSpec(file = "kokoro-82m.gguf", recipe = TTS_KOKORO_RECIPE,
+            companions <- [
+                ProvEntry(name = "tts_oracle/kokoro", root = "llm", recipe = TTS_ORACLE_RECIPE)])
     ]
 }
 

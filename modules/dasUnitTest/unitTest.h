@@ -51,10 +51,6 @@ DAS_MOD_API SomeEnum efn_takeOne_giveTwo ( SomeEnum one );
 DAS_MOD_API SomeEnum98 efn_takeOne_giveTwo_98 ( SomeEnum98 one );
 DAS_MOD_API SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two );
 
-DAS_MOD_API int64_t testFourStrings ( const char * a, const char * b, const char * c, const char * d );
-DAS_MOD_API int64_t testFourPointers ( void * a, void * b, void * c, void * d );
-DAS_MOD_API int64_t testStringArgLength ( const char * str );
-
 //sample of your-engine-float3-type to be aliased as float3 in daslang.
 class Point3 {
 public:
@@ -222,6 +218,8 @@ DAS_MOD_API void test_das_string(const das::Block & block, das::Context * contex
 DAS_MOD_API uint64_t testBlockAnnotationData(const das::Block & blk, das::Context * context, das::LineInfoArg * at);
 DAS_MOD_API uint64_t testBlockAnnotationDataPayload();
 DAS_MOD_API void testPipedDefaults(int32_t a, float b, const das::TBlock<void, int32_t, float> & blk, das::Context * context, das::LineInfoArg * at);
+DAS_MOD_API int64_t testFourStrings ( const char * a, const char * b, const char * c, const char * d );
+DAS_MOD_API int64_t testFourPointers ( void * a, void * b, void * c, void * d );
 DAS_MOD_API vec4f new_and_init ( das::Context & context, das::SimNode_CallBase * call, vec4f * );
 
 struct CppS1 {

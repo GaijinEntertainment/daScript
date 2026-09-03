@@ -1,7 +1,8 @@
 # dasLLAMA Code Review Checklist - placement
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** The per-file
-charters are `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md` and `ARCHITECTURE_MEDIA.md` sec.1.
+charters are `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md` and
+`ARCHITECTURE_TTS.md` sec.1.
 
 **Routed from `REVIEW.md`: a diff that adds a file under `dasllama/`, moves code between files,
 or lands a kernel, codec, transform, tokenizer, tool-wire, media-IO or registration concern

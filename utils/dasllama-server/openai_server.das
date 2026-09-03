@@ -170,6 +170,10 @@ var g_asr_path = ""
 var g_asr_mmproj = ""
 var g_asr_worker_count = 0
 var g_asr_team_dispatch = false
+var g_has_tts = false
+var g_tts_path = ""
+var g_tts_id = ""
+let TTS_FRONT_END_PACKS : array<string> <- ["tts_g2p.bin", "tts_postag.bin"]   // load_tts_model reads both from the GGUF's directory
 var g_shutdown_requested = false
 var g_gc_requested = false
 var g_req_counter = 0l
@@ -454,6 +458,29 @@ def configure_asr_workers(path, mmproj : string; workers : int = 1) {
     g_asr_mmproj = mmproj
     g_asr_worker_count = clamp(workers, 1, 8)
     g_has_asr = !empty(path)
+}
+
+//! Configure the TTS model ``/v1/audio/speech`` serves: one worker thread loads and owns it in
+//! its own context, the route id is the file's stem. Call once before ``run_server``. Panics
+//! naming the missing file when the GGUF or either front-end pack is absent — the worker loads
+//! on its own thread, where a loader panic would otherwise be an unattributed dead worker.
+def configure_tts(path : string) {
+    g_tts_path = path
+    g_has_tts = !empty(path)
+    g_tts_id = empty(path) ? "" : stem(base_name(path))
+    if (!g_has_tts) {
+        return
+    }
+    if (!stat(path).is_valid) {
+        panic("dasllama-server: the TTS model file was not found: {path}")
+    }
+    let dir = dir_name(path)
+    for (pack in TTS_FRONT_END_PACKS) {
+        let pack_path = path_join(dir, pack)
+        if (!stat(pack_path).is_valid) {
+            panic("dasllama-server: the TTS front-end pack was not found: {pack_path} (tts_g2p.bin and tts_postag.bin sit beside the model GGUF)")
+        }
+    }
 }
 
 //! Stop admitting new inference/ASR work and exit after all accepted work finishes. Also wired to
@@ -1230,6 +1257,7 @@ enum private AsrEventKind {
     started
     completed
     stopped
+    failed       // the worker could not load its model: `body` carries the panic text
 }
 
 struct private AsrJob {
@@ -1276,6 +1304,7 @@ var g_asr_ready = 0
 var g_asr_active = 0
 var g_asr_pending = 0
 let ASR_QUEUE_LIMIT = 32
+let WORKER_STOP_WAIT_NS = 30_000_000_000l   // a worker that died on its own never answers the stop; the teardown must still finish
 let ASR_WRITER_KEEPALIVE_MS = 3600000
 let LLM_WRITER_KEEPALIVE_MS = 3600000
 let DEFAULT_WRITER_KEEPALIVE_MS = 75000
@@ -1745,6 +1774,9 @@ def private handle_models(var resp : HttpResponse?) : http_status {
     }
     if (g_has_asr && !empty(g_slots)) {
         list.data |> push(OaiModel(id = "{g_slots[g_default_slot].name}-asr", _object = "model", created = created_ts(), owned_by = "dasllama"))
+    }
+    if (g_has_tts) {
+        list.data |> push(OaiModel(id = g_tts_id, _object = "model", created = created_ts(), owned_by = "dasllama"))
     }
     let body = sprint_json(list, false)
     delete list
@@ -2633,6 +2665,18 @@ def private reap_disconnected(srv : WebSocketServer) {
         g_asr_wires |> erase(id)
     }
     delete disconnected_asr
+    var disconnected_tts : array<int64>
+    for (id, w in keys(g_tts_wires), values(g_tts_wires)) {
+        if (!is_writer_connected(srv, w.writer)) {
+            release_writer(srv, w.writer)
+            disconnected_tts |> push(id)
+        }
+    }
+    for (id in disconnected_tts) {   // the synthesis keeps running; its completed event finds no wire and only tracks the file for the sweep
+        delete g_tts_wires[id]
+        g_tts_wires |> erase(id)
+    }
+    delete disconnected_tts
     var disconnected_vision : array<int64>
     for (id, w in keys(g_media_wires), values(g_media_wires)) {
         if (!is_writer_connected(srv, w.writer)) {
@@ -2916,6 +2960,8 @@ struct private OaiStatsResponse {
     hardware : string
     asr_done_jobs : int64
     asr_audio_s : float
+    tts_done_jobs : int64     // cumulative served syntheses
+    tts_audio_s : float       // cumulative speech seconds synthesized
     vision : bool             // the DEFAULT slot's vision arm — the slot a model-less page request lands on
     audio : bool              // the DEFAULT slot's audio arm (native audio through the serving slot)
     thinking_default : bool   // the DEFAULT slot's family thinking default (the page's checkbox seed)
@@ -2933,9 +2979,11 @@ def private gpu_weight_budget_bytes() : int64 {
 
 def private handle_stats(var resp : HttpResponse?) : http_status {
     if (empty(g_slots)) {
-        // setup mode: the minimum shape control.html's apply() reads (it gates on `setup`)
+        // no LLM slot: the minimum shape control.html's apply() reads (it gates on `setup`).
+        // `setup` is the MODE, not the slot count — a speech-only server serves the speech route
+        // and must not draw the page's pick-a-model surface.
         return resp |> JSON(
-            "\{\"setup\":true,\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":0,\"asr_ready\":0,\"asr_active\":0,\"asr_pending\":0,\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":0,\"asr_audio_s\":0,\"vision\":false,\"audio\":false,\"models\":[]}",
+            "\{\"setup\":{g_setup_mode},\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":0,\"asr_ready\":0,\"asr_active\":0,\"asr_pending\":0,\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":0,\"asr_audio_s\":0,\"tts_done_jobs\":{g_tts_done_jobs},\"tts_audio_s\":{g_tts_audio_s},\"vision\":false,\"audio\":false,\"models\":[]}",
             http_status.OK)
     }
     let tier = gpu_tier_status()
@@ -2968,6 +3016,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         gpu_budget_bytes = gpu_weight_budget_bytes(),
         hardware = g_hardware_line,
         asr_done_jobs = g_asr_done_jobs, asr_audio_s = g_asr_audio_s,
+        tts_done_jobs = g_tts_done_jobs, tts_audio_s = g_tts_audio_s,
         // DEFAULT slot, not g_active: these two gate the page's request UI, and a page request
         // carries no model field, so it lands on the default slot - the UI must show ITS truth
         vision = g_slots[g_default_slot].vision.kind != VisionKind.none,
@@ -3119,6 +3168,7 @@ let private CONFIG_KEY_KINDS <- {
     "model" => "s", "port" => "i", "quant" => "s", "kv_dtype" => "s", "metal" => "s",
     "gpu" => "s", "gpu_layers" => "i", "gpu_stream" => "i", "gpu_dn" => "b", "gpu_attn" => "b",
     "gpu_dense" => "b", "gpu_vram_mb" => "i", "asr" => "s", "mmproj" => "s", "asr_workers" => "i",
+    "tts" => "s",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
     "mtp" => "b", "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "models" => "a",
@@ -3654,7 +3704,18 @@ def private asr_worker_main(
                             ) {
     this_context().name := "dasllama_asr_{worker_index}"
     set_jobque_thread_team_mode(team_dispatch)
-    var model <- empty(mmproj_path) ? load_asr_model(model_path) : load_asr_model(model_path, mmproj_path)
+    var model = AsrModel()
+    var load_failure = ""
+    let load_failed = catch_worker_panic(load_failure) {
+        model <- empty(mmproj_path) ? load_asr_model(model_path) : load_asr_model(model_path, mmproj_path)   // nolint:PERF030 - target is the fresh empty decl above; the load runs inside the catch block, so it cannot fold into the declaration
+    }
+    if (load_failed) {   // an escaping panic here would kill only this thread and hang the ready-wait
+        to_log(LOG_ERROR, "dasllama-server: ASR worker {worker_index} could not load {model_path}: {load_failure}\n")
+        emit_asr_event(events, AsrEvent(kind = AsrEventKind.failed, body = load_failure))
+        jobs |> release
+        events |> release
+        return
+    }
     emit_asr_event(events, AsrEvent(kind = AsrEventKind.ready))
     var session = AsrSession()
     var session_language = ""
@@ -3762,13 +3823,19 @@ def private start_asr_worker_threads() {
                 worker_index, model_path, mmproj_path, team_dispatch, jobs_capture, events_capture)
         }
     }
-    while (g_asr_ready < g_asr_worker_count) {
+    var load_failure = ""
+    while (g_asr_ready < g_asr_worker_count && empty(load_failure)) {
         g_asr_events |> pop_with_timeout_clone(1000) $(event : AsrEvent#) {
             if (event.kind == AsrEventKind.ready) {
                 g_asr_ready++
                 to_log(LOG_INFO, "dasllama-server: ASR worker ready ({g_asr_ready}/{g_asr_worker_count})\n")
+            } elif (event.kind == AsrEventKind.failed) {
+                load_failure = clone_string(event.body)
             }
         }
+    }
+    if (!empty(load_failure)) {
+        panic("dasllama-server: an ASR worker failed to load {g_asr_path}: {load_failure}")
     }
 }
 
@@ -3834,14 +3901,312 @@ def private stop_asr_worker_threads() {
         g_asr_jobs |> push_clone(AsrJob(stop = true))
     }
     var stopped = 0
-    while (stopped < g_asr_worker_count) {
+    let since = ref_time_ticks()
+    while (stopped < g_asr_worker_count && get_time_nsec(since) < WORKER_STOP_WAIT_NS) {
         g_asr_events |> pop_with_timeout_clone(1000) $(event : AsrEvent#) {
             if (event.kind == AsrEventKind.stopped) {
                 stopped++
             }
         }
     }
+    if (stopped < g_asr_worker_count) {
+        to_log(LOG_WARNING, "dasllama-server: {g_asr_worker_count - stopped} ASR worker(s) did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
+    }
     g_asr_ready = 0
+}
+
+// ===== /v1/audio/speech =====
+// One worker thread owns the TTS model in its own context (the ASR shape); a request is a job,
+// the answer is a temp file the writer rail serves binary-safe, then reaps.
+
+enum private TtsEventKind {
+    ready
+    completed
+    stopped
+    failed       // the worker could not load its model: `body` carries the panic text
+}
+
+struct private TtsJob {
+    id : int64
+    text : string
+    voice : string
+    speed : float
+    format : string      // wav | pcm
+    stop : bool
+}
+
+struct private TtsEvent {
+    kind : TtsEventKind
+    id : int64
+    status : int
+    content_type : string
+    body : string        // the error body on a failure
+    file_path : string   // the served audio on success
+    audio_s : float
+}
+
+struct private TtsWire {
+    @do_not_delete writer : HttpResponseWriter?
+}
+
+struct private TtsServedFile {
+    path : string
+    at : int64
+}
+
+var g_tts_jobs : Channel?
+var g_tts_events : Channel?
+var g_tts_wires : table<int64; TtsWire>
+var g_tts_served : array<TtsServedFile>
+var g_tts_ready = 0
+var g_tts_pending = 0
+var g_tts_done_jobs = 0l
+var g_tts_audio_s = 0.0
+let TTS_QUEUE_LIMIT = 16
+let TTS_WRITER_KEEPALIVE_MS = 600000
+let TTS_MAX_INPUT_CHARS = 4096
+let SPEECH_FIELDS : table<string> <- { "model", "input", "voice", "speed", "response_format", "instructions", "stream_format" }
+
+def private emit_tts_event(events : Channel?; event : TtsEvent) {
+    events |> push_clone(event)
+}
+
+def private process_tts_job(var model : TtsModel; job : TtsJob; events : Channel?) {
+    var inscope c <- caps(model)   // freed at scope exit: the worker context never collects, so a per-request caps struct would accumulate
+    let voice = empty(job.voice) ? c.voices[0] : job.voice
+    var inscope audio <- synthesize(model, job.text, voice, job.speed)
+    var inscope bytes <- job.format == "pcm" ? pcm16_bytes(audio.pcm) : wav_pcm16_bytes(audio.pcm, audio.sample_rate)
+    let temp = create_temp_file_result("dasllama_speech", ".{job.format}")   // unguessable name: a shared tmpdir is not ours alone
+    if (!(temp is value)) {
+        panic("cannot create a temp file for the synthesis: {temp as error}")
+    }
+    let path = temp as value
+    let f = fopen(path, "wb")
+    if (f == null) {
+        panic("cannot write {path}")
+    }
+    fwrite(f, bytes)
+    fclose(f)
+    emit_tts_event(events, TtsEvent(
+        kind = TtsEventKind.completed, id = job.id, status = int(http_status.OK),
+        content_type = job.format == "pcm" ? "audio/pcm" : "audio/wav", file_path = path,
+        audio_s = float(length(audio.pcm)) / float(audio.sample_rate)))
+}
+
+def private tts_worker_main(model_path : string; team_dispatch : bool; var jobs : Channel?&; var events : Channel?&) {
+    this_context().name := "dasllama_tts"
+    set_jobque_thread_team_mode(team_dispatch)   // a new OS thread defaults to team publishes; the worker's kernels run inline like the ASR workers' unless the policy is `team`
+    var inscope model = TtsModel()
+    var load_failure = ""
+    let load_failed = catch_worker_panic(load_failure) {
+        model <- load_tts_model(model_path)   // nolint:PERF030 - target is the fresh empty decl above; the load runs inside the catch block, so it cannot fold into the declaration
+    }
+    if (load_failed) {   // an escaping panic here would kill only this thread and hang the ready-wait
+        to_log(LOG_ERROR, "dasllama-server: the TTS worker could not load {model_path}: {load_failure}\n")
+        emit_tts_event(events, TtsEvent(kind = TtsEventKind.failed, body = load_failure))
+        jobs |> release
+        events |> release
+        return
+    }
+    emit_tts_event(events, TtsEvent(kind = TtsEventKind.ready))
+    var stopping = false
+    while (!stopping) {
+        jobs |> pop_with_timeout_clone(250) $(job : TtsJob#) {
+            if (job.stop) {
+                stopping = true
+            } else {
+                var job_copy : TtsJob
+                job_copy := job
+                var failure = ""
+                let failed = catch_worker_panic(failure) {
+                    process_tts_job(model, job_copy, events)
+                }
+                if (failed) {
+                    // a voice the model lacks is the caller's mistake; anything else is ours
+                    let client = find(failure, "unknown voice") >= 0
+                    to_log(LOG_ERROR, "[req {job_copy.id}] tts: failed: {failure}\n")
+                    emit_tts_event(events, TtsEvent(
+                        kind = TtsEventKind.completed, id = job_copy.id,
+                        status = int(client ? http_status.BAD_REQUEST : http_status.INTERNAL_SERVER_ERROR),
+                        content_type = "application/json",
+                        body = error_body(failure, client ? "invalid_request_error" : "server_error")))
+                }
+                delete job_copy
+            }
+        }
+    }
+    delete model
+    emit_tts_event(events, TtsEvent(kind = TtsEventKind.stopped))
+    jobs |> release
+    events |> release
+}
+
+// POST /v1/audio/speech: {"model"?, "input", "voice"?, "speed"?, "response_format"?: "wav" | "pcm"}.
+def private queue_speech(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
+    if (reject_deferred_while_draining(srv, writer)) {
+        return
+    }
+    if (!g_has_tts || g_tts_ready < 1) {
+        service_unavailable(srv, writer, "no TTS model is served — start with --tts <model.gguf>")
+        return
+    }
+    if (g_tts_pending >= TTS_QUEUE_LIMIT) {
+        service_unavailable(srv, writer, "the TTS queue is at capacity ({TTS_QUEUE_LIMIT}) — retry shortly")
+        return
+    }
+    var perr = ""
+    var js = read_json(string(req.body), perr)
+    if (js == null) {
+        bad_request(srv, writer, "invalid JSON: {perr}")
+        return
+    }
+    defer() { unsafe { delete js } }
+    warn_ignored_fields(js, SPEECH_FIELDS, "/v1/audio/speech")
+    let want_model = js?["model"] ?? ""
+    if (!empty(want_model) && want_model != g_tts_id) {
+        respond(srv, writer, int(http_status.NOT_FOUND), "application/json",
+            error_body("model '{want_model}' is not the served TTS model ('{g_tts_id}') — GET /v1/models lists the ids", "invalid_request_error"))
+        return
+    }
+    let input = js?["input"] ?? ""
+    if (empty(input)) {
+        bad_request(srv, writer, "'input' is required (the text to speak)")
+        return
+    }
+    if (length(input) > TTS_MAX_INPUT_CHARS) {
+        bad_request(srv, writer, "'input' exceeds {TTS_MAX_INPUT_CHARS} characters — split the text")
+        return
+    }
+    let fmt = js?["response_format"] ?? "wav"
+    if (fmt != "wav" && fmt != "pcm") {
+        bad_request(srv, writer, "response_format '{fmt}' is not served — wav (the default) and pcm (16-bit little-endian at the model's rate) are; mp3, opus, aac and flac need an encoder this server does not carry")
+        return
+    }
+    let speed = float(js?["speed"] ?? 1.0lf)
+    if (speed < 0.25 || speed > 4.0) {
+        bad_request(srv, writer, "'speed' must be between 0.25 and 4.0")
+        return
+    }
+    set_writer_keepalive_timeout(srv, writer, TTS_WRITER_KEEPALIVE_MS)
+    let rid = next_id()
+    g_tts_wires[rid] <- TtsWire(writer = writer)
+    g_tts_pending++
+    g_tts_jobs |> push_clone(TtsJob(id = rid, text = input, voice = js?["voice"] ?? "", speed = speed, format = fmt))
+    to_log(LOG_INFO, "[req {rid}] tts: queued (pending={g_tts_pending}, {length(input)} chars, {fmt})\n")
+}
+
+def private start_tts_worker() {
+    g_tts_ready = 0
+    if (!g_has_tts) {
+        return
+    }
+    to_log(LOG_INFO, "dasllama-server: starting the TTS worker for {g_tts_id}\n")
+    let model_path = g_tts_path
+    let team_dispatch = g_asr_team_dispatch
+    var jobs_capture = g_tts_jobs
+    var events_capture = g_tts_events
+    new_thread() <| @capture(= model_path, = team_dispatch, = jobs_capture, = events_capture) {
+        tts_worker_main(model_path, team_dispatch, jobs_capture, events_capture)
+    }
+    var load_failure = ""
+    while (g_tts_ready < 1 && empty(load_failure)) {
+        g_tts_events |> pop_with_timeout_clone(1000) $(event : TtsEvent#) {
+            if (event.kind == TtsEventKind.ready) {
+                g_tts_ready++
+                to_log(LOG_INFO, "dasllama-server: TTS worker ready\n")
+            } elif (event.kind == TtsEventKind.failed) {
+                load_failure = clone_string(event.body)
+            }
+        }
+    }
+    if (!empty(load_failure)) {
+        panic("dasllama-server: the TTS worker failed to load {g_tts_path}: {load_failure}")
+    }
+}
+
+def private drain_tts_events(srv : WebSocketServer) {
+    var draining = true
+    while (draining) {
+        draining = g_tts_events |> try_pop_clone() $(event : TtsEvent#) {
+            if (event.kind == TtsEventKind.completed) {
+                g_tts_pending = max(g_tts_pending - 1, 0)
+                if (event.status == int(http_status.OK)) {
+                    g_tts_done_jobs++
+                    g_tts_audio_s += event.audio_s
+                }
+                var wire = unsafe(g_tts_wires?[event.id])
+                if (wire != null) {
+                    if (is_writer_connected(srv, wire.writer)) {
+                        set_writer_keepalive_timeout(srv, wire.writer, DEFAULT_WRITER_KEEPALIVE_MS)
+                        if (event.status == int(http_status.OK)) {
+                            set_header(srv, wire.writer, "Content-Type", event.content_type)
+                            SERVE_FILE(srv, wire.writer, event.file_path)
+                        } else {
+                            respond(srv, wire.writer, event.status, event.content_type, event.body)
+                        }
+                    } else {
+                        release_writer(srv, wire.writer)
+                    }
+                    delete g_tts_wires[event.id]
+                    g_tts_wires |> erase(event.id)
+                }
+                if (!empty(event.file_path)) {
+                    g_tts_served |> push(TtsServedFile(path = clone_string(event.file_path), at = ref_time_ticks()))
+                }
+                to_log(LOG_INFO, "[req {event.id}] tts: completed {event.status} ({event.audio_s} s of audio, pending={g_tts_pending})\n")
+            }
+        }
+    }
+    // the async file write is done long before this: served files go after a minute
+    var i = 0
+    while (i < length(g_tts_served)) {
+        if (get_time_nsec(g_tts_served[i].at) > 60_000_000_000l) {
+            remove_result(g_tts_served[i].path)
+            g_tts_served |> erase(i)
+        } else {
+            i++
+        }
+    }
+}
+
+// A synthesis in flight when the stop arrives still lands a completed event: its wire and its
+// temp file are ours to close, so the teardown finishes the job instead of dropping it.
+def private discard_tts_completion(id : int64; file_path : string) {
+    g_tts_pending = max(g_tts_pending - 1, 0)
+    var wire = unsafe(g_tts_wires?[id])
+    if (wire != null) {
+        if (g_server != null) {
+            release_writer(g_server.server, wire.writer)
+        }
+        delete g_tts_wires[id]
+        g_tts_wires |> erase(id)
+    }
+    if (!empty(file_path)) {
+        remove_result(file_path)
+    }
+    to_log(LOG_WARNING, "[req {id}] tts result discarded during teardown\n")
+}
+
+def private stop_tts_worker() {
+    if (!g_has_tts || g_tts_ready < 1) {
+        return
+    }
+    g_tts_jobs |> push_clone(TtsJob(stop = true))
+    var stopped = false
+    let since = ref_time_ticks()
+    while (!stopped && get_time_nsec(since) < WORKER_STOP_WAIT_NS) {
+        g_tts_events |> pop_with_timeout_clone(1000) $(event : TtsEvent#) {
+            if (event.kind == TtsEventKind.stopped) {
+                stopped = true
+            } elif (event.kind == TtsEventKind.completed) {
+                discard_tts_completion(event.id, clone_string(event.file_path))
+            }
+        }
+    }
+    if (!stopped) {
+        to_log(LOG_WARNING, "dasllama-server: the TTS worker did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
+    }
+    g_tts_ready = 0
 }
 
 // ===== async vision encode (the ASR worker pattern: own context, own embedder) =====
@@ -4153,6 +4518,9 @@ class OpenAiServer : HvWebServer {
         STREAM("/v1/audio/translations") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
             queue_transcription(server, req, writer, true)
         }
+        STREAM("/v1/audio/speech") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
+            queue_speech(server, req, writer)
+        }
         POST("/v1/embeddings") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (g_shutdown_requested) {
                 return resp |> JSON(
@@ -4240,7 +4608,7 @@ class OpenAiServer : HvWebServer {
             if (!g_shutdown_requested) {
                 to_log(
                     LOG_INFO,
-                    "dasllama-server: restart requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, media_pending={g_media_pending}\n")
+                    "dasllama-server: restart requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, tts_pending={g_tts_pending}, media_pending={g_media_pending}\n")
             }
             g_shutdown_requested = true
             g_restart_requested = true
@@ -4251,7 +4619,7 @@ class OpenAiServer : HvWebServer {
             if (!g_shutdown_requested) {
                 to_log(
                     LOG_INFO,
-                    "dasllama-server: graceful shutdown requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, media_pending={g_media_pending}\n")
+                    "dasllama-server: graceful shutdown requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, tts_pending={g_tts_pending}, media_pending={g_media_pending}\n")
             }
             g_shutdown_requested = true
             return resp |> JSON("\{\"ok\":true,\"draining\":true}", http_status.OK)
@@ -4301,6 +4669,7 @@ def private init_worker_rails {
     g_bake_result_json = ""
     catalog_events_init()
     start_asr_worker_threads()
+    start_tts_worker()
     start_media_worker()
 }
 
@@ -4355,6 +4724,10 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
         to_log(LOG_ERROR, "dasllama-server: init_server called while already initialized\n")
         return false
     }
+    if (empty(g_slots) && !g_setup_mode && !g_has_tts) {
+        to_log(LOG_ERROR, "dasllama-server: init_server with no model slots (call set_model/add_model first, or configure_tts for a speech-only server)\n")
+        return false
+    }
     g_shutdown_requested = false   // reset so a restart in the same context after /shutdown doesn't drain at once
     g_restart_requested = false    // NOT reset in shutdown_server — the lifecycle host reads it after
     g_gc_requested = false
@@ -4367,15 +4740,13 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     to_log(LOG_INFO, "dasllama-server: jobque compute dispatch = {dispatch_mode}\n")
     g_asr_jobs = unsafe(channel_create())
     g_asr_events = unsafe(channel_create())
+    g_tts_jobs = unsafe(channel_create())
+    g_tts_events = unsafe(channel_create())
     g_media_jobs = unsafe(channel_create())
     g_media_events = unsafe(channel_create())
     init_worker_rails()
-    if (empty(g_slots) && !g_setup_mode) {
-        to_log(LOG_ERROR, "dasllama-server: init_server with no model slots (call set_model/add_model first)\n")
-        return false
-    }
     if (empty(g_slots)) {
-        to_log(LOG_INFO, "dasllama-server: setup mode - serving the catalog/config page only\n")
+        to_log(LOG_INFO, g_setup_mode ? "dasllama-server: setup mode - serving the catalog/config page only\n" : "dasllama-server: no LLM slot - serving the speech route and the catalog only\n")
     }
     init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows, prefix_groups, kv_dtype, mtp)
     g_active = g_default_slot
@@ -4472,6 +4843,7 @@ def update_server() : bool {
     }
     let t_drain = ref_time_ticks()
     drain_asr_events(g_server.server)
+    drain_tts_events(g_server.server)
     drain_media_events(g_server.server)
     drain_bench_events()
     drain_bake_events()
@@ -4521,7 +4893,7 @@ def update_server() : bool {
         prof_window_report()
     }
     if (g_shutdown_requested && total_active() == 0l && total_queued() == 0l &&
-        g_asr_pending == 0 && g_media_pending == 0) {
+        g_asr_pending == 0 && g_tts_pending == 0 && g_media_pending == 0) {
         to_log(LOG_INFO, "dasllama-server: graceful shutdown drain complete\n")
         return false
     }
@@ -4529,6 +4901,18 @@ def update_server() : bool {
         sleep(2u)
     }
     return true
+}
+
+// a stopped worker's channel pair: both released, either may already be null
+def private remove_worker_channels(var jobs : Channel?; var events : Channel?) {
+    unsafe {
+        if (jobs != null) {
+            jobs |> channel_remove
+        }
+        if (events != null) {
+            events |> channel_remove
+        }
+    }
 }
 
 //! Release every lifecycle-owned object in dependency order. Safe after a partially failed init.
@@ -4539,6 +4923,9 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     g_server_started = false
     if (g_asr_jobs != null && g_asr_events != null) {
         stop_asr_worker_threads()
+    }
+    if (g_tts_jobs != null && g_tts_events != null) {
+        stop_tts_worker()
     }
     if (g_media_jobs != null && g_media_events != null) {
         stop_media_worker()
@@ -4569,6 +4956,11 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     delete g_events
     delete g_wires
     delete g_asr_wires
+    delete g_tts_wires
+    for (served in g_tts_served) {   // the synthesis temp files outlive the process otherwise: nothing else sweeps tmpdir
+        remove_result(served.path)
+    }
+    delete g_tts_served
     for (w in values(g_media_wires)) {   // parked image requests die with the server
         unsafe {
             delete w.js
@@ -4578,30 +4970,25 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     delete g_media_wires
     var asr_jobs = g_asr_jobs
     var asr_events = g_asr_events
+    var tts_jobs = g_tts_jobs
+    var tts_events = g_tts_events
     var vision_jobs = g_media_jobs
     var vision_events = g_media_events
     var bench_events = g_bench_events
     var bake_events = g_bake_events
     g_asr_jobs = null
     g_asr_events = null
+    g_tts_jobs = null
+    g_tts_events = null
     g_media_jobs = null
     g_media_events = null
     g_bench_events = null
     g_bake_events = null
     catalog_events_shutdown()
     unsafe {
-        if (asr_jobs != null) {
-            asr_jobs |> channel_remove
-        }
-        if (asr_events != null) {
-            asr_events |> channel_remove
-        }
-        if (vision_jobs != null) {
-            vision_jobs |> channel_remove
-        }
-        if (vision_events != null) {
-            vision_events |> channel_remove
-        }
+        remove_worker_channels(asr_jobs, asr_events)
+        remove_worker_channels(tts_jobs, tts_events)
+        remove_worker_channels(vision_jobs, vision_events)
         // a still-running worker holds a channel ref, and channel_remove throws on outstanding
         // refs — leave the channel to the worker (its exit release is safe on the live object;
         // the worker can't be cancelled, its child process runs minutes) instead of aborting stop
@@ -4632,6 +5019,11 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     g_asr_ready = 0
     g_asr_active = 0
     g_asr_pending = 0
+    g_has_tts = false
+    g_tts_path = ""
+    g_tts_id = ""
+    g_tts_ready = 0
+    g_tts_pending = 0
     g_media_pending = 0
     if (g_jobque_owned) {
         destroy_job_que()

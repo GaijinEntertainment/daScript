@@ -405,6 +405,55 @@ dedicated q8 plane (offset 0, plane == table exactly, gather rows BIT-match the 
 wblob provably too small to carry the expansion) and a K-quant table on its native kq plane;
 plus a greedy chat turn per serving mode on the E2B Q8_0 carrier - a q8 control, an fp32 turn,
 and a `q4_0` turn, the `q4_0` one proving q4 serving has a per-layer-embedding rail.
+`test_tts_textnorm.das` - model-free: the TTS text normalizer - the number, ordinal, year and
+decimal readers, the reference normalizer's own examples, the fixed upstream defects as
+failing-first cases, and the 200-sentence corpus (`_tts_fixtures/g2p_corpus.json`, loaded by
+`_tts_corpus.das`) against the reference normalizer's output - or the fixture's hand-corrected
+`expected` form where that output is not what a person says - idempotence included.
+`test_tts_postag.das` - model-free: the tagger's word class and shape features (the trainer's
+own hyphen rule, the d/h/q suffixes), the tokenizer's comma and colon infix rules, and the
+missing-pack panic; model-gated (`tts_postag.bin` in the models dir): the TTS tokenizer
+token-for-token against the reference tokenizer on the corpus, the tagger's agreement with the
+reference tagger (overall and on the heteronym words), the packed file's header floors, and
+the load budget.
+`test_tts_g2p.das` - model-free: the missing-pack panic; model-gated (`tts_g2p.bin` +
+`tts_postag.bin`): the grapheme-to-phoneme rail phoneme-identical with the reference front end
+on the corpus (fed the same normalized text) except the sentences its heteronym rules and the
+lexicon additions of `harness/g2p_local_additions.json` read past it (named in the cell), the
+heteronym gate (both annotated readings present, 32 of 38 against the reference's 24; a verb
+tag out-ranks the collocation table), the function-word, splitter, inflection and number arms
+(a glued number past 2^31 reads its digits, never "zero"), the fallback chain, stress helpers,
+and the load budget.
+`test_tts_kitten.das` - model-free suite; the symbol-map and token-rule cells run everywhere
+(the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
+the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-<size>.gguf` +
+`tts_oracle/kitten_<size>/` under the models dir, both from `performance/build_tts_data.das`)
+run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
+sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings.
+`test_tts_kokoro.das` - model-free: the symbol map over a synthetic phoneme string, the
+out-of-vocabulary drop, and the style-row clamps; model-gated (`kokoro-82m.gguf` +
+`tts_oracle/kokoro/`): the vocabulary and style-row rule, the parity rail of `_tts_parity.das`
+against the PyTorch reference, and a facade smoke cell through the front end's own inventory.
+`test_tts_facade.das` - model-free suite: the sentence chunker (the reference driver's boundary
+rule, the cap counted in codepoints, the hard split of a whitespace-free run, the appended
+punctuation), the WAV container, the codec's malformed-lead and astral arms, kitten's
+dropped-symbol rule, and the `rtf` guard; model-gated (`kitten-nano.gguf` + the front-end
+packs): the streaming form's chunks concatenate to the buffered synthesis sample for sample,
+one synthesis at one lane and the other at the box's lanes.
+`test_tts_blocks.das` - model-free: the block home's two layouts against each other - every
+rows form (token-major [T][C]) held to its channel-major twin at the dot-envelope bar (a
+tolerance times the sum of |w|*|x| feeding each output, with a zeroed-tap poison leg that must
+EXCEED it), the q8 lane at its own 2% bar, the padded input width on both lanes, the
+multi-chunk stacked-tap loop, `adain_rows_into` against `adain_rows`, the norms and the
+duration expansion; plus the split-invariance gate (every rows kernel bit-equal at batch lane
+cap 1 and 0) and the must-panic cells for the rows conv's shape refusals.
+`_tts_parity.das` - the rail both families run: token ids against the reference driver on every
+oracle case, identical durations on every case, and on the bring-up set every stage through the
+decoder output within 1e-4 of the oracle's peak, the sine source within 1e-4 fed the oracle's F0,
+the source spectrum's magnitude within 1e-4 of its peak and its phase within 1e-2 rad where the
+magnitude carries signal, and the generator (its stage-0 internals included) within 1e-4 fed the
+oracle's spectrum and decoder output; the end-to-end waveform difference is logged, not gated (the
+F0 phase drift the file header explains).
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference.

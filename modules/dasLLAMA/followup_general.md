@@ -342,13 +342,13 @@
       `timestamp_granularities[]` where the family has word timestamps; `prompt` biasing;
       `stream=true` transcription events; `/v1/audio/translations` for the whisper family
       (native decoder mode; other families decline); accept-and-ignore `image_url.detail`.
-    - CAPABILITY DECISIONS (Boris's call, each a new model class): TTS - `/v1/audio/speech`
-      and chat `modalities:["text","audio"]`. No served artifact can speak; the two Omni
-      families have Talkers upstream but the GGUF ecosystem carries only thinker + audio
-      encoder, and a talker conditions on thinker HIDDEN STATES (not a bolt-on). The
-      reference-backed route if wanted: a dedicated small TTS family (the upstream tts
-      example - OuteTTS + WavTokenizer ggufs). Realtime API (WebSocket voice, barge-in) is
-      the end-state the smaller audio choices point at; name it before choosing them.
+    - CAPABILITY DECISIONS (Boris's call, each a new model class): TTS `/v1/audio/speech` -
+      DONE (the StyleTTS2 lineage: KittenTTS nano/mini and Kokoro-82M, `--tts`, wav/pcm;
+      `plans/dasllama-tts.md`). Still open: chat `modalities:["text","audio"]` - no served
+      LLM artifact can speak; the two Omni families have Talkers upstream but the GGUF
+      ecosystem carries only thinker + audio encoder, and a talker conditions on thinker
+      HIDDEN STATES (not a bolt-on). Realtime API (WebSocket voice, barge-in) is the end-state
+      the smaller audio choices point at; name it before choosing them.
     - DECLINE/PARK: `/v1/images/generations` (+edits/variations) - no roster model
       generates images even upstream; diffusion is a disjoint class (DiT/UNet + conv2d VAE,
       no upstream reference; the GGML reference is stable-diffusion.cpp, which shares
@@ -878,7 +878,165 @@
     race any family whose adopted winner names a perm `tune_requires_ok` rejects locally (general,
     no rename, needs the suffix -> requires mapping surfaced to the adopt layer). The woodpecker
     round raised the Cascade Lake case.
-70. **Kernel alignment contracts as `requires=` - the residue.** The sweep landed on every
+
+70. **Two FFTs in the tree: `dasllama_audio.das` carries its own power-of-two FFT
+    (`build_fft_plan` / `fft_pow2_run` / `build_dft_twiddles`, the mel front end's kernel) while
+    `modules/dasMinfft` binds a general FFT/DCT library.** The TTS path added a third shape - the
+    N=20 STFT/ISTFT of the iSTFTNet generator, a direct 11-bin sum where a transform library
+    buys nothing. Done = one decision: either the mel front end moves onto dasMinfft (racing the
+    hand-rolled plan on the whisper 400-point and parakeet 512-point mels - the in-tree FFT was
+    written to be bit-close to the reference, so the seam gates must stay green) or the ledger
+    records why the mel kernel keeps its own (JIT-inlined, plan-cached, no module dependency on
+    the CPU-only build) and the direct N=20 sum stays where it is.
+
+71. **LINT candidate (approved 2026-09-02): a local container with no `inscope`, `delete`, or
+    move-out in a `persistent_heap` program.** daslang frees a local container only under
+    `var inscope`, an explicit `delete`, or a move-out; a plain `var a : array<T>` / `let a <- f()`
+    / `var s = StructWithArrays()` is a per-call leak on the persistent heap. The TTS path carried
+    155 of them: one synthesis allocates hundreds of MB of activations, Kitten mini grew ~1 GB per
+    sentence, and the OS killed the 200-sentence rig at sentence 175. PERF030 (move-assign onto a
+    live variable) covers none of these shapes. Done = a `daslib/perf_lint.das` rule that arms
+    only when the program declares `options persistent_heap` (the linear heap is bulk-reset, so
+    one-shot scripts are exempt) and `force_inscope_pod` is off; fires on a heap-carrying local
+    (array, table, struct/tuple/variant holding one; strings excluded) declared without `inscope`
+    when no path in its scope deletes it or moves it out (`return <- x`, `y <- x`, an `emplace` /
+    move-`push`, a `<-` into a field); the fix text spells `var inscope x <- f()` for the `let`
+    form (`let inscope` is rejected for containers) and keeps annotations after the keyword
+    (`var inscope @exact_size y`). The error text stands alone: the leak, the three fixes, the
+    exemption. Rig for the negative control: `heap_bytes_allocated()` per iteration, flat vs
+    growing.
+
+72. **One instrumentation rail (Boris, 2026-09-02): the jobque markers; every other timing
+    accumulator in `dasllama/` is a defect, and building another timing rig is counterproductive.**
+    dasLLAMA carries three sanctioned rails - the `jobque_profile` markers (`trace_tag` /
+    `trace_marker`, `JOBQUE_PROFILING`-compiled, `utils/jobque-timeline` with per-category stats),
+    the `prof_add` / `forward_profile_*` decode buckets (197 sites in 17 files) and the
+    `asr_prof_add` encode buckets (147 sites in 12 files, the TTS generator's `tts.gen.*` among
+    them) - and `REVIEW.md`'s clock rule plus `ARCHITECTURE_MEASUREMENT.md` sec.2.10 name all
+    three, which is how the second and third were built without anyone noticing. Done, as its own
+    PR: (1) every `prof_add` / `asr_prof_add` site becomes a marker category (a `TRACE_TAG_*` block
+    per family beside the ASR ones); (2) the consumers of the bucket tables - the `PROF` rows in
+    `harness/asr_stage_probe.das`, `q3omni_bench.das`, `qwen_encode_split_probe.das`, `asr_prof_ms`
+    in the ASR store reader, `forward_profile_report` - read an aggregator over the saved
+    `jobque_profile` trace that prints the same bucket table; (3) the two rule passages drop the
+    retired rails and state the deliverable carve-out: a per-request wall the API returns
+    (`TtsTimings`, the server's timings line) is a deliverable, not instrumentation; (4) `LAWS.md`
+    records the ruling. Lint candidate, the mechanical form of the clock rule that is prose today:
+    a `dasllama/` file that adds a clock read (`ref_time_ticks` / `get_time_usec`) whose value
+    reaches a log, an accumulator table or a struct field, outside a `// clock: control` mark, a
+    cold load / bake / map log, or a marker call.
+
+73. **`REVIEW.das` gates for four `REVIEW_TTS.md` rules (the dragon's census, 2026-09-02).**
+    Each is decidable from tree state alone, so each retires its prose rule once it lands in
+    `modules/dasLLAMA/REVIEW.das`: (1) every function reachable from `styletts2_synthesize`
+    through the TTS files carries `[hot_path]` - a call-graph walk; (2) every rows kernel in
+    `dasllama/dasllama_tts_blocks.das` has a cell naming it in `tests/test_tts_blocks.das` -
+    list A equals list B; (3) a `set_*_q8` call in a function with no `defer` reaching the
+    matching `reset_*_q8` - one grep-shaped cell that retires `REVIEW_AUDIO.md`'s twin rule
+    with it; (4) no family type, family-keyed branch or family metadata key in
+    `dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` - `REVIEW.das`
+    already runs `check_family_seams` for the audio and vision carriers, and `dasllama_tts.das`
+    (`TtsKind`, `KittenFamily` / `KokoroFamily` fields) is the same shape, so a third
+    registration is the gate. Lint note from the same round: PERF026's remedy text advertises
+    `@scratch` generically, but the mark is inert on a `var inscope @scratch` LOCAL (eight TTS
+    findings sat on locals already carrying it) - the message should say "move it to a reused
+    field", or the rule should honor a scope-lifetime local it can prove.
+
+74. **TTS quality past the surpass program's first round.** The rig on the corrected scoring
+    reads kitten-nano 3.23% / kitten-mini 2.77% / kokoro 2.73% WER against the reference
+    front end's 4.50 / 4.09 / 3.32, heteronyms 32/38 against 24, kokoro's OOV category under
+    the espeak arm's own (9.73 <= 10.90). Owed: (1) kitten-nano's OOV category sits one word
+    over the espeak arm's 8.56 (8.95) - what remains is the transcriber spelling correct
+    speech its own way (sirsha, kiva, dun leary, wynne, cerne, the American spelling of
+    "anaesthesiologists"), so the fix is a scorer that folds spelling variants of one
+    pronunciation, not more lexicon; (2) letters and acronyms (single letters, ALL-CAPS runs,
+    GHz-class alphanumerics) have no fixture category - mint sentences with expected spoken
+    forms into `tests/_tts_fixtures/g2p_corpus.json` through `harness/mint_tts_g2p_fixture.py`,
+    then measure; (3) the tagger's four heteronym misses (dove VBD, invalid NN, moped JJ, the
+    infinitive "entrance" after "to") - `harness/train_postag.py` retrained with silver prose
+    sampled around those words, or a rule where the context decides; (4) two annotation
+    spellings (object, subject with a different reduced vowel than the gold entry) stay as
+    scorer notation; (5) the year 1776 reads "one thousand seven hundred seventy-six" on every
+    arm - the pre-1900 year convention is a normalizer choice to make with a rig delta.
+
+75. **The dasllama-server web page: the TTS route and the numbers.** `utils/dasllama-server`'s
+    page does not yet show the `/v1/audio/speech` route, the three models, the q8 serving
+    default, or the receipts above; its own PR, after this arc merges.
+
+76. **The TTS teaching surface (Boris, 2026-09-02: "followup").** The facade's public defs
+    (`load_tts_model`, `synthesize`, `synthesize_stream`, `caps`, `write_wav`) have no tutorial
+    under `tutorials/dasLLAMA/` and no `utils/dasllama-server` speech demo; the module's TAUGHT
+    duty is owed by both, in one PR with row 75.
+
+77. **The TTS board cell (Boris, 2026-09-02: "ledger").** `REVIEW_MEASUREMENT.md` asks a new
+    servable capability for its cell in the same change; the speech route landed with the rig's
+    RTF receipts in `plans/dasllama-tts.md` and no board row. Owed: a TTS leg of
+    `performance/gen_bench_records.das` (or a `benchmarks/lcpp_bench.das` cell with its
+    `PROFILE.md` section) reporting RTF per model on the q8 lane, minted with row 72's one
+    timing rail.
+
+78. **The three rows-kernel constants were reasoned, not swept.** `ROWS_STACK_BYTES` (4 MB, the
+    stacked int8 chunk sized under the M1 Max per-cluster L2 beside the weight stream),
+    `ROWS_OVERSPLIT` (2 row-block chunks per lane, so the taps' ragged ends balance) and
+    `CONV_IM2COL_ROWS` (1024, the channel-major reference conv's im2col block) in
+    `dasllama/dasllama_tts_blocks.das` never had an interleaved A/B. A `[tune_perm]` over
+    {1,2,4} x {1,2,4,8 MB} on kokoro is about fifteen minutes; the im2col block is the
+    reference lane's and carries no perf duty.
+
+79. **Chunking on the token budget, the reference's design.** `tts_chunks` is the KittenTTS
+    port: a 400-character budget measured on raw text before the front end, then a hard split
+    of a whitespace-free run. Kokoro packs on the PHONEME string after spaces and punctuation
+    are inserted - greedy to 510 with a punctuation-priority waterfall (sentence end, then
+    clause, then comma) and a hard break as the fallback - so ordinary punctuation-dense text
+    never reaches the encoder's truncation. Owed: the chunker moves behind the front end and
+    packs token ids with the waterfall; the encoder's truncate-and-log stays the last resort.
+    Both references measured: `plans/dasllama-tts.md`, the review round.
+
+80. **`das_get_architecture_name` on MSVC ARM64 (Boris, 2026-09-02: "no", ledger).**
+    `src/builtin/module_builtin_runtime.cpp` tests `__aarch64__` alone, so a Windows-on-ARM
+    build reports `unknown`; the JIT's aarch64 lowering, the NEON kernels and the tune box
+    identity all key on that name and stay off there. One line (`|| defined(_M_ARM64)`) is a
+    platform enablement of three subsystems on a target no CI lane builds, so it lands with
+    that lane, not before.
+
+81. **Review-round remainders the arc did not take (Boris, 2026-09-02: "ledger").** (1)
+    kitten's tail trim (`TRIM_TAIL`, 5000 samples) runs per chunk, as the reference runs it per
+    `generate` call - a listening-test item, since a chunked paragraph loses 208 ms per chunk;
+    (2) `st2_bind` runs at three call sites instead of a post-bind hook in `parse_image`, so a
+    fourth `load_image` path would get an unbound carrier that dies at the first GEMM; (3)
+    `utils/dasllama-server/txt2wav.das` has no test (the `wav2txt.das` precedent); (4) the
+    server caps `input` at 4096 characters but nothing caps the normalized length or the chunk
+    count, and normalization expands numbers and currency about tenfold; (5)
+    `tests/jit_tests/intrinsics.das` keeps its exp2/log2/pow JIT-vs-interpreter comparisons
+    commented out - on aarch64 float vectors they now hold, and enabling them there would put
+    the rail's contract in a file per-PR CI runs; (6) `mW` and `MW` collapse under the
+    normalizer's lowercased unit lookup (Boris: keep megawatts) - a case-aware split is the
+    refinement; (7) `g2p_phonemize` fed un-normalized text drops a bare decimal ("3.5 files"
+    loses the number: `is_number_word` accepts it, `get_number` refuses the dot, and the
+    fallback finds no letter run) - unreachable through the facade, which normalizes first.
+
+82. **Gates the review-round fixes asked for.** (1) A served-layout change with no
+    `IMAGE_VERSION` bump: a `REVIEW.das` gate that a diff touching what `conv1d_prepare` /
+    `linear_prepare` mint, or a `read_*` consumer argument, also touches `IMAGE_VERSION` -
+    dropping the AdaIN affines' tiled twin needed 31 -> 32, and only a spuriously red image
+    cell would have said so. (2) A hand-listed `serialize(var arch : Archive; var x : T)`
+    with two or more `arch |> serialize*` calls and no leading `verify(count_meta_fields(x) ==
+    K)`: the five TTS leaves were the module's only ones without the tripwire while ten
+    sibling families carry it. (3) The split-invariance cell's second axis: `adain_rows` and
+    `attention_rows` shape their dispatch through `lanes_for_work(work, 0)` and the head
+    count, which `set_batch_lane_cap` never reaches, so their legs pin invariance under the
+    cap alone - `set_jobque_worker_limit` moves `get_dispatch_lanes()` and so every shaper.
+    (4) `--test modules/dasLLVM/tests` on an arm64 box deletes the tracked fixture
+    `llvm_tune_profiles_defaults/arm-neon.tune-defaults.json` (a tune-profiles test removes
+    the host's own default path); a folder-local `REVIEW.das` gate that a suite run leaves
+    `git status` clean is the fix. (5) A repo-wide lint: `length(<string>)` flowing into a
+    comparison against a name that reads as a character budget (`*_chars`, `max_len`, `cap`,
+    `limit`) in a file that elsewhere calls `utf8_to_cpts` - the chunker counted bytes, over-split
+    em-dash text threefold and let a 513-character run past a cap of 100. (6) A repo-wide lint,
+    LINT017's sibling: `int64(to_int(x))` - the cast says the author wanted 64-bit range, and
+    `to_int` answers 0 past 2^31 (the g2p number reader spoke "zero").
+
+83. **Kernel alignment contracts as `requires=` - the residue.** The sweep landed on every
    `[metal_dispatch]` GEMM form: the production mul_mm (`mp % 32, d % 64`), the 32-wide and 64-wide
    GEMM-B forms and their tensor twins (`ka.ndim % 32|64, ka.kdim % 32`), the split-K pair
    (`d % 32, ka.kdim % 32`), beside the two fixed-B mul_mv stripes; the header sentences went.
@@ -888,17 +1046,18 @@
    builder; and the float4-view `% 4` on kernels whose K reaches the builder only as a uniform
    BUFFER (`bk` on the mul_mm) is invisible to a scalar check - a `requires=` on a bound-buffer
    value needs a readback the dispatch must never pay, so that contract stays with the caller.
-71. **gemma-26B: small-M prefill and decode attention past ~1k keys.** The context sweep
-   (`history/dasLLAMA/mtp_plan.md`, "#71 context sweep") dissolved the prefill half of the original item - the halving
-   was the untuned dev rail serving no `runtime.metal_tensor` crowns, and on tuned kernels ours
-   leads llama.cpp 3124/3965/4551 vs 2809/3037/3175 tok/s at 256/700/2048 tokens (`lcpp_bench`
-   -jit vs `llama-bench`, M5 Max, the tuned m5 mint; direction-grade). Two residuals, same
-   instrument: pp35 reads 611 vs their 721 (the one-tile small-M regime of the GEMM ladder), and
-   the plain step drops 11.5% from 35 to 2048 keys where theirs drops 6% (`ATTN_CHUNK_ROWS` = 64
-   keys per threadgroup plus the combine pass; ours still leads 110 vs 94 at 2048). Done = the small-M
-   prefill profiled at M = 32/64/128 against their pp rows, and the decode attention microbenched
-   at 512/1024/2048/4096 keys against `test-backend-ops` FLASH_ATTN_EXT rows.
-72. **Dense 27B: the two-row verify streams the weights twice.** Records day (M5, Qwen3.8-27B +
+84. **gemma-26B: small-M prefill and decode attention past ~1k keys.** The context sweep
+   (`history/dasLLAMA/mtp_plan.md`, its "context sweep" section) dissolved the prefill half of the
+   original item - the halving was the untuned dev rail serving no `runtime.metal_tensor` crowns,
+   and on tuned kernels ours leads llama.cpp 3124/3965/4551 vs 2809/3037/3175 tok/s at
+   256/700/2048 tokens (`lcpp_bench` -jit vs `llama-bench`, M5 Max, the tuned m5 mint;
+   direction-grade). Two residuals, same instrument: pp35 reads 611 vs their 721 (the one-tile
+   small-M regime of the GEMM ladder), and the plain step drops 11.5% from 35 to 2048 keys where
+   theirs drops 6% (`ATTN_CHUNK_ROWS` = 64 keys per threadgroup plus the combine pass; ours still
+   leads 110 vs 94 at 2048). Done = the small-M prefill profiled at M = 32/64/128 against their pp
+   rows, and the decode attention microbenched at 512/1024/2048/4096 keys against
+   `test-backend-ops` FLASH_ATTN_EXT rows.
+85. **Dense 27B: the two-row verify streams the weights twice.** Records day (M5, Qwen3.8-27B +
    Q8_0 head, settled, exe-first): our round is 53.9 ms - draft 3 ms, verify 42 ms on a 36.2 ms
    plain step (**1.19x**) - for 1.78 tokens; llama.cpp's round is 54.4 ms on a 39.2 ms step for 1.85
    tokens (their acceptance on their own continuation). Equal rounds, our faster step, so the
@@ -908,7 +1067,7 @@
    rows come cheap: n_max 3 = 1.61-1.72x while ours lost at depth 3 (1.3-1.8x per extra row), so
    the rows probe at B = 1/2/4 with the per-kernel split (GEMV rail vs the mp-8 / GEMM crossover)
    is the first measurement, then the plain-step gap (28.4 vs 26.7 there) kernel by kernel.
-73. **Metal twin crowns keyed by device plus MSL hash, raced lazily.** The binary-mtime staleness
+86. **Metal twin crowns keyed by device plus MSL hash, raced lazily.** The binary-mtime staleness
    rule is the wrong key for the tensor twins in both directions: a C++ rebuild that changes no MSL
    wipes them, a `.das` emitter edit that changes the MSL leaves them standing. Step 1 landed with
    the MTP arc - a binary-stale sidecar keeps its `runtime` section, a foreign one applies nothing,
@@ -919,7 +1078,7 @@
    dispatches, best-of-3 - under a second for the twenty twins), and keep the serving-confirm crown
    (`kq_gemv_iq2xxs_f4`) mint-only with base as the safe side. Never the CPU class defaults: an M4
    is `arm-neon` with no tensor lane.
-74. **The speculative round's remaining fat (the MTP arc's S5, ledgered).** The gemma round is
+87. **The speculative round's remaining fat (the MTP arc's S5, ledgered).** The gemma round is
    one queue and one join; what is left: (a) one command buffer per round - draft chain, verify
    and the warm step encoded together (the in-graph argmax makes it possible; today the verify is
    its own buffer, a second commit); (b) the drafter's quant twins raced - Q8_0 serves, BF16 is a
@@ -929,43 +1088,36 @@
    pair; (f) tight-grid dispatch for the verify grids (launch only the causally valid
    threadgroups). Each is one measured lever on the S3 rail (`lcpp_bench --mtp-ab --prompts
    specbench4 --chat-prompts -n 128 -r 3`), promoted only on a win over the fused round.
-75. **MoE verify rows dedup the expert union.** The two-row gemma verify costs 1.45x a step on
+88. **MoE verify rows dedup the expert union.** The two-row gemma verify costs 1.45x a step on
    the M5 and 1.51x on the M4 Pro (the round clocks, gemma-4-26B-A4B Q4_K_M, `--ngl 99`,
    SpecBench-4 chat) because the batched expert GEMV streams every (row, slot) plane
    and the shared experts twice; a gathered GEMV over the union of selected experts (the prefill
    bucket kernels at M = 2..9) streams each expert once. The physics that caps depth 2 on every
    MoE carrier measured - Qwen3-30B-A3B at B=2 already pays 1.37x.
-77. **A box where the NextN round loses needs a depth-0 default.** The M4 Pro's Qwen3.8-27B round
+89. **Lint: a state-scaled `resize` with no reserve, on an unannotated array (its own PR).**
+   PERF032 guards only arrays annotated `@exact_size`; the speculative round's deltanet rollback
+   buffers were not, grew from empty with a bare resize to another buffer's `long_length`, and the
+   64 MB unreserved-growth guard killed the first CPU speculative step on Qwen3.8-27B (151 MB of
+   state) - a runtime failure lint could have named at the diff. Candidate rule: a `resize` /
+   `resize_no_init` whose size expression is `long_length(<array>)` / `length(<array>)` or a
+   product of one, on a destination with no `reserve` / `ensure_capacity` / `overwrite_resize`
+   earlier in the function, is a finding regardless of annotation; the fix text names
+   `overwrite_resize`. Authoring: `skills/internal/perf_lint_authoring.md`. Ruled a follow-up PR.
+90. **A box where the NextN round loses needs a depth-0 default.** The M4 Pro's Qwen3.8-27B round
    lost at depth 1 (12.7 -> 11.0) while its two-row verify cost 2.06x a step; the two-row k4 tile
    (`kq_mvb2_k4_r2`) turned that into 12.7 -> 13.9 (1.09x, round 1.62x a step), so no box of ours
    loses today. The gap stands: the box knobs `mtp_depth_nextn/assistant` clamp to 1..8, so a box
    whose round loses cannot mint the honest default of no speculation. Done = 0 admitted as "off" on
    both knobs and in `get_mtp_depth()` (the round takes the plain step), and the tuner's confirm
    racing the NextN carrier too (a Qwen vehicle with its `mtp-` head: 0 vs 1, the same 2% margin).
-80. **The k5 / k6 wide forms on an ALU-short GPU: no tile, no race.** The k4 pair walk
-   (`enc_kq_mvb_k4_pairs`, this arc) keeps three to eight k4 rows off the four- and eight-column
-   forms where the tile is crowned; k5 and k6 have no two-row tile, so a box that crowned
-   `kq_rows_k6` takes B single passes at every width and one that did not takes the wide ext forms
-   unraced. Done = the tile written for k5 / k6 (the k4 body with their scale decode) and their form
-   race, or the wide forms raced against B passes per format at four and eight rows. The same walk
-   has an M5-class form: five to seven rows pad to two four-column groups (gemma-4-12B same-slab on
-   the M5 Max: 1 / 2 / 3 / 4 / 5 / 8 rows = 1.00 / 0.83 / 1.19 / 1.19 / 2.03 / 2.06x a step) where
-   four plus a tail (4+1, 4+2) would save 15-17% at five and six rows by the lab's per-column costs
-   (single 0.373, twin 0.196, four-column 0.140 ms at cls); nothing at seven or eight, nothing for
-   speculation at depth 1. Ruled not worth it on the M5 (2026-09-02) - multi-session batches only.
-81. **The CPU speculative round runs depth 1 whatever the knob says.** M4 Pro, Qwen3.8-27B on the
-   CPU rails (`--ngl` unset): `--mtp-depth 1` and `--mtp-depth 2` both report 228/290 drafts
-   accepted "at depth 1 / 2" with identical per-prompt numbers (off 11.56 -> on 10.66, 0.92x). The
-   round dispatches with `get_mtp_depth()`, so the CPU override either ignores k or caps it silently.
-   Done = the CPU round honors k or clamps with a logged reason, and the bench's "at depth k" line
-   prints the depth that ran.
-82. **The assistant drafter's h reading is still an open A/B.** `set_metal_mtp_carry_hidden(on, pre)`
-   / `set_gemma_carry_pre_norm` select the target's post-`output_norm` hidden (default) or the
-   pre-norm residual as the drafter's `h` input, and the `mtp-count-pre` arm only proves output
-   invariance, never which reading accepts more. Done = an acceptance-rate A/B of the two readings
-   on the SpecBench chat corpus with a gemma-4 vehicle, the winner made the default, and the loser's
-   knob deleted rather than left as a permanent lever.
-79. **The batch rail has no hybrid-graph arm; a same-slab verify for the qwen35 round would need one.**
+91. **The ruler's in-process CPU greedy dies on Qwen3.8-27B.** `mtp_ruler --ngl 0` renders and
+   continues the corpus on the CPU rails for the text control; on the M5 it produced prompt 0's 128
+   tokens and died mid prompt 1 (the 686-token prompt) with no exception text, twice. The release exe
+   on the same CPU rails serves the same model (the CPU point's das row). Done = reproduce under the
+   debugger (`gen_probe.das`-shaped, CPU mode, the summarization prompt), name the site, add its arm.
+   Until then the CPU row's control text comes from a `--no-greedy` run (prompts render, no
+   continuation) and the das CPU texts of the crashed run stand as printed.
+92. **The batch rail has no hybrid-graph arm; a same-slab verify for the qwen35 round would need one.**
    The batch driver (`metal_batch_decode_forward`) runs std attention only - no deltanet layers, no
    2x-wide gated Q - and graph-declines hybrids (the rope_rows decline used to hide that it would
    otherwise serve them with plain attention: maxd 22.5, 47/48 argmax flips on head-less
@@ -975,29 +1127,36 @@
    of the round's verify against a plain step on the same rows, to see what beyond the GEMVs the
    two-row step pays (the dn tape walk is the suspect); a batch-rail hybrid arm only if that split
    says the driver, not the kernels, is the cost.
-78. **The ruler's in-process CPU greedy dies on Qwen3.8-27B.** `mtp_ruler --ngl 0` renders and
-   continues the corpus on the CPU rails for the text control; on the M5 it produced prompt 0's 128
-   tokens and died mid prompt 1 (the 686-token prompt) with no exception text, twice. The release exe
-   on the same CPU rails serves the same model (the CPU point's das row). Done = reproduce under the
-   debugger (`gen_probe.das`-shaped, CPU mode, the summarization prompt), name the site, add its arm.
-   Until then the CPU row's control text comes from a `--no-greedy` run (prompts render, no
-   continuation) and the das CPU texts of the crashed run stand as printed.
-76. **Lint: a state-scaled `resize` with no reserve, on an unannotated array (its own PR).**
-   PERF032 guards only arrays annotated `@exact_size`; the speculative round's deltanet rollback
-   buffers were not, grew from empty with a bare resize to another buffer's `long_length`, and the
-   64 MB unreserved-growth guard killed the first CPU speculative step on Qwen3.8-27B (151 MB of
-   state) - a runtime failure lint could have named at the diff. Candidate rule: a `resize` /
-   `resize_no_init` whose size expression is `long_length(<array>)` / `length(<array>)` or a
-   product of one, on a destination with no `reserve` / `ensure_capacity` / `overwrite_resize`
-   earlier in the function, is a finding regardless of annotation; the fix text names
-   `overwrite_resize`. Authoring: `skills/internal/perf_lint_authoring.md`. Ruled a follow-up PR.
-83. **Fold the k4 two-row register tile into the K4 twin template.** `MetalKqMvB2K4R2`
+93. **The k5 / k6 wide forms on an ALU-short GPU: no tile, no race.** The k4 pair walk
+   (`enc_kq_mvb_k4_pairs`, the MTP arc) keeps three to eight k4 rows off the four- and eight-column
+   forms where the tile is crowned; k5 and k6 have no two-row tile, so a box that crowned
+   `kq_rows_k6` takes B single passes at every width and one that did not takes the wide ext forms
+   unraced. Done = the tile written for k5 / k6 (the k4 body with their scale decode) and their form
+   race, or the wide forms raced against B passes per format at four and eight rows. The same walk
+   has an M5-class form: five to seven rows pad to two four-column groups (gemma-4-12B same-slab on
+   the M5 Max: 1 / 2 / 3 / 4 / 5 / 8 rows = 1.00 / 0.83 / 1.19 / 1.19 / 2.03 / 2.06x a step) where
+   four plus a tail (4+1, 4+2) would save 15-17% at five and six rows by the lab's per-column costs
+   (single 0.373, twin 0.196, four-column 0.140 ms at cls); nothing at seven or eight, nothing for
+   speculation at depth 1. Ruled not worth it on the M5 (2026-09-02) - multi-session batches only.
+94. **The CPU speculative round runs depth 1 whatever the knob says.** M4 Pro, Qwen3.8-27B on the
+   CPU rails (`--ngl` unset): `--mtp-depth 1` and `--mtp-depth 2` both report 228/290 drafts
+   accepted "at depth 1 / 2" with identical per-prompt numbers (off 11.56 -> on 10.66, 0.92x). The
+   round dispatches with `get_mtp_depth()`, so the CPU override either ignores k or caps it silently.
+   Done = the CPU round honors k or clamps with a logged reason, and the bench's "at depth k" line
+   prints the depth that ran.
+95. **The assistant drafter's h reading is still an open A/B.** `set_metal_mtp_carry_hidden(on, pre)`
+   / `set_gemma_carry_pre_norm` select the target's post-`output_norm` hidden (default) or the
+   pre-norm residual as the drafter's `h` input, and the `mtp-count-pre` arm only proves output
+   invariance, never which reading accepts more. Done = an acceptance-rate A/B of the two readings
+   on the SpecBench chat corpus with a gemma-4 vehicle, the winner made the default, and the loser's
+   knob deleted rather than left as a permanent lever.
+96. **Fold the k4 two-row register tile into the K4 twin template.** `MetalKqMvB2K4R2`
    (`dasllama/dasllama_metal_kernels.das`) is the k4 twin body written a second time by hand for two
    weight rows per thread; `REVIEW_GPU.md`'s twin rule wants one `class template` with rows-per-thread
    as the stamp axis. The tile is crowned and measured as it stands (the m4 mint), so the fold is a
    refactor plus a re-race, not a kernel change. Done = one template stamps `MetalKqMvB2K4` and the
    tile, and the tile's emitted MSL is byte-identical or both boxes re-race it.
-84. **The K-quant crown races time one width and check no CPU reference.** `race_kq_rows` and
+97. **The K-quant crown races time one width and check no CPU reference.** `race_kq_rows` and
    `race_kq_k4_form` (`dasllama/dasllama_metal_kernels.das`) time two rows only, while the
    `kq_rows_<fmt>` crown gates the four- and eight-column forms at 3..8 rows (`REVIEW_GPU_RACE.md`'s
    verify-width rule), and neither race checks its baseline arm against a CPU reference in-process
@@ -1005,7 +1164,7 @@
    the pair-walk gate in `tests/test_metal_gemv_kernels.das`. Done = the rows race times 2 / 4 / 8
    and crowns on all three, a CPU dot over each rig's planes checks the baseline arm, and both boxes
    re-mint (the m4 / m5 sidecars carry crowns from the two-row race).
-85. **Branches the MTP arc left untested (the tdd audit).** (a) the batch rail's `kv_dtype` decline
+98. **Branches the MTP arc left untested (the tdd audit).** (a) the batch rail's `kv_dtype` decline
    for partial rope on a block-codec KV (`batch_decode_decline`) - no fixture pairs a partial-rope
    model with q8_0 / tq4 KV; (b) `generate_mtp_greedy`'s multi-accept loop runs only on the CPU rail,
    where a round returns 0 or 1; (c) `tune_gate_bypassed()` and the `untuned:` flavor stamp; (d) the
@@ -1013,7 +1172,7 @@
    `site-dasllama/build_news.py`'s stale-page unlink and missing-slot exit; (f) the harness
    instruments' accept-rate arithmetic and llama-server client. Done = each has a test that fails
    without it, or is struck here as accepted.
-86. **The split head is folded into the image PATH, not the baked identity.** `image_path_for` hashes
+99. **The split head is folded into the image PATH, not the baked identity.** `image_path_for` hashes
    `|mtp:<head>:<size>` into the `.dlim` filename, but `image_identity_of` / `dlim_identity` (the
    header string) do not carry it, so on the direct-`.dlim` route (`load_model_cached` on a `.dlim`
    path) a head-baked and a head-less image share one identity: the trunk-alone image loads silently
