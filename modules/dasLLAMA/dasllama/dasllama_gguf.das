@@ -310,7 +310,7 @@ def gguf_file_arch(path : string) : string {
             return
         }
         fmap(f) $(var bytes : array<uint8>#) {
-            return if (!gguf_magic_ok(bytes))   // not a GGUF: unreadable, not a panic
+            return if (!gguf_magic_ok(bytes))
             var inscope m <- parse_gguf_meta(bytes)
             if (gguf_has(m, "general.architecture")) {
                 arch = gguf_str(m, bytes, "general.architecture")

@@ -20,7 +20,7 @@ require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower eng
 require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require ?das_metal dasllama/dasllama_metal_prefill   // --asr --ngl: the chat-decoder prefill engage witness
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // --mtp-ab on a gemma-4 target: the assistant drafter sidecar attaches here
-require dasllama/dasllama_mtp_gemma   // ... and gemma_drafter_sidecar finds the sidecar beside the target
+require dasllama/dasllama_mtp_gemma   // nolint:STYLE030,LINT019 — gemma_drafter_sidecar is read in the das_metal half
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
 require dasllama/dasllama_vision_embedder   // --image: the vision embedder (any family) + encode_image_
 require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
@@ -1477,7 +1477,7 @@ def main() : int {
         let c = t.config
         // a model with no NextN head silently no-ops set_mtp_spec — both arms would be identical
         if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
-            var attached = false
+            var attached = false   // nolint:LINT003,LINT019 — assigned in the das_metal half
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 let side = gemma_drafter_sidecar(mpath)
                 if (!empty(side)) {

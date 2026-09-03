@@ -216,7 +216,7 @@ def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<
 //! The SAME-SLAB verify: nrows rows of ONE session at pos..pos+nrows-1 in one batch step (row i attends
 //! rows < i this step writes). True when the metal batch rail served it; rows' logits land in
 //! s.mtp_logits_b (row 0 also in s.mtp_logits), post-norm hidden rows in s.mtp_hrows; n_past is the caller's.
-var private @scratch g_verify_sessions : array<Session?>   // the same-slab verify's row handles: one session, nrows times
+var private @scratch g_verify_sessions : array<Session?>
 
 //! the scratch session mirrors the verified session's KV codec tables (signs, per-layer byte prefixes);
 //! they change only when a different session arrives, so the copy runs once per switch
@@ -225,7 +225,7 @@ def private verify_bind_codec(var ws : BatchWorkspace; s : Session) {
     ws.scr.kv_signs := s.kv_signs
     ws.scr.kv_bprefix_k := s.kv_bprefix_k
     ws.scr.kv_bprefix_v := s.kv_bprefix_v
-    ws.verify_bound_uid = s.uid
+    ws.scr_codec_uid = s.uid
 }
 
 def verify_batch_step(t : Model; var ws : BatchWorkspace; var s : Session; tokens : array<int64>; pos, nrows : int64) : bool {
@@ -241,7 +241,7 @@ def verify_batch_step(t : Model; var ws : BatchWorkspace; var s : Session; token
     }
     ws.scr.kv_dtype_k = s.kv_dtype_k
     ws.scr.kv_dtype_v = s.kv_dtype_v
-    if (ws.verify_bound_uid != s.uid) {
+    if (ws.scr_codec_uid != s.uid) {
         verify_bind_codec(ws, s)
     }
     ws.scr.kv_pool = s.kv_pool

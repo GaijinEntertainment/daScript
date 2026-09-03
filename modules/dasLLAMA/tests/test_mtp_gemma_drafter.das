@@ -7,7 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — engine + arch registrations
 require dasllama/dasllama_mtp_gemma   // the subject: the gemma-4 assistant drafter loader + CPU oracle
 require dasllama/dasllama_math   // setup_dasllama_jobque_ - the CPU prefill needs the engine's own worker pool
-require dasllama/dasllama_image   // load_model_cached - the served (metal-blob) twin the GPU drafter runs against
+require dasllama/dasllama_image   // nolint:STYLE030,LINT019 — load_model_cached is called in the das_metal half
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // the subject's GPU half: attach + one draft step
 require ?das_metal dasllama/dasllama_metal_common   // finish_pending_step - land the pipelined decode before reading its carry
 require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown

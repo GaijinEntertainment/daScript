@@ -1494,8 +1494,6 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
     return ok
 }
 
-// argmax over row `row` of a [rows x n] flat logits image
-
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay")]
 def private encode_dn_replay(t : Model; var r : StepRes; nrun : int64) {
     let c = t.config

@@ -37,7 +37,7 @@ struct Args {
     @clarg_doc = "GGUF trunk (its mtp- head beside it is found the way the engine finds it)"
     model : string
 
-    @clarg_doc = "Draft head GGUF for llama.cpp's -md (default: the mtp- sibling the engine would load; '-' = none)"
+    @clarg_doc = "Draft head or assistant sidecar GGUF, also llama.cpp's -md (default: the assistant sidecar beside the trunk, else its mtp- sibling; '-' = none)"
     head : string = ""
 
     @clarg_doc = "Stock llama-server binary (the pinned reference build); empty = skip llama.cpp"
@@ -183,7 +183,7 @@ def private greedy_text(t : Model; tk : Tokenizer; ids : array<int64>; ngen : in
 //! Every corpus turn rendered through the model's own chat template, thinking off, as the text the
 //! reference server must see raw - the leading BOS piece dropped because the server adds its own -
 //! plus our greedy continuation of it, the control the reference's text is checked against.
-def private render_prompts(model : string; texts : array<string>; ngen : int; gpu : bool; var rendered : array<string>; var ours : array<string>) {
+def private render_prompts(model : string; texts : array<string>; ngen : int; gpu : bool; var rendered : array<string>; var ours : array<string>) {   // nolint:LINT012,LINT019 — gpu is read in the das_metal half
     let tk <- load_tokenizer_auto(model)
     with_job_que() {
         setup_dasllama_jobque_()
@@ -548,9 +548,6 @@ def main() : int {
     print("ruler: {length(texts)} prompts from {cfg.prompts}; head = {empty(head) ? "(none)" : head}\n")
     var rows : array<string>
     let depths <- parse_depths(cfg.depths)
-    //! the exe measures FIRST, from a parent that has loaded nothing: a parent that had just run
-    //! the engine in-process read the exe's speculative arm about a fifth low (this ruler on the
-    //! M5, gemma-4-26B-A4B Q4_K_M, --ngl 99, depth 1, before the order was fixed)
     if (!empty(cfg.exe)) {
         for (d in depths) {
             run_das(cfg, head, d, rows)

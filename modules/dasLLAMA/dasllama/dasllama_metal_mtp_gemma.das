@@ -607,5 +607,5 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
 [init]
 def gemma_mtp_init {
     register_mtp_round_override("metal", @@gemma_mtp_spec_round)
-    register_reload_prep(@@detach_gemma_drafter)   // the drafter is sized to the target it attached to
+    register_reload_prep(@@detach_gemma_drafter)
 }

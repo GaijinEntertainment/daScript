@@ -45,8 +45,8 @@ def test_first_snapshot_of_a_large_recurrent_state(t : T?) {
 [test]
 def test_per_position_accept_telemetry(t : T?) {
     mtp_pos_reset()
-    mtp_pos_note(3l, 2l)   // three drafts, the first two accepted
-    mtp_pos_note(2l, 0l)   // two drafts, none
+    mtp_pos_note(3l, 2l)
+    mtp_pos_note(2l, 0l)
     mtp_pos_note(1l, 1l)
     let rep = mtp_pos_report()
     t |> success(find(rep, "p1 66.7% (2/3)") >= 0, "p1 is two hits in three tries: {rep}")

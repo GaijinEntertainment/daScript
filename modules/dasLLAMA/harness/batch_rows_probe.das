@@ -133,7 +133,7 @@ def main() : int {
         return cfg.help ? 0 : 1
     }
     apply_box_profile_runtime()
-    if (!tune_gate()) {   // never measure the ladder on fallback winners
+    if (!tune_gate()) {
         panic("batch_rows_probe: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
     }
     set_metal_mode(MetalMode.required)

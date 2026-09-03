@@ -4878,8 +4878,7 @@ def private race_kq_k4_form(queue : MetalCommandQueue?) : MetalTensorRaceResult 
     return res
 }
 
-// the K-quant races' fixture: one format's planes at n x rows, two x columns, two y planes per arm
-// (consecutive dispatches alternate, as the served graph overlaps them), the n/d uniforms
+// the K-quant races' fixture: one format's planes at n x rows, two x columns, two y planes per arm, the n/d uniforms
 struct private KqRaceRig {
     bq, bs, bx, by_a, by_a2, by_b, by_b2, bn, bd : MetalBuffer?
     doff : uint64

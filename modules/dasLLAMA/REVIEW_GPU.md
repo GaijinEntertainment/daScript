@@ -256,7 +256,7 @@ cache.
 **A module-level variable in a GPU driver file whose value depends on the installed model
 gets a model-swap discharge in the same change that adds it** - the vulkan tier files
 discharge through `moe_gpu_model_marks_save_` / `moe_gpu_model_marks_restore_` /
-`moe_gpu_drop_model_`; the Metal prefill and tower through `register_reload_prep`
+`moe_gpu_drop_model_`; the Metal tier through `register_reload_prep`
 (`dasllama/dasllama_metal_common.das`). A global with no discharge survives a model swap and
 routes the next model's dispatches at the old model's planes.
 

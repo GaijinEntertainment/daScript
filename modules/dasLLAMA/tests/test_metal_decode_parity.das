@@ -423,8 +423,8 @@ struct BatchFf {
     maxd : float
 }
 
-def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : int) : BatchFf {
-    var st = BatchFf()
+def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : int) : BatchFf {   // nolint:LINT012,LINT019 — every argument is read in the das_metal half
+    var st = BatchFf()   // nolint:LINT003,LINT019 — filled in the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let c = tr.config
         let vocab = c.vocab_size
