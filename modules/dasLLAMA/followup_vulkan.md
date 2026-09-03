@@ -551,6 +551,13 @@ module) is independent and can land any time - it is pure structure.
     the quant block; (4) pad N to the tile width. `harness/vk_gemm_probe.das` already carries the
     isolation arms (`ref` = llama.cpp's own coopmat2 blob in our harness, `k6x flat` = compose
     without scale reads). Boris 2026-08-30: this one bothers him at 0.7. Plan: `plans/kernel_parity_pass.md`.
+    CLOSED on the board (2026-09-03, after #3926: the split-k group, the hand-laid twins, the
+    32-row last layer, the parallel embed): nine of ten 1B vehicles at or past llama.cpp on pp512,
+    IQ2_XXS at 0.98 (bracketed twelve-rep rows in the plan). What remains is per tile, not per
+    board: the iq2xxs gate/up tile at 1.15 of llama.cpp's rate (its grid decode still shows where
+    theirs is hidden), k3 and iq3s gate/up at 1.05-1.09, down at 1.04-1.14 on the 2048-wide shape
+    - the memo's delta 1 (scale hoist), delta 2 (scale interleave) and delta 8 (codebook and
+    prologue) rows, each behind its own probe A/B.
 
 35. **The grid-format GEMV workgroup re-stage is a fixed per-workgroup cost - amplified on
     small models.** Every u64-grid gemv (iq2s 8 KB, iq2xs 4 KB) stages the codebook into
@@ -592,3 +599,25 @@ module) is independent and can land any time - it is pure structure.
     methods; a gather class needs the same members or a shared free decode), then
     `rdec_set_emb` for `cls_kq`. Done = the embed bucket gone and the x upload out of prep on
     the Q4_K_M window, parity pregate token-for-token on Q8_0 and a kq vehicle.
+
+38. **Per-session device slots for the deltanet decode step.** The step keeps one resident
+    copy of each recurrent layer's state, owned by one session at a time
+    (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2u): two streams decoding turn about on the
+    per-op tier pay a flush and a cold upload per recurrent layer per switch - correct since
+    2026-09-03 (a user's two concurrent requests on Qwen3.5-9B-MTP had read each other's
+    state), slow by construction. Lever: N state slots per layer keyed by owner, the
+    scheduler's rows mapped to slots, the fused step kernel taking a slot index - the same
+    shape the batched deltanet step needs anyway. Done = two streams' tg on the 0.8B within
+    the single-stream rate's band, `test_scheduler_batching_deltanet_gpu` green.
+
+39. **`tests/test_scheduler.das` under the armed tier.** With `DASLLAMA_GPU=1` and the models
+    stocked, the chunk-size, prefix-cache and MTP cells fail at master 866a03046 (before the
+    session-ownership fix and after it alike), and the staggered-admit batching cell flakes
+    (green in a whole-file run, red when run first); the file had never run with the tier
+    armed, and CI has no GPU. Each is its own read: chunk-size invariance, the paged repeat and
+    the two-row batch under the per-op tier's SmolLM path, the MTP self-spec verify against
+    the plain scheduler on Qwen3.5-0.8B-MTP. The same state reaches the 0.8B after the three
+    SmolLM cells: its first decode step after a prefill diverges from generate (green alone and
+    behind any one of them), which is why the deltanet two-stream cell runs first in the file.
+    Done = the file green, twice in a row, under `DASLLAMA_GPU=1` on the 5060 Ti, the cell
+    order free.
