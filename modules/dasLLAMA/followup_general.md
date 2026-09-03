@@ -945,7 +945,12 @@
    forms where the tile is crowned; k5 and k6 have no two-row tile, so a box that crowned
    `kq_rows_k6` takes B single passes at every width and one that did not takes the wide ext forms
    unraced. Done = the tile written for k5 / k6 (the k4 body with their scale decode) and their form
-   race, or the wide forms raced against B passes per format at four and eight rows.
+   race, or the wide forms raced against B passes per format at four and eight rows. The same walk
+   has an M5-class form: five to seven rows pad to two four-column groups (gemma-4-12B same-slab on
+   the M5 Max: 1 / 2 / 3 / 4 / 5 / 8 rows = 1.00 / 0.83 / 1.19 / 1.19 / 2.03 / 2.06x a step) where
+   four plus a tail (4+1, 4+2) would save 15-17% at five and six rows by the lab's per-column costs
+   (single 0.373, twin 0.196, four-column 0.140 ms at cls); nothing at seven or eight, nothing for
+   speculation at depth 1. Ruled not worth it on the M5 (2026-09-02) - multi-session batches only.
 81. **The CPU speculative round runs depth 1 whatever the knob says.** M4 Pro, Qwen3.8-27B on the
    CPU rails (`--ngl` unset): `--mtp-depth 1` and `--mtp-depth 2` both report 228/290 drafts
    accepted "at depth 1 / 2" with identical per-prompt numbers (off 11.56 -> on 10.66, 0.92x). The

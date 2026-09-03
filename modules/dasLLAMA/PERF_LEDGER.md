@@ -1243,3 +1243,18 @@ group; wording kept.
   `k4_ext4` 1.31 / 1.46 / 1.33x, `k4_extb4` 1.27 / 1.42 / 1.27x; two tiles (2 x `k4_r2c2`) 0.078 /
   0.190 / 2.49 ms against `k4_extb4` 0.114 / 0.290 / 4.26. CPU rails on the same box: off 11.56 ->
   MTP 10.66 (0.92x, 78.6% accept) at depth 1, and the identical numbers at `--mtp-depth 2` (#81).
+- **The k4 pair walk (`enc_kq_mvb_k4_pairs`, commit 24d13f1d2), M4 Pro, gemma-4-12B-it-Q4_K_M
+  same-slab step (`batch_rows_probe --sameslab`, 16 steps), ms per step / x a single step, before ->
+  after:** 1 row 44.1 / 1.00x both; 2 rows 52.9 / 1.20x both (the tile); 3 rows 148.1 / 3.36x ->
+  83.1 / 1.88x; 4 rows 156.7 / 3.55x -> 103.1 / 2.34x; 5 rows 166.6 / 3.78x -> 133.5 / 3.03x. A
+  tile pair costs 1.2 single passes and the step is nearly all weight streaming, so pairs add
+  linearly (4 rows = 2.34x, not the 1.6x a shared-overhead model predicted). The batch-rail
+  parity arms on gemma-12B at 4 and 5 rows pass through the walk. Qwen3.8-27B depth-2 round split
+  on the box: verify 302.5 -> 194.4 ms (the third row 2.3 steps -> 0.96), round 4.04x -> 2.65x a
+  step, depth 2 7.7 -> 11.7 tok/s (0.61x -> 0.92x of plain); depth 1 stays the box's winner. The
+  records-grade ruler on that rig (24d13f1d2, exe-first, settle 180, -n 128 -r 3): ours off 12.7 ->
+  depth 1 14.0 (1.10x, 77.4%) -> depth 2 12.4 (0.97x; was 7.9), llama.cpp unchanged at 11.5 ->
+  13.8 -> 12.5. The
+  M5 Max has no three-row cliff (gemma-12B same-slab 1 / 2 / 3 / 4 / 5 / 8 rows = 20.8 / 17.3 /
+  24.7 / 24.6 / 42.1 / 42.7 ms = 1.00 / 0.83 / 1.19 / 1.19 / 2.03 / 2.06x; lab per-column cost at
+  cls: single 0.373, twin 0.196, four-column 0.140 ms) - the walk stays off there by the crown.

@@ -862,8 +862,19 @@ row bought nothing. Two findings, both fixed in the arc:
   form, which the lab puts at 1.27-1.46x of four passes on the M4. Ruled in-arc (Boris: "the golden
   nail"): `enc_kq_mvb_k4_pairs` walks the tile over the column pairs plus one single pass for an odd
   tail wherever the tile is crowned (3 = 2+1, 4 = 2+2, ...); direct parity gate at 3 / 4 / 5 columns
-  with a negative control; the M4 proof (rows probe B=1..5 on gemma-12B, the Qwen3.8 round split and
-  ruler at depth 2) follows. The CPU round ignores depth 2 there (#81); k5 / k6 have no tile (#80).
+  with a negative control. M4 proof: gemma-12B same-slab 3 / 4 / 5 rows 3.36 / 3.55 / 3.78x a step ->
+  1.88 / 2.34 / 3.03x (pairs add linearly: a tile pair is 1.2 passes and the step is all weight
+  streaming); gemma-12B batch-rail parity at 4 and 5 rows green; Qwen3.8 depth-2 verify 302 -> 194 ms,
+  round 4.04x -> 2.65x a step, 7.7 -> 11.7 tok/s (0.92x of plain; depth 1 still the winner). Ruler
+  on that rig: ours 12.7 -> 14.0 (d1, 1.10x) / 12.4 (d2, was 7.9) vs llama.cpp 11.5 -> 13.8 / 12.5 -
+  ON ahead by a hair at depth 1, depth 2 near break-even on both engines. The CPU round ignores depth 2 there (#81); k5 / k6 have no tile (#80).
+  The M5 has no three-row cliff (its four-column form is the efficient one: 1.19x a step at 3-4
+  rows) and a padding step at five rows (2.03x) - ruled not worth a walk there (Boris, 2026-09-02).
+- Depth after the arc (Boris): acceptance is the PROMPT's property, not the box's - the math
+  prompt runs 94% at position 1 and depth 2 already wins it on the M5 (36.0 vs 34.0); a code prompt
+  ("write quicksort in C++") would push further. The box knob stays the default; the dropped
+  controller comes back, if ever, as per-request depth driven by the round's own measured
+  position-2 acceptance against the box's break-even.
 
 **Two harness lessons, both now in the ruler:**
 - A heat-soaked box under-reads a memory-bound decode by 13-18% (llama.cpp Qwen3.8 off read 21-22
