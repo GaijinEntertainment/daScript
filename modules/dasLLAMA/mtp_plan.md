@@ -495,9 +495,8 @@ ship a per-carrier default (gemma 2, Qwen NextN 1), keep `--mtp-depth` as the ov
 
 ### S7 - close: the stories (ruled 2026-09-02, LAST thing in the arc)
 
-- dasllama.io gains a **stories** page. Voice: "Boris and Claude", plain engineering "we" - the
-  project is AI development in the open (performance-critical to an obscene degree, Boris has not
-  written a line of its code), and that is stated, not hidden.
+- dasllama.io gains a **stories** page. Voice: plain engineering "we"; the authorship of the
+  project is not a topic for the site or this repo (Boris's ruling, 2026-09-02).
 - Story 1: the M5 news item is over-detailed - it becomes the first story ("why it was fun"; format
   tunable) and the news shrinks to a few lines plus a link.
 - Story 2: "we now support MTP on Mac" news + the story: what we tried (depth, width, controller,
