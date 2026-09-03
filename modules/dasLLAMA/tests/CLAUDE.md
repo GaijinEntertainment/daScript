@@ -374,9 +374,10 @@ agreement with the reference tagger (overall and on the heteronym words), the pa
 header floors, and the load budget.
 `test_tts_g2p.das` - model-free suite; model-gated (`tts_g2p.bin` + `tts_postag.bin`): the
 grapheme-to-phoneme rail phoneme-identical with the reference front end on the corpus (fed the
-same normalized text) except the six heteronym sentences the rules read past it, the heteronym
-gate (both annotated readings present, 32 of 38 against the reference's 24), the fallback chain,
-stress helpers, and the load budget.
+same normalized text) except the sentences its heteronym rules and the lexicon additions of
+`harness/g2p_local_additions.json` read past it (named in the cell), the heteronym gate (both
+annotated readings present, 32 of 38 against the reference's 24), the fallback chain, stress
+helpers, and the load budget.
 `test_tts_kitten.das` - model-free suite; the symbol-map and token-rule cells run everywhere
 (the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
 the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-<size>.gguf` +

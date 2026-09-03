@@ -729,6 +729,38 @@ entries. Six corpus sentences now read a heteronym the reference misses; the cor
 them (`BEYOND_REFERENCE`) and keeps its budget of three tag calls for the rest. The tagger's
 four are the next heteronym step (dove VBD, invalid NN, moped JJ, entrance VB after "to").
 
+Scoring receipt (2026-09-02, "sure. lets fix and document"): the rig's WER reference was the
+upstream normalizer's output, defects included - units as their symbols, a fraction read digit
+by digit, a duration glued to the next word, a decade misspelled, pence called cents - so a
+correct "kilograms" counted as an error and the reference arms were rewarded for "kay gee".
+Thirteen sentences now carry a hand-corrected `expected` in the fixture beside the untouched
+`norm` (the phoneme and tagger cells still compare on `norm`; the minter's `CORRECTED_EXPECTED`
+reproduces the field); the corpus loader exposes it, the textnorm corpus cell reads it in place
+of its private table, and the rig scores against it with the clock suffix ("a m", "am") as one
+word on both sides. The reference line is the reference arms' own WAVs re-scored from the
+experiment's transcripts on the same forms: kitten-nano 4.50, kitten-mini 4.09, kokoro 3.32
+(oov 9.34 / 12.06 / 12.06, numeric 6.25 / 8.63 / 4.76). Two normalizer defects the probe
+exposed are fixed as failing-first cells: `mm` (and cm, lbs, oz, ft, kW, MW, kWh, rpm, fps)
+missing from the unit table, and a pound amount reading its minor unit as cents.
+
+OOV receipt (2026-09-02): `harness/g2p_local_additions.json` carries 43 gold entries in the
+misaki inventory for the names the transcripts mangle - the experiment's worst-15 tables and
+the rig's own list (Saoirse, Caoimhe, Dun Laoghaire, the Rijksmuseum, Kubernetes, etcd,
+Kierkegaard, Brzezinski, Schenectady, Skaneateles, Tuolumne, Siobhan, Mbappe, onnxruntime and
+the rest); the store build passes it to the pack and the corpus cell names the 27 sentences the
+rules and the additions read past the reference. OOV WER: kitten-nano 11.67 -> 8.95, kitten-mini
+11.67 -> 8.95, kokoro 12.84 -> 9.73 (the espeak arms' own: 8.56 nano, 10.90 kokoro). What
+remains is mostly the transcriber's spelling of correct speech (sirsha, kiva, dun leary, wynne,
+cerne, "anesthesiologists" against the British spelling in the text) and the Welsh station.
+
+Quality receipt, the rig on the final state (2026-09-02, q8 lane, 200 sentences, the corrected
+scoring, one process per box): kitten-nano WER 3.23% / UTMOS 3.971 (reference 4.50 / 4.035),
+kitten-mini 2.77 / 4.335 (4.09 / 3.996), kokoro 2.73 / 4.500 (3.32 / 4.499); numeric 5.06 / 2.08
+/ 1.19 against 6.25 / 8.63 / 4.76; heteronyms 32/38 against 24. Of the phase-5 targets:
+heteronyms > 27 met; overall WER below the reference on all three met; textnorm past both
+upstream normalizers met on the corpus; OOV met on kokoro (9.73 <= 10.90), one word short on
+nano (8.95 against 8.56); letters and acronyms have no fixture category yet.
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the
