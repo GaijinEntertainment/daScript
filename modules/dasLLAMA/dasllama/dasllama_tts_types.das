@@ -35,11 +35,13 @@ struct TtsTimings {
 }
 
 //! Real-time factor: generation seconds per second of audio produced.
+[cold_path]
 def rtf(t : TtsTimings; sample_rate : int) : double {
     return t.samples <= 0l ? 0.0lf : double(t.total_us) / 1e6lf / (double(t.samples) / double(sample_rate))
 }
 
 //! One line for the log: seconds of audio, wall time, RTF and the per-stage split in ms.
+[cold_path]
 def timings_line(t : TtsTimings; sample_rate : int) : string {
     let ms = @(us : int64) : string => "{double(us) / 1000.0lf}"
     return "{double(t.samples) / double(sample_rate)} s of audio in {ms(t.total_us)} ms (rtf {rtf(t, sample_rate)}): front {ms(t.front_end_us)}, bert {ms(t.bert_us)}, text {ms(t.text_enc_us)}, durations {ms(t.duration_us)}, prosody {ms(t.prosody_us)}, decoder {ms(t.decoder_us)}, source {ms(t.source_us)}, generator {ms(t.generator_us)}"

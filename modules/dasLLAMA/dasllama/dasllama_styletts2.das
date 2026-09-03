@@ -387,10 +387,17 @@ def finalize(var st : St2Staging) {
     delete st.e
 }
 
+def private styletts2_layout_fingerprint() : uint64 {
+    var proto = StyleTts2Model()
+    let layout = layout_fingerprint(proto)
+    delete proto
+    return layout
+}
+
 [init]
 def private register_styletts2_image_tags {
-    register_image_family_tag(ST2_IMAGE_TAG, true)   // no CPU knob shapes the f32 blob: one image per box
-    register_image_family_tag(ST2_IMAGE_TAG_Q8)      // the q8 quants follow the backend's repack
+    register_image_family_tag(ST2_IMAGE_TAG, true, @@styletts2_layout_fingerprint)   // no box property shapes the f32 blob
+    register_image_family_tag(ST2_IMAGE_TAG_Q8, false, @@styletts2_layout_fingerprint)   // the q8 quants follow the backend's repack
 }
 
 let private LN_EPS = 1e-5
@@ -460,7 +467,8 @@ def private conv_cin_of(m : GGUFMeta; bytes : array<uint8> | #; wname : string) 
     return geo[6] != 0l ? m.tensors[ti].dims[2] : m.tensors[ti].dims[1] * geo[5]
 }
 
-def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows_only : bool = false) : TtsLinear {
+def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows_only : bool = false;
+                        vec_only : bool = false) : TtsLinear {
     var l = TtsLinear()
     l.w <- read_arr(m, bytes, "{prefix}.weight")
     let ti = need_tensor(m, "{prefix}.weight")
@@ -469,7 +477,7 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         l.b <- read_arr(m, bytes, "{prefix}.bias")
     }
-    linear_prepare(l, rows_only, g_stage_q8, g_stage_repack)
+    linear_prepare(l, rows_only, g_stage_q8, g_stage_repack, vec_only)
     return <- l
 }
 
@@ -506,14 +514,14 @@ def private read_bilstm(m : GGUFMeta; bytes : array<uint8> | #; prefix : string)
 
 def private read_adain(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) : TtsAdaIn {
     var a = TtsAdaIn()
-    a.fc <- read_linear(m, bytes, "{prefix}.fc")
+    a.fc <- read_linear(m, bytes, "{prefix}.fc", vec_only = true)
     a.norm <- read_norm(m, bytes, "{prefix}.norm.weight", "{prefix}.norm.bias")
     return <- a
 }
 
 def private read_adaln(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) : TtsAdaLayerNorm {
     var a = TtsAdaLayerNorm()
-    a.fc <- read_linear(m, bytes, "{prefix}.fc")
+    a.fc <- read_linear(m, bytes, "{prefix}.fc", vec_only = true)
     return <- a
 }
 
@@ -694,6 +702,9 @@ def stage_styletts2(path : string; q8 : bool = false) : St2Staging {
         st.e.n_symbols = gguf_int(m, bytes, "styletts2.n_symbols")
         st.e.style_dim = gguf_int(m, bytes, "styletts2.style_dim")
         st.e.style_rows = int(gguf_int(m, bytes, "styletts2.style_rows"))
+        if (st.e.style_rows <= 0 || st.e.style_dim <= 0l) {
+            panic("dasLLAMA styletts2: '{path}' declares {st.e.style_rows} style rows of {st.e.style_dim}; a voice pack needs at least one row")
+        }
         st.e.source.n_harm = gguf_int(m, bytes, "styletts2.n_harmonics")
         st.e.source.sample_rate = float(st.e.sample_rate)
         st.e.source.torch_math = gguf_has(m, "styletts2.resample") && gguf_str(m, bytes, "styletts2.resample") == "torch"
@@ -864,6 +875,7 @@ struct St2Scratch {
     @scratch @exact_size gen_im : array<float>
     @scratch @exact_size gen_wr : array<float>
     @scratch @exact_size gen_wi : array<float>
+    @scratch @exact_size ids : array<int>
 }
 
 // ===== the trace rail's captures: the oracle harness's opt-in leg, cold by contract =====
@@ -901,7 +913,7 @@ def private albert_attention(a : St2Albert; h : array<float>; t : int64; var out
 def styletts2_albert(a : St2Albert; ids : array<int>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) {
     let t = long_length(ids)
     if (t > a.max_pos) {
-        panic("dasLLAMA styletts2: {t} tokens exceed the encoder's {a.max_pos} positions")
+        panic("dasLLAMA styletts2: {t} tokens exceed the encoder's {a.max_pos} positions; styletts2_synthesize truncates before it gets here")
     }
     unsafe(scratch_resize(sc.al_e, t * a.emb_dim))
     var e & = unsafe(sc.al_e)
@@ -1292,6 +1304,11 @@ def register_styletts2_generator_gpu(fn : St2GeneratorGpuFn) {
     g_st2_gen_gpu_set = true
 }
 
+//! Empty the hook slot again - the restore half of the seat a caller takes.
+def unregister_styletts2_generator_gpu {
+    g_st2_gen_gpu_set = false
+}
+
 //! Hook invocations and the ones that served, since the process started: engage is read from
 //! these counters, never inferred from a synthesis having run.
 def styletts2_generator_gpu_stats() : tuple<calls : int; served : int> {
@@ -1431,6 +1448,9 @@ def private decode_step(blk : St2AdainResBlk; cw : int64; src : array<float>; @s
         concat_rows(src, cw, res, rc, rs, f0d, nd, true, t, blk.dim_in_s, cat)
         return adain_res_blk(blk, cat, t, s_ref, dst, sc)
     }
+    if (blk.dim_in_s != blk.dim_in) {
+        panic("dasLLAMA styletts2: a decode block reading the previous stream at width {cw} serves a padded input width {blk.dim_in_s}; the padded width needs the concat")
+    }
     return adain_res_blk(blk, src, t, s_ref, dst, sc)
 }
 
@@ -1505,6 +1525,12 @@ def private styletts2_decode(d : St2Decoder; text_c : int64; source : SineSource
     return samples
 }
 
+// the reference pipeline truncates an over-long chunk to the encoder's positions and says so
+[cold_path]
+def private warn_truncated(n, cap : int64) {
+    to_log(LOG_WARNING, "dasLLAMA styletts2: {n} tokens exceed the encoder's {cap} positions - the chunk is truncated to {cap}\n")
+}
+
 //! Synthesize from token ids: the full StyleTTS2 pass into `sc.wave` (the facade trims the
 //! tail), the sample count back. `noise` supplies the source noise (empty = drawn from `seed`),
 //! `tr` collects the stage tensors when not null, `tm` the stage walls, `sc` every buffer.
@@ -1513,7 +1539,16 @@ def styletts2_synthesize(m : StyleTts2Model; ids : array<int>; style : array<flo
                          var noise : TtsNoise; seed : uint64; var tr : StyleTts2Trace?; var tm : TtsTimings; var sc : St2Scratch) : int64 {
     let start = ref_time_ticks()
     var clock = start
-    let t = long_length(ids)
+    let n_in = long_length(ids)
+    let t = min(n_in, m.albert.max_pos)
+    if (n_in > t) {
+        warn_truncated(n_in, t)
+    }
+    unsafe(scratch_resize(sc.ids, t))
+    var tok & = unsafe(sc.ids)
+    for (i in range64(t)) {
+        tok[i] = ids[i]
+    }
     let hs = m.style_dim / 2l
     unsafe(scratch_resize(sc.s_ref, hs))
     unsafe(scratch_resize(sc.s_pro, hs))
@@ -1523,14 +1558,14 @@ def styletts2_synthesize(m : StyleTts2Model; ids : array<int>; style : array<flo
         s_ref[i] = style[i]
         s_pro[i] = style[hs + i]
     }
-    styletts2_albert(m.albert, ids, sc.bert, sc)
+    styletts2_albert(m.albert, tok, sc.bert, sc)
     linear_rows(m.predictor.bert_encoder, sc.bert, t, sc.d_en)
     if (tr != null) {
         trace_take(tr.bert, sc.d_en)
     }
     tm.bert_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    styletts2_text_encoder(m.text_encoder, ids, sc.t_en, sc)
+    styletts2_text_encoder(m.text_encoder, tok, sc.t_en, sc)
     if (tr != null) {
         trace_take(tr.text_enc, sc.t_en)
     }

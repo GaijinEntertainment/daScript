@@ -13,6 +13,7 @@ require dasllama/dasllama_plane
 require dasllama/dasllama_convert
 require dasllama/dasllama_tower
 require dasllama/dasllama_common
+require dasllama/dasllama_image   // count_meta_fields - the leaf serializers' field tripwire
 
 //! The StyleTTS2-lineage block home: every operator the TTS families assemble, on f32
 //! buffers in one of two layouts - channel-major [C][T] (the reference form, the oracle the
@@ -139,7 +140,16 @@ struct TtsWeight {
     span : TtsSpan = TtsSpan()
 }
 
+// Every field a TTS leaf struct carries into the image meta is hand-listed in its serialize
+// overload; the counts below are the tripwires that catch a field added without a line.
+let private TTS_WEIGHT_META_FIELDS = 1
+let private TTS_CONV1D_META_FIELDS = 21
+let private TTS_LINEAR_META_FIELDS = 8
+let private TTS_NORM_META_FIELDS = 2
+let private TTS_LSTM_META_FIELDS = 5
+
 def serialize(var arch : Archive; var w : TtsWeight) {
+    verify(count_meta_fields(w) == TTS_WEIGHT_META_FIELDS)   // grew TtsWeight? extend this list
     arch |> serialize(w.span)
 }
 
@@ -186,6 +196,7 @@ struct TtsConv1d {
 }
 
 def serialize(var arch : Archive; var c : TtsConv1d) {
+    verify(count_meta_fields(c) == TTS_CONV1D_META_FIELDS)   // grew TtsConv1d? extend this list
     arch |> serialize(c.w_span)
     arch |> serialize(c.wt_span)
     arch |> serialize(c.wk_span)
@@ -248,6 +259,7 @@ struct TtsLinear {
 }
 
 def serialize(var arch : Archive; var l : TtsLinear) {
+    verify(count_meta_fields(l) == TTS_LINEAR_META_FIELDS)   // grew TtsLinear? extend this list
     arch |> serialize(l.w_span)
     arch |> serialize(l.wt_span)
     arch |> serialize(l.wq_span)
@@ -283,6 +295,7 @@ struct TtsNorm {
 }
 
 def serialize(var arch : Archive; var n : TtsNorm) {
+    verify(count_meta_fields(n) == TTS_NORM_META_FIELDS)   // grew TtsNorm? extend this list
     arch |> serialize(n.w_span)
     arch |> serialize(n.b_span)
 }
@@ -311,6 +324,7 @@ struct TtsLstm {
 }
 
 def serialize(var arch : Archive; var l : TtsLstm) {
+    verify(count_meta_fields(l) == TTS_LSTM_META_FIELDS)   // grew TtsLstm? extend this list
     arch |> serialize(l.w_ih_span)
     arch |> serialize(l.w_hh_span)
     arch |> serialize(l.b_span)
@@ -378,8 +392,8 @@ def conv1d_out_len(c : TtsConv1d; t_in : int64) : int64 {
 def conv1d_pad_cin(var c : TtsConv1d; cin_s : int64) {
     return if (cin_s == c.cin)
     let depthwise = c.groups != 1l
-    if (cin_s < c.cin || (depthwise && c.groups != c.cin) || (c.transposed && !depthwise)) {
-        panic("dasLLAMA tts: conv1d_pad_cin takes a forward dense conv or a depthwise one and a wider cin; got cin={c.cin} -> {cin_s} groups={c.groups} transposed={c.transposed}")
+    if (cin_s < c.cin || (depthwise && (c.groups != c.cin || c.cout != c.cin)) || (c.transposed && !depthwise)) {
+        panic("dasLLAMA tts: conv1d_pad_cin takes a forward dense conv or a depthwise one and a wider cin; got cin={c.cin} cout={c.cout} -> {cin_s} groups={c.groups} transposed={c.transposed}")
     }
     let k = c.k
     var inscope w : array<float>
@@ -413,8 +427,9 @@ def conv1d_pad_cin(var c : TtsConv1d; cin_s : int64) {
 }
 
 //! Pad an AdaIN from `c` to `cs` channels: the two halves of `fc` re-laid at the padded width
-//! with zero gamma and beta rows for the pad, zero norm scale and shift - so a padded channel
-//! normalizes to exactly zero.
+//! with zero gamma and beta for the pad, the norm's own affine zeroed there. A pad channel
+//! reaches zero only because `concat_rows` writes its input columns zero, never through the norm.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-padded-input-width")]
 def adain_pad(var a : TtsAdaIn; c, cs : int64) {
     return if (cs == c)
     let nin = a.fc.nin
@@ -443,7 +458,6 @@ def adain_pad(var a : TtsAdaIn; c, cs : int64) {
         a.fc.b <- b
     }
     a.fc.nout = 2l * cs
-    delete a.fc.wt   // a tiled twin minted at the old width would be stale; the affine reads w
     if (!empty(a.norm.w)) {
         a.norm.w |> reserve_resize(cs)
         for (i in range64(c, cs)) {
@@ -759,8 +773,13 @@ def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var
                 let shift = kk * dil - pad_l
                 let r0 = max(rb4, -shift)
                 let r1 = min(re4, t_in - shift)
-                if (r1 > r0) {
-                    gemm_f32_jo(yp + r0 * cout, xp + (r0 + shift) * cin, wp + kk * cin * cout, r1 - r0, cin, cout)
+                continue if (r1 <= r0)
+                let ra = min(r1, (r0 + 3l) / 4l * 4l)
+                if (ra > r0) {
+                    gemm_f32_jo(yp + r0 * cout, xp + (r0 + shift) * cin, wp + kk * cin * cout, ra - r0, cin, cout)
+                }
+                if (r1 > ra) {
+                    gemm_f32_jo(yp + ra * cout, xp + (ra + shift) * cin, wp + kk * cin * cout, r1 - ra, cin, cout)
                 }
             }
         }
@@ -889,11 +908,11 @@ def private conv1d_rows_dense_strided(c : TtsConv1d; x : array<float>; t_in : in
 def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
     let cin = c.cin
-    let cout = c.cout
+    let cout = c.cout_s
     let nb = cin / 32l
     let kc = c.q8_k
     let knb = kc / 32l
-    let nbias = empty(c.b) ? 0l : cout
+    let nbias = empty(c.b) ? 0l : c.cout
     var xq & = g_q8_xq
     var xs & = g_q8_xs
     var xst & = g_q8_xst
@@ -968,6 +987,9 @@ def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_s
     if (c.groups != 1l) {
         panic("dasLLAMA tts: the rows conv takes a dense conv; got groups={c.groups}")
     }
+    if (c.q8 && (c.stride != 1l || c.transposed)) {
+        panic("dasLLAMA tts: the q8 rows conv takes a stride-1 forward conv; got stride={c.stride} transposed={c.transposed}")
+    }
     if (!c.q8 && empty(c.transposed ? c.wtr : c.wk)) {
         panic("dasLLAMA tts: a rows conv with no rows layout - a prepared image older than this build's served layouts; delete the .dlim beside the GGUF")
     }
@@ -1029,9 +1051,11 @@ def conv1d_rows_transposed_depthwise(c : TtsConv1d; x : array<float>; t_in : int
 // ===== dense =====
 
 //! Mint the tiled GEMM's B operand `wt` [nin][nout] when the width sits on the 16-column tile;
-//! a layer only `linear_rows` ever reads (`rows_only`) then drops `w` - or, with `q8` and widths
-//! that quantize per 32, takes the Q8_0 form of `w` (repacked for the backend when `repack`).
-def linear_prepare(var l : TtsLinear; rows_only : bool = false; q8 : bool = false; repack : bool = false) {
+//! a layer only `linear_rows` reads (`rows_only`) drops `w`, one with `q8` and per-32 widths takes
+//! the Q8_0 form (`repack` for the backend), and `vec_only` - `linear_vec` reads `w` - mints none.
+def linear_prepare(var l : TtsLinear; rows_only : bool = false; q8 : bool = false; repack : bool = false;
+                   vec_only : bool = false) {
+    return if (vec_only)
     if (q8 && rows_only && l.nin % 32l == 0l && l.nout % 32l == 0l) {
         l.wq |> reserve_resize(l.nout * l.nin)
         l.wqs |> reserve_resize(l.nout * l.nin / 32l)
@@ -1297,7 +1321,8 @@ let private STAT_BLOCK = 256l
 
 [arch(at = "../ARCHITECTURE_TTS.md#tts-two-layouts")]
 def private column_stats(x : array<float>; t, c : int64; var mean : array<float>; var ssq : array<float>) {
-    let nblk = (t + STAT_BLOCK - 1l) / STAT_BLOCK
+    let sb = STAT_BLOCK
+    let nblk = (t + sb - 1l) / sb
     var part & = g_colsum_part
     part |> reserve_resize(2l * nblk * c)
     for (i in range64(2l * nblk * c)) {
@@ -1310,8 +1335,8 @@ def private column_stats(x : array<float>; t, c : int64; var mean : array<float>
         unsafe {
             let c4 = c / 4l
             for (blk in range64(int64(bb), int64(be))) {
-                let r0 = blk * STAT_BLOCK
-                let r1 = min(t, r0 + STAT_BLOCK)
+                let r0 = blk * sb
+                let r1 = min(t, r0 + sb)
                 let base = xp + r0 * c
                 var s1 = pp + blk * 2l * c
                 var s2 = s1 + c
@@ -1347,8 +1372,8 @@ def private column_stats(x : array<float>; t, c : int64; var mean : array<float>
         var m = 0.0lf
         var m2 = 0.0lf
         for (blk in range64(nblk)) {
-            let r0 = blk * STAT_BLOCK
-            let nb = double(min(t, r0 + STAT_BLOCK) - r0)
+            let r0 = blk * sb
+            let nb = double(min(t, r0 + sb) - r0)
             let sb1 = double(part[blk * 2l * c + ci])
             let sb2 = double(part[blk * 2l * c + c + ci])
             let mb = double(x[r0 * c + ci]) + sb1 / nb
