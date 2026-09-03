@@ -56,7 +56,8 @@
      row (12.7 -> 11.0) = the measurement-day ruler at das 6bacf485d, superseded in the record by 24d13f1d2;
      the 93% verify share and the depth-2 7.9 -> 12.4 = the round clocks on the M4 Pro, 2026-09-03; the
      models are gemma-4-26B-A4B-it-Q4_K_M with mtp-gemma-4-26B-A4B-it-Q8_0 and Qwen3.8-27B-Q4_K_M with
-     mtp-Qwen3.8-27B-Q8_0 (checksums in the records); the ruler is modules/dasLLAMA/harness/mtp_ruler.das -->
+     mtp-Qwen3.8-27B-Q8_0 (checksums in the records); "1 draft" = our --mtp-depth 1 and llama.cpp's
+     --spec-draft-n-max 1; the ruler is modules/dasLLAMA/harness/mtp_ruler.das -->
 <p>We turned speculative decoding on, and Anton's Mac mini got slower. That was the morning of
 the 2nd of September, and it is why this story has a second day.</p>
 <p>The idea first. A model generates one token at a time, and for a big model every token
@@ -76,15 +77,16 @@ in one pass: the position it was at anyway, where its own answer either matches 
 replaces it, and the position after the draft, which only counts if the draft matched. So a
 round always yields one token and, when the draft was right, a second. Two draft tokens mean
 three positions, and the second draft only pays if it is accepted often enough to cover that
-third row. We tried one against two on each machine and let the tuner decide, the way it
-decides everything else on a box, and every machine we own settled on one. Three and four
-were so far behind on the development build that they never reached the ruler.</p>
+third row.</p>
+<p>We tried one against two on each machine and let the tuner decide, the way it decides
+everything else on a box, and every machine we own settled on one. Three and four were so far
+behind on the development build that they never reached the ruler.</p>
 <p>The Gemma assistant reads the main model's hidden state as its input, and there are two
 places to read it from, before or after the final norm. After won on acceptance, so after
 ships.</p>
 <p>We also checked whether squeezing the main model harder hurts the drafter. The 8-bit Gemma
 accepted 76.5% of the drafts, the 4-bit one 74.6%. Not much, then.</p>
-<p>And then the kernels, which turned out to be the real story and get their own section.</p>
+<p>Then the kernels, which turned out to be the real story and get their own section.</p>
 <h2>How we measured</h2>
 <p>The board on daslang.io uses llama-bench, and llama-bench cannot measure speculative
 decoding. So we built a small ruler for ourselves. It takes four chat prompts, renders each
@@ -94,35 +96,33 @@ record per machine and model. Ours runs as the release build with a sidecar tune
 machine the same day. llama.cpp runs as its own server, built from upstream exactly as they
 ship it, told to write exactly 128 tokens too; the ruler reads the server's own timings back.</p>
 <p>We focused on two models, gemma-4-26B-A4B-it-Q4_K_M with its Q8_0 assistant and
-Qwen3.8-27B-Q4_K_M with its Q8_0 NextN head, and both engines read the same drafter file.
-From here on: Gemma and Qwen, M5 and M4.</p>
+Qwen3.8-27B-Q4_K_M with its Q8_0 NextN head, and both engines read the same drafter file.</p>
 <p>The four prompts are the first turns of four tasks from
 <a href="https://github.com/hemingkx/Spec-Bench">hemingkx/Spec-Bench</a>: a travel blog post to write,
 a news article to summarize, a GSM8K arithmetic problem, and a trivia question.</p>
-<p>Two of the ruler's rules exist because each one cost us an afternoon. Same thinking mode on
-both sides: our very first llama.cpp run had thinking on while ours had it off, and its
-acceptance read 91%. A thinking-on answer is an outline, not a blog post - a different text
-with a different acceptance rate. The ruler now renders one prompt and hands the same bytes
-to both engines.</p>
-<p>And let the box cool down. Surprisingly, a Mac that has been working hard for ten minutes
-decodes 13 to 18% slower than a cool one. Who knew. Every arm now waits three minutes on the
-27B before it measures. The release build also runs before anything else: when the measuring
-program had already run the engine in-process, everything it measured afterwards came out
-20% low, for reasons we still find funny.</p>
+<p>Two of the ruler's rules exist because each one cost us an afternoon.</p>
+<p>Rule 1. Same thinking mode on both sides. Our very first llama.cpp run had thinking on while
+ours had it off, and its acceptance read 91%. A thinking-on answer is an outline, not a blog
+post - a different text with a different acceptance rate. The ruler now renders one prompt
+and hands the same bytes to both engines.</p>
+<p>Rule 2. Let the box cool down. Surprisingly, a Mac that has been working hard for ten
+minutes decodes 13 to 18% slower than a cool one. Who knew. Every arm now waits three minutes
+on the 27B before it measures. The release build also runs before anything else: when the
+measuring program had already run the engine in-process, everything it measured afterwards
+came out 20% low, for reasons we still find funny.</p>
 <h2>What we measured</h2>
 <p>So we ran it, and the drafter earns its keep: about one token in five, and not a token more.
-In parentheses, the acceptance rate; "depth 1" and "n_max 1" are one draft token in our
-engine and in llama.cpp, "depth 2" and "n_max 2" are two.</p>
+In parentheses, the acceptance rate.</p>
 <table>
 <thead>
 <tr>
 <th>tokens/s</th>
 <th>dasLLAMA off</th>
-<th>depth 1</th>
-<th>depth 2</th>
+<th>1 draft</th>
+<th>2 drafts</th>
 <th>llama.cpp off</th>
-<th>n_max 1</th>
-<th>n_max 2</th>
+<th>1 draft</th>
+<th>2 drafts</th>
 </tr>
 </thead>
 <tbody>
@@ -166,17 +166,17 @@ engine and in llama.cpp, "depth 2" and "n_max 2" are two.</p>
 </table>
 <p>The same drafter drafts the same on both sides, 75 to 94% accepted at the first position
 depending on the prompt, in both engines. Whatever separates the two columns, it is not the
-drafting. And the four prompts do not agree with each other at all. Gemma on the M5:</p>
+drafting. The four prompts do not agree with each other at all. Gemma on the M5:</p>
 <table>
 <thead>
 <tr>
 <th>tokens/s</th>
 <th>dasLLAMA off</th>
-<th>depth 1</th>
-<th>depth 2</th>
+<th>1 draft</th>
+<th>2 drafts</th>
 <th>llama.cpp off</th>
-<th>n_max 1</th>
-<th>n_max 2</th>
+<th>1 draft</th>
+<th>2 drafts</th>
 </tr>
 </thead>
 <tbody>
@@ -224,11 +224,11 @@ drafting. And the four prompts do not agree with each other at all. Gemma on the
 <tr>
 <th>tokens/s</th>
 <th>dasLLAMA off</th>
-<th>depth 1</th>
-<th>depth 2</th>
+<th>1 draft</th>
+<th>2 drafts</th>
 <th>llama.cpp off</th>
-<th>n_max 1</th>
-<th>n_max 2</th>
+<th>1 draft</th>
+<th>2 drafts</th>
 </tr>
 </thead>
 <tbody>
@@ -306,17 +306,17 @@ tables tell you what a round costs: <code>c = (1 + a) / speedup</code>.</p>
 </tr>
 </tbody>
 </table>
-<p>Turns out ninety-three percent of the round is the verify. Checking two positions at once
-costs both engines about one and a half plain passes, and that, not the drafter, is what caps
-the gain at 1.1 to 1.2x on a dense 27B.</p>
+<p>Timed on the M4, a round is the draft, the verify, the accept-and-commit and the state
+replay, and the verify is ninety-three percent of it. Checking two positions at once costs
+both engines about one and a half plain passes, and that, not the drafter, is what caps the
+gain at 1.1 to 1.2x on a dense 27B.</p>
 <p>It is also why depth 2 falls behind on the M4 and only breaks even on the M5. A third row
 costs another half to a whole pass, and the second draft is accepted 51 to 66% of the time,
 which does not cover it. The math prompt is the exception: there the second draft lands 86
 to 88%, and depth 2 comes out ahead on every machine, 187.9 against 160.1 for Gemma on the
-M5. Acceptance is a property of the text, not the box.</p>
-<p>Which is why we dropped the automatic depth controller, the one that would raise the depth
-while the drafts keep landing, in favour of the per-box setting for now. It may come back
-one day as a per-request setting, when the text is allowed to decide.</p>
+M5.</p>
+<p>Acceptance is a property of the text. The cost of a row is a property of the box.
+Reconciling the two is a tricky business left for future us.</p>
 <p>The same arithmetic is why we never built the other idea, drafting wide: offering the two or
 three most likely tokens at one position instead of a chain. Every candidate is another row
 to verify, at half a pass to a whole pass each, and a runner-up only earns its row when the
@@ -337,15 +337,12 @@ plain. Same story, one row up: three rows took a kernel nobody had ever tried on
 We already had all the pieces - two rows on the new kernel, one on the old single pass - and
 1 + 2 turned out to be better than 3. Depth 2 went from 7.9 to 12.4, depth 1 to 14.0, by the
 evening of the 3rd. About a hundred lines and a test.</p>
-<p>llama.cpp is the gold standard of running language models on your own machine, and we are
-glad it sat on the other side of the table for those two days. Without it the M4 row would
-still read 11.0, and we would think that was the chip.</p>
 <h2>What a draft is worth</h2>
 <p>Exactly what the verify costs. The drafter's quality, the depth, the box, the quantization -
 each of them moves the number a few percent around that one fact. The models ship with the
 drafter built in, so the question was never whether to use it. The question was how cheap we
 could make the check, and the answer so far is one and a half passes for two tokens, on both
-engines, on both chips. Theirs is a little cheaper at depth 2. That one is on our list.</p></div>
+engines, on both chips.</p></div>
 </article>
 <article class="dio-story" id="s-2026-08-30-apple-m5">
 <div class="dio-story__eyebrow"><span class="dio-item__date">2026-08-30</span><span class="dio-item__tag">hardware</span></div>
