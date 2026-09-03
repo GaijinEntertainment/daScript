@@ -70,27 +70,29 @@ def kitten_token_ids(ps : string) : array<int> {
             in_word = false
             continue
         }
+        // an unknown phoneme takes its separator with it - a lone space token between two
+        // words the model never saw a space between
+        let id = sym?[c] ?? -1
+        continue if (id < 0)
         let word = kitten_word_cpt(c)
         if (!first && !(word && in_word)) {
             ids |> push(space_id)
         }
         first = false
         in_word = word
-        let id = sym?[c] ?? -1
-        if (id >= 0) {
-            ids |> push(id)
-        }
+        ids |> push(id)
     }
     ids |> push(sym?[ELLIPSIS_CPT] ?? 0)
     ids |> push(0)
     return <- ids
 }
 
-//! The style row the reference driver picks: the chunk's character count, capped at the last
-//! row.
+//! The style row the reference driver picks: the chunk's character count, clamped to the pack's
+//! rows. The loader guarantees at least one row; the lower bound is what keeps a pack that
+//! declared none from indexing behind the first.
 def kitten_style_row(norm_text : string; rows : int) : int {
     var inscope cps <- utf8_to_cpts(norm_text)
-    return min(length(cps), rows - 1)
+    return clamp(length(cps), 0, rows - 1)
 }
 
 //! Kitten's driver data beside the shared model: per-voice speed priors and the alias names.

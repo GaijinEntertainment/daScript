@@ -122,8 +122,11 @@ def load_pos_tagger(path : string) : PosTagger {
         var o = read_tagger_header(tg, b, path)
         let n_feat = rd_i32(b, o)
         o += 4l
+        tg.feat_hash |> reserve(n_feat)
         tg.feat_hash |> resize(n_feat)
+        tg.feat_off |> reserve(n_feat)
         tg.feat_off |> resize(n_feat)
+        tg.feat_len |> reserve(n_feat)
         tg.feat_len |> resize(n_feat)
         if (n_feat > 0) {
             unsafe {
@@ -139,7 +142,9 @@ def load_pos_tagger(path : string) : PosTagger {
         }
         let n_w = rd_i32(b, o)
         o += 4l
+        tg.w_tag |> reserve(n_w)
         tg.w_tag |> resize(n_w)
+        tg.w_val |> reserve(n_w)
         tg.w_val |> resize(n_w)
         for (i in range(n_w)) {
             tg.w_tag[i] = rd_u8(b, o)
@@ -234,20 +239,37 @@ def private shape(c : array<int>) : string {
     return s
 }
 
-//! the tagger's word class: hyphenated, four-digit year, digit-led, else lowercased
+//! the tagger's word class: hyphenated, four-digit year, digit-led, else lowercased. The
+//! hyphen test is the trainer's (`harness/train_postag.py`) - a hyphen anywhere in a token
+//! that does not START with one, so "--" and "-well-known" are ordinary words
 def private norm_word(c : array<int>) : string {
     let n = length(c)
     var hyphen = false
     var all_digits = n > 0
     for (i in range(n)) {
-        hyphen = hyphen || (i > 0 && c[i] == '-')
+        hyphen = hyphen || c[i] == '-'
         all_digits = all_digits && is_digit(c[i])
     }
-    return "!HYPHEN" if (hyphen)
+    return "!HYPHEN" if (hyphen && cp_at(c, 0) != '-')
     return "!YEAR" if (all_digits && n == 4)
     return "!DIGITS" if (n > 0 && is_digit(c[0]))
     var inscope lowered <- [for (cp in c); int(utf32_to_lower(uint(cp)))]
     return cpts_to_utf8(lowered)
+}
+
+//! The tagger's word class for one token - what the perceptron's word features key on:
+//! `!HYPHEN` for a hyphen in a token that does not start with one, `!YEAR` for a four-digit
+//! run, `!DIGITS` for a digit-led token, else the lowercased word.
+def pos_norm_word(word : string) : string {
+    var inscope c <- utf8_to_cpts(word)
+    return norm_word(c)
+}
+
+//! The tagger's shape feature for one token: `X` all caps, `Xx` title, `x` lower, then `d`
+//! when it carries a digit, `h` an interior hyphen, `q` an apostrophe.
+def pos_word_shape(word : string) : string {
+    var inscope c <- utf8_to_cpts(word)
+    return shape(c)
 }
 
 def private add_feature(tg : PosTagger; var scores : array<int>; h : uint64) {
@@ -291,6 +313,7 @@ def pos_tag_words(tg : PosTagger; words : array<string>) : array<string> {
     var tags : array<string>
     tags |> reserve(n)
     var inscope scores : array<int>
+    scores |> reserve(length(tg.tags))
     scores |> resize(length(tg.tags))
     var prev = START1
     var prev2 = START2

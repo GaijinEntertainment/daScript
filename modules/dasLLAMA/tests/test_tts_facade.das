@@ -7,17 +7,29 @@ require dastest/testing_boost public
 require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_audio_io
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_kitten   // kitten_token_ids: the symbol table's drop rule, model-free
+require dasllama/dasllama_unicode   // the chunker counts codepoints, so the cells do too
+require dasllama/dasllama_math   // setup_dasllama_jobque_ + the batch lane cap
 require daslib/jobque_boost
+require daslib/defer
 require daslib/fio
+require strings
+require daslib/strings_boost
 require math
 require _model_tier
 
+def private cpt_count(s : string) : int {
+    var inscope c <- utf8_to_cpts(s)
+    return length(c)
+}
+
 // The TTS facade above the families. Model-free: the sentence chunker (the reference driver's
-// boundary rule - abbreviations, decimals, a.m./p.m. - the 400-character cap, the appended
-// punctuation) and the WAV writer's container (header fields, sample round trip). Model-gated
-// (`kitten-nano.gguf` + the front-end packs under models_dir()): the streaming form's chunks
-// concatenate to the buffered form's audio with summed timings.
+// boundary rule - abbreviations, decimals, a.m./p.m. - the 400-CODEPOINT cap, the hard split of
+// a whitespace-free run, the appended punctuation), the WAV writer's container (header fields,
+// sample round trip), the timings' own rtf guard, and the kitten symbol table's drop rule.
+// Model-gated (`kitten-nano.gguf` + the front-end packs under models_dir()): the streaming
+// form's chunks concatenate to the buffered form's audio with summed timings, the two
+// syntheses run at different worker counts.
 
 [test]
 def test_chunker(t : T?) {
@@ -54,6 +66,78 @@ def test_chunker(t : T?) {
         t |> equal(length(tts_chunks("")), 0)
         t |> equal(length(tts_chunks("   ")), 0)
     }
+    t |> run("the cap counts codepoints, not bytes") @(t : T?) {
+        // thirty em dashes: 59 codepoints under the cap of 100, 119 bytes over it
+        var inscope dashes : array<string>
+        dashes |> reserve(30)
+        for (_i in range(30)) {
+            dashes |> push("—")   // nolint:STYLE039
+        }
+        let em = join(dashes, " ")
+        t |> equal(cpt_count(em), 59)
+        t |> equal(length(em), 119, "bytes, which is what a byte cap would have split on")
+        var inscope c <- tts_chunks(em, 100)
+        t |> equal(length(c), 1, "one chunk: 59 codepoints fit")
+        var inscope quotes : array<string>
+        quotes |> reserve(30)
+        for (_i in range(30)) {
+            quotes |> push("“ok”")   // nolint:STYLE039
+        }
+        let curly = join(quotes, " ")
+        t |> equal(cpt_count(curly), 149)
+        t |> success(length(curly) > 149, "{length(curly)} bytes")
+        var inscope q <- tts_chunks(curly, 200)
+        t |> equal(length(q), 1, "one chunk: 149 codepoints fit under 200")
+    }
+    t |> run("a whitespace-free run hard-splits at the cap") @(t : T?) {
+        let bare = build_string() $(var w) {
+            for (i in range(513)) {
+                w |> write(cpt_to_utf8('a' + i % 26))
+            }
+        }
+        t |> equal(cpt_count(bare), 513)
+        var inscope c <- tts_chunks(bare, 100)
+        t |> equal(length(c), 6, "five full pieces and a thirteen-character tail")
+        let rejoined = build_string() $(var w) {
+            for (ch in c) {
+                t |> success(cpt_count(ch) <= 101, "chunk of {cpt_count(ch)} codepoints (cap 100 plus the appended comma)")
+                t |> success(ends_with(ch, ","), "each piece gains the punctuation the split left off")
+                w |> write(slice(ch, 0, length(ch) - 1))
+            }
+        }
+        t |> equal(rejoined, bare, "the pieces are the run, in order, nothing dropped")
+        var inscope d <- tts_chunks(bare, 513)
+        t |> equal(length(d), 1, "a run exactly at the cap does not split")
+    }
+}
+
+[test]
+def test_kitten_symbol_drop(t : T?) {
+    t |> run("an unknown phoneme takes its separator space with it") @(t : T?) {
+        // 'a' and 'b' are in the table, '\x01' is in no table: the ids around it must read as
+        // if it had never been there
+        var inscope known <- kitten_token_ids("ab ab")
+        var inscope withOov <- kitten_token_ids("a{cpt_to_utf8(1)}b ab")
+        t |> equal(length(withOov), length(known), "the dropped symbol leaves no doubled space")
+        var same = true
+        for (x, y in known, withOov) {
+            same = same && x == y
+        }
+        t |> success(same, "id for id with the known string")
+    }
+}
+
+[test]
+def test_timings_guard(t : T?) {
+    t |> run("rtf answers zero rather than dividing by no audio") @(t : T?) {
+        var timings = TtsTimings()
+        timings.total_us = 1000l
+        t |> equal(rtf(timings, 24000), 0.0lf, "no samples yet")
+        timings.samples = -1l
+        t |> equal(rtf(timings, 24000), 0.0lf, "a negative count is no audio either")
+        timings.samples = 24000l
+        t |> equal(rtf(timings, 24000), 0.001lf, "one second of audio in a millisecond")
+    }
 }
 
 [test]
@@ -83,9 +167,9 @@ def test_wav_writer(t : T?) {
     }
 }
 
-[test]
+[test, arch(at = "../ARCHITECTURE_TTS.md#tts-two-layouts")]
 def test_streaming(t : T?) {
-    t |> run("chunks concatenate to the buffered synthesis") @(t : T?) {
+    t |> run("chunks concatenate to the buffered synthesis, at a different worker count") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")
         if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
             t |> skip("kitten-nano.gguf or the front-end packs not present")
@@ -93,22 +177,30 @@ def test_streaming(t : T?) {
         }
         with_job_que() {
             setup_dasllama_jobque_()
+            let cap0 = get_batch_lane_cap()
+            defer() {
+                set_batch_lane_cap(cap0)
+            }
             var inscope m <- load_tts_model(gguf)
             let text = "The first sentence is short. The second one is a little longer than the first! Is the third a question?"
             var chunks = 0
             var inscope streamed : array<float>
+            // one lane: every rows kernel runs its blocks in one sweep, in one order
+            set_batch_lane_cap(1)
             synthesize_stream(m, text, "Bella", 1.0) $(chunk) {
                 chunks++
                 streamed |> push_from(chunk.pcm)
             }
             t |> equal(chunks, 3, "three sentences, three chunks")
+            // the box's own lane count: the same blocks split across workers
+            set_batch_lane_cap(0)
             var inscope whole <- synthesize(m, text, "Bella")
             t |> equal(length(whole.pcm), length(streamed), "the buffered form is the concatenation")
-            var same = true
+            var differing = 0
             for (a, b in whole.pcm, streamed) {
-                same = same && a == b
+                differing += a == b ? 0 : 1
             }
-            t |> success(same, "sample for sample")
+            t |> equal(differing, 0, "{differing} of {length(whole.pcm)} samples move with the worker count")
             t |> success(whole.timings.samples == long_length(whole.pcm), "the summed timings count every sample")
         }
     }

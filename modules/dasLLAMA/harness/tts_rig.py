@@ -120,7 +120,7 @@ def main():
         dirs[spec] = d
         os.makedirs(d, exist_ok=True)
         if not a.skip_synth:
-            cmd = [a.daslang, "-jit", "-module-cache", os.path.join(REPO, "build", "module_cache.bin"),
+            cmd = [a.daslang, "-jit", "-dasroot", REPO, "-module-cache", os.path.join(REPO, "build", "module_cache.bin"),
                    os.path.join(HERE, "tts_synth.das"), "--", "--model", os.path.join(MODELS_DIR, model + ".gguf"),
                    "--voice", voice, "--out", d]
             if a.limit:

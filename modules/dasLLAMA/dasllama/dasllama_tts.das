@@ -6,6 +6,7 @@ module dasllama_tts shared public
 
 require dasllama/dasllama_lint public
 require daslib/fio
+require math
 require strings
 require daslib/strings_boost
 require daslib/utf8_utils
@@ -144,17 +145,42 @@ def private ensure_punctuation(chunk : string) : string {
     return (last == '.' || last == '!' || last == '?' || last == ',' || last == ';' || last == ':') ? s : "{s},"
 }
 
+// the cap counts what a reader says, so codepoints - `length()` on a string is BYTES, and an
+// em dash or a curly quote costs three of them
+def private cpt_length(s : string) : int {
+    var inscope c <- utf8_to_cpts(s)
+    return length(c)
+}
+
+// a whitespace-free run longer than the cap has no word boundary to split on, so it splits at
+// the cap itself, on a codepoint boundary
+def private push_hard_split(word : string; max_len : int; var out : array<string>) {
+    var inscope cps <- utf8_to_cpts(word)
+    let n = length(cps)
+    var a = 0
+    while (a < n) {
+        let b = min(a + max_len, n)
+        out |> push(ensure_punctuation(cpts_to_utf8(cps, a, b)))
+        a = b
+    }
+}
+
 def private push_words(sentence : string; max_len : int; var out : array<string>) {
     var inscope cur : array<string>
     var cur_len = 0
     for (w in split(sentence, " ")) {
         continue if (empty(w))
-        if (!empty(cur) && cur_len + 1 + length(w) > max_len) {
+        let wl = cpt_length(w)
+        if (!empty(cur) && cur_len + 1 + wl > max_len) {
             out |> push(ensure_punctuation(join(cur, " ")))
             cur |> clear()
             cur_len = 0
         }
-        cur_len += (empty(cur) ? 0 : 1) + length(w)
+        if (wl > max_len) {
+            push_hard_split(w, max_len, out)
+            continue
+        }
+        cur_len += (empty(cur) ? 0 : 1) + wl
         cur |> push(w)
     }
     if (!empty(cur)) {
@@ -163,7 +189,8 @@ def private push_words(sentence : string; max_len : int; var out : array<string>
 }
 
 //! Split normalized text into the pieces one synthesis takes: sentences, each at most
-//! `max_len` characters (a longer sentence splits on words), each ending in punctuation.
+//! `max_len` codepoints (a longer sentence splits on words, a longer word at the cap), each
+//! ending in punctuation.
 def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS) : array<string> {
     var inscope out : array<string>
     var inscope cps <- utf8_to_cpts(norm)
@@ -181,7 +208,7 @@ def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS) : array<string> {
     for (sent in sentences) {
         let st = strip(sent)
         continue if (empty(st))
-        if (length(st) <= max_len) {
+        if (cpt_length(st) <= max_len) {
             out |> push(ensure_punctuation(st))
         } else {
             push_words(st, max_len, out)
@@ -192,6 +219,7 @@ def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS) : array<string> {
 
 // ===== synthesis =====
 
+[cold_path]
 def private add_timings(var acc : TtsTimings; t : TtsTimings) {
     acc.front_end_us += t.front_end_us
     acc.bert_us += t.bert_us
@@ -205,7 +233,9 @@ def private add_timings(var acc : TtsTimings; t : TtsTimings) {
     acc.samples += t.samples
 }
 
-def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; speed : float) : TtsAudio {
+let private NOISE_SEED = 0x5eed1ul   // the chunk index folds in: consecutive chunks draw different noise
+
+def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; speed : float; chunk_index : int) : TtsAudio {
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
     let clock = ref_time_ticks()
@@ -217,7 +247,7 @@ def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; sp
     var inscope style : array<float>
     styletts2_style(m.model, vname, row, style)
     out.timings.front_end_us = int64(get_time_usec(clock))
-    styletts2_synthesize(m.model, ids, style, sp, m.scratch.noise, 0x5eed1ul, null, out.timings, m.scratch)
+    styletts2_synthesize(m.model, ids, style, sp, m.scratch.noise, NOISE_SEED + uint64(chunk_index), null, out.timings, m.scratch)
     out.pcm := m.scratch.wave
     if (is_kitten) {
         kitten_trim(out.pcm)
@@ -239,8 +269,9 @@ def private resolve_voice(m : TtsModel; voice : string) : string {
 def synthesize_stream(var m : TtsModel; text : string; voice : string; speed : float; blk : block<(chunk : TtsAudio)>) {
     let vname = resolve_voice(m, voice)
     let norm = normalize_text(text)
-    for (chunk in tts_chunks(norm)) {
-        var inscope a <- synthesize_chunk(m, chunk, vname, speed)
+    var inscope chunks <- tts_chunks(norm)
+    for (i, chunk in iter_range(chunks), chunks) {
+        var inscope a <- synthesize_chunk(m, chunk, vname, speed, i)
         to_log(LOG_INFO, "dasLLAMA tts: {m.model.family} {m.model.name}: {timings_line(a.timings, a.sample_rate)}\n")
         invoke(blk, a)
     }

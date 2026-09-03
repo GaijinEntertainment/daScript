@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # Pack the TTS grapheme-to-phoneme data into tts_g2p.bin for dasllama_g2p.das:
-#   - the gold and silver US-English lexicons (misaki 0.9.4 `us_gold.json` / `us_silver.json`,
-#     Apache-2.0), values either one phoneme string or a part-of-speech dictionary,
-#   - CMUdict 0.7a (BSD-2, the NLTK distribution) with every entry's first pronunciation
+#   - the gold and silver US-English lexicons (misaki 0.9.4 `us_gold.json` / `us_silver.json`),
+#     values either one phoneme string or a part-of-speech dictionary,
+#   - CMUdict 0.7a (the NLTK distribution) with every entry's first pronunciation
 #     ALREADY rendered into the misaki inventory through the calibrated ARPAbet table
 #     (results/calibration.json of the G2P fidelity experiment), so the runtime fallback is a
 #     plain lookup,
-#   - the g2p_en 2.1.0 GRU sequence-to-sequence OOV model (Apache-2.0, checkpoint20.npz) with its
+#   - the g2p_en 2.1.0 GRU sequence-to-sequence OOV model (checkpoint20.npz) with its
 #     grapheme and ARPAbet output alphabets.
+# Provenance and licences for all three: THIRD_PARTY_NOTICES.md at the repository root.
 # Every lexicon is a byte-sorted string table (offset columns + one key blob + one value blob),
 # looked up by binary search on the mapped bytes - nothing is parsed at load.
 #
@@ -116,7 +117,15 @@ def main():
     gold = json.load(open(os.path.join(data_dir, "us_gold.json"), encoding="utf8"))
     silver = json.load(open(os.path.join(data_dir, "us_silver.json"), encoding="utf8"))
     if a.local_additions:
-        gold.update(json.load(open(a.local_additions, encoding="utf8")))
+        additions = json.load(open(a.local_additions, encoding="utf8"))
+        # a plain-string addition over a tag-keyed gold entry flattens every part-of-speech
+        # reading and drops the word from --focus-words, silently
+        flattened = sorted(w for w, v in additions.items()
+                           if isinstance(v, str) and isinstance(gold.get(w), dict))
+        assert not flattened, (
+            f"{a.local_additions}: plain-string addition(s) over tag-keyed gold entries: "
+            f"{flattened} - give each a dict with DEFAULT, or drop it")
+        gold.update(additions)
     if a.focus_words:
         focus = sorted({w.lower() for w, v in gold.items() if isinstance(v, dict)})
         with open(a.focus_words, "w", encoding="utf8") as f:

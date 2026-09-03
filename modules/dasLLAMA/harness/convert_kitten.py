@@ -114,7 +114,7 @@ def main():
     w.add_name(cfg["name"])
     w.add_string("kitten.size", a.size)
     w.add_string("kitten.revision", kg.REVISIONS[a.size])
-    w.add_string("kitten.source", f"KittenML/kitten-tts-{a.size}-0.8 {kg.MODEL_FILES[a.size]} (Apache-2.0)")
+    w.add_string("kitten.source", f"KittenML/kitten-tts-{a.size}-0.8 {kg.MODEL_FILES[a.size]}")
     w.add_uint32("styletts2.sample_rate", 24000)
     w.add_uint32("styletts2.n_symbols", int(tensors["text_encoder.embedding.weight"].shape[0]))
     w.add_uint32("styletts2.style_dim", int(voices[voices.files[0]].shape[1]))

@@ -46,15 +46,34 @@ let private ABBREVIATIONS <- {
     "fig" => "Figure", "figs" => "Figures", "pp" => "pages", "p" => "page", "ch" => "chapter", "sec" => "section"
 }
 
+//! how a unit reads after exactly 1 and after anything else - the plural is irregular often
+//! enough (foot/feet, inch/inches, hertz, degrees Celsius) that both forms are spelled out
+struct private UnitWords {
+    one : string
+    many : string
+}
+
+def private unit(one, many : string) : UnitWords => UnitWords(one = one, many = many)
+
 let private UNITS <- {
-    "km" => "kilometers", "kg" => "kilograms", "mg" => "milligrams", "ml" => "milliliters",
-    "mm" => "millimeters", "cm" => "centimeters", "lbs" => "pounds", "oz" => "ounces", "ft" => "feet",
-    "kw" => "kilowatts", "mw" => "megawatts", "kwh" => "kilowatt hours", "rpm" => "revolutions per minute", "fps" => "frames per second",
-    "gb" => "gigabytes", "mb" => "megabytes", "kb" => "kilobytes", "tb" => "terabytes",
-    "hz" => "hertz", "khz" => "kilohertz", "mhz" => "megahertz", "ghz" => "gigahertz",
-    "mph" => "miles per hour", "kph" => "kilometers per hour",
-    "ms" => "milliseconds", "ns" => "nanoseconds", "µs" => "microseconds",   // nolint:STYLE039
-    "°c" => "degrees Celsius", "c°" => "degrees Celsius", "°f" => "degrees Fahrenheit", "f°" => "degrees Fahrenheit"   // nolint:STYLE039
+    "km" => unit("kilometer", "kilometers"), "kg" => unit("kilogram", "kilograms"),
+    "mg" => unit("milligram", "milligrams"), "ml" => unit("milliliter", "milliliters"),
+    "mm" => unit("millimeter", "millimeters"), "cm" => unit("centimeter", "centimeters"),
+    "lbs" => unit("pound", "pounds"), "oz" => unit("ounce", "ounces"),
+    "ft" => unit("foot", "feet"),
+    "kw" => unit("kilowatt", "kilowatts"), "mw" => unit("megawatt", "megawatts"),
+    "kwh" => unit("kilowatt hour", "kilowatt hours"),
+    "rpm" => unit("revolution per minute", "revolutions per minute"),
+    "fps" => unit("frame per second", "frames per second"),
+    "gb" => unit("gigabyte", "gigabytes"), "mb" => unit("megabyte", "megabytes"),
+    "kb" => unit("kilobyte", "kilobytes"), "tb" => unit("terabyte", "terabytes"),
+    "hz" => unit("hertz", "hertz"), "khz" => unit("kilohertz", "kilohertz"),
+    "mhz" => unit("megahertz", "megahertz"), "ghz" => unit("gigahertz", "gigahertz"),
+    "mph" => unit("mile per hour", "miles per hour"), "kph" => unit("kilometer per hour", "kilometers per hour"),
+    "ms" => unit("millisecond", "milliseconds"), "ns" => unit("nanosecond", "nanoseconds"),
+    "µs" => unit("microsecond", "microseconds"),   // nolint:STYLE039
+    "°c" => unit("degree Celsius", "degrees Celsius"), "c°" => unit("degree Celsius", "degrees Celsius"),   // nolint:STYLE039
+    "°f" => unit("degree Fahrenheit", "degrees Fahrenheit"), "f°" => unit("degree Fahrenheit", "degrees Fahrenheit")   // nolint:STYLE039
 }
 //! denominators a "N/D" is read as a spoken fraction for; anything else stays a slash
 let private FRACTION_DENOMINATORS <- { 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16, 32, 64, 100 }
@@ -146,7 +165,9 @@ def ordinal_words(n : int64) : string {
     return empty(prefix) ? last_ord : "{prefix}{joiner}{last_ord}"
 }
 
-def private digit_string_value(s : string) : int64 {
+//! The value of a string's digits, non-digits skipped, in a 64-bit accumulator: "1,024" -> 1024.
+//! Never `to_int`, which answers 0 past 2^31.
+def digit_string_value(s : string) : int64 {
     var v = 0l
     peek_data(s) $(d : array<uint8> const#) {
         for (b in d) {
@@ -157,6 +178,41 @@ def private digit_string_value(s : string) : int64 {
         }
     }
     return v
+}
+
+//! The widest digit run `digit_string_value` reads without overflowing its int64 accumulator.
+//! Past it a number reads digit by digit, which is how a reader says one that long anyway.
+let MAX_DIGITS_AS_NUMBER = 18
+
+//! How many of a string's characters are digits.
+def digit_count(s : string) : int {
+    var n = 0
+    peek_data(s) $(d : array<uint8> const#) {
+        for (b in d) {
+            n += is_number(int(b)) ? 1 : 0
+        }
+    }
+    return n
+}
+
+//! Every digit of a run as its own word: "102" -> "one zero two".
+def digits_to_words(s : string) : string {
+    var inscope parts : array<string>
+    peek_data(s) $(d : array<uint8> const#) {
+        for (b in d) {
+            let cp = int(b)
+            if (is_number(cp)) {
+                parts |> push(DIGIT_WORDS[cp - '0'])
+            }
+        }
+    }
+    return join(parts, " ")
+}
+
+//! A digit run as a cardinal, or digit by digit past `MAX_DIGITS_AS_NUMBER`.
+def private cardinal_words(digits : string) : string {
+    return digits_to_words(digits) if (digit_count(digits) > MAX_DIGITS_AS_NUMBER)
+    return number_to_words(digit_string_value(digits))
 }
 
 //! Decimal words, reading the fraction digit by digit: "3.14" -> "three point one four",
@@ -172,7 +228,7 @@ def float_to_words(text : string) : string {
     if (dot >= 0) {
         let int_part = slice(body, 0, dot)
         let dec_part = slice(body, dot + 1)
-        let int_words = empty(int_part) ? "zero" : number_to_words(digit_string_value(int_part))
+        let int_words = empty(int_part) ? "zero" : cardinal_words(int_part)
         let dec_words = build_string() $(var writer) {
             var first = true
             peek_data(dec_part) $(d : array<uint8> const#) {
@@ -190,7 +246,7 @@ def float_to_words(text : string) : string {
         }
         result = "{int_words} point {dec_words}"
     } else {
-        result = number_to_words(digit_string_value(body))
+        result = cardinal_words(body)
     }
     return negative ? "negative {result}" : result
 }
@@ -234,8 +290,9 @@ def number_or_year_to_words(raw : string) : string {
     let cleaned = replace(raw, ",", "")
     return float_to_words(cleaned) if (find(cleaned, '.') >= 0)
     let negative = starts_with(cleaned, "-")
+    return "negative {cardinal_words(cleaned)}" if (negative)
+    return digits_to_words(cleaned) if (digit_count(cleaned) > MAX_DIGITS_AS_NUMBER)
     let value = digit_string_value(cleaned)
-    return "negative {number_to_words(value)}" if (negative)
     return is_year(value) ? year_to_words(value) : number_to_words(value)
 }
 
@@ -633,7 +690,7 @@ def private match_amount(c : array<int>; i : int) : int {
 }
 
 def private amount_words(raw : string) : string {
-    return find(raw, '.') >= 0 ? float_to_words(raw) : number_to_words(digit_string_value(raw))
+    return find(raw, '.') >= 0 ? float_to_words(raw) : cardinal_words(raw)
 }
 
 def private plural(unit : string; count : int64) : string => count != 1l ? "{unit}s" : unit
@@ -641,26 +698,25 @@ def private plural(unit : string; count : int64) : string => count != 1l ? "{uni
 //! "$1,200.50" -> "twelve hundred dollars and fifty cents", "$85K" -> "eighty-five thousand dollars"
 def private currency_words(unit : string; raw : string; scale : string) : string {
     if (!empty(scale)) {
-        let num = find(raw, '.') >= 0 ? float_to_words(raw) : number_to_words(digit_string_value(raw))
+        let num = find(raw, '.') >= 0 ? float_to_words(raw) : cardinal_words(raw)
         return empty(unit) ? "{num} {scale}" : "{num} {scale} {unit}s"
     }
     let dot = find(raw, '.')
     if (dot >= 0) {
-        let int_value = digit_string_value(slice(raw, 0, dot))
+        let int_text = slice(raw, 0, dot)
         var cents_text = slice(raw, dot + 1)
         cents_text = length(cents_text) >= 2 ? slice(cents_text, 0, 2) : "{cents_text}0"
         let cents = digit_string_value(cents_text)
-        let int_words = number_to_words(int_value)
-        var result = empty(unit) ? int_words : "{int_words} {plural(unit, int_value)}"
+        let int_words = cardinal_words(int_text)
+        var result = empty(unit) ? int_words : "{int_words} {plural(unit, digit_string_value(int_text))}"
         if (cents != 0l) {
             let minor = unit == "pound" ? (cents == 1l ? "penny" : "pence") : plural("cent", cents)
             result = "{result} and {number_to_words(cents)} {minor}"
         }
         return result
     }
-    let value = digit_string_value(raw)
-    let words = number_to_words(value)
-    return empty(unit) ? words : "{words} {plural(unit, value)}"
+    let words = cardinal_words(raw)
+    return empty(unit) ? words : "{words} {plural(unit, digit_string_value(raw))}"
 }
 
 //! `([$€£¥₹₩₿])\s*([\d,]+(?:\.\d+)?)\s*([KMBT])?(?![a-zA-Z\d])` -> the amount in words
@@ -708,7 +764,7 @@ def private pass_percent(c : array<int>) : array<int> {
             let a = match_amount(c, s)
             if (a > 0 && cp_at(c, spaces_end(c, a)) == '%') {
                 let raw = replace(cpts_str(c, s, a), ",", "")
-                let words = find(raw, '.') >= 0 ? float_literal_words(raw) : number_to_words(digit_string_value(raw))
+                let words = find(raw, '.') >= 0 ? float_literal_words(raw) : cardinal_words(raw)
                 emit(out, neg ? "negative {words} percent" : "{words} percent")
                 i = spaces_end(c, a) + 1
                 continue
@@ -844,7 +900,16 @@ def private pass_versions(c : array<int>) : array<int> {
 
 def private is_unit_char(cp : int) : bool => is_ascii_alpha(cp) || cp == 176 || cp == 181
 
-//! `(\d+(?:\.\d+)?)\s*(km|kg|...|°C|ms|µs)\b` -> "five gigabytes", "twenty-five degrees Celsius"
+//! exactly one of something is singular; a fraction of one is not ("1.5 cm" reads centimeters)
+def private is_exactly_one(raw : string) : bool {
+    let dot = find(raw, '.')
+    return digit_string_value(raw) == 1l if (dot < 0)
+    return false if (digit_string_value(slice(raw, 0, dot)) != 1l)
+    return digit_string_value(slice(raw, dot + 1)) == 0l
+}
+
+//! `(\d+(?:\.\d+)?)\s*(km|kg|...|°C|ms|µs)\b` -> "five gigabytes", "twenty-five degrees Celsius";
+//! exactly one reads the singular ("1 cm" -> "one centimeter")
 def private pass_units(c : array<int>) : array<int> {
     var out : array<int>
     let n = length(c)
@@ -861,9 +926,10 @@ def private pass_units(c : array<int>) : array<int> {
                 u++
             }
             if (u > s && !is_word(cp_at(c, u))) {
-                let expansion = UNITS?[lower_str(c, s, u)] ?? ""
-                if (!empty(expansion)) {
-                    emit(out, "{float_literal_words(cpts_str(c, i, a))} {expansion}")
+                let words = UNITS?[lower_str(c, s, u)] ?? UnitWords()
+                if (!empty(words.many)) {
+                    let raw = cpts_str(c, i, a)
+                    emit(out, "{float_literal_words(raw)} {is_exactly_one(raw) ? words.one : words.many}")
                     i = u
                     continue
                 }

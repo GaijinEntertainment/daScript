@@ -108,7 +108,7 @@ def private put_u32(var b : array<uint8>; v : uint) {
 }
 
 def private put_tag(var b : array<uint8>; tag : string) {
-    b |> reserve(length(b) + length(tag))
+    b |> reserve(long_length(b) + long_length(tag))
     for (c in tag) {
         b |> push(uint8(c))
     }
@@ -118,10 +118,10 @@ def private put_tag(var b : array<uint8>; tag : string) {
 //! player and the OpenAI speech clients expect; samples clamp to [-1, 1].
 def wav_pcm16_bytes(samples : array<float>; sample_rate : int) : array<uint8> {
     var b : array<uint8>
-    let data_size = uint(length(samples)) * 2u
-    b |> reserve(44 + int(data_size))
+    let data_size = long_length(samples) * 2l   // the buffer is 64-bit; the RIFF header fields are the format's own 32 bits
+    b |> reserve(44l + data_size)
     put_tag(b, "RIFF")
-    put_u32(b, 36u + data_size)
+    put_u32(b, uint(36l + data_size))
     put_tag(b, "WAVE")
     put_tag(b, "fmt ")
     put_u32(b, 16u)
@@ -132,7 +132,7 @@ def wav_pcm16_bytes(samples : array<float>; sample_rate : int) : array<uint8> {
     put_u16(b, 2)
     put_u16(b, 16)
     put_tag(b, "data")
-    put_u32(b, data_size)
+    put_u32(b, uint(data_size))
     for (v in samples) {
         put_u16(b, roundi(clamp(v, -1.0, 1.0) * 32767.0))
     }
@@ -152,7 +152,7 @@ def write_wav_pcm16(path : string; samples : array<float>; sample_rate : int) : 
 //! Mono f32 PCM as raw 16-bit little-endian samples - the `pcm` response format.
 def pcm16_bytes(samples : array<float>) : array<uint8> {
     var b : array<uint8>
-    b |> reserve(length(samples) * 2)
+    b |> reserve(long_length(samples) * 2l)
     for (v in samples) {
         put_u16(b, roundi(clamp(v, -1.0, 1.0) * 32767.0))
     }

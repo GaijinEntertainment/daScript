@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_kokoro
+require dasllama/dasllama_unicode   // cpt_to_utf8: building a phoneme the vocabulary lacks
 require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_math   // setup_dasllama_jobque_
@@ -14,11 +15,13 @@ require math
 require _tts_parity
 require _model_tier
 
-// The Kokoro family. Model-gated (`kokoro-82m.gguf` + `tts_oracle/kokoro/` under models_dir(),
-// both minted by performance/build_tts_data.das through harness/convert_kokoro.py and
-// harness/kokoro_oracle.py): the token rule against the reference pipeline, the parity rail of
-// `_tts_parity.das` against the PyTorch reference with captured noise, and a facade smoke cell
-// that speaks one sentence through the front end's own inventory.
+// The Kokoro family. Model-free: the token rule and the style-row rule over a hand-built
+// vocabulary, including the drop of a symbol the vocabulary does not carry. Model-gated
+// (`kokoro-82m.gguf` + `tts_oracle/kokoro/` under models_dir(), both minted by
+// performance/build_tts_data.das through harness/convert_kokoro.py and harness/kokoro_oracle.py):
+// the token rule against the reference pipeline, the parity rail of `_tts_parity.das` against
+// the PyTorch reference with captured noise, and a facade smoke cell that speaks one sentence
+// through the front end's own inventory.
 
 def private gguf_path() : string {
     return path_join(models_dir(), "kokoro-82m.gguf")
@@ -35,6 +38,38 @@ def private kokoro_ids_of(ps : string) : array<int> {
 }
 
 [test]
+def test_kokoro_symbols(t : T?) {
+    t |> run("the vocabulary maps in order and drops what it does not carry") @(t : T?) {
+        var inscope fam = KokoroFamily()
+        fam.sym['a'] = 5
+        fam.sym['b'] = 7
+        fam.sym[' '] = 16
+        var inscope known <- kokoro_token_ids(fam, "a b")
+        t |> equal(length(known), 5, "a pad on each side of three known symbols")
+        t |> equal(known[0], 0)
+        t |> equal(known[1], 5)
+        t |> equal(known[2], 16)
+        t |> equal(known[3], 7)
+        t |> equal(known[4], 0)
+        var inscope withOov <- kokoro_token_ids(fam, "a{cpt_to_utf8(690)} b")
+        var same = length(withOov) == length(known)
+        if (same) {
+            for (x, y in known, withOov) {
+                same = same && x == y
+            }
+        }
+        t |> success(same, "an unknown symbol leaves no token behind")
+        var inscope none <- kokoro_token_ids(fam, "zzz")
+        t |> equal(length(none), 2, "nothing known: the two pads alone")
+    }
+    t |> run("the style row is the phoneme count less one, capped at the last row") @(t : T?) {
+        t |> equal(kokoro_style_row("abc", 510), 2)
+        t |> equal(kokoro_style_row("", 510), 0, "an empty string clamps up to row zero")
+        t |> equal(kokoro_style_row("abcdef", 3), 2, "a long string clamps down to the last row")
+    }
+}
+
+[test]
 def test_kokoro_oracle(t : T?) {
     t |> run("against the PyTorch reference, captured noise") @(t : T?) {
         if (!stat(gguf_path()).is_valid) {
@@ -48,8 +83,6 @@ def test_kokoro_oracle(t : T?) {
         t |> equal(length(ids), 14, "two pads around twelve known symbols")
         t |> equal(ids[0], 0)
         t |> equal(ids[length(ids) - 1], 0)
-        t |> equal(kokoro_style_row("abc", 510), 2)
-        t |> equal(kokoro_style_row("", 510), 0)
         tts_parity(t, TtsParityRig(family = "kokoro", gguf = gguf_path(), oracle_dir = oracle_dir(), ids = @@kokoro_ids_of))
     }
 }

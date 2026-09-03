@@ -153,7 +153,7 @@ def main():
     w = gguf.GGUFWriter(path, ARCH)
     w.add_name("Kokoro-82M v1.0")
     w.add_string("kokoro.revision", kg.KOKORO_REVISION)
-    w.add_string("kokoro.source", "hexgrad/Kokoro-82M kokoro-v1_0.pth + voices (Apache-2.0)")
+    w.add_string("kokoro.source", "hexgrad/Kokoro-82M kokoro-v1_0.pth + voices")
     w.add_uint32("styletts2.sample_rate", 24000)
     w.add_uint32("styletts2.n_symbols", int(cfg["n_token"]))
     w.add_uint32("styletts2.style_dim", int(style_dim))

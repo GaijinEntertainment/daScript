@@ -147,6 +147,7 @@ def private read_f32_tensor(b : array<uint8>; var o : int64&; var dst : array<fl
         n *= rd_i32(b, o)
         o += 4l
     }
+    dst |> reserve(n)
     dst |> resize(n)
     unsafe {
         memcpy(addr(dst[0]), addr(b[o]), n * 4)
@@ -177,9 +178,10 @@ def load_g2p(path : string) : G2pModel {
         panic("dasLLAMA tts: cannot open g2p data '{path}'")
     }
     fmap(f) $(var b : array<uint8>#) {
-        g.data |> resize(length(b))
+        g.data |> reserve(long_length(b))
+        g.data |> resize(long_length(b))
         unsafe {
-            memcpy(addr(g.data[0]), addr(b[0]), length(b))
+            memcpy(addr(g.data[0]), addr(b[0]), long_length(b))
         }
     }
     fclose(f)
@@ -653,9 +655,12 @@ def private lookup(g : G2pModel; word_in : string; tag : string; stress : float;
     if (has_ctx) {
         let wl = lower_word(word)
         var hit = ""
-        HETERONYM_NEXT |> get(wl) $(coll) {
-            coll |> get(ctx.next_text) $(cps) {
-                hit = cps
+        // every collocation names a NOUN reading, so a verb tag out-ranks the whole table
+        if (!starts_with(tag, "VB")) {
+            HETERONYM_NEXT |> get(wl) $(coll) {
+                coll |> get(ctx.next_text) $(cps) {
+                    hit = cps
+                }
             }
         }
         return some_ps(apply_stress(hit, stress), 4) if (!empty(hit))
@@ -927,8 +932,13 @@ def private get_number(g : G2pModel; word_in : string) : PsResult {
     }
     let digits = replace(word, ",", "")
     return none_ps() if (!is_digits(digits))
-    let value = int64(to_int(digits))
-    let spoken = key_exists(ORDINAL_SUFFIXES, suffix) ? ordinal_words(value) : number_to_words(value)
+    // the normalizer's 64-bit reader, never to_int, which answers 0 past 2^31
+    let over_wide = digit_count(digits) > MAX_DIGITS_AS_NUMBER
+    let value = digit_string_value(digits)
+    var spoken = digits_to_words(digits)
+    if (!over_wide) {
+        spoken = key_exists(ORDINAL_SUFFIXES, suffix) ? ordinal_words(value) : number_to_words(value)
+    }
     var inscope words <- split_by_chars(replace(spoken, "-", " "), " ")
     for (w in words) {
         continue if (empty(w))
@@ -989,6 +999,7 @@ def private sigmoid(x : float) : float => 1.0 / (1.0 + exp(-x))
 //! one GRU step: h' from the input row x and the previous hidden h
 def private gru_cell(x : array<float>; var h : array<float>; w_ih, w_hh, b_ih, b_hh : array<float>; hidden, emb : int; var scratch : array<float>) {
     let g3 = hidden * 3
+    scratch |> ensure_capacity(g3 * 2)   // reused across every GRU step: amortized, never per-call exact
     scratch |> resize(g3 * 2)
     for (r in range(g3)) {
         var acc_i = b_ih[r]
@@ -1049,8 +1060,10 @@ def arpabet_to_misaki(phones : array<string>) : string {
 //! spell an unknown lowercase word with the GRU: encoder over the letters, greedy decoder
 def g2p_predict(g : G2pModel; word : string) : array<string> {
     var inscope h : array<float>
+    h |> reserve(g.hidden)
     h |> resize(g.hidden)
     var inscope x : array<float>
+    x |> reserve(g.emb)
     x |> resize(g.emb)
     var inscope scratch : array<float>
     var inscope ids : array<int>

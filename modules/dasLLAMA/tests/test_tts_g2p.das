@@ -12,9 +12,10 @@ require _model_tier   // models_dir(): tts_g2p.bin and tts_postag.bin live in th
 
 // TTS grapheme-to-phoneme against the 200-sentence corpus: phoneme-identical with the reference
 // front end (arm E of the fidelity experiment, fed the same normalized text), the heteronym
-// gate (both annotated readings present), the fallback chain, stress helpers, and the
-// load-time budget. Model-gated on tts_g2p.bin + tts_postag.bin (harness/build_g2p_data.py,
-// harness/train_postag.py).
+// gate (both annotated readings present), the function-word and glued-piece arms of the
+// lexicon, the number reader, the fallback chain, stress helpers, and the load-time budget.
+// Model-gated on tts_g2p.bin + tts_postag.bin (harness/build_g2p_data.py,
+// harness/train_postag.py); the missing-file panic is model-free.
 
 def private g2p_path() : string => path_join(models_dir(), "tts_g2p.bin")
 def private tagger_path() : string => path_join(models_dir(), "tts_postag.bin")
@@ -104,6 +105,114 @@ def test_corpus_phonemes(t : T?) {
 let private BEYOND_REFERENCE <- { "ht001", "ht003", "ht010", "ht017", "ht024", "ht038",
     "lj024", "lj027", "lj037", "ov000", "ov001", "ov003", "ov006", "ov009", "ov011", "ov012", "ov015", "ov016",
     "ov017", "ov018", "ov019", "ov020", "ov021", "ov022", "ov025", "ov027", "ov028" }
+
+[test, arch(at = "../ARCHITECTURE_TTS.md#tts-heteronym-context")]
+def test_heteronym_context(t : T?) {
+    t |> run("a verb tag out-ranks the collocation table") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        // "lead out" is in the collocation table as the metal; tagged VB it is the verb
+        t |> equal(strip(g2p_phonemize(g, tg, "The pipes lead out to the street.")), "ðə pˈIps lˈid ˈWt tə ðə stɹˈit.")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "Get the lead out.")), "ɡˌɛt ðə lˈɛd ˈWt.", "the noun reading survives")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "They found lead pipes in the wall.")), "ðˌA fˈWnd lˈɛd pˈIps ɪn ðə wˈɔl.")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "The lead singer sang.")), "ðə lˈid sˈɪŋəɹ sˈæŋ.")   // nolint:STYLE039
+    }
+}
+
+[test]
+def test_number_reader(t : T?) {
+    t |> run("a number reads all its digits, past 2^31 too") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        // to_int answers 0 past 2^31, so the reader that used it said "zero" out loud
+        t |> equal(strip(g2p_phonemize(g, tg, "3000000000")), strip(g2p_phonemize(g, tg, "three billion")))
+        t |> equal(strip(g2p_phonemize(g, tg, "3000000000th")), "θɹˈi bˈɪljənθ", "the ordinal suffix too")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "21st")), "twˈɛnti fˈɜɹst")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "1990s")), "wˈʌn θˈWzᵊnd nˈIn hˈʌndɹəd nˈIndiz", "the -s suffix rides the joined reading")   // nolint:STYLE039
+        // past the int64 accumulator's width the run reads digit by digit
+        let wide = strip(g2p_phonemize(g, tg, "12345678901234567890"))
+        t |> equal(wide, "wˈʌn tˈu θɹˈi fˈɔɹ fˈIv sˈɪks sˈɛvən ˈAt nˈIn zˈɪɹO wˈʌn tˈu θɹˈi fˈɔɹ fˈIv sˈɪks sˈɛvən ˈAt nˈIn zˈɪɹO")   // nolint:STYLE039
+    }
+}
+
+[test]
+def test_function_words(t : T?) {
+    t |> run("the arms that read what follows") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        t |> equal(strip(g2p_phonemize(g, tg, "A dog barked.")), "ɐ dˈɔɡ bˈɑɹkt.")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "An apple a day.")), "ɐn ˈæpᵊl ɐ dˈA.")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "I am here.")), "ˌI ɐm hˈɪɹ.")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "in the box")), "ɪn ðə bˈɑks")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "the end")), "ði ˈɛnd", "a vowel follows: the long form")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "to run")), "tə ɹˈʌn")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "to open")), "tʊ ˈOpᵊn", "a vowel follows: the long form")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "He used to run.")), "hˌi jˈust tə ɹˈʌn.", "\"used to\" is the VBD reading")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "He used a hammer.")), "hˌi jˈuzd ɐ hˈæməɹ.")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "Rangers vs. Kings")), "ɹˈAnʤəɹz vˈɜɹsəs kˈɪŋz")   // nolint:STYLE039
+    }
+    t |> run("the symbols that speak") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        t |> equal(strip(g2p_phonemize(g, tg, "50% of it")), "fˈɪfti pəɹsˈɛnt ʌv ɪt")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "R&D and A+B and x@y")), "ˈɑɹ ænd dˈi ænd ˈA plˈʌs bˈi ænd ˈɛks æt wˈI")   // nolint:STYLE039
+    }
+    t |> run("dotted acronyms and names spell out") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        t |> equal(strip(g2p_phonemize(g, tg, "The U.S. way.")), "ðə jˌuˈɛs wˈA.")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "a.m.")), "ˌAˈɛm")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "IBM and NASA")), "ˌIbˌiˈɛm ænd nˈæsə", "an acronym letter by letter, a pronounceable one as a word")   // nolint:STYLE039
+    }
+}
+
+[test]
+def test_pieces_and_stems(t : T?) {
+    t |> run("the splitter's alternatives") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        t |> equal(strip(g2p_phonemize(g, tg, "twenty-one")), "twˌɛntiwˈʌn", "the dash piece goes silent, the group merges")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "MacDonald and O'Brien")), "məkdˈɑnəld ænd ObɹˈIɪn", "a capital before Capital+lower, and an inner apostrophe")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "camelCase iPhone")), "kˈæmᵊlkˌAs ˈIfˌOn", "the camelCase piece")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "wifi/lan")), "wˈIfilˈæn", "the slash is junk between two known pieces")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "'cause")), "kˈʌz", "leading apostrophes open a piece")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "back2back")), "bˈæktəbˈæk", "a 2 between letters is the \"to\" alias")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "The dam — it broke.")), "ðə dˈæm — ɪt bɹˈOk.", "the em dash speaks itself")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "the dogs' bowls")), "ðə dˈɔɡz bˈOlz", "a plural possessive reads the singular possessive")   // nolint:STYLE039
+    }
+    t |> run("inflections a lexicon entry does not carry") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        t |> equal(strip(g2p_phonemize(g, tg, "podcast")), "pˈɑdkˌæst")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "podcasts")), "pˈɑdkˌæsts", "-s after a voiceless stop")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "podcasting")), "pˈɑdkˌæstɪŋ", "-ing on the bare stem")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "unfriends")), "ˌʌnfɹˈɛndz", "-s after a voiced stop")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "unfriended")), "ˌʌnfɹˈɛndᵻd", "-ed after d")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "vlogging")), "vlˈɑɡɪŋ", "a doubled consonant before -ing drops back to the stem")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "zymurgies")), "zˈImˌɜɹʤiz", "-ies reads the -y stem")   // nolint:STYLE039
+    }
+}
+
+[test]
+def test_missing_pack(t : T?) {
+    t |> run("a missing pack panics by name") @(t : T?) {
+        var refused = false
+        try {
+            var g <- load_g2p(path_join(models_dir(), "no-such-tts_g2p.bin"))
+            delete g
+        } recover {
+            refused = true
+        }
+        t |> success(refused, "loading a missing g2p pack panics rather than phonemizing from zeros")
+    }
+}
 
 [test]
 def test_pieces(t : T?) {

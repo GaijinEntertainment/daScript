@@ -3,11 +3,14 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_textnorm
+require dasllama/dasllama_unicode
+require strings
 require _tts_corpus
 
 // TTS text normalization: the number/ordinal/year/decimal readers, the twelve upstream
-// normalizer defects as failing-first cases, and the 200-sentence corpus against the
-// reference normalizer's output (rows the fixes change carry their own expectation).
+// normalizer defects as failing-first cases, the codepoint codec every pass counts through,
+// and the 200-sentence corpus against the reference normalizer's output (rows the fixes change
+// carry their own expectation).
 
 [test]
 def test_number_words(t : T?) {
@@ -162,6 +165,83 @@ def test_upstream_defects_fixed(t : T?) {
     t |> run("a digit run glued to letters is left alone") @(t : T?) {
         t |> equal(normalize_text("abc123 def"), "abc123 def")
         t |> equal(normalize_text("IPv6 and mp3"), "IPv6 and mp3")
+    }
+}
+
+[test]
+def test_number_width_and_units(t : T?) {
+    t |> run("a digit run past the accumulator's width reads digit by digit") @(t : T?) {
+        t |> equal(normalize_text("Call 12345678901234567890 now."),
+            "Call one two three four five six seven eight nine zero one two three four five six seven eight nine zero now.")
+        t |> equal(digit_count("12345678901234567890"), 20)
+        t |> equal(normalize_text("Account 123456789012345678 is open."),
+            "Account one hundred twenty-three quadrillion four hundred fifty-six trillion seven hundred eighty-nine billion twelve million three hundred forty-five thousand six hundred seventy-eight is open.",
+            "eighteen digits still read as a cardinal")
+        t |> equal(digits_to_words("407"), "four zero seven")
+        t |> equal(digit_string_value("1,024"), 1024l)
+        t |> equal(digit_string_value("3000000000"), 3000000000l, "past 2^31, where to_int answers zero")
+    }
+    t |> run("exactly one of a unit is singular") @(t : T?) {
+        t |> equal(normalize_text("A 1 cm gap."), "A one centimeter gap.")
+        t |> equal(normalize_text("A 1.5 cm gap."), "A one point five centimeters gap.")
+        t |> equal(normalize_text("It weighs 1 kg and runs 1 km."), "It weighs one kilogram and runs one kilometer.")
+        t |> equal(normalize_text("A 1 ft board and a 6 ft fence."), "A one foot board and a six feet fence.")
+        t |> equal(normalize_text("At 1 Hz, then 60 Hz."), "At one hertz, then sixty hertz.")
+        t |> equal(normalize_text("Chilled to 1°C, boiled at 100°C."), "Chilled to one degree Celsius, boiled at one hundred degrees Celsius.")   // nolint:STYLE039
+        t |> equal(normalize_text("Idling at 1 rpm."), "Idling at one revolution per minute.")
+        t |> equal(normalize_text("A 1 mW laser and a 5 mW one."), "A one megawatt laser and a five megawatts one.",
+            "mw stays megawatts: the key is lowercased, and a milliwatt is not what the table carries")
+    }
+}
+
+[test]
+def test_normalizer_arms(t : T?) {
+    t |> run("a www address spells out without a scheme") @(t : T?) {
+        // the arm prepends "www dot " and then spells the whole thing, so the "dot" it added
+        // spells too - which is what the reference normalizer says
+        t |> equal(normalize_text("Go to www.abc.com now."), "Go to w w w d o t a b c dot c o m now.")
+        t |> equal(normalize_text("Try http://a.co/x?y=1&z"), "Try a dot c o slash x question mark y equals one and z")
+    }
+    t |> run("the ordinal reader's edges") @(t : T?) {
+        t |> equal(ordinal_words(11l), "eleventh")
+        t |> equal(ordinal_words(13l), "thirteenth")
+        t |> equal(ordinal_words(40l), "fortieth")
+        t |> equal(ordinal_words(1000000l), "one millionth")
+        t |> equal(normalize_text("the 1000000th visitor"), "the one millionth visitor")
+    }
+    t |> run("a twelve-hour clock wraps past noon") @(t : T?) {
+        t |> equal(normalize_text("It ended at 13:45 p.m."), "It ended at one forty-five p m.")
+        t |> equal(normalize_text("It ended at 13:45."), "It ended at thirteen forty-five.", "no meridiem, no wrap")
+        t |> equal(normalize_text("Set for 12:00 pm."), "Set for twelve p m.")
+    }
+}
+
+[test]
+def test_codepoint_codec(t : T?) {
+    t |> run("a malformed lead passes through as its own byte") @(t : T?) {
+        var inscope truncated <- utf8_to_cpts("a{cpt_to_utf8(195)}")   // 0xC3 with nothing after it
+        t |> equal(length(truncated), 2)
+        t |> equal(truncated[0], 'a')
+        t |> equal(truncated[1], 195, "the lead byte itself, not its five payload bits")
+        var inscope stray <- utf8_to_cpts(string([uint8(224), uint8('A')]))   // a three-byte lead, then 'A'
+        t |> equal(length(stray), 2)
+        t |> equal(stray[0], 224)
+        t |> equal(stray[1], 'A', "the byte after a malformed lead is still decoded")
+    }
+    t |> run("well-formed sequences still round-trip") @(t : T?) {
+        for (cp in ['a', 233, 8212, 128512]) {   // ascii, latin-1, em dash, an astral emoji
+            var inscope back <- utf8_to_cpts(cpt_to_utf8(cp))
+            t |> equal(length(back), 1, "one codepoint for {cp}")
+            t |> equal(back[0], cp)
+        }
+    }
+    t |> run("the encoder clamps outside the unicode range") @(t : T?) {
+        let replacement = cpt_to_utf8(65533)   // U+FFFD
+        t |> equal(cpts_to_utf8([-1]), replacement, "a negative codepoint")
+        t |> equal(cpts_to_utf8([1114112]), replacement, "past U+10FFFF")
+        t |> equal(cpts_to_utf8([1114111]), cpt_to_utf8(1114111), "U+10FFFF itself is in range")
+        t |> equal(cpts_to_utf8([128512]), cpt_to_utf8(128512), "the astral arm is untouched")
+        t |> equal(length(cpts_to_utf8([128512])), 4, "four bytes for an astral codepoint")
     }
 }
 
