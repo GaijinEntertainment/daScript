@@ -108,12 +108,17 @@ def private voice_lang(m : TtsModel; vname : string) : string {
 }
 
 def caps(m : TtsModel) : TtsCaps {
-    //! What the loaded model offers: the canonical voice names the front end can drive (a voice
-    //! whose language it does not phonemize is left out; a family's aliases resolve at
-    //! synthesis), the PCM sample rate, the languages, and whether it clones a voice from audio.
+    //! What the loaded model offers: the canonical voice names the front end can drive, each with
+    //! its language (a voice whose language it does not phonemize is left out; a family's aliases
+    //! resolve at synthesis), the PCM sample rate, the languages, and whether it clones a voice.
     var c = TtsCaps(sample_rate = m.model.sample_rate, cloning = false)
     c.langs <- front_end_langs(m)
-    c.voices <- [for (v in m.model.voice_names); v; where find_index(c.langs, voice_lang(m, v)) >= 0]
+    for (v in m.model.voice_names) {
+        let lang = voice_lang(m, v)
+        continue if (find_index(c.langs, lang) < 0)
+        c.voices |> push(v)
+        c.voice_langs |> push(lang)
+    }
     return <- c
 }
 

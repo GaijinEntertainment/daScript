@@ -13,9 +13,10 @@ struct TtsCaps {
     //! What a loaded TTS model can do: its voices (canonical names; aliases resolve in the
     //! family file), the PCM rate it emits, the languages it speaks, whether it clones a voice
     //! from audio (none of the first families do).
-    voices : array<string>   //! canonical voice names, in the model's order
-    sample_rate : int        //! PCM samples per second the model emits
-    langs : array<string>    //! the languages it speaks, as codes
+    voices : array<string>        //! canonical voice names, in the model's order
+    voice_langs : array<string>   //! the language each voice speaks, by index into ``voices``
+    sample_rate : int             //! PCM samples per second the model emits
+    langs : array<string>         //! the languages it speaks, as codes
     cloning : bool           //! whether a voice can be cloned from audio
 }
 

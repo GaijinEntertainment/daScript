@@ -425,6 +425,7 @@ def private check_phonemes(t : T?; base_url : string) {
         t |> success(js != null, "the answer parses as JSON: {err}")
         if (js != null) {
             t |> equal(js?["normalized"] ?? "", want_norm, "the document carries the normalized text")
+            t |> equal(js?["lang"] ?? "", "en-us", "no voice named: the model's first language")
             var inscope texts <- json_row_field(js?["chunks"], "text")
             var inscope phons <- json_row_field(js?["chunks"], "phonemes")
             t |> equal(length(texts), length(want), "one row per chunk the synthesis would take")

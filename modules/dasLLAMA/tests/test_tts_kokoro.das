@@ -112,6 +112,9 @@ def test_kokoro_facade(t : T?) {
             }
             t |> success(english, "every listed voice is English")
             t |> equal(british, 8, "the British packs")
+            t |> equal(length(c.voice_langs), length(c.voices), "one language per listed voice")
+            let emma = find_index(c.voices, "bf_emma")
+            t |> success(emma >= 0 && c.voice_langs[emma] == "en-gb", "bf_emma is listed as British")
             var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "af_heart")
             t |> equal(audio.sample_rate, 24000)
             t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")

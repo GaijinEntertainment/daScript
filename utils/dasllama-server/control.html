@@ -1826,7 +1826,7 @@ async function loadPhonemes(input) {
         const r = await fetch("/v1/audio/phonemes", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ input: input }),
+            body: JSON.stringify({ input: input, voice: speechVoice() }),
         });
         if (!r.ok) { $("s-phon").style.display = "none"; return; }
         renderPhonemes(await r.json());

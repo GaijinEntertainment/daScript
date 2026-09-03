@@ -4078,7 +4078,7 @@ let TTS_QUEUE_LIMIT = 16
 let TTS_WRITER_KEEPALIVE_MS = 600000
 let TTS_MAX_INPUT_CHARS = 4096
 let SPEECH_FIELDS : table<string> <- { "model", "input", "voice", "speed", "response_format", "instructions", "stream_format" }
-let PHONEMES_FIELDS : table<string> <- { "input" }
+let PHONEMES_FIELDS : table<string> <- { "input", "voice" }
 
 def private emit_tts_event(events : Channel?; event : TtsEvent) {
     events |> push_clone(event)
@@ -4109,16 +4109,26 @@ def private process_tts_job(var model : TtsModel; job : TtsJob; events : Channel
 // The front end alone, on the same worker because the packs live with the model: the spoken form
 // the normalizer produces, then one row per chunk the synthesis would take, each row carrying that
 // chunk's text and the 45-symbol phoneme string the g2p pass reads out of it.
+// the dialect a phonemes request reads in: the named voice's language, else the model's first -
+// an alias or a voice the model lacks phonemizes rather than fails, the speech route being the
+// one that validates voices
+def private tts_phonemes_lang(model : TtsModel; voice : string) : string {
+    var inscope c <- caps(model)
+    let vi = find_index(c.voices, voice)
+    return vi >= 0 ? c.voice_langs[vi] : c.langs[0]
+}
+
 def private process_tts_phonemes(model : TtsModel; job : TtsJob; events : Channel?) {
     let norm = tts_normalize(job.text)
+    let lang = tts_phonemes_lang(model, job.voice)
     var inscope chunks <- tts_chunks(norm)
     let doc = build_string() $(w) {
-        w |> write("\{\"normalized\":{json_str(norm)},\"chunks\":[")
+        w |> write("\{\"normalized\":{json_str(norm)},\"lang\":{json_str(lang)},\"chunks\":[")
         for (i in range(length(chunks))) {
             if (i > 0) {
                 w |> write(",")
             }
-            w |> write("\{\"text\":{json_str(chunks[i])},\"phonemes\":{json_str(tts_phonemize(model, chunks[i]))}}")
+            w |> write("\{\"text\":{json_str(chunks[i])},\"phonemes\":{json_str(tts_phonemize(model, chunks[i], lang))}}")
         }
         w |> write("]}")
     }
@@ -4235,9 +4245,10 @@ def private enqueue_tts_job(srv : WebSocketServer; var writer : HttpResponseWrit
     to_log(LOG_INFO, "[req {job.id}] tts: {note} (pending={g_tts_pending})\n")
 }
 
-// POST /v1/audio/phonemes: {"input"} -> {"normalized", "chunks":[{"text","phonemes"}]}. The front
-// end's own view of what a synthesis of the same text would say, answered by the worker that owns
-// the packs; the control page draws it under the studio's waveform.
+// POST /v1/audio/phonemes: {"input", "voice"?} -> {"normalized", "lang", "chunks":[{"text","phonemes"}]}.
+// The front end's own view of what a synthesis of the same text in that voice would say, in the
+// voice's dialect, answered by the worker that owns the packs; the control page draws it under
+// the studio's waveform.
 def private queue_phonemes(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
     if (tts_route_unavailable(srv, writer)) {
         return
@@ -4254,7 +4265,7 @@ def private queue_phonemes(srv : WebSocketServer; var req : HttpRequest?; var wr
     if (empty(input)) {
         return
     }
-    enqueue_tts_job(srv, writer, TtsJob(kind = TtsJobKind.phonemes, id = next_id(), text = input),
+    enqueue_tts_job(srv, writer, TtsJob(kind = TtsJobKind.phonemes, id = next_id(), text = input, voice = js?["voice"] ?? ""),
         "phonemes queued ({length(input)} chars)")
 }
 

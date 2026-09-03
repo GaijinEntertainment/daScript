@@ -117,7 +117,7 @@ test('speak asks the phonemes route for the same text and draws the document und
         await expect(rows.nth(i).locator('.t')).toHaveText(doc.chunks[i].text);
         await expect(rows.nth(i).locator('.p')).toHaveText(doc.chunks[i].phonemes);
     }
-    expect(lastJson(posts.filter(p => p.path === PHONEMES))).toEqual({ input: 'speak and phonemize this' });
+    expect(lastJson(posts.filter(p => p.path === PHONEMES))).toEqual({ input: 'speak and phonemize this', voice: fx('stats_tts').tts.voices[0] });
 });
 
 test('a refused phonemes call leaves the panel hidden and does not disturb the audio', async ({ page }) => {

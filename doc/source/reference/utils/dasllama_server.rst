@@ -149,7 +149,7 @@ Endpoints
      - Text→speech (needs ``--tts``); ``response_format`` ``wav`` (default) or ``pcm``
    * - ``POST``
      - ``/v1/audio/phonemes``
-     - ``{"input"}`` → the normalized text and, per chunk a synthesis would take, its phoneme string (needs ``--tts``)
+     - ``{"input", "voice"?}`` → the normalized text, the dialect the voice speaks (``lang``) and, per chunk a synthesis would take, its phoneme string in that dialect (needs ``--tts``)
    * - ``POST``
      - ``/v1/models/activate``
      - ``{"model": name}`` — make ``name`` the default + stepped slot and move the GPU tier to it now (loopback-only; 409 while work is live)
