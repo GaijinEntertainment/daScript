@@ -1190,3 +1190,8 @@
    reaches `panic(` from config input. Also owed: `main.das`'s `suppress_tune_for_setup` decides
    "no model configured" from argv alone (`--model` / `--config`), so a `--tts`-only start - a
    serving start that runs kernels - suppresses the tune mint.
+101. **The tagger pack on a permissive corpus.** `tts_postag.bin` trains on UD English-EWT (CC
+   BY-SA 4.0) plus spaCy-tagged Gutenberg prose; published on Hugging Face it carries the CC BY-SA
+   label (Boris, 2026-09-03). Owed: a retrain on the permissive silver prose alone, scored by the
+   rig's tagger agreement and heteronym cells against the 2422/2488 and 70/78 the mixed corpus
+   gives; if the loss is a point or less, the permissive pack replaces it and the label goes.
