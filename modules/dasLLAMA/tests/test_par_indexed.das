@@ -77,6 +77,25 @@ def indexed_storm(t : T?; rounds : int) {
 }
 
 [test]
+def test_maybe_parallel_for_bool_no_que(t : T?) {
+    t |> run("no job que - a true flag runs the bool form inline, one invoke over the whole range") @(t : T?) {
+        let before = get_disp_inline()
+        var acc : array<int>
+        acc |> resize(2)   // [invokes, elements covered]
+        var pa = unsafe(addr(acc[0]))
+        maybe_parallel_for(true, 3, 19, 8) $(rb, re) {
+            unsafe {
+                pa[0]++
+                pa[1] += re - rb
+            }
+        }
+        t |> equal(acc[0], 1, "one invoke")
+        t |> equal(acc[1], 16, "the whole range in that invoke")
+        t |> equal(get_disp_inline() - before, 1l, "counted as an inline run")
+    }
+}
+
+[test]
 def test_maybe_parallel_for_indexed(t : T?) {
     t |> run("no job que - inline as slot 0") @(t : T?) {
         single_invoke_round(t, 8, 32)

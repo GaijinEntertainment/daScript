@@ -199,12 +199,16 @@ verbatim; scales the 20 B `KQ_DEV_SSB` row) plus three eight-line width stamps, 
 `cm2_cls_ensure/set/enc` ladders, and `pf_f16_feed` admits it via `kq_sb` automatically. A
 codebook format raises the `IQLUT` axis - a gated `@workgroup` f16 table staged ahead of the
 tile loop (llama.cpp's `init_iq_shmem` form); never select codes out of a register vector per
-element inside a decode callback. The four-wide decode twin comes with the template: its loads
-pass the `DECVEC` axis as `coopmatLoadTensorDecode`'s tenth argument, so the emitter synthesizes
-the vector callback over `decode` and a format authors nothing for it. Run
-`harness/vk_gemm_probe.das -- cm2:<fmt>` with `DASLLAMA_VK_DECVEC` 1 and 0: a format whose row
-loses overrides `DECVEC = false` (iq3s, iq2s, iq2xxs today), and a hand-laid `half4` twin (a
-second `[spirv_decode]` method in that slot) is the lever for it. Gate: a device-form CPU oracle
+element inside a decode callback. The four-wide decode twin is the format's own: a second
+`[spirv_decode] def decode_v4` returning `half4` under `override DECV4 = true`, computing the
+four consecutive elements in the scalar `decode`'s operation order and sharing what they share
+(two 16-bit lanes and one scale extraction for a K-quant, one grid word and its four sign bits
+for a grid format - every kq format today authors one). A format may start on the template's
+`DECVEC` axis, the twin the emitter synthesizes over `decode`, but the synthesized twin repeats
+the scalar body four times and lost to the scalar callback on the grid formats. Run
+`harness/vk_gemm_probe.das -- cm2:<fmt>` (both twin arms in one process): a format whose
+four-wide row loses to its scalar row ships a twin that wins or turns both axes off. Gate: a
+device-form CPU oracle
 (`<fmt>f16_gemm_oracle`) and
 an l/m/s cell in `tests/test_vulkan_kernels.das`. Payoff on the 1B: iq4xs pp512 5161 -> 15334,
 k3 5174 -> 14031 (0.90x / 0.80x llama.cpp's Vulkan, from 0.30x).

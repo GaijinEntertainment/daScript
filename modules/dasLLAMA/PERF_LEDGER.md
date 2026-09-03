@@ -12,6 +12,18 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **OWED ROWS - the Vulkan cm2 prefill's board cells.** `performance/records/zen2.json` carries
+  one das/vulkan cell (Qwen3-4B Q8_0 under `DASLLAMA_COOPMAT=mm`, 2026-07-25) and no cm2 cell,
+  while the Vulkan pp arc (`plans/kernel_parity_pass.md`: the group-aware split-k, the hand-laid
+  four-wide twins, the last-layer slice, the parallel embed) made every Vulkan prefill faster -
+  the Q4_K_M 1B window 27.8 -> 22.1 ms on the `lcpp_bench --for-debug-purposes` rig,
+  stage readings only. `performance/gen_bench_records.das`'s hardware stamp refuses this box
+  while the remote-access daemon runs, so the mint waits for the owner's rig window. Owed: the
+  zen2 vulkan cell re-minted, plus a cm2 cell (the served default on the 5060 Ti) on a 1B kq
+  vehicle, both spawned by `gen_bench_records`, both walls out-of-process, direction-grade
+  against the 07-25 row; done when both rows sit in `performance/records/zen2.json` and the
+  site records are regenerated.
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

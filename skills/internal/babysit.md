@@ -84,6 +84,13 @@ cannot see it - poll that one with `gh run view <runID> --json jobs`.
    complete rerun.
 5. Push, then back into the Copilot loop.
 
+A lane whose `Test` step runs past twice its master duration (`gh run view <runID> --json jobs`
+gives per-step times; the sanitizer cells finish `Test` in about 25 minutes) is a hung test
+burning the dastest sweep's one-hour timeout plus its two-hour retry - it goes red on its own
+only three hours later. Cancel the run (`gh run cancel`), then `gh run rerun <runID> --failed`
+once it reports completed; a rerun cannot be issued while any lane is still running. A second
+hang on the same tip is real: reproduce it, `skills/internal/wsl_ci_repro.md`.
+
 ## 3. Fix, reply, resolve
 
 Fetch comments with `gh api repos/<owner>/<repo>/pulls/<PR>/comments` (id, path, line, body).
