@@ -941,3 +941,24 @@
     `@scratch` generically, but the mark is inert on a `var inscope @scratch` LOCAL (eight TTS
     findings sat on locals already carrying it) - the message should say "move it to a reused
     field", or the rule should honor a scope-lifetime local it can prove.
+
+74. **TTS quality past the surpass program's first round.** The rig on the corrected scoring
+    reads kitten-nano 3.23% / kitten-mini 2.77% / kokoro 2.73% WER against the reference
+    front end's 4.50 / 4.09 / 3.32, heteronyms 32/38 against 24, kokoro's OOV category under
+    the espeak arm's own (9.73 <= 10.90). Owed: (1) kitten-nano's OOV category sits one word
+    over the espeak arm's 8.56 (8.95) - what remains is the transcriber spelling correct
+    speech its own way (sirsha, kiva, dun leary, wynne, cerne, the American spelling of
+    "anaesthesiologists"), so the fix is a scorer that folds spelling variants of one
+    pronunciation, not more lexicon; (2) letters and acronyms (single letters, ALL-CAPS runs,
+    GHz-class alphanumerics) have no fixture category - mint sentences with expected spoken
+    forms into `tests/_tts_fixtures/g2p_corpus.json` through `harness/mint_tts_g2p_fixture.py`,
+    then measure; (3) the tagger's four heteronym misses (dove VBD, invalid NN, moped JJ, the
+    infinitive "entrance" after "to") - `harness/train_postag.py` retrained with silver prose
+    sampled around those words, or a rule where the context decides; (4) two annotation
+    spellings (object, subject with a different reduced vowel than the gold entry) stay as
+    scorer notation; (5) the year 1776 reads "one thousand seven hundred seventy-six" on every
+    arm - the pre-1900 year convention is a normalizer choice to make with a rig delta.
+
+75. **The dasllama-server web page: the TTS route and the numbers.** `utils/dasllama-server`'s
+    page does not yet show the `/v1/audio/speech` route, the three models, the q8 serving
+    default, or the receipts above; its own PR, after this arc merges.
