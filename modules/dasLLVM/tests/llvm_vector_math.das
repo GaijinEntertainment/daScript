@@ -12,9 +12,12 @@ require math
 //     a quality target. log2/log/pow are the loose ones and their bounds say so.
 //   - vs the interpreter: does the JIT agree with the rail the same program takes without -jit.
 //     That is the property the emitters exist to preserve, so it is asserted separately. For
-//     tan, exp2, log2, log and pow the bound is ZERO - the emitters reproduce vecmath bit for
-//     bit, including where vecmath is wrong. tanh/sinh/cosh cannot reach zero and say why at
-//     their cell. apply_op and apply_op_interp carry the SAME body; only [no_jit] separates them.
+//     sin, cos, tan, exp2, log2, log and pow the bound is ZERO - the emitters reproduce vecmath
+//     bit for bit, including where vecmath is wrong. tanh/sinh/cosh cannot reach zero and say why
+//     at their cell. Each worker pair - apply_op / apply_op_interp, apply_sincos /
+//     apply_sincos_interp - carries the SAME body; only [no_jit] separates the two.
+//   - NaN in, NaN out: a clamp or a conversion written with ordered compares replaces a NaN lane
+//     with a number, which no accuracy bound above can see. Asserted on both rails per emitter.
 // Arguments arrive through runtime arrays on purpose: a compile-time-constant argument is
 // const-folded by the AST and never reaches the intrinsic, so a folded test proves nothing.
 // The tight bounds need a fused a*b+c on whichever rail runs. aarch64 always fuses; a generic
@@ -182,16 +185,24 @@ def private report_rel(t : T?; what : string; r : ErrReport; relBound : float; w
 }
 
 // the JIT must agree with the rail the same program takes without -jit. Off the polynomial rail
-// the two run different algorithms by design (JIT keeps @llvm.*, interp keeps vecmath), so the
-// comparison is only meaningful on aarch64 - elsewhere it is reported as not applicable.
+// the two run different algorithms by design (JIT keeps @llvm.*, interp keeps vecmath), and
+// without -jit BOTH workers are the interpreter, so the comparison only says something where the
+// emitters actually run - everywhere else it is reported as not applicable rather than green.
+def private rail_applicable : bool {
+    return jit_enabled() && on_poly_rail()
+}
+
+def private report_div(t : T?; what : string; r : ErrReport; relBound : float; wantLanes : int) {
+    t |> equal(r.lanes, wantLanes, "{what}: lanes compared")
+    t |> success(r.maxRel <= relBound, "{what}: JIT vs interpreter max rel diff {r.maxRel} at x = {r.atRel} (bound {relBound}); max abs {r.maxAbs} at {r.at}")
+}
+
 def private report_divergence(t : T?; what : string; xs, ys : array<float4>; which : int; relBound : float; relFloor : float = 1.0e-20) {
-    if (!on_poly_rail()) {
-        t |> success(true, "{what}: rail consistency not applicable off aarch64")
+    if (!rail_applicable()) {
+        t |> success(true, "{what}: rail consistency not applicable off the jitted aarch64 rail")
         return
     }
-    let r = op_divergence(xs, ys, which, relFloor)
-    t |> equal(r.lanes, length(xs) * 4, "{what}: lanes compared")
-    t |> success(r.maxRel <= relBound, "{what}: JIT vs interpreter max rel diff {r.maxRel} at x = {r.atRel} (bound {relBound}); max abs {r.maxAbs} at {r.at}")
+    report_div(t, what, op_divergence(xs, ys, which, relFloor), relBound, length(xs) * 4)
 }
 
 // ===== sin / cos =====
@@ -252,13 +263,85 @@ def private report_abs(t : T?; what : string; r : ErrReport; absBound : float; w
     t |> success(r.maxAbs <= absBound, "{what}: max abs error {r.maxAbs} at x = {r.at} (bound {absBound})")
 }
 
+// sin and cos need their own worker pair: sincos_error above compares against libm in one pass, and
+// the rail comparison needs the two rails to run the SAME expression. dim picks the emitted vector
+// width - the emitter is width-generic, so float2 and float3 are separate emissions, not the float4
+// one truncated. Widths below 4 leave the unused lanes at zero and only the first dim are read.
+def private apply_sincos(xs : array<float4>; dim : int; wantCos : bool) : array<float4> {
+    var r : array<float4>
+    r |> reserve(length(xs))
+    for (v in xs) {
+        if (dim == 2) {
+            r |> push(float4(wantCos ? cos(float2(v.x, v.y)) : sin(float2(v.x, v.y)), 0.0, 0.0))
+        } elif (dim == 3) {
+            r |> push(float4(wantCos ? cos(float3(v.x, v.y, v.z)) : sin(float3(v.x, v.y, v.z)), 0.0))
+        } else {
+            r |> push(wantCos ? cos(v) : sin(v))
+        }
+    }
+    return <- r
+}
+
+[no_jit, never_inline]
+def private apply_sincos_interp(xs : array<float4>; dim : int; wantCos : bool) : array<float4> {
+    var r : array<float4>
+    r |> reserve(length(xs))
+    for (v in xs) {
+        if (dim == 2) {
+            r |> push(float4(wantCos ? cos(float2(v.x, v.y)) : sin(float2(v.x, v.y)), 0.0, 0.0))
+        } elif (dim == 3) {
+            r |> push(float4(wantCos ? cos(float3(v.x, v.y, v.z)) : sin(float3(v.x, v.y, v.z)), 0.0))
+        } else {
+            r |> push(wantCos ? cos(v) : sin(v))
+        }
+    }
+    return <- r
+}
+
+def private sincos_divergence(xs : array<float4>; dim : int; wantCos : bool) : ErrReport {
+    var r : ErrReport
+    let got <- apply_sincos(xs, dim, wantCos)
+    let ref <- apply_sincos_interp(xs, dim, wantCos)
+    for (g, e, x in got, ref, xs) {
+        for (l in range(dim)) {
+            track(r, g[l], e[l], x[l], 1.0e-20)
+        }
+    }
+    return r
+}
+
+def private report_sincos_divergence(t : T?; what : string; xs : array<float4>; dim : int; wantCos : bool) {
+    if (!rail_applicable()) {
+        t |> success(true, "{what}: rail consistency not applicable off the jitted aarch64 rail")
+        return
+    }
+    report_div(t, what, sincos_divergence(xs, dim, wantCos), 0.0, length(xs) * dim)
+}
+
 [test]
 def test_vector_sin_matches_libm(t : T?) {
     g_offset = 0.0
     let xs <- build_sincos_samples()
     t |> success(!jit_enabled() || is_jit_function(@@apply_op), "the op worker is jitted")
     t |> success(!jit_enabled() || !is_jit_function(@@apply_op_interp), "the reference worker stays interpreted")
+    t |> success(!jit_enabled() || is_jit_function(@@sincos_error), "the sin/cos libm worker is jitted")
     report_abs(t, "sin(float4)", sincos_error(xs, false), bound(SINCOS_ABS), length(xs) * 4)
+}
+
+// sin and cos mirror v_sincos instruction for instruction at every width the emitter serves, so the
+// two rails agree exactly - the zero bound tan carries, at float4, float3 and float2.
+[test]
+def test_vector_sin_cos_rail_consistency(t : T?) {
+    g_offset = 0.0
+    let xs <- build_sincos_samples()
+    t |> success(!jit_enabled() || is_jit_function(@@apply_sincos), "the sin/cos rail worker is jitted")
+    t |> success(!jit_enabled() || !is_jit_function(@@apply_sincos_interp), "the sin/cos reference worker stays interpreted")
+    report_sincos_divergence(t, "sin(float4)", xs, 4, false)
+    report_sincos_divergence(t, "cos(float4)", xs, 4, true)
+    report_sincos_divergence(t, "sin(float3)", xs, 3, false)
+    report_sincos_divergence(t, "cos(float3)", xs, 3, true)
+    report_sincos_divergence(t, "sin(float2)", xs, 2, false)
+    report_sincos_divergence(t, "cos(float2)", xs, 2, true)
 }
 
 [test]
@@ -416,6 +499,77 @@ def test_vector_pow_zero_exponent(t : T?) {
         t |> equal(got[0][l], 1.0, "pow(x, 0) is 1 - vecmath's y == 0 guard, lane {l}")
     }
     report_divergence(t, "pow(float4) zero exponent", xs, ys, OP_POW, 0.0)
+}
+
+// pow is exp2(log2_est(|x|) * y) and log2_est reads the exponent through a mask, so a negative base
+// loses its sign before the exponent is applied: pow(-2, 3) is +8, not libm's -8, and it is +8 on
+// every tier. The contract under test is the tiers agreeing, not the answer matching libm.
+[test]
+def test_vector_pow_negative_base(t : T?) {
+    g_offset = 0.0
+    var xs : array<float4>
+    xs |> push(float4(-2.0, -8.0, -0.5, -3.0))
+    var ys : array<float4>
+    ys |> push(float4(3.0, 1.0 / 3.0, 2.0, 2.0))
+    let got <- apply_op(xs, ys, OP_POW)
+    let ref <- apply_op_interp(xs, ys, OP_POW)
+    let mirrors = !jit_enabled() || on_poly_rail()
+    for (l in range(4)) {
+        t |> success(ref[0][l] > 0.0, "the interpreter drops the base sign, lane {l}: pow({xs[0][l]}, {ys[0][l]}) = {ref[0][l]}")
+        t |> success(!mirrors || got[0][l] == ref[0][l], "pow(negative base) agrees lane for lane, lane {l}: jit {got[0][l]}, interp {ref[0][l]}")
+    }
+    t |> equal(ref[0][0], 8.0, "pow(-2, 3) is +8 on the interpreter - log2's dropped sign")
+    t |> success(!mirrors || got[0][0] == 8.0, "pow(-2, 3) is +8 under the JIT too, got {got[0][0]}")
+    report_divergence(t, "pow(float4) negative base", xs, ys, OP_POW, 0.0)
+}
+
+// ===== NaN lanes =====
+
+// g_offset is 0.0 at every cell, so this is a runtime NaN the AST cannot fold away
+def private nan_samples : array<float4> {
+    let q = 0.0 / g_offset
+    return <- [ float4(q, 1.0, -q, -2.5),
+        float4(0.5, q, 100.0, -q)]
+}
+
+def private report_nan_lanes(t : T?; what : string; got, ref, xs : array<float4>) {
+    for (g, e, x in got, ref, xs) {
+        for (l in range(4)) {
+            t |> equal(is_nan(g[l]), is_nan(x[l]), "{what}: the JIT carries NaN at x = {x[l]}, got {g[l]}")
+            t |> equal(is_nan(e[l]), is_nan(x[l]), "{what}: the interpreter carries NaN at x = {x[l]}, got {e[l]}")
+        }
+    }
+}
+
+def private nan_lane_cell(t : T?; what : string; xs, ys : array<float4>; which : int) {
+    let got <- apply_op(xs, ys, which)
+    let ref <- apply_op_interp(xs, ys, which)
+    report_nan_lanes(t, what, got, ref, xs)
+}
+
+def private nan_lane_cell_sincos(t : T?; what : string; xs : array<float4>; wantCos : bool) {
+    let got <- apply_sincos(xs, 4, wantCos)
+    let ref <- apply_sincos_interp(xs, 4, wantCos)
+    report_nan_lanes(t, what, got, ref, xs)
+}
+
+// A clamp or a float-to-int conversion written with ORDERED compares silently replaces a NaN lane -
+// tanh's [-9,9] clamp answered 1.0 for NaN that way - and the replacement is invisible to every
+// accuracy bound above, because a bound only looks at lanes that produced a number. NaN in, NaN out
+// is asserted on both rails instead, and it holds on every target: off the polynomial rail the JIT
+// takes libm, which propagates NaN too. exp is the one member of the rail that cannot be here -
+// the interpreter answers inf for exp(NaN) while the JIT answers NaN (ARCHITECTURE.md sec.8.1).
+[test]
+def test_vector_nan_lanes(t : T?) {
+    g_offset = 0.0
+    let xs <- nan_samples()
+    let ys <- ramp(-4.0, 4.0, length(xs))
+    nan_lane_cell(t, "tanh(float4)", xs, ys, OP_TANH)
+    nan_lane_cell(t, "sinh(float4)", xs, ys, OP_SINH)
+    nan_lane_cell(t, "cosh(float4)", xs, ys, OP_COSH)
+    nan_lane_cell(t, "tan(float4)", xs, ys, OP_TAN)
+    nan_lane_cell_sincos(t, "sin(float4)", xs, false)
+    nan_lane_cell_sincos(t, "cos(float4)", xs, true)
 }
 
 // ===== tanh / sinh / cosh =====

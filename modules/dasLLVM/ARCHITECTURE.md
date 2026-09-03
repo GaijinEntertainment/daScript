@@ -201,7 +201,7 @@ float VECTOR type are emitted as inline IR by the `build_vector_*` emitters in
 `@llvm.<op>.vNf32`, which scalarizes to N libm calls on any target without a vector libm -
 Darwin-ARM and most others. Each emitter replaces that call with the SAME polynomial the
 interpreter and AOT already run (vecmath, `include/vecmath/`), written as generic vector IR
-(`fmuladd`, `trunc`, `roundeven`, `copysign`, integer masks and selects) that the backend lowers
+(`fmuladd`, `trunc`, `roundeven`, `fptosi.sat`, integer masks and selects) that the backend lowers
 to one NEON instruction apiece - so the three rails agree instead of merely being close; the
 one family that cannot mirror vecmath is sec.8.3. sin and cos mirror `v_sincos` (quadrant =
 round(x*2/pi), the two-constant Cody-Waite reduction, a degree-3-in-x^2 pair); tan mirrors
@@ -223,6 +223,21 @@ with the interpreter and AOT: measured over 200k lanes, unfused is identical and
 1.9e-6 apart. Where vecmath does fuse, fusion is load-bearing rather than optional - the sincos
 Cody-Waite reduction rounds `x - qf*KC1` into noise at |x| ~ 1e5 without it.
 
+The interpreter side of that bit-exactness is a precondition the emitters cannot enforce: it holds
+while the host compiler does not contract vecmath's POLY macros itself. clang's default
+`-ffp-contract=on` contracts only inside one source expression, so the inlined `v_add(v_mul(..))`
+pair stays two instructions; GCC's default `fast` contracts across statements and would fuse them.
+CMake pins neither flag, so on a GCC-built interpreter it is the vecmath rail that moves, not the
+emitted one.
+
+NaN carries lane for lane on this rail, and that has to be built in: a clamp or a float-to-int
+conversion written with ordered compares replaces a NaN lane with a number, and no accuracy bound
+can see the substitution because a bound only reads lanes that produced a number. So `tanh` selects
+its operand back over its `[-9,9]` clamp through `fcmp uno`, and the sincos quadrant and the tan
+octant convert through `llvm.fptosi.sat` rather than `fptosi`, whose result for NaN and for
+out-of-range input is poison. `exp` is the one member of the rail that still diverges on NaN: the
+JIT answers NaN for `exp(NaN)` where the interpreter answers inf.
+
 ### 8.2 log2 is an estimate, and its specials are not IEEE {#vector-log2-estimate}
 
 `build_vector_log2` mirrors vecmath's `v_log2_est_p5` (`dag_vecMath_common.h`): the exponent
@@ -234,7 +249,9 @@ tiers agreeing is the property that wins, and a better log2 goes into vecmath fo
 never into one rail. `math::log` is this estimate scaled by ln2 and `math::pow` is
 `exp2(log2_est(x) * y)`, so both inherit the error, pow amplified by |y|. The estimate reads
 the exponent through a mask and therefore never produces -inf or NaN: log2(0) is -127 and
-log2(-x) == log2(|x|). `tests/llvm_vector_math.das` pins the bounds and the special values.
+log2(-x) == log2(|x|). The dropped sign travels into `pow` with the estimate - the base reaches the
+exponent as `log2_est(|x|)` - so `pow(-2, 3)` is +8, not libm's -8, and it is +8 on every tier.
+`tests/llvm_vector_math.das` pins the bounds and the special values.
 
 ### 8.3 The hyperbolics have no interpreter twin {#vector-hyperbolic-divergence}
 

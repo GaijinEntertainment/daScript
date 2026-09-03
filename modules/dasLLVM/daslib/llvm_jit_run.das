@@ -37,11 +37,11 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x6cul   // aarch64 vector tan/exp2/log2/log/pow join the inline polynomial rail bit-exactly with the interpreter, sinh/cosh/tanh ride the exp one (0x6b: aarch64 vector sin/cos ride the inline polynomial; 0x6a: srem/urem for 32-bit %; 0x69: every string argument of an extern is substituted, not just the ones which asked)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x6dul   // the inline polynomial rail carries NaN: tanh selects the operand back over its ordered clamp, and the sincos quadrant / tan octant convert through llvm.fptosi.sat instead of poisoning on NaN and out-of-range (0x6c: aarch64 vector tan/exp2/log2/log/pow join the inline polynomial rail bit-exactly with the interpreter, sinh/cosh/tanh ride the exp one; 0x6b: aarch64 vector sin/cos ride the inline polynomial; 0x6a: srem/urem for 32-bit %; 0x69: every string argument of an extern is substituted, not just the ones which asked)
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xd4b7201c5c5a5175ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x6330d3756a092eebul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
