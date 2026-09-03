@@ -16,6 +16,7 @@ that a question answered for one backend has an obvious address in the other. Th
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates - no GPU C++ require, so any box can bake | device calls |
 | the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT, gemma3v SigLIP and qwen3v block loops - qwen3v adds the vision NEOX rope, the fused-qkv weight-offset GEMMs, and the inline deepstack tap + tail merger chains - the whisper-class block loop, the qwen25v window ViT, the gemma4a Conformer and canary FastConformer chains with their mel/conv fronts, the conv frontends + the qwen3a padded-weight slab and GPU front/mel) - no session, no KV, no mirror; registers the gemma4uv, gemma4v, gemma3v, qwen3v, qwen25v, encoder_blocks, tower-conv, qwen3a-front, qwen3a-mel, gemma4a, gemma4a-chunk and canary hooks | decoder state |
 | the ASR-decoder driver<br>`dasllama_metal_asr_dec` | the whisper decoder on Metal: the 34B weight blob, the f16 resident cross/self K/V, window-granular cross-KV + decode-step serves; registers the whisper cross-KV and decode hooks (family registries in `dasllama_whisper`) | kernel bodies, LLM session state |
+| the assistant-drafter driver<br>`dasllama_metal_mtp_gemma` | the gemma-4 assistant drafter on Metal: the sidecar blob upload, the Q-only layer chain reading the TARGET mirror at the two capture layers with the decode's own attention kernels, the speculative round over the batch driver's same-slab verify; registers the `metal` round override and delegates head-less-drafter-less models to `metal_mtp_spec_round` | kernel bodies, mirror ownership |
 | the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan - the `[vk_dispatch]` macro derives access per class) | the kernel-access macro | anything else |
 
 - **Vulkan additionally has an ENTRY, `dasllama_math_vulkan.das`** - capability probe/arm, `.dlim`
@@ -113,7 +114,8 @@ that a question answered for one backend has an obvious address in the other. Th
   integer). Backend-specific lowering stays in that backend's lens.
 
 **PSO lifecycle - the family shares ONE device and queue** (`metal_common_init`; the second-device
-question was surveyed and closed against). The decode PSO set lives as `g_pso_*` in
+question was surveyed and closed against; the tune-time race arms' transient queue is
+`ARCHITECTURE_MEASUREMENT.md` sec.2.21's). The decode PSO set lives as `g_pso_*` in
 `dasllama_metal_common`, is compiled by `metal_decode_init` in `dasllama_metal_kernels` and
 released by `metal_kernels_release` there - the kernels module owns its set's lifecycle even
 though the vars live with the device state. Prefill's `g_pf_pso_*` set is prefill-private end to
@@ -127,6 +129,9 @@ in prefill) and the tuner calls those public entries.
 **Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`,
 `MetalPrefillDecline`); decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for
 both paths.
+
+Sections 2.28-2.30, the Metal speculative round and the dispatch alignment contract, are
+`ARCHITECTURE_GPU_MTP.md`.
 
 **The allowed asymmetries between the backends - this list is closed; a new one lands with its
 entry here:**
@@ -148,6 +153,10 @@ entry here:**
   `discard_pre`), quiesces, and releases the address-keyed region caches. Vulkan's reload
   story is the unmap notify (`set_moe_gpu_unmap_notify`) - a different seam for a different
   ownership model.
+- **The speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one
+  registrant, `gemma_mtp_spec_round` (falling through to `metal_mtp_spec_round` with no drafter);
+  the same-slab verify and the NextN draft forward exist only in the Metal decode driver, and
+  Vulkan serves the CPU round (`ARCHITECTURE_GPU_MTP.md`).
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes - Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants; the
   class-kernel arc retired the hand-built 6-slot set ladders outright) - and both speak the
@@ -223,7 +232,7 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 `modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
 and why they lose.
 
-Sections 2.2j-2.2p, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`.
+Sections 2.2j-2.2q, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`.
 
 ### 2.2w The tower attention routes {#tower-attn-routes}
 
@@ -257,37 +266,4 @@ best-effort: it answers false (or -1) on any shape, knob, quant-mode or device d
 CPU chain serves that encode. Engage is read from counter deltas (`metal_tower_stats`,
 `metal_tower_f16_encodes`), never from "the model ran".
 
-### 2.2y The Metal kq split scale plane {#metal-kq-split-scale-plane}
-
-Every superblock format but k4, k5, q40 and iq4nl stores its Metal-blob scale row SPLIT into two
-regions of one buffer: the 16-byte sub-scale strips of every superblock first, then the packed
-per-superblock d tail. A kernel binds that one buffer twice - the strips at `soff = sb0 * 16` and
-the tail at `doff = nsb * 16 + sb0 * 2` - so the two reads stride independently and the strip
-read stays 16-byte aligned. k2 is the one shape variation: its tail is 4 bytes per superblock
-(`nsb * 16 + sb0 * 4`), because it carries d and dmin. `kq_scales_of` builds the pair;
-`metal_blob_scale_plane` mints it at bake time, folding each format's 20-byte decoded row into
-`[16B strips][2B d]` (k3's row is 18 bytes and is already in that shape). The 2-byte tail is why
-a region's bind offset must be a multiple of 512 elements - the `(off/256)*2` d-plane bind is
-4-byte aligned only then - which is what `metal_blob_off_ok` and `moe_site_ok` check. iq4nl is
-the exception: it reuses q40's 16-byte plane of eight f16 d per superblock, binds once, and
-ignores `doff`. The Vulkan tier does not use this form - it binds the decoded 20-byte row as five
-uints per superblock.
-
-### 2.2z The iquant GEMV grid read and its f4-slab twin {#metal-iquant-gemv-grid}
-
-Every iquant Metal GEMV - iq3s, iq3xxs, iq2s, iq2xs, iq2xxs - reads its codebook grid DIRECT
-off the module's hoisted constant tables and float-expands each word in place. That is the base
-form and the one that ships everywhere.
-
-Three of them carry a second form, the f4-slab twin (`MetalKqGemvIq3sF4`,
-`MetalKqGemvIq3xxsF4`, `MetalKqGemvIq2xxsF4`): the whole grid staged into threadgroup memory
-once per threadgroup, pre-expanded to `float4` magnitudes, signs applied by select, so the
-inner loop does no byte extraction. The twin is a PER-BOX CROWN, never a heuristic and never a
-default - it wins on M5-class GPUs and REGRESSES on M1/M4-class, which have less threadgroup
-bandwidth to trade for the byte work. Its PSO compiles only when the box's tune manifest
-carries the crown (`metal_tensor_crowned("kq_gemv_<fmt>_f4")`), and `enc_kq_gemv` picks the
-twin exactly when that PSO is non-null, so a box with no crown never compiles it.
-
-The `kq_gemv_iq3s_f4` and `kq_gemv_iq3xxs_f4` crowns are raced (`race_gemv_f4_twin`).
-`kq_gemv_iq2xxs_f4` cannot be settled by an isolated race at all and is minted from a serving
-A/B instead - `ARCHITECTURE_MEASUREMENT.md` sec.2.21.
+Sections 2.2y-2.2z, the Metal quant plane reads, are `ARCHITECTURE_GPU_QUANT_PLANES.md`.

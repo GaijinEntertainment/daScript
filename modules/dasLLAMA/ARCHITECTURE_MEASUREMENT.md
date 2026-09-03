@@ -59,6 +59,17 @@ in-process reference check: `harness/vk_gemm_probe.das` dispatches the shipped, 
 kernels on timing fixtures, compares no arm's output, and marks every row `timing-only`; its
 rows never enter a record store, and a decision it seeds is confirmed by the e2e board rows.
 
+**A binary-stale sidecar still serves its `runtime` section; a foreign one serves nothing.**
+The staleness rule kills measured kernel WINNERS - a rebuild can change the bodies they were
+raced on - but the `runtime` knobs (lane caps, jobque shape, the `metal_tensor` crowns that turn
+the tensor mul_mm twins on) are properties of the box, not of the binary. The engine's no-path
+`apply_box_profile_runtime()` therefore takes the checked route: `stale_binary` applies the
+runtime section and says so; `foreign_box` and `unreadable` apply nothing, because those knobs
+are the minting box's state; `absent` is an unminted box. Without the crowns the twins run their
+base forms - a prefill reads well under half its board cell - so `metal_decode_init`
+warns when a profile was asked for, declined, and no crowns are set, and `lcpp_bench` stamps a
+cell that passed `tune_gate()` on `DASLLAMA_ALLOW_UNTUNED=1` with an `untuned:` flavor prefix.
+
 **The retune re-exec bites scaffolding, and the pin for it is checked in.** Any bare `daslang`
 run that requires the engine - a probe, a one-off script, a REPL experiment - re-execs into a
 full retune when no manifest is armed. `performance/last_known_good_sidecar.json` exists for
@@ -148,6 +159,10 @@ them crowns confidently and wrongly:
   times and can flip a verdict outright.
 - **A real site shape.** `REVIEW_GPU.md` binds this one.
 
+A race arm owns a transient command queue for its timed pairs and releases it before returning -
+the one exception to the family's shared device and queue (`ARCHITECTURE_GPU.md` sec.1.5) - so
+the tune-time race never queues behind served work.
+
 Even a race meeting all three can be structurally blind. `kq_gemv_iq2xxs_f4` is the standing
 case: every isolated regime crowns the twin and the served decode graph loses 8.6% with it,
 because the effect is mixed-stream occupancy - it exists only when the GEMV runs beside the
@@ -198,3 +213,18 @@ flavors: f32 group scales (the engine's own quantization) and `q8s16` over binar
 wscale_f16 rail a GGUF q8_0 tensor runs, and the like-for-like row against the reference's q8_0.
 Provenance for every figure in this section: `benchmarks/matmul/kq_kernel_bench.das` under
 `DAS_TUNE_MODE=tune`, one thread, its default `--fmt` / `-n` / `-d` shape.
+
+### 2.28 The speculative round's cell is a ruler record {#ruler-records}
+
+**`performance/records/mtp/mtp_<box>_<model>[_variant].json` is a ruler record: one file per box
+and model, written only by `harness/mtp_ruler.das`.** The board (`records/<box>.json`) has no
+speculative column, because a speculative rate is not one engine's number: acceptance is a property
+of the text and of the drafter both engines share, so the honest cell is the two engines on the
+identical rendered prompt in one run. The ruler measures our released exe FIRST from a parent that
+has loaded nothing (a parent that had just run the engine in-process read the exe's speculative arm
+a fifth low), then the reference server at the ref pin, every arm settled, and writes `meta` (date,
+box, `das_sha`, `das_exe`, `lcpp_server`, `lcpp_version`, the model and head with their shas, the
+corpus, `ngen`, `reps`, `depths`) plus one row per engine, depth and prompt. The shape is the ruler's,
+not the board's - `list_record_stores` and the records gate read `records/` one level deep and never
+see the folder - and `mtp_ruler --render <record>` prints the table. A third-party wall lives here
+only as the other half of a pair taken in the same run.

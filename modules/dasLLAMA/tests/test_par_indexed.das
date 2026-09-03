@@ -81,7 +81,7 @@ def test_maybe_parallel_for_bool_no_que(t : T?) {
     t |> run("no job que - a true flag runs the bool form inline, one invoke over the whole range") @(t : T?) {
         let before = get_disp_inline()
         var acc : array<int>
-        acc |> resize(2)   // [invokes, elements covered]
+        acc |> resize(2)
         var pa = unsafe(addr(acc[0]))
         maybe_parallel_for(true, 3, 19, 8) $(rb, re) {
             unsafe {

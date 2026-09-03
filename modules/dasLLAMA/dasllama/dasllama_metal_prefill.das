@@ -7316,17 +7316,9 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
     return res
 }
 
-// the race fixture's scale-plane layout, one value per on-disk scale form
-enum KqRaceScaleForm {
-    compact     //!< k4/k5: 16B kmask blocks, d+dmin leading halves
-    split_d     //!< k6 + every split-scale iquant: 16B strips + a 2B f16 d tail
-    split_dmin  //!< k2: 16B strips + a 4B d+dmin tail
-    pure_d      //!< iq4nl: a pure-d plane, 8 f16 per superblock
-}
-
-//! random quant planes + constant f16 scales: any bit pattern is a valid plane, so the
-//! twin-vs-base envelope doubles as a layout-agreement check
-def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
+//! the fixture planes come from `race_kq_planes` (metal_common) - the same planes the decode
+//! small-batch race binds, so the two races agree on every format's layout
+def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;
                           base_src, base_entry : string; base_fm : bool; base_tgmem : uint64;
                           twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
                           qu_per_sb : int; sform : KqRaceScaleForm) : MetalTensorRaceResult {
@@ -7350,54 +7342,15 @@ def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family
     }
     var xa <- race_x_f32(m * kdim)
     let nblk = ndim * nsb
-    var qplane : array<uint>
-    qplane |> resize(nblk * qu_per_sb)
-    for (i in range(nblk * qu_per_sb)) {
-        qplane[i] = uint(i) * 2654435761u   //! deterministic pseudo-random bit pattern
-    }
-    var splane : array<uint8>
-    let sbytes = sform == KqRaceScaleForm.split_d ? nblk * 18 : (sform == KqRaceScaleForm.split_dmin ? nblk * 20 : nblk * 16)
-    splane |> resize(sbytes)
-    if (sform == KqRaceScaleForm.split_d || sform == KqRaceScaleForm.split_dmin) {
-        for (i in range(nblk * 16)) {
-            splane[i] = uint8(2)
-        }
-        unsafe {
-            var ph = addr<float16?>(splane[nblk * 16])
-            let per = sform == KqRaceScaleForm.split_dmin ? 2 : 1
-            for (b in range(nblk * per)) {
-                ph[b] = float16(0.25)
-            }
-        }
-    } elif (sform == KqRaceScaleForm.pure_d) {
-        unsafe {
-            var ph = addr<float16?>(splane[0])
-            for (b in range(nblk * 8)) {
-                ph[b] = float16(0.25)
-            }
-        }
-    } else {
-        unsafe {
-            var ph = addr<float16?>(splane[0])
-            for (b in range(nblk)) {
-                ph[b * 8] = float16(0.25)       //! d
-                ph[b * 8 + 1] = float16(0.25)   //! dmin
-            }
-        }
-        for (b in range(nblk)) {
-            for (kx in range(4, 12)) {
-                splane[b * 16 + kx] = uint8(17)   //! kmask bytes: small scales, both halves
-            }
-        }
-    }
-    var bq = race_buf(dev, uint64(nblk * qu_per_sb * 4), unsafe(addr<void?>(qplane[0])))
-    var bs = race_buf(dev, uint64(sbytes), unsafe(addr<void?>(splane[0])))
+    var planes = race_kq_planes(dev, nblk, qu_per_sb, sform)
+    var bq = planes.bq
+    var bs = planes.bs
+    let doff = planes.doff
     var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
     var by_base = race_buf(dev, uint64(m * ndim * 4), null)
     var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
     var bk = race_uniform_u32(dev, uint(kdim))
     var bn = race_uniform_u32(dev, uint(ndim))
-    let doff = sform == KqRaceScaleForm.split_d || sform == KqRaceScaleForm.split_dmin ? uint64(nblk * 16) : 0ul
     let grid = uint3(uint(m / 32), uint(ndim / 64), 1u)
     let tg = uint3(128u, 1u, 1u)
     race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {

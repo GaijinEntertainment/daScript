@@ -97,6 +97,25 @@ ones - lets ledger towards the end of this arc." Every new format's CPU kernel w
 reading llama.cpp's arch kernel and racing its techniques as tune perms; the formats that
 skipped this (IQ4_XS, Q3_K) get the retroactive audit at the end of the arc (#60).
 
+- **2026-09-01** (`REVIEW_GPU.md`, `ARCHITECTURE_GPU.md`): Boris, on the proposal to lint kernel
+  headers' "Requires n % 256" sentences against call-site gates: "your lint opportunity sounds
+  more like a macro expansion. like 'test alignment on dispatch' or something." The contract
+  moved into the `[metal_dispatch]` expansion (`requires = "lhs % N"` generates the check at
+  every dispatch); the review duty asks for the attribute instead of the sentence, and the
+  architecture doc states the mechanism.
+- **2026-09-02** (`ARCHITECTURE_MEASUREMENT.md`, `skills/tune.md`): Boris, on the untuned dev rail
+  halving Metal prefill because a binary-stale sidecar dropped the `metal_tensor` crowns with the
+  kernel winners: asked for suggestions, then "okie" to the recommendation - staleness drops
+  `kernels` and keeps `runtime` (box state, not binary state), the no-crowns state warns with its
+  magnitude and the bench stamps such cells distinctly; the device-plus-MSL-hash twin cache with a
+  lazy race is its own PR after the MTP arc.
+
+- **2026-09-03** (`REVIEW_EXCHANGE.md`, `performance/REVIEW.das`): the single-exchange-client
+  gate flagged the MTP ruler's `dashv` require (it drives a stock llama-server over HTTP for
+  the speculative-decoding comparison). Boris: "the review.das gate on dasHV - i think we should
+  adjust. for that llama-server thing." The gate's scope is the engine; `harness/` is carved
+  out, the rule says why.
+
 ## 2026-09-02 - REVIEW_TTS.md (new), REVIEW.md (the TTS routing line), followup_general.md (#72)
 
 Boris, at the TTS arc's phase-5 stopping point: "add REVIEW.md for tts. [hotpath] annotation

@@ -410,6 +410,86 @@ def private batch_step_gate(t : T?; tr, trg : Model; nb : int; kdt : KVDtype; to
     }
 }
 
+// GPU-vs-GPU forced-feed over a window of REAL text: every stream is fed the same token to its
+// single-step twin (forward on the blob) and to its batched twin (eval_batch_ on the blob), and
+// the two logits rows are compared before either can drift - the batch rail's near-tie-blind
+// counting arms cannot see a per-step kernel delta that only a free-running greedy would fork
+// on. Same feeds, one rail swapped: the kernel-swap envelope, not the CPU-vs-GPU one.
+struct BatchFf {
+    steps : int64
+    served_single : int64
+    served_batch : int64
+    flips : int64
+    maxd : float
+}
+
+def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : int) : BatchFf {   // nolint:LINT012,LINT019 — every argument is read in the das_metal half
+    var st = BatchFf()   // nolint:LINT003,LINT019 — filled in the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let c = tr.config
+        let vocab = c.vocab_size
+        let nb = length(prompts)
+        with_job_que() {
+            setup_dasllama_jobque()
+            var sa : array<Session>
+            var sb : array<Session>
+            sa |> reserve(nb)
+            sb |> reserve(nb)
+            for (i in range(nb)) {
+                sa |> emplace <| make_run_state(c, KVDtype.f16, KVDtype.f16)
+                sb |> emplace <| make_run_state(c, KVDtype.f16, KVDtype.f16)
+                eval_(tr, sa[i], prompts[i])
+                eval_(tr, sb[i], prompts[i])
+            }
+            var ws <- create_batch_workspace_(tr)
+            var sessb : array<Session?>
+            var cur : array<int64>
+            for (i in range(nb)) {
+                unsafe {
+                    sessb |> push(addr(sb[i]))
+                }
+                cur |> push(greedy_top(sa[i].logits, vocab))
+            }
+            select_decode_override("metal")
+            let d0 = metal_decode_stats().decodes
+            let b0 = metal_batch_decode_stats().steps
+            for (_st in range(nsteps)) {
+                for (i in range(nb)) {
+                    var mx = 0.0
+                    for (a, b in sa[i].logits, sb[i].logits) {
+                        mx = max(mx, abs(a - b))
+                    }
+                    st.maxd = max(st.maxd, mx)
+                    if (greedy_top(sb[i].logits, vocab) != cur[i]) {
+                        st.flips++
+                    }
+                }
+                for (i in range(nb)) {
+                    forward(trg, sa[i], cur[i], sa[i].n_past)
+                    sa[i].n_past++
+                }
+                eval_batch_(trg, ws, sessb, cur)
+                for (i in range(nb)) {
+                    cur[i] = greedy_top(sa[i].logits, vocab)
+                }
+                st.steps++
+            }
+            st.served_single = metal_decode_stats().decodes - d0
+            st.served_batch = metal_batch_decode_stats().steps - b0
+            select_decode_override("")
+            sessb |> clear()
+            unsafe {
+                delete ws
+                delete sessb
+            }
+            delete cur
+            delete sa
+            delete sb
+        }
+    }
+    return st
+}
+
 // interleaved-chunk prefill of paged sessions (multi-run mirror gathers), then batched greedy
 def private paged_batch_greedy(tr, trg : Model; prompts : array<array<int64>>; page_rows : int64; nsteps : int; gpu : bool) : array<array<int64>> {
     let c = tr.config
@@ -708,6 +788,31 @@ def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm l
                 } else {
                     feint("Llama-3.2-1B Q5_K_M not present; k5 batch arm skipped\n")
                 }
+            }
+
+            // arm batch-ff: REAL-TEXT forced feed, GPU single vs GPU batch on identical tokens -
+            // B=2 (the B2 GEMV form) and B=4 (the B4 form), the kernel-swap envelope
+            if (arm_on(t, "batch-ff")) {
+                var prose <- [ <- encode(tr, "The old lighthouse keeper watched the storm roll in from the west, counting the seconds between each flash and the thunder that followed. By midnight the waves were breaking over the jetty and", true, false),
+                              <- encode(tr, "In the spring of that year the river rose higher than anyone in the valley could remember, and the farmers along the lower fields moved their animals to the ridge while", true, false),
+                              <- encode(tr, "The committee met for the third time that week, and by the end of the afternoon it was clear to everyone in the room that the budget would not survive the vote unless", true, false),
+                              <- encode(tr, "She had learned to read the weather from the colour of the hills, and on the morning the fog failed to lift she packed the cart early and told the boys", true, false)]
+                for (nb in [2, 4]) {
+                    var sub : array<array<int64>>
+                    sub |> reserve(nb)
+                    for (i in range(nb)) {
+                        sub |> emplace <| clone_to_move(prose[i])
+                    }
+                    let st = batch_ff_pair(tr, trg, sub, 32)
+                    if (st.served_single == 0l || st.served_batch == 0l) {
+                        t |> skip("batch-ff B={nb}: a GPU rail declined (single {st.served_single}, batch {st.served_batch} steps)")
+                    } else {
+                        t |> success(st.maxd <= 0.5, "batch-ff B={nb}: batched step vs single step within 0.5 over {st.steps} forced-feed steps of real text (maxd {st.maxd}, argmax flips {st.flips})")
+                        to_log(LOG_INFO, "metal batch-ff B={nb}: maxd={st.maxd} flips={st.flips} steps={st.steps}\n")
+                    }
+                    delete sub
+                }
+                delete prose
             }
 
             // the leak gate: every GPU object the driver holds releases

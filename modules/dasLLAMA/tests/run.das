@@ -16,6 +16,8 @@ require math
 require dasllama/dasllama_env
 require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
 
+let MODULE_CACHE = ".jitted_scripts/module_cache/dastest.dascache"   // `-jit -module-cache`: the dastest child skips the module-graph compile after its first run
+
 [CommandLineArgs]
 struct RunArgs {
     @clarg_short = "a"
@@ -27,7 +29,7 @@ struct RunArgs {
     full : bool
 
     @clarg_short = "s"
-    @clarg_doc = "Suite: decode | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all (default all; all excludes image-vulkan and model-free)"
+    @clarg_doc = "Suite: decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all (default all; all excludes image-vulkan and model-free)"
     suite : string = "all"
 
     @clarg_doc = "Family filter — comma-separated family tokens (the full list lives in tests/CLAUDE.md, EXACT match); only blocks of these model families run (model-free blocks always run); sets DASLLAMA_TEST_FAMILY"
@@ -49,6 +51,9 @@ struct RunArgs {
 def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat suite table, one file per line
     if (name == "decode") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das" ]
+    } elif (name == "mtp") {
+        return <- [ "modules/dasLLAMA/tests/test_metal_mtp_parity.das",
+                    "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das" ]
     } elif (name == "prefill") {
         return <- [ "modules/dasLLAMA/tests/test_metal_prefill_parity.das" ]
     } elif (name == "matrix") {
@@ -86,6 +91,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_bench_records_schema.das",
                     "modules/dasLLAMA/tests/test_box_ident.das",
                     "modules/dasLLAMA/tests/test_box_profile.das",
+                    "modules/dasLLAMA/tests/test_mtp_snapshot.das",
                     "modules/dasLLAMA/tests/test_dasllama_lint_contracts.das",
                     "modules/dasLLAMA/tests/test_metal_float_a_gate.das",
                     "modules/dasLLAMA/tests/test_dasllama_lint_escape.das",
@@ -102,6 +108,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_gemma4uv.das",
                     "modules/dasLLAMA/tests/test_gemma4v.das",
                     "modules/dasLLAMA/tests/test_gguf_quant.das",
+                    "modules/dasLLAMA/tests/test_gguf_shards.das",
                     "modules/dasLLAMA/tests/test_groupn.das",
                     "modules/dasLLAMA/tests/test_kernel_backend.das",
                     "modules/dasLLAMA/tests/test_kgroup_repack.das",
@@ -113,6 +120,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_metal_gemm.das",
                     "modules/dasLLAMA/tests/test_metal_role_infer.das",
                     "modules/dasLLAMA/tests/test_model_specs.das",
+                    "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
                     "modules/dasLLAMA/tests/test_mxfp4.das",
                     "modules/dasLLAMA/tests/test_par_indexed.das",
                     "modules/dasLLAMA/tests/test_parity.das",
@@ -159,6 +167,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_whisper.das" ]
     } elif (name == "all") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
+                    "modules/dasLLAMA/tests/test_metal_mtp_parity.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_parity.das",
                     "modules/dasLLAMA/tests/test_metal_support_matrix.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
@@ -272,7 +281,7 @@ def main() : int {
     }
     var files <- suite_files(cfg.suite)
     if (empty(files)) {
-        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all)\n")
+        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all)\n")
         return 2
     }
     var tmp = g_env_test.tmpdir
@@ -288,12 +297,13 @@ def main() : int {
     let tmo = cfg.full ? 3600 : 1200
     let reps = max(cfg.nreps, 1)
     let das_exe = empty(cfg.das) ? get_command_line_arguments()[0] : cfg.das
+    mkdir(dir_name(MODULE_CACHE))   // the front-end cache: the first run writes it, later runs skip the module-graph compile
     var failures = 0
     for (rep in range(reps)) {
         for (file in files) {
             let tag = base_name(file)
             let log_path = path_join(tmp, "dasllama_run_{tag}_{rep}_{ref_time_ticks()}.log")
-            let cmd = "{envs}\"{das_exe}\" -jit dastest/dastest.das -- --test \"{file}\" --timeout {tmo} > \"{log_path}\" 2>&1"
+            let cmd = "{envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das -- --test \"{file}\" --timeout {tmo} > \"{log_path}\" 2>&1"
             let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
             to_log(LOG_INFO, "START {tag}{rep_tag}: {cmd}\n")
             let t0 = ref_time_ticks()

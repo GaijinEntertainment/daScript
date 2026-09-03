@@ -6,8 +6,9 @@ require dasllama/dasllama_gguf
 require daslib/fio
 
 // gguf_shard_paths: GGUF split-name expansion ("<prefix>-NNNNN-of-NNNNN.gguf"), the
-// non-split passthrough arms, and the missing_ok presence gate model_available rides
-// (incomplete split yields [] instead of the loader's panic). Name/filesystem only — no models.
+// non-split passthrough arms, the missing_ok presence gate model_available rides (incomplete
+// split yields [] instead of the loader's panic), and the split NextN head sidecar that rides the
+// same walk as its LAST shard (mtp-<trunk> sibling, or DASLLAMA_MTP_HEAD). Name/filesystem only.
 
 [test]
 def test_shard_name_passthrough(t : T?) {
@@ -47,4 +48,49 @@ def test_shard_split_expansion(t : T?) {
     delete missing
     remove(paths[0])
     remove(paths[1])
+}
+
+[test]
+def test_shard_mtp_head_sidecar(t : T?) {
+    var terr = ""
+    let dir = temp_directory(terr)
+    t |> success(terr == "", "temp_directory resolves")
+    let trunk = path_join(dir, "dasllama_sidecar_toy-Q4_K_M.gguf")
+    let head = path_join(dir, "mtp-dasllama_sidecar_toy-Q4_K_M.gguf")
+    let other = path_join(dir, "mtp-dasllama_sidecar_toy-Q8_0.gguf")
+    t |> success(fwrite(trunk, "x") && fwrite(head, "x") && fwrite(other, "x"), "toy trunk + two heads written")
+    set_mtp_head_path("")   // pin the override empty: the box env must not leak into the arms
+    t |> run("adjacency: the mtp-<trunk basename> sibling rides as the last shard") @(t : T?) {
+        var sh <- gguf_shard_paths(trunk)
+        t |> equal(length(sh), 2, "trunk + head")
+        t |> equal(sh[0], trunk, "trunk first")
+        t |> equal(base_name(sh[1]), base_name(head), "the same-named head last")
+        delete sh
+    }
+    t |> run("override: DASLLAMA_MTP_HEAD names the head regardless of its name") @(t : T?) {
+        set_mtp_head_path(other)
+        var sh <- gguf_shard_paths(trunk)
+        t |> equal(length(sh), 2, "trunk + override head")
+        t |> equal(base_name(sh[1]), base_name(other), "the override head, not the sibling")
+        set_mtp_head_path(path_join(dir, "does-not-exist.gguf"))
+        var none <- gguf_shard_paths(trunk)
+        t |> equal(length(none), 1, "a missing override attaches nothing (the sibling is NOT a fallback)")
+        set_mtp_head_path("")
+        delete sh
+        delete none
+    }
+    t |> run("a head file loaded on its own never recurses onto itself") @(t : T?) {
+        var sh <- gguf_shard_paths(head)
+        t |> equal(length(sh), 1, "just the head")
+        delete sh
+    }
+    t |> run("no sibling, no override: the plain single path") @(t : T?) {
+        remove(head)
+        var sh <- gguf_shard_paths(trunk)
+        t |> equal(length(sh), 1, "trunk alone")
+        delete sh
+    }
+    clear_mtp_head_path()
+    remove(trunk)
+    remove(other)
 }

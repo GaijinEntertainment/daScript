@@ -16,6 +16,11 @@ builder the tower dispatches, the `[metal_dispatch]` emission those builders are
 from (`dasllama/dasllama_metal_lens.das`), or the Metal ASR decoder
 (`dasllama/dasllama_metal_asr_dec.das`) applies `REVIEW_TOWER.md` too.**
 
+**A diff touching the Vulkan tier - `dasllama/dasllama_vulkan_*.das`,
+`dasllama/dasllama_gpu_resident.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, or a
+cm2 tile class (an NV_cooperative_matrix2 GEMM class stamped per weight format and column) -
+wherever the diff puts it - applies `REVIEW_GPU_VULKAN.md` too.**
+
 **A kernel body that emits a function pointer or a vtable into the shader is a defect - splice
 the choice at compile time instead.** A `class template` / `def abstract` / `def override`
 splice is compile-time and conforms - check the emission, not the das spelling.
@@ -29,6 +34,19 @@ already knows its answer as it picks the pipeline, is a defect - stamp the guard
 Stamped means the guard is carried by a `@template_constant` - a `static_if` block, or a value
 select on the constant. The instance stamped without the guard shows no guard in its generated
 `*_msl` global.
+
+**A `[metal_dispatch]` kernel whose main loop steps one fixed-size chunk at a time and never
+checks for a partial last chunk declares each alignment it assumes as one `<lhs> % N` item in
+`requires =`, comma-separated, `lhs` a `params=` name or a kargs (kernel-argument struct)
+field.** The generated builder then trips on the first misaligned dispatch instead of reading
+the next row.
+
+**A driver that keeps misaligned shapes off a kernel whose main loop steps one fixed-size chunk
+and never checks for a partial last chunk gates every dispatch site of that kernel on that
+site's own K - the extent the loop steps along - never on one gate covering every site, and
+each site's gate divides by a multiple of the chunk that site's kernel steps.** A kernel that
+steps 128 behind a gate that checks 256 never sees a shape it could serve; a kernel that steps
+256 behind a gate that checks 128 silently drops a tail.
 
 **Weakening the MSL emitter's refusal to compile an unlicensed float `matmul2d` A operand -
 `[metal_kernel(float_a_ok=true)]` is the license - or its gate
@@ -65,9 +83,10 @@ complete the op.
 
 **An encoder that picks a kernel form whose loop carries no bounds or tail guard - stamped
 without one, or generated from a template instance that has none - shows that every address
-the form touches stays inside its buffers' allocations.** One extent dividing evenly is not
-that showing. A padded chunk's walk can run past the live extent, and one poisoned read in a
-shared tile corrupts real rows.
+the form touches stays inside its buffers' allocations.** A `requires =` contract on the class
+is that showing for the dimension it names; an unchecked claim that an extent divides evenly is
+not. A padded chunk's walk can run past the live extent, and one poisoned read in a shared tile
+corrupts real rows.
 
 **Never let a prefill pad output row reach a `matmul2d` or a staged cooperative tile as its B
 operand - stage it as zero, or bound the walk at the live row count.** Pad rows hold recycled
@@ -185,30 +204,22 @@ own init/release pair.
 
 **A diff that changes what one backend can serve and the other cannot - a Metal-only or
 Vulkan-only hook, role, served path, or backend-only capability, added or removed - lands its
-`ARCHITECTURE_GPU.md` sec.1.5 edit in the same change.** One backend serving the same path
-faster or slower is not such a change. The duty holds when sec.1.5 already carries that class
-of asymmetry, and it covers sec.1.5's per-driver lists of registered hooks and borrowed
-kernels. sec.1.5 is the closed list of backend asymmetries; an asymmetry it does not
-carry does not exist.
-
-**A hand-written Vulkan pipeline build anywhere in the engine is a defect - a Vulkan pipeline
-is created only by a `[vk_dispatch]`-generated `ensure_*` and torn down by
-`vk_drop_model_state`.**
-
-**Never size a buffer bound as one SSBO (shader storage buffer) range above
-`vk_max_storage_range()` - check the size where it is NEGOTIATED, not where it binds.** The
-bind site cannot shrink a buffer that was sized wrong.
+entry in `ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the same change.** One
+backend serving the same path faster or slower is not such a change. The duty holds when that
+list already carries the class of asymmetry, and it covers sec.1.5's per-driver lists of
+registered hooks and borrowed kernels. Extending a file's sec.1.5 role row does not discharge
+it. An asymmetry the list does not carry does not exist.
 
 **A change to code that a served GPU decode or prefill path executes ships GPU-vs-CPU parity
 on one q8 and one kq (K-quant) model with the armed mirror codec.** That code is anything a
 served GPU decode or prefill call executes OR that selects what it executes - a driver, a
 kernel class it dispatches, that class's builder, a servability gate, a race that picks which
-kernel serves, a forwarder default, a weight-region or residency path, the tier forwarders
-the call routes through; never the bake paths, never a comment. The parity run is
-`harness/parity.das` on either backend, `benchmarks/lcpp_bench.das --parity`
-(`performance/model_specs.das`'s fixed model list) on either backend, or - on Metal only -
-the in-suite instruments `tests/test_metal_decode_parity.das` /
-`tests/test_metal_prefill_parity.das` through `tests/run.das`.
+kernel serves, a forwarder default, a weight-region or residency path, the tier forwarders and
+the Vulkan tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`) the call routes through;
+never the bake paths, never a comment. The parity run is `harness/parity.das` on either
+backend, `benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model
+list) on either backend, or - on Metal only - an in-suite `tests/test_metal_*_parity.das`
+instrument run through `tests/run.das`.
 
 **Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
 Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows the tier that serves
@@ -242,27 +253,10 @@ decode/prefill hook `dasllama/dasllama_gpu_resident.das` registers in
 same-codec session rows and mirror rows.** A cross-codec copy corrupts the host's authoritative
 cache.
 
-**Never cache a descriptor set across dispatches in state that `vk_drop_model_state` does not
-clear** - put it in a `*_ready` latch, or in a holder that function already clears in
-`dasllama/dasllama_vulkan_common.das`.
-
-**Never read a `[spirv_decode]` callback's quant bytes by indexing `unpack8` of a 32-bit word
-with a runtime value - read them as 16-bit lanes instead: an `int16[N]` block member selected
-with `unpack8(w)[i & 1u]`, sub-fields pulled out by shift and mask.** The vendor driver's shader
-compiler pattern-matches only the 16-bit spelling into its block-load path, and a runtime byte
-select drops the whole kernel off it.
-
-**A diff that changes when the resident prefill that takes token ids rather than embeddings
-accepts a call updates the engine's GPU-embed probe in the same change.** That prefill is
-`vk_rdec_prefill_ids` and the resident prefill override that routes to it; the probe is
-`vulkan_embed_gpu_gate` in `dasllama/dasllama_gpu_resident.das`, registered through
-`register_embed_gpu_gate`. The engine skips the CPU embed on a true probe, so a probe that is
-true where that path declines hands the next consumer an unfilled residual stream.
-
 **A module-level variable in a GPU driver file whose value depends on the installed model
 gets a model-swap discharge in the same change that adds it** - the vulkan tier files
 discharge through `moe_gpu_model_marks_save_` / `moe_gpu_model_marks_restore_` /
-`moe_gpu_drop_model_`; the Metal prefill and tower through `register_reload_prep`
+`moe_gpu_drop_model_`; the Metal tier through `register_reload_prep`
 (`dasllama/dasllama_metal_common.das`). A global with no discharge survives a model swap and
 routes the next model's dispatches at the old model's planes.
 
@@ -277,16 +271,3 @@ runtime state - the active kernel backend, a mode toggle - on its mint-time path
 sits behind the gate's `mint_time` flag, and the mint-time verdict tests the model's own
 fields.** The load selects the repacking CPU backend before the GPU backend is decided, so a
 mint-time read bakes a verdict the drivers do not share.
-
-**A diff that adds a cm2 tile format instance, changes a format's cm2 decode body, or changes a
-format's four-wide twin (`decode_v4`) or its `DECV4` or `DECVEC` constant puts that format's
-`cm2:<fmt>` probe rows (`harness/vk_gemm_probe.das`), both the `DASLLAMA_VK_DECVEC=1` and the
-`=0` rows, in the PR body.** A cm2 tile is the NV_cooperative_matrix2 GEMM class stamped per
-(weight format, column) pair in `dasllama/dasllama_vulkan_classes.das`.
-
-**A cm2 tile format instance whose `DASLLAMA_VK_DECVEC=1` probe row is slower than its `=0` row
-carries, in the same change, either a four-wide twin that wins - a hand-written `decode_v4`
-under `override DECV4 = true` on that format's class (`dasllama/dasllama_vulkan_classes.das`) -
-or the scalar callback: `override DECV4 = false` and `override DECVEC = false` together.** With
-`DECV4 = true` the class never reads `DECVEC`, so `override DECVEC = false` alone leaves the
-hand-written twin running.

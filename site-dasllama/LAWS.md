@@ -54,3 +54,17 @@ compacted, or cited as rules.
   (the round-2 form had become a statement); the dl-* residue names the id subtraction and
   the selector-only definition; the page-census WHY says what each miss costs. The metadata
   test's three page lists became one `PAGES` census the gate reads.
+
+- **2026-09-02** (`REVIEW.md`): Boris ruled the site gets a "stories" page - long-form:
+  "this is how we measured, this is what it looks like, these are the acceptance numbers,
+  this is where the prompts are from ... and a date and sha of the build. this is when we
+  tried, this is what it was on that day" - with llama.cpp named as the yardstick, "not a
+  competition". The two `_news` truth rules extend to `_stories`, and a story figure without
+  its date and sha is a defect. (Entry re-worded 2026-09-02 on Boris's ruling that the
+  project's authorship stays out of the public repo's documents.)
+
+- **2026-09-03** (`REVIEW.md`): Boris ruled the stories take the daslang.io blog's shape -
+  "each story gets its own subpage. there is RSS feed i guess. and a story page which lists
+  them all. so basically split format - not combined." The page definition now covers
+  `stories/`, and the census residue names the story pages' three registrations (directory
+  copy line, sitemap entry, metadata glob).

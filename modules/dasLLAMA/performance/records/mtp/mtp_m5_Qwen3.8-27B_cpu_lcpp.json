@@ -1,0 +1,118 @@
+{
+	"meta" : {
+		"head" : "~/Work/llama.cpp/models/mtp-Qwen3.8-27B-Q8_0.gguf",
+		"depths" : "1",
+		"ngl" : 0,
+		"model" : "~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf",
+		"lcpp_server" : "~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
+		"das_exe" : "",
+		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",
+		"das_sha" : "4da0045f0",
+		"head_sha" : "cbf60a0c48b431bb61f1d49b8948dc88ac29c398d6dbdbbb2e6e89ef77eacc9a",
+		"reps" : 3,
+		"model_sha" : "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34\t0x46aee4960\t2026-08-17T18:07:01",
+		"date" : "2026-09-02 14:16",
+		"cpu" : "Apple M5 Max",
+		"lcpp_version" : "version: 0.3.0-dev (build 832, commit 6fdd0ac89)",
+		"threads" : 6,
+		"ngen" : 128
+	},
+	"rows" : [
+		{
+			"predicted_n" : 128,
+			"text" : "# Aloha Spirit: Why Your Next Adventure Needs to Be in Hawaii\n\nThere’s a specific kind of magi",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 0,
+			"engine" : "llama.cpp",
+			"tps" : 9.622050894929709,
+			"same_text_as_das" : false,
+			"accepted" : 0,
+			"prompt_n" : 31
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "Here is a summary of the article:\n\nHillary Clinton’s Secret Service detail recently deployed a",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 1,
+			"engine" : "llama.cpp",
+			"tps" : 9.413552063899973,
+			"same_text_as_das" : false,
+			"accepted" : 0,
+			"prompt_n" : 686
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "To find the total cost of travel, we need to calculate the cost of the tickets and add it to the",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 2,
+			"engine" : "llama.cpp",
+			"tps" : 9.572196421077894,
+			"same_text_as_das" : false,
+			"accepted" : 0,
+			"prompt_n" : 64
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "The character **Anna** in the TV series *Once Upon a Time* was played by **Ginnifer Goodwin**.\n\n",
+			"depth" : 0,
+			"drafted" : 0,
+			"prompt" : 3,
+			"engine" : "llama.cpp",
+			"tps" : 9.564084134037541,
+			"same_text_as_das" : false,
+			"accepted" : 0,
+			"prompt_n" : 19
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "# Aloha Spirit: Why Your Next Adventure Needs to Be in Hawaii\n\nThere’s a specific kind of magi",
+			"depth" : 1,
+			"drafted" : 219,
+			"prompt" : 0,
+			"engine" : "llama.cpp",
+			"tps" : 8.445305812279644,
+			"same_text_as_das" : false,
+			"accepted" : 159,
+			"prompt_n" : 31
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "Here is a summary of the article:\n\nHillary Clinton’s Secret Service detail recently deployed a",
+			"depth" : 1,
+			"drafted" : 201,
+			"prompt" : 1,
+			"engine" : "llama.cpp",
+			"tps" : 9.01920252863522,
+			"same_text_as_das" : false,
+			"accepted" : 177,
+			"prompt_n" : 686
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "To find the total cost of travel, we need to calculate the cost of the tickets and add it to the",
+			"depth" : 1,
+			"drafted" : 195,
+			"prompt" : 2,
+			"engine" : "llama.cpp",
+			"tps" : 9.460810366802944,
+			"same_text_as_das" : false,
+			"accepted" : 183,
+			"prompt_n" : 64
+		},
+		{
+			"predicted_n" : 128,
+			"text" : "The character **Anna** in the TV series *Once Upon a Time* was played by **Ginnifer Goodwin**.\n\n",
+			"depth" : 1,
+			"drafted" : 219,
+			"prompt" : 3,
+			"engine" : "llama.cpp",
+			"tps" : 8.386882353021058,
+			"same_text_as_das" : false,
+			"accepted" : 159,
+			"prompt_n" : 19
+		}
+	]
+}

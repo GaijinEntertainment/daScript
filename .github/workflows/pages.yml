@@ -566,6 +566,9 @@ jobs:
         python3 site-dasllama/test_metadata.py
 
         cp site-dasllama/index.html _site_dasllama/
+        cp site-dasllama/stories.html _site_dasllama/
+        mkdir -p _site_dasllama/stories
+        cp -R site-dasllama/stories/. _site_dasllama/stories/
         cp site-dasllama/ladder.html _site_dasllama/
         cp site-dasllama/sidecars.html _site_dasllama/
         cp site-dasllama/robots.txt _site_dasllama/

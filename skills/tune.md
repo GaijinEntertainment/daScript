@@ -17,9 +17,13 @@ The sidecar is **per-app**: `<app>.tune.json` beside the app - the root
 script this process runs (the first `.das` on the command line), or the
 binary itself when there is none (standalone exe, embedded host).
 `DAS_TUNE_MANIFEST` overrides the location outright. A sidecar **older than
-the running binary is stale** and reads as absent everywhere - a rebuilt
-binary invalidates every measured winner, so copied-around stale files can
-never resurrect dead measurements.
+the running binary is stale** and its `"kernels"` winners read as absent
+everywhere - a rebuilt binary invalidates every measured winner, so
+copied-around stale files can never resurrect dead measurements. The
+framework never reads `"runtime"`: that section describes the box, not the
+binary, so the library that reads it decides per verdict (*Sidecar location
+and staleness*) - dasLLAMA serves its knobs off a `stale_binary` sidecar and
+applies nothing on `foreign_box` or `unreadable`.
 
 ```{note}
 
@@ -353,10 +357,10 @@ needed; `DAS_TUNE_MANIFEST` overrides the location, and
 `set_tune_manifest_runtime_path` points just the get/set APIs elsewhere for
 self-managed harnesses.
 
-A sidecar whose mtime **predates the running binary's** is stale: it reads as
-absent (stamps fall back, the policy rail re-tunes), and the first
-`tune_manifest_set` resets it to a fresh document. Measurements never
-outlive the binary that made them. A sidecar carrying another box's
+A sidecar whose mtime **predates the running binary's** is stale: its
+`"kernels"` read as absent (stamps fall back, the policy rail re-tunes), and
+the first `tune_manifest_set` resets the whole document - the `"runtime"`
+section included. Measurements never outlive the binary that made them. A sidecar carrying another box's
 identity is stale too - measurements are a property of the box - unless
 `provenance.applied_box` names this box, which is how a scope resolver (below)
 adopts a compatible sibling box's mint deliberately. That identity is the

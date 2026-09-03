@@ -501,6 +501,14 @@ def tune_summary() : string {
 //! * **plain script**: the policy rail ran, so every row must stamp a manifest winner.
 //! ``DASLLAMA_ALLOW_UNTUNED=1`` is the dev-run escape in all three (it also suppresses the
 //! auto-mint at ``[init]`` — see ``dasllama_math_gen_register`` — so the gate is reached at all).
+var private g_tune_gate_bypassed = false
+
+//! True once `tune_gate` let a cell through on `DASLLAMA_ALLOW_UNTUNED=1` - the flavor stamp
+//! carries it so no such number reads as a tuned one.
+def tune_gate_bypassed() : bool {
+    return g_tune_gate_bypassed
+}
+
 def tune_gate() : bool {
     var why = ""
     let mpath = g_env_core.tune_manifest
@@ -519,7 +527,7 @@ def tune_gate() : bool {
         if (!stat(mpath, mst)) {
             why = "DAS_TUNE_MANIFEST='{mpath}' does not exist - every kernel runs its fallback"
         } elif (stat(args[0], bst) && bst.mtime > mst.mtime) {
-            why = "DAS_TUNE_MANIFEST='{mpath}' is OLDER than the binary ({args[0]}) - the staleness rule drops every kernel to its fallback"
+            why = "DAS_TUNE_MANIFEST='{mpath}' is OLDER than the binary ({args[0]}) - the staleness rule drops every kernel to its fallback (the runtime knobs still apply)"
         } elif (find(fread(mpath), "\"kernels\"") < 0) {
             why = "DAS_TUNE_MANIFEST='{mpath}' carries no kernels section - not a minted manifest"
         }
@@ -549,6 +557,7 @@ def tune_gate() : bool {
         return true
     }
     if (g_env_bench.allow_untuned) {
+        g_tune_gate_bypassed = true
         to_log(LOG_WARNING, "tune gate: {why} - measuring anyway (DASLLAMA_ALLOW_UNTUNED=1, numbers are NOT publishable)\n")
         return true
     }

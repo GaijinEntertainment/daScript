@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>stories — dasllama.io</title>
+<meta name="description" content="How dasLLAMA is built and measured, one arc at a time — what we tried, how we measured it, and the tables."/>
+<meta property="og:title" content="dasllama.io stories"/>
+<meta property="og:description" content="What we tried, how we measured it, and the tables."/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://dasllama.io/stories.html"/>
+<link rel="canonical" href="https://dasllama.io/stories.html"/>
+<link rel="icon" href="files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="stylesheet" href="files/fonts/fonts.css"/>
+<link rel="stylesheet" href="files/forge.css"/>
+<link rel="stylesheet" href="files/dasllama-table.css"/>
+<link rel="stylesheet" href="files/dasllama-io.css"/>
+<script src="files/dasllama-io.js" defer></script>
+<script src="files/github-star.js" defer></script>
+<!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="stories.html">stories</a><a class="dio-tab" href="ladder.html">ladder</a><a class="dio-tab" href="sidecars.html">sidecars</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+</div></div></nav>
+
+<header class="dio-head"><div class="forge-container"><div class="dio-head__row">
+<div>
+<h1>Stories from the <em>build.</em></h1>
+<p class="dio-head__lede">Each story here is one arc of the work - what we tried, how we measured it, and the tables. Numbers are what they were that day; the <a href="ladder.html">ladder</a> is where the current ones live.</p>
+</div>
+</div></div></header>
+
+<section class="forge-section" style="padding:12px 0 64px;border-top:0">
+<div class="forge-container">
+<div id="dio-stories">
+<!-- stories:begin — everything between the markers is generated from _stories/*.md by
+     build_news.py (run at deploy AND checked in, so preview matches production) -->
+<div class="forge-blog-list dio-story-list">
+<a class="forge-blog-item" href="stories/2026-09-03-mtp-on-mac.html"><span class="forge-blog-item__date">2026-09-03</span><span class="forge-blog-item__tag">engine</span><span class="forge-blog-item__title">The model that drafts its own next token.</span><span class="forge-blog-item__excerpt">Qwen 3.8 and Gemma 4 ship with a drafter built in. We taught dasLLAMA to use it on Metal, then spent two days with a ruler finding out what a draft is worth.</span></a>
+<a class="forge-blog-item" href="stories/2026-08-30-apple-m5.html"><span class="forge-blog-item__date">2026-08-30</span><span class="forge-blog-item__tag">hardware</span><span class="forge-blog-item__title">Boris got a new laptop.</span><span class="forge-blog-item__excerpt">An M5 Max, an engine that had never seen one, and sixty-two kernels that had to earn their place on it again.</span></a>
+</div>
+<!-- stories:end -->
+</div>
+</div>
+</section>
+
+<footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="stories.html">stories</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+<div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>
+
+</div></body></html>

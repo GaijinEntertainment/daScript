@@ -6,6 +6,8 @@ require dasllama/dasllama_common
 require dasllama/dasllama_math  // the knob setters/getters (incl. set/get_q8_token_block) + the backend registry (engine-level, not re-exported)
 require daslib/fio
 require dasllama/dasllama_env
+require dasllama/dasllama_tune   // box_profile_verdict_at
+require llvm/daslib/llvm_tune    // tune_box_identity, TuneSidecarReason
 
 // The tune sidecar's "runtime" section: apply_box_profile_runtime(path) sets the runtime knobs
 // and logs each applied entry. The explicit-path form keeps the test independent of the app's
@@ -29,6 +31,10 @@ def private restore_defaults() {
     set_jobque_spin_us(30000l)
     set_jobque_join_poll(50l)
     set_team_rank_gate(-1)
+    clear_mtp_depth()
+    set_mtp_depth_nextn(1l)
+    set_mtp_depth_assistant(1l)
+    set_mtp_round_kind(MtpRoundKind.nextn)
 }
 
 [test]
@@ -239,4 +245,101 @@ def test_backend_pin_applies(t : T?) {
     clear_kernel_backend_pin()
     select_kernel_backend(before)   // restore for any later test in this process
     remove(path)
+}
+
+// The checked route (what the no-path apply takes): a sidecar older than the binary keeps its
+// runtime section - the knobs are this box's state and only the kernel winners died with the
+// rebuild - while another box's sidecar applies nothing.
+[test]
+def test_stale_binary_sidecar_keeps_runtime(t : T?) {
+    var terr = ""
+    let dir = temp_directory(terr)
+    t |> success(terr == "", "temp_directory resolves")
+    let path = path_join(dir, "dasllama_test_box_profile_stale.json")
+    let js = "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"{tune_box_identity()}\"\}\}"
+    t |> success(fwrite(path, js), "profile written")
+    var err : string
+    t |> success(set_mtime(path, mktime(2020, 1, 1, 0, 0, 0), err), "mtime set into the past ({err})")
+    t |> equal(box_profile_verdict_at(path), TuneSidecarReason.stale_binary, "reads as binary-stale")
+    apply_box_profile_runtime_checked(path)
+    t |> equal(get_q8_token_block(), 320l, "runtime knob applied off a binary-stale sidecar")
+    t |> success(box_profile_runtime_applied(), "the applied flag is up")
+    remove(path)
+    restore_defaults()
+}
+
+[test]
+def test_foreign_sidecar_applies_nothing(t : T?) {
+    var terr = ""
+    let dir = temp_directory(terr)
+    t |> success(terr == "", "temp_directory resolves")
+    let path = path_join(dir, "dasllama_test_box_profile_foreign.json")
+    let js = "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"dasllama-test-foreign-box\"\}\}"
+    t |> success(fwrite(path, js), "profile written")
+    t |> equal(box_profile_verdict_at(path), TuneSidecarReason.foreign_box, "reads as another box's")
+    apply_box_profile_runtime_checked(path)
+    t |> equal(get_q8_token_block(), 128l, "runtime knob NOT applied off another box's sidecar")
+    t |> equal(box_profile_runtime_declined(), "foreign_box", "the decline names its reason")
+    remove(path)
+    restore_defaults()
+}
+
+[test]
+def test_kernels_only_sidecar_declines_as_no_runtime(t : T?) {
+    var terr = ""
+    let dir = temp_directory(terr)
+    t |> success(terr == "", "temp_directory resolves")
+    let path = path_join(dir, "dasllama_test_box_profile_kernels_only.json")
+    let js = "\{\"kernels\":\{\"dot\":\"vec8_u2\"\},\"provenance\":\{\"box\":\"{tune_box_identity()}\"\}\}"
+    t |> success(fwrite(path, js), "profile written")
+    apply_box_profile_runtime_checked(path)
+    t |> equal(box_profile_runtime_declined(), "no_runtime_section", "a fallback-stamp sidecar declines by name")
+    remove(path)
+    restore_defaults()
+}
+
+[test]
+def test_apply_status_describes_the_last_checked_apply(t : T?) {
+    var terr = ""
+    let dir = temp_directory(terr)
+    t |> success(terr == "", "temp_directory resolves")
+    let foreign = path_join(dir, "dasllama_test_box_profile_last_foreign.json")
+    let own = path_join(dir, "dasllama_test_box_profile_last_own.json")
+    t |> success(fwrite(foreign, "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"dasllama-test-foreign-box\"\}\}"), "foreign profile written")
+    t |> success(fwrite(own, "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"{tune_box_identity()}\"\}\}"), "own profile written")
+    apply_box_profile_runtime_checked(foreign)
+    t |> equal(box_profile_runtime_declined(), "foreign_box", "the first apply declines")
+    apply_box_profile_runtime_checked(own)
+    t |> success(box_profile_runtime_applied(), "the second apply applies")
+    t |> equal(box_profile_runtime_declined(), "", "a later apply clears the earlier decline reason")
+    apply_box_profile_runtime_checked(foreign)
+    t |> success(!box_profile_runtime_applied(), "a later decline lowers the applied flag")
+    t |> equal(box_profile_runtime_declined(), "foreign_box", "and names its reason")
+    remove(foreign)
+    remove(own)
+    restore_defaults()
+}
+
+// The speculative depth: the box knobs decide per round kind until an explicit set wins.
+[test]
+def test_mtp_depth_knobs_apply_per_round_kind(t : T?) {
+    var terr = ""
+    let dir = temp_directory(terr)
+    t |> success(terr == "", "temp_directory resolves")
+    let path = path_join(dir, "dasllama_test_box_profile_mtp.json")
+    let js = "\{\"runtime\":\{\"mtp_depth_nextn\":1,\"mtp_depth_assistant\":2\}\}"
+    t |> success(fwrite(path, js), "profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(get_mtp_depth_assistant(), 2l, "assistant knob applied")
+    t |> equal(get_mtp_depth_nextn(), 1l, "nextn knob applied")
+    set_mtp_round_kind(MtpRoundKind.nextn)
+    t |> equal(get_mtp_depth(), 1l, "a NextN round drafts the nextn depth")
+    set_mtp_round_kind(MtpRoundKind.assistant)
+    t |> equal(get_mtp_depth(), 2l, "an assistant round drafts the assistant depth")
+    set_mtp_depth(3l)
+    t |> equal(get_mtp_depth(), 3l, "an explicit depth wins over the knobs")
+    clear_mtp_depth()
+    t |> equal(get_mtp_depth(), 2l, "clearing the explicit depth hands the knobs back")
+    remove(path)
+    restore_defaults()
 }

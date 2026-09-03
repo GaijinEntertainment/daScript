@@ -1,40 +1,456 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-<title>dasllama.io news</title>
+<title>dasllama.io news and stories</title>
 <author><name>dasllama.io</name></author>
 <link href="https://dasllama.io/"/>
 <link href="https://dasllama.io/feed.xml" rel="self"/>
-<updated>2026-08-30T00:00:00Z</updated>
+<updated>2026-09-03T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
+<entry>
+<title>Speculative decoding lands on Metal - Qwen 3.8&#x27;s NextN head and Gemma 4&#x27;s assistant drafter.</title>
+<link href="https://dasllama.io/#n-2026-09-03-mtp-on-mac"/>
+<id>https://dasllama.io/#n-2026-09-03-mtp-on-mac</id>
+<updated>2026-09-03T00:00:00Z</updated>
+<content type="html">&lt;p&gt;Both drafter families that ship with their models now run on any Apple GPU dasLLAMA runs
+on, and the depth is a per-box knob the tuner mints. Measured against a stock llama.cpp on
+identical rendered prompts: gemma-4-26B-A4B on an M5 Max goes 122.7 to 145.9 tok/s at depth
+1 (llama.cpp 97.7 to 133.7), Qwen3.8-27B on an M4 Pro 12.7 to 14.0 (llama.cpp 11.5 to 13.8).
+How we measured, what we tried, and why the gain is as small as it is:
+&lt;a href=&quot;stories/2026-09-03-mtp-on-mac.html&quot;&gt;the story&lt;/a&gt;.&lt;/p&gt;</content>
+</entry>
+<entry>
+<title>The model that drafts its own next token.</title>
+<link href="https://dasllama.io/stories/2026-09-03-mtp-on-mac.html"/>
+<id>https://dasllama.io/stories/2026-09-03-mtp-on-mac.html</id>
+<updated>2026-09-03T00:00:00Z</updated>
+<content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/mtp/mtp_m5_gemma-4-26B-A4B.json (2026-09-02, das 7907b133c),
+     mtp_m4_gemma-4-26B-A4B.json (2026-09-02, das fa0b0eac4), mtp_m5_Qwen3.8-27B.json (2026-09-02, das 497dcf10a),
+     mtp_m4_Qwen3.8-27B.json (2026-09-03, das f591c4c13); llama.cpp = stock upstream commit 6fdd0ac89 on both
+     boxes, run as llama-server on the same rendered prompt via /completion with ignore_eos; the M4 morning
+     row (12.7 -&gt; 11.0) = the measurement-day ruler at das 4da0045f0, superseded in the record by f591c4c13;
+     the 93% verify share and the depth-2 7.9 -&gt; 12.4 = the round clocks on the M4 Pro, 2026-09-03; the
+     models are gemma-4-26B-A4B-it-Q4_K_M with mtp-gemma-4-26B-A4B-it-Q8_0 and Qwen3.8-27B-Q4_K_M with
+     mtp-Qwen3.8-27B-Q8_0 (checksums in the records); &quot;1 draft&quot; = our --mtp-depth 1 and llama.cpp&#x27;s
+     --spec-draft-n-max 1; the code prompt = mtp_m5_gemma-4-26B-A4B_code1.json (2026-09-02, das c3239b46c,
+     corpus benchmarks/data/code1_prompts.txt); the ruler is modules/dasLLAMA/harness/mtp_ruler.das --&gt;
+&lt;p&gt;We turned speculative decoding on, and Anton&#x27;s Mac mini got slower. That was the morning of
+the 2nd of September, and it is why this story has a second day.&lt;/p&gt;
+&lt;p&gt;The idea first. A model generates one token at a time, and for a big model every token
+costs a full pass over the weights. Speculative decoding lets a smaller model (the drafter)
+propose a few tokens ahead and has the big model verify them all in one pass. Right guesses
+give you two or three tokens for the price of one pass and a bit; wrong guesses cost you the
+bit. The output does not change either way: the big model only keeps a drafted token it
+would have produced itself.&lt;/p&gt;
+&lt;p&gt;Two current models ship with their own drafter. Qwen 3.8 carries a NextN head, one extra
+layer that predicts the token after the next one. Gemma 4 ships a four-layer assistant
+model next to the 26B main model. Both now run in dasLLAMA on Metal. The drafter is a second
+file you load next to the model. We measured on Boris&#x27;s new M5 Max laptop and on Anton&#x27;s
+M4 Pro Mac mini, which answers over ssh from the other side of the globe.&lt;/p&gt;
+&lt;h2&gt;What we tried&lt;/h2&gt;
+&lt;p&gt;How deep to draft, first of all. One draft token means the big model computes two positions
+in one pass: the position it was at anyway, where its own answer either matches the draft or
+replaces it, and the position after the draft, which only counts if the draft matched. So a
+round always yields one token and, when the draft was right, a second. Two draft tokens mean
+three positions, and the second draft only pays if it is accepted often enough to cover that
+third row.&lt;/p&gt;
+&lt;p&gt;We tried one against two on each machine and let the tuner decide, the way it decides
+everything else on a box, and every machine we own settled on one. Three and four were so far
+behind on the development build that they never reached the ruler.&lt;/p&gt;
+&lt;p&gt;The Gemma assistant reads the main model&#x27;s hidden state as its input, and there are two
+places to read it from, before or after the final norm. After won on acceptance, so after
+ships.&lt;/p&gt;
+&lt;p&gt;We also checked whether squeezing the main model harder hurts the drafter. The 8-bit Gemma
+accepted 76.5% of the drafts, the 4-bit one 74.6%. Not much, then.&lt;/p&gt;
+&lt;p&gt;Then the kernels, which turned out to be the real story.&lt;/p&gt;
+&lt;h2&gt;How we measured&lt;/h2&gt;
+&lt;p&gt;The board on daslang.io uses llama-bench, and llama-bench cannot measure speculative
+decoding. So we built a small ruler for ourselves. It takes four chat prompts, renders each
+through the model&#x27;s own chat template with thinking off, and runs two engines on the
+identical rendered text for the same number of tokens - ours, and a stock llama.cpp built
+from upstream exactly as they ship it.&lt;/p&gt;
+&lt;p&gt;We focused on two models, gemma-4-26B-A4B-it-Q4_K_M with its Q8_0 assistant and
+Qwen3.8-27B-Q4_K_M with its Q8_0 NextN head, and both engines read the same drafter file.&lt;/p&gt;
+&lt;p&gt;The four prompts are the first turns of four tasks from
+&lt;a href=&quot;https://github.com/hemingkx/Spec-Bench&quot;&gt;hemingkx/Spec-Bench&lt;/a&gt;: a travel blog post to write,
+a news article to summarize, a GSM8K arithmetic problem, and a trivia question.&lt;/p&gt;
+&lt;p&gt;Two of the ruler&#x27;s rules exist because each one cost us an afternoon.&lt;/p&gt;
+&lt;p&gt;Rule 1. Same thinking mode on both sides. Our very first llama.cpp run had thinking on while
+ours had it off, and its acceptance read 91%. A thinking-on answer is an outline, not a blog
+post - a different text with a different acceptance rate. The ruler now renders one prompt
+and hands the same bytes to both engines.&lt;/p&gt;
+&lt;p&gt;Rule 2. Let the box cool down. Surprisingly, a Mac that has been working hard for ten
+minutes decodes 13 to 18% slower than a cool one. Who knew. Every arm now waits three minutes
+on the 27B before it measures. The release build also runs before anything else: when the
+measuring program had already run the engine in-process, everything it measured afterwards
+came out 20% low, for reasons we still find funny.&lt;/p&gt;
+&lt;h2&gt;What we measured&lt;/h2&gt;
+&lt;p&gt;So we ran it, and the drafter earns its keep: about one extra token in five, and not a token
+more.&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;tokens/s&lt;/th&gt;
+&lt;th&gt;dasLLAMA off&lt;/th&gt;
+&lt;th&gt;1 draft&lt;/th&gt;
+&lt;th&gt;2 drafts&lt;/th&gt;
+&lt;th&gt;llama.cpp off&lt;/th&gt;
+&lt;th&gt;1 draft&lt;/th&gt;
+&lt;th&gt;2 drafts&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;Gemma, M5&lt;/td&gt;
+&lt;td&gt;122.7&lt;/td&gt;
+&lt;td&gt;145.9 (75.2%)&lt;/td&gt;
+&lt;td&gt;148.1 (62.6%)&lt;/td&gt;
+&lt;td&gt;97.7&lt;/td&gt;
+&lt;td&gt;133.7&lt;/td&gt;
+&lt;td&gt;142.0&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Gemma, M4&lt;/td&gt;
+&lt;td&gt;59.2&lt;/td&gt;
+&lt;td&gt;67.5 (74.6%)&lt;/td&gt;
+&lt;td&gt;55.6 (62.9%)&lt;/td&gt;
+&lt;td&gt;52.8&lt;/td&gt;
+&lt;td&gt;67.2&lt;/td&gt;
+&lt;td&gt;62.5&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Qwen, M5&lt;/td&gt;
+&lt;td&gt;27.6&lt;/td&gt;
+&lt;td&gt;33.0 (77.4%)&lt;/td&gt;
+&lt;td&gt;31.4 (75.1%)&lt;/td&gt;
+&lt;td&gt;25.2&lt;/td&gt;
+&lt;td&gt;34.1&lt;/td&gt;
+&lt;td&gt;33.5&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Qwen, M4&lt;/td&gt;
+&lt;td&gt;12.7&lt;/td&gt;
+&lt;td&gt;14.0 (77.4%)&lt;/td&gt;
+&lt;td&gt;12.4 (75.1%)&lt;/td&gt;
+&lt;td&gt;11.5&lt;/td&gt;
+&lt;td&gt;13.8&lt;/td&gt;
+&lt;td&gt;12.5&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;&lt;small&gt;In parentheses, the acceptance rate.&lt;/small&gt;&lt;/p&gt;
+&lt;p&gt;The same drafter drafts the same on both sides, 75 to 94% accepted at the first position
+depending on the prompt, in both engines. Whatever separates the two columns, it is not the
+drafting. The four prompts do not agree with each other at all. Gemma on the M5:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;tokens/s&lt;/th&gt;
+&lt;th&gt;dasLLAMA off&lt;/th&gt;
+&lt;th&gt;1 draft&lt;/th&gt;
+&lt;th&gt;2 drafts&lt;/th&gt;
+&lt;th&gt;llama.cpp off&lt;/th&gt;
+&lt;th&gt;1 draft&lt;/th&gt;
+&lt;th&gt;2 drafts&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;writing&lt;/td&gt;
+&lt;td&gt;124.2&lt;/td&gt;
+&lt;td&gt;144.0 (69.3%)&lt;/td&gt;
+&lt;td&gt;138.3 (50.8%)&lt;/td&gt;
+&lt;td&gt;98.2&lt;/td&gt;
+&lt;td&gt;139.6 (81.4%)&lt;/td&gt;
+&lt;td&gt;130.8 (60.0%)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;summarization&lt;/td&gt;
+&lt;td&gt;118.1&lt;/td&gt;
+&lt;td&gt;133.4 (69.3%)&lt;/td&gt;
+&lt;td&gt;124.6 (54.9%)&lt;/td&gt;
+&lt;td&gt;95.8&lt;/td&gt;
+&lt;td&gt;119.8 (70.3%)&lt;/td&gt;
+&lt;td&gt;126.0 (56.8%)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;math&lt;/td&gt;
+&lt;td&gt;123.9&lt;/td&gt;
+&lt;td&gt;160.1 (89.6%)&lt;/td&gt;
+&lt;td&gt;187.9 (88.0%)&lt;/td&gt;
+&lt;td&gt;98.4&lt;/td&gt;
+&lt;td&gt;145.8 (89.6%)&lt;/td&gt;
+&lt;td&gt;163.4 (84.0%)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;qa&lt;/td&gt;
+&lt;td&gt;124.8&lt;/td&gt;
+&lt;td&gt;148.6 (74.0%)&lt;/td&gt;
+&lt;td&gt;155.5 (63.4%)&lt;/td&gt;
+&lt;td&gt;98.2&lt;/td&gt;
+&lt;td&gt;129.5 (76.4%)&lt;/td&gt;
+&lt;td&gt;147.9 (70.5%)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;Qwen on the M4, the machine that started the second day:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;tokens/s&lt;/th&gt;
+&lt;th&gt;dasLLAMA off&lt;/th&gt;
+&lt;th&gt;1 draft&lt;/th&gt;
+&lt;th&gt;2 drafts&lt;/th&gt;
+&lt;th&gt;llama.cpp off&lt;/th&gt;
+&lt;th&gt;1 draft&lt;/th&gt;
+&lt;th&gt;2 drafts&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;writing&lt;/td&gt;
+&lt;td&gt;12.8&lt;/td&gt;
+&lt;td&gt;13.5 (70.7%)&lt;/td&gt;
+&lt;td&gt;10.9 (59.3%)&lt;/td&gt;
+&lt;td&gt;11.5&lt;/td&gt;
+&lt;td&gt;13.6 (75.0%)&lt;/td&gt;
+&lt;td&gt;12.3 (66.7%)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;summarization&lt;/td&gt;
+&lt;td&gt;12.6&lt;/td&gt;
+&lt;td&gt;14.0 (80.3%)&lt;/td&gt;
+&lt;td&gt;12.0 (71.7%)&lt;/td&gt;
+&lt;td&gt;11.5&lt;/td&gt;
+&lt;td&gt;13.8 (81.4%)&lt;/td&gt;
+&lt;td&gt;12.4 (69.8%)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;math&lt;/td&gt;
+&lt;td&gt;12.8&lt;/td&gt;
+&lt;td&gt;15.4 (93.9%)&lt;/td&gt;
+&lt;td&gt;13.6 (86.2%)&lt;/td&gt;
+&lt;td&gt;11.5&lt;/td&gt;
+&lt;td&gt;14.5 (93.8%)&lt;/td&gt;
+&lt;td&gt;13.9 (87.0%)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;qa&lt;/td&gt;
+&lt;td&gt;12.8&lt;/td&gt;
+&lt;td&gt;13.2 (67.1%)&lt;/td&gt;
+&lt;td&gt;13.8 (88.0%)&lt;/td&gt;
+&lt;td&gt;11.5&lt;/td&gt;
+&lt;td&gt;13.5 (80.0%)&lt;/td&gt;
+&lt;td&gt;11.5 (62.5%)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2&gt;The arithmetic of a round&lt;/h2&gt;
+&lt;p&gt;Here is the part we most wanted to write down. A round with one draft token produces, on
+average, &lt;code&gt;1 + a&lt;/code&gt; tokens, where &lt;code&gt;a&lt;/code&gt; is the acceptance rate. So its speedup over plain decoding
+is &lt;code&gt;(1 + a) / c&lt;/code&gt;, with &lt;code&gt;c&lt;/code&gt; the cost of the round in plain passes. Turn it around and the
+tables tell you what a round costs: &lt;code&gt;c = (1 + a) / speedup&lt;/code&gt;.&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;round cost, in plain passes&lt;/th&gt;
+&lt;th&gt;dasLLAMA&lt;/th&gt;
+&lt;th&gt;llama.cpp&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;Gemma, M5&lt;/td&gt;
+&lt;td&gt;1.75 / 1.19 = 1.47&lt;/td&gt;
+&lt;td&gt;1.79 / 1.37 = 1.31&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Gemma, M4&lt;/td&gt;
+&lt;td&gt;1.75 / 1.14 = 1.53&lt;/td&gt;
+&lt;td&gt;1.83 / 1.27 = 1.44&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Qwen, M5&lt;/td&gt;
+&lt;td&gt;1.77 / 1.20 = 1.48&lt;/td&gt;
+&lt;td&gt;1.83 / 1.35 = 1.35&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Qwen, M4&lt;/td&gt;
+&lt;td&gt;1.77 / 1.10 = 1.61&lt;/td&gt;
+&lt;td&gt;1.82 / 1.20 = 1.52&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;Timed on the M4, a round is the draft, the verify, the accept-and-commit and the state
+replay, and the verify is ninety-three percent of it. Checking two positions at once costs
+both engines about one and a half plain passes, and that, not the drafter, is what caps the
+gain at 1.1 to 1.2x on a dense 27B.&lt;/p&gt;
+&lt;p&gt;It is also why depth 2 falls behind on the M4 and only breaks even on the M5. A third row
+costs another half to a whole pass, and the second draft is accepted 51 to 66% of the time,
+which does not cover it. The math prompt is the exception: there the second draft lands 86
+to 88%, and depth 2 comes out ahead on every machine, 187.9 against 160.1 for Gemma on the
+M5. Code sits in between: asked for a bubble sort in C++, Gemma on the M5 had 86% of first
+drafts and 68% of second drafts accepted, and depth 2 came out ahead again, 174.0 against
+159.0 tokens per second, with llama.cpp at 153.7 against 140.0 on the same prompt.&lt;/p&gt;
+&lt;p&gt;Acceptance is a property of the text. The cost of a row is a property of the box.
+Reconciling the two is a tricky business left for future us.&lt;/p&gt;
+&lt;p&gt;The same arithmetic is why we never built the other idea, drafting wide: offering the two or
+three most likely tokens at one position instead of a chain. Every candidate is another row
+to verify, at half a pass to a whole pass each, and a runner-up only earns its row when the
+first candidate was wrong - one time in four on these prompts. It lost on paper before it
+could lose on the box.&lt;/p&gt;
+&lt;h2&gt;Where the two days went&lt;/h2&gt;
+&lt;p&gt;Back to that morning. The M4 read 12.7 tokens per second plain and 11.0 with the drafter on.
+llama.cpp on the same machine read 11.5 and 13.6. Without that second pair, a verify that
+cost two full passes for two rows would have looked like the price of a smaller GPU. With
+it, it looked like what it was. It is a lot easier when you have an oracle; otherwise how do
+you know you are slow?&lt;/p&gt;
+&lt;p&gt;The kernel that verifies two rows in one pass over the weights turned out to be a good fit
+for the M5 and a bad one for the M4, because the two chips have very different amounts of
+arithmetic per byte of memory bandwidth. So a new M4-specific kernel was written, the tuner
+picks it where it is the faster one, and the M4 row went to 13.9.&lt;/p&gt;
+&lt;p&gt;Then the depth-2 row, which was dropping like crazy, 7.9 tokens per second against 12.7
+plain. Same story, one row up: three rows took a kernel nobody had ever tried on this chip.
+We already had all the pieces - two rows on the new kernel, one on the old single pass - and
+1 + 2 turned out to be better than 3. Depth 2 went from 7.9 to 12.4, depth 1 to 14.0, by the
+evening of the 3rd. About a hundred lines and a test.&lt;/p&gt;
+&lt;h2&gt;What a draft is worth&lt;/h2&gt;
+&lt;p&gt;Exactly what the verify costs. The drafter&#x27;s quality, the depth, the box, the quantization -
+each of them moves the number a few percent around that one fact. The models ship with the
+drafter built in, so the question was never whether to use it. The question was how cheap we
+could make the check, and the answer so far is one and a half passes for two tokens, on both
+engines, on both chips.&lt;/p&gt;</content>
+</entry>
 <entry>
 <title>Apple M5 support lands - text, vision and speech, tuned on the new silicon.</title>
 <link href="https://dasllama.io/#n-2026-08-30-apple-m5"/>
 <id>https://dasllama.io/#n-2026-08-30-apple-m5</id>
 <updated>2026-08-30T00:00:00Z</updated>
-<content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max, minted 2026-08-30)
-     and m4.json (M4, 2026-08-31), rendered on the board from the same records --&gt;
-&lt;p&gt;dasLLAMA now treats the Apple M5 as a first-class target. The Metal kernels pick up the
-M5&#x27;s GPU tensor units through the Metal 4 tensor API wherever the per-box tune races crown
-them, the vision towers and the speech-to-text encoders serve on the GPU, and the CPU lane
-learned the M5 Max&#x27;s all-compute core layout - 6 &quot;Super&quot; plus 12 &quot;Performance&quot; cores, the
-pool spanning both tiers with decode parking the slower one; on the M4 the efficiency
-cores stay excluded. Both core gates were verified live this sweep.&lt;/p&gt;
-&lt;p&gt;The full M5 Max board is re-minted and on the &lt;a href=&quot;https://daslang.io/dasllama.html&quot;&gt;board&lt;/a&gt;
-(pp512 / tg128, Metal, llama-bench protocol): gemma-4-E2B Q8_0 - das 9074.3 / 161.3
-tok/s, llama.cpp 7413.4 / 137.0; Qwen3.8-27B - das 913.9 / 27.8, llama.cpp 752.1 / 25.4;
-Qwen3-30B-A3B - das 3752.9 / 165.7, llama.cpp 3422.4 / 137.0; gpt-oss-20b - das 3995.1 /
-162.7, llama.cpp 3476.6 / 149.0. The other modalities ride the same rails: the
-gemma-4-12B image encode lands at 7.1 ms against the reference&#x27;s 95 ms, the Qwen2.5-Omni
-window ViT at 106 ms against 118, and whisper large-v3-turbo transcribes jfk in 140 ms
-against whisper-cli&#x27;s 153 on the same GPU. The M4 board rows are refreshed alongside,
-including Canary-Qwen on its new Q8_0 serving artifact - jfk in 307.6 ms on the M5 and
-512.9 on the M4, beside the NeMo torch-MPS reference&#x27;s 704.7 and 1076.5; on the long gb1
-clip the das row reads 6484 ms beside the reference&#x27;s 4383 - the one remaining gap on long
-audio, and the next dig. The M1 board stands unchanged as the long-term record, its Canary
-rows retiring with the old decoder artifact.&lt;/p&gt;
-&lt;p&gt;Bringing a new chip up one model at a time - watching kernels tuned for one generation
-get re-raced, re-crowned, and here and there rewritten for the next - has been genuinely
-fun.&lt;/p&gt;</content>
+<content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max, minted 2026-08-30) --&gt;
+&lt;p&gt;dasLLAMA now treats the Apple M5 as a first-class target: the Metal 4 tensor units where the
+per-box race crowns them, the vision and speech encoders on the GPU, and the CPU lane on the
+M5 Max&#x27;s all-compute core layout. The full M5 Max board is re-minted and on the
+&lt;a href=&quot;https://daslang.io/dasllama.html&quot;&gt;board&lt;/a&gt; - gemma-4-E2B Q8_0 at 9074.3 / 161.3 tok/s
+(llama.cpp 7413.4 / 137.0), Qwen3.8-27B at 913.9 / 27.8 (752.1 / 25.4), pp512 / tg128 on
+Metal. Bringing a chip up one model at a time, and why it was fun:
+&lt;a href=&quot;stories/2026-08-30-apple-m5.html&quot;&gt;the story&lt;/a&gt;.&lt;/p&gt;</content>
+</entry>
+<entry>
+<title>Boris got a new laptop.</title>
+<link href="https://dasllama.io/stories/2026-08-30-apple-m5.html"/>
+<id>https://dasllama.io/stories/2026-08-30-apple-m5.html</id>
+<updated>2026-08-30T00:00:00Z</updated>
+<content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max Metal rows measured 2026-08-30, das
+     build 345dcd667; the gemma-4-26B-A4B row 2026-09-02, fa0b0eac4) and m4.json (Anton&#x27;s M4 Pro Metal
+     rows: 2026-07-29 das 0c8200a72, gemma-4-12B 2026-08-10 39a1f5192, Qwen3.8-27B 2026-09-03 47422ea68);
+     62 = the kernel families in performance/m5.tune.json, 23 = its runtime.metal_tensor picks; core
+     tiers = sysctl hw.perflevel0 (Super, 6) / hw.perflevel1 (Performance, 12) on the M5 Max; the image
+     reference is llama.cpp&#x27;s multimodal path, the Canary reference NVIDIA&#x27;s NeMo on Torch MPS --&gt;
+&lt;p&gt;Boris got a new laptop. An M5 Max, at the end of August, and it became the main machine
+the same afternoon. dasLLAMA had never run on an M5. Anton lent us his Mac mini - an M4
+Pro, the previous generation, sitting on the other side of the globe and reached over ssh -
+so we could watch the two chips side by side. And we got to work.&lt;/p&gt;
+&lt;h2&gt;What a new chip is, to this engine&lt;/h2&gt;
+&lt;p&gt;dasLLAMA does not ship kernels tuned for a chip. For every heavy operation - a matrix
+multiply, an attention step, a normalization - it ships several ways of computing the same
+thing. The first time it runs on a machine it tries them all, keeps the fastest of each,
+and writes the picks into a small file called a sidecar. Sixty-two such choices for the M5
+Max. So &quot;supporting the M5&quot; was not a port. It was letting the tuner run and then looking
+hard at every place where the pick had changed.&lt;/p&gt;
+&lt;p&gt;Three places did.&lt;/p&gt;
+&lt;p&gt;The M5&#x27;s GPU has tensor units - dedicated matrix hardware, reached through Apple&#x27;s Metal 4
+tensor API. For each matrix multiply in the engine we wrote a tensor-unit version next to
+the plain one and let the machine choose. On the M5 Max the tensor version came out ahead
+in 23 of them: every multiply over the compressed 4-, 5-, 6- and 8-bit weights, the 16-bit
+ones, the expert layers of the mixture-of-experts models, and the attention scores. The
+choice lives in the sidecar, not in the code: a machine that never tried keeps the plain
+version, and one that tried and found it slower keeps it too.&lt;/p&gt;
+&lt;p&gt;On the CPU side, the M5 Max has no Efficiency cores at all. It has 6 cores Apple calls Super
+and 12 it calls Performance, and all of them are the real thing. On Anton&#x27;s M4 we had taught
+the CPU lane to leave the Efficiency cores out of the worker pool, because they only slowed
+everyone down. On the M5 that habit would have quietly thrown away a third of the chip. Now
+all 18 work on a prompt, and token generation keeps the six Super cores and parks the
+twelve Performance ones, which would only get in the way of the fast six. We could not believe our eyes, so
+we checked it twice, on both machines.&lt;/p&gt;
+&lt;p&gt;The vision towers and the speech-to-text encoders run on the GPU on the M5 the way the text
+path does. Nothing new in the design - the same GPU plumbing - but each one had to be tried
+again and its picks re-made.&lt;/p&gt;
+&lt;h2&gt;What we measured&lt;/h2&gt;
+&lt;p&gt;So we measured it on the M5 and - look at that. What a beast of a machine.&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;model&lt;/th&gt;
+&lt;th&gt;Anton&#x27;s M4 Pro (pp512 / tg128)&lt;/th&gt;
+&lt;th&gt;Boris&#x27;s M5 Max (pp512 / tg128)&lt;/th&gt;
+&lt;th&gt;M5 / M4&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;gemma-4-E4B Q8_0&lt;/td&gt;
+&lt;td&gt;769.7 / 45.4&lt;/td&gt;
+&lt;td&gt;5303.2 / 90.1&lt;/td&gt;
+&lt;td&gt;6.9x / 2.0x&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;gemma-4-12B Q4_K_M&lt;/td&gt;
+&lt;td&gt;290.8 / 29.9&lt;/td&gt;
+&lt;td&gt;2077.0 / 63.7&lt;/td&gt;
+&lt;td&gt;7.1x / 2.1x&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;gemma-4-26B-A4B Q4_K_M&lt;/td&gt;
+&lt;td&gt;778.2 / 56.4&lt;/td&gt;
+&lt;td&gt;3870.0 / 118.1&lt;/td&gt;
+&lt;td&gt;5.0x / 2.1x&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;gpt-oss-20b mxfp4&lt;/td&gt;
+&lt;td&gt;853.4 / 78.7&lt;/td&gt;
+&lt;td&gt;3995.1 / 162.7&lt;/td&gt;
+&lt;td&gt;4.7x / 2.1x&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Mistral-Small-24B Q4_K_M&lt;/td&gt;
+&lt;td&gt;141.2 / 17.3&lt;/td&gt;
+&lt;td&gt;1163.7 / 38.3&lt;/td&gt;
+&lt;td&gt;8.2x / 2.2x&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Qwen3-30B-A3B Q4_K_M&lt;/td&gt;
+&lt;td&gt;771.1 / 86.1&lt;/td&gt;
+&lt;td&gt;3752.9 / 165.7&lt;/td&gt;
+&lt;td&gt;4.9x / 1.9x&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Qwen3.8-27B Q4_K_M&lt;/td&gt;
+&lt;td&gt;126.4 / 12.9&lt;/td&gt;
+&lt;td&gt;913.9 / 27.8&lt;/td&gt;
+&lt;td&gt;7.2x / 2.2x&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;One chip generation apart, the same models, the same engine. Prompt processing moved five to
+eight times. Token generation, which is bound by memory bandwidth, about twice.&lt;/p&gt;
+&lt;p&gt;The models that do more than text ride the same machine, the same day. gemma-4-12B&#x27;s vision
+tower takes 7.1 ms where llama.cpp&#x27;s multimodal path takes 95 ms; Qwen2.5-Omni&#x27;s window
+vision transformer 106 ms against 118 ms.&lt;/p&gt;
+&lt;p&gt;Speech, too. whisper large-v3-turbo transcribes the short JFK clip that whisper.cpp ships as
+its sample in 140 ms, against whisper-cli&#x27;s 153 ms on the same GPU. Canary-Qwen, NVIDIA&#x27;s
+speech-to-text model, in its new 8-bit form does the same clip in 307.6 ms on the M5 and
+512.9 ms on the M4, where NVIDIA&#x27;s own NeMo on Torch MPS takes 704.7 ms and 1076.5 ms. On
+the long gb1 clip we read 6484 ms and NeMo 4383 ms, which gives us something to do during
+the long winter evenings.&lt;/p&gt;
+&lt;p&gt;Glad we have llama.cpp, whisper.cpp and NeMo numbers next to ours. Those are the industry
+standard for this kind of thing, and they are the only way we know whether we are fast, and
+the only way we know when to stop. Without a yardstick a new chip is just a machine that
+runs, and every one of these numbers would be a little worse.&lt;/p&gt;
+&lt;h2&gt;Sixty-two kernels walked into a new chip.&lt;/h2&gt;
+&lt;p&gt;Most walked out the same. Twenty-three swapped to the tensor units. A few found out, in
+the first afternoon, that the form that had carried them for two generations was now the
+slow one, and had to be rewritten before the tuner had anything worth picking. None of this
+is visible from a spec sheet. It all happily went into the tuner log, and so did our last
+week - which probably says something about us.&lt;/p&gt;</content>
 </entry>
 <entry>
 <title>Qwen 3.8 27B joins the board - the new dense hybrid runs on CPU and Metal.</title>
