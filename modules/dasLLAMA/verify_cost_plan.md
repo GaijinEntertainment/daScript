@@ -267,6 +267,33 @@ simdgroup-matrix form (S2.4 below).
    the mul_mm's (maxd 0.6, zero flips - `MM_TOL`). Order: a k4 lab stamp raced against the
    four-column form on the M5 first; k6 and iq4xs next; the crown per box as the kq forms have
    today (the M4 Pro has no tensor unit to speak of - its simdgroup matmul may not win).
+
+   **S2.4 lab verdict (M5 Max, `bench_metal_gemv_kernels` k4 arms, Qwen3.8-27B site shapes, ms per
+   dispatch, best of 3; the weights sit in cache here, so the single pass reads 830 GB/s and every
+   ratio is the ALU/issue cost alone):**
+
+   | form | columns | q 5120x5120 | w13 5120x17408 | w2 17408x5120 |
+   |---|---|---|---|---|
+   | single pass (`k4_b1c`) | 1 | 0.018 | 0.054-0.058 | 0.057-0.060 |
+   | production twin B2 | 2 | 0.029 | 0.089 | 0.102 |
+   | production twin B4 | 4 | 0.048 | 0.146 | 0.186-0.192 |
+   | production twin B8 | 8 | 0.102 | 0.286 | 0.341 |
+   | simdgroup 8x8 form (`k4_mm8`, padded stage) | 8 | 0.076 | 0.237 | 0.258 |
+   | its knockouts: no matmul / no dequant stores | 8 | 0.027 / 0.057 | 0.090 / 0.177 | 0.092 / 0.188 |
+   | prefill tensor twin at MT 8 / 16 (`k4_tmm8/16`) | 8 / 16 | 0.097 / 0.103 | 0.211 / 0.217 | 0.337 / 0.371 |
+   | tensor form, GEMV dequant, one step per superblock (`k4_tmv8k`) | 8 | 0.061 | 0.168 | 0.270 |
+
+   Reading: the classic simdgroup multiply-accumulate runs at plain FMA rate on this GPU (its tile
+   loop is 65% of `k4_mm8`; without it the stage-and-dequant floor is 1.5x the single pass), so it
+   only removed the x loads and gained 20-25% per column over the four-column twin. The Metal-4
+   tensor op is nearly free per column (16 columns cost what 8 do) but its tile at m = 8 is small
+   and the dequant-to-half stage is the cost: the best stamp beats the eight-column twin by 40%
+   and the four-column twin never - it computes eight columns at 3.4x the single pass where the
+   twin does four at 2.7x. The lab-to-step calibration (twin B8 5.7x lab = 2.77x step, twin B4 2.7x
+   lab = 1.59x step) predicts 5-8 verify rows at ~1.9x a step instead of 2.7x, and 3-4 rows
+   unchanged at 1.59x. Depth 3 - the point that matters - does not move: on the M5 the K-quant
+   four-column form is already at this GPU's FMA-issue floor. The forms stay as lab arms; nothing
+   ships from S2.4 until a depth that uses 5-8 rows pays (it does not, S2.-1).
 3. The twin's occupancy on ALU-short parts (the M4 Pro crowns single passes around it).
    Predicted: retires the per-box crown; M4 Pro 2-row 1.20x -> ~0.9x.
 4. Pair-walk 4+1 / 4+2 forms. Predicted: M4 Pro 4-row 2.34x -> ~1.6x.
