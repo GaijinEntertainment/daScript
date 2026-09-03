@@ -218,6 +218,8 @@ DAS_MOD_API void test_das_string(const das::Block & block, das::Context * contex
 DAS_MOD_API uint64_t testBlockAnnotationData(const das::Block & blk, das::Context * context, das::LineInfoArg * at);
 DAS_MOD_API uint64_t testBlockAnnotationDataPayload();
 DAS_MOD_API void testPipedDefaults(int32_t a, float b, const das::TBlock<void, int32_t, float> & blk, das::Context * context, das::LineInfoArg * at);
+DAS_MOD_API int64_t testFourStrings ( const char * a, const char * b, const char * c, const char * d );
+DAS_MOD_API int64_t testFourPointers ( void * a, void * b, void * c, void * d );
 DAS_MOD_API vec4f new_and_init ( das::Context & context, das::SimNode_CallBase * call, vec4f * );
 
 struct CppS1 {
