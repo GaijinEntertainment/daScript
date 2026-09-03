@@ -1,4 +1,4 @@
-# The MTP depth-N arc — Qwen3.8-27B native head + gemma-4-26B-A4B assistant drafter
+# The MTP depth-N arc - Qwen3.8-27B native head + gemma-4-26B-A4B assistant drafter
 
 Branch `bbatkin/mtp-depth-n` off master c0ca624f9 (PR #3919 merged). One PR, both carriers.
 Research (cited lane reports + synthesis): `~/.claude/plans/mtp-research/`. This document is
@@ -398,7 +398,7 @@ scan variant, conv state = a slice of the verify's conv inputs, no per-row check
     (`GemmaDrafter`: Q8_0 weights as one q8 blob + F32 norms, offsets per layer) + the CPU reference
     step `gemma_draft_step_cpu` (the oracle); `dasllama/dasllama_metal_mtp_gemma.das` = the GPU
     drafter (`attach_gemma_drafter` uploads the blob once; `gemma_draft_step_gpu` = embed(tok)*sqrt(2816)
-    ‖ h -> pre_proj -> 4 x [rms, Q gemv, per-head q_norm, Q-only rope via the fused store with every
+    || h -> pre_proj -> 4 x [rms, Q gemv, per-head q_norm, Q-only rope via the fused store with every
     pair a Q pair, the DECODE's own attention kernels over the target mirror at layer 28/29 with
     cnt = anchor (keys < anchor: the seed is unfed), scale 1.0, sliding window on the chunked form,
     wo, post-norm, residual, rms, gate/up, geglu, down, post-norm, (residual + branch) * layer_scale]
@@ -524,9 +524,9 @@ ship a per-carrier default (gemma 2, Qwen NextN 1), keep `--mtp-depth` as the ov
 
 | model | off t/s | on t/s | ratio | accept | July M1 |
 |---|---|---|---|---|---|
-| 0.8B Q8 | 357.9 ± 0.5 | 454.6 ± 1.7 | **1.27x** | 87.9% | 1.26x @ 92.8 |
-| 27B-MTP Q4_K_M | 23.5 ± 2.1 (VOID, cv 9%) | 28.1 ± 0.3 | 1.19x nominal, ~1.25-1.3x settled | 81.5% | 1.26x @ 85.3 |
-| 35B-A3B Q4_K_M | 103.1 ± 1.5 | 127.0 ± 0.3 | **1.23x** | 81.7% | 1.19x @ 81.7 |
+| 0.8B Q8 | 357.9 +/- 0.5 | 454.6 +/- 1.7 | **1.27x** | 87.9% | 1.26x @ 92.8 |
+| 27B-MTP Q4_K_M | 23.5 +/- 2.1 (VOID, cv 9%) | 28.1 +/- 0.3 | 1.19x nominal, ~1.25-1.3x settled | 81.5% | 1.26x @ 85.3 |
+| 35B-A3B Q4_K_M | 103.1 +/- 1.5 | 127.0 +/- 0.3 | **1.23x** | 81.7% | 1.19x @ 81.7 |
 
 Prediction check: dense 1.2-1.4x HELD; "MoE < 1.15x" MISSED - the MoE cell improved to 1.23x
 (the plain MoE step nearly doubled on M5 and the B=2 expert-union verify kept pace).
@@ -905,10 +905,10 @@ row bought nothing. Two findings, both fixed in the arc:
 
   | k | off t/s | on t/s | ratio | per-draft acceptance |
   |---|---|---|---|---|
-  | 1 | 357.9 ± 0.6 | 431.6 ± 0.3 | 1.21x | 87.9% |
-  | 2 | 356.3 ± 1.1 | 451.1 ± 1.9 | 1.27x | 80.0% |
-  | 3 | 355.4 ± 1.2 | **464.6 ± 2.6** | **1.31x** | 73.8% |
-  | 4 | 311.1 ± 32.6 (VOID, cv 10%) | 255.0 ± 4.0 | ~0.72x vs the settled off | 67.6% |
+  | 1 | 357.9 +/- 0.6 | 431.6 +/- 0.3 | 1.21x | 87.9% |
+  | 2 | 356.3 +/- 1.1 | 451.1 +/- 1.9 | 1.27x | 80.0% |
+  | 3 | 355.4 +/- 1.2 | **464.6 +/- 2.6** | **1.31x** | 73.8% |
+  | 4 | 311.1 +/- 32.6 (VOID, cv 10%) | 255.0 +/- 4.0 | ~0.72x vs the settled off | 67.6% |
 
   Prediction MISSED on both ends: the per-draft cost is lower than modelled (k=3 still gains), and
   k=4 falls off a wall the model lacked - at nr = 5 the q8 sites run TWO B4 tiles, so every weight
@@ -924,7 +924,7 @@ row bought nothing. Two findings, both fixed in the arc:
   E[tokens] 2.44 / 2.86 / 3.12 over costs 1.68 / 1.90 / 2.12 => **k=2 ~1.45x, k=3 ~1.5x, k=4
   ~1.5x, no wall** (the kq sites have the single-pass B8 form; only the small q8 dn projections
   tile). The off arms will carry the sustained-load noise.
-  **RESULT (M5, -r 3):** k=2 off 23.5 ± 2.5 (VOID) / on 23.2 => ~1.03x vs the settled 22.6, per-draft
+  **RESULT (M5, -r 3):** k=2 off 23.5 +/- 2.5 (VOID) / on 23.2 => ~1.03x vs the settled 22.6, per-draft
   69.1%; **k=3 off 22.6 / on 27.7 = 1.23x**, 61.3%; k=4 off 23.3 / on 17.4 = **0.74x**, 51.4%.
   Depth-1 measured 1.24x earlier. Prediction MISSED: (a) the round's cost is non-monotonic in rows
   (3 rows dearer than 4, 5 rows a wall) - the per-width kernel cliffs of the qwen38 memo, on our

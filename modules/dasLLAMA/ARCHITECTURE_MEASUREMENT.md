@@ -155,6 +155,10 @@ them crowns confidently and wrongly:
   times and can flip a verdict outright.
 - **A real site shape.** `REVIEW_GPU.md` binds this one.
 
+A race arm owns a transient command queue for its timed pairs and releases it before returning -
+the one exception to the family's shared device and queue (`ARCHITECTURE_GPU.md` sec.1.5) - so
+the tune-time race never queues behind served work.
+
 Even a race meeting all three can be structurally blind. `kq_gemv_iq2xxs_f4` is the standing
 case: every isolated regime crowns the twin and the served decode graph loses 8.6% with it,
 because the effect is mixed-stream occupancy - it exists only when the GEMV runs beside the
