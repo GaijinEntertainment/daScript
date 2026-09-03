@@ -1015,23 +1015,37 @@
     loses the number: `is_number_word` accepts it, `get_number` refuses the dot, and the
     fallback finds no letter run) - unreachable through the facade, which normalizes first.
 
-82. **Gates the review-round fixes asked for.** (1) A served-layout change with no
-    `IMAGE_VERSION` bump: a `REVIEW.das` gate that a diff touching what `conv1d_prepare` /
-    `linear_prepare` mint, or a `read_*` consumer argument, also touches `IMAGE_VERSION` -
-    dropping the AdaIN affines' tiled twin needed 31 -> 32, and only a spuriously red image
-    cell would have said so. (2) A hand-listed `serialize(var arch : Archive; var x : T)`
-    with two or more `arch |> serialize*` calls and no leading `verify(count_meta_fields(x) ==
-    K)`: the five TTS leaves were the module's only ones without the tripwire while ten
-    sibling families carry it. (3) The split-invariance cell's second axis: `adain_rows` and
-    `attention_rows` shape their dispatch through `lanes_for_work(work, 0)` and the head
-    count, which `set_batch_lane_cap` never reaches, so their legs pin invariance under the
-    cap alone - `set_jobque_worker_limit` moves `get_dispatch_lanes()` and so every shaper.
-    (4) `--test modules/dasLLVM/tests` on an arm64 box deletes the tracked fixture
-    `llvm_tune_profiles_defaults/arm-neon.tune-defaults.json` (a tune-profiles test removes
-    the host's own default path); a folder-local `REVIEW.das` gate that a suite run leaves
-    `git status` clean is the fix. (5) A repo-wide lint: `length(<string>)` flowing into a
-    comparison against a name that reads as a character budget (`*_chars`, `max_len`, `cap`,
-    `limit`) in a file that elsewhere calls `utf8_to_cpts` - the chunker counted bytes, over-split
-    em-dash text threefold and let a 513-character run past a cap of 100. (6) A repo-wide lint,
-    LINT017's sibling: `int64(to_int(x))` - the cast says the author wanted 64-bit range, and
-    `to_int` answers 0 past 2^31 (the g2p number reader spoke "zero").
+82. **Gates the review-round fixes asked for - ruled 2026-09-03, landed on the post-land
+    branch except (5).** (1) LANDED: `REVIEW.das` stamps the image layout closure (every
+    `Archive` serializer body, `build_image`, `parse_image`, every `*_prepare` mint) and reds
+    when it moves with `IMAGE_VERSION` unmoved - dropping the AdaIN affines' tiled twin needed
+    31 -> 32, and only a spuriously red image cell would have said so. (2) LANDED: `REVIEW.das`
+    reds a hand-listed `Archive` serializer with two or more field writes and no
+    `verify(count_meta_fields(x) == K)`; the five TTS leaves and the tokenizer's were the ones
+    without it. (3) LANDED: the split-invariance cell runs the jobque worker limit as a second
+    axis, with a witness per axis that it moved the split - `adain_rows` and `attention_rows`
+    shape their dispatch through `lanes_for_work(work, 0)` and the head count, which the batch
+    lane cap never reaches. (4) LANDED: the tune-profiles test works on a temp copy of
+    `llvm_tune_profiles_defaults/`, and `modules/dasLLVM/REVIEW.das` reds a test that writes
+    or removes inside a tracked directory. Owed from it: the scanner is not dasLLVM's - a test
+    that writes under the tracked tree it lives in bites any folder with checked-in fixtures,
+    so it belongs in `dastest/review_gate.das` as `gate_no_tracked_writes(folder, dirs)` with
+    the dasLLVM gate becoming one call; and the committed
+    `llvm_tune_profiles_defaults/arm-neon.tune-defaults.json` is a run's output that nothing
+    reads now - delete it and ignore the directory once its provenance is confirmed. (5) AUDIT-AGENT ITEM, never a code rule (Boris: a
+    lint rule does not guess semantics from names): `length(<string>)` used as a character
+    count - the chunker counted bytes, over-split em-dash text threefold and let a
+    513-character run past a cap of 100. (6) LANDED as a LINT017 extension: `int64(to_int(x))`
+    and the other sign combinations, remedy `to_int64(x, false)`; the eight pre-existing sites
+    parse in 64 bits now.
+
+83. **The server's boot-arming entry points: degrade on bad config everywhere, and a gate.**
+    `configure_tts` now degrades on a missing file the way the roster does (2026-09-03), but
+    the mirror image stands for vision and audio: `main.das` owns their missing-file check
+    (it drops `image_mmproj` before calling) while `set_model_vision` / `set_model_audio`
+    still panic on a mismatched pair - exactly as config-fixable as a missing pack. Owed: the
+    same degrade there, and a `utils/dasllama-server/REVIEW.das` check that a `configure_*` /
+    `set_model_*` body never reaches `panic(` from config input. Also owed: `main.das`'s
+    `suppress_tune_for_setup` decides "no model configured" from argv alone (`--model` /
+    `--config`), so a `--tts`-only start - a serving start that runs kernels - suppresses the
+    tune mint.

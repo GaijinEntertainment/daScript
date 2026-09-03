@@ -11,6 +11,9 @@
   `get_architecture_name()`, or `cpu_supports()` - runs the module-owned suite on a machine
   matching that condition.**
 
+- **A test under `tests/` never creates, overwrites, or deletes a path that git tracks - it
+  copies the fixtures it needs into a temp directory it makes and writes to the copy.**
+
 - **A diff that adds or changes a branch on the target triple records in its PR body the
   cross-compile (`write_exe`) for that target that exercised the behavior.** The suite runs on
   the host, so a target-triple branch is checked only by the artifact built for that target.
@@ -93,3 +96,8 @@
   the result by several ulp, the rail's point is that the three tiers agree, and a clamp or a
   conversion written with ordered compares replaces a NaN lane with a number that every accuracy
   bound reads as success.
+
+- **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, dropping a
+  directory from its tracked-fixture list, or a finding text that no longer names what failed.
+  What the gate enforces is read from the gate itself; each check's finding text states its own
+  rule.

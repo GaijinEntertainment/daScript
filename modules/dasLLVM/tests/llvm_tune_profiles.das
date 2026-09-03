@@ -11,9 +11,13 @@ require llvm/daslib/llvm_tune
 // processes: an untuned start adopts the class profile instead of racing (source=manifest,
 // no tuner spawn); a profile whose minting box lacked a feature this box has races ONLY the
 // unlocked family (DAS_TUNE_ONLY armed for the tuner, cleared after); no profile file =
-// the old full race. The profile files are written HERE — their name carries this box's
-// tune_cpu_class(), and their features field is this box's fingerprint (or empty, to fake
-// a less-capable minting box).
+// the old full race. The fixture set is COPIED into a per-process temp directory and every
+// spawn runs from the copy: [tune_scope(defaults=...)] resolves against the declaring file
+// and the per-app sidecar resolves beside the root script, so the defaults dir, the profile
+// files and the sidecar all land under the copy and the tracked fixtures beside this file
+// are never written or removed. A profile's name carries this box's tune_cpu_class(), and
+// its features field is this box's fingerprint (or empty, to fake a less-capable minting
+// box).
 
 def private cleared_tune_env_prefix() : string {
     return (get_platform_name() == "windows" ?
@@ -64,6 +68,34 @@ def private write_profile(dir, klass, winner, features : string) {
     fwrite(path_join(dir, "{klass}.tune-defaults.json"), body)
 }
 
+// The working copy's defaults dir is named apart from the dir the scope fixture declares, so
+// no path this test writes is ever spelled like the tracked defaults dir beside it.
+let private WORK_DEFAULTS = "tune_defaults"
+let private SCOPE_FIXTURE = "llvm_tune_profiles_lib.das"
+let private DECLARED_DEFAULTS = "defaults = \"./"
+
+def private copy_fixture(t : T?; name, dstdir : string) {
+    let text = fread("{get_this_module_dir()}/{name}")
+    t |> success(!empty(text), "fixture {name} is unreadable")
+    t |> success(fwrite(path_join(dstdir, name), text), "could not copy {name} into {dstdir}")
+}
+
+def private redirect_defaults(src : string) : string {
+    let at = find(src, DECLARED_DEFAULTS)
+    return src if (at < 0)
+    let from = at + length(DECLARED_DEFAULTS)
+    let close = find(src, "\"", from)
+    return src if (close < 0)
+    return "{slice(src, 0, at)}{DECLARED_DEFAULTS}{WORK_DEFAULTS}{slice(src, close)}"
+}
+
+def private copy_scope_fixture(t : T?; dstdir : string) {
+    let src = fread("{get_this_module_dir()}/{SCOPE_FIXTURE}")
+    let text = redirect_defaults(src)
+    t |> success(text != src, "{SCOPE_FIXTURE} declares no relative {DECLARED_DEFAULTS}...\" for the copy to redirect")
+    t |> success(fwrite(path_join(dstdir, SCOPE_FIXTURE), text), "could not copy {SCOPE_FIXTURE} into {dstdir}")
+}
+
 [test]
 def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert rail per scenario; a split would hide the sequence the scenarios build on
     if (!jit_enabled()) {
@@ -73,9 +105,18 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     }
     let args <- get_command_line_arguments()  // aliases a process-global Array header - do not delete
     let bin = args[0]
-    let client = "{get_this_module_dir()}/llvm_tune_profiles_client.das"
-    let sidecar = "{get_this_module_dir()}/llvm_tune_profiles_client.tune.json"
-    let defdir = "{get_this_module_dir()}/llvm_tune_profiles_defaults"
+    let dirRes = create_temp_directory_result("llvm_tune_profiles_")
+    if (dirRes is error) {
+        t |> failure("could not create a temp dir: {dirRes as error}")
+        return
+    }
+    let work = dirRes as value
+    copy_fixture(t, "llvm_tune_profiles_client.das", work)
+    copy_fixture(t, "llvm_tune_profiles_tuner.das", work)
+    copy_scope_fixture(t, work)
+    let client = path_join(work, "llvm_tune_profiles_client.das")
+    let sidecar = path_join(work, "llvm_tune_profiles_client.tune.json")
+    let defdir = path_join(work, WORK_DEFAULTS)
     let klass = tune_cpu_class()
     let profile = path_join(defdir, "{klass}.tune-defaults.json")
 
@@ -164,8 +205,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     t |> success(refRun |> has("RESULT 5"))
     delete refRun
 
-    remove(sidecar)
-    remove(profile)
+    rmdir_rec(work)
 }
 
 [export]
