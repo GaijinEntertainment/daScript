@@ -77,6 +77,27 @@ def test_catalog_table(t : T?) {
         t |> success(tower.url |> starts_with("https://"), "asr tower url must be https")
         t |> success(find(tower.url, "/resolve/main/") < 0, "asr tower url is not commit-pinned")
     }
+    t |> run("the text-to-speech set is pinned like any carrier: three models, two packs") @(t : T?) {
+        var inscope set <- serve_tts_set()
+        var packs = 0
+        var names : table<string>
+        for (item in set) {
+            t |> success(!key_exists(names, item.entry.name), "duplicate tts file {item.entry.name}")
+            names |> insert(item.entry.name)
+            t |> equal(length(item.entry.sha256), 64, "{item.entry.name}: sha256 must be 64 hex chars")
+            t |> success(item.entry.bytes > 0l, "{item.entry.name}: canonical size missing")
+            t |> success(item.entry.url |> starts_with("https://"), "{item.entry.name}: url must be https")
+            t |> success(find(item.entry.url, "/resolve/main/") < 0, "{item.entry.name}: url is not commit-pinned")
+            if (item.pack) {
+                packs++
+            }
+        }
+        t |> equal(length(set), 5, "the set is three models and two packs")
+        t |> equal(packs, 2, "two front-end packs")
+        for (want in ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_postag.bin"]) {
+            t |> success(key_exists(names, want), "the set carries {want}")
+        }
+    }
 }
 
 [test]
@@ -140,6 +161,12 @@ def test_download_refusals(t : T?) {
         t |> success(find(refusal, "already present") >= 0, "got: {refusal}")
         catalog_events_shutdown()
         remove(planted)
+        rmdir(dir)
+    }
+    t |> run("a file outside the text-to-speech set refuses its download by name") @(t : T?) {
+        let dir = tmp_models_dir("tts")
+        let refusal = catalog_download_start_tts(dir, "nobody.gguf")
+        t |> success(find(refusal, "not in the text-to-speech set") >= 0, "got: {refusal}")
         rmdir(dir)
     }
     t |> run("a towerless entry refuses the vision download; an unpinned item refuses too") @(t : T?) {
