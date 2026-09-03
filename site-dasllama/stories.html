@@ -42,93 +42,104 @@
 <!-- stories:begin — everything between the markers is generated from _stories/*.md by
      build_news.py (run at deploy AND checked in, so preview matches production) -->
 <div class="forge-blog-list dio-story-list">
-<a class="forge-blog-item" href="#s-2026-09-03-mtp-on-mac"><span class="forge-blog-item__date">2026-09-03</span><span class="forge-blog-item__tag">engine</span><span class="forge-blog-item__title">Speculative decoding on a Mac - what we tried, how we measured it, and how small the gain is.</span><span class="forge-blog-item__excerpt">Two models that ship their own drafters, two Apple GPUs, one ruler laid against llama.cpp on identical prompts. The honest core of the story is the arithmetic of a round.</span></a>
-<a class="forge-blog-item" href="#s-2026-08-30-apple-m5"><span class="forge-blog-item__date">2026-08-30</span><span class="forge-blog-item__tag">hardware</span><span class="forge-blog-item__title">Bringing up the Apple M5, one model at a time.</span><span class="forge-blog-item__excerpt">A new chip arrives, forty kernel families get re-raced, some get re-crowned, a few get rewritten. Why that week was fun.</span></a>
+<a class="forge-blog-item" href="#s-2026-09-03-mtp-on-mac"><span class="forge-blog-item__date">2026-09-03</span><span class="forge-blog-item__tag">engine</span><span class="forge-blog-item__title">The model that guesses its own next word.</span><span class="forge-blog-item__excerpt">Two models ship with a built-in guesser. We taught dasLLAMA to use it on a Mac, then spent two days finding out what the guess is worth. Less than you would hope, and about as much as llama.cpp gets.</span></a>
+<a class="forge-blog-item" href="#s-2026-08-30-apple-m5"><span class="forge-blog-item__date">2026-08-30</span><span class="forge-blog-item__tag">hardware</span><span class="forge-blog-item__title">Boris got a new laptop.</span><span class="forge-blog-item__excerpt">An M5 Max, an engine that had never seen one, and sixty-two kernels that had to earn their place on it again.</span></a>
 </div>
 <article class="dio-story" id="s-2026-09-03-mtp-on-mac">
 <div class="dio-story__eyebrow"><span class="dio-item__date">2026-09-03</span><span class="dio-item__tag">engine</span></div>
-<h2 class="dio-story__title">Speculative decoding on a Mac - what we tried, how we measured it, and how small the gain is.</h2>
-<p class="dio-story__lede">Two models that ship their own drafters, two Apple GPUs, one ruler laid against llama.cpp on identical prompts. The honest core of the story is the arithmetic of a round.</p>
+<h2 class="dio-story__title">The model that guesses its own next word.</h2>
+<p class="dio-story__lede">Two models ship with a built-in guesser. We taught dasLLAMA to use it on a Mac, then spent two days finding out what the guess is worth. Less than you would hope, and about as much as llama.cpp gets.</p>
 <div class="dio-story__body"><!-- figures: modules/dasLLAMA/performance/records/mtp_m5_gemma-4-26B-A4B.json (2026-09-02, das ecf965ce5),
      mtp_m4_gemma-4-26B-A4B.json (2026-09-02, das e58e5a3ba), mtp_m5_Qwen3.8-27B.json (2026-09-02, das 59cad510c),
-     mtp_m4_Qwen3.8-27B.json (2026-09-03, das 24d13f1d2); llama.cpp stock commit 6fdd0ac89 on both boxes -->
-<p>Speculative decoding is the trick where a small drafter guesses the next few tokens and the
-big model checks all of them in one pass. If the guesses are good, you get several tokens
-for the price of a little more than one step. Two current model families ship their own
-drafter: Qwen 3.8 carries a NextN head - one extra transformer layer that predicts the
-token after next - and Gemma 4 ships a four-layer assistant model beside the 26B trunk.
-Both are now supported on Metal, on any Apple GPU dasLLAMA runs on. This is the story of
-getting there and of measuring what it is worth.</p>
+     mtp_m4_Qwen3.8-27B.json (2026-09-03, das 24d13f1d2); llama.cpp = stock upstream commit 6fdd0ac89 on both
+     boxes; round clocks and the kernel lab numbers = the M4 Pro on 2026-09-03, build 24d13f1d2; the ruler
+     renders any record back into these tables with --render -->
+<p>We turned the guesser on, and Anton's Mac mini got slower. That was the morning of the 2nd
+of September, and it is the reason this story has a second day.</p>
+<p>First, the trick. A language model writes one word at a time, and for a big model on a
+laptop every word costs the same: one pass over all of its weights, the billions of numbers
+that are the model. Speculative decoding is the old idea of letting something small guess a
+few words ahead and having the big model check the guesses in a single pass. If the guesses
+are right you get two or three words for the price of one pass and a bit. If they are wrong
+you wasted the bit. Either way the answer is the same: the big model only keeps a guessed
+word it would have written itself.</p>
+<p>Two current models ship with their own guesser. Qwen 3.8 carries an extra layer, called a
+NextN head, that predicts the word after the next one. Gemma 4 ships a small four-layer
+assistant model next to the big one. Both now work in dasLLAMA on Metal, Apple's way of
+driving the GPU, on any Apple machine the engine runs on. In practice the guesser is a
+second file you load next to the model, and you get a word and a bit per pass instead of a
+word. We measured it on Boris's new M5 Max laptop and on Anton's M4 Pro Mac mini, which
+Anton lent us for the week; it lives on the other side of the globe and answers over ssh.</p>
 <h2>What we tried</h2>
-<p><strong>Depth.</strong> A round drafts <code>k</code> tokens and verifies <code>k + 1</code> rows. Depth 1 is the safe bet;
-depth 2 pays off only when the second guess is right often enough to cover a third verify
-row. We raced depth 1 against depth 2 on each box and made the answer a box knob the tuner
-mints (<code>mtp_depth_nextn</code>, <code>mtp_depth_assistant</code>). Every box we own minted 1. Depth 3 and 4
-lost outright on the development rail and never reached the ruler.</p>
-<p><strong>Width.</strong> Verifying the top-2 or top-3 candidates at one position instead of a chain. We
-dropped it on paper: with one token ahead there is no room for a second candidate to win,
-and combined with depth it multiplies the verify rows the round cannot afford.</p>
-<p><strong>A depth controller.</strong> An online controller that raises depth while acceptance stays high.
-Dropped in favour of the box knob; it may return as per-request depth, because acceptance
-is a property of the prompt, not the box - the math prompt below runs 94% at position 1.</p>
-<p><strong>The drafter's input.</strong> The Gemma drafter takes the trunk's hidden state as input. Pre-norm
-lost to post-norm on acceptance; post-norm ships. The target's quantization is not what caps
-acceptance: the Q8_0 Gemma target accepted 76.5% against the Q4_K_M target's 74.6% on the
-same corpus.</p>
-<p><strong>The kernels.</strong> Verify rows on K-quant weights ride a small-batch GEMV that streams each
-weight row once for all rows. That kernel is ALU-bound, and Apple GPUs differ in how much
-ALU they have per byte of bandwidth. The M5 Max likes one form; the M4 Pro needed a
-different one - a register tile where each thread owns two weight rows and both activation
-columns - and, above two rows, a walk of that tile over column pairs instead of the
-four-column kernel. Which form a box gets is decided by a race at tune time and stored in
-its sidecar, like every other kernel choice in the engine.</p>
+<p>How many words to guess ahead, first of all. One guess means the big model checks two words
+per pass. Two guesses means three, and the second guess only pays if it is right often
+enough to cover the third word's cost. We tried one against two on each machine and let the
+tuner decide - the tuner is the part of dasLLAMA that tries the alternatives on your machine
+and keeps what is faster - and every machine we own picked one. Three and four were so far
+behind on the development build that they never made it to the proper measurement.</p>
+<p>We also looked at guessing wide instead of deep: checking the two or three most likely
+words at one position rather than a chain. We dropped it on paper. With only one word ahead
+there is no room for a runner-up, and together with depth it multiplies the work the check
+has to pay for.</p>
+<p>We dropped the automatic controller too, the one that would raise the depth while the
+guesses keep landing, in favour of the per-machine setting. It may come back one day as a
+per-request setting; the math prompt below explains why.</p>
+<p>The Gemma assistant reads what the big model was thinking as its input, and there are two
+places to read that from. The one at the very end of the big model's work guessed better, so
+that one ships. We also checked whether squeezing the big model harder hurts the guesser:
+the 8-bit Gemma accepted 76.5% of the guesses, the 4-bit one 74.6%. It does not, much.</p>
+<p>And then the kernels - the small programs the GPU actually runs - which turned out to be
+the real story and get their own section below.</p>
 <h2>How we measured</h2>
-<p>The board on daslang.io runs the <code>llama-bench</code> protocol, and <code>llama-bench</code> cannot measure
-speculative decoding. So we built a ruler for ourselves: <code>modules/dasLLAMA/harness/mtp_ruler.das</code>.
-It renders four chat prompts through the model's own template with thinking off, then runs
-two engines on the identical rendered text, greedy, exactly 128 tokens each, three
-repetitions, and writes one dated, sha-stamped JSON per box and model.</p>
-<p>Ours runs as the release executable - the same artifact the board uses - on a sidecar
-minted the same day. The ruler starts it with the box's own settings:</p>
+<p>The board on daslang.io uses llama.cpp's own benchmark tool, and that tool cannot measure
+speculative decoding. So we built a small ruler for ourselves. It takes four chat prompts,
+renders each one through the model's own chat template with the "thinking" mode off, and
+then runs two engines on the identical rendered text. Both engines always take their most
+likely word, so there is no randomness; exactly 128 new words each, three repetitions, one
+dated and stamped record per machine and model.</p>
+<p>Ours runs as the release executable, the same program the board uses, with the machine's
+tuning picks measured fresh that same day. On Anton's M4 the ruler started it like this, for
+one guess ahead:</p>
 <pre><code>DAS_TUNE_MANIFEST= DASLLAMA_MTP_HEAD=&quot;/Users/dasbox/models/mtp-Qwen3.8-27B-Q8_0.gguf&quot; &quot;modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench&quot; -- -m &quot;/Users/dasbox/models/Qwen3.8-27B-Q4_K_M.gguf&quot; --mtp-ab --mtp-depth 1 -n 128 -r 3 --ngl 99 --prompts &quot;modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt&quot; --chat-prompts
 </code></pre>
-<p>llama.cpp runs as a stock <code>llama-server</code> built from upstream at commit <code>6fdd0ac89</code> - no
-fork, no patch - fed the same rendered prompt raw through <code>/completion</code> with <code>ignore_eos</code>,
-so it generates exactly 128 tokens too. The ruler starts it, per depth <code>K</code>, as
-<code>llama-server --port P --host 127.0.0.1 -ngl 99 -fa on -c 2048 -t T -np 1 --no-warmup -fit off -m MODEL --spec-type draft-mtp --spec-draft-n-max K -md HEAD -ngld 99</code>
-(the function is <code>run_lcpp_arm</code>; <code>T</code> is the box's thread count, 10 on the M4 Pro) and reads
-the server's own timings back.</p>
-<p>The prompts are the first turns of four Spec-Bench tasks
-(<a href="https://github.com/hemingkx/Spec-Bench">hemingkx/Spec-Bench</a>, Apache-2.0): writing (qid 81),
-summarization (qid 241), GSM8K math (qid 401) and qa (qid 321), in
-<code>modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt</code>. Both engines read the same
-drafter file: the Qwen NextN head as <code>mtp-Qwen3.8-27B-Q8_0.gguf</code>, the Gemma assistant as
-<code>mtp-gemma-4-26B-A4B-it-Q8_0.gguf</code>; the JSON records carry their sha256.</p>
-<p>Two lessons the ruler now enforces, because each one cost us an afternoon:</p>
-<ul>
-<li><strong>Same thinking mode on both sides.</strong> Our first llama.cpp pass ran with thinking on and
-  ours with thinking off, and their acceptance read 91%. A thinking-on continuation is an
-  outline, not a blog post; it is a different text and a different acceptance rate. The
-  ruler renders one prompt and hands it to both.</li>
-<li><strong>Settle before every arm.</strong> A heat-soaked Mac under-reads a memory-bound decode by 13 to
-  18%. Every arm waits 180 seconds on the dense 27B before it measures, the way the board
-  driver does. And the release executable runs first: a parent process that had already run
-  the engine in-process made the child's speculative arm read 20% low.</li>
-</ul>
-<p>The invocation on the M4 Pro, verbatim:</p>
+<p>llama.cpp runs as its own <code>llama-server</code>, built straight from upstream at commit
+<code>6fdd0ac89</code>, exactly as they ship it. We hand it the same rendered text over its network
+interface and ask it not to stop early, so it also writes exactly 128 words. The ruler
+started it in the background, for the same arm on the same machine, as:</p>
+<pre><code>&quot;/Users/dasbox/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server&quot; --port 18790 --host 127.0.0.1 -ngl 99 -fa on -c 2048 -t 10 -np 1 --no-warmup -fit off -m &quot;/Users/dasbox/models/Qwen3.8-27B-Q4_K_M.gguf&quot; --spec-type draft-mtp --spec-draft-n-max 1 -md &quot;/Users/dasbox/models/mtp-Qwen3.8-27B-Q8_0.gguf&quot; -ngld 99
+</code></pre>
+<p>and read the server's own timings back.</p>
+<p>The four prompts are the first turns of four tasks from Spec-Bench
+(<a href="https://github.com/hemingkx/Spec-Bench">hemingkx/Spec-Bench</a>, Apache-2.0): a travel blog
+post to write, a news article to summarize, a grade-school arithmetic problem (from GSM8K),
+and a trivia question. Both engines read the same guesser file, and the records note its
+fingerprint, so there is no doubt about that.</p>
+<p>Two of the ruler's rules exist because each one cost us an afternoon. The first: same
+thinking mode on both sides. Our very first llama.cpp run had thinking on while ours had it
+off, and their guesser suddenly landed 91% of the time. A thinking-on answer is an outline,
+not a blog post. It is a different text with a different hit rate, so the ruler now renders
+one prompt and hands the same bytes to both engines. The second: let the machine cool down.
+A Mac that has been working hard for ten minutes writes words 13 to 18% slower than a cool
+one, so every arm now waits three minutes on the big 27B Qwen before it measures. And the
+release executable runs before anything else. When the measuring program had already run the
+engine itself, everything it measured afterwards came out 20% low, for reasons we still find
+funny.</p>
+<p>The whole thing, on Anton's M4, is one line, and everything below reproduces from it on the
+dates and builds shown:</p>
 <pre><code>bin/daslang -jit modules/dasLLAMA/harness/mtp_ruler.das -- -m $HOME/models/Qwen3.8-27B-Q4_K_M.gguf --server $HOME/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server --depths 1,2 -t 10 --settle 180 -o modules/dasLLAMA/performance/records/mtp_m4_Qwen3.8-27B.json
 </code></pre>
 <h2>What it measured</h2>
-<p>Tokens per second over 128 generated tokens, four prompts, three repetitions; acceptance in
-parentheses is accepted drafts over drafts offered. llama.cpp's pooled figure is the mean of
-its four prompt rows. Sources: the four <code>mtp_*.json</code> records named at the top of this story.</p>
+<p>So we ran it, and the guesser earns its keep: about one word in five, and not a word more.
+In parentheses, how many of its guesses the big model accepted. "off" is plain decoding;
+"depth 1" and "n_max 1" are one guess ahead in our engine and in llama.cpp; "depth 2" and
+"n_max 2" are two.</p>
 <table>
 <thead>
 <tr>
-<th>model, box (date, das sha)</th>
-<th>das off</th>
-<th>das depth 1</th>
-<th>das depth 2</th>
+<th>model, machine (date, build)</th>
+<th>dasLLAMA off</th>
+<th>dasLLAMA depth 1</th>
+<th>dasLLAMA depth 2</th>
 <th>llama.cpp off</th>
 <th>n_max 1</th>
 <th>n_max 2</th>
@@ -136,7 +147,7 @@ its four prompt rows. Sources: the four <code>mtp_*.json</code> records named at
 </thead>
 <tbody>
 <tr>
-<td>gemma-4-26B-A4B Q4_K_M, M5 Max (09-02, ecf965ce5)</td>
+<td>gemma-4-26B-A4B, Boris's M5 Max (09-02, ecf965ce5)</td>
 <td>122.7</td>
 <td>145.9 (75.2%)</td>
 <td>148.1 (62.6%)</td>
@@ -145,7 +156,7 @@ its four prompt rows. Sources: the four <code>mtp_*.json</code> records named at
 <td>142.0</td>
 </tr>
 <tr>
-<td>gemma-4-26B-A4B Q4_K_M, M4 Pro (09-02, e58e5a3ba)</td>
+<td>gemma-4-26B-A4B, Anton's M4 Pro (09-02, e58e5a3ba)</td>
 <td>59.2</td>
 <td>67.5 (74.6%)</td>
 <td>55.6 (62.9%)</td>
@@ -154,7 +165,7 @@ its four prompt rows. Sources: the four <code>mtp_*.json</code> records named at
 <td>62.5</td>
 </tr>
 <tr>
-<td>Qwen3.8-27B Q4_K_M, M5 Max (09-02, 59cad510c)</td>
+<td>Qwen3.8-27B, Boris's M5 Max (09-02, 59cad510c)</td>
 <td>27.6</td>
 <td>33.0 (77.4%)</td>
 <td>31.4 (75.1%)</td>
@@ -163,7 +174,7 @@ its four prompt rows. Sources: the four <code>mtp_*.json</code> records named at
 <td>33.5</td>
 </tr>
 <tr>
-<td>Qwen3.8-27B Q4_K_M, M4 Pro (09-03, 24d13f1d2)</td>
+<td>Qwen3.8-27B, Anton's M4 Pro (09-03, 24d13f1d2)</td>
 <td>12.7</td>
 <td>14.0 (77.4%)</td>
 <td>12.4 (75.1%)</td>
@@ -173,14 +184,18 @@ its four prompt rows. Sources: the four <code>mtp_*.json</code> records named at
 </tr>
 </tbody>
 </table>
-<p>Per prompt, the two ends of the range. Gemma on the M5 Max:</p>
+<p>Words per second, four prompts, three repetitions, 128 words each; llama.cpp's pooled figure
+is the mean of its four prompts.</p>
+<p>The same guesser guesses the same on both sides, 75 to 94% of first guesses depending on the
+prompt, in both engines. Whatever separates the two columns, it is not the guessing. And the
+four prompts do not agree with each other at all. Gemma on the M5 Max:</p>
 <table>
 <thead>
 <tr>
 <th>prompt</th>
-<th>das off</th>
-<th>das depth 1</th>
-<th>das depth 2</th>
+<th>dasLLAMA off</th>
+<th>depth 1</th>
+<th>depth 2</th>
 <th>llama.cpp off</th>
 <th>n_max 1</th>
 <th>n_max 2</th>
@@ -225,14 +240,14 @@ its four prompt rows. Sources: the four <code>mtp_*.json</code> records named at
 </tr>
 </tbody>
 </table>
-<p>Qwen 3.8 on the M4 Pro:</p>
+<p>Qwen 3.8 on Anton's M4 Pro, the machine that started the second day:</p>
 <table>
 <thead>
 <tr>
 <th>prompt</th>
-<th>das off</th>
-<th>das depth 1</th>
-<th>das depth 2</th>
+<th>dasLLAMA off</th>
+<th>depth 1</th>
+<th>depth 2</th>
 <th>llama.cpp off</th>
 <th>n_max 1</th>
 <th>n_max 2</th>
@@ -277,18 +292,17 @@ its four prompt rows. Sources: the four <code>mtp_*.json</code> records named at
 </tr>
 </tbody>
 </table>
-<p>Acceptance is the same drafter on both sides and it shows: 75 to 94% at position 1
-depending on the prompt, on both engines. The drafter is not where the two engines differ.</p>
 <h2>The arithmetic of a round</h2>
-<p>Here is the honest core. A depth-1 round produces on average <code>1 + a</code> tokens, where <code>a</code> is
-the acceptance rate, so its speedup over plain decode is <code>(1 + a) / c</code>, with <code>c</code> the round's
-cost in plain steps. Read <code>c</code> back from the tables: <code>c = (1 + a) / speedup</code>.</p>
+<p>Here is the part we most wanted to write down. One round with one guess produces, on
+average, <code>1 + a</code> words, where <code>a</code> is how often the guess lands. So its speedup over plain
+decoding is <code>(1 + a) / c</code>, with <code>c</code> the cost of the round measured in plain passes. Turn it
+around and the tables tell you what a round costs: <code>c = (1 + a) / speedup</code>.</p>
 <table>
 <thead>
 <tr>
-<th>model, box</th>
-<th>das round, in steps</th>
-<th>llama.cpp round, in steps</th>
+<th>model, machine</th>
+<th>our round, in passes</th>
+<th>llama.cpp's round, in passes</th>
 </tr>
 </thead>
 <tbody>
@@ -314,83 +328,98 @@ cost in plain steps. Read <code>c</code> back from the tables: <code>c = (1 + a)
 </tr>
 </tbody>
 </table>
-<p>A round that verifies two rows costs both engines about one and a half plain steps, and
-that - not the drafter - is what caps the gain at 1.1 to 1.2x on a 27B dense model. The two
-extra rows' worth of work is the same weight pass read for two activation columns instead of
-one, plus the drafter, plus the bookkeeping. On the M4 Pro the round's own clocks on
-2026-09-03 (build 24d13f1d2, plain step 78.7 ms) read: draft 7.4 ms, verify 119.0 ms,
-walk and commit 1.0 ms, replay 0.7 ms. Ninety-three percent of the round is the verify, and
-the verify is 1.51 plain steps for two rows.</p>
-<p>That is also why depth 2 loses on the M4 Pro and only breaks even on the M5: a third row
-costs another 0.5 to 1.0 steps, and the second draft position is accepted 51 to 66% of the
-time, which does not cover it. Except on the math prompt, where position 2 runs 86 to 88%
-and depth 2 wins on every box (187.9 against 160.1 for gemma on the M5). Acceptance is the
-prompt's property. The box knob is the right default; the prompt-driven knob is the next
-idea.</p>
-<h2>Where the day went</h2>
-<p>The M4 Pro Qwen row is the one that moved. On the morning of 2026-09-02 it read 12.7 off and
-11.0 at depth 1 - speculation was a loss on that box - while llama.cpp's read 11.5 and 13.6.
-The ruler said we were slow, and the ruler was the only reason we knew: on the M4's own
-terms, a 2.06-step round for two rows looked like the price of a small GPU.</p>
-<p>The lab said otherwise. Our two-row kernel cost 1.36 to 1.49x of two single-row passes on
-the M4 Pro, and 0.52 to 0.89x on the M5 Max - the same kernel, two verdicts. A kernel
-shaped like llama.cpp's own sat at 0.9 to 1.05x on the M4. So we wrote the two-row
-register tile, raced it, crowned it on the M4 (0.48 ms against the old form's 0.84 on the
-race shape) and not on the M5 (0.53 against 0.49), and the row went to 13.9. Then the
-depth-2 row - 7.9 tok/s, 0.62x of plain - turned out to be the same story one row up: three
-rows took the four-column kernel, which no race had ever looked at. Walking the crowned
-tile over column pairs took the depth-2 row to 12.4 and the depth-1 row to 14.0 by the
-evening of 09-03. The whole fix is about a hundred lines and a test; finding it took a
-yardstick.</p>
+<p>Checking two words at once costs both engines about one and a half plain passes. That, not
+the guesser, is what caps the gain at 1.1 to 1.2x on a big dense model: the extra word is the
+same weights read for two inputs instead of one, plus the guesser, plus bookkeeping. On
+Anton's M4 the round's own clocks, with a plain pass at 78.7 ms, read: guessing 7.4 ms,
+checking 119.0 ms, deciding what to keep 1.0 ms, replaying the state 0.7 ms. Ninety-three
+percent of the round is the check.</p>
+<p>It is also why two guesses fall behind on the M4 and only break even on the M5. A third word
+costs another half to a whole pass, and the second guess lands 51 to 66% of the time, which
+does not cover it. The math prompt is the exception. There the second guess lands 86 to 88%,
+and two guesses come out ahead on every machine: 187.9 against 160.1 for Gemma on the M5.
+How well the guesser does is a property of the text you give it, which is why the
+per-request setting may come back one day.</p>
+<h2>Where the two days went</h2>
+<p>Back to that morning. Anton's machine read 12.7 words per second plain and 11.0 with the
+guesser. llama.cpp on the same machine read 11.5 and 13.6. Without that second pair, a check
+that cost two full passes for two words would have looked like the price of a smaller GPU.
+With it, it looked like what it was. As Boris put it, it is a lot easier when you have an
+oracle; otherwise how do you know you are slow?</p>
+<p>The kernel lab said the same thing in numbers. The kernel that checks two words in one pass
+over the weights cost 1.36 to 1.49 times two single passes on the M4 Pro, and 0.52 to 0.89
+on the M5 Max. Same code, two verdicts, because the two chips have very different amounts
+of arithmetic per byte they can read, and this kernel is limited by arithmetic. A kernel
+written in the shape llama.cpp uses sat at 0.9 to 1.05 on the M4. So we wrote a new form
+for the M4-class chips, where each of the GPU's many small workers holds two rows of weights
+close at hand and feeds both from one read of the input. The tuner tries both forms on a
+machine and keeps the faster. The M4 took the new one, 0.48 ms against the old form's 0.84
+on the test shape; the M5 kept the old one, 0.49 against 0.53. The M4 row went to 13.9.</p>
+<p>Then Boris asked why the two-guess row was dropping like crazy: 7.9 words per second, 0.62
+of plain. It was the same story one row up. Checking three words used a four-input kernel
+nobody had ever tried on this chip, and on the M4 it costs 1.3 to 1.5 times four single
+passes. We already had all the pieces - "and 1 + 2 is better than 3", as Boris said - so
+three words now run as the new two-row form plus one single pass, wherever the tuner picked
+that form. The two-guess row went from 7.9 to 12.4 and the one-guess row to 14.0 by the
+evening of the 3rd. About a hundred lines and a test. Finding it took a yardstick.</p>
 <h2>The yardstick</h2>
-<p>llama.cpp is the gold standard of local inference and it is the yardstick in every table
-here, not the opponent. Both projects are open source; they are welcome to anything in this
-engine with the license's attribution, and we take anything legal from anywhere. On this
-corpus, on these two boxes, on these two days: plain decode is ours by 10 to 26%, the
-speculative rounds land within a few percent of each other in both directions, and their
-depth-2 round is cheaper than ours. The ledger item for that last one is open.</p>
-<p>Everything above reproduces from the commands shown, on the dates and shas shown. The
-records are in <code>modules/dasLLAMA/performance/records/</code>; the ruler renders any of them back
-into these tables with <code>--render</code>.</p></div>
+<p>Glad we have llama.cpp next to every number here. It is the gold standard of running
+language models on your own machine, and it is the only way we know whether we are fast and
+the only way we know when to stop; the second day ended where it did because the two columns
+had met. Both projects are open source. Anything in this engine is theirs for the taking,
+with the license's attribution, and the same goes the other way. On these prompts, on these
+two machines, on these two days: plain decoding is 10 to 26% faster in dasLLAMA, the
+speculative rounds land within a few percent of each other in both directions, and
+llama.cpp's two-guess round is cheaper than ours. We know that one is ours to fix, and it is
+what winter evenings are for.</p></div>
 </article>
 <article class="dio-story" id="s-2026-08-30-apple-m5">
 <div class="dio-story__eyebrow"><span class="dio-item__date">2026-08-30</span><span class="dio-item__tag">hardware</span></div>
-<h2 class="dio-story__title">Bringing up the Apple M5, one model at a time.</h2>
-<p class="dio-story__lede">A new chip arrives, forty kernel families get re-raced, some get re-crowned, a few get rewritten. Why that week was fun.</p>
-<div class="dio-story__body"><!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max, minted 2026-08-30)
-     and m4.json (M4, 2026-08-31), rendered on the board from the same records -->
-<p>An M5 Max arrived at the end of August and became the main box the same day. dasLLAMA
-had never run on it. Everything below happened in the week that followed.</p>
+<h2 class="dio-story__title">Boris got a new laptop.</h2>
+<p class="dio-story__lede">An M5 Max, an engine that had never seen one, and sixty-two kernels that had to earn their place on it again.</p>
+<div class="dio-story__body"><!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max, measured 2026-08-30, das build
+     345dcd667, llama.cpp 6fdd0ac89) and m4.json (Anton's M4 Pro, the Qwen3.8-27B row re-stamped
+     2026-09-03, das build 8a03da431, llama.cpp 6fdd0ac89); 62 = the kernel families in
+     performance/m5.tune.json, 23 = its runtime.metal_tensor picks; the image reference is llama.cpp's
+     multimodal path, the Canary reference NVIDIA's NeMo on Torch MPS -->
+<p>Boris got a new laptop. An M5 Max, at the end of August, and it became the main machine
+the same afternoon. dasLLAMA - our inference engine, written top to bottom in daslang,
+because the language is the thing we are actually building here - had never run on an M5.
+Anton lent us his Mac mini, an M4 Pro of the previous generation that sits on the other side
+of the globe and answers over ssh, so we could watch the two chips side by side. And we got
+to work.</p>
 <h2>What a new chip is, to this engine</h2>
-<p>dasLLAMA does not ship kernels tuned for a chip. It ships kernel <em>families</em> - several
-ways to compute the same GEMV, attention or norm - and a tuner that races them on the box
-it is running on, then writes the winners into a sidecar. So "supporting the M5" is not a
-port. It is letting the races run and looking hard at every place where the winner changed.</p>
-<p>Three things changed.</p>
-<p><strong>The GPU tensor units.</strong> The M5 GPU exposes tensor units through the Metal 4 tensor API.
-We wrote the tensor-side twin for each matrix family and let the race decide, per family,
-whether the tensor form or the simdgroup form wins on this box. On the M5 Max the tensor
-twins took every K-quant matmul family, the bf16 and q8 matmuls, the MoE matmuls and the
-attention QK matmul. The crown is a runtime knob in the sidecar, not a class default: a
-box that did not race keeps the simdgroup form, and a box that raced and lost keeps it too.</p>
-<p><strong>The CPU core layout.</strong> The M5 Max has no efficiency cores. It has 6 "Super" cores and 12
-"Performance" cores, all compute. Our CPU lane had learned, on the M4, to exclude the
-efficiency tier from the pool; on the M5 that rule would have thrown away a third of the
-chip. The pool now spans both tiers, and decode parks the slower tier. Both core gates were
-verified live during the sweep, on both boxes.</p>
-<p><strong>The other modalities.</strong> The vision towers and the speech-to-text encoders serve on the GPU
-on the M5 the way the text path does. Nothing new in the design here - the same Metal rails
-- but each one had to be re-raced and its crowns re-minted.</p>
-<h2>What it measured</h2>
-<p>The full M5 Max board was re-minted on 2026-08-30 and is on the
-<a href="https://daslang.io/dasllama.html">board</a> (pp512 / tg128, Metal, llama-bench protocol), from
-<code>modules/dasLLAMA/performance/records/m5.json</code>:</p>
+<p>dasLLAMA tunes itself to whatever chip it lands on. For every heavy operation - a matrix
+multiply, an attention step, a normalization - it ships several small GPU programs, kernels,
+that compute the same thing in different ways. The first time it runs on a machine it tries
+them all, keeps the fastest of each, and writes the picks into a small file called a
+sidecar. Sixty-two such choices on the M5 Max. So supporting the M5 meant letting the tuner
+run, and then looking hard at every place where the pick had changed.</p>
+<p>Three places did.</p>
+<p>The M5's GPU has tensor units: dedicated matrix hardware, reached through Apple's Metal 4
+tensor API. For each matrix multiply in the engine we wrote a tensor-unit version next to
+the plain one and let the machine choose. On the M5 Max the tensor version came out ahead in
+23 of them. That covers every multiply over the compressed 4-, 5-, 6- and 8-bit weights and
+the 16-bit ones, the expert layers of the mixture-of-experts models, and the attention
+scores. The choice lives in the sidecar. A machine that never tried keeps the plain version,
+and one that tried and found it slower keeps it too.</p>
+<p>On the CPU side, the M5 Max has no efficiency cores at all. It has 6 cores Apple calls
+Super and 12 it calls Performance, and all 18 are the real thing. On Anton's M4 we had
+taught the CPU lane to leave the efficiency cores out of the worker pool, because they only
+slowed everyone down. On the M5 that habit would have quietly thrown away a third of the
+chip. Now all 18 work, and token generation parks the six slower ones. We could not believe
+our eyes, so we checked it twice, on both machines.</p>
+<p>The parts that look at pictures and the parts that listen run on the GPU on the M5 the way
+the text path does. Nothing new in the design, the same GPU plumbing, but each one had to be
+tried again and its picks re-made.</p>
+<h2>What we measured</h2>
+<p>So we measured it on the M5 and - look at that. What a beast of a machine.</p>
 <table>
 <thead>
 <tr>
 <th>model</th>
-<th>das pp512 / tg128</th>
-<th>llama.cpp pp512 / tg128</th>
+<th>dasLLAMA (prompt / generation)</th>
+<th>llama.cpp (prompt / generation)</th>
 </tr>
 </thead>
 <tbody>
@@ -416,22 +445,34 @@ on the M5 the way the text path does. Nothing new in the design here - the same 
 </tr>
 </tbody>
 </table>
-<p>The other modalities on the same box and day: the gemma-4-12B image encode 7.1 ms against
-the reference's 95 ms; the Qwen2.5-Omni window ViT 106 ms against 118; whisper
-large-v3-turbo transcribing jfk in 140 ms against whisper-cli's 153 on the same GPU.</p>
-<p>The M4 board rows were refreshed alongside (<code>m4.json</code>, 2026-08-31), including Canary-Qwen on
-its new Q8_0 serving artifact: jfk in 307.6 ms on the M5 and 512.9 on the M4, beside the
-NeMo torch-MPS reference's 704.7 and 1076.5. On the long gb1 clip the das row reads 6484 ms
-beside the reference's 4383 - the one gap left on long audio, and the next dig. The M1 board
-stands unchanged as the long-term record; its Canary rows retire with the old decoder
-artifact.</p>
-<h2>Why it was fun</h2>
-<p>Because nothing about it was a port. Every kernel that had been tuned for one generation
-got raced again on the next, and the outcomes were not predictable from the spec sheet: some
-winners stayed, some flipped, and a few families needed a new form written before the race
-had anything worth crowning. Watching an engine re-tune itself to a chip that did not exist
-when the engine was written - and finding the handful of places where it could not, and
-fixing those - is the part of this project we would do for free.</p></div>
+<p>Tokens per second, reading a 512-token prompt and then writing 128 tokens, on Metal,
+measured on 2026-08-30; the full M5 Max board is on the
+<a href="https://daslang.io/dasllama.html">board</a>.</p>
+<p>Before and after, one chip generation apart, on the same 27B model: Anton's M4 Pro reads
+126.4 / 12.9, the new laptop 913.9 / 27.8. Reading the prompt got seven times faster.
+Writing the answer got a bit more than twice as fast - that one is limited by how quickly
+memory can feed the chip, and there is only so much a new chip can do about memory.
+llama.cpp shows the same picture, 126.3 / 11.5 on the M4 and 752.1 / 25.4 on the M5.</p>
+<p>The parts that look at pictures ride the same machine, the same day. gemma-4-12B's image
+encoder, the piece that turns a picture into tokens the language model can read, takes
+7.1 ms where llama.cpp's multimodal path takes 95 ms. The part of Qwen2.5-Omni that looks at
+images, its window vision transformer, takes 106 ms against 118 ms.</p>
+<p>The parts that listen, too. whisper large-v3-turbo transcribes the short JFK clip that
+whisper.cpp ships as its sample in 140 ms, against whisper-cli's 153 ms on the same GPU.
+Canary-Qwen, NVIDIA's speech-to-text model, in its new 8-bit form does the same clip in
+307.6 ms on the M5 and 512.9 ms on the M4, where NVIDIA's own NeMo on Torch MPS takes 704.7
+and 1076.5. On a much longer clip we read 6484 ms and NeMo 4383 ms, which gives us something
+to do during the long winter evenings.</p>
+<p>Glad we have llama.cpp, whisper.cpp and NeMo numbers next to ours. Those are the industry
+standard for this kind of thing, and they are the only way we know whether we are fast, and
+the only way we know when to stop. Without a yardstick a new chip is just a machine that
+runs, and every one of these numbers would be a little worse.</p>
+<h2>Sixty-two kernels walked into a new chip.</h2>
+<p>Most walked out the same. Twenty-three came out wearing tensor units. A few found out, in
+the first afternoon, that the form that had carried them for two chip generations was now
+the slow one, and they did not get a vote: they were rewritten before the tuner had anything
+worth picking. A spec sheet shows none of this. The tuner's log shows all of it, and the log
+is where the week went - happily, which probably says something about us.</p></div>
 </article>
 <!-- stories:end -->
 </div>
