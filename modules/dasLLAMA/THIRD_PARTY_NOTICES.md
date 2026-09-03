@@ -56,13 +56,14 @@ sources; nothing under this repository redistributes the data itself.
   `KittenML/kitten-tts-nano-0.8` and `KittenML/kitten-tts-mini-0.8` (Apache License 2.0; ONNX
   graphs, `voices.npz`, `config.json` at the revisions pinned in `harness/kitten_graph.py`) are
   converted into `kitten-<size>.gguf` by `harness/convert_kitten.py`. The model architecture is
-  StyleTTS2 (Yinghao Aaron Li et al., MIT License) as the checkpoints instantiate it, reimplemented
-  in `dasllama/dasllama_tts_blocks.das`.
+  StyleTTS2 (Yinghao Aaron Li et al., MIT License - see `LICENSE.STYLETTS2`) as the checkpoints
+  instantiate it, reimplemented in `dasllama/dasllama_tts_blocks.das`.
 - **Kokoro** (https://github.com/hexgrad/kokoro), Apache License 2.0 - see `LICENSE.APACHE-2.0`.
   The `hexgrad/Kokoro-82M` weights and voice packs (Apache License 2.0, at the revision pinned in
   `harness/kitten_graph.py`) are converted into `kokoro-82m.gguf` by `harness/convert_kokoro.py`;
   `dasllama/dasllama_kokoro.das` carries the pipeline's vocabulary and style-row rule. The model
-  architecture is StyleTTS2 (Yinghao Aaron Li et al., MIT License), shared with KittenTTS in
+  architecture is StyleTTS2 (Yinghao Aaron Li et al., MIT License - see `LICENSE.STYLETTS2`; the
+  kokoro package's decoder and iSTFTNet modules are adapted from it), shared with KittenTTS in
   `dasllama/dasllama_styletts2.das` over the block home.
 - **spaCy** (https://github.com/explosion/spaCy), Copyright ExplosionAI GmbH, MIT License - see
   `LICENSE.SPACY`. Its English tokenizer exception table is exported into `tts_postag.bin`, and
