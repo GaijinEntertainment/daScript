@@ -146,6 +146,21 @@ button.xs { font-size: 10px; padding: 2px 8px; }
 .segs .seg.playing { background: var(--bg-3); color: var(--amber); }
 #a-rec.rec { border-color: var(--red); color: var(--red); }
 
+#s-text {
+    width: 100%; box-sizing: border-box; resize: vertical;
+    font-family: var(--font-sans); font-size: 13.5px; color: var(--fg);
+    background: var(--bg-3); border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px;
+}
+#s-text:focus { outline: none; border-color: var(--amber-dim); }
+#s-wave { height: 80px; background: var(--bg-3); border: 1px solid var(--rule); border-radius: 4px; cursor: pointer; }
+#tts-section .knob { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint); }
+#tts-section select {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--fg);
+    background: var(--bg-3); border: 1px solid var(--rule); border-radius: 4px; padding: 3px 6px;
+}
+#s-speed { width: 110px; }
+#s-count.over { color: var(--red); }
+
 .chat-log { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; margin-bottom: 12px; }
 .msg { max-width: 85%; padding: 8px 12px; border-radius: 8px; font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 .msg.user { align-self: flex-end; background: var(--bg-3); border: 1px solid var(--amber-dim); }
@@ -300,6 +315,7 @@ button:disabled { opacity: 0.45; cursor: default; }
             <tbody id="cat-body"><tr><td colspan="6" class="ctl-note">loading the catalog…</td></tr></tbody>
         </table>
         <div class="controls" id="asr-offer" style="display:none; margin-top:10px"></div>
+        <div class="controls" id="tts-offer" style="margin-top:10px"></div>
     </div>
 
     <div class="sec"><span>§ 04</span><span class="rule"></span><span>streams</span>
@@ -362,10 +378,25 @@ button:disabled { opacity: 0.45; cursor: default; }
         </div>
     </div>
 
-    <div class="sec"><span>§ 08</span><span class="rule"></span><span>config</span></div>
+    <div class="tts-only" id="tts-section" style="display:none">
+        <div class="sec"><span>§ 08</span><span class="rule"></span><span>speech studio</span></div>
+        <div class="panel">
+            <textarea id="s-text" rows="3" placeholder="type what the served voice should say"></textarea>
+            <div class="controls" style="margin-top:10px">
+                <button id="s-run" type="button" disabled>speak</button>
+                <label class="knob">voice <select id="s-voice"></select></label>
+                <label class="knob">speed <input type="range" id="s-speed" min="0.25" max="4" step="0.05" value="1"><span id="s-speed-v">1.00×</span></label>
+                <span class="ctl-note" id="s-count">0 / 4096</span>
+                <span class="ctl-note" id="s-note">type a line and press speak — the waveform plays once, click it to replay</span>
+            </div>
+            <canvas id="s-wave" height="80" style="margin-top:10px"></canvas>
+        </div>
+    </div>
+
+    <div class="sec"><span>§ 09</span><span class="rule"></span><span>config</span></div>
     <div class="panel cfg" id="cfg">…</div>
 
-    <div class="sec"><span>§ 09</span><span class="rule"></span><span>config editor</span></div>
+    <div class="sec"><span>§ 10</span><span class="rule"></span><span>config editor</span></div>
     <div class="panel">
         <div class="gpu-line" id="gpu-line" style="display:none"></div>
         <table class="ctable roster" id="roster">
@@ -386,14 +417,14 @@ button:disabled { opacity: 0.45; cursor: default; }
         <div class="cfg-file" id="cfg-file"></div>
     </div>
 
-    <div class="sec"><span>§ 10</span><span class="rule"></span><span>controls</span></div>
+    <div class="sec"><span>§ 11</span><span class="rule"></span><span>controls</span></div>
     <div class="panel controls">
         <button id="b-gc" type="button">collect garbage</button>
         <button id="b-drain" class="danger" type="button">drain + shutdown</button>
         <span class="ctl-note" id="ctl-note">gc runs at the next lifecycle safe point · shutdown drains accepted work, then exits</span>
     </div>
 
-    <div class="sec"><span>§ 11</span><span class="rule"></span><span>benchmark</span></div>
+    <div class="sec"><span>§ 12</span><span class="rule"></span><span>benchmark</span></div>
     <div class="panel">
         <div class="controls" style="margin-bottom:10px">
             <button id="b-bench" type="button">run llama.cpp A/B</button>
@@ -411,7 +442,7 @@ button:disabled { opacity: 0.45; cursor: default; }
         </div>
     </div>
 
-    <div class="sec" id="exchange"><span>§ 12</span><span class="rule"></span><span>sidecar exchange</span></div>
+    <div class="sec" id="exchange"><span>§ 13</span><span class="rule"></span><span>sidecar exchange</span></div>
     <div class="panel">
         <div class="cfg-file" id="ex-consent" style="display:none">
             <div id="ex-consent-text" style="white-space:pre-line"></div>
@@ -435,7 +466,7 @@ button:disabled { opacity: 0.45; cursor: default; }
     </div>
 
     <footer class="reveal">
-        <div class="sec"><span>§ 13</span><span class="rule"></span><span>how this works</span></div>
+        <div class="sec"><span>§ 14</span><span class="rule"></span><span>how this works</span></div>
         <p>
             Everything above — the tokenizer, every matmul kernel, the continuous-batching
             scheduler, the paged KV cache, this HTTP server — is written in
@@ -443,7 +474,9 @@ button:disabled { opacity: 0.45; cursor: default; }
             games. No PyTorch, no llama.cpp, no CUDA: the LLM engine — kernels, IR generators,
             tokenizer, loaders — is ~35&#8239;000 lines of <code>.das</code>, JIT-compiled to
             native code through LLVM at startup, with its hot kernels auto-tuned per box on
-            first run. The speech-recognition stack adds ~8&#8239;500, the Metal and Vulkan GPU
+            first run. The speech-recognition stack adds ~8&#8239;500, the speech synthesis that
+            answers <code>/v1/audio/speech</code> — text normalizer, grapheme-to-phoneme front
+            end, and the StyleTTS2 vocoder — another ~7&#8239;500, the Metal and Vulkan GPU
             backends ~28&#8239;500, and the server, scheduler, and this page ~7&#8239;000 more.
             The GPU tier offloads MoE expert stacks over Vulkan compute — hybrid by layer
             <i>type</i>, not layer count.
@@ -550,6 +583,8 @@ function apply(s) {
         $("t-asr").textContent = s.asr_ready + " · " + s.asr_active + " · " + s.asr_pending;
         $("asr-section").style.display = "block";
     }
+    applySpeech(s.tts);
+    renderTtsOffer();   // the card's wired state is the stats block's, so it refreshes with the poll
     $("cfg").innerHTML =
         "model <b>" + esc(s.model) + "</b> · ctx <b>" + s.ctx + "</b> · streams <b>" + s.max_streams + "</b>" +
         " · prefill chunk <b>" + s.chunk_tokens + "</b> tok" +
@@ -1476,34 +1511,35 @@ async function micToggle() {
 }
 $("b-mic").addEventListener("click", micToggle);
 
-// ===== asr studio: waveform + vad overlay + segment playback + rtf =====
-let asrPcm = null, asrRate = 16000;   // mono Float32Array + its sample rate (record or upload)
-let asrVad = [], asrRec = null, asrCtx = null, asrSrc = null;
-const rtfSeries = [];
-const seenAsrJobs = new Set();
+// ===== the clip player, shared by both studios =====
+// A clip is { pcm: mono Float32Array | null, rate, spans: [{start,end}] } — the ASR studio fills
+// spans from /vad, the speech studio leaves them empty. One renderer, one transport: whichever
+// studio starts a sound stops the one already playing.
+function newClip(rate) { return { pcm: null, rate: rate, spans: [] }; }
 
-function drawWave() {
-    const cv = $("a-wave"), dpr = window.devicePixelRatio || 1;
+function drawWave(cv, clip) {
+    const dpr = window.devicePixelRatio || 1;
     const w = cv.clientWidth, h = cv.clientHeight;
     if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
     const g = cv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
-    if (!asrPcm) return;
-    const dur = asrPcm.length / asrRate;
-    // vad spans under the envelope
+    const pcm = clip.pcm;
+    if (!pcm) return;
+    const dur = pcm.length / clip.rate;
+    // overlay spans under the envelope
     g.fillStyle = "rgba(155, 196, 106, 0.18)";
-    for (const s of asrVad) {
+    for (const s of clip.spans) {
         g.fillRect(s.start / dur * w, 0, Math.max((s.end - s.start) / dur * w, 1), h);
     }
     g.strokeStyle = css("--amber"); g.lineWidth = 1;
     g.beginPath();
-    const step = Math.max(1, Math.floor(asrPcm.length / w));
+    const step = Math.max(1, Math.floor(pcm.length / w));
     for (let x = 0; x < w; x++) {
         let lo = 1, hi = -1;
-        const base = Math.floor(x / w * asrPcm.length);
-        for (let i = base; i < Math.min(base + step, asrPcm.length); i++) {
-            const v = asrPcm[i];
+        const base = Math.floor(x / w * pcm.length);
+        for (let i = base; i < Math.min(base + step, pcm.length); i++) {
+            const v = pcm[i];
             if (v < lo) lo = v;
             if (v > hi) hi = v;
         }
@@ -1514,12 +1550,42 @@ function drawWave() {
     g.stroke();
 }
 
+let playCtx = null, playSrc = null;
+
+function stopPlayback() {
+    if (playSrc) { try { playSrc.stop(); } catch (_e) {} playSrc = null; }
+    for (const el of document.querySelectorAll(".segs .seg")) el.classList.remove("playing");
+}
+
+function playSpan(clip, start, end, row) {
+    if (!clip.pcm) return;
+    stopPlayback();
+    if (!playCtx) playCtx = new AudioContext();
+    const ab = playCtx.createBuffer(1, clip.pcm.length, clip.rate);
+    ab.copyToChannel(clip.pcm, 0);
+    const src = playCtx.createBufferSource();
+    src.buffer = ab;
+    src.connect(playCtx.destination);
+    src.start(0, start, Math.max(end - start, 0.05));
+    playSrc = src;
+    if (row) row.classList.add("playing");
+    src.onended = () => { if (row) row.classList.remove("playing"); };
+}
+
+// ===== asr studio: waveform + vad overlay + segment playback + rtf =====
+const asrClip = newClip(16000);   // mono PCM + its sample rate (record or upload)
+let asrRec = null;
+const rtfSeries = [];
+const seenAsrJobs = new Set();
+
+function drawAsrWave() { drawWave($("a-wave"), asrClip); }
+
 function setAsrClip(pcm, rate, label) {
-    asrPcm = pcm; asrRate = rate; asrVad = [];
+    asrClip.pcm = pcm; asrClip.rate = rate; asrClip.spans = [];
     $("a-run").disabled = false;
     $("a-note").textContent = label + " · " + (pcm.length / rate).toFixed(1) + "s — run vad + transcribe";
     $("a-segs").textContent = "";
-    drawWave();
+    drawAsrWave();
 }
 
 $("a-rec").addEventListener("click", async () => {
@@ -1573,34 +1639,18 @@ $("a-file").addEventListener("change", async () => {
     }
 });
 
-function playSpan(start, end, row) {
-    if (!asrPcm) return;
-    if (asrSrc) { try { asrSrc.stop(); } catch (_e) {} asrSrc = null; }
-    if (!asrCtx) asrCtx = new AudioContext();
-    const ab = asrCtx.createBuffer(1, asrPcm.length, asrRate);
-    ab.copyToChannel(asrPcm, 0);
-    const src = asrCtx.createBufferSource();
-    src.buffer = ab;
-    src.connect(asrCtx.destination);
-    src.start(0, start, Math.max(end - start, 0.05));
-    asrSrc = src;
-    for (const el of document.querySelectorAll(".segs .seg")) el.classList.remove("playing");
-    if (row) row.classList.add("playing");
-    src.onended = () => { if (row) row.classList.remove("playing"); };
-}
-
 $("a-run").addEventListener("click", async () => {
-    if (!asrPcm) return;
+    if (!asrClip.pcm) return;
     $("a-run").disabled = true;
     $("a-note").textContent = "running vad + transcription...";
-    const wav = encodeWav([asrPcm], asrRate);
+    const wav = encodeWav([asrClip.pcm], asrClip.rate);
     try {
         const fdv = new FormData();
         fdv.append("file", wav, "clip.wav");
         const rv = await fetch("/vad", { method: "POST", body: fdv });
         if (rv.ok) {
-            asrVad = (await rv.json()).segments || [];
-            drawWave();
+            asrClip.spans = (await rv.json()).segments || [];
+            drawAsrWave();
         }
         const fdt = new FormData();
         fdt.append("file", wav, "clip.wav");
@@ -1619,11 +1669,11 @@ $("a-run").addEventListener("click", async () => {
                 const tx = document.createElement("span");
                 tx.textContent = sg.text;
                 row.append(tm, tx);
-                row.addEventListener("click", () => playSpan(sg.start, sg.end, row));
+                row.addEventListener("click", () => playSpan(asrClip, sg.start, sg.end, row));
                 box.append(row);
             }
             $("a-note").textContent = "done — " + j.segments.length + " segment(s), " +
-                (asrVad.length ? asrVad.length + " speech span(s); " : "") + "click a segment to hear it";
+                (asrClip.spans.length ? asrClip.spans.length + " speech span(s); " : "") + "click a segment to hear it";
         } else {
             $("a-note").textContent = "transcription failed: " + (j.error ? j.error.message : rt.status);
         }
@@ -1667,6 +1717,106 @@ function renderAsrJobs(rows, stats) {
     }
 }
 
+// ===== § 08 speech studio =====
+// /v1/audio/speech answers a whole wav, so the studio decodes it into the shared clip player and
+// times the round trip itself — the route carries no timing header to read.
+const TTS_MAX_CHARS = 4096;        // the route's own input cap, refused server-side past it
+const VOICE_KEY = "dasllama.voice";
+const ttsClip = newClip(24000);
+let ttsVoices = [];
+
+function rememberedVoice() {
+    try { return localStorage.getItem(VOICE_KEY) || ""; } catch (_e) { return ""; }
+}
+
+function countSpeechInput() {
+    const n = $("s-text").value.length;
+    $("s-count").textContent = n + " / " + TTS_MAX_CHARS;
+    $("s-count").classList.toggle("over", n > TTS_MAX_CHARS);
+    $("s-run").disabled = n === 0 || n > TTS_MAX_CHARS;
+}
+
+// the tts block of /v1/stats: the section exists only while a speech worker is loaded
+function applySpeech(tts) {
+    const on = !setupMode && !!(tts && tts.ready);
+    $("tts-section").style.display = on ? "block" : "none";
+    if (!on) return;
+    const voices = tts.voices || [];
+    if (voices.join(" ") !== ttsVoices.join(" ")) {
+        ttsVoices = voices.slice();
+        const sel = $("s-voice");
+        sel.replaceChildren();
+        for (const v of voices) {
+            const o = document.createElement("option");
+            o.value = v;
+            o.textContent = v;
+            sel.append(o);
+        }
+        const want = rememberedVoice();
+        sel.value = voices.indexOf(want) >= 0 ? want : (voices[0] || "");
+    }
+    if (tts.sample_rate > 0 && !ttsClip.pcm) ttsClip.rate = tts.sample_rate;
+}
+
+$("s-text").addEventListener("input", countSpeechInput);
+$("s-speed").addEventListener("input", () => {
+    $("s-speed-v").textContent = Number($("s-speed").value).toFixed(2) + "×";
+});
+$("s-voice").addEventListener("change", () => {
+    try { localStorage.setItem(VOICE_KEY, $("s-voice").value); } catch (_e) { /* private mode */ }
+});
+$("s-wave").addEventListener("click", () => {
+    if (ttsClip.pcm) playSpan(ttsClip, 0, ttsClip.pcm.length / ttsClip.rate, null);
+});
+
+async function speechError(r) {
+    try {
+        const j = await r.json();
+        if (j && j.error && j.error.message) return j.error.message;
+    } catch (_e) { /* not a JSON body */ }
+    return "speech failed: " + r.status;
+}
+
+$("s-run").addEventListener("click", async () => {
+    const input = $("s-text").value;
+    if (!input) return;
+    $("s-run").disabled = true;
+    $("s-note").textContent = "synthesizing…";
+    const body = {
+        input: input,
+        voice: $("s-voice").value,
+        speed: Number($("s-speed").value),
+        response_format: "wav",
+    };
+    const t0 = performance.now();
+    try {
+        const r = await fetch("/v1/audio/speech", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+            $("s-note").textContent = await speechError(r);
+        } else {
+            const buf = await r.arrayBuffer();
+            const wall = (performance.now() - t0) / 1000;
+            const ctx = new AudioContext();
+            const ab = await ctx.decodeAudioData(buf);
+            await ctx.close();
+            ttsClip.pcm = ab.getChannelData(0).slice();
+            ttsClip.rate = ab.sampleRate;
+            ttsClip.spans = [];
+            drawWave($("s-wave"), ttsClip);
+            playSpan(ttsClip, 0, ab.duration, null);
+            $("s-note").textContent = ab.duration.toFixed(2) + "s of audio in " + wall.toFixed(2) +
+                "s wall — rtf " + (wall / Math.max(ab.duration, 1e-6)).toFixed(3) + " · click the wave to replay";
+        }
+    } catch (_e) {
+        $("s-note").textContent = "request failed";
+    }
+    countSpeechInput();
+});
+
 // ===== config editor =====
 // Defaults-first: the model paths live in the [[models]] roster table; every flat knob below
 // is an OVERRIDE gated by its own checkbox — unchecked keys are OMITTED from the saved TOML,
@@ -1690,6 +1840,7 @@ const FIELDS = [
     { k: "metal", t: "sel", o: ["off", "auto", "required"] },
     { k: "asr", t: "path", wide: true }, { k: "mmproj", t: "path", wide: true },
     { k: "tts", t: "path", wide: true },
+    { k: "tts_lane", t: "sel", o: ["q8", "f32"] },
     { k: "image_mmproj", t: "path", wide: true },
     { k: "asr_workers", t: "int" },
     { k: "lcpp_bin", t: "path", wide: true },
@@ -2082,6 +2233,7 @@ async function loadConfig() {
         renderRoster();
         renderGpu(c.status || {});
         savedSnapshot = JSON.stringify(gatherConfig());
+        renderTtsOffer();   // the offer reads the tts field, which only exists once the form rendered
         if (catState) renderCatalog(catState);   // the tower offers key off the roster + asr field
     } catch (_e) {
         $("cfg-note").textContent = "could not load /config";
@@ -2277,7 +2429,7 @@ $("b-bench").addEventListener("click", async () => {
 
 fetch("/bench", { cache: "no-store" }).then(r => r.json()).then(renderBench).catch(() => {});
 
-// ===== § 11 sidecar exchange =====
+// ===== § 13 sidecar exchange =====
 
 let exchangeState = null;    // the GET /exchange document
 let exchangePolicy = null;   // its policy — merged into every config save (gatherConfig)
@@ -2293,7 +2445,7 @@ function exLine(text) {
 // The header's sidecar-mint chip — the one-glance answer to "is this box running tuned
 // kernels, and is its mint on the ladder?": red = bad mint (absent / stale / version-lapsed /
 // raced on a noisy box), amber = good mint not yet shared to the exchange, green = tuned and
-// shared (or fetched from the exchange). Click lands on § 12.
+// shared (or fetched from the exchange). Click lands on § 13.
 function renderMintChip() {
     const chip = $("mint-chip");
     if (!exchangeState) { chip.style.display = "none"; return; }
@@ -2510,7 +2662,7 @@ $("ex-always").addEventListener("change", async () => {
     }
     const want = $("ex-always").checked ? "always" : "ask";
     // Commit ONLY the policy, on top of the LAST SAVED config — NOT gatherConfig(), which would
-    // also persist any unsaved §08 edits just because the box was ticked. Roll the toggle back
+    // also persist any unsaved §10 edits just because the box was ticked. Roll the toggle back
     // if the save fails so the UI never shows a state that was not written.
     let body;
     try { body = JSON.parse(savedSnapshot); } catch (_e) { body = null; }
@@ -2608,7 +2760,7 @@ function rosterRowFor(path) {
 }
 
 // a saved tower wire is one restart from live — offer that restart right in the note
-// instead of leaving the user to find the button in § 09
+// instead of leaving the user to find the button in § 10
 function noteWithRestart(text) {
     const note = $("cat-note");
     note.textContent = text + " ";
@@ -2711,6 +2863,34 @@ function renderAsrOffer(doc, dl) {
     strip.append(chip, label);
 }
 
+// the speech offer strip: PATH mode only. Nothing hosts the TTS weights yet, so this card never
+// offers a download - it says which model is wired, or points at the field that wires one.
+function renderTtsOffer() {
+    const strip = $("tts-offer");
+    strip.replaceChildren();
+    const el = $("f-tts");
+    const path = el ? String(el.value || "") : "";
+    const tts = last && last.tts;
+    const label = document.createElement("span");
+    label.className = "ctl-note";
+    if (tts && tts.ready) {
+        const chip = document.createElement("span");
+        chip.className = "chip good";
+        chip.textContent = "speech ✓";
+        chip.title = path || tts.id;
+        label.textContent = "wired: " + tts.id + ", " + (tts.voices || []).length + " voices, " + tts.lane
+            + " — the speech studio above speaks through it";
+        strip.append(chip, label);
+    } else if (path) {
+        label.textContent = "speech model configured, loading — " + path.split(/[\\/]/).pop();
+        strip.append(label);
+    } else {
+        label.textContent = "no speech model configured — point the tts field in the config editor at a"
+            + " kitten or kokoro GGUF (tts_g2p.bin + tts_postag.bin sit beside it)";
+        strip.append(label);
+    }
+}
+
 function renderCatalog(doc) {
     catState = doc;
     const body = $("cat-body");
@@ -2766,6 +2946,7 @@ function renderCatalog(doc) {
         body.append(tr);
     }
     renderAsrOffer(doc, dl);
+    renderTtsOffer();
     if (dl.state === "failed" && dl.error) {
         $("cat-note").textContent = "download failed: " + dl.error;
     }

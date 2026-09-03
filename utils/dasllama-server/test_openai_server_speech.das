@@ -7,20 +7,29 @@ require dastest/testing_boost public
 require openai_server                                   // configure_tts / run_server (sibling)
 require dasllama/dasllama_common
 require daslib/jobque_boost                             // with_job_status / with_channel (server-thread lifecycle, the burst fan-out)
-require daslib/fio
+require daslib/json_boost                               // read_json — the /v1/stats tts block
+require daslib/fio                                      // run_and_capture — the spawned speech-only boot
+require daslib/module_path                              // get_this_module_dir: main.das sits beside this test
 require daslib/rtti                                     // this_context().last_exception — proving configure_tts does NOT panic
+require math                                            // max: the child's captured tail is clamped to its last bytes
 require strings
 require dasllama/dasllama_env
 
 // /v1/audio/speech on a TTS-only boot (no LLM slot): a WAV answer of speech length with a RIFF
 // header, the raw pcm form, the declined mp3, the missing input, the unknown voice, the TTS id
-// on /v1/models, the input cap and the speed range, and the queue's refusal past its cap.
+// on /v1/models, the input cap and the speed range, the queue's refusal past its cap, the `tts`
+// block on /v1/stats, and the weight lane the worker pins.
 // Model-gated (kitten-nano.gguf + tts_g2p.bin + tts_postag.bin beside it) and JIT-only; skips
-// cleanly otherwise. The boot degrade and the no-TTS 503 are model-free and always run.
+// cleanly otherwise. The boot degrade, the no-TTS 503 and the lane normalization are model-free
+// and always run.
 
 let TEST_PORT = 18136   // 18097/18098/18099/18101/18102/18120/18121/18131/18135 belong to the sibling suites
 let SPEECHLESS_PORT = 18137
+let LANE_PORT = 18138   // the f32-lane boot: a second worker, so it needs a port of its own
+let BOOT_PORT = 18139   // the spawned main.das boot
 let TTS_BURST = 24      // past the server's queue cap (16): the overflow must be refused, not queued
+let CHILD_TIMEOUT_SEC = 420.0   // the child parses, JITs and loads before it listens
+let BOOT_POLL_ATTEMPTS = 720    // x 500 ms — inside the child's own timeout, so a hung boot still joins
 
 def private models_dir() : string {
     return models_dir_resolved()
@@ -33,10 +42,15 @@ struct private BurstAnswer {
     body : string
 }
 
-def private with_speech_server(port : int; blk : block<(base_url : string) : void>) {
+struct private BootOutcome {
+    rc : int
+    tail : string
+}
+
+def private with_speech_server(port : int; lane : string; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
-        new_thread() @() {
-            configure_tts(TTS_PATH)
+        new_thread() <| @capture(= lane) {
+            configure_tts(TTS_PATH, lane)   // the server thread is its own context: the lane pin has to be requested HERE
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
         }
@@ -76,6 +90,36 @@ def private speech_request(base_url : string; body : string; blk : block<(status
 
 def private le32(b : array<uint8>; o : int) : int {
     return int(b[o]) | (int(b[o + 1]) << 8) | (int(b[o + 2]) << 16) | (int(b[o + 3]) << 24)
+}
+
+// the `tts` member of /v1/stats — a MISS node when the boot serves no speech model, since a
+// missing key reads back as a shared _null node rather than a null pointer
+def private with_tts_stats(base_url : string; blk : block<(tts : JsonValue?) : void>) {
+    GET("{base_url}/v1/stats") $(resp) {
+        var err = ""
+        var js = read_json(resp == null ? "" : string(resp.body), err)
+        invoke(blk, js?["tts"])
+        if (js != null) {
+            unsafe {
+                delete js
+            }
+        }
+    }
+}
+
+def private json_present(v : JsonValue?) : bool {
+    return v != null && !(v is _null)
+}
+
+def private json_strings(v : JsonValue?) : array<string> {
+    var out : array<string>
+    if (v != null && (v.value is _array)) {
+        out |> reserve(length(v.value as _array))
+        for (e in v.value as _array) {
+            out |> push(e ?? "")
+        }
+    }
+    return <- out
 }
 
 // a slotless boot whose --tts names a file set that is not there: configure_tts drops the route
@@ -167,7 +211,28 @@ def test_speech_route_without_a_model(t : T?) {
                 t |> equal(status, 503, text)
                 t |> success(find(text, "--tts") >= 0, "the refusal names the flag that arms the route: {text}")
             }
+            // the page gates its speech studio on the key existing, so a speechless boot must not carry it
+            with_tts_stats(base_url) $(tts) {
+                t |> success(!json_present(tts), "a boot with no speech model carries no tts block on /v1/stats")
+            }
         }
+    }
+}
+
+[test]
+def test_tts_lane_normalizes_at_config_time(t : T?) {
+    t |> run("q8 is the default and f32 is the other served lane") @(t : T?) {
+        configure_tts(BOGUS_TTS_PATH)
+        t |> equal(server_tts_lane(), "q8", "an unspecified lane serves q8")
+        configure_tts(BOGUS_TTS_PATH, "f32")
+        t |> equal(server_tts_lane(), "f32", "f32 is taken as asked")
+        configure_tts(BOGUS_TTS_PATH, "Q8")
+        t |> equal(server_tts_lane(), "q8", "the spelling is case-insensitive, like every other enum-ish key")
+    }
+    t |> run("an unknown lane is refused and the default stands") @(t : T?) {
+        configure_tts(BOGUS_TTS_PATH, "int4")
+        t |> equal(server_tts_lane(), "q8", "an unserved lane must not reach the worker")
+        configure_tts("")
     }
 }
 
@@ -249,17 +314,45 @@ def private check_queue_cap(t : T?; base_url : string) {
     t |> success(refusal_names_cap, "every refusal names the queue cap")
 }
 
-[test]
-def test_speech_route(t : T?) {
+def private speech_model_missing(t : T?) : bool {
     if (!jit_enabled()) {
         t |> skip("JIT-only: the interpreter is too slow to serve a synthesis")
-        return
+        return true
     }
     if (!stat(TTS_PATH).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid || !stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
         t |> skip("kitten-nano.gguf or the front-end packs not present under {models_dir()}")
+        return true
+    }
+    return false
+}
+
+// the block the control page's speech studio gates on: the worker's own answers about the model
+// it loaded, beside the counters the two syntheses above moved
+def private check_tts_stats_block(t : T?; base_url : string; want_lane : string) {
+    with_tts_stats(base_url) $(tts) {
+        t |> success(json_present(tts), "a TTS boot carries the tts block on /v1/stats")
+        return if (!json_present(tts))
+        t |> equal(tts?["id"] ?? "", "kitten-nano", "the block names the served TTS id")
+        t |> success(tts?["ready"] ?? false, "the worker answered ready before the route did")
+        t |> equal(int(tts?["pending"] ?? -1l), 0, "no synthesis is in flight")
+        t |> success((tts?["done_jobs"] ?? 0l) > 0l, "the syntheses above are counted")
+        t |> success(json_present(tts?["audio_s"]), "the block carries the cumulative speech seconds")
+        t |> equal(int(tts?["sample_rate"] ?? 0l), 24000, "the model's rate — the same one the wav header carries")
+        t |> equal(tts?["lane"] ?? "", want_lane, "the block reports the lane the worker pinned")
+        // the CANONICAL names caps() declares, not the friendly aliases the route also accepts:
+        // the page's voice picker offers exactly what the model calls its voices
+        var inscope voices <- json_strings(tts?["voices"])
+        t |> equal(length(voices), 8, "kitten-nano's eight voices")
+        t |> equal(voices[0], "expr-voice-2-m", "the first is the one an omitted voice field lands on")
+    }
+}
+
+[test]
+def test_speech_route(t : T?) {
+    if (speech_model_missing(t)) {
         return
     }
-    with_speech_server(TEST_PORT) $(base_url) {
+    with_speech_server(TEST_PORT, "q8") $(base_url) {
         t |> run("/v1/models lists the TTS id") @(t : T?) {
             GET("{base_url}/v1/models") $(resp) {
                 t |> success(resp != null && resp.status_code == http_status.OK, "200")
@@ -287,6 +380,9 @@ def test_speech_route(t : T?) {
                 t |> success(!(length(bytes) > 4 && int(bytes[0]) == 'R' && int(bytes[1]) == 'I'), "no RIFF header on pcm")
             }
         }
+        t |> run("the tts block on /v1/stats") @(t : T?) {
+            check_tts_stats_block(t, base_url, "q8")
+        }
         t |> run("the declined and malformed requests") @(t : T?) {
             speech_request(base_url, "\{\"input\": \"Hello.\", \"response_format\": \"mp3\"}") $(status, _ctype, _bytes, text) {
                 t |> equal(status, 400)
@@ -312,6 +408,109 @@ def test_speech_route(t : T?) {
         }
         t |> run("the queue refuses past its cap") @(t : T?) {
             check_queue_cap(t, base_url)
+        }
+    }
+}
+
+// the child boots from the SAME tree this test runs from: the parent's -dasroot / -module-cache
+// carry over, so a worktree run never compiles main.das against the binary's tree
+def private child_launch_args(server_das : string; port : int) : array<string> {
+    var out : array<string>
+    out |> reserve(12)   // argv[0] + -jit + at most two forwarded flag pairs + the script + five own args
+    var carry = ""   // a forwarded flag, held until its value arrives on the next argv entry
+    for (a in get_command_line_arguments()) {   // a LOCKED array: iterate it, never bind or delete it
+        if (empty(out)) {
+            out |> push(clone_string(a))   // argv[0] = the running daslang binary
+            out |> push("-jit")
+        } elif (!empty(carry)) {
+            out |> push(clone_string(carry))
+            out |> push(clone_string(a))
+            carry = ""
+        } elif (a == "-dasroot" || a == "-module-cache") {
+            carry = clone_string(a)
+        }
+    }
+    out |> push(clone_string(server_das))
+    for (a in ["--", "--tts", TTS_PATH, "--port", "{port}"]) {
+        out |> push(clone_string(a))
+    }
+    return <- out
+}
+
+// A --tts boot with no --model is the ONE start shape only main.das can prove: its roster is
+// empty, so every roster-indexing step of the boot has to survive that, and the in-process
+// harness above never runs them (it calls configure_tts + run_server directly).
+[test]
+def test_speech_only_boot_through_main(t : T?) {
+    if (speech_model_missing(t)) {
+        return
+    }
+    let server_das = path_join(get_this_module_dir(), "main.das")
+    if (!stat(server_das).is_valid) {
+        t |> skip("main.das is not beside this test")
+        return
+    }
+    let base_url = "http://127.0.0.1:{BOOT_PORT}"
+    var ready = false
+    var why = ""
+    with_channel(1) $(ch) {
+        with_job_status(1) $(done) {
+            var inscope args <- child_launch_args(server_das, BOOT_PORT)
+            new_thread <| @capture(<- args) {
+                var out = ""
+                var rc = run_and_capture(args, out, CHILD_TIMEOUT_SEC)
+                if (rc == 3 && find(out, "restart to apply") >= 0) {
+                    out = ""   // [tune] bootstrap: the child adopted this box's kernels and exited with the restart code
+                    rc = run_and_capture(args, out, CHILD_TIMEOUT_SEC)
+                }
+                ch |> push_clone(BootOutcome(rc = rc, tail = slice(out, max(0, length(out) - 600))))
+                ch |> notify()
+                ch |> release()
+                done |> notify_and_release()
+            }
+            var died = false
+            for (_attempt in range(BOOT_POLL_ATTEMPTS)) {
+                GET("{base_url}/v1/stats") $(resp) {
+                    if (resp != null && resp.status_code == http_status.OK) {
+                        ready = true
+                    }
+                }
+                break if (ready)
+                died = ch |> try_pop_clone() $(o : BootOutcome#) {
+                    why = "the boot exited rc={o.rc} before it listened - tail: {clone_string(o.tail)}"
+                }
+                break if (died)
+                sleep(500u)
+            }
+            if (ready) {
+                t |> run("a --tts boot with no --model serves the speech route") @(t : T?) {
+                    speech_request(base_url, "\{\"input\": \"The speech-only boot speaks.\"}") $(status, ctype, bytes, text) {
+                        t |> equal(status, 200, text)
+                        t |> success(find(ctype, "audio/wav") >= 0, "content type {ctype}")
+                        t |> success(length(bytes) > 44, "{length(bytes)} bytes of wav")
+                    }
+                    check_tts_stats_block(t, base_url, "q8")
+                }
+            }
+            POST("{base_url}/shutdown", "") $(_resp) {}
+            done |> join()
+        }
+    }
+    t |> success(ready, "the speech-only boot listened. {why}")
+}
+
+[test]
+def test_speech_route_on_the_f32_lane(t : T?) {
+    if (speech_model_missing(t)) {
+        return
+    }
+    with_speech_server(LANE_PORT, "f32") $(base_url) {
+        t |> run("the configured lane reaches the worker and comes back on /v1/stats") @(t : T?) {
+            speech_request(base_url, "\{\"input\": \"The quick brown fox.\", \"voice\": \"Bella\"}") $(status, _ctype, bytes, text) {
+                t |> equal(status, 200, text)
+                t |> success(length(bytes) > 44, "{length(bytes)} bytes of wav off the f32 planes")
+            }
+            check_tts_stats_block(t, base_url, "f32")
         }
     }
 }

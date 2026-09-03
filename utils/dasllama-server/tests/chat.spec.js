@@ -1,4 +1,4 @@
-// §05 chat: the wire body (knob coercion, tri-state thinking, image parts),
+// §06 chat: the wire body (knob coercion, tri-state thinking, image parts),
 // SSE rendering (reasoning span, tool-call chips, meta), and the error path.
 
 const { test, expect, fx, raw, openControl, lastJson } = require('./fixtures');

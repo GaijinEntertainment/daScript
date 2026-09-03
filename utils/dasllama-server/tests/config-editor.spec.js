@@ -1,4 +1,4 @@
-// §08 config editor: fields + per-key source chips from /config, the
+// §10 config editor: fields + per-key source chips from /config, the
 // [[models]] roster, pre-save sanity, and the exchange-policy save guard
 // (POST /config replaces the whole file — the policy must ride every save).
 

@@ -1,4 +1,4 @@
-// §12 consent banner: the GDPR first-contact gate. It renders only on the zero-config path
+// §13 consent banner: the GDPR first-contact gate. It renders only on the zero-config path
 // of a consent-capable server (consent_notice present in /exchange), records the choice via
 // POST /exchange/consent, and never renders for an explicitly configured policy — an
 // exchange_* key IS the expressed choice. The captured fixture is the zero-config never-asked

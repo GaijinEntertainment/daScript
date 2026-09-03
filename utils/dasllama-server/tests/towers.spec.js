@@ -68,7 +68,7 @@ test('a present tower on a served model offers enable-vision, which wires, saves
     await expect(page.locator('#cat-note')).toContainText('dictation (below) can ride the same restart');
     const body = lastJson(posts.filter(p => p.path === '/config'));
     expect(body.models[0].image_mmproj).toBe(E2B_TOWER_PATH);
-    // the note OFFERS the restart — clicking it drains + relaunches without a trip to § 09
+    // the note OFFERS the restart — clicking it drains + relaunches without a trip to § 10
     await page.locator('#cat-note button', { hasText: 'restart now' }).click();
     await expect(page.locator('#badge')).toHaveText(/restarting/);
     expect(posts.some(p => p.path === '/restart')).toBe(true);

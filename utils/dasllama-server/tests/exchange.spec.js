@@ -1,4 +1,4 @@
-// §11 sidecar exchange: the current-sidecar states the page must distinguish
+// §13 sidecar exchange: the current-sidecar states the page must distinguish
 // (none / local unshared / shared / exchange-sourced / version-stale), the
 // matches table, and the always-share toggle's policy-only save.
 

@@ -16,6 +16,11 @@ function raw(name) {
     return fs.readFileSync(path.join(__dirname, 'fixtures', name + '.txt'), 'utf8');
 }
 
+// a captured binary body (the wav /v1/audio/speech answers), bytes untouched
+function bin(name) {
+    return fs.readFileSync(path.join(__dirname, 'fixtures', name));
+}
+
 // GET pathname -> state key
 const GET_MAP = {
     '/v1/stats': 'stats',
@@ -40,7 +45,8 @@ async function mockServer(page, opts = {}) {
         bench: opts.bench ?? fx('bench_idle'),
         images: opts.images ?? fx('images'),
         catalog: opts.catalog ?? fx('catalog_idle'),
-        // POST pathname -> {status, json}; the chat route instead streams `sse`
+        // POST pathname -> {status, json}, or {status, body, contentType} for a captured
+        // binary answer (the speech route's wav); the chat route instead streams `sse`
         // back verbatim as text/event-stream.
         responses: opts.responses ?? {},
         sse: opts.sse ?? null,
@@ -79,6 +85,9 @@ async function mockServer(page, opts = {}) {
             return route.fulfill({ contentType: 'text/event-stream', body: state.sse });
         }
         const r = state.responses[p] ?? { status: 200, json: {} };
+        if (r.body !== undefined) {
+            return route.fulfill({ status: r.status ?? 200, contentType: r.contentType ?? 'application/octet-stream', body: r.body });
+        }
         return route.fulfill({ status: r.status ?? 200, contentType: 'application/json', body: JSON.stringify(r.json ?? {}) });
     });
 
@@ -105,4 +114,4 @@ async function openControl(page, opts = {}) {
 
 const lastJson = posts => JSON.parse(posts[posts.length - 1].body);
 
-module.exports = { test: base.test, expect: base.expect, fx, raw, openControl, lastJson };
+module.exports = { test: base.test, expect: base.expect, fx, raw, bin, openControl, lastJson };

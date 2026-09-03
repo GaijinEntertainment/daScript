@@ -1,8 +1,9 @@
 # Captured fixtures for the control-page suite
 
-Every JSON/SSE file here was captured from a REAL dasllama-server run - never
-hand-written - so the page is tested against the wire shapes the server
-actually emits. If an endpoint's schema changes, re-capture rather than edit.
+Every file here - JSON, SSE, and the one captured WAV - came off a REAL
+dasllama-server run, never hand-written, so the page is tested against the wire
+shapes the server actually emits. If an endpoint's schema changes, re-capture
+rather than edit.
 
 ## Regenerating
 
@@ -52,6 +53,17 @@ Then capture (`B=http://127.0.0.1:18132`):
 | `activate_response.json` | `curl -X POST $B/v1/models/activate -d '{"model":"tiny"}'` (idle server) |
 | `sse_chat.txt` | `curl -N $B/v1/chat/completions -d '{"messages":[{"role":"user","content":"hi"}],"stream":true,"max_tokens":24}'` - raw bytes, keep the exact framing |
 | `sse_think.txt` | same against a thinking model, or a capture that carries `delta.reasoning_content` chunks |
+
+Speech fixtures (the same server, restarted with
+`--tts <models>/kitten-nano.gguf` beside its `tts_g2p.bin` + `tts_postag.bin`;
+`S=$B/v1/audio/speech`):
+
+| File | Command |
+|---|---|
+| `stats_tts.json` | `curl $B/v1/stats` after a synthesis or two - the `tts` block (voices, sample rate, lane) rides the full stats shape |
+| `config_tts.json` | `curl $B/config` on that same boot - the `tts` path and `tts_lane` as the speech studio's offer card reads them |
+| `speech.wav` | `curl -X POST $S -d '{"input":"Hi.","voice":"expr-voice-2-f","response_format":"wav"}' -o speech.wav` - raw bytes, keep the exact RIFF header. Say ONE short word: the answer is uncompressed 16-bit PCM, so every second costs ~48 KB |
+| `speech_error.json` | `curl -X POST $S -d '{"input":"Hi.","response_format":"mp3"}'` (the declined-format 400 body) |
 
 `sse_expected.json` pairs the SSE captures with the text the page must render:
 `{content, think, think_content}` = the concatenated `delta.content` of

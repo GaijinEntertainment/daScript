@@ -1,4 +1,4 @@
-// §10 native audio: with an audio arm and no ASR workers, the mic records a clip that rides the
+// §06 native audio: with an audio arm and no ASR workers, the mic records a clip that rides the
 // NEXT chat message as an input_audio part — no transcription pass, no second model copy.
 // Chromium's fake media device supplies the "microphone" (a tone), so the record → stop → attach →
 // send path runs for real.

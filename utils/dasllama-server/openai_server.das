@@ -173,6 +173,8 @@ var g_asr_team_dispatch = false
 var g_has_tts = false
 var g_tts_path = ""
 var g_tts_id = ""
+let TTS_LANE_DEFAULT = "q8"
+var g_tts_lane = TTS_LANE_DEFAULT   // the REQUESTED weight lane; the worker reports what it actually pinned
 let TTS_FRONT_END_PACKS : array<string> <- ["tts_g2p.bin", "tts_postag.bin"]   // load_tts_model reads both from the GGUF's directory
 var g_shutdown_requested = false
 var g_gc_requested = false
@@ -487,16 +489,39 @@ def tts_files_present(path : string) : bool {
     return !empty(path) && empty(tts_missing_file(path))
 }
 
+//! The TTS weight lane a spelling selects: ``q8`` | ``f32``, anything else warned about and
+//! served as ``q8``.
+def pick_tts_lane(s : string) : string {
+    let l = to_lower(s)
+    if (l == "f32" || l == "q8") {
+        return l
+    }
+    if (!empty(l)) {
+        to_log(LOG_WARNING, "dasllama-server: unknown --tts-lane '{s}', using {TTS_LANE_DEFAULT} (valid: q8 | f32)\n")
+    }
+    return TTS_LANE_DEFAULT
+}
+
+//! The weight lane ``/v1/audio/speech`` requested for its model — what ``configure_tts`` kept
+//! after normalizing. The lane the worker actually pinned rides the ``tts`` block of
+//! ``GET /v1/stats``.
+def server_tts_lane : string {
+    return g_tts_lane
+}
+
 //! Configure the TTS model ``/v1/audio/speech`` serves: one worker thread loads and owns it in
 //! its own context, the route id is the file's stem. Call once before ``run_server``. A missing
 //! GGUF or front-end pack DEGRADES instead of panicking — the missing file is logged at
 //! LOG_ERROR and the speech route is dropped (``server_has_tts`` then reads false), because a
 //! crash-looping boot under the watchdog never gets a page to fix the config from. The rest of
 //! the boot serves on; ``tts_files_present`` answers the same file check before the call.
-def configure_tts(path : string) {
+//! `lane` is the weight lane the worker pins around its load — ``q8`` (the default) or ``f32``;
+//! an unknown spelling warns and serves q8, the way every other enum-ish config key degrades.
+def configure_tts(path : string; lane : string = TTS_LANE_DEFAULT) {
     g_tts_path = path
     g_has_tts = !empty(path)
     g_tts_id = empty(path) ? "" : stem(base_name(path))
+    g_tts_lane = pick_tts_lane(lane)
     if (!g_has_tts) {
         return
     }
@@ -3009,13 +3034,40 @@ def private gpu_weight_budget_bytes() : int64 {
     return !empty(gpu_tier_status().device) ? moe_gpu_weight_budget() : 0l
 }
 
+// The `tts` member of /v1/stats, comma-prefixed, or "" when no speech model is configured — the
+// page gates its speech studio on the key EXISTING, so a speechless server must not carry it.
+// `voices`, `sample_rate` and `lane` are the worker's own answers about the model it loaded.
+def private tts_stats_member() : string {
+    if (!g_has_tts) {
+        return ""
+    }
+    let voices = build_string() $(w) {
+        for (i in range(length(g_tts_voices))) {
+            if (i > 0) {
+                w |> write(",")
+            }
+            w |> write(json_str(g_tts_voices[i]))
+        }
+    }
+    return ",\"tts\":\{\"id\":{json_str(g_tts_id)},\"ready\":{g_tts_ready > 0},\"pending\":{g_tts_pending},\"done_jobs\":{g_tts_done_jobs},\"audio_s\":{g_tts_audio_s},\"voices\":[{voices}],\"sample_rate\":{g_tts_sample_rate},\"lane\":{json_str(g_tts_lane_served)}}"
+}
+
+// splice a member into a compact JSON object body: sprint_json/write_json_compact both close on
+// the final `}`, and the stats shapes are objects with at least one member
+def private with_json_member(body : string; member : string) : string {
+    if (empty(member)) {
+        return body
+    }
+    return "{slice(body, 0, length(body) - 1)}{member}}"
+}
+
 def private handle_stats(var resp : HttpResponse?) : http_status {
     if (empty(g_slots)) {
         // no LLM slot: the minimum shape control.html's apply() reads (it gates on `setup`).
         // `setup` is the MODE, not the slot count — a speech-only server serves the speech route
         // and must not draw the page's pick-a-model surface.
         return resp |> JSON(
-            "\{\"setup\":{g_setup_mode},\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":0,\"asr_ready\":0,\"asr_active\":0,\"asr_pending\":0,\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":0,\"asr_audio_s\":0,\"tts_done_jobs\":{g_tts_done_jobs},\"tts_audio_s\":{g_tts_audio_s},\"vision\":false,\"audio\":false,\"models\":[]}",
+            "\{\"setup\":{g_setup_mode},\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":0,\"asr_ready\":0,\"asr_active\":0,\"asr_pending\":0,\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":0,\"asr_audio_s\":0,\"tts_done_jobs\":{g_tts_done_jobs},\"tts_audio_s\":{g_tts_audio_s},\"vision\":false,\"audio\":false,\"models\":[]{tts_stats_member()}}",
             http_status.OK)
     }
     let tier = gpu_tier_status()
@@ -3080,7 +3132,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
     }
     let body = sprint_json(out, false)
     delete out
-    return resp |> JSON(body, http_status.OK)
+    return resp |> JSON(with_json_member(body, tts_stats_member()), http_status.OK)
 }
 
 // /v1/streams: the poll surface behind the page's swimlane + stream cards — per-stream state,
@@ -3200,7 +3252,7 @@ let private CONFIG_KEY_KINDS <- {
     "model" => "s", "port" => "i", "quant" => "s", "kv_dtype" => "s", "metal" => "s",
     "gpu" => "s", "gpu_layers" => "i", "gpu_stream" => "i", "gpu_dn" => "b", "gpu_attn" => "b",
     "gpu_dense" => "b", "gpu_vram_mb" => "i", "asr" => "s", "mmproj" => "s", "asr_workers" => "i",
-    "tts" => "s",
+    "tts" => "s", "tts_lane" => "s",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
     "mtp" => "b", "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "models" => "a",
@@ -3975,6 +4027,11 @@ struct private TtsEvent {
     body : string        // the error body on a failure
     file_path : string   // the served audio on success
     audio_s : float
+    // the ready event's payload: what the loaded model can say, and the lane it was loaded on.
+    // The worker owns the model, so this is the only crossing where the main context learns them.
+    voices : array<string>
+    sample_rate : int
+    lane : string
 }
 
 struct private TtsWire {
@@ -3994,6 +4051,9 @@ var g_tts_ready = 0
 var g_tts_pending = 0
 var g_tts_done_jobs = 0l
 var g_tts_audio_s = 0.0
+var g_tts_voices : array<string>   // filled from the worker's ready event, with the two below
+var g_tts_sample_rate = 0
+var g_tts_lane_served = ""
 let TTS_QUEUE_LIMIT = 16
 let TTS_WRITER_KEEPALIVE_MS = 600000
 let TTS_MAX_INPUT_CHARS = 4096
@@ -4025,11 +4085,27 @@ def private process_tts_job(var model : TtsModel; job : TtsJob; events : Channel
         audio_s = float(length(audio.pcm)) / float(audio.sample_rate)))
 }
 
-def private tts_worker_main(model_path : string; team_dispatch : bool; var jobs : Channel?&; var events : Channel?&) {
+// what the main context is told about the loaded model: the voices it will accept, the rate its
+// wav headers carry, and the lane the load actually took (the pin, or the policy when none)
+def private tts_ready_event(model : TtsModel) : TtsEvent {
+    var inscope c <- caps(model)
+    var ev = TtsEvent(kind = TtsEventKind.ready, sample_rate = c.sample_rate,
+        lane = tts_serves_q8() ? "q8" : "f32")
+    ev.voices := c.voices
+    return <- ev
+}
+
+def private tts_worker_main(model_path : string; lane : string; team_dispatch : bool; var jobs : Channel?&; var events : Channel?&) {
     this_context().name := "dasllama_tts"
     set_jobque_thread_team_mode(team_dispatch)   // a new OS thread defaults to team publishes; the worker's kernels run inline like the ASR workers' unless the policy is `team`
     var inscope model = TtsModel()
     var load_failure = ""
+    // the lane pins HERE, in the context that loads: this thread started every dasLLAMA module
+    // global at its declared default, so a pin set by the spawning context never arrived
+    set_tts_q8(lane == "q8")
+    defer() {
+        reset_tts_q8()
+    }
     let load_failed = catch_worker_panic(load_failure) {
         model <- load_tts_model(model_path)   // nolint:PERF030 - target is the fresh empty decl above; the load runs inside the catch block, so it cannot fold into the declaration
     }
@@ -4040,7 +4116,7 @@ def private tts_worker_main(model_path : string; team_dispatch : bool; var jobs 
         events |> release
         return
     }
-    emit_tts_event(events, TtsEvent(kind = TtsEventKind.ready))
+    emit_tts_event(events, tts_ready_event(model))
     var stopping = false
     while (!stopping) {
         jobs |> pop_with_timeout_clone(250) $(job : TtsJob#) {
@@ -4127,25 +4203,39 @@ def private queue_speech(srv : WebSocketServer; var req : HttpRequest?; var writ
     to_log(LOG_INFO, "[req {rid}] tts: queued (pending={g_tts_pending}, {length(input)} chars, {fmt})\n")
 }
 
+// the ready event's payload into main-context storage: every string is cloned, because the popped
+// clone lives in the channel's heap and dies with this callback
+def private adopt_tts_ready(event : TtsEvent#) {
+    g_tts_voices |> clear()
+    g_tts_voices |> reserve(length(event.voices))
+    for (v in event.voices) {
+        g_tts_voices |> push(clone_string(v))
+    }
+    g_tts_sample_rate = event.sample_rate
+    g_tts_lane_served = clone_string(event.lane)
+}
+
 def private start_tts_worker() {
     g_tts_ready = 0
     if (!g_has_tts) {
         return
     }
-    to_log(LOG_INFO, "dasllama-server: starting the TTS worker for {g_tts_id}\n")
+    to_log(LOG_INFO, "dasllama-server: starting the TTS worker for {g_tts_id} on the {g_tts_lane} lane\n")
     let model_path = g_tts_path
+    let lane = g_tts_lane
     let team_dispatch = g_asr_team_dispatch
     var jobs_capture = g_tts_jobs
     var events_capture = g_tts_events
-    new_thread() <| @capture(= model_path, = team_dispatch, = jobs_capture, = events_capture) {
-        tts_worker_main(model_path, team_dispatch, jobs_capture, events_capture)
+    new_thread() <| @capture(= model_path, = lane, = team_dispatch, = jobs_capture, = events_capture) {
+        tts_worker_main(model_path, lane, team_dispatch, jobs_capture, events_capture)
     }
     var load_failure = ""
     while (g_tts_ready < 1 && empty(load_failure)) {
         g_tts_events |> pop_with_timeout_clone(1000) $(event : TtsEvent#) {
             if (event.kind == TtsEventKind.ready) {
+                adopt_tts_ready(event)
                 g_tts_ready++
-                to_log(LOG_INFO, "dasllama-server: TTS worker ready\n")
+                to_log(LOG_INFO, "dasllama-server: TTS worker ready ({length(g_tts_voices)} voice(s), {g_tts_sample_rate} Hz, {g_tts_lane_served} lane)\n")
             } elif (event.kind == TtsEventKind.failed) {
                 load_failure = clone_string(event.body)
             }
@@ -4993,6 +5083,7 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
         remove_result(served.path)
     }
     delete g_tts_served
+    delete g_tts_voices
     for (w in values(g_media_wires)) {   // parked image requests die with the server
         unsafe {
             delete w.js

@@ -1,4 +1,4 @@
-// §03 streams + §04 prefix cache: live cards per state, the history toggle,
+// §04 streams + §05 prefix cache: live cards per state, the history toggle,
 // finished-stream migration, and cache-table lifecycle (rows -> drained note).
 
 const { test, expect, fx, openControl } = require('./fixtures');
