@@ -10,7 +10,7 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
 - `index.html` - news-first home (identity masthead, feed, how-to-get, ladder teaser)
 - `stories.html` - the long-form arc stories (what we tried, how we measured, the tables,
   the commands, the date and sha), generated from `_stories/` between the `stories:begin`
-  markers by `build_news.py`; the "Boris and Claude" voice, llama.cpp as the yardstick
+  markers by `build_news.py`; plain "we", llama.cpp named as the yardstick
 - `ladder.html` - ALL measurements (official + community); daslang.io/dasllama.html stays
   official-only
 - `sidecars.html` - the sidecar exchange: finder, kernel-win viewer, downloads
