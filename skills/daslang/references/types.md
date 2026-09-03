@@ -170,7 +170,9 @@ indices: `typeinfo variant_index<f>(v)` (compile error on an unknown name),
 `typeinfo safe_variant_index<nope>(v)` (`-1` instead). A case-field write (`v.i = 7`) and
 `set_variant_index(v, n)` each need `unsafe` and neither implies the other: a field write does
 not change the index. Anonymous form `variant<i_value:uint; f_value:float>`; two variants match
-when named cases, types, and order all match.
+when named cases, types, and order all match. A case value takes the struct-field sigils:
+`Value(s = x)` copies, `Value(s <- x)` moves, `Value(s := x)` clones and leaves `x` intact
+(probe-verified 2026-09-02).
 
 ## Fixed arrays
 

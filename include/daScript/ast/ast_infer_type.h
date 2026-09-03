@@ -680,6 +680,7 @@ namespace das {
         virtual bool canVisitMakeStructure ( ExprMakeStruct * expr ) override;
         virtual void preVisit(ExprMakeStruct *expr) override;
         bool convertCloneSemanticsToExpression(ExprMakeStruct *expr, int index, MakeFieldDecl *decl);
+        void convertCloneFieldToMove(const TypeDeclPtr &fieldType, MakeFieldDecl *decl);
         virtual MakeFieldDeclPtr visitMakeStructureField(ExprMakeStruct *expr, int index, MakeFieldDecl *decl, bool last) override;
         virtual ExpressionPtr structToTuple(const TypeDeclPtr &makeType, const MakeStructPtr &st, const LineInfo &at);
         virtual ExpressionPtr visit(ExprMakeStruct *expr) override;
