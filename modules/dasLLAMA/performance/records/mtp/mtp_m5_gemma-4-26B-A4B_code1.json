@@ -13,7 +13,6 @@
 		"model_sha" : "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f\t0x3f226f6e0\t2026-07-20T19:30:57",
 		"date" : "2026-09-02 21:53",
 		"cpu" : "Apple M5 Max",
-		"host" : "Mac.socal.rr.com",
 		"lcpp_version" : "version: 0.3.0-dev (build 832, commit 6fdd0ac89)",
 		"threads" : 6,
 		"ngen" : 128

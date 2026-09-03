@@ -7,7 +7,6 @@
 		"cpu" : "Apple M5 Max",
 		"model" : "~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
 		"lcpp_server" : "~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
-		"host" : "m5.local",
 		"das_exe" : "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench",
 		"lcpp_version" : "version: 0.3.0-dev (build 832, commit 6fdd0ac89)",
 		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",

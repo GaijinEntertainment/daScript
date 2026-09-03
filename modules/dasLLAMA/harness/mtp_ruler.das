@@ -584,7 +584,7 @@ def main() : int {
 //! the dated, sha-stamped record: provenance of both engines, the model and its head, then the rows
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#ruler-records")]
 def private write_report(cfg : Args; head : string; rows : array<string>) : bool {
-    let meta = JV((date = format_time(get_clock(), "%Y-%m-%d %H:%M"), host = first_line(sh("hostname")),
+    let meta = JV((date = format_time(get_clock(), "%Y-%m-%d %H:%M"),
         cpu = first_line(sh("sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m")),
         das_sha = first_line(sh("git rev-parse --short HEAD")), das_exe = cfg.exe,
         lcpp_server = cfg.server, lcpp_version = first_line(sh("\"{cfg.server}\" --version 2>&1")),

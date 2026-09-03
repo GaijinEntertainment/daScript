@@ -13,7 +13,6 @@
 		"model_sha" : "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34\t0x46aee4960\t2026-08-18T06:36:23",
 		"date" : "2026-09-03 04:14",
 		"cpu" : "Apple M4 Pro",
-		"host" : "Antons-Mac-mini.local",
 		"lcpp_version" : "version: 0.3.0-dev (build 10659, commit 6fdd0ac89)",
 		"threads" : 10,
 		"ngen" : 128
