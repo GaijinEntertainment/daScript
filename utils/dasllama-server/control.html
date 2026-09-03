@@ -353,6 +353,7 @@ button:disabled { opacity: 0.45; cursor: default; }
             <div class="chat-btns">
                 <button id="b-img" type="button" style="display:none" title="attach an image — paste or drop one too">▣ image</button>
                 <button id="b-mic" type="button" style="display:none" title="record, click again to stop + transcribe">● mic</button>
+                <button id="b-speak" type="button" style="display:none" title="speak the last answer through the served voice (the reasoning stays silent)">▶ speak</button>
                 <button id="b-send" type="button">send</button>
                 <button id="b-chat-clear" type="button">clear</button>
             </div>
@@ -392,7 +393,7 @@ button:disabled { opacity: 0.45; cursor: default; }
             <div class="controls" style="margin-top:10px">
                 <button id="s-run" type="button" disabled>speak</button>
                 <label class="knob">voice <select id="s-voice"></select></label>
-                <label class="knob">speed <input type="range" id="s-speed" min="0.25" max="4" step="0.05" value="1"><span id="s-speed-v">1.00×</span></label>
+                <label class="knob">speed <input type="range" id="s-speed" min="0.3" max="1.5" step="0.05" value="1"><span id="s-speed-v">1.00×</span></label>
                 <span class="ctl-note" id="s-count">0 / 4096</span>
                 <span class="ctl-note" id="s-note">type a line and press speak — the waveform plays once, click it to replay</span>
             </div>
@@ -1411,6 +1412,7 @@ async function sendChat() {
     meta.textContent = ((performance.now() - t0) / 1000).toFixed(1) + "s";
     el.append(meta);
     addSpeakButton(el, splitThink(acc.trim()).text);
+    syncSpeakButtons();
     chatBusy = false;
     $("b-send").disabled = false;
 }
@@ -1782,6 +1784,7 @@ function countSpeechInput() {
 function applySpeech(tts) {
     const on = !setupMode && !!(tts && tts.ready);
     $("tts-section").style.display = on ? "block" : "none";
+    syncSpeakButtons();
     if (!on) return;
     const voices = tts.voices || [];
     if (voices.join(" ") !== ttsVoices.join(" ")) {
@@ -2013,16 +2016,43 @@ async function speakAnswer(btn, text) {
     endSpeaking(btn);
 }
 
+// every answer remembers its spoken text; the button itself lands whenever the server speaks -
+// at completion when it already does, else on the stats poll that first says so
 function addSpeakButton(el, text) {
-    if (!text || !ttsReady()) return;
+    if (!text) return;
+    el.dataset.speak = text;
+    if (!ttsReady() || el.querySelector("button.speak")) return;
     const b = document.createElement("button");
     b.type = "button";
     b.className = "mini speak";
     b.textContent = SPEAK_LABEL;
     b.title = "speak this answer through the served voice";
-    b.addEventListener("click", () => speakAnswer(b, text));
+    b.addEventListener("click", () => speakAnswer(b, el.dataset.speak));
     el.append(b);
 }
+
+function lastSpokenAnswer() {
+    const answers = document.querySelectorAll("#chat-log .msg.assistant");
+    for (let i = answers.length - 1; i >= 0; i--) {
+        if (answers[i].dataset.speak) return answers[i];
+    }
+    return null;
+}
+
+function syncSpeakButtons() {
+    const ready = ttsReady();
+    if (ready) {
+        for (const el of document.querySelectorAll("#chat-log .msg.assistant")) {
+            if (el.dataset.speak) addSpeakButton(el, el.dataset.speak);
+        }
+    }
+    $("b-speak").style.display = ready && lastSpokenAnswer() ? "" : "none";
+}
+
+$("b-speak").addEventListener("click", () => {
+    const el = lastSpokenAnswer();
+    if (el) speakAnswer($("b-speak"), el.dataset.speak);
+});
 
 // ===== config editor =====
 // Defaults-first: the model paths live in the [[models]] roster table; every flat knob below

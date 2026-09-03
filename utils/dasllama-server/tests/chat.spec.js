@@ -161,6 +161,24 @@ test('a ready speech model speaks the answer on the studio voice, reasoning left
     await expect(speak).not.toHaveClass(/speaking/, { timeout: 15_000 });
 });
 
+test('the chat bar speaks the newest answer, and an answer finished before speech arrived gets its button later', async ({ page }) => {
+    // the first polls say no speech; the answer lands without a button; then the server speaks
+    const stats = n => (n < 4 ? fx('stats') : fx('stats_tts'));
+    const { posts } = await openControl(page, Object.assign({ stats, sse: raw('sse_think') }, wavAnswer()));
+    await expect(page.locator('#b-speak')).toBeHidden();
+    await send(page, 'is 91 prime?');
+    await expect(page.locator('.msg.assistant .meta')).toBeVisible();
+    await expect(page.locator('.msg.assistant button.speak')).toHaveCount(0);
+    // the poll that first reports speech dresses the existing answer and reveals the bar button
+    await expect(page.locator('.msg.assistant button.speak')).toHaveCount(1, { timeout: 8_000 });
+    await expect(page.locator('#b-speak')).toBeVisible();
+    await page.locator('#b-speak').click();
+    await expect(page.locator('#b-speak')).toHaveClass(/speaking/);
+    await expect.poll(() => speechBodies(posts).length).toBeGreaterThan(0);
+    expect(speechBodies(posts)[0].input).toBe(fx('sse_expected').think_content);
+    await expect(page.locator('#b-speak')).not.toHaveClass(/speaking/, { timeout: 15_000 });
+});
+
 test('an answer past the route cap goes out as ordered pieces', async ({ page }) => {
     const times = 70;   // 70 x the captured sentence is past the 4096-character cap
     const { posts } = await openControl(page, Object.assign(
