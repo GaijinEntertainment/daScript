@@ -8,6 +8,7 @@ require dasllama/dasllama_math
 require daslib/jobque_boost
 require daslib/json_boost
 require daslib/clargs
+require daslib/defer          // defer() { reset_tts_q8() } — the weight-lane pin never outlives the run
 require daslib/fio
 require math
 
@@ -53,6 +54,10 @@ def main() : int {
     var args = SynthArgs()
     let rc = parse_args_with_help(args, "modules/dasLLAMA/harness/tts_synth.das")
     return rc if (rc >= 0)
+    if (args.q8 && args.f32) {
+        to_log(LOG_ERROR, "tts synth: --q8 and --f32 pin the rows GEMMs to opposite lanes - pass one, not both\n")
+        return 2
+    }
     let fixture = empty(args.fixture) ? path_join(get_das_root(), "modules/dasLLAMA/tests/_tts_fixtures/g2p_corpus.json") : args.fixture
     var err = ""
     let rows = read_json(fread(fixture), err)
@@ -65,6 +70,9 @@ def main() : int {
     var audio_total = 0.0lf
     var gen_total = 0.0lf
     var failed = ""
+    defer() {   // the pin must not outlive this run, on any path out
+        reset_tts_q8()
+    }
     if (args.q8 || args.f32) {
         set_tts_q8(args.q8)
     }

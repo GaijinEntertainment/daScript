@@ -709,7 +709,9 @@ def parse_args() {
         request_exit()
         return
     }
-    if (empty(g_cfg.model) && empty(g_models)) {   // a [[models]] roster needs no flat model key
+    // a [[models]] roster needs no flat model key; a --tts start is a SERVING server (the speech
+    // route), so it never enters setup mode
+    if (empty(g_cfg.model) && empty(g_models) && empty(g_cfg.tts)) {
         g_setup_mode = true
         print("no model configured - starting in setup mode (open the control page to download one from the catalog)\n")
     }
@@ -907,10 +909,12 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     delete g_models
     g_models <- roster
-    if (empty(g_models) && !g_setup_mode) {
+    if (empty(g_models) && !g_setup_mode && empty(g_cfg.tts)) {
         // not an exit: a crash-looping boot under the watchdog never gets a page to fix the config from
         g_setup_mode = true
         to_log(LOG_ERROR, "dasllama-server: no loadable model - every roster path failed its file check; starting in setup mode\n")
+    } elif (empty(g_models) && !g_setup_mode) {
+        to_log(LOG_WARNING, "dasllama-server: no loadable LLM model - serving the speech route only (the TTS model still loads)\n")
     }
     if (!empty(g_cfg.image_mmproj) && !stat(g_cfg.image_mmproj).is_valid) {
         to_log(LOG_ERROR, "dasllama-server: dropping --image-mmproj - file not found: {g_cfg.image_mmproj}\n")
@@ -1017,9 +1021,11 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         if (!empty(g_cfg.asr)) {
             configure_asr_workers(g_cfg.asr, g_cfg.mmproj, g_cfg.asr_workers > 0 ? g_cfg.asr_workers : 1)
         }
-        if (!empty(g_cfg.tts)) {
-            configure_tts(g_cfg.tts)
-        }
+    }
+    // outside the serving gate: a --tts start with no loadable LLM is a speech-only SERVER, and
+    // its route has to arm on that boot too
+    if (!empty(g_cfg.tts)) {
+        configure_tts(g_cfg.tts)
     }
 
     // the /config surface: a config-less start saves beside the program (the same spot the

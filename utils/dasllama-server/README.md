@@ -65,10 +65,11 @@ asr_workers = 2    # two independent transcription requests; each worker owns an
 
 ## Setup mode and the model catalog
 
-A start with **no model at all** (no `--model`, no config, or every configured path missing)
-does not exit - it boots into **setup mode**: the port opens, the control page serves, every
-inference route answers with a clean error, and the page leads with the **model catalog**
-(sec. 03) - a curated, sha-pinned list of current models (`model_catalog.das`; commit-pinned
+A start with **no LLM model at all** (no `--model`, no config, or every configured path
+missing) **and no `--tts`** does not exit - it boots into **setup mode**: the port opens, the
+control page serves, every inference route answers with a clean error, and the page leads
+with the **model catalog** (sec. 03) - a curated, sha-pinned list of current models
+(`model_catalog.das`; commit-pinned
 HF URLs, canonical sha256, one download at a time, `curl -C -` resume). A finished download
 is verified against its pinned sha before it is renamed into `models_dir` (default
 `~/.dasllama/models`; the `models_dir` config key or `DASLLAMA_MODELS_DIR` move it) with the
@@ -76,6 +77,10 @@ house `.sha` sidecar beside it. In setup mode a downloaded entry offers **serve 
 model** - the page writes the config and restarts (exit 4, the watchdog contract) straight
 into serving it. The same catalog stays available on a serving server for pulling more
 models.
+
+**`--tts` alone is a serving start, not a setup start.** A speech-only server has no LLM slot,
+so `/v1/stats` answers the slotless shape - but its `setup` reads `false`, and the page keeps
+its serving surface instead of leading with the catalog.
 
 Catalog entries carry their **towers**: a vision-capable row offers its pinned mmproj
 (download -> **enable vision** -> restart wires `image_mmproj`), and a **dictation** strip
@@ -192,9 +197,9 @@ Windows locks the DLLs.
 | `POST` | `/bake` | `{"model"?: name}` loopback-only: bake the slot's prepared `.dlim` image by spawning `dasllama-convert` (empty body bakes the default slot; 409 while a bake or bench runs or streams are active; the dlim GC of never-loadable images runs on completion) |
 | `GET`  | `/bake` | Bake state (`idle | running | done | failed`), the slot it runs for, log lines, the result JSON |
 | `GET`  | `/v1/images` | Per-slot prepared-image inventory: source GGUF path, the flavor THIS process mapped (planar/vulkan/metal, or raw gguf), the trimmed flag, and each on-disk `.dlim`'s info - plus the slot name a bake is currently running for |
-| `GET`  | `/v1/stats` | Scheduler counters (`gen_tokens`, `prefill_tokens`, TTFT last/avg, ...) plus `model`/`active_model`/`ctx`/`uptime_s`/`draining` identity fields, memory footprint (`weights_bytes`, `kv_bytes`, das heaps, `gpu_vram_bytes`/`gpu_budget_bytes`), a `hardware` line (CPU * lanes * GPU), `asr_workers`, `asr_ready`, `asr_active`, `asr_pending`, media counters (`media_pending`, `media_rows`, `mrope_streams` - streams whose media rode the qwen mrope grid walk), and `models[]` - one entry per slot: `file` (source GGUF base name - the page's serve-live gate), `is_active`, `holds_gpu`, requested `backend` vs `backend_effective` (`cpu`/`gpu:rails`/`gpu:resident`), per-slot cache counters, `last_used_s`, switch count/avg ms |
+| `GET`  | `/v1/stats` | Scheduler counters (`gen_tokens`, `prefill_tokens`, TTFT last/avg, ...) plus `model`/`active_model`/`ctx`/`uptime_s`/`draining` identity fields, memory footprint (`weights_bytes`, `kv_bytes`, das heaps, `gpu_vram_bytes`/`gpu_budget_bytes`), a `hardware` line (CPU * lanes * GPU), `asr_workers`, `asr_ready`, `asr_active`, `asr_pending`, speech counters (`tts_done_jobs` - syntheses served since boot, `tts_audio_s` - the speech seconds they carried), media counters (`media_pending`, `media_rows`, `mrope_streams` - streams whose media rode the qwen mrope grid walk), and `models[]` - one entry per slot: `file` (source GGUF base name - the page's serve-live gate), `is_active`, `holds_gpu`, requested `backend` vs `backend_effective` (`cpu`/`gpu:rails`/`gpu:resident`), per-slot cache counters, `last_used_s`, switch count/avg ms |
 | `GET`  | `/v1/streams` | Per-stream poll surface: `model` (the slot it runs on), state (`queued`/`prefilling`/`decoding`/`finished`), token counts, TTFT, and capped text tails (prompt head + generated tail); finished streams linger ~10 s flagged `finished`. Plus `cache`: the prefix-cache donation chains (tokens, live pages, hits, age, preview) and `asr`: recent ASR jobs (state, audio s, wall ms, RTF) |
-| `GET`  | `/config` | Effective config with per-key source (`default`/`cli`/`toml`), the `[[models]]` roster, model files beside the served one, active rail (gguf vs prepared `.dlim`), GPU tier status (`supported` + `reason` when the loaded model can't ride it) |
+| `GET`  | `/config` | Effective config with per-key source (`default`/`cli`/`toml`) - one entry per row of the flags table above, `tts` (the speech model path) included - plus the `[[models]]` roster, model files beside the served one, active rail (gguf vs prepared `.dlim`), GPU tier status (`supported` + `reason` when the loaded model can't ride it) |
 | `POST` | `/config` | Validate a `{key: value}` JSON body and write it as an **authoritative** TOML (`authoritative = true`) to the config path (or `dasllama-server.toml` beside the program on a config-less start). Applies on the next restart |
 | `POST` | `/restart` | Drain like `/shutdown`, then exit with code **4** - the watchdog relaunches, picking up the saved config (3 stays the tune-restart code) |
 | `GET`  | `/exchange` | The sidecar-exchange surface: policy (url/accept/submit/configured), the consent state (`consent`: accepted/declined/empty, `consent_notice`: the first-contact text), + the current tune sidecar's identity and share state (sha, origin, box/applied_box, version gate, shared-yet) |

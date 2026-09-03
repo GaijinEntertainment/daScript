@@ -11,6 +11,7 @@ require dasllama/dasllama            // load_tts_model / synthesize / write_wav_
 require llvm/daslib/llvm_tune        // [tune_policy] + log_tune_status
 require daslib/jobque_boost
 require daslib/clargs
+require daslib/defer          // defer() { reset_tts_q8() } — the weight-lane pin never outlives the run
 require daslib/fio
 
 [CommandLineArgs]
@@ -90,6 +91,13 @@ def main : int {
     }
     log_tune_status("txt2wav")
 
+    if (cfg.q8 && cfg.f32) {
+        to_log(LOG_ERROR, "txt2wav: --q8 and --f32 pin the rows GEMMs to opposite lanes - pass one, not both\n")
+        return 1
+    }
+    defer() {   // the pin must not outlive this run, on any path out
+        reset_tts_q8()
+    }
     if (cfg.q8 || cfg.f32) {
         set_tts_q8(cfg.q8)
     }
