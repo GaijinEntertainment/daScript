@@ -17,8 +17,9 @@ from (`dasllama/dasllama_metal_lens.das`), or the Metal ASR decoder
 (`dasllama/dasllama_metal_asr_dec.das`) applies `REVIEW_TOWER.md` too.**
 
 **A diff touching the Vulkan tier - `dasllama/dasllama_vulkan_*.das`,
-`dasllama/dasllama_gpu_resident.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, a
-cm2 tile class, or the resident prefill probes - applies `REVIEW_GPU_VULKAN.md` too.**
+`dasllama/dasllama_gpu_resident.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, or a
+cm2 tile class (an NV_cooperative_matrix2 GEMM class stamped per weight format and column) -
+wherever the diff puts it - applies `REVIEW_GPU_VULKAN.md` too.**
 
 **A kernel body that emits a function pointer or a vtable into the shader is a defect - splice
 the choice at compile time instead.** A `class template` / `def abstract` / `def override`
@@ -42,11 +43,10 @@ the next row.
 
 **A driver that keeps misaligned shapes off a kernel whose main loop steps one fixed-size chunk
 and never checks for a partial last chunk gates every dispatch site of that kernel on that
-site's own K, never on one gate covering every site.**
-
-**Such a site's gate divides by a multiple of the chunk the site's kernel steps** - a kernel
-that steps 128 behind a gate that checks 256 is a shape it never sees, and a kernel that steps
-256 behind a gate that checks 128 is a tail it silently drops.
+site's own K - the extent the loop steps along - never on one gate covering every site, and
+each site's gate divides by a multiple of the chunk that site's kernel steps.** A kernel that
+steps 128 behind a gate that checks 256 never sees a shape it could serve; a kernel that steps
+256 behind a gate that checks 128 silently drops a tail.
 
 **Weakening the MSL emitter's refusal to compile an unlicensed float `matmul2d` A operand -
 `[metal_kernel(float_a_ok=true)]` is the license - or its gate
@@ -86,8 +86,7 @@ without one, or generated from a template instance that has none - shows that ev
 the form touches stays inside its buffers' allocations.** A `requires =` contract on the class
 is that showing for the dimension it names; an unchecked claim that an extent divides evenly is
 not. A padded chunk's walk can run past the live extent, and one poisoned read in a shared tile
-corrupts real rows; a deliberate tail over-read conforms only where the allocation carries the
-slack.
+corrupts real rows.
 
 **Never let a prefill pad output row reach a `matmul2d` or a staged cooperative tile as its B
 operand - stage it as zero, or bound the walk at the live row count.** Pad rows hold recycled
@@ -208,20 +207,19 @@ Vulkan-only hook, role, served path, or backend-only capability, added or remove
 entry in `ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the same change.** One
 backend serving the same path faster or slower is not such a change. The duty holds when that
 list already carries the class of asymmetry, and it covers sec.1.5's per-driver lists of
-registered hooks and borrowed kernels. The role row a new driver file gets (the rule above)
-does not discharge it. sec.1.5's list is the closed list of backend asymmetries; an asymmetry
-it does not carry does not exist.
+registered hooks and borrowed kernels. Extending a file's sec.1.5 role row does not discharge
+it. An asymmetry the list does not carry does not exist.
 
 **A change to code that a served GPU decode or prefill path executes ships GPU-vs-CPU parity
 on one q8 and one kq (K-quant) model with the armed mirror codec.** That code is anything a
 served GPU decode or prefill call executes OR that selects what it executes - a driver, a
 kernel class it dispatches, that class's builder, a servability gate, a race that picks which
 kernel serves, a forwarder default, a weight-region or residency path, the tier forwarders and
-engine seams the call routes through; never the bake paths, never a comment. The parity run is
-`harness/parity.das` on either backend, `benchmarks/lcpp_bench.das --parity`
-(`performance/model_specs.das`'s fixed model list) on either backend, or - on Metal only - an
-in-suite `tests/test_metal_*_parity.das` instrument (decode, prefill, mtp) run through
-`tests/run.das`.
+the Vulkan tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`) the call routes through;
+never the bake paths, never a comment. The parity run is `harness/parity.das` on either
+backend, `benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model
+list) on either backend, or - on Metal only - an in-suite `tests/test_metal_*_parity.das`
+instrument run through `tests/run.das`.
 
 **Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
 Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows the tier that serves

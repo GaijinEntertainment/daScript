@@ -1,12 +1,14 @@
 # dasLLAMA Vulkan Tier Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_GPU_VULKAN.md`. Planned work: `followup_vulkan.md`.
+docs: `ARCHITECTURE_GPU_VULKAN.md` and `ARCHITECTURE_GPU_VULKAN_DECODE.md`. Planned work:
+`followup_vulkan.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff touching the Vulkan tier - `dasllama/dasllama_vulkan_*.das`,
-`dasllama/dasllama_gpu_resident.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, a
-cm2 tile class, or the resident prefill probes - applies this list together with
-`REVIEW_GPU.md`'s and `REVIEW.md`'s.**
+`dasllama/dasllama_gpu_resident.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, or a
+cm2 tile class (an NV_cooperative_matrix2 GEMM class stamped per weight format and column) -
+wherever the diff puts it - applies this list together with `REVIEW_GPU.md`'s and
+`REVIEW.md`'s.**
 
 **A hand-written Vulkan pipeline build anywhere in the engine is a defect - a Vulkan pipeline
 is created only by a `[vk_dispatch]`-generated `ensure_*` and torn down by
