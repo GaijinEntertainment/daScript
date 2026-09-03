@@ -12864,6 +12864,7 @@
 "category": "numeric",
 "text": "The package weighs 2.5 kg and ships tomorrow.",
 "norm": "The package weighs two point five kg and ships tomorrow.",
+"expected": "The package weighs two point five kilograms and ships tomorrow.",
 "ps_misaki": "ðə pˈækɪʤ wˈAz tˈu pˈYnt fˈIv kˈAʤ ænd ʃˈɪps təmˈɑɹO.",
 "ps_espeak": "ðə pˈækɪdʒ wˈeɪz tˈuː pˈɔːɪnt fˈaɪv kˈeɪdʒ ænd ʃˈɪps təmˈɑːɹoʊ.",
 "tokens": [
@@ -12929,6 +12930,7 @@
 "category": "numeric",
 "text": "He ran the marathon in 3:12:45 last spring.",
 "norm": "He ran the marathon in three twelve and forty-five secondslast spring.",
+"expected": "He ran the marathon in three twelve and forty-five seconds last spring.",
 "ps_misaki": "hˌi ɹˈæn ðə mˈɛɹəθˌɑn ɪn θɹˈi twˈɛlv ænd fˌɔɹTifˈIv sˈɛkənstləds spɹˈɪŋ.",
 "ps_espeak": "hˌi ɹˈæn ðə mˈɛɹəθˌɑːn ɪn θɹˈi twˈɛlv ænd fˌɔːɹɾifˈaɪv sˈɛkənstləds spɹˈɪŋ.",
 "tokens": [
@@ -13009,6 +13011,7 @@
 "category": "numeric",
 "text": "The server has 64 GB of memory and 12 cores.",
 "norm": "The server has sixty-four GB of memory and twelve cores.",
+"expected": "The server has sixty-four gigabytes of memory and twelve cores.",
 "ps_misaki": "ðə sˈɜɹvəɹ hæz sˈɪkstifˌɔɹ ʤˌibˈi ʌv mˈɛməɹi ænd twˈɛlv kˈɔɹz.",
 "ps_espeak": "ðə sˈɜːvɚ hæz sˈɪkstifˌɔːɹ dʒˌibˈi ʌv mˈɛmɚi ænd twˈɛlv kˈɔːɹz.",
 "tokens": [
@@ -13084,6 +13087,7 @@
 "category": "numeric",
 "text": "Water boils at 100 °C at sea level.",
 "norm": "Water boils at one hundred C at sea level.",
+"expected": "Water boils at one hundred degrees Celsius at sea level.",
 "ps_misaki": "wˈɔTəɹ bˈYlz æt wˈʌn hˈʌndɹəd sˈi æt sˈi lˈɛvᵊl.",
 "ps_espeak": "wˈɔːɾɚ bˈɔːɪlz æt wˈʌn hˈʌndɹəd sˈi æt sˈi lˈɛvəl.",
 "tokens": [
@@ -13529,6 +13533,7 @@
 "category": "numeric",
 "text": "The recipe calls for 1/2 cup of sugar.",
 "norm": "The recipe calls for one two cup of sugar.",
+"expected": "The recipe calls for one half cup of sugar.",
 "ps_misaki": "ðə ɹˈɛsəpˌi kˈɔlz fɔɹ wˈʌn tˈu kˈʌp ʌv ʃˈʊɡəɹ.",
 "ps_espeak": "ðə ɹˈɛsəpˌi kˈɔːlz fɔːɹ wˈʌn tˈuː kˈʌp ʌv ʃˈʊɡɚ.",
 "tokens": [
@@ -13744,6 +13749,7 @@
 "category": "numeric",
 "text": "The signal arrived 150 ms after the trigger.",
 "norm": "The signal arrived one hundred fifty ms after the trigger.",
+"expected": "The signal arrived one hundred fifty milliseconds after the trigger.",
 "ps_misaki": "ðə sˈɪɡnᵊl əɹˈIvd wˈʌn hˈʌndɹəd fˈɪfti mˈɪz ˈæftəɹ ðə tɹˈɪɡəɹ.",
 "ps_espeak": "ðə sˈɪɡnəl ɚˈaɪvd wˈʌn hˈʌndɹəd fˈɪfti mˈɪz ˈæftɚ ðə tɹˈɪɡɚ.",
 "tokens": [
@@ -13859,6 +13865,7 @@
 "category": "numeric",
 "text": "The processor runs at 3.2 GHz under load.",
 "norm": "The processor runs at three point two GHz under load.",
+"expected": "The processor runs at three point two gigahertz under load.",
 "ps_misaki": "ðə pɹˈɑsˌɛsəɹ ɹˈʌnz æt θɹˈi pˈYnt tˈu ɡˈɛz ˈʌndəɹ lˈOd.",
 "ps_espeak": "ðə pɹˈɑːsˌɛsɚ ɹˈʌnz æt θɹˈi pˈɔːɪnt tˈuː ɡˈɛz ˈʌndɚ lˈoʊd.",
 "tokens": [
@@ -14094,6 +14101,7 @@
 "category": "numeric",
 "text": "The 1960s produced remarkable music.",
 "norm": "The nineteen sixtys produced remarkable music.",
+"expected": "The nineteen sixties produced remarkable music.",
 "ps_misaki": "ðə nˌIntˈin sˈɪkstiz pɹədˈust ɹəmˈɑɹkəbᵊl mjˈuzɪk.",
 "ps_espeak": "ðə nˌaɪntˈin sˈɪkstiz pɹədˈuːst ɹəmˈɑːɹkəbəl mjˈuːzɪk.",
 "tokens": [
@@ -14219,6 +14227,7 @@
 "category": "numeric",
 "text": "The temperature dropped to 5 °F overnight.",
 "norm": "The temperature dropped to five F overnight.",
+"expected": "The temperature dropped to five degrees Fahrenheit overnight.",
 "ps_misaki": "ðə tˈɛmpɹəʧəɹ dɹˈɑpt tə fˈIv ˈɛf ˌOvəɹnˈIt.",
 "ps_espeak": "ðə tˈɛmpɹətʃɚ dɹˈɑːpt tə fˈaɪv ˈɛf ˌoʊvɚnˈaɪt.",
 "tokens": [
@@ -14269,6 +14278,7 @@
 "category": "numeric",
 "text": "We shipped 250 units at £14.50 each.",
 "norm": "We shipped two hundred fifty units at fourteen pounds and fifty cents each.",
+"expected": "We shipped two hundred fifty units at fourteen pounds and fifty pence each.",
 "ps_misaki": "wˌi ʃˈɪpt tˈu hˈʌndɹəd fˈɪfti jˈunəts æt fˌɔɹtˈin pˈWndz ænd fˈɪfti sˈɛnts ˈiʧ.",
 "ps_espeak": "wˌi ʃˈɪpt tˈuː hˈʌndɹəd fˈɪfti jˈuːnəts æt fˌɔːɹtˈin pˈaʊndz ænd fˈɪfti sˈɛnts ˈitʃ.",
 "tokens": [
@@ -14349,6 +14359,7 @@
 "category": "numeric",
 "text": "The measurement was 0.75 mm plus or minus 0.02 mm.",
 "norm": "The measurement was zero point seven five mm plus or minus zero point zero two mm.",
+"expected": "The measurement was zero point seven five millimeters plus or minus zero point zero two millimeters.",
 "ps_misaki": "ðə mˈɛʒəɹmᵊnt wʌz zˈɪɹO pˈYnt sˈɛvən fˈIv m plˈʌs ɔɹ mˈInəs zˈɪɹO pˈYnt zˈɪɹO tˈu m.",
 "ps_espeak": "ðə mˈɛʒɚmənt wʌz zˈɪɹoʊ pˈɔːɪnt sˈɛvən fˈaɪv m plˈʌs ɔːɹ mˈaɪnəs zˈɪɹoʊ pˈɔːɪnt zˈɪɹoʊ tˈuː m.",
 "tokens": [

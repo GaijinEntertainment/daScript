@@ -14,6 +14,24 @@
 # g2p_en 2.1.0 - see results/env.json there).
 import json, os, sys
 
+# The spoken form the rig scores against where the upstream normalizer's reading (`norm`, what
+# the phoneme and tagger cells still compare on) is not what a person says: units left as
+# their symbols, a fraction read digit by digit, a duration glued to the next word, a decade
+# misspelled, pence called cents. Hand-corrected; the reference arms are re-scored on the same.
+CORRECTED_EXPECTED = {
+    "nm006": "The package weighs two point five kilograms and ships tomorrow.",
+    "nm007": "He ran the marathon in three twelve and forty-five seconds last spring.",
+    "nm008": "The server has sixty-four gigabytes of memory and twelve cores.",
+    "nm009": "Water boils at one hundred degrees Celsius at sea level.",
+    "nm015": "The recipe calls for one half cup of sugar.",
+    "nm018": "The signal arrived one hundred fifty milliseconds after the trigger.",
+    "nm020": "The processor runs at three point two gigahertz under load.",
+    "nm023": "The nineteen sixties produced remarkable music.",
+    "nm025": "The temperature dropped to five degrees Fahrenheit overnight.",
+    "nm026": "We shipped two hundred fifty units at fourteen pounds and fifty pence each.",
+    "nm027": "The measurement was zero point seven five millimeters plus or minus zero point zero two millimeters.",
+}
+
 def main():
     root = sys.argv[1]
     out_path = sys.argv[2] if len(sys.argv) > 2 else os.path.join(
@@ -49,6 +67,8 @@ def main():
         row = {"id": r["id"], "category": r["category"], "text": r["text"], "norm": r["norm"],
                "ps_misaki": e["ps_misaki"], "ps_espeak": e["ps_espeak"],
                "tokens": [[t.text, t.tag_, t.whitespace_] for t in doc]}
+        if r["id"] in CORRECTED_EXPECTED:
+            row["expected"] = CORRECTED_EXPECTED[r["id"]]
         if r["id"] in het:
             row["heteronym"] = het[r["id"]]
         rows.append(row)

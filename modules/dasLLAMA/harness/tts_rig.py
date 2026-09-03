@@ -71,13 +71,28 @@ def wer_words(root):
     return wer_mod.norm_words, wer_mod.edit_ops
 
 
+def spoken_words(norm_words, s):
+    """the scorer's word list with the clock suffix as one word - the transcriber writes "am", the
+    normalizers say "a m", and the two are the same speech"""
+    words = norm_words(s)
+    out = []
+    for w in words:
+        if out and w == "m" and out[-1] in ("a", "p"):
+            out[-1] += "m"
+        else:
+            out.append(w)
+    return out
+
+
 def score_wer(norm_words, edit_ops, rows, hyps):
+    """WER against the fixture's expected spoken form: `expected` where the upstream normalizer's
+    reading was corrected by hand (the minter carries the table), else `norm`"""
     errs = words = 0
     for r in rows:
         if r["id"] not in hyps:
             continue
-        ref = norm_words(r["norm"])   # the expected spoken form, as the experiment's scorer and the reference line count it
-        hyp = norm_words(hyps[r["id"]])
+        ref = spoken_words(norm_words, r.get("expected") or r["norm"])
+        hyp = spoken_words(norm_words, hyps[r["id"]])
         d = edit_ops(ref, hyp)
         errs += d[len(ref)][len(hyp)] if isinstance(d, list) else d
         words += len(ref)
@@ -136,8 +151,9 @@ def main():
             cw, cn = score_wer(norm_words, edit_ops, [r for r in rows if r.get("category") == cat], hyps)
             cats.append(f"{cat} {cw:.2f} ({cn})")
         print(f"{'':24s} by category: " + ", ".join(cats))
-    print("\nreference (python arm E, same sentences, same scorers): kitten-nano 4.22% / 4.035, kitten-mini 4.00% / 3.996, kokoro 3.18% / 4.499;"
-          " arm E oov: kitten-nano 9.34, kokoro 12.06; the espeak arms' oov: kitten-nano 8.56, kokoro 10.90")
+    print("\nreference (python arm E, its own WAVs re-scored on the same expected forms and scorer): kitten-nano 4.50% / 4.035,"
+          " kitten-mini 4.09% / 3.996, kokoro 3.32% / 4.499; by category - oov: kitten-nano 9.34, kitten-mini 12.06, kokoro 12.06;"
+          " numeric: kitten-nano 6.25, kitten-mini 8.63, kokoro 4.76; ljspeech: kitten-nano 6.60, kitten-mini 2.70, kokoro 2.43")
 
 
 if __name__ == "__main__":

@@ -149,7 +149,13 @@ file -> a WAV, the timings line on stderr) and the server's `/v1/audio/speech` r
 dedicated TTS worker thread, one synthesis at a time, the audio served from a temp file the
 route reaps a minute after the wire closes - dasHV writes string bodies only). The rig that
 scores the whole chain is `harness/tts_rig.py` over `harness/tts_synth.das`: the 200-sentence
-fixture through one model and voice, WER by parakeet, UTMOS by the metrics venv, one table.
+fixture through one model and voice, WER by parakeet, UTMOS by the metrics venv, one table with a
+per-category line. WER counts against the fixture's expected spoken form - the upstream
+normalizer's reading (`norm`, what the phoneme and tagger cells compare on), or the hand-corrected
+`expected` where that reading is not what a person says (units as symbols, a fraction read digit
+by digit, a decade misspelled); `harness/mint_tts_g2p_fixture.py` carries the correction table,
+and the reference line is the reference arms' own WAVs re-scored on the same forms with the same
+scorer, the clock suffix ("a m", "am") counted as one word on both sides.
 
 ### 1.7b Vision
 

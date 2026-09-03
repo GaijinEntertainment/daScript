@@ -121,4 +121,9 @@ removes 'duty to optimize f32 path'. because its more memory for no good reason"
 served default and f32 the reference lane, stated in `ARCHITECTURE_MEDIA.md` sec 1.7c. The
 plan's standing rule from the same arc - no lexicon or rule change lands without a rig delta -
 is why the front-end packs' mint routes to the TTS checklist: a lexicon-only diff has to open
-the rule that asks for the delta.
+the rule that asks for the delta. On the rig's reference forms carrying the upstream
+normalizer's defects (a correct "kilograms" counted as an error against an expected "kg"):
+"sure. lets fix and document. if one day we'll need even better solution - we'll look into
+it" - the fixture's expected forms are hand-corrected where the upstream reading is not what
+a person says, the minter carries the table, and the reference arms are re-scored on the same
+forms (`ARCHITECTURE_MEDIA.md` sec 1.7c).
