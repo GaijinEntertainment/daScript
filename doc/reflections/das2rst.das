@@ -393,6 +393,23 @@ def document_module_dasllama(_root : string) {
     document("dasLLAMA LLM inference: models, sessions, generation, chat", mod, "dasllama.rst", groups, hook)
 }
 
+// The TTS facade and its type floor share one page; the family, assembly and front-end
+// modules a TtsModel field names are engine detail, so their types print plain.
+def document_module_dasllama_tts(_root : string) {
+    for (engine in ["dasllama_styletts2", "dasllama_kitten", "dasllama_kokoro", "dasllama_g2p", "dasllama_postag"]) {
+        mark_module_pageless(engine)
+    }
+    var mod = [find_module("dasllama_tts"), find_module("dasllama_tts_types")]
+    var groups <- array<DocGroup>(
+        group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|caps|finalize)$%%),
+        group_by_regex("Text front end", mod, %regex~(tts_normalize|tts_phonemize|tts_chunks)$%%),
+        group_by_regex("Synthesis", mod, %regex~(synthesize|synthesize_stream)$%%),
+        group_by_regex("The served lane", mod, %regex~(set_tts_q8|reset_tts_q8|tts_serves_q8)$%%),
+        group_by_regex("Timings", mod, %regex~(rtf|timings_line)$%%)
+    )
+    documents("dasLLAMA text to speech: models, voices, synthesis", mod, "dasllama_tts.rst", groups)
+}
+
 def document_module_debugapi(_root : string) {
     var mod = get_module("debugapi")
     var groups <- array<DocGroup>(
@@ -1910,6 +1927,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_spirv(root)
     // document the dasLLAMA facade module (the engine modules behind it stay undocumented by design)
     document_module_dasllama(root)
+    document_module_dasllama_tts(root)
     document_module_debugapi(root)
     document_module_rtti(root)
     document_module_ast(root)

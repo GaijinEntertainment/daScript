@@ -27,21 +27,22 @@ enum TtsKind {
     kokoro
 }
 
-//! A loaded TTS model: the shared assembly, the family's driver data, and the front-end packs
-//! read beside the GGUF.
 struct TtsModel {
-    kind : TtsKind
-    model : StyleTts2Model = StyleTts2Model()
-    scratch : St2Scratch = St2Scratch()   // the activation carrier every synthesis reuses
-    kitten : KittenFamily
-    kokoro : KokoroFamily
-    g2p : G2pModel
-    tagger : PosTagger
+    //! A loaded TTS model: the shared assembly, the family's driver data, and the front-end packs
+    //! read beside the GGUF. Load with ``load_tts_model``; ``delete`` frees every plane and pack.
+    kind : TtsKind                          //! the family the GGUF's architecture named
+    model : StyleTts2Model = StyleTts2Model()   //! the shared StyleTTS2-lineage assembly and its voices
+    scratch : St2Scratch = St2Scratch()   //! the activation carrier every synthesis reuses
+    kitten : KittenFamily                   //! the KittenTTS driver data (symbol table, aliases, speed priors)
+    kokoro : KokoroFamily                   //! the Kokoro driver data (vocabulary)
+    g2p : G2pModel                          //! ``tts_g2p.bin``: lexicons, rules and the fallback chain
+    tagger : PosTagger                      //! ``tts_postag.bin``: the tokenizer and part-of-speech tagger
 }
 
 // Stated rather than inferred: the shared carrier holds borrowed planes, and a generated
 // teardown would force every module that deletes a TtsModel to see the plane finalizers too.
 def finalize(var m : TtsModel) {
+    //! Free the model's planes, the carrier and both packs; ``delete m`` runs it.
     delete m.model
     delete m.scratch
     delete m.kitten
@@ -50,8 +51,10 @@ def finalize(var m : TtsModel) {
     delete m.tagger
 }
 
-//! Load a TTS GGUF; `tts_g2p.bin` and `tts_postag.bin` come from the same directory.
 def load_tts_model(path : string) : TtsModel {
+    //! Load a TTS GGUF (KittenTTS or Kokoro, picked from its architecture); ``tts_g2p.bin`` and
+    //! ``tts_postag.bin`` come from the same directory. The rows GEMMs serve as the lane
+    //! ``tts_serves_q8`` names at the time of the load.
     var inscope m = TtsModel()
     m.model <- load_styletts2(path)
     if (m.model.family == "kitten-tts") {
@@ -69,20 +72,26 @@ def load_tts_model(path : string) : TtsModel {
     return <- m
 }
 
-//! Pin the rows GEMMs' format for subsequent TTS loads: Q8_0 quants (their own prepared image
-//! beside the GGUF) or the file's f32 planes; ``reset_tts_q8`` returns to the policy default.
 def set_tts_q8(on : bool) {
+    //! Pin the rows GEMMs' format for subsequent TTS loads: Q8_0 quants (their own prepared image
+    //! beside the GGUF) or the file's f32 planes; ``reset_tts_q8`` returns to the policy default.
+    //! The pin is per context: a worker thread pins for itself.
     set_styletts2_q8(on)
 }
 
 def reset_tts_q8() {
+    //! Drop the ``set_tts_q8`` pin: the next load follows the policy default again.
     reset_styletts2_q8()
 }
 
-//! Would the next TTS load serve its rows GEMMs as q8 - the pin when set, the policy otherwise.
-def tts_serves_q8() : bool => styletts2_serves_q8()
+def tts_serves_q8() : bool {
+    //! Would the next TTS load serve its rows GEMMs as q8 - the pin when set, the policy otherwise.
+    return styletts2_serves_q8()
+}
 
 def caps(m : TtsModel) : TtsCaps {
+    //! What the loaded model offers: its canonical voice names (a family's aliases resolve at
+    //! synthesis), the PCM sample rate, the languages, and whether it clones a voice from audio.
     var c = TtsCaps()
     c.voices := m.model.voice_names
     c.sample_rate = m.model.sample_rate
@@ -93,15 +102,19 @@ def caps(m : TtsModel) : TtsCaps {
 
 // ===== front end =====
 
-//! The spoken form of `text`: the normalization pass every synthesis runs first
-//! (`dasllama_textnorm`, rules alone - it reads no pack), where "Dr." reads "Doctor", "3.5"
-//! reads "three point five" and "$12" reads "twelve dollars".
-def tts_normalize(text : string) : string => normalize_text(text)
+def tts_normalize(text : string) : string {
+    //! The spoken form of ``text``: the normalization pass every synthesis runs first (rules
+    //! alone - it reads no pack), where "Dr." reads "Doctor", "3.5" reads "three point five" and
+    //! "$12" reads "twelve dollars".
+    return normalize_text(text)
+}
 
-//! The phonemes one already-normalized sentence becomes, in the front end's own 45-symbol US
-//! inventory: the tagger of `tts_postag.bin` labels the tokens, the grapheme-to-phoneme pass of
-//! `tts_g2p.bin` reads them. A family wanting other symbols rewrites this string into them.
-def tts_phonemize(m : TtsModel; text : string) : string => g2p_phonemize(m.g2p, m.tagger, text)
+def tts_phonemize(m : TtsModel; text : string) : string {
+    //! The phonemes one already-normalized sentence becomes, in the front end's own 45-symbol US
+    //! inventory: the tagger of ``tts_postag.bin`` labels the tokens, the grapheme-to-phoneme pass
+    //! of ``tts_g2p.bin`` reads them. A family wanting other symbols rewrites this string into them.
+    return g2p_phonemize(m.g2p, m.tagger, text)
+}
 
 // ===== chunking =====
 
@@ -200,10 +213,10 @@ def private push_words(sentence : string; max_len : int; var out : array<string>
     }
 }
 
-//! Split normalized text into the pieces one synthesis takes: sentences, each at most
-//! `max_len` codepoints (a longer sentence splits on words, a longer word at the cap), each
-//! ending in punctuation.
 def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS) : array<string> {
+    //! Split normalized text into the pieces one synthesis takes: sentences, each at most
+    //! ``max_len`` codepoints (a longer sentence splits on words, a longer word at the cap), each
+    //! ending in punctuation.
     var inscope out : array<string>
     var inscope cps <- utf8_to_cpts(norm)
     var start = 0
@@ -276,9 +289,10 @@ def private resolve_voice(m : TtsModel; voice : string) : string {
     return vname
 }
 
-//! Text -> speech, one sentence-sized chunk at a time: the block receives each chunk's audio as
-//! soon as it exists, in order. Normalization runs once over the whole text.
 def synthesize_stream(var m : TtsModel; text : string; voice : string; speed : float; blk : block<(chunk : TtsAudio)>) {
+    //! Text -> speech, one sentence-sized chunk at a time: the block receives each chunk's audio as
+    //! soon as it exists, in order. Normalization runs once over the whole text; ``voice`` is a
+    //! name from ``caps`` or a family alias, and an unknown one panics.
     let vname = resolve_voice(m, voice)
     let norm = normalize_text(text)
     var inscope chunks <- tts_chunks(norm)
@@ -289,9 +303,10 @@ def synthesize_stream(var m : TtsModel; text : string; voice : string; speed : f
     }
 }
 
-//! Text -> speech: normalize, chunk by sentence, phonemize, map into the family's symbols,
-//! synthesize; the chunks concatenate, the timings sum.
 def synthesize(var m : TtsModel; text : string; voice : string; speed : float = 1.0) : TtsAudio {
+    //! Text -> speech: normalize, chunk by sentence, phonemize, map into the family's symbols,
+    //! synthesize; the chunks concatenate, the timings sum. Sample-identical to
+    //! ``synthesize_stream`` over the same text.
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
     synthesize_stream(m, text, voice, speed) $(chunk) {
