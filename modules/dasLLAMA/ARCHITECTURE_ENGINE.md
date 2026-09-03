@@ -246,7 +246,7 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   asr_bench process per cell; macOS only) - the interim footprint instrument until a footprint
   leg lands in `gen_bench_records`; its numbers live in `PERF_LEDGER.md`, never the stores.
 
-### 1.9 Serving
+### 1.9 Serving {#scheduler-step}
 
 - **`dasllama_scheduler.das`** - the continuous-batching scheduler, the serving layer over the
   facade (its one engine require is `dasllama/dasllama`). One synchronous thread: each
@@ -255,4 +255,7 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   streams' KV pages to the prefix cache. Results flow out as `SchedEvent`s - no HTTP here.
   `utils/dasllama-server` owns the writers; `tutorials/dasLLAMA/13_serving.das` is the
   teaching consumer; `tests/test_scheduler.das` gates it against `generate()` references.
+  The step clears its gather arrays (`batch_rows`, `batch_toks`, `batch_idx`) before it reaps
+  finished streams: `batch_rows` holds borrowed pointers into the sessions the reap deletes,
+  and a validating heap collect between steps walks every pointer the array still holds.
 

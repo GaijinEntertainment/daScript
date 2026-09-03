@@ -1903,6 +1903,18 @@ struct SamplingParams {
     penalty_last_n : int64 = 64l   // penalty window (most recent N generated tokens)
 }
 
+//! A Session's identity for its device-resident deltanet state; the finalizer drops the GPU tier's
+//! copies that state owns before its addresses can be reused.
+struct DnOwner {
+    state_lo : uint64
+    state_hi : uint64
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
+def finalize(var o : DnOwner) {
+    moe_gpu_dn_release(o.state_lo, o.state_hi)
+}
+
 //! Per-step scratch buffers and the KV cache (allocated once, reused every token).
 struct Session {
     // Stable identity for device-side mirrors (Metal decode KV mirror keys on it): monotonic per
@@ -2126,6 +2138,7 @@ struct Session {
     @exact_size dn_state : array<float>        // per recurrent layer: S — dt_rank heads x (d_state x d_state) f32
     dn_conv_prefix : array<int64>  // per-layer element offsets into the two above; -1 = attention layer
     dn_state_prefix : array<int64>
+    dn_owner : DnOwner
     dn_qkv : array<float>          // fused [q;k;v] projection out (conv_dim)
     dn_z : array<float>            // z gate projection (d_inner)
     dn_beta : array<float>         // per-v-head β (dt_rank)
@@ -2272,6 +2285,10 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
         }
         s.dn_conv_state |> reserve_resize(co)
         s.dn_state |> reserve_resize(so)   // 27B-class: 48 recurrent layers x 48 heads x 128^2 = 144 MB in one grow
+        if (so > 0l) {
+            let lo = intptr(unsafe(addr(s.dn_state[0])))
+            s.dn_owner = DnOwner(state_lo = lo, state_hi = lo + uint64(so * 4l))
+        }
         s.dn_qkv |> resize(cd)
         s.dn_z |> resize(c.ssm_d_inner)
         s.dn_beta |> resize(c.ssm_dt_rank)
@@ -4004,6 +4021,7 @@ let DN_CHUNK = 64l
 def dn_cws_head_size(c : Config) : int64 => (8l * DN_CHUNK * c.ssm_d_state
     + 2l * DN_CHUNK * DN_CHUNK + 3l * DN_CHUNK)
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
 def dn_reset(var s : Session) {
     for (i in range64(long_length(s.dn_conv_state))) {
         s.dn_conv_state[i] = 0.0
@@ -4011,7 +4029,7 @@ def dn_reset(var s : Session) {
     for (i in range64(long_length(s.dn_state))) {
         s.dn_state[i] = 0.0
     }
-    moe_gpu_dn_invalidate()   // CPU zeros are now authoritative — drop any device-resident copies
+    moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
 }
 
 // Sync one layer's device-resident deltanet state down before a CPU read (no-op when clean).
@@ -4711,11 +4729,12 @@ def mtp_state_snapshot(var s : Session) {
     s.mtp_snap_pos = s.dn_pos
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
 def mtp_state_restore(var s : Session) {
     copy_floats_par(s.mtp_snap_conv, s.dn_conv_state, long_length(s.mtp_snap_conv))
     copy_floats_par(s.mtp_snap_state, s.dn_state, long_length(s.mtp_snap_state))
     s.dn_pos = s.mtp_snap_pos
-    moe_gpu_dn_invalidate()   // restored CPU state is authoritative — device copies are stale
+    moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
 }
 
 // After a 2-row verify forward_prefill([tok, draft], 2, pos): row 0's post-norm hidden and

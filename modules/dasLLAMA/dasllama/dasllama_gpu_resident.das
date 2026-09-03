@@ -1062,11 +1062,26 @@ def moe_gpu_drop_model_() {
     set_moe_gpu_model_support("")
 }
 
+//! The upload rail's first step: a model still installed on the tier (its marks armed, or the
+//! resident driver active) is dropped before this load uploads, with the load's own MoE layer
+//! request - the one mark the drop's reset would zero - carried across.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
+def moe_gpu_drop_installed_before_load(n_layers : int64) {
+    if (!moe_gpu_tier_installed() || !(g_rdec_active || moe_gpu_installed_marks_armed())) {
+        return
+    }
+    to_log(LOG_INFO, "dasLLAMA: the GPU tier still holds a model - dropping its device state before loading this one ({n_layers} layers)\n")
+    let want_layers = moe_gpu_layer_count()
+    moe_gpu_drop_model_()
+    set_moe_gpu_layer_count(want_layers)
+}
+
 // Upload the offloaded layers' expert stacks to the GPU tier from the PREPARED planes. Called at
 // the end of every load rail so DASLLAMA_GPU_MOE_LAYERS behaves identically however the model
 // arrived. Layers go resident from the end while the tier's VRAM budget holds.
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
 def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven sequential rail walks sharing one rollback cursor; splitting them hides the partial-group unwind
+    moe_gpu_drop_installed_before_load(t.config.n_layers)
     set_moe_gpu_from_layer(t.config.n_layers)   // nothing resident until an upload lands
     set_moe_gpu_stream_from(t.config.n_layers)
     set_moe_gpu_total_layers(t.config.n_layers)

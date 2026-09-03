@@ -551,13 +551,17 @@ module) is independent and can land any time - it is pure structure.
     the quant block; (4) pad N to the tile width. `harness/vk_gemm_probe.das` already carries the
     isolation arms (`ref` = llama.cpp's own coopmat2 blob in our harness, `k6x flat` = compose
     without scale reads). Boris 2026-08-30: this one bothers him at 0.7. Plan: `plans/kernel_parity_pass.md`.
-    CLOSED on the board (2026-09-03, after #3926: the split-k group, the hand-laid twins, the
-    32-row last layer, the parallel embed): nine of ten 1B vehicles at or past llama.cpp on pp512,
-    IQ2_XXS at 0.98 (bracketed twelve-rep rows in the plan). What remains is per tile, not per
-    board: the iq2xxs gate/up tile at 1.15 of llama.cpp's rate (its grid decode still shows where
-    theirs is hidden), k3 and iq3s gate/up at 1.05-1.09, down at 1.04-1.14 on the 2048-wide shape
-    - the memo's delta 1 (scale hoist), delta 2 (scale interleave) and delta 8 (codebook and
-    prologue) rows, each behind its own probe A/B.
+    CLOSED at the debug rig (2026-09-03, after #3926: the split-k group, the hand-laid twins, the
+    32-row last layer, the parallel embed; `lcpp_bench --for-debug-purposes --plen 512 --ngen 0
+    --reps 12` on the RTX 5060 Ti bracketed by `llama-bench -p 512 -n 0 -r 6` of the vector build,
+    rows in `plans/kernel_parity_pass.md`; the board rows stay OWED in `PERF_LEDGER.md`): nine of
+    ten 1B vehicles at or past llama.cpp on pp512, IQ2_XXS at 0.98. What remains is per tile, not per
+    board. Read against llama.cpp's per-role windows (`GGML_VK_PERF_LOGGER=1 llama-bench` beside
+    `DASLLAMA_GPU_PROF=1 lcpp_bench`, the role table in `plans/kernel_parity_pass.md`): the iq2xxs
+    gate/up tile at 1.15 of llama.cpp's rate (its grid decode still shows where theirs is hidden),
+    k3 and iq3s gate/up at 1.05-1.09, down at 1.04-1.14 on the 2048-wide shape. The work for
+    those is the memo's delta 1 (scale hoist), delta 2 (scale interleave) and delta 8 (codebook
+    and prologue) rows, each behind its own probe A/B.
 
 35. **The grid-format GEMV workgroup re-stage is a fixed per-workgroup cost - amplified on
     small models.** Every u64-grid gemv (iq2s 8 KB, iq2xs 4 KB) stages the codebook into
@@ -610,14 +614,16 @@ module) is independent and can land any time - it is pure structure.
     shape the batched deltanet step needs anyway. Done = two streams' tg on the 0.8B within
     the single-stream rate's band, `test_scheduler_batching_deltanet_gpu` green.
 
-39. **`tests/test_scheduler.das` under the armed tier.** With `DASLLAMA_GPU=1` and the models
-    stocked, the chunk-size, prefix-cache and MTP cells fail at master 866a03046 (before the
-    session-ownership fix and after it alike), and the staggered-admit batching cell flakes
-    (green in a whole-file run, red when run first); the file had never run with the tier
-    armed, and CI has no GPU. Each is its own read: chunk-size invariance, the paged repeat and
-    the two-row batch under the per-op tier's SmolLM path, the MTP self-spec verify against
-    the plain scheduler on Qwen3.5-0.8B-MTP. The same state reaches the 0.8B after the three
-    SmolLM cells: its first decode step after a prefill diverges from generate (green alone and
-    behind any one of them), which is why the deltanet two-stream cell runs first in the file.
+39. **CLOSED - `tests/test_scheduler.das` under the armed tier.** Two causes, both landed with
+    the session-ownership fix. The order dependence (a model loaded before the deltanet cell
+    moved its first decode step; the MTP cell red behind the SmolLM cells) was the model-swap
+    defect: a deleted model's device state stayed installed and the next load uploaded beside
+    it, so the offset-keyed stack lookup served the earlier model's planes - the upload rail
+    now drops a still-installed model first (`ARCHITECTURE_GPU_VULKAN.md` 2.2o,
+    `tests/test_gpu_model_swap.das`). The SmolLM reds (chunk sizes, batching, evict, media
+    splice, mrope) were cross-lane numerics, not defects: the resident driver's device prefill,
+    its batch decode and the CPU prefill agree on every argmax over a few steps and drift by
+    about a logit on a scale of twenty, enough for a 135M model to flip a near-tie; those cells
+    claim bit-exact mechanics, so they pin the CPU lane (`moe_gpu_drop_model` after the load).
     Done = the file green, twice in a row, under `DASLLAMA_GPU=1` on the 5060 Ti, the cell
     order free.

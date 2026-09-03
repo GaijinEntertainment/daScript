@@ -44,7 +44,9 @@ an existing lint, the lint compels - an unnoted rule is the reviewer's.
 that are not documentation or lint suppression.** The kept set is exactly: `//!` docs on a
 contract a CALLER must know - public API always, a private helper only when callers inside
 the module need the contract (narration of an implementation goes to a name, a test, or the
-module's `.md`) - `// nolint:CODE` / `@nolint` suppressions carrying their one-line why,
+module's `.md`), and only where the contract is not reachable from the declaration's own
+`[arch]` citation: a `//!` that restates the section its citation names is a duplicate and
+goes - `// nolint:CODE` / `@nolint` suppressions carrying their one-line why,
 `//fmt:` formatter directives, license comments (Copyright / SPDX), and the file's leading
 header block (which may sit below the `options` / `module` / `require` preamble). Everything
 else - narration, banners, section dividers, commented-out code - does not exist. The

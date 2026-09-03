@@ -12,9 +12,6 @@ skip-path assertion.
 sits in is reviewed with that tool's own `REVIEW.md`, where one exists, as well as with this
 checklist - not with the checklist of the directory it sits in.**
 
-**A file in a `utils/` library directory (`common/`) is reviewed with this checklist and with
-the checklist of every tool that requires it.**
-
 **A diff under `utils/` that changes how a `.dlim` is built from a gguf, how one is loaded, or
 what identifies one - the fields that decide whether two `.dlim`s are the same image - answers
 to `modules/dasLLAMA/REVIEW.md` (repo root) too.** A `utils/` diff never opens that checklist
@@ -28,7 +25,7 @@ script itself, and each check's finding text states its rule.
 
 **A diff that drops a tool from `DAS_UTILS_SHIPPED_EXES` (`CMakeLists.txt`, beside this file)
 while keeping that tool's directory records the decision to stop shipping it in that tool's
-own `REVIEW.md`, wherever that directory is, in the same change** - the gate cannot see a
+own `REVIEW.md`, wherever that directory is, in the same change** - `REVIEW.das` cannot see a
 removed entry.
 
 **A diff that deletes a tool outright records the decision beside `DAS_UTILS_SHIPPED_EXES` in
@@ -41,10 +38,11 @@ it.** A row that only compile-checks the test (`dastest --compile-only`) does
 not execute them. A test whose assertions no row executes never runs again.
 
 **A test the diff adds or changes that covers a change under `utils/`, whose load-bearing
-assertions no CI lane can run, ships with a CI row that compile-checks it.**
+assertions no CI machine can run, ships with a row that compile-checks it - `dastest
+--compile-only` for a `.das` test - in the same change.**
 
-**A test the diff adds or changes that covers a change under `utils/`, whose only row
-compile-checks it or whose only executing row runs against an already-deployed artifact - a
-nightly lane driving the live site - records its executed run in the PR description**: the
-machine the assertions ran on, what that machine had that CI lacks, and the pass count. A lane
-that tests production after merge proves nothing about the diff under review.
+**A test the diff adds or changes that covers a change under `utils/`, whose load-bearing
+assertions no CI row runs against the build the diff produces, records its executed run in the
+PR description**: the machine the assertions ran on, what that machine had that CI lacks, and
+the pass count. A row that tests an already-deployed artifact proves nothing about the diff
+under review.

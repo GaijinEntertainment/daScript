@@ -440,6 +440,8 @@ struct DnStep {
     tok : HostBuf            // the step's TokMeta block (parity, host-poked per step)
     valid : bool
     dirty : bool
+    owner_state_addr : uint64
+    owner_hist_addr : uint64
 }
 
 struct QkvCmd {

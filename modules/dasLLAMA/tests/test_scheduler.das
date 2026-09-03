@@ -7,10 +7,13 @@ require dastest/testing_boost public
 require dasllama/dasllama_scheduler   // the scheduler under test
 require dasllama/dasllama                               // facade: load/encode/generate references + engine knobs
 require dasllama/dasllama_blocks   // embed_text_rows: the media arms build rows from the prompt's own tokens
+require dasllama/dasllama_common   // layer_is_recurrent: the deltanet-on-GPU cell finds a recurrent layer to probe
+require dasllama/dasllama_gpu_tier   // moe_gpu_dnd_on_gpu: that cell skips unless the tier serves the decode step
 require daslib/jobque_boost
 require daslib/fio
 require daslib/strings_boost   // join: the decoded stream logs beside the token-exact compares
 require math
+require strings
 require dasllama/dasllama_env
 
 // Unit gates for the continuous-batching scheduler — all through the SchedEvent seam, zero HTTP:
@@ -36,9 +39,10 @@ def private model_missing(t : T?) : bool {
     return false
 }
 
-def private load_capped(cap : int64) : Model {
+def private load_capped_cpu(cap : int64) : Model {
     var m <- load_model_(MODEL_PATH, QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, cap)
+    moe_gpu_drop_model()
     return <- m
 }
 
@@ -128,6 +132,99 @@ def private finished_of(events : array<SchedEvent>; id : int64) : SchedEvent {
     return SchedEvent(stream = -1l)
 }
 
+let DN_MODEL_PATH = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+
+def private has_gpu_dn_layer(c : Config) : bool {
+    for (l in range64(c.n_layers)) {
+        if (layer_is_recurrent(c, l) && moe_gpu_dnd_on_gpu(l)) {
+            return true
+        }
+    }
+    return false
+}
+
+def private text_of(pieces : array<string>) : string {
+    return build_string() $(var w) {
+        for (p in pieces) {
+            w |> write(p)
+        }
+    }
+}
+
+// ===== two deltanet streams turn about on the GPU tier: each reads its own recurrent state =====
+
+[test]
+def test_scheduler_batching_deltanet_gpu(t : T?) {
+    t |> run("two interleaved deltanet streams on the GPU tier match their solo references (needs Qwen3.5-0.8B-Q8_0, DASLLAMA_GPU=1)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        if (!stat(DN_MODEL_PATH).is_valid) {
+            t |> skip("{DN_MODEL_PATH} not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque()
+            var m <- load_model_(DN_MODEL_PATH, QuantMode.q8)
+            m.config.seq_len = min(m.config.seq_len, 256l)
+            let prev_dnd_route = moe_gpu_dnd_route()
+            set_moe_gpu_dnd_route(true)   // the claim is about the tier's decode step: pin its route on, whatever an earlier cell left
+            if (!has_gpu_dn_layer(m.config)) {
+                t |> skip("the GPU tier's deltanet decode step is not armed - needs DASLLAMA_GPU=1 on a device that serves it")
+                set_moe_gpu_dnd_route(prev_dnd_route)
+                delete m
+                return
+            }
+            let greedy = SamplingParams()
+            var none : array<int64>
+            var pa <- encode(m, "Count from one to ten in words.", true, false)
+            var pb <- encode(m, "Name three primary colors.", true, false)
+            var refs <- [ <- ref_generate(m, pa, greedy, 8l, none), <- ref_generate(m, pb, greedy, 8l, none)]
+            var sch1 <- create_scheduler(m, 1l, 2l, 64l)
+            var events1 : array<SchedEvent>
+            t |> success(submit(m, sch1, make_req(10l, pa, greedy, 8l, none)), "stream A queued (one-stream scheduler)")
+            t |> success(submit(m, sch1, make_req(11l, pb, greedy, 8l, none)), "stream B queued (one-stream scheduler)")
+            drain(m, sch1, events1)
+            var sa <- toks_of(events1, 10l)
+            var sb <- toks_of(events1, 11l)
+            to_log(LOG_INFO, "one-stream scheduler A: \"{text_of(pieces_of(events1, 10l))}\" | generate A: \"{text_of(refs[0].pieces)}\"\n")
+            to_log(LOG_INFO, "one-stream scheduler B: \"{text_of(pieces_of(events1, 11l))}\" | generate B: \"{text_of(refs[1].pieces)}\"\n")
+            t |> success(same(sa, refs[0].toks), "stream A through a one-stream scheduler matches generate ({sa} vs {refs[0].toks})")
+            t |> success(same(sb, refs[1].toks), "stream B through a one-stream scheduler matches generate ({sb} vs {refs[1].toks})")
+            var sch <- create_scheduler(m, 2l, 2l, 64l)
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(20l, pa, greedy, 8l, none)), "stream A queued")
+            t |> success(submit(m, sch, make_req(21l, pb, greedy, 8l, none)), "stream B queued")
+            drain(m, sch, events)
+            var ga <- toks_of(events, 20l)
+            var gb <- toks_of(events, 21l)
+            to_log(LOG_INFO, "two-stream A: \"{text_of(pieces_of(events, 20l))}\" | solo A: \"{text_of(refs[0].pieces)}\"\n")
+            to_log(LOG_INFO, "two-stream B: \"{text_of(pieces_of(events, 21l))}\" | solo B: \"{text_of(refs[1].pieces)}\"\n")
+            t |> success(same(ga, refs[0].toks), "stream A, decoded turn about with B, matches its solo reference ({ga} vs {refs[0].toks})")
+            t |> success(same(gb, refs[1].toks), "stream B, decoded turn about with A, matches its solo reference ({gb} vs {refs[1].toks})")
+            t |> success(sch.sum_batch >= 2l * 2l, "the two streams shared decode steps (sum batch {sch.sum_batch})")
+            delete sa
+            delete sb
+            delete events1
+            unsafe {
+                delete sch1
+            }
+            delete ga
+            delete gb
+            delete events
+            unsafe {
+                delete sch
+            }
+            delete refs
+            delete pa
+            delete pb
+            set_moe_gpu_dnd_route(prev_dnd_route)
+            delete m
+        }
+    }
+}
+
 // ===== scheduler ≡ generate (1 stream): greedy bit-exact, seeded sampling, stop finish =====
 
 [test]
@@ -138,7 +235,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
         }
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_capped(128l)
+            var m <- load_capped_cpu(128l)
             var prompt <- encode(m, "Once upon a time", true, false)
             var none : array<int64>
             // greedy, single-chunk prefill: the eval sequence is identical to generate()'s, so the
@@ -228,7 +325,7 @@ def test_scheduler_chunk_sizes(t : T?) {
         }
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_capped(128l)
+            var m <- load_capped_cpu(128l)
             // classic prefill is bit-exact under ANY chunking (test_prefill's contract) — the same
             // pin as test_chat's render-seam case, so every chunk size must yield ONE stream
             let saved_mode = get_prefill_attn_mode()
@@ -246,6 +343,7 @@ def test_scheduler_chunk_sizes(t : T?) {
                 drain(m, sch, events)
                 var got <- toks_of(events, int64(ci))
                 first[ci] = !empty(got) ? got[0] : -1l
+                to_log(LOG_INFO, "K={K}: \"{text_of(pieces_of(events, int64(ci)))}\" {got}\n")
                 streams |> emplace(got)
                 delete events
                 unsafe {
@@ -276,7 +374,7 @@ def test_scheduler_batching(t : T?) {
         }
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_capped(128l)
+            var m <- load_capped_cpu(128l)
             // the batch worker mirrors the std decode path — pin the fused chain off so the solo
             // generate() references share its numerics (test_batch_decode's contract)
             let prev_fused = get_fused_decode()
@@ -304,9 +402,13 @@ def test_scheduler_batching(t : T?) {
             t |> equal(finished_of(events, 13l).finish, "evicted")
             t |> equal(n_queued(sch), 1l)
             drain(m, sch, events)
+            t |> success(empty(sch.batch_rows), "no row pointer outlives the step that reaped its batched stream (a validating heap collect between steps walks them)")
             var ga <- toks_of(events, 10l)
             var gb <- toks_of(events, 11l)
             var gc <- toks_of(events, 12l)
+            to_log(LOG_INFO, "batched A: \"{text_of(pieces_of(events, 10l))}\" {ga} | solo A: \"{text_of(refs[0].pieces)}\" {refs[0].toks}\n")
+            to_log(LOG_INFO, "batched B: \"{text_of(pieces_of(events, 11l))}\" {gb} | solo B: \"{text_of(refs[1].pieces)}\" {refs[1].toks}\n")
+            to_log(LOG_INFO, "batched C: \"{text_of(pieces_of(events, 12l))}\" {gc} | solo C: \"{text_of(refs[2].pieces)}\" {refs[2].toks}\n")
             t |> success(same(ga, refs[0].toks), "stream A (batched) matches its solo reference")
             t |> success(same(gb, refs[1].toks), "stream B (batched) matches its solo reference")
             t |> success(same(gc, refs[2].toks), "stream C (admitted after a slot freed) matches its solo reference")
@@ -343,7 +445,7 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
         }
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_capped(128l)
+            var m <- load_capped_cpu(128l)
             // classic prefill: the warm run re-chunks the prompt (tail-only), and only classic is
             // bit-exact under re-chunking — the same pin as the chunk-size arm above
             let saved_mode = get_prefill_attn_mode()
@@ -463,7 +565,7 @@ def test_scheduler_evict_and_context_length(t : T?) {
         }
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_capped(64l)
+            var m <- load_capped_cpu(64l)
             let prev_fused = get_fused_decode()
             set_fused_decode(false)
             let greedy = SamplingParams()
@@ -485,6 +587,7 @@ def test_scheduler_evict_and_context_length(t : T?) {
             drain(m, sch, events)
             t |> equal(length(toks_of(events, 21l)), b_before)
             var ga <- toks_of(events, 20l)
+            to_log(LOG_INFO, "survivor: \"{text_of(pieces_of(events, 20l))}\" {ga} | solo: \"{text_of(ref_a.pieces)}\" {ref_a.toks}\n")
             t |> success(same(ga, ref_a.toks), "survivor stream unaffected by the eviction")
             t |> equal(finished_of(events, 20l).finish, "length")
             // context exhaustion: budget far beyond the capped seq_len — the decode pre-check must
@@ -559,6 +662,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             drain(m, sch, events)
             set_mtp_spec(prev_spec)
             var got <- toks_of(events, 2l)
+            to_log(LOG_INFO, "spec: \"{text_of(pieces_of(events, 2l))}\" {got} | plain: \"{text_of(pieces_of(events0, 1l))}\" {ref_toks}\n")
             t |> success(same(got, ref_toks), "spec stream tokens == plain scheduler")
             t |> success(sch.mtp_drafted > 0l, "the spec tick actually drafted ({sch.mtp_drafted} drafts)")
             t |> success(sch.mtp_accepted > 0l, "some drafts accepted ({sch.mtp_accepted} of {sch.mtp_drafted})")
@@ -649,7 +753,7 @@ def test_scheduler_paged_sampled(t : T?) {
         }
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_capped(128l)
+            var m <- load_capped_cpu(128l)
             let saved_mode = get_prefill_attn_mode()
             set_prefill_attn_mode(AttnPrefillMode.classic)   // the warm run re-chunks (tail-only)
             var prompt <- encode(m, "Once upon a time in a small village near the mountains there lived a very curious little robot who loved counting stars", true, false)
@@ -733,7 +837,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
         }
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_capped(128l)
+            var m <- load_capped_cpu(128l)
             // classic prefill: the splice necessarily moves the eval boundaries, and only classic
             // is bit-exact under re-chunking — the same pin as the chunk-size arm above
             let saved_mode = get_prefill_attn_mode()
@@ -831,7 +935,7 @@ def test_scheduler_media_validation(t : T?) {   // nolint:STYLE038 — one flat 
         }
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_capped(128l)
+            var m <- load_capped_cpu(128l)
             var prompt <- encode(m, "The quick brown fox", true, false)
             let greedy = SamplingParams()
             var sch <- create_scheduler(m, 1l, 4l, 64l)
@@ -937,7 +1041,7 @@ def test_scheduler_mrope(t : T?) {
         }
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_capped(128l)
+            var m <- load_capped_cpu(128l)
             m.config.rope_sections = int4(12, 10, 10, 0)   // stamp: the toy is not an mrope arch (rotary 64 -> half 32)
             m.config.mrope_interleaved = true
             let saved_mode = get_prefill_attn_mode()
@@ -1011,7 +1115,7 @@ def test_scheduler_mrope_validation(t : T?) {
         }
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_capped(128l)
+            var m <- load_capped_cpu(128l)
             var prompt <- encode(m, "The quick brown fox", true, false)
             let greedy = SamplingParams()
             var sch <- create_scheduler(m, 1l, 4l, 64l)

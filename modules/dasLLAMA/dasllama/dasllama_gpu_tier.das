@@ -358,20 +358,27 @@ def public set_moe_gpu_dn_route(on : bool) {
     g_moe_gpu_dn_route = on
 }
 
+//! The deltanet chain's routing gate.
+def public moe_gpu_dn_route() : bool => g_moe_gpu_dn_route
+
 // ===== deltanet DECODE step =====
 // Same MoeGpuDnFn hook at npos == 1, same dn marks/uploads; separate routing gate (--dnd-ab).
 // State lives device-side across steps — flush/invalidate seams guard every CPU state consumer.
 
 typedef MoeGpuDnFlushFn = function<(l : int64; var stp : float?; var histp : float?) : void>
 typedef MoeGpuDnInvalidateFn = function<() : void>
+typedef MoeGpuDnReleaseFn = function<(state_lo : uint64; state_hi : uint64) : void>
 
 [unused_argument(l, stp, histp)]
 def private moe_gpu_noop_dn_flush(l : int64; var stp : float?; var histp : float?) {}
 def private moe_gpu_noop_dn_invalidate() {}
+[unused_argument(state_lo, state_hi)]
+def private moe_gpu_noop_dn_release(state_lo : uint64; state_hi : uint64) {}
 
 var g_moe_gpu_dnd_route = true
 var g_moe_gpu_dn_flush = @@moe_gpu_noop_dn_flush
 var g_moe_gpu_dn_invalidate = @@moe_gpu_noop_dn_invalidate
+var g_moe_gpu_dn_release = @@moe_gpu_noop_dn_release
 
 def public moe_gpu_dnd_on_gpu(l : int64) : bool {
     return g_moe_gpu_installed && g_moe_gpu_dnd_route && key_exists(g_moe_gpu_dn_layers, l)
@@ -382,10 +389,19 @@ def public set_moe_gpu_dnd_route(on : bool) {
     g_moe_gpu_dnd_route = on
 }
 
+//! The deltanet decode step's routing gate.
+def public moe_gpu_dnd_route() : bool => g_moe_gpu_dnd_route
+
+//! The installed state-residency seams, for a cell that overrides one and restores the set.
+def public moe_gpu_dn_state_hooks() : tuple<flush : MoeGpuDnFlushFn; inval : MoeGpuDnInvalidateFn; release : MoeGpuDnReleaseFn> {
+    return (flush = g_moe_gpu_dn_flush, inval = g_moe_gpu_dn_invalidate, release = g_moe_gpu_dn_release)
+}
+
 //! Tier registration of the state-residency seams (beside install_moe_gpu_tier).
-def public set_moe_gpu_dn_state_hooks(flush : MoeGpuDnFlushFn; inval : MoeGpuDnInvalidateFn) {
+def public set_moe_gpu_dn_state_hooks(flush : MoeGpuDnFlushFn; inval : MoeGpuDnInvalidateFn; release : MoeGpuDnReleaseFn) {
     g_moe_gpu_dn_flush = flush
     g_moe_gpu_dn_invalidate = inval
+    g_moe_gpu_dn_release = release
 }
 
 //! Sync one layer's device-resident deltanet state back into the engine's buffers (no-op when
@@ -397,6 +413,12 @@ def public moe_gpu_dn_flush(l : int64; var stp : float?; var histp : float?) {
 //! Drop all device-resident deltanet state (the engine rebuilt/zeroed its CPU copies).
 def public moe_gpu_dn_invalidate() {
     invoke(g_moe_gpu_dn_invalidate)
+}
+
+//! Drop, unwritten, the device-resident deltanet copies one session's state owns: the session
+//! zeroed that state, or it is dying.
+def public moe_gpu_dn_release(state_lo : uint64; state_hi : uint64) {
+    invoke(g_moe_gpu_dn_release, state_lo, state_hi)
 }
 
 //! Loader contract: mark one full-attention layer's q/k/v/o plane quad resident on the tier —
@@ -666,9 +688,24 @@ def public moe_gpu_marks_save(var m : MoeGpuMarks) {
 //! load's arm outcome to the slot that captured it — the process-global VRAM counter cannot
 //! tell WHOSE planes are resident.
 def public moe_gpu_marks_armed(m : MoeGpuMarks) : bool {
-    return (!empty(m.dense_offs) || !empty(m.dn_layers) || !empty(m.attn_layers)
-        || !empty(m.shexp_layers) || !empty(m.qkv_layers) || m.cls_off >= 0l
-        || (m.total_layers > 0l && (m.from_layer < m.total_layers || m.stream_from < m.total_layers)))
+    return moe_gpu_marks_armed_of(m.dense_offs, m.dn_layers, m.attn_layers, m.shexp_layers, m.qkv_layers,
+        m.cls_off, m.total_layers, m.from_layer, m.stream_from)
+}
+
+//! Do the INSTALLED marks carry any armed state? A load asks before installing its model: a
+//! model deleted without the drop leaves its marks and its device state behind.
+def public moe_gpu_installed_marks_armed() : bool {
+    return moe_gpu_marks_armed_of(g_moe_gpu_dense_offs, g_moe_gpu_dn_layers, g_moe_gpu_attn_layers,
+        g_moe_gpu_shexp_layers, g_moe_gpu_qkv_layers, g_moe_gpu_cls_off, g_moe_gpu_total_layers,
+        g_moe_gpu_from_layer, g_moe_gpu_stream_from)
+}
+
+def private moe_gpu_marks_armed_of(dense_offs : table<int64>; dn_layers : table<int64; int64>;
+                                   attn_layers, shexp_layers, qkv_layers : table<int64>;
+                                   cls_off, total_layers, from_layer, stream_from : int64) : bool {
+    return (!empty(dense_offs) || !empty(dn_layers) || !empty(attn_layers)
+        || !empty(shexp_layers) || !empty(qkv_layers) || cls_off >= 0l
+        || (total_layers > 0l && (from_layer < total_layers || stream_from < total_layers)))
 }
 
 // Release what is installed, then take `src`'s. The restore is public and nothing enforces the
@@ -1502,6 +1539,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_moe_gpu_dn_invalidate == null) {
         g_moe_gpu_dn_invalidate = @@moe_gpu_noop_dn_invalidate
+    }
+    if (g_moe_gpu_dn_release == null) {
+        g_moe_gpu_dn_release = @@moe_gpu_noop_dn_release
     }
     if (g_moe_gpu_heat_query == null) {
         g_moe_gpu_heat_query = @@moe_gpu_unset_heat_query

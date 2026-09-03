@@ -1,8 +1,9 @@
 # dasLLAMA Architecture - the Vulkan per-op tier's decode era
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries sections 2.2r-2.2t: the decode attention block over per-layer K/V mirrors,
-the streamed expert layer's GPU/CPU split, and the whole-token decode span. The prefill window
+document carries sections 2.2r-2.2u: the decode attention block over per-layer K/V mirrors,
+the streamed expert layer's GPU/CPU split, the whole-token decode span, and the deltanet decode
+step's per-session resident state. The prefill window
 chain, the cm2 tiles and the MoE expert chain these build on are `ARCHITECTURE_GPU_VULKAN.md`
 sections 2.2j-2.2q.
 
@@ -138,3 +139,32 @@ arch binds a non-standard attention or FFN block declines whole (`span_model_ok`
 span's recorder declares those edges by hand (`vhz_dep` on the span's own region bits) after
 each requant and after the top-k. The loader carves the router planes with the mirrors
 (`set_moe_gpu_dat_need`).
+
+### 2.2u The deltanet decode step's resident state follows its session {#dn-step-owner}
+
+**The deltanet decode step keeps one device copy of a recurrent layer's state and conv ring,
+and that copy belongs to one session at a time.** The step (`vk_moe_dn_step`) records, per
+layer, the host address of the session state it uploaded (`DnStep.owner_state_addr`, with the
+conv history's address beside it): a step from the owner runs on the resident copy; a step from a
+different session sends the resident copy home to its owner's buffers when it is dirty, then
+cold-uploads its own state and takes the slot. A flush request (`vk_dn_step_flush`) writes only
+when the requester is the owner - a foreign session's state is already on its host, so the
+request is a no-op there. Two sessions decoding turn about on the tier therefore pay a flush
+and an upload per recurrent layer per switch, and each reads its own state.
+
+**A session's identity outlives nothing.** Every Session with deltanet state carries a
+`DnOwner` token whose range is that state's host addresses; the token's finalizer - run by the
+Session's own finalizer, at every `delete` - releases the device copies the range owns without
+writing them (`vk_dn_step_release`), so a later switch never flushes into freed memory and a
+new session at the same addresses never inherits a dead one's copy. The token and its
+finalizer live beside Session in the engine module: a struct's finalizer is resolved in the
+scope of the module that deletes it, and a Session dies in modules that see the engine and
+never the tier (the scheduler reaps its streams through the facade). A session's own
+position-zero reset releases its own copies the same way (`dn_reset`), and so does its
+speculative-round rollback (`mtp_state_restore`): the session's host state is authoritative,
+and the other sessions' copies stay theirs. The whole-device invalidate
+(`vk_dn_step_invalidate`) remains the seam for a dropped model, where every host copy is
+authoritative at once. The engine reaches those seams through the tier's forwarders:
+`dn_flush_layer` per layer before any CPU read of `dn_state` or the conv history,
+`moe_gpu_dn_release` for one session's copies, and `moe_gpu_dn_invalidate` for every copy at
+once.
