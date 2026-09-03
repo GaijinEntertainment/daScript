@@ -37,7 +37,10 @@ rewrites - and only the watermark keeps them from being read.
 serves an explicit setting (`set_mtp_depth`, the `--mtp-depth` flag) when one was made, else the
 box profile's `runtime.mtp_depth_assistant` or `runtime.mtp_depth_nextn` by the `MtpRoundKind` the
 assistant drafter's attach and detach select. The per-position acceptance curve has the same shape
-on every task (p2/p1 about 0.7), so nothing a controller could observe changes the depth ranking;
+on every task and on both carriers - of the rounds at depth 4, position 1 is accepted in about
+three quarters, position 2 in half to two thirds, position 3 in a third and position 4 in a
+fifth (the `_depths` ruler records under `performance/records/mtp/`), so a fourth draft adds
+about a tenth of a token per round - and nothing a controller could observe changes the depth ranking;
 what does is the box's k-row verify cost - on the M5 depth 2 ties depth 1, on the M4 Pro depth 2
 loses (`PERF_LEDGER.md`, the MTP section) - so the tuner mints the assistant knob as a
 serving race of depth 1 against depth 2 on the SpecBench chat corpus with a gemma-4 vehicle and its

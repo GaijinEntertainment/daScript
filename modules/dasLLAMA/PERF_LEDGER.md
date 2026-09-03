@@ -1243,6 +1243,19 @@ commits: direction-grade.
   the step is nearly all weight streaming, so pairs add linearly out to the eighth row. The M5 Max has no
   three-row cliff: 1 / 2 / 3 / 4 / 5 / 8 rows = 20.8 / 17.3 / 24.7 / 24.6 / 42.1 / 42.7 ms = 1.00 /
   0.83 / 1.19 / 1.19 / 2.03 / 2.06x - the walk stays off there by the crown. Direction-grade.
+- **Depth ladder 1..4 on the M5 Max, both carriers (2026-09-03, ruler ours-only, settle 45 s -
+  the off arms drift 27.3 -> 26.0 across the four Qwen arms, so the speeds are direction-grade;
+  the acceptance counts are exact; records `mtp_m5_Qwen3.8-27B_depths.json` and
+  `mtp_m5_gemma-4-26B-A4B_depths.json`):** Qwen3.8-27B + Q8_0 head: depth 1 27.3 -> 33.6
+  (1.23x), depth 2 26.7 -> 31.6 (1.18x), depth 3 26.3 -> 34.4 (1.31x), depth 4 26.0 -> 19.7
+  (0.76x); per-position acceptance at depth 4: p1 81.3 p2 64.3 p3 34.5 p4 22.4% of rounds (depth 3:
+  86.4 / 69.3 / 35.2). gemma-26B + the assistant drafter: depth 1 112.2 -> 130.4 (1.16x), depth 2
+  122.5 -> 146.5 (1.20x), depth 3 122.4 -> 139.5 (1.14x), depth 4 121.5 -> 112.1 (0.92x); at depth
+  4: p1 71.7 p2 47.6 p3 33.2 p4 22.5%. Tokens per round 1.77 / 2.50 / 2.90 / 3.02 (Qwen) and 1.75 /
+  2.25 / 2.52 / 2.75 (gemma): the fourth draft adds a tenth to a quarter of a token. The implied
+  round cost in steps (tokens per round over the speedup) is 1.44 / 2.12 / 2.21 / 3.97 on Qwen -
+  the five-row verify (2.73x) plus about 0.3 step per NextN draft; on gemma 1.51 / 1.88 / 2.21 /
+  2.99. Depth 3 is the best Qwen point on this box today. Direction-grade.
 - **A code prompt, gemma on the M5 (c3239b46c, `benchmarks/data/code1_prompts.txt`):** ours off
   123.4 -> depth 1 159.0 (1.29x, 85.5%) -> depth 2 174.0 (1.41x; p1 86.0 p2 68.0); llama.cpp off
   99.7 -> n_max 1 140.0 (84.1%) -> n_max 2 153.7. Acceptance is a property of the text: code

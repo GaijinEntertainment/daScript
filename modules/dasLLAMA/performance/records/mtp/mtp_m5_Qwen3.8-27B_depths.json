@@ -1,0 +1,222 @@
+{
+	"meta" : {
+		"model_sha" : "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34\t0x46aee4960\t2026-08-17T18:07:01",
+		"head" : "/Users/borisbatkin/Work/llama.cpp/models/mtp-Qwen3.8-27B-Q8_0.gguf",
+		"depths" : "1,2,3,4",
+		"date" : "2026-09-03 12:36",
+		"cpu" : "Apple M5 Max",
+		"ngl" : 99,
+		"model" : "/Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf",
+		"lcpp_server" : "",
+		"das_exe" : "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench",
+		"lcpp_version" : "-",
+		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",
+		"threads" : 6,
+		"das_sha" : "048e00d07",
+		"ngen" : 128,
+		"head_sha" : "cbf60a0c48b431bb61f1d49b8948dc88ac29c398d6dbdbbb2e6e89ef77eacc9a",
+		"reps" : 3
+	},
+	"rows" : [
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 0,
+			"off_tps" : 27.4,
+			"on_tps" : 32.3,
+			"drafted" : 225,
+			"accepted" : 159
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 1,
+			"off_tps" : 27.2,
+			"on_tps" : 34.5,
+			"drafted" : 213,
+			"accepted" : 171
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 2,
+			"off_tps" : 27.2,
+			"on_tps" : 36.7,
+			"drafted" : 198,
+			"accepted" : 186
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 3,
+			"off_tps" : 27.4,
+			"on_tps" : 31.4,
+			"drafted" : 228,
+			"accepted" : 153
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : -1,
+			"off_tps" : 27.31,
+			"on_tps" : 33.59,
+			"note" : "mtp: 669/864 drafts accepted (77.4%) at depth 1; per-position accept: p1 77.4% (669/864)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 0,
+			"off_tps" : 26.8,
+			"on_tps" : 27.7,
+			"drafted" : 354,
+			"accepted" : 210
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 1,
+			"off_tps" : 26.6,
+			"on_tps" : 30.4,
+			"drafted" : 318,
+			"accepted" : 228
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 2,
+			"off_tps" : 26.7,
+			"on_tps" : 34.5,
+			"drafted" : 282,
+			"accepted" : 243
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 3,
+			"off_tps" : 26.6,
+			"on_tps" : 34.8,
+			"drafted" : 276,
+			"accepted" : 243
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : -1,
+			"off_tps" : 26.69,
+			"on_tps" : 31.55,
+			"note" : "mtp: 924/1230 drafts accepted (75.1%) at depth 2; per-position accept: p1 83.9% (516/615) p2 66.3% (408/615)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 3,
+			"prompt" : 0,
+			"off_tps" : 26.5,
+			"on_tps" : 28,
+			"drafted" : 486,
+			"accepted" : 219
+		},
+		{
+			"engine" : "das",
+			"depth" : 3,
+			"prompt" : 1,
+			"off_tps" : 26.2,
+			"on_tps" : 34.7,
+			"drafted" : 396,
+			"accepted" : 258
+		},
+		{
+			"engine" : "das",
+			"depth" : 3,
+			"prompt" : 2,
+			"off_tps" : 26.2,
+			"on_tps" : 43.5,
+			"drafted" : 315,
+			"accepted" : 279
+		},
+		{
+			"engine" : "das",
+			"depth" : 3,
+			"prompt" : 3,
+			"off_tps" : 26.2,
+			"on_tps" : 34.7,
+			"drafted" : 387,
+			"accepted" : 252
+		},
+		{
+			"engine" : "das",
+			"depth" : 3,
+			"prompt" : -1,
+			"off_tps" : 26.27,
+			"on_tps" : 34.39,
+			"note" : "mtp: 1008/1584 drafts accepted (63.6%) at depth 3; per-position accept: p1 86.4% (456/528) p2 69.3% (366/528) p3 35.2% (186/528)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 4,
+			"prompt" : 0,
+			"off_tps" : 26.1,
+			"on_tps" : 16.3,
+			"drafted" : 636,
+			"accepted" : 234
+		},
+		{
+			"engine" : "das",
+			"depth" : 4,
+			"prompt" : 1,
+			"off_tps" : 26,
+			"on_tps" : 18.9,
+			"drafted" : 540,
+			"accepted" : 258
+		},
+		{
+			"engine" : "das",
+			"depth" : 4,
+			"prompt" : 2,
+			"off_tps" : 26,
+			"on_tps" : 25.2,
+			"drafted" : 396,
+			"accepted" : 286
+		},
+		{
+			"engine" : "das",
+			"depth" : 4,
+			"prompt" : 3,
+			"off_tps" : 25.9,
+			"on_tps" : 20.4,
+			"drafted" : 480,
+			"accepted" : 261
+		},
+		{
+			"engine" : "das",
+			"depth" : 4,
+			"prompt" : -1,
+			"off_tps" : 26.02,
+			"on_tps" : 19.71,
+			"note" : "mtp: 1039/2052 drafts accepted (50.6%) at depth 4; per-position accept: p1 81.3% (417/513) p2 64.3% (330/513) p3 34.5% (177/513) p4 22.4% (115/513)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 0,
+			"text" : "# Aloha Spirit: Why Your Next Trip to Hawaii Needs to Be More Than Just a Beach Day\n\nThere’s a"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 1,
+			"text" : "Hillary Clinton’s security detail in Iowa recently included a second, visually identical armor"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 2,
+			"text" : "To determine the total cost of travel, we need to calculate the cost of the tickets based on the"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 3,
+			"text" : "The character of **Anna** in the TV series *Once Upon a Time* was played by **Ginnifer Goodwin**"
+		}
+	]
+}

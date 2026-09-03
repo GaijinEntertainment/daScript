@@ -248,7 +248,7 @@ struct public MetalEnv {
     fuse : bool = true
 
     @clarg_default_doc = "-1 (adaptive)"
-    @clarg_doc = "MTP speculative decode chain: 0 off, 1 forced, -1 adaptive."
+    @clarg_doc = "The single-row Metal decode's greedy chain (the next step pre-encoded on the GPU's own argmax): 0 off, 1 forced, -1 adaptive (backs off after a miss). A session sampled at temp > 0 never chains, whatever the mode."
     spec : Option<int>
 
     @clarg_doc = "Rows per MoE router/expert GEMV threadgroup, clamped 1..32 (the dense GEMV geometry is fixed)."

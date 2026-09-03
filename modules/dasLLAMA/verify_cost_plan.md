@@ -180,6 +180,19 @@ none poisoned.
 
 Boris: depth past 4 is unrealistic, so the verify widths that matter are 2 to 5 rows.
 
+**S2.-1 - does the round ever reach five rows?** Re-measured and recorded (ruler, depths 1..4,
+both carriers, M5; the `_depths` records and the ledger bullet). Acceptance by position, of all
+rounds: about 75-85% / 50-66% / 35% / 22% on BOTH carriers, so tokens per round run 1.77 / 2.50 /
+2.90 / 3.02 (Qwen) and 1.75 / 2.25 / 2.52 / 2.75 (gemma). The fourth draft is worth a tenth to a
+quarter of a token; the five-row verify serves depth 4 alone. Speed today: Qwen 1.23 / 1.18 /
+1.31 / 0.76x, gemma 1.16 / 1.20 / 1.14 / 0.92x - depth 3 is the best Qwen point on this box, depth
+4 loses on both. Implied round costs (tokens per round over the speedup, in steps): Qwen 1.44 /
+2.12 / 2.21 / 3.97 = the verify ladder (1.13 / 1.59 / 1.59 / 2.73) plus 0.25-0.3 step PER NEXTN
+DRAFT; gemma 1.51 / 1.88 / 2.21 / 2.99. Two consequences: the five-column stamp (S2.2) is struck -
+its only customer is depth 4; and the NextN draft overhead (item 5 below) is as large a lever as
+the verify at depths 2-3: a flat 1.2x verify alone takes Qwen depth 3 from 1.31x to ~1.6x, the
+draft fix alone to ~1.5x, both to ~2.0x.
+
 **S2.0 - their K-quant ladder, measured, not inferred.** The report's "1.05x at M = 4" for
 K-quants is an inference from kernel selection. Read side by side, llama.cpp's
 `kernel_mul_mv_ext_q4x4_f32_impl` has our twin's structure exactly: 8 threads per weight row, 4

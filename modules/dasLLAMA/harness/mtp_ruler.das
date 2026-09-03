@@ -587,7 +587,7 @@ def private write_report(cfg : Args; head : string; rows : array<string>) : bool
     let meta = JV((date = format_time(get_clock(), "%Y-%m-%d %H:%M"),
         cpu = first_line(sh("sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m")),
         das_sha = first_line(sh("git rev-parse --short HEAD")), das_exe = cfg.exe,
-        lcpp_server = cfg.server, lcpp_version = first_line(sh("\"{cfg.server}\" --version 2>&1")),
+        lcpp_server = cfg.server, lcpp_version = empty(cfg.server) ? "-" : first_line(sh("\"{cfg.server}\" --version 2>&1")),
         model = cfg.model, model_sha = sha_of(cfg.model), head = head, head_sha = sha_of(head),
         corpus = cfg.prompts, ngen = cfg.ngen, reps = cfg.reps, threads = cfg.threads, ngl = cfg.ngl, depths = cfg.depths))
     let text = "\{\"meta\":{write_json_compact(meta)},\"rows\":[{join(rows, ",")}]}"
