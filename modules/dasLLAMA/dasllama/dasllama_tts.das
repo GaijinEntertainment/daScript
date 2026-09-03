@@ -194,10 +194,11 @@ def private is_sentence_boundary(cps : array<int>; i : int) : bool {
     return i + 1 >= n || is_space_cpt(cps[i + 1])
 }
 
-// a chunk ends on prosodic punctuation; one is appended when the split left none
-def private ensure_punctuation(chunk : string) : string {
+// a chunk ends on prosodic punctuation when the family's driver says so (Kitten's appends a comma
+// where the split left none; Kokoro's pipeline sends the text as it is)
+def private finish_chunk(chunk : string; punct : bool) : string {
     let s = strip(chunk)
-    return s if (empty(s))
+    return s if (empty(s) || !punct)
     var inscope cps <- utf8_to_cpts(s)
     let last = cps[length(cps) - 1]
     return (last == '.' || last == '!' || last == '?' || last == ',' || last == ';' || last == ':') ? s : "{s},"
@@ -212,44 +213,44 @@ def private cpt_length(s : string) : int {
 
 // a whitespace-free run longer than the cap has no word boundary to split on, so it splits at
 // the cap itself, on a codepoint boundary
-def private push_hard_split(word : string; max_len : int; var out : array<string>) {
+def private push_hard_split(word : string; max_len : int; punct : bool; var out : array<string>) {
     var inscope cps <- utf8_to_cpts(word)
     let n = length(cps)
     var a = 0
     while (a < n) {
         let b = min(a + max_len, n)
-        out |> push(ensure_punctuation(cpts_to_utf8(cps, a, b)))
+        out |> push(finish_chunk(cpts_to_utf8(cps, a, b), punct))
         a = b
     }
 }
 
-def private push_words(sentence : string; max_len : int; var out : array<string>) {
+def private push_words(sentence : string; max_len : int; punct : bool; var out : array<string>) {
     var inscope cur : array<string>
     var cur_len = 0
     for (w in split(sentence, " ")) {
         continue if (empty(w))
         let wl = cpt_length(w)
         if (!empty(cur) && cur_len + 1 + wl > max_len) {
-            out |> push(ensure_punctuation(join(cur, " ")))
+            out |> push(finish_chunk(join(cur, " "), punct))
             cur |> clear()
             cur_len = 0
         }
         if (wl > max_len) {
-            push_hard_split(w, max_len, out)
+            push_hard_split(w, max_len, punct, out)
             continue
         }
         cur_len += (empty(cur) ? 0 : 1) + wl
         cur |> push(w)
     }
     if (!empty(cur)) {
-        out |> push(ensure_punctuation(join(cur, " ")))
+        out |> push(finish_chunk(join(cur, " "), punct))
     }
 }
 
-def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS) : array<string> {
+def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS; ensure_punct : bool = true) : array<string> {
     //! Split normalized text into the pieces one synthesis takes: sentences, each at most
-    //! ``max_len`` codepoints (a longer sentence splits on words, a longer word at the cap), each
-    //! ending in punctuation.
+    //! ``max_len`` codepoints (a longer sentence splits on words, a longer word at the cap). With
+    //! ``ensure_punct`` a chunk the split left bare gets a comma - KittenTTS's driver rule.
     var inscope out : array<string>
     var inscope cps <- utf8_to_cpts(norm)
     var start = 0
@@ -267,12 +268,19 @@ def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS) : array<string> {
         let st = strip(sent)
         continue if (empty(st))
         if (cpt_length(st) <= max_len) {
-            out |> push(ensure_punctuation(st))
+            out |> push(finish_chunk(st, ensure_punct))
         } else {
-            push_words(st, max_len, out)
+            push_words(st, max_len, ensure_punct, out)
         }
     }
     return <- out
+}
+
+def tts_chunks(m : TtsModel; norm : string) : array<string> {
+    //! The chunks a synthesis on this model takes: the family's own driver rule - Kitten's
+    //! appends a comma to a chunk the split left bare, Kokoro's pipeline sends the text as it is,
+    //! and its voices render an added mark as an audible breath.
+    return <- tts_chunks(norm, TTS_CHUNK_CHARS, m.kind == TtsKind.kitten)
 }
 
 // ===== synthesis =====
@@ -333,7 +341,7 @@ def synthesize_stream(var m : TtsModel; text : string; voice : string; speed : f
     //! name from ``caps`` or a family alias, and an unknown one panics.
     let vname = resolve_voice(m, voice)
     let norm = normalize_text(text)
-    var inscope chunks <- tts_chunks(norm)
+    var inscope chunks <- tts_chunks(m, norm)
     for (i, chunk in iter_range(chunks), chunks) {
         var inscope a <- synthesize_chunk(m, chunk, vname, speed, i)
         to_log(LOG_INFO, "dasLLAMA tts: {m.model.family} {m.model.name}: {timings_line(a.timings, a.sample_rate)}\n")

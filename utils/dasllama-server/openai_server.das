@@ -4121,7 +4121,7 @@ def private tts_phonemes_lang(model : TtsModel; voice : string) : string {
 def private process_tts_phonemes(model : TtsModel; job : TtsJob; events : Channel?) {
     let norm = tts_normalize(job.text)
     let lang = tts_phonemes_lang(model, job.voice)
-    var inscope chunks <- tts_chunks(norm)
+    var inscope chunks <- tts_chunks(model, norm)
     let doc = build_string() $(w) {
         w |> write("\{\"normalized\":{json_str(norm)},\"lang\":{json_str(lang)},\"chunks\":[")
         for (i in range(length(chunks))) {

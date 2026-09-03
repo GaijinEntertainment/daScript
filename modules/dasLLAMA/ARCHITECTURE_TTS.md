@@ -101,7 +101,10 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`), `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
   chunk - `length()` on a string is bytes, and an em dash costs three of them - abbreviations
   and decimals never split, a whitespace-free run longer than the cap hard-split at the cap on
-  a codepoint boundary -> per chunk: phonemize -> the family's symbols
+  a codepoint boundary; a chunk the split left without a closing mark gets a comma under
+  Kitten's driver rule and nothing under Kokoro's, whose pipeline sends the text as it is and
+  whose voices render an added mark as an audible breath -> per chunk: phonemize -> the
+  family's symbols
   and style row -> PCM, timed, delivered to the caller's block as it lands) and `synthesize`
   (the same, concatenated, timings summed). Every chunk draws its own source noise: the seed
   is the facade's constant plus the chunk's index, so consecutive sentences of one request

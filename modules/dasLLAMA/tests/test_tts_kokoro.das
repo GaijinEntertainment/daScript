@@ -103,18 +103,17 @@ def test_kokoro_facade(t : T?) {
             t |> equal(length(c.voices), 28)   // the American and British packs; the other languages wait for their front end
             t |> success(length(c.langs) == 2 && c.langs[0] == "en-us" && c.langs[1] == "en-gb",
                 "{length(c.langs)} language(s), first '{c.langs[0]}'")
+            t |> equal(length(c.voice_langs), length(c.voices), "one language per listed voice")
             var british = 0
-            var english = true
-            for (v in c.voices) {
-                let lang = kokoro_voice_lang(v)
-                english = english && (lang == "en-us" || lang == "en-gb")
+            for (lang in c.voice_langs) {
+                t |> success(find_index(c.langs, lang) >= 0, "a listed voice speaks a declared language ({lang})")
                 british += lang == "en-gb" ? 1 : 0
             }
-            t |> success(english, "every listed voice is English")
             t |> equal(british, 8, "the British packs")
-            t |> equal(length(c.voice_langs), length(c.voices), "one language per listed voice")
             let emma = find_index(c.voices, "bf_emma")
             t |> success(emma >= 0 && c.voice_langs[emma] == "en-gb", "bf_emma is listed as British")
+            var inscope plain <- tts_chunks(m, "hello how are you")
+            t |> success(length(plain) == 1 && plain[0] == "hello how are you", "a Kokoro chunk carries no appended mark")
             var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "af_heart")
             t |> equal(audio.sample_rate, 24000)
             t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")

@@ -131,9 +131,11 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     //
     // One synthesis takes one sentence-sized piece. tts_chunks is the splitter synthesize
     // runs over the normalized text: sentences first, then words when a sentence runs past
-    // TTS_CHUNK_CHARS codepoints, and every chunk ends in punctuation so the model hears a
-    // prosodic close. A period inside "Dr." or "3.5" is not a sentence end.
-    let pieces <- tts_chunks(PARAGRAPH)
+    // TTS_CHUNK_CHARS codepoints. A period inside "Dr." or "3.5" is not a sentence end. Given
+    // the model, the chunker follows that family's own driver: Kitten's appends a comma to a
+    // piece the split left bare so the model hears a prosodic close; Kokoro's sends the text
+    // as it is, because its voices read an added mark out loud as a breath.
+    let pieces <- tts_chunks(m, PARAGRAPH)
     print("\ntts_chunks: {length(pieces)} chunk(s), cap {TTS_CHUNK_CHARS} codepoints\n")
     for (p in pieces) {
         print("  {p}\n")

@@ -450,7 +450,7 @@ line phonemized in both dialects, every British symbol proven to be in the model
 vocabulary by the token count, and `bf_emma` speaking.
 `test_tts_facade.das` - model-free suite: the sentence chunker (the reference driver's boundary
 rule, the cap counted in codepoints, the hard split of a whitespace-free run, the appended
-punctuation), the WAV container, the codec's malformed-lead and astral arms, kitten's
+comma as Kitten's driver rule and the bare text Kokoro's sends), the WAV container, the codec's malformed-lead and astral arms, kitten's
 dropped-symbol rule, and the `rtf` guard; model-gated (`kitten-nano.gguf` + the front-end
 packs): the streaming form's chunks concatenate to the buffered synthesis sample for sample,
 one synthesis at one lane and the other at the box's lanes, the phonemizer on the corpus rail,

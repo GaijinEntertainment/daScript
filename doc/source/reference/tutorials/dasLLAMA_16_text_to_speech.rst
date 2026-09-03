@@ -147,15 +147,17 @@ The chunker
 
 One synthesis takes one sentence-sized piece, and ``tts_chunks`` is the
 splitter ``synthesize`` runs over the normalized text. It cuts at sentence
-ends, splits a sentence past ``TTS_CHUNK_CHARS`` codepoints on a word
-boundary, and appends punctuation to a piece that lost it, so the model always
-hears a prosodic close. The cap counts codepoints, not bytes — an em dash
-costs three bytes and one character. A period inside ``Dr.`` or ``3.5`` is not
-a sentence end.
+ends and splits a sentence past ``TTS_CHUNK_CHARS`` codepoints on a word
+boundary. Given the model, it follows that family's own driver: Kitten's
+appends a comma to a piece the split left bare, so the model hears a prosodic
+close; Kokoro's sends the text as it is, because its voices read an added mark
+out loud as a breath. The cap counts codepoints, not bytes — an em dash costs
+three bytes and one character. A period inside ``Dr.`` or ``3.5`` is not a
+sentence end.
 
 .. code-block:: das
 
-   for (piece in tts_chunks("Dr. Smith read it. It ran to 3.5 pages.")) {
+   for (piece in tts_chunks(m, "Dr. Smith read it. It ran to 3.5 pages.")) {
        print("{piece}\n")
    }
    // -> "Dr. Smith read it."

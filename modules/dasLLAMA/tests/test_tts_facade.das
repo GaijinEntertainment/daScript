@@ -44,6 +44,32 @@ def test_chunker(t : T?) {
         t |> equal(c[2], "Third?")
         t |> equal(c[3], "Fourth,", "a chunk left without punctuation gains a comma")
     }
+}
+
+[test]
+def test_chunker_family_rule(t : T?) {
+    t |> run("the appended comma is Kitten's driver rule; off, the text goes through as it is") @(t : T?) {
+        var inscope bare <- tts_chunks("hello how are you", TTS_CHUNK_CHARS, false)
+        t |> equal(length(bare), 1)
+        t |> equal(bare[0], "hello how are you", "Kokoro's pipeline adds no mark - its voices breathe one out loud")
+        var inscope kept <- tts_chunks("First one. Second", TTS_CHUNK_CHARS, false)
+        t |> equal(length(kept), 2)
+        t |> equal(kept[0], "First one.", "punctuation the text carries stays")
+        t |> equal(kept[1], "Second")
+        var words = ""
+        for (i in range(40)) {
+            words = i == 0 ? "word" : "{words} word"
+        }
+        var inscope pieces <- tts_chunks(words, 50, false)
+        t |> success(length(pieces) >= 3, "{length(pieces)} pieces")
+        for (p in pieces) {
+            t |> success(!ends_with(p, ","), "a word-split piece stays bare too: '{p}'")
+        }
+    }
+}
+
+[test]
+def test_chunker_rules(t : T?) {
     t |> run("abbreviations, decimals and clock times do not end a sentence") @(t : T?) {
         var inscope c <- tts_chunks("Dr. Smith paid 3.50 dollars at 9 a.m. today. Then he left.")
         t |> equal(length(c), 2)
