@@ -65,6 +65,39 @@ Lifecycle
             print("hello\n")
         }
 
+``[export_c]``
+    An ``[export]`` that ``daslang -lib`` additionally surfaces as a C function in the header it
+    generates. The function keeps working under the interpreter, ``-jit`` and AOT. Its signature
+    has to be one C can spell: scalars, ``string``, raw pointers, enumerations, plain structures,
+    the ``float2``..``uint4`` and ``range`` families, and ``fixed_array`` arguments; ``array``,
+    ``table``, ``tuple``, ``variant``, lambdas, blocks, iterators and bound C++ types are not, and
+    the build names the parameter it could not spell. A generic function cannot carry it.
+    ``name="..."`` renames the C symbol, which is how two overloads reach C at all:
+
+    .. das-doc: alt
+    .. code-block:: das
+
+        struct Vec3 {
+            x : float
+            y : float
+            z : float
+        }
+
+        [export_c]
+        def dot(a, b : Vec3) : float {
+            return a.x * b.x + a.y * b.y + a.z * b.z
+        }
+
+        [export_c(name = "scale_by")]
+        def scale(v : Vec3; k : float) : Vec3 {
+            return Vec3(x = v.x * k, y = v.y * k, z = v.z * k)
+        }
+
+    A scalar result comes back directly, so ``dot`` becomes
+    ``float p_dot(p_ctx *, const p_Vec3 *, const p_Vec3 *)``; a structure or vector result travels
+    through a trailing out pointer, so ``scale`` becomes
+    ``void p_scale_by(p_ctx *, const p_Vec3 *, float, p_Vec3 *)``.
+
 ``[init]``
     Marks a function to run automatically during context initialization. The function must
     take no arguments and return ``void``:

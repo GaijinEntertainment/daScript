@@ -397,6 +397,41 @@ namespace das
         };
     };
 
+    static bool isCIdentifier ( const string & name ) {
+        if ( name.empty() ) return false;
+        if ( !isalpha(uint8_t(name[0])) && name[0]!='_' ) return false;
+        for ( auto ch : name ) {
+            if ( !isalnum(uint8_t(ch)) && ch!='_' ) return false;
+        }
+        return true;
+    }
+
+    //! [export_c] is an [export] which daslang -lib also surfaces as a C entry point. Whether the
+    //! signature has a C representation is decided after infer, by daslib/c_api_header - argument
+    //! types do not exist yet here.
+    struct ExportCFunctionAnnotation : MarkFunctionAnnotation {
+        ExportCFunctionAnnotation() : MarkFunctionAnnotation("export_c") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string & err) override {
+            if ( func->isGeneric() ) {
+                err = "[export_c] can't export generic function `" + func->name
+                    + "`: it has auto or template arguments, and C needs one concrete signature";
+                return false;
+            }
+            for ( const auto & arg : args ) {
+                if ( arg.name!="name" ) {
+                    err = "[export_c] unknown argument `" + arg.name + "`; the only argument is name=\"<c identifier>\"";
+                    return false;
+                }
+                if ( arg.type!=Type::tString || !isCIdentifier(arg.sValue) ) {
+                    err = "[export_c] name must be a valid C identifier ([A-Za-z_][A-Za-z0-9_]*), got `" + arg.sValue + "`";
+                    return false;
+                }
+            }
+            func->exports = true;
+            return true;
+        };
+    };
+
     struct PInvokeFunctionAnnotation : MarkFunctionAnnotation {
         PInvokeFunctionAnnotation() : MarkFunctionAnnotation("pinvoke") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -2222,6 +2257,7 @@ namespace das
         addAnnotation(new AliasCMRESFunctionAnnotation());
         addAnnotation(new NeverAliasCMRESFunctionAnnotation());
         addAnnotation(new ExportFunctionAnnotation());
+        addAnnotation(new ExportCFunctionAnnotation());
         addAnnotation(new PInvokeFunctionAnnotation());
         addAnnotation(new NoLintFunctionAnnotation());
         addAnnotation(new SideEffectsFunctionAnnotation());

@@ -14,6 +14,7 @@ Whether we are in lint-check mode (standalone linters set this so modules can ad
 Skip Program::lint() entirely (as if every module set ``options lint = false``).
 Skip the Module::Initialize() assert in compileDaScript (for environments initialized later, e.g. dynamic-module discovery).
 Export all functions and global variables.
+Treat every public, non-generic function of the entry module as [export] (daslang -lib -lib-export-all).
 If not set, we recompile main module each time.
 Keep context alive after main function.
 Whether to use very safe context (delete of data is delayed, to avoid table[foo]=table[bar] lifetime bugs).
@@ -101,6 +102,7 @@ JIT all functions - if enabled, JIT will compile all functions in the module.
 JIT debug info - if enabled, JIT will generate debug info for JIT compiled code.
 JIT dll mode - if enabled, JIT will generate DLL's into JIT output folder and load them from there.
 JIT exe mode - if enabled, JIT will generate standalone executable.
+JIT lib mode - if enabled, JIT will generate a C-ABI native library (shared by default, static with --jit-lib-static) and a C header.
 JIT offline AOT object mode - emit a native .o (this module only) with a load constructor registering its functions into the AOT library, for static linking into a host binary.
 JIT will always emit function prologues, which allows call-stack in debuggers.
 JIT output folder (where JIT compiled code will be stored).
