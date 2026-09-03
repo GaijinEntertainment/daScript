@@ -403,8 +403,12 @@ rows form (token-major [T][C]) held to its channel-major twin at the dot-envelop
 tolerance times the sum of |w|*|x| feeding each output, with a zeroed-tap poison leg that must
 EXCEED it), the q8 lane at its own 2% bar, the padded input width on both lanes, the
 multi-chunk stacked-tap loop, `adain_rows_into` against `adain_rows`, the norms and the
-duration expansion; plus the split-invariance gate (every rows kernel bit-equal at batch lane
-cap 1 and 0) and the must-panic cells for the rows conv's shape refusals.
+duration expansion; plus the split-invariance gate (every rows kernel bit-equal on both axes
+that move the row split - batch lane cap 1 against 0, and jobque worker limit 1 against the
+box's job count, the axis that reaches the AdaIN column stats and the bare `lanes_for_work`
+sites the cap never touches - each axis carrying a witness arm that its narrow leg shapes a
+rows GEMM to fewer lanes than its wide one) and the must-panic cells for the rows conv's shape
+refusals.
 `_tts_parity.das` - the rail both families run: token ids against the reference driver on every
 oracle case, identical durations on every case, and on the bring-up set every stage through the
 decoder output within 1e-4 of the oracle's peak, the sine source within 1e-4 fed the oracle's F0,

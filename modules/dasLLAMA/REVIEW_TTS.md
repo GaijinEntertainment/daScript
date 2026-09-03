@@ -40,8 +40,9 @@ checked against.
 **A rows kernel whose result depends on how its row blocks split across the parallel workers
 is a defect - every GEMM starts on the 4-row tile edge in every split, and a reduction
 accumulates per fixed-size row block and combines in a fixed order.** `tests/test_tts_blocks.das`
-runs each rows kernel at one lane and at the box's lanes and asserts bit equality, and the
-facade's streaming cell does the same for a whole synthesis.
+runs each rows kernel at one lane and at the box's lanes on both axes that move the split (the
+batch lane cap and the jobque worker limit) and asserts bit equality, and the facade's
+streaming cell does the same for a whole synthesis.
 
 **A `read_*` call in `dasllama/dasllama_styletts2.das` that leaves a conv or linear on the
 channel-major default while the forward assembly runs it through a rows kernel is a defect -

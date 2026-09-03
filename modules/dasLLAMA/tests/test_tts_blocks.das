@@ -710,6 +710,16 @@ struct SplitCase {
     diffs : int
 }
 
+// The two axes a rows kernel's row split moves on. The batch lane cap clamps inside
+// lanes_for_work, so it reaches only the shapers that pass it - matmul_chunks. The jobque worker
+// limit parks the over-limit workers, so it moves get_dispatch_lanes() itself and reaches every
+// shaper: the AdaIN column stats, attention's head split, and each bare lanes_for_work(work, 0)
+// site the cap alone leaves on one setting.
+enum SplitAxis {
+    lane_cap
+    worker_limit
+}
+
 // the pin the row-split legs share: the batch lane cap decides how many chunks a rows GEMM's
 // row range breaks into, and it is restored on every path out
 def private at_lane_cap(cap : int; blk : block<() : void>) {
@@ -719,6 +729,42 @@ def private at_lane_cap(cap : int; blk : block<() : void>) {
     }
     set_batch_lane_cap(cap)
     invoke(blk)
+}
+
+// the second axis, the same shape. The limit lives on the que rather than in a module global,
+// so the restore reads it back instead of assuming the unlimited default setup_dasllama_jobque_
+// left; -1 comes back as the que's own saturated value, which restores identically.
+def private at_worker_limit(limit : int; blk : block<() : void>) {
+    let prev = get_jobque_worker_limit()
+    defer() {
+        set_jobque_worker_limit(prev)
+    }
+    set_jobque_worker_limit(limit)
+    invoke(blk)
+}
+
+// one leg of an axis: `narrow` pins it to the fewest lanes it admits, else to the box's
+def private at_split(axis : SplitAxis; narrow : bool; blk : block<() : void>) {
+    if (axis == SplitAxis.worker_limit) {
+        at_worker_limit(narrow ? 1 : get_total_hw_jobs(), blk)
+    } else {
+        at_lane_cap(narrow ? 1 : 0, blk)
+    }
+}
+
+def private axis_name(axis : SplitAxis) : string {
+    return axis == SplitAxis.worker_limit ? "worker limit" : "lane cap"
+}
+
+// the lanes a rows GEMM's shaper answers under a pinned leg - the anti-vacuous witness: the cap
+// clamps inside lanes_for_work, the worker limit moves the get_dispatch_lanes() it clamps
+// against, and a leg pair shaped to the same count compares nothing.
+def private shaped_lanes(axis : SplitAxis; narrow : bool) : int {
+    var lanes = 0
+    at_split(axis, narrow) {
+        lanes = lanes_for_work(1l << 40l, get_batch_lane_cap())
+    }
+    return lanes
 }
 
 def private split_diff(name : string; a, b : array<float>) : SplitCase {
@@ -734,7 +780,7 @@ def private split_diff(name : string; a, b : array<float>) : SplitCase {
     return res
 }
 
-def private split_conv_case(name : string; cin, cout, k, stride, pad, dil : int64; q8 : bool) : SplitCase {
+def private split_conv_case(name : string; cin, cout, k, stride, pad, dil : int64; q8 : bool; axis : SplitAxis) : SplitCase {
     var r = TtsRng()
     rng_seed(r, 0x5b17ul + uint64(k * 100l + dil))
     var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, dil, false, true)
@@ -746,20 +792,20 @@ def private split_conv_case(name : string; cin, cout, k, stride, pad, dil : int6
     transpose_ct(x_ct, cin, t_in, x_rows)
     var inscope one : array<float>
     var inscope many : array<float>
-    at_lane_cap(1) {
+    at_split(axis, true) {
         conv1d_rows(cr, x_rows, t_in, one)
     }
-    at_lane_cap(0) {
+    at_split(axis, false) {
         conv1d_rows(cr, x_rows, t_in, many)
     }
-    var res = split_diff(name, one, many)
+    var res = split_diff("{name} @ {axis_name(axis)}", one, many)
     if (q8 && !cr.q8) {
         res.diffs += 1000000   // the q8 lane never minted, so this leg pinned the f32 kernel
     }
     return res
 }
 
-def private split_adain_case(c : int64) : SplitCase {
+def private split_adain_case(c : int64; axis : SplitAxis) : SplitCase {
     var r = TtsRng()
     rng_seed(r, 0x5b18ul + uint64(c))
     let t = T_ROWS
@@ -776,16 +822,16 @@ def private split_adain_case(c : int64) : SplitCase {
     rand_fill(r, src, t * c, 3.0)
     var inscope one := src
     var inscope many := src
-    at_lane_cap(1) {
+    at_split(axis, true) {
         adain_rows(a, one, t, c, style, 1.0e-5)
     }
-    at_lane_cap(0) {
+    at_split(axis, false) {
         adain_rows(a, many, t, c, style, 1.0e-5)
     }
-    return split_diff("adain_rows c={c}", one, many)
+    return split_diff("adain_rows c={c} @ {axis_name(axis)}", one, many)
 }
 
-def private split_attention_case() : SplitCase {
+def private split_attention_case(axis : SplitAxis) : SplitCase {
     var r = TtsRng()
     rng_seed(r, 0x5b19ul)
     let t = 401l
@@ -799,16 +845,16 @@ def private split_attention_case() : SplitCase {
     rand_fill(r, v, t * hidden, 2.0)
     var inscope one : array<float>
     var inscope many : array<float>
-    at_lane_cap(1) {
+    at_split(axis, true) {
         attention_rows(q, k, v, t, hidden, heads, one)
     }
-    at_lane_cap(0) {
+    at_split(axis, false) {
         attention_rows(q, k, v, t, hidden, heads, many)
     }
-    return split_diff("attention_rows", one, many)
+    return split_diff("attention_rows @ {axis_name(axis)}", one, many)
 }
 
-def private split_linear_case(nin, nout : int64) : SplitCase {
+def private split_linear_case(nin, nout : int64; axis : SplitAxis) : SplitCase {
     var r = TtsRng()
     rng_seed(r, 0x5b1aul + uint64(nin))
     let t = T_ROWS
@@ -820,13 +866,13 @@ def private split_linear_case(nin, nout : int64) : SplitCase {
     rand_fill(r, x, t * nin, 2.0)
     var inscope one : array<float>
     var inscope many : array<float>
-    at_lane_cap(1) {
+    at_split(axis, true) {
         linear_rows(l, x, t, one)
     }
-    at_lane_cap(0) {
+    at_split(axis, false) {
         linear_rows(l, x, t, many)
     }
-    return split_diff("linear_rows {nin}x{nout}", one, many)
+    return split_diff("linear_rows {nin}x{nout} @ {axis_name(axis)}", one, many)
 }
 
 def private report(t : T?; r : BlockCase) {
@@ -907,25 +953,45 @@ def test_rows_convs(t : T?) {
     }
 }
 
+// every rows kernel over one axis: the two legs, plus the witness that the axis moved the split
+def private split_arms(t : T?; axis : SplitAxis) {
+    let ax = axis_name(axis)
+    let narrow = shaped_lanes(axis, true)
+    let wide = shaped_lanes(axis, false)
+    to_log(LOG_INFO, "tts blocks split axis {ax}: a rows GEMM shapes to {narrow} lane(s) against {wide}\n")
+    t |> run("the {ax} axis moves the row split") @(t : T?) {
+        if (get_total_hw_jobs() < 2) {
+            t |> skip("a box with fewer than two hardware jobs shapes both legs the same")
+            return
+        }
+        t |> success(narrow < wide, "{ax}: {narrow} lane(s) against {wide} - equal counts compare nothing")
+    }
+    t |> run("the rows convs land the same bits at one lane and at many ({ax})") @(t : T?) {
+        report_split(t, split_conv_case("conv k3 pad1 d1", 64l, 64l, 3l, 1l, 1l, 1l, false, axis))
+        report_split(t, split_conv_case("conv k7 pad9 d3", 64l, 64l, 7l, 1l, 9l, 3l, false, axis))
+        report_split(t, split_conv_case("conv k4 pad4", 64l, 64l, 4l, 1l, 4l, 1l, false, axis))
+        report_split(t, split_conv_case("conv q8 k3 pad1 d1", 128l, 128l, 3l, 1l, 1l, 1l, true, axis))
+    }
+    t |> run("adain, attention and the dense layer land the same bits ({ax})") @(t : T?) {
+        report_split(t, split_adain_case(64l, axis))
+        report_split(t, split_adain_case(66l, axis))
+        report_split(t, split_attention_case(axis))
+        report_split(t, split_linear_case(768l, 3072l, axis))
+    }
+}
+
 // ARCHITECTURE_TTS.md sec.2.28: a rows kernel's result never depends on how its rows split
-// across the parallel workers. The batch lane cap is the split: 1 collapses every rows GEMM to
-// one inline chunk, 0 gives the box's lanes times the oversplit.
+// across the parallel workers. Two axes move that split, and every kernel runs both. The batch
+// lane cap: 1 collapses every rows GEMM to one inline chunk, 0 gives the box's lanes times the
+// oversplit. The jobque worker limit: 1 leaves one live worker plus the caller lane, the box's
+// job count wakes the whole pool - and unlike the cap it moves get_dispatch_lanes(), so it is
+// the only axis that reaches the AdaIN column stats and the bare lanes_for_work sites.
 [test]
 def test_rows_split_invariance(t : T?) {
     with_job_que() {
         setup_dasllama_jobque_()
-        t |> run("the rows convs land the same bits at one lane and at many") @(t : T?) {
-            report_split(t, split_conv_case("conv k3 pad1 d1", 64l, 64l, 3l, 1l, 1l, 1l, false))
-            report_split(t, split_conv_case("conv k7 pad9 d3", 64l, 64l, 7l, 1l, 9l, 3l, false))
-            report_split(t, split_conv_case("conv k4 pad4", 64l, 64l, 4l, 1l, 4l, 1l, false))
-            report_split(t, split_conv_case("conv q8 k3 pad1 d1", 128l, 128l, 3l, 1l, 1l, 1l, true))
-        }
-        t |> run("adain, attention and the dense layer land the same bits") @(t : T?) {
-            report_split(t, split_adain_case(64l))
-            report_split(t, split_adain_case(66l))
-            report_split(t, split_attention_case())
-            report_split(t, split_linear_case(768l, 3072l))
-        }
+        split_arms(t, SplitAxis.lane_cap)
+        split_arms(t, SplitAxis.worker_limit)
     }
 }
 

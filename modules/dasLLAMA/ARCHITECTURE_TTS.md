@@ -122,8 +122,13 @@ block peels the rows up to the next tile edge through the scalar path before its
 every GEMM base sits on the tile and a row is tiled or scalar-remainder the same way in every
 split, and a reduction accumulates per fixed 256-row block (`STAT_BLOCK`) and merges the blocks
 in a fixed order. `tests/test_tts_blocks.das` runs each rows kernel at one lane and at the
-box's lanes and asserts bit equality, and the facade's streaming cell does the same for a whole
-synthesis; per-dispatch-slot partials and an off-tile GEMM base each broke it once.
+box's lanes on both axes that move the split - the batch lane cap, which clamps inside
+`lanes_for_work`, and the jobque worker limit, which moves `get_dispatch_lanes()` itself and so
+reaches the shapers that pass no cap (the AdaIN column stats, every bare `lanes_for_work(work,
+0)` site) - and asserts bit equality, each axis carrying its own witness that it moved the
+split, since a leg pair whose shaper answers the same lane count compares nothing; the facade's
+streaming cell does the same for a whole synthesis. Per-dispatch-slot partials and an off-tile
+GEMM base each broke it once.
 
 ### 2.29 Tap stacking: one GEMM per chunk, nothing accumulates across taps {#tts-tap-stacking}
 
