@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 28   // k6's qh and k3's qs/hmask planes packed per sub-block (CPU flavor)
+let IMAGE_VERSION = 32   // the TTS AdaIN/AdaLayerNorm affines are vec-only: their tiled `wt` twin no longer rides the blob
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -57,7 +57,17 @@ struct ImgSection {
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def image_identity(tag : string = ""; quant : string = "q8") : string {
-    return image_identity_of(dlim_config_current(quant), tag)
+    return image_identity_of(image_config_for(tag, quant), tag)
+}
+
+//! The configuration an image under `tag` is keyed and stored by: the box's current one, or the
+//! default one for a family registered config-free (no CPU knob shapes its bytes, so its image
+//! is one file per box rather than one per tune state).
+def image_config_for(tag : string; quant : string = "q8") : DlimConfiguration {
+    if (tag != "" && has_value(g_config_free_tags, tag)) {
+        return DlimConfiguration(quant = quant)
+    }
+    return dlim_config_current(quant)
 }
 
 //! The identity of an explicit configuration — the ONE spelling every identity consumer (the
@@ -81,6 +91,7 @@ struct DlimPeek {
     bytes : int64
     identity : string
     config_json : string
+    layout : uint64       //!< the header's meta-layout fingerprint - what parse_image refuses on
 }
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head")]
@@ -100,6 +111,7 @@ def image_peek(path : string) : DlimPeek {
     var bp = unsafe(reinterpret<uint8 const?>(base))
     p.bytes = int64(msize)
     p.version = int(read_u32(bp, 4l))
+    p.layout = read_u64(bp, 48l)
     let meta_off = read_u64(bp, 16l)
     let meta_bytes = read_u64(bp, 24l)
     p.valid = (read_u32(bp, 0l) == IMAGE_MAGIC && read_u32(bp, 8l) == uint(IMAGE_PAGE)
@@ -152,6 +164,8 @@ struct DlimImageInfo {
 }
 
 var private g_family_tags : array<string>
+var private g_config_free_tags : array<string>
+var private g_family_layouts : table<string; function<() : uint64>>
 
 var private g_image_frozen = false
 
@@ -164,10 +178,21 @@ def set_image_artifacts_frozen(frozen : bool) {
 
 //! Register an image family/flavor tag (call from the family module's [init]) so
 //! ``dlim_current_identities`` — and with it every list/GC verdict — covers its images.
-def register_image_family_tag(tag : string) {
+def register_image_family_tag(tag : string; config_free : bool = false) {
     if (!has_value(g_family_tags, tag)) {
         g_family_tags |> push(tag)
     }
+    if (config_free && !has_value(g_config_free_tags, tag)) {
+        g_config_free_tags |> push(tag)
+    }
+}
+
+//! The same registration with a function answering ``layout_fingerprint`` of the family's
+//! carrier, which adds the ``STALE layout`` verdict. A function, not the value: the describe walks
+//! the whole carrier, and at [init] that walk runs on every program's init stack.
+def register_image_family_tag(tag : string; config_free : bool; layout_of : function<() : uint64>) {
+    register_image_family_tag(tag, config_free)
+    g_family_layouts[tag] = layout_of
 }
 
 //! The identities THIS box would produce right now, across flavors and quants — the CURRENT
@@ -197,12 +222,30 @@ def dlim_identity_lane(identity : string) : string {
         return identity   // malformed/pre-v7 — its own lane, never cross-matched
     }
     let quant = parts[1]
+    delete parts
+    return "{quant}#{dlim_identity_tag(identity)}"
+}
+
+//! The flavor/family tag an identity was baked under ("" when it carries none); a tag spelling
+//! its own pipes (the vulkan plan) comes back whole.
+def dlim_identity_tag(identity : string) : string {
+    var parts <- split(identity, "|")
     var tag = ""
     for (i in range(8, length(parts))) {
         tag = empty(tag) ? parts[i] : "{tag}|{parts[i]}"
     }
     delete parts
-    return "{quant}#{tag}"
+    return tag
+}
+
+// A registered family's carrier shape is knowable here, so an image whose header pins a
+// different one is provably unloadable - parse_image refuses it by fingerprint.
+def private dlim_layout_stale(p : DlimPeek) : bool {
+    var stale = false
+    g_family_layouts |> get(dlim_identity_tag(p.identity)) $(layout_of) {
+        stale = p.layout != invoke(layout_of)
+    }
+    return stale
 }
 
 def private dlim_lane_foreign(lane : string) : bool {
@@ -222,6 +265,9 @@ def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
     }
     if (p.version != IMAGE_VERSION) {
         return "STALE v{p.version}"
+    }
+    if (dlim_layout_stale(p)) {
+        return "STALE layout"
     }
     if (key_exists(current, p.identity)) {
         return "CURRENT"
@@ -732,10 +778,12 @@ def private layout_describe(var t; var d : string&) {
 // an array field's ELEMENT struct also serializes element-wise — its shape is load-bearing
 def private layout_describe_elem(var a : array<auto(TT)>; var d : string&) {
     static_if (typeinfo is_struct(type<TT>)) {
-        var tmp : TT
-        layout_describe(tmp, d)
-        d += "^"
-        delete tmp
+        unsafe {   //! the zeroed value: a nested carrier's initializer chain overflows the init script's stack, and only the type is read
+            var tmp : TT
+            layout_describe(tmp, d)
+            d += "^"
+            delete tmp
+        }
     }
 }
 
@@ -781,7 +829,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                         tag : string; quant : string; consume : bool; layout : uint64;
                         plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
     // one config snapshot serves the meta embed AND the header hash — they must agree
-    let dcfg = dlim_config_current(quant)
+    let dcfg = image_config_for(tag, quant)
     let ident = image_identity_of(dcfg, tag)
     var fend = 0ul
     var meta_off = 0ul

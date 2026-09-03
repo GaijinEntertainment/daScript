@@ -37,6 +37,7 @@ EXEMPT_FILES = {
     "history/dasLLAMA/qwen2_audio_plan.md",              # model prompt samples
     "history/dasLLAMA/audio_models_plan.md",             # model prompt samples
     "plans/dasllama-tutorials.md",                       # non-English tutorial samples
+    "plans/dasllama-tts.md",                             # IPA phoneme inventories are the subject
 }
 
 # em dash gets surrounding-space normalization; plain dashes map directly

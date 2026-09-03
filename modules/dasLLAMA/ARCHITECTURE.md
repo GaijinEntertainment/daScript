@@ -27,6 +27,8 @@ When placement charters disagree on one function, the sec.1 charter line decides
   arch-registration, support and serving charters.
 - `ARCHITECTURE_GPU.md` - sec.1.5: the GPU backend role table and the backend asymmetries.
 - `ARCHITECTURE_MEDIA.md` - sec.1.7, 1.7b: the encoder-tower, audio, ASR and vision charters.
+- `ARCHITECTURE_TTS.md` - sec.1.7c: the text-to-speech charters - the front end, the block home,
+  the shared assembly, the families and the facade.
 
 Every file under `dasllama/` appears in a companion. Two carry generated CONTENT rather
 than being generated themselves: `dasllama_env.das` holds the `[EnvConfig]` knob declarations
@@ -60,6 +62,9 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   the CPU kernel bench's fixture conditions.
 - `ARCHITECTURE_CPU_KERNELS.md` - sec.2.22-2.24: the sub-block-packed k3/k6 planes, the grid
   formats' panel and row-group decodes, and the VBMI symbol lattice.
+- `ARCHITECTURE_TTS.md` - sec.2.28-2.35: the TTS block home's two layouts, tap stacking, the
+  padded concat width, the per-synthesis carrier, the served carrier on the image rail, the
+  sine source's operation order, the heteronym context, and the rig's scoring.
 
 ## 3. Inherited invariants
 

@@ -82,3 +82,14 @@
   (`ARCHITECTURE.md#x64-tier-gates`). A name the cpuid table does not know answers false on
   every box, so every perm that requires it silently declines to its fallback and no error names
   the cause.
+
+- **A diff that adds or changes a `build_vector_*` emitter on the inline-polynomial rail
+  (`daslib/llvm_jit_intrin.das`) emits every Horner step vecmath writes unfused, through
+  `vmath_poly_step`, and reaches for `vmath_fma` only where vecmath itself fuses. It also ships
+  that emitter's cells in `tests/llvm_vector_math.das`: a divergence arm comparing the emitted
+  form lane for lane with the interpreted twin, at every vector width the emitter serves, and a
+  NaN-lane cell asserting the two rails agree on which lanes come back NaN**
+  (`ARCHITECTURE.md#vector-poly-fusion`). One contracted step in a sign-alternating chain moves
+  the result by several ulp, the rail's point is that the three tiers agree, and a clamp or a
+  conversion written with ordered compares replaces a NaN lane with a number that every accuracy
+  bound reads as success.

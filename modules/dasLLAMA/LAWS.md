@@ -96,3 +96,54 @@ side?" and then "lets make sure we do for all new CPU kernels, and if we skipped
 ones - lets ledger towards the end of this arc." Every new format's CPU kernel work starts by
 reading llama.cpp's arch kernel and racing its techniques as tune perms; the formats that
 skipped this (IQ4_XS, Q3_K) get the retroactive audit at the end of the arc (#60).
+
+## 2026-09-02 - REVIEW_TTS.md (new), REVIEW.md (the TTS routing line), followup_general.md (#72)
+
+Boris, at the TTS arc's phase-5 stopping point: "add REVIEW.md for tts. [hotpath] annotation
+on everything involved in tts generation. similar concept as how the rest of dasLLAMA does
+it. perhaps steal wording from REVIEW.md on other parts." The TTS checklist mirrors the
+audio one - the hot-path contract on the synthesis path, `[cold_path]` on debug legs, the
+GEMM-through-the-wrappers rule, the lane pin/reset duty - and adds the arc's own laws: the
+rows form ships its channel-major twin and block cell, split-invariance, one served layout
+per weight, the sine source's phase order, the rig delta per kernel or lexicon change, and
+the failing-first front-end case. Same day, on the profiling rails: "we have one which feeds
+into jobque and there is /utils/jobque-timeline which displays them ... it's
+counterproductive to keep building timing rigs" - one instrumentation rail, the jobque
+markers; `prof_add` and `asr_prof_add` retire in their own PR (#72), with the mechanical clock
+rule as a lint candidate. On the hot-path mechanism, after a helper wrapping the sizing call
+("cute. this is not a hack how?" ... "the intent of the @scratch is to provide a way to say
+'yes, this global data persists between iterations of decode\generation, and grows as needed.
+but never truly reallocated'" ... "sounds good on both"): a reused buffer is sized by the
+builtin `scratch_resize` at the site, never through a helper, and the `@scratch` mark sits on
+the callee out-parameter the buffer grows through - the checklist's scratch rule says so.
+Same day, on the q8 lane's rig receipt (kokoro WER 3.50 vs 3.41 f32, UTMOS tie): "this just
+removes 'duty to optimize f32 path'. because its more memory for no good reason" - q8 is the
+served default and f32 the reference lane, stated in `ARCHITECTURE_MEDIA.md` sec 1.7c. The
+plan's standing rule from the same arc - no lexicon or rule change lands without a rig delta -
+is why the front-end packs' mint routes to the TTS checklist: a lexicon-only diff has to open
+the rule that asks for the delta. On the rig's reference forms carrying the upstream
+normalizer's defects (a correct "kilograms" counted as an error against an expected "kg"):
+"sure. lets fix and document. if one day we'll need even better solution - we'll look into
+it" - the fixture's expected forms are hand-corrected where the upstream reading is not what
+a person says, the minter carries the table, and the reference arms are re-scored on the same
+forms (`ARCHITECTURE_MEDIA.md` sec 1.7c).
+
+- **2026-09-02** (`REVIEW_TTS.md`, `REVIEW_IMAGE.md`, `REVIEW.md`, `REVIEW_AUDIO.md`,
+  `REVIEW_PLACEMENT.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_MEASUREMENT.md`,
+  `ARCHITECTURE_IMAGE.md`, `ARCHITECTURE_MEDIA.md`, `followup_general.md`): the TTS arc's
+  review round, presented as a flashlight queue ("read flashlight agent, and lets go through
+  the rest of the info where necessary. and one thing at a time with recommendations").
+  Rulings: an over-long chunk truncates at the encoder with a log line, Kokoro's way ("A now,
+  B ledger" - the token-budget packer is row 79); a speech-only server is a serving server,
+  not setup mode; the JIT's vector `pow` inherits the dropped sign, the three tiers agreeing
+  is the contract; the sin/cos and tan emitters use `fptosi.sat`; the `_M_ARM64` C++ line is
+  ledgered (row 80); the ASR worker gets the TTS worker's load catch; the control page gains
+  the `tts` field now and the TTS counters land on `/stats`; a digit run past 18 digits reads
+  digit by digit; `mw` keeps "megawatts"; the `[hot_path]` rule names the model stages, and
+  the pin rule gains the cross-context clause ("a pin never crosses a `new_thread` boundary");
+  the rewordings above land as one batch. Earlier in the round: the facade tutorial and the
+  server demo are follow-ups (row 76), `model_specs()` rows for the three TTS models land,
+  the board cell is ledgered (row 77), the licence suffix leaves the GGUF metadata and
+  `THIRD_PARTY_NOTICES.md` carries the attribution with the licences installed ("we need to
+  add THIRD_PARTY_NOTICES for sure, and CMAKE install the licenses"), the noise seed folds the
+  chunk index, and the three reasoned kernel constants are ledgered (row 78).
