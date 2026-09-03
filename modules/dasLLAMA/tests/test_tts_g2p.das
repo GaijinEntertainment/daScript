@@ -102,8 +102,8 @@ def test_corpus_phonemes(t : T?) {
 // pipe" and "get the lead out", "bass player", "minute detail", "the does", "my resume") and the
 // names the lexicon additions of harness/g2p_local_additions.json carry
 let private BEYOND_REFERENCE <- { "ht001", "ht003", "ht010", "ht017", "ht024", "ht038",
-    "lj024", "lj027", "lj037", "ov000", "ov001", "ov006", "ov009", "ov012", "ov016", "ov017", "ov018", "ov019",
-    "ov020", "ov021", "ov022", "ov025", "ov027", "ov028" }
+    "lj024", "lj027", "lj037", "ov000", "ov001", "ov003", "ov006", "ov009", "ov011", "ov012", "ov015", "ov016",
+    "ov017", "ov018", "ov019", "ov020", "ov021", "ov022", "ov025", "ov027", "ov028" }
 
 [test]
 def test_pieces(t : T?) {

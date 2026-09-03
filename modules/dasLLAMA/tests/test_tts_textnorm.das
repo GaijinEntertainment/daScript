@@ -120,6 +120,12 @@ def test_upstream_defects_fixed(t : T?) {
     t |> run("units glued to numbers are read") @(t : T?) {
         t |> equal(normalize_text("a 5GB file at 3.6GHz in 12ms"), "a five gigabytes file at three point six gigahertz in twelve milliseconds")
         t |> equal(normalize_text("The trail is 42km long and 500 kg heavy."), "The trail is forty-two kilometers long and five hundred kilograms heavy.")
+        t |> equal(normalize_text("The measurement was 0.75 mm plus or minus 0.02 mm."), "The measurement was zero point seven five millimeters plus or minus zero point zero two millimeters.")
+        t |> equal(normalize_text("A 12 cm ruler, 5 lbs of flour, 8 oz of milk, a 6 ft fence."), "A twelve centimeters ruler, five pounds of flour, eight ounces of milk, a six feet fence.")
+    }
+    t |> run("pounds carry pence") @(t : T?) {
+        t |> equal(normalize_text("We shipped 250 units at £14.50 each."), "We shipped two hundred fifty units at fourteen pounds and fifty pence each.")   // nolint:STYLE039
+        t |> equal(normalize_text("It cost £3.01 and $3.01."), "It cost three pounds and one penny and three dollars and one cent.")   // nolint:STYLE039
     }
     t |> run("degrees survive") @(t : T?) {
         t |> equal(normalize_text("Water boils at 100°C."), "Water boils at one hundred degrees Celsius.")   // nolint:STYLE039
@@ -163,24 +169,12 @@ def test_upstream_defects_fixed(t : T?) {
 def test_corpus(t : T?) {
     t |> run("200 sentences match the reference normalizer") @(t : T?) {
         let rows <- load_tts_corpus()
-        // rows a defect fix changes: the reference output is wrong there, this is the reading
-        let fixed <- {
-            "hv017" => "The soft cushion broke the man's fall.",
-            "nm006" => "The package weighs two point five kilograms and ships tomorrow.",
-            "nm007" => "He ran the marathon in three twelve and forty-five seconds last spring.",
-            "nm008" => "The server has sixty-four gigabytes of memory and twelve cores.",
-            "nm009" => "Water boils at one hundred degrees Celsius at sea level.",
-            "nm011" => "Please read chapter twelve, pages three hundred forty to three hundred fifty-eight.",
-            "nm015" => "The recipe calls for one half cup of sugar.",
-            "nm018" => "The signal arrived one hundred fifty milliseconds after the trigger.",
-            "nm020" => "The processor runs at three point two gigahertz under load.",
-            "nm023" => "The nineteen sixties produced remarkable music.",
-            "nm025" => "The temperature dropped to five degrees Fahrenheit overnight."
-        }
+        // where the reference normalizer's reading is wrong, the fixture carries the corrected
+        // spoken form (the minter's table) and that is the reading
         var mismatches = 0
         for (r in rows) {
             let got = normalize_text(r.text)
-            let want = fixed?[r.id] ?? r.norm
+            let want = empty(r.expected) ? r.norm : r.expected
             if (got != want) {
                 mismatches++
                 t |> failure("{r.id}: got '{got}', want '{want}'")

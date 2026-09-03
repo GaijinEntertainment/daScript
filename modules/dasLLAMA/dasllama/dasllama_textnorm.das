@@ -48,6 +48,8 @@ let private ABBREVIATIONS <- {
 
 let private UNITS <- {
     "km" => "kilometers", "kg" => "kilograms", "mg" => "milligrams", "ml" => "milliliters",
+    "mm" => "millimeters", "cm" => "centimeters", "lbs" => "pounds", "oz" => "ounces", "ft" => "feet",
+    "kw" => "kilowatts", "mw" => "megawatts", "kwh" => "kilowatt hours", "rpm" => "revolutions per minute", "fps" => "frames per second",
     "gb" => "gigabytes", "mb" => "megabytes", "kb" => "kilobytes", "tb" => "terabytes",
     "hz" => "hertz", "khz" => "kilohertz", "mhz" => "megahertz", "ghz" => "gigahertz",
     "mph" => "miles per hour", "kph" => "kilometers per hour",
@@ -651,7 +653,8 @@ def private currency_words(unit : string; raw : string; scale : string) : string
         let int_words = number_to_words(int_value)
         var result = empty(unit) ? int_words : "{int_words} {plural(unit, int_value)}"
         if (cents != 0l) {
-            result = "{result} and {number_to_words(cents)} {plural("cent", cents)}"
+            let minor = unit == "pound" ? (cents == 1l ? "penny" : "pence") : plural("cent", cents)
+            result = "{result} and {number_to_words(cents)} {minor}"
         }
         return result
     }

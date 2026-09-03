@@ -5504,6 +5504,7 @@
 "category": "harvard",
 "text": "The soft cushion broke the man's fall.",
 "norm": "The soft cushion broke the man s fall.",
+"expected": "The soft cushion broke the man's fall.",
 "ps_misaki": "ðə sˈɔft kˈʊʃən bɹˈOk ðə mˈæn ˈɛs fˈɔl.",
 "ps_espeak": "ðə sˈɔːft kˈʊʃən bɹˈoʊk ðə mˈæn ˈɛs fˈɔːl.",
 "tokens": [
@@ -13208,6 +13209,7 @@
 "category": "numeric",
 "text": "Please read chapter 12, pages 340 to 358.",
 "norm": "Please read chapter twelve pages three hundred forty to three hundred fifty-eight.",
+"expected": "Please read chapter twelve, pages three hundred forty to three hundred fifty-eight.",
 "ps_misaki": "plˈiz ɹˈid ʧˈæptəɹ twˈɛlv pˈAʤᵻz θɹˈi hˈʌndɹəd fˈɔɹTi tə θɹˈi hˈʌndɹəd fˈɪftiˌAt.",
 "ps_espeak": "plˈiz ɹˈid tʃˈæptɚ twˈɛlv pˈeɪdʒᵻz θɹˈi hˈʌndɹəd fˈɔːɹɾi tə θɹˈi hˈʌndɹəd fˈɪftiˌeɪt.",
 "tokens": [

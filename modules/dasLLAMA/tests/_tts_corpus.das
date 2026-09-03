@@ -22,6 +22,7 @@ struct TtsCorpusRow {
     category : string
     text : string
     norm : string
+    expected : string   // the hand-corrected spoken form where `norm` is not what a person says; "" elsewhere
     ps_misaki : string
     ps_espeak : string
     tokens : array<array<string>>

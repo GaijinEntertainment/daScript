@@ -364,9 +364,10 @@ wblob provably too small to carry the expansion) and a K-quant table on its nati
 plus a greedy chat turn per serving mode on the E2B Q8_0 carrier - a q8 control, an fp32 turn,
 and a `q4_0` turn, the `q4_0` one proving q4 serving has a per-layer-embedding rail.
 `test_tts_textnorm.das` - model-free: the TTS text normalizer - the number, ordinal, year and
-decimal readers, the reference normalizer's own examples, the twelve fixed upstream defects as
+decimal readers, the reference normalizer's own examples, the fixed upstream defects as
 failing-first cases, and the 200-sentence corpus (`_tts_fixtures/g2p_corpus.json`, loaded by
-`_tts_corpus.das`) against the reference normalizer's output, idempotence included.
+`_tts_corpus.das`) against the reference normalizer's output - or the fixture's hand-corrected
+`expected` form where that output is not what a person says - idempotence included.
 `test_tts_postag.das` - model-free suite; model-gated (`tts_postag.bin` in the models dir): the
 TTS tokenizer token-for-token against the reference tokenizer on the corpus, the tagger's
 agreement with the reference tagger (overall and on the heteronym words), the packed file's

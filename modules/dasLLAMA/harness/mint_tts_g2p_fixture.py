@@ -19,10 +19,12 @@ import json, os, sys
 # their symbols, a fraction read digit by digit, a duration glued to the next word, a decade
 # misspelled, pence called cents. Hand-corrected; the reference arms are re-scored on the same.
 CORRECTED_EXPECTED = {
+    "hv017": "The soft cushion broke the man's fall.",
     "nm006": "The package weighs two point five kilograms and ships tomorrow.",
     "nm007": "He ran the marathon in three twelve and forty-five seconds last spring.",
     "nm008": "The server has sixty-four gigabytes of memory and twelve cores.",
     "nm009": "Water boils at one hundred degrees Celsius at sea level.",
+    "nm011": "Please read chapter twelve, pages three hundred forty to three hundred fifty-eight.",
     "nm015": "The recipe calls for one half cup of sugar.",
     "nm018": "The signal arrived one hundred fifty milliseconds after the trigger.",
     "nm020": "The processor runs at three point two gigahertz under load.",
