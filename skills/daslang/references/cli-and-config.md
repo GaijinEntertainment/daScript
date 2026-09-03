@@ -83,6 +83,9 @@ interpreter wires it to `-?` instead:
 help : bool
 ```
 
+A `-lib` library never owns argv at all: the host's process arguments are whatever the host was
+started with, so a library reads its configuration from its C parameters, not from `clargs`.
+
 Only an `-exe` binary owns argv, so `-h` / `--help` - and `parse_args_with_help`'s automatic help
 flag - are reachable only there.
 

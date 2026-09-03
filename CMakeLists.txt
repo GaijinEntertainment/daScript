@@ -1631,6 +1631,9 @@ if (NOT ${DAS_TOOLS_DISABLED})
     # test time + dasModuleSQLITE; both must already be defined as targets).
     add_subdirectory(tests/exe-paths)
 
+    # daslang -lib integration test: a C host against the generated header (needs daslang + LLVM).
+    add_subdirectory(tests/lib-capi)
+
     # Build daslang utilities as standalone executables (-exe mode)
     add_subdirectory(utils)
 

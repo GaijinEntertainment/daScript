@@ -30,7 +30,7 @@ def scale(v : Vec3; k : float) : Vec3 {
 
 [export_c]
 def bump(var v : Vec3) {
-    v.x += 1.0
+    v.x ++
 }
 
 [export_c]

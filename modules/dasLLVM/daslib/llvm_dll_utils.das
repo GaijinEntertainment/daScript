@@ -312,6 +312,21 @@ def public add_exe_extension(path : string) {
     return "{path}.exe"
 }
 
+//! A native shared library's file name on THIS platform - unlike add_dll_extension, which spells
+//! .dll everywhere because the jit's own cache is named, not shipped.
+def public add_shared_lib_extension(path : string) {
+    let plat = get_platform_name()
+    if (plat == "windows") {
+        return "{path}.dll"
+    }
+    return plat == "darwin" ? "{path}.dylib" : "{path}.so"
+}
+
+//! A static archive's file name on THIS platform.
+def public add_static_lib_extension(path : string) {
+    return get_platform_name() == "windows" ? "{path}.lib" : "{path}.a"
+}
+
 def public get_dll_by_path(path : string) : DLLHandle? {
     return new DLLHandle(handle = load_dynamic_library(add_dll_extension(path)))
 }

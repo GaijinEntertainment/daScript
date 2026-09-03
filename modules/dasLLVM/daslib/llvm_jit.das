@@ -88,7 +88,7 @@ def set_debug_linkage(value : LLVMOpaqueValue?) {
     LLVMSetLinkage(value, LLVMLinkage.LLVMInternalLinkage)
 }
 
-def set_public_linkage(value : LLVMOpaqueValue?) {
+def public set_public_linkage(value : LLVMOpaqueValue?) {
     LLVMSetLinkage(value, LLVMLinkage.LLVMDLLExportLinkage)
     LLVMSetDLLStorageClass(value, LLVMDLLStorageClass.LLVMDLLExportStorageClass)
 }

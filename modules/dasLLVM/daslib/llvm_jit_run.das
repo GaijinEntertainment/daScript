@@ -7,6 +7,8 @@ options no_global_variables = false
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_dll_utils
 require llvm/daslib/llvm_exe
+require llvm/daslib/llvm_lib
+require daslib/c_api_header
 require llvm/daslib/llvm_aot
 require llvm/daslib/llvm_jit
 require llvm/daslib/llvm_jit_common
@@ -41,7 +43,7 @@ let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x6aul   // srem/urem for 32-bit % (0x69
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x636870d5283981a3ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xe170b29b6bfb7760ul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -727,7 +729,10 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         to_log(LOG_WARNING, "LLVM JIT: dll mode requested but this daslang build is static - no DLL cache, " +
             "every run pays full in-memory codegen\n")
     }
-    let gen_exe = prog.policies.jit_exe_mode
+    // A -lib shares every exe codegen decision (private wrappers, load-resolved globals, no dll
+    // cache); only the entry emitter and the artifact differ, so it rides the same flag.
+    let gen_lib = prog.policies.jit_lib_mode
+    let gen_exe = prog.policies.jit_exe_mode || gen_lib
     // Drives the $::is_standalone_exe JIT intrinsic in llvm_jit_intrin so daslang
     // code can constant-fold to true when this codegen run produces a standalone exe.
     llvm_jit_intrin::g_jit_exe_mode = gen_exe
@@ -783,6 +788,13 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     // script-level `options jit_target = "..."`.
     let opt_target = (prog._options |> find_arg("jit_target")) ?as tString ?? ""
     let target_triple = cli_opts.target |> unwrap_or(opt_target)
+    let lib_static = cli_opts.lib_static |> unwrap_or(false)
+    if ((cli_opts.lib_static |> is_some()) && !gen_lib) {
+        to_log(LOG_WARNING, "LLVM JIT: --jit-lib-static applies to -lib only - ignored for this run\n")
+    }
+    if (gen_lib && !(target_triple |> empty())) {
+        panic("LLVM LIB: -lib does not cross-compile (--jit-target) - build the library on its target host")
+    }
     let gen_wasm = gen_exe && (target_triple |> starts_with("wasm"))
     // Optional CLI override for the wasm runtime archive location. Falls
     // back to `options jit_runtime_lib = "..."` then write_wasm's
@@ -857,10 +869,10 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     unsafe {
         delete disableJitVisitor
     }
-    // emit_aot_object always writes an object even with no functions to emit (a fully-no_aot
-    // module): an empty .o with just the fileinfo ctor, so the build always has the file it
-    // expects and those functions interpret at load (as Program::linkCppAot skips them).
-    if (!empty(funcs) || emit_aot_object) {
+    // emit_aot_object and gen_lib emit even with nothing to jit: the first writes an empty .o so
+    // the build has the file it expects (those functions interpret at load, linkCppAot skips them),
+    // the second owes its caller a library or a diagnostic - producing neither reads as success.
+    if (!empty(funcs) || emit_aot_object || gen_lib) {
         let totalTime = ref_time_ticks()
         // the front end's log_compile_time option extends into the backend: per-phase wall below
         let log_jit_time = prog._options |> find_arg("log_compile_time") ?as tBool ?? prog.policies.log_compile_time
@@ -957,7 +969,17 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, lto_probe ? "" : dll_hash_basename, sres.objs)
         } elif (recompile_prog) {
             jit_has_externals = irgen_functions(ctx, uids, attrs, funcs, jit_flags, jit_mode, prog)
-            if (gen_exe) {
+            if (gen_lib) {
+                let res = inject_lib(ctx, g_ctx, prog, g_mod, g_prim_t, uids, exe_strict,
+                    prog.policies.export_public_functions, cli_opts.register_all_modules |> unwrap_or(false))
+                LINK_WHOLE_LIB = res.link_whole_lib
+                if (res.fn == null) {
+                    // A build rule consumes this artifact, so a failure has to reach it as a
+                    // non-zero exit; the emitter already named what went wrong.
+                    finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
+                    panic("LLVM LIB: no library written for {output_path}")
+                }
+            } elif (gen_exe) {
                 let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict,
                     cli_opts.register_all_modules |> unwrap_or(false))
                 LINK_WHOLE_LIB = res.link_whole_lib
@@ -999,6 +1021,15 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 to_log(LOG_INFO, "LLVM JIT: compile-only - module built, optimized and verified; no artifact written, nothing installed\n")
             } elif (emit_aot_object) {
                 emit_object_only(g_mod, output_path, use_host_cpu)
+            } elif (gen_lib) {
+                mkdir_rec(dir_name(output_path))
+                write_lib(g_mod, output_path, path_to_shared_lib, path_to_linker, linker_string,
+                    LINK_WHOLE_LIB, exe_host_cpu, debug_info, lib_static, log_jit_time)
+                let lib_names = CNames(prefix = lib_symbol_prefix(prog), this_module = prog.getThisModule)
+                if (!emit_c_header(g_lib_exports, lib_names, string(prog.getThisModule.fileName),
+                        output_path, lib_link_note(lib_static, LINK_WHOLE_LIB))) {
+                    panic("LLVM LIB: the library is written but its C header is not - {output_path}.h")
+                }
             } elif (gen_wasm) {
                 mkdir_rec(dir_name(output_path))
                 // path_to_linker is reused as the optional emcc override

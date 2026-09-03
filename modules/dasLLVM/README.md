@@ -81,6 +81,42 @@ cached DLL for instant execution.
 - By default, the `dll` is stored in `.jitted_scripts/`.
 - This can be changed using `jit_output_path`.
 
+## Native library with a C API (`-lib`)
+`-lib` emits a native library plus the C header a host calls it through, so a
+program that only needs to *call* one script links no daslang API:
+
+```sh
+./bin/daslang -lib script.das -output build/script
+```
+
+writes `build/script.so` (`.dylib` / `.dll`) and `build/script.h`. Add
+`-- --jit-lib-static` for a `.a` / `.lib` archive instead; the generated header
+records what a host then links.
+
+Which functions cross the boundary: `[export_c]` marks them one at a time, and
+`-lib-export-all` offers every public function of the entry module whose
+signature C can spell (naming the ones it skips). Every library gets the same
+four entry points, prefixed with the script's name:
+
+```c
+script_ctx * script_create(void);
+void script_destroy(script_ctx * ctx);
+const char * script_last_error(script_ctx * ctx);
+void script_shutdown_runtime(void);
+```
+
+One instance owns one daslang context - its own globals, heap and string heap - and `_create`
+works on any thread. A second daslang library in one process declines: its `_create` returns NULL
+with the reason in `_last_error(NULL)`.
+Scalars, `string`, pointers and enums cross by value; structures and the
+`float2`..`uint4` / `range` families cross as `const T *` and return through a
+trailing `T * out`. A daslang panic returns zero, leaves `out` untouched, and
+shows up in `script_last_error(ctx)` until the next call clears it.
+
+Codegen is the same as `-exe`: the same private wrappers, the same
+load-resolved globals, no DLL cache. Cross-compilation is not supported here -
+build the library on its target host.
+
 ## Cross-compilation (WebAssembly)
 The JIT pipeline can emit a non-host target instead of running on the host.
 The supported cross-target is `wasm32-unknown-emscripten` (the default when no

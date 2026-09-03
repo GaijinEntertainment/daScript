@@ -393,6 +393,13 @@ def private describe_params(var fn : Function?; names : CNames; var out : array<
 }
 
 
+def private returns_cmres(var fn : Function?) : bool {
+    //! `ast_boost::isCMRES` for a borrowed pointer. A raw-pointer overload there would make every
+    //! existing call ambiguous - a smart pointer converts to one too - so this stays local.
+    return fn.flags.copyOnReturn || fn.flags.moveOnReturn
+}
+
+
 def public describe_c_signature(var fn : Function?; names : CNames; c_name : string) : tuple<exp : CExport; reject : CReject> {
     //! Describes one function at the C boundary, or reports the first type that has no C spelling.
     var params : array<CParam>
@@ -405,14 +412,9 @@ def public describe_c_signature(var fn : Function?; names : CNames; c_name : str
     if (!rt.ok || peel(fn.result).baseType == Type.tFixedArray) {
         return (exp = CExport(), reject = CReject(what = "result", why = fn.result.describe()))
     }
-    let res = CResult(c_type = rt.spelling, via_out = rt.by_pointer, cmres = isCMRES_result(fn))
+    let res = CResult(c_type = rt.spelling, via_out = rt.by_pointer, cmres = returns_cmres(fn))
     return (exp = CExport(fn = fn, c_name = c_name, das_signature = das_signature_of(fn),
         params <- params, result = res), reject = CReject(ok = true))
-}
-
-
-def private isCMRES_result(var fn : Function?) : bool {
-    return fn.flags.copyOnReturn || fn.flags.moveOnReturn
 }
 
 
