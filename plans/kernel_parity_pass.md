@@ -1200,7 +1200,7 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   activation and the residual step of the last layer take a region 32 rows below the window's
   end: 32 rather than one because the s tile's fast path loads a whole 32-row column unclamped
   and the resident planes carry no read slack. Plumbing: `fill_arena_batch_sched` row base,
-  `ActArgs.base`, `ArArgs.row0`; f16-fed cm2 route only. The first cut shipped a bug the tier
+  `ActArgs.elem0`, `ArArgs.row0`; f16-fed cm2 route only. The first cut shipped a bug the tier
   suite (36/36) did not see and the bench's sanity line did: the sliced down GEMM (2048 wide,
   K 8192) still qualified for split-k, and the split-k reduce sums dense planes from row 0, so
   the classifier read stale rows (argmax 2242 " config" against every earlier run's 319). A

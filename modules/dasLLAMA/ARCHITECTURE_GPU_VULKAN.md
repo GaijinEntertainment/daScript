@@ -24,7 +24,7 @@ requant and the classifier.
 final layer reads more than the last row - the classifier requantizes row `wlen - 1`, the KV
 mirrors were stored before the FFN, and a later window starts from fresh embeddings - so the
 gate, up and down GEMMs, the activation and the residual step of the last layer take a region
-starting 32 rows below the window's end (`fill_arena_batch_sched`'s `row0`, `ActArgs.base`,
+starting 32 rows below the window's end (`fill_arena_batch_sched`'s `row0`, `ActArgs.elem0`,
 `ArArgs.row0`). Thirty-two, not one, because the s tile's fast path loads a whole 32-row
 column unclamped and the resident prefill's activation planes (`pf_xf`, `pf_hf`) carry no read
 slack past the window - unlike the MoE chain's gathered image and hidden plane, which sec.2.2l
