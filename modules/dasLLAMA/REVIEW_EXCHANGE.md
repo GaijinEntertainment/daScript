@@ -9,7 +9,9 @@ list together with `REVIEW.md`'s.**
 
 **Never add a second HTTP path to the sidecar exchange - every HTTP call (lookup, download,
 submit) goes through `dasllama/dasllama_exchange.das`.** The mechanical half (no second
-`dashv` requirer under the module) is `performance/REVIEW.das`'s to enforce.
+`dashv` requirer in the engine; `harness/` is out of its scope, since a measurement harness
+talks HTTP to a reference server, never to the exchange) is `performance/REVIEW.das`'s to
+enforce.
 
 **Weakening the exchange download gate, the submission strip, or the submit rails is a
 defect.** The download gate checks content sha, schema, and `DASLLAMA_RELEASE`. The submit

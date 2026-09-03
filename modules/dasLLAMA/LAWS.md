@@ -110,3 +110,9 @@ skipped this (IQ4_XS, Q3_K) get the retroactive audit at the end of the arc (#60
   magnitude and the bench stamps such cells distinctly; the device-plus-MSL-hash twin cache with a
   lazy race is its own PR after the MTP arc.
 
+- **2026-09-03** (`REVIEW_EXCHANGE.md`, `performance/REVIEW.das`): the single-exchange-client
+  gate flagged the MTP ruler's `dashv` require (it drives a stock llama-server over HTTP for
+  the speculative-decoding comparison). Boris: "the review.das gate on dasHV - i think we should
+  adjust. for that llama-server thing." The gate's scope is the engine; `harness/` is carved
+  out, the rule says why.
+

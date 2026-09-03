@@ -38,15 +38,19 @@ def private walk_das_files(folder : string; var out : array<string>) {
 }
 
 // one exchange client: every HTTP call to the sidecar exchange goes through
-// dasllama_exchange.das - a second dashv requirer under the module is a second HTTP path
+// dasllama_exchange.das - a second dashv requirer in the engine is a second HTTP path. The
+// harness folder is out of scope: a measurement harness talks HTTP to a reference server
+// (the MTP ruler drives a stock llama-server), never to the exchange.
+let private HARNESS_ROOT = "{MODULE_ROOT}/harness/"
+
 def private check_single_exchange_client {
     var files : array<string>
     walk_das_files(MODULE_ROOT, files)
     for (f in files) {
-        continue if (f == EXCHANGE_CLIENT)
+        continue if (f == EXCHANGE_CLIENT || (f |> starts_with(HARNESS_ROOT)))
         for (req in das_requires(f)) {
             if (req |> starts_with("dashv")) {
-                gate_finding(f, "requires '{req}' - {EXCHANGE_CLIENT} is the single exchange client; a second HTTP path under the module is a defect")
+                gate_finding(f, "requires '{req}' - {EXCHANGE_CLIENT} is the single exchange client; a second HTTP path in the engine is a defect (a harness talking to a reference server lives under harness/)")
             }
         }
     }

@@ -1,10 +1,10 @@
 {
 	"meta" : {
-		"head" : "/Users/dasbox/models/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+		"head" : "~/models/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
 		"depths" : "1,2",
 		"ngl" : 99,
-		"model" : "/Users/dasbox/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-		"lcpp_server" : "/Users/dasbox/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
+		"model" : "~/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+		"lcpp_server" : "~/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
 		"das_exe" : "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench",
 		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",
 		"das_sha" : "e58e5a3ba",

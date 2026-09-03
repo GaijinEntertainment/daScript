@@ -1,10 +1,10 @@
 {
 	"meta" : {
-		"head" : "/Users/borisbatkin/Work/llama.cpp/models/mtp-Qwen3.8-27B-Q8_0.gguf",
+		"head" : "~/Work/llama.cpp/models/mtp-Qwen3.8-27B-Q8_0.gguf",
 		"depths" : "1",
 		"ngl" : 0,
-		"model" : "/Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf",
-		"lcpp_server" : "/Users/borisbatkin/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
+		"model" : "~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf",
+		"lcpp_server" : "~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
 		"das_exe" : "",
 		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",
 		"das_sha" : "6bacf485d",

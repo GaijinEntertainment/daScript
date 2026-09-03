@@ -1,10 +1,10 @@
 {
 	"meta" : {
-		"head" : "/Users/borisbatkin/Work/llama.cpp/models/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+		"head" : "~/Work/llama.cpp/models/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
 		"depths" : "1,2",
 		"ngl" : 99,
-		"model" : "/Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-		"lcpp_server" : "/Users/borisbatkin/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
+		"model" : "~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+		"lcpp_server" : "~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server",
 		"das_exe" : "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench",
 		"corpus" : "modules/dasLLAMA/benchmarks/data/code1_prompts.txt",
 		"das_sha" : "d96b153dd",
