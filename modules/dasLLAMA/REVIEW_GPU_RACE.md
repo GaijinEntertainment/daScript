@@ -35,12 +35,12 @@ kernels on one queue and compares their outputs.
 small enough to sit in cache ranks the kernels by an effect production never sees, and the
 race then picks the slower kernel.
 
-**A race or tune sweep that mints a runtime crown (the winner recorded in the box profile,
-which the served graph then dispatches) or a tune-sidecar row for a kernel the batched decode
-driver (`dasllama/dasllama_<gpu>_decode.das`) dispatches times that kernel at every verify
-width - every row count from 2 to `MTP_MAX_ROWS - 1` (`dasllama/dasllama_common.das`), the rows
-one speculative round checks in one batch.** The verify widths are a production shape of their
-own, and a crown timed at one row alone sends the verify through the single-row form.
+**A race times a kernel at every verify width - every row count from 2 to `MTP_MAX_ROWS - 1`
+(`dasllama/dasllama_common.das`), the rows one speculative round checks in one batch - when it
+mints that kernel's runtime crown or tune-sidecar row and the batched decode driver
+(`dasllama/dasllama_<gpu>_decode.das`) dispatches it.** A runtime crown - the winner the box
+profile records and the served graph dispatches - timed at one row alone sends the verify
+through the single-row form.
 
 **A kernel A/B race arm that mints a runtime crown or a tune-sidecar row binds a DIFFERENT
 output buffer for consecutive dispatches of its chain, never one shared output.** One shared

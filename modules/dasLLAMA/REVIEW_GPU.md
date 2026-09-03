@@ -1,7 +1,7 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_PREFILL.md`, `ARCHITECTURE_GPU_VULKAN.md`.
+docs: the folder's `ARCHITECTURE_GPU*.md` set.
 
 **Routed from `REVIEW.md`: a diff touching a GPU kernel, driver, dispatch class, or the K/V
 mirrors applies this list together with `REVIEW.md`.**
@@ -28,13 +28,15 @@ Stamped means the guard is carried by a `@template_constant` - a `static_if` blo
 select on the constant. The instance stamped without the guard shows no guard in its generated
 `*_msl` global.
 
-**A kernel main loop that steps one fixed-size chunk at a time and never checks for a partial
-last chunk declares the alignment it assumes as `requires = "<lhs> % N"` on its
-`[metal_dispatch]`, `lhs` a `params=` name or a kargs field.** The generated builder then trips
-on the first misaligned dispatch instead of reading the next row.
+**A `[metal_dispatch]` kernel whose main loop steps one fixed-size chunk at a time and never
+checks for a partial last chunk declares each alignment it assumes as one `<lhs> % N` item in
+`requires =`, comma-separated, `lhs` a `params=` name or a kargs (kernel-argument struct)
+field.** The generated builder then trips on the first misaligned dispatch instead of reading
+the next row.
 
-**A driver that routes shapes around a kernel whose main loop takes no partial last chunk gates
-each dispatch site on that site's own modulus, never on one gate covering every site.**
+**A driver that keeps misaligned shapes off a kernel whose main loop steps one fixed-size chunk
+and never checks for a partial last chunk gates each dispatch site on the chunk size that
+site's kernel steps, never on one gate covering every site.**
 
 **Never let a `matmul2d` left or right operand reach the op as `float` outside a kernel class
 stamped `[metal_kernel(float_a_ok=true)]` - convert it in the pass that writes the operand's
@@ -72,7 +74,8 @@ complete the op.
 **An encoder that picks a kernel form whose loop carries no bounds or tail guard - stamped
 without one, or generated from a template instance that has none - shows that every address the
 form touches stays inside its buffers' allocations.** A `requires =` contract on the class is
-that showing for the dimension it names; one extent dividing evenly is not. A padded
+that showing for the dimension it names; an unchecked claim that an extent divides evenly is
+not. A padded
 chunk's walk can run past the live extent, and one poisoned read in a shared tile corrupts
 real rows; a deliberate tail over-read conforms only where the allocation carries the slack.
 

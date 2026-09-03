@@ -17,7 +17,8 @@ script whose output is a measured wall or rate.
 per arm, best-of across rounds.** A race is an instrument that compares two implementations.
 Two separate runs measure how the machine changed between them as much as they measure the
 arms; `race_pair_ms` (`../dasllama/dasllama_metal_common.das`) is the engine-side helper that
-carries both properties, and `../REVIEW_GPU_RACE.md` binds the clock burn.
+carries both properties. A diff that adds or changes a GPU race arm applies
+`../REVIEW_GPU_RACE.md` too.
 
 **A diff that adds or changes a race arm offered as the reason to adopt a change proves the
 arm's output on its report line, by what the arm computes:** an arm producing no comparable
@@ -81,8 +82,8 @@ tell.
 **A diff that adds or changes an A/B arm - one of the two runs an instrument makes with one
 named lever off, then on - makes that instrument exit non-zero when the lever does not change
 what the run executes.** A lever is the flag or environment switch the ON arm turns on; a lever
-that silently no-ops turns an unmeasured cell into a 1.00x row nobody can tell from a real tie.
+that silently no-ops prints a 1.00x row nobody can tell from a real tie.
 
 **An A/B instrument over a prompt corpus reports one row per prompt, never one aggregate
-ratio alone.** Prompts differ in how much the lever helps, so a per-prompt loss hides inside a
-winning mean.
+ratio alone.** Prompts differ in how much the toggled flag helps, so a per-prompt loss hides
+inside a winning mean.
