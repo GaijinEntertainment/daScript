@@ -38,11 +38,15 @@ root) defines and no `id="..."` in those files declares - is a defect.**
 **A statement on a page here about what a shipped tool does is a defect unless it matches
 the current code.**
 
-**A claim in a `_news/*.md` entry that is not true at publish time is a defect, including a
-claim about what a page here renders - check that one against the page's markup and
-`files/dasllama-io.js`.**
+**A claim in a `_news/*.md` or `_stories/*.md` entry that is not true at publish time is a
+defect, including a claim about what a page here renders - check that one against the
+page's markup and `files/dasllama-io.js`.**
 
-**A `_news/*.md` entry for something not yet shipped is a defect.**
+**A `_news/*.md` or `_stories/*.md` entry for something not yet shipped is a defect.**
+
+**A figure in a `_stories/*.md` entry that names no date and build sha for the run it came
+from - in the entry's own text or its figures comment - is a defect**; a story is a dated
+one-day experiment, and a number without its day reads as a standing claim.
 
 **A value `files/dasllama-io.js` takes from `/api/*` and puts into markup without the
 context-correct escape is a defect: `esc()` (which escapes `< > & " '`) for text and for

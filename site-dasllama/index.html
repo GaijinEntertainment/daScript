@@ -24,7 +24,7 @@
 <div class="dio-nav__left">
 <button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<div class="dio-tabs"><a class="dio-tab is-active" href="/">home</a><a class="dio-tab" href="ladder.html">ladder</a><a class="dio-tab" href="sidecars.html">sidecars</a></div>
+<div class="dio-tabs"><a class="dio-tab is-active" href="/">home</a><a class="dio-tab" href="stories.html">stories</a><a class="dio-tab" href="ladder.html">ladder</a><a class="dio-tab" href="sidecars.html">sidecars</a></div>
 </div>
 <div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
 </div></div></nav>
@@ -63,32 +63,25 @@
 <div id="dio-feed-items">
 <!-- news:begin — everything between the markers is generated from _news/*.md by
      build_news.py (run at deploy AND checked in, so preview matches production) -->
-<article class="dio-item dio-item--lead is-open" id="n-2026-08-30-apple-m5" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-08-30</span><span class="dio-item__tag">hardware</span><h2 class="dio-item__title">Apple M5 support lands - text, vision and speech, tuned on the new silicon.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
-<div class="dio-item__body"><!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max, minted 2026-08-30)
-     and m4.json (M4, 2026-08-31), rendered on the board from the same records -->
-<p>dasLLAMA now treats the Apple M5 as a first-class target. The Metal kernels pick up the
-M5's GPU tensor units through the Metal 4 tensor API wherever the per-box tune races crown
-them, the vision towers and the speech-to-text encoders serve on the GPU, and the CPU lane
-learned the M5 Max's all-compute core layout - 6 "Super" plus 12 "Performance" cores, the
-pool spanning both tiers with decode parking the slower one; on the M4 the efficiency
-cores stay excluded. Both core gates were verified live this sweep.</p>
-<p>The full M5 Max board is re-minted and on the <a href="https://daslang.io/dasllama.html">board</a>
-(pp512 / tg128, Metal, llama-bench protocol): gemma-4-E2B Q8_0 - das 9074.3 / 161.3
-tok/s, llama.cpp 7413.4 / 137.0; Qwen3.8-27B - das 913.9 / 27.8, llama.cpp 752.1 / 25.4;
-Qwen3-30B-A3B - das 3752.9 / 165.7, llama.cpp 3422.4 / 137.0; gpt-oss-20b - das 3995.1 /
-162.7, llama.cpp 3476.6 / 149.0. The other modalities ride the same rails: the
-gemma-4-12B image encode lands at 7.1 ms against the reference's 95 ms, the Qwen2.5-Omni
-window ViT at 106 ms against 118, and whisper large-v3-turbo transcribes jfk in 140 ms
-against whisper-cli's 153 on the same GPU. The M4 board rows are refreshed alongside,
-including Canary-Qwen on its new Q8_0 serving artifact - jfk in 307.6 ms on the M5 and
-512.9 on the M4, beside the NeMo torch-MPS reference's 704.7 and 1076.5; on the long gb1
-clip the das row reads 6484 ms beside the reference's 4383 - the one remaining gap on long
-audio, and the next dig. The M1 board stands unchanged as the long-term record, its Canary
-rows retiring with the old decoder artifact.</p>
-<p>Bringing a new chip up one model at a time - watching kernels tuned for one generation
-get re-raced, re-crowned, and here and there rewritten for the next - has been genuinely
-fun.</p></div>
+<article class="dio-item dio-item--lead is-open" id="n-2026-09-03-mtp-on-mac" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-09-03</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">Speculative decoding lands on Metal - Qwen 3.8&#x27;s NextN head and Gemma 4&#x27;s assistant drafter.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>Both drafter families that ship with their models now run on any Apple GPU dasLLAMA runs
+on, and the depth is a per-box knob the tuner mints. Measured against a stock llama.cpp on
+identical rendered prompts: gemma-4-26B-A4B on an M5 Max goes 122.7 to 145.9 tok/s at depth
+1 (llama.cpp 97.7 to 133.7), Qwen3.8-27B on an M4 Pro 12.7 to 14.0 (llama.cpp 11.5 to 13.8).
+How we measured, what we tried, and why the gain is as small as it is:
+<a href="stories.html#s-2026-09-03-mtp-on-mac">the story</a>.</p></div>
+</article>
+<article class="dio-item" id="n-2026-08-30-apple-m5" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-08-30</span><span class="dio-item__tag">hardware</span><h2 class="dio-item__title">Apple M5 support lands - text, vision and speech, tuned on the new silicon.</h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max, minted 2026-08-30) -->
+<p>dasLLAMA now treats the Apple M5 as a first-class target: the Metal 4 tensor units where the
+per-box race crowns them, the vision and speech encoders on the GPU, and the CPU lane on the
+M5 Max's all-compute core layout. The full M5 Max board is re-minted and on the
+<a href="https://daslang.io/dasllama.html">board</a> - gemma-4-E2B Q8_0 at 9074.3 / 161.3 tok/s
+(llama.cpp 7413.4 / 137.0), Qwen3.8-27B at 913.9 / 27.8 (752.1 / 25.4), pp512 / tg128 on
+Metal. Bringing a chip up one model at a time, and why it was fun:
+<a href="stories.html#s-2026-08-30-apple-m5">the story</a>.</p></div>
 </article>
 <article class="dio-item" id="n-2026-08-18-qwen38-27b" onclick="this.classList.toggle('is-open')">
 <div class="dio-item__head"><span class="dio-item__date">2026-08-18</span><span class="dio-item__tag">models</span><h2 class="dio-item__title">Qwen 3.8 27B joins the board - the new dense hybrid runs on CPU and Metal.</h2><span class="dio-item__chev">▾</span></div>
@@ -143,7 +136,7 @@ scoreboard and carries official measurements only.</p></div>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
 <p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
 </div>
-<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="stories.html">stories</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
 <div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a><a class="dio-footer__link" href="https://daslang.io/playground/index.html">playground</a></div>
 <div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
 <div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>

@@ -54,3 +54,10 @@ compacted, or cited as rules.
   (the round-2 form had become a statement); the dl-* residue names the id subtraction and
   the selector-only definition; the page-census WHY says what each miss costs. The metadata
   test's three page lists became one `PAGES` census the gate reads.
+
+- **2026-09-02** (`REVIEW.md`): Boris ruled the site gets a "stories" page - long-form,
+  "Boris and Claude" voice, "this is how we measured, this is what it looks like, these are
+  the acceptance numbers, this is where the prompts are from ... and a date and sha of the
+  build. this is when we tried, this is what it was on that day" - with llama.cpp named as
+  the yardstick, "not a competition". The two `_news` truth rules extend to `_stories`, and
+  a story figure without its date and sha is a defect.

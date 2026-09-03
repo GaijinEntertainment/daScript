@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>stories — dasllama.io</title>
+<meta name="description" content="How dasLLAMA is built and measured, one arc at a time — what we tried, how we measured it, the tables, the commands, the date and the build. Written by Boris and Claude."/>
+<meta property="og:title" content="dasllama.io stories"/>
+<meta property="og:description" content="What we tried, how we measured it, the tables, the commands, the date and the build."/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://dasllama.io/stories.html"/>
+<link rel="canonical" href="https://dasllama.io/stories.html"/>
+<link rel="icon" href="files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="stylesheet" href="files/fonts/fonts.css"/>
+<link rel="stylesheet" href="files/forge.css"/>
+<link rel="stylesheet" href="files/dasllama-table.css"/>
+<link rel="stylesheet" href="files/dasllama-io.css"/>
+<script src="files/dasllama-io.js" defer></script>
+<script src="files/github-star.js" defer></script>
+<!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="stories.html">stories</a><a class="dio-tab" href="ladder.html">ladder</a><a class="dio-tab" href="sidecars.html">sidecars</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+</div></div></nav>
+
+<header class="dio-head"><div class="forge-container"><div class="dio-head__row">
+<div>
+<h1>Stories from the <em>build.</em></h1>
+<p class="dio-head__lede">dasLLAMA is written by Boris and Claude: Boris sets the direction, runs the boxes and rules on the trade-offs; Claude writes the code, the tests and the measurements. Not a line of the engine is hand-written, and we say so. Each story here is one arc of that work - what we tried, how we measured it, the tables, the commands as they ran, and the date and build they ran on. Numbers are what they were that day; the <a href="ladder.html">ladder</a> is where the current ones live.</p>
+</div>
+</div></div></header>
+
+<section class="forge-section" style="padding:12px 0 64px;border-top:0">
+<div class="forge-container">
+<div id="dio-stories">
+<!-- stories:begin — everything between the markers is generated from _stories/*.md by
+     build_news.py (run at deploy AND checked in, so preview matches production) -->
+<div class="forge-blog-list dio-story-list">
+<a class="forge-blog-item" href="#s-2026-09-03-mtp-on-mac"><span class="forge-blog-item__date">2026-09-03</span><span class="forge-blog-item__tag">engine</span><span class="forge-blog-item__title">Speculative decoding on a Mac - what we tried, how we measured it, and how small the gain is.</span><span class="forge-blog-item__excerpt">Two models that ship their own drafters, two Apple GPUs, one ruler laid against llama.cpp on identical prompts. The honest core of the story is the arithmetic of a round.</span></a>
+<a class="forge-blog-item" href="#s-2026-08-30-apple-m5"><span class="forge-blog-item__date">2026-08-30</span><span class="forge-blog-item__tag">hardware</span><span class="forge-blog-item__title">Bringing up the Apple M5, one model at a time.</span><span class="forge-blog-item__excerpt">A new chip arrives, forty kernel families get re-raced, some get re-crowned, a few get rewritten. Why that week was fun.</span></a>
+</div>
+<article class="dio-story" id="s-2026-09-03-mtp-on-mac">
+<div class="dio-story__eyebrow"><span class="dio-item__date">2026-09-03</span><span class="dio-item__tag">engine</span></div>
+<h2 class="dio-story__title">Speculative decoding on a Mac - what we tried, how we measured it, and how small the gain is.</h2>
+<p class="dio-story__lede">Two models that ship their own drafters, two Apple GPUs, one ruler laid against llama.cpp on identical prompts. The honest core of the story is the arithmetic of a round.</p>
+<div class="dio-story__body"><!-- figures: modules/dasLLAMA/performance/records/mtp_m5_gemma-4-26B-A4B.json (2026-09-02, das ecf965ce5),
+     mtp_m4_gemma-4-26B-A4B.json (2026-09-02, das e58e5a3ba), mtp_m5_Qwen3.8-27B.json (2026-09-02, das 59cad510c),
+     mtp_m4_Qwen3.8-27B.json (2026-09-03, das 24d13f1d2); llama.cpp stock commit 6fdd0ac89 on both boxes -->
+<p>Speculative decoding is the trick where a small drafter guesses the next few tokens and the
+big model checks all of them in one pass. If the guesses are good, you get several tokens
+for the price of a little more than one step. Two current model families ship their own
+drafter: Qwen 3.8 carries a NextN head - one extra transformer layer that predicts the
+token after next - and Gemma 4 ships a four-layer assistant model beside the 26B trunk.
+Both are now supported on Metal, on any Apple GPU dasLLAMA runs on. This is the story of
+getting there and of measuring what it is worth.</p>
+<h2>What we tried</h2>
+<p><strong>Depth.</strong> A round drafts <code>k</code> tokens and verifies <code>k + 1</code> rows. Depth 1 is the safe bet;
+depth 2 pays off only when the second guess is right often enough to cover a third verify
+row. We raced depth 1 against depth 2 on each box and made the answer a box knob the tuner
+mints (<code>mtp_depth_nextn</code>, <code>mtp_depth_assistant</code>). Every box we own minted 1. Depth 3 and 4
+lost outright on the development rail and never reached the ruler.</p>
+<p><strong>Width.</strong> Verifying the top-2 or top-3 candidates at one position instead of a chain. We
+dropped it on paper: with one token ahead there is no room for a second candidate to win,
+and combined with depth it multiplies the verify rows the round cannot afford.</p>
+<p><strong>A depth controller.</strong> An online controller that raises depth while acceptance stays high.
+Dropped in favour of the box knob; it may return as per-request depth, because acceptance
+is a property of the prompt, not the box - the math prompt below runs 94% at position 1.</p>
+<p><strong>The drafter's input.</strong> The Gemma drafter takes the trunk's hidden state as input. Pre-norm
+lost to post-norm on acceptance; post-norm ships. The target's quantization is not what caps
+acceptance: the Q8_0 Gemma target accepted 76.5% against the Q4_K_M target's 74.6% on the
+same corpus.</p>
+<p><strong>The kernels.</strong> Verify rows on K-quant weights ride a small-batch GEMV that streams each
+weight row once for all rows. That kernel is ALU-bound, and Apple GPUs differ in how much
+ALU they have per byte of bandwidth. The M5 Max likes one form; the M4 Pro needed a
+different one - a register tile where each thread owns two weight rows and both activation
+columns - and, above two rows, a walk of that tile over column pairs instead of the
+four-column kernel. Which form a box gets is decided by a race at tune time and stored in
+its sidecar, like every other kernel choice in the engine.</p>
+<h2>How we measured</h2>
+<p>The board on daslang.io runs the <code>llama-bench</code> protocol, and <code>llama-bench</code> cannot measure
+speculative decoding. So we built a ruler for ourselves: <code>modules/dasLLAMA/harness/mtp_ruler.das</code>.
+It renders four chat prompts through the model's own template with thinking off, then runs
+two engines on the identical rendered text, greedy, exactly 128 tokens each, three
+repetitions, and writes one dated, sha-stamped JSON per box and model.</p>
+<p>Ours runs as the release executable - the same artifact the board uses - on a sidecar
+minted the same day. The ruler starts it with the box's own settings:</p>
+<pre><code>DAS_TUNE_MANIFEST= DASLLAMA_MTP_HEAD=&quot;/Users/dasbox/models/mtp-Qwen3.8-27B-Q8_0.gguf&quot; &quot;modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench&quot; -- -m &quot;/Users/dasbox/models/Qwen3.8-27B-Q4_K_M.gguf&quot; --mtp-ab --mtp-depth 1 -n 128 -r 3 --ngl 99 --prompts &quot;modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt&quot; --chat-prompts
+</code></pre>
+<p>llama.cpp runs as a stock <code>llama-server</code> built from upstream at commit <code>6fdd0ac89</code> - no
+fork, no patch - fed the same rendered prompt raw through <code>/completion</code> with <code>ignore_eos</code>,
+so it generates exactly 128 tokens too. The ruler starts it, per depth <code>K</code>, as
+<code>llama-server --port P --host 127.0.0.1 -ngl 99 -fa on -c 2048 -t T -np 1 --no-warmup -fit off -m MODEL --spec-type draft-mtp --spec-draft-n-max K -md HEAD -ngld 99</code>
+(the function is <code>run_lcpp_arm</code>; <code>T</code> is the box's thread count, 10 on the M4 Pro) and reads
+the server's own timings back.</p>
+<p>The prompts are the first turns of four Spec-Bench tasks
+(<a href="https://github.com/hemingkx/Spec-Bench">hemingkx/Spec-Bench</a>, Apache-2.0): writing (qid 81),
+summarization (qid 241), GSM8K math (qid 401) and qa (qid 321), in
+<code>modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt</code>. Both engines read the same
+drafter file: the Qwen NextN head as <code>mtp-Qwen3.8-27B-Q8_0.gguf</code>, the Gemma assistant as
+<code>mtp-gemma-4-26B-A4B-it-Q8_0.gguf</code>; the JSON records carry their sha256.</p>
+<p>Two lessons the ruler now enforces, because each one cost us an afternoon:</p>
+<ul>
+<li><strong>Same thinking mode on both sides.</strong> Our first llama.cpp pass ran with thinking on and
+  ours with thinking off, and their acceptance read 91%. A thinking-on continuation is an
+  outline, not a blog post; it is a different text and a different acceptance rate. The
+  ruler renders one prompt and hands it to both.</li>
+<li><strong>Settle before every arm.</strong> A heat-soaked Mac under-reads a memory-bound decode by 13 to
+  18%. Every arm waits 180 seconds on the dense 27B before it measures, the way the board
+  driver does. And the release executable runs first: a parent process that had already run
+  the engine in-process made the child's speculative arm read 20% low.</li>
+</ul>
+<p>The invocation on the M4 Pro, verbatim:</p>
+<pre><code>bin/daslang -jit modules/dasLLAMA/harness/mtp_ruler.das -- -m $HOME/models/Qwen3.8-27B-Q4_K_M.gguf --server $HOME/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server --depths 1,2 -t 10 --settle 180 -o modules/dasLLAMA/performance/records/mtp_m4_Qwen3.8-27B.json
+</code></pre>
+<h2>What it measured</h2>
+<p>Tokens per second over 128 generated tokens, four prompts, three repetitions; acceptance in
+parentheses is accepted drafts over drafts offered. llama.cpp's pooled figure is the mean of
+its four prompt rows. Sources: the four <code>mtp_*.json</code> records named at the top of this story.</p>
+<table>
+<thead>
+<tr>
+<th>model, box (date, das sha)</th>
+<th>das off</th>
+<th>das depth 1</th>
+<th>das depth 2</th>
+<th>llama.cpp off</th>
+<th>n_max 1</th>
+<th>n_max 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gemma-4-26B-A4B Q4_K_M, M5 Max (09-02, ecf965ce5)</td>
+<td>122.7</td>
+<td>145.9 (75.2%)</td>
+<td>148.1 (62.6%)</td>
+<td>97.7</td>
+<td>133.7</td>
+<td>142.0</td>
+</tr>
+<tr>
+<td>gemma-4-26B-A4B Q4_K_M, M4 Pro (09-02, e58e5a3ba)</td>
+<td>59.2</td>
+<td>67.5 (74.6%)</td>
+<td>55.6 (62.9%)</td>
+<td>52.8</td>
+<td>67.2</td>
+<td>62.5</td>
+</tr>
+<tr>
+<td>Qwen3.8-27B Q4_K_M, M5 Max (09-02, 59cad510c)</td>
+<td>27.6</td>
+<td>33.0 (77.4%)</td>
+<td>31.4 (75.1%)</td>
+<td>25.2</td>
+<td>34.1</td>
+<td>33.5</td>
+</tr>
+<tr>
+<td>Qwen3.8-27B Q4_K_M, M4 Pro (09-03, 24d13f1d2)</td>
+<td>12.7</td>
+<td>14.0 (77.4%)</td>
+<td>12.4 (75.1%)</td>
+<td>11.5</td>
+<td>13.8</td>
+<td>12.5</td>
+</tr>
+</tbody>
+</table>
+<p>Per prompt, the two ends of the range. Gemma on the M5 Max:</p>
+<table>
+<thead>
+<tr>
+<th>prompt</th>
+<th>das off</th>
+<th>das depth 1</th>
+<th>das depth 2</th>
+<th>llama.cpp off</th>
+<th>n_max 1</th>
+<th>n_max 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>writing</td>
+<td>124.2</td>
+<td>144.0 (69.3%)</td>
+<td>138.3 (50.8%)</td>
+<td>98.2</td>
+<td>139.6 (81.4%)</td>
+<td>130.8 (60.0%)</td>
+</tr>
+<tr>
+<td>summarization</td>
+<td>118.1</td>
+<td>133.4 (69.3%)</td>
+<td>124.6 (54.9%)</td>
+<td>95.8</td>
+<td>119.8 (70.3%)</td>
+<td>126.0 (56.8%)</td>
+</tr>
+<tr>
+<td>math</td>
+<td>123.9</td>
+<td>160.1 (89.6%)</td>
+<td>187.9 (88.0%)</td>
+<td>98.4</td>
+<td>145.8 (89.6%)</td>
+<td>163.4 (84.0%)</td>
+</tr>
+<tr>
+<td>qa</td>
+<td>124.8</td>
+<td>148.6 (74.0%)</td>
+<td>155.5 (63.4%)</td>
+<td>98.2</td>
+<td>129.5 (76.4%)</td>
+<td>147.9 (70.5%)</td>
+</tr>
+</tbody>
+</table>
+<p>Qwen 3.8 on the M4 Pro:</p>
+<table>
+<thead>
+<tr>
+<th>prompt</th>
+<th>das off</th>
+<th>das depth 1</th>
+<th>das depth 2</th>
+<th>llama.cpp off</th>
+<th>n_max 1</th>
+<th>n_max 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>writing</td>
+<td>12.8</td>
+<td>13.5 (70.7%)</td>
+<td>10.9 (59.3%)</td>
+<td>11.5</td>
+<td>13.6 (75.0%)</td>
+<td>12.3 (66.7%)</td>
+</tr>
+<tr>
+<td>summarization</td>
+<td>12.6</td>
+<td>14.0 (80.3%)</td>
+<td>12.0 (71.7%)</td>
+<td>11.5</td>
+<td>13.8 (81.4%)</td>
+<td>12.4 (69.8%)</td>
+</tr>
+<tr>
+<td>math</td>
+<td>12.8</td>
+<td>15.4 (93.9%)</td>
+<td>13.6 (86.2%)</td>
+<td>11.5</td>
+<td>14.5 (93.8%)</td>
+<td>13.9 (87.0%)</td>
+</tr>
+<tr>
+<td>qa</td>
+<td>12.8</td>
+<td>13.2 (67.1%)</td>
+<td>13.8 (88.0%)</td>
+<td>11.5</td>
+<td>13.5 (80.0%)</td>
+<td>11.5 (62.5%)</td>
+</tr>
+</tbody>
+</table>
+<p>Acceptance is the same drafter on both sides and it shows: 75 to 94% at position 1
+depending on the prompt, on both engines. The drafter is not where the two engines differ.</p>
+<h2>The arithmetic of a round</h2>
+<p>Here is the honest core. A depth-1 round produces on average <code>1 + a</code> tokens, where <code>a</code> is
+the acceptance rate, so its speedup over plain decode is <code>(1 + a) / c</code>, with <code>c</code> the round's
+cost in plain steps. Read <code>c</code> back from the tables: <code>c = (1 + a) / speedup</code>.</p>
+<table>
+<thead>
+<tr>
+<th>model, box</th>
+<th>das round, in steps</th>
+<th>llama.cpp round, in steps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gemma, M5 Max</td>
+<td>1.75 / 1.19 = 1.47</td>
+<td>1.79 / 1.37 = 1.31</td>
+</tr>
+<tr>
+<td>gemma, M4 Pro</td>
+<td>1.75 / 1.14 = 1.53</td>
+<td>1.83 / 1.27 = 1.44</td>
+</tr>
+<tr>
+<td>Qwen 3.8, M5 Max</td>
+<td>1.77 / 1.20 = 1.48</td>
+<td>1.83 / 1.35 = 1.35</td>
+</tr>
+<tr>
+<td>Qwen 3.8, M4 Pro</td>
+<td>1.77 / 1.10 = 1.61</td>
+<td>1.82 / 1.20 = 1.52</td>
+</tr>
+</tbody>
+</table>
+<p>A round that verifies two rows costs both engines about one and a half plain steps, and
+that - not the drafter - is what caps the gain at 1.1 to 1.2x on a 27B dense model. The two
+extra rows' worth of work is the same weight pass read for two activation columns instead of
+one, plus the drafter, plus the bookkeeping. On the M4 Pro the round's own clocks on
+2026-09-03 (build 24d13f1d2, plain step 78.7 ms) read: draft 7.4 ms, verify 119.0 ms,
+walk and commit 1.0 ms, replay 0.7 ms. Ninety-three percent of the round is the verify, and
+the verify is 1.51 plain steps for two rows.</p>
+<p>That is also why depth 2 loses on the M4 Pro and only breaks even on the M5: a third row
+costs another 0.5 to 1.0 steps, and the second draft position is accepted 51 to 66% of the
+time, which does not cover it. Except on the math prompt, where position 2 runs 86 to 88%
+and depth 2 wins on every box (187.9 against 160.1 for gemma on the M5). Acceptance is the
+prompt's property. The box knob is the right default; the prompt-driven knob is the next
+idea.</p>
+<h2>Where the day went</h2>
+<p>The M4 Pro Qwen row is the one that moved. On the morning of 2026-09-02 it read 12.7 off and
+11.0 at depth 1 - speculation was a loss on that box - while llama.cpp's read 11.5 and 13.6.
+The ruler said we were slow, and the ruler was the only reason we knew: on the M4's own
+terms, a 2.06-step round for two rows looked like the price of a small GPU.</p>
+<p>The lab said otherwise. Our two-row kernel cost 1.36 to 1.49x of two single-row passes on
+the M4 Pro, and 0.52 to 0.89x on the M5 Max - the same kernel, two verdicts. A kernel
+shaped like llama.cpp's own sat at 0.9 to 1.05x on the M4. So we wrote the two-row
+register tile, raced it, crowned it on the M4 (0.48 ms against the old form's 0.84 on the
+race shape) and not on the M5 (0.53 against 0.49), and the row went to 13.9. Then the
+depth-2 row - 7.9 tok/s, 0.62x of plain - turned out to be the same story one row up: three
+rows took the four-column kernel, which no race had ever looked at. Walking the crowned
+tile over column pairs took the depth-2 row to 12.4 and the depth-1 row to 14.0 by the
+evening of 09-03. The whole fix is about a hundred lines and a test; finding it took a
+yardstick.</p>
+<h2>The yardstick</h2>
+<p>llama.cpp is the gold standard of local inference and it is the yardstick in every table
+here, not the opponent. Both projects are open source; they are welcome to anything in this
+engine with the license's attribution, and we take anything legal from anywhere. On this
+corpus, on these two boxes, on these two days: plain decode is ours by 10 to 26%, the
+speculative rounds land within a few percent of each other in both directions, and their
+depth-2 round is cheaper than ours. The ledger item for that last one is open.</p>
+<p>Everything above reproduces from the commands shown, on the dates and shas shown. The
+records are in <code>modules/dasLLAMA/performance/records/</code>; the ruler renders any of them back
+into these tables with <code>--render</code>.</p></div>
+</article>
+<article class="dio-story" id="s-2026-08-30-apple-m5">
+<div class="dio-story__eyebrow"><span class="dio-item__date">2026-08-30</span><span class="dio-item__tag">hardware</span></div>
+<h2 class="dio-story__title">Bringing up the Apple M5, one model at a time.</h2>
+<p class="dio-story__lede">A new chip arrives, forty kernel families get re-raced, some get re-crowned, a few get rewritten. Why that week was fun.</p>
+<div class="dio-story__body"><!-- figures: modules/dasLLAMA/performance/records/m5.json (M5 Max, minted 2026-08-30)
+     and m4.json (M4, 2026-08-31), rendered on the board from the same records -->
+<p>An M5 Max arrived at the end of August and became the main box the same day. dasLLAMA
+had never run on it. Everything below happened in the week that followed.</p>
+<h2>What a new chip is, to this engine</h2>
+<p>dasLLAMA does not ship kernels tuned for a chip. It ships kernel <em>families</em> - several
+ways to compute the same GEMV, attention or norm - and a tuner that races them on the box
+it is running on, then writes the winners into a sidecar. So "supporting the M5" is not a
+port. It is letting the races run and looking hard at every place where the winner changed.</p>
+<p>Three things changed.</p>
+<p><strong>The GPU tensor units.</strong> The M5 GPU exposes tensor units through the Metal 4 tensor API.
+We wrote the tensor-side twin for each matrix family and let the race decide, per family,
+whether the tensor form or the simdgroup form wins on this box. On the M5 Max the tensor
+twins took every K-quant matmul family, the bf16 and q8 matmuls, the MoE matmuls and the
+attention QK matmul. The crown is a runtime knob in the sidecar, not a class default: a
+box that did not race keeps the simdgroup form, and a box that raced and lost keeps it too.</p>
+<p><strong>The CPU core layout.</strong> The M5 Max has no efficiency cores. It has 6 "Super" cores and 12
+"Performance" cores, all compute. Our CPU lane had learned, on the M4, to exclude the
+efficiency tier from the pool; on the M5 that rule would have thrown away a third of the
+chip. The pool now spans both tiers, and decode parks the slower tier. Both core gates were
+verified live during the sweep, on both boxes.</p>
+<p><strong>The other modalities.</strong> The vision towers and the speech-to-text encoders serve on the GPU
+on the M5 the way the text path does. Nothing new in the design here - the same Metal rails
+- but each one had to be re-raced and its crowns re-minted.</p>
+<h2>What it measured</h2>
+<p>The full M5 Max board was re-minted on 2026-08-30 and is on the
+<a href="https://daslang.io/dasllama.html">board</a> (pp512 / tg128, Metal, llama-bench protocol), from
+<code>modules/dasLLAMA/performance/records/m5.json</code>:</p>
+<table>
+<thead>
+<tr>
+<th>model</th>
+<th>das pp512 / tg128</th>
+<th>llama.cpp pp512 / tg128</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gemma-4-E2B Q8_0</td>
+<td>9074.3 / 161.3</td>
+<td>7413.4 / 137.0</td>
+</tr>
+<tr>
+<td>Qwen3.8-27B Q4_K_M</td>
+<td>913.9 / 27.8</td>
+<td>752.1 / 25.4</td>
+</tr>
+<tr>
+<td>Qwen3-30B-A3B Q4_K_M</td>
+<td>3752.9 / 165.7</td>
+<td>3422.4 / 137.0</td>
+</tr>
+<tr>
+<td>gpt-oss-20b mxfp4</td>
+<td>3995.1 / 162.7</td>
+<td>3476.6 / 149.0</td>
+</tr>
+</tbody>
+</table>
+<p>The other modalities on the same box and day: the gemma-4-12B image encode 7.1 ms against
+the reference's 95 ms; the Qwen2.5-Omni window ViT 106 ms against 118; whisper
+large-v3-turbo transcribing jfk in 140 ms against whisper-cli's 153 on the same GPU.</p>
+<p>The M4 board rows were refreshed alongside (<code>m4.json</code>, 2026-08-31), including Canary-Qwen on
+its new Q8_0 serving artifact: jfk in 307.6 ms on the M5 and 512.9 on the M4, beside the
+NeMo torch-MPS reference's 704.7 and 1076.5. On the long gb1 clip the das row reads 6484 ms
+beside the reference's 4383 - the one gap left on long audio, and the next dig. The M1 board
+stands unchanged as the long-term record; its Canary rows retire with the old decoder
+artifact.</p>
+<h2>Why it was fun</h2>
+<p>Because nothing about it was a port. Every kernel that had been tuned for one generation
+got raced again on the next, and the outcomes were not predictable from the spec sheet: some
+winners stayed, some flipped, and a few families needed a new form written before the race
+had anything worth crowning. Watching an engine re-tune itself to a chip that did not exist
+when the engine was written - and finding the handful of places where it could not, and
+fixing those - is the part of this project we would do for free.</p></div>
+</article>
+<!-- stories:end -->
+</div>
+</div>
+</section>
+
+<footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="stories.html">stories</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+<div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>
+
+</div></body></html>

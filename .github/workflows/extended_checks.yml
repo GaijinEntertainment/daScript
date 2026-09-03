@@ -582,7 +582,7 @@ jobs:
         set -eux
         pip install markdown
         python3 site-dasllama/build_news.py --root site-dasllama
-        git diff --exit-code -- site-dasllama/index.html site-dasllama/feed.xml site-dasllama/sitemap.xml
+        git diff --exit-code -- site-dasllama/index.html site-dasllama/stories.html site-dasllama/feed.xml site-dasllama/sitemap.xml
         python3 site-dasllama/test_metadata.py
 
     - name: "Test pr-babysit verdict core"

@@ -8,6 +8,9 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
 ## Layout
 
 - `index.html` - news-first home (identity masthead, feed, how-to-get, ladder teaser)
+- `stories.html` - the long-form arc stories (what we tried, how we measured, the tables,
+  the commands, the date and sha), generated from `_stories/` between the `stories:begin`
+  markers by `build_news.py`; the "Boris and Claude" voice, llama.cpp as the yardstick
 - `ladder.html` - ALL measurements (official + community); daslang.io/dasllama.html stays
   official-only
 - `sidecars.html` - the sidecar exchange: finder, kernel-win viewer, downloads
@@ -15,10 +18,14 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
 - `files/dasllama-io.js` - the one renderer for all three pages (page detected by mount
   points); community text is escaped before it reaches markup
 - `files/dasllama-favicon.svg` - from the dasllama-mark brand set (amber)
-- `_news/` - news entries as dated markdown, same pipeline shape as `site/_news`
+- `_news/` - news entries as dated markdown, same pipeline shape as `site/_news`; a news
+  item is a few lines, the detail is a story it links to
+- `_stories/` - the stories as dated markdown (front matter: date, tag, title, lede; fenced
+  code and tables render)
 - `build_news.py` - regenerates the index.html news region (between the `news:begin`
-  markers), `feed.xml` (Atom) and `sitemap.xml` from `_news/`; output is checked in so the
-  preview matches production, and the deploy re-runs it anyway
+  markers), the stories.html region (`stories:begin`), `feed.xml` (Atom, news and stories)
+  and `sitemap.xml` from `_news/` and `_stories/`; output is checked in so the preview
+  matches production, and the deploy re-runs it anyway
 - `robots.txt` - static
 
 The public home URL is `https://dasllama.io/`. All pages link home with `/`, each page
