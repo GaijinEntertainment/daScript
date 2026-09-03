@@ -43,8 +43,10 @@ never mask a red.
 
 Arm names - decode parity: `arm1-basic arm2-hybrid arm3-step arm4-paged arm5-rewind
 arm6-churn arm7-q8kv arm7b-tq4kv arm8-s16 arm9-reload arm10-kq arm11-depth arm12-dim
-arm13-conc arm14-poison` (arm14 = the shared-region collision gate: a foreign GPU prefill must
-not degrade a later forced-feed decode - Qwen2.5-0.5B, its own `[test]` block),
+arm13-conc arm14-poison arm15-spec-hint` (arm14 = the shared-region collision gate: a foreign GPU
+prefill must not degrade a later forced-feed decode - Qwen2.5-0.5B, its own `[test]` block; arm15 =
+the single-row driver's greedy chain stands down for a decode sampled at temp > 0 and rides for a
+greedy one),
 batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`, `batch-ff` (real-text forced feed,
 GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance).
 

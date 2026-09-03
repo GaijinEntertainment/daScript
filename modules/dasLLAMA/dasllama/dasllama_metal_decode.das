@@ -2030,6 +2030,7 @@ def private discard_pre {
 // Pre-encode the PREDICTED next step (same session, pos + 1) while the current step runs on the
 // GPU. When speculation gates pass, the cb commits AND chains itself (argmax + embed gather, no
 // CPU poke); otherwise it stays uncommitted. Quietly declines when gates fail — slow path serves those.
+[arch(at="../ARCHITECTURE_GPU_MTP.md#greedy-chain")]
 def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog : MetalBuffer?) {
     // no encode-ahead for recurrent (two cbs race the one dn state buffer); a declined/absent-mirror skip = slow path serves it
     if (t.config.recr_mask != 0ul ||
@@ -2043,7 +2044,7 @@ def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog 
     let ts_enc = ref_time_ticks()
     var r = acquire_step(t, s, npos, mr.koff, mr.voff, mr.cap_rows)
     if (r.gpu_logits && prev_blog != null && spec_cls_capable(t) &&
-            !has_ple(t.config) && spec_armed()) {
+            !has_ple(t.config) && !s.sampled && spec_armed()) {
         // speculative chain: the cb runs the moment the previous one drains — CPU tail/sampling/next forward() all overlap GPU execution
         r.spec = true
         // a spec step is IN FLIGHT after forward() returns — must not touch session memory (staging only; acceptance lands it via finish_step)

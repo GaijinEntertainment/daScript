@@ -181,3 +181,22 @@ follows: the zero-copy per-session logits scatter stands down, because all rows 
 session, and `land_sameslab_rows` copies every row's logits into `s.mtp_logits_b` (row 0 also into
 `s.mtp_logits`, which only a NextN-headed session has sized), the post-final-norm hidden rows into
 `s.mtp_hrows`, and the GPU per-row argmax into `g_sameslab_arg`.
+
+### 2.38 The single-row driver's greedy chain {#greedy-chain}
+
+**The single-row driver pre-encodes the next step on the GPU's own argmax, and only a greedy
+caller can afford it.** `pre_encode_next` encodes step `pos + 1` while step `pos` runs. Armed,
+the new command buffer opens with an argmax over the running step's logits and the embed gather
+of the winner (`r.spec`), commits at once, and runs the moment the previous one drains - the CPU
+tail, the sampler and the next `forward()` all overlap GPU execution. Unarmed, the step is encoded
+but held, and `forward()` pokes the caller's token and commits it - the encode still overlaps, the
+commit turnaround does not. `finish_step` then compares the GPU's pick with the caller's token: a
+miss waits the chained step out, discards it, and reruns the step through the slow path, so a miss
+costs about two steps (30 ms against a 15 ms step on gemma-4-12B, M5 Max) where a hit saves the
+turnaround, about 2% of a step. The adaptive mode (`DASLLAMA_METAL_SPEC` -1) backs off
+exponentially after a miss and re-arms on the next hit; under a sampler that agrees with the
+argmax two steps in three it still costs 63% of the step (26.0 against 15.9 ms), because the
+re-arm attempts far more often than a 2% upside pays for. So the sampler decides: `sample_` marks
+the session `sampled` whenever it draws at a temperature above zero, and the driver never chains
+such a session; a greedy sampler (temp 0) and a caller feeding the argmax directly keep the
+adaptive chain.

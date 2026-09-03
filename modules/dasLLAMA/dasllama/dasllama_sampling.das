@@ -77,6 +77,7 @@ def private apply_penalties_(var s : Session; params : SamplingParams) {
 def sample_(var s : Session; params : SamplingParams) : int64 { // nolint:STYLE037,STYLE038 — a flat dispatch over the sampling modes; each arm is independent and splitting it just hides the menu
     let vocab = long_length(s.logits)
     apply_penalties_(s, params)
+    s.sampled = params.temp > 0.0
     if (params.temp <= 0.0) {
         return argmax(s, vocab)
     }

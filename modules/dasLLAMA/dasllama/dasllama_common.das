@@ -1839,6 +1839,7 @@ struct Session {
     rng : int4                // sampling RNG state (seeded in make_run_state; reseed via set_seed)
     recent : array<int64>     // recently generated tokens, for the repetition penalty
     sample_scratch : array<float>  // vocab-sized scratch for top-k selection
+    sampled : bool            //! the last sample_ drew from the distribution (temp > 0): the Metal driver's greedy chain stands down
     // last-generation timing, filled by the streaming generate() and read by stats()
     stat_n_prefill : int64    // prompt tokens prefilled
     stat_prefill_us : int64   // wall time to prefill the prompt (microseconds)

@@ -109,6 +109,42 @@ steps), not kernels - the two drivers dispatch the same GEMV forms at one row. I
 `mtp.*`-style profiler sections on both drivers' one-row step, or knockouts of the readback.
 If it holds, plain decode on every Metal box is 20-25% off the table.
 
+Mechanism (read from the driver, `metal_decode_forward`): the single-row driver pre-encodes the
+NEXT step chained on the GPU's greedy argmax (`r.spec`), commits it before the current step
+drains, and on a miss (the caller's token is not the argmax) discards the chained step and reruns
+the whole step through the slow path, then backs the chain off exponentially (cooldown 1, 2, 4
+... 256 steps) and re-arms on a hit. The probe feeds real-text tokens, so the chain misses; the
+production greedy bench hits every step and reads 63.7 tok/s = 15.7 ms on this model (the m5
+records), the batch driver's one-row number. The gap is therefore the cost of a mispredicted
+chain, not of the driver's kernels - and it is exactly what a SAMPLED decode (temperature above
+zero) pays whenever the sampled token is not the argmax. Instrument: the probe's `--feed
+text|greedy` and `--spec -1|0|1` arms, one process each; the split is miss cost (text vs greedy
+under the adaptive chain) and commit bubble (chain off vs forced-on under a greedy feed).
+
+**S4 results, gemma-4-12B on the M5 Max (one process per arm, 32 steps; the `second:K` feeds 60):**
+
+| feed | chain | ms/step | chain hits / misses |
+|---|---|---|---|
+| greedy (argmax every step) | adaptive | 14.87 | 33 / 0 |
+| greedy | forced | 14.87 | 33 / 0 |
+| text (real tokens) | off | 15.20 | - |
+| text | adaptive | 18.97 | 0 / 5 |
+| runner-up every 10th step | off | 15.40 | - |
+| runner-up every 10th step | adaptive | 18.17 | 49 / 6 |
+| runner-up every 3rd step | off | 15.93 | - |
+| runner-up every 3rd step | adaptive | 26.02 | 21 / 20 |
+| runner-up every 3rd step | forced | 25.60 | 41 / 20 |
+
+The chain's whole upside is the commit turnaround: 0.33 ms, 2.2% of the step. A miss costs
+about 30 ms - two steps: the chained step is waited out before the rerun. The adaptive policy
+re-arms on every hit, so under a sampler that agrees with the argmax 90% of the time it costs
+18%, at 67% agreement 63%. Any decode at temperature above zero on Metal has been paying this;
+the greedy bench never saw it. Fix (commit pending): `sample_` marks the session `sampled` when it
+draws at temp > 0 and `pre_encode_next` never chains such a session (`ARCHITECTURE_GPU_MTP.md`
+sec.2.38); arm `arm15-spec-hint` of the decode parity suite holds it (negative control: without
+the driver's check the sampled half reports 23 hits). The plain-decode lead the prediction named
+does not exist: the greedy step already equals the batch driver's one-row step.
+
 **S0 results, gemma-4-26B-A4B (MoE) on the M5 Max, same run conditions, one process per row
 count (ms):**
 
