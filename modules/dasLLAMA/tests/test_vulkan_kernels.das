@@ -192,7 +192,7 @@ def test_vkd_cls_ar_row0(t0 : T?) {
     t0 |> run("cls_ar with a row base lands on the rows from row0 and leaves the rows below untouched") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_cls_ar()) {
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device, or the cls_ar pipeline failed to build")
                 return
             }
             let dim = 1024
@@ -293,7 +293,7 @@ def test_vkd_cls_ar_row0(t0 : T?) {
             delete xc
             delete ysent
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -303,7 +303,7 @@ def test_vkd_actf16_base(t0 : T?) {
     t0 |> run("actf16 with an element base == the same row dispatched from zero; the halves below the base keep their sentinel") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_actf16_cls()) {
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device, or the actf16 pipeline failed to build")
                 return
             }
             let nelem = 2048
@@ -379,7 +379,7 @@ def test_vkd_actf16_base(t0 : T?) {
             delete h0
             delete h1
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
