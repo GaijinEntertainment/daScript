@@ -61,8 +61,8 @@ declines, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step 
 at B=2/B=4 on identical real-text tokens plus one CPU reference row (the batch rail's logits gate -
 the support matrix's batch cell only proves ENGAGE); `mtp-vff-<tag>` takes both tag families;
 `mtp-vff1-<tag>` = one row through the batch driver (the encoder alone, no row mixing);
-`mtp-vff5-<tag>` = five rows through the batch driver; `mtp-dff8-<tag>` = distinct sessions at
-B=5 and B=8. `mtp-count-<tag>` on a verify tag attaches the `mtp-*` assistant sidecar beside a
+`mtp-vff5-<tag>` = five rows through the batch driver; `mtp-vff9-<tag>` = nine rows, the deepest
+verify the round can ask for (MTP_MAX_ROWS); `mtp-dff8-<tag>` = distinct sessions at B=5 and B=8. `mtp-count-<tag>` on a verify tag attaches the `mtp-*` assistant sidecar beside a
 gemma-4 target first (skips when none) and runs the counting free-run at depth 1, 2, 4; the
 diagnostic arms `mtp-count-cpu` (drafts through the CPU oracle), `mtp-count-trace` (drafts vs
 truth logged per round) and `mtp-count-pre` (the pre-norm residual as the drafter's h) ride along

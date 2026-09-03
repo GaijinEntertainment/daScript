@@ -706,6 +706,9 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
         if (arm_on(t, "mtp-vff5-{tag}")) {   // five rows: the batch driver's GEMM rail (mp 32) under the same-slab verify
             vff_cell(t, tr, trg, tag, prose_a, tol, 5l, must_serve, expect_decline)
         }
+        if (arm_on(t, "mtp-vff9-{tag}")) {   // nine rows = MTP_MAX_ROWS, the deepest verify the round can ask for
+            vff_cell(t, tr, trg, tag, prose_a, tol, 9l, must_serve, expect_decline)
+        }
         // the assistant drafter's round (gemma-4 targets with an mtp-* sidecar beside them): counting
         // free-run, speculative == plain at depth 1, 2 and 4
         if (arm_on(t, "mtp-count-{tag}")) {

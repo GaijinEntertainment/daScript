@@ -34,8 +34,11 @@ struct Args {
     @clarg_doc = "Comma list of row counts"
     bs : string = "1,2,4,8"
 
-    @clarg_doc = "Same-slab mode: the rows are B consecutive positions of ONE session through the verify entry (verify_batch_step) instead of B sessions"
+    @clarg_doc = "Same-slab mode: the rows are B consecutive positions of ONE session through the verify entry (verify_batch_step) instead of B sessions; B = 1 goes through the same entry, and the plain single-row step prints beside it as the reference"
     sameslab : bool
+
+    @clarg_doc = "Per-stage split: time every row count under each Metal decode knockout (full, then gemv / attn / ew / moe_rt skipped), arms interleaved in this process; a stage's cost is full minus its knockout. Output is garbage while a knockout is armed."
+    knockouts : bool
 
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -85,7 +88,7 @@ def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sames
         for (i in range64(nb)) {
             cur[i] = prompt[(step + i) % plen]   // real-text tokens, deterministic - the routing stays realistic
         }
-        if (nb == 1l) {
+        if (nb == 1l && !sameslab) {
             forward(t, sess[0], cur[0], sess[0].n_past)
             sess[0].n_past++
         } elif (sameslab) {
@@ -145,19 +148,41 @@ def main() : int {
         t.config.seq_len = min(t.config.seq_len, 512l)
         var prompt <- encode(tk, "The old lighthouse keeper watched the storm roll in from the west, counting the seconds between each flash and the thunder that followed, while the village below slept through it.", false)
         var base = 0.0lf
+        let arms <- cfg.knockouts ? [ "", "gemv", "attn", "ew", "moe_rt" ] : [ "" ]
+        if (cfg.sameslab) {   //! the plain step through the single-row driver, as a labelled reference: the ladder's own B = 1 goes through the batch driver so every row count shares one driver, and it is the ratio column's denominator even when --bs skips 1
+            let plain = time_rows(t, prompt, 1l, int64(cfg.steps), false)
+            print("plain step (single-row driver): {plain:.2f} ms\n")
+            base = time_rows(t, prompt, 1l, int64(cfg.steps), true)
+            print("one-row step (batch driver): {base:.2f} ms - the ratio column's denominator\n")
+        }
         for (bstr in split(cfg.bs, ",")) {
             let nb = int64(to_int(strip(bstr)))
             if (nb < 1l) {
                 continue
             }
-            let ms = time_rows(t, prompt, nb, int64(cfg.steps), cfg.sameslab && nb > 1l)
-            if (nb == 1l) {
-                base = ms
+            let mode = cfg.sameslab ? " same-slab" : ""
+            var full = 0.0lf
+            for (arm in arms) {
+                static_if (typeinfo builtin_module_exists(das_metal)) {
+                    set_metal_decode_skip(arm)
+                }
+                let ms = time_rows(t, prompt, nb, int64(cfg.steps), cfg.sameslab)
+                if (empty(arm)) {
+                    full = ms
+                    if (nb == 1l && !cfg.sameslab) {
+                        base = ms
+                    }
+                    let ratio = base > 0.0lf ? ms / base : 0.0lf
+                    print("B={nb}{mode}: {ms:.2f} ms/step  x{ratio:.2f} of the single step  ({ms / double(nb):.2f} ms per row)\n")
+                    measured++
+                } else {
+                    let stage = full - ms   // what the skipped stage cost inside the full step
+                    print("B={nb}{mode} minus {arm}: {ms:.2f} ms/step -> the {arm} stage is {stage:.2f} ms ({base > 0.0lf ? stage / base : 0.0lf:.2f} of the single step)\n")
+                }
             }
-            let ratio = base > 0.0lf ? ms / base : 0.0lf
-            let mode = cfg.sameslab && nb > 1l ? " same-slab" : ""
-            print("B={nb}{mode}: {ms:.2f} ms/step  x{ratio:.2f} of the single step  ({ms / double(nb):.2f} ms per row)\n")
-            measured++
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                set_metal_decode_skip("")
+            }
         }
         static_if (typeinfo builtin_module_exists(das_metal)) {
             metal_decode_shutdown()

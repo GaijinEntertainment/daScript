@@ -2941,7 +2941,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     var bw_ds = upload_region(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert]), uint64(c.n_expert * 4l))
                     enc_moe_wscale(enc, bmsel, bmsel, bw_ds, u_moe_k, nrows)
                 }
-                if (t.experts_mx4) {
+                if (g_skip == "moe_rt") {   // moe_rt knockout: the routed expert GEMVs only (router/select stay live)
+                } elif (t.experts_mx4) {
                     var bwb1 = upload_region(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
                     var bwb3 = upload_region(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
                     // gmode == 1 doubles as the has-bias flag (see enc_moe_select above)
@@ -2969,7 +2970,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             }
             if (moe && g_skip != "gemv") {
                 let fe2 = fmt_at(t.we2_fmt, l)
-                if (t.experts_mx4) {
+                if (g_skip == "moe_rt") {   // the down projection is a routed expert GEMV too
+                } elif (t.experts_mx4) {
                     var bwb2 = upload_region(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim]), uint64(c.n_expert * dim * 4l))
                     var b2m = MoeGemvArgs(ndim = k_moe_nfe, ddim = k_dim, eplane = k_moe_eblk,
                         xs = k_moe_xs_dn, ss = k_moe_ss, bxs = k_moe_knfe, bys = k_moe_kdim, hasb = k_moe_gmode)
