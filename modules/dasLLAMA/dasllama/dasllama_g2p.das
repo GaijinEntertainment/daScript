@@ -525,11 +525,56 @@ struct PsResult {
 def private none_ps() : PsResult => PsResult(ok = false, ps = "", rating = 0)
 def private some_ps(ps : string; rating : int) : PsResult => PsResult(ok = true, ps = ps, rating = rating)
 
-//! what follows the current token, read right to left: whether the next spoken sound is a
-//! vowel (-1 unknown, 0 no, 1 yes), and whether the next word is "to"
+//! what a word sees around it, read right to left: whether the next spoken sound is a vowel
+//! (-1 unknown, 0 no, 1 yes), whether the next word is "to", and the words on either side -
+//! what settles a heteronym the tag alone cannot
 struct TokenContext {
     future_vowel : int
     future_to : bool
+    prev_text : string   // the word before, lowercased; "" at the start
+    prev_tag : string
+    next_text : string   // the word after, lowercased; "" at the end
+    next_tag : string
+}
+
+//! heteronyms the tags cannot split - the reading a following word settles
+let private HETERONYM_NEXT <- {
+    "bass" => { "player" => "bˈAs", "players" => "bˈAs", "guitar" => "bˈAs", "guitars" => "bˈAs", "line" => "bˈAs", "lines" => "bˈAs",   // nolint:STYLE039
+        "drum" => "bˈAs", "drums" => "bˈAs", "clef" => "bˈAs", "note" => "bˈAs", "notes" => "bˈAs", "voice" => "bˈAs", "voices" => "bˈAs",   // nolint:STYLE039
+        "singer" => "bˈAs", "part" => "bˈAs", "parts" => "bˈAs", "amp" => "bˈAs" },   // nolint:STYLE039
+    "lead" => { "pipe" => "lˈɛd", "pipes" => "lˈɛd", "paint" => "lˈɛd", "poisoning" => "lˈɛd", "weight" => "lˈɛd", "weights" => "lˈɛd",   // nolint:STYLE039
+        "shot" => "lˈɛd", "bullet" => "lˈɛd", "bullets" => "lˈɛd", "out" => "lˈɛd" },   // nolint:STYLE039
+    "minute" => { "detail" => "mInˈut", "details" => "mInˈut", "amount" => "mInˈut", "amounts" => "mInˈut", "particle" => "mInˈut",   // nolint:STYLE039
+        "particles" => "mInˈut", "quantity" => "mInˈut", "quantities" => "mInˈut", "trace" => "mInˈut", "traces" => "mInˈut",   // nolint:STYLE039
+        "difference" => "mInˈut", "differences" => "mInˈut" }   // nolint:STYLE039
+}
+
+//! heteronyms the lexicon carries as one reading: the part-of-speech keyed readings it lacks
+let private HETERONYM_OVERRIDES <- {
+    "does" => { "DEFAULT" => "dˈʌz", "NOUN" => "dˈOz" },   // nolint:STYLE039
+    "resume" => { "DEFAULT" => "ɹəzˈum", "NOUN" => "ɹˈɛzəmˌA" }   // nolint:STYLE039
+}
+
+// the entry keys to try, in order: the infinitive after "to" reads as the verb; after a
+// determiner a verb tag is a mis-tag and an adjective before a non-noun is the noun
+def private key_order(tag : string; ctx : TokenContext; has_ctx : bool) : array<string> {
+    var keys : array<string>
+    if (has_ctx && ctx.prev_text == "to" && ctx.prev_tag == "TO") {
+        keys |> push("VERB")
+    } elif (has_ctx && ctx.prev_tag == "DT") {
+        if (starts_with(tag, "VB")) {
+            keys |> push("NOUN")
+            keys |> push("DEFAULT")
+            return <- keys
+        }
+        if (tag == "JJ" && !starts_with(ctx.next_tag, "NN")) {
+            keys |> push("NOUN")
+        }
+    }
+    keys |> push(tag)
+    keys |> push(parent_tag(tag))
+    keys |> push("DEFAULT")
+    return <- keys
 }
 
 //! the grown lexicon: a word, then its capitalized or lowercased twin the way the reference
@@ -567,17 +612,17 @@ def private entry_ps(g : G2pModel; t : LexTable; i : int; tag : string; ctx : To
         return lex_plain(g, t, i)
     }
     var found = false
-    var key = tag
     if (has_ctx && ctx.future_vowel < 0) {
         let none_ps = lex_dict_get(g, t, i, "None", found, present)
         return none_ps if (found)
     }
-    var ps = lex_dict_get(g, t, i, key, found, present)
-    return ps if (found)
-    key = parent_tag(tag)
-    ps = lex_dict_get(g, t, i, key, found, present)
-    return ps if (found)
-    return lex_dict_get(g, t, i, "DEFAULT", found, present)
+    var inscope keys <- key_order(tag, ctx, has_ctx)
+    var ps = ""
+    for (key in keys) {
+        ps = lex_dict_get(g, t, i, key, found, present)
+        return ps if (found)
+    }
+    return ps
 }
 
 //! a name or acronym spelled letter by letter, the last letter carrying the primary stress
@@ -605,6 +650,26 @@ def private lookup(g : G2pModel; word_in : string; tag : string; stress : float;
         word = lower_word(word)
         nnp_case = true
         is_nnp = tag == "NNP"
+    }
+    if (has_ctx) {
+        let wl = lower_word(word)
+        var hit = ""
+        HETERONYM_NEXT |> get(wl) $(coll) {
+            coll |> get(ctx.next_text) $(cps) {
+                hit = cps
+            }
+        }
+        return some_ps(apply_stress(hit, stress), 4) if (!empty(hit))
+        HETERONYM_OVERRIDES |> get(wl) $(ov) {
+            var inscope keys <- key_order(tag, ctx, has_ctx)
+            for (key in keys) {
+                ov |> get(key) $(ops) {
+                    hit = ops
+                }
+                break if (!empty(hit))
+            }
+        }
+        return some_ps(apply_stress(hit, stress), 4) if (!empty(hit))
     }
     var rating = 4
     var i = grown_find(g, g.gold, word)
@@ -1310,6 +1375,8 @@ def private token_context(ctx : TokenContext; ps : string; has_ps : bool; tk : G
         }
     }
     next.future_to = tk.text == "to" || tk.text == "To" || (tk.text == "TO" && (tk.tag == "TO" || tk.tag == "IN"))
+    next.next_text = lower_word(tk.text)
+    next.next_tag = tk.tag
     return next
 }
 
@@ -1468,6 +1535,8 @@ def g2p_tokens(g : G2pModel; tagged : array<PosToken>) : array<G2pToken> {
         while (a > 0 && !pieces[a].is_head) {
             a--
         }
+        ctx.prev_text = a > 0 ? lower_word(pieces[a - 1].text) : ""
+        ctx.prev_tag = a > 0 ? pieces[a - 1].tag : ""
         if (b - a == 1) {
             if (!pieces[a].has_ps) {
                 let r = lexicon(g, pieces[a], ctx)

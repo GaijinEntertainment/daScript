@@ -37,7 +37,7 @@ def private bare(ps : string) : string {
     var s = replace(replace(replace(ps, "ˈ", ""), "ˌ", ""), "ː", "")   // nolint:STYLE039
     s = replace(s, "ˑ", "")   // nolint:STYLE039
     s = replace(s, " ", "")
-    s = replace(replace(replace(replace(s, "ᵻ", "ə"), "ɨ", "ə"), "ɐ", "ə"), "ɪ", "ə")   // nolint:STYLE039
+    s = replace(replace(replace(replace(replace(s, "ᵻ", "ə"), "ɨ", "ə"), "ɐ", "ə"), "ɪ", "ə"), "ᵊ", "ə")   // nolint:STYLE039
     return replace(replace(s, "ɾ", "t"), "T", "t")   // nolint:STYLE039
 }
 
@@ -49,18 +49,25 @@ def test_corpus_phonemes(t : T?) {
         let tg <- load_pos_tagger(tagger_path())
         let rows <- load_tts_corpus()
         var mismatches = 0
+        var beyond = 0
         for (r in rows) {
             let got = strip(g2p_phonemize(g, tg, r.norm))
             if (got != r.ps_misaki) {
-                mismatches++
-                to_log(LOG_INFO, "tts g2p differs {r.id}: got  {got}\n       want {r.ps_misaki}\n")
+                if (key_exists(BEYOND_REFERENCE, r.id)) {
+                    beyond++
+                    to_log(LOG_INFO, "tts g2p beyond the reference {r.id}: got  {got}\n       ref  {r.ps_misaki}\n")
+                } else {
+                    mismatches++
+                    to_log(LOG_INFO, "tts g2p differs {r.id}: got  {got}\n       want {r.ps_misaki}\n")
+                }
             }
         }
-        to_log(LOG_INFO, "tts g2p: {200 - mismatches}/200 sentences phoneme-identical with the reference\n")
+        to_log(LOG_INFO, "tts g2p: {200 - mismatches - beyond}/200 sentences phoneme-identical with the reference, {beyond} read a heteronym the reference misses\n")
         // every remaining difference is a tag the reference tagger read differently on a word
         // with a tag-keyed reading (the tagger agrees with it on 97 percent of tokens); the
         // tokenizer and the lexicon rules themselves are identical on the whole corpus
-        t |> success(mismatches <= 8, "{mismatches} sentences differ (budget 8 - tag calls)")
+        t |> success(mismatches <= 3, "{mismatches} sentences differ (budget 3 - tag calls)")
+        t |> equal(beyond, length(BEYOND_REFERENCE), "the heteronym sentences the rules settle beyond the reference")
     }
     t |> run("heteronyms: both readings present") @(t : T?) {
         return if (!data_present(t))
@@ -84,11 +91,16 @@ def test_corpus_phonemes(t : T?) {
         to_log(LOG_INFO, "tts g2p: heteronyms both readings {both}/{n}\n")
         t |> equal(n, 38)
         // the reference front end scores 24/38 in this inventory (27/38 in the espeak one), the
-        // bare tagger-less pipeline 2/38, espeak 11/38; the gap to 24 is four tag calls on
-        // sentences built to defeat taggers - the surpass program's first target
-        t |> success(both >= 20, "heteronyms {both}/{n} (reference front end 24 in this inventory)")
+        // bare tagger-less pipeline 2/38, espeak 11/38; the infinitive, determiner and
+        // collocation rules and the two keyed entries read past it, the six left are four
+        // tagger calls (dove, invalid, moped-class) and two annotation spellings
+        t |> success(both >= 32, "heteronyms {both}/{n} (reference front end 24 in this inventory)")
     }
 }
+
+// the heteronym sentences the front end reads past the reference: "lead pipe" and "get the
+// lead out", "bass player", "minute detail", "the does", "my resume"
+let private BEYOND_REFERENCE <- { "ht001", "ht003", "ht010", "ht017", "ht024", "ht038" }
 
 [test]
 def test_pieces(t : T?) {

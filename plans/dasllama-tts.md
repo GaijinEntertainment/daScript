@@ -713,6 +713,22 @@ K = 1090 was paying far more than its arithmetic), synthesis 651-671 ms, RTF 0.0
 ahead of torch; nano 383 ms for 15 s, RTF 0.026. `IMAGE_VERSION` 31. Blocks 13/13 (the padded
 conv and AdaIN cell), kitten 13/13, kokoro 4/4, facade 9/9.
 
+Heteronym receipt (2026-09-02, the first quality target): 20/38 -> 32/38 against the reference
+front end's 24. The 18 misses classified: three were the scorer folding `ɪ` to schwa but not
+misaki's syllabic `ᵊ` (the fold now takes it); one was the infinitive after "to"; two wanted a
+part-of-speech keyed entry the lexicon carries as one reading ("the does", "my resume"); four
+wanted a following-word collocation the tags cannot carry ("lead pipe", "get the lead out",
+"bass player", "minute detail"); four are tagger calls (dove, invalid, moped, the second
+"entrance") and four are annotation spellings (object, subject, separate, conduct read with a
+different reduced vowel than the gold entry). The rules live in `dasllama_g2p.das` as the
+token context's neighbours (the word and tag on either side, beside the reference's
+look-ahead) and a key order: the infinitive after "to" reads the VERB key; after a determiner a
+verb tag is a mis-tag (NOUN, then DEFAULT) and an adjective before a non-noun is the noun;
+`HETERONYM_NEXT` settles the collocations and `HETERONYM_OVERRIDES` carries the two keyed
+entries. Six corpus sentences now read a heteronym the reference misses; the corpus cell names
+them (`BEYOND_REFERENCE`) and keeps its budget of three tag calls for the rest. The tagger's
+four are the next heteronym step (dove VBD, invalid NN, moped JJ, entrance VB after "to").
+
 ## Risks
 
 - ConvTranspose1d and ISTFT are genuinely new kernels - budget bring-up time; the
