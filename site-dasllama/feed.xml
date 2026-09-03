@@ -26,83 +26,71 @@ How we measured, what we tried, and why the gain is as small as it is:
 <content type="html">&lt;!-- figures: modules/dasLLAMA/performance/records/mtp_m5_gemma-4-26B-A4B.json (2026-09-02, das ecf965ce5),
      mtp_m4_gemma-4-26B-A4B.json (2026-09-02, das e58e5a3ba), mtp_m5_Qwen3.8-27B.json (2026-09-02, das 59cad510c),
      mtp_m4_Qwen3.8-27B.json (2026-09-03, das 24d13f1d2); llama.cpp = stock upstream commit 6fdd0ac89 on both
-     boxes; the round clocks and the kernel lab numbers = Anton&#x27;s M4 Pro on 2026-09-03, build 24d13f1d2;
-     the ruler renders any record back into these tables with --render --&gt;
+     boxes, run as llama-server on the same rendered prompt via /completion with ignore_eos; the M4 morning
+     row (12.7 -&gt; 11.0) = the measurement-day ruler at das 6bacf485d, superseded in the record by 24d13f1d2;
+     the 93% verify share and the depth-2 7.9 -&gt; 12.4 = the round clocks on the M4 Pro, 2026-09-03; the
+     models are gemma-4-26B-A4B-it-Q4_K_M with mtp-gemma-4-26B-A4B-it-Q8_0 and Qwen3.8-27B-Q4_K_M with
+     mtp-Qwen3.8-27B-Q8_0 (checksums in the records); the ruler is modules/dasLLAMA/harness/mtp_ruler.das --&gt;
 &lt;p&gt;We turned speculative decoding on, and Anton&#x27;s Mac mini got slower. That was the morning of
 the 2nd of September, and it is why this story has a second day.&lt;/p&gt;
 &lt;p&gt;The idea first. A model generates one token at a time, and for a big model every token
-costs a full pass over the weights. Speculative decoding lets a small drafter propose a few
-tokens ahead and has the big model verify them all in one pass. Right guesses give you two
-or three tokens for the price of one pass and a bit; wrong guesses cost you the bit. The
-output does not change either way: the big model only keeps a drafted token it would have
-produced itself.&lt;/p&gt;
+costs a full pass over the weights. Speculative decoding lets a smaller model (the drafter)
+propose a few tokens ahead and has the big model verify them all in one pass. Right guesses
+give you two or three tokens for the price of one pass and a bit; wrong guesses cost you the
+bit. The output does not change either way: the big model only keeps a drafted token it
+would have produced itself.&lt;/p&gt;
 &lt;p&gt;Two current models ship with their own drafter. Qwen 3.8 carries a NextN head, one extra
 layer that predicts the token after the next one. Gemma 4 ships a four-layer assistant
-model next to the 26B main model. Both now run in dasLLAMA on Metal, on any Apple GPU the
-engine runs on; the drafter is a second file you load next to the model. We measured on
-Boris&#x27;s new M5 Max laptop and on Anton&#x27;s M4 Pro Mac mini, which he lent us for the week and
-which answers over ssh from the other side of the globe.&lt;/p&gt;
+model next to the 26B main model. Both now run in dasLLAMA on Metal. The drafter is a second
+file you load next to the model. We measured on Boris&#x27;s new M5 Max laptop and on Anton&#x27;s
+M4 Pro Mac mini, which answers over ssh from the other side of the globe.&lt;/p&gt;
 &lt;h2&gt;What we tried&lt;/h2&gt;
-&lt;p&gt;How deep to draft, first of all. One draft token means the big model verifies two tokens per
-pass; two means three, and the second draft only pays if it is accepted often enough to
-cover a third row. We tried one against two on each machine and let the tuner decide, the
-way it decides everything else on a box, and every machine we own settled on one. Three and
-four were so far behind on the development build that they never reached the ruler.&lt;/p&gt;
-&lt;p&gt;We also looked at drafting wide instead of deep: verifying the two or three most likely
-tokens at one position rather than a chain. We dropped it on paper. With one token ahead
-there is no room for a runner-up, and together with depth it multiplies the rows the
-verify has to pay for.&lt;/p&gt;
-&lt;p&gt;We dropped the automatic depth controller too, the one that would raise the depth while the
-drafts keep landing, in favour of the per-box setting. It may come back one day as a
-per-request setting; the math prompt below explains why.&lt;/p&gt;
+&lt;p&gt;How deep to draft, first of all. One draft token means the big model computes two positions
+in one pass: the position it was at anyway, where its own answer either matches the draft or
+replaces it, and the position after the draft, which only counts if the draft matched. So a
+round always yields one token and, when the draft was right, a second. Two draft tokens mean
+three positions, and the second draft only pays if it is accepted often enough to cover that
+third row. We tried one against two on each machine and let the tuner decide, the way it
+decides everything else on a box, and every machine we own settled on one. Three and four
+were so far behind on the development build that they never reached the ruler.&lt;/p&gt;
 &lt;p&gt;The Gemma assistant reads the main model&#x27;s hidden state as its input, and there are two
 places to read it from, before or after the final norm. After won on acceptance, so after
-ships. We also checked whether quantizing the main model harder hurts the drafter: the Q8_0
-Gemma accepted 76.5% of the drafts, the Q4_K_M one 74.6%. Not much, then.&lt;/p&gt;
+ships.&lt;/p&gt;
+&lt;p&gt;We also checked whether squeezing the main model harder hurts the drafter. The 8-bit Gemma
+accepted 76.5% of the drafts, the 4-bit one 74.6%. Not much, then.&lt;/p&gt;
 &lt;p&gt;And then the kernels, which turned out to be the real story and get their own section.&lt;/p&gt;
 &lt;h2&gt;How we measured&lt;/h2&gt;
 &lt;p&gt;The board on daslang.io uses llama-bench, and llama-bench cannot measure speculative
-decoding. So we built a small ruler for ourselves. It renders four chat prompts through the
-model&#x27;s own chat template with thinking off, then runs two engines on the identical rendered
-text: greedy, exactly 128 new tokens each, three repetitions, one dated and stamped record
-per machine and model.&lt;/p&gt;
-&lt;p&gt;Ours runs as the release executable, the same program the board uses, on a sidecar minted
-the same day - the tuner&#x27;s picks for that machine, fresh. On Anton&#x27;s M4 the ruler started it
-like this, for depth 1:&lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;DAS_TUNE_MANIFEST= DASLLAMA_MTP_HEAD=&amp;quot;/Users/dasbox/models/mtp-Qwen3.8-27B-Q8_0.gguf&amp;quot; &amp;quot;modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench&amp;quot; -- -m &amp;quot;/Users/dasbox/models/Qwen3.8-27B-Q4_K_M.gguf&amp;quot; --mtp-ab --mtp-depth 1 -n 128 -r 3 --ngl 99 --prompts &amp;quot;modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt&amp;quot; --chat-prompts
-&lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;llama.cpp runs as its own &lt;code&gt;llama-server&lt;/code&gt;, built straight from upstream at commit
-&lt;code&gt;6fdd0ac89&lt;/code&gt;, exactly as they ship it. The ruler posts the same rendered prompt to its
-&lt;code&gt;/completion&lt;/code&gt; endpoint with &lt;code&gt;ignore_eos&lt;/code&gt; set, so it also produces exactly 128 tokens, and
-reads the server&#x27;s own timings back. For the same arm on the same machine it started the
-server as:&lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;&amp;quot;/Users/dasbox/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server&amp;quot; --port 18790 --host 127.0.0.1 -ngl 99 -fa on -c 2048 -t 10 -np 1 --no-warmup -fit off -m &amp;quot;/Users/dasbox/models/Qwen3.8-27B-Q4_K_M.gguf&amp;quot; --spec-type draft-mtp --spec-draft-n-max 1 -md &amp;quot;/Users/dasbox/models/mtp-Qwen3.8-27B-Q8_0.gguf&amp;quot; -ngld 99
-&lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;The four prompts are the first turns of four tasks from Spec-Bench
-(&lt;a href=&quot;https://github.com/hemingkx/Spec-Bench&quot;&gt;hemingkx/Spec-Bench&lt;/a&gt;, Apache-2.0): a travel blog
-post to write, a news article to summarize, a GSM8K arithmetic problem, and a trivia
-question. Both engines read the same drafter file, and the records carry its checksum.&lt;/p&gt;
+decoding. So we built a small ruler for ourselves. It takes four chat prompts, renders each
+through the model&#x27;s own chat template with thinking off, and runs two engines on the
+identical rendered text: greedy, exactly 128 new tokens each, three repetitions, one dated
+record per machine and model. Ours runs as the release build with a sidecar tuned for that
+machine the same day. llama.cpp runs as its own server, built from upstream exactly as they
+ship it, told to write exactly 128 tokens too; the ruler reads the server&#x27;s own timings back.&lt;/p&gt;
+&lt;p&gt;We focused on two models, gemma-4-26B-A4B-it-Q4_K_M with its Q8_0 assistant and
+Qwen3.8-27B-Q4_K_M with its Q8_0 NextN head, and both engines read the same drafter file.
+From here on: Gemma and Qwen, M5 and M4.&lt;/p&gt;
+&lt;p&gt;The four prompts are the first turns of four tasks from
+&lt;a href=&quot;https://github.com/hemingkx/Spec-Bench&quot;&gt;hemingkx/Spec-Bench&lt;/a&gt;: a travel blog post to write,
+a news article to summarize, a GSM8K arithmetic problem, and a trivia question.&lt;/p&gt;
 &lt;p&gt;Two of the ruler&#x27;s rules exist because each one cost us an afternoon. Same thinking mode on
 both sides: our very first llama.cpp run had thinking on while ours had it off, and its
-acceptance read 91%. A thinking-on answer is an outline, not a blog post, a different text
-with a different acceptance rate; the ruler now renders one prompt and hands the same bytes
-to both engines. And let the box cool down: a Mac that has been working hard for ten minutes
-decodes 13 to 18% slower than a cool one, so every arm now waits three minutes on the 27B
-before it measures. The release executable also runs before anything else. When the
-measuring program had already run the engine in-process, everything it measured afterwards
-came out 20% low, for reasons we still find funny.&lt;/p&gt;
-&lt;p&gt;The whole thing, on Anton&#x27;s M4, is one line, and everything below reproduces from it on the
-dates and builds shown:&lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;bin/daslang -jit modules/dasLLAMA/harness/mtp_ruler.das -- -m $HOME/models/Qwen3.8-27B-Q4_K_M.gguf --server $HOME/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-server --depths 1,2 -t 10 --settle 180 -o modules/dasLLAMA/performance/records/mtp_m4_Qwen3.8-27B.json
-&lt;/code&gt;&lt;/pre&gt;
+acceptance read 91%. A thinking-on answer is an outline, not a blog post - a different text
+with a different acceptance rate. The ruler now renders one prompt and hands the same bytes
+to both engines.&lt;/p&gt;
+&lt;p&gt;And let the box cool down. Surprisingly, a Mac that has been working hard for ten minutes
+decodes 13 to 18% slower than a cool one. Who knew. Every arm now waits three minutes on the
+27B before it measures. The release build also runs before anything else: when the measuring
+program had already run the engine in-process, everything it measured afterwards came out
+20% low, for reasons we still find funny.&lt;/p&gt;
 &lt;h2&gt;What we measured&lt;/h2&gt;
 &lt;p&gt;So we ran it, and the drafter earns its keep: about one token in five, and not a token more.
-In parentheses, the acceptance rate. &quot;off&quot; is plain decoding; &quot;depth 1&quot; and &quot;n_max 1&quot; are
-one draft token in our engine and in llama.cpp; &quot;depth 2&quot; and &quot;n_max 2&quot; are two.&lt;/p&gt;
+In parentheses, the acceptance rate; &quot;depth 1&quot; and &quot;n_max 1&quot; are one draft token in our
+engine and in llama.cpp, &quot;depth 2&quot; and &quot;n_max 2&quot; are two.&lt;/p&gt;
 &lt;table&gt;
 &lt;thead&gt;
 &lt;tr&gt;
-&lt;th&gt;model, machine (date, build)&lt;/th&gt;
+&lt;th&gt;tokens/s&lt;/th&gt;
 &lt;th&gt;dasLLAMA off&lt;/th&gt;
 &lt;th&gt;depth 1&lt;/th&gt;
 &lt;th&gt;depth 2&lt;/th&gt;
@@ -113,7 +101,7 @@ one draft token in our engine and in llama.cpp; &quot;depth 2&quot; and &quot;n_
 &lt;/thead&gt;
 &lt;tbody&gt;
 &lt;tr&gt;
-&lt;td&gt;gemma-4-26B-A4B, Boris&#x27;s M5 Max (09-02, ecf965ce5)&lt;/td&gt;
+&lt;td&gt;Gemma, M5&lt;/td&gt;
 &lt;td&gt;122.7&lt;/td&gt;
 &lt;td&gt;145.9 (75.2%)&lt;/td&gt;
 &lt;td&gt;148.1 (62.6%)&lt;/td&gt;
@@ -122,7 +110,7 @@ one draft token in our engine and in llama.cpp; &quot;depth 2&quot; and &quot;n_
 &lt;td&gt;142.0&lt;/td&gt;
 &lt;/tr&gt;
 &lt;tr&gt;
-&lt;td&gt;gemma-4-26B-A4B, Anton&#x27;s M4 Pro (09-02, e58e5a3ba)&lt;/td&gt;
+&lt;td&gt;Gemma, M4&lt;/td&gt;
 &lt;td&gt;59.2&lt;/td&gt;
 &lt;td&gt;67.5 (74.6%)&lt;/td&gt;
 &lt;td&gt;55.6 (62.9%)&lt;/td&gt;
@@ -131,7 +119,7 @@ one draft token in our engine and in llama.cpp; &quot;depth 2&quot; and &quot;n_
 &lt;td&gt;62.5&lt;/td&gt;
 &lt;/tr&gt;
 &lt;tr&gt;
-&lt;td&gt;Qwen3.8-27B, Boris&#x27;s M5 Max (09-02, 59cad510c)&lt;/td&gt;
+&lt;td&gt;Qwen, M5&lt;/td&gt;
 &lt;td&gt;27.6&lt;/td&gt;
 &lt;td&gt;33.0 (77.4%)&lt;/td&gt;
 &lt;td&gt;31.4 (75.1%)&lt;/td&gt;
@@ -140,7 +128,7 @@ one draft token in our engine and in llama.cpp; &quot;depth 2&quot; and &quot;n_
 &lt;td&gt;33.5&lt;/td&gt;
 &lt;/tr&gt;
 &lt;tr&gt;
-&lt;td&gt;Qwen3.8-27B, Anton&#x27;s M4 Pro (09-03, 24d13f1d2)&lt;/td&gt;
+&lt;td&gt;Qwen, M4&lt;/td&gt;
 &lt;td&gt;12.7&lt;/td&gt;
 &lt;td&gt;14.0 (77.4%)&lt;/td&gt;
 &lt;td&gt;12.4 (75.1%)&lt;/td&gt;
@@ -150,15 +138,13 @@ one draft token in our engine and in llama.cpp; &quot;depth 2&quot; and &quot;n_
 &lt;/tr&gt;
 &lt;/tbody&gt;
 &lt;/table&gt;
-&lt;p&gt;Tokens per second over 128 tokens, four prompts, three repetitions; llama.cpp&#x27;s pooled
-figure is the mean of its four prompts.&lt;/p&gt;
 &lt;p&gt;The same drafter drafts the same on both sides, 75 to 94% accepted at the first position
 depending on the prompt, in both engines. Whatever separates the two columns, it is not the
-drafting. And the four prompts do not agree with each other at all. Gemma on the M5 Max:&lt;/p&gt;
+drafting. And the four prompts do not agree with each other at all. Gemma on the M5:&lt;/p&gt;
 &lt;table&gt;
 &lt;thead&gt;
 &lt;tr&gt;
-&lt;th&gt;prompt&lt;/th&gt;
+&lt;th&gt;tokens/s&lt;/th&gt;
 &lt;th&gt;dasLLAMA off&lt;/th&gt;
 &lt;th&gt;depth 1&lt;/th&gt;
 &lt;th&gt;depth 2&lt;/th&gt;
@@ -206,11 +192,11 @@ drafting. And the four prompts do not agree with each other at all. Gemma on the
 &lt;/tr&gt;
 &lt;/tbody&gt;
 &lt;/table&gt;
-&lt;p&gt;Qwen 3.8 on Anton&#x27;s M4 Pro, the machine that started the second day:&lt;/p&gt;
+&lt;p&gt;Qwen on the M4, the machine that started the second day:&lt;/p&gt;
 &lt;table&gt;
 &lt;thead&gt;
 &lt;tr&gt;
-&lt;th&gt;prompt&lt;/th&gt;
+&lt;th&gt;tokens/s&lt;/th&gt;
 &lt;th&gt;dasLLAMA off&lt;/th&gt;
 &lt;th&gt;depth 1&lt;/th&gt;
 &lt;th&gt;depth 2&lt;/th&gt;
@@ -266,76 +252,74 @@ tables tell you what a round costs: &lt;code&gt;c = (1 + a) / speedup&lt;/code&g
 &lt;table&gt;
 &lt;thead&gt;
 &lt;tr&gt;
-&lt;th&gt;model, machine&lt;/th&gt;
-&lt;th&gt;our round, in passes&lt;/th&gt;
-&lt;th&gt;llama.cpp&#x27;s round, in passes&lt;/th&gt;
+&lt;th&gt;round cost, in plain passes&lt;/th&gt;
+&lt;th&gt;dasLLAMA&lt;/th&gt;
+&lt;th&gt;llama.cpp&lt;/th&gt;
 &lt;/tr&gt;
 &lt;/thead&gt;
 &lt;tbody&gt;
 &lt;tr&gt;
-&lt;td&gt;gemma, M5 Max&lt;/td&gt;
+&lt;td&gt;Gemma, M5&lt;/td&gt;
 &lt;td&gt;1.75 / 1.19 = 1.47&lt;/td&gt;
 &lt;td&gt;1.79 / 1.37 = 1.31&lt;/td&gt;
 &lt;/tr&gt;
 &lt;tr&gt;
-&lt;td&gt;gemma, M4 Pro&lt;/td&gt;
+&lt;td&gt;Gemma, M4&lt;/td&gt;
 &lt;td&gt;1.75 / 1.14 = 1.53&lt;/td&gt;
 &lt;td&gt;1.83 / 1.27 = 1.44&lt;/td&gt;
 &lt;/tr&gt;
 &lt;tr&gt;
-&lt;td&gt;Qwen 3.8, M5 Max&lt;/td&gt;
+&lt;td&gt;Qwen, M5&lt;/td&gt;
 &lt;td&gt;1.77 / 1.20 = 1.48&lt;/td&gt;
 &lt;td&gt;1.83 / 1.35 = 1.35&lt;/td&gt;
 &lt;/tr&gt;
 &lt;tr&gt;
-&lt;td&gt;Qwen 3.8, M4 Pro&lt;/td&gt;
+&lt;td&gt;Qwen, M4&lt;/td&gt;
 &lt;td&gt;1.77 / 1.10 = 1.61&lt;/td&gt;
 &lt;td&gt;1.82 / 1.20 = 1.52&lt;/td&gt;
 &lt;/tr&gt;
 &lt;/tbody&gt;
 &lt;/table&gt;
-&lt;p&gt;Verifying two tokens at once costs both engines about one and a half plain passes. That, not
-the drafter, caps the gain at 1.1 to 1.2x on a dense 27B: the second row is the same weights
-read for two inputs instead of one, plus the draft, plus bookkeeping. On Anton&#x27;s M4 the
-round&#x27;s own clocks, against a 78.7 ms plain pass, read draft 7.4 ms, verify 119.0 ms, accept
-and commit 1.0 ms, replay 0.7 ms. Ninety-three percent of the round is the verify.&lt;/p&gt;
+&lt;p&gt;Turns out ninety-three percent of the round is the verify. Checking two positions at once
+costs both engines about one and a half plain passes, and that, not the drafter, is what caps
+the gain at 1.1 to 1.2x on a dense 27B.&lt;/p&gt;
 &lt;p&gt;It is also why depth 2 falls behind on the M4 and only breaks even on the M5. A third row
 costs another half to a whole pass, and the second draft is accepted 51 to 66% of the time,
 which does not cover it. The math prompt is the exception: there the second draft lands 86
 to 88%, and depth 2 comes out ahead on every machine, 187.9 against 160.1 for Gemma on the
-M5. Acceptance is a property of the text, not the box, which is why the per-request setting
-may come back one day.&lt;/p&gt;
+M5. Acceptance is a property of the text, not the box.&lt;/p&gt;
+&lt;p&gt;Which is why we dropped the automatic depth controller, the one that would raise the depth
+while the drafts keep landing, in favour of the per-box setting for now. It may come back
+one day as a per-request setting, when the text is allowed to decide.&lt;/p&gt;
+&lt;p&gt;The same arithmetic is why we never built the other idea, drafting wide: offering the two or
+three most likely tokens at one position instead of a chain. Every candidate is another row
+to verify, at half a pass to a whole pass each, and a runner-up only earns its row when the
+first candidate was wrong - one time in four on these prompts. It lost on paper before it
+could lose on the box.&lt;/p&gt;
 &lt;h2&gt;Where the two days went&lt;/h2&gt;
-&lt;p&gt;Back to that morning. Anton&#x27;s machine read 12.7 tokens per second plain and 11.0 with the
-drafter on. llama.cpp on the same machine read 11.5 and 13.6. Without that second pair, a
-verify that cost two full passes for two rows would have looked like the price of a smaller
-GPU. With it, it looked like what it was. As Boris put it, it is a lot easier when you have
-an oracle; otherwise how do you know you are slow?&lt;/p&gt;
-&lt;p&gt;The kernel lab said the same in numbers. Our two-row verify kernel - one pass over the
-weights serving two input rows - cost 1.36 to 1.49 times two single-row passes on the M4
-Pro, and 0.52 to 0.89 on the M5 Max. Same code, two verdicts: the two chips have very
-different amounts of arithmetic per byte of memory bandwidth, and this kernel is bound by
-arithmetic. A kernel written in the shape llama.cpp uses sat at 0.9 to 1.05 on the M4. So
-we wrote a new form for M4-class chips, a register tile where each GPU thread holds two
-weight rows and feeds both from one read of the input. The tuner tries both forms on a box
-and keeps the faster. The M4 took the new one, 0.48 ms against the old form&#x27;s 0.84 on the
-test shape; the M5 kept the old one, 0.49 against 0.53. The M4 row went to 13.9.&lt;/p&gt;
-&lt;p&gt;Then Boris asked why the depth-2 row was dropping like crazy: 7.9 tokens per second, 0.62 of
-plain. Same story, one row up. Three rows took a four-column kernel nobody had ever tried on
-this chip, and on the M4 it costs 1.3 to 1.5 times four single passes. We already had all
-the pieces - &quot;and 1 + 2 is better than 3&quot;, as Boris said - so three rows now run as the new
-two-row form plus one single pass, wherever the tuner picked that form. Depth 2 went from 7.9
-to 12.4 and depth 1 to 14.0 by the evening of the 3rd. About a hundred lines and a test.
-Finding it took a yardstick.&lt;/p&gt;
-&lt;h2&gt;The yardstick&lt;/h2&gt;
-&lt;p&gt;Glad we have llama.cpp next to every number here. It is the gold standard of running
-language models on your own machine, the only way we know whether we are fast, and the only
-way we know when to stop: the second day ended where it did because the two columns had met.
-Both projects are open source. Anything in this engine is theirs for the taking, with the
-license&#x27;s attribution, and the same goes the other way. On these prompts, on these two
-machines, on these two days: plain decoding is 10 to 26% faster in dasLLAMA, the speculative
-rounds land within a few percent of each other in both directions, and llama.cpp&#x27;s depth-2
-round is cheaper than ours. That one is ours to fix, and it is what winter evenings are for.&lt;/p&gt;</content>
+&lt;p&gt;Back to that morning. The M4 read 12.7 tokens per second plain and 11.0 with the drafter on.
+llama.cpp on the same machine read 11.5 and 13.6. Without that second pair, a verify that
+cost two full passes for two rows would have looked like the price of a smaller GPU. With
+it, it looked like what it was. It is a lot easier when you have an oracle; otherwise how do
+you know you are slow?&lt;/p&gt;
+&lt;p&gt;The kernel that verifies two rows in one pass over the weights turned out to be a good fit
+for the M5 and a bad one for the M4, because the two chips have very different amounts of
+arithmetic per byte of memory bandwidth. So a new M4-specific kernel was written, the tuner
+picks it where it is the faster one, and the M4 row went to 13.9.&lt;/p&gt;
+&lt;p&gt;Then the depth-2 row, which was dropping like crazy, 7.9 tokens per second against 12.7
+plain. Same story, one row up: three rows took a kernel nobody had ever tried on this chip.
+We already had all the pieces - two rows on the new kernel, one on the old single pass - and
+1 + 2 turned out to be better than 3. Depth 2 went from 7.9 to 12.4, depth 1 to 14.0, by the
+evening of the 3rd. About a hundred lines and a test.&lt;/p&gt;
+&lt;p&gt;llama.cpp is the gold standard of running language models on your own machine, and we are
+glad it sat on the other side of the table for those two days. Without it the M4 row would
+still read 11.0, and we would think that was the chip.&lt;/p&gt;
+&lt;h2&gt;What a draft is worth&lt;/h2&gt;
+&lt;p&gt;Exactly what the verify costs. The drafter&#x27;s quality, the depth, the box, the quantization -
+each of them moves the number a few percent around that one fact. The models ship with the
+drafter built in, so the question was never whether to use it. The question was how cheap we
+could make the check, and the answer so far is one and a half passes for two tokens, on both
+engines, on both chips. Theirs is a little cheaper at depth 2. That one is on our list.&lt;/p&gt;</content>
 </entry>
 <entry>
 <title>Apple M5 support lands - text, vision and speech, tuned on the new silicon.</title>
