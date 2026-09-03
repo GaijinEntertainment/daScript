@@ -6,6 +6,7 @@ module dasllama_kokoro shared public
 
 require dasllama/dasllama_lint public
 require math
+require strings
 require daslib/fio
 require dasllama/dasllama_gguf
 require dasllama/dasllama_unicode
@@ -53,6 +54,23 @@ def kokoro_token_ids(fam : KokoroFamily; ps : string) : array<int> {
     }
     ids |> push(0)
     return <- ids
+}
+
+def kokoro_voice_lang(name : string) : string {
+    //! The language a voice pack was trained on, as the reference pipeline's code, read from
+    //! the pack name's first letter: a American English, b British English, e Spanish, f
+    //! French, h Hindi, i Italian, p Brazilian Portuguese, j Japanese, z Mandarin; else "".
+    let first = empty(name) ? 0 : first_character(name)
+    if (first == 'a') return "en-us"
+    if (first == 'b') return "en-gb"
+    if (first == 'e') return "es"
+    if (first == 'f') return "fr-fr"
+    if (first == 'h') return "hi"
+    if (first == 'i') return "it"
+    if (first == 'p') return "pt-br"
+    if (first == 'j') return "ja"
+    if (first == 'z') return "zh"
+    return ""
 }
 
 //! The style row the reference pipeline picks: the phoneme string's character count, less

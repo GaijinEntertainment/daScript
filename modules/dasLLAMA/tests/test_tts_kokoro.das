@@ -100,7 +100,13 @@ def test_kokoro_facade(t : T?) {
             var inscope m <- load_tts_model(gguf_path())
             var inscope c <- caps(m)
             t |> equal(c.sample_rate, 24000)
-            t |> success(length(c.voices) >= 50, "{length(c.voices)} voices")
+            t |> equal(length(c.voices), 20)   // the American packs; the other languages wait for their front end
+            t |> success(length(c.langs) == 1 && c.langs[0] == "en-us", "{length(c.langs)} language(s), first '{c.langs[0]}'")
+            var american = true
+            for (v in c.voices) {
+                american = american && kokoro_voice_lang(v) == "en-us"
+            }
+            t |> success(american, "every listed voice is American English")
             var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "af_heart")
             t |> equal(audio.sample_rate, 24000)
             t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")

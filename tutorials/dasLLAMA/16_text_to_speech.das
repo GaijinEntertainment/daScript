@@ -22,7 +22,7 @@ require strings
 // Two families run through these verbs, and load_tts_model tells them apart from the GGUF's
 // own architecture metadata:
 //   - KittenTTS — kitten-nano and kitten-mini, 8 voices
-//   - Kokoro-82M — 54 voices
+//   - Kokoro-82M — 54 voice packs in nine languages; caps() lists the ones the front end speaks
 // Both are StyleTTS2-lineage models: a text encoder predicts per-phoneme durations, a prosody
 // branch predicts pitch and energy, a decoder and an iSTFT generator turn those into samples.
 // caps() reports the rate each one emits.

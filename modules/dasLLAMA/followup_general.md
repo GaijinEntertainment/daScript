@@ -1199,6 +1199,19 @@
    safe index answers a shared null NODE, never a null pointer (`skills/daslang/references/json.md`
    says so); the presence test is `is_null`-shaped. One AST shape, no name reading; it cost
    one red cycle in the studio work.
+103. **Kokoro's other languages.** The weights and the vocabulary are shared; a voice pack needs
+   only its language's phoneme strings, and the reference picks the phonemizer by the voice
+   name's first letter. American English serves today and British English is the lexicon
+   rung in flight (misaki `gb_gold`/`gb_silver`, Apache-2.0, merged into the v2 pack). The
+   rest, ruled ledger: Mandarin (8 packs: jieba segmentation plus a pinyin dictionary and
+   tone sandhi, MIT data) and Japanese (5 packs: a dictionary reading engine over
+   OpenJTalk/unidic) are each their own project; Spanish, French, Hindi, Italian and
+   Brazilian Portuguese (13 packs) sit behind a data question - the reference phonemizes them
+   through espeak-ng, whose dictionaries are GPL-3, so a das port of that data cannot sit
+   beside the Apache-2 and MIT packs without a licence ruling or another lexicon source.
+   Every one of them also needs its own number and abbreviation normalizer. Until a language
+   lands, `caps` lists only the voices the front end can drive and a request for another is
+   refused with the reason.
 101. **The tagger pack on a permissive corpus.** `tts_postag.bin` trains on UD English-EWT (CC
    BY-SA 4.0) plus spaCy-tagged Gutenberg prose; published on Hugging Face it carries the CC BY-SA
    label (Boris, 2026-09-03). Owed: a retrain on the permissive silver prose alone, scored by the

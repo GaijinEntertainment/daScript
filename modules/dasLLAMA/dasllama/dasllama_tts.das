@@ -89,13 +89,29 @@ def tts_serves_q8() : bool {
     return styletts2_serves_q8()
 }
 
+def private front_end_langs(m : TtsModel) : array<string> {
+    //! The languages the front end phonemizes for this model, as the reference pipeline's
+    //! codes. Both families ship American English; a family speaks a language only once its
+    //! lexicon rung lands here.
+    var inscope langs : array<string>
+    langs |> push("en-us")
+    return <- langs
+}
+
+def private voice_lang(m : TtsModel; vname : string) : string {
+    //! The language a canonical voice was trained on: Kitten's voices are all American
+    //! English; a Kokoro pack's name carries its language.
+    return m.kind == TtsKind.kitten ? "en-us" : kokoro_voice_lang(vname)
+}
+
 def caps(m : TtsModel) : TtsCaps {
-    //! What the loaded model offers: its canonical voice names (a family's aliases resolve at
+    //! What the loaded model offers: the canonical voice names the front end can drive (a voice
+    //! whose language it does not phonemize is left out; a family's aliases resolve at
     //! synthesis), the PCM sample rate, the languages, and whether it clones a voice from audio.
     var c = TtsCaps()
-    c.voices := m.model.voice_names
+    c.langs <- front_end_langs(m)
+    c.voices <- [for (v in m.model.voice_names); v; where find_index(c.langs, voice_lang(m, v)) >= 0]
     c.sample_rate = m.model.sample_rate
-    c.langs |> push("en")
     c.cloning = false
     return <- c
 }
@@ -285,6 +301,11 @@ def private resolve_voice(m : TtsModel; voice : string) : string {
     let vname = m.kind == TtsKind.kitten ? kitten_voice(m.kitten, m.model, voice) : (styletts2_has_voice(m.model, voice) ? voice : "")
     if (empty(vname)) {
         panic("dasLLAMA tts: unknown voice '{voice}'")
+    }
+    let lang = voice_lang(m, vname)
+    var inscope langs <- front_end_langs(m)
+    if (find_index(langs, lang) < 0) {
+        panic("dasLLAMA tts: unknown voice '{voice}' for this front end - the pack speaks {lang}, which it does not phonemize")
     }
     return vname
 }
