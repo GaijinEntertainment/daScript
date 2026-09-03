@@ -511,12 +511,147 @@ def private check_image_backing_release {
     delete files
 }
 
+// ===== the image rail's two mechanical checks (REVIEW_IMAGE.md) =====
+
+let private DASLLAMA_DIR = "modules/dasLLAMA/dasllama"
+let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
+
+// The stamp of the layout closure - every Archive serializer body, build_image, parse_image and
+// every *_prepare mint, hashed in file order. A closure change with IMAGE_VERSION unmoved is red;
+// the bump re-stamps both constants (the finding prints the values).
+let private IMAGE_LAYOUT_STAMP_VERSION = 32
+let private IMAGE_LAYOUT_STAMP_HASH = 0x234b76b7a8d95d93ul
+
+def private is_archive_serializer(header : string) : bool {
+    return (header |> starts_with("def serialize") || header |> starts_with("def private serialize")) && find(header, "Archive") >= 0
+}
+
+def private is_layout_function(header : string) : bool {
+    return true if (is_archive_serializer(header))
+    var rest = slice(header, 4)
+    if (rest |> starts_with("private ")) {
+        rest = slice(rest, length("private "))
+    }
+    let name = ident_prefix(rest)
+    return name == "build_image" || name == "parse_image" || find(name, "_prepare") >= 0
+}
+
+// every top-level function of the file whose header `pick` accepts: its header line number and
+// its text through the closing brace, comments stripped
+def private function_bodies(path : string; pick : block<(header : string) : bool>) : array<tuple<line : int; body : string>> {
+    var out : array<tuple<line : int; body : string>>
+    var inscope lines : array<string>
+    var header_line = 0
+    var line_no = 0
+    for (raw in split(strip_line_comments(fread(path)), "\n")) {
+        line_no++
+        if (raw |> starts_with("def ")) {
+            if (header_line > 0) {
+                out |> push((line = header_line, body = join(lines, "\n")))
+                lines |> clear()
+                header_line = 0
+            }
+            if (pick |> invoke(raw)) {
+                header_line = line_no
+                lines |> push(raw)
+            }
+        } elif (header_line > 0) {
+            lines |> push(raw)
+            if (raw |> starts_with("}")) {
+                out |> push((line = header_line, body = join(lines, "\n")))
+                lines |> clear()
+                header_line = 0
+            }
+        }
+    }
+    if (header_line > 0) {
+        out |> push((line = header_line, body = join(lines, "\n")))
+    }
+    return <- out
+}
+
+def private fnv1a(text : string; seed : uint64) : uint64 {
+    var h = seed
+    peek_data(text) $(d) {
+        for (b in d) {
+            h ^= uint64(b)
+            h *= 0x100000001b3ul
+        }
+    }
+    return h
+}
+
+def private check_meta_tripwires {
+    dir(DASLLAMA_DIR) $(name) {
+        return if (!ends_with(name, ".das"))
+        let path = "{DASLLAMA_DIR}/{name}"
+        var inscope fns <- function_bodies(path) $(header) {
+            return is_archive_serializer(header)
+        }
+        for (f in fns) {
+            var calls = 0
+            var guarded = false
+            for (line in split(f.body, "\n")) {
+                if (find(line, "arch |> serialize") >= 0) {
+                    calls++
+                }
+                if (find(line, "verify(count_meta_fields(") >= 0) {
+                    guarded = true
+                }
+            }
+            if (calls >= 2 && !guarded) {
+                gate_finding(path, f.line,
+                    "hand-listed Archive serializer with {calls} field writes and no verify(count_meta_fields(x) == K) - a field added to the struct and forgotten here reads back zero on every load; pin the count")
+            }
+        }
+    }
+}
+
+def private check_image_layout_stamp {
+    var version = -1
+    for (line in split(fread(IMAGE_FILE), "\n")) {
+        if (line |> starts_with("let IMAGE_VERSION = ")) {
+            version = try_to_int(ident_prefix(slice(line, length("let IMAGE_VERSION = ")))) ?? -1
+        }
+    }
+    if (version < 0) {
+        gate_finding(IMAGE_FILE, "no `let IMAGE_VERSION = N` line - the layout stamp gate reads the version from it")
+        return
+    }
+    var inscope files : array<string>
+    dir(DASLLAMA_DIR) $(name) {
+        if (ends_with(name, ".das")) {
+            files |> push(name)
+        }
+    }
+    files |> sort()
+    var h = 0xcbf29ce484222325ul
+    for (name in files) {
+        var inscope fns <- function_bodies("{DASLLAMA_DIR}/{name}") $(header) {
+            return is_layout_function(header)
+        }
+        for (f in fns) {
+            h = fnv1a("{name}\n{f.body}\n", h)
+        }
+    }
+    return if (h == IMAGE_LAYOUT_STAMP_HASH && version == IMAGE_LAYOUT_STAMP_VERSION)
+    if (version == IMAGE_LAYOUT_STAMP_VERSION) {
+        gate_finding(IMAGE_FILE,
+            "the image layout closure (every Archive serializer, build_image, parse_image, every *_prepare mint) changed and IMAGE_VERSION is still {version} - a stale image stays structurally valid and serves different bytes; bump IMAGE_VERSION, then set IMAGE_LAYOUT_STAMP_HASH = {h}ul and IMAGE_LAYOUT_STAMP_VERSION to the new version in modules/dasLLAMA/REVIEW.das (a change that provably leaves every byte where it was - a tripwire line, a rename - re-stamps the hash alone; that is a gate edit the weakening rule reviews)")
+    } else {
+        gate_finding("modules/dasLLAMA/REVIEW.das",
+            "the layout stamp is behind IMAGE_VERSION {version} - re-stamp: IMAGE_LAYOUT_STAMP_HASH = {h}ul, IMAGE_LAYOUT_STAMP_VERSION = {version}")
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
         to_log(LOG_ERROR, "modules/dasLLAMA/REVIEW.das: run from the repo root\n")
         return 2
     }
+    check_meta_tripwires()
+    check_image_layout_stamp()
     check_exe_fn_global_restore()
     check_race_bind_numbers()
     check_gpu_role_partition()

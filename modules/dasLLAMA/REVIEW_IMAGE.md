@@ -55,10 +55,15 @@ property-shaped family serves the wrong bytes under a changed property.
 loader puts into an image, bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) in the same
 change.**
 Without the bump a stale image stays structurally valid and silently serves a different model.
+`REVIEW.das` holds the stamp of the layout closure - every `Archive` serializer body,
+`build_image`, `parse_image`, every `*_prepare` mint - and reds when the closure changed with the
+version unmoved; the bump re-stamps both constants with the values the finding prints.
 
-**Weakening the `serialize_image_meta` field-count tripwire (`IMAGE_META_FIELDS`,
-`dasllama/dasllama_image.das`) is a defect** - raising the constant without adding the field to
-`serialize_image_meta` leaves that field out of every image.
+**Every `serialize` / `serialize_image_meta` overload over an `Archive` that writes two or more
+fields opens with `verify(count_meta_fields(x) == K)`, and weakening a tripwire
+(`IMAGE_META_FIELDS` and its family twins) is a defect** - raising the constant without adding
+the field to the serializer leaves that field out of every image, and a serializer without the
+tripwire reads a forgotten field back as zero on every load. `REVIEW.das` checks the presence.
 
 **A filesystem or chunk-allocation decline while saving an image
 (`dasllama/dasllama_image.das`) never fails the load - warn, and serve what is still whole:
