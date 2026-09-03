@@ -233,9 +233,10 @@ author's whole brief: a step dropped there is a step the next format silently sk
 **Legal attribution never appears in prose - it lives in `THIRD_PARTY_NOTICES.md` and the
 `LICENSE.*` files.**
 
-**A def of `dasllama/dasllama.das` - and a new OVERLOAD of one - is TAUGHT: demonstrated in
-runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
-`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** `REVIEW.das`'s `check_tutorial_floor`
+**A def of a facade file - `dasllama/dasllama.das`, or `dasllama/dasllama_tts.das`, which it
+re-exports publicly - and a new OVERLOAD of one - is TAUGHT: demonstrated in runnable code in a
+`tutorials/dasLLAMA/*.das` source and narrated on a `doc/source/reference/tutorials/dasLLAMA_*.rst`
+page.** `REVIEW.das`'s `check_tutorial_floor`
 matches def NAMES only, so an overload passes on a sibling's tutorial - the reviewer confirms a tutorial calls the NEW
 signature, and a mention that only names it (a comment, a passing reference) does not count.
 

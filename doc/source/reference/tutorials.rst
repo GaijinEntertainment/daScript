@@ -249,7 +249,7 @@ engine over a tiny llama2.c checkpoint. The remaining tutorials cover the
 loading GGUF models, tokenization, streaming generation, chat with templates,
 sampling, sessions and memory, performance, the architecture registry,
 speech-to-text, audio chat, embeddings, thinking models, tool calling,
-voice-activity detection, and serving many conversations.
+voice-activity detection, serving many conversations, and text-to-speech.
 Tutorial 01 onward is written against the public ``dasllama/dasllama`` facade.
 
 For tutorials 01 onward, you'll need a GGUF model file on disk (models are not
@@ -280,6 +280,7 @@ with ``-jit``::
    tutorials/dasLLAMA_13_serving.rst
    tutorials/dasLLAMA_14_vision_chat.rst
    tutorials/dasLLAMA_15_prefix_cache.rst
+   tutorials/dasLLAMA_16_text_to_speech.rst
 
 .. _tutorials_dasopenai:
 

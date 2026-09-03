@@ -11,6 +11,9 @@ require dastest/review_gate
 // 1 with findings.
 
 let private FACADE = "modules/dasLLAMA/dasllama/dasllama.das"
+// The TTS surface is a module of its own that dasllama.das re-exports publicly, so its defs
+// are facade defs and the coverage floor reads both files.
+let private FACADE_FILES = [FACADE, "modules/dasLLAMA/dasllama/dasllama_tts.das"]
 let private TUTORIAL_DIR = "tutorials/dasLLAMA"
 let private RST_DIR = "doc/source/reference/tutorials"
 
@@ -74,27 +77,36 @@ def private read_rst(folder : string; prefix : string; var out : array<string>) 
     }
 }
 
-// The tutorial-coverage floor: every def the facade file itself defines appears in at least
-// one tutorial source and one tutorial page. REVIEW.md keeps the judgment half (covered
-// means TAUGHT); this gate only proves presence.
-def private check_tutorial_floor(tut_texts, rst_texts : array<string>) {
-    var seen : table<string>
-    let lines <- split(fread(FACADE), "\n")
+// `finalize` is the language's own teardown hook - the compiler calls it at `delete`, so no
+// tutorial calls it by name and it carries no floor duty.
+var private FLOOR_HOOKS <- {"finalize"}
+
+def private check_floor_of(path : string; var seen : table<string>; tut_texts, rst_texts : array<string>) {
     var line_no = 0
-    for (line in lines) {
+    for (line in split(fread(path), "\n")) {
         line_no++
-        continue if (!starts_with(line, "def "))
+        continue if (!starts_with(line, "def ") || starts_with(line, "def private ") || starts_with(line, "def operator"))
         let name = ident_prefix(slice(line, 4))
-        continue if (empty(name) || key_exists(seen, name))
+        continue if (empty(name) || key_exists(FLOOR_HOOKS, name) || key_exists(seen, name))
         seen |> insert(name)
         if (!word_in_any(tut_texts, name)) {
-            gate_finding(FACADE, line_no,
+            gate_finding(path, line_no,
                 "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial")
         }
         if (!word_in_any(rst_texts, name)) {
-            gate_finding(FACADE, line_no,
+            gate_finding(path, line_no,
                 "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes)")
         }
+    }
+}
+
+// The tutorial-coverage floor: every def the facade files themselves define appears in at
+// least one tutorial source and one tutorial page. REVIEW.md keeps the judgment half (covered
+// means TAUGHT); this gate only proves presence.
+def private check_tutorial_floor(tut_texts, rst_texts : array<string>) {
+    var seen : table<string>
+    for (path in FACADE_FILES) {
+        check_floor_of(path, seen, tut_texts, rst_texts)
     }
 }
 

@@ -86,6 +86,8 @@ safe to delete:
 
    Full source: :download:`tutorials/dasLLAMA/15_prefix_cache.das <../../../../tutorials/dasLLAMA/15_prefix_cache.das>`
 
+   Next tutorial: :ref:`tutorial_dasLLAMA_text_to_speech`
+
    The scheduler that automates this: :ref:`tutorial_dasLLAMA_serving`
 
    Sessions and the KV cache: :ref:`tutorial_dasLLAMA_sessions_and_memory`
