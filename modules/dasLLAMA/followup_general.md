@@ -1190,6 +1190,15 @@
    reaches `panic(` from config input. Also owed: `main.das`'s `suppress_tune_for_setup` decides
    "no model configured" from argv alone (`--model` / `--config`), so a `--tts`-only start - a
    serving start that runs kernels - suppresses the tune mint.
+102. **Two gates the speech studio round asked for.** (1) `utils/dasllama-server/REVIEW.das`'s
+   fixture sweep reads each fixture into a `string`, which stops at the first NUL, so the one
+   binary fixture (`tests/fixtures/speech.wav`) is scanned for seven bytes while the gate
+   appears to cover it - an explicit binary skip, or a byte-array read, makes the coverage
+   honest (a gate edit under the weakening rule, so ruled, not slipped in). (2) A style rule:
+   `js?["k"] == null` / `!= null` on a `JsonValue?` is always wrong and always compiles - the
+   safe index answers a shared null NODE, never a null pointer (`skills/daslang/references/json.md`
+   says so); the presence test is `is_null`-shaped. One AST shape, no name reading; it cost
+   one red cycle in the studio work.
 101. **The tagger pack on a permissive corpus.** `tts_postag.bin` trains on UD English-EWT (CC
    BY-SA 4.0) plus spaCy-tagged Gutenberg prose; published on Hugging Face it carries the CC BY-SA
    label (Boris, 2026-09-03). Owed: a retrain on the permissive silver prose alone, scored by the

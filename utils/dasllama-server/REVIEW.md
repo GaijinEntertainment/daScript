@@ -6,7 +6,7 @@ doc: `README.md`. Planned work: `CONTROL_PAGE_PLAN.md`.
 **A diff to a file that requires - directly or through another file in this folder - a
 `dasllama/*` module applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
-**A captured response body - a `.json`/`.txt` under `tests/fixtures/` - is never
+**A captured response body - a `.json`, `.txt` or `.wav` under `tests/fixtures/` - is never
 hand-authored, and never edited beyond machine-local path normalization; a request or
 response body in a Playwright `.spec.js` under `tests/` (beside this file) is a captured
 fixture, or a clone of one with named fields overridden - a body authored from nothing is a
