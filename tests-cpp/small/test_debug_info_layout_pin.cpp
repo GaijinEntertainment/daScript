@@ -123,6 +123,7 @@ static_assert(offsetof(BaseRequireRecord, name) == 0, DAS_PIN_MSG);
 static_assert(offsetof(BaseRequireRecord, line) == 32, DAS_PIN_MSG);
 static_assert(offsetof(BaseRequireRecord, chain) == 40, DAS_PIN_MSG);
 static_assert(offsetof(RequireRecord, isPublic) == 64, DAS_PIN_MSG);
+static_assert(offsetof(RequireRecord, cantBeRequired) == 65, DAS_PIN_MSG);
 static_assert(offsetof(MissingRecord, hintType) == 64, DAS_PIN_MSG);
 static_assert(offsetof(MissingRecord, hintName) == 72, DAS_PIN_MSG);
 static_assert(offsetof(MissingRecord, hintName2) == 104, DAS_PIN_MSG);
