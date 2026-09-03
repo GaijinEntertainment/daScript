@@ -976,12 +976,26 @@ def private handle_catalog_download(var req : HttpRequest?; var resp : HttpRespo
         to_log(LOG_INFO, "dasllama-server: catalog download started: asr tower (into {g_catalog_dir})\n")
         return resp |> JSON("\{\"ok\":true,\"name\":\"asr\"}", http_status.ACCEPTED)
     }
+    if (tower == "tts") {
+        let file = js?["file"] ?? ""
+        if (empty(file)) {
+            let why = empty(jerr) ? "" : " ({jerr})"
+            return resp |> JSON(error_body("the tts arm names one file of the speech set: \{\"tower\": \"tts\", \"file\": ...}{why}", "invalid_request_error"), http_status.BAD_REQUEST)
+        }
+        let refusal = catalog_download_start_tts(g_catalog_dir, file)
+        if (!empty(refusal)) {
+            return resp |> JSON(error_body(refusal, "invalid_request_error"), http_status.CONFLICT)
+        }
+        let dl_name = "tts:{file}"
+        to_log(LOG_INFO, "dasllama-server: catalog download started: {dl_name} (into {g_catalog_dir})\n")
+        return resp |> JSON("\{\"ok\":true,\"name\":{json_str(dl_name)}}", http_status.ACCEPTED)
+    }
     if (empty(want)) {
         let why = empty(jerr) ? "" : " ({jerr})"
         return resp |> JSON(error_body("body must name a catalog entry: \{\"name\": ...}{why}", "invalid_request_error"), http_status.BAD_REQUEST)
     }
     if (!empty(tower) && tower != "vision") {
-        return resp |> JSON(error_body("unknown tower '{tower}' (vision | asr)", "invalid_request_error"), http_status.BAD_REQUEST)
+        return resp |> JSON(error_body("unknown tower '{tower}' (vision | asr | tts)", "invalid_request_error"), http_status.BAD_REQUEST)
     }
     for (e in model_catalog()) {
         if (e.name == want) {

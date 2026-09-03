@@ -93,8 +93,12 @@ Catalog entries carry their **towers**: a vision-capable row offers its pinned m
 (download -> **enable vision** -> restart wires `image_mmproj`), and a **dictation** strip
 under the table offers the ASR tower (parakeet v3; wires the `asr` key the same way) -
 `POST /catalog/download` takes `{"name", "tower": "vision"}` or `{"tower": "asr"}` on the
-same one-at-a-time rail. Setup-mode **serve this model** wires any tower already on disk
-automatically. Each row also wears a **fit badge** (fits gpu / fits / tight / too big) from
+same one-at-a-time rail. A **speech** strip sits beside it for the text-to-speech set the
+`/catalog` document's `tts` list carries: the two front-end packs first (every speech model
+loads them), then one model, then **enable speech** wires the `tts` key -
+`{"tower": "tts", "file": <file>}` pulls one file of that set on the same rail. Setup-mode
+**serve this model** wires any tower already on disk automatically. Each row also wears a
+**fit badge** (fits gpu / fits / tight / too big) from
 the box facts the `/catalog` document carries (`box.ram_gb`, and the armed tier's weight
 budget as `box.vram_mb`); the advertised working set is a hint, not a load gate.
 
@@ -197,8 +201,8 @@ Windows locks the DLLs.
 | `POST` | `/v1/audio/translations` | Speech->English text (needs `--asr`) |
 | `POST` | `/v1/audio/speech` | Text->speech (needs `--tts`): `{"input", "voice"?, "speed"?, "response_format"?: "wav" \| "pcm"}` - the OpenAI shape; `wav` (default) is 16-bit PCM at the model's rate, `pcm` the raw samples; the compressed formats answer `400` (no encoder here). One synthesis at a time on the TTS worker (its kernels run inline under `hybrid`, like the ASR workers'), 16 queued |
 | `POST` | `/vad` | Silero speech spans over an uploaded clip (the control page's waveform overlay; in-handler, <=120 s, needs the in-repo `silero_vad.bin`) |
-| `GET`  | `/catalog` | The curated model list with local presence + the download state machine (`idle | downloading | verifying | done | failed`, byte progress) |
-| `POST` | `/catalog/download` | `{"name": <entry>}` - start one catalog download; `{"name", "tower": "vision"}` / `{"tower": "asr"}` pull a tower (409 while one runs or the file exists; sha-verified, never waived) |
+| `GET`  | `/catalog` | The curated model list with local presence, the `asr` tower row, the `tts` list (the three speech GGUFs and the two front-end packs, each `file`/`bytes`/`pack`/`present`/`path`), the `box` memory facts + the download state machine (`idle | downloading | verifying | done | failed`, byte progress) |
+| `POST` | `/catalog/download` | `{"name": <entry>}` - start one catalog download; `{"name", "tower": "vision"}` / `{"tower": "asr"}` pull a tower, `{"tower": "tts", "file": <file>}` one file of the speech set (409 while one runs or the file exists; sha-verified, never waived) |
 | `POST` | `/bench` | Loopback-only: start the quiesced A/B benchmark - our engine then the configured `lcpp_bin` - spawned as a child process (needs a source-tree daslang + `lcpp_bin` in the config; 409 while a bench runs or streams are active) |
 | `GET`  | `/bench` | Bench state (`idle | running | done | failed`), live log lines, the result JSON, and the hardware line |
 | `POST` | `/bake` | `{"model"?: name}` loopback-only: bake the slot's prepared `.dlim` image by spawning `dasllama-convert` (empty body bakes the default slot; 409 while a bake or bench runs or streams are active; the dlim GC of never-loadable images runs on completion) |

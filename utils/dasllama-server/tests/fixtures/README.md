@@ -75,12 +75,15 @@ Catalog/setup fixtures (same server, booted with NO model for the setup ones):
 | File | Command |
 |---|---|
 | `stats_setup.json` | `curl $B/v1/stats` on a no-model (setup mode) boot |
-| `catalog_idle.json` | `curl $B/catalog` with at least one entry already downloaded |
+| `catalog_idle.json` | `curl $B/catalog` on a boot whose `DASLLAMA_MODELS_DIR` names a scratch dir holding SYMLINKS to exactly what the fixture must read present: at least one catalog entry, plus `kitten-nano.gguf` and both `tts_g2p.bin` / `tts_postag.bin`, so the speech card's enable state is captured rather than derived. Symlink, never copy - a personal model library does not belong in a fixture, and neither does a second copy of one |
+| `catalog_empty.json` | the same call with `DASLLAMA_MODELS_DIR` on an EMPTY scratch dir: every entry, the ASR tower and the whole speech set absent - the document the download offers are read from |
 | `catalog_downloading.json` + `catalog_done.json` | `bin/daslang -jit utils/dasllama-server/tests/fixtures/capture_catalog.das` (repo root) - boots a setup server on a scratch dir, downloads the smallest card FOR REAL, snapshots `/catalog` mid-flight and after it lands, normalizes paths, deletes the scratch download |
 | `catalog_refusal.json` | `POST $B/catalog/download` for a second entry while one runs (the 409 body) |
 
 After capture, mechanically normalize machine-local paths (model dirs ->
 `D:/models`, the capture TOML path -> `D:/models/dasllama-server.toml`, the capture user's
-home -> `C:/Users/user`) -
+home -> `C:/Users/user`; a `/catalog` capture's scratch models dir maps to
+`C:\Users\user\.dasllama\models`, the home-relative default those fixtures record, exactly as
+`capture_catalog.das` does it) -
 paths are the ONE permitted edit; every other byte stays as served. The
 hardware/box identity lines stay as captured.

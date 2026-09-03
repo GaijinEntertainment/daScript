@@ -154,7 +154,7 @@ button.xs { font-size: 10px; padding: 2px 8px; }
 #s-text:focus { outline: none; border-color: var(--amber-dim); }
 #s-wave { height: 80px; background: var(--bg-3); border: 1px solid var(--rule); border-radius: 4px; cursor: pointer; }
 #tts-section .knob { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint); }
-#tts-section select {
+#tts-section select, #tts-pick {
     font-family: var(--font-mono); font-size: 11.5px; color: var(--fg);
     background: var(--bg-3); border: 1px solid var(--rule); border-radius: 4px; padding: 3px 6px;
 }
@@ -2708,6 +2708,10 @@ let catState = null;   // the last GET /catalog document — the tower offers re
 
 function fmtGB(b) { return (b / 1e9).toFixed(1) + " GB"; }
 
+// sub-gigabyte artifacts - the speech front-end packs, the small speech models - read as MB;
+// fmtGB prints every one of them as "0.1 GB"
+function fmtSize(b) { return b < 1e9 ? Math.round(b / 1e6) + " MB" : fmtGB(b); }
+
 const OS_HEADROOM_GB = 4;   // RAM the fit verdict leaves to the OS before calling it "tight"
 
 // The box-fit verdict for one entry's advertised working set: facts from /catalog's `box`
@@ -2749,11 +2753,14 @@ function miniButton(text, onClick) {
 
 function dlBusy(dl) { return dl.state === "downloading" || dl.state === "verifying"; }
 
-function dlProgress(dl) {
+// the size formatter is the caller's: a catalog row is gigabytes, a speech pack megabytes
+function dlProgressAs(dl, fmtBytes) {
     if (dl.state === "verifying") return "verifying sha256…";
     const pct = dl.total > 0 ? (100 * dl.got / dl.total).toFixed(0) : "0";
-    return "downloading — " + pct + "% of " + fmtGB(dl.total);
+    return "downloading — " + pct + "% of " + fmtBytes(dl.total);
 }
+
+function dlProgress(dl) { return dlProgressAs(dl, fmtGB); }
 
 function rosterRowFor(path) {
     return path ? roster.findIndex(r => r.path === path) : -1;
@@ -2863,8 +2870,85 @@ function renderAsrOffer(doc, dl) {
     strip.append(chip, label);
 }
 
-// the speech offer strip: PATH mode only. Nothing hosts the TTS weights yet, so this card never
-// offers a download - it says which model is wired, or points at the field that wires one.
+const ttsName = f => f.replace(/\.gguf$/i, "");
+
+// smallest present model first: the enable default is the cheapest one on disk, and a box that
+// downloaded several picks among them
+function ttsEnableArm(strip, label, present) {
+    let pick = present[0];
+    if (present.length > 1) {
+        const sel = document.createElement("select");
+        sel.id = "tts-pick";
+        for (const m of present) {
+            const o = document.createElement("option");
+            o.value = m.file;
+            o.textContent = ttsName(m.file);
+            sel.append(o);
+        }
+        sel.value = pick.file;
+        sel.addEventListener("change", () => { pick = present.find(m => m.file === sel.value) || pick; });
+        strip.append(sel);
+    }
+    const b = miniButton("enable speech", async () => {
+        const el = $("f-tts");
+        const en = $("en-tts");
+        if (!el || !en) return;
+        en.checked = true;
+        el.disabled = false;
+        el.closest(".field").classList.remove("off");
+        el.value = pick.path;
+        if (await saveConfig()) noteWithRestart("speech wired (" + ttsName(pick.file) + ") —");
+    });
+    label.textContent = present.length > 1
+        ? "speech models are downloaded — pick one and wire it in"
+        : ttsName(pick.file) + " is downloaded — wire it in to speak";
+    strip.append(b, label);
+}
+
+// the download ladder over /catalog's `tts` list: the two front-end packs first (every speech
+// model loads them), then the models, then the enable. The rail runs one download at a time,
+// so an absent pack pair is one button and the card re-offers what is still missing.
+// False back = the catalog has no tts list to offer from, and the caller says so instead.
+function ttsOfferArm(strip, dl) {
+    const items = (catState && catState.tts) || [];
+    if (!items.length) return false;
+    const label = document.createElement("span");
+    label.className = "ctl-note";
+    if (String(dl.name || "").startsWith("tts:") && dlBusy(dl)) {
+        label.textContent = "speech (" + ttsName(dl.name.slice(4)) + "): " + dlProgressAs(dl, fmtSize);
+        strip.append(label);
+        return true;
+    }
+    const missingPacks = items.filter(i => i.pack && !i.present);
+    if (missingPacks.length) {
+        const bytes = missingPacks.reduce((a, p) => a + p.bytes, 0);
+        const b = miniButton("download the front-end packs (" + fmtSize(bytes) + ")",
+            () => startTtsDownload(missingPacks[0].file));
+        b.title = "the text normalizer and grapheme-to-phoneme tables every speech model loads";
+        b.disabled = dlBusy(dl);
+        label.textContent = "add speech synthesis — /v1/audio/speech and the speech studio above";
+        strip.append(b, label);
+        return true;
+    }
+    const models = items.filter(i => !i.pack);
+    const present = models.filter(m => m.present).sort((a, b) => a.bytes - b.bytes);
+    if (!present.length) {
+        label.textContent = "the front-end packs are here — pick a speech model";
+        for (const m of models) {
+            const b = miniButton("download " + ttsName(m.file) + " (" + fmtSize(m.bytes) + ")",
+                () => startTtsDownload(m.file));
+            b.disabled = dlBusy(dl);
+            strip.append(b);
+        }
+        strip.append(label);
+        return true;
+    }
+    ttsEnableArm(strip, label, present);
+    return true;
+}
+
+// the speech offer strip: the download ladder above, then the three PATH-mode states - wired,
+// configured but not yet loaded, and nothing configured with no catalog to offer from.
 function renderTtsOffer() {
     const strip = $("tts-offer");
     strip.replaceChildren();
@@ -2881,14 +2965,17 @@ function renderTtsOffer() {
         label.textContent = "wired: " + tts.id + ", " + (tts.voices || []).length + " voices, " + tts.lane
             + " — the speech studio above speaks through it";
         strip.append(chip, label);
-    } else if (path) {
+        return;
+    }
+    if (path) {
         label.textContent = "speech model configured, loading — " + path.split(/[\\/]/).pop();
         strip.append(label);
-    } else {
-        label.textContent = "no speech model configured — point the tts field in the config editor at a"
-            + " kitten or kokoro GGUF (tts_g2p.bin + tts_postag.bin sit beside it)";
-        strip.append(label);
+        return;
     }
+    if (ttsOfferArm(strip, (catState && catState.download) || { state: "idle" })) return;
+    label.textContent = "no speech model configured — point the tts field in the config editor at a"
+        + " kitten or kokoro GGUF (tts_g2p.bin + tts_postag.bin sit beside it)";
+    strip.append(label);
 }
 
 function renderCatalog(doc) {
@@ -2970,12 +3057,12 @@ async function loadCatalog() {
     }
 }
 
-async function startCatalogDownload(name, tower) {
+async function postCatalogDownload(body) {
     try {
         const r = await fetch("/catalog/download", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(tower ? { name, tower } : { name }),
+            body: JSON.stringify(body),
         });
         const j = await r.json().catch(() => null);
         if (!r.ok) {
@@ -2986,6 +3073,15 @@ async function startCatalogDownload(name, tower) {
     } catch (_e) {
         $("cat-note").textContent = "download request failed";
     }
+}
+
+function startCatalogDownload(name, tower) {
+    return postCatalogDownload(tower ? { name, tower } : { name });
+}
+
+// the speech set is addressed by FILE, not by a catalog entry name: the packs are not models
+function startTtsDownload(file) {
+    return postCatalogDownload({ tower: "tts", file });
 }
 
 // The live-switch rail: load the downloaded file into a NEW slot and make it the default —

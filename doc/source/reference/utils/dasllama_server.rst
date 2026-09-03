@@ -173,7 +173,7 @@ Endpoints
      - The curated model list with local presence and per-entry download state
    * - ``POST``
      - ``/catalog/download``
-     - ``{"name": <entry>}`` — start one catalog download (sha-verified; ``"tower"`` pulls a vision/asr companion)
+     - ``{"name": <entry>}`` — start one catalog download (sha-verified; ``"tower"`` pulls a vision/asr companion, and ``{"tower": "tts", "file": <file>}`` one file of the speech set)
    * - ``GET`` / ``POST``
      - ``/bench``
      - Read bench state and log / start the quiesced A/B benchmark against the configured llama.cpp binary (``POST`` is loopback-only)

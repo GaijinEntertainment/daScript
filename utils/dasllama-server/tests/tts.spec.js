@@ -1,6 +1,6 @@
 // §08 speech studio: the section is gated on the `tts` block of /v1/stats, the voice select is
 // that block's list, Speak posts the route's own body shape and reports the decoded audio, and
-// the §03 offer card reads the three path-mode states the page can be in.
+// the §03 offer card walks the speech set's download ladder before the three path-mode states.
 
 const { test, expect, fx, bin, openControl, lastJson } = require('./fixtures');
 
@@ -10,6 +10,31 @@ function statsWithoutTts() {
     const s = JSON.parse(JSON.stringify(fx('stats_tts')));
     delete s.tts;
     return s;
+}
+
+// the same names and sizes the card prints, read off whatever the capture recorded
+const modelName = file => file.replace(/\.gguf$/i, '');
+const sizeMB = bytes => Math.round(bytes / 1e6) + ' MB';
+const speechModels = doc => doc.tts.filter(i => !i.pack);
+const speechPacks = doc => doc.tts.filter(i => i.pack);
+const bySize = list => [...list].sort((a, b) => a.bytes - b.bytes);
+
+// the packs land before any model does - the rail runs one download at a time
+function withPacksPresent(doc) {
+    const d = JSON.parse(JSON.stringify(doc));
+    for (const i of d.tts) {
+        if (i.pack) i.present = true;
+    }
+    return d;
+}
+
+// a second model on disk beside the captured one, at the path the capture's own dir implies
+function withModelPresent(doc, file) {
+    const d = JSON.parse(JSON.stringify(doc));
+    const m = d.tts.find(i => i.file === file);
+    m.present = true;
+    m.path = d.models_dir + '\\' + file;
+    return d;
 }
 
 // the fixture's own duration, off its RIFF header — the page decodes the same bytes
@@ -104,10 +129,77 @@ test('the offer card says loading while a configured model has not answered read
     await expect(page.locator('#tts-offer')).toContainText('speech model configured, loading');
 });
 
-test('the offer card points at the config field when nothing is configured', async ({ page }) => {
-    await openControl(page);
+test('the offer card points at the config field when no catalog answers', async ({ page }) => {
+    await openControl(page, { catalog: { status: 500, json: {} } });
     await expect(page.locator('#tts-offer')).toContainText('no speech model configured');
     await expect(page.locator('#tts-offer')).toContainText('tts field');
+});
+
+test('an empty models dir offers the front-end packs before any model', async ({ page }) => {
+    const doc = fx('catalog_empty');
+    const packs = speechPacks(doc);
+    const { posts } = await openControl(page, { catalog: doc });
+    const b = page.locator('#tts-offer button');
+    // one button, not three: every speech model loads the packs, so they come first
+    await expect(b).toHaveCount(1);
+    await expect(b).toHaveText('download the front-end packs (' + sizeMB(packs.reduce((a, p) => a + p.bytes, 0)) + ')');
+    await b.click();
+    expect(lastJson(posts.filter(p => p.path === '/catalog/download')))
+        .toEqual({ tower: 'tts', file: packs[0].file });
+});
+
+test('the packs on disk turn the card into one button per speech model', async ({ page }) => {
+    const doc = withPacksPresent(fx('catalog_empty'));
+    const models = speechModels(doc);
+    const { posts } = await openControl(page, { catalog: doc });
+    await expect(page.locator('#tts-offer button')).toHaveCount(models.length);
+    for (const m of models) {
+        await expect(page.locator('#tts-offer button', { hasText: modelName(m.file) }))
+            .toHaveText('download ' + modelName(m.file) + ' (' + sizeMB(m.bytes) + ')');
+    }
+    await page.locator('#tts-offer button').first().click();
+    expect(lastJson(posts.filter(p => p.path === '/catalog/download')))
+        .toEqual({ tower: 'tts', file: models[0].file });
+});
+
+test('a speech download in flight renders its progress and holds the buttons back', async ({ page }) => {
+    const doc = JSON.parse(JSON.stringify(fx('catalog_empty')));
+    const pack = speechPacks(doc)[0];
+    doc.download = { state: 'downloading', name: 'tts:' + pack.file, got: Math.round(pack.bytes / 2), total: pack.bytes, error: '' };
+    await openControl(page, { catalog: doc });
+    await expect(page.locator('#tts-offer'))
+        .toContainText('speech (' + pack.file + '): downloading — 50% of ' + sizeMB(pack.bytes));
+    await expect(page.locator('#tts-offer button')).toHaveCount(0);
+});
+
+test('a downloaded model beside the packs offers enable-speech, which wires and saves', async ({ page }) => {
+    const doc = fx('catalog_idle');
+    const pick = bySize(speechModels(doc).filter(m => m.present))[0];
+    expect(pick).toBeTruthy();   // the capture stocks one speech model - the enable state is what it records
+    const { posts } = await openControl(page, { catalog: doc });
+    await page.locator('#tts-offer button', { hasText: 'enable speech' }).click();
+    await expect(page.locator('#cat-note')).toContainText('speech wired (' + modelName(pick.file) + ')');
+    expect(lastJson(posts.filter(p => p.path === '/config')).tts).toBe(pick.path);
+    await expect(page.locator('#en-tts')).toBeChecked();
+    // a saved wire is one restart from live, so the note offers it
+    await page.locator('#cat-note button', { hasText: 'restart now' }).click();
+    expect(posts.some(p => p.path === '/restart')).toBe(true);
+});
+
+test('several downloaded models become a picker that defaults to the smallest', async ({ page }) => {
+    const idle = fx('catalog_idle');
+    const absent = bySize(speechModels(idle).filter(m => !m.present))[0];
+    const doc = withModelPresent(idle, absent.file);
+    const present = bySize(speechModels(doc).filter(m => m.present));
+    expect(present.length).toBeGreaterThan(1);
+    const { posts } = await openControl(page, { catalog: doc });
+    const sel = page.locator('#tts-pick');
+    expect(await sel.locator('option').allTextContents()).toEqual(present.map(m => modelName(m.file)));
+    await expect(sel).toHaveValue(present[0].file);
+    // the picked row is the one the enable wires, not the default
+    await sel.selectOption(present[1].file);
+    await page.locator('#tts-offer button', { hasText: 'enable speech' }).click();
+    expect(lastJson(posts.filter(p => p.path === '/config')).tts).toBe(present[1].path);
 });
 
 test('setup mode hides the studio the way it hides the mic', async ({ page }) => {

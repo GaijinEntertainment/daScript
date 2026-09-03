@@ -20,13 +20,14 @@ require dasllama/dasllama_env
 // on /v1/models, the input cap and the speed range, the queue's refusal past its cap, the `tts`
 // block on /v1/stats, and the weight lane the worker pins.
 // Model-gated (kitten-nano.gguf + tts_g2p.bin + tts_postag.bin beside it) and JIT-only; skips
-// cleanly otherwise. The boot degrade, the no-TTS 503 and the lane normalization are model-free
-// and always run.
+// cleanly otherwise. The boot degrade, the no-TTS 503, the lane normalization and the catalog's
+// tts download arm are model-free and always run.
 
 let TEST_PORT = 18136   // 18097/18098/18099/18101/18102/18120/18121/18131/18135 belong to the sibling suites
 let SPEECHLESS_PORT = 18137
 let LANE_PORT = 18138   // the f32-lane boot: a second worker, so it needs a port of its own
 let BOOT_PORT = 18139   // the spawned main.das boot
+let CATALOG_PORT = 18141   // 18140 belongs to the fixtures' capture_catalog rail
 let TTS_BURST = 24      // past the server's queue cap (16): the overflow must be refused, not queued
 let CHILD_TIMEOUT_SEC = 420.0   // the child parses, JITs and loads before it listens
 let BOOT_POLL_ATTEMPTS = 720    // x 500 ms — inside the child's own timeout, so a hung boot still joins
@@ -214,6 +215,39 @@ def test_speech_route_without_a_model(t : T?) {
             // the page gates its speech studio on the key existing, so a speechless boot must not carry it
             with_tts_stats(base_url) $(tts) {
                 t |> success(!json_present(tts), "a boot with no speech model carries no tts block on /v1/stats")
+            }
+        }
+    }
+}
+
+def private catalog_download(base_url, body : string; blk : block<(status : int; text : string) : void>) {
+    POST("{base_url}/catalog/download", body) $(resp) {
+        if (resp == null) {
+            invoke(blk, 0, "")
+        } else {
+            invoke(blk, int(resp.status_code), string(resp.body))
+        }
+    }
+}
+
+// The tts arm of POST /catalog/download - the control page's speech card addresses one FILE of
+// the pinned set, not a catalog entry name. Only the refusals are exercised: an accepted start
+// pulls a real file from the pinned upstream, which no test may do.
+[test]
+def test_catalog_tts_download_arm(t : T?) {
+    t |> run("a tts start with no file, and one naming a file outside the set, refuse in words") @(t : T?) {
+        with_speechless_server(t, CATALOG_PORT) $(base_url) {
+            catalog_download(base_url, "\{\"tower\": \"tts\"}") $(status, text) {
+                t |> equal(status, 400, text)
+                t |> success(find(text, "file") >= 0, "the refusal names the field it wants: {text}")
+            }
+            catalog_download(base_url, "\{\"tower\": \"tts\", \"file\": \"no-such-speech-model.gguf\"}") $(status, text) {
+                t |> equal(status, 409, text)
+                t |> success(find(text, "text-to-speech set") >= 0, "the refusal says what the file is not in: {text}")
+            }
+            catalog_download(base_url, "\{\"name\": \"gemma-4-e2b\", \"tower\": \"speech\"}") $(status, text) {
+                t |> equal(status, 400, text)
+                t |> success(find(text, "tts") >= 0, "the unknown-tower refusal lists the tts arm: {text}")
             }
         }
     }
