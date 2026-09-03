@@ -31,7 +31,8 @@ routing, not a second telling.
 
 0. **Shorten and simplify, a lot.** Every move is a rewrite downward; never add a claim
    that carries no probe.
-1. `probe-verified <date>` tags travel with their claims.
+1. A moved claim stays probe-verified: re-probe it if the move touches its wording. No
+   inline `(probe-verified <date>)` tag is written; the date is history.
 2. Every link to a moved file is retargeted in the same change.
 3. A stray repo-only line in a shipped file takes the `repo-only` marker; a file whose
    repo-only content is more than stray lines splits (`writing_tests.md` /

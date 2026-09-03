@@ -42,17 +42,19 @@ is a syntax error.
 **Character literals take a smaller escape set** - `\b \t \n \f \r \\ \'` only. `'\v'` is
 `error[30151] syntax error, unexpected invalid token` though `"\v"` works; write the number,
 `11`.
+
 ## Conversions
 
 **No implicit value-to-value conversion**: `int + float` is a compile error. Cast by calling the
 target type - `float(i)`, `int(3.7)` truncates toward zero - any numeric to any numeric.
 
 Bare *integer literals* promote to a known target type when the value fits: local/global
-initializers, struct field declarations, struct-ctor field values, variant-arm values, `=`,
-`:=`, compound assignment, either side of a binary operator, `return`. Call arguments,
-parameter defaults, and `<-` do **not** promote - write `foo(1.0)`, never `foo(1)`.
-Only a typed-in literal adapts; a computed constant keeps its type. `31 - clz(0xFF)` and
-`31 - (1u + 1u)` are both uint. Cast when needed: `long_length(a) * int64(typeinfo sizeof(T))`.
+initializers, struct field declarations, struct-ctor field values, variant-arm and tuple-element
+values, `=`, `:=`, compound assignment, either side of a binary operator, `return`. Call
+arguments, parameter defaults, and `<-` do **not** promote - write `foo(1.0)`, never `foo(1)`.
+In a binary operator only a literal adapts - `-1`, `~1`, `(1 + 1)` count, since they are built
+from literals - while a computed constant keeps its type: `31 - clz(0xFF)` is uint, and a
+`typeinfo` result or a macro-built constant is int. Cast those: `long_length(a) * int64(typeinfo sizeof(T))`.
 
 Integer and bitfield targets are range-checked (`var d : uint8 = 256` is an error);
 `float`/`double` targets always accept, so a literal above 2^24 silently loses precision in a
@@ -100,6 +102,7 @@ truncate to the storage type. `require daslib/enum_trait` enables `for (x in typ
 Enum and bitfield bodies separate entries by newline **or** comma (`enum E { A, B }`) but,
 unlike struct and tuple bodies, reject `;`: `enum E { A; B }` is `error[30151] syntax error,
 unexpected ';', expecting '}'`.
+
 ## Bitfields
 
 Each named flag is one bit; storage is `uint` unless declared `uint8`/`uint16`/`uint64`.
@@ -170,7 +173,7 @@ indices: `typeinfo variant_index<f>(v)` (compile error on an unknown name),
 `set_variant_index(v, n)` each need `unsafe` and neither implies the other: a field write does
 not change the index. Anonymous form `variant<i_value:uint; f_value:float>`; two variants match
 when named cases, types, and order all match. A case value takes the struct-field sigils:
-`Value(s = x)` copies, `Value(s <- x)` moves, `Value(s := x)` clones and leaves `x` intact.
+`=` copies a copyable value, `<-` moves, `:=` clones and leaves the source intact.
 
 ## Fixed arrays
 
@@ -217,6 +220,7 @@ Safe without `unsafe`: `new`, `*p` / `deref(p)`, `p.field`, `p?.field`, `p ?? de
 **A `void?` carries no stride, so arithmetic on one is refused outright** - `error[30950]
 operations on 'void' pointers are prohibited`, even inside `unsafe`. Do byte math on `intptr(p)`,
 or reinterpret to `uint8?` first.
+
 **Writing through a pointer needs both const positions open** - a non-const pointee *and* a
 `var` handle: `def f(var p : float?)` stores, while a plain `p : float?` parameter is
 `float? const` and rejects the store. Const flows from the handle through deref, index, and

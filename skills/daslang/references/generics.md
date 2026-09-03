@@ -49,7 +49,7 @@ the head of the type expression they sit on, and are load-bearing only while a g
 binding. On a concrete cast target they are inert (`reinterpret<Foo? -const>(p)` is
 `reinterpret<Foo?>(p)`), and never reach a nested qualifier: with `typedef CI = int const`,
 `CI? -const` is still `int const?`. For a writable pointer declare the parameter `var T?`
-(memory.md). (probe-verified 2026-08-16)
+(memory.md).
 
 | Contract | Accepts |
 |---|---|
@@ -143,8 +143,7 @@ branch is compiled, so the others may be invalid for the current types.
 
 Statement form only. A value-position ternary `cond ? a : b` infers BOTH arms even when `cond`
 is a compile-time constant, so arms whose types diverge (or where one arm is invalid for the
-current types) must select via statement `static_if` into a variable, never a ternary
-(probe-verified 2026-08-26).
+current types) must select via statement `static_if` into a variable, never a ternary.
 
 - `static_assert(cond, "message")` - reports **at the assert**, inside the generic.
 - `concept_assert(cond, "message")` - reports **at the call site**; prefer it for preconditions a

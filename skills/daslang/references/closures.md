@@ -52,7 +52,7 @@ A block or lambda literal needs a target that states the type; assigned to a bar
 with `error[30200] initialization type can't be inferred`.
 
 **A lambda or block parameter silently shadows an enclosing function parameter of the same name**;
-the body sees the inner one. (probe-verified 2026-08-16)
+the body sees the inner one.
 
 ### Capture and lifetime
 
@@ -148,7 +148,7 @@ A lambda cannot capture a block - blocks are neither copyable nor movable
 
 **Capture freezes the binding, not what it points at.** A copy-captured `var p : T?` is still a
 mutable pointer inside the frame: `p[i] = v` writes through to the original memory, and `p + off`
-is still a mutable `T?`. (probe-verified 2026-08-16)
+is still a mutable `T?`.
 
 **An enclosing `unsafe` does not reach into a lambda body** - operations inside it need their own
 wrap; a *block* body, running in the same frame, is covered by the outer wrap.
@@ -264,7 +264,7 @@ you stopped driving early, and is always safe on a sequenced-out one.
 not a reference into any source. A generic parameter written `iterator<auto(TT) const>` takes both
 flavors through one instantiation, at the cost of a body that may not move from or mutate the
 elements. It must still be `var`: a non-`var` iterator parameter is const as a *handle* and cannot
-be iterated at all (`error[30939] can't iterate over const iterator`). (probe-verified 2026-08-16)
+be iterated at all (`error[30939] can't iterate over const iterator`).
 
 ### Making a type iterable
 
