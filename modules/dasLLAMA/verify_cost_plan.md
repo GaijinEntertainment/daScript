@@ -52,11 +52,18 @@ cost is attention plus elementwise; on the MoE carrier the routed experts re-str
 **S0 results, gemma-4-12B on the M5 Max (2026-09-03, fresh mint 866a03046, `-jit`, 16 steps,
 one process per row count):**
 
-| rows through the batch driver | 1 | 2 | 3 | 4 | 5 | 8 |
-|---|---|---|---|---|---|---|
-| ms/step | 15.44 | 17.38 | 24.61 | 24.48 | 42.16 | 42.71 |
-| x the one-row step | 1.00 | 1.13 | 1.59 | 1.59 | 2.73 | 2.77 |
-| marginal row | - | +0.13 | +0.47 | +0.00 | +1.15 | +0.00 (x3) |
+| rows through the batch driver | 1 | 2 | 3 | 4 | 5 | 8 | 9 |
+|---|---|---|---|---|---|---|---|
+| ms/step | 15.44 | 17.38 | 24.61 | 24.48 | 42.16 | 42.71 | 83.64 |
+| x the one-row step | 1.00 | 1.13 | 1.59 | 1.59 | 2.73 | 2.77 | 5.41 |
+| marginal row | - | +0.13 | +0.47 | +0.00 | +1.15 | +0.00 (x3) | +2.64 |
+
+Nine rows is the batch driver's kq mul_mm rail (`enc_kq_site_b` at `nrows > 8`, M padded to 32):
+one weight stream, yet twice the eight-row step - the prefill GEMM at M = 32 runs one 32x64 tile
+per threadgroup and cannot fill the part. The verify's own nine-row route (the eight-row form plus
+one single pass, S1) is predicted at ~55 ms on the same ladder, so past eight rows the batch
+driver's rule is the wrong one on this box (S2 #2b). Sixteen rows decline in `verify_batch_step`
+(the same-slab buffers are `MTP_MAX_ROWS`-sized); the probe stops at nine.
 
 The plain step through the single-row driver reads 20.79 ms beside the batch driver's 15.44 ms
 one-row step - the same weights, the same box: the single-row driver carries 5.3 ms (26%) the
@@ -139,6 +146,9 @@ none poisoned.
    verify (the CPU path already buckets). Predicted: gemma-26B two-row verify 1.45x -> 1.15-1.25x.
 2. K-quant twin 3- and 5-column forms (today 3 rows pay the 4-column kernel, 5 rows re-grid).
    Predicted: M5 5-row 2.03x -> ~1.3x.
+   2b. The batch driver's `nrows > 8` kq mul_mm rail (measured 5.41x at nine rows against 2.77x
+   at eight): route nine to sixteen rows as eight-row forms plus passes, or give the kq mul_mm an
+   M = 32 form that fills the part. Predicted: nine rows 5.41x -> ~3.5x.
 3. The twin's occupancy on ALU-short parts (the M4 Pro crowns single passes around it).
    Predicted: retires the per-box crown; M4 Pro 2-row 1.20x -> ~0.9x.
 4. Pair-walk 4+1 / 4+2 forms. Predicted: M4 Pro 4-row 2.34x -> ~1.6x.
