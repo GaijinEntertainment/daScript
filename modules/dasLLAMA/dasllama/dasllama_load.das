@@ -1647,9 +1647,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // GGUF uses the architecture name as the metadata key prefix (llama.*, qwen2.*, gemma2.*, ...)
         let dim = gguf_int(m, bytes, "{arch}.embedding_length")
-        // MTP/NextN: an in-file head's block_count INCLUDES the appended draft block(s); a split head
-        // (sidecar shard) leaves the trunk's block_count at the trunk. `layers` below is the TRUNK
-        // count — every per-layer validation/mask walks the trunk only.
+        //! an in-file head's block_count includes the draft block(s), a split head's does not - `layers` is the TRUNK count every per-layer walk uses
         let nextn_in = gguf_has(m, "{arch}.nextn_predict_layers") ? gguf_int(m, bytes, "{arch}.nextn_predict_layers") : 0l
         let nextn = m.nextn_sidecar > 0l ? m.nextn_sidecar : nextn_in
         if (nextn < 0l || nextn > 1l) {

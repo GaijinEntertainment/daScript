@@ -245,14 +245,14 @@ def private with_tensor_view(m : GGUFMeta; srcbytes : array<uint8> | #; ti : int
     }
 }
 
-// the in-process override of DASLLAMA_MTP_HEAD (tests and tools that pair a trunk with a head
-// whose name the adjacency rule cannot derive); unset = the env knob rules
+//! the in-process override of DASLLAMA_MTP_HEAD - for a trunk/head pair the adjacency rule cannot name
 var private g_mtp_head_override = ""
 var private g_mtp_head_override_set = false
 
 def public set_mtp_head_path(path : string) {
     g_mtp_head_override = path
     g_mtp_head_override_set = true
+    to_log(LOG_INFO, "dasLLAMA: MTP head pinned to {path} (set_mtp_head_path)\n")
 }
 
 def public clear_mtp_head_path() {
@@ -261,7 +261,7 @@ def public clear_mtp_head_path() {
 }
 
 //! The split NextN/MTP head that rides `path`'s shard walk: the override / `DASLLAMA_MTP_HEAD` when
-//! set, else the `mtp-<trunk basename>` sibling beside the trunk (the ggml-org layout), else "".
+//! set, else the `mtp-<trunk basename>` sibling beside the trunk (the published split-head layout), else "".
 def mtp_head_sidecar(path : string) : string {
     let name = base_name(path)
     if (name |> starts_with("mtp-")) {   // a head loaded on its own never recurses onto itself
@@ -400,8 +400,8 @@ def parse_gguf_meta_shards(bases : array<void?>; sizes : array<int64>) : GGUFMet
             mk.tensors[i].shard = k
             m.tensors |> emplace(mk.tensors[i])
         }
-        // a head shard carries the nextn count the trunk file dropped (ggml-org converts the trunk
-        // --no-mtp and the head --mtp); shard-0 KVs otherwise rule, so promote it only when absent there
+        // a head shard carries the nextn count the trunk file dropped (a split conversion writes the
+        // trunk without the head, the head as its own file); shard-0 KVs otherwise rule, so promote it only when absent there
         unsafe {
             let kb <- temp_array(reinterpret<uint8?>(bases[k]), sizes[k], type<uint8>)
             let arch = gguf_has(mk, "general.architecture") ? gguf_str(mk, kb, "general.architecture") : ""

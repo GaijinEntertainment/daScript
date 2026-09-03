@@ -187,7 +187,6 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
 def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64) {
     let c = t.config
     batch_decode_alloc(t, ws.scr, nrows)
-    // embed each row's token into the residual stream
     let dim = c.dim
     let ts_embed = prof_ticks()
     for (i in range64(nrows)) {

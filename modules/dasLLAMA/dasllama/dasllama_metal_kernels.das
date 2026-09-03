@@ -1164,8 +1164,7 @@ class MetalEmbedQ8 {
     }
 }
 
-// Per-row argmax over a [nrows x n] logits image (the same-slab verify's accept walk on the GPU):
-// one threadgroup per row, tok[row] = the row's winner (lowest index on ties, like MetalArgmax).
+//! per-row argmax over a [nrows x n] logits image: one threadgroup per row, lowest index on ties (like MetalArgmax)
 [metal_dispatch(name = "enc_argmax_rows", pso = "g_pso_argmax_rows", tgmem = "metal_argmax_rows_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
 class MetalArgmaxRows {
     @ssbo @binding = 0 lg : array<float>    // [nrows x n]
@@ -2903,7 +2902,7 @@ struct DnArgs {
     eps : float
     qscale : float
     mid : uint
-    split : uint    // 1: the final state / history store lands in the alias (shadow) region, the live region stays pre-window
+    split : uint
 }
 
 // The fused q8 QKV-GEMV + rope + KV-store twins share one kargs — f16 and f32 mirrors differ
@@ -4039,14 +4038,10 @@ def enc_site_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
     }
 }
 
-//! per format: the box's mint crowned `kq_rows_<fmt>` - B single-row passes beat the small-batch twin
-//! there. Filled once in metal_decode_init from the crown list; uncrowned = the twin, today's form.
 var private g_kq_rows_crowned : bool[16]
-//! the box's mint crowned `kq_mvb2_k4_r2` - the k4 twin at two rows is the two-row register tile
 var private g_kq_k4_r2_crowned : bool
 
-// One kq weight site in a batched step. B <= 8: the small-batch twin, or nrows single-stream GEMVs
-// where the box crowned `kq_rows_<fmt>`; B >= 9: the kq mul_mm twin over the M-padded x panel.
+//! B >= 9 leaves the crown behind and takes the kq mul_mm twin over the M-padded x panel
 [arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
 def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
                   bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
@@ -4073,9 +4068,6 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
     }
 }
 
-//! Three to eight k4 verify rows on a box that crowned the two-row tile: the tile over each column
-//! pair (x and y advance a pair at a time) and one single-row pass for an odd tail - never the four-
-//! or eight-column form, which costs 1.3-1.5x of B single passes where the tile is the box's form.
 [arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
 def enc_kq_mvb_k4_pairs(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff, doff : uint64;
                         bx, by : MetalBuffer?; yoff : uint64; bn, bd : MetalBuffer?; rows, n, ystride, nlive : int64) {
@@ -4278,9 +4270,7 @@ def enc_gemv_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; boff 
     }
 }
 
-// one q8 GEMV site at nrows live rows: the B2/B4 form at nrows <= 4 (spare rows of the B4 form
-// compute garbage into y rows the caller never reads), two 4-row tiles at 5..8 - the second tile
-// offsets x by 4 rows of n floats and y by 4 rows of the site's y stride (enc_mv_site's shape)
+[arch(at="../ARCHITECTURE_GPU_MTP.md#verify-row-pad")]
 def enc_gemv_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; boff : uint64;
                   bx, by, bn, bd, bys : MetalBuffer?; n, d, ys : int64; yoff : uint64 = 0ul) {
     enc_gemv_b(enc, nrows > 2l, bw, boff, bx, by, bn, bd, bys, d, yoff)
@@ -4843,9 +4833,7 @@ let KQ_ROWS_RACE_FORMATS <- [
     (fmt = KqFmt.iq2xxs, qu = 16, sform = KqRaceScaleForm.split_d)
 ]
 
-//! The K-quant small-batch form race on the PRODUCTION wrappers: the two-row twin (`enc_kq_mvb`, base)
-//! against two single-row passes (`enc_kq_gemv`, the "tensor" side); the passes' win crowns
-//! `kq_rows_<fmt>`. Needs the decode PSOs - the caller runs `metal_decode_init` first.
+//! needs the decode PSOs - the caller runs `metal_decode_init` first
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
 def private race_kq_rows(queue : MetalCommandQueue?; fmt : KqFmt; qu_per_sb : int; sform : KqRaceScaleForm) : MetalTensorRaceResult {
     var res = MetalTensorRaceResult(family = "kq_rows_{fmt}", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
@@ -4868,9 +4856,6 @@ def private race_kq_rows(queue : MetalCommandQueue?; fmt : KqFmt; qu_per_sb : in
     return res
 }
 
-//! The k4 twin's form race on the production PSOs: the two-column ext twin (base) against the two-row
-//! register tile (`enc_kq_mvb2_k4r2_c`, the "tensor" side); the tile's win crowns `kq_mvb2_k4_r2`.
-//! Raced before `kq_rows_k4`, so that race meets the box's twin form.
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
 def private race_kq_k4_form(queue : MetalCommandQueue?) : MetalTensorRaceResult {
     var res = MetalTensorRaceResult(family = "kq_mvb2_k4_r2", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
@@ -4984,7 +4969,7 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
     if (metal_decode_init()) {
         var pq = metal_new_command_queue(g_dev)
         var form = race_kq_k4_form(pq)
-        g_kq_k4_r2_crowned = form.winner == "tensor"   // the rows race below meets the box's twin form
+        g_kq_k4_r2_crowned = form.winner == "tensor"
         results |> emplace(form)
         for (f in KQ_ROWS_RACE_FORMATS) {
             results |> emplace(race_kq_rows(pq, f.fmt, f.qu, f.sform))
@@ -10655,9 +10640,7 @@ class MetalKqMvB2K4 : MetalKqMvK4T {
     override TILED = false
 }
 
-//! The k4 twin's two-row register tile: a thread owns TWO weight rows and both x columns, so every x
-//! float4 load feeds two rows. Wins where ALU is short (M4 Pro), loses where it is not (M5 Max); the
-//! `kq_mvb2_k4_r2` crown selects it at two rows, `enc_kq_mvb_k4_pairs` walks it over wider verifies.
+//! the k4 twin's two-row register tile: a thread owns TWO weight rows and both x columns, so every x float4 load feeds two rows
 [metal_dispatch(name = "enc_kq_mvb2_k4r2_c", pso = "g_pso_kq_mvb2_k4r2", tg = 64, grid = "rows/16", params = "rows : int64")]
 class MetalKqMvB2K4R2 {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16>

@@ -62,8 +62,6 @@ def public metal_requires_failed(msg : string) {
     }
 }
 
-// requires item "lhs % N" (lhs = a params= name or kargs.field):
-//   if ((uint64(lhs) % N) != 0) metal_requires_failed("<builder>: lhs % N != 0")
 [arch(at="../ARCHITECTURE_GPU_MTP.md#metal-dispatch-requires")]
 def private mk_requires_check(at : LineInfo; fn_name, lhs : string; n : int) : ExpressionPtr {
     let parts <- split(lhs, ".")
@@ -494,7 +492,6 @@ class MetalDispatch : AstStructureAnnotation {
         // gate scans the whole staged set — but reads-then-writes matches the hand-written order).
         var body : array<ExpressionPtr>
         body |> reserve(length(bufs) * 3 + 4)
-        // requires = "lhs % N, ..." — the kernel's alignment contracts, checked before every dispatch
         let requires = find_arg(args, "requires") ?as tString ?? ""
         if (!empty(strip(requires))) {
             for (item in split(requires, ",")) {

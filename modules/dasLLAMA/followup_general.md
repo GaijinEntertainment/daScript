@@ -957,6 +957,12 @@
    round dispatches with `get_mtp_depth()`, so the CPU override either ignores k or caps it silently.
    Done = the CPU round honors k or clamps with a logged reason, and the bench's "at depth k" line
    prints the depth that ran.
+82. **The assistant drafter's h reading is still an open A/B.** `set_metal_mtp_carry_hidden(on, pre)`
+   / `set_gemma_carry_pre_norm` select the target's post-`output_norm` hidden (default) or the
+   pre-norm residual as the drafter's `h` input, and the `mtp-count-pre` arm only proves output
+   invariance, never which reading accepts more. Done = an acceptance-rate A/B of the two readings
+   on the SpecBench chat corpus with a gemma-4 vehicle, the winner made the default, and the loser's
+   knob deleted rather than left as a permanent lever.
 79. **The batch rail has no hybrid-graph arm; a same-slab verify for the qwen35 round would need one.**
    The batch driver (`metal_batch_decode_forward`) runs std attention only - no deltanet layers, no
    2x-wide gated Q - and graph-declines hybrids (the rope_rows decline used to hide that it would

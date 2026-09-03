@@ -75,3 +75,11 @@ moves the measured quantity. The re-mint or withdrawal lands in
 with zero result rows - wrong flags, failed load, a device that declines.** A run that matched
 nothing and reported success leaves a sidecar or a record untouched, and its caller cannot
 tell.
+
+**A diff that adds or changes an A/B arm makes the run fail when the lever that arm names
+cannot engage - never let both arms run the same code and report the ratio.** A lever that
+silently no-ops turns an unmeasured cell into a 1.00x row nobody can tell from a real tie.
+
+**An A/B instrument over a prompt corpus reports one row per prompt, never one aggregate
+ratio alone.** A corpus whose prompts differ in acceptance hides a per-task loss inside a
+winning mean.

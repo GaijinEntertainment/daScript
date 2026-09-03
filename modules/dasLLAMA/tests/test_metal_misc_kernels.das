@@ -2022,10 +2022,7 @@ def test_lens_requires_gate(t : T?) {
     }
 }
 
-// The K-quant small-batch form is a per-box crown: the decode race times the production two-row twin
-// against two single-row passes for every format with a twin, on this box, and returns a verdict per
-// format - the mint writes `kq_rows_<fmt>` where the passes won (the M4 Pro's k4; the M5 Max's iq4 pair).
-[test]
+[test, arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
 def test_kq_rows_race_verdicts(t : T?) {
     t |> run("the decode race returns a small-batch verdict per K-quant format") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

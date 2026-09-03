@@ -1476,8 +1476,6 @@ def main() : int {
         }
         let c = t.config
         // a model with no NextN head silently no-ops set_mtp_spec — both arms would be identical
-        // and the row would read as a valid 1.00x result. Fail closed instead; a gemma-4 target
-        // carries its drafter as an assistant sidecar (mtp-<name>-Q8_0.gguf beside it) instead.
         if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
             var attached = false
             static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1505,8 +1503,6 @@ def main() : int {
             dispatch_census(t, fmt)
         }
         var s <- make_run_state(c, KVDtype.f16, KVDtype.f16)
-        // per-prompt tok/s of the OFF arm, so the ON arm can print its per-prompt ratio: a SpecBench
-        // corpus is a per-task table, never one number
         var pp_off : array<double>
         pp_off |> resize(length(toks))
         for (arm in range(ab ? 2 : 1)) {

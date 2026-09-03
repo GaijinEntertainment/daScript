@@ -139,3 +139,11 @@ The crown set is read when the prefill PSOs compile, not when a GEMM dispatches,
 `pf_hmm_ready` answers for whatever crowns were armed at the last `metal_prefill_init`. A
 caller that arms a crown after bring-up runs `metal_prefill_shutdown` to force the recompile;
 without it the f16 arm silently stays unavailable and every encode takes the f32 route.
+
+### 2.1j A split head is part of the image's identity {#image-identity-head-fold}
+
+**An image path folds in the split NextN head that rides the load.** `image_path_for` resolves
+`mtp_head_sidecar` for the gguf and, when one exists, hashes `|mtp:<basename>:<size>` alongside the
+configuration identity, so a trunk loaded alone and the same trunk loaded with its head never share
+a `.dlim` path. The head's tensors are baked INSIDE the minted image - one file serves both - so two
+identities sharing a path would re-save over each other forever.

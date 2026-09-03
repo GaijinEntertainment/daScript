@@ -88,8 +88,7 @@ struct private DrPlan {
 
 // ===== sidecar discovery =====
 
-// the stem before the trailing quant token ("...-it-Q4_K_M" -> "...-it"); the whole stem when
-// the name carries no "-Q<digit>" marker
+//! the stem before the trailing quant token ("...-it-Q4_K_M" -> "...-it"); no marker = the whole stem
 def private quant_stem(stem : string) : string {
     var cut = -1
     peek_data(stem) $(d : array<uint8> const#) {
@@ -137,7 +136,7 @@ def private refuse_off(var dr : GemmaDrafter; why : string) : int64 {
 }
 
 // a tensor's byte base inside the mapped single-shard file
-def private tbase(m : GGUFMeta; ti : int) : int64 => m.data_offset + m.tensors[ti].offset
+def private tensor_byte_base(m : GGUFMeta; ti : int) : int64 => m.data_offset + m.tensors[ti].offset
 
 // plan one tensor: presence, on-disk type and element count all have to match, or the load refuses
 def private plan_tensor(var dr : GemmaDrafter; m : GGUFMeta; var plans : array<DrPlan>;
@@ -170,8 +169,7 @@ def private plan_tensor(var dr : GemmaDrafter; m : GGUFMeta; var plans : array<D
     return off
 }
 
-// the drafter owns no K/V projection: a stray k/v weight means the checkpoint and the config
-// disagree, which is a hard refusal rather than a silent drop
+//! the drafter owns no K/V projection: a stray k/v weight is a hard refusal, never a silent drop
 def private has_stray_kv(m : GGUFMeta) : string {
     for (ti in range(length(m.tensors))) {
         let n = m.tensors[ti].name
@@ -238,7 +236,7 @@ def private read_drafter_meta(var dr : GemmaDrafter; m : GGUFMeta; bytes : array
         let sl = pat[l] != 0l
         dr.sliding |> push(sl)
         dr.hs |> push(sl ? hs_swa : hs_full)
-        dr.kv_layer |> push(sl ? -2l : -1l)   // relative to the target's layer count until bound
+        dr.kv_layer |> push(sl ? -2l : -1l)
         if (dr.kvh[l] <= 0l || dr.n_heads % dr.kvh[l] != 0l) {
             return refuse(dr, "layer {l}: {dr.n_heads} q heads do not divide over {dr.kvh[l]} kv heads")
         }
@@ -313,7 +311,7 @@ def private copy_planned(var dr : GemmaDrafter; m : GGUFMeta; bytes : array<uint
         if (pl.q8) {
             let nbytes = (pl.n / Q8_BLK_ELEMS) * Q8_BLK_BYTES
             unsafe {
-                memcpy(addr<void?>(dr.blob[pl.dst]), addr<void?>(bytes[tbase(m, pl.ti)]), nbytes)
+                memcpy(addr<void?>(dr.blob[pl.dst]), addr<void?>(bytes[tensor_byte_base(m, pl.ti)]), nbytes)
             }
         } else {
             gguf_read_tensor_f32(m, bytes, m.tensors[pl.ti].name, dr.fblob, pl.dst, pl.n)
@@ -431,8 +429,7 @@ def gemma_target_hidden(t : Model; var s : Session; post_norm : bool; var dst : 
     }
 }
 
-// this step's cos/sin row for one attention class: the sliding class ropes over its own head size
-// at theta_swa with no frequency factors, the full class over hs at theta with the p-RoPE table
+[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
 def private drafter_rope_row(dr : GemmaDrafter; var cosr : array<float>; var sinr : array<float>;
                              var ff : array<float>; anchor, hs : int64; slid : bool) {
     let theta = slid ? dr.rope_theta_swa : dr.rope_theta
@@ -444,8 +441,7 @@ def private drafter_rope_row(dr : GemmaDrafter; var cosr : array<float>; var sin
     build_rope_tabs(cosr, sinr, theta, 1.0, 1.0, ff, use_ff, anchor, 1l, hs)
 }
 
-// one drafter layer's attention over the target's frozen K/V at kv_layer[l], scale 1.0, GQA
-// broadcast, sliding layers masked to keys within the window of the anchor
+[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
 def private drafter_attention(t : Model; var s : Session; dr : GemmaDrafter; l, anchor : int64;
                               q : array<float>; var attn : array<float>; var scores : array<float>;
                               var kvrow : array<float>) {
@@ -457,7 +453,6 @@ def private drafter_attention(t : Model; var s : Session; dr : GemmaDrafter; l, 
     }
     let kv_dim = layer_kv_dim(c, kvl)
     let kv_mul = dr.n_heads / dr.kvh[l]
-    // visible keys [lo, anchor): the seed at `anchor` is unfed; sliding masks anchor - key >= window
     let lo = dr.sliding[l] ? max(0l, anchor - dr.sliding_window + 1l) : 0l
     let cnt = anchor - lo
     var kcl = kv_layer_kbase(s, kvl, c.seq_len)

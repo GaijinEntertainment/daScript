@@ -35,7 +35,7 @@ struct GemmaDrafterGpu {
     bhnext : MetalBuffer?      // [tdim] post_projection hidden = the next step's h
     btok : MetalBuffer?        // [1] token in (the oracle's single step)
     btok_out : MetalBuffer?    // [1] argmax out
-    bvtok : MetalBuffer?       // [MTP_MAX_ROWS] the round's token list: seed at 0, draft i's winner at i+1 - the verify embeds from it
+    bvtok : MetalBuffer?       //! [MTP_MAX_ROWS] the round's token list
     u_one1 : MetalBuffer?      // uniform 1: the one-token copies
     bpart : MetalBuffer?       // chunked attention partials (grown on demand)
     bpart_bytes : uint64
@@ -196,7 +196,7 @@ def public attach_gemma_drafter(t : Model; path : string) : bool {
     }
     delete g_gemma_drafter
     g_gemma_drafter <- dr
-    gemma_drafter_bind_target(g_gemma_drafter, c.n_layers)   // kv_layer: relative (-2 sliding, -1 full) -> absolute
+    gemma_drafter_bind_target(g_gemma_drafter, c.n_layers)
     gemma_gpu_init(g_gemma_drafter, c.embed_scale, g_gemma_gpu)   // the target's own token scale (gemma: sqrt(dim))
     delete g_gemma_ws
     g_gemma_ws <- create_batch_workspace_(t)
@@ -235,8 +235,7 @@ def public gemma_drafter_attached() : bool => g_gemma_attached
 //! drafted / accepted / rounds since attach - the acceptance lens
 def public gemma_drafter_stats() : tuple<drafted : int64; accepted : int64; rounds : int64> => (drafted = g_gemma_drafted, accepted = g_gemma_accepted, rounds = g_gemma_rounds)
 
-// the anchor's rope rows for both classes: full = theta 1e6 with the target's freq table over the
-// full head, sliding = theta 1e4 over the sliding head (the target's own two rope configs)
+[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
 def private gemma_rope_rows(t : Model; var g : GemmaDrafterGpu; anchor : int64) {
     if (g.rope_pos == anchor) {
         return
@@ -271,9 +270,7 @@ def private gemma_rope_rows(t : Model; var g : GemmaDrafterGpu; anchor : int64) 
     g.rope_pos = anchor
 }
 
-// one drafter layer: rms -> Q -> per-head q_norm -> rope at the anchor -> attention over the
-// target's layer-L mirror rows [0, cnt) -> wo -> post-norm -> residual; rms -> gate/up -> geglu
-// -> down -> post-norm -> (residual + branch) * layer_scale
+[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
 def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder?; var g : GemmaDrafterGpu; l, cnt : int64; mr : KVMirror) {
     let c = t.config
     let dr & = g_gemma_drafter
@@ -294,7 +291,6 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
         var rka = RopeStoreArgs(qd = uint(qd), head_size = uint(hs), npairs_q = uint(qd / 2l), npairs = uint(qd / 2l),
             neox = c.rope_neox ? 1u : 0u, has_bias = 0u, rot = uint(hs))
         enc_rope_store(enc, true, g.bq, 0ul, g_arena, g_arena, 0ul, 0ul, sl ? g.bcos_sw : g.bcos, sl ? g.bsin_sw : g.bsin, g_one, rka, qd / 2l)
-        // attention: the target's layer kvl K/V rows [0, cnt), GQA over its kv heads, scale 1.0
         let lb = uint64(mirror_lbase(t, kdt, mr.cap_rows, kvl))
         let lkoff = mr.koff + lb
         let lvoff = mr.voff + lb
@@ -395,8 +391,7 @@ def public gemma_drafter_last_logits(var dst : array<float>) {
     }
 }
 
-// the layer chain + tail of one draft step on `enc`: bx = [embed ; h] -> logits, argmax into btok_out,
-// post_projection into bhnext (the next step's h)
+[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
 def private encode_gemma_draft(t : Model; s : Session; enc : MetalComputeEncoder?; var g : GemmaDrafterGpu; anchor : int64; mr : KVMirror) {
     let dr & = g_gemma_drafter
     let dim = dr.dim
@@ -413,11 +408,7 @@ def private encode_gemma_draft(t : Model; s : Session; enc : MetalComputeEncoder
     }
 }
 
-//! The k-draft chain as ONE command buffer, committed without a wait: draft i embeds bvtok[i] (the
-//! seed at 0, the argmaxes above it), its h is the CPU carry for i = 0 and the previous draft's
-//! post_projection copied on the device after; each winner lands in bvtok[i + 1], so the verify
-//! that follows on the same queue embeds the rows from the same buffer and the CPU touches nothing
-//! until the verify's join.
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
 def private gemma_draft_chain_gpu(t : Model; s : Session; seed, anchor, k : int64) : bool {
     let dr & = g_gemma_drafter
     var g & = g_gemma_gpu
@@ -444,12 +435,11 @@ def private gemma_draft_chain_gpu(t : Model; s : Session; seed, anchor, k : int6
     metal_end_encoding(enc)
     metal_release(enc)
     metal_commit(cb)
-    let ok = !metal_command_buffer_failed(cb)   // an encode-time failure surfaces here; the GPU result is read after the verify's join
+    let ok = !metal_command_buffer_failed(cb)
     metal_release(cb)
     return ok
 }
 
-// the bring-up lever's chain: the CPU oracle drafts step by step from the CPU carry, tokens into mtp_vbatch
 def private gemma_draft_chain_cpu(t : Model; var s : Session; pos, k : int64) : int64 {
     let dr & = g_gemma_drafter
     var drafted = 0l
@@ -472,8 +462,8 @@ def private gemma_draft_chain_cpu(t : Model; var s : Session; pos, k : int64) : 
 
 var private @scratch g_gemma_h : array<float>      // the chain's h input (tdim)
 var private @scratch g_gemma_hn : array<float>     // ... and the drafter's h_next
-var private g_gemma_draft_cpu = false              // bring-up bisect: the CPU oracle drafts instead of the GPU step
-var private g_gemma_trace = false                  // bring-up bisect: one log line per round
+var private g_gemma_draft_cpu = false
+var private g_gemma_trace = false
 var private g_gemma_cpu_out : GemmaDraftOut
 var private g_gemma_us_draft = 0l   // round time split since attach: the draft chain ...
 var private g_gemma_us_verify = 0l  // ... the same-slab verify + walk + commit
@@ -492,8 +482,8 @@ def public set_gemma_trace(on : bool) {
     g_gemma_trace = on
 }
 
-//! The drafter's h input: the target's post-output_norm hidden (default, llama.cpp's reading) or
-//! the pre-norm residual (mlxfast's). Takes effect from the next decode step's landing.
+//! The drafter's h input: the target's post-output_norm hidden (default) or the pre-norm residual.
+//! Takes effect from the next decode step's landing.
 def public set_gemma_carry_pre_norm(on : bool) {
     if (g_gemma_attached) {
         set_metal_mtp_carry_hidden(true, on)
@@ -528,11 +518,6 @@ def private gemma_trace_round(s : Session; pos, drafted, a, vocab : int64) {
     to_log(LOG_INFO, "{line}\n")
 }
 
-//! The gemma speculative ROUND: k chained drafts at the constant anchor `pos` from (tok, the
-//! target's post-norm hidden of the position before), ONE same-slab batch verify of
-//! [tok, d_1 .. d_k], the accept walk, the commit. Same contract as metal_mtp_spec_round: returns a,
-//! the accepted drafts are s.mtp_vbatch[1..a], tok is always committed; a cold round takes one
-//! plain GPU step and returns 0. A model without a drafter (the NextN carriers) takes the metal round.
 // a round that cannot speculate takes one plain GPU step (output-invariant either way)
 def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) : int64 {
     let tc = ref_time_ticks()
@@ -542,6 +527,11 @@ def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) : int
     return 0l
 }
 
+//! The gemma speculative ROUND: k chained drafts at the constant anchor `pos` from (tok, the
+//! target's post-norm hidden of the position before), ONE same-slab batch verify of
+//! [tok, d_1 .. d_k], the accept walk, the commit. Same contract as metal_mtp_spec_round: returns a,
+//! the accepted drafts are s.mtp_vbatch[1..a], tok is always committed; a cold round takes one
+//! plain GPU step and returns 0. A model without a drafter (the NextN carriers) takes the metal round.
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
 def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {
     if (!g_gemma_attached) {
@@ -569,8 +559,6 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     let td = ref_time_ticks()
     s.mtp_vbatch[0] = tok
     let gpu_chain = !g_gemma_draft_cpu
-    // the GPU chain and the verify ride the queue back to back (one join at the end); the CPU lever
-    // drafts step by step with the oracle
     let drafted = gpu_chain ? (gemma_draft_chain_gpu(t, s, tok, pos, k) ? k : 0l) : gemma_draft_chain_cpu(t, s, pos, k)
     if (drafted == 0l) {
         return gemma_plain_step(t, s, tok, pos)
@@ -587,7 +575,7 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
         return gemma_plain_step(t, s, tok, pos)
     }
     if (gpu_chain) {
-        unsafe {   // the chain's winners, landed by the verify's join (queue order completes the chain first)
+        unsafe {
             let tp = reinterpret<uint?>(metal_buffer_contents(g_gemma_gpu.bvtok))
             for (i in range64(drafted)) {
                 s.mtp_vbatch[i + 1l] = int64(tp[i + 1l])
@@ -596,7 +584,6 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     }
     g_gemma_drafted += drafted
     g_gemma_rounds++
-    // the accept walk: row i is the truth for draft i+1 (the join landed every row's argmax)
     var a = 0l
     while (a < drafted && sameslab_argmax(a) == s.mtp_vbatch[a + 1l]) {
         a++
@@ -604,7 +591,6 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     if (g_gemma_trace) {
         gemma_trace_round(s, pos, drafted, a, c.vocab_size)
     }
-    // commit rows 0..a: row a's logits sample the bonus token, row a's hidden is the next round's h
     unsafe {
         memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits_b[a * c.vocab_size]), uint64(c.vocab_size) * 4ul)
         memcpy(addr < void? >(s.mtp_h[0]), addr < void? >(s.mtp_hrows[a * c.dim]), uint64(c.dim) * 4ul)

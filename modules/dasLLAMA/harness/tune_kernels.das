@@ -2391,15 +2391,10 @@ def private confirm_decode_model() : string {
     return empty(best) ? "" : "{md}{best}"
 }
 
-//! Depth 2 must beat depth 1 by 2% on the chat corpus to be minted: its downside is asymmetric (a
-//! 6% loss on the M4 Pro, a tie on the M5) and a tie is not worth the longer round's latency spread.
+//! the margin depth 2 must beat depth 1 by on the chat corpus to be minted
 let MTP_DEPTH_TG_MARGIN = 1.02lf
 let MTP_DEPTH_CORPUS = "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt"
 
-//! The assistant-drafter depth is a box knob, raced as serving tg on a gemma-4 vehicle with its
-//! `mtp-` head beside it, on the SpecBench chat corpus the board measures (a synthetic 32-token
-//! prompt generates incoherent text the drafter accepts less of: depth 2 lost 10% there where the
-//! chat corpus tied). No vehicle = depth 1, the safe side, and the run says how to provision one.
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-depth-knob")]
 def private confirm_mtp_depth_assistant(wins : array<string>) {
     let model = confirm_assistant_model()

@@ -193,7 +193,6 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
             var one <- [t0]
             eval_(trg, sa, one)
             eval_(trg, sb, one)
-            // plain
             var tok = greedy_top(sa.logits, vocab)
             for (_i in range64(n)) {
                 plain |> push(tok)
@@ -642,8 +641,8 @@ def test_metal_mtp_parity_35b(t : T?) {
     }
 }
 
-// The split-head carrier: ggml-org ships Qwen3.8-27B's NextN head as its own file (the trunk is
-// converted --no-mtp), and the served pair here is the Q4_K_M trunk with the Q8_0 head - a
+// The split-head carrier: Qwen3.8-27B's NextN head ships as its own file (the trunk is converted
+// without it), and the served pair here is the Q4_K_M trunk with the Q8_0 head - a
 // mixed-quant pair the mtp-<trunk basename> adjacency cannot name, so the fixture sets the
 // override knob (restored on exit) and the head rides the load as the last shard.
 [test]
@@ -660,9 +659,9 @@ def test_metal_mtp_parity_qwen38_split_head(t : T?) {
     }
 }
 
-// A head-less fixture: only the batch-rail verify arm runs (the model has no draft head yet - the
-// gemma assistant drafter lands in S3). gemma4's router amplifies any float-class difference to
-// ~2.5 logits/step (the support-matrix row's finding), so its bar is the row's, not the 0.5 one.
+// A head-less fixture: only the batch-rail verify arm runs. gemma4's router amplifies any
+// float-class difference to ~2.5 logits/step (the support-matrix row's finding), so its bar is
+// the row's, not the 0.5 one.
 def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_serve : bool = false; expect_decline : string = "") {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)
@@ -711,8 +710,8 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
             } else {
                 var count <- encode(tr, counting_prompt(1, 40), true, false)
                 set_gemma_trace(arm_on(t, "mtp-count-trace"))
-                set_gemma_draft_on_cpu(arm_on(t, "mtp-count-cpu"))   // bring-up bisect: the CPU oracle drafts
-                set_gemma_carry_pre_norm(arm_on(t, "mtp-count-pre"))   // the memo's open question: pre-norm residual as the drafter's h
+                set_gemma_draft_on_cpu(arm_on(t, "mtp-count-cpu"))
+                set_gemma_carry_pre_norm(arm_on(t, "mtp-count-pre"))
                 for (depth in [1l, 2l, 4l]) {
                     count_cell(t, tr, trg, tag, count, depth)
                     let st = gemma_drafter_stats()

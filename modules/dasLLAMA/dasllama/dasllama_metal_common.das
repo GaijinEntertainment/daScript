@@ -1875,10 +1875,10 @@ var @scratch g_lp_cbs : array<MetalCommandBuffer?>   // per-step cb stash; relea
 var @scratch g_lp_pooled : array<tuple<buf : MetalBuffer?; size : uint64>>   // pending-step stash; clear()-recycled per finish
 var @scratch g_lp_upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
 var g_lp_blog : MetalBuffer?
-var g_lp_sameslab = false       // same-slab verify: land every row's logits + hidden on sessions[0]
-var g_lp_bxf : MetalBuffer?     // ... the rows' post-final-norm hidden (nrows x dim)
+var g_lp_sameslab = false
+var g_lp_bxf : MetalBuffer?     // the rows' post-final-norm hidden (nrows x dim)
 var g_lp_bxf_bytes = 0l
-var g_lp_bvarg : MetalBuffer?   // same-slab verify: the rows' GPU argmax (uint per row), landed into g_sameslab_arg
+var g_lp_bvarg : MetalBuffer?   // the rows' GPU argmax (uint per row), landed into g_sameslab_arg
 var @scratch g_sameslab_arg : array<int64>
 
 //! The same-slab verify's per-row argmax as the join landed it (row i = the truth for draft i+1).
@@ -1905,7 +1905,7 @@ var g_lp_prev_gpu_end = 0.0lf   // last finished step's gpu_end — the handoff 
 
 // wait + read back + release the pending step; x_b writes back only on the sync CPU-classifier
 // path (pipe mode skips it — stale). A dispatch error sets g_lp_err (sync reruns on CPU; a pipelined step is lost).
-// same-slab landing: every row's logits (row 0 also into mtp_logits) + the post-norm hidden rows onto the ONE session
+[arch(at="../ARCHITECTURE_GPU_MTP.md#batch-same-slab")]
 def private land_sameslab_rows(lgp : uint8?) {
     var s0 = g_lp_sessions[0]
     let vb = g_lp_vocab * 4l

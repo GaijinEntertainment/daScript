@@ -603,7 +603,6 @@ def select_decode_override(name : string) : bool {
 
 //! The armed batch-decode override, or none — eval_batch_ (dasllama_batch) dispatches through these
 //! two rather than the registry going public.
-// same-slab verify mode of the batch step: every row is ONE session at consecutive positions (the metal driver prepares the mirror once and lands all rows on it)
 var private g_batch_same_slab = false
 
 def set_batch_same_slab(on : bool) {
@@ -2078,12 +2077,11 @@ struct Session {
     mtp_logits : array<float>      // verify-batch row-0 logits (vocab; the draft check reads its argmax)
     mtp_vbatch : array<int64>      // the 2-row verify batch [tok, draft] (persistent — no per-step alloc)
     mtp_norm_b : array<float>      // verify-batch final-normed rows (npos x dim), input to the batched classifier
-    @scratch mtp_logits_b : array<float>   // verify-batch logits (rows x vocab) — ONE classifier pass covers every row; grows once to the round's width
+    @scratch mtp_logits_b : array<float>   // verify-batch logits (rows x vocab), grown once to the round's width
     @scratch mtp_hrows : array<float>      // verify-batch post-final-norm hidden rows (rows x dim) — the drafter's next input / the carry
     mtp_drafted : int64            // session-lifetime telemetry: drafts attempted / accepted
     mtp_accepted : int64
-    // deltanet rollback for a rejected verify batch (sized lazily on first snapshot - a 27B hybrid's
-    // state is 151 MB, so the first growth reserves before it resizes)
+    // deltanet rollback for a rejected verify batch, sized lazily on the first snapshot (a 27B hybrid's state is 151 MB)
     @scratch mtp_snap_conv : array<float>
     @scratch mtp_snap_state : array<float>
     mtp_snap_pos : int64
@@ -4417,8 +4415,7 @@ def get_mtp_spec() : bool => g_mtp_spec
 
 var private g_mtp_batch_cls = true
 
-// the speculative depth k: drafts per round (the verify runs k+1 rows). 1 = the shipped depth-1
-// rail; the metal round serves 1..MTP_MAX_ROWS-1, the CPU rail stays at 1.
+//! the verify's row cap: depth k runs k+1 rows, so the deepest round drafts MTP_MAX_ROWS-1
 let MTP_MAX_ROWS = 9l
 //! Which speculative round serves: the native NextN head (qwen) or the assistant drafter (gemma-4).
 enum public MtpRoundKind {
@@ -4500,9 +4497,6 @@ def set_mtp_round_kind(k : MtpRoundKind) {
 
 def get_mtp_round_kind() : MtpRoundKind => g_mtp_round_kind
 
-//! The depth a round drafts: the explicit setting when one was made, else the box knob of the
-//! round kind that serves (measured per box - the M5's two-row gemma verify ties depth 1 at
-//! depth 2 where the M4 Pro's loses; the NextN carriers measured depth 1 everywhere).
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-depth-knob")]
 def get_mtp_depth() : int64 {
     if (g_mtp_depth_explicit) return g_mtp_depth
@@ -4785,7 +4779,7 @@ def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total
         break if (tok == 1l)   // BOS delimits sequences (generate()'s contract)
         ids |> push(tok)
         break if (long_length(ids) >= total)
-        let a = mtp_spec_round(t, s, tok)   // commits tok + the accepted drafts at the configured depth
+        let a = mtp_spec_round(t, s, tok)
         var stop = false
         for (i in range64(a)) {
             let acc = s.mtp_vbatch[i + 1l]

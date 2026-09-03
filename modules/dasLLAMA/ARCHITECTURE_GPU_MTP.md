@@ -22,6 +22,14 @@ post-output_norm hidden, carried in `s.mtp_h` by the decode on head-less models
 verify's GPU cost is ~1.2x a one-row step on this model (the rows' weight stream), the physics the
 round cannot recover; everything the host did between the drafts and the verify was.
 
+**The accept walk and the commit.** Row i of the verify is the truth for draft i+1, so the walk
+takes `a` = the length of the leading run where a row's argmax equals the draft it verifies. The
+round commits rows 0..a: row a's logits become `s.logits` (the token sampled next), row a's
+post-final-norm hidden becomes `s.mtp_h` (the next round's carry, and the assistant drafter's h
+input), `s.mtp_h_pos1` and the mirror watermark move to `pos + a + 1`, and `n_past` advances by
+`a + 1`. The rows above the new watermark are the rejected drafts' - garbage the next round
+rewrites - and only the watermark keeps them from being read.
+
 ### 2.29 The depth a round drafts {#mtp-depth-knob}
 
 **The depth a round drafts is a box knob per round kind, not a controller.** `get_mtp_depth()`
@@ -78,4 +86,87 @@ eight k4 rows never take the four- or eight-column forms either: `enc_kq_mvb_k4_
 tile over the column pairs and gives an odd tail one single-row pass. The wide forms are the ext
 algorithm at more columns, and on the box that crowned the tile they cost 1.3-1.5x of B single
 passes while two tiles do four rows in 0.6x of the four-column kernel's time; a third verify row
-under the four-column form cost the M4 Pro's Qwen3.8-27B round 2.3 steps.
+under the four-column form cost the M4 Pro's Qwen3.8-27B round 2.3 steps. In both races the
+first arm is the incumbent and the second is the "tensor" side whose win crowns: `race_kq_rows`
+times the twin against B single passes (the passes are "tensor"), `race_kq_k4_form` the ext twin
+against the tile (the tile is "tensor").
+
+### 2.32 The verify's row buffers are padded to the GEMV form's row tile {#verify-row-pad}
+
+**A multi-row verify sizes every row buffer to a whole 4-row tile, and the pad rows are owned
+scratch.** `acquire_step` takes `mp = ceil(nrows / 4) * 4` (a single-row step stays at 1) and sizes
+`bx`, `bxb`, `bqkv`, `bh12`, `blog` and the deltanet rows to `mp` rows; the rope tables stay at the
+live `nrows`. The fixed-B GEMV forms write a full tile - `enc_gemv_rows` dispatches the B2 form at
+one or two rows, the B4 form at three or four, and two B4 tiles at five to eight, the second
+offsetting x by four rows of n floats and y by four rows of the site's y stride - so the spare rows
+of the last tile compute garbage that must land inside an allocation this step owns and nobody
+reads. A row buffer sized to the live count puts that garbage on whatever the pool put next to it.
+
+### 2.33 The NextN draft chain reads only what its own chain wrote {#mtp-nextn-chain}
+
+**A chained draft carries the head's own hidden and may read slab rows only above the round's
+base.** The chain fills the verify batch: `vbatch[0]` is the committed token, `vbatch[i]` is draft
+`d_i` decoded from `(d_{i-1}, the draft head's own h)`, and `d_1` alone comes from `(tok, the
+trunk's stashed h)` - which the round saves in `s.mtp_xb_save` before the first draft, because the
+chain overwrites `s.mtp_h`. Each step runs `metal_mtp_draft_forward` at `pos + i` against the trunk
+mirror, and it is gated on the round's BASE position (`wm_pos`), not on `pos + i`: the trunk
+watermark only has to cover the base, since a draft at `pos + i` reads exactly the slab rows its own
+chain wrote above it, while the slab capacity must still cover the row being written. Gating on the
+drafted position refuses every round past the first draft.
+
+### 2.34 The verify step re-warms the draft slab from committed history {#mtp-verify-draft-warm}
+
+**The NextN verify encodes the draft head as one more layer and re-warms its K/V slab in the same
+command buffer.** `encode_verify_step` builds `nrows` same-slab route entries for every trunk layer
+PLUS `n_layer_nextn`, and the extra entry addresses the draft head's own slab. After the trunk rows
+norm and classify - row 0 is the truth for the committed token, row i the truth for draft i - the
+step assembles the head's inputs from committed history: `h_0` is the saved pre-draft `mtp_h` parked
+at `bcat` row `nr`, and `h_i` is verify post-norm row `i-1`. It norms the embeds with `mtp_enorm`
+and the hiddens with `mtp_hnorm`, interleaves `[enorm(embed_i) ; hnorm(h_i)]` per row into the cat
+image, runs `mtp_ehproj`, and encodes the verify layer once more at `l == n_layers`. The head
+therefore enters the next round on rows the trunk actually committed, not on the chain's own drafts.
+
+### 2.35 A recurrent verify writes a shadow region and replays into it {#mtp-dn-shadow-replay}
+
+**Recurrent layers under a verify never touch their live state, so a partial accept costs one
+replay instead of a re-forward.** When `r.dn_split` is set, every deltanet store of the verify - the
+conv-history store and the scan's final state - lands in the DnMirror's alias (shadow) region
+(`dn_state_alt` / `dn_conv_alt`, the kernels' `split = 1`), and the live region keeps the pre-verify
+state. The same pass tapes each recurrent layer's scan inputs into `btape` as `[cv rows | qkv rows |
+beta rows | alpha rows]`, `tape_slot` bytes per taped layer. After the accept walk the shadow holds
+the state as of row k; when the walk accepted a < k, `encode_dn_replay` re-runs the history and scan
+kernels over rows 0..a of the tape, reading the LIVE pre-verify state and writing the shadow again -
+the same kernels over the same inputs, so the boundary state is bit for bit what the verify produced
+for that prefix - and `dn_mirror_flip` then makes the shadow live at `pos + a + 1`. A verify whose
+dispatch failed mid-scan leaves the mirror neither live nor re-derivable, so the round drops it.
+
+### 2.36 One assistant-drafter step {#assistant-drafter-step}
+
+**The drafter is a Q-only head on the target's cache at ONE frozen anchor.** A step takes
+`(tok, h)`: it concatenates `embed(tok) * sqrt(tdim)` with the target hidden `h` into a `2 x tdim`
+row, projects it down with `pre_projection`, runs the drafter's layers, applies `output_norm`, and
+reads the normed hidden twice - through the token table for logits (the draft is their argmax) and
+through `post_projection` for the `tdim`-wide hidden the NEXT step consumes in `h`'s slot.
+
+A layer is rms -> Q -> per-head q_norm -> rope at the anchor -> attention -> wo -> post-norm ->
+residual, then rms -> gate/up -> geglu -> down -> post-norm -> (residual + branch) * layer_scale.
+The drafter owns no K/V projection: layer `l` attends the TARGET's layer `kv_layer[l]` rows
+`[0, anchor)`, GQA-broadcast over that layer's kv heads at scale 1.0, and a sliding layer masks
+`anchor - key >= window` (low bound `anchor - window + 1`). The anchor is the seed's own position -
+the target's `n_past` - so the seed row itself is unfed and every draft of a round ropes at the same
+position. Each attention class ropes on its own terms: the full class over `hs` at the target's
+`rope_freq_base` with the p-RoPE frequency table, the sliding class over its own head size at
+`rope_freq_base_swa` with none.
+
+### 2.37 The batch driver's same-slab mode {#batch-same-slab}
+
+**In same-slab mode every batch row is the SAME session at consecutive positions, so the mirror is
+prepared once and the whole step lands on one session.** `eval_verify_batch_` fills the workspace
+with `nrows` copies of one session handle at `pos .. pos+nrows-1` and arms
+`set_batch_same_slab(true)`; the Metal batch driver then calls `mirror_prepare` only for row 0, at
+the base position, and every row shares that slab - the rows above the base are exactly what this
+step writes, so row i attends the rows below it that the same step produced. The landing side
+follows: the zero-copy per-session logits scatter stands down, because all rows would scatter to one
+session, and `land_sameslab_rows` copies every row's logits into `s.mtp_logits_b` (row 0 also into
+`s.mtp_logits`, which only a NextN-headed session has sized), the post-final-norm hidden rows into
+`s.mtp_hrows`, and the GPU per-row argmax into `g_sameslab_arg`.
