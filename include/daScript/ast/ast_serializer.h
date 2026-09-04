@@ -129,6 +129,7 @@ namespace das {
         uint64_t            resumedModules = 0;     // records skipped + reparsed in place
         uint64_t            resumedCorrupt = 0;     // of those, failures a rewrite REPAIRS (anything but builtinHashDrift)
         bool                builtinHashDrift = false;   // last record failed on a builtin cumulative-hash mismatch (lazily populated builtin, e.g. dasbind) - deterministic per process, a rewrite changes nothing
+        bool                quietCache = false;         // default-path module cache: no per-record ser: lines, no drift warning
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
@@ -371,9 +372,12 @@ namespace das {
     // resumed record failed the THROWING way (damaged bytes - the rewrite repairs it); a
     // drift-flavored 'partial' (a lazily populated builtin like dasbind, deterministic per
     // process) deliberately does NOT rewrite - that reparse cost recurs per run by design.
-    // Pass the same path as both readFrom and writeTo for a self-maintaining cache. Under
-    // DAS_NO_FILEIO the cache degrades to a stub: install() binds nothing and finish()
-    // answers 'unavailable'.
+    // Pass the same path as both readFrom and writeTo for a self-maintaining cache; quiet
+    // silences the reader's per-record diagnostics (the host's default cache is invisible
+    // unless asked for). defaultPath() is that default: .jitted_scripts/module_cache/
+    // <stem>-<hash of the normalized script path>.dascache in the cwd, beside the JIT DLL
+    // cache; finish() creates missing parent directories. Under DAS_NO_FILEIO the cache
+    // degrades to a stub: install() binds nothing and finish() answers 'unavailable'.
     struct DAS_API ModuleFileCache {
         enum class ReadVerdict {
             none,       // no reader installed, or nothing was ever read (e.g. debugger disabled the rail)
@@ -389,8 +393,9 @@ namespace das {
             bool        saveFailed = false;     // had bytes to save but could not write the file
             uint64_t    wroteBytes = 0;
         };
-        void install ( const string & readFrom, const string & writeTo );
+        void install ( const string & readFrom, const string & writeTo, bool quiet = false );
         Result finish ();
+        static string defaultPath ( const string & scriptPath );
         SerializationStorageVector  readStorage, writeStorage;
         unique_ptr<AstSerializer>   reader, writer;
         string                      writePath;

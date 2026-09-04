@@ -7,8 +7,14 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/misc/anyhash.h"
+#include "daScript/misc/sysos.h"
 #include <cstdarg>
 #include <cstdio>
+#include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#endif
 #include <stdexcept>
 #include <type_traits>
 
@@ -3027,8 +3033,10 @@ namespace das {
                     *this << savedHash;
 
                     if ( moduleHash != savedHash ) {
-                        LOG(LogLevel::warning) << "das: serialize: cumulative hash for module '" << m->name
-                                               << "' differs" << " (" << moduleHash << " vs " << savedHash << ") ";
+                        if ( !ser.quietCache ) {
+                            LOG(LogLevel::warning) << "das: serialize: cumulative hash for module '" << m->name
+                                                   << "' differs" << " (" << moduleHash << " vs " << savedHash << ") ";
+                        }
                         ser.builtinHashDrift = true;    // per-process-deterministic drift, not damage
                         program->failToCompile = true;
                         return;
@@ -3305,7 +3313,33 @@ namespace das {
         allocateStack(logs,true,false);
     }
 
-    void ModuleFileCache::install ( const string & readFrom, const string & writeTo ) {
+#if !DAS_NO_FILEIO
+    static void ensureParentDirectories ( const string & path ) {
+        for ( size_t i = 1; i < path.size(); ++i ) {
+            if ( path[i] == '/' || path[i] == '\\' ) {
+                string dir = path.substr(0, i);
+#ifdef _WIN32
+                _mkdir(dir.c_str());
+#else
+                mkdir(dir.c_str(), 0755);
+#endif
+            }
+        }
+    }
+#endif
+
+    string ModuleFileCache::defaultPath ( const string & scriptPath ) {
+        string norm = normalizeFileName(scriptPath.c_str());
+        size_t slash = norm.find_last_of("/\\");
+        string stem = slash == string::npos ? norm : norm.substr(slash + 1);
+        size_t dot = stem.rfind('.');
+        if ( dot != string::npos && dot != 0 ) stem = stem.substr(0, dot);
+        char hex[17];
+        snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_blockz64((const uint8_t *) norm.c_str()));
+        return string(".jitted_scripts/module_cache/") + stem + "-" + string(hex, 8) + ".dascache";
+    }
+
+    void ModuleFileCache::install ( const string & readFrom, const string & writeTo, bool quiet ) {
         requested = !readFrom.empty() || !writeTo.empty();
 #if !DAS_NO_FILEIO
         writePath = writeTo;
@@ -3329,13 +3363,17 @@ namespace das {
             }
             if ( !readStorage.buffer.empty() ) {
                 reader = make_unique<AstSerializer>(&readStorage, false);
+                reader->quietCache = quiet;
                 env.serializer_read = reader.get();
             }
         }
         if ( !writePath.empty() ) {
             writer = make_unique<AstSerializer>(&writeStorage, true);
+            writer->quietCache = quiet;
             env.serializer_write = writer.get();
         }
+#else
+        (void) quiet;
 #endif
     }
 
@@ -3378,6 +3416,7 @@ namespace das {
                 // cannot replace on Windows, so there is a missing-file blink there - a
                 // reader in that window just takes the cold path
                 string tmpPath = writePath + ".tmp";
+                ensureParentDirectories(writePath);
                 if ( FILE * f = fopen(tmpPath.c_str(), "wb") ) {
                     res.wroteBytes = uint64_t(fwrite(writeStorage.buffer.data(), 1, writeStorage.buffer.size(), f));
                     fclose(f);

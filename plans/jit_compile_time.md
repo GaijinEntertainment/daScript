@@ -21,11 +21,12 @@ re-execs, A/B reruns), so the warm 9x is where the session hours went.
 ## Adopted dev loop (the kernel workflow)
 
 ```
-daslang.exe -jit -module-cache .jitted_scripts/module_cache/<app>.dascache <app>.das \
-    -- --jit-split-modules=-1 <app args>
+daslang.exe -jit <app>.das -- --jit-split-modules=-1 <app args>
 ```
 
-One cache file per app, under `.jitted_scripts/` (already gitignored). Caveats that stay:
+The module cache is on by default (one file per app under `.jitted_scripts/module_cache/`,
+already gitignored; `-no-module-cache` opts out, `-module-cache <path>` names it). Caveats that
+stay:
 
 - **Bench t/s rows run the stock monolith invocation** until an A/B proves split-neutral -
   split loses cross-module inlining across partitions, so its artifact is not the shipped one.
@@ -37,11 +38,10 @@ One cache file per app, under `.jitted_scripts/` (already gitignored). Caveats t
 
 ## Invalidation ledger
 
-1. **Deser-vs-parse AOT-hash divergence.** A `-module-cache` deserialized AST produces
-   different per-function AOT hashes than the freshly parsed one, so the first run after a
-   cache write re-keys the whole JIT DLL/obj cache (one wasted cold codegen); hashes are
-   stable from then on. Done = the same program hashes identically parsed or deserialized,
-   witnessed by a cache write followed by a JIT cache HIT.
+1. **Deser-vs-parse AOT-hash divergence - DONE.** A deserialized AST hashes identically to the
+   parsed one: `tests/jit_tests/llvm_ast_roundtrip.das` round 2 links 3/3 cached partitions
+   from a `-deser` compile, and a cache write followed by a JIT DLL cache HIT was observed at
+   lcpp_bench scale (9364 functions, M5, 2026-09-04).
 2. **Split obj keys are a chained prefix fold - one edit re-emits the suffix.** Editing
    `dasllama_repack` re-emitted 72 of 99 partitions (18.3 s, nearly full cold): every module
    AFTER the edited one in program order re-keys, though their IR is unchanged. Done =
