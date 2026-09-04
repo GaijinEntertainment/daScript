@@ -772,7 +772,8 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | table.das | Table tombstone handling and iteration | |
 | table_get_key.das | `get_key(table, value)` - retrieve key by iterator value for int<->float, string<->int, const table, tombstones, empty, single entry | |
 | table_operations.das | Table find, insert, delete, key_exists, erase collision, lock panic, defaults, modify | |
-| test_value_table_key.das | `table<EntityId; string>` - value-type table key ops, set operations | |
+| test_cross_tier_table_hash.das | One `table<EntityId; int>` reached by both tiers in one AOT binary - a `[no_aot]` write and an AOT read must agree on the key's hash | |
+| test_value_table_key.das | Value-type table keys - `table<EntityId; string>` ops and set operations, plus a vec4f-workhorse key (`BigEntityId`) across all three tiers | |
 | testing_tools.das | Faker, fuzzer, testing_boost tools | |
 | to_array.das | `to_array` - from fixed_array, range, each(), static/dynamic arrays | |
 | to_table.das | `to_table` - from fixed_array of tuples | |
