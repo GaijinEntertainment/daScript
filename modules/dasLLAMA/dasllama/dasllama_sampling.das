@@ -60,7 +60,7 @@ def private apply_penalties_(s : Session; params : SamplingParams; var row : arr
 //! top-p/min-p, and a CDF draw (or greedy argmax when temp <= 0). Consumes `s.logits` in place.
 //! A token the speculative round's accept walk already drew (s.mtp_pre_tok) is returned instead.
 def sample_(var s : Session; params : SamplingParams) : int64 {
-    s.sampled = params.temp > 0.0
+    s.sampled = !sampler_is_argmax(params)   // any non-argmax draw (a temperature, or a penalty at temp 0) stands the greedy chain down: it predicts the raw argmax, the sampler picks something else
     if (s.mtp_pre_drawn) {
         s.mtp_pre_drawn = false
         return s.mtp_pre_tok

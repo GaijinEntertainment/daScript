@@ -174,3 +174,25 @@ def test_sampled_walk_penalizes_with_the_accepted_drafts(t : T?) {
     delete rows
     delete s
 }
+
+[test]
+def test_sampled_flag_stands_the_greedy_chain_down(t : T?) {
+    //! sample_ sets s.sampled - the single-row driver's greedy-chain gate - whenever its pick can
+    //! differ from the raw argmax: a temperature, OR a penalty at temp 0. A bare argmax leaves it clear.
+    var s <- bare()
+    for (i in range64(VOCAB)) {
+        s.logits[i] = float(i)
+    }
+    let bare_argmax = SamplingParams()
+    s.sampled = true
+    let _b = sample_(s, bare_argmax)
+    t |> success(!s.sampled, "a bare argmax sampler keeps the chain armed")
+    let penalized = SamplingParams(penalty = 2.0)
+    let _p = sample_(s, penalized)
+    t |> success(s.sampled, "a penalty at temp 0 stands the chain down: the chain predicts the raw argmax the penalty rejects")
+    let hot = SamplingParams(temp = 0.8)
+    s.rng = random_seed(3)
+    let _h = sample_(s, hot)
+    t |> success(s.sampled, "a temperature stands the chain down")
+    delete s
+}

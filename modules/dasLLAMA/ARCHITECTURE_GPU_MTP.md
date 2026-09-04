@@ -224,9 +224,10 @@ section is `harness/batch_rows_probe.das` with `--feed text|greedy|second:K --sp
 a sampler that agrees with the argmax two steps in three it still costs 63% of the step (26.0
 against 15.9 ms), because the
 re-arm attempts far more often than a 2% upside pays for. So the sampler decides: `sample_` marks
-the session `sampled` whenever it draws at a temperature above zero, and the driver never chains
-such a session; a greedy sampler (temp 0) and a caller feeding the argmax directly keep the
-adaptive chain.
+the session `sampled` whenever its pick can differ from the raw argmax - a temperature above zero,
+or a penalty at temp 0 (`sampler_is_argmax` is the negation) - and the driver never chains such a
+session, because the chain predicts the raw argmax the penalty then rejects. Only a bare argmax
+sampler (temp 0, penalties off) and a caller feeding the argmax directly keep the adaptive chain.
 
 ### 2.39 The verify encodes on the serial encoder {#verify-serial-encoder}
 

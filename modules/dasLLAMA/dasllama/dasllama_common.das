@@ -1918,8 +1918,8 @@ struct Session {
     rng : int4                // sampling RNG state (seeded in make_run_state; reseed via set_seed)
     recent : array<int64>     // recently generated tokens, for the repetition penalty
     sample_scratch : array<float>  // vocab-sized scratch for top-k selection
-    sampled : bool            //! the last sample_ drew from the distribution (temp > 0): the Metal driver's greedy chain stands down
-    @do_not_delete spec_params : SamplingParams?   //! the caller's sampler, set before a speculative round for its accept walk to draw with; null or temp <= 0 keeps the greedy argmax walk
+    sampled : bool            //! the last sample_'s pick can differ from the raw argmax (a temperature, or a penalty at temp 0 - not a bare argmax): the Metal driver's greedy chain stands down
+    @do_not_delete spec_params : SamplingParams?   //! the caller's sampler, set before a speculative round for its accept walk to draw with; null or a bare argmax (temp <= 0, penalties off) keeps the argmax-match walk
     mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
     mtp_pre_tok : int64
     // last-generation timing, filled by the streaming generate() and read by stats()
