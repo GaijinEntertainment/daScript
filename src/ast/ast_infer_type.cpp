@@ -2464,7 +2464,7 @@ namespace das {
                     error("is argument requires subexpression", "", "",
                           expr->at, CompilationError::missing_typeinfo_subexpression);
                 } else {
-                    if (expr->subexpr->rtti_isVar()) {
+                    if (expr->subexpr->rtti_isVar() && func) {
                         auto evar = static_cast<ExprVar*>(expr->subexpr);
                         reportAstChanged();
                         return new ExprConstBool(expr->at, func->findArgument(evar->name) != nullptr);
