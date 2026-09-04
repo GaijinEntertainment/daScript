@@ -112,6 +112,21 @@ def test_fallback_verdict_names_the_cutoff(t : T?) {
     rmdir_rec(tmp, err)
 }
 
+//! the modes that never install the default cache: the opt-out flag, a compile with no run, an AOT-consuming run
+def check_off_modes(t : T?; base, b, c : string) {
+    var off : string
+    let offRc = run("{base} -no-module-cache {b}", off)
+    t |> success(report_child(t, "no-module-cache", offRc, off, "MARK_mc_default_b"), "-no-module-cache still executes")
+    t |> equal(cache_files("mc_default_b"), 0, "-no-module-cache writes no cache")
+    var co : string
+    let coRc = run("{base} -compile-only {c}", co)
+    t |> success(coRc == 0, "-compile-only compiles:\n{co}")
+    t |> equal(cache_files("mc_default_c"), 0, "-compile-only writes no cache")
+    var aot : string
+    run("{base} -use-aot {c}", aot)
+    t |> equal(cache_files("mc_default_c"), 0, "-use-aot writes no cache, whether or not the binary carries AOT stubs")
+}
+
 //! a cache file cut in the middle is read as far as it goes, silently, and rewritten
 def check_damaged_cache(t : T?; base, a : string) {
     truncate_file(cache_file_path("mc_default_a"))
@@ -125,6 +140,11 @@ def check_damaged_cache(t : T?; base, a : string) {
 //! the AST module cache is on by default - silent, at a path keyed by script, host flags and DAS* env - and the flags that turn it off or make it loud
 [test]
 def test_default_module_cache(t : T?) {
+    let hostArgs <- get_command_line_arguments()
+    if (find_index(hostArgs, "--use-aot") >= 0) {
+        t |> skip("an AOT-consuming host never installs the default cache")
+        return
+    }
     var terr : string
     let tmp = create_temp_directory("das_mc_default", terr)
     if (empty(tmp)) {
@@ -152,14 +172,7 @@ def test_default_module_cache(t : T?) {
     t |> success(quiet(warm), "the default cache says nothing on the warm run:\n{warm}")
     t |> equal(cache_files("mc_default_a"), 1, "the warm run adds no second file")
     check_damaged_cache(t, base, a)
-    var off : string
-    let offRc = run("{base} -no-module-cache {b}", off)
-    t |> success(report_child(t, "no-module-cache", offRc, off, "MARK_mc_default_b"), "-no-module-cache still executes")
-    t |> equal(cache_files("mc_default_b"), 0, "-no-module-cache writes no cache")
-    var co : string
-    let coRc = run("{base} -compile-only {c}", co)
-    t |> success(coRc == 0, "-compile-only compiles:\n{co}")
-    t |> equal(cache_files("mc_default_c"), 0, "-compile-only writes no cache")
+    check_off_modes(t, base, b, c)
     var loud : string
     let loudRc = run("{base} -module-cache \"{path_join(tmp, "explicit.bin")}\" {a}", loud)
     t |> success(report_child(t, "explicit", loudRc, loud, "ser: wrote"), "an explicit -module-cache keeps the loud verdict")

@@ -266,29 +266,33 @@ namespace das {
         return program;
     }
 
-    // pins a file a macro read (a tune sidecar) as a compile-time input of the compiling module,
-    // so a change to it invalidates the cached record. A deliberate NO-OP outside compilation -
-    // manifest readers also run at runtime, and their call site stays unconditional.
+    // pins a compile-time input a macro read - a file (a tune sidecar), an `env:NAME` variable,
+    // or an `arg:--flag` command-line occurrence set - on the compiling module, so a change to
+    // it invalidates the cached record. A deliberate NO-OP outside compilation - manifest
+    // readers also run at runtime, and their call site stays unconditional.
     void addModuleCacheDependency ( const char * path, Context *, LineInfoArg * ) {
         auto program = daScriptEnvironment::getBound()->g_Program;
         if ( !program || !path || !path[0] ) return;
+        bool virtualInput = strncmp(path, "env:", 4)==0 || strncmp(path, "arg:", 4)==0;
         // absolutize: the validating reader may run from a different cwd, and a relative
         // path there would stat the wrong (or no) file
         string fullPath = path;
 #if !defined(DAS_NO_FILEIO)
+        if ( !virtualInput ) {
 #if defined(_WIN32)
-        // a drive-relative spelling (C:foo) resolves against that drive's own cwd, which a
-        // hand-rolled cwd-join cannot reproduce - GetFullPathName (via normalizeFileName) can
-        string norm = normalizeFileName(path);
-        if ( !norm.empty() ) fullPath = norm;
+            // a drive-relative spelling (C:foo) resolves against that drive's own cwd, which a
+            // hand-rolled cwd-join cannot reproduce - GetFullPathName (via normalizeFileName) can
+            string norm = normalizeFileName(path);
+            if ( !norm.empty() ) fullPath = norm;
 #else
-        if ( path[0]!='/' ) {
-            char cwd[4096];
-            if ( das_dep_getcwd(cwd, sizeof(cwd)) ) {
-                fullPath = string(cwd) + "/" + path;
+            if ( path[0]!='/' ) {
+                char cwd[4096];
+                if ( das_dep_getcwd(cwd, sizeof(cwd)) ) {
+                    fullPath = string(cwd) + "/" + path;
+                }
             }
-        }
 #endif
+        }
 #endif
         int64_t size = -1;
         uint64_t hash = 0;

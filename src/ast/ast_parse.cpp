@@ -10,8 +10,10 @@
 #include "daScript/ast/ast_bound_check_elision.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/simulate.h"
+#include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/aot_builtin_uriparser.h"
+#include "daScript/misc/env_cfg.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/das_project_specific.h"
 
@@ -600,6 +602,21 @@ namespace das {
     void statAndHashFileDependency ( const string & path, int64_t & size, uint64_t & hash ) {
         size = -1;
         hash = 0;
+        if ( path.compare(0, 4, "env:") == 0 ) {
+            if ( const char * v = das_getenv(path.c_str() + 4) ) {
+                size = int64_t(strlen(v));
+                hash = size ? hash_block64((const uint8_t *) v, size_t(size)) : FNV64A_SEED;
+            }
+            return;
+        }
+        if ( path.compare(0, 4, "arg:") == 0 ) {
+            string occurrences = commandLineArgumentOccurrences(path.substr(4));
+            if ( !occurrences.empty() ) {
+                size = int64_t(occurrences.size());
+                hash = hash_block64((const uint8_t *) occurrences.data(), occurrences.size());
+            }
+            return;
+        }
 #if !defined(DAS_NO_FILEIO)
         FILE * f = fopen(path.c_str(), "rb");
         if ( !f ) return;

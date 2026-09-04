@@ -500,7 +500,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     string cacheWritePath = !serFile.empty() ? serFile : explicitCache;
     bool cacheQuiet = false;
     if ( !moduleCacheExplicit && !noModuleCache && serFile.empty() && deserFile.empty()
-        && jitEnabled != JitMode::Executable && !compileOnly && !buildingDocumentation && !debuggerRequired ) {
+        && jitEnabled != JitMode::Executable && !compileOnly && !buildingDocumentation && !debuggerRequired && !useAot ) {
         cacheReadPath = cacheWritePath = ModuleFileCache::defaultPath(fn, hostBinary, hostOptions);
         cacheQuiet = true;
     }
@@ -694,7 +694,7 @@ void print_help() {
         << "    -module-cache <path> self-maintaining AST module cache at <path>: read when present, rewritten\n"
         << "                when the compile diverged; prints 'deser: clean'/'partial'/'FALLBACK'. Default ON,\n"
         << "                silently, at .jitted_scripts/module_cache/<script>-<hash>.dascache for a run that\n"
-        << "                executes; off under -exe (one-unit codegen is the faster binary), -compile-only, -documentation\n"
+        << "                executes; off under -exe (one-unit codegen is the faster binary), -compile-only, -documentation, -use-aot\n"
         << "    -no-module-cache  no AST module cache at all\n"
         << "    -ser <path> write the compiled AST module cache to <path> after compile (explicit write half)\n"
         << "    -deser <path> read the AST module cache from <path> during compile instead of parsing;\n"

@@ -1715,6 +1715,26 @@ namespace das
         arr = g_CommandLineArguments;
     }
 
+    string commandLineArgumentOccurrences ( const string & flag ) {
+        string out;
+        auto argv = (char **) g_CommandLineArguments.data;
+        uint32_t argc = g_CommandLineArguments.size;
+        string eq = flag + "=";
+        for ( uint32_t i=0; i<argc; ++i ) {
+            const char * a = argv[i] ? argv[i] : "";
+            if ( flag == a ) {
+                out += a;
+                out += '\x01';
+                if ( i+1<argc && argv[i+1] ) out += argv[i+1];
+                out += '\x02';
+            } else if ( strncmp(a, eq.c_str(), eq.size())==0 ) {
+                out += a;
+                out += '\x02';
+            }
+        }
+        return out;
+    }
+
     void withCommandLineArguments( const Array & arr, const TBlock<void> & body, Context * context, LineInfoArg * at ) {
         auto prev = g_CommandLineArguments;
         g_CommandLineArguments = arr;

@@ -10,7 +10,9 @@ The front end parses modules in require order. When a module cache is installed
 (`ModuleFileCache`), each module first tries `trySerializeProgramModule`. The reader stands at
 the next record and checks that the record names this file, that the file's mtime and size
 match, and that every compile-time input the record's macros pinned
-(`add_module_cache_dependency`) still has the same content. A match deserializes the module and
+(`add_module_cache_dependency` - a file's bytes, an environment variable's value under
+`env:NAME`, a command-line flag's occurrences under `arg:--flag`) still has the same content. A
+match deserializes the module and
 counts it as served. The first mismatch is the cutoff: the reader marks the stream failed, the
 module and everything after it parse from source, and the writer rewrites the whole file - the
 served records re-serialized from the modules the reader restored, then the freshly parsed
