@@ -238,7 +238,11 @@ static CompileResult compile_script(const string & fn) {
         if (!cacheQuiet) {
             switch (cres.verdict) {
             case ModuleFileCache::ReadVerdict::fallback:
-                tout << "daslang-live: module cache stale - recompiled from source\n";
+                if (cres.served > 0) {
+                    tout << "daslang-live: module cache " << cres.served << " module(s) served, recompiled from '" << cres.cutoffFile << "' (" << cres.cutoffReason << ")\n";
+                } else {
+                    tout << "daslang-live: module cache stale - recompiled from source\n";
+                }
                 break;
             case ModuleFileCache::ReadVerdict::partial:
                 tout << "daslang-live: module cache partial - " << cres.resumed << " module(s) reparsed in place\n";

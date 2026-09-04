@@ -511,7 +511,14 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         if ( !cacheQuiet ) {
             switch ( cres.verdict ) {
             case ModuleFileCache::ReadVerdict::fallback:
-                tout << "deser: FALLBACK - modules reparsed from source (stale, truncated, or version-mismatched cache)\n";
+                // positional cutoff: the prefix before the changed record was served, everything after re-parsed
+                if ( cres.served > 0 ) {
+                    tout << "deser: FALLBACK - " << cres.served << " module(s) served from cache, re-parsed from '" << cres.cutoffFile << "' (" << cres.cutoffReason << ")\n";
+                } else if ( !cres.cutoffReason.empty() ) {
+                    tout << "deser: FALLBACK - modules reparsed from source (" << cres.cutoffReason << " at '" << cres.cutoffFile << "')\n";
+                } else {
+                    tout << "deser: FALLBACK - modules reparsed from source (stale, truncated, or version-mismatched cache)\n";
+                }
                 break;
             case ModuleFileCache::ReadVerdict::partial:
                 // records for unchanged files that failed to deserialize (e.g. a lazily

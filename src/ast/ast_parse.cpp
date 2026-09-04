@@ -648,6 +648,8 @@ namespace das {
                 }) || magic != SER_MODULE_STREAM_MAGIC || version != AstSerializer::getVersion() ) {
                     serializer_read->seenNewModule = true;
                     serializer_read->failed = true;
+                    serializer_read->cutoffFile = fileName;
+                    serializer_read->cutoffReason = "stale or foreign module cache stream";
                     if ( !serializer_read->quietCache ) logs << "ser: read failed (stale or foreign module cache stream)\n";
                     return false;
                 }
@@ -695,6 +697,8 @@ namespace das {
             if ( depSize != get<1>(dep) || depHash != get<2>(dep) ) {
                 serializer_read->seenNewModule = true;
                 serializer_read->failed = true;
+                serializer_read->cutoffFile = fileName;
+                serializer_read->cutoffReason = "macro dependency '" + get<0>(dep) + "' changed";
                 if ( !serializer_read->quietCache ) logs << "ser: macro dependency changed '" << get<0>(dep) << "' (e.g. a re-minted tune sidecar)\n";
                 return false;
             }
@@ -706,6 +710,8 @@ namespace das {
             // modules depend on earlier ones (macros), so this stays the prefix cutoff
             serializer_read->seenNewModule = true;
             serializer_read->failed = true;
+            serializer_read->cutoffFile = fileName;
+            serializer_read->cutoffReason = saved_filename != fileName ? "module order changed" : "file changed";
             if ( !serializer_read->quietCache ) {
                 if (saved_filename != fileName) {
                     logs << "ser: file name mismatch. Expected '" << saved_filename << "', got '" << fileName << "'\n";
@@ -730,6 +736,7 @@ namespace das {
         });
 
         if ( read_ok && !program->failed() && !serializer_read->failed ) {
+            serializer_read->servedModules ++;
             program->thisModuleGroup = &libGroup;
             // the stream is rewritten every run from parsedModules, so a kept record's deps
             // must round-trip through the deserialized program or the next write drops them

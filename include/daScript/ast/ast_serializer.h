@@ -130,6 +130,9 @@ namespace das {
         uint64_t            resumedCorrupt = 0;     // of those, failures a rewrite REPAIRS (anything but builtinHashDrift)
         bool                builtinHashDrift = false;   // last record failed on a builtin cumulative-hash mismatch (lazily populated builtin, e.g. dasbind) - deterministic per process, a rewrite changes nothing
         bool                quietCache = false;         // default-path module cache: no per-record ser: lines, no drift warning
+        uint64_t            servedModules = 0;      // records deserialized and served before any cutoff
+        string              cutoffFile;             // the record that cut the stream (positional: everything after re-parses)
+        string              cutoffReason;           // why it cut: file changed / macro dependency changed / stale stream
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
@@ -393,6 +396,9 @@ namespace das {
         struct Result {
             ReadVerdict verdict = ReadVerdict::none;
             uint64_t    resumed = 0;
+            uint64_t    served = 0;             // modules served from the cache before the cutoff (fallback keeps its prefix)
+            string      cutoffFile;             // the record that cut the stream, for the fallback verdict
+            string      cutoffReason;
             bool        wrote = false;          // refreshed stream saved to writeTo
             bool        saveFailed = false;     // had bytes to save but could not write the file
             uint64_t    wroteBytes = 0;

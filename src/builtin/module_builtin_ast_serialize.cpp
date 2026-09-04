@@ -3428,6 +3428,9 @@ namespace das {
                 res.verdict = ReadVerdict::clean;
             }
             res.resumed = reader->resumedModules;
+            res.served = reader->servedModules;
+            res.cutoffFile = reader->cutoffFile;
+            res.cutoffReason = reader->cutoffReason;
             reader->moduleLibrary = nullptr;    // not ours to free
             // claim the FileInfos the reader created that no module took ownership of -
             // ~AstSerializer would DELETE them, and the deserialized AST's LineInfos still

@@ -47,9 +47,15 @@ stay:
    AFTER the edited one in program order re-keys, though their IR is unchanged. Done =
    per-module keys derived from the module's own (transitive-interface) hash, so a leaf edit
    re-emits ~itself; measured target: an early-chain kernel edit under ~5 s of codegen.
-3. **The AST module cache is all-or-nothing under an edit.** The same repack edit paid the
-   full 39.7 s front end and rewrote the whole 148 MB cache - no per-module reuse of the
-   unedited prefix. Done = an edit re-parses the edited module + dependents only.
+3. **An edit re-parses everything after the edited module - RULED OUT as a defect.** Measured
+   (lcpp_bench, M5): a one-line edit to module 67 of 165 served the 66-module prefix (0.99 s
+   cold -> 0.00 s) and re-parsed the 99-module suffix (11.65 -> 12.05 s); the run reads as
+   cold because dasLLAMA's heaviest modules (`dasllama_vulkan_classes` 4.1 s,
+   `dasllama_metal_kernels` 1.7 s, `dasllama_metal_prefill` 1.1 s) sit late in the chain. A
+   dependency-aware cutoff is impossible with macros - a macro can rewrite any later module,
+   and no `require` graph bounds that, so the positional prefix is the only sound rule. The
+   verdict line now says how much was served and where the cutoff fell; the mitigation stays
+   require order (a hot-edit module as late in the chain as its dependencies allow).
 4. **Macro-emitter changes are invisible to every cache key** (QUIRK 21; QUIRK 15's unquirk
    note wants the generator hash folded into the sidecar identity too). Done = an emitter
    edit invalidates exactly the families it generates.
