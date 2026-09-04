@@ -920,8 +920,8 @@
     in the ASR store reader, `forward_profile_report` - read an aggregator over the saved
     `jobque_profile` trace that prints the same bucket table; (3) the two rule passages drop the
     retired rails and state the deliverable carve-out: a per-request wall the API returns
-    (`TtsTimings`, the server's timings line) is a deliverable, not instrumentation; (4) `LAWS.md`
-    records the ruling. Lint candidate, the mechanical form of the clock rule that is prose today:
+    (`TtsTimings`, the server's timings line) is a deliverable, not instrumentation.
+    Lint candidate, the mechanical form of the clock rule that is prose today:
     a `dasllama/` file that adds a clock read (`ref_time_ticks` / `get_time_usec`) whose value
     reaches a log, an accumulator table or a struct field, outside a `// clock: control` mark, a
     cold load / bake / map log, or a marker call.

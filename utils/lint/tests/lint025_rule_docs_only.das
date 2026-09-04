@@ -71,7 +71,7 @@ def private build_tree() : string {
     let root = path_join(tmp_root(), "tree")
     mkdir_rec(root)
     plant_folder(root, "tagged", "[docs]\nrule_docs_only = true\n",
-        ["notes.md", "REVIEW.md", "REVIEW_LINQ.md", "ARCHITECTURE.md", "ARCHITECTURE_DEDUP.md", "LAWS.md"])
+        ["notes.md", "REVIEW.md", "REVIEW_LINQ.md", "ARCHITECTURE.md", "ARCHITECTURE_DEDUP.md"])
     plant_folder(root, "off", "[docs]\nrule_docs_only = false\n", ["notes.md"])
     plant_folder(root, "plain", "", ["notes.md"])
     return root
@@ -126,7 +126,7 @@ def test_rule_docs_only_folder(t : T?) {
         let root = build_tree()
         var out : string
         run_lint(root, out)
-        for (doc in ["REVIEW.md", "REVIEW_LINQ.md", "ARCHITECTURE.md", "ARCHITECTURE_DEDUP.md", "LAWS.md"]) {
+        for (doc in ["REVIEW.md", "REVIEW_LINQ.md", "ARCHITECTURE.md", "ARCHITECTURE_DEDUP.md"]) {
             t |> success(find(out, "/{doc}: LINT025") < 0, "{doc} is a rule document\n{out}")
         }
     }

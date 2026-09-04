@@ -187,10 +187,10 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
 let RULE_DOC_MAX_LINES = 300
 
 // The .md basenames a `[docs] rule_docs_only = true` folder may carry: the folder's
-// checklists (REVIEW.md and its routed companions), its architecture doc (and companion
-// splits), and the rulings sidecar. Everything else is a ledger, a plan or a note.
+// checklists (REVIEW.md and its routed companions) and its architecture doc (and companion
+// splits). Everything else is a ledger, a plan or a note.
 def is_rule_doc_name(name : string) : bool {
-    return (name == "REVIEW.md" || name == "ARCHITECTURE.md" || name == "LAWS.md"
+    return (name == "REVIEW.md" || name == "ARCHITECTURE.md"
         || name |> starts_with("REVIEW_") || name |> starts_with("ARCHITECTURE_"))
 }
 
@@ -245,13 +245,11 @@ def folder_holds_rule_doc(path : string) : bool {
 }
 
 // The .md files in `folder` (non-recursive) on one side of `is_rule_doc_name`: the strays
-// LINT025 reports, or the rule documents LINT027 sizes. LAWS.md is append-only ruling
-// provenance, never read end to end, so it stays out of the rule-document side.
+// LINT025 reports, or the rule documents LINT027 sizes.
 def collect_folder_mds(folder : string; rule_docs : bool; var out : array<string>) {
     fio::dir(folder) $(name) {
         return if (name == "." || name == ".." || !(name |> ends_with(".md"))
-                   || is_rule_doc_name(name) != rule_docs
-                   || (rule_docs && name == "LAWS.md"))
+                   || is_rule_doc_name(name) != rule_docs)
         let full = "{folder}/{name}"
         let fst = stat(full)
         if (fst.is_valid && fst.is_reg) {
@@ -270,7 +268,7 @@ def run_rule_docs_pass(folders : array<string>) : int {
         collect_folder_mds(folder, false, strays)
         strays |> sort
         for (md in strays) {
-            print("{md}: LINT025: stray .md beside shipped code - rule documents only (REVIEW*.md, ARCHITECTURE*.md, LAWS.md); ledgers and plans live at the module root or plans/ (repo root)\n")
+            print("{md}: LINT025: stray .md beside shipped code - rule documents only (REVIEW*.md, ARCHITECTURE*.md); ledgers and plans live at the module root or plans/ (repo root)\n")
             found ++
         }
     }

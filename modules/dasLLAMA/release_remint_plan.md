@@ -37,7 +37,6 @@ separate per-change counter and stays exactly as it is.
   - perf-only drift (crowns pick twins; races verified the envelope at mint). The principled
   hardening - per-entry kernel identity hashes in llvm_tune, the JIT-dll-cache
   self-invalidation pattern - is ledgered as its own generic llvm_tune item, not blocking.
-- LAWS.md entries for the ruling (module folder + repo root for the CLAUDE.md wording).
 
 ## Step 0 - gate-candidate scope assessment (DONE, 2026-08-30)
 

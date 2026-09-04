@@ -83,8 +83,7 @@ applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
 `modules/dasLLAMA/` applies this one.**
 
 **`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
-a maintainer ruling that bench comparability is broken - and the bump's diff carries the
-`LAWS.md` entry recording that ruling.** Recorded performance rows and tune sidecars stay valid across code changes, and
+a maintainer ruling that bench comparability is broken.** Recorded performance rows and tune sidecars stay valid across code changes, and
 per-change invalidation lives in the finer mechanisms - `IMAGE_VERSION` and
 `layout_fingerprint()` (`dasllama/dasllama_image.das`).
 
@@ -252,7 +251,7 @@ owns lands the sec.1 edit that keeps the charters true - in `ARCHITECTURE_ENGINE
 `ARCHITECTURE_GPU.md`, or `ARCHITECTURE_MEDIA.md` - in the same change.** A diff that adds
 a file to any folder where another file has its own sec.1 charter line lands the new file's
 charter line too. A module-root doc
-file - a ledger, a plan, `LAWS.md` - has no charter line and needs no charter edit.
+file - a ledger, a plan - has no charter line and needs no charter edit.
 
 **A diff that adds or removes an `ARCHITECTURE_*.md` companion, or moves a section between
 companions, lands `ARCHITECTURE.md`'s index line and section range and repoints every prose

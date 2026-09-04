@@ -1918,8 +1918,6 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/
     # skills/daslang_live.md (prefix match on the full path)
     REGEX "/skills/internal$" EXCLUDE
     REGEX "/skills/daslang$" EXCLUDE
-    # ruling provenance for this repo's rule documents, not a skill
-    REGEX "/LAWS\\.md$" EXCLUDE
     PATTERN "*.md"
 )
 # its README is editing rules for this repo's maintainers, meaningless in the SDK
@@ -2184,7 +2182,6 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/
     PATTERN "REVIEW.md" EXCLUDE
     PATTERN "REVIEW.das" EXCLUDE
     PATTERN "ARCHITECTURE.md" EXCLUDE
-    PATTERN "LAWS.md" EXCLUDE
     # soundfonts are fetched locally and carry unclear redistribution terms —
     # they must never ride into a release bundle
     PATTERN "*.sf2" EXCLUDE
@@ -2364,7 +2361,7 @@ if(_arch_specs AND NOT ${DAS_TOOLS_DISABLED} AND NOT CMAKE_CROSSCOMPILING)
 endif()
 
 # Repo-internal rule-and-record documents never install: REVIEW.md / REVIEW.das,
-# ARCHITECTURE.md, LAWS.md, MASTERPLAN logs, followup/perf/profile ledgers. The
+# ARCHITECTURE.md, MASTERPLAN logs, followup/perf/profile ledgers. The
 # exceptions are REVIEW_COMMON.md and ARCHITECTURE_COMMON.md at the install root
 # (adopting repos vendor from them), and the arch-extract excerpts registered above,
 # recognized by their first-line banner. This must stay the LAST install rule in the

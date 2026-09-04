@@ -138,9 +138,6 @@ pack, delete `*.dlim` and e2e the MIXED vehicle (the iq2xs requant carrying q2_K
    the Q22 dispatch-loop probe method, D2 if dropped.
 4. The per-format phase diaries -> `/history` (doc_archiving skill), linked from the ledger.
 
-LAWS.md (modules/dasLLAMA) gets the rulings from this session: prune the families, saved
-zen2/M1 defaults, race only on feature unlock, CPU/GPU tune split, the doc split.
-
 ## Phase F - TWO PRs (the mid-plan cut that starts the M5 session)
 
 - **PR-1** (after B): the 9-format ladder the branch already carries + the tuner rework +

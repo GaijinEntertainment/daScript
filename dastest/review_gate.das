@@ -1134,8 +1134,7 @@ def html_resource_urls(text : string) : array<string> {
 //! True for a repository rule or architecture document - a `.md` the document system owns,
 //! which no site serves (the SDK bundle gate bans every one of them from an install).
 def private is_rule_document(name : string) : bool {
-    return (name |> starts_with("REVIEW") || name |> starts_with("ARCHITECTURE") ||
-        name == "LAWS.md" || name == "README.md")
+    return (name |> starts_with("REVIEW") || name |> starts_with("ARCHITECTURE") || name == "README.md")
 }
 
 def private is_markup_file(name : string) : bool {

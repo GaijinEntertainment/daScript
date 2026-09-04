@@ -144,20 +144,6 @@ class GateFixture(unittest.TestCase):
         write(self.repo, "skills/dropped.md", "# Dropped\n\nprose\n")
         self.assert_fires("missing from bundle", "dropped.md")
 
-    def test_laws_md_is_not_a_skill(self):
-        # ruling provenance: the install rules exclude it on purpose, and a bundle
-        # that ships it anyway is still a defect
-        write(self.repo, "skills/LAWS.md", "# LAWS\n\n| date | doc | ask |\n")
-        rc, out = self.run_gate()
-        self.assertEqual(rc, 0, out)
-        write(self.bundle, "skills/LAWS.md", "# LAWS\n\n| date | doc | ask |\n")
-        self.assert_fires("not a skill", "LAWS.md")
-
-    def test_nested_laws_md_in_bundle_fires(self):
-        # a nested one has no trigger row to miss, so only the basename check sees it
-        write(self.bundle, "skills/daslang/LAWS.md", "# LAWS\n\n| date | doc | ask |\n")
-        self.assert_fires("not a skill", "daslang/LAWS.md")
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)
