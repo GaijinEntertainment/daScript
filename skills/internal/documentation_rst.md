@@ -79,8 +79,8 @@ header (`module-strudel_midi.rst` is just `Module strudel_midi`); the real modul
 unconditionally discards a pending block above the `def` (verified against the parser, 2026-07-02).
 An above-def `//!` extracts NOTHING and says nothing - bare signature on the page, no detail file.
 Structs: `//!` inside the struct body, a trailing `//!` per field - never `//!<`: the reader strips
-only `//!` and one space, so the `<` reaches the page as `- < text` (probe-verified 2026-09-03; the
-struct's doc needs at least one line per documented field or the generator panics). A `//!` above the `module` decl does not
+only `//!` and one space, so the `<` reaches the page as `- < text`; the struct's doc needs at
+least one line per documented field or the generator panics. A `//!` above the `module` decl does not
 reach the page either; the module header text comes from handmade `module-<name>.rst`.
 
 **STYLE014 on an intentionally long `//!` block:** put `//!@nolint` on its first line -
