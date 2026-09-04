@@ -444,7 +444,21 @@ def sampler_is_argmax(p : SamplingParams) : bool {
 //! sampler is installed, and the sampler is not a bare argmax (a penalized greedy sampler picks a
 //! penalized argmax, which the raw-argmax walk would not). Otherwise the walk is the argmax match.
 def mtp_walk_samples(s : Session) : bool {
-    return s.spec_params != null && g_mtp_sample_row_set && !sampler_is_argmax(deref(s.spec_params))
+    if (s.spec_params == null || sampler_is_argmax(deref(s.spec_params))) {
+        return false
+    }
+    if (!g_mtp_sample_row_set) {
+        panic("dasLLAMA: a sampled stream reached the speculative round with no row sampler installed - the program must require dasllama/dasllama_sampling")
+    }
+    return true
+}
+
+//! Every speculative round opens here: a token the previous round parked must have been consumed
+//! by the caller's sample_ - a caller that read s.logits instead would emit a stale token later.
+def mtp_round_begin(s : Session) {
+    if (s.mtp_pre_drawn) {
+        panic("dasLLAMA: the speculative round's parked token was never consumed - the caller samples through sample_ after every round")
+    }
 }
 
 //! The sampled accept walk over the verify's k+1 rows in s.mtp_logits_b; returns a. The recent-token
@@ -4660,6 +4674,7 @@ def private copy_floats_par(src : array<float>; var dst : array<float>; n : int6
     if (n <= 0l) {
         return
     }
+    assert(long_length(src) >= n && long_length(dst) >= n, "copy_floats_par: both arrays cover n")
     let lanes = clamp(int(n / MIN_LANE_FLOATS), 1, 8)
     unsafe {
         let sp = addr < float const? >(src[0])
@@ -4787,7 +4802,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         return invoke(g_mtp_spec_overrides[g_decode_override_name], t, s, tok, accepted)
     }
     let pos = s.n_past
-    s.mtp_pre_drawn = false
+    mtp_round_begin(s)
     // pos < 1: nothing evaled yet — the zero-init mtp_h_pos1 sentinel COLLIDES with pos == 0
     // (0 != 0 would pass the cold check and draft at row -1), so gate it explicitly
     if (c.n_layer_nextn <= 0l || t.quant == QuantMode.q4_0 || pos < 1l || s.mtp_h_pos1 != pos

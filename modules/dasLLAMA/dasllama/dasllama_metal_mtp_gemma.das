@@ -548,6 +548,7 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     }
     let c = t.config
     let pos = s.n_past
+    mtp_round_begin(s)
     let k = clamp(k_req, 1l, MTP_MAX_ROWS - 1l)
     let dr & = g_gemma_drafter
     if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {   // sized for the NextN carriers only at make_run_state
@@ -568,7 +569,6 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     let td = ref_time_ticks()
     let ts_draft = prof_ticks()
     s.mtp_vbatch[0] = tok
-    s.mtp_pre_drawn = false
     let gpu_chain = !g_gemma_draft_cpu
     let drafted = gpu_chain ? (gemma_draft_chain_gpu(t, s, tok, pos, k) ? k : 0l) : gemma_draft_chain_cpu(t, s, pos, k)
     if (drafted == 0l) {

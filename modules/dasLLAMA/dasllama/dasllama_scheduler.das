@@ -125,7 +125,7 @@ struct Scheduler {
     pool : KVPool
     prefix : PrefixCache
     kv_dtype : KVDtype = KVDtype.f16        // KV codec for every stream (pool-wide when paged)
-    mtp : bool                              // MTP/NextN self-spec ticks for greedy streams (the server also sets the engine's prefill-warm gate)
+    mtp : bool                              // MTP/NextN self-spec ticks for every decoding stream - sampled and penalized ones draw the walk through their own sampler (the server also sets the engine's prefill-warm gate)
     // per-step gather scratch. @do_not_delete is load-bearing: delete of a plain array<T?>
     // CASCADES to the pointees — these are borrowed rows into streams[i].session
     @do_not_delete batch_rows : array<Session?>
@@ -444,6 +444,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                     sch.gen_tokens ++
                 }
             }
+            sch.streams[i].session.spec_params = null   // the pointer aims into `streams`, which admission and reaping move
             sch.decode_steps ++
             sch.sum_batch ++
             continue

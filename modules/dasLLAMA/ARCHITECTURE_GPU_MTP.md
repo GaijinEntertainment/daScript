@@ -62,8 +62,10 @@ loses (`PERF_LEDGER.md`, the MTP section) - so the tuner mints the assistant kno
 serving race of depth 1 against depth 2 on the SpecBench chat corpus with a gemma-4 vehicle and its
 `mtp-` head (depth 2 must beat by 2% - its downside is asymmetric and a tie is not worth the longer
 round; a synthetic 32-token prompt is not the site shape, the drafter accepts less of incoherent
-text; no vehicle means depth 1). The NextN knob defaults to 1, the depth every
-NextN carrier measured best.
+text; no vehicle means depth 1). The NextN knob defaults to 1: every NextN carrier measured
+best there on the M4 Pro, and the M5 Max's depth-3 point (1.31x against 1.23x at depth 1 on
+Qwen3.8-27B, the ruler's `_depths` record) is a direction-grade reading the tuner does not yet
+mint into the knob.
 
 ### 2.30 The kernel argument-alignment contract {#metal-dispatch-requires}
 

@@ -1566,6 +1566,7 @@ def private mtp_trace_round(s : Session; pos, k, nr, a, vocab : int64) {
 def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {   // nolint:STYLE037,STYLE038 — draft chain / verify / accept walk / commit is one sequential protocol on shared locals
     let c = t.config
     let pos = s.n_past
+    mtp_round_begin(s)
     let k = clamp(k_req, 1l, 8l)
     var cold = (g_dev == null || !t.metal_blob || c.n_layer_nextn <= 0l || pos < 1l ||
         s.mtp_h_pos1 != pos || pos + k + 1l > c.seq_len || !metal_mtp_verify_ok(t, s))
@@ -1588,7 +1589,6 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         to_log(LOG_INFO, "mtp cold: pos={pos} h_pos1={s.mtp_h_pos1} seq={c.seq_len} verify_ok={vok_g} dn_pos={dnp} watermark={wm}\n")   // nolint:PERF028,PERF026 — behind the DASLLAMA_MTP_DEBUG=cold bring-up gate
     }
     s.mtp_vbatch[0] = tok
-    s.mtp_pre_drawn = false
     let ts_draft = prof_ticks()
     if (!cold) {
         s.mtp_xb_save |> resize(c.dim)

@@ -1176,7 +1176,8 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
             if (arm_on(t, "arm15-spec-hint")) {
                 with_job_que() {
                     setup_dasllama_jobque()
-                    set_metal_decode_speculate(-1)
+                    let prev_spec = metal_decode_spec_mode()
+                    set_metal_decode_speculate(-1)   // the claim needs the adaptive default, whatever an earlier arm left
                     select_prefill_override("metal")   // the blob twin has no CPU prefill
                     set_metal_prefill_min_npos(1l)
                     select_decode_override("metal")
@@ -1201,6 +1202,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                     t |> success(sp3.hits > sp2.hits, "arm15: a greedy decode rides the chain ({sp3.hits - sp2.hits} hits, {sp3.misses - sp2.misses} misses)")
                     to_log(LOG_INFO, "arm15 eyeball: sampled {sp1.hits - sp0.hits} hits / {sp1.misses - sp0.misses} misses, greedy {sp3.hits - sp2.hits} hits / {sp3.misses - sp2.misses} misses\n")
                     delete sg
+                    set_metal_decode_speculate(prev_spec)
                     select_decode_override("")
                     select_prefill_override("")
                     set_metal_prefill_min_npos(64l)

@@ -278,6 +278,7 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
     var spec : array<int64>
     var drafted = 0l
     var parked = 0l
+    mtp_pos_reset()
     let served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted, parked, sampled)
     let kind = sampled ? "sampled" : "counting"
     if (served == 0l) {
@@ -285,6 +286,8 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
     } else {
         log_gen_texts(tr, "{tag} {kind} k{depth}", plain, spec)
         t |> success(drafted > 0l, "{tag} {kind} k{depth}: the spec rail engaged ({drafted} drafts) - a plain fallback would pass vacuously")
+        let positions = mtp_pos_report()
+        t |> success(find(positions, "p{depth} ") >= 0, "{tag} {kind} k{depth}: a round drafted position {depth} - the depth the arm names was reached ({positions})")
         t |> success(same(plain, spec), "{tag} {kind} k{depth}: speculative free-run == plain free-run ({COUNT_STEPS} tokens)")
         t |> success(sampled == (parked > 0l), "{tag} {kind} k{depth}: the sampled walk parks the next draw ({parked} rounds); the argmax walk parks none")
     }
@@ -550,6 +553,32 @@ def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64
     }
 }
 
+//! the wider nine-row bar's control: the same nine-row verify with the GEMV stage knocked out must
+//! land OUTSIDE the bar - a bar nothing exceeds is not known to discriminate
+def private vff_control_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; bar : float) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var st = RowStats()
+        var served = 0l
+        set_metal_decode_skip("gemv")
+        vff_pair(tr, trg, prompt, 4l, 9l, st, served, false)
+        set_metal_decode_skip("")
+        if (served == 0l) {
+            t |> skip("{tag} vff9 control: the metal batch rail declined the same-slab verify")
+        } else {
+            t |> success(st.max_abs > bar, "{tag} vff9 control: the nine-row verify with its GEMV stage knocked out reds the {bar} bar (maxd {st.max_abs} over {st.rows} rows)")
+        }
+    }
+}
+
+// the nine-row arm: the kq carriers take the wider mul_mm bar, and a bar wider than the file's
+// standing one ships its control in the same arm
+def private vff9_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; must_serve : bool; expect_decline : string) {
+    vff_cell(t, tr, trg, tag, prompt, trg.kquant_native ? max(tol, MM_TOL) : tol, 9l, must_serve, expect_decline)
+    if (trg.kquant_native && empty(expect_decline)) {
+        vff_control_cell(t, tr, trg, tag, prompt, MM_TOL)
+    }
+}
+
 def private restore_knobs(prior_backend : string; prior_wscale : bool) {
     clear_kernel_backend_pin()
     select_kernel_backend(prior_backend)
@@ -736,7 +765,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
             vff_cell(t, tr, trg, tag, prose_a, tol, 5l, must_serve, expect_decline)
         }
         if (arm_on(t, "mtp-vff9-{tag}")) {   // nine rows = MTP_MAX_ROWS: the batch driver's mul_mm rail (kq planes stage x to half)
-            vff_cell(t, tr, trg, tag, prose_a, trg.kquant_native ? max(tol, MM_TOL) : tol, 9l, must_serve, expect_decline)
+            vff9_cell(t, tr, trg, tag, prose_a, tol, must_serve, expect_decline)
         }
         // the assistant drafter's round (gemma-4 targets with an mtp-* sidecar beside them): counting
         // free-run, speculative == plain at depth 1, 2 and 4

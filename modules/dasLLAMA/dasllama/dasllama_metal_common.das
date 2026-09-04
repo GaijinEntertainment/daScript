@@ -476,6 +476,11 @@ def public set_metal_decode_speculate(v : int) {
     g_spec_backoff = 1
 }
 
+//! The chaining rail's current mode (-1 adaptive, 0 off, 1 forced) - a test captures it to restore.
+def public metal_decode_spec_mode() : int {
+    return g_spec_mode
+}
+
 //! (speculative steps verified correct, mispredicted-and-rerun) since load.
 def public metal_decode_spec_stats() : tuple<hits : int64; misses : int64> {
     return (hits = g_spec_hits, misses = g_spec_misses)
@@ -500,6 +505,9 @@ def spec_armed() : bool {
 //! `DASLLAMA_METAL_DECODE_SKIP`, switchable between measurement windows.
 def public set_metal_decode_skip(v : string) {
     g_skip = v
+    if (!empty(v)) {
+        to_log(LOG_INFO, "dasLLAMA: metal decode knockout armed - set_metal_decode_skip(\"{v}\"): the single-row and batch drivers skip that stage, so served output is not a model's\n")
+    }
 }
 
 //! Zero the cumulative per-stage timers + the served-step counter — windows a chase run's stage

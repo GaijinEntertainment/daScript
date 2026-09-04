@@ -1187,11 +1187,10 @@
    census clears, a site gate where it does not.
 101. **DONE (2026-09-03): the speculative round serves sampled streams - sample-and-match.** The
    walk was an argmax compare, so the scheduler ran the MTP tick only at temp 0 with no penalties
-   (`dasllama/dasllama_scheduler.das`) and a sampled stream decoded plain. llama.cpp's server
-   speculates under temperature by sampling each verify row with the stream's own sampler and
-   accepting while the sample equals the draft (`common_sampler_sample_and_accept_n`) - every emitted
-   token is a genuine draw from the target row, so the distribution is exact and no draft
-   probabilities are needed. The acceptance rate becomes the target's probability of the draft
+   (`dasllama/dasllama_scheduler.das`) and a sampled stream decoded plain. The reference build's
+   server speculates under temperature by sampling each verify row with the stream's own sampler
+   and accepting while the sample equals the draft - every emitted token is a genuine draw from
+   the target row, so the distribution is exact and no draft probabilities are needed. The acceptance rate becomes the target's probability of the draft
    token (lower than the argmax match: ~0.6 against 0.77 at depth 1), so the gain is (1 + a) / c
    with c the round's cost in steps - about 1.3x on a dense carrier at c = 1.2, a wash on
    Qwen3.8-27B at today's c = 1.5 until the verify gets cheaper. Done = the walk samples row i

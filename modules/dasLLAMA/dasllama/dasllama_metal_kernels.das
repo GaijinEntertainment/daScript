@@ -4283,6 +4283,7 @@ def enc_gemv_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; boff 
 [arch(at="../ARCHITECTURE_GPU_MTP.md#verify-row-pad")]
 def enc_gemv_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; boff : uint64;
                   bx, by, bn, bd, bys : MetalBuffer?; n, d, ys : int64; yoff : uint64 = 0ul) {
+    assert(nrows <= 12l, "three B4 tiles cover twelve rows")
     enc_gemv_b(enc, nrows > 2l, bw, boff, bx, by, bn, bd, bys, d, yoff)
     if (nrows > 4l) {
         enc_gemv_b(enc, true, bw, boff, bx, by, bn, bd, bys, d, yoff + uint64(4l * ys * 4l), uint64(4l * n * 4l))
@@ -4338,6 +4339,7 @@ def enc_gemv_w13sw_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?;
 // the fused W1|W3 + swiglu site at nrows live rows (enc_gemv_rows's tiling; y stride = hidden)
 def enc_gemv_w13sw_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; w1off, w3off : uint64;
                         bx, by, bn, bhid : MetalBuffer?; n, hidden : int64) {
+    assert(nrows <= 12l, "three B4 tiles cover twelve rows")
     enc_gemv_w13sw_b(enc, nrows > 2l, bw, w1off, w3off, bx, by, bn, bhid, hidden)
     if (nrows > 4l) {
         enc_gemv_w13sw_b(enc, true, bw, w1off, w3off, bx, by, bn, bhid, hidden, uint64(4l * n * 4l), uint64(4l * hidden * 4l))

@@ -9,6 +9,7 @@ require dasllama/dasllama                               // facade: load/encode/g
 require dasllama/dasllama_blocks   // embed_text_rows: the media arms build rows from the prompt's own tokens
 require daslib/jobque_boost
 require daslib/fio
+require daslib/strings_boost   // join: the decoded stream logs beside the token-exact compares
 require math
 require dasllama/dasllama_env
 
@@ -111,6 +112,11 @@ def private toks_of(events : array<SchedEvent>; id : int64) : array<int64> {
 
 def private pieces_of(events : array<SchedEvent>; id : int64) : array<string> {
     return <- [for (e in events); e.text; where e.stream == id && e.kind == SchedEventKind.piece]
+}
+
+// both sides of a stream compare, decoded - a near-tie synonym flip and a broken walk read alike as ids
+def private log_streams(la : string; ea : array<SchedEvent>; ida : int64; lb : string; eb : array<SchedEvent>; idb : int64) {
+    to_log(LOG_INFO, "{la}: {join(pieces_of(ea, ida), "")}\n{lb}: {join(pieces_of(eb, idb), "")}\n")
 }
 
 def private finished_of(events : array<SchedEvent>; id : int64) : SchedEvent {
@@ -574,6 +580,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             drain(m, sch2, events2)
             set_mtp_spec(prev_spec)
             var got_s <- toks_of(events2, 4l)
+            log_streams("sampled plain", events1, 3l, "sampled spec", events2, 4l)
             t |> success(same(got_s, ref_s), "sampled spec stream tokens == plain scheduler (temp 0.7, top-k 1, penalty 1.1)")
             t |> success(sch2.mtp_drafted > 0l, "the sampled tick drafted ({sch2.mtp_drafted} drafts)")
             t |> success(sch2.mtp_accepted > 0l, "the sampled walk accepted drafts ({sch2.mtp_accepted} of {sch2.mtp_drafted})")
@@ -597,6 +604,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             drain(m, sch4, events4)
             set_mtp_spec(prev_spec)
             var got_p <- toks_of(events4, 6l)
+            log_streams("penalized-greedy plain", events3, 5l, "penalized-greedy spec", events4, 6l)
             t |> success(same(got_p, ref_p), "penalized-greedy spec stream tokens == plain scheduler (penalty 1.3, temp 0)")
             t |> success(sch4.mtp_drafted > 0l, "the penalized-greedy tick drafted ({sch4.mtp_drafted} drafts)")
             delete got_p
