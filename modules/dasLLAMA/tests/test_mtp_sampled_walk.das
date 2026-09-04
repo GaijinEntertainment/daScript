@@ -122,6 +122,36 @@ def test_sampled_walk_stops_at_the_first_miss(t : T?) {
 }
 
 [test]
+def test_greedy_walk_with_penalties_goes_through_the_sampler(t : T?) {
+    //! a penalized greedy sampler (temp 0) picks the penalized argmax, so the walk must draw through
+    //! it: the second draft repeats the accepted first one and loses to the runner-up under the penalty
+    var s <- bare()
+    let drafts <- [0l, 3l, 3l, 1l]
+    var rows <- [[0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0],
+                 [0.0, 0.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0],
+                 [0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                 [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0]]
+    for (i in range64(K + 1l)) {
+        set_row(s, i, rows[i])
+        s.mtp_vbatch[i] = drafts[i]
+    }
+    var greedy = SamplingParams()
+    s.spec_params = unsafe(addr(greedy))
+    t |> success(!mtp_walk_samples(s), "a bare argmax sampler keeps the argmax walk")
+    var sp = SamplingParams(penalty = 2.0)
+    s.spec_params = unsafe(addr(sp))
+    t |> success(mtp_walk_samples(s), "a penalized greedy sampler goes through the walk")
+    let rng0 = s.rng
+    let a = mtp_walk_sampled(s, K, VOCAB)
+    t |> equal(a, 1l, "the repeated draft is rejected under the penalty")
+    t |> equal(s.mtp_pre_tok, 2l, "the penalized argmax is the next token")
+    t |> success(same_rng(s.rng, rng0), "a greedy sampler draws no random number")
+    t |> equal(sample_(s, sp), 2l, "the caller's sample_ returns the parked token")
+    delete rows
+    delete s
+}
+
+[test]
 def test_sampled_walk_penalizes_with_the_accepted_drafts(t : T?) {
     //! top-k 1 makes each draw the penalized argmax: the second draft repeats the first, so only a walk that advanced the recent window rejects it
     var s <- bare()

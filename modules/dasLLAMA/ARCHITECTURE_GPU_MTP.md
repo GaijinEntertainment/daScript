@@ -42,8 +42,10 @@ run reproduces it token for token - one RNG draw per emitted token, in order. Th
 draw from the row past the last draft, is the next token: the walk parks it in `s.mtp_pre_tok`
 (`mtp_pre_drawn`), and the caller's next `sample_` returns it instead of drawing from `s.logits`
 again. The acceptance rate becomes the target's probability of the draft token, so it sits below
-the argmax match (`PERF_LEDGER.md`, the MTP section, for the measured gap); a null `spec_params` or
-a zero temperature keeps the argmax walk bit for bit.
+the argmax match (`PERF_LEDGER.md`, the MTP section, for the measured gap). A null `spec_params`,
+or a sampler that is a bare argmax (temperature zero, no penalty), keeps the argmax walk bit for
+bit; a penalized greedy sampler goes through the walk too, because its pick is the penalized
+argmax and the raw-argmax match would accept drafts the penalty rejects.
 
 ### 2.29 The depth a round drafts {#mtp-depth-knob}
 

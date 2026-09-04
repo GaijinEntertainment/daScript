@@ -433,10 +433,18 @@ def register_mtp_sample_row(fn : MtpSampleRowFn) {
     g_mtp_sample_row_set = true
 }
 
-//! Whether a round's accept walk samples: the caller's sampler draws at a temperature above zero
-//! and the row sampler is installed. Otherwise the walk is the greedy argmax match.
+//! A sampler that is a bare argmax: temperature at or below zero and no penalty of any kind - the
+//! only sampler whose pick equals the raw argmax the greedy accept walk compares.
+def sampler_is_argmax(p : SamplingParams) : bool {
+    let rep = p.penalty > 0.0 && p.penalty != 1.0
+    return p.temp <= 0.0 && !rep && p.presence_penalty == 0.0 && p.frequency_penalty == 0.0
+}
+
+//! Whether a round's accept walk goes through the caller's sampler: one is pointed at, the row
+//! sampler is installed, and the sampler is not a bare argmax (a penalized greedy sampler picks a
+//! penalized argmax, which the raw-argmax walk would not). Otherwise the walk is the argmax match.
 def mtp_walk_samples(s : Session) : bool {
-    return s.spec_params != null && s.spec_params.temp > 0.0 && g_mtp_sample_row_set
+    return s.spec_params != null && g_mtp_sample_row_set && !sampler_is_argmax(deref(s.spec_params))
 }
 
 //! The sampled accept walk over the verify's k+1 rows in s.mtp_logits_b; returns a. The recent-token

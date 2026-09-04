@@ -578,6 +578,34 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             t |> success(sch2.mtp_drafted > 0l, "the sampled tick drafted ({sch2.mtp_drafted} drafts)")
             t |> success(sch2.mtp_accepted > 0l, "the sampled walk accepted drafts ({sch2.mtp_accepted} of {sch2.mtp_drafted})")
             t |> equal(finished_of(events2, 4l).n_gen, 24l)
+            // penalized greedy: the plain scheduler picks the PENALIZED argmax every step, so the
+            // spec tick must draw its verify rows through the sampler too - a raw-argmax walk would
+            // accept drafts the penalty rejects
+            let gp = SamplingParams(penalty = 1.3)
+            var sch3 <- create_scheduler(m, 1l, 4l, 8l, 16l)
+            var events3 : array<SchedEvent>
+            t |> success(submit(m, sch3, make_req(5l, prompt, gp, 24l, none)), "plain penalized-greedy stream queued")
+            drain(m, sch3, events3)
+            var ref_p <- toks_of(events3, 5l)
+            unsafe {
+                delete sch3
+            }
+            set_mtp_spec(true)
+            var sch4 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true)
+            var events4 : array<SchedEvent>
+            t |> success(submit(m, sch4, make_req(6l, prompt, gp, 24l, none)), "spec penalized-greedy stream queued")
+            drain(m, sch4, events4)
+            set_mtp_spec(prev_spec)
+            var got_p <- toks_of(events4, 6l)
+            t |> success(same(got_p, ref_p), "penalized-greedy spec stream tokens == plain scheduler (penalty 1.3, temp 0)")
+            t |> success(sch4.mtp_drafted > 0l, "the penalized-greedy tick drafted ({sch4.mtp_drafted} drafts)")
+            delete got_p
+            delete ref_p
+            delete events4
+            delete events3
+            unsafe {
+                delete sch4
+            }
             delete got_s
             delete ref_s
             delete events2
