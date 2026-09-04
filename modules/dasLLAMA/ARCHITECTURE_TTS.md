@@ -25,15 +25,35 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   lexicon's part-of-speech entries and the punctuation phonemes. The tagger's word class is
   the trainer's own `normalize`: a hyphen anywhere in a token that does not start with one, so
   "--" and "-well-known" are ordinary words, not `!HYPHEN`.
-- **`dasllama_g2p.das`** - grapheme-to-phoneme into the 45-symbol US inventory: a gold lexicon
-  with part-of-speech keyed entries, a silver lexicon, function-word rules that read what
-  follows (the pass runs right to left), the heteronym rules of sec.2.34, inflection stemming,
-  capitalization and acronym stress, then a fallback chain - CMUdict pre-rendered into the same
-  inventory, then a GRU spelling model - so no word is ever dropped. Loads `tts_g2p.bin`
-  (`harness/build_g2p_data.py`, the gold tier extended by `harness/g2p_local_additions.json`),
-  searched in place as byte-sorted string tables. The 200-sentence fixture under
-  `tests/_tts_fixtures/` (minted by `harness/mint_tts_g2p_fixture.py` from the G2P fidelity
-  experiment) is the parity rail for all three stages.
+- **`dasllama_g2p.das`** - grapheme-to-phoneme into the reference front end's inventory, in
+  either English dialect: a gold lexicon with part-of-speech keyed entries, a silver lexicon,
+  function-word rules that read what follows (the pass runs right to left), the heteronym
+  rules of sec.2.34, inflection stemming, capitalization and acronym stress, then a fallback
+  chain - the lexicon's own plain reading for each letter run, then CMUdict pre-rendered into
+  the same inventory, then a GRU spelling model - so no word is ever dropped. The lexicon leads
+  that chain because a glued group sends its WHOLE surface to the fallback as soon as one piece
+  is unresolvable, so a run both dialects carry does arrive there, and CMUdict is pruned of
+  exactly those words. The `british` flag picks the dialect: the gold and silver tables carry an
+  American and a British value per key (a key present for one dialect only reads as unknown to
+  the other, as the reference does), the inflection rules switch their suffix vowels and drop
+  the American flap, and the two American sources of the fallback chain rewrite their answer
+  into the British inventory through a table derived from aligning the two lexicons (the
+  non-rhotic rule keyed on whether a vowel follows, the goat, trap, lot and reduced vowels
+  onto their British symbols, the length marks) - the lexicon's own reading is already British
+  and takes no rewrite, which matters because the rewrite is not the identity on one: it reads
+  the DRESS vowel before a linking rhotic as SQUARE, having nothing in the string to tell merry
+  from Mary. A vowel the two lexicons give no evidence for before a dropped rhotic keeps that
+  rhotic rather than losing it. The bath-trap split reaches only lexicon
+  words. Loads `tts_g2p.bin`, pack
+  version 2 (`harness/build_g2p_data.py`: the gold tier extended by
+  `harness/g2p_local_additions.json`, the US and GB keys merged into one string table per
+  tier, the GRU stored as f16, CMUdict pruned of the words both dialects' lexicons carry -
+  safe because the fallback reads the lexicon first),
+  searched in place as byte-sorted string tables; a version 1 pack is refused by name. The
+  200-sentence fixtures under `tests/_tts_fixtures/` (American, minted by
+  `harness/mint_tts_g2p_fixture.py` from the G2P fidelity experiment; British, minted by
+  `harness/mint_tts_g2p_gb_fixture.py` from the reference's own British front end) are the
+  parity rails for all three stages.
 - **`dasllama_tts_types.das`** - the TTS floor: `TtsCaps`, `TtsAudio` (f32 PCM + rate), `TtsNoise`
   (the source noise a synthesis consumed - captured from the oracle, or drawn into a reused
   carrier). Family files require this, never each other.
@@ -76,19 +96,38 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
 - **`dasllama_kokoro.das`** - the Kokoro family (Kokoro-82M): the reference pipeline's
   vocabulary (`kokoro.symbol_*` metadata - the front end's own inventory, no rewrite), its token
   wrapping and style-row rule (the phoneme string's character count less one). Fifty-four voice
-  packs of 510 rows.
+  packs of 510 rows, each named `<language><f|m>_<name>`; a pack's language is read from that
+  shape and only from it, because the language letters are ordinary first letters of ordinary
+  names, so a name of any other shape has no language rather than the one its first letter spells.
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
   picked by `general.architecture`; `tts_g2p.bin` and `tts_postag.bin` read from the GGUF's
-  directory), `caps`, the lane pin (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`),
-  `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
+  directory; the packs it leaves out are named once in the log), `caps` (the voices the front
+  end can drive - a Kokoro pack's name carries its language, and only the languages the family
+  declares are listed or accepted; the rest refuse with the language in the message, or, where
+  the name carried none, with the fact that the front end cannot phonemize it), `tts_voice_lang`
+  (the language a voice reads in - the resolution `synthesize` runs, aliases included, so a
+  caller can phonemize in the dialect the voice will actually be spoken in), the front-end pair
+  `tts_normalize` (the
+  normalization pass alone - the spoken form a synthesis reads, and it consults no pack) and
+  `tts_phonemize` (one already normalized sentence in the front end's own inventory, the
+  string each chunk carries before a family rewrites it into its own symbols; the language
+  form takes a code from `caps` and refuses one the family does not declare), the lane pin
+  (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`), `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
   chunk - `length()` on a string is bytes, and an em dash costs three of them - abbreviations
   and decimals never split, a whitespace-free run longer than the cap hard-split at the cap on
-  a codepoint boundary -> per chunk: phonemize -> the family's symbols
+  a codepoint boundary; a chunk the split left without a closing mark gets a comma under
+  Kitten's driver rule and nothing under Kokoro's, whose pipeline sends the text as it is and
+  whose voices render an added mark as an audible breath -> per chunk: phonemize -> the
+  family's symbols
   and style row -> PCM, timed, delivered to the caller's block as it lands) and `synthesize`
   (the same, concatenated, timings summed). Every chunk draws its own source noise: the seed
   is the facade's constant plus the chunk's index, so consecutive sentences of one request
   never share a draw, and `synthesize` and `synthesize_stream` stay sample-identical because
-  both walk the same chunk list in the same order. Requires no `audio` module.
+  both walk the same chunk list in the same order. Requires no `audio` module. `REVIEW.das`'s
+  `check_tutorial_floor` walks both facade files - `dasllama.das` and this one - and licenses
+  exactly three kinds of def: a `def private` one, a `def operator` overload, and `finalize`,
+  the language's own teardown hook the compiler calls at `delete` (the check's `FLOOR_HOOKS`
+  set); none of the three is a name a tutorial could call, so none carries a teaching duty.
 
 Every local container on the TTS path is `var inscope`: the persistent heap frees nothing at
 scope exit, and a bare local holding a per-sentence buffer is a per-sentence leak that ends in
@@ -122,8 +161,13 @@ block peels the rows up to the next tile edge through the scalar path before its
 every GEMM base sits on the tile and a row is tiled or scalar-remainder the same way in every
 split, and a reduction accumulates per fixed 256-row block (`STAT_BLOCK`) and merges the blocks
 in a fixed order. `tests/test_tts_blocks.das` runs each rows kernel at one lane and at the
-box's lanes and asserts bit equality, and the facade's streaming cell does the same for a whole
-synthesis; per-dispatch-slot partials and an off-tile GEMM base each broke it once.
+box's lanes on both axes that move the split - the batch lane cap, which clamps inside
+`lanes_for_work`, and the jobque worker limit, which moves `get_dispatch_lanes()` itself and so
+reaches the shapers that pass no cap (the AdaIN column stats, every bare `lanes_for_work(work,
+0)` site) - and asserts bit equality, each axis carrying its own witness that it moved the
+split, since a leg pair whose shaper answers the same lane count compares nothing; the facade's
+streaming cell does the same for a whole synthesis. Per-dispatch-slot partials and an off-tile
+GEMM base each broke it once.
 
 ### 2.29 Tap stacking: one GEMM per chunk, nothing accumulates across taps {#tts-tap-stacking}
 

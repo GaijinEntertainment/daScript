@@ -3,15 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_TTS.md`. Planned work: `followup_general.md`.
 
-**Routed from `REVIEW.md`: a diff touching `dasllama/dasllama_tts.das`,
-`dasllama/dasllama_tts_types.das`, `dasllama/dasllama_tts_blocks.das`,
-`dasllama/dasllama_styletts2.das`, a TTS family file - one `dasllama/dasllama_<family>.das`
-holding a single speech-synthesis family - a text front-end file - one stage of the pass
-that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
-`dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - the front-end packs' mint
-(`harness/build_g2p_data.py`, `harness/train_postag.py`, `harness/mint_postag_silver.py`,
-`performance/build_tts_data.das`), or a call that pins the TTS weight lane (`set_tts_q8` /
-`set_styletts2_q8`), wherever the diff puts it, applies this list together with `REVIEW.md`.**
+**Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
+`REVIEW.md`.**
 
 **The synthesis entry point `styletts2_synthesize` carries `[hot_path]`, and a model stage it
 drives - a rows kernel in `dasllama/dasllama_tts_blocks.das`, the decoder and generator
@@ -38,10 +31,11 @@ in the same change.** The channel-major form is what the parity rail and any GPU
 checked against.
 
 **A rows kernel whose result depends on how its row blocks split across the parallel workers
-is a defect - every GEMM starts on the 4-row tile edge in every split, and a reduction
-accumulates per fixed-size row block and combines in a fixed order.** `tests/test_tts_blocks.das`
-runs each rows kernel at one lane and at the box's lanes and asserts bit equality, and the
-facade's streaming cell does the same for a whole synthesis.
+is a defect.** How a rows kernel stays split-invariant is the "Two layouts, one oracle" section
+of `ARCHITECTURE_TTS.md`.
+
+**A new rows kernel ships its `tests/test_tts_blocks.das` bit-equality cell on both axes that
+move the split - the batch lane cap and the jobque worker limit - in the same change.**
 
 **A `read_*` call in `dasllama/dasllama_styletts2.das` that leaves a conv or linear on the
 channel-major default while the forward assembly runs it through a rows kernel is a defect -

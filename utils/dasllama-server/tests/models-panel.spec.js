@@ -49,6 +49,14 @@ test('a failed activate surfaces the server error message', async ({ page }) => 
     await expect(page.locator('#m-note')).toHaveText('switch refused: work is live');
 });
 
+test('a slot names the towers it serves; a text-only slot wears no tower chip', async ({ page }) => {
+    const s = fx('stats_multi');
+    s.models = s.models.map((m, i) => (i === 0 ? { ...m, vision: true, audio: true } : { ...m, vision: false, audio: false }));
+    await openControl(page, { stats: s });
+    await expect(page.locator('#mc-' + s.models[0].name + ' .chip.tower')).toHaveText('vision + audio');
+    await expect(page.locator('#mc-' + s.models[1].name + ' .chip.tower')).toHaveCount(0);
+});
+
 test('a GPU budget reveals the VRAM bar with the owner and fill', async ({ page }) => {
     const s = { ...fx('stats_multi'), gpu_budget_bytes: 8e9, gpu_vram_bytes: 2e9 };
     s.models = s.models.map((m, i) => (i === 0 ? { ...m, holds_gpu: true } : m));

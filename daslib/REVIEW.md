@@ -5,9 +5,10 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_LINT.md`, `ARCHITECTURE_EMIT.md`, `ARCHIT
 Planned work: `plans/daslib_comment_sweep.md` (repo root).
 A diff touching the linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too.
 
-**A diff that adds or changes a lint report path (`perf_warning` / `style_warning` /
-`lint_error`) checks suppression before that path's dedup insert.** A nolint'd finding that
-takes the (rule, location) slot silences a co-located sibling rule.
+**A diff that changes the body of `perf_warning` (`perf_lint.das`), `style_warning`
+(`style_lint.das`), or `lint_error` (`lint.das`) runs the suppression check before the body
+records or reports the finding.** A nolint'd finding that takes the (rule, location) slot
+silences a co-located sibling rule.
 
 **A diff that changes the dedup key keeps the rule code in it.** A key without the code
 collides across rules.
@@ -84,9 +85,12 @@ Instantiation mangles names and strips witness arguments.
 **A lint rule that fires on the source of the module that implements the idiom it suggests
 is a defect.**
 
-**A diff that adds or changes a collapse suggestion gates it on receiver type, arity,
-cloneability, and duplicate constant keys, so the suggestion compiles and keeps the reported
-shape's semantics.**
+**A diff that adds or changes a collapse check - a lint rule that suggests replacing a run of
+statements with one expression - gates the suggestion on receiver type, arity, cloneability,
+and duplicate constant keys.**
+
+**A diff that adds or changes the rewrite a lint message suggests adds that rewrite to the
+rule's fixture as a good shape that compiles and does not fire.**
 
 **A diff that makes two collapse checks fire on one shape is a defect.** Overlaps stay
 partitioned: STYLE021 owns the const-key run over STYLE031, STYLE032 owns fresh-empty

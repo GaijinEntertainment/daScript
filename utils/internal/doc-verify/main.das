@@ -1054,7 +1054,9 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
 // ===== compile driver =====
 
 def compile_file_rc(cfg : Config; path : string; var output : string&) : int {
-    let args <- [normalize(cfg.daslang), "-compile-only", normalize(path)]
+    //! -dasroot names the tree whose modules the page's requires resolve from: the audited
+    //! root, not the binary's own tree, so a worktree session checks its own sources
+    let args <- [normalize(cfg.daslang), "-dasroot", normalize(cfg.root), "-compile-only", normalize(path)]
     return run_and_capture(args, output, 120.0)
 }
 

@@ -148,6 +148,9 @@ Endpoints
      - ``/v1/audio/speech``
      - Text→speech (needs ``--tts``); ``response_format`` ``wav`` (default) or ``pcm``
    * - ``POST``
+     - ``/v1/audio/phonemes``
+     - ``{"input", "voice"?}`` → the normalized text, the dialect the voice speaks (``lang``) and, per chunk a synthesis would take, its phoneme string in that dialect (needs ``--tts``)
+   * - ``POST``
      - ``/v1/models/activate``
      - ``{"model": name}`` — make ``name`` the default + stepped slot and move the GPU tier to it now (loopback-only; 409 while work is live)
    * - ``POST``
@@ -173,7 +176,7 @@ Endpoints
      - The curated model list with local presence and per-entry download state
    * - ``POST``
      - ``/catalog/download``
-     - ``{"name": <entry>}`` — start one catalog download (sha-verified; ``"tower"`` pulls a vision/asr companion)
+     - ``{"name": <entry>}`` — start one catalog download (sha-verified; ``"tower"`` pulls a vision/asr companion, and ``{"tower": "tts", "file": <file>}`` one file of the speech set)
    * - ``GET`` / ``POST``
      - ``/bench``
      - Read bench state and log / start the quiesced A/B benchmark against the configured llama.cpp binary (``POST`` is loopback-only)

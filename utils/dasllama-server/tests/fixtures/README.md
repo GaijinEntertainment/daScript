@@ -1,8 +1,9 @@
 # Captured fixtures for the control-page suite
 
-Every JSON/SSE file here was captured from a REAL dasllama-server run - never
-hand-written - so the page is tested against the wire shapes the server
-actually emits. If an endpoint's schema changes, re-capture rather than edit.
+Every file here - JSON, SSE, and the one captured WAV - came off a REAL
+dasllama-server run, never hand-written, so the page is tested against the wire
+shapes the server actually emits. If an endpoint's schema changes, re-capture
+rather than edit.
 
 ## Regenerating
 
@@ -53,6 +54,19 @@ Then capture (`B=http://127.0.0.1:18132`):
 | `sse_chat.txt` | `curl -N $B/v1/chat/completions -d '{"messages":[{"role":"user","content":"hi"}],"stream":true,"max_tokens":24}'` - raw bytes, keep the exact framing |
 | `sse_think.txt` | same against a thinking model, or a capture that carries `delta.reasoning_content` chunks |
 
+Speech fixtures (the same server, restarted with
+`--tts <models>/kitten-nano.gguf` beside its `tts_g2p.bin` + `tts_postag.bin`;
+`S=$B/v1/audio/speech`):
+
+| File | Command |
+|---|---|
+| `stats_tts.json` | `curl $B/v1/stats` after a synthesis or two - the `tts` block (voices, sample rate, lane) rides the full stats shape |
+| `stats_tts_failed.json` | `curl $B/v1/stats` on a boot whose whole `--tts` file set is THERE but whose worker cannot load it - copy `kitten-nano.gguf` + `tts_postag.bin` into a scratch dir and write a `tts_g2p.bin` of ten bytes, `TG2P` then a version byte of 1 (an ordinary upgrade leaves exactly that), then boot `--tts <scratch>/kitten-nano.gguf --config <a one-key toml>` with no `--model`. The `tts` block with `ready: false`, empty `voices`, the requested `lane`, and the loader's own `error`, which the speech card prints instead of the studio. A file that is simply ABSENT is a different path - `configure_tts` drops the route before the worker starts, and the block never appears |
+| `config_tts.json` | `curl $B/config` on that same boot - the `tts` path and `tts_lane` as the speech studio's offer card reads them |
+| `speech.wav` | `curl -X POST $S -d '{"input":"Hi.","voice":"expr-voice-2-f","response_format":"wav"}' -o speech.wav` - raw bytes, keep the exact RIFF header. Say ONE short word: the answer is uncompressed 16-bit PCM, so every second costs ~48 KB |
+| `speech_error.json` | `curl -X POST $S -d '{"input":"Hi.","response_format":"mp3"}'` (the declined-format 400 body) |
+| `phonemes.json` | `curl -X POST $B/v1/audio/phonemes -d '{"input":"Dr. Chen paid $12. The quick brown fox jumps over the lazy dog."}'` - the front-end document the studio draws under the waveform. Say something the normalizer REWRITES and that chunks in two, so the panel's specs see both halves |
+
 `sse_expected.json` pairs the SSE captures with the text the page must render:
 `{content, think, think_content}` = the concatenated `delta.content` of
 `sse_chat.txt`, and the concatenated `delta.reasoning_content` /
@@ -63,12 +77,15 @@ Catalog/setup fixtures (same server, booted with NO model for the setup ones):
 | File | Command |
 |---|---|
 | `stats_setup.json` | `curl $B/v1/stats` on a no-model (setup mode) boot |
-| `catalog_idle.json` | `curl $B/catalog` with at least one entry already downloaded |
+| `catalog_idle.json` | `bin/daslang -jit utils/dasllama-server/tests/fixtures/capture_catalog.das -- --presence <dir> catalog_idle.json` (repo root) over a scratch dir holding SYMLINKS to exactly what the fixture must read present: the entries and companions the committed fixture shows present, plus `kitten-nano.gguf` and both `tts_g2p.bin` / `tts_postag.bin`, so the speech card's enable state is captured rather than derived. Symlink, never copy - a personal model library does not belong in a fixture, and neither does a second copy of one |
+| `catalog_empty.json` | the same rail with `--presence <dir> catalog_empty.json` over an EMPTY scratch dir: every entry, the ASR tower and the whole speech set absent - the document the download offers are read from |
 | `catalog_downloading.json` + `catalog_done.json` | `bin/daslang -jit utils/dasllama-server/tests/fixtures/capture_catalog.das` (repo root) - boots a setup server on a scratch dir, downloads the smallest card FOR REAL, snapshots `/catalog` mid-flight and after it lands, normalizes paths, deletes the scratch download |
 | `catalog_refusal.json` | `POST $B/catalog/download` for a second entry while one runs (the 409 body) |
 
 After capture, mechanically normalize machine-local paths (model dirs ->
 `D:/models`, the capture TOML path -> `D:/models/dasllama-server.toml`, the capture user's
-home -> `C:/Users/user`) -
+home -> `C:/Users/user`; a `/catalog` capture's scratch models dir maps to
+`C:\Users\user\.dasllama\models`, the home-relative default those fixtures record, exactly as
+`capture_catalog.das` does it) -
 paths are the ONE permitted edit; every other byte stays as served. The
 hardware/box identity lines stay as captured.

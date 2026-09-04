@@ -1,0 +1,327 @@
+// §08 speech studio: the section is gated on the `tts` block of /v1/stats, the voice select is
+// that block's list, Speak posts the route's own body shape and reports the decoded audio, the
+// phoneme panel under the waveform is the /v1/audio/phonemes document, and the §03 offer card
+// walks the speech set's download ladder before the three path-mode states.
+
+const { test, expect, fx, bin, openControl, lastJson } = require('./fixtures');
+
+const SPEECH = '/v1/audio/speech';
+const PHONEMES = '/v1/audio/phonemes';
+const CAP = 4096;        // the speech route's own input cap, in characters (the page's TTS_MAX_CHARS)
+const ASTRAL = '\u{1F600}';   // one character, two UTF-16 units — the two counts disagree on it
+
+function statsWithoutTts() {
+    const s = JSON.parse(JSON.stringify(fx('stats_tts')));
+    delete s.tts;
+    return s;
+}
+
+// the same names and sizes the card prints, read off whatever the capture recorded
+const modelName = file => file.replace(/\.gguf$/i, '');
+const sizeMB = bytes => Math.round(bytes / 1e6) + ' MB';
+const speechModels = doc => doc.tts.filter(i => !i.pack);
+const speechPacks = doc => doc.tts.filter(i => i.pack);
+const bySize = list => [...list].sort((a, b) => a.bytes - b.bytes);
+
+// the packs land before any model does - the rail runs one download at a time
+function withPacksPresent(doc) {
+    const d = JSON.parse(JSON.stringify(doc));
+    for (const i of d.tts) {
+        if (i.pack) i.present = true;
+    }
+    return d;
+}
+
+// a second model on disk beside the captured one, at the path the capture's own dir implies
+function withModelPresent(doc, file) {
+    const d = JSON.parse(JSON.stringify(doc));
+    const m = d.tts.find(i => i.file === file);
+    m.present = true;
+    m.path = d.models_dir + '\\' + file;
+    return d;
+}
+
+// the fixture's own duration, off its RIFF header — the page decodes the same bytes
+function wavSeconds(buf) {
+    return buf.readUInt32LE(40) / (buf.readUInt32LE(24) * buf.readUInt16LE(32));
+}
+
+function wavAnswer() {
+    return { responses: { [SPEECH]: { status: 200, body: bin('speech.wav'), contentType: 'audio/wav' } } };
+}
+
+// the wav and the phoneme document the one Speak click asks for
+function speechAnswers() {
+    return { responses: Object.assign({ [PHONEMES]: { status: 200, json: fx('phonemes') } },
+                                      wavAnswer().responses) };
+}
+
+test('a boot with no speech model keeps the studio hidden', async ({ page }) => {
+    await openControl(page);   // the plain stats fixture carries no tts block
+    await expect(page.locator('#tts-section')).toBeHidden();
+});
+
+test('a tts block that is not ready keeps the studio hidden', async ({ page }) => {
+    const s = fx('stats_tts');
+    s.tts.ready = false;
+    await openControl(page, { stats: s });
+    await expect(page.locator('#tts-section')).toBeHidden();
+});
+
+test('a ready tts block reveals the studio and fills the voice select from the block', async ({ page }) => {
+    const s = fx('stats_tts');
+    await openControl(page, { stats: s });
+    await expect(page.locator('#tts-section')).toBeVisible();
+    expect(await page.locator('#s-voice option').allTextContents()).toEqual(s.tts.voices);
+    await expect(page.locator('#s-voice')).toHaveValue(s.tts.voices[0]);
+    await expect(page.locator('#s-count')).toContainText('/ ' + CAP);
+});
+
+test('the textarea counts against the route cap and gates the button', async ({ page }) => {
+    await openControl(page, { stats: fx('stats_tts') });
+    await expect(page.locator('#s-run')).toBeDisabled();
+    await page.locator('#s-text').fill('hello');
+    await expect(page.locator('#s-count')).toHaveText('5 / ' + CAP + ' characters');
+    await expect(page.locator('#s-run')).toBeEnabled();
+    await page.locator('#s-text').fill('x'.repeat(CAP + 1));
+    await expect(page.locator('#s-run')).toBeDisabled();
+});
+
+test('the count and the cap gate measure characters, not UTF-16 units', async ({ page }) => {
+    await openControl(page, { stats: fx('stats_tts') });
+    await page.locator('#s-text').fill(ASTRAL.repeat(3));
+    await expect(page.locator('#s-count')).toHaveText('3 / ' + CAP + ' characters');
+    await expect(page.locator('#s-run')).toBeEnabled();
+    // exactly the cap in characters — and twice the cap in UTF-16 units, which must not refuse it
+    await page.locator('#s-text').fill(ASTRAL.repeat(CAP));
+    await expect(page.locator('#s-count')).toHaveText(CAP + ' / ' + CAP + ' characters');
+    await expect(page.locator('#s-run')).toBeEnabled();
+    await page.locator('#s-text').fill(ASTRAL.repeat(CAP + 1));
+    await expect(page.locator('#s-run')).toBeDisabled();
+});
+
+test('the answer splitter sizes its pieces in characters too', async ({ page }) => {
+    await openControl(page, { stats: fx('stats_tts') });
+    const pieces = await page.evaluate(([ch, cap]) => splitForSpeech(ch.repeat(2 * cap), cap), [ASTRAL, 10]);
+    expect(pieces.length).toBe(2);
+    for (const p of pieces) expect([...p].length).toBe(10);
+    expect(pieces.join('')).toBe(ASTRAL.repeat(20));
+});
+
+test('speak posts the route body and the status line reports the decoded audio', async ({ page }) => {
+    const s = fx('stats_tts');
+    const { posts } = await openControl(page, Object.assign({ stats: s }, wavAnswer()));
+    await page.locator('#s-text').fill('hello from the speech studio');
+    await page.locator('#s-speed').fill('1.5');
+    await page.locator('#s-run').click();
+    await expect(page.locator('#s-note')).toContainText('of audio in');
+    const body = lastJson(posts.filter(p => p.path === SPEECH));
+    expect(body.input).toBe('hello from the speech studio');
+    expect(body.voice).toBe(s.tts.voices[0]);
+    expect(body.speed).toBe(1.5);
+    expect(body.response_format).toBe('wav');
+    const note = await page.locator('#s-note').textContent();
+    const secs = Number(note.match(/^([\d.]+)s of audio/)[1]);
+    expect(Math.abs(secs - wavSeconds(bin('speech.wav')))).toBeLessThan(0.05);
+    expect(note).toMatch(/rtf \d/);
+});
+
+test('speak asks the phonemes route for the same text and draws the document under the wave', async ({ page }) => {
+    const doc = fx('phonemes');
+    const { posts } = await openControl(page, Object.assign({ stats: fx('stats_tts') }, speechAnswers()));
+    await expect(page.locator('#s-phon')).toBeHidden();
+    await page.locator('#s-text').fill('speak and phonemize this');
+    await page.locator('#s-run').click();
+    await expect(page.locator('#s-phon')).toBeVisible();
+    await expect(page.locator('#s-phon .norm')).toHaveText(doc.normalized);
+    const rows = page.locator('#s-phon .chunk');
+    await expect(rows).toHaveCount(doc.chunks.length);
+    for (let i = 0; i < doc.chunks.length; i++) {
+        await expect(rows.nth(i).locator('.t')).toHaveText(doc.chunks[i].text);
+        await expect(rows.nth(i).locator('.p')).toHaveText(doc.chunks[i].phonemes);
+    }
+    expect(lastJson(posts.filter(p => p.path === PHONEMES))).toEqual({ input: 'speak and phonemize this', voice: fx('stats_tts').tts.voices[0] });
+});
+
+test('the phonemes job goes out only after the speech answer is back', async ({ page }) => {
+    // one worker serves both routes: asked first, the front-end pass would sit in front of the
+    // synthesis and land inside the wall time the studio reports
+    const { posts } = await openControl(page, Object.assign({ stats: fx('stats_tts') }, speechAnswers()));
+    await page.locator('#s-text').fill('order matters on one worker');
+    await page.locator('#s-run').click();
+    await expect(page.locator('#s-phon')).toBeVisible();
+    expect(posts.filter(p => p.path === SPEECH || p.path === PHONEMES).map(p => p.path))
+        .toEqual([SPEECH, PHONEMES]);
+});
+
+test('the phoneme panel names the dialect the document was read in', async ({ page }) => {
+    const doc = fx('phonemes');
+    expect(doc.lang).toBeTruthy();
+    await openControl(page, Object.assign({ stats: fx('stats_tts') }, speechAnswers()));
+    await page.locator('#s-text').fill('which dialect is this');
+    await page.locator('#s-run').click();
+    await expect(page.locator('#s-phon .lang')).toHaveText(doc.lang);
+    await expect(page.locator('#s-phon .norm')).toHaveText(doc.normalized);
+});
+
+test('a refused phonemes call leaves the panel hidden and does not disturb the audio', async ({ page }) => {
+    await openControl(page, {
+        stats: fx('stats_tts'),
+        responses: Object.assign({ [PHONEMES]: { status: 503, json: fx('speech_error') } }, wavAnswer().responses),
+    });
+    await page.locator('#s-text').fill('speak this');
+    await page.locator('#s-run').click();
+    await expect(page.locator('#s-note')).toContainText('of audio in');
+    await expect(page.locator('#s-phon')).toBeHidden();
+});
+
+test('the picked voice survives a reload', async ({ page }) => {
+    const s = fx('stats_tts');
+    const second = s.tts.voices[1];
+    await openControl(page, { stats: s });
+    await page.locator('#s-voice').selectOption(second);
+    await page.reload();
+    await expect(page.locator('#s-voice')).toHaveValue(second);
+});
+
+test('a refusal renders in the status line', async ({ page }) => {
+    const refusal = fx('speech_error');
+    await openControl(page, {
+        stats: fx('stats_tts'),
+        responses: { [SPEECH]: { status: 400, json: refusal } },
+    });
+    await page.locator('#s-text').fill('speak this');
+    await page.locator('#s-run').click();
+    await expect(page.locator('#s-note')).toHaveText(refusal.error.message);
+});
+
+test('the offer card names the model, its voices and its lane when one is wired', async ({ page }) => {
+    const s = fx('stats_tts');
+    await openControl(page, { stats: s, config: fx('config_tts') });
+    const card = page.locator('#tts-offer');
+    await expect(card).toContainText('wired: ' + s.tts.id);
+    await expect(card).toContainText(s.tts.voices.length + ' voices');
+    await expect(card).toContainText(s.tts.lane);
+});
+
+test('the offer card says loading while a configured model has not answered ready', async ({ page }) => {
+    await openControl(page, { stats: statsWithoutTts(), config: fx('config_tts') });
+    await expect(page.locator('#tts-offer')).toContainText('speech model configured, loading');
+});
+
+test('a path left in an unticked tts field is not configured — the card keeps offering', async ({ page }) => {
+    // the same wired path, but nothing sourced it: an unticked override is omitted on save
+    const c = JSON.parse(JSON.stringify(fx('config_tts')));
+    c.surface.sources.tts = 'default';
+    await openControl(page, { stats: statsWithoutTts(), config: c, catalog: fx('catalog_idle') });
+    await expect(page.locator('#en-tts')).not.toBeChecked();
+    await expect(page.locator('#f-tts')).toHaveValue(fx('config_tts').surface.config.tts);
+    await expect(page.locator('#tts-offer')).not.toContainText('configured, loading');
+    await expect(page.locator('#tts-offer button', { hasText: 'enable speech' })).toHaveCount(1);
+});
+
+test('a speech model that failed to load says why and re-opens the ladder', async ({ page }) => {
+    const s = fx('stats_tts_failed');
+    expect(s.tts.ready).toBe(false);
+    await openControl(page, { stats: s, config: fx('config_tts'), catalog: fx('catalog_idle') });
+    await expect(page.locator('#tts-section')).toBeHidden();
+    const card = page.locator('#tts-offer');
+    await expect(card).toContainText('speech failed to load: ' + s.tts.error);
+    await expect(card).not.toContainText('configured, loading');
+    await expect(card.locator('button', { hasText: 'enable speech' })).toHaveCount(1);
+});
+
+test('the offer card points at the config field when no catalog answers', async ({ page }) => {
+    await openControl(page, { catalog: { status: 500, json: {} } });
+    await expect(page.locator('#tts-offer')).toContainText('no speech model configured');
+    await expect(page.locator('#tts-offer')).toContainText('tts field');
+});
+
+test('an empty models dir offers the front-end packs before any model', async ({ page }) => {
+    const doc = fx('catalog_empty');
+    const packs = speechPacks(doc);
+    const { posts } = await openControl(page, { catalog: doc });
+    const b = page.locator('#tts-offer button');
+    // one button, not three: every speech model loads the packs, so they come first
+    await expect(b).toHaveCount(1);
+    await expect(b).toHaveText('download the front-end packs (' + sizeMB(packs.reduce((a, p) => a + p.bytes, 0)) + ')');
+    await b.click();
+    expect(lastJson(posts.filter(p => p.path === '/catalog/download')))
+        .toEqual({ tower: 'tts', file: packs[0].file });
+});
+
+test('the packs on disk turn the card into one button per speech model', async ({ page }) => {
+    const doc = withPacksPresent(fx('catalog_empty'));
+    const models = speechModels(doc);
+    const { posts } = await openControl(page, { catalog: doc });
+    await expect(page.locator('#tts-offer button')).toHaveCount(models.length);
+    for (const m of models) {
+        await expect(page.locator('#tts-offer button', { hasText: modelName(m.file) }))
+            .toHaveText('download ' + modelName(m.file) + ' (' + sizeMB(m.bytes) + ')');
+    }
+    await page.locator('#tts-offer button').first().click();
+    expect(lastJson(posts.filter(p => p.path === '/catalog/download')))
+        .toEqual({ tower: 'tts', file: models[0].file });
+});
+
+test('a speech download in flight renders its progress and holds the buttons back', async ({ page }) => {
+    const doc = JSON.parse(JSON.stringify(fx('catalog_empty')));
+    const pack = speechPacks(doc)[0];
+    doc.download = { state: 'downloading', name: 'tts:' + pack.file, got: Math.round(pack.bytes / 2), total: pack.bytes, error: '' };
+    await openControl(page, { catalog: doc });
+    await expect(page.locator('#tts-offer'))
+        .toContainText('speech (' + pack.file + '): downloading — 50% of ' + sizeMB(pack.bytes));
+    await expect(page.locator('#tts-offer button')).toHaveCount(0);
+});
+
+test('a downloaded model beside the packs offers enable-speech, which wires and saves', async ({ page }) => {
+    const doc = fx('catalog_idle');
+    const pick = bySize(speechModels(doc).filter(m => m.present))[0];
+    expect(pick).toBeTruthy();   // the capture stocks one speech model - the enable state is what it records
+    const { posts } = await openControl(page, { catalog: doc });
+    await page.locator('#tts-offer button', { hasText: 'enable speech' }).click();
+    await expect(page.locator('#cat-note')).toContainText('speech wired (' + modelName(pick.file) + ')');
+    expect(lastJson(posts.filter(p => p.path === '/config')).tts).toBe(pick.path);
+    await expect(page.locator('#en-tts')).toBeChecked();
+    // a saved wire is one restart from live, so the note offers it
+    await page.locator('#cat-note button', { hasText: 'restart now' }).click();
+    expect(posts.some(p => p.path === '/restart')).toBe(true);
+});
+
+test('several downloaded models become a picker that defaults to the smallest', async ({ page }) => {
+    const idle = fx('catalog_idle');
+    const absent = bySize(speechModels(idle).filter(m => !m.present))[0];
+    const doc = withModelPresent(idle, absent.file);
+    const present = bySize(speechModels(doc).filter(m => m.present));
+    expect(present.length).toBeGreaterThan(1);
+    const { posts } = await openControl(page, { catalog: doc });
+    const sel = page.locator('#tts-pick');
+    expect(await sel.locator('option').allTextContents()).toEqual(present.map(m => modelName(m.file)));
+    await expect(sel).toHaveValue(present[0].file);
+    // the picked row is the one the enable wires, not the default
+    await sel.selectOption(present[1].file);
+    await page.locator('#tts-offer button', { hasText: 'enable speech' }).click();
+    expect(lastJson(posts.filter(p => p.path === '/config')).tts).toBe(present[1].path);
+});
+
+test('the pick survives the poll rebuild and is still the one enable wires', async ({ page }) => {
+    const idle = fx('catalog_idle');
+    const absent = bySize(speechModels(idle).filter(m => !m.present))[0];
+    const doc = withModelPresent(idle, absent.file);
+    const present = bySize(speechModels(doc).filter(m => m.present));
+    const { posts } = await openControl(page, { catalog: doc });
+    const sel = page.locator('#tts-pick');
+    await sel.selectOption(present[1].file);
+    await page.waitForTimeout(1500);   // the stats poll rebuilds this card once a second
+    await expect(sel).toHaveValue(present[1].file);
+    await page.locator('#tts-offer button', { hasText: 'enable speech' }).click();
+    expect(lastJson(posts.filter(p => p.path === '/config')).tts).toBe(present[1].path);
+});
+
+test('setup mode hides the studio the way it hides the mic', async ({ page }) => {
+    const s = fx('stats_tts');
+    s.setup = true;
+    await openControl(page, { stats: s });
+    await expect(page.locator('#tts-section')).toBeHidden();
+    await expect(page.locator('#b-mic')).toBeHidden();
+});

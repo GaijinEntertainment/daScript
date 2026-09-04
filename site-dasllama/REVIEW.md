@@ -12,9 +12,10 @@ verbatim and produces the result the page shows.**
 **A code sample shown on a page that does not compile and run with the current toolchain is
 a defect.**
 
-**A number shown on a page with no source named on the page is a defect** - the source is
-live data the page renders it from, or a page comment or prose clause naming the checked-in
-measurement record, or naming the box and date and what was measured, or the word
+**A measured number shown on a page with no source named on the page is a defect** - a
+measured number is one a run produced, and the named source is whatever lets a reader find
+that run: the live endpoint the page renders it from, the checked-in measurement record a page
+comment or prose clause names, the box and date and what was measured, or the word
 placeholder.
 
 **A comparative superiority claim made in words rather than as side-by-side figures, on any
@@ -36,14 +37,14 @@ top-level `.html` page here, or in a script or stylesheet under `files/`, that n
 `site/files/dasllama-table.css` (repo root) defines and no `id="..."` in those files declares -
 is a defect.**
 
-**A statement on a page here about what a shipped tool does is a defect unless it matches
-the current code.**
+**A claim on a page here, or in a `_news/*.md` or `_stories/*.md` entry, that is not true at
+publish time is a defect** - check a claim about what a shipped tool does against that tool's
+current code, and a claim about what a page here renders against the page's markup and
+`files/dasllama-io.js`.
 
-**A claim in a `_news/*.md` or `_stories/*.md` entry that is not true at publish time is a
-defect, including a claim about what a page here renders - check that one against the
-page's markup and `files/dasllama-io.js`.**
-
-**A `_news/*.md` or `_stories/*.md` entry for something not yet shipped is a defect.**
+**A `_news/*.md` or `_stories/*.md` entry for something not yet shipped is a defect.** Shipped
+means a reader can have it now: the code the entry describes is merged to this repository's
+`master`, and any artifact the entry points a reader at is downloadable from where it points.
 
 **A figure in a `_stories/*.md` entry that names no date and build sha for the run it came
 from - in the entry's own text or its `<!-- figures: ... -->` comment - is a defect** - a

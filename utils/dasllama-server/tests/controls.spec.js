@@ -1,4 +1,4 @@
-// §09 controls + §10 benchmark + the restart guard: destructive actions are
+// §11 controls + §12 benchmark + the restart guard: destructive actions are
 // confirm-gated, a dismissed confirm fires nothing, and a restart with dirty
 // edits saves first (a failed save must abort the restart).
 

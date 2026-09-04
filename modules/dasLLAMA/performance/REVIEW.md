@@ -1,8 +1,8 @@
 # dasLLAMA performance Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_ENGINE.md`, `../ARCHITECTURE_MEASUREMENT.md`. Planned
-work: `../followup_general.md`.
+docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_ENGINE.md`, `../ARCHITECTURE_MEASUREMENT.md`.
+Planned work: `../followup_general.md`.
 
 **Never add a second validator for exchange submissions (record stores and tune sidecars) -
 validate through `../dasllama/dasllama_exchange_schema.das` instead.** The engine-free half (no
@@ -79,7 +79,9 @@ second tool's record carrying the wrong engine, and looks real.
 `profile_common.das`), a `.das` function under this folder that lists model files, quants,
 board membership, provenance, or parity fixtures is a defect.** Board membership is which
 models the site results board shows. Write a new list as a view over those two functions: it
-recomputes from them on every call, and it stores no `url`/`bytes`/`sha256` of its own.
+recomputes from them on every call, selects rows by one field whose value on the row states
+membership, never by matching a field against a list of literal values - file names, name
+prefixes, and recipe constants alike - and stores no `url`/`bytes`/`sha256` of its own.
 
 **A diff that makes a recorded row or manifest under this folder pin a model file keeps that
 file's provenance on its own row.** The row is a row of `model_specs()` (`model_specs.das`) or
@@ -93,10 +95,10 @@ beside it: a projector, a draft head, an assistant sidecar, an image fixture - p
 `companions` of the row that pins its carrier, and names it from every other row that consumes
 it.** Uniqueness itself is `../tests/test_model_specs.das`'s to enforce.
 
-**A diff that adds or changes a `serve_*` field on a row of `model_specs()` lands
-`utils/dasllama-server/test_model_catalog.das` (repo root) green in the same change** - the
-serving catalog is a view over these rows, and its gates (pinned urls, unique ids, one
-default) red on a row this folder ships.
+**A diff that adds or changes a `serve_*` field on a row of `model_specs()`, or any `serve_*`
+function in `model_specs.das`, lands `utils/dasllama-server/test_model_catalog.das` (repo
+root) green in the same change** - the serving catalog is a view over these rows, so its gates
+red on a row this folder ships.
 
 **A convert, a bench, or a tune-state write reached from `fetch_models.das --fetch` is a
 defect - `--fetch` downloads only.** Each has its own home: a conversion recipe runs under

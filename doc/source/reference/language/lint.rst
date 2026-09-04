@@ -711,8 +711,8 @@ Only user-written, non-generated code is reported. Generic templates and their
 instantiated functions are skipped; a direct call from ordinary user code is
 still checked.
 
-LINT017 — 64-bit cast of a call that has a ``long_`` counterpart
-=================================================================
+LINT017 — 64-bit cast of a call that stays 32-bit
+==================================================
 
 ``int64(length(x))`` widens a result that is already 32-bit, so the
 2\ :sup:`31` limit is reached inside ``length`` before the cast ever runs — as
@@ -732,6 +732,29 @@ it buys 64-bit range and buys nothing. Call the ``long_`` form, which is
 
 Applies to ``int64(...)`` and ``uint64(...)`` over ``length``, ``capacity``,
 ``count``, ``find_index``, ``fread`` and ``fwrite``.
+
+The same reasoning covers the 32-bit string parses. ``to_int`` and ``to_uint``
+answer ``0`` for any value that overflows 32 bits, so ``int64(to_int(s))``
+asks for a range the parse cannot give — the cast is the author saying 64-bit
+range was wanted, and the parse already threw it away. The mixed-signedness
+spellings ``uint64(to_int(s))`` and ``int64(to_uint(s))`` are the same defect.
+Parse at 64 bits instead, with ``to_int64`` / ``to_uint64`` from module
+``strings``, in the sign the 32-bit parse had: a same-sign site drops the
+cast, a mixed-sign site keeps its outer cast around the 64-bit parse so the
+value is unchanged, and the ``hex`` argument is the site's own.
+
+.. das-doc: alt
+.. code-block:: das
+
+    // Bad — to_int already answered 0 for anything past 2^31
+    let parsed = int64(to_int(s))
+    let hexed = int64(to_int(s, true))
+    let mixed = uint64(to_int(s))
+
+    // Good
+    let parsed = to_int64(s, false)
+    let hexed = to_int64(s, true)
+    let mixed = uint64(to_int64(s, false))
 
 The pair table is hardcoded on purpose. An "does this function exist" check is
 not meaningful for user functions — a macro may add or remove them during

@@ -7,9 +7,13 @@
   `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
   covers it.
 
-- **A change whose behavior depends on the host - a branch on `get_platform_name()`,
-  `get_architecture_name()`, or `cpu_supports()` - runs the module-owned suite on a machine
-  matching that condition.**
+- **A diff that adds or changes a branch on `get_platform_name()`, `get_architecture_name()`,
+  `cpu_supports()`, or `host_llvm_feature()` runs the module-owned suite on a machine that
+  takes the new branch.**
+
+- **A test under `tests/` (beside this file) never creates, overwrites, or deletes a
+  git-tracked path - it copies the fixture into a temp directory it makes and writes to the
+  copy.**
 
 - **A diff that adds or changes a branch on the target triple records in its PR body the
   cross-compile (`write_exe`) for that target that exercised the behavior.** The suite runs on
@@ -93,3 +97,7 @@
   the result by several ulp, the rail's point is that the three tiers agree, and a clamp or a
   conversion written with ordered compares replaces a NaN lane with a number that every accuracy
   bound reads as success.
+
+- **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, dropping a
+  directory from its tracked-fixture list, or a finding text that no longer names what failed.
+  What the gate enforces is read from the gate itself.

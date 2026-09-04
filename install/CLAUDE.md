@@ -169,6 +169,7 @@ diagnostic in any tier.
 | `b == T('(')` where `b` is a non-`int` numeric scalar | make `b : int`, compare `b == '('` | STYLE035: character literals are `int` |
 | `dst := src` / `push_clone(src)` on a plain `string` | `dst = src` / `push(src)`; cross-context copy = `clone_string(src)` | LINT016: the clone spelling copies only the pointer |
 | `int64(length(x))` / `uint64(capacity(x))` (also `count`, `find_index`, `fread`, `fwrite`) | `long_length(x)` / `long_capacity(x)` / ... | LINT017: the inner call returns `int` - 2^31 is hit before the cast |
+| `int64(to_int(s))` / `uint64(to_uint(s))` - a 32-bit string parse under a 64-bit cast | `to_int64(s, false)` / `to_uint64(s, false)` (`strings`) | LINT017: the parse answers 0 for a value past 32 bits, so the cast asks for a range it cannot give |
 | `memcpy(d, s, int(n))` / `arr \|> resize(int(n64))` with a 64-bit `n` | `memcpy(d, s, n)` / `resize(n64)` - the 64-bit overloads exist | LINT018 |
 | `int64(length(a) * 4)` - a 32-bit product with a call among the factors | `long_length(a) * 4l` - the product wrapped before the cast | LINT024 |
 | `range(int(n64))` / `urange(uint(u64))` | `range64(n64)` / `urange64(u64)` | LINT020. Vector components and `string` index stay 32-bit |

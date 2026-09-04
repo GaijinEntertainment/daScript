@@ -1,4 +1,4 @@
-// §09 defaults-first config editor: every flat knob is an override gated by its own
+// §10 defaults-first config editor: every flat knob is an override gated by its own
 // checkbox — unchecked keys are OMITTED from POST /config so engine defaults stay live
 // (ctx = model window, backend = auto-detected), and the advanced fold hides the long tail.
 

@@ -8,11 +8,13 @@ require dastest/review_gate
 
 // The mechanical half of utils/dasllama-server/REVIEW.md (contract: REVIEW_COMMON.md at the
 // repo root). Run from the repo root: bin/daslang utils/dasllama-server/REVIEW.das.
-// Fixtures are captured wire bytes: every JSON fixture must parse, carry no latin-1 round-trip
-// mojibake (the raw Â pair or its \u00c2 escape spelling — the PowerShell/cp1252 trap), and
-// hold no machine-local username (the rail normalizes captures to C:/Users/user). Every
-// path-shaped route registration appears in the README and rst endpoint tables, and no
-// surface documents or consumes a route the server does not register.
+// Fixtures are captured wire bytes, swept by KIND: a text capture must carry no latin-1
+// round-trip mojibake (the raw Â pair or its \u00c2 escape spelling — the PowerShell/cp1252
+// trap) and no machine-local username (the rail normalizes captures to C:/Users/user), a JSON
+// one must parse, the wav must carry the RIFF/WAVE header the route answers with, and a kind
+// with no arm here is itself a finding. Every path-shaped route registration appears in the
+// README and rst endpoint tables, and no surface documents or consumes a route the server
+// does not register.
 
 let FIXTURES_DIR = "utils/dasllama-server/tests/fixtures"
 let SERVER_DAS = "utils/dasllama-server/openai_server.das"
@@ -124,44 +126,78 @@ def check_routes_in_surfaces() {
     }
 }
 
-def private has_mojibake_bytes(text : string) : bool {
-    var found = false
-    peek_data(text) $(d) {
-        let n = length(d)
-        for (i in range(n - 1)) {
-            if (int(d[i]) == 0xC3 && int(d[i + 1]) == 0x82) {
-                found = true
-                break
-            }
+// a fixture is read as BYTES: a string read stops at the first NUL, so the captured wav's tail
+// never reached the scan at all
+def private read_bytes(path : string; size : uint64; var out : array<uint8>) : bool {
+    out |> resize(int64(size))
+    var got = 0
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            got = fread(f, out)
         }
     }
-    return found
+    return got == length(out)
 }
 
-def private foreign_username(text : string) : string {
+def private has_mojibake_bytes(d : array<uint8>) : bool {
+    let n = length(d)
+    for (i in range(n - 1)) {
+        if (int(d[i]) == 0xC3 && int(d[i + 1]) == 0x82) return true
+    }
+    return false
+}
+
+// the ascii-lowered copy the escape search runs over, so \u00C2 reads the same as \u00c2
+def private lowered(d : array<uint8>; var out : array<uint8>) {
+    out |> resize(length(d))
+    for (b, o in d, out) {
+        o = uint8(int(b) >= 'A' && int(b) <= 'Z' ? int(b) + 32 : int(b))
+    }
+}
+
+def private foreign_username(d : array<uint8>) : string {
     var bad = ""
-    peek_data(text) $(d) {
-        let n = length(d)
-        var from = 0
-        while (empty(bad)) {
-            let idx = find(d, "Users", from)
-            break if (idx < 0)
-            var i = idx + 5
-            while (i < n && (int(d[i]) == '\\' || int(d[i]) == '/')) {
-                i++
-            }
-            var name = ""
-            while (i < n && (is_alnum(int(d[i])) || int(d[i]) == '_' || int(d[i]) == '.' || int(d[i]) == '-')) {
-                name += to_char(int(d[i]))
-                i++
-            }
-            if (!empty(name) && name != "user") {
-                bad = name
-            }
-            from = idx + 5
+    let n = length(d)
+    var from = 0
+    while (empty(bad)) {
+        let idx = find(d, "Users", from)
+        break if (idx < 0)
+        var i = idx + 5
+        while (i < n && (int(d[i]) == '\\' || int(d[i]) == '/')) {
+            i++
         }
+        let start = i
+        while (i < n && (is_alnum(int(d[i])) || int(d[i]) == '_' || int(d[i]) == '.' || int(d[i]) == '-')) {
+            i++
+        }
+        let name = build_string() $(writer) {
+            writer |> write_string(d, start, i)
+        }
+        if (!empty(name) && name != "user") {
+            bad = name
+        }
+        from = idx + 5
     }
     return bad
+}
+
+def private scan_text(path : string; d : array<uint8>) {
+    var inscope low : array<uint8>
+    lowered(d, low)
+    if (has_mojibake_bytes(d) || find(low, "\\u00c2") >= 0) {
+        gate_finding(path, "latin-1 mojibake (Â) in a captured fixture — re-capture per tests/fixtures/README.md with a UTF-8-safe writer, never hand-edit")
+    }
+    let uname = foreign_username(d)
+    if (!empty(uname)) {
+        gate_finding(path, "machine-local username '{uname}' — the capture rail normalizes home paths to C:/Users/user")
+    }
+}
+
+// the wav the speech route answers with is PCM, so the text scans say nothing about it; its
+// header is what a hand-written body would not carry
+def private is_riff_wave(d : array<uint8>) : bool {
+    return false if (length(d) < 12)
+    return find(d, "RIFF") == 0 && find(d, "WAVE") == 8
 }
 
 [export]
@@ -175,17 +211,25 @@ def main() : int {
         let p = "{FIXTURES_DIR}/{name}"
         let st = stat(p)
         return if (!st.is_valid || st.is_dir)
-        let text = fread(p)
-        if (has_mojibake_bytes(text) || find(to_lower(text), "\\u00c2") >= 0) {
-            gate_finding(p, "latin-1 mojibake (Â) in a captured fixture — re-capture per tests/fixtures/README.md with a UTF-8-safe writer, never hand-edit")
+        var inscope bytes : array<uint8>
+        if (!read_bytes(p, st.size, bytes)) {
+            gate_finding(p, "could not be read as bytes - the sweep must see every byte of every capture")
+            return
         }
-        let uname = foreign_username(text)
-        if (!empty(uname)) {
-            gate_finding(p, "machine-local username '{uname}' — the capture rail normalizes home paths to C:/Users/user")
+        // the captured text bodies, plus the folder's own rail doc and capture script
+        if (ends_with(name, ".json") || ends_with(name, ".txt") || ends_with(name, ".md")
+            || ends_with(name, ".das") || ends_with(name, ".gitattributes")) {
+            scan_text(p, bytes)
+        } elif (ends_with(name, ".wav")) {
+            if (!is_riff_wave(bytes)) {
+                gate_finding(p, "no RIFF/WAVE header - a captured speech body carries one; re-capture per tests/fixtures/README.md")
+            }
+        } else {
+            gate_finding(p, "fixture kind this gate cannot scan - teach REVIEW.das what to check for it in the same change that adds it")
         }
         if (ends_with(name, ".json")) {
             var jerr = ""
-            var js = read_json(text, jerr)
+            var js = read_json(fread(p), jerr)
             if (js == null) {
                 gate_finding(p, "fixture does not parse as JSON: {jerr}")
             } else {

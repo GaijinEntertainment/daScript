@@ -1015,26 +1015,29 @@
     loses the number: `is_number_word` accepts it, `get_number` refuses the dot, and the
     fallback finds no letter run) - unreachable through the facade, which normalizes first.
 
-82. **Gates the review-round fixes asked for.** (1) A served-layout change with no
-    `IMAGE_VERSION` bump: a `REVIEW.das` gate that a diff touching what `conv1d_prepare` /
-    `linear_prepare` mint, or a `read_*` consumer argument, also touches `IMAGE_VERSION` -
-    dropping the AdaIN affines' tiled twin needed 31 -> 32, and only a spuriously red image
-    cell would have said so. (2) A hand-listed `serialize(var arch : Archive; var x : T)`
-    with two or more `arch |> serialize*` calls and no leading `verify(count_meta_fields(x) ==
-    K)`: the five TTS leaves were the module's only ones without the tripwire while ten
-    sibling families carry it. (3) The split-invariance cell's second axis: `adain_rows` and
-    `attention_rows` shape their dispatch through `lanes_for_work(work, 0)` and the head
-    count, which `set_batch_lane_cap` never reaches, so their legs pin invariance under the
-    cap alone - `set_jobque_worker_limit` moves `get_dispatch_lanes()` and so every shaper.
-    (4) `--test modules/dasLLVM/tests` on an arm64 box deletes the tracked fixture
-    `llvm_tune_profiles_defaults/arm-neon.tune-defaults.json` (a tune-profiles test removes
-    the host's own default path); a folder-local `REVIEW.das` gate that a suite run leaves
-    `git status` clean is the fix. (5) A repo-wide lint: `length(<string>)` flowing into a
-    comparison against a name that reads as a character budget (`*_chars`, `max_len`, `cap`,
-    `limit`) in a file that elsewhere calls `utf8_to_cpts` - the chunker counted bytes, over-split
-    em-dash text threefold and let a 513-character run past a cap of 100. (6) A repo-wide lint,
-    LINT017's sibling: `int64(to_int(x))` - the cast says the author wanted 64-bit range, and
-    `to_int` answers 0 past 2^31 (the g2p number reader spoke "zero").
+82. **Gates the review-round fixes asked for - ruled 2026-09-03, landed on the post-land
+    branch except (5).** (1) LANDED: `REVIEW.das` stamps the image layout closure (every
+    `Archive` serializer body, `build_image`, `parse_image`, every `*_prepare` mint) and reds
+    when it moves with `IMAGE_VERSION` unmoved - dropping the AdaIN affines' tiled twin needed
+    31 -> 32, and only a spuriously red image cell would have said so. (2) LANDED: `REVIEW.das`
+    reds a hand-listed `Archive` serializer with two or more field writes and no
+    `verify(count_meta_fields(x) == K)`; the five TTS leaves and the tokenizer's were the ones
+    without it. (3) LANDED: the split-invariance cell runs the jobque worker limit as a second
+    axis, with a witness per axis that it moved the split - `adain_rows` and `attention_rows`
+    shape their dispatch through `lanes_for_work(work, 0)` and the head count, which the batch
+    lane cap never reaches. (4) LANDED: the tune-profiles test works on a temp copy of
+    `llvm_tune_profiles_defaults/`, and `modules/dasLLVM/REVIEW.das` reds a test that writes
+    or removes inside a tracked directory. Owed from it: the scanner is not dasLLVM's - a test
+    that writes under the tracked tree it lives in bites any folder with checked-in fixtures,
+    so it belongs in `dastest/review_gate.das` as `gate_no_tracked_writes(folder, dirs)` with
+    the dasLLVM gate becoming one call; and the committed
+    `llvm_tune_profiles_defaults/arm-neon.tune-defaults.json` is a run's output that nothing
+    reads now - delete it and ignore the directory once its provenance is confirmed. (5) AUDIT-AGENT ITEM, never a code rule (Boris: a
+    lint rule does not guess semantics from names): `length(<string>)` used as a character
+    count - the chunker counted bytes, over-split em-dash text threefold and let a
+    513-character run past a cap of 100. (6) LANDED as a LINT017 extension: `int64(to_int(x))`
+    and the other sign combinations, remedy `to_int64(x, false)`; the eight pre-existing sites
+    parse in 64 bits now.
 
 83. **Kernel alignment contracts as `requires=` - the residue.** The sweep landed on every
    `[metal_dispatch]` GEMM form: the production mul_mm (`mp % 32, d % 64`), the 32-wide and 64-wide
@@ -1236,3 +1239,110 @@
    each layer's state slice AFTER row 0 into the snapshot buffers (`mtp_snap_pos = pos + 1`), so a
    reject restores that snapshot and takes row 0's logits and hidden the verify already produced -
    the non-recurrent reject path's shape - with `test_mtp_reject_rollback` as the gate.
+106. **The server's boot-arming entry points: degrade on bad config everywhere, and a gate.**
+   `configure_tts` now degrades on a missing file the way the roster does (2026-09-03), but the
+   mirror image stands for vision and audio: `main.das` owns their missing-file check (it drops
+   `image_mmproj` before calling) while `set_model_vision` / `set_model_audio` still panic on a
+   mismatched pair - exactly as config-fixable as a missing pack. Owed: the same degrade there,
+   and a `utils/dasllama-server/REVIEW.das` check that a `configure_*` / `set_model_*` body never
+   reaches `panic(` from config input. Also owed: `main.das`'s `suppress_tune_for_setup` decides
+   "no model configured" from argv alone (`--model` / `--config`), so a `--tts`-only start - a
+   serving start that runs kernels - suppresses the tune mint.
+108. **A style rule the speech studio round asked for.** (The byte-array fixture sweep the same
+   round asked for landed with the text-to-speech follow-on: `utils/dasllama-server/REVIEW.das`
+   reads every fixture as bytes and sweeps by kind.) A style rule:
+   `js?["k"] == null` / `!= null` on a `JsonValue?` is always wrong and always compiles - the
+   safe index answers a shared null NODE, never a null pointer (`skills/daslang/references/json.md`
+   says so); the presence test is `is_null`-shaped. One AST shape, no name reading; it cost
+   one red cycle in the studio work.
+109. **Kokoro's other languages.** The weights and the vocabulary are shared; a voice pack needs
+   only its language's phoneme strings, and the reference picks the phonemizer by the voice
+   name's first letter. American English serves today and British English is the lexicon
+   rung in flight (misaki `gb_gold`/`gb_silver`, Apache-2.0, merged into the v2 pack). The
+   rest, ruled ledger: Mandarin (8 packs: jieba segmentation plus a pinyin dictionary and
+   tone sandhi, MIT data) and Japanese (5 packs: a dictionary reading engine over
+   OpenJTalk/unidic) are each their own project; Spanish, French, Hindi, Italian and
+   Brazilian Portuguese (13 packs) sit behind a data question - the reference phonemizes them
+   through espeak-ng, whose dictionaries are GPL-3, so a das port of that data cannot sit
+   beside the Apache-2 and MIT packs without a licence ruling or another lexicon source.
+   Every one of them also needs its own number and abbreviation normalizer. Until a language
+   lands, `caps` lists only the voices the front end can drive and a request for another is
+   refused with the reason. British landed as pack v2; its two known gaps: the bath-trap
+   split reaches lexicon words only (the fallback rewrite always maps the trap vowel to its
+   British symbol; 3% of the aligned pairs go to the long back vowel instead), and an
+   unstressed medial "i" keeps the American value (the aligned data splits 59/17/15 between
+   the short, plain and long forms, too weak to rule on).
+110. **`tests/run.das` cannot run from a worktree.** Its children spawn `dastest/dastest.das`
+   with no `-dasroot` pass-through, so a worktree session's suites resolve every module
+   against the MAIN tree - the same silent cross-tree answer the MCP lint gives. Forwarding
+   the parent's dasroot (the doc-verify fix's shape) closes it; until then a worktree runs
+   each suite file under `dastest` with `-dasroot <worktree>` by hand.
+107. **The tagger pack on a permissive corpus.** `tts_postag.bin` trains on UD English-EWT (CC
+   BY-SA 4.0) plus spaCy-tagged Gutenberg prose; published on Hugging Face it carries the CC BY-SA
+   label (Boris, 2026-09-03). Owed: a retrain on the permissive silver prose alone, scored by the
+   rig's tagger agreement and heteronym cells against the 2422/2488 and 70/78 the mixed corpus
+   gives; if the loss is a point or less, the permissive pack replaces it and the label goes.
+111. **A lint fixture's `expect 50503:N` is hand-counted.** `utils/lint/tests/*.das` pin the
+   number of findings a rule fires in a header line the fixture runner compares against the run;
+   a fixture that adds cases and forgets the count reds honestly, but one whose count drifts the
+   OTHER way (a case that stops firing while another starts) stays green. Owed: a
+   `utils/lint/REVIEW.das` check that every fixture's per-case markers (the `bad_*` / `good_*`
+   naming the folder already uses) sum to the header's count.
+112. **Three copies of the speech files' bytes and hashes.** The model card
+   (`harness/tts_model_card.md`), the publish script's verification and `performance/model_specs.das`
+   each carry the size and sha256 of the five files; the publish script checks itself against
+   the card, nothing checks the card against `serve_tts_set()`. Owed: a `harness/REVIEW.das` check
+   that the card's table and the catalog rows agree byte for byte, so a re-publish cannot leave
+   the catalog pinned to the previous upload.
+113. **`lex_part` is decoded two to three times per resolved word.** `dasllama_g2p.das` decodes
+   one merged value's dialect header in `grown_find -> lex_find_part -> lex_has -> lex_part`, again
+   in `entry_ps -> lex_is_dict -> lex_part`, and again for the reading itself on the dict path.
+   Each pass re-reads the flags byte and re-walks the American length prefix to find the British
+   part. One decode returning `(kind, a, b)` - a small `LexPart` struct threaded from
+   `lex_find_part` into `entry_ps` - collapses them. The front end sits outside `[hot_path]` and
+   the binary search dominates, so this is a measure-it row, not a hot-path defect.
+114. **The British `-ing` decline loses the GB stem vowel.** `suffix_ing` declines a British stem
+   ending in a schwa or a length mark because the reference has no rule for the linking r such a
+   stem wants; the word then falls to the fallback and reads as the AMERICAN word rewritten,
+   throwing away the British stem the lexicon supplied - "mentoring" reads with the American
+   r-coloured schwa where the GB stem "mentor" ends in the long open o. 61 words in the corpus
+   fixtures' vocabulary hit it. The reference build
+   does the same and carries its own TODO, so we do not diverge - but a linking-r rule (stem + r +
+   ing when the stem ends so) reads all 61 correctly and is testable against the GB lexicon's own
+   `-ing` entries, which spell exactly that (`anchoring`, `tutoring`, `harbouring`). Pinned today by
+   `tests/test_tts_g2p.das`'s British `-ing` arm, whose two expectations move when the rule lands.
+115. **Two `utils/dasllama-server/REVIEW.das` gates the fix batch asked for.** (1) Every file under
+   `tests/fixtures/` has a row in `tests/fixtures/README.md`, and every row names a file that
+   exists - a fixture with no capture rail cannot be re-captured, and a row describing a capture
+   that cannot produce its file (the `stats_tts_failed.json` row once described a MISSING pack,
+   which never yields a `tts` block) is worse than none. (2) A test that spawns `main.das` passes
+   `--config` - without it the child adopts whatever `dasllama-server.toml` sits in the cwd or
+   beside the program, a developer's own with `authoritative = true` included, so the test
+   measures that config, not its flags (`with_spawned_boot` now writes a one-key TOML; the gate
+   keeps the next spawn honest).
+116. **Audit-agent item, not a lint rule: a cap whose message says "characters" but whose test is
+   `length(<string>)`.** `length()` on a string is bytes; the server counted bytes against
+   `TTS_MAX_INPUT_CHARS` while the page counted UTF-16 units, so one paste was accepted by one
+   side and refused by the other. The facade already had `cpt_length` for exactly this and the
+   server did not reach it. A rule would have to guess semantics from a name, so this is an item
+   for the review-round auditors' checklist.
+117. **Gate candidates the review round's dragons surfaced, one line each.** (a) dasLLAMA:
+   `check_test_placement` - a `[test]` file requiring `dasllama/*` outside `tests/`, licensed
+   set = the four ledgered files in `tests/CLAUDE.md`. (b) `tests/REVIEW.das` (new): every test
+   file dastest runs is in a `run.das` suite or its header names `DASLLAMA_CPU_PREFILL`; every
+   test file has a `CMakeLists.txt` row. (c) `performance/REVIEW.das`: a `url =` / `bytes =` /
+   `sha256 =` literal in any `.das` under the folder other than `model_specs.das` and
+   `profile_common.das`; every `records/<box>.json` row's `tune_sha` names an archive that exists;
+   a `defaults/` profile's `provenance.dasllama_version` equals `DASLLAMA_RELEASE`. (d)
+   `harness/REVIEW.das` (new): `tune_kernels.das`'s `benches` list ends in `dot_q8q8_laneq4x4`.
+   (e) `benchmarks/REVIEW.das` (new): nothing under `benchmarks/` or `performance/` but the two
+   reference cells writes under `performance/records/`. (f) `daslib`: a `daslib/*.das` emitting a
+   `RULE_ID` that `utils/lint/REVIEW.das`'s `RULE_MODULES` lacks, and the reverse sweep (a fixture
+   or `lint.rst` section whose id no module still emits). (g) `utils/REVIEW.das`: a test file under
+   `utils/` named in no workflow row, or only in a `--compile-only` row. (h) `site-dasllama`: a
+   `_stories/*.md` entry with neither a figures comment nor a date and sha. (i) `dasLLVM`: every
+   `[EnvConfig]` field of `llvm_env.das` named in `ARCHITECTURE.md` sec.3; every `requires=` /
+   `g_target_x64_*` feature name present in `das_cpu_supports`. (j) `dasllama-server`: a fixture's
+   top-level key absent from `README.md`. (k) `REVIEW_IMAGE`: an addition on the left of a
+   `> msize` compare in `dasllama_image.das`; `REVIEW_TTS`: `styletts2_synthesize` carries
+   `[hot_path]`; a family name or tag string in the two shared TTS files.

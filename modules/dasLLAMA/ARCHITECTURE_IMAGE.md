@@ -167,3 +167,53 @@ its own blob and never mints a `.dlim`.** The sidecar is 440 MiB, its Q8_0 block
 34-byte form the Metal encoder uploads unrepacked, and the copy takes a fraction of a second - an
 image would shorten nothing. The lane is optional (no sidecar, no drafter) and invisible to
 `dasllama-convert`'s list and GC by design.
+
+### 2.1l The layout stamp is one hash over the code that places bytes {#image-layout-stamp}
+
+`REVIEW.das`'s `check_image_layout_stamp` hashes the LAYOUT CLOSURE - the top-level definitions
+under `dasllama/` that decide what an image holds and where each byte lands - and compares the
+result against the two constants the gate carries, `IMAGE_LAYOUT_STAMP_HASH` and
+`IMAGE_LAYOUT_STAMP_VERSION`.
+
+The closure, per file in sorted name order: every `Archive` serializer body (a top-level
+`def serialize*` taking an `Archive`), `build_image`, `parse_image`, every `*_prepare` mint, the
+layout helpers `pad_to_page`, `plane_end`, `image_total_bytes`, `w_append`, `w_zeros`,
+`w_header`, `store_u32` and `store_u64`, and the declaration lines of the layout constants
+`IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND` and
+`METAL_BAND_BLOCKS`. Comments are stripped first, so re-wording one moves nothing. A body runs
+from its `def` line to the column-0 `}` that closes it, or, for a `def ... => expr` one-liner, to
+the end of that one line. Each piece folds into one FNV-1a hash keyed by its file name, so moving
+a serializer between files changes the stamp.
+
+The closure is wider than the byte-moving set on purpose. The two staging bands only decide how
+many bytes a writer stages per pass, and `store_u32` writes header scalars rather than plane
+bytes; over-inclusion costs a re-stamp, and under-inclusion serves the wrong bytes. What it does
+not reach is what a plane HOLDS - the loaders, repackers and quantizers upstream of the mint,
+which the identity string and `layout_fingerprint()` cover instead.
+
+A red says the closure moved, and the two repairs are not the same thing. A **re-stamp** answers
+a change that provably leaves every byte where it was - a renamed local, a tripwire line, a
+helper split, or a content change that also moved the image PATH, since an image at a path
+nothing reads cannot be reinterpreted: `IMAGE_LAYOUT_STAMP_HASH` takes the value the finding
+prints and both version numbers stand. A **bump** answers a change that moves bytes, or that
+changes what an image at an UNCHANGED path contains: `IMAGE_VERSION` (`dasllama_image.das`) goes
+up, `IMAGE_LAYOUT_STAMP_VERSION` follows it, and the hash is re-stamped alongside. Without the
+bump a stale image stays structurally valid and silently serves a different model.
+
+### 2.1m A hand-listed meta serializer pins its own field count {#image-meta-tripwire}
+
+An `Archive` serializer over a struct writes that struct's fields by hand, one call per field, so
+a field added to the struct and forgotten in the list reads back zero on every load - no error,
+no short read, just a zero. `verify(count_meta_fields(x) == K)` at the top of the serializer is
+what makes that loud: the count is pinned, and growing the struct fails the verify until the
+field list grows with it.
+
+`REVIEW.das`'s `check_meta_tripwires` walks every `dasllama/` file and reds a serializer that
+writes two or more fields without that line. It counts a field write in three spellings: the pipe
+form `arch |> serialize` (which also covers `serialize_raw`), the plain call
+`serialize(arch, ...)`, and any other `serialize*(arch, ...)` helper - the bulk forms
+`serialize_pod_array` and `serialize_strings`, and a nested `serialize_image_meta`.
+
+The set the check licenses is the bulk payload forms themselves, recognized by their shape rather
+than their names: a serializer whose header declares an `array` parameter carries a payload, not
+a struct field list, so it has no count to pin. Everything else taking an `Archive` is checked.

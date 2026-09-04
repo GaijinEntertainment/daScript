@@ -27,21 +27,22 @@ enum TtsKind {
     kokoro
 }
 
-//! A loaded TTS model: the shared assembly, the family's driver data, and the front-end packs
-//! read beside the GGUF.
 struct TtsModel {
-    kind : TtsKind
-    model : StyleTts2Model = StyleTts2Model()
-    scratch : St2Scratch = St2Scratch()   // the activation carrier every synthesis reuses
-    kitten : KittenFamily
-    kokoro : KokoroFamily
-    g2p : G2pModel
-    tagger : PosTagger
+    //! A loaded TTS model: the shared assembly, the family's driver data, and the front-end packs
+    //! read beside the GGUF. Load with ``load_tts_model``; ``delete`` frees every plane and pack.
+    kind : TtsKind                          //! the family the GGUF's architecture named
+    model : StyleTts2Model = StyleTts2Model()   //! the shared StyleTTS2-lineage assembly and its voices
+    scratch : St2Scratch = St2Scratch()   //! the activation carrier every synthesis reuses
+    kitten : KittenFamily                   //! the KittenTTS driver data (symbol table, aliases, speed priors)
+    kokoro : KokoroFamily                   //! the Kokoro driver data (vocabulary)
+    g2p : G2pModel                          //! ``tts_g2p.bin``: lexicons, rules and the fallback chain
+    tagger : PosTagger                      //! ``tts_postag.bin``: the tokenizer and part-of-speech tagger
 }
 
 // Stated rather than inferred: the shared carrier holds borrowed planes, and a generated
 // teardown would force every module that deletes a TtsModel to see the plane finalizers too.
 def finalize(var m : TtsModel) {
+    //! Free the model's planes, the carrier and both packs; ``delete m`` runs it.
     delete m.model
     delete m.scratch
     delete m.kitten
@@ -50,8 +51,10 @@ def finalize(var m : TtsModel) {
     delete m.tagger
 }
 
-//! Load a TTS GGUF; `tts_g2p.bin` and `tts_postag.bin` come from the same directory.
 def load_tts_model(path : string) : TtsModel {
+    //! Load a TTS GGUF (KittenTTS or Kokoro, picked from its architecture); ``tts_g2p.bin`` and
+    //! ``tts_postag.bin`` come from the same directory. The rows GEMMs serve as the lane
+    //! ``tts_serves_q8`` names at the time of the load.
     var inscope m = TtsModel()
     m.model <- load_styletts2(path)
     if (m.model.family == "kitten-tts") {
@@ -66,29 +69,106 @@ def load_tts_model(path : string) : TtsModel {
     let dir = dir_name(path)
     m.g2p <- load_g2p(path_join(dir, "tts_g2p.bin"))
     m.tagger <- load_pos_tagger(path_join(dir, "tts_postag.bin"))
+    log_dropped_voices(m)
     return <- m
 }
 
-//! Pin the rows GEMMs' format for subsequent TTS loads: Q8_0 quants (their own prepared image
-//! beside the GGUF) or the file's f32 planes; ``reset_tts_q8`` returns to the policy default.
+[cold_path]
+def private log_dropped_voices(m : TtsModel) {
+    //! Name, once per load, the voice packs ``caps`` leaves out: the front end phonemizes none
+    //! of their languages, so a caller asking for one gets a refusal rather than a wrong accent.
+    var inscope langs <- front_end_langs(m)
+    var inscope dropped : array<string>
+    for (v in m.model.voice_names) {
+        continue if (find_index(langs, voice_lang(m, v)) >= 0)
+        dropped |> push(v)
+    }
+    return if (empty(dropped))
+    to_log(LOG_INFO, "dasLLAMA tts: {length(dropped)} voice pack(s) speak a language this front end does not phonemize, and are not offered: {join(dropped, ", ")}\n")
+}
+
 def set_tts_q8(on : bool) {
+    //! Pin the rows GEMMs' format for subsequent TTS loads: Q8_0 quants (their own prepared image
+    //! beside the GGUF) or the file's f32 planes; ``reset_tts_q8`` returns to the policy default.
+    //! The pin is per context: a worker thread pins for itself.
     set_styletts2_q8(on)
 }
 
 def reset_tts_q8() {
+    //! Drop the ``set_tts_q8`` pin: the next load follows the policy default again.
     reset_styletts2_q8()
 }
 
-//! Would the next TTS load serve its rows GEMMs as q8 - the pin when set, the policy otherwise.
-def tts_serves_q8() : bool => styletts2_serves_q8()
+def tts_serves_q8() : bool {
+    //! Would the next TTS load serve its rows GEMMs as q8 - the pin when set, the policy otherwise.
+    return styletts2_serves_q8()
+}
+
+def private front_end_langs(m : TtsModel) : array<string> {
+    //! The languages the front end phonemizes for this model, as the reference pipeline's
+    //! codes. Both families ship American English; Kokoro adds British, which its ``bf_*`` and
+    //! ``bm_*`` packs speak. A family speaks a language only once its lexicon rung lands here.
+    var inscope langs : array<string>
+    langs |> push("en-us")
+    if (m.kind == TtsKind.kokoro) {
+        langs |> push("en-gb")
+    }
+    return <- langs
+}
+
+def private voice_lang(m : TtsModel; vname : string) : string {
+    //! The language a canonical voice was trained on: Kitten's voices are all American
+    //! English; a Kokoro pack's name carries its language.
+    return m.kind == TtsKind.kitten ? "en-us" : kokoro_voice_lang(vname)
+}
 
 def caps(m : TtsModel) : TtsCaps {
-    var c = TtsCaps()
-    c.voices := m.model.voice_names
-    c.sample_rate = m.model.sample_rate
-    c.langs |> push("en")
-    c.cloning = false
+    //! What the loaded model offers: the canonical voice names the front end can drive, each with
+    //! its language (a voice whose language it does not phonemize is left out; a family's aliases
+    //! resolve at synthesis), the PCM sample rate, the languages, and whether it clones a voice.
+    var c = TtsCaps(sample_rate = m.model.sample_rate, cloning = false)
+    c.langs <- front_end_langs(m)
+    for (v in m.model.voice_names) {
+        let lang = voice_lang(m, v)
+        continue if (find_index(c.langs, lang) < 0)
+        c.voices |> push(v)
+        c.voice_langs |> push(lang)
+    }
     return <- c
+}
+
+def tts_voice_lang(m : TtsModel; voice : string) : string {
+    //! The language the front end reads ``voice`` in - a canonical name from ``caps`` or a family
+    //! alias, resolved the way ``synthesize`` resolves it. A voice this model cannot drive panics
+    //! here with the message a synthesis would give, rather than making the caller speak a line.
+    return voice_lang(m, resolve_voice(m, voice))
+}
+
+// ===== front end =====
+
+def tts_normalize(text : string) : string {
+    //! The spoken form of ``text``: the normalization pass every synthesis runs first (rules
+    //! alone - it reads no pack), where "Dr." reads "Doctor", "3.5" reads "three point five" and
+    //! "$12" reads "twelve dollars".
+    return normalize_text(text)
+}
+
+def tts_phonemize(m : TtsModel; text : string) : string {
+    //! The phonemes one already-normalized sentence becomes, in the front end's own American
+    //! inventory: the tagger of ``tts_postag.bin`` labels the tokens, the grapheme-to-phoneme pass
+    //! of ``tts_g2p.bin`` reads them. A family wanting other symbols rewrites this string into them.
+    return g2p_phonemize(m.g2p, m.tagger, text)
+}
+
+def tts_phonemize(m : TtsModel; text : string; lang : string) : string {
+    //! The same, in the inventory ``lang`` names - a language code from ``caps``, ``"en-us"`` or
+    //! ``"en-gb"``. A language this model's front end does not phonemize panics rather than
+    //! answering in the wrong dialect.
+    var inscope langs <- front_end_langs(m)
+    if (find_index(langs, lang) < 0) {
+        panic("dasLLAMA tts: this front end does not phonemize '{lang}'")
+    }
+    return g2p_phonemize(m.g2p, m.tagger, text, lang == "en-gb")
 }
 
 // ===== chunking =====
@@ -136,10 +216,11 @@ def private is_sentence_boundary(cps : array<int>; i : int) : bool {
     return i + 1 >= n || is_space_cpt(cps[i + 1])
 }
 
-// a chunk ends on prosodic punctuation; one is appended when the split left none
-def private ensure_punctuation(chunk : string) : string {
+// a chunk ends on prosodic punctuation when the family's driver says so (Kitten's appends a comma
+// where the split left none; Kokoro's pipeline sends the text as it is)
+def private finish_chunk(chunk : string; punct : bool) : string {
     let s = strip(chunk)
-    return s if (empty(s))
+    return s if (empty(s) || !punct)
     var inscope cps <- utf8_to_cpts(s)
     let last = cps[length(cps) - 1]
     return (last == '.' || last == '!' || last == '?' || last == ',' || last == ';' || last == ':') ? s : "{s},"
@@ -154,44 +235,44 @@ def private cpt_length(s : string) : int {
 
 // a whitespace-free run longer than the cap has no word boundary to split on, so it splits at
 // the cap itself, on a codepoint boundary
-def private push_hard_split(word : string; max_len : int; var out : array<string>) {
+def private push_hard_split(word : string; max_len : int; punct : bool; var out : array<string>) {
     var inscope cps <- utf8_to_cpts(word)
     let n = length(cps)
     var a = 0
     while (a < n) {
         let b = min(a + max_len, n)
-        out |> push(ensure_punctuation(cpts_to_utf8(cps, a, b)))
+        out |> push(finish_chunk(cpts_to_utf8(cps, a, b), punct))
         a = b
     }
 }
 
-def private push_words(sentence : string; max_len : int; var out : array<string>) {
+def private push_words(sentence : string; max_len : int; punct : bool; var out : array<string>) {
     var inscope cur : array<string>
     var cur_len = 0
     for (w in split(sentence, " ")) {
         continue if (empty(w))
         let wl = cpt_length(w)
         if (!empty(cur) && cur_len + 1 + wl > max_len) {
-            out |> push(ensure_punctuation(join(cur, " ")))
+            out |> push(finish_chunk(join(cur, " "), punct))
             cur |> clear()
             cur_len = 0
         }
         if (wl > max_len) {
-            push_hard_split(w, max_len, out)
+            push_hard_split(w, max_len, punct, out)
             continue
         }
         cur_len += (empty(cur) ? 0 : 1) + wl
         cur |> push(w)
     }
     if (!empty(cur)) {
-        out |> push(ensure_punctuation(join(cur, " ")))
+        out |> push(finish_chunk(join(cur, " "), punct))
     }
 }
 
-//! Split normalized text into the pieces one synthesis takes: sentences, each at most
-//! `max_len` codepoints (a longer sentence splits on words, a longer word at the cap), each
-//! ending in punctuation.
-def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS) : array<string> {
+def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS; ensure_punct : bool = true) : array<string> {
+    //! Split normalized text into the pieces one synthesis takes: sentences, each at most
+    //! ``max_len`` codepoints (a longer sentence splits on words, a longer word at the cap). With
+    //! ``ensure_punct`` a chunk the split left bare gets a comma - KittenTTS's driver rule.
     var inscope out : array<string>
     var inscope cps <- utf8_to_cpts(norm)
     var start = 0
@@ -209,12 +290,19 @@ def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS) : array<string> {
         let st = strip(sent)
         continue if (empty(st))
         if (cpt_length(st) <= max_len) {
-            out |> push(ensure_punctuation(st))
+            out |> push(finish_chunk(st, ensure_punct))
         } else {
-            push_words(st, max_len, out)
+            push_words(st, max_len, ensure_punct, out)
         }
     }
     return <- out
+}
+
+def tts_chunks(m : TtsModel; norm : string) : array<string> {
+    //! The chunks a synthesis on this model takes: the family's own driver rule - Kitten's
+    //! appends a comma to a chunk the split left bare, Kokoro's pipeline sends the text as it is,
+    //! and its voices render an added mark as an audible breath.
+    return <- tts_chunks(norm, TTS_CHUNK_CHARS, m.kind == TtsKind.kitten)
 }
 
 // ===== synthesis =====
@@ -239,7 +327,7 @@ def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; sp
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
     let clock = ref_time_ticks()
-    let ps_misaki = g2p_phonemize(m.g2p, m.tagger, norm)
+    let ps_misaki = g2p_phonemize(m.g2p, m.tagger, norm, voice_lang(m, vname) == "en-gb")
     let is_kitten = m.kind == TtsKind.kitten
     var inscope ids <- is_kitten ? kitten_token_ids(kitten_phonemes_from_misaki(ps_misaki)) : kokoro_token_ids(m.kokoro, ps_misaki)
     let row = is_kitten ? kitten_style_row(norm, m.model.style_rows) : kokoro_style_row(ps_misaki, m.model.style_rows)
@@ -261,15 +349,23 @@ def private resolve_voice(m : TtsModel; voice : string) : string {
     if (empty(vname)) {
         panic("dasLLAMA tts: unknown voice '{voice}'")
     }
+    let lang = voice_lang(m, vname)
+    var inscope langs <- front_end_langs(m)
+    if (find_index(langs, lang) < 0) {
+        // a pack whose name carries no language of the pipeline's own shape has none to name
+        let says = empty(lang) ? "speaks a language the front end does not phonemize" : "speaks {lang}, which it does not phonemize"
+        panic("dasLLAMA tts: unknown voice '{voice}' for this front end - the pack {says}")
+    }
     return vname
 }
 
-//! Text -> speech, one sentence-sized chunk at a time: the block receives each chunk's audio as
-//! soon as it exists, in order. Normalization runs once over the whole text.
 def synthesize_stream(var m : TtsModel; text : string; voice : string; speed : float; blk : block<(chunk : TtsAudio)>) {
+    //! Text -> speech, one sentence-sized chunk at a time: the block receives each chunk's audio as
+    //! soon as it exists, in order. Normalization runs once over the whole text; ``voice`` is a
+    //! name from ``caps`` or a family alias, and an unknown one panics.
     let vname = resolve_voice(m, voice)
     let norm = normalize_text(text)
-    var inscope chunks <- tts_chunks(norm)
+    var inscope chunks <- tts_chunks(m, norm)
     for (i, chunk in iter_range(chunks), chunks) {
         var inscope a <- synthesize_chunk(m, chunk, vname, speed, i)
         to_log(LOG_INFO, "dasLLAMA tts: {m.model.family} {m.model.name}: {timings_line(a.timings, a.sample_rate)}\n")
@@ -277,9 +373,10 @@ def synthesize_stream(var m : TtsModel; text : string; voice : string; speed : f
     }
 }
 
-//! Text -> speech: normalize, chunk by sentence, phonemize, map into the family's symbols,
-//! synthesize; the chunks concatenate, the timings sum.
 def synthesize(var m : TtsModel; text : string; voice : string; speed : float = 1.0) : TtsAudio {
+    //! Text -> speech: normalize, chunk by sentence, phonemize, map into the family's symbols,
+    //! synthesize; the chunks concatenate, the timings sum. Sample-identical to
+    //! ``synthesize_stream`` over the same text.
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
     synthesize_stream(m, text, voice, speed) $(chunk) {

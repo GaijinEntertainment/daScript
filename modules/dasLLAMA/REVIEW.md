@@ -82,10 +82,13 @@ applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
 **A routed file applies BOTH the checklist it routes to and this one; every other file under
 `modules/dasLLAMA/` applies this one.**
 
+**A diff that puts a `[test]` file requiring any `dasllama/*` module outside `tests/` (beside
+this file) is a defect.**
+
 **`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
-a maintainer ruling that bench comparability is broken.** Recorded performance rows and tune sidecars stay valid across code changes, and
-per-change invalidation lives in the finer mechanisms - `IMAGE_VERSION` and
-`layout_fingerprint()` (`dasllama/dasllama_image.das`).
+a maintainer ruling that bench comparability is broken.** Recorded performance rows and tune
+sidecars stay valid across code changes, and per-change invalidation lives in the finer
+mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_image.das`).
 
 **A value that cannot change between dispatches of one compiled kernel never reaches that
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value
@@ -115,9 +118,8 @@ wall-clock - and a stated decision.**
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is
 to produce a reference result to check another against), where a faster-format twin already
 serves the same weights and shape, is a defect - call that twin instead.** A site that must
-stay f32 for another reason is ledgered on its own file's sec.1 charter line in
-`ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`, or
-`ARCHITECTURE_TTS.md`, not commented into compliance.
+stay f32 for another reason is ledgered on its own file's sec.1 charter line in an
+`ARCHITECTURE_*.md` companion, not commented into compliance.
 
 **A boot-path prompt (code that runs at startup, before the first request) that reads stdin
 without first proving both stdin and stdout are terminals is a defect - emit the question as
@@ -202,10 +204,9 @@ text names that set as its extension point and the diff lands the paired archite
 asks for, or a finding text that no longer names what failed. What the gate enforces is read
 from the gate itself; each check's finding text states its own rule.
 
-**A new `REVIEW.das` check ships its sec.1 charter line in the same change, on the charter of
-the file it checks - in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`, or
-`ARCHITECTURE_GPU.md`.** The line names the check and the names it licenses. A licensed name
-is one that check does not flag. When the check licenses no names, the line says so.
+**A new `REVIEW.das` check ships its line on the checked file's sec.1 charter - in an
+`ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The line names the check and the names it licenses. A licensed name is one that check does not
+flag. When the check licenses no names, the line says so.
 
 **Checked-in prose this module owns - docs and comments, any language - that is not locating,
 patching, or reproducing work against the reference build describes an upstream mechanism in
@@ -229,14 +230,21 @@ file the author must touch, a fixture or probe entry the format must supply, or 
 pass - updates `HOW_TO_ADD_A_FORMAT.md` in the same change.** The how-to is the next format
 author's whole brief: a step dropped there is a step the next format silently skips.
 
-**Legal attribution never appears in prose - it lives in `THIRD_PARTY_NOTICES.md` and the
-`LICENSE.*` files.**
+**Legal attribution - a third party's copyright line, licence name, or licence text - lives in
+`THIRD_PARTY_NOTICES.md`, in the `LICENSE.*` files, in a model card - the provenance-and-licence
+page published beside a released model or pack - or in a ledger row naming a licence as a
+reason to adopt or reject a model, a dataset, or a dependency; anywhere else in prose it is a
+defect.**
 
-**A def of `dasllama/dasllama.das` - and a new OVERLOAD of one - is TAUGHT: demonstrated in
-runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
-`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** `REVIEW.das`'s `check_tutorial_floor`
-matches def NAMES only, so an overload passes on a sibling's tutorial - the reviewer confirms a tutorial calls the NEW
-signature, and a mention that only names it (a comment, a passing reference) does not count.
+**A def of a facade file, and a new OVERLOAD of one, is TAUGHT: demonstrated in runnable code
+in a `tutorials/dasLLAMA/*.das` source and narrated on a
+`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** The facade files are
+`dasllama/dasllama.das` and `dasllama/dasllama_tts.das` - a facade file's defs reach a consumer
+through `require dasllama/dasllama`, and a diff that makes another file's defs reach that way
+adds it here and to `check_tutorial_floor` in the same change. `REVIEW.das`'s `check_tutorial_floor`
+matches def NAMES only, so an overload passes on a sibling's tutorial - the reviewer confirms
+a tutorial calls the NEW signature, and a mention that only names it (a comment, a passing
+reference) does not count.
 
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
 struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;
@@ -247,11 +255,11 @@ a struct the renderer emits but the registry does not is caught by
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
 **A diff that adds a file under `dasllama/`, moves code between files, or changes what a file
-owns lands the sec.1 edit that keeps the charters true - in `ARCHITECTURE_ENGINE.md`,
-`ARCHITECTURE_GPU.md`, or `ARCHITECTURE_MEDIA.md` - in the same change.** A diff that adds
-a file to any folder where another file has its own sec.1 charter line lands the new file's
-charter line too. A module-root doc
-file - a ledger, a plan - has no charter line and needs no charter edit.
+owns lands the sec.1 edit that keeps the charters true - in an `ARCHITECTURE_*.md` companion,
+never `ARCHITECTURE.md` - in the same change.** A diff that adds a file to any
+folder where another file has its own sec.1 charter line lands the new file's charter line
+too. A module-root doc file - a ledger, a plan - has no charter line and needs no charter
+edit.
 
 **A diff that adds or removes an `ARCHITECTURE_*.md` companion, or moves a section between
 companions, lands `ARCHITECTURE.md`'s index line and section range and repoints every prose

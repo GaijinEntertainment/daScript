@@ -146,6 +146,27 @@ button.xs { font-size: 10px; padding: 2px 8px; }
 .segs .seg.playing { background: var(--bg-3); color: var(--amber); }
 #a-rec.rec { border-color: var(--red); color: var(--red); }
 
+#s-text {
+    width: 100%; box-sizing: border-box; resize: vertical;
+    font-family: var(--font-sans); font-size: 13.5px; color: var(--fg);
+    background: var(--bg-3); border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px;
+}
+#s-text:focus { outline: none; border-color: var(--amber-dim); }
+#s-wave { height: 80px; background: var(--bg-3); border: 1px solid var(--rule); border-radius: 4px; cursor: pointer; }
+#tts-section .knob { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint); }
+#tts-section select, #tts-pick {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--fg);
+    background: var(--bg-3); border: 1px solid var(--rule); border-radius: 4px; padding: 3px 6px;
+}
+#s-speed { width: 110px; }
+#s-count.over { color: var(--red); }
+#s-phon { margin-top: 10px; font-family: var(--font-mono); font-size: 11.5px; }
+#s-phon .norm { color: var(--fg-dim); white-space: pre-wrap; word-break: break-word; }
+#s-phon .lang { color: var(--amber); margin-left: 8px; white-space: nowrap; }
+#s-phon .chunk { border-top: 1px solid var(--rule); padding: 5px 0; margin-top: 5px; }
+#s-phon .chunk .t { color: var(--fg); white-space: pre-wrap; word-break: break-word; }
+#s-phon .chunk .p { color: var(--amber); white-space: pre-wrap; word-break: break-word; margin-top: 2px; }
+
 .chat-log { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; margin-bottom: 12px; }
 .msg { max-width: 85%; padding: 8px 12px; border-radius: 8px; font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 .msg.user { align-self: flex-end; background: var(--bg-3); border: 1px solid var(--amber-dim); }
@@ -153,6 +174,8 @@ button.xs { font-size: 10px; padding: 2px 8px; }
 .msg .think { font-family: Georgia, "Times New Roman", serif; font-style: italic; color: var(--fg-dim); }
 .msg .toolcall { display: block; font-family: ui-monospace, monospace; font-size: 12px; color: var(--fg-dim); border: 1px solid var(--rule); border-radius: 6px; padding: 3px 8px; margin: 4px 0; }
 .msg .meta { display: block; font-family: var(--font-mono); font-size: 10px; color: var(--fg-faint); margin-top: 6px; }
+.msg button.speak { margin-top: 6px; }
+.msg button.speak.speaking { border-color: var(--amber); color: var(--amber); }
 .msg img.shot { display: block; max-width: 100%; max-height: 180px; border-radius: 6px; margin-bottom: 6px; }
 .img-strip { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg-3); }
 .img-strip img { max-height: 56px; border-radius: 4px; }
@@ -235,6 +258,7 @@ button.danger { border-color: var(--red); color: var(--red); }
 button.danger:hover { background: rgba(217, 109, 79, 0.10); }
 button:disabled { opacity: 0.45; cursor: default; }
 .ctl-note { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
+.ctl-note.bad { color: var(--red); }
 </style>
 </head>
 <body>
@@ -300,6 +324,7 @@ button:disabled { opacity: 0.45; cursor: default; }
             <tbody id="cat-body"><tr><td colspan="6" class="ctl-note">loading the catalog…</td></tr></tbody>
         </table>
         <div class="controls" id="asr-offer" style="display:none; margin-top:10px"></div>
+        <div class="controls" id="tts-offer" style="margin-top:10px"></div>
     </div>
 
     <div class="sec"><span>§ 04</span><span class="rule"></span><span>streams</span>
@@ -330,6 +355,7 @@ button:disabled { opacity: 0.45; cursor: default; }
             <div class="chat-btns">
                 <button id="b-img" type="button" style="display:none" title="attach an image — paste or drop one too">▣ image</button>
                 <button id="b-mic" type="button" style="display:none" title="record, click again to stop + transcribe">● mic</button>
+                <button id="b-speak" type="button" style="display:none" title="speak the last answer through the served voice (the reasoning stays silent)">▶ speak</button>
                 <button id="b-send" type="button">send</button>
                 <button id="b-chat-clear" type="button">clear</button>
             </div>
@@ -362,10 +388,26 @@ button:disabled { opacity: 0.45; cursor: default; }
         </div>
     </div>
 
-    <div class="sec"><span>§ 08</span><span class="rule"></span><span>config</span></div>
+    <div class="tts-only" id="tts-section" style="display:none">
+        <div class="sec"><span>§ 08</span><span class="rule"></span><span>speech studio</span></div>
+        <div class="panel">
+            <textarea id="s-text" rows="3" placeholder="type what the served voice should say"></textarea>
+            <div class="controls" style="margin-top:10px">
+                <button id="s-run" type="button" disabled>speak</button>
+                <label class="knob">voice <select id="s-voice"></select></label>
+                <label class="knob">speed <input type="range" id="s-speed" min="0.3" max="1.5" step="0.05" value="1"><span id="s-speed-v">1.00×</span></label>
+                <span class="ctl-note" id="s-count">0 / 4096 characters</span>
+                <span class="ctl-note" id="s-note">type a line and press speak — the waveform plays once, click it to replay</span>
+            </div>
+            <canvas id="s-wave" height="80" style="margin-top:10px"></canvas>
+            <div id="s-phon" style="display:none"></div>
+        </div>
+    </div>
+
+    <div class="sec"><span>§ 09</span><span class="rule"></span><span>config</span></div>
     <div class="panel cfg" id="cfg">…</div>
 
-    <div class="sec"><span>§ 09</span><span class="rule"></span><span>config editor</span></div>
+    <div class="sec"><span>§ 10</span><span class="rule"></span><span>config editor</span></div>
     <div class="panel">
         <div class="gpu-line" id="gpu-line" style="display:none"></div>
         <table class="ctable roster" id="roster">
@@ -386,14 +428,14 @@ button:disabled { opacity: 0.45; cursor: default; }
         <div class="cfg-file" id="cfg-file"></div>
     </div>
 
-    <div class="sec"><span>§ 10</span><span class="rule"></span><span>controls</span></div>
+    <div class="sec"><span>§ 11</span><span class="rule"></span><span>controls</span></div>
     <div class="panel controls">
         <button id="b-gc" type="button">collect garbage</button>
         <button id="b-drain" class="danger" type="button">drain + shutdown</button>
         <span class="ctl-note" id="ctl-note">gc runs at the next lifecycle safe point · shutdown drains accepted work, then exits</span>
     </div>
 
-    <div class="sec"><span>§ 11</span><span class="rule"></span><span>benchmark</span></div>
+    <div class="sec"><span>§ 12</span><span class="rule"></span><span>benchmark</span></div>
     <div class="panel">
         <div class="controls" style="margin-bottom:10px">
             <button id="b-bench" type="button">run llama.cpp A/B</button>
@@ -411,7 +453,7 @@ button:disabled { opacity: 0.45; cursor: default; }
         </div>
     </div>
 
-    <div class="sec" id="exchange"><span>§ 12</span><span class="rule"></span><span>sidecar exchange</span></div>
+    <div class="sec" id="exchange"><span>§ 13</span><span class="rule"></span><span>sidecar exchange</span></div>
     <div class="panel">
         <div class="cfg-file" id="ex-consent" style="display:none">
             <div id="ex-consent-text" style="white-space:pre-line"></div>
@@ -435,7 +477,7 @@ button:disabled { opacity: 0.45; cursor: default; }
     </div>
 
     <footer class="reveal">
-        <div class="sec"><span>§ 13</span><span class="rule"></span><span>how this works</span></div>
+        <div class="sec"><span>§ 14</span><span class="rule"></span><span>how this works</span></div>
         <p>
             Everything above — the tokenizer, every matmul kernel, the continuous-batching
             scheduler, the paged KV cache, this HTTP server — is written in
@@ -443,7 +485,9 @@ button:disabled { opacity: 0.45; cursor: default; }
             games. No PyTorch, no llama.cpp, no CUDA: the LLM engine — kernels, IR generators,
             tokenizer, loaders — is ~35&#8239;000 lines of <code>.das</code>, JIT-compiled to
             native code through LLVM at startup, with its hot kernels auto-tuned per box on
-            first run. The speech-recognition stack adds ~8&#8239;500, the Metal and Vulkan GPU
+            first run. The speech-recognition stack adds ~8&#8239;500, the speech synthesis that
+            answers <code>/v1/audio/speech</code> — text normalizer, grapheme-to-phoneme front
+            end, and the StyleTTS2 vocoder — another ~7&#8239;500, the Metal and Vulkan GPU
             backends ~28&#8239;500, and the server, scheduler, and this page ~7&#8239;000 more.
             The GPU tier offloads MoE expert stacks over Vulkan compute — hybrid by layer
             <i>type</i>, not layer count.
@@ -550,6 +594,8 @@ function apply(s) {
         $("t-asr").textContent = s.asr_ready + " · " + s.asr_active + " · " + s.asr_pending;
         $("asr-section").style.display = "block";
     }
+    applySpeech(s.tts);
+    renderTtsOffer();   // the card's wired state is the stats block's, so it refreshes with the poll
     $("cfg").innerHTML =
         "model <b>" + esc(s.model) + "</b> · ctx <b>" + s.ctx + "</b> · streams <b>" + s.max_streams + "</b>" +
         " · prefill chunk <b>" + s.chunk_tokens + "</b> tok" +
@@ -682,6 +728,9 @@ function renderModels(s) {
             (m.is_default ? '<span class="def">default</span>' : '') +
             '<span class="st' + (m.is_active ? ' active' : '') + '">' + (m.is_active ? 'active' : 'idle') + '</span>' +
             (m.holds_gpu ? '<span class="chip">gpu · ' + esc(m.backend_effective) + '</span>' : '') +
+            (m.vision || m.audio
+                ? '<span class="chip good tower" title="the towers this slot serves: images as image_url parts' +
+                  (m.audio ? ', clips as input_audio parts' : '') + '">' + [m.vision ? 'vision' : '', m.audio ? 'audio' : ''].filter(Boolean).join(' + ') + '</span>' : '') +
             '<span class="spacer"></span>' +
             (!m.is_active && slots.length > 1
                 ? '<button class="mini xs" type="button" data-activate="' + esc(m.name).replace(/"/g, "&quot;") + '">activate</button>' : '') +
@@ -1146,15 +1195,23 @@ let thinkSeeded = false;
     box.append(think);
 }
 
+// fallback for families the server doesn't split (R1-distill-class fine-tunes): a literal leading
+// <think> block in the content is the reasoning half. The speaker button reads the same split —
+// what is spoken is the answer, never the thinking.
+function splitThink(text) {
+    if (!text || !text.startsWith("<think>")) return { think: "", text: text || "" };
+    const m = text.match(/^<think>([\s\S]*?)(?:<\/think>\s*([\s\S]*))?$/);
+    return m ? { think: m[1].trim(), text: (m[2] || "").trim() } : { think: "", text: text };
+}
+
 // render one message: think span (serif), content text, tool-call chips
 function renderMsgContent(el, text, think, calls, keepChildren) {
     // reasoning arrives separated as delta.reasoning_content; calls as the tool_calls chunk
     if (!keepChildren) el.textContent = "";   // a user bubble may already hold the image thumbnail
-    // fallback for families the server doesn't split (R1-distill-class fine-tunes): a literal
-    // leading <think> block in the content renders as the think span
-    if (!think && text && text.startsWith("<think>")) {
-        const m = text.match(/^<think>([\s\S]*?)(?:<\/think>\s*([\s\S]*))?$/);
-        if (m) { think = m[1].trim(); text = (m[2] || "").trim(); }
+    if (!think) {
+        const split = splitThink(text);
+        think = split.think;
+        text = split.text;
     }
     if (think) {
         const sp = document.createElement("span");
@@ -1356,6 +1413,8 @@ async function sendChat() {
     meta.className = "meta";
     meta.textContent = ((performance.now() - t0) / 1000).toFixed(1) + "s";
     el.append(meta);
+    addSpeakButton(el, splitThink(acc.trim()).text);
+    syncSpeakButtons();
     chatBusy = false;
     $("b-send").disabled = false;
 }
@@ -1415,14 +1474,40 @@ function renderAudioStrip() {
     strip.append(note, x);
 }
 
+function audioNote(text) {
+    const strip = $("aud-strip");
+    strip.textContent = "";
+    strip.style.display = "";
+    const note = document.createElement("span");
+    note.className = "note";
+    note.textContent = text;
+    strip.append(note);
+}
+
+// the button wears the LAST poll's verdict; a slot activated a moment ago has not reached it yet,
+// so a dimmed mic asks once more. The answer is decided at STOP, never before getUserMedia: a
+// network round trip inside the click consumes the user gesture, and Safari then refuses the
+// microphone outright.
+function probeTowers() {
+    return fetch("/v1/stats").then(r => r.ok ? r.json() : null).catch(() => null);
+}
+
+// true when the fresh answer arms the mic; it also settles which mode this clip records in
+async function towerArmed(btn, probe) {
+    const s = await probe;
+    if (!s || !(s.asr_workers > 0 || s.audio)) {
+        towerHint(ASR_OFFER);
+        return false;
+    }
+    micNativeAudio = !!s.audio && !(s.asr_workers > 0);
+    btn.classList.remove("off");
+    return true;
+}
+
 async function micToggle() {
     const btn = $("b-mic");
-    if (btn.classList.contains("off")) {
-        towerHint(ASR_OFFER);
-        return;
-    }
     if (micRec) {
-        const { ctx, node, stream, chunks } = micRec;
+        const { ctx, node, stream, chunks, probe } = micRec;
         micRec = null;
         btn.classList.remove("rec");
         btn.textContent = "● mic";
@@ -1430,7 +1515,11 @@ async function micToggle() {
         stream.getTracks().forEach(t => t.stop());
         const rate = ctx.sampleRate;
         await ctx.close();
-        if (!chunks.length) return;
+        if (probe && !await towerArmed(btn, probe)) return;
+        if (!chunks.length) {
+            audioNote("no audio captured — allow the microphone when the browser asks, then record again");
+            return;
+        }
         if (micNativeAudio) {
             // native audio: the wav attaches to the next chat message as an input_audio part —
             // the model hears the clip itself, no transcription pass
@@ -1457,53 +1546,59 @@ async function micToggle() {
         btn.disabled = false;
         return;
     }
+    const probe = btn.classList.contains("off") ? probeTowers() : null;   // rides ALONG, never ahead
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const ctx = new AudioContext();
+        if (ctx.state === "suspended") await ctx.resume();   // Safari starts a context suspended; still inside the click
         const src = ctx.createMediaStreamSource(stream);
         const node = ctx.createScriptProcessor(4096, 1, 1);
         const chunks = [];
         node.onaudioprocess = e => { chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
         src.connect(node);
         node.connect(ctx.destination);
-        micRec = { ctx, node, stream, chunks };
+        micRec = { ctx, node, stream, chunks, probe };
         btn.classList.add("rec");
         btn.textContent = "■ stop";
     } catch (_e) {
+        // a dimmed button that cannot record says which of the two is missing: an un-wired tower
+        // walks the user to § 03, a refused microphone takes the button down
+        if (probe && !await towerArmed(btn, probe)) return;
         micDenied = true;   // no mic permission
         btn.style.display = "none";
     }
 }
 $("b-mic").addEventListener("click", micToggle);
 
-// ===== asr studio: waveform + vad overlay + segment playback + rtf =====
-let asrPcm = null, asrRate = 16000;   // mono Float32Array + its sample rate (record or upload)
-let asrVad = [], asrRec = null, asrCtx = null, asrSrc = null;
-const rtfSeries = [];
-const seenAsrJobs = new Set();
+// ===== the clip player, shared by both studios =====
+// A clip is { pcm: mono Float32Array | null, rate, spans: [{start,end}] } — the ASR studio fills
+// spans from /vad, the speech studio leaves them empty. One renderer, one transport: whichever
+// studio starts a sound stops the one already playing.
+function newClip(rate) { return { pcm: null, rate: rate, spans: [] }; }
 
-function drawWave() {
-    const cv = $("a-wave"), dpr = window.devicePixelRatio || 1;
+function drawWave(cv, clip) {
+    const dpr = window.devicePixelRatio || 1;
     const w = cv.clientWidth, h = cv.clientHeight;
     if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
     const g = cv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
-    if (!asrPcm) return;
-    const dur = asrPcm.length / asrRate;
-    // vad spans under the envelope
+    const pcm = clip.pcm;
+    if (!pcm) return;
+    const dur = pcm.length / clip.rate;
+    // overlay spans under the envelope
     g.fillStyle = "rgba(155, 196, 106, 0.18)";
-    for (const s of asrVad) {
+    for (const s of clip.spans) {
         g.fillRect(s.start / dur * w, 0, Math.max((s.end - s.start) / dur * w, 1), h);
     }
     g.strokeStyle = css("--amber"); g.lineWidth = 1;
     g.beginPath();
-    const step = Math.max(1, Math.floor(asrPcm.length / w));
+    const step = Math.max(1, Math.floor(pcm.length / w));
     for (let x = 0; x < w; x++) {
         let lo = 1, hi = -1;
-        const base = Math.floor(x / w * asrPcm.length);
-        for (let i = base; i < Math.min(base + step, asrPcm.length); i++) {
-            const v = asrPcm[i];
+        const base = Math.floor(x / w * pcm.length);
+        for (let i = base; i < Math.min(base + step, pcm.length); i++) {
+            const v = pcm[i];
             if (v < lo) lo = v;
             if (v > hi) hi = v;
         }
@@ -1514,12 +1609,42 @@ function drawWave() {
     g.stroke();
 }
 
+let playCtx = null, playSrc = null;
+
+function stopPlayback() {
+    if (playSrc) { try { playSrc.stop(); } catch (_e) {} playSrc = null; }
+    for (const el of document.querySelectorAll(".segs .seg")) el.classList.remove("playing");
+}
+
+function playSpan(clip, start, end, row) {
+    if (!clip.pcm) return;
+    stopPlayback();
+    if (!playCtx) playCtx = new AudioContext();
+    const ab = playCtx.createBuffer(1, clip.pcm.length, clip.rate);
+    ab.copyToChannel(clip.pcm, 0);
+    const src = playCtx.createBufferSource();
+    src.buffer = ab;
+    src.connect(playCtx.destination);
+    src.start(0, start, Math.max(end - start, 0.05));
+    playSrc = src;
+    if (row) row.classList.add("playing");
+    src.onended = () => { if (row) row.classList.remove("playing"); };
+}
+
+// ===== asr studio: waveform + vad overlay + segment playback + rtf =====
+const asrClip = newClip(16000);   // mono PCM + its sample rate (record or upload)
+let asrRec = null;
+const rtfSeries = [];
+const seenAsrJobs = new Set();
+
+function drawAsrWave() { drawWave($("a-wave"), asrClip); }
+
 function setAsrClip(pcm, rate, label) {
-    asrPcm = pcm; asrRate = rate; asrVad = [];
+    asrClip.pcm = pcm; asrClip.rate = rate; asrClip.spans = [];
     $("a-run").disabled = false;
     $("a-note").textContent = label + " · " + (pcm.length / rate).toFixed(1) + "s — run vad + transcribe";
     $("a-segs").textContent = "";
-    drawWave();
+    drawAsrWave();
 }
 
 $("a-rec").addEventListener("click", async () => {
@@ -1544,6 +1669,7 @@ $("a-rec").addEventListener("click", async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const ctx = new AudioContext();
+        if (ctx.state === "suspended") await ctx.resume();   // Safari starts a context suspended; still inside the click
         const src = ctx.createMediaStreamSource(stream);
         const node = ctx.createScriptProcessor(4096, 1, 1);
         const chunks = [];
@@ -1573,34 +1699,18 @@ $("a-file").addEventListener("change", async () => {
     }
 });
 
-function playSpan(start, end, row) {
-    if (!asrPcm) return;
-    if (asrSrc) { try { asrSrc.stop(); } catch (_e) {} asrSrc = null; }
-    if (!asrCtx) asrCtx = new AudioContext();
-    const ab = asrCtx.createBuffer(1, asrPcm.length, asrRate);
-    ab.copyToChannel(asrPcm, 0);
-    const src = asrCtx.createBufferSource();
-    src.buffer = ab;
-    src.connect(asrCtx.destination);
-    src.start(0, start, Math.max(end - start, 0.05));
-    asrSrc = src;
-    for (const el of document.querySelectorAll(".segs .seg")) el.classList.remove("playing");
-    if (row) row.classList.add("playing");
-    src.onended = () => { if (row) row.classList.remove("playing"); };
-}
-
 $("a-run").addEventListener("click", async () => {
-    if (!asrPcm) return;
+    if (!asrClip.pcm) return;
     $("a-run").disabled = true;
     $("a-note").textContent = "running vad + transcription...";
-    const wav = encodeWav([asrPcm], asrRate);
+    const wav = encodeWav([asrClip.pcm], asrClip.rate);
     try {
         const fdv = new FormData();
         fdv.append("file", wav, "clip.wav");
         const rv = await fetch("/vad", { method: "POST", body: fdv });
         if (rv.ok) {
-            asrVad = (await rv.json()).segments || [];
-            drawWave();
+            asrClip.spans = (await rv.json()).segments || [];
+            drawAsrWave();
         }
         const fdt = new FormData();
         fdt.append("file", wav, "clip.wav");
@@ -1619,11 +1729,11 @@ $("a-run").addEventListener("click", async () => {
                 const tx = document.createElement("span");
                 tx.textContent = sg.text;
                 row.append(tm, tx);
-                row.addEventListener("click", () => playSpan(sg.start, sg.end, row));
+                row.addEventListener("click", () => playSpan(asrClip, sg.start, sg.end, row));
                 box.append(row);
             }
             $("a-note").textContent = "done — " + j.segments.length + " segment(s), " +
-                (asrVad.length ? asrVad.length + " speech span(s); " : "") + "click a segment to hear it";
+                (asrClip.spans.length ? asrClip.spans.length + " speech span(s); " : "") + "click a segment to hear it";
         } else {
             $("a-note").textContent = "transcription failed: " + (j.error ? j.error.message : rt.status);
         }
@@ -1667,6 +1777,323 @@ function renderAsrJobs(rows, stats) {
     }
 }
 
+// ===== § 08 speech studio =====
+// /v1/audio/speech answers a whole wav, so the studio decodes it into the shared clip player and
+// times the round trip itself — the route carries no timing header to read.
+const TTS_MAX_CHARS = 4096;        // the route's own input cap, refused server-side past it
+const VOICE_KEY = "dasllama.voice";
+const ttsClip = newClip(24000);
+let ttsVoices = [];
+
+// the cap counts CHARACTERS the way the server does — codepoints, not UTF-16 units, so an emoji
+// or any astral character costs one here and one there
+const cpLen = s => [...s].length;
+
+function rememberedVoice() {
+    try { return localStorage.getItem(VOICE_KEY) || ""; } catch (_e) { return ""; }
+}
+
+function countSpeechInput() {
+    const n = cpLen($("s-text").value);
+    $("s-count").textContent = n + " / " + TTS_MAX_CHARS + " characters";
+    $("s-count").classList.toggle("over", n > TTS_MAX_CHARS);
+    $("s-run").disabled = n === 0 || n > TTS_MAX_CHARS;
+}
+
+// the tts block of /v1/stats: the section exists only while a speech worker is loaded
+function applySpeech(tts) {
+    const on = !setupMode && !!(tts && tts.ready);
+    $("tts-section").style.display = on ? "block" : "none";
+    syncSpeakButtons();
+    if (!on) return;
+    const voices = tts.voices || [];
+    if (voices.join(" ") !== ttsVoices.join(" ")) {
+        ttsVoices = voices.slice();
+        const sel = $("s-voice");
+        sel.replaceChildren();
+        for (const v of voices) {
+            const o = document.createElement("option");
+            o.value = v;
+            o.textContent = v;
+            sel.append(o);
+        }
+        const want = rememberedVoice();
+        sel.value = voices.indexOf(want) >= 0 ? want : (voices[0] || "");
+    }
+    if (tts.sample_rate > 0 && !ttsClip.pcm) ttsClip.rate = tts.sample_rate;
+}
+
+$("s-text").addEventListener("input", countSpeechInput);
+$("s-speed").addEventListener("input", () => {
+    $("s-speed-v").textContent = Number($("s-speed").value).toFixed(2) + "×";
+});
+$("s-voice").addEventListener("change", () => {
+    try { localStorage.setItem(VOICE_KEY, $("s-voice").value); } catch (_e) { /* private mode */ }
+});
+$("s-wave").addEventListener("click", () => {
+    stopSpeaking();   // one transport: a manual replay takes the studio back from a spoken answer
+    if (ttsClip.pcm) playSpan(ttsClip, 0, ttsClip.pcm.length / ttsClip.rate, null);
+});
+
+async function speechError(r) {
+    try {
+        const j = await r.json();
+        if (j && j.error && j.error.message) return j.error.message;
+    } catch (_e) { /* not a JSON body */ }
+    return "speech failed: " + r.status;
+}
+
+// /v1/audio/phonemes: what the front end makes of the same text, drawn under the waveform — the
+// normalizer's spoken form and the dialect it was read in, then each chunk the synthesis takes
+// above the phonemes it reads out.
+function renderPhonemes(doc) {
+    const box = $("s-phon");
+    box.replaceChildren();
+    const line = document.createElement("div");
+    line.className = "normline";
+    const norm = document.createElement("span");
+    norm.className = "norm";
+    norm.textContent = doc.normalized || "";
+    line.append(norm);
+    if (doc.lang) {
+        const lg = document.createElement("span");
+        lg.className = "lang";
+        lg.textContent = doc.lang;
+        lg.title = "the dialect the picked voice speaks — the phonemes below are in it";
+        line.append(lg);
+    }
+    box.append(line);
+    for (const c of doc.chunks || []) {
+        const row = document.createElement("div");
+        row.className = "chunk";
+        const t = document.createElement("div");
+        t.className = "t";
+        t.textContent = c.text;
+        const p = document.createElement("div");
+        p.className = "p";
+        p.textContent = c.phonemes;
+        row.append(t, p);
+        box.append(row);
+    }
+    box.style.display = "";
+}
+
+// rides the same queue as the synthesis on the ONE speech worker, so it goes out only after the
+// wav is back: asked first, its normalize + chunk + g2p pass over the same text would sit in
+// front of the synthesis and land in the studio's own wall time. A refusal leaves the panel
+// hidden — the status line already carries the reason.
+async function loadPhonemes(input) {
+    try {
+        const r = await fetch("/v1/audio/phonemes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: input, voice: speechVoice() }),
+        });
+        if (!r.ok) { $("s-phon").style.display = "none"; return; }
+        renderPhonemes(await r.json());
+    } catch (_e) {
+        $("s-phon").style.display = "none";
+    }
+}
+
+$("s-run").addEventListener("click", async () => {
+    const input = $("s-text").value;
+    if (!input) return;
+    stopSpeaking();   // the studio takes the transport back from any answer still being read
+    $("s-run").disabled = true;
+    $("s-note").textContent = "synthesizing…";
+    const body = {
+        input: input,
+        voice: $("s-voice").value,
+        speed: Number($("s-speed").value),
+        response_format: "wav",
+    };
+    const t0 = performance.now();
+    try {
+        const r = await fetch("/v1/audio/speech", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+            $("s-note").textContent = await speechError(r);
+        } else {
+            const buf = await r.arrayBuffer();
+            const wall = (performance.now() - t0) / 1000;
+            const ctx = new AudioContext();
+            const ab = await ctx.decodeAudioData(buf);
+            await ctx.close();
+            ttsClip.pcm = ab.getChannelData(0).slice();
+            ttsClip.rate = ab.sampleRate;
+            ttsClip.spans = [];
+            drawWave($("s-wave"), ttsClip);
+            playSpan(ttsClip, 0, ab.duration, null);
+            $("s-note").textContent = ab.duration.toFixed(2) + "s of audio in " + wall.toFixed(2) +
+                "s wall — rtf " + (wall / Math.max(ab.duration, 1e-6)).toFixed(3) + " · click the wave to replay";
+        }
+    } catch (_e) {
+        $("s-note").textContent = "request failed";
+    }
+    await loadPhonemes(input);
+    countSpeechInput();
+});
+
+// ===== speak the answer: the chat panel's speaker button =====
+// The CONTENT half of a reply only — the reasoning span is not speech — split at sentence
+// boundaries into pieces the route's cap accepts and played in order through the studio's
+// waveform and transport, on the studio's own voice and speed. A second click drops the rest.
+const SPEAK_LABEL = "▶ speak";
+let speakingBtn = null;   // the button whose answer is playing — one answer at a time
+let speakToken = 0;       // bumped by every stop, so an in-flight queue abandons itself
+
+function ttsReady() { return !!(last && last.tts && last.tts.ready); }
+
+// the studio's pick when it has one, else the first voice the served model declares
+function speechVoice() {
+    const sel = $("s-voice");
+    if (sel && sel.value) return sel.value;
+    return ((last && last.tts && last.tts.voices) || [])[0] || "";
+}
+
+// sentence boundaries first, then words, then the cap itself for a word longer than it. Every
+// size is in codepoints — the unit the route's cap counts, so a piece never splits a surrogate
+// pair and an astral-heavy answer is not cut at half the cap.
+function splitForSpeech(text, cap) {
+    const out = [];
+    let cur = "";
+    const flush = () => { const t = cur.trim(); if (t) out.push(t); cur = ""; };
+    for (const s of text.match(/[^.!?\n]*[.!?\n]+|[^.!?\n]+$/g) || []) {
+        if (cpLen(s) <= cap) {
+            if (cpLen(cur) + cpLen(s) > cap) flush();
+            cur += s;
+            continue;
+        }
+        flush();
+        for (const w of s.split(/\s+/)) {
+            if (!w) continue;
+            const cps = [...w];
+            if (cps.length > cap) {
+                flush();
+                for (let i = 0; i < cps.length; i += cap) out.push(cps.slice(i, i + cap).join(""));
+                continue;
+            }
+            if (cpLen(cur) + 1 + cps.length > cap) flush();
+            cur += (cur ? " " : "") + w;
+        }
+    }
+    flush();
+    return out;
+}
+
+// the clip's own length is the backstop: a suspended or sink-less AudioContext must never strand
+// the queue on an onended that will not arrive
+function playClipToEnd(clip, seconds) {
+    return new Promise(resolve => {
+        let settled = false;
+        const finish = () => { if (!settled) { settled = true; resolve(); } };
+        playSpan(clip, 0, seconds, null);
+        if (playSrc) playSrc.onended = finish;
+        setTimeout(finish, seconds * 1000 + 250);
+    });
+}
+
+function endSpeaking(btn) {
+    btn.classList.remove("speaking");
+    btn.textContent = SPEAK_LABEL;
+    if (speakingBtn === btn) speakingBtn = null;
+}
+
+function stopSpeaking() {
+    speakToken++;
+    stopPlayback();
+    if (speakingBtn) endSpeaking(speakingBtn);
+}
+
+async function speakAnswer(btn, text) {
+    if (speakingBtn === btn) { stopSpeaking(); return; }
+    stopSpeaking();
+    const pieces = splitForSpeech(text, TTS_MAX_CHARS);
+    if (!pieces.length) return;
+    const token = ++speakToken;
+    speakingBtn = btn;
+    btn.classList.add("speaking");
+    btn.textContent = "■ speaking…";
+    for (const piece of pieces) {
+        let ab = null;
+        try {
+            const r = await fetch("/v1/audio/speech", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    input: piece,
+                    voice: speechVoice(),
+                    speed: Number($("s-speed").value),
+                    response_format: "wav",
+                }),
+            });
+            if (token !== speakToken) return;
+            if (!r.ok) { $("s-note").textContent = await speechError(r); break; }
+            const buf = await r.arrayBuffer();
+            const ctx = new AudioContext();
+            ab = await ctx.decodeAudioData(buf);
+            await ctx.close();
+        } catch (_e) {
+            break;
+        }
+        if (token !== speakToken) return;
+        ttsClip.pcm = ab.getChannelData(0).slice();
+        ttsClip.rate = ab.sampleRate;
+        ttsClip.spans = [];
+        drawWave($("s-wave"), ttsClip);
+        await playClipToEnd(ttsClip, ab.duration);
+        if (token !== speakToken) return;
+    }
+    endSpeaking(btn);
+}
+
+// every answer remembers its spoken text; the button itself lands whenever the server speaks -
+// at completion when it already does, else on the stats poll that first says so
+function addSpeakButton(el, text) {
+    if (!text) return;
+    el.dataset.speak = text;
+    if (!ttsReady() || el.querySelector("button.speak")) return;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "mini speak";
+    b.textContent = SPEAK_LABEL;
+    b.title = "speak this answer through the served voice";
+    b.addEventListener("click", () => speakAnswer(b, el.dataset.speak));
+    el.append(b);
+}
+
+function lastSpokenAnswer() {
+    const answers = document.querySelectorAll("#chat-log .msg.assistant");
+    for (let i = answers.length - 1; i >= 0; i--) {
+        if (answers[i].dataset.speak) return answers[i];
+    }
+    return null;
+}
+
+function syncSpeakButtons() {
+    const ready = ttsReady();
+    if (ready) {
+        for (const el of document.querySelectorAll("#chat-log .msg.assistant")) {
+            if (el.dataset.speak) addSpeakButton(el, el.dataset.speak);
+        }
+    }
+    // the bar button also stays up while IT is the one speaking — clearing the log mid-read must
+    // not take the stop control away with the answer
+    const bar = $("b-speak");
+    bar.style.display = ready && (lastSpokenAnswer() || speakingBtn === bar) ? "" : "none";
+}
+
+$("b-speak").addEventListener("click", () => {
+    const bar = $("b-speak");
+    if (speakingBtn === bar) { stopSpeaking(); return; }   // while it reads, it IS the stop control
+    const el = lastSpokenAnswer();
+    if (el) speakAnswer(bar, el.dataset.speak);
+});
+
 // ===== config editor =====
 // Defaults-first: the model paths live in the [[models]] roster table; every flat knob below
 // is an OVERRIDE gated by its own checkbox — unchecked keys are OMITTED from the saved TOML,
@@ -1690,6 +2117,7 @@ const FIELDS = [
     { k: "metal", t: "sel", o: ["off", "auto", "required"] },
     { k: "asr", t: "path", wide: true }, { k: "mmproj", t: "path", wide: true },
     { k: "tts", t: "path", wide: true },
+    { k: "tts_lane", t: "sel", o: ["q8", "f32"] },
     { k: "image_mmproj", t: "path", wide: true },
     { k: "asr_workers", t: "int" },
     { k: "lcpp_bin", t: "path", wide: true },
@@ -1702,6 +2130,17 @@ let advOpen = false;      // the advanced-overrides fold; sticky across re-rende
 function fieldEnabled(k) {
     const en = $("en-" + k);
     return !!(en && en.checked);
+}
+
+// a path field is a DRAFT of the config the page saves: an unticked override is OMITTED on save,
+// so a path left in the box is not configured at all. A key the server itself sourced - cli or
+// toml - is this boot's own, ticked or not.
+function configuredPath(k) {
+    const el = $("f-" + k);
+    if (!el) return "";
+    const src = (cfgSurface && cfgSurface.sources && cfgSurface.sources[k]) || "default";
+    if (src === "default" && !fieldEnabled(k)) return "";
+    return String(el.value || "");
 }
 
 function buildField(f, cfg, src) {
@@ -2082,6 +2521,7 @@ async function loadConfig() {
         renderRoster();
         renderGpu(c.status || {});
         savedSnapshot = JSON.stringify(gatherConfig());
+        renderTtsOffer();   // the offer reads the tts field, which only exists once the form rendered
         if (catState) renderCatalog(catState);   // the tower offers key off the roster + asr field
     } catch (_e) {
         $("cfg-note").textContent = "could not load /config";
@@ -2277,7 +2717,7 @@ $("b-bench").addEventListener("click", async () => {
 
 fetch("/bench", { cache: "no-store" }).then(r => r.json()).then(renderBench).catch(() => {});
 
-// ===== § 11 sidecar exchange =====
+// ===== § 13 sidecar exchange =====
 
 let exchangeState = null;    // the GET /exchange document
 let exchangePolicy = null;   // its policy — merged into every config save (gatherConfig)
@@ -2293,7 +2733,7 @@ function exLine(text) {
 // The header's sidecar-mint chip — the one-glance answer to "is this box running tuned
 // kernels, and is its mint on the ladder?": red = bad mint (absent / stale / version-lapsed /
 // raced on a noisy box), amber = good mint not yet shared to the exchange, green = tuned and
-// shared (or fetched from the exchange). Click lands on § 12.
+// shared (or fetched from the exchange). Click lands on § 13.
 function renderMintChip() {
     const chip = $("mint-chip");
     if (!exchangeState) { chip.style.display = "none"; return; }
@@ -2510,7 +2950,7 @@ $("ex-always").addEventListener("change", async () => {
     }
     const want = $("ex-always").checked ? "always" : "ask";
     // Commit ONLY the policy, on top of the LAST SAVED config — NOT gatherConfig(), which would
-    // also persist any unsaved §08 edits just because the box was ticked. Roll the toggle back
+    // also persist any unsaved §10 edits just because the box was ticked. Roll the toggle back
     // if the save fails so the UI never shows a state that was not written.
     let body;
     try { body = JSON.parse(savedSnapshot); } catch (_e) { body = null; }
@@ -2556,6 +2996,10 @@ let catState = null;   // the last GET /catalog document — the tower offers re
 
 function fmtGB(b) { return (b / 1e9).toFixed(1) + " GB"; }
 
+// sub-gigabyte artifacts - the speech front-end packs, the small speech models - read as MB;
+// fmtGB prints every one of them as "0.1 GB"
+function fmtSize(b) { return b < 1e9 ? Math.round(b / 1e6) + " MB" : fmtGB(b); }
+
 const OS_HEADROOM_GB = 4;   // RAM the fit verdict leaves to the OS before calling it "tight"
 
 // The box-fit verdict for one entry's advertised working set: facts from /catalog's `box`
@@ -2597,18 +3041,21 @@ function miniButton(text, onClick) {
 
 function dlBusy(dl) { return dl.state === "downloading" || dl.state === "verifying"; }
 
-function dlProgress(dl) {
+// the size formatter is the caller's: a catalog row is gigabytes, a speech pack megabytes
+function dlProgressAs(dl, fmtBytes) {
     if (dl.state === "verifying") return "verifying sha256…";
     const pct = dl.total > 0 ? (100 * dl.got / dl.total).toFixed(0) : "0";
-    return "downloading — " + pct + "% of " + fmtGB(dl.total);
+    return "downloading — " + pct + "% of " + fmtBytes(dl.total);
 }
+
+function dlProgress(dl) { return dlProgressAs(dl, fmtGB); }
 
 function rosterRowFor(path) {
     return path ? roster.findIndex(r => r.path === path) : -1;
 }
 
 // a saved tower wire is one restart from live — offer that restart right in the note
-// instead of leaving the user to find the button in § 09
+// instead of leaving the user to find the button in § 10
 function noteWithRestart(text) {
     const note = $("cat-note");
     note.textContent = text + " ";
@@ -2651,7 +3098,7 @@ function visionControl(e, dl) {
             renderRoster();
             if (await saveConfig()) {
                 const asr = catState && catState.asr;
-                const asrHint = (asr && !(asr.present && fieldEnabled("asr")))
+                const asrHint = (asr && !(asr.present && configuredPath("asr") !== ""))
                     ? " · dictation (below) can ride the same restart" : "";
                 noteWithRestart("vision tower wired for " + e.display + asrHint + " —");
             }
@@ -2661,8 +3108,13 @@ function visionControl(e, dl) {
     }
     const s = document.createElement("span");
     s.className = "chip good";
-    s.textContent = i >= 0 ? "vision ✓" : "vision ready";
-    s.title = i >= 0 ? "the tower is wired into this model's config" : "tower downloaded - add the model to the roster to wire it";
+    // a slot loaded at runtime carries the tower without a roster row: the live stats are the truth
+    // there, and they also know whether the same mmproj brought an audio encoder along
+    const live = ((last && last.models) || []).find(m => m.name === e.file && m.vision);
+    const towers = live && live.audio ? "vision + audio" : "vision";
+    s.textContent = live ? towers + " ✓" : (i >= 0 ? "vision ✓" : "vision ready");
+    s.title = live ? "the tower is live on this slot" + (live.audio ? "; the same mmproj carries the audio encoder, so the chat mic attaches a clip" : "")
+        : (i >= 0 ? "the tower is wired into this model's config" : "tower downloaded - add the model to the roster to wire it");
     return s;
 }
 
@@ -2688,8 +3140,7 @@ function renderAsrOffer(doc, dl) {
         return;
     }
     const asrEl = $("f-asr");
-    const wired = asrEl && String(asrEl.value || "") !== "" && fieldEnabled("asr");
-    if (!wired) {
+    if (configuredPath("asr") === "") {
         label.textContent = "parakeet v3 is downloaded — wire it in to enable dictation";
         const b = miniButton("enable dictation", async () => {
             const en = $("en-asr");
@@ -2709,6 +3160,132 @@ function renderAsrOffer(doc, dl) {
     chip.title = asrEl.value;
     label.textContent = "speech-to-text serves on /v1/audio/transcriptions and the chat mic";
     strip.append(chip, label);
+}
+
+const ttsName = f => f.replace(/\.gguf$/i, "");
+
+// smallest present model first: the enable default is the cheapest one on disk, and a box that
+// downloaded several picks among them. The poll rebuilds this card every second, so the picker
+// is seeded from `kept` — the selection the last build carried — and the enable reads the live
+// element, never a closure the next rebuild orphans.
+function ttsEnableArm(strip, label, present, kept) {
+    const chosen = () => {
+        const sel = $("tts-pick");
+        return present.find(m => m.file === (sel ? sel.value : kept)) || present[0];
+    };
+    if (present.length > 1) {
+        const sel = document.createElement("select");
+        sel.id = "tts-pick";
+        for (const m of present) {
+            const o = document.createElement("option");
+            o.value = m.file;
+            o.textContent = ttsName(m.file);
+            sel.append(o);
+        }
+        strip.append(sel);
+        sel.value = present.some(m => m.file === kept) ? kept : present[0].file;
+    }
+    const b = miniButton("enable speech", async () => {
+        const pick = chosen();
+        const el = $("f-tts");
+        const en = $("en-tts");
+        if (!el || !en) return;
+        en.checked = true;
+        el.disabled = false;
+        el.closest(".field").classList.remove("off");
+        el.value = pick.path;
+        if (await saveConfig()) noteWithRestart("speech wired (" + ttsName(pick.file) + ") —");
+    });
+    label.textContent = present.length > 1
+        ? "speech models are downloaded — pick one and wire it in"
+        : ttsName(present[0].file) + " is downloaded — wire it in to speak";
+    strip.append(b, label);
+}
+
+// the download ladder over /catalog's `tts` list: the two front-end packs first (every speech
+// model loads them), then the models, then the enable. The rail runs one download at a time,
+// so an absent pack pair is one button and the card re-offers what is still missing.
+// False back = the catalog has no tts list to offer from, and the caller says so instead.
+function ttsOfferArm(strip, dl, kept) {
+    const items = (catState && catState.tts) || [];
+    if (!items.length) return false;
+    const label = document.createElement("span");
+    label.className = "ctl-note";
+    if (String(dl.name || "").startsWith("tts:") && dlBusy(dl)) {
+        label.textContent = "speech (" + ttsName(dl.name.slice(4)) + "): " + dlProgressAs(dl, fmtSize);
+        strip.append(label);
+        return true;
+    }
+    const missingPacks = items.filter(i => i.pack && !i.present);
+    if (missingPacks.length) {
+        const bytes = missingPacks.reduce((a, p) => a + p.bytes, 0);
+        const b = miniButton("download the front-end packs (" + fmtSize(bytes) + ")",
+            () => startTtsDownload(missingPacks[0].file));
+        b.title = "the text normalizer and grapheme-to-phoneme tables every speech model loads";
+        b.disabled = dlBusy(dl);
+        label.textContent = "add speech synthesis — /v1/audio/speech and the speech studio above";
+        strip.append(b, label);
+        return true;
+    }
+    const models = items.filter(i => !i.pack);
+    const present = models.filter(m => m.present).sort((a, b) => a.bytes - b.bytes);
+    if (!present.length) {
+        label.textContent = "the front-end packs are here — pick a speech model";
+        for (const m of models) {
+            const b = miniButton("download " + ttsName(m.file) + " (" + fmtSize(m.bytes) + ")",
+                () => startTtsDownload(m.file));
+            b.disabled = dlBusy(dl);
+            strip.append(b);
+        }
+        strip.append(label);
+        return true;
+    }
+    ttsEnableArm(strip, label, present, kept);
+    return true;
+}
+
+// the speech offer strip: the download ladder above, then the four PATH-mode states - wired, the
+// configured pack that failed to load, configured but not yet loaded, and nothing configured
+// with no catalog to offer from.
+function renderTtsOffer() {
+    const strip = $("tts-offer");
+    const picker = $("tts-pick");
+    const kept = picker ? picker.value : "";
+    strip.replaceChildren();
+    const path = configuredPath("tts");
+    const tts = last && last.tts;
+    const dl = (catState && catState.download) || { state: "idle" };
+    const label = document.createElement("span");
+    label.className = "ctl-note";
+    if (tts && tts.ready) {
+        const chip = document.createElement("span");
+        chip.className = "chip good";
+        chip.textContent = "speech ✓";
+        chip.title = path || tts.id;
+        label.textContent = "wired: " + tts.id + ", " + (tts.voices || []).length + " voices, " + tts.lane
+            + " — the speech studio above speaks through it";
+        strip.append(chip, label);
+        return;
+    }
+    if (tts && tts.error) {
+        // a load that failed is not coming back on its own, so the card says why and re-opens the
+        // ladder instead of claiming the model is still on its way
+        const bad = document.createElement("span");
+        bad.className = "ctl-note bad";
+        bad.textContent = "speech failed to load: " + tts.error;
+        strip.append(bad);
+        ttsOfferArm(strip, dl, kept);
+        return;
+    }
+    if (path) {
+        label.textContent = "speech model configured, loading — " + path.split(/[\\/]/).pop();
+        strip.append(label);
+        return;
+    }
+    if (ttsOfferArm(strip, dl, kept)) return;
+    label.textContent = "no speech model configured — point the tts field in the config editor at a"
+        + " kitten or kokoro GGUF (tts_g2p.bin + tts_postag.bin sit beside it)";
+    strip.append(label);
 }
 
 function renderCatalog(doc) {
@@ -2766,6 +3343,7 @@ function renderCatalog(doc) {
         body.append(tr);
     }
     renderAsrOffer(doc, dl);
+    renderTtsOffer();
     if (dl.state === "failed" && dl.error) {
         $("cat-note").textContent = "download failed: " + dl.error;
     }
@@ -2789,12 +3367,12 @@ async function loadCatalog() {
     }
 }
 
-async function startCatalogDownload(name, tower) {
+async function postCatalogDownload(body) {
     try {
         const r = await fetch("/catalog/download", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(tower ? { name, tower } : { name }),
+            body: JSON.stringify(body),
         });
         const j = await r.json().catch(() => null);
         if (!r.ok) {
@@ -2805,6 +3383,15 @@ async function startCatalogDownload(name, tower) {
     } catch (_e) {
         $("cat-note").textContent = "download request failed";
     }
+}
+
+function startCatalogDownload(name, tower) {
+    return postCatalogDownload(tower ? { name, tower } : { name });
+}
+
+// the speech set is addressed by FILE, not by a catalog entry name: the packs are not models
+function startTtsDownload(file) {
+    return postCatalogDownload({ tower: "tts", file });
 }
 
 // The live-switch rail: load the downloaded file into a NEW slot and make it the default —

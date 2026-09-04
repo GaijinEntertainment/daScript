@@ -1,0 +1,1 @@
+{"error":{"message":"response_format 'mp3' is not served — wav (the default) and pcm (16-bit little-endian at the model's rate) are; mp3, opus, aac and flac need an encoder this server does not carry","type":"invalid_request_error"}}

@@ -5,7 +5,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // dasllama-server: it requires dasLLAMA and so inherits the shared [tune_scope]. The front end's
 // packs (tts_g2p.bin, tts_postag.bin) are read from the model's directory.
 //
-//   bin/daslang -jit utils/dasllama-server/txt2wav.das -- --tts <kokoro-82m.gguf> --text "Hello." --out hello.wav [--voice af_heart] [--speed 1.0]
+//   bin/daslang -jit utils/dasllama-server/txt2wav.das -- --tts <kitten-nano.gguf> --text "Hello." --out hello.wav [--voice expr-voice-2-f] [--speed 1.0]
 
 require dasllama/dasllama            // load_tts_model / synthesize / write_wav_pcm16 / the shared [tune_scope]
 require llvm/daslib/llvm_tune        // [tune_policy] + log_tune_status
@@ -105,6 +105,10 @@ def main : int {
     var inscope m <- load_tts_model(cfg.tts)
     let load_s = double(get_time_usec(t_load)) / 1.0e6lf
     var inscope c <- caps(m)
+    if (empty(cfg.voice) && empty(c.voices)) {
+        to_log(LOG_ERROR, "txt2wav: {cfg.tts} offers no voice this front end can drive - every voice pack speaks a language it does not phonemize\n")
+        return 1
+    }
     let voice = empty(cfg.voice) ? c.voices[0] : cfg.voice
     let speed = cfg.speed > 0.0 ? cfg.speed : 1.0
 

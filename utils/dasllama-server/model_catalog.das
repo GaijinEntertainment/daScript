@@ -303,6 +303,18 @@ def public catalog_download_start_asr(dir : string) : string {
     return download_start_item(dir, "asr", tower.name, tower.url, tower.sha256, tower.bytes)
 }
 
+//! Start downloading one file of the text-to-speech set - a model GGUF or one of the two
+//! front-end packs (download id "tts:<file>"). "" on success, else the refusal.
+def public catalog_download_start_tts(dir : string; file : string) : string {
+    var inscope set <- serve_tts_set()
+    for (item in set) {
+        if (item.entry.name == file) {
+            return download_start_item(dir, "tts:{file}", item.entry.name, item.entry.url, item.entry.sha256, item.entry.bytes)
+        }
+    }
+    return "'{file}' is not in the text-to-speech set"
+}
+
 //! Drain worker events; call once per HTTP tick.
 def public catalog_download_tick() {
     if (g_dl_events == null) {
@@ -346,6 +358,15 @@ def public catalog_state_json(dir : string; ram_gb : int = 0; vram_mb : int64 = 
     let asr_tower <- serve_asr_tower()
     let asr_path = path_join(dir, asr_tower.name)
     let asr_present = stat(asr_path).is_valid
+    var inscope tts_set <- serve_tts_set()
+    var tts_items : array<JsonValue?>
+    tts_items |> reserve(length(tts_set))
+    for (item in tts_set) {
+        let p = path_join(dir, item.entry.name)
+        let present = stat(p).is_valid
+        tts_items |> push(JV((file = item.entry.name, bytes = item.entry.bytes, pack = item.pack,
+            present = present, path = present ? p : "")))
+    }
     var got = 0l
     if (g_dl_state == "downloading") {
         let st = stat(g_dl_partial)
@@ -358,6 +379,7 @@ def public catalog_state_json(dir : string; ram_gb : int = 0; vram_mb : int64 = 
         entries = JV(entries),
         asr = (file = asr_tower.name, bytes = asr_tower.bytes,
             present = asr_present, path = asr_present ? asr_path : ""),
+        tts = JV(tts_items),
         box = (ram_gb = ram_gb, vram_mb = vram_mb),
         download = (state = g_dl_state, name = g_dl_name, got = got,
             total = g_dl_want_bytes, error = g_dl_error)))

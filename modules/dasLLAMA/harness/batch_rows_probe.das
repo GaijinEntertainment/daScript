@@ -158,7 +158,7 @@ var private g_dead_levers = 0   // knockout arms that left the step's time uncha
 def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : array<string>; var base : double&; runner_up_every : int64) : int {
     var measured = 0
     for (bstr in split(cfg.bs, ",")) {
-        let nb = int64(to_int(strip(bstr)))
+        let nb = to_int64(strip(bstr), false)
         if (nb < 1l) {
             continue
         }
@@ -217,7 +217,7 @@ def main() : int {
     }
     set_metal_mode(MetalMode.required)
     let feed_parts <- split(cfg.feed, ":")
-    let runner_up_every = cfg.feed == "greedy" ? FEED_ARGMAX : (length(feed_parts) == 2 ? int64(to_int(feed_parts[1])) : FEED_TEXT)
+    let runner_up_every = cfg.feed == "greedy" ? FEED_ARGMAX : (length(feed_parts) == 2 ? to_int64(feed_parts[1], false) : FEED_TEXT)
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_decode_speculate(cfg.spec)
     }

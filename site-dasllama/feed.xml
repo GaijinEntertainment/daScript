@@ -7,6 +7,284 @@
 <updated>2026-09-03T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
 <entry>
+<title>dasLLAMA speaks - KittenTTS nano and mini, Kokoro-82M, and a text front end that is nothing but data.</title>
+<link href="https://dasllama.io/#n-2026-09-03-text-to-speech"/>
+<id>https://dasllama.io/#n-2026-09-03-text-to-speech</id>
+<updated>2026-09-03T00:00:00Z</updated>
+<content type="html">&lt;p&gt;Three text-to-speech models serve from the same engine and the same tuned kernels as the
+language models, on the CPU, through &lt;code&gt;/v1/audio/speech&lt;/code&gt; on dasllama-server and a speech
+studio on its control page. On an M1 Max the served 8-bit lane reads a real-time factor of
+0.026 for kitten-nano (onnxruntime on the same input, 0.035) and 0.072 for kokoro-82m (torch
+CPU, 0.097), measured 2026-09-02. Why a game wants this, how the front end became two data
+packs, and the afternoon an &quot;s&quot; turned out to be a comma:
+&lt;a href=&quot;stories/2026-09-03-text-to-speech.html&quot;&gt;the story&lt;/a&gt;.&lt;/p&gt;</content>
+</entry>
+<entry>
+<title>The engine learned to talk.</title>
+<link href="https://dasllama.io/stories/2026-09-03-text-to-speech.html"/>
+<id>https://dasllama.io/stories/2026-09-03-text-to-speech.html</id>
+<updated>2026-09-03T00:00:00Z</updated>
+<content type="html">&lt;!-- figures: plans/dasllama-tts.md receipts, all on our M1 Max (64 GB, 8 worker lanes), das at the
+     merge b124bef01 (2026-09-03) unless named: the speed ladder and the final speed receipt are dated
+     2026-09-02 (one two-sentence input, warm: nano 383 ms for 15 s of audio, RTF 0.026 = 38x real time;
+     kokoro 651-671 ms for 9.1 s, RTF 0.071-0.073 = 14x), the references were taken the same day on the
+     same box at 8 threads, best of 5 (onnxruntime 1.29 on the KittenTTS nano ONNX, RTF 0.035; kokoro
+     0.9.4 on torch 2.13 CPU, RTF 0.097; the community ONNX export of Kokoro on onnxruntime, RTF 0.138);
+     the quality receipt is the rig&#x27;s final run, 2026-09-02, q8 lane, 200 sentences, WER by
+     parakeet-tdt-0.6b-v2 on the synthesized audio and UTMOS22-strong, the reference arms&#x27; own audio
+     re-scored on the same forms and scorer; the front-end parity counts are the test suite&#x27;s own lines
+     at das 850f0ba8a (2026-09-03): 171 of 200 American sentences, 149 of 157 British, 32 of 38
+     heteronyms against the reference front end&#x27;s 24 (the American count reads 170 once the
+     fallback consults the lexicon before CMUdict, 2026-09-04: &quot;PyTorch&quot; moved from the
+     reference&#x27;s spelling to the local addition&#x27;s, the other rows unchanged); the pack sizes are the pack builder&#x27;s own print at
+     850f0ba8a (v1 12,719,239 bytes, v2 14,011,554; the tagger pack 12,566,510); the phoneme strings for
+     Dr. Chen, the two Polish names and the hunt are the served front end&#x27;s own answers on 2026-09-03 at
+     das 2efa6dde1 (POST /v1/audio/phonemes, and the tutorial&#x27;s live run for Dr. Chen); the hunt compared
+     our waveform with the reference pipeline&#x27;s for the same line and voice in 20 ms frames, RMS and the
+     share of energy above 4 kHz, at das c08ae9bcf; the arc opened 2026-09-01 (42595f347) and merged
+     2026-09-03 (PR #3929); the models are kitten-nano 0.8, kitten-mini 0.8 and Kokoro-82M v1.0 converted
+     to GGUF; a re-run on 2026-09-03 at das 2efa6dde1 with the serving server and a browser live on the
+     same box read nano 0.028-0.030 and kokoro 0.072-0.076 over four warm runs of a 15 s input (a 4%
+     spread, so not a quiet-box measurement; the 2026-09-02 receipts stand as the published figures);
+     the audio clips under files/tts/ are the served engine&#x27;s own answers to POST /v1/audio/speech on
+     2026-09-03: dr-chen, brzezinski, grzegorz and hello-kitten by kitten-nano in the voice
+     expr-voice-5-f at das 2efa6dde1; hello-emma and hello-bare-emma by kokoro-82m in bf_emma at
+     das c08ae9bcf and 220e56bf3 (the two builds the hunt&#x27;s last two paragraphs describe); the bare
+     line&#x27;s tail breath: ours 0.012-0.014 RMS at 74-95% above 4 kHz over 1320-1380 ms against the
+     reference pipeline&#x27;s 0.014-0.017 at 84-98% over 1340-1380 ms, versus 0.041 after the question mark
+     (2026-09-03, das 220e56bf3); the model sizes (59, 296, 353 MB) and Kokoro&#x27;s 54 voice packs are the
+     model card&#x27;s byte counts at the Hugging Face commit c5247896 (2026-09-03); &quot;the same eighteen token
+     ids, the same 49,800 samples&quot; is the reference-pipeline probe of 2026-09-03 at das c08ae9bcf; &quot;19 MB&quot;
+     is the pack builder&#x27;s estimate for two more plain tables (2.7 + 3.6 MB packed, 2026-09-03) on top of
+     the v1 pack; &quot;44,000 words&quot; is the builder&#x27;s own print at 850f0ba8a (cmudict 79,062 kept, 44,393
+     dropped) --&gt;
+&lt;p&gt;dasLLAMA exists to run inside games, and games are where the GPU is never yours. The frame
+owns it. What a game has to spare is a few CPU cores, sometimes, and an engine that lives on
+those cores gets to do the things a game would like an engine to do: hear the player
+(speech-to-text), think about what was said (correct the dictation, play a character, run the
+announcer), and now, answer out loud.&lt;/p&gt;
+&lt;p&gt;Text-to-speech is the third leg, and the one with the most obvious uses: a typed line becomes
+a voice, a generated dialogue becomes a scene, a dynamic announcer reads a score that did not
+exist a second ago. So we went on a journey. It opened on the 1st of September and merged on
+the 3rd, and it was fun.&lt;/p&gt;
+&lt;h2&gt;The part before the model&lt;/h2&gt;
+&lt;p&gt;Text is not phonemes. Before anything can say &quot;Dr. Chen read 3.5 pages and paid $12.&quot; it has
+to become&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;Doctor Chen read three point five pages and paid twelve dollars.
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;and then every word has to become its sounds:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;dˈɑktəɹ ʧˈɛn ɹˈɛd θɹˈi pˈYnt fˈIv pˈAʤᵻz ænd pˈAd twˈɛlv dˈɑləɹz.
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;audio controls preload=&quot;none&quot; src=&quot;/files/tts/dr-chen.wav&quot;&gt;&lt;/audio&gt;&lt;/p&gt;
+&lt;p&gt;Note &quot;read&quot; coming out as &lt;code&gt;ɹˈɛd&lt;/code&gt;, the past tense, because the tagger looked at the sentence
+and said so. The reference pipelines do all this with a stack of Python packages and a
+phonemizer process, which is fine for a notebook. A game ships an executable and its data, so
+the front end here is data: a normalizer that reads numbers, dates, money, units and
+abbreviations the way a reader does, a part-of-speech tagger, and a pronunciation table with a
+spelling model behind it for the words the table does not know.&lt;/p&gt;
+&lt;p&gt;It is remarkable how much has to go right for one sentence to come out. Every number has a
+reading, every abbreviation a word, every &quot;read&quot; a tense, and every word that is spelled like
+another word a rule that tells them apart. We got a lot of it right: of the 38 heteronyms in
+our corpus 32 come out the way a reader would say them, where the reference front end manages
+24. &quot;Bass player&quot; and &quot;the pipes lead out&quot; took an afternoon each.&lt;/p&gt;
+&lt;p&gt;Names the table does not know go to the spelling model, which has opinions. It knows Zbigniew
+Brzezinski:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;zbˈɪɡnjɛf bɹəzˈɪnski.
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;audio controls preload=&quot;none&quot; src=&quot;/files/tts/brzezinski.wav&quot;&gt;&lt;/audio&gt;&lt;/p&gt;
+&lt;p&gt;Asked for Grzegorz Brzęczyszczykiewicz, it answers&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;ɡˈɜɹzəɡɹˌɑs bɹˈɪzʧɪzkˈIkəbəlz.
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;audio controls preload=&quot;none&quot; src=&quot;/files/tts/grzegorz.wav&quot;&gt;&lt;/audio&gt;&lt;/p&gt;
+&lt;h2&gt;Small kittens, big Kokoro&lt;/h2&gt;
+&lt;p&gt;Kitten nano is 59 MB, eight voices, and the served default. Kitten mini is 296 MB. Kokoro is
+353 MB with 54 voice packs, of which we drive the 28 English ones: twenty American and, since
+this week, eight British. All three speak at 24 kHz, and all three are the same machine
+underneath, one assembly in the engine with a small family file for each one&#x27;s quirks.&lt;/p&gt;
+&lt;p&gt;We made the kittens say two sentences and timed them on the M1 Max. Kokoro too.&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;&lt;/th&gt;
+&lt;th&gt;first speech&lt;/th&gt;
+&lt;th&gt;the rows form&lt;/th&gt;
+&lt;th&gt;the 8-bit lane&lt;/th&gt;
+&lt;th&gt;today&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;kitten-nano, RTF&lt;/td&gt;
+&lt;td&gt;0.22&lt;/td&gt;
+&lt;td&gt;0.051&lt;/td&gt;
+&lt;td&gt;0.040&lt;/td&gt;
+&lt;td&gt;0.026&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;kokoro-82m, RTF&lt;/td&gt;
+&lt;td&gt;0.66&lt;/td&gt;
+&lt;td&gt;0.168&lt;/td&gt;
+&lt;td&gt;0.116&lt;/td&gt;
+&lt;td&gt;0.072&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;RTF is the real-time factor, seconds of compute per second of audio, so 0.026 means fifteen
+seconds of speech in 383 milliseconds. The two big moves were the ones the language models
+already had: 8-bit weights and the worker lanes. Nothing clever, and it still went from 0.66
+to 0.07. The reference engines on the same input, same box:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;RTF, M1 Max&lt;/th&gt;
+&lt;th&gt;dasLLAMA, q8 lane&lt;/th&gt;
+&lt;th&gt;reference engine&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;kitten-nano&lt;/td&gt;
+&lt;td&gt;0.026&lt;/td&gt;
+&lt;td&gt;0.035 (onnxruntime)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;kokoro-82m&lt;/td&gt;
+&lt;td&gt;0.072&lt;/td&gt;
+&lt;td&gt;0.097 (torch CPU)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2&gt;How we measured quality&lt;/h2&gt;
+&lt;p&gt;Speed is easy to measure and easy to fake: a model that speaks fast and says the wrong thing
+is a bug with a good RTF, and memset(0) even sounds smart. So the rig synthesizes the whole
+200-sentence corpus with each model, transcribes the audio back with a speech-to-text model
+that has never heard of us, and scores the word error rate of the round trip beside a
+naturalness score. The reference engines&#x27; own audio for the same sentences goes through the
+same transcriber and the same scorer, so both columns share a yardstick.&lt;/p&gt;
+&lt;p&gt;Then we found the yardstick was bent: the &quot;expected&quot; text the rig scored against was the
+reference normalizer&#x27;s output, defects included, so a correct &quot;kilograms&quot; counted as an error
+and &quot;kay gee&quot; did not.&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;200 sentences, WER % / UTMOS&lt;/th&gt;
+&lt;th&gt;dasLLAMA, q8 lane&lt;/th&gt;
+&lt;th&gt;the reference engine&#x27;s own audio&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;kitten-nano&lt;/td&gt;
+&lt;td&gt;3.23 / 3.971&lt;/td&gt;
+&lt;td&gt;4.50 / 4.035&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;kitten-mini&lt;/td&gt;
+&lt;td&gt;2.77 / 4.335&lt;/td&gt;
+&lt;td&gt;4.09 / 3.996&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;kokoro-82m&lt;/td&gt;
+&lt;td&gt;2.73 / 4.500&lt;/td&gt;
+&lt;td&gt;3.32 / 4.499&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2&gt;The hunt for &quot;hellows&quot;&lt;/h2&gt;
+&lt;p&gt;We picked a British voice on the speech studio, typed &quot;Hello, how are you&quot;, and Emma said
+&quot;hellows, how are yous&quot;. That is the kind of bug that ruins an afternoon in the best way.&lt;/p&gt;
+&lt;p&gt;First suspect: the dialect. Kokoro picks its phonemizer by the first letter of the voice&#x27;s
+name, &lt;code&gt;b&lt;/code&gt; for British, and our front end only spoke American. We had been handing an
+Englishwoman American phonetics and wondering why she sounded odd. So we taught it British,
+which turned out to be American with the r&#x27;s removed and the vowels moved half a step, plus a
+table of the words that disagree, until &quot;Hello, how are you?&quot; came out&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;həlˈQ, hˌW ɑː juː?
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;byte for byte what the reference pipeline produces, the same eighteen token ids, the same
+49,800 samples of audio.&lt;/p&gt;
+&lt;p&gt;Emma still said &quot;hellows&quot;.&lt;/p&gt;
+&lt;p&gt;&lt;audio controls preload=&quot;none&quot; src=&quot;/files/tts/hello-emma.wav&quot;&gt;&lt;/audio&gt;&lt;/p&gt;
+&lt;p&gt;Second suspect: us. Odd that it was not the first. We put our waveform next to the reference
+pipeline&#x27;s for the same line and the same voice and looked at where the energy above 4 kHz
+went; a hiss is nothing else.&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;20 ms frame&lt;/th&gt;
+&lt;th&gt;reference (RMS, share above 4 kHz)&lt;/th&gt;
+&lt;th&gt;ours&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;660 ms, right after &quot;Hello,&quot;&lt;/td&gt;
+&lt;td&gt;0.034, 91%&lt;/td&gt;
+&lt;td&gt;0.035, 93%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;680 ms&lt;/td&gt;
+&lt;td&gt;0.025, 84%&lt;/td&gt;
+&lt;td&gt;0.023, 82%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;1380 ms, right after &quot;you?&quot;&lt;/td&gt;
+&lt;td&gt;0.032, 100%&lt;/td&gt;
+&lt;td&gt;0.034, 100%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;1400 ms&lt;/td&gt;
+&lt;td&gt;0.041, 100%&lt;/td&gt;
+&lt;td&gt;0.041, 100%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;Frame for frame, within two percent, both lanes. It was like looking in the mirror. The model
+renders a British voice&#x27;s comma as a breath and a full stop as a longer one, and the
+reference&#x27;s own voice table grades those packs accordingly. The engine was innocent.&lt;/p&gt;
+&lt;p&gt;Then we removed every punctuation mark and still heard one at the end. That one was ours. We
+knew we should have started there. The sentence chunker appended a comma to any piece the
+split left bare, which is what the KittenTTS driver does and what Kokoro&#x27;s does not. Now each
+family gets its own driver&#x27;s rule, and &quot;hello how are u&quot; goes to the model as&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;həlˈQ hˌW ɑː jˈuː
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;with nothing after it. Emma still gives a breath at the end. How very British of her.&lt;/p&gt;
+&lt;p&gt;&lt;audio controls preload=&quot;none&quot; src=&quot;/files/tts/hello-bare-emma.wav&quot;&gt;&lt;/audio&gt;&lt;/p&gt;
+&lt;p&gt;Kitten is the served default; in the same test its voices did not breathe at the comma.&lt;/p&gt;
+&lt;p&gt;&lt;audio controls preload=&quot;none&quot; src=&quot;/files/tts/hello-kitten.wav&quot;&gt;&lt;/audio&gt;&lt;/p&gt;
+&lt;h2&gt;British, for 1.3 megabytes&lt;/h2&gt;
+&lt;p&gt;Two more tables would have made the pronunciation pack 19 MB. It turns out the British word
+for an American key is &quot;key&quot;, so both dialects share one, the spelling model went to 16-bit,
+and the fallback dictionary dropped the 44,000 words both dialects already carry:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;pronunciation pack&lt;/th&gt;
+&lt;th&gt;American only&lt;/th&gt;
+&lt;th&gt;American + British&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;bytes&lt;/td&gt;
+&lt;td&gt;12,719,239&lt;/td&gt;
+&lt;td&gt;14,011,554&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;On the British corpus, 149 of the 157 sentences the reference answers from its table alone
+come out identical. Eight differ: two are tag calls that could go either way, and six are ours
+by rule: the lead pipe, the bass player, this minute detail, the does are watching, get the
+lead out, and my resume. Never rhyme retain and Britain.&lt;/p&gt;
+&lt;h2&gt;Where it ends&lt;/h2&gt;
+&lt;p&gt;So the server speaks now, the page shows what the model heard before it spoke, and every chat
+answer can read itself out. British Emma still does the talking around here: she narrated our
+tutorial videos through a Kokoro server we had to keep running next to the recorder, and the
+engine that generated the script now answers that same request itself, at fourteen times real
+time on a laptop. Never again the other way. Kitten nano does it at thirty-eight times and leaves
+the rest of the core to the frame, which is the number a game reads first, and the one we set
+out to get.&lt;/p&gt;</content>
+</entry>
+<entry>
 <title>Speculative decoding lands on Metal - Qwen 3.8&#x27;s NextN head and Gemma 4&#x27;s assistant drafter.</title>
 <link href="https://dasllama.io/#n-2026-09-03-mtp-on-mac"/>
 <id>https://dasllama.io/#n-2026-09-03-mtp-on-mac</id>

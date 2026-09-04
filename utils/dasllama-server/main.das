@@ -93,6 +93,10 @@ struct ServerArgs {
     @clarg_doc = "Path to a TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m) — enables /v1/audio/speech"
     tts : string
 
+    @clarg_name = "tts-lane"
+    @clarg_doc = "TTS weight lane: q8 (default) | f32 — the format the speech worker pins around its load"
+    tts_lane : string
+
     @clarg_name = "image-mmproj"
     @clarg_doc = "Vision mmproj (gemma4uv, gemma4v, or gemma3v, sniffed) for the default model — enables image_url parts on /v1/chat/completions"
     image_mmproj : string
@@ -254,7 +258,7 @@ var private g_cfg_sources : table<string; string>
 var private g_cfg_authoritative = false
 
 let CONFIG_KEYS = fixed_array("model", "port", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
-    "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "asr_workers", "tts",
+    "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "asr_workers", "tts", "tts_lane",
     "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "page_rows",
     "prefix", "flat", "mtp", "lcpp_bin", "models_dir", "models")
 
@@ -340,6 +344,9 @@ def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 �
     if (!empty(cfg.tts)) {
         g_cfg_sources["tts"] = "cli"
     }
+    if (!empty(cfg.tts_lane)) {
+        g_cfg_sources["tts_lane"] = "cli"
+    }
     if (!empty(cfg.image_mmproj)) {
         g_cfg_sources["image_mmproj"] = "cli"
     }
@@ -419,6 +426,7 @@ def apply_config(var cfg : ServerArgs) : bool {
     cfg_from_toml(root, "asr", cfg.asr, auth)
     cfg_from_toml(root, "mmproj", cfg.mmproj, auth)
     cfg_from_toml(root, "tts", cfg.tts, auth)
+    cfg_from_toml(root, "tts_lane", cfg.tts_lane, auth)
     cfg_from_toml(root, "image_mmproj", cfg.image_mmproj, auth)
     cfg_from_toml(root, "asr_workers", cfg.asr_workers, auth)
     cfg_from_toml(root, "ctx", cfg.ctx, auth)
@@ -611,6 +619,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         asr = cfg.asr,
         mmproj = cfg.mmproj,
         tts = cfg.tts,
+        tts_lane = pick_tts_lane(cfg.tts_lane),   // the lane configure_tts kept, not the spelling asked for
         image_mmproj = cfg.image_mmproj,
         asr_workers = cfg.asr_workers > 0 ? cfg.asr_workers : 1,
         ctx = cfg.ctx,
@@ -709,9 +718,10 @@ def parse_args() {
         request_exit()
         return
     }
-    // a [[models]] roster needs no flat model key; a --tts start is a SERVING server (the speech
-    // route), so it never enters setup mode
-    if (empty(g_cfg.model) && empty(g_models) && empty(g_cfg.tts)) {
+    // a [[models]] roster needs no flat model key; a --tts start with its file set complete is a
+    // SERVING server (the speech route), so it never enters setup mode - an incomplete set is one
+    // configure_tts drops, which leaves this boot nothing to serve
+    if (empty(g_cfg.model) && empty(g_models) && !tts_files_present(g_cfg.tts)) {
         g_setup_mode = true
         print("no model configured - starting in setup mode (open the control page to download one from the catalog)\n")
     }
@@ -909,10 +919,10 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     delete g_models
     g_models <- roster
-    if (empty(g_models) && !g_setup_mode && empty(g_cfg.tts)) {
+    if (empty(g_models) && !g_setup_mode && !tts_files_present(g_cfg.tts)) {
         // not an exit: a crash-looping boot under the watchdog never gets a page to fix the config from
         g_setup_mode = true
-        to_log(LOG_ERROR, "dasllama-server: no loadable model - every roster path failed its file check; starting in setup mode\n")
+        to_log(LOG_ERROR, "dasllama-server: no loadable model - no configured path survived its file check (roster entries, and the --tts file set); starting in setup mode\n")
     } elif (empty(g_models) && !g_setup_mode) {
         to_log(LOG_WARNING, "dasllama-server: no loadable LLM model - serving the speech route only (the TTS model still loads)\n")
     }
@@ -934,7 +944,8 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         // re-arm it when the tick loop or POST /v1/models/activate moves the tier.
         var gpu_idx = -1
         var slot_want = GpuTierWant()
-        if (gpu == "vulkan") {
+        // a --tts boot with no LLM has an EMPTY roster: nothing loads, so nothing arms the tier
+        if (gpu == "vulkan" && !empty(g_models)) {
             slot_want = GpuTierWant(
                 moe_layers = gpu_detail_layers(g_cfg), moe_stream = gpu_detail_stream(g_cfg),
                 vram_mb = int64(g_cfg.gpu_vram_mb), dn = gpu_detail_dn(g_cfg),
@@ -993,7 +1004,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                 set_slot_gpu_want(ent.name, slot_want)   // the want switch-in re-arms with
             }
         }
-        set_default_model(g_models[def_idx].name)
+        if (!empty(g_models)) {
+            set_default_model(g_models[def_idx].name)
+        }
         // 16384, not a chat-sized 256: thinking-default families spend the budget's head on the
         // thought channel, and a request that omits max_tokens must still get its whole answer
         set_default_max_tokens(g_cfg.max_tokens > 0 ? int64(g_cfg.max_tokens) : 16384l)
@@ -1025,7 +1038,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     // outside the serving gate: a --tts start with no loadable LLM is a speech-only SERVER, and
     // its route has to arm on that boot too
     if (!empty(g_cfg.tts)) {
-        configure_tts(g_cfg.tts)
+        configure_tts(g_cfg.tts, g_cfg.tts_lane)
     }
 
     // the /config surface: a config-less start saves beside the program (the same spot the

@@ -38,6 +38,7 @@ EXEMPT_FILES = {
     "history/dasLLAMA/audio_models_plan.md",             # model prompt samples
     "plans/dasllama-tutorials.md",                       # non-English tutorial samples
     "plans/dasllama-tts.md",                             # IPA phoneme inventories are the subject
+    "site-dasllama/_stories/2026-09-03-text-to-speech.md",  # the phonemizer's IPA output is shown
 }
 
 # em dash gets surrounding-space normalization; plain dashes map directly

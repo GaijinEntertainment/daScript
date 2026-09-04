@@ -89,9 +89,12 @@ sidecar prove the upsert preserves the other's keys, and that tuned-ness is per-
 completeness. `llvm_tune_manifest.das` covers the write->stamp round trip and the staleness
 rail (back-dating with `set_mtime` + `mktime`). Both run under `-jit` and short-circuit to
 pass when `!jit_enabled()`. The defaults-profile rail is `llvm_tune_profiles.das` (+ its
-`_client` / `_lib` / `_tuner` fixtures): it writes its profile files at runtime under the
-untracked `llvm_tune_profiles_defaults/`, named by this box's own `tune_cpu_class()`, and fakes
-a less-capable minting box with an empty `features` field to force the unlocked-seat race.
+`_client` / `_lib` / `_tuner` fixtures): it copies the fixtures into a per-process temp
+directory, redirects the copied lib's `defaults =` at a `tune_defaults/` beside them, writes its
+profile files there at runtime, named by this box's own `tune_cpu_class()`, and fakes a
+less-capable minting box with an empty `features` field to force the unlocked-seat race. It
+never writes under the tracked `llvm_tune_profiles_defaults/`; `modules/dasLLVM/REVIEW.das`
+reds a test that does.
 
 ## Shipped defaults profiles - where the pieces live
 

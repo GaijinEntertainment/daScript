@@ -617,6 +617,9 @@ def serialize_strings(var arch : Archive; var a : array<string>) {
 
 // derived state (piece -> index, merge -> rank) is never stored: it rebuilds in milliseconds at load
 def private serialize_tokenizer(var arch : Archive; var tk : Tokenizer) {
+    verify(count_meta_fields(tk) == TOKENIZER_META_FIELDS)   // grew Tokenizer? extend this list
+    verify(count_meta_fields(tk.spm) == SPM_META_FIELDS)   // grew SpmTokenizer? extend this list
+    verify(count_meta_fields(tk.bpe) == BPE_META_FIELDS)   // grew BpeTokenizer? extend this list
     arch |> serialize_raw(tk.kind)
     serialize_strings(arch, tk.spm.vocab)
     serialize_pod_array(arch, tk.spm.scores)
@@ -739,6 +742,13 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
 
 // the 3 deliberate skips: blocks, image_map, image_bytes
 let IMAGE_META_FIELDS = 75 + 3
+
+// the tokenizer's tripwires: the SentencePiece backend's five serialized meta fields + its three
+// derived tables (lookup, pair_merge, bkey_id); the BPE backend's seven (merge_rank rides as the
+// merges array) + its three (lookup, pair_merge, cpt_id)
+let private TOKENIZER_META_FIELDS = 3
+let private SPM_META_FIELDS = 5 + 3
+let private BPE_META_FIELDS = 7 + 3
 
 //! Count of meta-carried fields of any struct: non-arrays plus string arrays (those cannot
 //! be raw planes — see serialize_strings). Pair with a per-type field-count constant to

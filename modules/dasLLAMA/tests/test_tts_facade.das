@@ -8,26 +8,41 @@ require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_audio_io
 require dasllama/dasllama_kitten   // kitten_token_ids: the symbol table's drop rule, model-free
+require dasllama/dasllama_styletts2   // the voices table: a hand-built model whose pack names no language
 require dasllama/dasllama_unicode   // the chunker counts codepoints, so the cells do too
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + the batch lane cap
 require daslib/jobque_boost
 require daslib/defer
+require daslib/rtti   // this_context().last_exception: the voice refusals are read as text
 require daslib/fio
 require strings
 require daslib/strings_boost
 require math
 require _model_tier
+require _tts_corpus   // the 200-sentence front-end fixture: the phonemes arm E was scored against
 
 def private cpt_count(s : string) : int {
     var inscope c <- utf8_to_cpts(s)
     return length(c)
 }
 
+def private panic_text_of(blk : block<() : void>) : string {
+    var why = ""
+    try {
+        invoke(blk)
+    } recover {
+        why = this_context().last_exception |> rtrim
+    }
+    return why
+}
+
 // The TTS facade above the families. Model-free: the sentence chunker (the reference driver's
 // boundary rule - abbreviations, decimals, a.m./p.m. - the 400-CODEPOINT cap, the hard split of
-// a whitespace-free run, the appended punctuation), the WAV writer's container (header fields,
-// sample round trip), the timings' own rtf guard, and the kitten symbol table's drop rule.
-// Model-gated (`kitten-nano.gguf` + the front-end packs under models_dir()): the streaming
+// a whitespace-free run, the appended punctuation), the normalizer the facade exposes
+// (`tts_normalize`), the WAV writer's container (header fields, sample round trip), the timings'
+// own rtf guard, and the kitten symbol table's drop rule.
+// Model-gated (`kitten-nano.gguf` + the front-end packs under models_dir()): the facade's
+// phonemes (`tts_phonemize`) against the corpus fixture's own inventory, and the streaming
 // form's chunks concatenate to the buffered form's audio with summed timings, the two
 // syntheses run at different worker counts.
 
@@ -41,6 +56,32 @@ def test_chunker(t : T?) {
         t |> equal(c[2], "Third?")
         t |> equal(c[3], "Fourth,", "a chunk left without punctuation gains a comma")
     }
+}
+
+[test]
+def test_chunker_family_rule(t : T?) {
+    t |> run("the appended comma is Kitten's driver rule; off, the text goes through as it is") @(t : T?) {
+        var inscope bare <- tts_chunks("hello how are you", TTS_CHUNK_CHARS, false)
+        t |> equal(length(bare), 1)
+        t |> equal(bare[0], "hello how are you", "Kokoro's pipeline adds no mark - its voices breathe one out loud")
+        var inscope kept <- tts_chunks("First one. Second", TTS_CHUNK_CHARS, false)
+        t |> equal(length(kept), 2)
+        t |> equal(kept[0], "First one.", "punctuation the text carries stays")
+        t |> equal(kept[1], "Second")
+        var words = ""
+        for (i in range(40)) {
+            words = i == 0 ? "word" : "{words} word"
+        }
+        var inscope pieces <- tts_chunks(words, 50, false)
+        t |> success(length(pieces) >= 3, "{length(pieces)} pieces")
+        for (p in pieces) {
+            t |> success(!ends_with(p, ","), "a word-split piece stays bare too: '{p}'")
+        }
+    }
+}
+
+[test]
+def test_chunker_rules(t : T?) {
     t |> run("abbreviations, decimals and clock times do not end a sentence") @(t : T?) {
         var inscope c <- tts_chunks("Dr. Smith paid 3.50 dollars at 9 a.m. today. Then he left.")
         t |> equal(length(c), 2)
@@ -111,6 +152,41 @@ def test_chunker(t : T?) {
     }
 }
 
+// A pack whose name carries no language of the pipeline's shape: the refusal has no code to name,
+// and must say so in words rather than render a blank. Hand-built - every stocked pack is shaped.
+[test]
+def test_voice_refusal_without_a_language(t : T?) {
+    t |> run("a voice whose pack names no language refuses in words, not in an empty code") @(t : T?) {
+        var inscope m = TtsModel()
+        m.kind = TtsKind.kokoro
+        var inscope pack : array<float>
+        m.model.voices["emma"] <- pack   // the model HAS the voice; what it does not have is a language for it
+        let why = panic_text_of() {
+            feint("{tts_voice_lang(m, "emma")}")
+        }
+        t |> success(find(why, "unknown voice 'emma'") >= 0, "the refusal names the voice: {why}")
+        t |> success(find(why, "speaks a language the front end does not phonemize") >= 0,
+            "and says what it cannot do with it: {why}")
+        t |> success(find(why, "speaks , which") < 0, "no empty language code rendered into the sentence: {why}")
+    }
+}
+
+[test]
+def test_facade_normalizer(t : T?) {
+    t |> run("the facade reaches the normalizer every synthesis runs first") @(t : T?) {
+        t |> equal(tts_normalize("Dr. Chen read 3.5 pages and paid $12."),
+            "Doctor Chen read three point five pages and paid twelve dollars.",
+            "an abbreviation, a decimal and an amount of money")
+        t |> equal(tts_normalize("Prof. Lee owes $1.50."), "Professor Lee owes one dollar and fifty cents.")
+        t |> equal(tts_normalize("It started at 9 a.m. on Feb. 3, 2021."),
+            "It started at nine a.m. on February third, twenty twenty-one.", "a clock time and a date")
+        t |> equal(tts_normalize("The 1st of May, 75% off, 3 km away."),
+            "The first of May, seventy-five percent off, three kilometers away.",
+            "an ordinal, a percentage and a unit")
+        t |> equal(tts_normalize(""), "", "empty text stays empty")
+    }
+}
+
 [test]
 def test_kitten_symbol_drop(t : T?) {
     t |> run("an unknown phoneme takes its separator space with it") @(t : T?) {
@@ -164,6 +240,88 @@ def test_wav_writer(t : T?) {
         t |> equal(length(raw), 4800)
         let removed = remove_result(path)
         t |> success(removed is value, "temp file removed")
+    }
+}
+
+// corpus rows the daslang front end reproduces phoneme for phoneme, so a facade wrapper that
+// reached a family's rewrite instead of the front end's own inventory reds here
+let private PINNED_CORPUS_ROWS <- {"lj000", "lj002", "lj003"}
+
+[test]
+def test_facade_phonemizer(t : T?) {
+    t |> run("the facade phonemizes into the front end's own inventory, on the corpus rail") @(t : T?) {
+        let gguf = path_join(models_dir(), "kitten-nano.gguf")
+        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
+            t |> skip("kitten-nano.gguf or the front-end packs not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope m <- load_tts_model(gguf)
+            var inscope rows <- load_tts_corpus()
+            var seen = 0
+            for (r in rows) {
+                continue if (!key_exists(PINNED_CORPUS_ROWS, r.id))
+                seen++
+                t |> equal(strip(tts_phonemize(m, r.norm)), r.ps_misaki,
+                    "{r.id}: the 45-symbol US inventory the corpus pins, never a family's own symbols")
+            }
+            t |> equal(seen, length(PINNED_CORPUS_ROWS), "every pinned row is in the fixture")
+        }
+    }
+    t |> run("the language form answers for a language the model declares and panics for one it does not") @(t : T?) {
+        let gguf = path_join(models_dir(), "kitten-nano.gguf")
+        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
+            t |> skip("kitten-nano.gguf or the front-end packs not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope m <- load_tts_model(gguf)
+            var inscope c <- caps(m)
+            var inscope rows <- load_tts_corpus()
+            // Kitten speaks American English alone, so its front end declares one language and
+            // refuses the other rather than answering in the wrong dialect
+            t |> success(length(c.langs) == 1 && c.langs[0] == "en-us", "{length(c.langs)} language(s), first '{c.langs[0]}'")
+            var seen = 0
+            for (r in rows) {
+                continue if (!key_exists(PINNED_CORPUS_ROWS, r.id))
+                seen++
+                t |> equal(strip(tts_phonemize(m, r.norm, "en-us")), r.ps_misaki, "{r.id}: the declared language reads the same as the bare form")
+            }
+            t |> equal(seen, length(PINNED_CORPUS_ROWS), "every pinned row is in the fixture")
+            var refused = false
+            try {
+                t |> failure("phonemized {tts_phonemize(m, "the water tower", "en-gb")} for a language this front end does not declare")
+            } recover {
+                refused = true
+            }
+            t |> success(refused, "an undeclared language panics at the call site")
+        }
+    }
+}
+
+// The model-keyed chunker picks the family's driver rule, and Kitten's is the arm no model-free
+// cell can reach: the boolean form is pinned above, Kokoro's bare text in test_tts_kokoro.das.
+[test]
+def test_chunker_model_rule(t : T?) {
+    t |> run("a Kitten model's chunks gain the driver's comma") @(t : T?) {
+        let gguf = path_join(models_dir(), "kitten-nano.gguf")
+        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
+            t |> skip("kitten-nano.gguf or the front-end packs not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope m <- load_tts_model(gguf)
+            var inscope bare <- tts_chunks(m, "hello how are you")
+            t |> equal(length(bare), 1)
+            t |> equal(bare[0], "hello how are you,", "KittenTTS's driver appends the prosodic close")
+            var inscope kept <- tts_chunks(m, "First one. Second")
+            t |> equal(length(kept), 2)
+            t |> equal(kept[0], "First one.", "punctuation the text carries stays as it is")
+            t |> equal(kept[1], "Second,")
+        }
     }
 }
 
