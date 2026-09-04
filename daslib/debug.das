@@ -832,6 +832,13 @@ struct private DABreakpoint {
 typedef DABreakpoints = table<string; array<DABreakpoint>>
 
 
+def private delete_breakpoint_arrays(var breakpoints : DABreakpoints) {
+    for (it in values(breakpoints)) {
+        delete it
+    }
+}
+
+
 struct private DAContext {
     //! Internal context state for the DAP debugger.
     id : uint64
@@ -1151,6 +1158,19 @@ class private DAgent : DapiDebugAgent {
         })
     }
 
+    [arch(at="ARCHITECTURE.md#statement-breakpoint-lookup")]
+    def findBreakpointId(file : string; line : uint) : uint64 {
+        for (fileBr, brs in keys(breakpoints), values(breakpoints)) {
+            if (!compare_path(fileBr, file)) continue
+            for (br in brs) {
+                if (br.line == line) return br.id
+            }
+            break
+        }
+        return -1ul
+    }
+
+    [arch(at="ARCHITECTURE.md#statement-breakpoint-lookup")]
     def override onSingleStep(var ctx : Context; at : LineInfo) : void {
         //! Handles single-step events, processing pause, step-in, step-over requests, and breakpoint checks.
         if (at.fileInfo == null || server == null) return
@@ -1203,30 +1223,12 @@ class private DAgent : DapiDebugAgent {
                 ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedDepth > 0)
                 return
             }
-            var i = 0
-            while (i < length(breakpoints)) {
-                var fileBr : string
-                for (j, it in range(i + 1), keys(breakpoints)) {
-                    if (j == i) {
-                        fileBr = it
-                        break
-                    }
-                }
-                i++
-                if (!compare_path(fileBr, file)) continue
-                breakpoints |> get(file) $(brs) {
-                    var brIdx = 0
-                    while (brIdx < length(brs)) {
-                        let br & = unsafe((brs)[brIdx++])
-                        if (br.line != at.line) continue
-                        sendStopped(ctx, ctxData, file, at, "breakpoint", "", br.id)
-
-                        ctxData.continueRequested = false
-                        wait_for_resume(ctxData)
-                        afterPause()
-                        break
-                    }
-                }
+            let breakpointHit = findBreakpointId(file, at.line)
+            if (breakpointHit != -1ul) {
+                sendStopped(ctx, ctxData, file, at, "breakpoint", "", breakpointHit)
+                ctxData.continueRequested = false
+                wait_for_resume(ctxData)
+                afterPause()
             }
         })
     }
@@ -1343,10 +1345,10 @@ class private DAgent : DapiDebugAgent {
         }
     }
 
-    def invalidateBreakpoints(var ctx : Context) : void {
-        //! Re-instruments breakpoints for a context after code changes, updating their verification state.
+    def invalidateBreakpoints(var ctx : Context; configuring : bool = false) : void {
+        //! Instruments configured breakpoints for a context and updates their verification state.
         if (!withInstruments
-                || server == null || !server.configurationDone
+                || server == null || (!server.configurationDone && !configuring)
                 || ctx.category.debug_context || ctx.category.debugger_tick) return
 
         for (brs in values(breakpoints)) {
@@ -1416,6 +1418,11 @@ class private DAgent : DapiDebugAgent {
         //! Handles new context creation by registering it and re-instrumenting breakpoints.
         addContext(ctx)
         invalidateBreakpoints(ctx)
+    }
+
+    [arch(at="ARCHITECTURE.md#debugger-worker-startup")]
+    def override onSimulateContext(var ctx : Context) : void {
+        debugger_thread_context_ready(ctx)
     }
 
     def override onDestroyContext(var ctx : Context) : void {
@@ -1662,6 +1669,11 @@ class private DAServer : Server {
 
     def reqConfigurationDone(seq : double; command : string; data : JsonValue?) {
         //! Handles the DAP configurationDone request, marking client configuration as complete.
+        for (ctx in agent.contexts) {
+            if (ctx.ctx != null) {
+                agent->invalidateBreakpoints(*ctx.ctx, true)
+            }
+        }
         configurationDone = true
         sendSuccessResponse(seq, command, null)
     }
@@ -1732,9 +1744,7 @@ class private DAServer : Server {
             ctx |> reset_debug_flags()
             ctx.continueRequested = true
         }
-        for (it in values(agent.breakpoints)) {
-            delete it
-        }
+        delete_breakpoint_arrays(agent.breakpoints)
         agent.breakpoints |> clear()
         disconnected = true
     }
@@ -2217,12 +2227,33 @@ def private tick_debugger() {
 
 var private g```dAgent : DAgent?
 
-[apply_in_context(name="~debug")]
+[arch(at="ARCHITECTURE.md#debugger-readiness-query"), export, pinvoke]
+def private query_debugger_ready(var ready : bool?) {
+    unsafe {
+        if (g```dAgent == null || g```dAgent.server == null) {
+            *ready = false
+        } else {
+            *ready = !g```dAgent.waitConnection || (g```dAgent.server.configurationDone && g```dAgent.server.threadsDone)
+        }
+    }
+}
+
+
+[arch(at="ARCHITECTURE.md#debugger-readiness-query")]
+def private debugger_is_ready() : bool {
+    var ready = false
+    unsafe {
+        invoke_in_context(get_debug_agent_context("~debug"), @@query_debugger_ready, addr(ready))
+    }
+    return ready
+}
+
+
+[arch(at="ARCHITECTURE.md#debugger-worker-startup")]
 def wait_for_debugger() : bool {
-    //! Blocks until the debug agent is connected and the client configuration is complete.
-    while (g```dAgent == null || g```dAgent.server == null
-       || (g```dAgent.waitConnection && (!g```dAgent.server.configurationDone || !g```dAgent.server.threadsDone))) {
-        sleep(10u)
+    //! Blocks until the debug agent reports readiness for the selected connection mode.
+    while (!debugger_is_ready()) {
+        tick_debugger()
     }
     return true
 }

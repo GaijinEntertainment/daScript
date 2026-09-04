@@ -530,6 +530,13 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/mcp/test_tools.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/mcp/test_crosstree_guard.das
 
+    - name: "Test DAP MCP bridge (python)"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        PYTHONDONTWRITEBYTECODE=1 python3 utils/dap/test_mcp_bridge.py
+        DAS_TEST_STEPPING=1 PYTHONDONTWRITEBYTECODE=1 python3 utils/dap/test_mcp_bridge.py
+
     - name: "Test LSP cross-tree guard (python)"
       if: matrix.role != 'modules'
       run: |
@@ -760,4 +767,3 @@ jobs:
       run: |
         $BIN/daslang dastest/dastest.das -- --cov-path coverage.lcov --color --test ./tests/language --timeout 1800
         $BIN/dascov.exe -- coverage.lcov --exclude tests/language
-

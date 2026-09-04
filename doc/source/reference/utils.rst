@@ -24,6 +24,7 @@ built-in leak-detection mechanism.
    utils/benchctl.rst
    utils/aot.rst
    utils/mcp.rst
+   utils/dap.rst
    utils/lsp.rst
    utils/detect_dupe.rst
    utils/find_dupe.rst

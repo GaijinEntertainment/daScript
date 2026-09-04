@@ -127,6 +127,32 @@ Three companions carry a concern each; a section number is unique across all fou
 - **`g_installed_agents` is the GC root for every installed agent** - the C++ adapter holds
   a raw classPtr the das GC cannot see.
 
+### 24.1 Debugger readiness query {#debugger-readiness-query}
+
+- **Non-allocation debug-agent callbacks and cross-context invocations share the debug-agent
+  context mutex** - callbacks can run on debuggee or debugger worker threads, while pinvokes can
+  arrive on the main thread. Allocation instrumentation callbacks remain direct because they run
+  inside allocator operations, where re-entering the same allocation path cannot be serialized.
+- **The debugger-ready query uses an explicit pinvoke** - generated `apply_in_context`
+  verification would acquire the agent registry while holding the context mutex, opposite to the
+  debugger tick's registry-to-context order.
+
+### 24.2 Debugger worker startup {#debugger-worker-startup}
+
+- **The statement-debugger worker executes its lambda only after the source context reaches
+  `onSimulateContext`** - its cloned context shares the finalized SimNode graph, so executing the
+  lambda while `Program::simulate` is still hashing that graph is a data race. With
+  `--das-wait-debugger`, the main thread pumps DAP requests until client configuration completes;
+  without that flag, source-context simulation proceeds while the worker waits for it to finish.
+- **Only one statement-debugger worker may be active** - a second launch fails immediately rather
+  than blocking the source thread that must deliver the first worker's readiness notification.
+  Destroying that source context cancels the pending worker so its raw identity cannot outlive it.
+
+### 24.3 Statement breakpoint lookup {#statement-breakpoint-lookup}
+
+- **Statement stepping releases a breakpoint table borrow before entering the stopped command
+  pump** - requests handled while stopped may replace that table entry.
+
 ## 25. typemacro_boost {#typemacro-boost}
 
 - **The parser does not run annotation `apply` for macro-added functions** - the add/erase

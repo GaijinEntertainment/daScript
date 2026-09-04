@@ -2031,6 +2031,12 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/daslang/
 )
 install(FILES ${PROJECT_SOURCE_DIR}/.claude/agents/dragon.md DESTINATION .claude/agents)
 
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/dap/mcp_bridge.py
+    ${PROJECT_SOURCE_DIR}/utils/dap/README.md
+    DESTINATION utils/dap
+)
+
 # Install dascov (code coverage)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/dascov/main.das DESTINATION utils/dascov)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/dascov/README.md DESTINATION utils/dascov)
