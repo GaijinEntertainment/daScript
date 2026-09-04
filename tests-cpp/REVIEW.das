@@ -61,6 +61,23 @@ def private check_test_targets(f : string; text : string) {
     }
 }
 
+// Every source a `set_source_files_properties` names exists beside its CMakeLists. The
+// property applies to nothing when the file moves, so a test whose compile flag went
+// missing builds the ordinary way and stays green.
+def private check_source_property_paths(f : string; text : string) {
+    let folder = dir_name(f)
+    for (blk in cmake_command_blocks(text, "set_source_files_properties")) {
+        var inscope args <- cmake_args(blk)
+        for (a in args) {
+            break if (a == "PROPERTIES" || a == "DIRECTORY" || a == "TARGET_DIRECTORY")
+            continue if (a |> starts_with("$"))
+            if (!fexist(path_join(folder, a))) {
+                gate_finding(f, "set_source_files_properties names {a}, which does not exist beside {f} - the property applies to nothing and its test builds without the flag")
+            }
+        }
+    }
+}
+
 // Every lane a file labels tests into is a lane that file also builds for.
 def private check_lane_wiring {
     let top_cmake = "tests-cpp/CMakeLists.txt"
@@ -79,6 +96,7 @@ def private check_lane_wiring {
             gate_finding(f, "labels a test \"{lab}\" but wires nothing into test-{lab} — wire it with add_dependencies(test-{lab} <target>), or the lane runs a binary it never built")
         }
         check_test_targets(f, text)
+        check_source_property_paths(f, text)
     }
 }
 
