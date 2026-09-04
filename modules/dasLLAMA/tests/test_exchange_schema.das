@@ -441,7 +441,7 @@ def test_tune_scope_wire_key(t : T?) {
         // the rename's load-bearing compensator: without version_key= the scope's staleness
         // pin silently becomes "dasllama_release" - a key no sidecar in records/ carries, so
         // every box re-tunes; llvm_tune exposes no runtime reader, so the pin is textual
-        let src = fread("modules/dasLLAMA/dasllama/dasllama_math_gen.das")
+        let src = fread("modules/dasLLAMA/dasllama/dasllama_tune_scope.das")
         t |> success(find(src, "version_of = \"dasllama_version/DASLLAMA_RELEASE\"") >= 0,
                      "the scope versions off DASLLAMA_RELEASE")
         t |> success(find(src, "version_key = \"dasllama_version\"") >= 0,
