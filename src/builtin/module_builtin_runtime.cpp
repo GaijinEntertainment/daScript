@@ -1715,6 +1715,27 @@ namespace das
         arr = g_CommandLineArguments;
     }
 
+    string commandLineArgumentOccurrences ( const string & flag ) {
+        string out;
+        auto argv = (char **) g_CommandLineArguments.data;
+        uint32_t argc = g_CommandLineArguments.size;
+        string eq = flag + "=";
+        for ( uint32_t i=0; i<argc; ++i ) {
+            const char * a = argv[i] ? argv[i] : "";
+            // NUL-separated: an argv string cannot contain NUL, so no two argument lists share a stream
+            if ( flag == a ) {
+                out += a;
+                out += '\0';
+                if ( i+1<argc && argv[i+1] ) out += argv[i+1];
+                out += '\0';
+            } else if ( strncmp(a, eq.c_str(), eq.size())==0 ) {
+                out += a;
+                out += '\0';
+            }
+        }
+        return out;
+    }
+
     void withCommandLineArguments( const Array & arr, const TBlock<void> & body, Context * context, LineInfoArg * at ) {
         auto prev = g_CommandLineArguments;
         g_CommandLineArguments = arr;

@@ -26,8 +26,17 @@ Background on the hash machinery is in [`skills/internal/aot_testing.md`](aot_te
    names functions you just added, it is staleness, not codegen. Wipe every
    `_aot_generated` (they are all gitignored) before trusting the gate:
    ```
-   find tests daslib modules examples utils tutorials -type d -name _aot_generated -print0 | xargs -0 rm -rf
+   find tests dastest daslib modules examples utils tutorials -type d -name _aot_generated -print0 | xargs -0 rm -rf
    ```
+   `dastest/_aot_generated` holds the `testing` module's stub; a wipe that skips it leaves
+   every test's `testing::run` link red whatever else you regenerate.
+
+2b. **The stub says `AOT disabled due to module requirements` for a module that AOTs by hand.**
+   Read the per-module lines: a `// AOT disabled due to this module` on a script module the
+   generator shares with its own root compile (`rtti`, `ast`, `strings_boost`) means that module
+   came from the AST module cache as something other than a `ModuleDas` - `Module::aotRequire`
+   answers `no_aot` for the base class. Regenerating with `-no-module-cache` producing a full
+   stub confirms it; the fix is in the deserializer's module construction, never in the rule.
 
 3. **The function's module was never AOT'd at all.** A missing stub and a mismatched stub produce the same 50101. New test dir not registered in `tests/aot/CMakeLists.txt`, or the module is in the daslib AOT *exclusion* regex there (modules whose builtins lack AOT header decls get excluded - if you gave such a module runtime-callable functions, add the missing decls to `include/daScript/simulate/aot_builtin_ast.h` and un-exclude it; precedent: `style_lint` and its five `for_each_*_macro` decls).
 

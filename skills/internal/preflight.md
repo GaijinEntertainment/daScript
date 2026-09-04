@@ -9,6 +9,12 @@ subsets; `--lint-skip-exe-rail` trims the lint gate to its interp rails. A gate
 whose host tool or module is missing reports `SKIP` with an install/rebuild
 hint.
 
+Each gate line carries its breakdown indented underneath, on PASS as well as FAIL: the
+build/run split for a gate that builds before it sweeps (`tests-aot`, `sequence`, `imgui`),
+and dastest's `Top 10 slowest files` table for a suite sweep (preflight passes
+`--timing-outliers 10`). The run closes with a time-by-gate table, largest first, so the gate
+holding the wall clock names itself.
+
 Two gates mirror no CI lane:
 
 - **untracked** - `git ls-files --others --exclude-standard` must print nothing:

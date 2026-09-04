@@ -10,6 +10,7 @@ require llvm/daslib/f16_cvt  // per-element f16 scale reads/writes inside the ho
 require dasllama/dasllama_math  // dot/axpy/copy_floats — the f32 arms of the dispatch below
 require dasllama/dasllama_convert  // cvt_f16_to_f32 — the bulk f16 row dequant
 require dasllama/dasllama_tune  // [tuned]: reconstitute kernels from templates with per-box loop hints
+require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
 
 // The KV-cache codec — one family per cache format, kept WHOLE: store (quantize), read (cvt
 // back to f32), the attention score dot, and the V-accumulate axpy share the format's block

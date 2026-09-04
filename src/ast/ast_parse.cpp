@@ -10,8 +10,10 @@
 #include "daScript/ast/ast_bound_check_elision.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/simulate.h"
+#include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/aot_builtin_uriparser.h"
+#include "daScript/misc/env_cfg.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/das_project_specific.h"
 
@@ -600,6 +602,21 @@ namespace das {
     void statAndHashFileDependency ( const string & path, int64_t & size, uint64_t & hash ) {
         size = -1;
         hash = 0;
+        if ( path.compare(0, 4, "env:") == 0 ) {
+            if ( const char * v = das_getenv(path.c_str() + 4) ) {
+                size = int64_t(strlen(v));
+                hash = size ? hash_block64((const uint8_t *) v, size_t(size)) : FNV64A_SEED;
+            }
+            return;
+        }
+        if ( path.compare(0, 4, "arg:") == 0 ) {
+            string occurrences = commandLineArgumentOccurrences(path.substr(4));
+            if ( !occurrences.empty() ) {
+                size = int64_t(occurrences.size());
+                hash = hash_block64((const uint8_t *) occurrences.data(), occurrences.size());
+            }
+            return;
+        }
 #if !defined(DAS_NO_FILEIO)
         FILE * f = fopen(path.c_str(), "rb");
         if ( !f ) return;
@@ -648,7 +665,9 @@ namespace das {
                 }) || magic != SER_MODULE_STREAM_MAGIC || version != AstSerializer::getVersion() ) {
                     serializer_read->seenNewModule = true;
                     serializer_read->failed = true;
-                    logs << "ser: read failed (stale or foreign module cache stream)\n";
+                    serializer_read->cutoffFile = fileName;
+                    serializer_read->cutoffReason = "stale or foreign module cache stream";
+                    if ( !serializer_read->quietCache ) logs << "ser: read failed (stale or foreign module cache stream)\n";
                     return false;
                 }
             }
@@ -681,7 +700,7 @@ namespace das {
         }) || depCount > SER_MAX_MACRO_DEPS ) {
             serializer_read->seenNewModule = true;
             serializer_read->failed = depCount > SER_MAX_MACRO_DEPS;
-            logs << "ser: read failed '" << fileName << "'\n";
+            if ( !serializer_read->quietCache ) logs << "ser: read failed '" << fileName << "'\n";
             return false;
         }
 
@@ -695,7 +714,9 @@ namespace das {
             if ( depSize != get<1>(dep) || depHash != get<2>(dep) ) {
                 serializer_read->seenNewModule = true;
                 serializer_read->failed = true;
-                logs << "ser: macro dependency changed '" << get<0>(dep) << "' (e.g. a re-minted tune sidecar)\n";
+                serializer_read->cutoffFile = fileName;
+                serializer_read->cutoffReason = "macro dependency '" + get<0>(dep) + "' changed";
+                if ( !serializer_read->quietCache ) logs << "ser: macro dependency changed '" << get<0>(dep) << "' (e.g. a re-minted tune sidecar)\n";
                 return false;
             }
         }
@@ -706,14 +727,18 @@ namespace das {
             // modules depend on earlier ones (macros), so this stays the prefix cutoff
             serializer_read->seenNewModule = true;
             serializer_read->failed = true;
-            if (saved_filename != fileName) {
-                logs << "ser: file name mismatch. Expected '" << saved_filename << "', got '" << fileName << "'\n";
-            }
-            if (file_mtime != saved_mtime) {
-                logs << "ser: file mtime mismatch. Expected " << saved_mtime << ", got " << file_mtime << "\n";
-            }
-            if (file_size != saved_size) {
-                logs << "ser: file size mismatch. Expected " << saved_size << ", got " << file_size << "\n";
+            serializer_read->cutoffFile = fileName;
+            serializer_read->cutoffReason = saved_filename != fileName ? "module order changed" : "file changed";
+            if ( !serializer_read->quietCache ) {
+                if (saved_filename != fileName) {
+                    logs << "ser: file name mismatch. Expected '" << saved_filename << "', got '" << fileName << "'\n";
+                }
+                if (file_mtime != saved_mtime) {
+                    logs << "ser: file mtime mismatch. Expected " << saved_mtime << ", got " << file_mtime << "\n";
+                }
+                if (file_size != saved_size) {
+                    logs << "ser: file size mismatch. Expected " << saved_size << ", got " << file_size << "\n";
+                }
             }
             return false;
         }
@@ -728,6 +753,7 @@ namespace das {
         });
 
         if ( read_ok && !program->failed() && !serializer_read->failed ) {
+            serializer_read->servedModules ++;
             program->thisModuleGroup = &libGroup;
             // the stream is rewritten every run from parsedModules, so a kept record's deps
             // must round-trip through the deserialized program or the next write drops them
@@ -738,12 +764,14 @@ namespace das {
             return true;
         }
 
-        if ( !read_ok ) {
-            logs << "ser: read failed '" << fileName << "'\n";
-        } else if ( program->failed() ) {
-            logs << "ser: program failed '" << fileName << "'\n";
-        } else {
-            logs << "ser: serialization failed. Internal issue.\n";
+        if ( !serializer_read->quietCache ) {
+            if ( !read_ok ) {
+                logs << "ser: read failed '" << fileName << "'\n";
+            } else if ( program->failed() ) {
+                logs << "ser: program failed '" << fileName << "'\n";
+            } else {
+                logs << "ser: serialization failed. Internal issue.\n";
+            }
         }
         replaceProgramKeepGcRootValid(program);
 
@@ -767,7 +795,7 @@ namespace das {
             // record (still valid: the file is UNCHANGED) reparses instead of serving
             serializer_read->seenNewModule = false;
             serializer_read->resumedModules ++;
-            logs << "ser: reparsing in place '" << fileName << "'\n";
+            if ( !serializer_read->quietCache ) logs << "ser: reparsing in place '" << fileName << "'\n";
             return false;
         }
         serializer_read->seenNewModule = true;

@@ -150,6 +150,7 @@ def private run_half(name : string; paranoid : bool) : bool {
         }
     }
     let elapsed_ms = get_time_usec(t0) / 1000
+    g_half_ms[name] = elapsed_ms
     print("dasllama_tuner: {name} finished in {elapsed_ms} ms (rc={rc})\n")
     if (rc == TUNE_ONLY_NO_MATCH) {
         g_no_match_halves++
@@ -172,8 +173,9 @@ def private run_half(name : string; paranoid : bool) : bool {
 // exit code of a half whose --tune-only filter matched nothing (tune_kernels / gen_tune_probe)
 let TUNE_ONLY_NO_MATCH = 3
 var private g_no_match_halves = 0
+var private g_half_ms : table<string; int>
 
-[export]
+[export, arch(at = "../ARCHITECTURE_MEASUREMENT.md#mint-wall-provenance")]
 def main : int {
     let t0 = ref_time_ticks()
     let paranoid = tuner_paranoid_requested()
@@ -209,6 +211,16 @@ def main : int {
         if (ok1 && ok2) {
             if (!empty(oldText)) {
                 print_mint_diff(oldText, fread(sidecar))
+            }
+            if (!tune_sidecar_stale(sidecar)) {
+                tune_provenance_note("mint_gen_ms", "{g_half_ms?["gen_tune_probe.das"] ?? 0}")
+                tune_provenance_note("mint_kernels_ms", "{g_half_ms?["tune_kernels.das"] ?? 0}")
+                tune_provenance_note("mint_total_ms", "{get_time_usec(t0) / 1000}")
+                let noKernels : table<string; string>
+                var noRuntime : JsonValue?
+                if (!tune_sidecar_merge(noKernels, noRuntime)) {
+                    print("dasllama_tuner: could not stamp the mint times into {sidecar}\n")
+                }
             }
             let arch = tune_history_archive(sidecar, "ok", "")
             if (!empty(arch)) {

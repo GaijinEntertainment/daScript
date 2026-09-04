@@ -32,6 +32,10 @@ module build_const shared private
 //! resolves in every compile profile (``static_if`` computes a const global's init on
 //! the side even where lint/IDE profiles disable in-place folding) — but the combined
 //! accessors say the same thing in one call. Arguments must be literals.
+//!
+//! Every accessor pins the carrier it read as a module-cache dependency (``arg:<flag>`` /
+//! ``env:<NAME>``), so under the AST module cache a changed flag or variable re-parses
+//! the requiring module instead of serving the constant an earlier compile folded.
 
 require fio
 require strings
@@ -45,6 +49,14 @@ require daslib/macro_boost
 def private env_text_is_true(v : string) : bool {
     let s = to_lower(v)
     return !(empty(s) || s == "0" || s == "false" || s == "off" || s == "no")
+}
+
+def private pin_arg(flag : string) {
+    add_module_cache_dependency("arg:{flag}")
+}
+
+def private pin_env(name : string) {
+    add_module_cache_dependency("env:{name}")
 }
 
 def private find_last_arg_text(flag : string) : tuple<found : bool; value : string> {
@@ -70,6 +82,8 @@ class BuildFlagMacro : AstCallMacro {
             "build_flag: flag and env must be string literals, got {describe(expr.arguments[0])}, {describe(expr.arguments[1])}")
         let flag = string((expr.arguments[0] as ExprConstString).value)
         let name = string((expr.arguments[1] as ExprConstString).value)
+        pin_arg(flag)
+        pin_env(name)
         var res = false
         var on_argv = false
         let eq_prefix = flag + "="
@@ -99,6 +113,8 @@ class BuildValueMacro : AstCallMacro {
             "build_value: flag, env and dflt must be string literals, got {describe(expr.arguments[0])}, {describe(expr.arguments[1])}, {describe(expr.arguments[2])}")
         let flag = string((expr.arguments[0] as ExprConstString).value)
         let name = string((expr.arguments[1] as ExprConstString).value)
+        pin_arg(flag)
+        pin_env(name)
         var res = string((expr.arguments[2] as ExprConstString).value)
         let hit = find_last_arg_text(flag)
         if (hit.found) {
@@ -122,6 +138,8 @@ class BuildIntMacro : AstCallMacro {
             "build_int: flag and env must be string literals and dflt an int literal, got {describe(expr.arguments[0])}, {describe(expr.arguments[1])}, {describe(expr.arguments[2])}")
         let flag = string((expr.arguments[0] as ExprConstString).value)
         let name = string((expr.arguments[1] as ExprConstString).value)
+        pin_arg(flag)
+        pin_env(name)
         var res = (expr.arguments[2] as ExprConstInt).value
         let hit = find_last_arg_text(flag)
         let env_text = has_env_variable(name) ? get_env_variable(name) : ""
@@ -145,6 +163,7 @@ class BuildHasArgMacro : AstCallMacro {
         macro_verify(expr.arguments |> length == 1, prog, expr.at, "build_has_arg expects (flag : string literal)")
         macro_verify(expr.arguments[0] is ExprConstString, prog, expr.at, "build_has_arg: flag must be a string literal, got {describe(expr.arguments[0])}")
         let flag = string((expr.arguments[0] as ExprConstString).value)
+        pin_arg(flag)
         var found = false
         let eq_prefix = flag + "="
         let args <- get_command_line_arguments()
@@ -165,6 +184,7 @@ class BuildArgValueMacro : AstCallMacro {
         macro_verify(expr.arguments[0] is ExprConstString && expr.arguments[1] is ExprConstString, prog, expr.at,
             "build_arg_value: flag and dflt must be string literals, got {describe(expr.arguments[0])}, {describe(expr.arguments[1])}")
         let flag = string((expr.arguments[0] as ExprConstString).value)
+        pin_arg(flag)
         let hit = find_last_arg_text(flag)
         let res = hit.found ? hit.value : string((expr.arguments[1] as ExprConstString).value)
         return <- qmacro($v(res))
@@ -179,6 +199,7 @@ class BuildArgIntMacro : AstCallMacro {
         macro_verify(expr.arguments[0] is ExprConstString && expr.arguments[1] is ExprConstInt, prog, expr.at,
             "build_arg_int: flag must be a string literal and dflt an int literal, got {describe(expr.arguments[0])}, {describe(expr.arguments[1])}")
         let flag = string((expr.arguments[0] as ExprConstString).value)
+        pin_arg(flag)
         let hit = find_last_arg_text(flag)
         var res = (expr.arguments[1] as ExprConstInt).value
         if (hit.found) {
@@ -197,6 +218,7 @@ class BuildEnvFlagMacro : AstCallMacro {
         macro_verify(expr.arguments |> length == 1, prog, expr.at, "build_env_flag expects (name : string literal)")
         macro_verify(expr.arguments[0] is ExprConstString, prog, expr.at, "build_env_flag: name must be a string literal, got {describe(expr.arguments[0])}")
         let name = string((expr.arguments[0] as ExprConstString).value)
+        pin_env(name)
         let res = has_env_variable(name) ? env_text_is_true(get_env_variable(name)) : false
         return <- qmacro($v(res))
     }
@@ -210,6 +232,7 @@ class BuildEnvValueMacro : AstCallMacro {
         macro_verify(expr.arguments[0] is ExprConstString && expr.arguments[1] is ExprConstString, prog, expr.at,
             "build_env_value: name and dflt must be string literals, got {describe(expr.arguments[0])}, {describe(expr.arguments[1])}")
         let name = string((expr.arguments[0] as ExprConstString).value)
+        pin_env(name)
         var res = string((expr.arguments[1] as ExprConstString).value)
         if (has_env_variable(name)) {
             let v = get_env_variable(name)
@@ -229,6 +252,7 @@ class BuildEnvIntMacro : AstCallMacro {
         macro_verify(expr.arguments[0] is ExprConstString && expr.arguments[1] is ExprConstInt, prog, expr.at,
             "build_env_int: name must be a string literal and dflt an int literal, got {describe(expr.arguments[0])}, {describe(expr.arguments[1])}")
         let name = string((expr.arguments[0] as ExprConstString).value)
+        pin_env(name)
         var res = (expr.arguments[1] as ExprConstInt).value
         let env_text = has_env_variable(name) ? get_env_variable(name) : ""
         if (!empty(env_text)) {

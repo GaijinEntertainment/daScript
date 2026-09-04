@@ -297,12 +297,6 @@ def box_profile_verdict_at(path : string) : TuneSidecarReason {
     return tune_sidecar_verdict(path, "runtime").reason
 }
 
-// Compile-time read of the sidecar's "kernels" section written by the tuner harness:
-// function name -> winning perm suffix. "" when the sidecar is absent, stale, or lacks
-// the key (macros can do fio).
-def private config_perm_for(fname : string) : string {
-    return tune_manifest_get(fname)
-}
 
 // Every [tuned] kernel's shipped fallback AS RESOLVED HERE — a `;`-chain picks per ISA, so this
 // is box-specific and cannot be restated as a literal anywhere else. [dasllama_fallbacks] emits it.
@@ -325,8 +319,8 @@ def private report_perm(fname, perm, source : string) : string {
     return perm
 }
 
-// Precedence: `perm=` pin > sidecar "kernels" entry > the fallback chain > DEFAULT_PERM.
-// (`fallback`, not `default` — `default` is a grammar keyword, won't parse as an arg name.)
+// the annotation arg is spelled `fallback`: `default` is a grammar keyword and would not parse as an arg name
+[arch(at = "../ARCHITECTURE_MEASUREMENT.md#tuned-perm-precedence")]
 def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : string {
     let fname = "{func.name}"
     let fb = fallback_perm(args)
@@ -337,9 +331,10 @@ def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : st
     }
     let av = find_arg(args, "perm")
     if (av is tString) return av as tString
-    let cfg = config_perm_for(fname)
+    var pickSource = ""
+    let cfg = tune_kernel_pick(fname, pickSource)
     if (!empty(cfg)) {
-        return report_perm(fname, cfg, box_profile_path())
+        return report_perm(fname, cfg, pickSource)
     }
     let declared = find_arg(args, "fallback") is tString
     return report_perm(fname, fb, declared ? "fallback" : "default")

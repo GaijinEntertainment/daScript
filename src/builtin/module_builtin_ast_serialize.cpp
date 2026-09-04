@@ -7,8 +7,18 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/misc/anyhash.h"
+#include "daScript/misc/sysos.h"
 #include <cstdarg>
 #include <cstdio>
+#include <sys/stat.h>
+#include <algorithm>
+#ifdef _WIN32
+#include <direct.h>
+#include <stdlib.h>
+#else
+extern char ** environ;
+#endif
 #include <stdexcept>
 #include <type_traits>
 
@@ -2875,7 +2885,7 @@ namespace das {
         try {
             serializeProgramImpl(program, libGroup);
         } catch ( const dasException & r ) {
-            LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: " << r.what() << "\n";
+            if ( !quietCache ) LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: " << r.what() << "\n";
             failed = true;
             seenNewModule = true;
             if ( program ) program->failToCompile = true;
@@ -2885,7 +2895,7 @@ namespace das {
             // this method is noexcept for embedders built without EH; a non-das
             // exception (e.g. std::bad_alloc deep in deserialization) escaping here
             // would std::terminate. Contain it the same way and report failure.
-            LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: unknown exception\n";
+            if ( !quietCache ) LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: unknown exception\n";
             failed = true;
             seenNewModule = true;
             if ( program ) program->failToCompile = true;
@@ -2920,7 +2930,7 @@ namespace das {
         uint32_t version = getVersion();
         ser << version;
         if ( !ser.writing && version != getVersion() ) {
-            LOG(LogLevel::warning) << "das: deserialize: module cache version " << version
+            if ( !ser.quietCache ) LOG(LogLevel::warning) << "das: deserialize: module cache version " << version
                 << " does not match serializer version " << getVersion() << "\n";
             ser.failed = true;
             return;
@@ -3027,8 +3037,10 @@ namespace das {
                     *this << savedHash;
 
                     if ( moduleHash != savedHash ) {
-                        LOG(LogLevel::warning) << "das: serialize: cumulative hash for module '" << m->name
-                                               << "' differs" << " (" << moduleHash << " vs " << savedHash << ") ";
+                        if ( !ser.quietCache ) {
+                            LOG(LogLevel::warning) << "das: serialize: cumulative hash for module '" << m->name
+                                                   << "' differs" << " (" << moduleHash << " vs " << savedHash << ") ";
+                        }
                         ser.builtinHashDrift = true;    // per-process-deterministic drift, not damage
                         program->failToCompile = true;
                         return;
@@ -3046,14 +3058,14 @@ namespace das {
                         program->library.addModule(existing);
                         continue;
                     }
-                    LOG(LogLevel::warning) << "das: serialize: module '" << name << "' not found";
+                    if ( !ser.quietCache ) LOG(LogLevel::warning) << "das: serialize: module '" << name << "' not found";
                     program->failToCompile = true;
                     return;
                 }
 
                 Module* deser = nullptr;
                 try {
-                    deser = new Module();
+                    deser = new ModuleDas();     // the parser's class: aotRequire answers cpp, a plain Module answers no_aot
                     deser->setModuleName(name);
                     if ( existing ) {
                         program->library.addModule(existing);
@@ -3071,7 +3083,7 @@ namespace das {
                 } catch ( const dasException & r ) {
                     if ( activeWasThisModule ) activeRoot = &gc_root::gc_get_thread_root();
                     delete deser;
-                    LOG(LogLevel::warning) << "das: serialize: reading module '" << name << "' (" << i << "/" << size
+                    if ( !ser.quietCache ) LOG(LogLevel::warning) << "das: serialize: reading module '" << name << "' (" << i << "/" << size
                                            << (existing ? ", already exists" : ", new") << "): " << r.what() << "\n";
                     program->failToCompile = true;
                     return;
@@ -3088,7 +3100,7 @@ namespace das {
             }
 
             if ( program->library.getModules().empty() ) {
-                LOG(LogLevel::warning) << "das: serialize: program '" << program->thisModuleName << "' stream has no modules\n";
+                if ( !ser.quietCache ) LOG(LogLevel::warning) << "das: serialize: program '" << program->thisModuleName << "' stream has no modules\n";
                 program->failToCompile = true;
                 return;
             }
@@ -3274,7 +3286,7 @@ namespace das {
                     library.addModule(m);
                 }
             } else {
-                auto mod = new Module;
+                auto mod = new ModuleDas;
                 mod->setModuleName(name);
                 mod->fileName = fileName;
                 library.addModule(mod);
@@ -3305,7 +3317,54 @@ namespace das {
         allocateStack(logs,true,false);
     }
 
-    void ModuleFileCache::install ( const string & readFrom, const string & writeTo ) {
+#if !DAS_NO_FILEIO
+    static void ensureParentDirectories ( const string & path ) {
+        for ( size_t i = 1; i < path.size(); ++i ) {
+            if ( path[i] == '/' || path[i] == '\\' ) {
+                string dir = path.substr(0, i);
+#ifdef _WIN32
+                _mkdir(dir.c_str());
+#else
+                mkdir(dir.c_str(), 0755);
+#endif
+            }
+        }
+    }
+#endif
+
+    string ModuleFileCache::defaultPath ( const string & scriptPath, const string & hostBinary, const string & hostOptions ) {
+        string norm = normalizeFileName(scriptPath.c_str());
+        size_t slash = norm.find_last_of("/\\");
+        string stem = slash == string::npos ? norm : norm.substr(slash + 1);
+        size_t dot = stem.rfind('.');
+        if ( dot != string::npos && dot != 0 ) stem = stem.substr(0, dot);
+        struct stat bst;
+        char host[64];
+        if ( !hostBinary.empty() && stat(hostBinary.c_str(), &bst) == 0 ) {
+            snprintf(host, sizeof(host), "\n%lld:%lld", (long long) bst.st_mtime, (long long) bst.st_size);
+        } else {
+            host[0] = 0;
+        }
+        vector<string> envs;
+#ifdef _WIN32
+        for ( char ** e = _environ; e && *e; ++e ) {
+#else
+        for ( char ** e = environ; e && *e; ++e ) {
+#endif
+            if ( strncmp(*e, "DAS", 3) == 0 ) envs.push_back(*e);
+        }
+        sort(envs.begin(), envs.end());
+        string key = norm + host + "\n" + hostOptions;
+        for ( auto & e : envs ) {
+            key += "\n";
+            key += e;
+        }
+        char hex[17];
+        snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_blockz64((const uint8_t *) key.c_str()));
+        return string(".jitted_scripts/module_cache/") + stem + "-" + string(hex, 8) + ".dascache";
+    }
+
+    void ModuleFileCache::install ( const string & readFrom, const string & writeTo, bool quiet ) {
         requested = !readFrom.empty() || !writeTo.empty();
 #if !DAS_NO_FILEIO
         writePath = writeTo;
@@ -3329,13 +3388,17 @@ namespace das {
             }
             if ( !readStorage.buffer.empty() ) {
                 reader = make_unique<AstSerializer>(&readStorage, false);
+                reader->quietCache = quiet;
                 env.serializer_read = reader.get();
             }
         }
         if ( !writePath.empty() ) {
             writer = make_unique<AstSerializer>(&writeStorage, true);
+            writer->quietCache = quiet;
             env.serializer_write = writer.get();
         }
+#else
+        (void) quiet;
 #endif
     }
 
@@ -3362,6 +3425,9 @@ namespace das {
                 res.verdict = ReadVerdict::clean;
             }
             res.resumed = reader->resumedModules;
+            res.served = reader->servedModules;
+            res.cutoffFile = reader->cutoffFile;
+            res.cutoffReason = reader->cutoffReason;
             reader->moduleLibrary = nullptr;    // not ours to free
             // claim the FileInfos the reader created that no module took ownership of -
             // ~AstSerializer would DELETE them, and the deserialized AST's LineInfos still
@@ -3378,6 +3444,7 @@ namespace das {
                 // cannot replace on Windows, so there is a missing-file blink there - a
                 // reader in that window just takes the cold path
                 string tmpPath = writePath + ".tmp";
+                ensureParentDirectories(writePath);
                 if ( FILE * f = fopen(tmpPath.c_str(), "wb") ) {
                     res.wroteBytes = uint64_t(fwrite(writeStorage.buffer.data(), 1, writeStorage.buffer.size(), f));
                     fclose(f);

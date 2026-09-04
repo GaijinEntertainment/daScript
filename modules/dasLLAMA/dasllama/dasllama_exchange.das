@@ -44,11 +44,12 @@ struct ExchangeHit {
 }
 
 //! The exchange policy knobs: config-file keys `exchange_url` / `exchange_accept` /
-//! `exchange_submit`, env overrides `DASLLAMA_EXCHANGE_URL` / `DASLLAMA_EXCHANGE_ACCEPT`.
+//! `exchange_submit`, env overrides `DASLLAMA_EXCHANGE_URL` / `DASLLAMA_EXCHANGE_ACCEPT`. The
+//! exchange is closed: both policies default to off, and only an explicit key turns them on.
 struct ExchangePolicy {
     url : string = EXCHANGE_URL_DEFAULT
-    accept : string = "verified"    // verified | any | off
-    submit : string = "ask"         // ask | always | never
+    accept : string = "off"         // verified | any | off
+    submit : string = "never"       // ask | always | never
     configured : bool = false       // any exchange_* key came from the config file or env — an explicit choice
     configured_via : string = ""    // the knob spelling that expressed it, for the waiver announce
 }
@@ -57,7 +58,7 @@ struct ExchangePolicy {
 //! lookup transmits the box identity, and the server sees the connection's IP like any web
 //! server). PLACEHOLDER wording — Gaijin legal owns the final text; the watchdog dialog
 //! (utils/watchdog/watchdog.py CONSENT_*) carries the same wording, keep the two in sync.
-let public EXCHANGE_CONSENT_NOTICE = "dasLLAMA can download a ready performance-tuning preset (a \"sidecar\") for this machine from dasllama.io, instead of spending ~12 minutes tuning locally.\nThe request sends only your hardware class - platform, CPU model and OS build. No serial numbers, user names or other personal data; no cookies. Sharing your own tuning results back is always confirmed separately.\nDetails: https://legal.gaijin.net/privacypolicy"
+let public EXCHANGE_CONSENT_NOTICE = "dasLLAMA can download a ready performance-tuning preset (a \"sidecar\") for this machine from dasllama.io, instead of tuning locally.\nThe request sends only your hardware class - platform, CPU model and OS build. No serial numbers, user names or other personal data; no cookies. Sharing your own tuning results back is always confirmed separately.\nDetails: https://legal.gaijin.net/privacypolicy"
 
 // structured events for the watchdog (same contract as @tune): folded into supervisor STATE
 def private sc_event(kind : string; kv : string) {
@@ -332,12 +333,12 @@ def exchange_policy_from_config(config_path : string) : ExchangePolicy {
         p.configured_via = "DASLLAMA_EXCHANGE_ACCEPT (env)"
     }
     if (p.accept != "verified" && p.accept != "any" && p.accept != "off") {
-        print("exchange: unknown exchange_accept '{p.accept}' - using verified (valid: verified | any | off)\n")
-        p.accept = "verified"
+        print("exchange: unknown exchange_accept '{p.accept}' - using off (valid: verified | any | off)\n")
+        p.accept = "off"
     }
     if (p.submit != "ask" && p.submit != "always" && p.submit != "never") {
-        print("exchange: unknown exchange_submit '{p.submit}' - using ask (valid: ask | always | never)\n")
-        p.submit = "ask"
+        print("exchange: unknown exchange_submit '{p.submit}' - using never (valid: ask | always | never)\n")
+        p.submit = "never"
     }
     return p
 }

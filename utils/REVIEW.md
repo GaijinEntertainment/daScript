@@ -6,7 +6,7 @@ doc: `CLAUDE.md` (repo root).
 A tool is a directory that owns one program - its entry point and the files only that program
 uses - under `utils/`, or outside `utils/` when `CMakeLists.txt` (beside this file) builds or
 ships it. A test's load-bearing assertions are the ones that prove the change, never a
-skip-path assertion.
+skip-path assertion. A CI row is a workflow step whose command reaches the test.
 
 **A file under `utils/` that belongs to a tool other than the one owning the directory it
 sits in is reviewed with that tool's own `REVIEW.md`, where one exists, as well as with this
@@ -17,9 +17,6 @@ what identifies one - the fields that decide whether two `.dlim`s are the same i
 to `modules/dasLLAMA/REVIEW.md` (repo root) too.** A `utils/` diff never opens that checklist
 on its own.
 
-**A diff that changes the consent wording in `watchdog/watchdog.py` answers to
-`modules/dasLLAMA/performance/REVIEW.md` (repo root) too.**
-
 **Weakening `REVIEW.das` (beside this file) is a defect.** What the gate checks is read from the
 script itself, and each check's finding text states its rule.
 
@@ -28,17 +25,18 @@ while keeping that tool's directory records the decision to stop shipping it in 
 own `REVIEW.md`, wherever that directory is, in the same change** - `REVIEW.das` cannot see a
 removed entry.
 
-**A diff that deletes a tool outright records the decision beside `DAS_UTILS_SHIPPED_EXES` in
-`CMakeLists.txt` (beside this file), in the same change.**
+**A diff that deletes a tool named in `DAS_UTILS_SHIPPED_EXES` outright removes its entry and
+leaves a comment line beside the list naming the removed exe, in the same change.** A tool the
+list never carried leaves no record.
 
 **A test the diff adds or changes that covers a change under `utils/`, whose load-bearing
-assertions a CI lane can run against the change, ships with a CI row that executes those
+assertions a CI row can run against the change, ships with a CI row that executes those
 assertions, wherever the diff puts the test, added in the same change if no row already covers
 it.** A row that only compile-checks the test (`dastest --compile-only`) does
 not execute them. A test whose assertions no row executes never runs again.
 
 **A test the diff adds or changes that covers a change under `utils/`, whose load-bearing
-assertions no CI machine can run, ships with a row that compile-checks it - `dastest
+assertions no CI row can run for want of hardware or data, ships with a row that compile-checks it - `dastest
 --compile-only` for a `.das` test - in the same change.**
 
 **A test the diff adds or changes that covers a change under `utils/`, whose load-bearing

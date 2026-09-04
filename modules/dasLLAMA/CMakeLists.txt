@@ -40,7 +40,7 @@ IF(NOT DAS_LLAMA_INCLUDED)
     )
     # shipped defaults profiles ([tune_scope(defaults = ...)]): an untuned SDK box adopts its
     # CPU class's winners instead of racing — the scope resolves this dir against the installed
-    # dasllama_math_gen.das, so the bundle must carry it
+    # dasllama_tune_scope.das, so the bundle must carry it
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/performance/defaults
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/performance
         FILES_MATCHING

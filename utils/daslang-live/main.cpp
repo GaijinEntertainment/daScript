@@ -51,6 +51,9 @@ static TextPrinter tout;
 static string projectFile;
 static string project_root;
 static string moduleCacheFile;  // -module-cache <path>: AST module cache, read+refreshed per (re)compile
+static bool noModuleCache = false;  // -no-module-cache: off, over -module-cache and the default alike
+static string hostBinary;           // argv[0]
+static string hostOptions;          // argv up to "--": the compile's own options key the default cache
 static vector<string> load_modules;
 static bool version2syntax = true;
 static bool trackAllocations = false;
@@ -222,27 +225,39 @@ static CompileResult compile_script(const string & fn) {
     // on the cold start. Same file is read and refreshed: a clean or resumed-only read
     // writes nothing, an edit rewrites the stream from the changed module's cutoff. The
     // cache lives in CompileResult - it owns deserialized FileInfos past this return.
-    result.moduleCache.install(moduleCacheFile, moduleCacheFile);
+    string cachePath = noModuleCache ? string() : moduleCacheFile;
+    bool cacheQuiet = false;
+    if (cachePath.empty() && !noModuleCache) {
+        cachePath = ModuleFileCache::defaultPath(fn, hostBinary, hostOptions);
+        cacheQuiet = true;
+    }
+    result.moduleCache.install(cachePath, cachePath, cacheQuiet);
     result.program = compileDaScript(fn, result.access, tout, *result.moduleGroup, policies);
     {
         auto cres = result.moduleCache.finish();
-        switch (cres.verdict) {
-        case ModuleFileCache::ReadVerdict::fallback:
-            tout << "daslang-live: module cache stale - recompiled from source\n";
-            break;
-        case ModuleFileCache::ReadVerdict::partial:
-            tout << "daslang-live: module cache partial - " << cres.resumed << " module(s) reparsed in place\n";
-            break;
-        case ModuleFileCache::ReadVerdict::clean:
-            tout << "daslang-live: module cache clean\n";
-            break;
-        case ModuleFileCache::ReadVerdict::unavailable:
-            tout << "daslang-live: module cache unavailable (built without file IO)\n";
-            break;
-        default: break;
+        if (!cacheQuiet) {
+            switch (cres.verdict) {
+            case ModuleFileCache::ReadVerdict::fallback:
+                if (cres.served > 0) {
+                    tout << "daslang-live: module cache " << cres.served << " module(s) served, recompiled from '" << cres.cutoffFile << "' (" << cres.cutoffReason << ")\n";
+                } else {
+                    tout << "daslang-live: module cache stale - recompiled from source\n";
+                }
+                break;
+            case ModuleFileCache::ReadVerdict::partial:
+                tout << "daslang-live: module cache partial - " << cres.resumed << " module(s) reparsed in place\n";
+                break;
+            case ModuleFileCache::ReadVerdict::clean:
+                tout << "daslang-live: module cache clean\n";
+                break;
+            case ModuleFileCache::ReadVerdict::unavailable:
+                tout << "daslang-live: module cache unavailable (built without file IO)\n";
+                break;
+            default: break;
+            }
+            if (cres.wrote) tout << "daslang-live: module cache refreshed (" << cres.wroteBytes << " bytes)\n";
         }
-        if (cres.wrote) tout << "daslang-live: module cache refreshed (" << cres.wroteBytes << " bytes)\n";
-        else if (cres.saveFailed) tout << "daslang-live: module cache write FAILED '" << moduleCacheFile << "'\n";
+        if (cres.saveFailed) tout << "daslang-live: module cache write FAILED '" << cachePath << "'\n";
     }
     if (!result.program) {
         result.errors = "failed to compile " + fn;
@@ -753,7 +768,9 @@ static void print_help() {
     tout << "  -project <file>    - project file (.das_project)\n";
     tout << "  -project_root <path> - project root (parent of modules/, default: script's dir)\n";
     tout << "  -load_module <path> - directly load a single dynamic-module folder (the one containing .das_module); repeatable. Shadows same-basename entries from dasroot/project_root.\n";
-    tout << "  -module-cache <path> - AST module cache: read when present, refreshed when a compile diverges; pays on every reload\n";
+    tout << "  -module-cache <path> - AST module cache: read when present, refreshed when a compile diverges; pays on every reload.\n"
+            "                        Default ON (silent) at .jitted_scripts/module_cache/<script>-<hash>.dascache\n"
+            "  -no-module-cache     - no AST module cache at all\n";
     tout << "  -dasroot <path>    - override DAS_ROOT\n";
     tout << "  -cwd               - change working directory to script's folder\n";
     tout << "  -v1syntax          - use v1 syntax (default: v2)\n";
@@ -878,6 +895,13 @@ int main(int argc, char * argv[]) {
     bool dumpLeaks = true;
 
     // Parse args
+    char exePath[4096];
+    size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
+    hostBinary = exeLen ? string(exePath, exeLen) : string(argv[0]);
+    for (int i = 1; i < argc && strcmp(argv[i], "--") != 0; i++) {
+        hostOptions += argv[i];
+        hostOptions += '\n';
+    }
     for (int i = 1; i < argc; i++) {
         string arg = argv[i];
         if (arg == "-project" && i + 1 < argc) {
@@ -888,6 +912,8 @@ int main(int argc, char * argv[]) {
             load_modules.push_back(argv[++i]);
         } else if (arg == "-module-cache" && i + 1 < argc) {
             moduleCacheFile = argv[++i];
+        } else if (arg == "-no-module-cache") {
+            noModuleCache = true;
         } else if (arg == "-dasroot" && i + 1 < argc) {
             setDasRoot(argv[++i]);
         } else if (arg == "-cwd") {

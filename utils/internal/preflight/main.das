@@ -99,6 +99,7 @@ struct GateResult {
     seconds : double
     detail : string                 // one-line summary: skip reason / failure hint
     output : string                 // child output, printed on FAIL or --verbose
+    breakdown : string
 }
 
 struct PreflightCtx {
@@ -1130,11 +1131,41 @@ def gate_ci_das(ctx : PreflightCtx) : GateResult {
 
 // ===== test suites =====
 
-def run_test_gate(name : string; args : array<string>; fail_hint : string) : GateResult {
+def slowest_files_block(out : string) : string {
+    var rows : array<string>
+    var inside = false
+    for (raw in split(out, "\n")) {
+        var ln = strip(raw)
+        if (ln |> starts_with("[I] ")) {
+            ln = slice(ln, 4)
+        }
+        if (find(ln, "slowest files:") >= 0) {
+            inside = true
+            rows |> push(ln)
+            continue
+        }
+        if (inside) {
+            break if (empty(ln) || !is_number(first_character(ln)) || find(ln, "s  ") <= 0)
+            rows |> push(ln)
+        }
+    }
+    return join(rows, "\n")
+}
+
+//! Runs a test sweep as one gate. `t_gate`, when set, is the gate's own start - a build ran
+//! ahead of the sweep, and the gate's seconds must count it, with the split in the breakdown.
+def run_test_gate(name : string; args : array<string>; fail_hint : string; t_gate : int64 = 0l) : GateResult {
     let t0 = ref_time_ticks()
     let r = run_argv(args, 3600.0)
+    let run_s = seconds_since(t0)
+    let total_s = t_gate != 0l ? seconds_since(t_gate) : run_s
+    var breakdown = slowest_files_block(r.out)
+    if (t_gate != 0l) {
+        let build_line = "build {fmt(":.1f", float(total_s - run_s))}s + run {fmt(":.1f", float(run_s))}s"
+        breakdown = empty(breakdown) ? build_line : "{build_line}\n{breakdown}"
+    }
     return GateResult(name = name, status = r.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
-        seconds = seconds_since(t0), detail = r.rc == 0 ? "" : fail_hint, output = r.out)
+        seconds = total_s, detail = r.rc == 0 ? "" : fail_hint, output = r.out, breakdown = breakdown)
 }
 
 // build-gate failure triage. LNK1104 on bin outputs = a live daslang process
@@ -1160,7 +1191,7 @@ def gate_tests_interp(ctx : PreflightCtx) : GateResult {
     // 2x CI's per-file cap: the chained run executes suites while other gates load the
     // same cores, and CI's 30 measures scheduler pressure there, not the test
     return run_test_gate("tests-interp",
-        [ctx.daslang, "dastest/dastest.das", "--", "--failures-only", "--max-file-time", "60", "--timeout", "1800", "--test", "tests"],
+        [ctx.daslang, "dastest/dastest.das", "--", "--failures-only", "--timing-outliers", "10", "--max-file-time", "60", "--timeout", "1800", "--test", "tests"],
         "interpreter suite failures")
 }
 
@@ -1181,7 +1212,7 @@ def gate_tests_jit(ctx : PreflightCtx) : GateResult {
     // Isolated-parallel like CI's run_tests_jit (~3x faster than sequential, identical
     // pass/fail set; workers mint the dll cache themselves). Timeout matches CI's 1800.
     return run_test_gate("tests-jit",
-        [ctx.daslang, "dastest/dastest.das", "-jit", "--", "--jit-opt-level=3", "--failures-only",
+        [ctx.daslang, "dastest/dastest.das", "-jit", "--", "--jit-opt-level=3", "--failures-only", "--timing-outliers", "10",
             "--max-file-time", "{ctx.jit_max_file_time}", "--isolated-mode",
             "--isolated-mode-threads", "{ctx.jit_jobs}", "--batch", "4",
             "--timeout", "1800", "--test", "tests"],
@@ -1242,8 +1273,8 @@ def gate_tests_aot(ctx : PreflightCtx) : GateResult {
     }
     // 2x CI's per-file cap - same chained-load reasoning as gate_tests_interp
     return run_test_gate("tests-aot",
-        [test_aot, "-use-aot", "dastest/dastest.das", "--", "--use-aot", "--failures-only", "--max-file-time", "60", "--timeout", "1800", "--test", "tests"],
-        "AOT suite failures (error[50101] → skills/internal/aot_hash_desync_debugging.md)")
+        [test_aot, "-use-aot", "dastest/dastest.das", "--", "--use-aot", "--failures-only", "--timing-outliers", "10", "--max-file-time", "60", "--timeout", "1800", "--test", "tests"],
+        "AOT suite failures (error[50101] → skills/internal/aot_hash_desync_debugging.md)", t0)
 }
 
 def gate_sequence(ctx : PreflightCtx) : GateResult {
@@ -1291,7 +1322,7 @@ def gate_sequence(ctx : PreflightCtx) : GateResult {
             }
         }
     }
-    return run_test_gate("sequence", args, "sequence smoke failed (examples/games/sequence/ci_smoke_test.*)")
+    return run_test_gate("sequence", args, "sequence smoke failed (examples/games/sequence/ci_smoke_test.*)", t0)
 }
 
 def gate_imgui(ctx : PreflightCtx) : GateResult {
@@ -1323,7 +1354,7 @@ def gate_imgui(ctx : PreflightCtx) : GateResult {
         argv |> push("embedded_terminal")
     }
     return run_test_gate("imgui", argv,
-        "dasImgui playwright suite failed (nightly_imgui.yml is its only CI lane — this local gate is the only pre-merge check)")
+        "dasImgui playwright suite failed (nightly_imgui.yml is its only CI lane — this local gate is the only pre-merge check)", t0)
 }
 
 // ===== orchestration =====
@@ -1390,6 +1421,11 @@ def report_gate(r : GateResult; verbose : bool) {
     let level = r.status == GateStatus.Fail ? LOG_ERROR : LOG_INFO
     let tag = status_tag(r.status)
     to_log(level, "[{tag}] {r.name}{timing}{detail}\n")
+    for (ln in split(r.breakdown, "\n")) {
+        if (!empty(ln)) {
+            to_log(level, "       {ln}\n")
+        }
+    }
     if ((r.status == GateStatus.Fail || verbose) && !empty(r.output)) {
         to_log(level, "{r.output}\n")
     }
@@ -1553,9 +1589,22 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
             n_skip ++
         }
     }
-    let total_s = fmt(":.1f", float(seconds_since(t_all)))
+    let total_d = seconds_since(t_all)
+    let total_s = fmt(":.1f", float(total_d))
     to_log(n_fail > 0 ? LOG_ERROR : LOG_INFO,
         "\npreflight: {n_pass} passed, {n_fail} failed, {n_skip} skipped in {total_s}s\n")
+    var timed <- [for (r in results); (name = r.name, secs = r.seconds); where r.seconds > 0.05lf]
+    sort(timed) $(a, b) {
+        return a.secs > b.secs
+    }
+    if (length(timed) > 1 && total_d > 0.0lf) {
+        to_log(LOG_INFO, "preflight: time by gate:\n")
+        for (t in timed) {
+            let pct = fmt(":3.0f", float(t.secs * 100.0lf / total_d))
+            to_log(LOG_INFO, "  {fmt(":8.1f", float(t.secs))}s {pct}%  {t.name}\n")
+        }
+    }
+    delete timed
     for (r in results) {
         if (r.status != GateStatus.Pass) {
             let tag = status_tag(r.status)

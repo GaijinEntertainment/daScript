@@ -12,11 +12,11 @@ require dasllama/dasllama_math_default  // dot_q8q8_f16s — the row-major tails
 require dasllama/dasllama_repack  // the grp<mr> repack family + kq panel unpack (pure transforms; the _gen/_bake twins below feed them numbers)
 require llvm/daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
 require llvm/daslib/llvm_tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code]; PUBLIC so the auto-policy infer pass and tune_status reach app roots that require this module
+require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tune] kernels pick their perms
 require dasllama/dasllama_gemm_schema
 require daslib/jobque_boost public
 require dasllama/dasllama_par
 require dasllama/dasllama_env  // DASLLAMA_ALLOW_UNTUNED wires tune_suppress_mint at [init]
-require dasllama/dasllama_version  // nolint:STYLE030 — version_of= below names DASLLAMA_RELEASE by string; the module must be in this compile
 require math
 
 // The GEMM family as a [tune] client (gemm_generator_plan.md part 3; promoted from the M2
@@ -47,18 +47,6 @@ require math
 // (`require ?llvm/daslib/llvm_tune`), so any Q8/mx4 model load on a gen-capable box runs the
 // generated family. The generators live in dasllama/dasllama_gemm_gen.das (llvm-jit context,
 // wired via llvm/daslib/llvm_user_modules.das).
-
-// The library-owned tune scope: winners land in the app tune sidecar, and the policy rail
-// (auto default / --tune / daspkg release) runs dasllama_tuner — the wrapper that sweeps
-// BOTH halves: the [tune] generator grid (gen_tune_probe; point DASLLAMA_CONFIRM_MODEL at a
-// q8 gguf to arm its e2e confirm gate) and the [tuned] loop-hint grid + runtime snapshot
-// (tune_kernels). covers= names the modules whose [tuned] kernels this scope demands sidecar
-// entries for (the completeness set — drift shows up as a loud "missing:" list at startup).
-[tune_scope(name = "dasllama", tuner = "../harness/dasllama_tuner.das",
-            covers = "dasllama_math;dasllama_math_default;dasllama_math_aarch64_neon;dasllama_kv_codec;dasllama_convert",
-            version_of = "dasllama_version/DASLLAMA_RELEASE", version_key = "dasllama_version",
-            defaults = "../performance/defaults")]
-struct private DasllamaTuneScope {}
 
 //! The layout companion (six-function stamp): the repack interleave (mr) the stamped tile reads.
 //! Reference body = the reference tile's grp4; generator declines in lockstep with the tile

@@ -188,6 +188,9 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   registration. A hand-written tile that the generator could emit belongs in the generator.
 - **`dasllama_tune.das`** - the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`). Tuning
   POLICY lives here; tuned VALUES live in the box's sidecar, never in source.
+- **`dasllama_tune_scope.das`** - the one `[tune_scope]` declaration (tuner, covered modules,
+  version pin, shipped defaults), in a module every kernel module requires: a kernel reads its
+  class entry in the defaults profile at its own compile, so the scope must be on the AST first.
 
 ### 1.6 Architecture registrations
 
@@ -237,9 +240,12 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   outside that walk by design): the boot-time
   lookup/apply (llvm_tune's scope resolver - a verified per-box match downloads instead of a
   ~12-minute tune), the privacy-stripped submit rails, and the control-page surface
-  dasllama-server serves at `/exchange`. The first-contact consent gate (GDPR) sits ahead of
-  every lookup: an explicit `exchange_*` config counts as the expressed choice, otherwise the
-  `<stem>.consent` sidecar-sibling file governs - unset asks on a real terminal, or emits
+  dasllama-server serves at `/exchange`. The exchange is closed: both policies default to
+  `off`, so no boot contacts it and no consent question is asked unless an explicit
+  `exchange_*` key opts in - the shipped class profiles cover the boxes the exchange served.
+  The first-contact consent gate (GDPR) sits ahead of every lookup once a policy is on: an
+  explicit `exchange_*` config counts as the expressed choice, otherwise the `<stem>.consent`
+  sidecar-sibling file governs - unset asks on a real terminal, or emits
   `@sidecar consent state=needed` for the watchdog dialog / control page, and no request
   leaves until a surface records "accepted".
 - **`benchmarks/asr/mem_census.sh`** - the peak-memory census (`/usr/bin/time -l` around one

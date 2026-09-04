@@ -21,11 +21,12 @@ re-execs, A/B reruns), so the warm 9x is where the session hours went.
 ## Adopted dev loop (the kernel workflow)
 
 ```
-daslang.exe -jit -module-cache .jitted_scripts/module_cache/<app>.dascache <app>.das \
-    -- --jit-split-modules=-1 <app args>
+daslang.exe -jit <app>.das -- --jit-split-modules=-1 <app args>
 ```
 
-One cache file per app, under `.jitted_scripts/` (already gitignored). Caveats that stay:
+The module cache is on by default (one file per app under `.jitted_scripts/module_cache/`,
+already gitignored; `-no-module-cache` opts out, `-module-cache <path>` names it). Caveats that
+stay:
 
 - **Bench t/s rows run the stock monolith invocation** until an A/B proves split-neutral -
   split loses cross-module inlining across partitions, so its artifact is not the shipped one.
@@ -37,19 +38,24 @@ One cache file per app, under `.jitted_scripts/` (already gitignored). Caveats t
 
 ## Invalidation ledger
 
-1. **Deser-vs-parse AOT-hash divergence.** A `-module-cache` deserialized AST produces
-   different per-function AOT hashes than the freshly parsed one, so the first run after a
-   cache write re-keys the whole JIT DLL/obj cache (one wasted cold codegen); hashes are
-   stable from then on. Done = the same program hashes identically parsed or deserialized,
-   witnessed by a cache write followed by a JIT cache HIT.
+1. **Deser-vs-parse AOT-hash divergence - DONE.** A deserialized AST hashes identically to the
+   parsed one: `tests/jit_tests/llvm_ast_roundtrip.das` round 2 links 3/3 cached partitions
+   from a `-deser` compile, and a cache write followed by a JIT DLL cache HIT was observed at
+   lcpp_bench scale (9364 functions, M5, 2026-09-04).
 2. **Split obj keys are a chained prefix fold - one edit re-emits the suffix.** Editing
    `dasllama_repack` re-emitted 72 of 99 partitions (18.3 s, nearly full cold): every module
    AFTER the edited one in program order re-keys, though their IR is unchanged. Done =
    per-module keys derived from the module's own (transitive-interface) hash, so a leaf edit
    re-emits ~itself; measured target: an early-chain kernel edit under ~5 s of codegen.
-3. **The AST module cache is all-or-nothing under an edit.** The same repack edit paid the
-   full 39.7 s front end and rewrote the whole 148 MB cache - no per-module reuse of the
-   unedited prefix. Done = an edit re-parses the edited module + dependents only.
+3. **An edit re-parses everything after the edited module - RULED OUT as a defect.** Measured
+   (lcpp_bench, M5): a one-line edit to module 67 of 165 served the 66-module prefix (0.99 s
+   cold -> 0.00 s) and re-parsed the 99-module suffix (11.65 -> 12.05 s); the run reads as
+   cold because dasLLAMA's heaviest modules (`dasllama_vulkan_classes` 4.1 s,
+   `dasllama_metal_kernels` 1.7 s, `dasllama_metal_prefill` 1.1 s) sit late in the chain. A
+   dependency-aware cutoff is impossible with macros - a macro can rewrite any later module,
+   and no `require` graph bounds that, so the positional prefix is the only sound rule. The
+   verdict line now says how much was served and where the cutoff fell; the mitigation stays
+   require order (a hot-edit module as late in the chain as its dependencies allow).
 4. **Macro-emitter changes are invisible to every cache key** (QUIRK 21; QUIRK 15's unquirk
    note wants the generator hash folded into the sidecar identity too). Done = an emitter
    edit invalidates exactly the families it generates.

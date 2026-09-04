@@ -230,14 +230,16 @@ Config precedence: `defaults < config TOML < explicit CLI flags` - unless the TO
 `authoritative = true` (what the control page saves), which flips the top: `defaults < CLI <
 authoritative TOML`.
 
-The sidecar exchange rides three config-only keys (no CLI flags - one code path):
-`exchange_accept = verified | any | off` (default `verified` - at an untuned boot a verified
-match downloads and applies instead of racing ~12 minutes; unverified NEVER auto-applies),
-`exchange_submit = ask | always | never` (default `ask` - a fresh local tune surfaces as an
-offer on the control page and the watchdog balloon; `always` shares it automatically), and
-`exchange_url` (baked default `https://dasllama.io`). `DASLLAMA_EXCHANGE_URL` /
-`DASLLAMA_EXCHANGE_ACCEPT` env override for tests and one-shot watchdog relaunches. Lookup
-failure is never fatal - the boot falls through to the local tuner.
+The sidecar exchange rides three config-only keys (no CLI flags - one code path). **The
+exchange is closed: both policies default to off, and only an explicit key turns them on** -
+a box its shipped class profile covers stamps its kernels at compile time and never needed the
+exchange, and the residue races locally. `exchange_accept = verified | any | off` (default
+`off`; `verified` - at an untuned boot a verified match downloads and applies instead of racing;
+unverified NEVER auto-applies), `exchange_submit = ask | always | never` (default `never`;
+`ask` - a fresh local tune surfaces as an offer on the control page and the watchdog balloon;
+`always` shares it automatically), and `exchange_url` (baked default `https://dasllama.io`).
+`DASLLAMA_EXCHANGE_URL` / `DASLLAMA_EXCHANGE_ACCEPT` env override for tests and one-shot
+watchdog relaunches. Lookup failure is never fatal - the boot falls through to the local tuner.
 
 **First-contact consent (GDPR):** nothing is sent to the exchange until a choice is
 expressed. Setting any `exchange_*` key (TOML or env) IS that choice; on the zero-config

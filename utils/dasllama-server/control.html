@@ -2774,7 +2774,7 @@ function renderExchange() {
     const box = $("ex-current");
     box.replaceChildren();
     if (!c.present) {
-        box.appendChild(exLine("no tune sidecar on this box yet — the first start picks one up from the exchange (verified match) or tunes locally"));
+        box.appendChild(exLine("no tune sidecar on this box yet — the first start stamps the shipped class profile and tunes locally what it cannot answer (the exchange is closed; an exchange_accept key in the config opts back in)"));
     } else {
         const origin = c.origin === "exchange" ? ("from the exchange (" + exShort(c.exchange_sha) + ")") : "tuned on this box";
         box.appendChild(exLine("current: " + exShort(c.sha) + " · " + origin + " · " + (c.kernel_count || 0) + " kernel families · engine v" + c.dasllama_version

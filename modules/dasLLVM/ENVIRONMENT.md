@@ -38,6 +38,7 @@ Loaded once at context init into `g_env_tune`; tuner children inherit the enviro
 | `DAS_TUNE_POLICY` | text | declared by [tune_policy] | Override the missing-scope policy: fallback, reference, warn, error, auto, or restart. The announce line says when the environment shaped the policy. |
 | `DAS_TUNE_CONTROL` | path | unset | A supervisor's stop channel: while the named file exists, tune_interrupt_requested() is true and tuners abort at the next kernel-family boundary without minting. The watchdog sets it and owns the file's lifetime; the measurement in flight always completes. |
 | `DAS_TUNE_ONLY` | text | unset (every family races) | Comma-separated re-mint filter: a tuner races only kernel families whose name contains one of these tokens, and every skipped family's sidecar entry survives the upsert. Set by --tune-only on the application; the tuner children inherit it. |
+| `DAS_TUNE_RELAUNCH` | number | 0 | Relaunch depth, armed by the auto policy's re-exec for its child. A relaunched process that still reads a scope as untuned neither tunes nor relaunches again - it reports that the tune did not converge and runs the stamps it has - so a tune that cannot converge costs one restart instead of stacking processes until the box runs out of memory. |
 
 ## Ambient variables dasLLVM reads but does not own
 

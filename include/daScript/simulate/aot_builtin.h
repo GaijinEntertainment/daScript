@@ -17,6 +17,7 @@ namespace das {
     DAS_API const char * get_module_file_name ( const char * name, Context * context );
     DAS_API void setCommandLineArguments ( int argc, char * argv[] );
     DAS_API void getCommandLineArguments( Array & arr );
+    DAS_API string commandLineArgumentOccurrences ( const string & flag );    // every `flag` / `flag=...` argument, the value after a bare `flag` included
 
     DAS_API bool is_compiling ( );
     DAS_API bool is_compiling_macros ( );

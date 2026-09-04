@@ -29,8 +29,9 @@ image-chat cells bake what they need mid-cell, like their publishing legs. A sec
 harness would produce numbers that cannot be compared to any of this.
 
 **The tune stamp gates the comparison.** A manifest older than the binary fails every cell, and
-an untuned invocation re-execs into a full retune rather than measuring - so re-mint the box
-manifest and check its winners against the stored rows' `tune` stamps before trusting a delta.
+an untuned invocation stamps the shipped class profile (a box the profile does not cover
+re-execs into the residue race) rather than measuring - so re-mint the box manifest and check
+its winners against the stored rows' `tune` stamps before trusting a delta.
 
 **The Vulkan GEMM probe attributes prefill GEMM cost on three axes.**
 `harness/vk_gemm_probe.das` times one shape at a time: the serving GEMM against its alternates
@@ -70,11 +71,13 @@ base forms - a prefill reads well under half its board cell - so `metal_decode_i
 warns when a profile was asked for, declined, and no crowns are set, and `lcpp_bench` stamps a
 cell that passed `tune_gate()` on `DASLLAMA_ALLOW_UNTUNED=1` with an `untuned:` flavor prefix.
 
-**The retune re-exec bites scaffolding, and the pin for it is checked in.** Any bare `daslang`
-run that requires the engine - a probe, a one-off script, a REPL experiment - re-execs into a
-full retune when no manifest is armed. `performance/last_known_good_sidecar.json` exists for
-exactly that: a frozen copy of a complete, noise-gated mint, tracked in git (the `*.tune.json`
-ignore rule deliberately does not match it). Point `DAS_TUNE_MANIFEST` at it and the framework
+**The retune re-exec bites scaffolding on a box its class profile does not cover, and the pin
+for it is checked in.** A bare `daslang` run that requires the engine - a probe, a one-off
+script, a REPL experiment - stamps the shipped class profile at compile time and runs; on a box
+the profile does not cover it re-execs into the residue race when no manifest is armed, and on
+either box it serves no runtime section (no Metal crowns - no profile ships those).
+`performance/last_known_good_sidecar.json` exists for exactly that: a frozen copy of a complete,
+noise-gated mint, tracked in git (the `*.tune.json` ignore rule deliberately does not match it). Point `DAS_TUNE_MANIFEST` at it and the framework
 never retunes; on a different box the identity mismatch just serves fallbacks, and a copy minted
 before the current `DASLLAMA_RELEASE` serves fallbacks on any box - the compile says which with
 one `WARNING DAS_TUNE_MANIFEST` line per scope. That is the whole
@@ -228,3 +231,23 @@ corpus, `ngen`, `reps`, `depths`) plus one row per engine, depth and prompt. The
 not the board's - `list_record_stores` and the records gate read `records/` one level deep and never
 see the folder - and `mtp_ruler --render <record>` prints the table. A third-party wall lives here
 only as the other half of a pair taken in the same run.
+
+### 2.40 A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
+
+`dasllama_tune.das` picks one perm per `[tuned]` kernel, first match wins: the `reference` tune
+policy (the kill switch - the template's own loops, no hints stamped), a `perm=` pin on the
+annotation, this box's sidecar `"kernels"` entry, this box's class entry in the shipped defaults
+profile (`performance/defaults`), the annotation's `fallback` `;`-chain, then `DEFAULT_PERM`.
+`tune_kernel_pick` (llvm_tune) reads the sidecar and the profile in that order and hands back the
+FILE its answer came from, so a verbose compile names which of the two stamped each kernel. A box
+the shipped profile covers therefore compiles tuned kernels without racing anything, and a box it
+does not cover falls to the fallback chain - never to another box's winners.
+
+### 2.41 The mint's own wall rides in the sidecar's provenance {#mint-wall-provenance}
+
+A successful mint stamps three provenance keys into the sidecar before the archive copy is
+written: `mint_gen_ms` (the generator half), `mint_kernels_ms` (the loop-hint half) and
+`mint_total_ms` (the wrapper's own wall). The order is what makes the timestamped copy in the
+box's tune-history directory carry them too, so the box's longitudinal record answers what
+shipping a profile cost without re-running the mint - a console line that scrolled past is not
+that record.
