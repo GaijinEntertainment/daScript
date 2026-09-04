@@ -21,7 +21,7 @@ struct public JitCliOptions {
     size_level : Option<int>
 
     @clarg_name = "jit-split-modules"
-    @clarg_doc = "JIT (dll mode): partition codegen per das-module - one .o per module, linked into the ONE cached DLL. 0 = off (default, monolithic emission); 1 = split with serial emit; N>1 = split + N optimize/emit threads; -1 = split + auto threads (JobQue count). Opt-in: cross-module inlining is lost across partitions (thread count never changes the artifact - split DLLs cache under one distinct key). Script-level pin: options jit_split_modules = N"
+    @clarg_doc = "JIT (dll mode): partition codegen per das-module - one .o per module, linked into the ONE cached DLL. -1 = split + auto threads (JobQue count; the default); 1 = split with serial emit; N>1 = split + N optimize/emit threads; 0 = monolithic emission, one context with full cross-module inlining, which split partitions lose (thread count never changes the artifact - split DLLs cache under one distinct key). Script-level pin: options jit_split_modules = N"
     split_modules : Option<int>
 
     @clarg_name = "jit-obj-cache"

@@ -748,12 +748,14 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     }
     defer() { g_emit_aot_object_globals = false; }
     let use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !gen_exe && !compile_only && !emit_aot_object
-    // --jit-split-modules (or `options jit_split_modules`): per-das-module partition emission.
-    // 0 = off (default, today's monolithic path); any other value = split. Opt-in by ruling:
-    // the monolith stays the right default (one context, full cross-module inlining).
-    let split_modules = cli_opts.split_modules |> unwrap_or((prog._options |> find_arg("jit_split_modules")) ?as tInt ?? 0)
+    // --jit-split-modules (or `options jit_split_modules`): -1 = per-das-module partitions, auto
+    // threads (default - the obj cache serves every program sharing a module); 0 = the monolith
+    // with full cross-module inlining, which -exe always emits (split is DLL-path only)
+    let split_option = prog._options |> find_arg("jit_split_modules")
+    let split_requested = (cli_opts.split_modules |> is_some()) || !(split_option is nothing)
+    let split_modules = cli_opts.split_modules |> unwrap_or(split_option ?as tInt ?? -1)
     let jit_split = split_modules != 0 && use_dll
-    if (split_modules != 0 && !use_dll) {
+    if (split_requested && split_modules != 0 && !use_dll) {
         to_log(LOG_WARNING, "LLVM JIT: --jit-split-modules applies to the JIT DLL path only - ignored for this artifact mode\n")
     }
     g_jit_split_active = jit_split

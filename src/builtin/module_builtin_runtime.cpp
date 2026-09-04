@@ -1722,14 +1722,15 @@ namespace das
         string eq = flag + "=";
         for ( uint32_t i=0; i<argc; ++i ) {
             const char * a = argv[i] ? argv[i] : "";
+            // NUL-separated: an argv string cannot contain NUL, so no two argument lists share a stream
             if ( flag == a ) {
                 out += a;
-                out += '\x01';
+                out += '\0';
                 if ( i+1<argc && argv[i+1] ) out += argv[i+1];
-                out += '\x02';
+                out += '\0';
             } else if ( strncmp(a, eq.c_str(), eq.size())==0 ) {
                 out += a;
-                out += '\x02';
+                out += '\0';
             }
         }
         return out;
