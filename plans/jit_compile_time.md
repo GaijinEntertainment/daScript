@@ -21,12 +21,13 @@ re-execs, A/B reruns), so the warm 9x is where the session hours went.
 ## Adopted dev loop (the kernel workflow)
 
 ```
-daslang.exe -jit <app>.das -- --jit-split-modules=-1 <app args>
+daslang.exe -jit <app>.das -- <app args>
 ```
 
-The module cache is on by default (one file per app under `.jitted_scripts/module_cache/`,
-already gitignored; `-no-module-cache` opts out, `-module-cache <path>` names it). Caveats that
-stay:
+The module cache and the split-module JIT are both on by default (one cache file per app under
+`.jitted_scripts/module_cache/`, already gitignored; `-no-module-cache` opts out, `-module-cache
+<path>` names it; `--jit-split-modules=0` after the `--` selects the one-unit monolith). Caveats
+that stay:
 
 - **Bench t/s rows run the stock monolith invocation** until an A/B proves split-neutral -
   split loses cross-module inlining across partitions, so its artifact is not the shipped one.

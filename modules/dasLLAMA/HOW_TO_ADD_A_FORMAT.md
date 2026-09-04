@@ -262,13 +262,13 @@ the MoE GEMV/mul_mm trio for the format - ledgered for the M5 kernel pass.
 ## 8. End to end
 
 **Dev-loop invocation (adopted 2026-08-31):** every correctness-loop run (probe tests,
-parity, run.das spot checks) goes through the fast stack -
-`daslang.exe -jit -module-cache .jitted_scripts/module_cache/<app>.dascache <app>.das --
---jit-split-modules=-1 ...` - warm no-edit reruns drop 48 s -> 5 s, an edit loop 196 s ->
-~60 s (zen2, lcpp_bench scale). Bench t/s rows keep the stock monolith invocation (split
-loses cross-module inlining); the first run after a cache write pays one cold codegen (the
-deser re-key); QUIRK 21 still applies to emitter edits. Numbers, caveats and the
-invalidation ledger: `plans/jit_compile_time.md`.
+parity, run.das spot checks) is the fast stack by default - `daslang.exe -jit <app>.das ...`
+installs the AST module cache and the split-module JIT unasked (a warm no-edit rerun is
+seconds, an edit loop about a minute at lcpp_bench scale on zen2). A bench that must see
+one-unit codegen passes `--jit-split-modules=0` after the `--` separator; a records row
+measures a released `-exe`, which always is one unit. `-no-module-cache` opts out of the
+cache. QUIRK 21 still applies to emitter edits. Numbers, caveats and the invalidation ledger:
+`plans/jit_compile_time.md`; the flags: `skills/internal/build_and_debug.md`.
 
 **Kernel-loop invocation (adopted 2026-09-01):** a kernel spelling is raced without a model in
 `benchmarks/matmul/kq_kernel_bench.das` - `DAS_TUNE_MODE=tune bin/Release/daslang.exe -jit

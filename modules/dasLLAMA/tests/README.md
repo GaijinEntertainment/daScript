@@ -5,11 +5,13 @@ the scoped runner - its environment is part of the suites' contract ([CLAUDE.md]
 
 ```text
 bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite <name>]
+bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free          # every-change gate, no --arm
+bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked [--exclude test_ple_modes]   # per-PR model coverage
 ```
 
-Standalone suites (`test_chat`, `test_whisper`, `test_audio`, ...) may be run via dastest
-directly, with `DASLLAMA_CPU_PREFILL=1` exported. Model-driven tests self-skip when their
-fixture models are absent; never launch the whole directory unfiltered.
+Files of the `model-free` and `stocked` suites may be run via dastest directly, with
+`DASLLAMA_CPU_PREFILL=1` exported. Model-driven tests self-skip when their fixture models are
+absent; never launch the whole directory unfiltered.
 
 The suite covers architecture registration, audio and Whisper, batching and dispatch, the public
 facade, forward and parity fixtures, quantization and KV codecs, CPU and Metal kernels, model images,

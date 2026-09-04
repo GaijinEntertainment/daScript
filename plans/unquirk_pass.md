@@ -80,8 +80,8 @@ macOS-only compile error (two require paths for MetalTensorRaceResult), fixed in
 
 One per-format record on `Model` - quant plane, scale plane, mr, qsb/ssb strides, stream
 code, schema id, device-form flag - indexed by `KqFmt`; every `fmt ==` ladder becomes a
-lookup. Staged so each commit is green; the fast dev loop (`-module-cache` +
-`--jit-split-modules=-1`) keeps the cycle ~1 min; after EVERY stage that touches layout or
+lookup. Staged so each commit is green; the fast dev loop (the default module cache + split
+JIT of a plain `-jit` run) keeps the cycle ~1 min; after EVERY stage that touches layout or
 pack, delete `*.dlim` and e2e the MIXED vehicle (the iq2xs requant carrying q2_K - QUIRK
 26's lesson), not a pure one.
 
