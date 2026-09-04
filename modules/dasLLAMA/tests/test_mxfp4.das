@@ -165,7 +165,8 @@ def test_matmul_mx4q8(t : T?) {
         }
     }
     t |> run("gen tier: repack + interleaved GEMV matches the scalar leaf (incl. tail rows)") @(t : T?) {
-        if (!has_backend("arm64-gen")) {   // registered on arm64 + JIT (with dasLLVM) only
+        if (!has_backend("arm64-gen")) {
+            t |> skip("backend 'arm64-gen' is not registered here (arm64 + JIT with dasLLVM only)")
             return
         }
         // d = 6 = one 4-row group + 2 row-major tail rows

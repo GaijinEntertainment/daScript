@@ -338,7 +338,10 @@ generic loop drives every evidence-carrying spec of the model-set table through 
 pinned arms (evidence is DATA on `ModelSpec.parity` - ids + arms, regenerated via
 `../harness/parity.sh`); hand-written arms remain only for the tied-cls bit-match and the gpt-oss
 shared-load double fixture. Every compare logs both decoded streams. Large carriers gate
-on `DASLLAMA_PARITY_FULL=1` via `model_available`.
+on `DASLLAMA_PARITY_FULL=1` via `model_available`. `DASLLAMA_PIN_BACKEND` points the compares
+at one kernel backend: the generic loop and the gpt-oss arm pin it before their load, restore
+it on every exit, and name the served backend in every assert label; a name the box has not
+registered skips the cell naming it, never a silent run on the default backend.
 `test_parity_pregate.das` - stocked suite; model-gated: the board parity pregate
 (`lcpp_bench --parity`, via `parity_check` fed a controlled spec) on small carriers - the real
 fixture passes, a flipped id fails, an evidence-less spec is refused, the text-form prompt
@@ -572,6 +575,105 @@ F0 phase drift the file header explains).
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference.
+`test_tower_asr_kernels.das` - model-free: the public tower / audio / TTS kernels with no CPU
+unit of their own, each against an in-test fp64 reference over a procedural seeded-LCG fixture
+and each bar carrying its own must-EXCEED poison arm - the padded-width GEMM wrappers
+(`mm_blob_b` on an owned blob and on a borrowed plane, `mm_bf16_b` on bf16-exact operands,
+`mm_plane_b`'s per-tensor routing, and the sec.2.13 claim that a zero-padded served width is
+bit-identical to the unpadded GEMM), `layernorm` and both `layernorm_batch` overloads at a dim
+off every lane width, `add_bias_rows` and `add_inplace_rows` against the exact scalar loop at
+lengths off the float4 block, `gelu_erf_batch` against an fp64 erf series and against its own
+whole-image form, `rope_neox_tab_rows` with a per-row-table-index leg, `attention_bidir_windows`
+against an oracle that attends strictly inside each ragged window with per-window content so a
+leak is material, `interpolate_grid_bilinear_aa` down and up at a non-zero plane offset, the
+audio front end's `build_fft_plan` / `fft_pow2_run` / `build_dft_twiddles` against an fp64
+O(n^2) DFT of the same forward convention (plus the plan's non-power-of-2 refusal), the TTS
+`resize_linear` / `resize_linear_torch` against an fp64 reference of each interpolation
+convention, and the STFT pair `magnitude_phase` (with the zero-imaginary branch planted at both
+zero signs - a bare `atan2` reads -pi where torch.angle reads +pi) and `istft_envelope_divide`
+(four overlap-add geometries plus the zero-window leg that must leave the wave untouched through
+the negligible-envelope guard).
+`test_math_elementwise.das` - model-free: the `[tuned]` elementwise kernels (`dot`, `dot_bf16`,
+`axpy`, `add_inplace`, `add_scale_inplace`, `mul_inplace`, `scale_inplace`, `copy_floats`) over
+a 27-length sweep that reaches every width-8/unroll-2 tail (1..9, 15/16/17, 23/24/25, 31/32/33,
+63/64/65, 100, 127/128/129, 1023/1024/1025). Inputs come from a seeded LCG tainted through a
+`[sideeffects]` seam so no fixture folds at compile time, and every reference is accumulated in
+`double` in-test. The two dots run twice: once on a dyadic lattice chosen so the whole fp32
+accumulation is provably exact (products are multiples of 3/64 bounded well inside 2^24, so any
+vectorized or reassociated reduction still bit-matches), and once on unit-range inputs against
+a length-only bar `1e-7*n^2 + 1e-6` - the textbook sequential-FMA bound at |a|,|b| <= 1 - each
+length shipping its must-EXCEED control, the expected result offset by an added 0.5. `dot_bf16`
+builds its operands AS bf16 and widens them for the reference, so the compare never measures
+input rounding. The six in-place kernels are exact-equality gates: their operand lattices make
+the fp64 reference land on a representable float and differ from the input at every element by
+construction (`copy_floats` writes over a 1e9 sentinel, `add_scale_inplace` uses positive
+operands with a negative scale so the result cannot be the input, `mul_inplace`'s multiplier is
+a multiple of 0.375 so it can never be one), and every cell asserts that count. A closing cell
+pins a zero count as a no-op on all eight.
+`test_math_activations.das` - model-free: the activation, norm and fp32 GEMM kernels against
+closed forms and in-test fp64 references over the same tail sweep. `softmax_sink` is gated per
+element plus the closed form its name carries - the row's sum plus the sink mass is one - at a
+negligible sink (-1000, where the -80 clamp engages) and a dominant one, and by shift
+invariance (adding 5 to the scores and to the sink leaves the distribution alone).
+`softcap`/`softcap4` are gated as `cap*tanh(x/cap)` at caps 30 and 50 over inputs out to 200,
+with the band assert `|out| <= cap`; `sigmoid_gate`/`sigmoid_gate4`, `swiglu_oai`/`swiglu_oai4`
+and `silu_mul4` (writing over a sentinel destination) each get the scalar and vec4 forms against
+the same fp64 reference, so the twins are held to an oracle rather than to each other.
+`swiglu_oai` additionally carries the trained-clamp gate: a gate of 20 must read bit-identically
+to a gate of 7, an up value of +-20 to +-7, with a gate pair inside the limit as the must-differ
+control. `silu4_batch` is gated for split invariance - bit-identical to `silu4` over the whole
+buffer inline and under a `with_job_que` scope, with the dispatch counter (`get_disp_count`) as
+the anti-vacuous witness that the threaded leg really split - plus the two fallback shapes (row
+length off the float4 grouping, single row) which must not dispatch. `l2_norm_rows` is gated
+per element and by the unit-norm property over eight (rows, row_size) pairs, plus the eps floor
+on a zero row and a 1e-9 row. `gemm_f32` and `gemm_f32_jo` run twelve shapes covering both
+remainder strips and the pure 4x16 tile, each against an fp64 GEMM that starts from the
+pre-initialized C (so the accumulate contract is part of the claim) and against each other
+bit-for-bit. Every tolerance bar in the file ships its control in the same cell: the expected
+value offset by an added 0.01, which must land outside the bar.
+`test_q8q8_family.das` - model-free: the q8q8 kernel family end to end, promoted from the
+hand-run `harness/gen_parity_probe.das` / `gen_slot_parity_probe.das`. Six widths with tails
+(64, 96, 512, 1024, 1056, 3072) across five cells, each judged by an in-test fp64 dequant
+reference (int8 products summed exactly, both block scales applied in double) whose bar is the
+per-block envelope times the block count, and each bar carrying a poison leg - 0.25 ADDED to
+one expected element - that must EXCEED it. The stamped family repacks through
+`repack_q8q8_grp` at the layout/wbias/kgroup companions and walks `q8q8_tile_gen` at the
+tokstep companion's stride with a `q8q8_gemv_gen` token tail, bit-exact against per-token
+GEMVs. The dispatch wrappers run on every backend `kernel_backend_names()` lists - repack
+backends through their own `repack_q8q8_weight`, never on row-major data - with
+`matmul_q8q8_batch` bit-exact against ntok x `matmul_q8q8`. The wscale_f16 arm covers
+`dot_q8q8_f16s`, the `_s16` rows and groupN kernels, the stamped s16 tile/GEMV twins and the
+`matmul_q8q8` / `_batch` / `_groupn` s16 overloads, bit-exact against their f32 twins over
+f16-exact scales. `matmul_q8q8_group3` (f32 and s16) runs against three independent GEMVs on
+unequal regions 32/40/44 (the row tail); `matmul_q8` / `dot_q8` cover the fp32-activation rail;
+the mx4 cell drives `matmul_mx4q8_batch` and `matmul_mx4q8_batch_groupn` against ntok
+independent `matmul_mx4q8` GEMVs and the `dot_mx4q8_scalar` leaf, pinned portable and swept
+over the repack backends that carry those slots. Nothing here self-skips off-JIT - every cell
+holds on the reference bodies.
+`test_rope_apply.das` - model-free: the CPU rope APPLICATION leaves (`dasllama_math`'s
+`rope_scaled`, `rope_scaled_neox`, the `_tab` and `_part` twins and `rope_apply`) against an
+in-test fp64 angle reference over the same theta schedule, on head sizes 40/64/96/256 with
+tails, positions 0/1/7/37/512, two thetas, fscale and mscale arms and the `rope_freqs` divisor
+- the bar is one rotation's f32 accumulation plus the f32 angle's own rounding, each with an
+added-value poison that must exceed it. The `_tab` forms also ride a tight twin bar against the
+un-tabled forms (loose only by the cross-compilation-unit cos/sin ulp drift), the `_part` forms
+are bit-exact against a full apply over the gathered rotated prefix with the un-rotated dims
+proven to pass through, and `rope_apply` is bit-exact against the leaf its `neox` flag names,
+including the `use_ff = false` p-RoPE arm. These kernels were previously only the Apple-only
+Metal rope tests' oracle; this file makes them a subject on every platform.
+`test_prefill_cpu_kernels.das` - model-free: the prefill and KV CPU kernels no suite gated
+before, on q4_K / q6_K / q4_0 synthetic disk planes built in-file. `matmul_kq_batch` and
+`matmul_kq_batch_groupn` - the per-position and per-expert GEMV routes a tier with no kq batch
+slot runs, bit-matched against per-(token,row) and per-(region,token) disk dots, with no skip on
+any tier; where a kq-carrying backend can be pinned (restored on exit) the native batched
+kernels additionally ride bit-for-bit against `matmul_kq_active` and the rows-core GEMVs.
+`cvt_q8kv_to_f32` / `kv_row_to_f32` (all four overloads, at a non-zero `kv_head_off` base)
+against `quantize_q8kv_row`'s stored blocks plus a half-step round-trip assert.
+`requant_rows_q8` vs `quantize_q8_0` per row and `requant_rows_q8k_bs` vs an in-test Q8_K
+reference, on both `par` arms. `repack_kq_weight`'s round trip: the pure grp repack read back
+through `kq_grp_row_dot` on every tier, then the dispatch seam - byte-identical to that layout
+where the tier carries kq slots, the registered identity where it does not. Every compare ships
+an added-value poison control.
 `test_attn_span.das` - stocked suite; the non-causal image span (`eval_embd_` with `non_causal =
 true`): mask direction by perturbation (causal row 0 blind to the last row, span row 0 sees it),
 classic/blocked/flash agreement, and the flag-reset bit-exactness; plus the FUSED mid-turn span

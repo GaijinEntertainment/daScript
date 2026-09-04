@@ -2046,9 +2046,9 @@ def matmul_q8q8(var y : array<float>; wq : array<int8>; ws : array<float>; woff 
     }
 }
 
-//! Batched Q8·Q8 GEMM for prefill: same weight-stationary nest as matmul_batch over the SDOT kernel.
-//! Activations PRE-quantized per token into (xq [ntok x n], xs [ntok x n/32]). Y token-major
-//! [ntok x d]. Bit-for-bit ntok× matmul_q8q8. Dispatches to the active backend. n % 32 == 0.
+//! Batched Q8·Q8 GEMM for prefill over PRE-quantized activations (xq [ntok x n], xs [ntok x n/32]),
+//! Y token-major [ntok x d], n % 32 == 0. Bit-for-bit ntok× matmul_q8q8 on the portable backend;
+//! a generated backend's tile and token-tail perms fold differently (test_q8q8_family holds them within the dot's envelope).
 def matmul_q8q8_batch(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
     unsafe {
         invoke(g_mm_q8q8_batch, addr(y[0]),

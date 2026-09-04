@@ -5,6 +5,9 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
 require llvm/daslib/f16_cvt   // f16_to_f32 — the tied-cls arm reads the live scale plane
+require dasllama/dasllama_math   // pin_kernel_backend / kernel_backend_names / active_kernel_backend — the facade wraps none of them
+require dasllama/dasllama_env    // g_env_engine.pin_backend
+require daslib/defer   // the backend pin is restored on every path out of a pinned cell
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
@@ -14,6 +17,33 @@ require ../performance/model_specs.das   // the model-set table — parity evide
 // Evidence is DATA in model_specs.das — pinned ids (or a text prompt encoded here) + the arms it was
 //   frozen under; regenerate with harness/parity.sh. The board's --parity pregate reads the same rows.
 // Models are gitignored multi-GB files: absent = clean skip (a real local regression, a no-op in CI).
+
+// DASLLAMA_PIN_BACKEND points these gates at one kernel backend, the way the benches read it —
+// the pin lands BEFORE the load, so select_matmul_backend_for_load_ picks the layout it repacks
+// into. pin_kernel_backend is process-wide, so the entry backend is restored on every path out.
+// Unknown name => the body never runs and the cell skips naming it, never a silent run on the
+// default backend.
+def private with_parity_backend(t : T?; blk : block<() : void>) {
+    let name = g_env_engine.pin_backend
+    if (empty(name)) {
+        invoke(blk)
+        return
+    }
+    var names <- kernel_backend_names()
+    let known = find_index(names, name) >= 0
+    delete names
+    if (!known) {
+        t |> skip("DASLLAMA_PIN_BACKEND='{name}' is not a registered kernel backend on this box")
+        return
+    }
+    let prev = active_kernel_backend()
+    defer() {
+        clear_kernel_backend_pin()
+        select_kernel_backend(prev)   // "" is a no-op: nothing had activated on entry
+    }
+    pin_kernel_backend(name)
+    invoke(blk)
+}
 
 def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
@@ -184,27 +214,28 @@ def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
     if (tr.config.seq_len > 2048l) {
         tr.config.seq_len = 2048l
     }
+    let be = " [backend {active_kernel_backend()}]"   // read AFTER the load: that is where the pin resolves
     var prompt <- (empty(spec.parity.prompt_text) ? clone_to_move(spec.parity.prompt)
         : encode(tr, spec.parity.prompt_text, true, false))
     if (spec.parity.require_dn_kq) {
         t |> success(dn_kq_engaged(tr.dnqkv_fmt) > 0l && dn_kq_engaged(tr.dngate_fmt) > 0l && dn_kq_engaged(tr.dnout_fmt) > 0l,
             "{spec.file} dn planes kq-native (not demoted)")
     }
-    t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]), "{spec.file} token-for-token")
+    t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]), "{spec.file} token-for-token{be}")
     if (spec.parity.dn_chunked) {
         t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [dn_chunked = true, eyeball = true]),
-            "{spec.file} chunked-prefill token-for-token")
+            "{spec.file} chunked-prefill token-for-token{be}")
     }
     if (spec.parity.moe_reference) {
         set_moe_grouped_prefill(false)
         t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]),
-            "{spec.file} reference-prefill token-for-token")
+            "{spec.file} reference-prefill token-for-token{be}")
         set_moe_grouped_prefill(true)
     }
     if (spec.parity.moe_per_expert) {
         set_moe_fused_expert_gemms(false)
         t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]),
-            "{spec.file} per-expert-prefill token-for-token")
+            "{spec.file} per-expert-prefill token-for-token{be}")
         set_moe_fused_expert_gemms(true)
     }
     delete prompt
@@ -232,7 +263,9 @@ def test_parity_specs(t : T?) {
             var inscope spec <- spec_by_file(file)
             let path = path_join(models_dir(), spec.file)
             if (!model_available(t, path)) return
-            parity_spec_arms(t, spec, path)
+            with_parity_backend(t) {
+                parity_spec_arms(t, spec, path)
+            }
         }
     }
     delete files
@@ -263,13 +296,16 @@ def test_parity_gptoss_20b(t : T?) {
         var inscope spec <- spec_by_file("gpt-oss-20b-mxfp4.gguf")
         let path = path_join(models_dir(), spec.file)
         if (!model_available(t, path)) return
-        var tr <- load_model_(path, QuantMode.q8)
-        if (tr.config.seq_len > 2048l) {
-            tr.config.seq_len = 2048l
+        with_parity_backend(t) {
+            var tr <- load_model_(path, QuantMode.q8)
+            if (tr.config.seq_len > 2048l) {
+                tr.config.seq_len = 2048l
+            }
+            let be = " [backend {active_kernel_backend()}]"
+            t |> success(parity_gen_ok(tr, spec.parity.prompt, spec.parity.gen, [eyeball = true]), "gpt-oss-20b token-for-token{be}")
+            let long_prompt <- encode(tr, counting_prompt(150), true, false)
+            t |> success(parity_gen_ok(tr, long_prompt, GPTOSS_LONG_GEN, [eyeball = true]), "gpt-oss-20b window-engaged token-for-token{be}")
+            delete tr
         }
-        t |> success(parity_gen_ok(tr, spec.parity.prompt, spec.parity.gen, [eyeball = true]), "gpt-oss-20b token-for-token")
-        let long_prompt <- encode(tr, counting_prompt(150), true, false)
-        t |> success(parity_gen_ok(tr, long_prompt, GPTOSS_LONG_GEN, [eyeball = true]), "gpt-oss-20b window-engaged token-for-token")
-        delete tr
     }
 }
