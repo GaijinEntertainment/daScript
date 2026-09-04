@@ -654,6 +654,7 @@ def vk_rdec_read_kv(l, pos : int64; kp : uint8?; vp : uint8?) {
 // One pre-recorded submit per layer per token: qkv+z GEMVs into a SHARED y buffer -> the fused
 // step kernel -> out GEMV -> y DMA. State/ring stay device-resident; flush/invalidate = the seams.
 
+[cold_path]
 def private ensure_dnd_state {
     if (g_gpu.dnd_ready) {
         return
@@ -669,6 +670,7 @@ def private ensure_dnd_state {
 // create one layer's step chain: per-layer state/smalls buffers, the three sets, the once-filled
 // GEMV metas (dn stacks never serve FFN GEMVs, so their host metas are ours to pin), and the
 // warm cmd — per token only acts/β/γ refresh and the cmd resubmits as-is.
+[cold_path]
 def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
                           dim, cd, kd, di, nvh, nkh, ds, taps : int64; eps : float) {
     ensure_gemv_scratch(s_qkv)
@@ -686,7 +688,8 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
                     smalls_dev = make_device_buf(DND_SMALLS_BYTES),
                     cmd = alloc_cmd(), s_qkv = s_qkv, s_z = s_z, s_o = s_o,
                     state_bytes = nvh * ds * ds * 4l, ring_bytes = cd * taps * 4l,
-                    parity = 0, tok <- make_host_buf(16l, true), valid = false, dirty = false)
+                    parity = 0, tok <- make_host_buf(16l, true), valid = false, dirty = false,
+                    owner_state_addr = 0ul, owner_hist_addr = 0ul)
     let fqkv = g_gpu.stacks[s_qkv].fmt
     let fz = g_gpu.stacks[s_z].fmt
     let fo = g_gpu.stacks[s_o].fmt
@@ -766,6 +769,7 @@ def private dnd_cold_upload(st : DnStep; stp : float const?; histp : float const
     submit_wait(g_gpu.batch_cmd)
 }
 
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
 def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64;
                    xqp : int8 const?; xsp : float const?; bp : float const?; gp : float const?;
                    convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?;
@@ -780,10 +784,23 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
     if (!key_exists(g_gpu.dnd_steps, woq)) {
         dnd_step_make(s_qkv, s_z, s_o, woq, woz, woo, dim, cd, kd, di, nvh, nkh, ds, taps, eps)
     }
-    var st = g_gpu.dnd_steps[woq]
+    var st : DnStep?
+    unsafe {
+        st = g_gpu.dnd_steps?[woq]   // the make above made the key: a read, never an insert
+    }
+    let caller_state_addr = intptr(stp)
+    if (st.valid && st.owner_state_addr != caller_state_addr) {
+        if (st.dirty) {
+            dnd_flush_down(*st)
+        }
+        st.valid = false
+        st.dirty = false
+    }
     if (!st.valid) {
-        dnd_cold_upload(st, stp, histp, convw, wnormp, ap, dtp, cd, taps, dconv, nvh, ds, eps)
-        st.parity = 0   // the cold image is ring image 0
+        dnd_cold_upload(*st, stp, histp, convw, wnormp, ap, dtp, cd, taps, dconv, nvh, ds, eps)
+        st.parity = 0
+        st.owner_state_addr = caller_state_addr
+        st.owner_hist_addr = intptr(histp)
     }
     let ts0 = ref_time_ticks()
     fill_stack_acts(s_qkv, xqp, xsp, dim)   // the z GEMV set shares this image
@@ -800,18 +817,15 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
     unsafe {
         memcpy(reinterpret<void?>(yp), g_gpu.stacks[s_o].y.mapped, dim * 4l)
     }
-    st.parity = 1 - st.parity   // the step wrote the other image; it now holds current history
+    st.parity = 1 - st.parity
     st.valid = true
     st.dirty = true
-    g_gpu.dnd_steps[woq] = st
     if (vk_prof()) {
-        to_log(LOG_INFO, "vk_dnd prep {get_time_usec(ts0) - get_time_usec(ts1)} submit {get_time_usec(ts1) - get_time_usec(ts2)} copy {get_time_usec(ts2)}\n")
+        to_log(LOG_INFO, "vk_dnd prep {get_time_usec(ts0) - get_time_usec(ts1)} submit {get_time_usec(ts1) - get_time_usec(ts2)} copy {get_time_usec(ts2)}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
     }
 }
 
-// MoeGpuDnFlushFn: sync one layer's device-resident state/ring down into the engine's buffers.
-// Any flush retires the device copy (the CPU is about to read AND may then advance on its own) —
-// the next GPU step cold-uploads from the engine's then-current state.
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner"), unused_argument(histp)]
 def vk_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
     if (g_gpu == null || !g_gpu.dnd_ready) {
         return
@@ -820,36 +834,63 @@ def vk_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
     if (woq < 0l || !key_exists(g_gpu.dnd_steps, woq)) {
         return
     }
-    var st = g_gpu.dnd_steps[woq]
-    if (st.dirty) {
-        let raw = g_gpu.batch_cmd
-        let rf : VkCommandBufferResetFlags
-        vk_check(vkResetCommandBuffer(raw, rf), null)
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        cmd_copy_whole(raw, st.state_dev, g_gpu.dn_state_host.buf, st.state_bytes)
-        cmd_copy_range(raw, st.smalls_dev, DN_SM_HIST * 4l + int64(st.parity) * st.ring_bytes,
-            g_gpu.dn_tail_host.buf, 0l, st.ring_bytes)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(g_gpu.batch_cmd)
-        unsafe {
-            memcpy(reinterpret<void?>(stp), g_gpu.dn_state_host.mapped, st.state_bytes)
-            memcpy(reinterpret<void?>(histp), g_gpu.dn_tail_host.mapped, st.ring_bytes)
-        }
+    var st : DnStep?
+    unsafe {
+        st = g_gpu.dnd_steps?[woq]   // the key_exists above made sure of the key: a read, never an insert
     }
-    st.dirty = false
-    st.valid = false
-    g_gpu.dnd_steps[woq] = st
+    let caller_state_addr = intptr(stp)
+    if (st.owner_state_addr != caller_state_addr) {
+        return
+    }
+    if (st.dirty) {
+        dnd_flush_down(*st)
+    }
+    dnd_drop_slot(*st)
 }
 
-// MoeGpuDnInvalidateFn: the engine rebuilt/zeroed its CPU state — every device copy is stale
+def private dnd_drop_slot(var st : DnStep) {
+    st.valid = false
+    st.dirty = false
+    st.owner_state_addr = 0ul
+    st.owner_hist_addr = 0ul
+}
+
+def private dnd_flush_down(st : DnStep) {
+    let raw = g_gpu.batch_cmd
+    let rf : VkCommandBufferResetFlags
+    vk_check(vkResetCommandBuffer(raw, rf), null)
+    let begin = VkCommandBufferBeginInfo()
+    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    cmd_copy_whole(raw, st.state_dev, g_gpu.dn_state_host.buf, st.state_bytes)
+    cmd_copy_range(raw, st.smalls_dev, DN_SM_HIST * 4l + int64(st.parity) * st.ring_bytes,
+        g_gpu.dn_tail_host.buf, 0l, st.ring_bytes)
+    vk_check(vkEndCommandBuffer(raw), null)
+    submit_wait(g_gpu.batch_cmd)
+    unsafe {
+        memcpy(reinterpret<void?>(st.owner_state_addr), g_gpu.dn_state_host.mapped, st.state_bytes)
+        memcpy(reinterpret<void?>(st.owner_hist_addr), g_gpu.dn_tail_host.mapped, st.ring_bytes)
+    }
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // a model drop, never the served token
 def vk_dn_step_invalidate {
     if (g_gpu == null) {
         return
     }
     for (st in values(g_gpu.dnd_steps)) {
-        st.valid = false
-        st.dirty = false
+        dnd_drop_slot(st)
+    }
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // per session reset, rollback and delete
+def vk_dn_step_release(state_lo : uint64; state_hi : uint64) {
+    if (g_gpu == null) {
+        return
+    }
+    for (st in values(g_gpu.dnd_steps)) {
+        if (st.owner_state_addr >= state_lo && st.owner_state_addr < state_hi) {
+            dnd_drop_slot(st)
+        }
     }
 }
 

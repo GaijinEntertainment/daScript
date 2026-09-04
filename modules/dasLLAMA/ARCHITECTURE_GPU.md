@@ -85,7 +85,8 @@ that a question answered for one backend has an obvious address in the other. Th
   route/mark/want/status state, engine-facing forwarders. Vulkan implements it (per-op offload plus
   resident plumbing, and the decode-era seats it alone fills: the cm2 expert chain
   `set_moe_gpu_ffn_xf_hooks` / `_async_hooks`, the decode attention block
-  `set_moe_gpu_attn_dec_hooks`, the decode FFN tail `set_moe_gpu_ffn_tail_hooks`, the
+  `set_moe_gpu_attn_dec_hooks`, the decode FFN tail `set_moe_gpu_ffn_tail_hooks`, the deltanet
+  decode step's state seams `set_moe_gpu_dn_state_hooks` (flush, invalidate, release), the
   whole-token span `set_moe_gpu_span_dec_hook` - the span rides common's decode override
   registry as `vulkan_moe_span`, selected by the MoE placement and declining per token). The
   installs are one-way: a test that arms the tier installs the seats and never restores them,
@@ -136,6 +137,10 @@ Sections 2.28-2.30, the Metal speculative round and the dispatch alignment contr
 **The allowed asymmetries between the backends - this list is closed; a new one lands with its
 entry here:**
 
+- **The `dasllama_gpu_tier` cooperation SPI is Vulkan-only**: every hook seat the tier
+  exposes (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the
+  Vulkan family alone, and the role row above enumerates the seats; a new seat lands in that
+  row, not as a new entry here.
 - **Metal sits ABOVE `dasllama_common`** (typed `Model`/`Session` access, shapes unconditional);
   **Vulkan sits BELOW it** (untyped pointer/array seams - the family never requires common).
   Both tiers ENTER from the transformer umbrella (`?das_metal` requires; the single `?vulkan`

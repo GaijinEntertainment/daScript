@@ -1,7 +1,8 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md`. Planned work: the parent folder's `../followup_*.md` ledgers.
+doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
+`../followup_metal.md`.
 
 **Every PR runs `run.das -- --suite model-free`, plus every test here the change reaches - never
 the whole directory.** A change reaches a test when it alters anything the test's result
@@ -24,10 +25,12 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds a gate, removes a gate, or moves a gate to another suite or arm, in a file
-whose `CLAUDE.md` paragraph LISTS its gates, updates that paragraph in the same change.** A
-paragraph that only names the file (a brace list, a suite roster) carries nothing to update
-and does not fire this rule.
+**A diff that adds a gate (one test cell), removes a gate, or moves a gate to another suite or
+arm, in a file whose `CLAUDE.md` paragraph LISTS its gates, updates that paragraph in the same
+change.** A
+paragraph lists its gates when any clause of it names a specific fixture, model, arm, or skip
+condition; a paragraph that only names the file (a brace list, a suite roster) carries nothing
+to update.
 
 **A new test file listed in `run.das`'s `model-free` suite, or in no `run.das` suite at all,
 whose name does not say what it covers, gets a `CLAUDE.md` entry in the same change** -
@@ -52,32 +55,30 @@ bypass check (no cached hit at `prefix_attach`, no donated pages at `donate_stre
 `test_vulkan_kernels.das`'s tile-pick cell (which tile the Vulkan matmul picks for a given
 width and row count, and whether that dispatch splits its reduction across partial planes).
 A gate whose failure means a documented contract changed, rather than a kernel regressing, joins
-this list in the same change - as a file when
-every cell of it pins, as a named cell otherwise.
+this list in the same change - as a file when every cell of it pins, as a named cell otherwise.
 
-**A test passes or skips explicitly on every platform - a cell that neither asserts nor
-registers a skip is a defect.** A cell that returns without asserting -
-the module is absent, its models are not stocked, no device answered, a capability declined -
-registers `t |> skip` there; `feint` is a print, not a skip.
+**On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell
+that returns without asserting - the module is absent,
+its models are not stocked, no device answered, a capability declined - registers `t |> skip`
+there; `feint` is a print, not a skip.
 
-**A skip gate keys on a fact the box owns - a device capability, a run-mode knob's value, a
-host toolchain's presence, a compile-time module-presence check
+**A cell's skip condition keys on a fact the box owns - a device capability, a run-mode knob's
+value, a host toolchain's presence, a compile-time module-presence check
 (`typeinfo builtin_module_exists`) - or on a stocked fixture beside the models (a model
-file, an mmproj, an oracle dump - a model gate); never on the existence of an artifact this
-repo's build or a previous test run produced (a mint, a generated binary, a dump a test
-wrote).** An artifact gate goes permanently false when its producer moves.
+file, an mmproj, an oracle dump - a model condition); never on the existence of an artifact
+this repo's build or a previous test run produced (a minted `.dlim`, a generated binary, a
+dump a test wrote).** An artifact condition goes permanently false when its producer moves.
 
 **A test that loads a model above the large tier (`LARGE_TIER_BYTES`, `_model_tier.das`)
-without gating on `DASLLAMA_PARITY_FULL=1` is a defect** - that gate is a final pre-PR gate,
-not the iteration loop. In this folder the
-spelling is `model_available` (`_model_tier.das`). A test that cannot require
-`_model_tier.das` open-codes the same env check.
+without gating on `DASLLAMA_PARITY_FULL=1` is a defect** - `DASLLAMA_PARITY_FULL=1` is a final
+pre-PR switch, not the iteration loop. In this folder the spelling is `model_available` (`_model_tier.das`).
+A test that cannot require `_model_tier.das` open-codes the same env check.
 
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image
 rail never calls `load_model`, `load_model_cached`, or `load_model_image` - it loads each
 carrier through that carrier's own loader.** Decoders load through `load_model_`
-(`../dasllama/dasllama_load.das`). Towers, embedders, and union carriers load through their
-family or carrier loaders.
+(`../dasllama/dasllama_load.das`); every other carrier loads through its own
+`load_<family>_tower` / `load_<family>_encoder` / `load_<carrier>_model`.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -106,23 +107,26 @@ agree.
 **A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
 naming the `ggml-vocab-*.gguf` fixture.**
 
-**A `corpus_case` arm missing either an exact-reference-id assert or a lossless round-trip
-assert is a defect.**
+**A `corpus_case` arm that does not assert BOTH the exact reference ids and a lossless
+round-trip is a defect.**
 
 **A test that compares generated tokens, ids, or logits without logging a human-readable form
-of BOTH sides is a defect: the decoded text where the model carries a vocab (`log_gen_texts`
-in `_model_tier.das`, or one line per side), otherwise each side's argmax index and value.** A
-red, or a suspicious green, must be readable in the log, not only as an id or float
+of BOTH sides is a defect: for a token or id compare the decoded text (`log_gen_texts` in
+`_model_tier.das`, or one line per side), for a logits compare each side's argmax index and
+value.** A red, or a suspicious green, must be readable in the log, not only as an id or float
 difference.
 
 **A cell whose name, comment, arm, or fixture claims a size, depth, or row count asserts that
 number.** A cap, a resize, or a counter showing the path ran is not evidence that the number was
 reached.
 
-**A freeform token-parity cell is a defect.** Freeform coverage uses the forced-feed
-logits-tolerance form - the same fixed tokens fed to both sides, logits compared within a bar.
-Counting cells - those whose prompt forces a continuation that cannot tie, so greedy tokens
-are fixed - stay token-exact.
+**A freeform token-parity cell whose two sides can round differently - different lanes,
+backends, batch shapes or kernel forms - is a defect, and a token-exact freeform compare
+states in the cell what makes its two sides one code path: the shared entry point, or an
+assert pinning the lane.** Freeform coverage across a pair that rounds differently uses the
+forced-feed logits-tolerance form - the same fixed tokens fed to both sides, logits compared
+within a bar. Counting cells - those whose prompt forces a continuation that cannot tie, so
+greedy tokens are fixed - stay token-exact.
 
 **A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
 output - missing a compare against a CPU oracle that can witness the cell's property is a
@@ -143,13 +147,13 @@ which can wrongly satisfy a tolerant compare.
 **An ASR family with no token-for-token oracle cell is a defect** - the cell compares a
 transcript against a reference leg, external dump or CPU control alike.
 
-**A test in this folder that loads a stocked artifact not traceable to something checked in is
-a defect.** Stocked artifacts are model files, mmprojs, image fixtures, and oracle dumps. Any
-one of these counts as traceable: a row in `../performance/model_specs.das`; a row's
+**A test in this folder that loads a stocked artifact whose producer the test cannot name is a
+defect.** Stocked artifacts are model files, mmprojs, image fixtures, and oracle dumps. Any
+one of these names the producer: a row in `../performance/model_specs.das`; a row's
 `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
-script beside `model_specs.das` in `../performance/`. For an oracle dump, a mint script that
-regenerates it also counts - it sits beside the dumps under `models_dir()`, and the test that
-loads the dump names it.
+script beside `model_specs.das` in `../performance/`. For an oracle dump, the mint script
+stocked beside the dumps under `models_dir()` also counts, and the test that loads the dump
+names it.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header -
 the backend, the flash-attention setting, and the mmproj precision the dump came from - is a
@@ -158,15 +162,14 @@ defect.**
 **A cell that does not establish every process-wide driver setter and serving-lane knob its
 claim depends on, and restore each knob it set in-process to the value it had on entry before
 returning, is a defect.** This holds even when the claim needs the knob at its DEFAULT value.
-The mechanism
-(why the hooks flip legs silently) is `CLAUDE.md`'s "Metal fixtures" section.
+The mechanism (why a hook left set silently changes which implementation the next cell
+measures) is `CLAUDE.md`'s "Metal fixtures" section.
 
 **A cell claiming a family serving lane that does not pin it through the family's own lane
 knobs - `set_<family>_q8` / `reset_<family>_q8`, canary's `set_canary_enc_q8` /
 `reset_canary_enc_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32` - or through a loader
-parameter that takes the lane, is a defect.** A family whose knob has no reset twin restores
-it to the documented default. A runtime decline standing in for a pin measures whichever
-lane the box's policy picked.
+parameter that takes the lane, is a defect.** A runtime decline standing in for a pin measures
+whichever lane the box's policy picked.
 
 **A cell that loads a media carrier under a lane pin - a `set_<family>_q8`-class knob, or a
 `set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - and whose subject is not that lane
@@ -180,12 +183,11 @@ another suite panics on the wrong identity.
 through the `.dlim`-baking loader, never around it.** The pin is part of what the image
 identity records.
 
-**A CPU-vs-GPU arm that does not run a PLANAR model - the non-blob form, the only one CPU
-inference reads - for its CPU stages, and that model's blob twin (`blob_twin(t, path,
-seq_cap)`, `test_metal_decode_parity.das`) for the stages a decode override selects, is a
-defect.** One session spans the planar model and its blob twin, because sessions are
-geometry-bound. A cell whose subject is why the GPU lane declined keeps the planar model and
-needs no twin.
+**A CPU-vs-GPU arm on Metal - one comparing the two lanes' outputs, not one whose subject is
+the GPU lane's decline - runs its CPU stages on a PLANAR model (the non-blob form, the only
+one CPU inference reads) and the stages a decode override selects on that model's blob twin
+(`blob_twin(t, path, seq_cap)`, `test_metal_decode_parity.das`), in one session.** The planar
+model and its blob twin share one shape, so one session serves both.
 
 **A diff that adds a model-loading block to a `run.das` MODEL suite (every suite the
 `--family` filter reaches - not the model-free suite) tags it with its family.** The family
@@ -200,18 +202,18 @@ starts is a defect - set it before that process starts.** That process is a chil
 spawns, or the runner's own. An in-cell set is invisible to the running config, which is read
 once at context init.
 
-**A cell that cannot set an environment-read knob before its reader starts, and whose assert
-text does not name the value it asserts under, is a defect.** An environment-read knob is one
+**A cell that cannot set an environment-read knob before its reader starts, and whose text
+that prints with a red - the cell label or the assert - does not name the value it asserts
+under, is a defect.** An environment-read knob is one
 the running config reads once, at context init.
 
 **A cell asserting the UNPINNED default lane never compares against a hardcoded lane - it
 compares against the predicates the lane policy itself consults, `float_batch_override_active()`
-and the family's `<family>_gpu_would_serve()` where one exists.** The accelerate tier and the
-GPU tower move the default per box, so the assert is on the lane the policy selects, not on
-one predicate's own value.
+and the family's `<family>_gpu_would_serve()` where one exists.** The default lane differs
+per box, so the assert is on the lane the policy selects, not on one predicate's own value.
 
-**A cell that encodes, preprocesses, or asserts on media bytes an encoder consumes - pixels
-or audio samples, not a `.dlim` model image - with no model loaded builds its fixture
+**A cell that runs with no model loaded and encodes, preprocesses, or asserts on media bytes
+an encoder consumes - pixels or audio samples, not a `.dlim` model image - builds its fixture
 procedurally and pins its expectations in-repo.**
 
 **An image a test feeds an embedder that the test does not build, and that
@@ -219,12 +221,12 @@ procedurally and pins its expectations in-repo.**
 instrumentation before a human can see what the model consumed.
 
 **An audio clip a test feeds an embedder that the test does not build, and that is not one of
-the checked-in fixtures beside the models (`jfk.wav`, `gemma4a_test2.wav`), is a defect** - a
-clip nobody else can play makes a red unreadable. A newly checked-in clip joins this list in
-the same change.
+the clips stocked beside the models (`jfk.wav`, `gemma4a_test2.wav`), is a defect** - a clip
+nobody else can play makes a red unreadable. A newly stocked clip joins this list in the same
+change.
 
-**A tier-1 media fixture - one an embedder-parity cell regenerates in-test and compares
-against an oracle dump - with no exact-value generator is a defect.** A generator running libm
+**A media fixture an embedder-parity cell regenerates in-test and compares against an oracle
+dump, with no exact-value generator, is a defect.** A generator running libm
 transcendentals is not exact-value: it is not float-portable.
 
 **An embedding-parity cell that does not name its fixture, or does not log the measured
@@ -239,9 +241,9 @@ mechanism, or a second independent lane; a gate's own reference is never its con
 outside the new bar.** A bar nothing has ever exceeded is not known to discriminate.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
-change** - the wire-shape pins, the render pins, and a live server leg gated on the family's
-smallest GGUF that runs on the small tier (the file homes are `CLAUDE.md`'s "Model-free /
-no-arm tests" and "Out-of-folder test files" notes). A family whose vocab carries no thinking
+change** - the wire-shape pins, the render pins, and a live server case gated on the family's
+smallest GGUF that sits under `LARGE_TIER_BYTES` (`_model_tier.das`) (the file homes are
+`CLAUDE.md`'s "Model-free / no-arm tests" and "Out-of-folder test files" notes). A family whose vocab carries no thinking
 or tool markers has no format to test.
 
 **A kernel-unit cell whose kernel reads f16 operands and whose oracle is wider-precision
@@ -255,19 +257,20 @@ then reds the ordinary compare, so the gate needs no separate leak control.
 **A cell whose only compare is bit-identity between two kernel forms also compares one of the
 two against a CPU oracle, in the same cell.** Two forms can be bit-equal and both wrong.
 
-**A poison leg on a tower the Metal driver serves reaches every weight buffer the served route
-reads.** Which buffers those are depends on the route: a twin-W route reads the baked halfword
-twin (`wblob`), so poisoning that buffer alone is a valid control there, while a route reading
-both buffers needs both zeroed. A poison the served route never reads passes on a broken
-kernel.
+**A poison control on a tower the Metal driver serves - a run of the gate with the tower's
+weights zeroed, which must RED - zeroes every weight buffer the served route reads.** Which
+buffers those are depends on the route: a twin-W route reads only the baked halfword copy of
+the GEMM weights (`wblob`), so zeroing that buffer alone is a valid control there; a route
+that also reads the f32 plane (`fblob`) needs both zeroed. A poison the served route never
+reads passes on a broken kernel.
 
-**An ASR cell comparing transcripts across two serving lanes, other than a tune-armed kernel
-form against its Metal-tensor twin, asserts TOKEN equality.**
+**An ASR cell comparing transcripts across two serving lanes, other than a crowned lane
+against its tensor twin, asserts TOKEN equality.** A crowned lane is the kernel form the tuner
+measured fastest and armed as the serving one; its tensor twin is the same kernel written on
+Metal's tensor primitives.
 
 **An ASR cell comparing a crowned lane against its tensor twin asserts WORD equality** - the
-twins' rounding legitimately flips tokens. A crowned lane is the raced kernel form a tune
-sidecar arms as the serving one; its tensor twin is the same kernel written on Metal's tensor
-primitives.
+twins' rounding legitimately flips tokens.
 
 **An ASR transcript cell that cannot assert the equality its comparison calls for converts to
 a forced-feed logits compare within a tolerance bar - never to a looser text compare.**

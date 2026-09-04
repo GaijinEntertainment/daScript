@@ -16,7 +16,7 @@ builder the tower dispatches, the `[metal_dispatch]` emission those builders are
 from (`dasllama/dasllama_metal_lens.das`), or the Metal ASR decoder
 (`dasllama/dasllama_metal_asr_dec.das`) applies `REVIEW_TOWER.md` too.**
 
-**A diff touching the Vulkan tier - `dasllama/dasllama_vulkan_*.das`,
+**A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`,
 `dasllama/dasllama_gpu_resident.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, or a
 cm2 tile class (an NV_cooperative_matrix2 GEMM class stamped per weight format and column) -
 wherever the diff puts it - applies `REVIEW_GPU_VULKAN.md` too.**
@@ -26,8 +26,9 @@ the choice at compile time instead.** A `class template` / `def abstract` / `def
 splice is compile-time and conforms - check the emission, not the das spelling.
 
 **Never give a `*_decline_caps` predicate a parameter beyond the model, the row count, and
-whether the call carries a uniform attention span - however that parameter is derived;
-window-setup state is asked by `prefill_decline` / `decode_decline` instead.**
+whether the call carries a uniform attention span - however that parameter is derived; window
+readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
+`decode_decline` instead.**
 
 **A bounds or tail guard that branches per iteration in a kernel's main loop, where the host
 already knows its answer as it picks the pipeline, is a defect - stamp the guard instead.**
@@ -41,12 +42,15 @@ receives - a `params=` name or a kargs (kernel-argument struct) field - as one `
 in `requires =`, comma-separated.** The generated builder then trips on the first misaligned
 dispatch instead of reading the next row.
 
-**A driver that keeps misaligned shapes off a kernel whose main loop steps one fixed-size chunk
-and never checks for a partial last chunk gates every dispatch site of that kernel on that
-site's own K - the extent the loop steps along - never on one gate covering every site, and
-each site's gate divides by a multiple of the chunk that site's kernel steps.** A kernel that
-steps 128 behind a gate that checks 256 never sees a shape it could serve; a kernel that steps
-256 behind a gate that checks 128 silently drops a tail.
+**A driver that keeps misaligned shapes off a chunk-stepping kernel - one whose main loop
+steps a fixed-size chunk and never checks for a partial last chunk - gates each dispatch site
+of that kernel on that site's own K, the extent that site's loop steps along, never on one
+gate covering every site.**
+
+**A dispatch site's alignment gate whose divisor is not the chunk the kernel that site
+dispatches steps is a defect.** A kernel that steps 128 behind a gate that checks 256 never
+sees a shape it could serve; a kernel that steps 256 behind a gate that checks 128 silently
+drops a tail.
 
 **Weakening the MSL emitter's refusal to compile an unlicensed float `matmul2d` A operand -
 `[metal_kernel(float_a_ok=true)]` is the license - or its gate
@@ -67,13 +71,15 @@ each lane a consecutive run of elements, or a lane-coalesced stride (`i += 32`),
 device-to-device copy loop is already coalesced and conforms.
 
 **Never decide a kernel row's validity or owner by scanning the per-bucket base and count
-arrays - read the one per-row entry instead.** The bucket-building kernel writes that per-row
+arrays - a bucket is the run of rows one expert owns in the bucket-ordered buffer - read the
+one per-row entry instead.** The bucket-building kernel writes that per-row
 entry. The scan repeats on every thread of every row's threadgroup, and it grows with the
 bucket count.
 
-**Never test a bucket row's validity against the pad sentinel `0xFFFFFFFF` - compare the row's
-per-row bucket entry, the one the bucket-building kernel writes, with the live entry count
-(positions x experts per token, `npos * nk`) instead.** Rows past the last expert's stamped
+**Never test the validity of a row in the bucket-ordered buffer - where each expert owns one
+run of rows - against the pad sentinel `0xFFFFFFFF`; compare the row's per-row bucket entry,
+the one the bucket-building kernel writes, with the live entry count (positions x experts per
+token, `npos * nk`) instead.** Rows past the last expert's stamped
 tail hold stale pool bytes, not the sentinel, and an equality test sends their token index
 out of bounds.
 
@@ -104,10 +110,6 @@ wider-row site passes the full stride or dispatches the padded tile.** A split r
 `row x dispatched-width`, so a wider-row caller lands its split rows on top of the row beside
 them.
 
-**A prefill GEMM dispatched at a nonzero start row never asks `cm2_split_k` for a split - it
-encodes unsplit.** The split-k reduce sums partial planes counted from row 0, so a dispatch
-starting above row 0 would reduce the wrong rows.
-
 **A scratch buffer a dispatch writes is never rebound for a new write before the reader of
 its previous write is encoded - rotate through as many buffers as the chain has dispatches in
 flight between a write and its read.** One shared scratch serializes the whole chain through
@@ -136,8 +138,9 @@ axis - one compile-time choice, such as single/batch, format, or single-pass/chu
 the stamp axis is.** Body divergence is carried by a `@template_constant`, or by an
 overridden method spliced flat at emission.
 
-**A dummy-bound field where a gate serves is a defect - a stamp-varying binding is carried by
-`@template_gate` instead.**
+**A kernel class template that binds a real buffer to a field the stamp's own body never
+reads - a dummy bind that exists only to fill the slot - is a defect: gate that field with
+`@template_gate` so the stamps whose bodies do not read it do not carry it.**
 
 **A diff that forks a kernel class out of a shared template shows that the bodies no longer
 differ on the compile-time choice the template carried, and names that choice in the
@@ -155,8 +158,8 @@ defect; a per-encode field either omits `@role` or names the access its body per
 `[vk_dispatch]` declaration, or a new instance of a template carrying one - covers that class
 in `tests/test_kernel_coverage.das`, one of two ways.** Either a census row there dispatches
 the class, or the diff names it in that file's `CENSUS_NEVER_DISPATCHED` with the reason no
-row can reach it - a class in neither place leaves `CENSUS_NEVER_DISPATCHED` claiming coverage
-the census does not have.
+row can reach it - the two lists together are the file's coverage claim, and a class in
+neither makes that claim false.
 
 **Every field of a new kernel class declared in `dasllama/` carries at least one of the
 annotations its `[metal_dispatch]` / `[vk_dispatch]` builder reads - `@binding`, `@role`,
@@ -171,7 +174,8 @@ stride the full output width, so a span computed from the tile width leaves the 
 every row outside the tracked hazard range.
 
 **A NEW hand-written `enc_*` body is a defect unless it is a wrapper - a format or twin pick, a
-default-filling wrapper, or a composite over generated builders.**
+default-filling wrapper, or a composite over generated builders - declare the class so the
+`[metal_dispatch]` / `[vk_dispatch]` lens generates the builder instead.**
 
 **A hand-rolled bind list on a dispatch that serves a user call, in `dasllama/` or
 `performance/`, is a defect: dispatch through the kernel's `enc_*` builder instead.**
@@ -203,24 +207,25 @@ own init/release pair.
 **A decline counter beside the decline site is a defect - decline counting lives in
 `dasllama/dasllama_metal_common.das`.**
 
-**A diff that changes what one backend can serve and the other cannot - a Metal-only or
-Vulkan-only hook, role, served path, or backend-only capability, added or removed - lands its
-entry in `ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the same change.** One
-backend serving the same path faster or slower is not such a change. The duty holds when that
-list already carries the class of asymmetry, and it covers sec.1.5's per-driver lists of
-registered hooks and borrowed kernels. Extending a file's sec.1.5 role row does not discharge
-it. An asymmetry the list does not carry does not exist.
+**A diff that adds or removes a Metal-only or Vulkan-only hook, role, served path, or
+backend-only capability - a hook in sec.1.5's per-driver registered-hook or borrowed-kernel
+lists included, a seat of the `dasllama_gpu_tier` cooperation SPI excluded (the closed list's
+standing entry sends those to the tier's role row) - lands its own entry in
+`ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the same change, even when that list
+already carries an asymmetry of the same class, and even when the diff also extends the file's
+sec.1.5 role row.** One backend serving the same
+path faster or slower is not such a change.
 
 **A change to code that a served GPU decode or prefill path executes ships GPU-vs-CPU parity
-on one q8 and one kq (K-quant) model with the armed mirror codec.** That code is anything a
-served GPU decode or prefill call executes OR that selects what it executes - a driver, a
-kernel class it dispatches, that class's builder, a servability gate, a race that picks which
-kernel serves, a forwarder default, a weight-region or residency path, the tier forwarders and
-the Vulkan tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`) the call routes through;
-never the bake paths, never a comment. The parity run is `harness/parity.das` on either
-backend, `benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model
-list) on either backend, or - on Metal only - an in-suite `tests/test_metal_*_parity.das`
-instrument run through `tests/run.das`.
+on one q8 and one kq (K-quant) model the changed path serves, with the mirror codec armed
+where the changed path reads a K/V mirror.** That code is anything a served GPU decode or prefill call executes OR that
+selects what it executes - a driver, a kernel class it dispatches, that class's builder, a
+servability gate, a race that picks which kernel serves, a forwarder default, a weight-region
+or residency path, the tier forwarders and the Vulkan tier-dispatch seams
+(`dasllama/dasllama_vulkan_seams.das`) the call routes through; never the bake paths, never a
+comment. The parity run is `harness/parity.das` on either backend, `benchmarks/lcpp_bench.das
+--parity` (`performance/model_specs.das`'s fixed model list) on either backend, or - on Metal
+only - an in-suite `tests/test_metal_*_parity.das` instrument run through `tests/run.das`.
 
 **Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
 Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows the tier that serves
@@ -230,13 +235,6 @@ resident` for the per-op tier).** The Vulkan driver declines codec-mismatched se
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq
 (K-quant) model.** Parity runs never reach it.
-
-**Never leave a K/V codec unserved by the kernels that read or write the whole-model driver's
-`k_mirror`/`v_mirror` slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair - a
-K/V codec is the mirror's element type, f16 or f32.** Two shapes serve both: instances of one
-template cover both codecs, or a single-codec kernel has a sibling that serves the other codec
-behind an arming gate that keys on `kv16`. The whole-model driver serves both codecs, so a
-codec no kernel covers silently drops that codec's GPU path.
 
 **An f16 store into any GPU-resident K/V that does not clamp to the f16 finite range
 (+/-65504) is a defect.**
@@ -264,11 +262,11 @@ routes the next model's dispatches at the old model's planes.
 **A diff that changes how a dev-W resident panel's cache key is built - a dev-W panel is a
 weight plane dequantized once into a device f16 panel - changes both the seed site and the
 lookup site in the same change** - `pf_devw_seed_baked` and `pf_devw_resident_panel` in
-`dasllama/dasllama_metal_prefill.das`. A seed keyed differently from the forward never hits,
+`dasllama/dasllama_metal_prefill.das`. A seed keyed differently from the lookup never hits,
 and every baked site silently re-dequantizes.
 
 **A servability gate in `dasllama/dasllama_metal_shapes.das` never reads process-global
 runtime state - the active kernel backend, a mode toggle - on its mint-time path: such a read
-sits behind the gate's `mint_time` flag, and the mint-time verdict tests the model's own
-fields.** The load selects the repacking CPU backend before the GPU backend is decided, so a
-mint-time read bakes a verdict the drivers do not share.
+runs only where the gate's `mint_time` flag is false, and the mint-time verdict tests the
+model's own fields.** The load selects the repacking CPU backend before the GPU backend is
+decided, so a mint-time read bakes a verdict the drivers do not share.

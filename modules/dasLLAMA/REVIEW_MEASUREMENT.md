@@ -30,11 +30,16 @@ board row.
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
 benchmark process.**
 
+**A `--for-debug-purposes` reading never overturns a committed board row - the board answers
+to a re-minted board cell.** A `--for-debug-purposes` row is the `-jit` script's own output.
+
 **A `PERF_LEDGER.md` entry carrying a figure from another project names the source and the
 report it came from and tags it `external`.**
 
 **A diff never rests an adoption decision on a figure from another project - the decision
-rests on a self-measured board cell.**
+rests on a self-measured board cell.** A board cell is one `performance/gen_bench_records.das`
+spawns, or a manual cell of this folder's `benchmarks/lcpp_bench.das` that `PROFILE.md`
+documents in a section.
 
 **A diff that adds an entry to `PERF_LEDGER.md` never records a selection timing - a timing
 that picks a winner between candidate kernel forms.** That timing settles its adoption
@@ -56,8 +61,12 @@ skipping it. Where no row exercises the path, the diff mints one. The board is t
 public memory of what serving costs; a kernel win that never lands there is invisible to the
 next regression check.
 
-**A diff that claims to make an already-served path faster, from an author whose box does not
-mint that path, names the owed row in `PERF_LEDGER.md` and in the PR body.**
+**A timing figure this module writes down as a measurement rather than as a prediction -
+tok/s, latency, a whole-turn model or engine comparison, and the 512-token prefill (pp512)
+and 128-token decode (tg128) rates - carries either a board cell behind it or a provenance
+line, covering its passage or its section, naming harness, flags, box, and the exe or script
+that ran it.** The board cell states its quant mode and stamps box and engine provenance, so a
+number can never silently describe a format nobody serves or a kernel set nobody ships.
 
 **A timing figure PRESENTED AS A MEASUREMENT of a served turn as a whole - tok/s, latency, a
 whole-turn model or engine comparison - is a defect wherever this module writes it down with

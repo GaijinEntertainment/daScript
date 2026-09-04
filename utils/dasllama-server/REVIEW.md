@@ -10,24 +10,20 @@ number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 **A diff that changes a flag's row in `README.md` also updates that flag's `@clarg_doc` in
 `main.das`, in the same change - `--help` is the other copy a user reads.**
 
-**A captured body under `tests/fixtures/` is never hand-authored, and never edited beyond
-machine-local path normalization - re-capture it instead.** `tests/fixtures/README.md` gives
-the capture rails; a capture SCRIPT beside the fixtures is code, not a fixture.
+**A Playwright `.spec.js` or a captured fixture, wherever the diff puts it, applies the
+`tests/` subfolder's `REVIEW.md` (beside this file) too.**
 
-**A body or SSE frame a Playwright `.spec.js` under `tests/` (beside this file) sends or
-asserts is a fixture, or a clone of one with named fields overridden - one assembled from
-scratch is a defect.**
-
-**A diff that re-captures a fixture under `tests/fixtures/`, or edits `control.html`, runs
-the Playwright suite in `tests/` (beside this file) and ships green.**
-
-**Weakening `REVIEW.das` (beside this file) is a defect** - dropping a check, narrowing what a
-check scans, adding a name to a check's licensed set (the names that check does not flag), or
-changing a finding text so it no longer names what failed. What the gate enforces is read from
+**Weakening `REVIEW.das` (beside this file) - dropping a check, narrowing what a check scans,
+adding a name to a check's licensed set (the names it does not flag), or blunting a finding
+text so it no longer names what failed - is a defect.** What the gate enforces is read from
 the gate itself.
 
-**A diff that adds a route, or changes a request field the server reads, updates
-`control.html` where the page uses it, in the same change.**
+**A diff that renames or removes a request field that `openai_server.das` reads updates every
+place `control.html` sends that field, in the same change.**
+
+**A diff that makes a route in `openai_server.das` require a request field it did not require
+before - a new route requires all of its fields - adds that field to every `control.html`
+request to that route, in the same change.**
 
 **A diff that changes what a route answers - an item, a field, or a value - re-captures every
 fixture under `tests/fixtures/` that records that route, in the same change.** The fixtures are
@@ -39,9 +35,3 @@ fixture for the route that answers with that key first.**
 
 **A diff that adds a key to what a route answers lists it in that route's `README.md` row, in
 the same change.** The row is where a consumer learns the key exists.
-
-**A Playwright `.spec.js` under `tests/` (beside this file) never spells out a value a fixture
-carries, and never hard-codes a number a re-capture can move - including one derived from a
-capture's length. It reads the value, and computes the number, from the fixture.** A capture
-carries the values of the machine it was taken on, so a re-capture elsewhere moves them, and a
-spec that pins one goes red for a reason that has nothing to do with the page.

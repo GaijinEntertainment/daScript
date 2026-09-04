@@ -249,6 +249,17 @@ thinking family's wire shape, whole-string and per-chunk down to 1 byte.
 serializers and call parsers for harmony/gemma4/mistral/llama_json against verbatim fixtures.
 `test_scheduler.das` - the continuous-batching scheduler (dasllama_scheduler) against
 `generate()` references; skips honestly without SmolLM2-135M / the MTP fixture, `-jit` only.
+The SmolLM cells drop the loaded model's GPU state (`moe_gpu_drop_model`) so they serve on
+the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lane, and the
+tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream
+deltanet cell needs Qwen3.5-0.8B-Q8_0 and `DASLLAMA_GPU=1` on a box whose tier serves the
+deltanet decode step, and skips otherwise.
+`test_gpu_model_swap.das` - two models through one process on the armed tier (Qwen3-0.6B,
+SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own weights,
+the pin on the upload rail dropping a still-installed model's device state first; skips
+without both models or the armed tier. Its model-free cell drives that pre-load drop through
+its own entry with a stale mark installed and checks the MoE layer request survives it
+(needs only an installed tier).
 `test_program_roots.das` - model-free: every dasllama program root (tutorials, examples,
 server tools) declares `options stack = 524288`, and every model-loading root declares its
 prefill intent.
@@ -319,7 +330,9 @@ branches that decide what lands on the public board, which no model suite reache
 grows past the `max_unreserved_size` guard that must not panic.
 `test_deltanet.das` - model-free: the deltanet session-state sizing at 27B geometry through
 `make_run_state` (S state + widened-conv history past the guard); model-gated: the
-chunked-vs-recurrent prefill equivalence probe on Qwen3.5-0.8B.
+chunked-vs-recurrent prefill equivalence probe on Qwen3.5-0.8B, in the forced-feed
+logits-tolerance form with the tier's deltanet chain and decode step pinned off (its claim is
+the CPU chunk algebra).
 `test_vision.das` - model-free: the vision preprocessing rail (geometry, letterbox, normalize)
 bit-exact against pinned mtmd oracle hashes (dumps + mint scripts in the models dir's
 `gemma4-vision-oracle/` and `qwen3vl-vision-oracle/` - the qwen rail letterboxes at align 32),

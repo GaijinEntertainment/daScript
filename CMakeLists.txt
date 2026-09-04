@@ -1925,7 +1925,6 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/daslang/
     DESTINATION ${DAS_INSTALL_DOCDIR}/skills/daslang
     FILES_MATCHING
     REGEX "/daslang/README\\.md$" EXCLUDE
-    REGEX "/LAWS\\.md$" EXCLUDE
     PATTERN "*.md"
 )
 # The review constitution ships with the review skills that route to it, and the
@@ -2028,7 +2027,6 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/daslang/
     DESTINATION .claude/skills/daslang
     FILES_MATCHING
     REGEX "/daslang/README\\.md$" EXCLUDE
-    REGEX "/LAWS\\.md$" EXCLUDE
     PATTERN "*.md"
 )
 install(FILES ${PROJECT_SOURCE_DIR}/.claude/agents/dragon.md DESTINATION .claude/agents)
@@ -2380,7 +2378,7 @@ install(CODE [[
         get_filename_component(_name "${_f}" NAME)
         get_filename_component(_f_abs "${_f}" ABSOLUTE)
         if((_name MATCHES "^REVIEW.*\.(md|das)$"
-                OR _name MATCHES "^(ARCHITECTURE[A-Za-z_]*|LAWS|MASTERPLAN[A-Za-z_]*|PERF_LEDGER|PROFILE|THINKING)\.md$"
+                OR _name MATCHES "^(ARCHITECTURE[A-Za-z_]*|MASTERPLAN[A-Za-z_]*|PERF_LEDGER|PROFILE|THINKING)\.md$"
                 OR _name MATCHES "^followup_.*\.md$")
             AND NOT _f_abs STREQUAL _root_common
             AND NOT _f_abs STREQUAL _root_arch_common)

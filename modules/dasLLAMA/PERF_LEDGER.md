@@ -24,6 +24,15 @@ what it costs today and what the fix would change.
   against the 07-25 row; done when both rows sit in `performance/records/zen2.json` and the
   site records are regenerated.
 
+- **OWED ROWS - the parity pass's ten 1B pp512 vehicles.** The mirror pass
+  (`plans/kernel_parity_pass.md`, 2026-09-03) read Q3_K_L at 1.08, IQ3_M at 1.06 and IQ2_XXS
+  at 0.98 of the reference on the `lcpp_bench --for-debug-purposes --plen 512 --ngen 0 --reps
+  12` rig bracketed by `llama-bench -p 512 -n 0 -r 6`, stage readings only; the board's rows
+  for those vehicles are two-rep readings and stand until re-minted. Same refusal as above -
+  the hardware stamp declines this box while the remote-access daemon runs. Owed: the ten
+  vehicles' vulkan pp512 rows re-minted by `gen_bench_records`, direction-grade against the
+  rows they replace; done when they sit in `performance/records/zen2.json`.
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

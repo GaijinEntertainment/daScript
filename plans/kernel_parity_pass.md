@@ -1280,3 +1280,39 @@ Vulkan grid tg (gap 3): followup_vulkan 35's levers, after gap 1 or 2 lands.
   cell's first shape compared the CPU rail against itself for twenty minutes and passed - a
   two-arm compare on the driver builds f16 sessions like the bench and asserts the driver's
   session stamp (`rdec_gen != 0`) on both arms, or it proves nothing.
+
+- 2026-09-03: the mirror pass on the three pp512 rows under 1.0 (Q3_K_L, IQ3_M, IQ2_XXS), on
+  the RTX 5060 Ti (the zen2 box, driver 616.56), on master after #3926 merged (866a03046, the
+  Vulkan files byte-identical to the PR tip). Method:
+  llama.cpp's `GGML_VK_PERF_LOGGER=1 llama-bench -p 512 -n 0 -r 2 -ngl 99` last-graph rows
+  (`Total time` = the GPU window) against our `DASLLAMA_GPU_PROF=1 lcpp_bench --plen 512 --ngen 0`
+  role stamps, then plain pp512 with llama.cpp bracketing ours (`-r 6` | `--reps 12` | `-r 6`).
+  RULE learned the hard way: a `--reps 2` stamp is not a reading - the window never lets the
+  clocks settle and any load on the box lands on the bandwidth-bound roles (act, classifier gemv,
+  residual norms read 1.5-2x, window to window); twelve reps reproduce yesterday's Q4_K_M window
+  (22.4 ms, 20777 tok/s) exactly. `test-backend-ops perf` cannot take a custom shape (its list is
+  m 4096 x n 512 x k 14336), so the per-shape reference is the perf logger, never the probe's
+  shapes. GPU time per window, us, ours vs llama.cpp (twelve reps, same minutes):
+
+  | role | Q3_K_L | IQ3_M | IQ2_XXS |
+  |---|---|---|---|
+  | q + wo | 3073-3230 vs 2936 | 2812-2834 vs 2733 | 3114-3240 vs 3092 |
+  | k + v | 1067 vs 1087 | 970 vs 982 | 976 vs 997 |
+  | gate + up | 10952-11366 vs 10383 | 10669-10728 vs 10148 | 11826-11840 vs 10309 |
+  | down | 5418-5700 vs 5000 | 5163-5207 vs 4961 | 5667-5809 vs 5325 |
+  | act | 972-1203 vs 1377 | 1001 vs 1381 | 969 vs 1688 |
+  | rope | 385 vs 1096 | 380 vs 1100 | 378 vs 1411 |
+  | classifier | 520-697 vs 522 | 520-561 vs 525 | 445 vs 441 |
+  | total | 24530-24815 vs 24259 | 23173-23202 vs 23676 | 25102-25112 vs 25132 |
+
+  Plain pp512, direction-grade across three processes, llama.cpp before | ours | llama.cpp
+  after: Q3_K_L 18813 | 20393 | 18737 (1.08); IQ3_M 19425 | 20734 | 19533 (1.06); IQ2_XXS
+  19972 | 19298 | 19483 (0.98). Verdict: gap 1 is closed at the rig - nine of ten vehicles at
+  or past llama.cpp, IQ2_XXS at 0.98 inside the box's band. The GEMM tiles still lose a little
+  (gate/up iq2xxs 1.15, k3 1.05-1.09, iq3s 1.05; down 1.04-1.14 on the 2048-wide shape) and
+  rope (2.9x ahead), act (1.4-1.7x ahead) and the fused residual norms pay it back. The one
+  tile deficit worth a row of its own is the iq2xxs gate/up at 1.15: llama.cpp's iq2_xxs row
+  runs at its q3_K rate (50 TF/s), so its grid decode is hidden where ours (41 TF/s on the 1B
+  shape) still shows. That is memo delta 8 territory (the computed codebook and the
+  per-workgroup prologue). The board's 0.90 rows were two-rep readings; they stand until
+  re-minted (owed in `PERF_LEDGER.md`).

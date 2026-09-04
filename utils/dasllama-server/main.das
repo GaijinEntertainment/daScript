@@ -876,7 +876,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         // the Metal-build CPU-prefill guard is a profiling tripwire; its panic would drop every
         // live stream, and serving on the CPU arm is a legitimate configuration
         allow_cpu_prefill()
-        to_log(LOG_INFO, "dasllama-server: prefill runs on the CPU arm - pass --gpu metal for the Metal rails\n")
+        if (gpu != "vulkan") {
+            to_log(LOG_INFO, "dasllama-server: prefill runs on the CPU arm - pass --gpu metal for the Metal rails\n")
+        }
     }
     to_log(LOG_INFO, "dasllama-server: metal mode {get_metal_mode()}\n")
     if (gpu == "vulkan") {

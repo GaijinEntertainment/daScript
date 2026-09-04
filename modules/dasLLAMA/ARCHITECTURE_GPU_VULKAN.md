@@ -228,7 +228,15 @@ codec, and the device-embed arm). The save moves the installed state out and lea
 reading as no-model; the restore is its exact inverse. The whole-model drop clears the same set
 and deselects the `"vulkan"` overrides, so a dropped model's prefill and decode take the plain
 CPU path and a later re-arm passes `resident_upload`'s no-active-override gate. The three carry
-the same set, which is why a model's device state never survives into the next.
+the same set, which is why a model's device state never survives into the next. The upload
+rail enforces it from its own side: a load that finds marks still installed - a model deleted
+without the drop, the shape every test process and single-model tool takes - drops that
+model's device state before uploading its own, carrying the load's MoE layer request across
+the drop (the one mark the drop's reset would otherwise zero before the rail reads it).
+Without that drop the second model's stacks
+land beside the first's, and the offset-keyed stack lookup serves whichever model's plane
+registered that offset first: the decode attention block asserts on the geometry change, and a
+model whose geometry matches decodes the earlier model's weights.
 
 ### 2.2p The Q8 requant writers store one quant per byte {#q8-requant-byte-store}
 

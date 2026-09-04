@@ -170,8 +170,8 @@ def private dn_token_core(t : Model; var s : Session; l : int64; qkv : float con
 }
 
 // The deltanet decode step as ONE device chain (npos=1 through MoeGpuDnFn): CPU keeps norm +
-// raw β/α + the q8 image. State/conv history live DEVICE-SIDE across steps — dn_flush_layer /
-// moe_gpu_dn_invalidate are the sync seams for every CPU consumer.
+// raw β/α + the q8 image.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
 def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
     let c = t.config
     let dim = c.dim

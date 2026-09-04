@@ -26,6 +26,37 @@ require dasllama/dasllama_env
 // (incl. gemma-4-E2B at 4.97GB) from the 7.7GB+ heavies.
 let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul
 
+//! Max |a[i] - b[i]| over two same-length float arrays - the compare behind a logits bar.
+def logits_maxdiff(a, b : array<float>) : float {
+    var m = 0.0
+    for (x, y in a, b) {
+        m = max(m, abs(x - y))
+    }
+    return m
+}
+
+//! Max |a[i]| - the scale a relative logits bar multiplies.
+def logits_maxabs(a : array<float>) : float {
+    var m = 0.0
+    for (x in a) {
+        m = max(m, abs(x))
+    }
+    return m
+}
+
+//! Element-for-element equality of two id lists.
+def ids_equal(a, b : array<int64>) : bool {
+    if (length(a) != length(b)) {
+        return false
+    }
+    for (x, y in a, b) {
+        if (x != y) {
+            return false
+        }
+    }
+    return true
+}
+
 // Machine-local model root; override with DASLLAMA_MODELS_DIR (e.g. the x64 handoff box).
 def models_dir() : string {
     let env = g_env_harness.models_dir

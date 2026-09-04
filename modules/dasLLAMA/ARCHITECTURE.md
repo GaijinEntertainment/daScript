@@ -51,9 +51,9 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j-2.2q: the Vulkan resident driver - the prefill window
   chain, the cm2 decode lanes and tile pick, the class-pipeline build seat, the residency plan,
   the GPU-slot marks swap, the Q8 requant byte store, and the MoE expert chain on the cm2 tiles.
-- `ARCHITECTURE_GPU_VULKAN_DECODE.md` - sec.2.2r-2.2t: the per-op tier's decode era - the decode
-  attention block over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, and the
-  whole-token decode span.
+- `ARCHITECTURE_GPU_VULKAN_DECODE.md` - sec.2.2r-2.2u: the per-op tier's decode era - the decode
+  attention block over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, the
+  whole-token decode span, and the deltanet decode step's per-session resident state.
 - `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.39: the Metal speculative round over the batch driver's
   same-slab verify, the box knob that sets the depth a round drafts, and the kernel
   argument-alignment contract enforced at every dispatch.

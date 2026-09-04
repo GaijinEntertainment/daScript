@@ -348,6 +348,7 @@ def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : boo
 //! over every decoding stream, at most ONE chunk_tokens prefill chunk (FCFS; the final chunk's
 //! logits sample the first token inline), then reap finished streams. Events append to `events`
 //! (the caller drains it). Returns true while any stream or queued request remains.
+[arch(at="../ARCHITECTURE_ENGINE.md#scheduler-step")]
 def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent>) : bool {  // nolint:STYLE037,STYLE038 - admit/decode/prefill/reap, one linear pass
     // (0) drop finished-stream linger entries past their poll window (bounded backstop at 32).
     // get_time_nsec, NOT get_time_usec: the usec helper returns int and wraps at ~35.8 min,
@@ -463,6 +464,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             }
         }
     }
+    sch.batch_rows |> clear()
+    sch.batch_toks |> clear()
+    sch.batch_idx |> clear()
     // (3) at most ONE prefill chunk, FCFS — decode-priority with a bounded prefill quantum
     for (i in range64(long_length(sch.streams))) {
         if (sch.streams[i].state != StreamState.prefilling) {
