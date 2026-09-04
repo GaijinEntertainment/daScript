@@ -79,9 +79,9 @@ def private plant_folder(root, name, config : string; docs : array<string>; leng
 def private build_tree() : string {
     let root = path_join(tmp_root(), "tree")
     mkdir_rec(root)
-    // 301 fires, 300 is at the cap, and LAWS.md is provenance rather than a checklist
+    // 301 fires, 300 is at the cap
     plant_folder(root, "tagged", "[docs]\nrule_docs_only = true\n",
-        ["ARCHITECTURE.md", "REVIEW.md", "LAWS.md"], [301, 300, 400])
+        ["ARCHITECTURE.md", "REVIEW.md"], [301, 300])
     plant_folder(root, "arch", "", ["REVIEW_GPU.md"], [301])
     plant_folder(root, "off", "[docs]\nrule_docs_only = false\n", ["ARCHITECTURE.md"], [400])
     plant_folder(root, "plain", "", ["ARCHITECTURE.md"], [400])
@@ -147,12 +147,11 @@ def test_rule_doc_line_gate(t : T?) {
         t |> equal(count_of(out, "LINT027"), 4, "the line gate runs with LINT025/026 whitelisted off\n{out}")
         t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
     }
-    t |> run("the cap itself is silent, and so is LAWS.md at any length") @(t : T?) {
+    t |> run("the cap itself is silent") @(t : T?) {
         let root = build_tree()
         var out : string
         run_lint(root, out)
         t |> success(find(out, "REVIEW.md: LINT027") < 0, "300 lines exactly is at the cap\n{out}")
-        t |> success(find(out, "LAWS.md: LINT027") < 0, "the rulings sidecar carries no line gate\n{out}")
     }
     t |> run("an untagged folder is gated like a tagged one") @(t : T?) {
         let root = build_tree()

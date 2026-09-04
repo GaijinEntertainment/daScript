@@ -23,6 +23,20 @@ The scope of "externals" is the [daspkg-index](https://github.com/borisbat/daspk
 package list - that is the universe of repos any user (and the planned nightly
 cron) builds against daslang master.
 
+**Generated-binding externals are a second canary class.** dasDuckDB and
+dasPostgreSQL ship `dasClangBind` output checked in: every generated `.cpp`
+carries the binder's include set, and the hand-written `*.main.cpp` fixup loops
+touch `Function` / `TypeDecl` members directly. Two daslang changes break them
+that touch no external-facing API: a change to what the binder EMITS
+(`modules/dasClangBind/cbind/cbind_boost.das` - an include it stops writing is
+one the externals still `#include`), and a removed member the fixups set. The
+binder is OFF in release builds (`DAS_CLANG_BIND_DISABLED=ON`), so hand-editing
+the generated sources to the new emission IS the regeneration; verify with the
+nightly's own command, `./bin/daslang utils/daspkg/main.das -- install <name>
+--branch <fix-branch> --root <scratch>` (dasPostgreSQL needs libpq on the box:
+`brew install libpq` and `-DPostgreSQL_ROOT=/opt/homebrew/opt/libpq` on a
+standalone configure - env vars do not reach daspkg's cmake).
+
 ## The checklist
 
 1. **Identify the breaking surface.** List every symbol removed, renamed, or

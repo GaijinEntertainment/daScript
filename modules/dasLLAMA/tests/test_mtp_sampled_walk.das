@@ -1,0 +1,198 @@
+options gen2
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options persistent_heap
+options _dasllama_internal = true
+
+require dastest/testing_boost public
+require dasllama/dasllama_common     // Session, SamplingParams, mtp_walk_sampled / mtp_walk_samples
+require dasllama/dasllama_sampling   // sample_, and the [init] that installs the walk's row sampler
+require daslib/random
+
+// The sampled accept walk is host arithmetic over the verify rows, so its reference is plain
+// sampled decode over the same rows: sample_ per row, the same seed, one draw per emitted token.
+// A bare session over an 8-token vocabulary carries everything the walk touches.
+
+let VOCAB = 8l
+let K = 3l
+
+def private bare() : Session {
+    var s : Session
+    s.logits |> resize(VOCAB)
+    s.sample_scratch |> resize(VOCAB)
+    s.mtp_vbatch |> resize(K + 1l)
+    s.mtp_logits_b |> resize((K + 1l) * VOCAB)
+    return <- s
+}
+
+def private set_row(var s : Session; row : int64; vals : array<float>) {
+    for (i in range64(VOCAB)) {
+        s.mtp_logits_b[row * VOCAB + i] = vals[i]
+    }
+}
+
+def private same_rng(a, b : int4) : bool {
+    return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w
+}
+
+// plain sampled decode over the same rows: the emitted tokens, and where the drafts stop matching
+def private plain_sampled_decode(var r : Session; params : SamplingParams; drafts : array<int64>; var accepted : int64&) : int64 {
+    accepted = 0l
+    for (i in range64(K + 1l)) {
+        for (j in range64(VOCAB)) {
+            r.logits[j] = r.mtp_logits_b[i * VOCAB + j]
+        }
+        let d = sample_(r, params)
+        if (i < K && d == drafts[i + 1l]) {
+            r.recent |> push(d)
+            accepted++
+            continue
+        }
+        return d
+    }
+    return -1l
+}
+
+[test]
+def test_sampled_walk_matches_plain_sampled_decode(t : T?) {
+    //! every draft is the only token with mass on its row, so the walk accepts all three and draws the bonus row
+    var s <- bare()
+    var r <- bare()
+    let drafts <- [0l, 3l, 5l, 1l]
+    var rows <- [[-1.0e30, -1.0e30, -1.0e30, 4.0, -1.0e30, -1.0e30, -1.0e30, -1.0e30],
+                 [-1.0e30, -1.0e30, -1.0e30, -1.0e30, -1.0e30, 4.0, -1.0e30, -1.0e30],
+                 [-1.0e30, 4.0, -1.0e30, -1.0e30, -1.0e30, -1.0e30, -1.0e30, -1.0e30],
+                 [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]]
+    for (i in range64(K + 1l)) {
+        set_row(s, i, rows[i])
+        set_row(r, i, rows[i])
+        s.mtp_vbatch[i] = drafts[i]
+    }
+    var sp = SamplingParams(temp = 0.8)
+    s.rng = random_seed(77)
+    r.rng = random_seed(77)
+    t |> success(!mtp_walk_samples(s), "no sampler pointed at: the walk stays greedy")
+    s.spec_params = unsafe(addr(sp))
+    t |> success(mtp_walk_samples(s), "a sampler above zero temperature arms the sampled walk")
+    var a_ref = 0l
+    let next_ref = plain_sampled_decode(r, sp, drafts, a_ref)
+    let a = mtp_walk_sampled(s, K, VOCAB)
+    t |> equal(a, 3l, "every draft accepted")
+    t |> equal(a, a_ref, "the accepted run equals the plain decode's")
+    t |> success(s.mtp_pre_drawn, "the bonus row's draw is parked for the caller")
+    t |> equal(s.mtp_pre_tok, next_ref, "the parked token is the plain decode's fourth draw")
+    t |> success(same_rng(s.rng, r.rng), "one RNG draw per emitted token: the states agree after the round")
+    t |> equal(length(s.recent), 0, "the recent window is put back for the caller to commit")
+    t |> equal(sample_(s, sp), next_ref, "the caller's sample_ returns the parked token")
+    t |> success(!s.mtp_pre_drawn, "and clears it")
+    delete rows
+    delete s
+    delete r
+}
+
+[test]
+def test_sampled_walk_stops_at_the_first_miss(t : T?) {
+    //! row 1's draft has no mass, so the walk accepts draft 1 and misses there; rows 2 and 3 are never touched
+    var s <- bare()
+    var r <- bare()
+    let drafts <- [0l, 3l, 5l, 1l]
+    var rows <- [[-1.0e30, -1.0e30, -1.0e30, 4.0, -1.0e30, -1.0e30, -1.0e30, -1.0e30],
+                 [1.0, 2.0, 3.0, 1.0, 2.0, -1.0e30, 1.5, 0.5],
+                 [-1.0e30, 4.0, -1.0e30, -1.0e30, -1.0e30, -1.0e30, -1.0e30, -1.0e30],
+                 [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]]
+    for (i in range64(K + 1l)) {
+        set_row(s, i, rows[i])
+        set_row(r, i, rows[i])
+        s.mtp_vbatch[i] = drafts[i]
+    }
+    var sp = SamplingParams(temp = 0.8, top_k = 4l)
+    s.rng = random_seed(5)
+    r.rng = random_seed(5)
+    s.spec_params = unsafe(addr(sp))
+    var a_ref = 0l
+    let next_ref = plain_sampled_decode(r, sp, drafts, a_ref)
+    let a = mtp_walk_sampled(s, K, VOCAB)
+    t |> equal(a, 1l, "the first draft is accepted, the second is a miss")
+    t |> equal(a, a_ref, "the accepted run equals the plain decode's")
+    t |> equal(s.mtp_pre_tok, next_ref, "the miss is the plain decode's second draw")
+    t |> success(s.mtp_pre_tok != drafts[2], "and it is not the rejected draft")
+    t |> success(same_rng(s.rng, r.rng), "two RNG draws on both sides")
+    delete rows
+    delete s
+    delete r
+}
+
+[test]
+def test_greedy_walk_with_penalties_goes_through_the_sampler(t : T?) {
+    //! a penalized greedy sampler (temp 0) picks the penalized argmax, so the walk must draw through
+    //! it: the second draft repeats the accepted first one and loses to the runner-up under the penalty
+    var s <- bare()
+    let drafts <- [0l, 3l, 3l, 1l]
+    var rows <- [[0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0],
+                 [0.0, 0.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0],
+                 [0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                 [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0]]
+    for (i in range64(K + 1l)) {
+        set_row(s, i, rows[i])
+        s.mtp_vbatch[i] = drafts[i]
+    }
+    var greedy = SamplingParams()
+    s.spec_params = unsafe(addr(greedy))
+    t |> success(!mtp_walk_samples(s), "a bare argmax sampler keeps the argmax walk")
+    var sp = SamplingParams(penalty = 2.0)
+    s.spec_params = unsafe(addr(sp))
+    t |> success(mtp_walk_samples(s), "a penalized greedy sampler goes through the walk")
+    let rng0 = s.rng
+    let a = mtp_walk_sampled(s, K, VOCAB)
+    t |> equal(a, 1l, "the repeated draft is rejected under the penalty")
+    t |> equal(s.mtp_pre_tok, 2l, "the penalized argmax is the next token")
+    t |> success(same_rng(s.rng, rng0), "a greedy sampler draws no random number")
+    t |> equal(sample_(s, sp), 2l, "the caller's sample_ returns the parked token")
+    delete rows
+    delete s
+}
+
+[test]
+def test_sampled_walk_penalizes_with_the_accepted_drafts(t : T?) {
+    //! top-k 1 makes each draw the penalized argmax: the second draft repeats the first, so only a walk that advanced the recent window rejects it
+    var s <- bare()
+    let drafts <- [0l, 3l, 3l, 1l]
+    var rows <- [[0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0],
+                 [0.0, 0.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0],
+                 [0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                 [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0]]
+    for (i in range64(K + 1l)) {
+        set_row(s, i, rows[i])
+        s.mtp_vbatch[i] = drafts[i]
+    }
+    var sp = SamplingParams(temp = 0.7, top_k = 1l, penalty = 2.0)
+    s.rng = random_seed(1)
+    s.spec_params = unsafe(addr(sp))
+    let a = mtp_walk_sampled(s, K, VOCAB)
+    t |> equal(a, 1l, "the repeated draft is rejected once the first one sits in the window")
+    t |> equal(s.mtp_pre_tok, 2l, "the runner-up is the next token")
+    t |> equal(length(s.recent), 0, "the window is put back")
+    delete rows
+    delete s
+}
+
+[test]
+def test_sampled_flag_stands_the_greedy_chain_down(t : T?) {
+    //! sample_ sets s.sampled - the single-row driver's greedy-chain gate - whenever its pick can
+    //! differ from the raw argmax: a temperature, OR a penalty at temp 0. A bare argmax leaves it clear.
+    var s <- bare()
+    for (i in range64(VOCAB)) {
+        s.logits[i] = float(i)
+    }
+    let bare_argmax = SamplingParams()
+    s.sampled = true
+    let _b = sample_(s, bare_argmax)
+    t |> success(!s.sampled, "a bare argmax sampler keeps the chain armed")
+    let penalized = SamplingParams(penalty = 2.0)
+    let _p = sample_(s, penalized)
+    t |> success(s.sampled, "a penalty at temp 0 stands the chain down: the chain predicts the raw argmax the penalty rejects")
+    let hot = SamplingParams(temp = 0.8)
+    s.rng = random_seed(3)
+    let _h = sample_(s, hot)
+    t |> success(s.sampled, "a temperature stands the chain down")
+    delete s
+}

@@ -125,7 +125,7 @@ struct Scheduler {
     pool : KVPool
     prefix : PrefixCache
     kv_dtype : KVDtype = KVDtype.f16        // KV codec for every stream (pool-wide when paged)
-    mtp : bool                              // MTP/NextN self-spec ticks for greedy streams (the server also sets the engine's prefill-warm gate)
+    mtp : bool                              // MTP/NextN self-spec ticks for every decoding stream - sampled and penalized ones draw the walk through their own sampler (the server also sets the engine's prefill-warm gate)
     // per-step gather scratch. @do_not_delete is load-bearing: delete of a plain array<T?>
     // CASCADES to the pointees — these are borrowed rows into streams[i].session
     @do_not_delete batch_rows : array<Session?>
@@ -423,17 +423,15 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             finish_stream(sch.streams[i], "length", events)
             continue
         }
-        if (sch.mtp && sch.streams[i].params.temp <= 0.0 && sch.streams[i].params.penalty == 1.0 &&
-                sch.streams[i].params.presence_penalty == 0.0 && sch.streams[i].params.frequency_penalty == 0.0) {
-            // greedy self-spec tick: draft + 2-row batched verify on this stream's own session
-            // (the stream trades its cross-stream batch row for up to two positions per tick;
-            // sampled/penalized streams stay on the batch — the greedy verify wouldn't match them).
+        if (sch.mtp) {
+            // self-spec tick: the stream trades its cross-stream batch row for up to two positions per tick.
             // Donation-side note: an accepted token is already evaled, so a "length" finish here
             // makes donate_stream's pending-eval redundant — harmless, and unreachable anyway:
             // every MTP-capable arch is a deltanet hybrid, which the prefix cache refuses.
             let d0 = sch.streams[i].session.mtp_drafted
             let a0 = sch.streams[i].session.mtp_accepted
             var acc = 0l
+            sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
             if (mtp_spec_eval(m, sch.streams[i].session, sch.streams[i].cur_tok, acc)) {
                 if (advance_with(m, sch.streams[i], acc, events)) {
                     sch.gen_tokens ++
@@ -446,6 +444,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                     sch.gen_tokens ++
                 }
             }
+            sch.streams[i].session.spec_params = null   // the pointer aims into `streams`, which admission and reaping move
             sch.decode_steps ++
             sch.sum_batch ++
             continue

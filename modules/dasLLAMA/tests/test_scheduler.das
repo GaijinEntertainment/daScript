@@ -9,6 +9,7 @@ require dasllama/dasllama                               // facade: load/encode/g
 require dasllama/dasllama_blocks   // embed_text_rows: the media arms build rows from the prompt's own tokens
 require daslib/jobque_boost
 require daslib/fio
+require daslib/strings_boost   // join: the decoded stream logs beside the token-exact compares
 require math
 require dasllama/dasllama_env
 
@@ -111,6 +112,11 @@ def private toks_of(events : array<SchedEvent>; id : int64) : array<int64> {
 
 def private pieces_of(events : array<SchedEvent>; id : int64) : array<string> {
     return <- [for (e in events); e.text; where e.stream == id && e.kind == SchedEventKind.piece]
+}
+
+// both sides of a stream compare, decoded - a near-tie synonym flip and a broken walk read alike as ids
+def private log_streams(la : string; ea : array<SchedEvent>; ida : int64; lb : string; eb : array<SchedEvent>; idb : int64) {
+    to_log(LOG_INFO, "{la}: {join(pieces_of(ea, ida), "")}\n{lb}: {join(pieces_of(eb, idb), "")}\n")
 }
 
 def private finished_of(events : array<SchedEvent>; id : int64) : SchedEvent {
@@ -508,8 +514,8 @@ def test_scheduler_evict_and_context_length(t : T?) {
 let MTP_MODEL_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
 
 [test]
-def test_scheduler_mtp(t : T?) {
-    t |> run("scheduler mtp: self-spec greedy stream == plain scheduler, chunked prefill + paged (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
+def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per test: the greedy and the sampled leg run against that model inside the same jobque scope
+    t |> run("scheduler mtp: self-spec greedy and sampled streams == plain scheduler, chunked prefill + paged (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -557,6 +563,64 @@ def test_scheduler_mtp(t : T?) {
             t |> success(sch.mtp_drafted > 0l, "the spec tick actually drafted ({sch.mtp_drafted} drafts)")
             t |> success(sch.mtp_accepted > 0l, "some drafts accepted ({sch.mtp_accepted} of {sch.mtp_drafted})")
             t |> equal(finished_of(events, 2l).n_gen, 24l)
+            //! top-k 1 makes every draw the penalized argmax, so the seeded sampled stream is deterministic and must equal the plain scheduler's
+            let sp = SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1)
+            var sch1 <- create_scheduler(m, 1l, 4l, 8l, 16l)
+            var events1 : array<SchedEvent>
+            t |> success(submit(m, sch1, make_req(3l, prompt, sp, 24l, none, 4242)), "plain sampled stream queued")
+            drain(m, sch1, events1)
+            var ref_s <- toks_of(events1, 3l)
+            unsafe {
+                delete sch1
+            }
+            set_mtp_spec(true)
+            var sch2 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true)
+            var events2 : array<SchedEvent>
+            t |> success(submit(m, sch2, make_req(4l, prompt, sp, 24l, none, 4242)), "spec sampled stream queued")
+            drain(m, sch2, events2)
+            set_mtp_spec(prev_spec)
+            var got_s <- toks_of(events2, 4l)
+            log_streams("sampled plain", events1, 3l, "sampled spec", events2, 4l)
+            t |> success(same(got_s, ref_s), "sampled spec stream tokens == plain scheduler (temp 0.7, top-k 1, penalty 1.1)")
+            t |> success(sch2.mtp_drafted > 0l, "the sampled tick drafted ({sch2.mtp_drafted} drafts)")
+            t |> success(sch2.mtp_accepted > 0l, "the sampled walk accepted drafts ({sch2.mtp_accepted} of {sch2.mtp_drafted})")
+            t |> equal(finished_of(events2, 4l).n_gen, 24l)
+            // penalized greedy: the plain scheduler picks the PENALIZED argmax every step, so the
+            // spec tick must draw its verify rows through the sampler too - a raw-argmax walk would
+            // accept drafts the penalty rejects
+            let gp = SamplingParams(penalty = 1.3)
+            var sch3 <- create_scheduler(m, 1l, 4l, 8l, 16l)
+            var events3 : array<SchedEvent>
+            t |> success(submit(m, sch3, make_req(5l, prompt, gp, 24l, none)), "plain penalized-greedy stream queued")
+            drain(m, sch3, events3)
+            var ref_p <- toks_of(events3, 5l)
+            unsafe {
+                delete sch3
+            }
+            set_mtp_spec(true)
+            var sch4 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true)
+            var events4 : array<SchedEvent>
+            t |> success(submit(m, sch4, make_req(6l, prompt, gp, 24l, none)), "spec penalized-greedy stream queued")
+            drain(m, sch4, events4)
+            set_mtp_spec(prev_spec)
+            var got_p <- toks_of(events4, 6l)
+            log_streams("penalized-greedy plain", events3, 5l, "penalized-greedy spec", events4, 6l)
+            t |> success(same(got_p, ref_p), "penalized-greedy spec stream tokens == plain scheduler (penalty 1.3, temp 0)")
+            t |> success(sch4.mtp_drafted > 0l, "the penalized-greedy tick drafted ({sch4.mtp_drafted} drafts)")
+            delete got_p
+            delete ref_p
+            delete events4
+            delete events3
+            unsafe {
+                delete sch4
+            }
+            delete got_s
+            delete ref_s
+            delete events2
+            delete events1
+            unsafe {
+                delete sch2
+            }
             delete got
             delete events
             unsafe {

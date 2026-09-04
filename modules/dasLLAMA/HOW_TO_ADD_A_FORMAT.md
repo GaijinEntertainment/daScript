@@ -82,7 +82,7 @@ add the arm next to `q40`'s. The compiler does not find these - a missing arm fa
   `memcpy`, the stream repack `invoke(g_stream_repack, <id>, ...)`, `transcode_kq_tensor`,
   `load_big`, `kq_fmt_of` (GGML type -> tag), the two `noisy` log lines,
   `g_stream_plane_total["<fmt>q"]`, the plane `reserve`/`resize` block.
-- `dasllama_common.das`: `kq_active_mr`, `kq_fi`, `mm_at_kq_pre` (two arms), `mm_b_kq`,
+- `dasllama_common.das`: `kq_active_mr`, `kq_fi`, `mm_at_kq_pre` (two arms), `mm_b_kq_tile`,
   `mm_at_kq_groupn` (two arms), `mm_b_kq_groupn`, `mm_b_kq_pre`, `kq_plane_q`, `kq_plane_s`,
   `embed_row` (four arms: grp and plane form, trimmed and untrimmed), the bake config fill
   (`c.kq_mr<id> = active_kq_layout_mr(<id>)`).

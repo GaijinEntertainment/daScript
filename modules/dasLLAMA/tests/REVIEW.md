@@ -8,14 +8,11 @@ the whole directory.** A change reaches a test when it alters anything the test'
 depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture or
 corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
-**Every test file - a `.das` in this folder that dastest runs: one carrying at least one
-`[test]` function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the
-assertion - is listed in a `run.das` suite, or its header states why its cells cannot hold
-under `DASLLAMA_CPU_PREFILL=1`; a diff that leaves a test file in neither state is a defect.**
-`DASLLAMA_CPU_PREFILL=1` is what the runner arms for every suite.
-
-**Listing a test file whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` in any `run.das`
-suite is a defect, and so is leaving that fact out of the file's header.**
+**A test file - a `.das` in this folder that dastest runs: one carrying at least one `[test]`
+function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion
+- whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in its header and sits in no
+`run.das` suite; every other test file in this folder sits in one.** `DASLLAMA_CPU_PREFILL=1`
+is what the runner arms for every suite.
 
 **Invoking dastest directly on a test file in a `run.das` model suite (every suite but
 `model-free`) is a defect - run it through `run.das`.**
@@ -87,10 +84,9 @@ therefore cannot differ between two runs on one machine is never tested through 
 value; test it through the argv it gates or the mode it selects.**
 
 **A test for an added, moved, or edited registration reaches the registered thing through its
-registry, and never calls it directly.** The registries this governs: the arch registrations
-(`register_decode_override` and its sibling `register_*` hooks), the `[EnvConfig]` env
-registry, and the format/backend dispatch tables. A new registry joins that list in the same
-change.
+registry, and never calls it directly.** A registry is the storage a `register_*` call writes
+and a lookup reads at dispatch - a table, a list, or a single hook global - or the `[EnvConfig]`
+env registry.
 
 **A diff that changes a kernel's dispatch geometry - its grid divisor, threadgroup size, or
 threadgroup-memory length - updates every gate that hand-dispatches that kernel, in the same
@@ -119,8 +115,9 @@ in `_model_tier.das`, or one line per side), otherwise each side's argmax index 
 red, or a suspicious green, must be readable in the log, not only as an id or float
 difference.
 
-**A fixture claiming a size or depth property whose test does not assert the actual number is
-a defect.** A resize cap is not evidence.
+**A cell whose name, comment, arm, or fixture claims a size, depth, or row count asserts that
+number.** A cap, a resize, or a counter showing the path ran is not evidence that the number was
+reached.
 
 **A freeform token-parity cell is a defect.** Freeform coverage uses the forced-feed
 logits-tolerance form - the same fixed tokens fed to both sides, logits compared within a bar.
@@ -233,13 +230,13 @@ transcendentals is not exact-value: it is not float-portable.
 **An embedding-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A kernel-unit cell that dispatches a kernel class no cell dispatched before, and a cell
-that adds or loosens a tolerance bar, each ship a control that reds them in the same
-change.** A control is a run of the same gate that must RED - a poisoned input, a poisoned
-expectation, a disconnected mechanism, or a second independent lane; a gate's own reference is
-never its control. A bar nothing has ever exceeded is not known to discriminate, and a gate
-that reads state the same code path wrote can be a tautology - only the control proves either
-can fail.
+**A kernel-unit cell that dispatches a `[metal_dispatch]` or `[vk_dispatch]` class no cell
+dispatched before ships a control that reds it in the same change.** A control is a run of
+the same gate that must RED - a poisoned input, a poisoned expectation, a disconnected
+mechanism, or a second independent lane; a gate's own reference is never its control.
+
+**A cell that adds or loosens a tolerance bar ships, in the same change, a control that lands
+outside the new bar.** A bar nothing has ever exceeded is not known to discriminate.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server leg gated on the family's

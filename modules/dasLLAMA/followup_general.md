@@ -920,8 +920,8 @@
     in the ASR store reader, `forward_profile_report` - read an aggregator over the saved
     `jobque_profile` trace that prints the same bucket table; (3) the two rule passages drop the
     retired rails and state the deliverable carve-out: a per-request wall the API returns
-    (`TtsTimings`, the server's timings line) is a deliverable, not instrumentation; (4) `LAWS.md`
-    records the ruling. Lint candidate, the mechanical form of the clock rule that is prose today:
+    (`TtsTimings`, the server's timings line) is a deliverable, not instrumentation.
+    Lint candidate, the mechanical form of the clock rule that is prose today:
     a `dasllama/` file that adds a clock read (`ref_time_ticks` / `get_time_usec`) whose value
     reaches a log, an accumulator table or a struct field, outside a `// clock: control` mark, a
     cold load / bake / map log, or a marker call.
@@ -1181,7 +1181,65 @@
    path) a head-baked and a head-less image share one identity: the trunk-alone image loads silently
    on an MTP run, and `dlim_image_verdict` calls both CURRENT. Done = the head fold lives in
    `image_identity`, with the one-time re-mint of the headed images that implies.
-100. **The server's boot-arming entry points: degrade on bad config everywhere, and a gate.**
+100. **The K-quant mul_mm twins carry no `rows % 64` contract.** Their grid is `rows/64` and the
+   kernel stores whole 64-column tiles (`dasllama/dasllama_metal_kernels.das`, `MetalKqMulMmK45T`),
+   so a weight-row count off 64 drops the last columns silently at every kq mul_mm site: the batch
+   driver's `use_mm` gate checks `% 64` for the q8 mm only, and `enc_kq_site_b` at nine rows and up
+   takes the kq mm with no such gate. `mp % 32` is declared; `rows` is not. Done = a census of every
+   kq mul_mm site's `rows` (decode, prefill, the `_t` / `_th` twins), `rows % 64` declared where the
+   census clears, a site gate where it does not.
+101. **DONE (2026-09-03): the speculative round serves sampled streams - sample-and-match.** The
+   walk was an argmax compare, so the scheduler ran the MTP tick only at temp 0 with no penalties
+   (`dasllama/dasllama_scheduler.das`) and a sampled stream decoded plain. The reference build's
+   server speculates under temperature by sampling each verify row with the stream's own sampler
+   and accepting while the sample equals the draft - every emitted token is a genuine draw from
+   the target row, so the distribution is exact and no draft probabilities are needed. The acceptance rate becomes the target's probability of the draft
+   token (lower than the argmax match: ~0.6 against 0.77 at depth 1), so the gain is (1 + a) / c
+   with c the round's cost in steps - about 1.3x on a dense carrier at c = 1.2, a wash on
+   Qwen3.8-27B at today's c = 1.5 until the verify gets cheaper. Done = the walk samples row i
+   through `sample_` (the row copied into `s.logits`, `s.recent` advanced per accepted token) and
+   accepts while the draw equals the draft, the scheduler gate drops to "MTP on", and a seeded
+   counting run at temp 0.8 matches plain sampled decode token for token.
+102. **The NextN draft chain is k command buffers because untied embeddings have no GPU gather.**
+   `metal_mtp_spec_round` runs k `metal_mtp_draft_forward` calls - a submit, a wait, a 1 MB logits
+   readback and a CPU argmax each (about 0.4 ms of a 2.8 ms draft on Qwen3.8-27B, M5: `lcpp_bench
+   --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1`, the `mtp.draft.*` sections) - where the
+   gemma round chains its drafts in one command buffer with `enc_argmax` and `enc_embed` on the
+   device. The NextN chain cannot: `embed_row` for an untied model reads the fp32 token table in
+   `fblob` (`t.tok_emb_off`; 5 GB on Qwen3.8-27B, carried in the image), and the GPU gathers exist
+   only for tied Q8 (`MetalEmbedQ8`) and tied K6 (`MetalEmbedK6`). Done = a K-quant embed gather
+   over the token table's own plane (k4 first) that also retires the fp32 table from blob images,
+   then the round in the gemma shape: one command buffer, `bvtok` chaining, one wait.
+103. **A sampled stream's round has no break-even guard.** The sampled accept walk (#101) pays the
+   round cost c (about 1.45 steps on gemma-26B at depth 1) whether or not the draws match, and
+   acceptance under sampling is the target's probability of the draft, which a hot sampler
+   flattens: gemma-26B on the M5 at temp 0.8 accepts 74.7% (the greedy rate) and gains 1.26x, at
+   temp 2.0 it accepts 29.9% (7.6% on one prompt) and LOSES, 0.93x (`PERF_LEDGER.md`, the sampled
+   walk entry, carries the harness and flags). The round pays only
+   while the acceptance a clears c - 1. Done = a per-stream running acceptance (the last N rounds)
+   in the scheduler's tick, and the tick decodes plain while it sits under c - 1 - re-arming every
+   M plain steps to re-measure - with the gemma-26B temp 2.0 corpus as the gate (on must not lose
+   to off) and the temp 0.8 corpus as the control (the guard must not fire there).
+104. **The CPU kq batch tile has no two-token form.** `kq_batch_cell_gen` (`dasllama_math_gen`)
+   tiles four tokens and runs the token tail as one GEMV pass per row, so the speculative round's
+   two-row verify streams and dequantizes every weight twice (`mm_gemm` 1.75x a step on Qwen3.8-27B,
+   M5 CPU); padding two rows to the four-token tile with zero rows was timed against it
+   (`lcpp_bench --mtp-ab --prof --ngl 0`, `-jit` debug rail, M5, `-n 64 -r 1`, SpecBench-4 chat):
+   `mm_gemm` 5.17 -> 6.36 s over the profiled window, the round 0.78x -> 0.75x, so the tile costs
+   2.46 GEMV passes for four tokens - the path is compute-bound, about half dequant and half dots
+   per row (`PERF_LEDGER.md`, the CPU round split). Done = a
+   two-token tile in the generator (`dasllama_gemm_gen::k4_tile` and its siblings take the token
+   count as a perm), predicted ~1.5 passes for two rows, wired into the tail walk for ntok % 4 == 2
+   (and 3 = 2 + 1), bit-exact vs the per-token GEMVs like the four-token form, with the CPU
+   round's `mtp.verify` section as the witness.
+105. **A rejected CPU verify on a recurrent hybrid re-forwards the whole step.** `mtp_spec_eval`
+   snapshots the deltanet state before the two-row verify and, on a reject, restores it and runs a
+   plain forward to re-advance it past row 0 - 0.24 step per round at 82% acceptance (the same
+   ledger entry). Done = the verify's recurrent layers run the per-token core at npos 2 and copy
+   each layer's state slice AFTER row 0 into the snapshot buffers (`mtp_snap_pos = pos + 1`), so a
+   reject restores that snapshot and takes row 0's logits and hidden the verify already produced -
+   the non-recurrent reject path's shape - with `test_mtp_reject_rollback` as the gate.
+106. **The server's boot-arming entry points: degrade on bad config everywhere, and a gate.**
    `configure_tts` now degrades on a missing file the way the roster does (2026-09-03), but the
    mirror image stands for vision and audio: `main.das` owns their missing-file check (it drops
    `image_mmproj` before calling) while `set_model_vision` / `set_model_audio` still panic on a
@@ -1190,14 +1248,14 @@
    reaches `panic(` from config input. Also owed: `main.das`'s `suppress_tune_for_setup` decides
    "no model configured" from argv alone (`--model` / `--config`), so a `--tts`-only start - a
    serving start that runs kernels - suppresses the tune mint.
-102. **A style rule the speech studio round asked for.** (The byte-array fixture sweep the same
+108. **A style rule the speech studio round asked for.** (The byte-array fixture sweep the same
    round asked for landed with the text-to-speech follow-on: `utils/dasllama-server/REVIEW.das`
    reads every fixture as bytes and sweeps by kind.) A style rule:
    `js?["k"] == null` / `!= null` on a `JsonValue?` is always wrong and always compiles - the
    safe index answers a shared null NODE, never a null pointer (`skills/daslang/references/json.md`
    says so); the presence test is `is_null`-shaped. One AST shape, no name reading; it cost
    one red cycle in the studio work.
-103. **Kokoro's other languages.** The weights and the vocabulary are shared; a voice pack needs
+109. **Kokoro's other languages.** The weights and the vocabulary are shared; a voice pack needs
    only its language's phoneme strings, and the reference picks the phonemizer by the voice
    name's first letter. American English serves today and British English is the lexicon
    rung in flight (misaki `gb_gold`/`gb_silver`, Apache-2.0, merged into the v2 pack). The
@@ -1214,36 +1272,36 @@
    British symbol; 3% of the aligned pairs go to the long back vowel instead), and an
    unstressed medial "i" keeps the American value (the aligned data splits 59/17/15 between
    the short, plain and long forms, too weak to rule on).
-104. **`tests/run.das` cannot run from a worktree.** Its children spawn `dastest/dastest.das`
+110. **`tests/run.das` cannot run from a worktree.** Its children spawn `dastest/dastest.das`
    with no `-dasroot` pass-through, so a worktree session's suites resolve every module
    against the MAIN tree - the same silent cross-tree answer the MCP lint gives. Forwarding
    the parent's dasroot (the doc-verify fix's shape) closes it; until then a worktree runs
    each suite file under `dastest` with `-dasroot <worktree>` by hand.
-101. **The tagger pack on a permissive corpus.** `tts_postag.bin` trains on UD English-EWT (CC
+107. **The tagger pack on a permissive corpus.** `tts_postag.bin` trains on UD English-EWT (CC
    BY-SA 4.0) plus spaCy-tagged Gutenberg prose; published on Hugging Face it carries the CC BY-SA
    label (Boris, 2026-09-03). Owed: a retrain on the permissive silver prose alone, scored by the
    rig's tagger agreement and heteronym cells against the 2422/2488 and 70/78 the mixed corpus
    gives; if the loss is a point or less, the permissive pack replaces it and the label goes.
-105. **A lint fixture's `expect 50503:N` is hand-counted.** `utils/lint/tests/*.das` pin the
+111. **A lint fixture's `expect 50503:N` is hand-counted.** `utils/lint/tests/*.das` pin the
    number of findings a rule fires in a header line the fixture runner compares against the run;
    a fixture that adds cases and forgets the count reds honestly, but one whose count drifts the
    OTHER way (a case that stops firing while another starts) stays green. Owed: a
    `utils/lint/REVIEW.das` check that every fixture's per-case markers (the `bad_*` / `good_*`
    naming the folder already uses) sum to the header's count.
-106. **Three copies of the speech files' bytes and hashes.** The model card
+112. **Three copies of the speech files' bytes and hashes.** The model card
    (`harness/tts_model_card.md`), the publish script's verification and `performance/model_specs.das`
    each carry the size and sha256 of the five files; the publish script checks itself against
    the card, nothing checks the card against `serve_tts_set()`. Owed: a `harness/REVIEW.das` check
    that the card's table and the catalog rows agree byte for byte, so a re-publish cannot leave
    the catalog pinned to the previous upload.
-107. **`lex_part` is decoded two to three times per resolved word.** `dasllama_g2p.das` decodes
+113. **`lex_part` is decoded two to three times per resolved word.** `dasllama_g2p.das` decodes
    one merged value's dialect header in `grown_find -> lex_find_part -> lex_has -> lex_part`, again
    in `entry_ps -> lex_is_dict -> lex_part`, and again for the reading itself on the dict path.
    Each pass re-reads the flags byte and re-walks the American length prefix to find the British
    part. One decode returning `(kind, a, b)` - a small `LexPart` struct threaded from
    `lex_find_part` into `entry_ps` - collapses them. The front end sits outside `[hot_path]` and
    the binary search dominates, so this is a measure-it row, not a hot-path defect.
-108. **The British `-ing` decline loses the GB stem vowel.** `suffix_ing` declines a British stem
+114. **The British `-ing` decline loses the GB stem vowel.** `suffix_ing` declines a British stem
    ending in a schwa or a length mark because the reference has no rule for the linking r such a
    stem wants; the word then falls to the fallback and reads as the AMERICAN word rewritten,
    throwing away the British stem the lexicon supplied - "mentoring" reads with the American
@@ -1253,7 +1311,7 @@
    ing when the stem ends so) reads all 61 correctly and is testable against the GB lexicon's own
    `-ing` entries, which spell exactly that (`anchoring`, `tutoring`, `harbouring`). Pinned today by
    `tests/test_tts_g2p.das`'s British `-ing` arm, whose two expectations move when the rule lands.
-109. **Two `utils/dasllama-server/REVIEW.das` gates the fix batch asked for.** (1) Every file under
+115. **Two `utils/dasllama-server/REVIEW.das` gates the fix batch asked for.** (1) Every file under
    `tests/fixtures/` has a row in `tests/fixtures/README.md`, and every row names a file that
    exists - a fixture with no capture rail cannot be re-captured, and a row describing a capture
    that cannot produce its file (the `stats_tts_failed.json` row once described a MISSING pack,
@@ -1262,13 +1320,13 @@
    beside the program, a developer's own with `authoritative = true` included, so the test
    measures that config, not its flags (`with_spawned_boot` now writes a one-key TOML; the gate
    keeps the next spawn honest).
-110. **Audit-agent item, not a lint rule: a cap whose message says "characters" but whose test is
+116. **Audit-agent item, not a lint rule: a cap whose message says "characters" but whose test is
    `length(<string>)`.** `length()` on a string is bytes; the server counted bytes against
    `TTS_MAX_INPUT_CHARS` while the page counted UTF-16 units, so one paste was accepted by one
    side and refused by the other. The facade already had `cpt_length` for exactly this and the
    server did not reach it. A rule would have to guess semantics from a name, so this is an item
    for the review-round auditors' checklist.
-111. **Gate candidates the review round's dragons surfaced, one line each.** (a) dasLLAMA:
+117. **Gate candidates the review round's dragons surfaced, one line each.** (a) dasLLAMA:
    `check_test_placement` - a `[test]` file requiring `dasllama/*` outside `tests/`, licensed
    set = the four ledgered files in `tests/CLAUDE.md`. (b) `tests/REVIEW.das` (new): every test
    file dastest runs is in a `run.das` suite or its header names `DASLLAMA_CPU_PREFILL`; every

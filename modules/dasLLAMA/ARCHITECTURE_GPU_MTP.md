@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the Metal speculative round
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.28-2.30: the speculative round on Metal, the box knob that sets the depth a
+carries sections 2.28-2.39: the speculative round on Metal, the box knob that sets the depth a
 round drafts, and the argument-alignment contract a kernel declares on its `[metal_dispatch]` -
 the contract the batch driver's fixed-B mul_mv forms carry. The GPU backend role table these
 sections build on, the assistant-drafter driver's role row included, stays in
@@ -31,20 +31,41 @@ input), `s.mtp_h_pos1` and the mirror watermark move to `pos + a + 1`, and `n_pa
 `a + 1`. The rows above the new watermark are the rejected drafts' - garbage the next round
 rewrites - and only the watermark keeps them from being read.
 
+**A sampled stream's walk draws instead of comparing argmaxes, and the same walk serves every
+round - the two Metal rounds and the CPU depth-1 step.** The caller points `s.spec_params` at its
+own sampler before the round; at a temperature above zero the walk draws row i through that
+sampler (`mtp_walk_sampled`, the row sampler installed by `dasllama_sampling`), with the
+recent-token window advanced per accepted draft so penalties see the tokens the stream will have
+committed, and accepts while the draw equals the draft it verifies. Every committed token is a draw
+from its own target row, so the stream's distribution is the plain sampled decode's, and a seeded
+run reproduces it token for token - one RNG draw per emitted token, in order. The first miss, or the
+draw from the row past the last draft, is the next token: the walk parks it in `s.mtp_pre_tok`
+(`mtp_pre_drawn`), and the caller's next `sample_` returns it instead of drawing from `s.logits`
+again. The acceptance rate becomes the target's probability of the draft token, so it sits below
+the argmax match (`PERF_LEDGER.md`, the MTP section, for the measured gap). A null `spec_params`,
+or a sampler that is a bare argmax (temperature zero, no penalty), keeps the argmax walk bit for
+bit; a penalized greedy sampler goes through the walk too, because its pick is the penalized
+argmax and the raw-argmax match would accept drafts the penalty rejects.
+
 ### 2.29 The depth a round drafts {#mtp-depth-knob}
 
 **The depth a round drafts is a box knob per round kind, not a controller.** `get_mtp_depth()`
 serves an explicit setting (`set_mtp_depth`, the `--mtp-depth` flag) when one was made, else the
 box profile's `runtime.mtp_depth_assistant` or `runtime.mtp_depth_nextn` by the `MtpRoundKind` the
 assistant drafter's attach and detach select. The per-position acceptance curve has the same shape
-on every task (p2/p1 about 0.7), so nothing a controller could observe changes the depth ranking;
+on every task and on both carriers - of the rounds at depth 4, position 1 is accepted in about
+three quarters, position 2 in half to two thirds, position 3 in a third and position 4 in a
+fifth (the `_depths` ruler records under `performance/records/mtp/`), so a fourth draft adds
+about a tenth of a token per round - and nothing a controller could observe changes the depth ranking;
 what does is the box's k-row verify cost - on the M5 depth 2 ties depth 1, on the M4 Pro depth 2
 loses (`PERF_LEDGER.md`, the MTP section) - so the tuner mints the assistant knob as a
 serving race of depth 1 against depth 2 on the SpecBench chat corpus with a gemma-4 vehicle and its
 `mtp-` head (depth 2 must beat by 2% - its downside is asymmetric and a tie is not worth the longer
 round; a synthetic 32-token prompt is not the site shape, the drafter accepts less of incoherent
-text; no vehicle means depth 1). The NextN knob defaults to 1, the depth every
-NextN carrier measured best.
+text; no vehicle means depth 1). The NextN knob defaults to 1: every NextN carrier measured
+best there on the M4 Pro, and the M5 Max's depth-3 point (1.31x against 1.23x at depth 1 on
+Qwen3.8-27B, the ruler's `_depths` record) is a direction-grade reading the tuner does not yet
+mint into the knob.
 
 ### 2.30 The kernel argument-alignment contract {#metal-dispatch-requires}
 
@@ -57,9 +78,13 @@ tail-guard-free main loop and the DRIVER does the shape routing: the fixed-B mul
 K in 256 (B2) / 128 (B4) element chunks, and the batched decode driver gates each mv site on its
 own K (`mv_kdim`, `mv_wo`, `mv_w2`), falling to the tail-exact GEMV form where the alignment
 fails (gemma-4-26B-A4B's dense hidden 2112 on the w2 site). Every `[metal_dispatch]` GEMM form
-carries its grid divisors the same way - the production mul_mm `mp % 32, d % 64`, the 32- and
-64-wide GEMM-B forms and their tensor twins `ka.ndim % 32|64` with the q8 block `ka.kdim % 32`,
+carries its grid divisors the same way - the production mul_mm `mp % 32, d % 64`, the K-quant
+mul_mm twins `mp % 32`, the 32- and 64-wide GEMM-B forms and their tensor twins `ka.ndim % 32|64` with the q8 block `ka.kdim % 32`,
 the split-K pair `d % 32` - so a grid that would have truncated silently now names the site.
+The K-quant mul_mm twins declare `mp % 32` alone: their `rows % 64` half stays undeclared until
+the site census (followup 100) settles which sites clear it and which take a driver gate, and
+the drivers' own shape routing carries it meanwhile - the one contract these forms hold that the
+builder does not yet check.
 A contract on a value that reaches the builder only as a bound uniform BUFFER (the mul_mm's K)
 stays with the caller: the dispatch never pays a readback.
 
@@ -94,16 +119,24 @@ first arm is the incumbent and the second is the "tensor" side whose win crowns:
 times the twin against B single passes (the passes are "tensor"), `race_kq_k4_form` the ext twin
 against the tile (the tile is "tensor").
 
+Past eight rows the form is the panel's. The kq mul_mm twins dispatch `mp / 32` threadgroups
+along M, so `enc_kq_site_b` takes them only over a panel padded to that tile (`mp` a multiple of
+32) - the batch driver's at nine rows and up. The verify's panel is padded to the GEMV forms'
+4-row tile (sec.2.32), so its nine rows (`MTP_MAX_ROWS`, depth 8) ride the small-batch forms: the
+first eight as the eight-row dispatch, each row past eight as a single pass at its own x and y row
+offsets. An unpadded nine-row panel handed to the mul_mm dispatches no threadgroup at all; the
+twins' `mp % 32` contract names that site instead of leaving the output unwritten.
+
 ### 2.32 The verify's row buffers are padded to the GEMV form's row tile {#verify-row-pad}
 
 **A multi-row verify sizes every row buffer to a whole 4-row tile, and the pad rows are owned
 scratch.** `acquire_step` takes `mp = ceil(nrows / 4) * 4` (a single-row step stays at 1) and sizes
 `bx`, `bxb`, `bqkv`, `bh12`, `blog` and the deltanet rows to `mp` rows; the rope tables stay at the
 live `nrows`. The fixed-B GEMV forms write a full tile - `enc_gemv_rows` dispatches the B2 form at
-one or two rows, the B4 form at three or four, and two B4 tiles at five to eight, the second
-offsetting x by four rows of n floats and y by four rows of the site's y stride - so the spare rows
-of the last tile compute garbage that must land inside an allocation this step owns and nobody
-reads. A row buffer sized to the live count puts that garbage on whatever the pool put next to it.
+one or two rows, the B4 form at three or four, two B4 tiles at five to eight and three at nine to
+twelve, each tile past the first offsetting x by its first row's count of n floats and y by the
+same rows of the site's y stride - so the spare rows of the last tile compute garbage that must
+land inside an allocation this step owns and nobody reads. A row buffer sized to the live count puts that garbage on whatever the pool put next to it.
 
 ### 2.33 The NextN draft chain reads only what its own chain wrote {#mtp-nextn-chain}
 
@@ -173,3 +206,35 @@ follows: the zero-copy per-session logits scatter stands down, because all rows 
 session, and `land_sameslab_rows` copies every row's logits into `s.mtp_logits_b` (row 0 also into
 `s.mtp_logits`, which only a NextN-headed session has sized), the post-final-norm hidden rows into
 `s.mtp_hrows`, and the GPU per-row argmax into `g_sameslab_arg`.
+
+### 2.38 The single-row driver's greedy chain {#greedy-chain}
+
+**The single-row driver pre-encodes the next step on the GPU's own argmax, and only a greedy
+caller can afford it.** `pre_encode_next` encodes step `pos + 1` while step `pos` runs. Armed,
+the new command buffer opens with an argmax over the running step's logits and the embed gather
+of the winner (`r.spec`), commits at once, and runs the moment the previous one drains - the CPU
+tail, the sampler and the next `forward()` all overlap GPU execution. Unarmed, the step is encoded
+but held, and `forward()` pokes the caller's token and commits it - the encode still overlaps, the
+commit turnaround does not. `finish_step` then compares the GPU's pick with the caller's token: a
+miss waits the chained step out, discards it, and reruns the step through the slow path, so a miss
+costs about two steps (30 ms against a 15 ms step on gemma-4-12B, M5 Max; every figure in this
+section is `harness/batch_rows_probe.das` with `--feed text|greedy|second:K --spec -1|0|1`,
+`-jit`) where a hit saves the turnaround, about 2% of a step. The adaptive mode
+(`DASLLAMA_METAL_SPEC` -1) backs off exponentially after a miss and re-arms on the next hit; under
+a sampler that agrees with the argmax two steps in three it still costs 63% of the step (26.0
+against 15.9 ms), because the
+re-arm attempts far more often than a 2% upside pays for. So the sampler decides: `sample_` marks
+the session `sampled` whenever its pick can differ from the raw argmax - a temperature above zero,
+or a penalty at temp 0 (`sampler_is_argmax` is the negation) - and the driver never chains such a
+session, because the chain predicts the raw argmax the penalty then rejects. Only a bare argmax
+sampler (temp 0, penalties off) and a caller feeding the argmax directly keep the adaptive chain.
+
+### 2.39 The verify encodes on the serial encoder {#verify-serial-encoder}
+
+**The NextN round's verify builds its whole step on one serial compute encoder - the one decode
+path that does not take the concurrent rail.** `encode_verify_step` opens a single encoder on the
+round's command buffer, so every dispatch is implicitly barriered on the one before it. The
+concurrent rail buys nothing here: measured through the round's profiler sections
+(`lcpp_bench --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1`, `-jit`, Qwen3.8-27B
+on the M5 Max), the two forms show the same GPU time and the concurrent one doubles the host
+encode, so the round keeps the serial encoder and pays no hazard-tracker work per dispatch.

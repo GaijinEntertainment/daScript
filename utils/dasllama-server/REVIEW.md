@@ -4,7 +4,11 @@
 doc: `README.md`. Planned work: `CONTROL_PAGE_PLAN.md`.
 
 **A diff to a file that requires - directly or through another file in this folder - a
-`dasllama/*` module applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
+`dasllama/*` module, or to a `README.md` row stating dasLLAMA engine behavior or a measured
+number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
+
+**A diff that changes a flag's row in `README.md` also updates that flag's `@clarg_doc` in
+`main.das`, in the same change - `--help` is the other copy a user reads.**
 
 **A captured body under `tests/fixtures/` is never hand-authored, and never edited beyond
 machine-local path normalization - re-capture it instead.** `tests/fixtures/README.md` gives

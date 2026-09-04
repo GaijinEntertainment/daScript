@@ -333,7 +333,7 @@ def private docs_flag_at(config_path, key : string) : bool {
 }
 
 //! True when the ``.lint_config`` at `config_path` sets ``[docs] rule_docs_only = true`` — the folder
-//! carries rule documents only (``REVIEW*.md`` / ``ARCHITECTURE*.md`` / ``LAWS.md``). A folder property,
+//! carries rule documents only (``REVIEW*.md`` / ``ARCHITECTURE*.md``). A folder property,
 //! NOT the ``[format]`` cascade: only that one file is read, and anything missing reads as false.
 def public rule_docs_only_at(config_path : string) : bool {
     return docs_flag_at(config_path, "rule_docs_only")

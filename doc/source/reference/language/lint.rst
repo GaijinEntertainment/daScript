@@ -799,7 +799,7 @@ LINT025 — stray ``.md`` beside shipped code
 
 A folder rule, not a code rule: a folder whose ``.lint_config`` carries
 ``[docs] rule_docs_only = true`` may hold only rule documents —
-``REVIEW*.md``, ``ARCHITECTURE*.md``, ``LAWS.md``. Any other ``.md`` there
+``REVIEW*.md``, ``ARCHITECTURE*.md``. Any other ``.md`` there
 fires. Ledgers, plans, and notes live at the module root or in ``plans/``
 (repo root), where they cannot ride an install glob into the SDK or bury the
 documents a reviewer must read. The pass runs once per lint invocation over
@@ -872,8 +872,6 @@ being read end to end, and a rule nobody reaches is not a rule. No
 The fix is a split, never a trim — every criterion survives, moved into a
 companion the reader can hold: ``ARCHITECTURE_<CONCERN>.md`` for an
 architecture document, a routed ``REVIEW_<KIND>.md`` for a checklist.
-``LAWS.md`` is append-only ruling provenance rather than a document anyone
-reads end to end, and carries no cap.
 
 Like the other two folder rules, the pass runs once per invocation over the
 directories being linted and the folders of the files being linted, and never

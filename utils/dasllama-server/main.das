@@ -136,7 +136,7 @@ struct ServerArgs {
     @clarg_doc = "Flat preallocated KV sessions — disables paged serving and the prefix cache"
     flat : bool
 
-    @clarg_doc = "MTP/NextN self-speculative decode for greedy requests (needs a model with an in-file NextN head, e.g. the -MTP- GGUFs; pays on the dense qwen35 models)"
+    @clarg_doc = "MTP/NextN self-speculative decode for every request (needs a model with an in-file NextN head, e.g. the -MTP- GGUFs; pays on the dense qwen35 models). A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
     mtp : bool
 
     @clarg_doc = "Path to a llama.cpp llama-bench binary — enables the control page's benchmark button"

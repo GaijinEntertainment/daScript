@@ -254,13 +254,13 @@ else
     FAIL=$((FAIL + 1))
 fi
 # Repo-internal rule/record documents never ship: REVIEW.md / REVIEW.das,
-# ARCHITECTURE.md, LAWS.md, MASTERPLAN logs, followup/perf/profile ledgers.
+# ARCHITECTURE.md, MASTERPLAN logs, followup/perf/profile ledgers.
 # The exceptions: REVIEW_COMMON.md and ARCHITECTURE_COMMON.md at the bundle root
 # (adopting repos vendor from them), and arch-extract excerpts - generated
 # ARCHITECTURE*.md recognized by their first-line banner.
 printf '  %-30s ' "no internal rule/record docs"
 REVIEW_LEAKS=$(find "$BUNDLE" \( -name "REVIEW*.md" -o -name "REVIEW*.das" \
-    -o -name "ARCHITECTURE*.md" -o -name "LAWS.md" -o -name "MASTERPLAN*.md" \
+    -o -name "ARCHITECTURE*.md" -o -name "MASTERPLAN*.md" \
     -o -name "PERF_LEDGER.md" -o -name "PROFILE.md" -o -name "THINKING.md" \
     -o -name "followup_*.md" \) \
     ! -path "$BUNDLE/REVIEW_COMMON.md" ! -path "$BUNDLE/ARCHITECTURE_COMMON.md" 2>/dev/null)

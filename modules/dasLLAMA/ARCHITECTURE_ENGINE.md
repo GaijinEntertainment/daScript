@@ -30,8 +30,10 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   the benches, and the facade chain (`dasllama_common` re-exports it) all reach it without
   weight.
 - **`dasllama_common.das`** - the engine: `Model`/`Session`/`Config`, the forward loops, the
-  override registries, the runtime knobs, and the MTP per-position accept telemetry (`mtp_pos_*`)
-  the round-override registry's rounds feed. **Not** the load walk (sec.1.3) and **not** GPU residency
+  override registries (the accept walk's row-sampler seam among them), the runtime knobs,
+  `SamplingParams` (the struct a `Session` points at, so a speculative round draws with its
+  caller's sampler), and the MTP per-position accept telemetry (`mtp_pos_*`) the round-override
+  registry's rounds feed. **Not** the load walk (sec.1.3) and **not** GPU residency
   (`ARCHITECTURE_GPU.md` sec.1.5) - both left, and the seam each left behind is a registered hook,
   so neither comes back.
   It remains the module's debt sink; what sits here that is family-specific or platform-specific is
@@ -65,8 +67,10 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   dot over decoded rows - reference arithmetic, not a tier kernel or a codec primitive, so no
   tier specializes it. A refusal is `ok = false` plus a `why`, never a panic - a drafter is
   optional and a bad sidecar must degrade to plain decode.
-- **`dasllama_sampling.das`** - token sampling and the generation drivers. A leaf on top of
-  `forward`/`eval_batch`; the engine never calls back in.
+- **`dasllama_sampling.das`** - token sampling and the generation drivers: the sampler over
+  `dasllama_common`'s `SamplingParams`. It registers the accept walk's row sampler
+  (`register_mtp_sample_row`) at init, and that registration is the only way the engine reaches
+  this file.
 - **`dasllama_ple.das`** - gemma-4 E-series per-layer embeddings and the gemma4 MoE FFN. The
   forward sequence reaches it only through the hooks it registers at init.
 - **`dasllama_config.das`** - `DlimConfiguration`: every input that changes `.dlim` image BYTES,

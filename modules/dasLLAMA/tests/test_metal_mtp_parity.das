@@ -174,13 +174,17 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
     return st
 }
 
-// Free-running pair on the GPU: plain greedy vs the speculative rail's committed stream. Only
-// valid as a token-exact gate on a counting prompt (near-tie-free by construction).
-def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var plain, spec : array<int64>; depth : int64; var drafted : int64&) : int64 {   // nolint:LINT012,LINT019 — the body is the das_metal half
+//! top-k 1 makes every draw the penalized argmax, so a seeded sampled stream is deterministic and the token-exact gate holds
+let SAMPLED_PARAMS = SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1)
+
+//! Free-running pair on the GPU, greedy or through the session sampler: only valid as a token-exact gate on a counting prompt (near-tie-free by construction).
+def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var plain, spec : array<int64>; depth : int64; var drafted, parked : int64&; sampled : bool = false) : int64 {   // nolint:LINT012,LINT019 — the body is the das_metal half
     var served = 0l   // nolint:LINT003,LINT019 — counted in the das_metal half
+    parked = 0l
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let c = tr.config
         let vocab = c.vocab_size
+        var sp = SAMPLED_PARAMS
         with_job_que() {
             setup_dasllama_jobque()
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -192,24 +196,33 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
             var one <- [t0]
             eval_(trg, sa, one)
             eval_(trg, sb, one)
-            var tok = greedy_top(sa.logits, vocab)
+            if (sampled) {
+                set_seed_(sa, 4242)
+                set_seed_(sb, 4242)
+                sb.spec_params = unsafe(addr(sp))
+            }
+            var tok = sampled ? sample_(sa, sp) : greedy_top(sa.logits, vocab)
             for (_i in range64(n)) {
                 plain |> push(tok)
                 one[0] = tok
                 eval_(trg, sa, one)
-                tok = greedy_top(sa.logits, vocab)
+                tok = sampled ? sample_(sa, sp) : greedy_top(sa.logits, vocab)
             }
             // speculative: commit tok, plus every accepted draft of the round
             set_mtp_depth(depth)
-            tok = greedy_top(sb.logits, vocab)
+            tok = sampled ? sample_(sb, sp) : greedy_top(sb.logits, vocab)
             while (long_length(spec) < n) {
                 spec |> push(tok)
                 let a = mtp_spec_round(trg, sb, tok)
                 for (i in range64(a)) {
                     spec |> push(sb.mtp_vbatch[i + 1l])
                 }
-                tok = greedy_top(sb.logits, vocab)
+                if (sb.mtp_pre_drawn) {
+                    parked++
+                }
+                tok = sampled ? sample_(sb, sp) : greedy_top(sb.logits, vocab)
             }
+            sb.spec_params = null
             set_mtp_depth(1l)
             spec |> resize(n)
             drafted = sb.mtp_drafted
@@ -240,6 +253,8 @@ def private served_twin(path : string; seq_cap : int64) : Model {
 // GPU-vs-GPU forced-feed envelope: two metal rails on the same feeds differ by kernel spelling
 // only (the standing kernel-swap gates sit near 0.01); 0.5 is the one-step decode gate's bar.
 let FF_TOL = 0.5
+//! the nine-row kq mul_mm stages x to half - a wider envelope than the f32-x GEMV forms', flips still zero
+let MM_TOL = 1.0
 let FF_STEPS = 48l
 let COUNT_STEPS = 40l
 
@@ -258,17 +273,23 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
 }
 
 // the process-wide knobs every exit path of run_fixture puts back
-def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64) {
+def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64; sampled : bool = false) {
     var plain : array<int64>
     var spec : array<int64>
     var drafted = 0l
-    let served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted)
+    var parked = 0l
+    mtp_pos_reset()
+    let served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted, parked, sampled)
+    let kind = sampled ? "sampled" : "counting"
     if (served == 0l) {
         t |> skip("metal decode declined (no Metal device?)")
     } else {
-        log_gen_texts(tr, "{tag} counting k{depth}", plain, spec)
-        t |> success(drafted > 0l, "{tag} counting k{depth}: the spec rail engaged ({drafted} drafts) - a plain fallback would pass vacuously")
-        t |> success(same(plain, spec), "{tag} counting k{depth}: speculative free-run == plain free-run ({COUNT_STEPS} tokens)")
+        log_gen_texts(tr, "{tag} {kind} k{depth}", plain, spec)
+        t |> success(drafted > 0l, "{tag} {kind} k{depth}: the spec rail engaged ({drafted} drafts) - a plain fallback would pass vacuously")
+        let positions = mtp_pos_report()
+        t |> success(find(positions, "p{depth} ") >= 0, "{tag} {kind} k{depth}: a round drafted position {depth} - the depth the arm names was reached ({positions})")
+        t |> success(same(plain, spec), "{tag} {kind} k{depth}: speculative free-run == plain free-run ({COUNT_STEPS} tokens)")
+        t |> success(sampled == (parked > 0l), "{tag} {kind} k{depth}: the sampled walk parks the next draw ({parked} rounds); the argmax walk parks none")
     }
     delete plain
     delete spec
@@ -532,6 +553,32 @@ def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64
     }
 }
 
+//! the wider nine-row bar's control: the same nine-row verify with the GEMV stage knocked out must
+//! land OUTSIDE the bar - a bar nothing exceeds is not known to discriminate
+def private vff_control_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; bar : float) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var st = RowStats()
+        var served = 0l
+        set_metal_decode_skip("gemv")
+        vff_pair(tr, trg, prompt, 4l, 9l, st, served, false)
+        set_metal_decode_skip("")
+        if (served == 0l) {
+            t |> skip("{tag} vff9 control: the metal batch rail declined the same-slab verify")
+        } else {
+            t |> success(st.max_abs > bar, "{tag} vff9 control: the nine-row verify with its GEMV stage knocked out reds the {bar} bar (maxd {st.max_abs} over {st.rows} rows)")
+        }
+    }
+}
+
+// the nine-row arm: the kq carriers take the wider mul_mm bar, and a bar wider than the file's
+// standing one ships its control in the same arm
+def private vff9_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; must_serve : bool; expect_decline : string) {
+    vff_cell(t, tr, trg, tag, prompt, trg.kquant_native ? max(tol, MM_TOL) : tol, 9l, must_serve, expect_decline)
+    if (trg.kquant_native && empty(expect_decline)) {
+        vff_control_cell(t, tr, trg, tag, prompt, MM_TOL)
+    }
+}
+
 def private restore_knobs(prior_backend : string; prior_wscale : bool) {
     clear_kernel_backend_pin()
     select_kernel_backend(prior_backend)
@@ -624,6 +671,17 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
             count_cell(t, tr, trg, tag, count, 2l)
             count_cell(t, tr, trg, tag, count, 4l)
         }
+
+        // the deepest round: depth 8 verifies MTP_MAX_ROWS rows, one past the eight-row GEMV rail
+        if (arm_on(t, "mtp-count8-{tag}")) {
+            count_cell(t, tr, trg, tag, count, 8l)
+        }
+
+        // the sampled walk: every verify row drawn through the session's sampler, seeded - free-run == plain sampled free-run
+        if (arm_on(t, "mtp-sampled-{tag}")) {
+            count_cell(t, tr, trg, tag, count, 1l, true)
+            count_cell(t, tr, trg, tag, count, 2l, true)
+        }
     }
 }
 
@@ -706,6 +764,9 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
         if (arm_on(t, "mtp-vff5-{tag}")) {   // five rows: the batch driver's GEMM rail (mp 32) under the same-slab verify
             vff_cell(t, tr, trg, tag, prose_a, tol, 5l, must_serve, expect_decline)
         }
+        if (arm_on(t, "mtp-vff9-{tag}")) {   // nine rows = MTP_MAX_ROWS: the batch driver's mul_mm rail (kq planes stage x to half)
+            vff9_cell(t, tr, trg, tag, prose_a, tol, must_serve, expect_decline)
+        }
         // the assistant drafter's round (gemma-4 targets with an mtp-* sidecar beside them): counting
         // free-run, speculative == plain at depth 1, 2 and 4
         if (arm_on(t, "mtp-count-{tag}")) {
@@ -723,6 +784,9 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
                     count_cell(t, tr, trg, tag, count, depth)
                     let st = gemma_drafter_stats()
                     to_log(LOG_INFO, "gemma drafter {tag} k{depth}: rounds={st.rounds} drafted={st.drafted} accepted={st.accepted}\n")
+                    if (depth < 4l && arm_on(t, "mtp-sampled-{tag}")) {
+                        count_cell(t, tr, trg, tag, count, depth, true)
+                    }
                 }
                 set_gemma_trace(false)
                 set_gemma_draft_on_cpu(false)

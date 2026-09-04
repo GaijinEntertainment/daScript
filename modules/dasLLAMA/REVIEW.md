@@ -86,30 +86,29 @@ applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
 this file) is a defect.**
 
 **`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
-a maintainer ruling that bench comparability is broken - and the bump's diff carries the
-`LAWS.md` entry recording that ruling.** Recorded performance rows and tune sidecars stay valid
-across code changes, and per-change invalidation lives in the finer mechanisms -
-`IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_image.das`).
+a maintainer ruling that bench comparability is broken.** Recorded performance rows and tune
+sidecars stay valid across code changes, and per-change invalidation lives in the finer
+mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_image.das`).
 
 **A value that cannot change between dispatches of one compiled kernel never reaches that
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value
 that can change between dispatches goes in a uniform, a kargs field, or an `@off` bind offset.
 
-**Weakening `REVIEW.das`'s restore check - the walk over `dasllama/` requiring every
-function-typed global with a declaration initializer to join its file's boot-restore
-`[init]` - is a defect, and so is landing such a global anywhere the walk does not reach.** A
-serialized exe restores globals as data, so the function value arrives null and the first
-invoke to reach it dies at exe runtime while every `-jit` gate stays green.
+**A function-typed global with a declaration initializer lands in a `dasllama/` file and joins
+that file's boot-restore `[init]`; landing one where `REVIEW.das`'s restore-check walk over
+`dasllama/` cannot reach it is a defect.** A serialized exe restores globals as data, so the
+function value arrives null and the first invoke to reach it dies at exe runtime while every
+`-jit` gate stays green.
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`) - keep the multiply order the code already has.** A regrouping
 moves the angles in the last bits and flips token-exact fixtures.
 
-**A diff that changes a kernel-selection predicate in `dasllama/` is based on timing that ran
-both variants interleaved in one process, under one instrument.** The same holds for a
-constant in `dasllama/` whose value was chosen by timing two candidates against each other. A
-reading taken across two processes, or across two commits, says which way the wall-clock time
-moved, not which implementation to adopt.
+**A diff that changes a predicate in `dasllama/` picking between kernel forms that both
+produce the right answer is based on timing that ran both forms interleaved in one process,
+under one instrument.** The same holds for a constant in `dasllama/` whose value was chosen by
+timing two candidates against each other. A reading taken across two processes, or across two
+commits, says which way the wall-clock time moved, not which implementation to adopt.
 
 **A change to an allocation reached from a load, bake, or convert path (judge a shared helper
 at each call site) that trades footprint for speed ships the measured pair - peak footprint and
@@ -259,8 +258,8 @@ by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.*
 owns lands the sec.1 edit that keeps the charters true - in an `ARCHITECTURE_*.md` companion,
 never `ARCHITECTURE.md` - in the same change.** A diff that adds a file to any
 folder where another file has its own sec.1 charter line lands the new file's charter line
-too. A module-root doc file - a ledger, a plan, `LAWS.md` - has no charter line and needs no
-charter edit.
+too. A module-root doc file - a ledger, a plan - has no charter line and needs no charter
+edit.
 
 **A diff that adds or removes an `ARCHITECTURE_*.md` companion, or moves a section between
 companions, lands `ARCHITECTURE.md`'s index line and section range and repoints every prose
@@ -271,9 +270,9 @@ sends the reader to nothing.
 **A diff that moves a family encode stage onto a GPU hook leaves the CPU form in place and
 changes none of its arithmetic.** The CPU form serves every box with no driver.
 
-**A diff that writes a CPU feature name in a `requires=` argument that `TUNE_KNOWN_FEATURES`
-(`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it there in the same
-change.** The `features` fingerprint saved with every sidecar is this box's pass/fail over
+**A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
+`TUNE_KNOWN_FEATURES` (`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it
+there in the same change.** The `features` fingerprint saved with every sidecar is this box's pass/fail over
 that list, so a name outside it is never recorded and a box adopting a shipped profile re-runs
 the tuning the profile was meant to save.
 
@@ -284,8 +283,9 @@ or `var`).** A team lane never runs global initializers, so the global reads zer
 every single-threaded run reads the right value.
 
 **A `resize` in `dasllama/` of a buffer whose element count scales with a model dimension is
-preceded by a `reserve` of the same count (`reserve_resize` / `grow_resize` / `ensure_length` in
-`dasllama/dasllama_common.das`, the builtin `scratch_resize` on a `@scratch` carrier, or the
-pair spelled out) - whatever the size looks like at today's shapes.** A model dimension makes
+preceded by a `reserve` of the same count - a `dasllama/dasllama_common.das` sizing helper that
+reserves before it grows (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`,
+`zeroed_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the pair spelled
+out - whatever the size looks like at today's shapes.** A model dimension makes
 the count unbounded, and a bare grow past the heap's unreserved-size cap (64 MB) panics the
 load on the first big model rather than at the call site.

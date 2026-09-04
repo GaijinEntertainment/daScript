@@ -11,39 +11,23 @@ require dasllama/dasllama_math   // softmax/softcap on the logits row
 require daslib/random
 require math
 
-// Token sampling and the generation drivers. Nothing in the engine calls back into this — it sits
-// on top of forward()/eval_batch, which is why it can be a leaf module; the umbrella re-exports it
-// so every consumer of dasllama/dasllama keeps generate_/sample_/set_seed_/stats_.
+// Token sampling and the generation drivers on top of forward()/eval_batch. The engine reaches
+// this file through one registry only - the accept walk's row sampler installed at [init]; the
+// umbrella re-exports it so every consumer of dasllama/dasllama keeps generate_/sample_/set_seed_/stats_.
 
 // ===== Sampling =====
-
-//! Sampling parameters. Defaults are greedy (temp = 0, all cutoffs/penalties off) — bit-identical
-//! to argmax. Cutoff order: top-k on logits, then top-p and min-p on the
-//! softmaxed probabilities.
-struct SamplingParams {
-    temp : float = 0.0             // <= 0 => greedy argmax; otherwise softmax temperature
-    top_k : int64 = 0l             // <= 0 or >= vocab => no top-k cutoff
-    top_p : float = 1.0            // nucleus: keep the smallest prob mass >= top_p (>= 1 = off)
-    min_p : float = 0.0            // drop tokens with prob < min_p * max prob (<= 0 = off)
-    penalty : float = 1.0          // multiplicative repetition penalty over recent tokens (1 = none; <= 0 treated as none)
-    presence_penalty : float = 0.0   // subtracted from the logit of every distinct token in the window
-    frequency_penalty : float = 0.0  // subtracted per occurrence in the window (OpenAI semantics)
-    penalty_last_n : int64 = 64l   // penalty window (most recent N generated tokens)
-}
 
 //! Seed the session's sampling RNG for reproducible generation.
 def set_seed_(var s : Session; seed : int) {
     s.rng = random_seed(seed)
 }
 
-// Repetition/presence/frequency penalties over the last `penalty_last_n` of `s.recent`:
-// each unique token penalized once, multiplicative then presence+frequency*count.
-def private apply_penalties_(var s : Session; params : SamplingParams) {
-    // <= 0 treated as off too (not just 1): 0 would inf/NaN the logits, and additive-penalty clients send it
-    let rep = params.penalty > 0.0 && params.penalty != 1.0
-    if (!rep && params.presence_penalty == 0.0 && params.frequency_penalty == 0.0) {
+//! penalties over the last `penalty_last_n` of `s.recent` onto the row at `off` in `row`: each unique token once, multiplicative then presence + frequency*count
+def private apply_penalties_(s : Session; params : SamplingParams; var row : array<float>; off : int64) {
+    if (penalties_off(params)) {
         return
     }
+    let rep = params.penalty > 0.0 && params.penalty != 1.0
     let n = length(s.recent)
     let win = int(params.penalty_last_n)
     let pstart = n > win ? n - win : 0
@@ -63,30 +47,52 @@ def private apply_penalties_(var s : Session; params : SamplingParams) {
                 cnt++
             }
         }
-        var v = s.logits[id]
+        var v = row[off + id]
         if (rep) {
             v = v > 0.0 ? v / params.penalty : v * params.penalty
         }
         v -= params.presence_penalty + params.frequency_penalty * float(cnt)
-        s.logits[id] = v
+        row[off + id] = v
     }
 }
 
 //! Sample the next token from `s.logits` per `params`: penalties, then temp + top-k, softmax,
 //! top-p/min-p, and a CDF draw (or greedy argmax when temp <= 0). Consumes `s.logits` in place.
-def sample_(var s : Session; params : SamplingParams) : int64 { // nolint:STYLE037,STYLE038 — a flat dispatch over the sampling modes; each arm is independent and splitting it just hides the menu
+//! A token the speculative round's accept walk already drew (s.mtp_pre_tok) is returned instead.
+def sample_(var s : Session; params : SamplingParams) : int64 {
+    s.sampled = !sampler_is_argmax(params)   // any non-argmax draw (a temperature, or a penalty at temp 0) stands the greedy chain down: it predicts the raw argmax, the sampler picks something else
+    if (s.mtp_pre_drawn) {
+        s.mtp_pre_drawn = false
+        return s.mtp_pre_tok
+    }
     let vocab = long_length(s.logits)
-    apply_penalties_(s, params)
     if (params.temp <= 0.0) {
+        apply_penalties_(s, params, s.logits, 0l)
         return argmax(s, vocab)
+    }
+    return sample_row_(s, params, s.logits, 0l, vocab)
+}
+
+//! sample_'s row form: the same sampler over the `vocab`-wide logits row at `off` in `row`
+//! (consumed in place). The accept walk draws each verify row through it.
+def sample_row_(var s : Session; params : SamplingParams; var row : array<float>; off, vocab : int64) : int64 { // nolint:STYLE037,STYLE038 — a flat dispatch over the sampling modes; each arm is independent and splitting it just hides the menu
+    apply_penalties_(s, params, row, off)
+    if (params.temp <= 0.0) {
+        var mi = 0l
+        for (i in range64(1l, vocab)) {
+            if (row[off + i] > row[off + mi]) {
+                mi = i
+            }
+        }
+        return mi
     }
     let inv = 1.0 / params.temp
     for (i in range64(vocab)) {
-        s.logits[i] *= inv
+        row[off + i] *= inv
     }
     if (params.top_k > 0l && params.top_k < vocab) {
         for (i in range64(vocab)) {
-            s.sample_scratch[i] = s.logits[i]
+            s.sample_scratch[i] = row[off + i]
         }
         var kth = -1.0e30
         for (_j in range64(params.top_k)) {
@@ -102,17 +108,17 @@ def sample_(var s : Session; params : SamplingParams) : int64 { // nolint:STYLE0
             s.sample_scratch[mi] = -1.0e30
         }
         for (i in range64(vocab)) {
-            if (s.logits[i] < kth) {
-                s.logits[i] = -1.0e30
+            if (row[off + i] < kth) {
+                row[off + i] = -1.0e30
             }
         }
     }
-    softmax(s.logits, vocab)
+    softmax(unsafe(addr(row[off])), vocab)
     if (params.top_p < 1.0) {
         // nucleus cut: sort a prob copy descending-by-walk, find the smallest prefix whose mass
         // reaches top_p, zero everything below that prefix's boundary probability
         for (i in range64(vocab)) {
-            s.sample_scratch[i] = s.logits[i]
+            s.sample_scratch[i] = row[off + i]
         }
         sort(s.sample_scratch)
         let target = max(params.top_p, 0.0)
@@ -126,20 +132,20 @@ def sample_(var s : Session; params : SamplingParams) : int64 { // nolint:STYLE0
             idx--
         }
         for (i in range64(vocab)) {
-            if (s.logits[i] < cut) {
-                s.logits[i] = 0.0
+            if (row[off + i] < cut) {
+                row[off + i] = 0.0
             }
         }
     }
     if (params.min_p > 0.0) {
         var maxp = 0.0
         for (i in range64(vocab)) {
-            maxp = max(maxp, s.logits[i])
+            maxp = max(maxp, row[off + i])
         }
         let thr = min(params.min_p, 1.0) * maxp
         for (i in range64(vocab)) {
-            if (s.logits[i] < thr) {
-                s.logits[i] = 0.0
+            if (row[off + i] < thr) {
+                row[off + i] = 0.0
             }
         }
     }
@@ -147,17 +153,26 @@ def sample_(var s : Session; params : SamplingParams) : int64 { // nolint:STYLE0
     // (cdf accumulates in the same order as total, so the walk always lands on a surviving token)
     var total = 0.0
     for (i in range64(vocab)) {
-        total += s.logits[i]
+        total += row[off + i]
     }
     let r = random_float(s.rng) * total
     var cdf = 0.0
     for (i in range64(vocab)) {
-        cdf += s.logits[i]
+        cdf += row[off + i]
         if (r < cdf) {
             return i
         }
     }
     return vocab - 1l
+}
+
+def private mtp_sample_row(var s : Session; var rows : array<float>; off, vocab : int64) : int64 {
+    return sample_row_(s, deref(s.spec_params), rows, off, vocab)
+}
+
+[init]
+def private sampling_init {
+    register_mtp_sample_row(@@mtp_sample_row)
 }
 
 //! Stream-generate up to `max_tokens` from `prompt`, invoking `blk(id, piece)` per token; return
