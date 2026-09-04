@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
 require math

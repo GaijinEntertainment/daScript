@@ -11,7 +11,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_kv_codec
 require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require math
 
 var g_taint = 0.0

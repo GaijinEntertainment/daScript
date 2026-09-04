@@ -7,7 +7,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require math
 require _vk_kq_fixtures
 require dasllama/dasllama_vulkan_common   // find_stack_idx: the fresh-base guard

@@ -12,7 +12,7 @@ require daslib/fio                  // shard-path expansion + mapping (split GGU
 require daslib/strings_boost        // trim_suffix / pad_left (split shard names)
 require daslib/strings_convert     // try_to_int (validating shard-index parse)
 require dasllama/dasllama_env       // g_env_engine.mtp_head — the split NextN head sidecar override
-require llvm/daslib/f16_cvt public  // f16_to_f32 / f32_to_f16 (re-export: whisper/vad/parakeet/audio callers)
+require daslib/f16_cvt public  // f16_to_f32 / f32_to_f16 (re-export: whisper/vad/parakeet/audio callers)
 require dasllama/dasllama_convert public   // the pure codec layer (readers/dequants/transcodes/encoder) — split out 2026-07-29
 require dasllama/dasllama_par       // maybe_parallel_for (+ its emitted dispatch counters) — the transcode hot loops thread when a jobque is up
 

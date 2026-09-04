@@ -12,7 +12,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
 require daslib/jobque_boost
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require math
 
 // ATTRIBUTION SWEEP: attributes the MoE CPU pp gap across kernel shape (dense vs narrow D),

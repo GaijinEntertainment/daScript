@@ -9,7 +9,7 @@ require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_repack
 require dasllama/dasllama_convert
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require daslib/jobque_boost
 require math
 

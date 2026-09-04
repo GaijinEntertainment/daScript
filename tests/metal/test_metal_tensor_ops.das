@@ -11,7 +11,7 @@ require dastest/testing_boost public
 require strings
 require metal/msl_shader
 require daslib/math_bits   // float_bits_to_uint — bf16 halfword construction
-require llvm/daslib/f16_cvt   // f32_to_f16 — the f16s scale plane
+require daslib/f16_cvt   // f32_to_f16 — the f16s scale plane
 require _metal_common  // nolint:STYLE030,LINT019 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 
 let M = 8

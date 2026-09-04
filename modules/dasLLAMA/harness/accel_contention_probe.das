@@ -6,7 +6,7 @@ require das_accelerate
 require ?das_metal metal/das_metal_boost  // the live-Metal-device ingredient (env METAL=1)
 require dasllama/dasllama_math
 require dasllama/dasllama_par
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require daslib/jobque_boost
 require math
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused

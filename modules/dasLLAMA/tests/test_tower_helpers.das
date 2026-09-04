@@ -8,7 +8,7 @@ require dasllama/dasllama_math    // setup_dasllama_jobque_
 require dasllama/dasllama_rope    // build_rope_tabs_rows — the 2-axis rope's table source
 require dasllama/dasllama_plane
 require daslib/jobque_boost
-require llvm/daslib/f16_cvt   // the binary16 round-trip the geglu table property checks
+require daslib/f16_cvt   // the binary16 round-trip the geglu table property checks
 require math
 
 // Model-free unit tests for the encoder-tower helpers both the audio (gemma4a) and vision

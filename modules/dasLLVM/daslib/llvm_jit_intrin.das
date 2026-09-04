@@ -223,7 +223,7 @@ let g_x64_avx512vnni_intrin_lookup <- {   // zmm VPDPBUSD (the bw gate is a prer
     "x64_avx::dot64_acc16_vnni" => @@intrinsic_dot64_acc16_vnni_x64
 }
 
-// Half<->float converts (the llvm/daslib/f16_cvt module) — one TARGET-INDEPENDENT table, consulted
+// Half<->float converts (the daslib/f16_cvt module) — one TARGET-INDEPENDENT table, consulted
 // when the target lowers fpext/fptrunc through half in hardware: any aarch64 (scalar fcvt is
 // ARMv8.0 baseline, no finer gate) or x86-64 with F16C (g_target_x64_f16c). Elsewhere the calls
 // compile their exact bit-twiddle daslang bodies — a half convert without hardware support would

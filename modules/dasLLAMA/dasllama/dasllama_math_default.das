@@ -9,7 +9,7 @@ require dasllama/dasllama_math       // KernelBackend + register_kernel_backend 
 require dasllama/dasllama_tune       // [tuned]: reconstitute dot_q8q8 from its template with per-box loop hints
 require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb — the fmt-id kq plane strides
-require llvm/daslib/f16_cvt          // dot_q8q8_f16s widens the binary16 weight scale in-loop
+require daslib/f16_cvt               // dot_q8q8_f16s widens the binary16 weight scale in-loop
 require daslib/jobque_boost public   // parallel_for / notify_and_release (the kernels expand parallel_for)
 require dasllama/dasllama_par        // maybe_parallel_for
 require math
