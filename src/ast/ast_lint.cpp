@@ -1202,6 +1202,10 @@ namespace das {
         }
         virtual void preVisit ( ExprMakeStruct * mks ) override {
             Visitor::preVisit(mks);
+            if ( mks->makeType && mks->makeType->getSizeOf64()>0x7fffffff ) {
+                program->error("can't make a value of a type that is too big", "", "",
+                    mks->at, CompilationError::exceeds_type);
+            }
             if ( mks->constructor && mks->constructor->arguments.size() ) {
                 program->error("default arguments of constructors can't be used in make declarations", "its not yet implemented", "",
                     mks->at, CompilationError::cant_argument_structure);

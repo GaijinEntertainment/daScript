@@ -680,7 +680,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | failed_type_inference_fuzz.das | Fuzzer-reached shapes that must be rejected - sealed redeclare of an inherited field, void argument, `typeinfo is_argument` outside a function | **expect** `30107` `30110` `30320` `30805` `30821` `30826` `30832` |
 | type_inference_fuzz.das | Fuzzer-reached shapes that must keep compiling - a block in a template structure's dim expression, a computed goto inside a captured block | |
 | invalid_type_ref_in_table_value.das | Ref type as table value | **expect** `30106` |
-| invalid_types.das | Oversized types and arguments | **expect** `30101:2` `30108:4` `30109:2` |
+| invalid_types.das | Oversized types and arguments - declarations, `new`, ascend, `default<T>` | **expect** `30500:3` `30508` `30510` `30512:3` `30513` |
 | failed_jit_abi.das | JIT ABI correctness - `test_abi_mad` for float2/3/4, function pointers | |
 | labels.das | Labels and goto - control flow, nested loops, labeled break | |
 | lambda_basic.das | Lambda capture, invoke, null check, addX returning lambda | |
