@@ -2563,8 +2563,8 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     if (!noise_gate("start")) {
         return 1
     }
-    let metal_plan = (typeinfo builtin_module_exists(das_metal)) ? 1 : 0   // the crown race reports as one more family
-    tune_progress_plan("dasllama_kernels", length(benches) + VALIDATE_PLAN_ALLOWANCE + metal_plan)
+    let metal_crown_kernels = (typeinfo builtin_module_exists(das_metal)) ? 1 : 0
+    tune_progress_plan("dasllama_kernels", length(benches) + VALIDATE_PLAN_ALLOWANCE + metal_crown_kernels)
 
     load_incumbents()
     for (b in benches) {

@@ -398,8 +398,6 @@ def tune_manifest_get(fname : string) : string {
     return r
 }
 
-// the first defaults profile on this box's class ladder that exists and matches the scope's version
-// pin — the ONE locate both the compile-time pick and the runtime adopt walk, so they cannot disagree
 [arch(at="../ARCHITECTURE.md#tune-sidecar-cache-pin")]
 def private locate_profile_doc(defaultsDir, verKey, verVal : string; compileTime : bool; var klass, ppath : string&) : JsonValue? {
     var chain <- tune_class_chain()
@@ -441,9 +439,7 @@ def private no_kernels() : table<string; string> {
     return <- kernels
 }
 
-// the shipped defaults profile this box adopts, read off the [tune_scope] annotations on the AST — a
-// macro global is a per-requiring-context copy, and the [tuned] rail in another macro module reads the
-// same profile through tune_kernel_pick; a version-pin miss means the scope has not compiled yet
+//! A scope whose version pin cannot resolve is skipped, not an error: its pinned module may not be on the AST yet at this kernel's compile.
 def private profile_kernels(var klass, ppath : string&) : table<string; string> {
     klass = ""
     ppath = ""
@@ -1749,24 +1745,23 @@ class private TuneAnnotation : AstFunctionAnnotation {
         let mpath = tune_manifest_path()
         var manifest <- read_manifest(mpath, manifestFound)
         var suffix = ""
-        var pickSource = ""   // manifest | profile | fallback - the tune_source the stamp records
-        var pickPath = ""
+        var tuneSource = ""   // manifest | profile | fallback - the tune_source the stamp records
+        var tuneSourcePath = ""
         if (manifestFound) {
             suffix = manifest?[fname] ?? ""
             if (!empty(suffix)) {
-                pickSource = "manifest"
-                pickPath = mpath
+                tuneSource = "manifest"
+                tuneSourcePath = mpath
             }
         }
-        // no sidecar entry: this box's class entry in the shipped defaults profile, read at compile time so a covered box never relaunches
         var profileKlass = ""
         var profilePath = ""
         var profile <- empty(suffix) ? profile_kernels(profileKlass, profilePath) : no_kernels()
         if (empty(suffix)) {
             suffix = profile?[fname] ?? ""
             if (!empty(suffix)) {
-                pickSource = "profile"
-                pickPath = profilePath
+                tuneSource = "profile"
+                tuneSourcePath = profilePath
             }
         }
         // clear an adopted winner this box can't run (ISA-gated → would decline to reference; or not in this build's grid → would crash-loop) so the fallback ;-chain picks a legal perm and it boots
@@ -1783,18 +1778,18 @@ class private TuneAnnotation : AstFunctionAnnotation {
             if (!known || !eligible) {
                 if (tune_verbosity() != "silent") {
                     let why = known ? "fails its requires= on this box" : "is not in this build's grid"
-                    print("llvm_tune: {fname} {pickSource} winner '{suffix}' {why} - using the fallback chain\n")
+                    print("llvm_tune: {fname} {tuneSource} winner '{suffix}' {why} - using the fallback chain\n")
                 }
                 suffix = ""
-                pickSource = ""
-                pickPath = ""
+                tuneSource = ""
+                tuneSourcePath = ""
             }
         }
         var companionOwnSuffix : array<string>   // a companion's OWN entry (the harness's gemv seat) when it names an eligible perm of this grid; else it follows the main
         companionOwnSuffix |> resize(length(comps))
-        if (pickSource == "manifest" || pickSource == "profile") {
+        if (tuneSource == "manifest" || tuneSource == "profile") {
             for (ci, c in count(), comps) {
-                let own = pickSource == "manifest" ? (manifest?["{c.fnname}"] ?? "") : (profile?["{c.fnname}"] ?? "")
+                let own = tuneSource == "manifest" ? (manifest?["{c.fnname}"] ?? "") : (profile?["{c.fnname}"] ?? "")
                 for (p in perms) {
                     if (p.suffix == own && perm_requires_ok(p)) {
                         companionOwnSuffix[ci] = own
@@ -1805,7 +1800,7 @@ class private TuneAnnotation : AstFunctionAnnotation {
         let fromPick = !empty(suffix)
         var ok = true
         if (empty(suffix)) {
-            pickSource = "fallback"
+            tuneSource = "fallback"
     // ';'-chain in declaration order, first passing requires= wins; none eligible => reference
             let fv = find_arg(args, "fallback")
             if (fv is tString) {
@@ -1835,26 +1830,26 @@ class private TuneAnnotation : AstFunctionAnnotation {
             ok = false
             for (p in perms) {
                 if (p.suffix == suffix) {
-                    stamp_llvm_code(func, genKey, p, fromPick ? pickPath : "", pickSource)
+                    stamp_llvm_code(func, genKey, p, fromPick ? tuneSourcePath : "", tuneSource)
                     for (ci, c in count(), comps) {
                         var stampedOwn = false
                         if (!empty(companionOwnSuffix[ci]) && companionOwnSuffix[ci] != suffix) {
                             for (q in perms) {
                                 if (q.suffix == companionOwnSuffix[ci]) {
-                                    stamp_llvm_code(c.fn, c.genkey, q, pickPath, pickSource)
+                                    stamp_llvm_code(c.fn, c.genkey, q, tuneSourcePath, tuneSource)
                                     stampedOwn = true
                                 }
                             }
                             if (stampedOwn && tune_verbosity() == "verbose") {
-                                print("llvm_tune: {c.fnname} <- {companionOwnSuffix[ci]} (its own entry, {pickPath})\n")
+                                print("llvm_tune: {c.fnname} <- {companionOwnSuffix[ci]} (its own entry, {tuneSourcePath})\n")
                             }
                         }
                         if (!stampedOwn) {
-                            stamp_llvm_code(c.fn, c.genkey, p, fromPick ? pickPath : "", pickSource)
+                            stamp_llvm_code(c.fn, c.genkey, p, fromPick ? tuneSourcePath : "", tuneSource)
                         }
                     }
                     if (tune_verbosity() == "verbose") {
-                        print("llvm_tune: {fname} <- {suffix} ({fromPick ? pickPath : "fallback"})\n")
+                        print("llvm_tune: {fname} <- {suffix} ({fromPick ? tuneSourcePath : "fallback"})\n")
                     }
                     ok = true
                     break
@@ -1887,7 +1882,6 @@ def private resolve_decl_path(declFile : string; p : string) : string {
     return is_absolute(p) ? p : path_join(dir_name(declFile), p)
 }
 
-// find_compiling_module panics on a miss; the [tune_scope] ordering check asks about modules that legitimately are not compiled yet
 def private module_compiled(name : string) : bool {
     var found = false
     let prog = get_ptr(compiling_program())
@@ -1943,7 +1937,6 @@ class private TuneScopeAnnotation : AstStructureAnnotation {
         if (dv is tString) {
             defaults = resolve_decl_path(string(st.at.fileInfo.name), dv as tString)
         }
-        // a kernel reads the profile at ITS compile, off this annotation: a covered module that compiled first stamped its fallback while the runtime adopt reads the same box as covered and never relaunches
         if (!empty(defaults)) {
             for (m in split(covers, ";")) {
                 continue if (empty(m))
@@ -1985,8 +1978,7 @@ struct private TuneCliArgs {
 }
 
 // Adopts --tune-quiet/--tune-verbose/--tune-only and answers whether a forced tune was asked for
-// (--tune, or --tune-only alone). Runs at MACRO time for this compile's verbosity and AGAIN at runtime
-// from the guard (tune_cli_force): the module cache can serve a compile whose macros never saw this argv.
+// (--tune, or --tune-only alone).
 def private apply_cli_tune_flags() : bool {
     var r <- parse_args(type<TuneCliArgs>, get_user_args())
     if (r |> is_err) {
@@ -2397,7 +2389,6 @@ def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gate
         }
     }
     if (empty(race)) {
-        // the compile read this same profile ahead of its fallback chain, so these picks are already stamped: nothing to write, nothing to restart
         print("llvm_tune: scope '{scopeName}' is covered by the '{klass}' defaults profile ({length(kernels)} kernel entries) - stamped at compile time, no restart\n")
         delete kernels
         delete race
@@ -2437,7 +2428,7 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
     }
     var onlyFilter = ""
     if (!force && profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gatedFamilies, onlyFilter) && empty(onlyFilter)) {
-        return   // covered: the compile stamped the profile's picks, so there is nothing to relaunch for
+        return
     }
     if (!force && empty(onlyFilter) && scope_resolved_externally(scopeName, manifestPath, fnames)) {
         g_tuned_scopes++   // the re-exec picks the resolved sidecar up like a fresh tune
@@ -2579,7 +2570,7 @@ def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : s
     }
     var onlyFilter = ""
     if (profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gatedFamilies, onlyFilter) && empty(onlyFilter)) {
-        return false   // covered: the compile stamped the profile's picks, carry on
+        return false
     }
     if (empty(onlyFilter) && scope_resolved_externally(scopeName, manifestPath, fnames)) {
         return true   // resolved without a tune; the resolver printed its own restart marker
@@ -2743,7 +2734,6 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             // per-scope KEY completeness, not file existence — the sidecar is shared
             let scopeFnames = scope_fnames_joined(scope)
             let v = tune_sidecar_verdict(scope.manifestPath, scopeFnames)
-            // the auto guard is emitted for a complete scope too: it re-reads the sidecar and --tune at RUNTIME, because the module cache can serve this compile to a run whose argv the macros never saw
             continue if (!force && v.complete && policy != "auto")
             if (force || policy == "auto") {
     // a runtime guard tunes and RE-EXECS: restamping a required module's compiled function is a cross-module mutation re-infer cannot survive

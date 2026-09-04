@@ -61,9 +61,7 @@ def quiet(out : string) : bool {
     return find(out, "deser:") < 0 && find(out, "ser:") < 0
 }
 
-//! the AST module cache is ON by default for a run that executes, at a derived path under the
-//! cwd, and says nothing; -no-module-cache and -compile-only leave no file; an explicit
-//! -module-cache keeps the loud verdicts the round-trip tests read
+//! the AST module cache is on by default - silent, at a cwd-derived path - and the flags that turn it off or make it loud
 [test]
 def test_default_module_cache(t : T?) {
     var terr : string
@@ -103,8 +101,6 @@ def test_default_module_cache(t : T?) {
     var loud : string
     let loudRc = run("{base} -module-cache \"{path_join(tmp, "explicit.bin")}\" {a}", loud)
     t |> success(report_child(t, "explicit", loudRc, loud, "ser: wrote"), "an explicit -module-cache keeps the loud verdict")
-    // the key folds the DAS* environment: macros read it at compile time, so a different
-    // environment must be a different cache file, not a stale hit
     let win = get_platform_name() == "windows"
     var envRun : string
     let envRc = run(win ? "set \"DAS_MC_PROBE=1\"&& {base} {a}" : "DAS_MC_PROBE=1 {base} {a}", envRun)

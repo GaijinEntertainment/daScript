@@ -1,4 +1,6 @@
-# src/builtin - extern bind flavors
+# src/builtin
+
+## 1. Extern bind flavors
 
 Every C++ function a module registers becomes an interpreter call node. Two node
 flavors exist, and the choice is per bind:
@@ -33,3 +35,17 @@ flavor by destination module. The gate (`review_nttp.das`) skips them by `cppNam
 
 The gate scans the module registry of its own program, so only modules its
 `require` list pulls in are covered - the require list is the coverage list.
+
+## 2. The default module-cache path
+
+`ModuleFileCache::defaultPath` (`module_builtin_ast_serialize.cpp`) returns
+`.jitted_scripts/module_cache/<stem>-<hash>.dascache` - relative, so the cache follows the
+current directory, and it sits beside the JIT DLL cache. `<stem>` is the script's file name
+without its extension. `<hash>` is the first 8 hex digits of a 64-bit hash over the normalized
+script path, the host binary's mtime and size when it can be stat'ed, and every `NAME=VALUE`
+environment pair whose name starts with `DAS`, sorted.
+
+The binary and the environment are in the key because macros read the tune and JIT environment
+at compile time and stamp what they read into the AST the cache stores. A rebuild or a changed
+`DAS*` variable is a different compile, so it gets its own file instead of a stale hit, and two
+same-named scripts in different directories never share one.

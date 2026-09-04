@@ -121,7 +121,9 @@ reds a test that does.
   longer equals the `manifestPath` the guard was compiled for.
 - `--tune` / `--tune-only` are read at RUNTIME by the guard (`tune_cli_force`, the same
   `apply_cli_tune_flags` parse), and the auto guard is emitted for a complete scope too: under
-  the module cache a compile's macros may never have seen this run's argv.
+  the module cache a compile's macros may never have seen this run's argv. The parse reads
+  `get_user_args()`, not raw argv: that is what slices a standalone exe's command line the
+  same way as `daslang script.das -- args`.
 - `tune_profile_export` carries `kernels` plus the string provenance that survives, dropping
   `binary` / `box` / `engine_sha` and re-stamping `origin` = `profile`, `class` = the export's
   class argument, and `written`: a profile's identity is class + version pin + features, never

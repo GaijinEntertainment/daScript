@@ -129,10 +129,10 @@ namespace das {
         uint64_t            resumedModules = 0;     // records skipped + reparsed in place
         uint64_t            resumedCorrupt = 0;     // of those, failures a rewrite REPAIRS (anything but builtinHashDrift)
         bool                builtinHashDrift = false;   // last record failed on a builtin cumulative-hash mismatch (lazily populated builtin, e.g. dasbind) - deterministic per process, a rewrite changes nothing
-        bool                quietCache = false;         // default-path module cache: no per-record ser: lines, no drift warning
-        uint64_t            servedModules = 0;      // records deserialized and served before any cutoff
-        string              cutoffFile;             // the record that cut the stream (positional: everything after re-parses)
-        string              cutoffReason;           // why it cut: file changed / macro dependency changed / stale stream
+        bool                quietCache = false;
+        uint64_t            servedModules = 0;
+        string              cutoffFile;
+        string              cutoffReason;
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
@@ -370,34 +370,28 @@ namespace das {
     // File-backed driver for the env module-cache rail (daScriptEnvironment::serializer_read
     // / serializer_write): install() binds a reader (when the file exists and is non-empty)
     // and/or a writer around a compile; finish() unbinds, classifies what the reader saw,
-    // and saves the refreshed stream (write-to-temp + rename) when the writeback fired.
+    // and saves the refreshed stream (write-to-temp + rename, creating missing parent
+    // directories) when the writeback fired.
     // The writeback fires when there was no usable reader, the stream went stale, or a
     // resumed record failed the THROWING way (damaged bytes - the rewrite repairs it); a
     // drift-flavored 'partial' (a lazily populated builtin like dasbind, deterministic per
     // process) deliberately does NOT rewrite - that reparse cost recurs per run by design.
     // Pass the same path as both readFrom and writeTo for a self-maintaining cache; quiet
-    // silences the reader's per-record diagnostics (the host's default cache is invisible
-    // unless asked for). defaultPath() is that default: .jitted_scripts/module_cache/
-    // <stem>-<hash>.dascache in the cwd, beside the JIT DLL cache - the hash covers the
-    // normalized script path, every DAS* environment variable (macros read the tune/JIT
-    // environment at compile time) and the host binary's mtime+size (a rebuild changes what
-    // macros decide - a sidecar older than the binary reads as stale); finish() creates
-    // missing parent directories.
-    // Under DAS_NO_FILEIO the cache
+    // silences the reader's per-record diagnostics. Under DAS_NO_FILEIO the cache
     // degrades to a stub: install() binds nothing and finish() answers 'unavailable'.
     struct DAS_API ModuleFileCache {
         enum class ReadVerdict {
             none,       // no reader installed, or nothing was ever read (e.g. debugger disabled the rail)
             clean,      // every module came from the cache
             partial,    // resumed: N unchanged-file records reparsed in place, the rest served
-            fallback,   // stale/truncated/foreign stream - modules reparsed from source
+            fallback,   // the stream was cut - the prefix before the cutoff served, the rest reparsed
             unavailable // DAS_NO_FILEIO build - a file-backed cache cannot exist on this target
         };
         struct Result {
             ReadVerdict verdict = ReadVerdict::none;
             uint64_t    resumed = 0;
-            uint64_t    served = 0;             // modules served from the cache before the cutoff (fallback keeps its prefix)
-            string      cutoffFile;             // the record that cut the stream, for the fallback verdict
+            uint64_t    served = 0;
+            string      cutoffFile;
             string      cutoffReason;
             bool        wrote = false;          // refreshed stream saved to writeTo
             bool        saveFailed = false;     // had bytes to save but could not write the file

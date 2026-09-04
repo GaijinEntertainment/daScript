@@ -47,6 +47,11 @@
 - **A change to the tune framework - `daslib/llvm_tune.das` or its tests - is reviewed with
   `skills/internal/llvm_tune_internals.md`.**
 
+- **A test under `tests/` here that asserts a compile-time print - an `llvm_tune:` stamp or
+  announce line, a `[tune]`-family compile error - spawns its child daslang process with
+  `-no-module-cache`.** The front-end module cache is on by default and replays the cached AST
+  without re-running the macro, so the print lands on the first run and never again.
+
 - **A diff that adds a top-level section to the tune sidecar (`<app>.tune.json`, written by
   `daslib/llvm_tune.das`), or a new key or value type inside an existing section, updates
   `modules/dasLLAMA/dasllama/dasllama_exchange_schema.das` in the same change and keeps

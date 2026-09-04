@@ -198,9 +198,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     delete chain
 
     // 7. DAS_TUNE_POLICY=reference serves the original bodies and announces itself even on a
-    //    fully tuned box (the sidecar from case 5 is complete). The announce is a compile-time
-    //    print, so this child runs -no-module-cache: a warm cache keyed on that environment
-    //    legitimately skips the macro (the stamps are still reference - the key covers DAS*)
+    //    fully tuned box (the sidecar from case 5 is complete)
     var refRun : array<string>
     let refEnv = (get_platform_name() == "windows" ?
         "set DAS_TUNE_MODE=&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=reference&& set DAS_TUNE_ONLY=&& " :

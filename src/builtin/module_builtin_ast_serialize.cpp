@@ -3332,9 +3332,6 @@ namespace das {
     }
 #endif
 
-    // the key folds every DAS* environment variable and the host binary's mtime+size beside
-    // the script path: macros read the tune/JIT environment at compile time, and a rebuild
-    // changes what they decide, so either is a different cache
     string ModuleFileCache::defaultPath ( const string & scriptPath, const string & hostBinary ) {
         string norm = normalizeFileName(scriptPath.c_str());
         size_t slash = norm.find_last_of("/\\");

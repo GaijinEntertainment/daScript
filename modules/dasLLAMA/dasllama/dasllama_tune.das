@@ -319,9 +319,8 @@ def private report_perm(fname, perm, source : string) : string {
     return perm
 }
 
-// Precedence: `perm=` pin > sidecar "kernels" entry > this box's class entry in the shipped
-// defaults profile > the fallback chain > DEFAULT_PERM.
-// (`fallback`, not `default` — `default` is a grammar keyword, won't parse as an arg name.)
+// the annotation arg is spelled `fallback`: `default` is a grammar keyword and would not parse as an arg name
+[arch(at = "../ARCHITECTURE_MEASUREMENT.md#tuned-perm-precedence")]
 def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : string {
     let fname = "{func.name}"
     let fb = fallback_perm(args)

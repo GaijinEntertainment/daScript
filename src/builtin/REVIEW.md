@@ -25,3 +25,9 @@
   `include/daScript/ast/ast_serializer.h`, in the same change** - a reader accepts a stream
   only when its stored version equals `getVersion()`, so without the bump an older cache
   passes that check and every field after the new one decodes shifted.
+
+- **Weakening the default-cache silence check in
+  `tests/module_cache/test_default_cache_path.das` (repo root) is a defect** - a diagnostic a
+  module-cache read prints, in `trySerializeProgramModule` (`src/ast/ast_parse.cpp`) or the
+  module cumulative-hash check in `module_builtin_ast_serialize.cpp`, prints only when the
+  serializer's `quietCache` is false.

@@ -55,9 +55,9 @@ static string jitOutPath = ""; // Empty, JIT module will choose default.
 static string serFile = "";   // -ser <path>: write the AST module cache (env serializer rail) after compile
 static string deserFile = ""; // -deser <path>: read the AST module cache during compile instead of parsing
 static string moduleCacheFile = ""; // -module-cache <path>: both - read when present, refresh when the compile diverged
-static bool moduleCacheExplicit = false; // -module-cache given: rides every mode (-exe included), verdicts print
-static bool noModuleCache = false;  // -no-module-cache: no AST module cache even where it is the default
-static string hostBinary = "";      // argv[0]: its mtime+size key the default module cache
+static bool moduleCacheExplicit = false; // -module-cache given
+static bool noModuleCache = false;  // -no-module-cache: off even where the cache is the default
+static string hostBinary = "";      // argv[0]
 
 static bool noDynamicModules = false;
 static bool noLint = false;
@@ -494,8 +494,6 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     // is the self-maintaining composition: read the file when present, keep a writer armed,
     // and save only when the writeback fired (first run, or a changed module cut the
     // stream). serialize_main_module defaults true, so the whole program rides the cache.
-    // Default ON, silently, for a run that executes; -exe keeps the one-unit slow path (its
-    // binary is the artifact), -compile-only / -documentation / the debugger gain nothing.
     string cacheReadPath = !deserFile.empty() ? deserFile : moduleCacheFile;
     string cacheWritePath = !serFile.empty() ? serFile : moduleCacheFile;
     bool cacheQuiet = false;
@@ -511,7 +509,6 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         if ( !cacheQuiet ) {
             switch ( cres.verdict ) {
             case ModuleFileCache::ReadVerdict::fallback:
-                // positional cutoff: the prefix before the changed record was served, everything after re-parsed
                 if ( cres.served > 0 ) {
                     tout << "deser: FALLBACK - " << cres.served << " module(s) served from cache, re-parsed from '" << cres.cutoffFile << "' (" << cres.cutoffReason << ")\n";
                 } else if ( !cres.cutoffReason.empty() ) {

@@ -99,7 +99,7 @@ struct GateResult {
     seconds : double
     detail : string                 // one-line summary: skip reason / failure hint
     output : string                 // child output, printed on FAIL or --verbose
-    breakdown : string              // where the gate's time went (build vs run, the sweep's slowest files), printed on PASS too
+    breakdown : string
 }
 
 struct PreflightCtx {
@@ -1131,8 +1131,6 @@ def gate_ci_das(ctx : PreflightCtx) : GateResult {
 
 // ===== test suites =====
 
-// dastest's "Top N slowest files:" table when the sweep printed one (--timing-outliers): the
-// header and its "<secs>s  <file>" rows, log prefixes stripped - the per-file half of the breakdown
 def slowest_files_block(out : string) : string {
     var rows : array<string>
     var inside = false
@@ -1595,7 +1593,6 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     let total_s = fmt(":.1f", float(total_d))
     to_log(n_fail > 0 ? LOG_ERROR : LOG_INFO,
         "\npreflight: {n_pass} passed, {n_fail} failed, {n_skip} skipped in {total_s}s\n")
-    // where the wall went, largest first - the slow CI lane's local mirror names itself
     var timed <- [for (r in results); (name = r.name, secs = r.seconds); where r.seconds > 0.05lf]
     sort(timed) $(a, b) {
         return a.secs > b.secs

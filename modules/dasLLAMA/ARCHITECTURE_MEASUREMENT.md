@@ -231,3 +231,23 @@ corpus, `ngen`, `reps`, `depths`) plus one row per engine, depth and prompt. The
 not the board's - `list_record_stores` and the records gate read `records/` one level deep and never
 see the folder - and `mtp_ruler --render <record>` prints the table. A third-party wall lives here
 only as the other half of a pair taken in the same run.
+
+### 2.40 A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
+
+`dasllama_tune.das` picks one perm per `[tuned]` kernel, first match wins: the `reference` tune
+policy (the kill switch - the template's own loops, no hints stamped), a `perm=` pin on the
+annotation, this box's sidecar `"kernels"` entry, this box's class entry in the shipped defaults
+profile (`performance/defaults`), the annotation's `fallback` `;`-chain, then `DEFAULT_PERM`.
+`tune_kernel_pick` (llvm_tune) reads the sidecar and the profile in that order and hands back the
+FILE its answer came from, so a verbose compile names which of the two stamped each kernel. A box
+the shipped profile covers therefore compiles tuned kernels without racing anything, and a box it
+does not cover falls to the fallback chain - never to another box's winners.
+
+### 2.41 The mint's own wall rides in the sidecar's provenance {#mint-wall-provenance}
+
+A successful mint stamps three provenance keys into the sidecar before the archive copy is
+written: `mint_gen_ms` (the generator half), `mint_kernels_ms` (the loop-hint half) and
+`mint_total_ms` (the wrapper's own wall). The order is what makes the timestamped copy in the
+box's tune-history directory carry them too, so the box's longitudinal record answers what
+shipping a profile cost without re-running the mint - a console line that scrolled past is not
+that record.
