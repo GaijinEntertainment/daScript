@@ -63,8 +63,18 @@
 <div id="dio-feed-items">
 <!-- news:begin — everything between the markers is generated from _news/*.md by
      build_news.py (run at deploy AND checked in, so preview matches production) -->
-<article class="dio-item dio-item--lead is-open" id="n-2026-09-03-mtp-on-mac" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-09-03</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">Speculative decoding lands on Metal - Qwen 3.8&#x27;s NextN head and Gemma 4&#x27;s assistant drafter.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<article class="dio-item dio-item--lead is-open" id="n-2026-09-03-text-to-speech" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-09-03</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">dasLLAMA speaks - KittenTTS nano and mini, Kokoro-82M, and a text front end that is nothing but data.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>Three text-to-speech models serve from the same engine and the same tuned kernels as the
+language models, on the CPU, through <code>/v1/audio/speech</code> on dasllama-server and a speech
+studio on its control page. On an M1 Max the served 8-bit lane reads a real-time factor of
+0.026 for kitten-nano (onnxruntime on the same input, 0.035) and 0.072 for kokoro-82m (torch
+CPU, 0.097), measured 2026-09-02. Why a game wants this, how the front end became two data
+packs, and the afternoon an "s" turned out to be a comma:
+<a href="stories/2026-09-03-text-to-speech.html">the story</a>.</p></div>
+</article>
+<article class="dio-item" id="n-2026-09-03-mtp-on-mac" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-09-03</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">Speculative decoding lands on Metal - Qwen 3.8&#x27;s NextN head and Gemma 4&#x27;s assistant drafter.</h2><span class="dio-item__chev">▾</span></div>
 <div class="dio-item__body"><p>Both drafter families that ship with their models now run on any Apple GPU dasLLAMA runs
 on, and the depth is a per-box knob the tuner mints. Measured against a stock llama.cpp on
 identical rendered prompts: gemma-4-26B-A4B on an M5 Max goes 122.7 to 145.9 tok/s at depth
