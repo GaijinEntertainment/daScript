@@ -12,6 +12,21 @@ struct template r {
     typedef r = r<iterator<a>[ @ {0 = (0, C())}]>
 }
 
+// A computed goto inside a captured block. Its label lives in the enclosing function, which
+// the block's own label table does not carry.
+def label_target : int {
+    return 6
+}
+
+[export]
+def computed_goto_in_a_captured_block {
+    invoke($ {
+        goto label_target()
+    })
+    label 6:
+    pass
+}
+
 [export]
 def main {
 }

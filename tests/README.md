@@ -678,7 +678,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | invalid_structure_field_type_void.das | Void type in struct field | **expect** `30104` |
 | invalid_table_type_mix.das | Invalid table key/value types | **expect** `30106:2` `30108` |
 | failed_type_inference_fuzz.das | Fuzzer-reached shapes that must be rejected - sealed redeclare of an inherited field, void argument, `typeinfo is_argument` outside a function | **expect** `30107` `30110` `30320` `30805` `30821` `30826` `30832` |
-| type_inference_fuzz.das | Fuzzer-reached shapes that must keep compiling - a block in a template structure's dim expression | |
+| type_inference_fuzz.das | Fuzzer-reached shapes that must keep compiling - a block in a template structure's dim expression, a computed goto inside a captured block | |
 | invalid_type_ref_in_table_value.das | Ref type as table value | **expect** `30106` |
 | invalid_types.das | Oversized types and arguments | **expect** `30101:2` `30108:4` `30109:2` |
 | failed_jit_abi.das | JIT ABI correctness - `test_abi_mad` for float2/3/4, function pointers | |
