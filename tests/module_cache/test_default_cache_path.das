@@ -187,6 +187,33 @@ def scramble_header(path : string) {
     }
 }
 
+//! a served module keeps its source lines: the lint reads `nolint:` markers off them, so a
+//! warm run of a module whose only defence against a lint finding is the marker must still compile
+[test]
+def test_source_lines_survive_the_cache(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_mc_src", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    fwrite(path_join(tmp, "mc_marked.das"), "options gen2\nmodule mc_marked\ndef marked(x) \{\n    var v = x   // nolint:LINT003 - the marker is what this generic lives on, instantiated in the root\n    return v\n\}\n")
+    let root = path_join(tmp, "mc_src_root.das")
+    fwrite(root, "options gen2\nrequire daslib/lint\nrequire mc_marked\n[export]\ndef main \{\n    print(\"MARK_src \{marked(7)\}\\n\")\n\}\n")
+    remove_cache_files("mc_src_root")
+    let cmd = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" \"{root}\""
+    var cold : string
+    t |> success(report_child(t, "marked cold", run(cmd, cold), cold, "MARK_src 7"), "the cold run compiles past the marked variable")
+    // the root changes so it re-parses and its lint pass runs, while the marked module is served
+    fwrite(root, "options gen2\nrequire daslib/lint\nrequire mc_marked\n[export]\ndef main \{\n    print(\"MARK_src2 \{marked(7)\}\\n\")\n\}\n")
+    var warm : string
+    t |> success(report_child(t, "marked warm", run(cmd, warm), warm, "MARK_src2 7"), "the warm run still sees the nolint marker on the served module")
+    t |> success(find(warm, "LINT003") < 0, "no LINT003 leaks through a served module:\n{warm}")
+    remove_cache_files("mc_src_root")
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
 //! a cache file cut in the middle, or one whose header is garbage, is read as far as it goes,
 //! silently, and rewritten
 def check_damaged_cache(t : T?; base, a : string) {

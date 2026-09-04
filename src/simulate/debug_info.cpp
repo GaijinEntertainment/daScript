@@ -885,6 +885,28 @@ namespace das
     }
 
     void TextFileInfo::getSourceAndLength ( const char * & src, uint32_t & len ) {
+#if !defined(DAS_NO_FILEIO)
+        // a module served from the cache carries its file name and length only; the bytes come
+        // back from the file on first use, accepted when the size still matches the record
+        if ( !source && sourceLength && !name.empty() ) {
+            if ( FILE * f = fopen(name.c_str(), "rb") ) {
+                fseek(f, 0, SEEK_END);
+                long fsize = ftell(f);
+                fseek(f, 0, SEEK_SET);
+                if ( fsize == long(sourceLength) ) {
+                    char * data = (char *) das_aligned_alloc16(sourceLength + 1);
+                    if ( fread(data, 1, sourceLength, f) == size_t(sourceLength) ) {
+                        data[sourceLength] = 0;
+                        source = data;
+                        owner = true;
+                    } else {
+                        das_aligned_free16(data);
+                    }
+                }
+                fclose(f);
+            }
+        }
+#endif
         src = source;
         len = sourceLength;
     }
