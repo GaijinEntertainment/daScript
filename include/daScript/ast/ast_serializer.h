@@ -117,6 +117,7 @@ namespace das {
         ModuleLibrary *     moduleLibrary = nullptr;
     // some passes require module group (it's passed from top-level)
         ModuleGroup *       thisModuleGroup = nullptr;
+        FileAccess *        fileAccess = nullptr;       // the compile's access: a served record's FileInfo resolves through it, source included
         Module *            thisModule = nullptr;
         Module *            astModule = nullptr;
         bool                writing = false;
@@ -133,6 +134,7 @@ namespace das {
         uint64_t            servedModules = 0;
         string              cutoffFile;
         string              cutoffReason;
+        bool                policyMismatch = false;     // the record's CodeOfPolicies differ from the compiling program's
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
@@ -256,7 +258,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 200;   // 200: the constant stream carries ExprConst::isConstLiteral
+            return 201;   // 201: the policy stream carries lint_check and no_lint
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

@@ -749,6 +749,7 @@ namespace das {
         // failure branches below carry everything a human needs
         bool read_ok = serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer.thisModuleGroup = &libGroup;
+            serializer.fileAccess = access.get();
             serializer.serializeProgram(program, libGroup);
         });
 
@@ -762,6 +763,18 @@ namespace das {
                 serializer_write->parsedModules.push_back({fileName, file_mtime, file_size, program, program->thisModule.get()});
             }
             return true;
+        }
+
+        if ( serializer_read->policyMismatch ) {
+            // the cache was written by a compile with other policies - no record after this one fits either
+            serializer_read->policyMismatch = false;
+            serializer_read->seenNewModule = true;
+            serializer_read->failed = true;
+            serializer_read->cutoffFile = fileName;
+            serializer_read->cutoffReason = "compile policies changed";
+            if ( !serializer_read->quietCache ) logs << "ser: compile policies changed at '" << fileName << "' - the cache was written by a compile with different policies\n";
+            replaceProgramKeepGcRootValid(program);
+            return false;
         }
 
         if ( !serializer_read->quietCache ) {
@@ -1033,6 +1046,7 @@ namespace das {
         uint64_t myParseT = 0, myInferT = 0, myOptT = 0, myMacroModT = 0;
         auto macroTicks0 = daScriptEnvironment::getBound()->macroTimeTicks;
         program->inferPassesUsed = 0;  // reset once per module; inferTypesDirty accumulates across all inferTypes legs (incl. restartInfer)
+        program->policies = policies;   // before the cache read: the reader compares the record's policies against this compile's
 
         if ( trySerializeProgramModule(program, access, fileName, libGroup, logs) ) {
             return program;

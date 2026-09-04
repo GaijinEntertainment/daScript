@@ -115,6 +115,34 @@ def test_fallback_verdict_names_the_cutoff(t : T?) {
     rmdir_rec(tmp, err)
 }
 
+//! a record written under one set of compile policies serves nothing to a compile under another:
+//! the same explicit cache read by a -no-lint run stops at the first module and is rewritten
+[test]
+def test_policy_change_refuses_the_cache(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_mc_policy", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    fwrite(path_join(tmp, "mc_pol_leaf.das"), "options gen2\nmodule mc_pol_leaf\ndef leaf() : int \{\n    return 3\n\}\n")
+    fwrite(path_join(tmp, "mc_pol_root.das"), "options gen2\nrequire mc_pol_leaf\n[export]\ndef main \{\n    print(\"MARK_policy \{leaf()\}\\n\")\n\}\n")
+    let base = "{das_exe()} -dasroot {get_das_root()}"
+    let tail = "-module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_pol_root.das")}"
+    var cold : string
+    t |> success(report_child(t, "policy cold", run("{base} {tail}", cold), cold, "ser: wrote"), "the cold run writes the explicit cache")
+    var same : string
+    t |> success(report_child(t, "policy same", run("{base} {tail}", same), same, "deser: clean"), "the same policies serve every module")
+    var changed : string
+    t |> success(report_child(t, "policy changed", run("{base} -no-lint {tail}", changed), changed, "MARK_policy 3"), "a -no-lint run over the plain run's cache still executes")
+    t |> success(find(changed, "compile policies changed at") >= 0 && find(changed, "mc_pol_leaf.das") >= 0, "the verdict names the policy cutoff at the first module:\n{changed}")
+    t |> success(find(changed, "ser: wrote") >= 0, "the cache is rewritten under the new policies")
+    var rewritten : string
+    t |> success(report_child(t, "policy rewritten", run("{base} -no-lint {tail}", rewritten), rewritten, "deser: clean"), "the rewritten cache serves the -no-lint compile")
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
 //! the modes that never install the default cache: the opt-out flag, a compile with no run, an AOT-consuming run
 def check_off_modes(t : T?; base, b, c : string) {
     var off : string

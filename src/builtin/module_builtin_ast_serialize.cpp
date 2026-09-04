@@ -890,6 +890,13 @@ namespace das {
                     default: SERIALIZER_VERIFYF(false, "Unreachable");
                 }
                 info->serialize(*this);
+                // the record carries name and length only; LineInfos point at the compile's FileAccess file,
+                // source included. A name the access cannot produce keeps the record object (deleteUponFinish)
+                if ( fileAccess && !info->name.empty() ) {
+                    if ( FileInfo * live = fileAccess->getFileInfo(info->name) ) {
+                        info = live;
+                    }
+                }
                 readingFileInfoMap[curOffset] = info;
                 if ( curOffset != savedOffset )
                     readOffset = savedOffset;
@@ -907,6 +914,13 @@ namespace das {
             *this << info_ptr;
         } else {
             FileInfo * info_ptr = nullptr; *this << info_ptr;
+            if ( fileAccess && info_ptr ) {
+                // the module owns its own file the way a parse leaves it: taken from the access
+                if ( auto owned = fileAccess->letGoOfFileInfo(info_ptr->name) ) {
+                    info = das::move(owned);
+                    return *this;
+                }
+            }
             info.reset(info_ptr);
             doNotDelete.insert(info_ptr);
         }
@@ -2767,97 +2781,43 @@ namespace das {
     };
 
 
+    // every policy field a cache record carries - one list for the stream and for the compare,
+    // so a field cannot be streamed and not compared (or the reverse)
+    #define DAS_MODULE_CACHE_POLICY_FIELDS(X) \
+        X(aot) X(aot_module) X(aot_macros) X(tune_frozen) X(completion) X(building_documentation) \
+        X(export_all) X(serialize_main_module) X(keep_alive) X(very_safe_context) X(max_infer_passes) \
+        X(max_call_depth) X(verify_infer_types) X(stack) X(intern_strings) X(persistent_heap) \
+        X(multiple_contexts) X(heap_size_hint) X(string_heap_size_hint) X(solid_context) \
+        X(macro_context_persistent_heap) X(macro_context_collect) X(max_static_variables_size) \
+        X(max_heap_allocated) X(max_string_heap_allocated) X(max_unreserved_size) X(track_allocations) \
+        X(rtti) X(unsafe_table_lookup) X(relaxed_pointer_const) X(version_2_syntax) X(gen2_make_syntax) \
+        X(relaxed_assign) X(no_unsafe) X(local_ref_is_unsafe) X(with_module_is_unsafe) \
+        X(no_global_variables) X(no_global_variables_at_all) X(no_global_heap) X(only_fast_aot) \
+        X(aot_order_side_effects) X(no_unused_function_arguments) X(no_unused_block_arguments) \
+        X(allow_block_variable_shadowing) X(allow_local_variable_shadowing) X(allow_shared_lambda) \
+        X(ignore_shared_modules) X(default_module_public) X(no_deprecated) X(no_aliasing) \
+        X(strict_smart_pointers) X(no_init) X(strict_unsafe_delete) X(no_members_functions_in_struct) \
+        X(no_local_class_members) X(no_unsafe_uninitialized_structures) X(default_init_containers) \
+        X(strict_properties) X(no_writing_to_nameless) X(no_optimizations) X(fast_math) X(disable_dse) \
+        X(disable_cse) X(disable_temp_string_reclaim) X(disable_inline) X(disable_auto_inline) \
+        X(auto_inline_functions) X(auto_inline_cost) X(disable_run) X(no_infer_time_folding) \
+        X(fail_on_no_aot) X(fail_on_lack_of_aot_export) X(no_fast_call) X(fusion) X(scoped_stack_allocator) \
+        X(force_inscope_pod) X(log_inscope_pod) X(debugger) X(profiler) X(jit_enabled) \
+        X(jit_jit_all_functions) X(jit_debug_info) X(jit_opt_level) X(jit_size_level) X(jit_dll_mode) \
+        X(jit_output_path) X(jit_path_to_shared_lib) X(jit_path_to_linker) X(threadlock_context) \
+        X(lint_check) X(no_lint)
+
+    static bool cachedPoliciesMatch ( const CodeOfPolicies & a, const CodeOfPolicies & b ) {
+    #define DAS_POLICY_FIELD_SAME(f) if ( !(a.f == b.f) ) return false;
+        DAS_MODULE_CACHE_POLICY_FIELDS(DAS_POLICY_FIELD_SAME)
+    #undef DAS_POLICY_FIELD_SAME
+        return true;
+    }
+
     AstSerializer & AstSerializer::operator << ( CodeOfPolicies & value ) {
-        // This is like so because of several fields with strings
-        *this << value.aot
-              << value.aot_module
-              << value.aot_macros
-              << value.tune_frozen
-              << value.completion
-              << value.building_documentation
-              << value.export_all
-              << value.serialize_main_module
-              << value.keep_alive
-              << value.very_safe_context
-              << value.max_infer_passes
-              << value.max_call_depth
-              << value.verify_infer_types
-              << value.stack
-              << value.intern_strings
-              << value.persistent_heap
-              << value.multiple_contexts
-              << value.heap_size_hint
-              << value.string_heap_size_hint
-              << value.solid_context
-              << value.macro_context_persistent_heap
-              << value.macro_context_collect
-              << value.max_static_variables_size
-              << value.max_heap_allocated
-              << value.max_string_heap_allocated
-              << value.max_unreserved_size
-              << value.track_allocations
-              << value.rtti
-              << value.unsafe_table_lookup
-              << value.relaxed_pointer_const
-              << value.version_2_syntax
-              << value.gen2_make_syntax
-              << value.relaxed_assign
-              << value.no_unsafe
-              << value.local_ref_is_unsafe
-              << value.with_module_is_unsafe
-              << value.no_global_variables
-              << value.no_global_variables_at_all
-              << value.no_global_heap
-              << value.only_fast_aot
-              << value.aot_order_side_effects
-              << value.no_unused_function_arguments
-              << value.no_unused_block_arguments
-              << value.allow_block_variable_shadowing
-              << value.allow_local_variable_shadowing
-              << value.allow_shared_lambda
-              << value.ignore_shared_modules
-              << value.default_module_public
-              << value.no_deprecated
-              << value.no_aliasing
-              << value.strict_smart_pointers
-              << value.no_init
-              << value.strict_unsafe_delete
-              << value.no_members_functions_in_struct
-              << value.no_local_class_members
-              << value.no_unsafe_uninitialized_structures
-              << value.default_init_containers
-              << value.strict_properties
-              << value.no_writing_to_nameless
-              << value.no_optimizations
-              << value.fast_math
-              << value.disable_dse
-              << value.disable_cse
-              << value.disable_temp_string_reclaim
-              << value.disable_inline
-              << value.disable_auto_inline
-              << value.auto_inline_functions
-              << value.auto_inline_cost
-              << value.disable_run
-              << value.no_infer_time_folding
-              << value.fail_on_no_aot
-              << value.fail_on_lack_of_aot_export
-              << value.no_fast_call
-              << value.fusion
-              << value.scoped_stack_allocator
-              << value.force_inscope_pod
-              << value.log_inscope_pod
-              << value.debugger
-              << value.profiler
-              << value.jit_enabled
-              << value.jit_jit_all_functions
-              << value.jit_debug_info
-              << value.jit_opt_level
-              << value.jit_size_level
-              << value.jit_dll_mode
-              << value.jit_output_path
-              << value.jit_path_to_shared_lib
-              << value.jit_path_to_linker
-              << value.threadlock_context;
+    #define DAS_POLICY_FIELD_STREAM(f) *this << value.f;
+        DAS_MODULE_CACHE_POLICY_FIELDS(DAS_POLICY_FIELD_STREAM)
+    #undef DAS_POLICY_FIELD_STREAM
         return *this;
     }
 
@@ -2946,7 +2906,19 @@ namespace das {
         ser << program->globalInitStackSize << program->globalStringHeapSize;
         ser << program->flags;
 
-        ser << program->options << program->policies;
+        if ( writing ) {
+            ser << program->options << program->policies;
+        } else {
+            // a record written under other policies is never served; the caller cuts the stream
+            ser << program->options;
+            CodeOfPolicies stored = program->policies;
+            ser << stored;
+            if ( !cachedPoliciesMatch(stored, program->policies) ) {
+                ser.policyMismatch = true;
+                ser.failed = true;
+                return;
+            }
+        }
 
         if ( writing ) {
             moduleLibrary = &program->library;  // Module::serialize binds *moduleLibrary (finalizeModule)
