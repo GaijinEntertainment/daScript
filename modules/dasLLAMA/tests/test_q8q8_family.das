@@ -626,10 +626,8 @@ def private group3_gate(t : T?; n : int64) {
     let saved = active_kernel_backend()
     for (name in kernel_backend_names()) {
         pin_kernel_backend(name)
-        var q : array<int8>
-        var s : array<float>
-        q := wq0.q
-        s := ws32m
+        var q := wq0.q
+        var s := ws32m
         if (kernel_backend_needs_repack(name)) {
             repack_q8q8_weight(q, s, woff0, n, d0)
             repack_q8q8_weight(q, s, woff1, n, d1)
@@ -670,9 +668,15 @@ def private group3_gate(t : T?; n : int64) {
         h1 |> resize(d1)
         h2 |> resize(d2)
         matmul_q8q8_group3(h0, h1, h2, q, s16, woff0, woff1, woff2, xq, xs, n, d0, d1, d2)
-        identical(t, h0, y0, "{name} group3 s16 region 0 bit-matches the f32 plane, n={n}")
-        identical(t, h1, y1, "{name} group3 s16 region 1 bit-matches the f32 plane, n={n}")
-        identical(t, h2, y2, "{name} group3 s16 region 2 bit-matches the f32 plane, n={n}")
+        if (name == "portable") {
+            identical(t, h0, y0, "{name} group3 s16 region 0 bit-matches the f32 plane, n={n}")
+            identical(t, h1, y1, "{name} group3 s16 region 1 bit-matches the f32 plane, n={n}")
+            identical(t, h2, y2, "{name} group3 s16 region 2 bit-matches the f32 plane, n={n}")
+        } else {
+            var fused16 : array<float>
+            concat3(h0, h1, h2, fused16)
+            held(t, fused16, ref, bar, "{name} matmul_q8q8_group3 s16 within the fp64 bar, n={n}")
+        }
     }
     restore_backend(saved)
 }

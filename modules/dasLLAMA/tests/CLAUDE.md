@@ -643,9 +643,10 @@ GEMVs. The dispatch wrappers run on every backend `kernel_backend_names()` lists
 backends through their own `repack_q8q8_weight`, never on row-major data - with
 `matmul_q8q8_batch` bit-exact against ntok x `matmul_q8q8`. The wscale_f16 arm covers
 `dot_q8q8_f16s`, the `_s16` rows and groupN kernels, the stamped s16 tile/GEMV twins and the
-`matmul_q8q8` / `_batch` / `_groupn` s16 overloads, bit-exact against their f32 twins over
-f16-exact scales. `matmul_q8q8_group3` (f32 and s16) runs against three independent GEMVs on
-unequal regions 32/40/44 (the row tail); `matmul_q8` / `dot_q8` cover the fp32-activation rail;
+`matmul_q8q8` / `_batch` / `_groupn` s16 overloads, against their f32 twins over f16-exact
+scales - bit-exact on the portable backend, within the fp64 bar on a generated one whose s16
+and f32 stamps fold differently. `matmul_q8q8_group3` (f32 and s16) runs against three
+independent GEMVs on unequal regions 32/40/44 (the row tail); `matmul_q8` / `dot_q8` cover the fp32-activation rail;
 the mx4 cell drives `matmul_mx4q8_batch` and `matmul_mx4q8_batch_groupn` against ntok
 independent `matmul_mx4q8` GEMVs and the `dot_mx4q8_scalar` leaf, pinned portable and swept
 over the repack backends that carry those slots. Nothing here self-skips off-JIT - every cell
