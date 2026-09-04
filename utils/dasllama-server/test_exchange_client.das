@@ -446,8 +446,8 @@ def test_policy_and_discovery(t : T?) {
     t |> run("policy: defaults, toml, and degradation") @(tt : T?) {
         let p0 = exchange_policy_from_config("")
         tt |> equal(p0.url, EXCHANGE_URL_DEFAULT)
-        tt |> equal(p0.accept, "verified")
-        tt |> equal(p0.submit, "ask")
+        tt |> equal(p0.accept, "off", "the exchange is closed: nothing contacts it without an explicit key")
+        tt |> equal(p0.submit, "never")
         tt |> success(!p0.configured, "the baked defaults are not an expressed choice")
         let res = create_temp_file_result("exchange_policy_", ".toml")
         if (res is error) {
@@ -463,8 +463,8 @@ def test_policy_and_discovery(t : T?) {
         tt |> success(p1.configured, "any exchange_* key in the config is an expressed choice (consent)")
         fwrite(path, "exchange_accept = \"yolo\"\nexchange_submit = \"whatever\"\n")
         let p2 = exchange_policy_from_config(path)
-        tt |> equal(p2.accept, "verified", "a typo must never widen acceptance")
-        tt |> equal(p2.submit, "ask")
+        tt |> equal(p2.accept, "off", "a typo must never widen acceptance")
+        tt |> equal(p2.submit, "never")
         fwrite(path, "authoritative = true\nexchange_url = \"http://127.0.0.1:9\"\nexchange_accept = \"any\"\n")
         let p3 = exchange_policy_from_config(path)
         tt |> equal(p3.accept, "any", "an authoritative toml still sets the policy")
@@ -488,11 +488,15 @@ def test_consent(t : T?) {
         var off = ExchangePolicy()
         off.accept = "off"
         tt |> success(!exchange_may_contact(off), "accept=off never contacts, whatever the consent state")
+        // the gate composes over an ON policy: the baked default is off (the exchange is closed), so
+        // each arm turns accept on and varies only the consent state
         var conf = ExchangePolicy()
+        conf.accept = "verified"
         conf.configured = true
         conf.configured_via = "exchange_accept (config)"
         tt |> success(exchange_may_contact(conf), "an expressed exchange config waives the question")
-        let zero = ExchangePolicy()
+        var zero = ExchangePolicy()
+        zero.accept = "verified"
         tt |> success(!exchange_may_contact(zero), "zero-config + never asked: nothing leaves (dastest has no TTY, so the event arm answers)")
         verify(exchange_record_consent(false))
         tt |> success(!exchange_may_contact(zero), "a recorded decline keeps the box offline")

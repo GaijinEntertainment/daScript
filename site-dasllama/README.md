@@ -17,7 +17,9 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
   down); the deploy copies the directory whole; plain "we", llama.cpp named as the yardstick
 - `ladder.html` - ALL measurements (official + community); daslang.io/dasllama.html stays
   official-only
-- `sidecars.html` - the sidecar exchange: finder, kernel-win viewer, downloads
+- `sidecars.html` - the sidecar exchange: finder, kernel-win viewer, downloads. The exchange is
+  closed: the page is unlinked from every tab bar and footer and carries `noindex`; it stays so
+  the service can reopen without a rebuild
 - `files/dasllama-io.css` - site chrome (`dio-` prefix)
 - `files/dasllama-io.js` - the one renderer for all three pages (page detected by mount
   points); community text is escaped before it reaches markup

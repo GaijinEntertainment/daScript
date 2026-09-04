@@ -240,9 +240,12 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   outside that walk by design): the boot-time
   lookup/apply (llvm_tune's scope resolver - a verified per-box match downloads instead of a
   ~12-minute tune), the privacy-stripped submit rails, and the control-page surface
-  dasllama-server serves at `/exchange`. The first-contact consent gate (GDPR) sits ahead of
-  every lookup: an explicit `exchange_*` config counts as the expressed choice, otherwise the
-  `<stem>.consent` sidecar-sibling file governs - unset asks on a real terminal, or emits
+  dasllama-server serves at `/exchange`. The exchange is closed: both policies default to
+  `off`, so no boot contacts it and no consent question is asked unless an explicit
+  `exchange_*` key opts in - the shipped class profiles cover the boxes the exchange served.
+  The first-contact consent gate (GDPR) sits ahead of every lookup once a policy is on: an
+  explicit `exchange_*` config counts as the expressed choice, otherwise the `<stem>.consent`
+  sidecar-sibling file governs - unset asks on a real terminal, or emits
   `@sidecar consent state=needed` for the watchdog dialog / control page, and no request
   leaves until a surface records "accepted".
 - **`benchmarks/asr/mem_census.sh`** - the peak-memory census (`/usr/bin/time -l` around one
