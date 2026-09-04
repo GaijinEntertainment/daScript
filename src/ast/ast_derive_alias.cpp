@@ -321,6 +321,9 @@ namespace das {
             var->aliasesResolved = isPermanent;
             return true;
         }
+        virtual bool canVisitStructure ( Structure * st ) override {
+            return !st->isTemplate;
+        }
         virtual bool canVisitFunction ( Function * fun ) override {
             if ( fun->stub ) return false;
             if ( fun->isTemplate ) return false;

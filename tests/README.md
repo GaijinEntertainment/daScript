@@ -677,8 +677,10 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | invalid_structure_field_type_ref.das | Ref type in struct field | **expect** `30104` |
 | invalid_structure_field_type_void.das | Void type in struct field | **expect** `30104` |
 | invalid_table_type_mix.das | Invalid table key/value types | **expect** `30106:2` `30108` |
+| failed_type_inference_fuzz.das | Fuzzer-reached shapes that must be rejected - sealed redeclare of an inherited field, void argument, `typeinfo is_argument` outside a function, an `[expr]`-typed for-source | **expect** `30107` `30109` `30110` `30192` `30320` `30805` `30821` `30826` `30832` |
+| type_inference_fuzz.das | Fuzzer-reached shapes that must keep compiling - a block in a template structure's dim expression, a computed goto inside a captured block | |
 | invalid_type_ref_in_table_value.das | Ref type as table value | **expect** `30106` |
-| invalid_types.das | Oversized types and arguments | **expect** `30101:2` `30108:4` `30109:2` |
+| invalid_types.das | Oversized types and arguments - declarations, `new`, ascend, `default<T>` | **expect** `30500:3` `30508` `30510` `30512:3` `30513` |
 | failed_jit_abi.das | JIT ABI correctness - `test_abi_mad` for float2/3/4, function pointers | |
 | labels.das | Labels and goto - control flow, nested loops, labeled break | |
 | lambda_basic.das | Lambda capture, invoke, null check, addX returning lambda | |
@@ -770,7 +772,8 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | table.das | Table tombstone handling and iteration | |
 | table_get_key.das | `get_key(table, value)` - retrieve key by iterator value for int<->float, string<->int, const table, tombstones, empty, single entry | |
 | table_operations.das | Table find, insert, delete, key_exists, erase collision, lock panic, defaults, modify | |
-| test_value_table_key.das | `table<EntityId; string>` - value-type table key ops, set operations | |
+| test_cross_tier_table_hash.das | One `table<EntityId; int>` reached by both tiers in one AOT binary - a `[no_aot]` write and an AOT read must agree on the key's hash | |
+| test_value_table_key.das | Value-type table keys - `table<EntityId; string>` ops and set operations, plus a vec4f-workhorse key (`BigEntityId`) across all three tiers | |
 | testing_tools.das | Faker, fuzzer, testing_boost tools | |
 | to_array.das | `to_array` - from fixed_array, range, each(), static/dynamic arrays | |
 | to_table.das | `to_table` - from fixed_array of tuples | |

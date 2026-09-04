@@ -337,8 +337,8 @@ namespace das {
     };
     template <> struct WrapType<BigEntityId> {
         enum { value = true };
-        typedef vec4f type;
-        typedef vec4f rettype;
+        using type = float4;
+        using rettype = float4;
     };
 }
 

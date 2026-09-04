@@ -1891,16 +1891,18 @@ class public CppAot : AstVisitor {
     def override visitExprGoto(var that : ExprGoto?) : ExpressionPtr {
         if (that.subexpr != null) {
             write(*ss, ") \{\n");
-            scopes |> reverse();
-            for (blk in scopes) {
+            var si = length(scopes) - 1;
+            while (si >= 0) {
+                let blk = scopes[si];
                 for (ex in blk.list) {
                     if (ex is ExprLabel) {
                         let lab = ex as ExprLabel;
                         write(*ss, "{tabs()}case {lab.labelName}: goto label_{lab.labelName};\n");
                     }
                 }
+                break if (blk.blockFlags.isClosure);
+                si--;
             }
-            scopes |> reverse();
             write(*ss, "{tabs()}default: __context__->throw_error(\"invalid label\");\n");
             write(*ss, "{tabs()}\}");
         }

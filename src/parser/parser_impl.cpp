@@ -455,7 +455,7 @@ namespace das {
                                     oldFd->init = pDecl->pInit; pDecl->pInit = nullptr;
                                 }
                             }
-                            oldFd->parentType = oldFd->type->isAuto();
+                            oldFd->parentType = oldFd->inherited && oldFd->type->isAuto();
                             oldFd->privateField = pDecl->isPrivate;
                             oldFd->sealed = pDecl->sealed;
                             oldFd->implemented = true;

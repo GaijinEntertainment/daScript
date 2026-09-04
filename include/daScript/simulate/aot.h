@@ -1331,21 +1331,21 @@ namespace das {
         }
         __forceinline TV & operator () ( const TK & key, Context * __context__ ) {
             TableHash<TK> thh(__context__,sizeof(TV));
-            auto hfn = hash_function(*__context__, key);
+            auto hfn = KeyHash<KeyType>()(*__context__, key);
             int64_t index = thh.reserve(*this, key, hfn);
             return ((TV *)data)[index];
         }
         static __forceinline TV * safe_index ( THIS_TYPE * that, const TK & key, Context * __context__ ) {
             if (!that) return nullptr;
             TableHash<TK> thh(__context__,sizeof(TV));
-            auto hfn = hash_function(*__context__, key);
+            auto hfn = KeyHash<KeyType>()(*__context__, key);
             int64_t index = thh.find(*that, key, hfn);
             return index==-1 ? nullptr : ((TV *)that->data) + index;
         }
         static __forceinline const TV * safe_index ( const THIS_TYPE * that, const TK & key, Context * __context__ ) {
             if (!that) return nullptr;
             TableHash<TK> thh(__context__,sizeof(TV));
-            auto hfn = hash_function(*__context__, key);
+            auto hfn = KeyHash<KeyType>()(*__context__, key);
             int64_t index = thh.find(*that, key, hfn);
             return index==-1 ? nullptr : ((const TV *)that->data) + index;
         }
@@ -3211,7 +3211,7 @@ namespace das {
     template <typename TK, typename TV, typename TKey>
     __forceinline TV * __builtin_table_find ( Context * context, const TTable<TK, TV> & tab, TKey _key ) {
         TK key = (TK) _key;
-        auto hfn = hash_function(*context, key);
+        auto hfn = KeyHash<TK>()(*context, key);
         TableHash<TK> thh(context,sizeof(TV));
         int64_t index = thh.find(tab, key, hfn);
         return (TV *) ( index!=-1 ? tab.data + index * sizeof(TV) : nullptr );
@@ -3226,7 +3226,7 @@ namespace das {
     template <typename TK, typename TV, typename TKey>
     __forceinline bool __builtin_table_key_exists ( Context * context, const TTable<TK, TV> & tab, TKey _key ) {
         TK key = (TK) _key;
-        auto hfn = hash_function(*context, key);
+        auto hfn = KeyHash<TK>()(*context, key);
         TableHash<TK> thh(context, safe_size_of<TV>::value);
         return thh.find(tab, key, hfn) != -1;
     }
@@ -3235,7 +3235,7 @@ namespace das {
     __forceinline bool __builtin_table_erase ( Context * context, TTable<TK,TV> & tab, TKey _key ) {
         if ( tab.isLocked() ) context->throw_error("can't erase from locked table");
         TK key = (TK) _key;
-        auto hfn = hash_function(*context, key);
+        auto hfn = KeyHash<TK>()(*context, key);
         TableHash<TK> thh(context,safe_size_of<TV>::value);
         return thh.erase(tab, key, hfn) != -1;
     }
@@ -3244,7 +3244,7 @@ namespace das {
     __forceinline void __builtin_table_set_insert ( Context * context, TTable<TK,void> & tab, TKey _key ) {
         if ( tab.isLocked() ) context->throw_error("can't insert to a locked table");
         TK key = (TK) _key;
-        auto hfn = hash_function(*context, key);
+        auto hfn = KeyHash<TK>()(*context, key);
         TableHash<TK> thh(context,0);
         thh.reserve(tab, key, hfn);
     }

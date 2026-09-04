@@ -1604,6 +1604,11 @@ namespace das {
             error("debug comment must be string constant", "", "",
                   expr->at, CompilationError::invalid_debug_comment_type);
         }
+        if (expr->arguments[0]->type->isVoid()) {
+            error("void type is not allowed as argument", "", "",
+                  expr->at, CompilationError::invalid_argument_type);
+            return Visitor::visit(expr);
+        }
         TypeDecl::clone(expr->type, expr->arguments[0]->type);
         return Visitor::visit(expr);
     }
@@ -2459,7 +2464,7 @@ namespace das {
                     error("is argument requires subexpression", "", "",
                           expr->at, CompilationError::missing_typeinfo_subexpression);
                 } else {
-                    if (expr->subexpr->rtti_isVar()) {
+                    if (expr->subexpr->rtti_isVar() && func) {
                         auto evar = static_cast<ExprVar*>(expr->subexpr);
                         reportAstChanged();
                         return new ExprConstBool(expr->at, func->findArgument(evar->name) != nullptr);
@@ -5308,7 +5313,7 @@ namespace das {
     }
     ExpressionPtr InferTypes::visitForSource(ExprFor *expr, Expression *that, bool last) {
         // now, for the one where we did not find anything
-        if (that->type) {
+        if (that->type && !that->type->isExprType()) {
             if (that->type->baseType != Type::tFixedArray &&
                 !that->type->isGoodIteratorType() &&
                 !that->type->isGoodArrayType() &&

@@ -293,6 +293,12 @@ class CoverageMacro : AstVisitor {
         }
     }
 
+    def override canVisitStructure(st : Structure?) : bool {
+        //! Skips template structures - their type expressions are never inferred, so a block
+        //! inside one reaches the instrumentation outside of any function, with a null `func`.
+        return !st.flags.isTemplate
+    }
+
     def override canVisitFunction(fun : Function?) : bool {
         if (fun.flags.init || fun.flags.builtIn) return false
         for (ann in fun.annotations) {
