@@ -1,9 +1,9 @@
 #pragma once
 
 #include <dag_noise/dag_uint_noise.h>
-#if (__clang_major__ < 12 || (__clang_major__ >= 17 && __clang_major__ <= 18)) && defined(__clang__) && defined(__FAST_MATH__)
+#if defined(__GNUC__) || defined(__clang__)
 #include <cstring> // memcpy
-#include <cmath> // INFINITY
+#include <cstdint>
 #endif
 
 namespace das {
@@ -101,47 +101,32 @@ namespace das {
     __forceinline vec4f degrees_vec(vec4f rad) { return v_mul(rad, v_splats(180.0f / 3.14159265358979323846f)); }
 
 #if defined(__GNUC__) || defined(__clang__)
-#if !defined(__clang__)
-#define DAS_FINITE_MATH __attribute__((optimize("no-finite-math-only")))
-#else
-#define DAS_FINITE_MATH
-#endif
-#if defined(__clang__) && !defined(__arm64__) && !defined(__e2k__) && !defined(__NINTENDO__)
-#pragma float_control(push)
-#pragma float_control(precise, on)
-#endif
-#if (__clang_major__ < 12 || (__clang_major__ >= 17 && __clang_major__ <= 18)) && defined(__clang__) && defined(__FAST_MATH__)
-    //unfortunately older clang versions do not work with float_control, and in clang 17-18.1 it's broken
-    __forceinline DAS_FINITE_MATH bool   fisnan(float  a) { volatile float b = a; return b != a; }
-    __forceinline DAS_FINITE_MATH bool   disnan(double  a) { volatile double b = a; return b != a; }
-    __forceinline DAS_FINITE_MATH bool   fisfinite(float a)
-    {
-      uint32_t i;
-      memcpy(&i, &a, sizeof(a));
-      i &= ~(1 << 31);
-      memcpy(&a, &i, sizeof(a));
-      static volatile float inf = INFINITY;
-      return a != inf;
+    // A finite-math build folds the builtins, and clang 17+ marks every float parameter
+    // nofpclass(nan inf), which folds a plain exponent test too; no pragma or attribute lifts
+    // that from a parameter. A precise build is not safe either: an inlined builtin folds
+    // inside the fast-math region aot.h emits around every `options fast_math` function.
+    // The volatile copy launders the value in every build; the exponent test is integer
+    // math, which fast math leaves alone. Gated by tests-cpp/small/test_isnan_fastmath*.cpp.
+    __forceinline bool fisnan(float a) {
+        volatile float vb = a; float b = vb;
+        uint32_t i; memcpy(&i, &b, sizeof(b));
+        return (i & 0x7F800000u) == 0x7F800000u && (i & 0x007FFFFFu) != 0u;
     }
-    __forceinline DAS_FINITE_MATH bool   disfinite(double a)
-    {
-      uint64_t i;
-      memcpy(&i, &a, sizeof(a));
-      i &= ~(1ull << 63);
-      memcpy(&a, &i, sizeof(a));
-      static volatile double inf = INFINITY;
-      return a != inf;
+    __forceinline bool disnan(double a) {
+        volatile double vb = a; double b = vb;
+        uint64_t i; memcpy(&i, &b, sizeof(b));
+        return (i & 0x7FF0000000000000ull) == 0x7FF0000000000000ull && (i & 0x000FFFFFFFFFFFFFull) != 0ull;
     }
-#else
-    ___noinline DAS_FINITE_MATH inline bool   fisnan(float  a) { return __builtin_isnan(a); }
-    ___noinline DAS_FINITE_MATH inline bool   disnan(double  a) { return __builtin_isnan(a); }
-    ___noinline DAS_FINITE_MATH inline bool   fisfinite(float  a) { return __builtin_isfinite(a); }
-    ___noinline DAS_FINITE_MATH inline bool   disfinite(double  a) { return __builtin_isfinite(a); }
-#endif
-#undef DAS_FINITE_MATH
-#if defined(__clang__) && !defined(__arm64__) && !defined(__e2k__) && !defined(__NINTENDO__)
-#pragma float_control(pop)
-#endif
+    __forceinline bool fisfinite(float a) {
+        volatile float vb = a; float b = vb;
+        uint32_t i; memcpy(&i, &b, sizeof(b));
+        return (i & 0x7F800000u) != 0x7F800000u;
+    }
+    __forceinline bool disfinite(double a) {
+        volatile double vb = a; double b = vb;
+        uint64_t i; memcpy(&i, &b, sizeof(b));
+        return (i & 0x7FF0000000000000ull) != 0x7FF0000000000000ull;
+    }
 #else
     //msvc just does not optimize fast math
     __forceinline bool   fisfinite(float  a) { return isfinite(a); }

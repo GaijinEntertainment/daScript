@@ -18,6 +18,15 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/doctest/doctest.cmake)
 # Glob `test_*.cpp` (not `*.cpp`) to skip editor temp files (`.#foo.cpp`, `foo.cpp~`).
 file(GLOB SMALL_SOURCES CONFIGURE_DEPENDS small/test_*.cpp)
 
+# One TU is built the way an embedder builds the runtime - fast math on - so the is_nan /
+# is_finite helpers are gated under the flag that folds them. MSVC is TRUE for clang-cl too.
+if(MSVC)
+    set(DAS_FAST_MATH_FLAG /fp:fast)
+else()
+    set(DAS_FAST_MATH_FLAG -ffast-math)
+endif()
+set_source_files_properties(small/test_isnan_fastmath.cpp PROPERTIES COMPILE_OPTIONS ${DAS_FAST_MATH_FLAG})
+
 add_executable(tests-cpp-small doctest_main.cpp ${SMALL_SOURCES})
 target_link_libraries(tests-cpp-small PRIVATE
     doctest libDaScript ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
