@@ -5,7 +5,8 @@ options _dasllama_internal = true
 
 // The batch step's cost curve in rows: ms per step at B = 1 (the single-stream decode) and B = 2, 4, 8
 // (the batch driver, one session per row) on a served model - what a k-row speculative verify pays
-// against a plain step, and on an MoE model the price of the expert union.
+// against a plain step, and on an MoE model the price of the expert union. ATTRIBUTION SWEEP under
+// --knockouts: the arms attribute the step across the Metal decode stages gemv / attn / ew / moe_rt.
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_common
 require dasllama/dasllama_batch   // eval_batch_ + create_batch_workspace_
@@ -152,6 +153,8 @@ def private print_chain_stats(feed : string; spec : int) {
     }
 }
 
+var private g_dead_levers = 0   // knockout arms that left the step's time unchanged: the lever did not engage
+
 def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : array<string>; var base : double&; runner_up_every : int64) : int {
     var measured = 0
     for (bstr in split(cfg.bs, ",")) {
@@ -177,7 +180,11 @@ def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : arra
                 measured++
             } else {
                 let skipped_stage_ms = full - ms
-                print("B={nb}{mode} minus {arm}: {ms:.2f} ms/step -> the {arm} stage is {skipped_stage_ms:.2f} ms ({base > 0.0lf ? skipped_stage_ms / base : 0.0lf:.2f} of the single step)\n")
+                print("B={nb}{mode} minus {arm}: full {full:.2f} - knockout {ms:.2f} -> the {arm} stage is {skipped_stage_ms:.2f} ms ({base > 0.0lf ? skipped_stage_ms / base : 0.0lf:.2f} of the single step)\n")
+                if (ms >= full) {
+                    print("  the {arm} lever did not change the step - the knockout arm is dead, this run reports failure\n")
+                    g_dead_levers++
+                }
             }
         }
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -241,6 +248,10 @@ def main() : int {
     if (measured == 0) {
         print("batch_rows_probe: no row count measured - --bs names none >= 1\n")
         return 1
+    }
+    if (g_dead_levers > 0) {
+        print("batch_rows_probe: {g_dead_levers} knockout arm(s) left the step unchanged - their stage rows are not attributions\n")
+        return 2
     }
     return 0
 }

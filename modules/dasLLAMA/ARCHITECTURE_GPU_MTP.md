@@ -81,6 +81,10 @@ fails (gemma-4-26B-A4B's dense hidden 2112 on the w2 site). Every `[metal_dispat
 carries its grid divisors the same way - the production mul_mm `mp % 32, d % 64`, the K-quant
 mul_mm twins `mp % 32`, the 32- and 64-wide GEMM-B forms and their tensor twins `ka.ndim % 32|64` with the q8 block `ka.kdim % 32`,
 the split-K pair `d % 32` - so a grid that would have truncated silently now names the site.
+The K-quant mul_mm twins declare `mp % 32` alone: their `rows % 64` half stays undeclared until
+the site census (followup 100) settles which sites clear it and which take a driver gate, and
+the drivers' own shape routing carries it meanwhile - the one contract these forms hold that the
+builder does not yet check.
 A contract on a value that reaches the builder only as a bound uniform BUFFER (the mul_mm's K)
 stays with the caller: the dispatch never pays a readback.
 
@@ -213,10 +217,12 @@ tail, the sampler and the next `forward()` all overlap GPU execution. Unarmed, t
 but held, and `forward()` pokes the caller's token and commits it - the encode still overlaps, the
 commit turnaround does not. `finish_step` then compares the GPU's pick with the caller's token: a
 miss waits the chained step out, discards it, and reruns the step through the slow path, so a miss
-costs about two steps (30 ms against a 15 ms step on gemma-4-12B, M5 Max) where a hit saves the
-turnaround, about 2% of a step. The adaptive mode (`DASLLAMA_METAL_SPEC` -1) backs off
-exponentially after a miss and re-arms on the next hit; under a sampler that agrees with the
-argmax two steps in three it still costs 63% of the step (26.0 against 15.9 ms), because the
+costs about two steps (30 ms against a 15 ms step on gemma-4-12B, M5 Max; every figure in this
+section is `harness/batch_rows_probe.das` with `--feed text|greedy|second:K --spec -1|0|1`,
+`-jit`) where a hit saves the turnaround, about 2% of a step. The adaptive mode
+(`DASLLAMA_METAL_SPEC` -1) backs off exponentially after a miss and re-arms on the next hit; under
+a sampler that agrees with the argmax two steps in three it still costs 63% of the step (26.0
+against 15.9 ms), because the
 re-arm attempts far more often than a 2% upside pays for. So the sampler decides: `sample_` marks
 the session `sampled` whenever it draws at a temperature above zero, and the driver never chains
 such a session; a greedy sampler (temp 0) and a caller feeding the argmax directly keep the
@@ -227,6 +233,7 @@ adaptive chain.
 **The NextN round's verify builds its whole step on one serial compute encoder - the one decode
 path that does not take the concurrent rail.** `encode_verify_step` opens a single encoder on the
 round's command buffer, so every dispatch is implicitly barriered on the one before it. The
-concurrent rail buys nothing here: measured through the round's profiler sections on Qwen3.8-27B
-(M5 Max), the two forms show the same GPU time and the concurrent one doubles the host encode, so
-the round keeps the serial encoder and pays no hazard-tracker work per dispatch.
+concurrent rail buys nothing here: measured through the round's profiler sections
+(`lcpp_bench --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1`, `-jit`, Qwen3.8-27B
+on the M5 Max), the two forms show the same GPU time and the concurrent one doubles the host
+encode, so the round keeps the serial encoder and pays no hazard-tracker work per dispatch.

@@ -433,11 +433,17 @@ def register_mtp_sample_row(fn : MtpSampleRowFn) {
     g_mtp_sample_row_set = true
 }
 
-//! A sampler that is a bare argmax: temperature at or below zero and no penalty of any kind - the
-//! only sampler whose pick equals the raw argmax the greedy accept walk compares.
-def sampler_is_argmax(p : SamplingParams) : bool {
+//! No penalty of any kind is armed: a repetition penalty at or below zero counts as off (zero would
+//! inf/NaN the logits, and additive-penalty clients send it).
+def penalties_off(p : SamplingParams) : bool {
     let rep = p.penalty > 0.0 && p.penalty != 1.0
-    return p.temp <= 0.0 && !rep && p.presence_penalty == 0.0 && p.frequency_penalty == 0.0
+    return !rep && p.presence_penalty == 0.0 && p.frequency_penalty == 0.0
+}
+
+//! A sampler that is a bare argmax: temperature at or below zero and no penalty - the only sampler
+//! whose pick equals the raw argmax the greedy accept walk compares.
+def sampler_is_argmax(p : SamplingParams) : bool {
+    return p.temp <= 0.0 && penalties_off(p)
 }
 
 //! Whether a round's accept walk goes through the caller's sampler: one is pointed at, the row

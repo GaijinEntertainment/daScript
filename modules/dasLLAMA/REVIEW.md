@@ -1,7 +1,8 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions it indexes. Planned work:
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`,
+`ARCHITECTURE_TTS.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
 `followup_general.md`, `followup_vulkan.md`, `followup_metal.md` (the Metal tier, and CPU work
 measured on macOS), `PERF_LEDGER.md` (performance goes to the perf ledger, everything else to
 the followup ledgers).
@@ -92,21 +93,22 @@ per-change invalidation lives in the finer mechanisms - `IMAGE_VERSION` and
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value
 that can change between dispatches goes in a uniform, a kargs field, or an `@off` bind offset.
 
-**Weakening `REVIEW.das`'s restore check - the walk over `dasllama/` requiring every
-function-typed global with a declaration initializer to join its file's boot-restore
-`[init]` - is a defect, and so is landing such a global anywhere the walk does not reach.** A
-serialized exe restores globals as data, so the function value arrives null and the first
-invoke to reach it dies at exe runtime while every `-jit` gate stays green.
+**Landing a function-typed global with a declaration initializer where `REVIEW.das`'s
+restore-check walk over `dasllama/` does not reach is a defect.** A serialized exe restores
+globals as data, so the function value arrives null and the first invoke to reach it dies at
+exe runtime while every `-jit` gate stays green; the walk requires every such global to join
+its file's boot-restore `[init]`.
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`) - keep the multiply order the code already has.** A regrouping
 moves the angles in the last bits and flips token-exact fixtures.
 
-**A diff that changes a kernel-selection predicate in `dasllama/` is based on timing that ran
-both variants interleaved in one process, under one instrument.** The same holds for a
-constant in `dasllama/` whose value was chosen by timing two candidates against each other. A
-reading taken across two processes, or across two commits, says which way the wall-clock time
-moved, not which implementation to adopt.
+**A diff that changes a predicate in `dasllama/` picking between kernel forms that both
+produce the right answer is based on timing that ran both forms interleaved in one process,
+under one instrument.** The same holds for a constant in `dasllama/` whose value was chosen by
+timing two candidates against each other; a predicate a kernel's declared contract forces is
+settled by that contract. A reading taken across two processes, or across two commits, says
+which way the wall-clock time moved, not which implementation to adopt.
 
 **A change to an allocation reached from a load, bake, or convert path (judge a shared helper
 at each call site) that trades footprint for speed ships the measured pair - peak footprint and
@@ -263,9 +265,9 @@ sends the reader to nothing.
 **A diff that moves a family encode stage onto a GPU hook leaves the CPU form in place and
 changes none of its arithmetic.** The CPU form serves every box with no driver.
 
-**A diff that writes a CPU feature name in a `requires=` argument that `TUNE_KNOWN_FEATURES`
-(`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it there in the same
-change.** The `features` fingerprint saved with every sidecar is this box's pass/fail over
+**A diff that writes a CPU feature name in a `[tune]` or `[tune_perm]` `requires=` argument that
+`TUNE_KNOWN_FEATURES` (`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it
+there in the same change.** The `features` fingerprint saved with every sidecar is this box's pass/fail over
 that list, so a name outside it is never recorded and a box adopting a shipped profile re-runs
 the tuning the profile was meant to save.
 
@@ -276,8 +278,9 @@ or `var`).** A team lane never runs global initializers, so the global reads zer
 every single-threaded run reads the right value.
 
 **A `resize` in `dasllama/` of a buffer whose element count scales with a model dimension is
-preceded by a `reserve` of the same count (`reserve_resize` / `grow_resize` / `ensure_length` in
-`dasllama/dasllama_common.das`, the builtin `scratch_resize` on a `@scratch` carrier, or the
-pair spelled out) - whatever the size looks like at today's shapes.** A model dimension makes
+preceded by a `reserve` of the same count - a `dasllama/dasllama_common.das` sizing helper that
+reserves before it grows (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`,
+`zeroed_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the pair spelled
+out - whatever the size looks like at today's shapes.** A model dimension makes
 the count unbounded, and a bare grow past the heap's unreserved-size cap (64 MB) panics the
 load on the first big model rather than at the call site.

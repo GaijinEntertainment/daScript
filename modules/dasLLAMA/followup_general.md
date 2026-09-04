@@ -1199,7 +1199,8 @@
    counting run at temp 0.8 matches plain sampled decode token for token.
 102. **The NextN draft chain is k command buffers because untied embeddings have no GPU gather.**
    `metal_mtp_spec_round` runs k `metal_mtp_draft_forward` calls - a submit, a wait, a 1 MB logits
-   readback and a CPU argmax each (about 0.4 ms of a 2.8 ms draft on Qwen3.8-27B, M5) - where the
+   readback and a CPU argmax each (about 0.4 ms of a 2.8 ms draft on Qwen3.8-27B, M5: `lcpp_bench
+   --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1`, the `mtp.draft.*` sections) - where the
    gemma round chains its drafts in one command buffer with `enc_argmax` and `enc_embed` on the
    device. The NextN chain cannot: `embed_row` for an untied model reads the fp32 token table in
    `fblob` (`t.tok_emb_off`; 5 GB on Qwen3.8-27B, carried in the image), and the GPU gathers exist
@@ -1210,7 +1211,8 @@
    round cost c (about 1.45 steps on gemma-26B at depth 1) whether or not the draws match, and
    acceptance under sampling is the target's probability of the draft, which a hot sampler
    flattens: gemma-26B on the M5 at temp 0.8 accepts 74.7% (the greedy rate) and gains 1.26x, at
-   temp 2.0 it accepts 29.9% (7.6% on one prompt) and LOSES (115 -> 107 tok/s). The round pays only
+   temp 2.0 it accepts 29.9% (7.6% on one prompt) and LOSES, 0.93x (`PERF_LEDGER.md`, the sampled
+   walk entry, carries the harness and flags). The round pays only
    while the acceptance a clears c - 1. Done = a per-stream running acceptance (the last N rounds)
    in the scheduler's tick, and the tick decodes plain while it sits under c - 1 - re-arming every
    M plain steps to re-measure - with the gemma-26B temp 2.0 corpus as the gate (on must not lose
@@ -1218,8 +1220,11 @@
 104. **The CPU kq batch tile has no two-token form.** `kq_batch_cell_gen` (`dasllama_math_gen`)
    tiles four tokens and runs the token tail as one GEMV pass per row, so the speculative round's
    two-row verify streams and dequantizes every weight twice (`mm_gemm` 1.75x a step on Qwen3.8-27B,
-   M5 CPU); padding two rows to the four-token tile measured 2.46 passes - the path is compute-bound,
-   about half dequant and half dots per row (`PERF_LEDGER.md`, the CPU round split). Done = a
+   M5 CPU); padding two rows to the four-token tile with zero rows was timed against it
+   (`lcpp_bench --mtp-ab --prof --ngl 0`, `-jit` debug rail, M5, `-n 64 -r 1`, SpecBench-4 chat):
+   `mm_gemm` 5.17 -> 6.36 s over the profiled window, the round 0.78x -> 0.75x, so the tile costs
+   2.46 GEMV passes for four tokens - the path is compute-bound, about half dequant and half dots
+   per row (`PERF_LEDGER.md`, the CPU round split). Done = a
    two-token tile in the generator (`dasllama_gemm_gen::k4_tile` and its siblings take the token
    count as a perm), predicted ~1.5 passes for two rows, wired into the tail walk for ntok % 4 == 2
    (and 3 = 2 + 1), bit-exact vs the per-token GEMVs like the four-token form, with the CPU

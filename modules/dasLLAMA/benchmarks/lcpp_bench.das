@@ -1523,6 +1523,7 @@ def main() : int {
                 let mtp_on = cfg.mtp_ab && arm != 0
                 var drafted = 0l
                 var accepted = 0l
+                var parked = 0l   // rounds whose sampled walk parked the next draw: the --mtp-temp lever's engagement witness
                 var tps : array<double>
                 var pp_us : array<int64>      // per prompt across the reps: timed µs, tokens, drafts, accepts
                 var pp_gen : array<int64>
@@ -1552,6 +1553,9 @@ def main() : int {
                             var gen = 0l
                             while (gen < ngen) {
                                 gen += 1l + mtp_spec_round(t, rs, tok)   // tok + the accepted drafts; only the advance is timed
+                                if (rs.mtp_pre_drawn) {
+                                    parked++
+                                }
                                 tok = sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size)
                             }
                             p_gen = gen   // a trailing accept may overshoot by 1 — count what ran
@@ -1574,6 +1578,9 @@ def main() : int {
                         delete rs
                     }
                     tps |> push(double(rep_gen) * 1.0e6lf / double(total_us))
+                }
+                if (mtp_on && sp.temp > 0.0 && parked == 0l) {
+                    panic("lcpp_bench: --mtp-temp {sp.temp} is set but the accept walk never parked a draw - the lever did not engage")
                 }
                 let st = row_stat("tg-real{ngen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps, {length(toks)} prompts)\n")

@@ -5257,6 +5257,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
             }
             est = ms
             if (variants[vi].ko) {
+                to_log(LOG_INFO, "{variants[vi].name}/B{nbatch} {sh._0}: timing-only knockout (output unchecked)\n")
                 alv = true
                 continue
             }
@@ -5274,7 +5275,8 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
             } else {
                 bad = count_mismatch_sampled(ygot, yref, d, int64(nbatch), refd, firstBad)
             }
-            b |> success(bad == 0l, "{variants[vi].name}/B{nbatch} {sh._0}: bit-exact vs CPU reference")
+            let compare = variants[vi].approx ? "within 1e-3 of max(|ref|, 1) vs CPU reference (accumulation order not fixed)" : "bit-exact vs CPU reference"
+            b |> success(bad == 0l, "{variants[vi].name}/B{nbatch} {sh._0}: {compare}")
             if (bad != 0l) {
                 to_log(LOG_ERROR, "{variants[vi].name}/B{nbatch} {sh._0}: {bad} mismatches, first at {firstBad}: got {ygot[firstBad]}\n")
             } else {
@@ -5593,11 +5595,11 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
             LabVariant(name = "k4_mm8komma", src = MetalKqLabK4Mm8KoMma_lab_k4_mm8_msl, entry = MetalKqLabK4Mm8KoMma_lab_k4_mm8_msl_entry,
                        b_list <- [8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, ko = true, tgmem = MetalKqLabK4Mm8KoMma_lab_k4_mm8_msl_tgmem),
             LabVariant(name = "k4_tmv8", src = MetalKqLabK4Tmv8_lab_k4_tmv8_msl, entry = MetalKqLabK4Tmv8_lab_k4_tmv8_msl_entry,
-                       b_list <- [8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, approx = true, tgmem = MetalKqLabK4Tmv8_lab_k4_tmv8_msl_tgmem),
+                       b_list <- [2, 3, 4, 5, 6, 7, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, approx = true, tgmem = MetalKqLabK4Tmv8_lab_k4_tmv8_msl_tgmem),
             LabVariant(name = "k4_tmv8k", src = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl, entry = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl_entry,
-                       b_list <- [8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, approx = true, tgmem = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl_tgmem),
+                       b_list <- [2, 3, 4, 5, 6, 7, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, approx = true, tgmem = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl_tgmem),
             LabVariant(name = "k4_tmv8r", src = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl, entry = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl_entry,
-                       b_list <- [8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 64, approx = true, tgmem = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl_tgmem)
+                       b_list <- [2, 3, 4, 5, 6, 7, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 64, approx = true, tgmem = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl_tgmem)
         ]
         run_lab(b, variants)
         delete variants

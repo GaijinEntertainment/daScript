@@ -1,12 +1,12 @@
 {
 	"meta" : {
 		"model_sha" : "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f\t0x3f226f6e0\t2026-07-20T19:30:57",
-		"head" : "/Users/borisbatkin/Work/llama.cpp/models/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+		"head" : "mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
 		"depths" : "1,2,3,4",
 		"date" : "2026-09-03 12:42",
 		"cpu" : "Apple M5 Max",
 		"ngl" : 99,
-		"model" : "/Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+		"model" : "gemma-4-26B-A4B-it-Q4_K_M.gguf",
 		"lcpp_server" : "",
 		"das_exe" : "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench",
 		"lcpp_version" : "-",

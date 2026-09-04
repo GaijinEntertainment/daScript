@@ -504,6 +504,9 @@ def spec_armed() : bool {
 //! non-empty): `"gemv"` | `"attn"` | `"ew"`; `""` restores full math. Same rail as
 //! `DASLLAMA_METAL_DECODE_SKIP`, switchable between measurement windows.
 def public set_metal_decode_skip(v : string) {
+    if (!empty(v) && v != "gemv" && v != "attn" && v != "ew" && v != "moe_rt" && v != "qkv" && v != "wo") {
+        panic("dasLLAMA: unknown metal decode knockout '{v}' - the drivers read gemv, attn, ew, moe_rt, qkv, wo")
+    }
     g_skip = v
     if (!empty(v)) {
         to_log(LOG_INFO, "dasLLAMA: metal decode knockout armed - set_metal_decode_skip(\"{v}\"): the single-row and batch drivers skip that stage, so served output is not a model's\n")

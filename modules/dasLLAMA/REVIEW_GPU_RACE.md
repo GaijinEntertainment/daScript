@@ -3,10 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_GPU.md`. Planned work: `followup_metal.md`.
 
-**Routed from `REVIEW_GPU.md`: a diff touching a GPU kernel A/B race, knockout, or
-hand-binding arm - or changing a kernel class such an arm mirrors (binding numbers, kargs
-layout, threadgroup memory, staging shape, grid or threadgroup geometry) - wherever the diff
-puts it, applies this list together with `REVIEW_GPU.md`.**
+**Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
+with it.**
 
 **A hand-binding arm - a race or knockout timing arm (a knockout attributes cost across
 stages instead of selecting between implementations) that lists its bindings by number
@@ -21,13 +19,12 @@ The `REVIEW.das` gate `check_race_bind_numbers` cannot read those arms, and an a
 checked is where a mis-numbered bind reaches the board.
 
 **A diff that changes anything a hand-binding arm must mirror to dispatch a kernel - binding
-numbers, kargs (kernel-argument struct) layout, threadgroup memory, grid or threadgroup
-geometry - fixes or deletes every such arm in the same change.** An arm left dispatching
-stale geometry measures the wrong kernel silently.
+numbers, kargs (kernel-argument struct) layout, threadgroup memory, staging shape, grid or
+threadgroup geometry - fixes or deletes every such arm in the same change.** An arm left
+dispatching stale geometry measures the wrong kernel silently.
 
-**Race code inside the engine (`dasllama/`) sits in the file that owns its kernel family and
-never in another engine file.** Race code is the base-vs-twin check that times both kernels on
-one queue and compares their outputs.
+**Race and knockout code inside the engine (`dasllama/`) sits in the file that owns the kernel
+family or the stage it measures, and never in another engine file.**
 
 **Scaffolding that race sites in two DIFFERENT engine files share sits in
 `dasllama/dasllama_<gpu>_common.das`.** Scaffolding two races in one file share stays in that
@@ -37,13 +34,13 @@ file.
 small enough to sit in cache ranks the kernels by an effect production never sees, and the
 race then picks the slower kernel.
 
-**A race times a kernel at every verify width - every row count from 2 to `MTP_MAX_ROWS - 1`
-(`dasllama/dasllama_common.das`), the rows one speculative round checks in one batch - when it
-mints that kernel's runtime crown or tune-sidecar row and the batched decode driver
-(`dasllama/dasllama_<gpu>_decode.das`) dispatches it.** A runtime crown - the winner the box
-profile records and the served graph dispatches - timed at one width alone is dispatched at
-widths it was never ranked at. A kernel the driver dispatches at one fixed width per tile (a
-two-row tile walked over pairs) is timed at that width.
+**A timing arm whose ranking is recorded as a decision - a runtime crown, a tune-sidecar row,
+or an `ARCHITECTURE_GPU.md` sec.2.2b entry - times its kernel at every verify width, every row
+count from 2 to `MTP_MAX_ROWS - 1` (`dasllama/dasllama_common.das`), when the batched decode
+driver (`dasllama/dasllama_<gpu>_decode.das`) dispatches that kernel or the decision concerns
+those widths.** A ranking timed at one width alone is applied at widths it was never ranked at.
+A kernel dispatched at one fixed width per tile (a two-row tile walked over pairs, a tensor
+tile of fixed M) is timed at that width.
 
 **A kernel A/B race arm that mints a runtime crown or a tune-sidecar row binds a DIFFERENT
 output buffer for consecutive dispatches of its chain, never one shared output.** One shared

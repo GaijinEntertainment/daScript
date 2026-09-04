@@ -24,11 +24,10 @@ def set_seed_(var s : Session; seed : int) {
 
 //! penalties over the last `penalty_last_n` of `s.recent` onto the row at `off` in `row`: each unique token once, multiplicative then presence + frequency*count
 def private apply_penalties_(s : Session; params : SamplingParams; var row : array<float>; off : int64) {
-    // <= 0 treated as off too (not just 1): 0 would inf/NaN the logits, and additive-penalty clients send it
-    let rep = params.penalty > 0.0 && params.penalty != 1.0
-    if (!rep && params.presence_penalty == 0.0 && params.frequency_penalty == 0.0) {
+    if (penalties_off(params)) {
         return
     }
+    let rep = params.penalty > 0.0 && params.penalty != 1.0
     let n = length(s.recent)
     let win = int(params.penalty_last_n)
     let pstart = n > win ? n - win : 0

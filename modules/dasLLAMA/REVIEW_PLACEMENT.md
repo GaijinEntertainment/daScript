@@ -1,12 +1,11 @@
 # dasLLAMA Code Review Checklist - placement
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** The per-file
-charters are `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md` and
-`ARCHITECTURE_TTS.md` sec.1.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+docs: `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`,
+`ARCHITECTURE_TTS.md` (sec.1 in each - the per-file charters).
 
-**Routed from `REVIEW.md`: a diff that adds a file under `dasllama/`, moves code between files,
-or lands a kernel, codec, transform, tokenizer, tool-wire, media-IO or registration concern
-in a new place applies this list together with `REVIEW.md`.**
+**Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
+it.**
 
 **A per-file inventory restated in this checklist is a defect of the checklist.** The sec.1
 charters own the per-file list; a rule naming what KIND of code lands in which file is the
@@ -28,11 +27,16 @@ backend file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 **A kernel body lands in its owner's backend file.** A GPU kernel body lands in the file where
 its pipeline state object (PSO) is compiled and released. A CPU-tier kernel body lands in that
 tier's `dasllama/dasllama_math_<tier>.das`. A kernel body never lands in
-`dasllama/dasllama_math.das` or in a file whose job is declaring kernels and routing dispatch.
+`dasllama/dasllama_math.das` or in a file whose job is declaring kernels and routing dispatch. A
+class stamped from a template declared elsewhere is not a kernel body: it compiles and releases
+its own PSO where it is stamped.
 
 **A quirk of one family - one model architecture's file, or one backend driver's - lands in that
-file; a piece two files need lands in their nearest shared file (its own file when none
-exists)** - never a second copy, never sideways into a sibling.
+file, never sideways into a sibling.**
+
+**A piece two files need lands in their nearest shared file (its own file when none exists) -
+never a second copy.** A predicate, a constant, or a helper spelled twice drifts on the first
+edit to one copy.
 
 **A family gaining an arm for a media kind adds that kind's span markers to that family's chat
 template, never to a second renderer.** Span markers are the template text that opens and
@@ -65,10 +69,11 @@ logic in engine files, HTTP in the server, writer logic in the writer's own file
 
 **An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
 `dasllama/dasllama_transformer.das`** - arch registrations, GPU tiers, every module requiring
-the engine back. It lives in `dasllama/dasllama_common.das` instead when code in
-`dasllama/dasllama_common.das` itself depends on that module's registration having run. A
-program root (test, harness, benchmark, tool) requires the registration module it needs
-directly.
+the engine back. It lives in `dasllama/dasllama_common.das` instead when code there depends on
+the registration having run and the registered module does not require the engine back; when
+it does, `dasllama/dasllama_common.das` panics on the unset hook with a message naming the
+module to require. A program root (test, harness, benchmark, tool) requires the registration
+module it needs directly.
 
 **A `dasllama/` module whose `[init]` registers a hook the engine dispatches through is
 required from `dasllama/dasllama_transformer.das` in the same change that adds it** - a
@@ -83,7 +88,6 @@ family name on a shared path, is a defect - it carries declarative registration 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
 file.**
 
-**A diff that adds to `dasllama/dasllama_common.das` a module-global variable and its accessor
-set that none of the file's charter headings (`ARCHITECTURE_ENGINE.md` sec.1: `Model`/`Session`
-/`Config` state, the forward loops, the override registries, the runtime knobs) names is a
+**A diff that adds to `dasllama/dasllama_common.das` a module global (`let` or `var`, private or
+not) whose concern the file's charter line in `ARCHITECTURE_ENGINE.md` sec.1 does not name is a
 defect - give the concern its own file, or extend the charter line in the same change.**

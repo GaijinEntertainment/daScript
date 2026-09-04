@@ -6,6 +6,8 @@ the Metal backend, `../followup_vulkan.md` for anything about the Vulkan backend
 `../PERF_LEDGER.md` for any other performance followup, `../followup_general.md` for
 everything else.
 
+**A GPU race arm, wherever the diff puts it, applies `../REVIEW_GPU_RACE.md` too.**
+
 **A diff that adds or changes an instrument whose timed body runs a forward pass through a
 pipeline the dasLLAMA engine selected also calls `tune_gate()`
 (`../performance/profile_common.das`) before that instrument's first timed rep.** A pipeline
@@ -14,14 +16,12 @@ selected. Without the gate the instrument measures fallback kernels silently. An
 script whose output is a measured wall or rate.
 
 **A diff that adds or changes a race alternates its arms within one process - one timed round
-per arm, best-of across rounds.** A race is an instrument that compares two implementations.
-Two separate runs measure how the machine changed between them as much as they measure the
-arms; `race_pair_ms` (`../dasllama/dasllama_metal_common.das`) is the engine-side helper that
-carries both properties. A diff that adds or changes a GPU race arm applies
-`../REVIEW_GPU_RACE.md` too.
+per arm, best-of across rounds.** A race is an instrument that compares two implementations of
+the same computation on comparable output. Two separate runs measure how the machine changed
+between them as much as they measure the arms.
 
-**A diff that adds or changes a race arm offered as the reason to adopt a change proves the
-arm's output on its report line, by what the arm computes:** an arm producing no comparable
+**A diff that adds or changes a race arm proves the arm's output on its report line, by what the
+arm computes:** an arm producing no comparable
 output carries the literal token `timing-only`; an arm whose result is bit-identical to the
 baseline's prints the bit-exact compare over the sampled region - the set of output elements
 the run compares - on the report's "bit-exact vs ..." line; every other arm prints a
@@ -34,11 +34,11 @@ reference.** The baseline arm is the arm running the implementation already in u
 reference check runs in the same process, on the same output elements the arms are judged on.
 Two arms can agree and both be wrong; only the reference makes the winner right.
 
-**A diff that adds or changes a knockout or sweep instrument carries the literal text
-`ATTRIBUTION SWEEP` in the instrument's file header comment.** A knockout or sweep instrument
-is one whose arms attribute cost across stages instead of selecting between two
-implementations. The same header line also names what its arms attribute. Without that text a
-reader takes the sweep's arms for an adoption decision it never made.
+**A knockout or sweep arm - one that attributes cost across stages instead of selecting
+between two implementations - carries the literal token `timing-only` on its report line; an
+instrument all of whose arms attribute carries the literal text `ATTRIBUTION SWEEP` in its file
+header comment, on a line that also names what its arms attribute.** Without the text a reader
+takes the sweep's arms for an adoption decision it never made.
 
 **A new instrument that puts its own clock around a served turn is a defect: add a board cell
 to `../performance/gen_bench_records.das`, or a `lcpp_bench.das` cell with its own
@@ -80,9 +80,9 @@ with zero result rows - wrong flags, failed load, a device that declines.** A ru
 nothing and reported success leaves a sidecar or a record untouched, and its caller cannot
 tell.
 
-**A diff that adds or changes an A/B arm - one of the runs an instrument makes with one named
-lever at a setting the other run does not use, off/on or graded - makes that instrument exit
-non-zero when the lever does not change what the run executes.** A lever is the flag or
+**A diff that adds or changes an A/B arm - a run an instrument makes with a named lever it sets
+for its timed runs, off/on or graded, whether one arm or both carry it - makes that instrument
+exit non-zero when the lever does not change what the run executes.** A lever is the flag or
 environment switch that names the arm; a lever that silently no-ops prints a 1.00x row nobody
 can tell from a real tie.
 
