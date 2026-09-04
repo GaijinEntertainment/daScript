@@ -517,7 +517,7 @@ namespace das {
         // Returns non-null on success (new ExprConst* of targetType, with promotedFromInt=true).
         // Sets rangeError=true and emits exceeds_constant_range when the literal exceeds the target range.
         // Returns nullptr+rangeError=false when promotion is not applicable.
-        ExpressionPtr tryPromoteConstInt(const ExpressionPtr &expr, const TypeDeclPtr &targetType, bool &rangeError);
+        ExpressionPtr tryPromoteConstInt(const ExpressionPtr &expr, const TypeDeclPtr &targetType, bool &rangeError, bool requireConstLiteral = false);
         string moveErrorInfo(ExprMove *expr) const;
         virtual void preVisit(ExprMove *expr) override;
         virtual ExpressionPtr visit(ExprMove *expr) override;
@@ -680,6 +680,7 @@ namespace das {
         virtual bool canVisitMakeStructure ( ExprMakeStruct * expr ) override;
         virtual void preVisit(ExprMakeStruct *expr) override;
         bool convertCloneSemanticsToExpression(ExprMakeStruct *expr, int index, MakeFieldDecl *decl);
+        void convertCloneFieldToMove(const TypeDeclPtr &fieldType, MakeFieldDecl *decl);
         virtual MakeFieldDeclPtr visitMakeStructureField(ExprMakeStruct *expr, int index, MakeFieldDecl *decl, bool last) override;
         virtual ExpressionPtr structToTuple(const TypeDeclPtr &makeType, const MakeStructPtr &st, const LineInfo &at);
         virtual ExpressionPtr visit(ExprMakeStruct *expr) override;

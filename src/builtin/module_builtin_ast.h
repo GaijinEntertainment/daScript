@@ -336,6 +336,7 @@ namespace das {
             this->template addField<DAS_BIND_MANAGED_FIELD(baseType)>("baseType");
             this->template addField<DAS_BIND_MANAGED_FIELD(promotedFromInt)>("promotedFromInt");
             this->template addField<DAS_BIND_MANAGED_FIELD(inexactFloatPromotion)>("inexactFloatPromotion");
+            this->template addField<DAS_BIND_MANAGED_FIELD(isConstLiteral)>("isConstLiteral");
         }
         template <typename TT>
         void init( ModuleLibrary & ml ) {

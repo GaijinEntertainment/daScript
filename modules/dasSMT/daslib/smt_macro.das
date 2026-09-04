@@ -99,7 +99,7 @@ def private lower_block_stmts(prog : ProgramPtr; blk : ExprBlock?; ctxName : str
                 let fname = sort_fn_for(v._type)
                 if (empty(fname)) {
                     macro_error(prog, v.at,
-                        "constrain block: unsupported unknown type for `{v.name}` — use int, uint, uint64, float, double, bool or string")
+                        "constrain block: unsupported unknown type for `{v.name}` - use int, uint, uint64, float, double, bool or string")
                     return false
                 }
                 let vname = string(v.name)
@@ -140,8 +140,7 @@ def private lower_block_stmts(prog : ProgramPtr; blk : ExprBlock?; ctxName : str
 [call_macro(name="constrain")]
 class private ConstrainMacro : AstCallMacro {
     def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        // the constraint expression must stay raw — `&&` over SBool can't type
-        // before the rewrite; the solver argument types normally
+        // the constraint expression stays raw: `&&` over SBool cannot type before the rewrite
         return argIndex == 0
     }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
@@ -207,11 +206,9 @@ def private lift_type_name(td : TypeDeclPtr) : string {
     return ""
 }
 
-//! Statement-lowering visitor for [smt_fn]: guard-based flattening. `if`
-//! becomes guard updates, assignments merge via `ite`, early `return`s
-//! accumulate first-return-wins, bounded `for` unrolls. Descent is driven
-//! explicitly (not via AstVisitor) because the done-flag threads sequential
-//! state between sibling statements — auto-descent order can't express that.
+//! Statement-lowering visitor for [smt_fn]: `if` becomes guard updates, assignments merge via
+//! `ite`, early returns accumulate first-return-wins, bounded `for` unrolls. Descent is explicit,
+//! not AstVisitor, because the done-flag threads sequential state between sibling statements.
 class private SmtFnEmitter {
     stmts : array<ExpressionPtr>
     counter : int
@@ -245,7 +242,7 @@ class private SmtFnEmitter {
         } elif (stmt is ExprFor) {
             return emit_for(stmt as ExprFor, g)
         }
-        err = "[smt_fn]: unsupported statement `{describe(stmt)}` — v1 supports initialized locals, assignments, if/else, return, and literal-range for loops"
+        err = "[smt_fn]: unsupported statement `{describe(stmt)}` - v1 supports initialized locals, assignments, if/else, return, and literal-range for loops"
         return false
     }
 
@@ -351,13 +348,13 @@ class private SmtFnEmitter {
             var iterBody = clone_expression(efor.body)
             remove_deref(van, iterBody)
             var subst : Template
-            subst |> replaceVariable(van) <| new ExprConstInt(at = efor.at, value = k)
+            subst |> replaceVariable(van) <| new ExprConstInt(at = efor.at, value = k, isConstLiteral = true)
             subst |> apply_template(efor.at, iterBody, false)
             var inner = new SmtFnEmitter(counter = counter)
             let ok = inner->emit_block(iterBody as ExprBlock, g)
             counter = inner.counter
             if (!ok) {
-                err := inner.err
+                err = inner.err
                 unsafe {
                     delete inner
                 }

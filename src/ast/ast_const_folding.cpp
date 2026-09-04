@@ -359,6 +359,19 @@ namespace das {
         }
     }
 
+    static bool foldsFromLiterals ( Expression * expr ) {
+        auto isLiteral = [] ( Expression * e ) {
+            return e && e->rtti_isConstant() && static_cast<ExprConst *>(e)->isConstLiteral;
+        };
+        if ( expr->rtti_isOp1() ) {
+            return isLiteral(static_cast<ExprOp1 *>(expr)->subexpr);
+        } else if ( expr->rtti_isOp2() ) {
+            auto op2 = static_cast<ExprOp2 *>(expr);
+            return isLiteral(op2->left) && isLiteral(op2->right);
+        }
+        return false;
+    }
+
     ExpressionPtr FoldingVisitor::evalAndFold ( Expression * expr ) {
         if ( expr->type->baseType == Type::tString ) return evalAndFoldString(expr);
         if ( expr->rtti_isConstant() ) return expr->clone();
@@ -419,6 +432,7 @@ namespace das {
                 sim->type = new TypeDecl(*expr->type);
                 sim->constexpression = true;
                 ((ExprConst *)sim)->foldedNonConst = !expr->type->constant;
+                ((ExprConst *)sim)->isConstLiteral = foldsFromLiterals(expr);
                 sim->at = encloseAt(expr);
                 reportFolding();
                 return sim;

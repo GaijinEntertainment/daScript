@@ -36,8 +36,9 @@ construct's visit.
 survives into the sibling loop's exit path and unbalances its counter.
 
 **A diff that adds or changes a daslib fact - code or a `//!` contract - whose truth is
-decided by a C++-side definition records the pair in the architecture doc, in its module's
-section, naming both sides.** Nothing catches it when one side later moves alone.
+decided by a C++-side definition, with no test, lint, or compile error failing when the two
+sides no longer match, records the pair in the architecture doc, in its module's section,
+naming both sides.**
 
 **When a diff changes one side of a recorded daslib/C++ pair so the two no longer match, it
 changes the other side and updates the pair's architecture-doc entry in the same diff.**

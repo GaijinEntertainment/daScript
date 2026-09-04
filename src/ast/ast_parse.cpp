@@ -412,7 +412,10 @@ namespace das {
                 }
                 if ( !access->canBeRequired(mod, fileName, modRec.isPublic) )
                 {
-                    notAllowed.push_back({mod, modRec.line, chain, modRec.isPublic});
+                    RequireRecord denied {mod, modRec.line, chain};
+                    denied.isPublic = modRec.isPublic;
+                    denied.cantBeRequired = true;
+                    notAllowed.push_back(denied);
                     if ( log ) {
                         *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CAN'T BE REQUIRED\n";
                     }
@@ -449,11 +452,13 @@ namespace das {
                                     *log << string(tab,'\t') << "from " << fileName << " require " << modRec.name << " - MODULE INFO NOT FOUND\n";
                                 }
                                 missing.push_back({modRec.name, modRec.line, chain, MissingHint::ModuleInfoNotFound});
+                                dependencies.erase(mod);
                                 return false;
                             }
                             string fileModName;
                             if ( !getPrerequisits(info.fileName, access, fileModName, req, missing, circular, notAllowed, chain, dependencies,
                                                   namelessReq, namelessMismatches, libGroup, log, tab + 1, allowPromoted, modRec.name, modRec.line) ) {
+                                dependencies.erase(mod);
                                 return false;
                             }
                             if ( !fileModName.empty() ) {
@@ -462,6 +467,7 @@ namespace das {
                                         *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND; did you mean '" << fileModName << "'?\n";
                                     }
                                     missing.push_back({modRec.name, modRec.line, chain, MissingHint::WrongModuleName, mod, fileModName});
+                                    dependencies.erase(mod);
                                     return false;
                                 }
                                 info.moduleName = fileModName;
@@ -482,6 +488,7 @@ namespace das {
                                         modRec.name, info.fileName, fileName,
                                         prevMod->second.name, prevMod->second.fileName, prevMod->second.fromFile
                                     });
+                                    dependencies.erase(mod);
                                     return false;
                                 }
                             }
@@ -1496,45 +1503,32 @@ namespace das {
     DAS_API string describe_pending_dynamic_modules();
 
     ProgramPtr reportPrerequisitesErrors (
-            string fileName,
-            vector<MissingRecord> & missing,
-            vector<RequireRecord> & circular,
-            vector<RequireRecord> & notAllowed,
-            vector<ModuleInfo> & req,
-            das_set<string> & dependencies,
-            das_hash_map<string, NamelessModuleReq> & namelessReq,
-            vector<NamelessMismatch> & namelessMismatches,
-            const FileAccessPtr & access,
+            const string & fileName,
+            const vector<MissingRecord> & missing,
+            const vector<RequireRecord> & circular,
+            const vector<RequireRecord> & notAllowed,
+            const vector<NamelessMismatch> & namelessMismatches,
             ModuleGroup & libGroup,
             CodeOfPolicies policies ) {
-        TextWriter tw;
-        req.clear();
-        missing.clear();
-        circular.clear();
-        dependencies.clear();
-        notAllowed.clear();
-        vector<FileInfo *> chain;
-        string modName;
-        addExtraDependency("builtin", get_builtin_path(), missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &tw);
-        for ( const auto & em : access->getExtraModules() ) {
-            addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &tw);
-        }
-        getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain, dependencies, namelessReq, namelessMismatches, libGroup, &tw, 1, false);
         auto program = make_smart<Program>();
         program->policies = policies;
         program->thisModuleGroup = &libGroup;
         TextWriter err;
         LineInfo at;
         bool first = true;
+        auto anchorFirst = [&] ( const vector<FileInfo *> & chain, int32_t line, const string & name ) {
+            if ( !first ) return;
+            first = false;
+            auto fi = find_if(chain.rbegin(), chain.rend(), [] ( FileInfo * f ) { return f != nullptr; });
+            if ( fi == chain.rend() ) return;
+            at.fileInfo = *fi;
+            at.line = at.last_line = line;
+            at.column = 8;
+            at.last_column = at.column + (int)name.size();
+        };
         bool anyNotFound = false;
         for ( auto & mis : missing ) {
-            if ( first && !mis.chain.empty() ) {
-                at.fileInfo = mis.chain.back();
-                at.line = at.last_line = mis.line;
-                at.column = 8;
-                at.last_column = at.column + (int)mis.name.size();
-                first = false;
-            }
+            anchorFirst(mis.chain, mis.line, mis.name);
             switch ( mis.hintType ) {
                 case MissingHint::FileNotFound: {
                     err << "missing prerequisite '" << mis.name << "'; file not found\n";
@@ -1550,7 +1544,7 @@ namespace das {
                     if ( !mis.hintName.empty() ) {
                         err << ", did you mean '" << mis.hintName << "'?\n";
                     } else {
-                        err << "'\n";
+                        err << "\n";
                     }
                     break;
                 }
@@ -1559,7 +1553,7 @@ namespace das {
                     break;
                 }
                 default: {
-                    err << "'\n";
+                    err << "missing prerequisite '" << mis.name << "'\n";
                     break;
                 }
             }
@@ -1574,39 +1568,28 @@ namespace das {
             }
         }
         for ( auto & mis : circular ) {
-            if ( first && !mis.chain.empty() ) {
-                at.fileInfo = mis.chain.back();
-                at.line = at.last_line = mis.line;
-                at.column = 8;
-                at.last_column = at.column + (int)mis.name.size();
-                first = false;
-            }
+            anchorFirst(mis.chain, mis.line, mis.name);
             err << "circular dependency '" << mis.name << "'\n";
             reportChain(err, mis.chain);
         }
         for ( auto & mis : notAllowed ) {
-            if ( first && !mis.chain.empty() ) {
-                at.fileInfo = mis.chain.back();
-                at.line = at.last_line = mis.line;
-                at.column = 8;
-                at.last_column = at.column + (int)mis.name.size();
-                first = false;
+            anchorFirst(mis.chain, mis.line, mis.name);
+            if ( mis.cantBeRequired ) {
+                err << "module '" << mis.name << "' can't be required here; the project's can_module_be_required hook rejects it\n";
+            } else {
+                err << "module not allowed '" << mis.name << "'\n";
             }
-            err << "module not allowed '" << mis.name << "'\n";
             reportChain(err, mis.chain);
         }
         for ( auto & nameless : namelessMismatches ) {
-            if ( first && !nameless.chain.empty() ) {
-                at.fileInfo = nameless.chain.back();
-                at.line = at.last_line = nameless.line;
-                at.column = 8;
-                at.last_column = at.column + (int)nameless.name1.size();
-                first = false;
-            }
+            anchorFirst(nameless.chain, nameless.line, nameless.name1);
             err << "module name case conflict: '" << nameless.name1 << "' vs '" << nameless.name2 << "'\n"
                 << "'" << nameless.name1 << "' (" << nameless.fileName1 << ") from " << nameless.fromFile1 << "\n"
-                << "'" << nameless.name2 << "' (" << nameless.fileName2 << ") from " << nameless.fromFile2 << "\n\n";
+                << "'" << nameless.name2 << "' (" << nameless.fileName2 << ") from " << nameless.fromFile2 << "\n";
             reportChain(err, nameless.chain);
+        }
+        if ( err.str().empty() ) {
+            err << "can't resolve the prerequisites of '" << fileName << "'\n";
         }
         program->error(err.str(), "", "", at,
                         CompilationError::lookup_module);
@@ -1708,15 +1691,7 @@ namespace das {
         }
         if ( !getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain,
                 dependencies, namelessReq, namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
-            req.clear();
-            missing.clear();
-            circular.clear();
-            notAllowed.clear();
-            dependencies.clear();
-            namelessReq.clear();
-            namelessMismatches.clear();
-            return reportPrerequisitesErrors(fileName, missing, circular, notAllowed,
-                req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies);
+            return reportPrerequisitesErrors(fileName, missing, circular, notAllowed, namelessMismatches, libGroup, policies);
         }
         if ( !verifyModuleNamesUnique(req, logs) ) {
             auto res = make_smart<Program>();
@@ -1778,12 +1753,10 @@ namespace das {
             return res;
         }
         for ( const auto & em : access->getExtraModules() ) {
-            allGood = addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
+            allGood = addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, nullptr) && allGood;
         }
         if ( !allGood ) {
-            auto res = make_smart<Program>();
-            res->error("internal error", logs.str(), "", LineInfo(), CompilationError::internal_module);
-            return res;
+            return reportPrerequisitesErrors(fileName, missing, circular, notAllowed, namelessMismatches, libGroup, policies);
         }
         if ( getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain,
                 dependencies, namelessReq, namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
@@ -1903,15 +1876,7 @@ namespace das {
             }
             return res;
         } else {
-            req.clear();
-            missing.clear();
-            circular.clear();
-            notAllowed.clear();
-            dependencies.clear();
-            namelessReq.clear();
-            namelessMismatches.clear();
-            auto res = reportPrerequisitesErrors(fileName, missing, circular, notAllowed,
-                                        req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies);
+            auto res = reportPrerequisitesErrors(fileName, missing, circular, notAllowed, namelessMismatches, libGroup, policies);
             if ( auto fi = access->getFileInfo(fileName) ) {
                 const char * src = nullptr;
                 uint32_t len = 0;

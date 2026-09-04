@@ -29,7 +29,6 @@ A `CodeOfPolicies` field is settable from `options` ONLY if its declaration in
 bound to rtti, and reads plausibly in docs, but `options that_field = true` in a `.das` silently
 does nothing - only a C++ embedder setting the policy can reach it. Check the marker before
 believing an option is live: a policy-gated pass with no marker has effectively never run.
-(probe-verified 2026-08-09)
 
 ## Table index rewrite
 

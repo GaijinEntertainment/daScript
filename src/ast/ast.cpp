@@ -1117,6 +1117,7 @@ namespace das {
         cexpr->foldedNonConst = foldedNonConst;
         cexpr->promotedFromInt = promotedFromInt;
         cexpr->inexactFloatPromotion = inexactFloatPromotion;
+        cexpr->isConstLiteral = isConstLiteral;
         return expr;
     }
 

@@ -1721,9 +1721,16 @@ namespace das {
             const string & pVarName = pVarNames[si];
             if ( expr->sources[si]->type->isRange() ) {
                 const auto & iterv = expr->iteratorVariables[si];
+                auto typedOne = [&]() -> Expression * {
+                    switch ( iterv->type->baseType ) {
+                        case Type::tUInt:   return new ExprConstUInt(expr->at, 1u);
+                        case Type::tInt64:  return new ExprConstInt64(expr->at, int64_t(1));
+                        case Type::tUInt64: return new ExprConstUInt64(expr->at, uint64_t(1));
+                        default:            return new ExprConstInt(expr->at, 1);
+                    }
+                }();
                 blk->list.push_back(new ExprCopy(expr->at, makeCounterRef(expr->at, pVarName, iterv->type),
-                    new ExprOp2(expr->at, "+", new ExprVar(expr->at, expr->iterators[si]),
-                        new ExprConstInt(expr->at, 1))));
+                    new ExprOp2(expr->at, "+", new ExprVar(expr->at, expr->iterators[si]), typedOne)));
                 auto rne = new ExprOp2(expr->at, "!=", new ExprVar(expr->at, expr->iterators[si]),
                     new ExprField(expr->at, new ExprVar(expr->at, srcName), "y"));
                 blk->list.push_back(new ExprOp2(expr->at, "&&=", new ExprVar(expr->at, loopVar), rne));

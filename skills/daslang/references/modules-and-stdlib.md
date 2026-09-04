@@ -25,7 +25,7 @@ The only enforced ordering is `module` before any type declaration; `options` / 
 `[export]` makes a function callable from the host by name; `[init]` / `[finalize]` run at context
 init / shutdown (no arguments, no return). `main` is a convention, not a keyword: it returns `void`
 unless declared `def main() : int`, whose return value is the process exit code (do not `panic` to
-force one). (probe-verified 2026-08-16)
+force one).
 
 ## Module declaration
 
@@ -126,7 +126,7 @@ with (module physics) {
 
 A host can set `options with_module_is_unsafe = true` (or a `.das_project` `with_module_unsafe()`
 rule) to make user-written ones require an `unsafe` wrap (`error[31037]`); inliner-generated forms
-are exempt. (probe-verified 2026-08-16)
+are exempt.
 
 ## options
 

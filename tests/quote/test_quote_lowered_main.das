@@ -10,6 +10,7 @@ options indenting = 4
 require dastest/testing_boost public
 require daslib/ast
 require daslib/templates_boost
+require _quote_lit_macro
 
 enum LocalColor {
     red
@@ -41,5 +42,13 @@ def test_lowered_local_entities(t : T?) {
             var e = qmacro($c(nm)(1 + 2))
             t |> equal(describe_expression(e), "renamed(1 + 2)")
         }
+    }
+    t |> run("a quoted literal keeps adapting after lowering") @(t : T?) {
+        let u = 5u
+        let l = 5l
+        t |> equal(plus_one_lit(u), 6u)
+        t |> equal(plus_one_lit(l), 6l)
+        t |> equal(plus_spliced_lit(u), 7u)
+        t |> equal(plus_spliced_lit(l), 7l)
     }
 }

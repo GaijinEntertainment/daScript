@@ -37,7 +37,7 @@ initializers.
 
 A field whose *type* is unsafe-when-uninitialized and has no initializer is
 `error[31030]: Uninitialized field a is unsafe` at the struct declaration, silenced by
-`@safe_when_uninitialized value : T` on that field. (probe-verified 2026-08-16)
+`@safe_when_uninitialized value : T` on that field.
 
 **Clone initializer** - an initializer taking `Foo?`, so `new Foo(a)` deep-copies `a`:
 `def Foo(p : Foo?) { var self := *p; return <- self }`.
