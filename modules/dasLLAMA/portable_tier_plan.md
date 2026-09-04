@@ -132,6 +132,17 @@ instead of `t |> skip` (against `tests/CLAUDE.md:40-42`). `test_groupn.das:12-15
 expected values from the per-region GEMV under the same backend pin, so a bug shared by
 `q8q8_kernel` and `q8q8_groupn_kernel` passes; give it an independent reference.
 
+**(f2) The same shared-bug class in the two mx4 groupn cells.** `test_mx4q8_groupn` takes its
+expected values from the per-region `matmul_mx4q8` under the same backend pin, and
+`test_groupn_bias_fold` takes its q8 and mx4 expectations from the unbiased groupn kernel; the
+fp64 mx4 reference already exists as `ref_dot_f64` in `test_mxfp4.das:35` (private to that
+file). Lift it into a shared `_kernel_ref.das` beside the two files and close both cells the
+way (f) closed the q8 one. Lint candidate for a folder-local `tests/REVIEW.das` gate: a
+`t |> run` arm that returns before asserting registers a skip (the guard whitelist is
+`model_available`, `arm_on`, `family_on`, `model_missing`, `gguf_missing`,
+`facade_data_missing`); the `test_mxfp4.das` silent return was the one raw-capability return
+that did neither.
+
 **(g) A way to point the parity rails at the portable backend.** `tests/test_parity.das`
 (`:177`) and `harness/parity.das` cannot select a backend from the command line; the
 documented `DASLLAMA_PIN_BACKEND` knob (`ENVIRONMENT.md:25`, `dasllama_env.das:50`) is read by
@@ -149,6 +160,31 @@ direct test. TTS: `bilstm`, `sine_source`, `magnitude_phase`, `istft_envelope_di
 oracle-dir gated); `resize_linear` / `resize_linear_torch` (`:1738, :1776`) have none. Since ASR
 and TTS are the main targets, the private stems get exposed to a synthetic unit or a
 weights-in-tree oracle the way VAD already has one.
+
+**(h) findings from writing the tower/ASR/TTS unit.** The four family mels and every TTS
+kernel named above are already public; only the seven conv-stem helpers and `lstm_direction`
+are private, and the whisper-class stem is not in the whisper file at all but lines 1300-1333 of
+`audio_encode_blocks` (`dasllama_audio.das`), serving whisper, ultravox, voxtral, qwen2audio and
+omni. Ranked exposure: (1) split that stem into one public kernel in `dasllama_audio.das`
+(ARCHITECTURE_MEDIA sec.2.14 names the seam); (2)-(3) the four mels need no engine change, only
+an fp64 STFT reference; (4) `bilstm` is public, gate `lstm_direction` through it and run one
+shape twice for the scratch-global reset; (5) `magnitude_phase` / `istft_envelope_divide` are
+pure and now covered; (6) drop `private` on the two parakeet convs; (7) `g4a_conv_stage` splits
+into a public im2col and a LayerNorm+ReLU epilogue that has no twin anywhere; (8)-(10) the
+qwen3a and canary stems converge on the parakeet shape (the three im2col walks are
+near-identical copies); `cn_conv_pw` is a wrapper, not a kernel. `sine_source` cannot take an
+fp64 reference (ARCHITECTURE_TTS sec.2.33 phase law): its gate is a golden vector.
+
+**(i) findings from writing the other units.** `test_kquant.das`'s synthetic plane builders are
+private in a `[test]` root; lift them into a `_kq_fixtures.das` sibling (the
+`_metal_kernel_common.das` precedent) so the kq gates stop hand-packing blocks.
+`kq_batch_kernel_gen` / `kq_batch_groupn_gen` (`dasllama_math_gen.das:2185, :2233`) are private
+unlike their groupn sibling, so their reference bodies are reachable only through a backend
+pin; make them public. `KernelBackend` has no `kernel_backend_has_mx4_batch()` predicate, so a
+sweep of `kernel_backend_names()` that touches `matmul_mx4q8_batch` panics on `arm64-sdot`
+(`mx4q8_unset_batch`, `dasllama_math.das:1051, :1573`). An exact-equality float compare whose
+fixture lattice no longer guarantees exactness has no lint; the two elementwise files carry
+hand-derived lattice arguments, worth a fixture-intent annotation before any rule.
 
 Stage 0 also lands the four rule-document and gate fixes owed from the is_nan arc
 (a `tests-cpp/REVIEW.das` gate that every `set_source_files_properties` path exists, the

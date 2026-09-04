@@ -9,9 +9,11 @@ require dasllama/dasllama_convert               // quantize_q8_0 (deterministic 
 require math
 
 // Region-list (groupN) GEMVs — the MoE decode dispatch fuse: N same-shape [d x n] projections in
-// one dispatch, offs packing (weight, activation) element-offset pairs. Expected values come from
-// the per-region single GEMV under the SAME backend pin (identical dots, only scheduling differs),
-// so equality is exact per backend. Regions 0/1 share activation row 0; region 2 reads row 1.
+// one dispatch, offs packing (weight, activation) element-offset pairs. Every q8 row carries TWO
+// compares: the per-region single GEMV under the SAME backend pin (identical dots, only scheduling
+// differs, so equality is exact per backend — it catches groupn-vs-gemv divergence and nothing a
+// shared kernel bug would move), and the in-test fp64 dequant dot below, which shares no code with
+// any kernel. Regions 0/1 share activation row 0; region 2 reads row 1.
 
 def private close(t : T?; got, want : float; what : string) {
     t |> success(abs(got - want) <= 1e-6 * max(abs(want), 1.0), "{what}: got {got} want {want}")
@@ -20,6 +22,8 @@ def private close(t : T?; got, want : float; what : string) {
 let N = 64l
 let D = 4l   // one interleaved group per region (laneq-compatible), no tail
 let NREG = 3l
+let REF_ULP = 2.0e-6   // per-32-block fp32 fold margin — the bar scales with the accumulation length
+let REF_POISON = 0.05  // added to one expected element; the bar must not swallow it
 
 def private build_offs() : array<int64> {
     return <- [N * D * 0l, 0l, N * D * 1l, 0l, N * D * 2l, N]
@@ -35,6 +39,25 @@ def private slice_u8(src : array<uint8>; off, n : int64) : array<uint8> {
 
 def private slice_f(src : array<float>; off, n : int64) : array<float> {
     return <- [for (i in range64(off, off + n)); src[i]]
+}
+
+// The independent truth for one q8 row: an fp64 dot over the region's dequantized Q8_0 blocks —
+// int8 products summed exactly in int, both block scales applied in double. `env` is that sum
+// taken on block magnitudes: the envelope the kernels' fp32 per-block folds round inside, which is
+// what the bar is derived from. Layout-free, so it judges repacked and row-major backends alike.
+def private ref_dot_q8_f64(wq : array<int8>; ws : array<float>; woff : int64;
+                           xq : array<int8>; xs : array<float>; xoff : int64; n : int64) : tuple<dot : double; env : double> {
+    var res : tuple<dot : double; env : double>
+    for (bi in range64(n / 32l)) {
+        var iacc = 0
+        for (k in range64(32l)) {
+            iacc += int(wq[woff + bi * 32l + k]) * int(xq[xoff + bi * 32l + k])
+        }
+        let term = double(iacc) * double(ws[woff / 32l + bi]) * double(xs[xoff / 32l + bi])
+        res.dot += term
+        res.env += abs(term)
+    }
+    return res
 }
 
 [test]
@@ -54,6 +77,19 @@ def test_q8q8_groupn(t : T?) {
         let wq0 <- quantize_q8_0(wf, NREG * D * N)
         let xq <- quantize_q8_0(xf, 2l * N)
         var offs <- build_offs()
+        // the fp64 reference and its bar, built once off the row-major quants: both are
+        // backend-free, since a repack only permutes the same weights
+        var refy : array<float>
+        var refbar : array<float>
+        refy |> resize(int(NREG * D))
+        refbar |> resize(int(NREG * D))
+        for (r in range64(NREG)) {
+            for (row in range64(D)) {
+                let rf = ref_dot_q8_f64(wq0.q, wq0.scales, r * D * N + row * N, xq.q, xq.scales, offs[r * 2l + 1l], N)
+                refy[r * D + row] = float(rf.dot)
+                refbar[r * D + row] = REF_ULP * float(N / 32l) * max(float(rf.env), 1.0)
+            }
+        }
         let saved = active_kernel_backend()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)
@@ -86,7 +122,11 @@ def test_q8q8_groupn(t : T?) {
             matmul_q8q8_groupn(y, wq, ws, offs, NREG, xq.q, xq.scales, N, D)
             for (i in range(int(NREG * D))) {
                 close(t, y[i], want[i], "q8 row {i} (backend {name})")
+                t |> success(abs(y[i] - refy[i]) <= refbar[i],
+                    "q8 row {i} vs fp64 dequant dot (backend {name}): got {y[i]} want {refy[i]} bar {refbar[i]}")
             }
+            t |> success(abs(y[0] - (refy[0] + REF_POISON)) > refbar[0],
+                "poison control: row 0 expectation + {REF_POISON} must exceed bar {refbar[0]} (backend {name})")
         }
         clear_kernel_backend_pin()
         if (saved != "") {
