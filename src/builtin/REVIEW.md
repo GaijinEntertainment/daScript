@@ -28,5 +28,5 @@
 
 - **Every print the module cumulative-hash check in `module_builtin_ast_serialize.cpp` reaches
   is gated on the serializer's `quietCache`; a diff that leaves one ungated is a defect** - the
-  default cache is on for every run that executes, so an ungated line becomes output every user
+  default cache is on unasked for an ordinary run, so an ungated line becomes output every user
   sees. The reader's other half, `trySerializeProgramModule`, answers to `src/ast/REVIEW.md`.

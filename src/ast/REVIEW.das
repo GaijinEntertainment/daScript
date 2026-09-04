@@ -51,7 +51,7 @@ def private check_reader_prints {
         let ln = lines[i]
         let guardLine = find(ln, GUARD) >= 0 && find(ln, "if") >= 0
         if (find(ln, PRINT) >= 0 && !guardLine && guardDepth < 0) {
-            gate_finding("{SOURCE}:{i + 1}", "a module-cache read diagnostic prints without a {GUARD} guard - the default cache is on for every run that executes, so this line is output every user sees; wrap it in `if ( !serializer_read->{GUARD} )`")
+            gate_finding("{SOURCE}:{i + 1}", "a module-cache read diagnostic prints without a {GUARD} guard - the default cache is on unasked for an ordinary run, so this line is output every user sees; wrap it in `if ( !serializer_read->{GUARD} )`")
         }
         let opens = count_char(ln, '{')
         let closes = count_char(ln, '}')
