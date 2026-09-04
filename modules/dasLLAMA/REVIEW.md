@@ -1,8 +1,7 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`,
-`ARCHITECTURE_TTS.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
+docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions it indexes. Planned work:
 `followup_general.md`, `followup_vulkan.md`, `followup_metal.md` (the Metal tier, and CPU work
 measured on macOS), `PERF_LEDGER.md` (performance goes to the perf ledger, everything else to
 the followup ledgers).
@@ -93,11 +92,11 @@ per-change invalidation lives in the finer mechanisms - `IMAGE_VERSION` and
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value
 that can change between dispatches goes in a uniform, a kargs field, or an `@off` bind offset.
 
-**Landing a function-typed global with a declaration initializer where `REVIEW.das`'s
-restore-check walk over `dasllama/` does not reach is a defect.** A serialized exe restores
-globals as data, so the function value arrives null and the first invoke to reach it dies at
-exe runtime while every `-jit` gate stays green; the walk requires every such global to join
-its file's boot-restore `[init]`.
+**A function-typed global with a declaration initializer lands in a `dasllama/` file and joins
+that file's boot-restore `[init]`; landing one where `REVIEW.das`'s restore-check walk over
+`dasllama/` cannot reach it is a defect.** A serialized exe restores globals as data, so the
+function value arrives null and the first invoke to reach it dies at exe runtime while every
+`-jit` gate stays green.
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`) - keep the multiply order the code already has.** A regrouping
@@ -106,9 +105,8 @@ moves the angles in the last bits and flips token-exact fixtures.
 **A diff that changes a predicate in `dasllama/` picking between kernel forms that both
 produce the right answer is based on timing that ran both forms interleaved in one process,
 under one instrument.** The same holds for a constant in `dasllama/` whose value was chosen by
-timing two candidates against each other; a predicate a kernel's declared contract forces is
-settled by that contract. A reading taken across two processes, or across two commits, says
-which way the wall-clock time moved, not which implementation to adopt.
+timing two candidates against each other. A reading taken across two processes, or across two
+commits, says which way the wall-clock time moved, not which implementation to adopt.
 
 **A change to an allocation reached from a load, bake, or convert path (judge a shared helper
 at each call site) that trades footprint for speed ships the measured pair - peak footprint and
@@ -265,7 +263,7 @@ sends the reader to nothing.
 **A diff that moves a family encode stage onto a GPU hook leaves the CPU form in place and
 changes none of its arithmetic.** The CPU form serves every box with no driver.
 
-**A diff that writes a CPU feature name in a `[tune]` or `[tune_perm]` `requires=` argument that
+**A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
 `TUNE_KNOWN_FEATURES` (`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it
 there in the same change.** The `features` fingerprint saved with every sidecar is this box's pass/fail over
 that list, so a name outside it is never recorded and a box adopting a shipped profile re-runs

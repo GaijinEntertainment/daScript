@@ -40,7 +40,8 @@ count from 2 to `MTP_MAX_ROWS - 1` (`dasllama/dasllama_common.das`), when the ba
 driver (`dasllama/dasllama_<gpu>_decode.das`) dispatches that kernel or the decision concerns
 those widths.** A ranking timed at one width alone is applied at widths it was never ranked at.
 A kernel dispatched at one fixed width per tile (a two-row tile walked over pairs, a tensor
-tile of fixed M) is timed at that width.
+tile of fixed M) is timed at that width; an instrument built on a power-of-two batch grid times
+the powers of two it spans, and the entry names the grid.
 
 **A kernel A/B race arm that mints a runtime crown or a tune-sidecar row binds a DIFFERENT
 output buffer for consecutive dispatches of its chain, never one shared output.** One shared

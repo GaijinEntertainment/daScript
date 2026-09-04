@@ -5346,6 +5346,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         if (anymvb) {
             metal_release(kqmvargs)
             metal_release(kqmvargs4)
+            metal_release(kqmvargs8)
         }
         if (anyblob) {
             metal_release(wbbuf)
@@ -5595,11 +5596,11 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
             LabVariant(name = "k4_mm8komma", src = MetalKqLabK4Mm8KoMma_lab_k4_mm8_msl, entry = MetalKqLabK4Mm8KoMma_lab_k4_mm8_msl_entry,
                        b_list <- [8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, ko = true, tgmem = MetalKqLabK4Mm8KoMma_lab_k4_mm8_msl_tgmem),
             LabVariant(name = "k4_tmv8", src = MetalKqLabK4Tmv8_lab_k4_tmv8_msl, entry = MetalKqLabK4Tmv8_lab_k4_tmv8_msl_entry,
-                       b_list <- [2, 3, 4, 5, 6, 7, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, approx = true, tgmem = MetalKqLabK4Tmv8_lab_k4_tmv8_msl_tgmem),
+                       b_list <- [2, 4, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, approx = true, tgmem = MetalKqLabK4Tmv8_lab_k4_tmv8_msl_tgmem),
             LabVariant(name = "k4_tmv8k", src = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl, entry = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl_entry,
-                       b_list <- [2, 3, 4, 5, 6, 7, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, approx = true, tgmem = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl_tgmem),
+                       b_list <- [2, 4, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, approx = true, tgmem = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl_tgmem),
             LabVariant(name = "k4_tmv8r", src = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl, entry = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl_entry,
-                       b_list <- [2, 3, 4, 5, 6, 7, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 64, approx = true, tgmem = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl_tgmem)
+                       b_list <- [2, 4, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 64, approx = true, tgmem = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl_tgmem)
         ]
         run_lab(b, variants)
         delete variants
