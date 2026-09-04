@@ -41,6 +41,7 @@ namespace das {
 
     DAS_CC_API Module * compileModule ( Context * context, LineInfoArg * at );
     DAS_CC_API smart_ptr_raw<Program> compileProgram ( Context * context, LineInfoArg * at );
+    DAS_CC_API void addModuleCacheDependency ( const char * path, Context * context, LineInfoArg * at );
 
 
     DAS_CC_API void aotSuffix( StructureAnnotation *structure, StructurePtr st, const AnnotationArgumentList & args, StringBuilderWriter *writer, Context * context, LineInfoArg * at);
