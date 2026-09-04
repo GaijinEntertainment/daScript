@@ -550,7 +550,7 @@ def tune_gate() : bool {
         if (total == 0) {
             why = "tune_status is EMPTY - the cell cannot prove its kernel provenance"
         } elif (bad > 0) {
-            why = "{bad}/{total} kernels stamp non-manifest winners (first: {sample}) - stale or absent sidecar"
+            why = "{bad}/{total} kernels stamp non-manifest winners (first: {sample}) - the sidecar is stale or absent; a class-profile stamp covers the kernels but is not this box's mint"
         }
     }
     if (empty(why)) {
