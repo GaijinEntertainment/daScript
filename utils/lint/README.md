@@ -13,7 +13,7 @@ The SDK also ships a prebuilt `bin/lint.exe`.
 Three rules are the runner's own, because they are about folders rather than code. Each runs
 once per invocation, over a walk of the directory roots the run was given. A directory whose
 `.lint_config` carries `[docs] rule_docs_only = true` may hold only rule documents
-(`REVIEW*.md`, `ARCHITECTURE*.md`, `LAWS.md`); any other `.md` beside the sources is
+(`REVIEW*.md`, `ARCHITECTURE*.md`); any other `.md` beside the sources is
 **LINT025**. **LINT026**'s reverse direction needs no tag: every `{#anchor}` in any `.md` under
 the run's roots must be cited by an `[arch]` in a `.das` there. **LINT027** caps each
 `REVIEW*.md` / `ARCHITECTURE*.md` at 300 lines in every folder that holds one. The

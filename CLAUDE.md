@@ -31,7 +31,7 @@ Three document types split one grammar, each with a repo-root contract:
 - **`/history`** - past tense: what happened. Nothing current cites it.
 
 An implementation folder - `daslib/`, a module's `daslib/` or engine folder - holds no `.md`
-besides `REVIEW*.md`, `ARCHITECTURE*.md`, and `LAWS.md` (lint-enforced: `.lint_config`
+besides `REVIEW*.md` and `ARCHITECTURE*.md` (lint-enforced: `.lint_config`
 `rule_docs_only`). Ledgers and plans live at the module root or in `plans/` (repo root). None
 of these documents installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` and
 `ARCHITECTURE_COMMON.md` at the install root are the two vendoring exceptions, and a shipped
@@ -177,8 +177,6 @@ New knowledge about daslang syntax, semantics, or conventions - from compiler er
 **Syntax and factual corrections are fix-in-place, always.** A compiler error, probe, or user correction showing a claim in CLAUDE.md or `skills/*.md` is wrong, incomplete, or stale gets fixed in the same session and flagged in the end-of-turn summary - never deferred to a proposal. Verify first: grammar truth is `src/parser/ds2_parser.ypp`, behavior truth is a probe-compile with the current binary.
 
 **Rule files carry rules, not history.** CLAUDE.md files, `skills/*.md`, and per-module rule docs state the CURRENT contract only - no incident anecdotes, PR/issue numbers, dated rulings, or "as of" entries. When a rule changes, replace the old text outright and state the timeless WHY; history lives in git, `/history`, and memory, so archive a motivating incident worth keeping in `/history`. A syntax/behavior claim is still probe-verified before it lands, but the verification date is history too: never write an inline `(probe-verified <date>)` tag. These files load into context and are read by weaker models, so every token must carry meaning.
-
-**Boris's rulings get a `LAWS.md` sidecar.** When an edit to a rule document implements something Boris asked for, append an entry to `LAWS.md` in that document's folder (create the file on the first ruling): the date, the document(s) edited, and what he asked for - his words, condensed but verbatim in spirit. `LAWS.md` is not a rule document - it is append-only intent provenance, so no agent edits, compacts, or audits it, and its entries are never cited as rules; they exist so rule provenance can be decided later.
 
 **Every REVIEW.md reviews itself.** A discovered checklist is itself audited under the self-review rule, not just applied - its own defects are findings, fixed in the same batch. The contract all checklists share lives ONCE in `REVIEW_COMMON.md` at the repo root; checklists point at it and never restate it (`skills/review_md.md`). Per-PR discovery, the `REVIEW.das` gates, and the auditor-agent topology: `skills/internal/make_pr.md`, the REVIEW audit row and its agent-topology section.
 

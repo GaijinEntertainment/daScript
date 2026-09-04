@@ -10,9 +10,6 @@ Read this before adding, moving, or shipping any skill, and before any skills cl
   no CI, no lint rule IDs.
 - `skills/internal/` - never ships: repo workflow, CI, review machinery, compiler
   internals.
-- `LAWS.md`, in any folder - never ships: Boris's ruling provenance for that folder's rule
-  documents, not a skill. Anywhere under `skills/` the install rules drop it by name and
-  the gate knows the name.
 
 There is no shipping list. The gate (`ci/check_shipped_skills.py`) enforces the split:
 no shipped file links into `internal/`, no unmarked repo-only path in a shipped file

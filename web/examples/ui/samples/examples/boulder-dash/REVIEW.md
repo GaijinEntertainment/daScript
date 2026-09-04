@@ -55,5 +55,3 @@ adds its line here, with its tests, in the same change.**
 - `test_sfx_gen.das` - the sound-synthesis dastest suite.
 - `ARCHITECTURE.md` - design rationale for this folder.
 - `REVIEW.md` - this file.
-- `LAWS.md` - append-only intent provenance (CLAUDE.md sec. "Boris's rulings get a `LAWS.md`
-  sidecar", repo root). Never groomed.

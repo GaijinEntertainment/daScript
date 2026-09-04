@@ -782,8 +782,8 @@ budget, and its own chunker emits pieces ("no... " x66 -> 728 ids, "x, " x133 ->
 inside ONNX Runtime past the 512 positions. The port truncates at the encoder with a log line
 now; the token-budget packer is `followup_general.md` row 79. The rig after the batch
 (kitten-nano, this box, other agents running - quality only): 3.23 / 3.972, harvard 0.00,
-ljspeech 3.64, heteronym 1.00, oov 8.95, numeric 5.06 - the figure above. The rulings and what
-they left to the ledger: `modules/dasLLAMA/LAWS.md` (2026-09-02) and rows 76-82.
+ljspeech 3.64, heteronym 1.00, oov 8.95, numeric 5.06 - the figure above. What the rulings
+left to the ledger: rows 76-82.
 
 ## Risks
 
