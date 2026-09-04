@@ -8,17 +8,23 @@ one-arm fix into an afternoon.
 
 ```
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|mtp|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate, no --arm
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the every-change gate: files that reach no model or fixture, no --arm
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # the per-PR gate on a box with models: the model-gated files, no --arm
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the ~10 min PLE file
 ```
 
 `all` (the default) runs the decode, MTP and prefill parity files, the support matrix, the kernel
-files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vulkan`, `coverage`
-and `model-free`.
+files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vulkan`, `coverage`,
+`model-free` and `stocked`.
 
-Every suite but `model-free` needs `--arm`. `--full` parses and is then refused, so `--arm` is
-the only way in. `--suite model-free` takes neither - it is the whole gate. The runner redirects
+Every suite but `model-free` and `stocked` needs `--arm`. `--full` parses and is then refused, so
+`--arm` is the only way in. `--suite model-free` and `--suite stocked` take neither - each is a
+whole gate; `--exclude <substr,...>` drops the files whose name contains a token and names each
+on an `EXCLUDED` line, so a trimmed run cannot read as full. The runner redirects
 the COMPLETE output to a log file, and prints that path on the DONE line. It owns the dastest
 timeout. It repeats only when `--nreps` is passed explicitly (default 1, never best-of-N).
+`preflight --full` runs both per-PR suites when the diff touches `modules/dasLLAMA/` (gates
+`dasllama-model-free`, `dasllama-stocked`) and skips them otherwise.
 
 ## The iteration loop
 
@@ -202,10 +208,15 @@ omission a compile refusal (`test_lens_tgmem_gate` above).
 
 ## Model-free / no-arm tests
 
-Which files belong to the `model-free` suite is `REVIEW.md`'s to say. The runner sets
+Which files belong to the `model-free` and `stocked` suites is `REVIEW.md`'s to say: a file
+that reaches a machine-local fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`,
+`whisper_dir()`) is `stocked`, every other suite-less file is `model-free`, and
+`test_run_suites.das` reads the files and fails a misfiled one. A `stocked` cell skips honestly
+when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box it is
+the model coverage the per-PR gate owes - `test_ple_modes` alone is ~10 min. The runner sets
 `DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride
-the `model-free` suite: the runner disarms the guard that tripwire asserts. The map below is
-partial. `run.das`'s `model-free` list is the census.
+either suite: the runner disarms the guard that tripwire asserts. The map below is
+partial. `run.das`'s two lists together are the census.
 `test_vulkan_dec_tail.das` - model-free (a Vulkan device, else skips): the per-op tier's decode
 era against a CPU reference - the decode attention block (K-quant and q8 quads, both rope
 pairings, the hydrate arms), the decode FFN tail, and the whole-token decode span with its
@@ -305,6 +316,10 @@ bench's engine compile.
 `test_run_summary.das` - model-free: `run.das`'s own `log_summary` log scraper (last marker line
 wins, end of file closes an unterminated final line, doubled marker yields one line), fed
 synthetic log files from a per-process temp dir. Requires `run` by bare same-dir name.
+`test_run_suites.das` - model-free: `run.das`'s per-PR split read against the files' text - no
+`model-free` file reaches a fixture root, every `stocked` file does, no file sits in both, every
+listed file exists - plus the `--exclude` filter's semantics (base-name substring, comma list,
+blanks ignored). Requires `run` by bare same-dir name.
 `test_site_records.das` - model-free: the records-vs-site drift gate - `merge_site_records`
 (required by relative path, pays the engine compile) regenerated in memory and byte-compared
 against the committed `site/files/dasllama/bench_records.json` (what daslang.io/dasllama.html

@@ -4,8 +4,10 @@
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-**Every PR runs `run.das -- --suite model-free`, plus every test here the change reaches - never
-the whole directory.** A change reaches a test when it alters anything the test's result
+**Every PR runs `run.das -- --suite model-free` and, on a box with models stocked, `--suite
+stocked` (`preflight --full` runs both when the diff touches `modules/dasLLAMA/`), plus every
+test here the change reaches - never the whole directory.** `--suite stocked --exclude
+test_ple_modes` is the iteration form between PRs, never the PR's run. A change reaches a test when it alters anything the test's result
 depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture or
 corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
@@ -16,7 +18,7 @@ function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile
 is what the runner arms for every suite.
 
 **Invoking dastest directly on a test file in a `run.das` model suite (every suite but
-`model-free`) is a defect - run it through `run.das`.**
+`model-free` and `stocked`) is a defect - run it through `run.das`.**
 
 **Every test RUN runs under `-jit` - never the interpreter, never AOT.** A compile-only CI lane
 passes dastest's `--compile-only`. Under the interpreter a model-gated suite's cells skip, and
@@ -32,10 +34,17 @@ paragraph lists its gates when any clause of it names a specific fixture, model,
 condition; a paragraph that only names the file (a brace list, a suite roster) carries nothing
 to update.
 
-**A new test file listed in `run.das`'s `model-free` suite, or in no `run.das` suite at all,
-whose name does not say what it covers, gets a `CLAUDE.md` entry in the same change** -
-`run.das`'s `model-free` list is the complete census, the `CLAUDE.md` map is deliberately
-partial.
+**A suite-less test file that reaches a machine-local fixture root - `models_dir()`,
+`model_available()`, `llama2c_dir()`, `whisper_dir()` - sits in `run.das`'s `stocked` list,
+never `model-free`; one that reaches none sits in `model-free`.** `model-free` is the
+every-change gate and runs the same on a bare box; `stocked` is the per-PR model coverage and a
+run of skips without models. `test_run_suites.das` reads every listed file and fails a misfiled
+one.
+
+**A new test file listed in `run.das`'s `model-free` or `stocked` suite, or in no `run.das`
+suite at all, whose name does not say what it covers, gets a `CLAUDE.md` entry in the same
+change** - `run.das`'s `model-free` and `stocked` lists together are the complete census, the
+`CLAUDE.md` map is deliberately partial.
 
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm

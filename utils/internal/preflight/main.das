@@ -1357,6 +1357,25 @@ def gate_imgui(ctx : PreflightCtx) : GateResult {
         "dasImgui playwright suite failed (nightly_imgui.yml is its only CI lane — this local gate is the only pre-merge check)", t0)
 }
 
+//! The dasLLAMA runner's two per-PR suites (modules/dasLLAMA/tests/CLAUDE.md), each its own
+//! full-tier gate, and each runs only when the diff touches modules/dasLLAMA/ - the suites cost
+//! tens of minutes and nothing outside the module reaches them.
+def gate_dasllama(ctx : PreflightCtx; suite : string) : GateResult {
+    let name = "dasllama-{suite}"
+    let t0 = ref_time_ticks()
+    let changed = run_argv(["git", "diff", "--name-only", "{ctx.base}..HEAD"])
+    if (changed.rc != 0) {
+        return GateResult(name = name, status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "git diff {ctx.base}..HEAD failed - fetch origin first")
+    }
+    if (!any_path_under(non_empty_lines(changed.out), "modules/dasLLAMA/")) {
+        return GateResult(name = name, status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "nothing under modules/dasLLAMA/ changed vs {ctx.base}")
+    }
+    return run_test_gate(name, [ctx.daslang, "-jit", "modules/dasLLAMA/tests/run.das", "--", "--suite", suite],
+        "dasLLAMA {suite} suite failures - each file's log path is on its DONE line", t0)
+}
+
 // ===== orchestration =====
 
 struct GateInfo {
@@ -1383,7 +1402,9 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "tests-jit", full_only = true, doc = "full JIT suite (skips when dasLLVM absent)"),
         GateInfo(name = "tests-aot", full_only = true, doc = "build test_aot + full AOT suite"),
         GateInfo(name = "sequence", full_only = true, doc = "sequence game release smoke (only pre-merge compile of GLFW-gated das)"),
-        GateInfo(name = "imgui", full_only = true, doc = "dasImgui playwright suite (nightly-only CI — this local mirror is the only pre-merge gate for it)")
+        GateInfo(name = "imgui", full_only = true, doc = "dasImgui playwright suite (nightly-only CI — this local mirror is the only pre-merge gate for it)"),
+        GateInfo(name = "dasllama-model-free", full_only = true, doc = "dasLLAMA model-free suite via tests/run.das (skips unless the diff touches modules/dasLLAMA/; no CI lane)"),
+        GateInfo(name = "dasllama-stocked", full_only = true, doc = "dasLLAMA stocked suite - the model-gated files, a run of skips without models (skips unless the diff touches modules/dasLLAMA/; no CI lane)")
     ]
 }
 
@@ -1563,6 +1584,10 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 r <- gate_sequence(ctx)
             } elif (info.name == "imgui") {
                 r <- gate_imgui(ctx)
+            } elif (info.name == "dasllama-model-free") {
+                r <- gate_dasllama(ctx, "model-free")
+            } elif (info.name == "dasllama-stocked") {
+                r <- gate_dasllama(ctx, "stocked")
             }
             report_gate(r, cfg.verbose)
             results |> emplace(r)

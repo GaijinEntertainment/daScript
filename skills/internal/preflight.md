@@ -3,8 +3,9 @@
 `daslang utils/internal/preflight/main.das` runs the fast tier: format, lint,
 clang frontend pass on changed C++ (a full src+tests-cpp sweep when a header
 changed). `-- --full` adds the untracked gate, dasgen freshness, the
-CI-only-das compile sweep, the doc gates, ctest, the interp/JIT/AOT suites and
-the sequence smoke. `--list-gates`; `--only <names>` / `--skip <names>` select
+CI-only-das compile sweep, the doc gates, ctest, the interp/JIT/AOT suites,
+the sequence smoke, and - when the diff touches `modules/dasLLAMA/` - the
+dasLLAMA `model-free` and `stocked` suites. `--list-gates`; `--only <names>` / `--skip <names>` select
 subsets; `--lint-skip-exe-rail` trims the lint gate to its interp rails. A gate
 whose host tool or module is missing reports `SKIP` with an install/rebuild
 hint.
@@ -15,8 +16,13 @@ and dastest's `Top 10 slowest files` table for a suite sweep (preflight passes
 `--timing-outliers 10`). The run closes with a time-by-gate table, largest first, so the gate
 holding the wall clock names itself.
 
-Two gates mirror no CI lane:
+These gates mirror no CI lane:
 
+- **dasllama-model-free / dasllama-stocked** - `modules/dasLLAMA/tests/run.das -- --suite
+  model-free` and `--suite stocked` (the module's per-PR gates, `modules/dasLLAMA/tests/CLAUDE.md`),
+  full tier, each SKIPs unless `git diff --name-only <base>..HEAD` has a path under
+  `modules/dasLLAMA/`. Both are tens of minutes; `stocked` is a run of skips on a box with no
+  models. Each file's log path is on the runner's DONE line in the gate output.
 - **untracked** - `git ls-files --others --exclude-standard` must print nothing:
   commit, delete, or ignore each leftover (`.gitignore` when every clone mints
   it, `.git/info/exclude` for box-local keeps).

@@ -11,12 +11,13 @@ options _dasllama_internal = true
 
 require daslib/clargs
 require daslib/fio
+require daslib/strings_boost
 require strings
 require math
 require dasllama/dasllama_env
 require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
 
-let MODULE_CACHE = ".jitted_scripts/module_cache/dastest.dascache"   // `-jit -module-cache`: the dastest child skips the module-graph compile after its first run
+let MODULE_CACHE = ".jitted_scripts/module_cache/dastest.dascache"   // `-jit -module-cache`: serves dastest's own graph; the test program dastest compiles at runtime is past the cache and pays the engine compile
 
 [CommandLineArgs]
 struct RunArgs {
@@ -29,8 +30,12 @@ struct RunArgs {
     full : bool
 
     @clarg_short = "s"
-    @clarg_doc = "Suite: decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all (default all; all excludes image-vulkan and model-free)"
+    @clarg_doc = "Suite: decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | all (default all; all excludes image-vulkan, model-free and stocked)"
     suite : string = "all"
+
+    @clarg_short = "x"
+    @clarg_doc = "Exclude — comma-separated substrings; a suite file whose name contains one is dropped, each named on an EXCLUDED line (e.g. --suite stocked --exclude test_ple_modes)"
+    exclude : string
 
     @clarg_doc = "Family filter — comma-separated family tokens (the full list lives in tests/CLAUDE.md, EXACT match); only blocks of these model families run (model-free blocks always run); sets DASLLAMA_TEST_FAMILY"
     family : string
@@ -48,7 +53,8 @@ struct RunArgs {
     help : bool
 }
 
-def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat suite table, one file per line
+//! the suite tables. Non-private: test_run_suites.das reads them against the files' own text
+def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat suite table, one file per line
     if (name == "decode") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das" ]
     } elif (name == "mtp") {
@@ -73,10 +79,11 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
     } elif (name == "coverage") {
         return <- [ "modules/dasLLAMA/tests/test_kernel_coverage.das" ]
     } elif (name == "model-free") {
-        // every suite-less test file: the per-PR gate. A cell that needs a model or a fixture
-        // skips honestly when it is absent. A new such file registers here in the same change.
-        // Not here: test_cpu_prefill_tripwire (it asserts the guard the runner's
-        // DASLLAMA_CPU_PREFILL=1 disarms - plain dastest only).
+        // the every-change gate: every suite-less test file that reaches NO machine-local fixture
+        // root (models_dir / model_available / llama2c_dir / whisper_dir) - it runs the same with
+        // nothing stocked. A new such file registers here in the same change; test_run_suites.das
+        // reads every listed file and fails a misfiled one. Not here: test_cpu_prefill_tripwire
+        // (it asserts the guard the runner's DASLLAMA_CPU_PREFILL=1 disarms - plain dastest only).
         return <- [
                     "modules/dasLLAMA/tests/failed_dasllama_lint_require.das",
                     "modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das",
@@ -84,9 +91,6 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_affinity_predicates.das",
                     "modules/dasLLAMA/tests/test_arch_registry.das",
                     "modules/dasLLAMA/tests/test_asr_verbs.das",
-                    "modules/dasLLAMA/tests/test_attn_span.das",
-                    "modules/dasLLAMA/tests/test_audio.das",
-                    "modules/dasLLAMA/tests/test_audio_embedder.das",
                     "modules/dasLLAMA/tests/test_batch_grid.das",
                     "modules/dasLLAMA/tests/test_bench_records_schema.das",
                     "modules/dasLLAMA/tests/test_box_ident.das",
@@ -96,77 +100,86 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_dasllama_lint_contracts.das",
                     "modules/dasLLAMA/tests/test_metal_float_a_gate.das",
                     "modules/dasLLAMA/tests/test_dasllama_lint_escape.das",
-                    "modules/dasLLAMA/tests/test_deltanet.das",
                     "modules/dasLLAMA/tests/test_dispatch_shaping.das",
                     "modules/dasLLAMA/tests/test_env_registry.das",
                     "modules/dasLLAMA/tests/test_exchange_schema.das",
-                    "modules/dasLLAMA/tests/test_exe_smoke.das",
                     "modules/dasLLAMA/tests/test_facade_docs.das",
-                    "modules/dasLLAMA/tests/test_flash.das",
-                    "modules/dasLLAMA/tests/test_forward.das",
                     "modules/dasLLAMA/tests/test_gen_records_args.das",
-                    "modules/dasLLAMA/tests/test_gemma3v.das",
-                    "modules/dasLLAMA/tests/test_gemma4uv.das",
-                    "modules/dasLLAMA/tests/test_gemma4v.das",
                     "modules/dasLLAMA/tests/test_gguf_quant.das",
                     "modules/dasLLAMA/tests/test_gguf_shards.das",
-                    "modules/dasLLAMA/tests/test_gpu_model_swap.das",
                     "modules/dasLLAMA/tests/test_groupn.das",
                     "modules/dasLLAMA/tests/test_kernel_backend.das",
                     "modules/dasLLAMA/tests/test_kgroup_repack.das",
                     "modules/dasLLAMA/tests/test_kqformat.das",
-                    "modules/dasLLAMA/tests/test_kquant.das",
-                    "modules/dasLLAMA/tests/test_kv_prefix.das",
                     "modules/dasLLAMA/tests/test_matmul.das",
                     "modules/dasLLAMA/tests/test_matmul_batch.das",
                     "modules/dasLLAMA/tests/test_metal_gemm.das",
                     "modules/dasLLAMA/tests/test_metal_role_infer.das",
                     "modules/dasLLAMA/tests/test_model_specs.das",
-                    "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
                     "modules/dasLLAMA/tests/test_mxfp4.das",
                     "modules/dasLLAMA/tests/test_par_indexed.das",
-                    "modules/dasLLAMA/tests/test_parity.das",
                     "modules/dasLLAMA/tests/test_parity_cache.das",
-                    "modules/dasLLAMA/tests/test_parity_pregate.das",
                     "modules/dasLLAMA/tests/test_plane.das",
-                    "modules/dasLLAMA/tests/test_ple_modes.das",
                     "modules/dasLLAMA/tests/test_ple_check.das",
-                    "modules/dasLLAMA/tests/test_prefill.das",
                     "modules/dasLLAMA/tests/test_program_roots.das",
                     "modules/dasLLAMA/tests/test_quant.das",
-                    "modules/dasLLAMA/tests/test_qwen3v.das",
-                    "modules/dasLLAMA/tests/test_qwen25v.das",
                     "modules/dasLLAMA/tests/test_repack.das",
                     "modules/dasLLAMA/tests/test_repack_lane_context.das",
                     "modules/dasLLAMA/tests/test_rmsnorm.das",
                     "modules/dasLLAMA/tests/test_rope.das",
+                    "modules/dasLLAMA/tests/test_run_suites.das",
                     "modules/dasLLAMA/tests/test_run_summary.das",
-                    "modules/dasLLAMA/tests/test_scheduler.das",
                     "modules/dasLLAMA/tests/test_silu.das",
                     "modules/dasLLAMA/tests/test_site_records.das",
                     "modules/dasLLAMA/tests/test_sizing_helpers.das",
                     "modules/dasLLAMA/tests/test_softmax.das",
                     "modules/dasLLAMA/tests/test_think_split.das",
                     "modules/dasLLAMA/tests/test_tok_seed.das",
-                    "modules/dasLLAMA/tests/test_tokenizer.das",
                     "modules/dasLLAMA/tests/test_tts_textnorm.das",
-                    "modules/dasLLAMA/tests/test_tts_postag.das",
-                    "modules/dasLLAMA/tests/test_tts_g2p.das",
-                    "modules/dasLLAMA/tests/test_tts_kitten.das",
-                    "modules/dasLLAMA/tests/test_tts_kokoro.das",
-                    "modules/dasLLAMA/tests/test_tts_facade.das",
                     "modules/dasLLAMA/tests/test_tts_blocks.das",
                     "modules/dasLLAMA/tests/test_tool_formats.das",
                     "modules/dasLLAMA/tests/test_tower_helpers.das",
                     "modules/dasLLAMA/tests/test_tune_interrupt.das",
                     "modules/dasLLAMA/tests/test_unicode.das",
                     "modules/dasLLAMA/tests/test_vision.das",
-                    "modules/dasLLAMA/tests/test_vision_chat.das",
-                    "modules/dasLLAMA/tests/test_vision_embedder.das",
                     "modules/dasLLAMA/tests/test_vulkan_dec_tail.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
-                    "modules/dasLLAMA/tests/test_vulkan_tier.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tier.das" ]
+    } elif (name == "stocked") {
+        // the per-PR gate on a box with models stocked: every suite-less test file that reaches a
+        // machine-local fixture root. Each cell skips honestly when its file is absent, so the
+        // suite is a run of skips on a bare box. `--exclude test_ple_modes` is its iteration form.
+        return <- [
+                    "modules/dasLLAMA/tests/test_attn_span.das",
+                    "modules/dasLLAMA/tests/test_audio.das",
+                    "modules/dasLLAMA/tests/test_audio_embedder.das",
+                    "modules/dasLLAMA/tests/test_deltanet.das",
+                    "modules/dasLLAMA/tests/test_exe_smoke.das",
+                    "modules/dasLLAMA/tests/test_flash.das",
+                    "modules/dasLLAMA/tests/test_forward.das",
+                    "modules/dasLLAMA/tests/test_gemma3v.das",
+                    "modules/dasLLAMA/tests/test_gemma4uv.das",
+                    "modules/dasLLAMA/tests/test_gemma4v.das",
+                    "modules/dasLLAMA/tests/test_gpu_model_swap.das",
+                    "modules/dasLLAMA/tests/test_kquant.das",
+                    "modules/dasLLAMA/tests/test_kv_prefix.das",
+                    "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
+                    "modules/dasLLAMA/tests/test_parity.das",
+                    "modules/dasLLAMA/tests/test_parity_pregate.das",
+                    "modules/dasLLAMA/tests/test_ple_modes.das",
+                    "modules/dasLLAMA/tests/test_prefill.das",
+                    "modules/dasLLAMA/tests/test_qwen3v.das",
+                    "modules/dasLLAMA/tests/test_qwen25v.das",
+                    "modules/dasLLAMA/tests/test_scheduler.das",
+                    "modules/dasLLAMA/tests/test_tokenizer.das",
+                    "modules/dasLLAMA/tests/test_tts_postag.das",
+                    "modules/dasLLAMA/tests/test_tts_g2p.das",
+                    "modules/dasLLAMA/tests/test_tts_kitten.das",
+                    "modules/dasLLAMA/tests/test_tts_kokoro.das",
+                    "modules/dasLLAMA/tests/test_tts_facade.das",
+                    "modules/dasLLAMA/tests/test_vision_chat.das",
+                    "modules/dasLLAMA/tests/test_vision_embedder.das",
                     "modules/dasLLAMA/tests/test_whisper.das" ]
     } elif (name == "all") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
@@ -184,6 +197,27 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
     }
     var none : array<string>
     return <- none
+}
+
+//! --exclude: a file whose base name contains any comma-separated token is dropped. Non-private:
+//! test_run_suites.das gates it
+def exclude_files(files : array<string>; exclude : string) : tuple<kept : array<string>; dropped : array<string>> {
+    var kept : array<string>
+    var dropped : array<string>
+    let tokens <- [for (tok in split(exclude, ",")); strip(tok); where !empty(strip(tok))]
+    for (file in files) {
+        let name = base_name(file)
+        var hit = false
+        for (tok in tokens) {
+            hit ||= find(name, tok) >= 0
+        }
+        if (hit) {
+            dropped |> push(file)
+        } else {
+            kept |> push(file)
+        }
+    }
+    return <- (kept <- kept, dropped <- dropped)
 }
 
 // the trailing "N tests, ..." summary line of a dastest log ("" when the run died before
@@ -269,9 +303,9 @@ def main() : int {
         print_help(get_command_info(type<RunArgs>), "modules/dasLLAMA/tests/run.das")
         return 0
     }
-    if (cfg.suite == "model-free") {
-        if (cfg.full || !empty(cfg.arm)) {   // the per-PR gate has no arms to scope: a filter would silently shrink it
-            to_log(LOG_ERROR, "--suite model-free takes neither --arm nor --full: it is the whole per-PR gate\n")
+    if (cfg.suite == "model-free" || cfg.suite == "stocked") {
+        if (cfg.full || !empty(cfg.arm)) {   // the per-PR gates have no arms to scope: a filter would silently shrink them
+            to_log(LOG_ERROR, "--suite {cfg.suite} takes neither --arm nor --full: it is a whole per-PR gate (--exclude names what it drops)\n")
             return 2
         }
     } elif (cfg.full == !empty(cfg.arm)) {   // both set, or neither
@@ -282,9 +316,18 @@ def main() : int {
         to_log(LOG_ERROR, "please narrow the scope to the correct set of gates, metal is not fully implemented yet\n")
         return 2
     }
-    var files <- suite_files(cfg.suite)
+    let listed <- suite_files(cfg.suite)
+    if (empty(listed)) {
+        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | all)\n")
+        return 2
+    }
+    var split <- exclude_files(listed, cfg.exclude)
+    for (file in split.dropped) {
+        to_log(LOG_INFO, "EXCLUDED {base_name(file)} (--exclude {cfg.exclude})\n")
+    }
+    var files <- split.kept
     if (empty(files)) {
-        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all)\n")
+        to_log(LOG_ERROR, "--exclude '{cfg.exclude}' dropped every file of --suite {cfg.suite}\n")
         return 2
     }
     var tmp = g_env_test.tmpdir
