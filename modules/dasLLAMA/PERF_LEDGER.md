@@ -1267,6 +1267,22 @@ commits: direction-grade.
   the draft about as often as the argmax did. Qwen3.8-27B + the Q8_0 NextN head at temp 0.8: off
   27.1 -> on 34.6 (1.28x), acceptance 70.2% (greedy 77%); per prompt 1.26 / 1.30 / 1.40 / 1.17x at
   58.0 / 71.6 / 89.6 / 64.9%. Direction-grade.
+- **Where the CPU round's time goes (Qwen3.8-27B-Q4_K_M + the Q8_0 head, M5 Max CPU rails
+  `--ngl 0`, `lcpp_bench --mtp-ab --prof` `-jit` debug rail, `-n 64 -r 1`, SpecBench-4 chat; the
+  `mtp.draft` / `mtp.snapshot` / `mtp.verify` / `mtp.walk` / `mtp.replay` sections; plain step
+  89 ms):** off 11.4 -> on 8.9 tok/s (0.78x) at 82.3% acceptance, 1.82 tokens per round. Per round
+  in steps: the two-row verify 1.79, the recurrent-state snapshot 0.25 (151 MB through a scalar
+  copy loop at 6.6 GB/s), the reject re-forward 0.24 (a restore plus one plain step on 18% of the
+  rounds), the draft 0.09 - 2.37 steps for 1.82 tokens. The verify's `mm_gemm` is 1.75x a step's
+  GEMVs because the kq batch tile is four-token granular and its token tail runs one GEMV pass
+  per row: two rows stream and dequantize the weights twice. REFUTED fix: padding the two rows to
+  the four-token tile with zero rows made the verify SLOWER (`mm_gemm` 5.17 -> 6.36 s over the
+  window, on 8.9 -> 8.5 tok/s) - the tile costs 2.46 GEMV passes for four tokens, so the CPU
+  K-quant path is compute-bound (dequant ~0.5, dots ~0.5 of a pass per row) and only a real
+  two-token tile (~1.5 passes) would pay (#104). LANDED: the snapshot as lane-parallel memcpy
+  (22.7 -> 1.0 ms per round): on 8.9 -> 10.2 tok/s, 0.78x -> 0.89x, verify and replay unchanged.
+  The reject re-forward is the other lever (#105); with the two-token tile the round is predicted
+  at ~1.5 steps, 1.2x. Direction-grade.
 - **Where the NextN round's time goes (`lcpp_bench --prof`, `-jit` debug rail, Qwen3.8-27B on the
   M5, prompt 0 of the corpus, 128 tokens, plain step 37 ms):** depth 1, 75 rounds: draft 3.1 ms
   per draft (0.08 step), the two-row verify 45.7 ms (1.24x a step), walk 0.3, replay 0.5; depth 3,

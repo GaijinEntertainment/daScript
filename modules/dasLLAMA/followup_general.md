@@ -1216,3 +1216,19 @@
    in the scheduler's tick, and the tick decodes plain while it sits under c - 1 - re-arming every
    M plain steps to re-measure - with the gemma-26B temp 2.0 corpus as the gate (on must not lose
    to off) and the temp 0.8 corpus as the control (the guard must not fire there).
+104. **The CPU kq batch tile has no two-token form.** `kq_batch_cell_gen` (`dasllama_math_gen`)
+   tiles four tokens and runs the token tail as one GEMV pass per row, so the speculative round's
+   two-row verify streams and dequantizes every weight twice (`mm_gemm` 1.75x a step on Qwen3.8-27B,
+   M5 CPU); padding two rows to the four-token tile measured 2.46 passes - the path is compute-bound,
+   about half dequant and half dots per row (`PERF_LEDGER.md`, the CPU round split). Done = a
+   two-token tile in the generator (`dasllama_gemm_gen::k4_tile` and its siblings take the token
+   count as a perm), predicted ~1.5 passes for two rows, wired into the tail walk for ntok % 4 == 2
+   (and 3 = 2 + 1), bit-exact vs the per-token GEMVs like the four-token form, with the CPU
+   round's `mtp.verify` section as the witness.
+105. **A rejected CPU verify on a recurrent hybrid re-forwards the whole step.** `mtp_spec_eval`
+   snapshots the deltanet state before the two-row verify and, on a reject, restores it and runs a
+   plain forward to re-advance it past row 0 - 0.24 step per round at 82% acceptance (the same
+   ledger entry). Done = the verify's recurrent layers run the per-token core at npos 2 and copy
+   each layer's state slice AFTER row 0 into the snapshot buffers (`mtp_snap_pos = pos + 1`), so a
+   reject restores that snapshot and takes row 0's logits and hidden the verify already produced -
+   the non-recurrent reject path's shape - with `test_mtp_reject_rollback` as the gate.

@@ -3589,6 +3589,39 @@ def private mm_kq(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x 
     mm_at_kq_pre(y, t, fmt, woff, xq, xs, xbs, n, d)
 }
 
+// the per-format kq batch tile over a Q8_K-form activation image of ntok rows
+def private mm_b_kq_tile(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, ntok : int64) {
+    if (fmt == KqFmt.k4) {
+        matmul_kq_batch(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.k5) {
+        matmul_kq_batch(5, y, t.k5q, t.k5s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.k6) {
+        matmul_kq_batch(6, y, t.k6q, t.k6s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.q40) {
+        matmul_kq_batch(40, y, t.q40q, t.q40s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq4xs) {
+        matmul_kq_batch(44, y, t.iq4xsq, t.iq4xss, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.k3) {
+        matmul_kq_batch(3, y, t.k3q, t.k3s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq3s) {
+        matmul_kq_batch(33, y, t.iq3sq, t.iq3ss, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq3xxs) {
+        matmul_kq_batch(34, y, t.iq3xxsq, t.iq3xxss, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq4nl) {
+        matmul_kq_batch(45, y, t.iq4nlq, t.iq4nls, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.k2) {
+        matmul_kq_batch(2, y, t.k2q, t.k2s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq2s) {
+        matmul_kq_batch(23, y, t.iq2sq, t.iq2ss, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq2xs) {
+        matmul_kq_batch(24, y, t.iq2xsq, t.iq2xss, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq2xxs) {
+        matmul_kq_batch(25, y, t.iq2xxsq, t.iq2xxss, woff, xq, xs, xbs, n, d, ntok)
+    } else {
+        panic("mm_b_kq: '{fmt}' has no kq plane pair")
+    }
+}
+
 // Batched K-quant matmul. Repacked loads with a kq batch kernel run the native tile: one threaded
 // bs-requant, then ONE weight-stationary GEMM (bit-for-bit npos x the per-position GEMV).
 // Otherwise positions run serially, each bs-quantized then a full row GEMV.
@@ -3600,35 +3633,7 @@ def mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff 
             return
         }
         let ts_gemm = prof_ticks()
-        if (fmt == KqFmt.k4) {
-            matmul_kq_batch(4, y, t.k4q, t.k4s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.k5) {
-            matmul_kq_batch(5, y, t.k5q, t.k5s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.k6) {
-            matmul_kq_batch(6, y, t.k6q, t.k6s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.q40) {
-            matmul_kq_batch(40, y, t.q40q, t.q40s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq4xs) {
-            matmul_kq_batch(44, y, t.iq4xsq, t.iq4xss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.k3) {
-            matmul_kq_batch(3, y, t.k3q, t.k3s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq3s) {
-            matmul_kq_batch(33, y, t.iq3sq, t.iq3ss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq3xxs) {
-            matmul_kq_batch(34, y, t.iq3xxsq, t.iq3xxss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq4nl) {
-            matmul_kq_batch(45, y, t.iq4nlq, t.iq4nls, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.k2) {
-            matmul_kq_batch(2, y, t.k2q, t.k2s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq2s) {
-            matmul_kq_batch(23, y, t.iq2sq, t.iq2ss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq2xs) {
-            matmul_kq_batch(24, y, t.iq2xsq, t.iq2xss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq2xxs) {
-            matmul_kq_batch(25, y, t.iq2xxsq, t.iq2xxss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } else {
-            panic("mm_b_kq: '{fmt}' has no kq plane pair")
-        }
+        mm_b_kq_tile(y, t, fmt, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
         prof_add("mm_gemm", ts_gemm)
         return
     }
@@ -4641,6 +4646,28 @@ def mtp_verify_prep_n(t : Model; var s : Session; toks : array<int64>; n, pos : 
                      c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
 }
 
+// a state-sized copy (151 MB on a 27B hybrid) as lane-parallel memcpy chunks: the scalar loop
+// moved it at 6.6 GB/s, a quarter of a decode step per round
+def private copy_floats_par(src : array<float>; var dst : array<float>; n : int64) {
+    if (n <= 0l) {
+        return
+    }
+    let lanes = clamp(int(n / 4194304l), 1, 8)   // 16 MB per lane at least
+    unsafe {
+        let sp = addr < float const? >(src[0])
+        var dp = addr(dst[0])
+        maybe_parallel_for(lanes > 1, 0, lanes, lanes) $(lb, le) {
+            unsafe {
+                for (li in range(lb, le)) {
+                    let i0 = int64(li) * n / int64(lanes)
+                    let i1 = int64(li + 1) * n / int64(lanes)
+                    memcpy(reinterpret<void?>(dp + i0), reinterpret<void const?>(sp + i0), (i1 - i0) * 4l)
+                }
+            }
+        }
+    }
+}
+
 //! Snapshot/restore the deltanet recurrent state (conv history + S + dn_pos) around a speculative
 //! verify batch: a rejected draft has already advanced the state past itself. KV rows stay correct;
 //! only the recurrent state rolls back, then one plain forward re-advances it.
@@ -4650,14 +4677,14 @@ def mtp_state_snapshot(var s : Session) {
     let ns = long_length(s.dn_state)
     s.mtp_snap_conv |> overwrite_resize(nc)   // reserves once, a no-op after the first call
     s.mtp_snap_state |> overwrite_resize(ns)
-    copy_floats(s.dn_conv_state, 0l, s.mtp_snap_conv, 0l, nc)
-    copy_floats(s.dn_state, 0l, s.mtp_snap_state, 0l, ns)
+    copy_floats_par(s.dn_conv_state, s.mtp_snap_conv, nc)
+    copy_floats_par(s.dn_state, s.mtp_snap_state, ns)
     s.mtp_snap_pos = s.dn_pos
 }
 
 def mtp_state_restore(var s : Session) {
-    copy_floats(s.mtp_snap_conv, 0l, s.dn_conv_state, 0l, long_length(s.mtp_snap_conv))
-    copy_floats(s.mtp_snap_state, 0l, s.dn_state, 0l, long_length(s.mtp_snap_state))
+    copy_floats_par(s.mtp_snap_conv, s.dn_conv_state, long_length(s.mtp_snap_conv))
+    copy_floats_par(s.mtp_snap_state, s.dn_state, long_length(s.mtp_snap_state))
     s.dn_pos = s.mtp_snap_pos
     moe_gpu_dn_invalidate()   // restored CPU state is authoritative — device copies are stale
 }
@@ -4762,13 +4789,18 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         return false
     }
     // draft x_{pos+1} from (h_{pos-1}, tok) at row pos-1 (rewrites that row's draft KV in place)
+    let ts_draft = prof_ticks()
     forward_mtp(t, s, tok, pos - 1l)
     let d = parallel_argmax(s.logits, c.vocab_size)
     s.mtp_drafted++
+    prof_add("mtp.draft", ts_draft)
     // batched verify: trunk over [tok@pos, d@pos+1] — weights stream once for both rows; the
     // warm inside this prefill writes the head's row pos = (h_pos, d), which doubles as the
     // accept-path backfill (a reject leaves it stale; the next draft at that row rewrites it)
+    let ts_snap = prof_ticks()
     mtp_state_snapshot(s)
+    prof_add("mtp.snapshot", ts_snap)
+    let ts_verify = prof_ticks()
     s.mtp_vbatch[0] = tok
     s.mtp_vbatch[1] = d
     let batch_cls = mtp_cls_batch_ok(t)
@@ -4778,6 +4810,8 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     } else {
         mtp_verify_row0(t, s)
     }
+    prof_add("mtp.verify", ts_verify)
+    let ts_walk = prof_ticks()
     var hit = false
     if (mtp_walk_samples(s)) {
         // both rows, classifier tail applied, into the walk's row buffer
@@ -4788,6 +4822,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     } else {
         hit = parallel_argmax(s.mtp_logits, c.vocab_size) == d
     }
+    prof_add("mtp.walk", ts_walk)
     if (hit) {
         s.mtp_accepted++
         accepted = d
@@ -4806,8 +4841,10 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         s.n_past = pos + 1l
         return false
     }
+    let ts_replay = prof_ticks()
     mtp_state_restore(s)
     forward(t, s, tok, pos)
+    prof_add("mtp.replay", ts_replay)
     s.n_past = pos + 1l
     return false
 }
