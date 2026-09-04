@@ -42,7 +42,7 @@ Run under `-jit` - interpreted inference is far too slow. Flags:
 | `--page-rows` | - | `64` | KV page size in positions for paged serving |
 | `--prefix` | - | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
 | `--flat` | - | - | Flat preallocated KV sessions - disables paged serving and the prefix cache |
-| `--mtp` | - | - | MTP/NextN self-speculative decode for greedy requests (`temperature: 0`, no repetition penalty) - needs a model with an in-file NextN head (the `-MTP-` GGUFs). Output-invariant; up to ~2x decode on the dense qwen35/qwen3.6 models (measured rows: `modules/dasLLAMA/performance/records/<box>.json`, on the site board), ~nothing on the MoEs. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
+| `--mtp` | - | - | MTP/NextN self-speculative decode - needs a model with an in-file NextN head (the `-MTP-` GGUFs). Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. Up to ~2x decode on the dense qwen35/qwen3.6 models (measured rows: `modules/dasLLAMA/performance/records/<box>.json`, on the site board), ~nothing on the MoEs. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
 | `--models-dir` | - | `~/.dasllama/models` | Where the model catalog downloads land (`DASLLAMA_MODELS_DIR` overrides both this and the config key) |
 | `--help` | `-?` | - | Show help and exit |
 

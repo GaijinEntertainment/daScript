@@ -423,17 +423,17 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             finish_stream(sch.streams[i], "length", events)
             continue
         }
-        if (sch.mtp && sch.streams[i].params.temp <= 0.0 && sch.streams[i].params.penalty == 1.0 &&
-                sch.streams[i].params.presence_penalty == 0.0 && sch.streams[i].params.frequency_penalty == 0.0) {
-            // greedy self-spec tick: draft + 2-row batched verify on this stream's own session
-            // (the stream trades its cross-stream batch row for up to two positions per tick;
-            // sampled/penalized streams stay on the batch — the greedy verify wouldn't match them).
+        if (sch.mtp) {
+            // self-spec tick: draft + 2-row batched verify on this stream's own session (the stream
+            // trades its cross-stream batch row for up to two positions per tick). The accept walk
+            // draws with the stream's own sampler, so a sampled or penalized stream ticks too.
             // Donation-side note: an accepted token is already evaled, so a "length" finish here
             // makes donate_stream's pending-eval redundant — harmless, and unreachable anyway:
             // every MTP-capable arch is a deltanet hybrid, which the prefix cache refuses.
             let d0 = sch.streams[i].session.mtp_drafted
             let a0 = sch.streams[i].session.mtp_accepted
             var acc = 0l
+            sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
             if (mtp_spec_eval(m, sch.streams[i].session, sch.streams[i].cur_tok, acc)) {
                 if (advance_with(m, sch.streams[i], acc, events)) {
                     sch.gen_tokens ++

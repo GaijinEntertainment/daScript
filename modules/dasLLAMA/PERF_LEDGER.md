@@ -1256,6 +1256,17 @@ commits: direction-grade.
   round cost in steps (tokens per round over the speedup) is 1.44 / 2.12 / 2.21 / 3.97 on Qwen
   and 1.51 / 1.88 / 2.21 / 2.99 on gemma. Depth 3 is the best Qwen point on this box today.
   Direction-grade.
+- **The sampled walk (sample-and-match, #101; `lcpp_bench --mtp-ab --mtp-temp`, `-jit` debug rail,
+  M5, depth 1, `-n 128 -r 1`, SpecBench-4 chat, both arms seeded alike):** gemma-26B + the assistant
+  drafter at temp 0.8: off 115.2 -> on 145.1 tok/s (1.26x), acceptance 74.7% - the greedy rate; the
+  off arm sits 6% under greedy off (the 262k-vocab CPU sample per token, ~0.5 ms). Per prompt 1.26 /
+  1.25 / 1.31 / 1.22x at 71.6 / 77.8 / 81.4 / 68.4%. At temp 2.0 the same pair accepts 29.9%
+  (42.7 / 15.5 / 71.6 / 7.6% per prompt) and the round LOSES: off 115.3 -> on 107.3 (0.93x; the two
+  cold prompts 0.81x and 0.78x) - the round's cost is paid whether the draws match or not (#103).
+  An instruct model's chat distributions are peaked, so at serving temperatures the draw matches
+  the draft about as often as the argmax did. Qwen3.8-27B + the Q8_0 NextN head at temp 0.8: off
+  27.1 -> on 34.6 (1.28x), acceptance 70.2% (greedy 77%); per prompt 1.26 / 1.30 / 1.40 / 1.17x at
+  58.0 / 71.6 / 89.6 / 64.9%. Direction-grade.
 - **Where the NextN round's time goes (`lcpp_bench --prof`, `-jit` debug rail, Qwen3.8-27B on the
   M5, prompt 0 of the corpus, 128 tokens, plain step 37 ms):** depth 1, 75 rounds: draft 3.1 ms
   per draft (0.08 step), the two-row verify 45.7 ms (1.24x a step), walk 0.3, replay 0.5; depth 3,

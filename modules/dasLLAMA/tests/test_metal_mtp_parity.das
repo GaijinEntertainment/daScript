@@ -174,13 +174,20 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
     return st
 }
 
-// Free-running pair on the GPU: plain greedy vs the speculative rail's committed stream. Only
-// valid as a token-exact gate on a counting prompt (near-tie-free by construction).
-def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var plain, spec : array<int64>; depth : int64; var drafted : int64&) : int64 {   // nolint:LINT012,LINT019 — the body is the das_metal half
+// the sampled arms' sampler: top-k 1 makes every draw the penalized argmax, so a seeded sampled
+// stream is deterministic and the token-exact gate holds on the counting prompt
+let SAMPLED_PARAMS = SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1)
+
+// Free-running pair on the GPU: plain vs the speculative rail's committed stream, greedy or (with
+// `sampled`) through the session sampler - the spec session points its accept walk at the same
+// params. Only valid as a token-exact gate on a counting prompt (near-tie-free by construction).
+def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var plain, spec : array<int64>; depth : int64; var drafted, parked : int64&; sampled : bool = false) : int64 {   // nolint:LINT012,LINT019 — the body is the das_metal half
     var served = 0l   // nolint:LINT003,LINT019 — counted in the das_metal half
+    parked = 0l
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let c = tr.config
         let vocab = c.vocab_size
+        var sp = SAMPLED_PARAMS
         with_job_que() {
             setup_dasllama_jobque()
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -192,24 +199,33 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
             var one <- [t0]
             eval_(trg, sa, one)
             eval_(trg, sb, one)
-            var tok = greedy_top(sa.logits, vocab)
+            if (sampled) {
+                set_seed_(sa, 4242)
+                set_seed_(sb, 4242)
+                sb.spec_params = unsafe(addr(sp))
+            }
+            var tok = sampled ? sample_(sa, sp) : greedy_top(sa.logits, vocab)
             for (_i in range64(n)) {
                 plain |> push(tok)
                 one[0] = tok
                 eval_(trg, sa, one)
-                tok = greedy_top(sa.logits, vocab)
+                tok = sampled ? sample_(sa, sp) : greedy_top(sa.logits, vocab)
             }
             // speculative: commit tok, plus every accepted draft of the round
             set_mtp_depth(depth)
-            tok = greedy_top(sb.logits, vocab)
+            tok = sampled ? sample_(sb, sp) : greedy_top(sb.logits, vocab)
             while (long_length(spec) < n) {
                 spec |> push(tok)
                 let a = mtp_spec_round(trg, sb, tok)
                 for (i in range64(a)) {
                     spec |> push(sb.mtp_vbatch[i + 1l])
                 }
-                tok = greedy_top(sb.logits, vocab)
+                if (sb.mtp_pre_drawn) {   // the sampled walk parks the next draw; the argmax walk never does
+                    parked++
+                }
+                tok = sampled ? sample_(sb, sp) : greedy_top(sb.logits, vocab)
             }
+            sb.spec_params = null
             set_mtp_depth(1l)
             spec |> resize(n)
             drafted = sb.mtp_drafted
@@ -261,17 +277,20 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
 }
 
 // the process-wide knobs every exit path of run_fixture puts back
-def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64) {
+def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64; sampled : bool = false) {
     var plain : array<int64>
     var spec : array<int64>
     var drafted = 0l
-    let served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted)
+    var parked = 0l
+    let served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted, parked, sampled)
+    let kind = sampled ? "sampled" : "counting"
     if (served == 0l) {
         t |> skip("metal decode declined (no Metal device?)")
     } else {
-        log_gen_texts(tr, "{tag} counting k{depth}", plain, spec)
-        t |> success(drafted > 0l, "{tag} counting k{depth}: the spec rail engaged ({drafted} drafts) - a plain fallback would pass vacuously")
-        t |> success(same(plain, spec), "{tag} counting k{depth}: speculative free-run == plain free-run ({COUNT_STEPS} tokens)")
+        log_gen_texts(tr, "{tag} {kind} k{depth}", plain, spec)
+        t |> success(drafted > 0l, "{tag} {kind} k{depth}: the spec rail engaged ({drafted} drafts) - a plain fallback would pass vacuously")
+        t |> success(same(plain, spec), "{tag} {kind} k{depth}: speculative free-run == plain free-run ({COUNT_STEPS} tokens)")
+        t |> success(sampled == (parked > 0l), "{tag} {kind} k{depth}: the sampled walk parks the next draw ({parked} rounds); the argmax walk parks none")
     }
     delete plain
     delete spec
@@ -632,6 +651,13 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
         if (arm_on(t, "mtp-count8-{tag}")) {
             count_cell(t, tr, trg, tag, count, 8l)
         }
+
+        // the sampled walk: the round draws every verify row through the session's sampler and the
+        // caller's sample_ takes the parked draw - free-run == plain sampled free-run, seeded
+        if (arm_on(t, "mtp-sampled-{tag}")) {
+            count_cell(t, tr, trg, tag, count, 1l, true)
+            count_cell(t, tr, trg, tag, count, 2l, true)
+        }
     }
 }
 
@@ -734,6 +760,9 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
                     count_cell(t, tr, trg, tag, count, depth)
                     let st = gemma_drafter_stats()
                     to_log(LOG_INFO, "gemma drafter {tag} k{depth}: rounds={st.rounds} drafted={st.drafted} accepted={st.accepted}\n")
+                    if (depth < 4l && arm_on(t, "mtp-sampled-{tag}")) {   // the assistant round's sampled walk at depth 1 and 2
+                        count_cell(t, tr, trg, tag, count, depth, true)
+                    }
                 }
                 set_gemma_trace(false)
                 set_gemma_draft_on_cpu(false)

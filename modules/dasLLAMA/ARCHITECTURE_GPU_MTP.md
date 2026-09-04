@@ -31,6 +31,20 @@ input), `s.mtp_h_pos1` and the mirror watermark move to `pos + a + 1`, and `n_pa
 `a + 1`. The rows above the new watermark are the rejected drafts' - garbage the next round
 rewrites - and only the watermark keeps them from being read.
 
+**A sampled stream's walk draws instead of comparing argmaxes, and the same walk serves every
+round - the two Metal rounds and the CPU depth-1 step.** The caller points `s.spec_params` at its
+own sampler before the round; at a temperature above zero the walk draws row i through that
+sampler (`mtp_walk_sampled`, the row sampler installed by `dasllama_sampling`), with the
+recent-token window advanced per accepted draft so penalties see the tokens the stream will have
+committed, and accepts while the draw equals the draft it verifies. Every committed token is a draw
+from its own target row, so the stream's distribution is the plain sampled decode's, and a seeded
+run reproduces it token for token - one RNG draw per emitted token, in order. The first miss, or the
+draw from the row past the last draft, is the next token: the walk parks it in `s.mtp_pre_tok`
+(`mtp_pre_drawn`), and the caller's next `sample_` returns it instead of drawing from `s.logits`
+again. The acceptance rate becomes the target's probability of the draft token, so it sits below
+the argmax match (`PERF_LEDGER.md`, the MTP section, for the measured gap); a null `spec_params` or
+a zero temperature keeps the argmax walk bit for bit.
+
 ### 2.29 The depth a round drafts {#mtp-depth-knob}
 
 **The depth a round drafts is a box knob per round kind, not a controller.** `get_mtp_depth()`

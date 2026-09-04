@@ -139,6 +139,10 @@ struct Args {
     @clarg_doc = "A/B MTP/NextN self-speculation in-process, OFF then ON (needs a NextN head in the GGUF). Runs the tg-real row, NOT the llama-bench tg row — acceptance is meaningless on synthetic ids. Reports the draft accept rate; mutually exclusive with the other A/B levers"
     mtp_ab : bool
 
+    @clarg_name = "mtp-temp"
+    @clarg_doc = "Sampling temperature for BOTH --mtp-ab arms (default 0 = greedy): the off arm samples every token, the on arm's accept walk draws each verify row with the same sampler (sample-and-match), both seeded alike - the sampled speed and acceptance"
+    mtp_temp : float = 0.0
+
     @clarg_doc = "A/B the resident ladder's per-token re-encode in-process: every row runs twice, recorded-once then re-encoded every token. Prices the carrier class twins' push-borne pos/cnt (vulkan resident decode only); mutually exclusive with the other A/B levers"
     rerecord_ab : bool
 
@@ -1528,6 +1532,7 @@ def main() : int {
                 pp_gen |> resize(length(toks))
                 pp_dr |> resize(length(toks))
                 pp_ac |> resize(length(toks))
+                var sp = SamplingParams(temp = cfg.mtp_temp)   // both arms pick through it; greedy stays the argmax path
                 for (_rep in range(reps)) {
                     var total_us = 0l
                     var rep_gen = 0l
@@ -1535,21 +1540,25 @@ def main() : int {
                         var rs <- make_run_state(c, KVDtype.f16, KVDtype.f16)
                         let pl = long_length(toks[pi])
                         forward_prefill(t, rs, toks[pi], pl, 0l)
+                        if (sp.temp > 0.0) {
+                            set_seed_(rs, 4242)
+                            rs.spec_params = unsafe(addr(sp))
+                        }
                         let t0 = ref_time_ticks()
                         var p_gen = ngen
                         if (mtp_on) {
                             rs.n_past = pl   // forward_prefill leaves n_past alone; the round drives it
-                            var tok = argmax_logit(rs, c.vocab_size)
+                            var tok = sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size)
                             var gen = 0l
                             while (gen < ngen) {
                                 gen += 1l + mtp_spec_round(t, rs, tok)   // tok + the accepted drafts; only the advance is timed
-                                tok = argmax_logit(rs, c.vocab_size)
+                                tok = sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size)
                             }
                             p_gen = gen   // a trailing accept may overshoot by 1 — count what ran
                         } else {
                             var pos = pl
                             for (_g in range64(ngen)) {
-                                forward(t, rs, argmax_logit(rs, c.vocab_size), pos)
+                                forward(t, rs, sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size), pos)
                                 pos++
                             }
                         }
@@ -1575,7 +1584,8 @@ def main() : int {
                 }
                 if (mtp_on) {
                     let rate = drafted > 0l ? double(accepted) * 100.0lf / double(drafted) : 0.0lf
-                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}; {mtp_pos_report()}\n")
+                    let walk = sp.temp > 0.0 ? " (sampled walk, temp {sp.temp})" : ""
+                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}{walk}; {mtp_pos_report()}\n")
                     mtp_pos_reset()
                     if (length(toks) > 1) {
                         for (pi in range(length(toks))) {
@@ -1612,18 +1622,22 @@ def main() : int {
                     static_if (typeinfo builtin_module_exists(das_metal)) {
                         metal_decode_stage_reset()   // the stage report below covers this window alone
                     }
+                    if (sp.temp > 0.0) {
+                        set_seed_(ps, 4242)
+                        ps.spec_params = unsafe(addr(sp))
+                    }
                     if (mtp_on) {
                         ps.n_past = pl0
-                        var ptok = argmax_logit(ps, c.vocab_size)
+                        var ptok = sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size)
                         var pgen = 0l
                         while (pgen < ngen) {
                             pgen += 1l + mtp_spec_round(t, ps, ptok)
-                            ptok = argmax_logit(ps, c.vocab_size)
+                            ptok = sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size)
                         }
                     } else {
                         var ppos = pl0
                         for (_g in range64(ngen)) {
-                            forward(t, ps, argmax_logit(ps, c.vocab_size), ppos)
+                            forward(t, ps, sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size), ppos)
                             ppos++
                         }
                     }

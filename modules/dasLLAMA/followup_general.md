@@ -1185,9 +1185,9 @@
    takes the kq mm with no such gate. `mp % 32` is declared; `rows` is not. Done = a census of every
    kq mul_mm site's `rows` (decode, prefill, the `_t` / `_th` twins), `rows % 64` declared where the
    census clears, a site gate where it does not.
-101. **The speculative round serves greedy streams only.** The accept walk compares each verify
-   row's argmax with the draft, so the scheduler runs the MTP tick only at temp 0 with no penalties
-   (`dasllama/dasllama_scheduler.das`) and a sampled stream decodes plain. llama.cpp's server
+101. **DONE (2026-09-03): the speculative round serves sampled streams - sample-and-match.** The
+   walk was an argmax compare, so the scheduler ran the MTP tick only at temp 0 with no penalties
+   (`dasllama/dasllama_scheduler.das`) and a sampled stream decoded plain. llama.cpp's server
    speculates under temperature by sampling each verify row with the stream's own sampler and
    accepting while the sample equals the draft (`common_sampler_sample_and_accept_n`) - every emitted
    token is a genuine draw from the target row, so the distribution is exact and no draft
@@ -1207,3 +1207,12 @@
    only for tied Q8 (`MetalEmbedQ8`) and tied K6 (`MetalEmbedK6`). Done = a K-quant embed gather
    over the token table's own plane (k4 first) that also retires the fp32 table from blob images,
    then the round in the gemma shape: one command buffer, `bvtok` chaining, one wait.
+103. **A sampled stream's round has no break-even guard.** The sampled accept walk (#101) pays the
+   round cost c (about 1.45 steps on gemma-26B at depth 1) whether or not the draws match, and
+   acceptance under sampling is the target's probability of the draft, which a hot sampler
+   flattens: gemma-26B on the M5 at temp 0.8 accepts 74.7% (the greedy rate) and gains 1.26x, at
+   temp 2.0 it accepts 29.9% (7.6% on one prompt) and LOSES (115 -> 107 tok/s). The round pays only
+   while the acceptance a clears c - 1. Done = a per-stream running acceptance (the last N rounds)
+   in the scheduler's tick, and the tick decodes plain while it sits under c - 1 - re-arming every
+   M plain steps to re-measure - with the gemma-26B temp 2.0 corpus as the gate (on must not lose
+   to off) and the temp 0.8 corpus as the control (the guard must not fire there).

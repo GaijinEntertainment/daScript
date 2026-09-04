@@ -57,7 +57,11 @@ verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose 
 same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay, which re-runs row 0
 from the pre-verify recurrent state; vff = the same-slab batch verify's four rows vs four plain
 steps; count = speculative free-run == plain free-run, token-exact, counting prompt, at depth 1, 2
-and 4; `mtp-count8-<tag>` = the same at depth 8, the deepest round - nine verify rows). The same
+and 4; `mtp-count8-<tag>` = the same at depth 8, the deepest round - nine verify rows;
+`mtp-sampled-<tag>` = the sampled accept walk - speculative free-run == plain SAMPLED free-run,
+seeded, at depth 1 and 2, temp 0.7 / top-k 1 / penalty 1.1 so every draw is the penalized argmax
+and the stream stays deterministic; on a verify tag it rides the assistant round inside the
+`mtp-count-<tag>` attach). The same
 file carries the BATCH RAIL's parity arms per verify-fixture tag `l1b g12 q30 q38
 g26` (Llama-3.2-1B, gemma-4-12B, Qwen3-30B-A3B, Qwen3.8-27B head-less - the hybrid graph the rail
 declines, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single step
@@ -234,6 +238,11 @@ synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call sti
 `test_mtp_snapshot.das` - model-free: the speculative round's deltanet rollback sizes its two
 snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB, past the
 `max_unreserved_size` guard) and restores the state from them.
+`test_mtp_sampled_walk.das` - model-free: the speculative round's sampled accept walk
+(sample-and-match) over a bare 8-token session against plain sampled decode of the same rows -
+every draft accepted plus the parked bonus draw, the first miss, RNG state equality (one draw
+per emitted token), the restored recent window, and the repetition penalty seeing the accepted
+drafts (a walk that forgot the window would accept the repeated draft).
 `test_think_split.das` - the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
 `test_tool_formats.das` - the per-ToolMode wire codecs (dasllama_tools), model-free: defs

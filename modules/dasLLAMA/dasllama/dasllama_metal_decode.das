@@ -1590,6 +1590,7 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         to_log(LOG_INFO, "mtp cold: pos={pos} h_pos1={s.mtp_h_pos1} seq={c.seq_len} verify_ok={vok_g} dn_pos={dnp} watermark={wm}\n")   // nolint:PERF028,PERF026 — behind the DASLLAMA_MTP_DEBUG=cold bring-up gate
     }
     s.mtp_vbatch[0] = tok
+    s.mtp_pre_drawn = false
     let ts_draft = prof_ticks()
     if (!cold) {
         s.mtp_xb_save |> resize(c.dim)
@@ -1689,8 +1690,12 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
     prof_add("mtp.verify", ts_verify)
     let ts_walk = prof_ticks()
     var a = 0l
-    while (a < k && argmax_row(s.mtp_logits_b, a, c.vocab_size) == s.mtp_vbatch[a + 1l]) {
-        a++
+    if (mtp_walk_samples(s)) {
+        a = mtp_walk_sampled(s, k, c.vocab_size)
+    } else {
+        while (a < k && argmax_row(s.mtp_logits_b, a, c.vocab_size) == s.mtp_vbatch[a + 1l]) {
+            a++
+        }
     }
     if (g_env_mtp_debug == "trace") {
         mtp_trace_round(s, pos, k, nr, a, c.vocab_size)
