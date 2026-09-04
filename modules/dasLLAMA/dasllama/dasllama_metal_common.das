@@ -500,12 +500,23 @@ def spec_armed() : bool {
     return true
 }
 
+// the stages the single-row and batch decode drivers honor as a knockout (g_skip != "<stage>")
+let DECODE_SKIP_STAGES <- ["gemv", "attn", "ew", "moe_rt", "moe_sh", "qkv", "wo"]
+
+def decode_skip_known(v : string) : bool {
+    for (s in DECODE_SKIP_STAGES) {
+        if (s == v) {
+            return true
+        }
+    }
+    return false
+}
+
 //! The knockout rail as an in-process setter (timing attribution — served output is GARBAGE while
-//! non-empty): `"gemv"` | `"attn"` | `"ew"`; `""` restores full math. Same rail as
-//! `DASLLAMA_METAL_DECODE_SKIP`, switchable between measurement windows.
+//! non-empty; `""` restores full math). Same rail as `DASLLAMA_METAL_DECODE_SKIP`.
 def public set_metal_decode_skip(v : string) {
-    if (!empty(v) && v != "gemv" && v != "attn" && v != "ew" && v != "moe_rt" && v != "qkv" && v != "wo") {
-        panic("dasLLAMA: unknown metal decode knockout '{v}' - the drivers read gemv, attn, ew, moe_rt, qkv, wo")
+    if (!empty(v) && !decode_skip_known(v)) {
+        panic("dasLLAMA: unknown metal decode knockout '{v}' - the drivers read gemv, attn, ew, moe_rt, moe_sh, qkv, wo")
     }
     g_skip = v
     if (!empty(v)) {

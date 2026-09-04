@@ -3645,7 +3645,7 @@ def private mm_b_kq_tile(var y : array<float>; t : Model; fmt : KqFmt; woff : in
     } elif (fmt == KqFmt.iq2xxs) {
         matmul_kq_batch(25, y, t.iq2xxsq, t.iq2xxss, woff, xq, xs, xbs, n, d, ntok)
     } else {
-        panic("mm_b_kq: '{fmt}' has no kq plane pair")
+        panic("mm_b_kq_tile: '{fmt}' has no kq plane pair")
     }
 }
 
