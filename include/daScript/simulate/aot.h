@@ -28,10 +28,10 @@
 #endif
 
 // options fast_math: per-function fast-math region emitted by the AOT compiler
-// (daslib/aot_cpp.das) around every function of a fast_math program. float_control
-// guards mirror aot_builtin_math.h: clang only outside arm64/e2k/Nintendo, and not
-// on the versions where float_control is broken (<12, 17-18.1). Where no relaxed
-// mode is known-safe the macros are empty and the function stays precise.
+// (daslib/aot_cpp.das) around every function of a fast_math program. float_control is
+// used on clang only outside arm64/e2k/Nintendo, and not on the versions where it is
+// broken (<12, 17-18.1). Where no relaxed mode is known-safe the macros are empty and
+// the function stays precise.
 #if defined(__GNUC__) && !defined(__clang__)
 #define DAS_FAST_MATH_PUSH \
     _Pragma("GCC push_options") \

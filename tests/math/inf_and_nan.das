@@ -7,11 +7,14 @@ let neg_inf = -1.0 / 0.0    // nolint:LINT006
 let neg_nan = inf / inf     // nolint:LINT007 — inf/inf is how a nan is produced here
 let nan = -(inf / inf)      // nolint:LINT007
 
-// A host may build the runtime with -ffinite-math-only (dagor does). That folds the
-// is_finite / is_nan builtins and every nan comparison to a constant, so the IEEE
-// semantics below are not the ones that host asked for - detect it and skip.
-def private host_folds_non_finite() : bool {
-    return is_finite(inf) || !is_nan(nan)
+// A host may build the runtime with -ffinite-math-only (dagor does). That folds every nan
+// comparison to a constant, so the compare semantics below are not the ones that host
+// asked for - detect it and skip. is_nan / is_finite are exempt: they answer IEEE on every
+// host (test_is_nan_and_is_finite_hold_on_every_host), so the probe is a compare, never is_nan.
+def private host_folds_nan_compares() : bool {
+    let a = opaque(unsafe(reinterpret<double>(0x7FF8000000000000ul)))
+    let b = opaque(unsafe(reinterpret<double>(0x7FF8000000000000ul)))
+    return a == b || !(a != b)
 }
 
 [sideeffects]
@@ -76,8 +79,8 @@ def test_abs_clears_the_sign_of_zero(t : T?) {
 
 [test]
 def test_inf_and_nan(t : T?) {
-    if (host_folds_non_finite()) {
-        t |> skip("host runtime is built -ffinite-math-only: is_finite/is_nan and nan compares fold")
+    if (host_folds_nan_compares()) {
+        t |> skip("host runtime is built -ffinite-math-only: nan compares fold")
         return
     }
     t |> run("inf and neg inf") @@(t : T?) {
@@ -138,6 +141,51 @@ def test_inf_and_nan(t : T?) {
         t |> success(!geq(nan, 1.))
         t |> success(!geq(inf, nan))
         t |> success(!geq(nan, inf))
+    }
+}
+
+// bit-built values, so no arithmetic a finite-math host could fold; this test never skips
+[test]
+def test_is_nan_and_is_finite_hold_on_every_host(t : T?) {
+    t |> run("float") @@(t : T?) {
+        let fnan = opaque(unsafe(reinterpret<float>(0x7FC00000u)))
+        let fneg_nan = opaque(unsafe(reinterpret<float>(0xFFC00000u)))
+        let finf = opaque(unsafe(reinterpret<float>(0x7F800000u)))
+        let fneg_inf = opaque(unsafe(reinterpret<float>(0xFF800000u)))
+        let fmax = opaque(unsafe(reinterpret<float>(0x7F7FFFFFu)))
+        let fone = opaque(1.0f)
+        t |> success(is_nan(fnan))
+        t |> success(is_nan(fneg_nan))
+        t |> success(!is_nan(finf))
+        t |> success(!is_nan(fneg_inf))
+        t |> success(!is_nan(fmax))
+        t |> success(!is_nan(fone))
+        t |> success(!is_finite(fnan))
+        t |> success(!is_finite(fneg_nan))
+        t |> success(!is_finite(finf))
+        t |> success(!is_finite(fneg_inf))
+        t |> success(is_finite(fmax))
+        t |> success(is_finite(fone))
+    }
+    t |> run("double") @@(t : T?) {
+        let dnan = opaque(unsafe(reinterpret<double>(0x7FF8000000000000ul)))
+        let dneg_nan = opaque(unsafe(reinterpret<double>(0xFFF8000000000000ul)))
+        let dinf = opaque(unsafe(reinterpret<double>(0x7FF0000000000000ul)))
+        let dneg_inf = opaque(unsafe(reinterpret<double>(0xFFF0000000000000ul)))
+        let dmax = opaque(unsafe(reinterpret<double>(0x7FEFFFFFFFFFFFFFul)))
+        let done = opaque(1.0lf)
+        t |> success(is_nan(dnan))
+        t |> success(is_nan(dneg_nan))
+        t |> success(!is_nan(dinf))
+        t |> success(!is_nan(dneg_inf))
+        t |> success(!is_nan(dmax))
+        t |> success(!is_nan(done))
+        t |> success(!is_finite(dnan))
+        t |> success(!is_finite(dneg_nan))
+        t |> success(!is_finite(dinf))
+        t |> success(!is_finite(dneg_inf))
+        t |> success(is_finite(dmax))
+        t |> success(is_finite(done))
     }
 }
 

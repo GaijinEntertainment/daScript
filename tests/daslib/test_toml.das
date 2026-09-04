@@ -5,7 +5,6 @@ require daslib/toml
 require daslib/json
 require daslib/json_boost   // ?["key"] ?? default lookups in the write_toml round-trip checks
 require daslib/math_bits
-require math            // is_finite / is_nan, for the finite-math host probe below
 require strings
 
 // IEEE-754 bit-pattern constants, same as daslib/toml.das uses internally —
@@ -223,17 +222,24 @@ def test_array_of_tables(t : T?) {
     }
 }
 
-// A host built -ffinite-math-only folds is_nan/is_finite and the nan compares, so a nan
-// round-trip cannot be observed there - the three tests below skip on such a host.
-def private host_folds_non_finite() : bool {
-    let inf = 1.0 / 0.0     // nolint:LINT006 — deliberate: the probe needs a real inf
-    return is_finite(inf) || !is_nan(-(inf / inf))  // nolint:LINT007 — inf/inf is how a nan is produced here
+[sideeffects]
+def private opaque(x : double) : double {
+    return x
+}
+
+// A host built -ffinite-math-only folds the nan compares the three tests below rely on, so
+// they skip there. The probe is a compare, never is_nan: is_nan / is_finite answer IEEE on
+// every host (tests/math/inf_and_nan.das holds them to it).
+def private host_folds_nan_compares() : bool {
+    let a = opaque(uint64_bits_to_double(0x7FF8000000000000ul))
+    let b = opaque(uint64_bits_to_double(0x7FF8000000000000ul))
+    return a == b || !(a != b)
 }
 
 [test]
 def test_inf_nan(t : T?) {
-    if (host_folds_non_finite()) {
-        t |> skip("host runtime is built -ffinite-math-only: nan/inf values fold")
+    if (host_folds_nan_compares()) {
+        t |> skip("host runtime is built -ffinite-math-only: nan compares fold")
         return
     }
 
@@ -335,8 +341,8 @@ def test_alphanum_bare_key(t : T?) {
 
 [test]
 def test_inf_nan_still_work_as_values(t : T?) {
-    if (host_folds_non_finite()) {
-        t |> skip("host runtime is built -ffinite-math-only: nan/inf values fold")
+    if (host_folds_nan_compares()) {
+        t |> skip("host runtime is built -ffinite-math-only: nan compares fold")
         return
     }
 
@@ -689,8 +695,8 @@ def test_write_toml_tiny_huge_floats(t : T?) {
 
 [test]
 def test_write_toml_non_finite(t : T?) {
-    if (host_folds_non_finite()) {
-        t |> skip("host runtime is built -ffinite-math-only: nan/inf values fold")
+    if (host_folds_nan_compares()) {
+        t |> skip("host runtime is built -ffinite-math-only: nan compares fold")
         return
     }
 
