@@ -18,7 +18,8 @@ file is only what maintaining the implementation needs on top of it.
   so that can never tune.
 - **`find_module(name)` resolves against `this_program()`** - the runtime program, null in
   macro context, so the call is an access violation. Walk `compiling_program()`, or use
-  `find_compiling_module(name)`.
+  `find_compiling_module(name)` - which PANICS on a miss, never returns null; a "compiled yet?"
+  question walks `compiling_program() |> for_each_module()` (`module_compiled`).
 - **`get_command_line_arguments()` aliases a process-global locked array.** Never `delete` it.
 - **A shared macro-module global is a per-requiring-module copy.** `llvm_exe` calling an
   `llvm_tune` function reads `llvm_exe`'s own (empty) copy of `g_scopes` - the same trap as
@@ -26,9 +27,9 @@ file is only what maintaining the implementation needs on top of it.
   through the AST, a file, or the environment. Hence `tune_scopes_status(prog)` walks
   `[tune_scope]` structure annotations plus `[tune]` functions rather than the bank, and
   `collect_status` reads the stamps back off the AST.
-- **`stamp_llvm_code` records `tune_suffix` / `tune_from`** as extra `[llvm_code]` args
-  (generators ignore unknown args by contract), and `tune_status` reads that stamped truth
-  off the AST - there is no macro-state bank to keep coherent.
+- **`stamp_llvm_code` records `tune_suffix` / `tune_from` / `tune_source`** as extra
+  `[llvm_code]` args (generators ignore unknown args by contract), and `tune_status` reads that
+  stamped truth off the AST - there is no macro-state bank to keep coherent.
 - **`--tune` is read at macro time** from the compiler argv after `--`, and stripped from the
   re-exec so the child converges instead of looping.
 
@@ -103,15 +104,24 @@ reds a test that does.
   `scope_gated_families_joined` string - `family=requires+requires` rows, `;`-joined, only for
   families with a gated row, read off the AST - into the `tune_auto_prepare` /
   `tune_restart_needed` call, because the runtime has no AST.
-- Adoption is runtime-side (`profile_try_adopt`): walk `tune_class_chain()` from
-  `tune_cpu_class()`, skip a profile whose version pin differs (the walk continues down),
-  `tune_sidecar_merge` the kernels into the app sidecar as a normal local write, then diff the
-  gated string against the profile's `features` fingerprint. It returns adopted-or-not and
-  hands the residue back in its `onlyFilter` out-param; the two signals read together - true
-  with an empty filter means fully covered, true with a filter means adopted-and-owing, and
-  an owing adoption skips the scope resolver and rides `run_scope_tuner(scope, onlyFilter)`,
-  which arms `DAS_TUNE_ONLY` for that one spawn. It declines outright when
-  `tune_manifest_path()` no longer equals the `manifestPath` the guard was compiled for.
+- `locate_profile_doc` is the ONE ladder walk (class chain, version pin) both halves share, so
+  compile time and runtime cannot pick different profiles. Compile-time: `profile_kernels`
+  reads the `[tune_scope]` annotations OFF THE AST (a macro global is a per-requiring-context
+  copy; the `[tuned]` rail in `dasllama_tune` reaches the same profile through
+  `tune_kernel_pick`), registers every candidate path as a module-cache dependency, and the
+  `[tune]` apply stamps the pick with `tune_source = "profile"`. That is why a scope with
+  `defaults=` must compile before its `covers=` modules - the scope apply refuses one that
+  already compiled (`module_compiled`, a non-panicking twin of `find_compiling_module`).
+- Runtime: `profile_try_adopt` diffs the gated string against the profile's `features`
+  fingerprint and hands the residue back in its `onlyFilter` out-param. An empty residue is a
+  COVERED box: no write, no `g_tuned_scopes` bump, no relaunch - the compile already stamped
+  the same picks. A residue `tune_sidecar_merge`s the kernels into the app sidecar as a normal
+  local write, skips the scope resolver, and rides `run_scope_tuner(scope, onlyFilter)`, which
+  arms `DAS_TUNE_ONLY` for that one spawn. It declines outright when `tune_manifest_path()` no
+  longer equals the `manifestPath` the guard was compiled for.
+- `--tune` / `--tune-only` are read at RUNTIME by the guard (`tune_cli_force`, the same
+  `apply_cli_tune_flags` parse), and the auto guard is emitted for a complete scope too: under
+  the module cache a compile's macros may never have seen this run's argv.
 - `tune_profile_export` carries `kernels` plus the string provenance that survives, dropping
   `binary` / `box` / `engine_sha` and re-stamping `origin` = `profile`, `class` = the export's
   class argument, and `written`: a profile's identity is class + version pin + features, never

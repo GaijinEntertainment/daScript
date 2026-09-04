@@ -375,8 +375,12 @@ namespace das {
     // Pass the same path as both readFrom and writeTo for a self-maintaining cache; quiet
     // silences the reader's per-record diagnostics (the host's default cache is invisible
     // unless asked for). defaultPath() is that default: .jitted_scripts/module_cache/
-    // <stem>-<hash of the normalized script path>.dascache in the cwd, beside the JIT DLL
-    // cache; finish() creates missing parent directories. Under DAS_NO_FILEIO the cache
+    // <stem>-<hash>.dascache in the cwd, beside the JIT DLL cache - the hash covers the
+    // normalized script path, every DAS* environment variable (macros read the tune/JIT
+    // environment at compile time) and the host binary's mtime+size (a rebuild changes what
+    // macros decide - a sidecar older than the binary reads as stale); finish() creates
+    // missing parent directories.
+    // Under DAS_NO_FILEIO the cache
     // degrades to a stub: install() binds nothing and finish() answers 'unavailable'.
     struct DAS_API ModuleFileCache {
         enum class ReadVerdict {
@@ -395,7 +399,7 @@ namespace das {
         };
         void install ( const string & readFrom, const string & writeTo, bool quiet = false );
         Result finish ();
-        static string defaultPath ( const string & scriptPath );
+        static string defaultPath ( const string & scriptPath, const string & hostBinary );
         SerializationStorageVector  readStorage, writeStorage;
         unique_ptr<AstSerializer>   reader, writer;
         string                      writePath;

@@ -52,6 +52,7 @@ static string projectFile;
 static string project_root;
 static string moduleCacheFile;  // -module-cache <path>: AST module cache, read+refreshed per (re)compile
 static bool noModuleCache = false;  // -no-module-cache: no AST module cache even where it is the default
+static string hostBinary;           // argv[0]: its mtime+size key the default module cache
 static vector<string> load_modules;
 static bool version2syntax = true;
 static bool trackAllocations = false;
@@ -227,7 +228,7 @@ static CompileResult compile_script(const string & fn) {
     string cachePath = moduleCacheFile;
     bool cacheQuiet = false;
     if (cachePath.empty() && !noModuleCache) {
-        cachePath = ModuleFileCache::defaultPath(fn);
+        cachePath = ModuleFileCache::defaultPath(fn, hostBinary);
         cacheQuiet = true;
     }
     result.moduleCache.install(cachePath, cachePath, cacheQuiet);
@@ -890,6 +891,7 @@ int main(int argc, char * argv[]) {
     bool dumpLeaks = true;
 
     // Parse args
+    hostBinary = argv[0];
     for (int i = 1; i < argc; i++) {
         string arg = argv[i];
         if (arg == "-project" && i + 1 < argc) {

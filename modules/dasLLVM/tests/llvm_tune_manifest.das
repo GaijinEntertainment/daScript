@@ -14,7 +14,9 @@ require llvm/daslib/llvm_tune   // tune_box_identity — the applied_box adoptio
 // once with "write" — tune_manifest_set targets that sidecar and records k2 — then spawn it
 // again: the fresh compile stamps man_add from the sidecar, so RESULT moves from the
 // fallback k1 tier (6) to the k2 tier (7). A third arm back-dates the sidecar older than
-// the daslang binary: STALE reads as absent, so the stamps drop back to fallback.
+// the daslang binary: STALE reads as absent, so the stamps drop back to fallback. Every child
+// runs -no-module-cache: the back-date simulates a rebuild, and a real rebuild re-keys the
+// default cache, while an identical-content back-date alone would be a cache hit.
 
 def private spawn_client(cmd : string; var lines : array<string>) : int {
     // verbose: the `llvm_tune: <fn> <- <perm>` stamp lines this test reads are the stamped-truth
@@ -65,7 +67,7 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     let sidecarPath = "{slice(clientPath, 0, length(clientPath) - 4)}.tune.json"
 
     var wlines : array<string>
-    let rcw = spawn_client("\"{bin}\" -jit \"{clientPath}\" -- write", wlines)
+    let rcw = spawn_client("\"{bin}\" -no-module-cache -jit \"{clientPath}\" -- write", wlines)
     t |> equal(rcw, 0)
     var wrote = false
     for (ln in wlines) {
@@ -75,7 +77,7 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     t |> success(!empty(fread(sidecarPath)))
 
     var rlines : array<string>
-    let rcr = spawn_client("\"{bin}\" -jit \"{clientPath}\"", rlines)
+    let rcr = spawn_client("\"{bin}\" -no-module-cache -jit \"{clientPath}\"", rlines)
     t |> equal(rcr, 0)
     var stamped = false
     var result7 = false
@@ -97,10 +99,10 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
 
     // the companion's OWN sidecar entry (the gemv-seat rail): man_kv stamps from it while man_add keeps k2
     var olines : array<string>
-    let rco = spawn_client("\"{bin}\" -jit \"{clientPath}\" -- write-own", olines)
+    let rco = spawn_client("\"{bin}\" -no-module-cache -jit \"{clientPath}\" -- write-own", olines)
     t |> equal(rco, 0)
     var ownLines : array<string>
-    let rcor = spawn_client("\"{bin}\" -jit \"{clientPath}\"", ownLines)
+    let rcor = spawn_client("\"{bin}\" -no-module-cache -jit \"{clientPath}\"", ownLines)
     t |> equal(rcor, 0)
     var ownResult7 = false
     var ownKv1 = false
@@ -115,7 +117,7 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     let backRes = set_mtime_result(sidecarPath, mktime(2000, 1, 1, 0, 0, 0))
     t |> success(!(backRes is error), "could not back-date the sidecar")
     var slines : array<string>
-    let rcs = spawn_client("\"{bin}\" -jit \"{clientPath}\"", slines)
+    let rcs = spawn_client("\"{bin}\" -no-module-cache -jit \"{clientPath}\"", slines)
     t |> equal(rcs, 0)
     var staleStampedK2 = false
     var staleResult6 = false
@@ -146,7 +148,7 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     fwrite(sidecarPath, write_json(jdoc))
     delete_json(jdoc)
     var flines : array<string>
-    let rcf = spawn_client("\"{bin}\" -jit \"{clientPath}\"", flines)
+    let rcf = spawn_client("\"{bin}\" -no-module-cache -jit \"{clientPath}\"", flines)
     t |> equal(rcf, 0)
     var foreignStampedK2 = false
     var foreignResult6 = false
@@ -173,7 +175,7 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     fwrite(sidecarPath, write_json(jdoc2))
     delete_json(jdoc2)
     var alines : array<string>
-    let rca = spawn_client("\"{bin}\" -jit \"{clientPath}\"", alines)
+    let rca = spawn_client("\"{bin}\" -no-module-cache -jit \"{clientPath}\"", alines)
     t |> equal(rca, 0)
     var adoptedStampedK2 = false
     var adoptedResult7 = false

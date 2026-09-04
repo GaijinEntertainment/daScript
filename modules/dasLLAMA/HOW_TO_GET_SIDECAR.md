@@ -1,7 +1,7 @@
 # How to get a sidecar: a fresh box to a committed CPU-class profile
 
 You have ssh into a machine nobody has tuned on. This is the walk from there to a checked-in
-`performance/defaults/<class>.tune-defaults.json` that every box of that CPU class adopts at start,
+`performance/defaults/<class>.tune-defaults.json` that every box of that CPU class stamps at its first compile,
 with the kernel ladder proving the kernels along the way. Every command below was run as written on
 the boxes named in the last section; a step that differs per box says so.
 
@@ -10,8 +10,9 @@ What a sidecar and a profile are: `skills/tune.md` (the `[tune]` framework, the 
 (what a committed profile must satisfy). Short form: the tuner races every kernel family's
 `[tune_perm]` seats on the box and writes the winners into the app's sidecar; `export_tune_profile.das`
 strips the box-specific rows and saves the kernel winners as the class profile; a box whose
-`tune_cpu_class()` resolves to that class adopts the profile and races nothing unless its ISA unlocks
-a seat the profile never saw.
+`tune_cpu_class()` resolves to that class is covered by the profile at its first compile - no race,
+no sidecar, no restart - unless its ISA unlocks a seat the profile never saw, which it adopts and
+races.
 
 ## 1. The box
 

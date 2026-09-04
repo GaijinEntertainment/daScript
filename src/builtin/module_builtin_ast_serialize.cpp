@@ -12,8 +12,12 @@
 #include <cstdarg>
 #include <cstdio>
 #include <sys/stat.h>
+#include <algorithm>
 #ifdef _WIN32
 #include <direct.h>
+#include <stdlib.h>
+#else
+extern char ** environ;
 #endif
 #include <stdexcept>
 #include <type_traits>
@@ -3328,14 +3332,38 @@ namespace das {
     }
 #endif
 
-    string ModuleFileCache::defaultPath ( const string & scriptPath ) {
+    // the key folds every DAS* environment variable and the host binary's mtime+size beside
+    // the script path: macros read the tune/JIT environment at compile time, and a rebuild
+    // changes what they decide, so either is a different cache
+    string ModuleFileCache::defaultPath ( const string & scriptPath, const string & hostBinary ) {
         string norm = normalizeFileName(scriptPath.c_str());
         size_t slash = norm.find_last_of("/\\");
         string stem = slash == string::npos ? norm : norm.substr(slash + 1);
         size_t dot = stem.rfind('.');
         if ( dot != string::npos && dot != 0 ) stem = stem.substr(0, dot);
+        struct stat bst;
+        char host[64];
+        if ( !hostBinary.empty() && stat(hostBinary.c_str(), &bst) == 0 ) {
+            snprintf(host, sizeof(host), "\n%lld:%lld", (long long) bst.st_mtime, (long long) bst.st_size);
+        } else {
+            host[0] = 0;
+        }
+        vector<string> envs;
+#ifdef _WIN32
+        for ( char ** e = _environ; e && *e; ++e ) {
+#else
+        for ( char ** e = environ; e && *e; ++e ) {
+#endif
+            if ( strncmp(*e, "DAS", 3) == 0 ) envs.push_back(*e);
+        }
+        sort(envs.begin(), envs.end());
+        string key = norm + host;
+        for ( auto & e : envs ) {
+            key += "\n";
+            key += e;
+        }
         char hex[17];
-        snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_blockz64((const uint8_t *) norm.c_str()));
+        snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_blockz64((const uint8_t *) key.c_str()));
         return string(".jitted_scripts/module_cache/") + stem + "-" + string(hex, 8) + ".dascache";
     }
 

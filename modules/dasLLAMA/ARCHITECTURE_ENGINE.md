@@ -188,6 +188,9 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   registration. A hand-written tile that the generator could emit belongs in the generator.
 - **`dasllama_tune.das`** - the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`). Tuning
   POLICY lives here; tuned VALUES live in the box's sidecar, never in source.
+- **`dasllama_tune_scope.das`** - the one `[tune_scope]` declaration (tuner, covered modules,
+  version pin, shipped defaults), in a module every kernel module requires: a kernel reads its
+  class entry in the defaults profile at its own compile, so the scope must be on the AST first.
 
 ### 1.6 Architecture registrations
 

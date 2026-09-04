@@ -103,6 +103,13 @@ def test_default_module_cache(t : T?) {
     var loud : string
     let loudRc = run("{base} -module-cache \"{path_join(tmp, "explicit.bin")}\" {a}", loud)
     t |> success(report_child(t, "explicit", loudRc, loud, "ser: wrote"), "an explicit -module-cache keeps the loud verdict")
+    // the key folds the DAS* environment: macros read it at compile time, so a different
+    // environment must be a different cache file, not a stale hit
+    let win = get_platform_name() == "windows"
+    var envRun : string
+    let envRc = run(win ? "set \"DAS_MC_PROBE=1\"&& {base} {a}" : "DAS_MC_PROBE=1 {base} {a}", envRun)
+    t |> success(report_child(t, "env-keyed", envRc, envRun, "MARK_mc_default_a"), "a DAS* environment change still executes")
+    t |> equal(cache_files("mc_default_a"), 2, "a DAS* environment change keys a second cache file")
     for (stem in stems) {
         remove_cache_files(stem)
     }

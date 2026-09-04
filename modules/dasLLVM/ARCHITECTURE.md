@@ -162,6 +162,14 @@ and a re-mint replaces one the gate rejected. An absent file registers as size -
 which the next run's re-validation sees change. Registering is a no-op outside compilation, so
 the manifest's runtime readers reach the same call unconditionally.
 
+The shipped defaults profiles are the same kind of input: with no sidecar entry a kernel
+stamps its class entry out of `<defaults>/<class>.tune-defaults.json`, so `locate_profile_doc`
+registers every candidate on the class ladder it tries, existing or not - a profile that
+appears, or is re-exported after a re-mint, must invalidate the stamps minted without it. The
+staleness gate itself compares the sidecar's mtime with the running binary's, which no content
+hash sees; the host closes that hole by keying its default module cache on the binary's
+mtime and size, so a rebuild is a fresh cache rather than a hit on pre-rebuild stamps.
+
 ## 6. The x64 kernel-matrix tier gates {#x64-tier-gates}
 
 An x64 host target publishes eight boolean gates (`g_target_x64_*`), one per instruction tier the

@@ -2563,7 +2563,8 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     if (!noise_gate("start")) {
         return 1
     }
-    tune_progress_plan("dasllama_kernels", length(benches) + VALIDATE_PLAN_ALLOWANCE)
+    let metal_plan = (typeinfo builtin_module_exists(das_metal)) ? 1 : 0   // the crown race reports as one more family
+    tune_progress_plan("dasllama_kernels", length(benches) + VALIDATE_PLAN_ALLOWANCE + metal_plan)
 
     load_incumbents()
     for (b in benches) {
@@ -2626,6 +2627,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var mt_wins : array<string>
         var mt_ran = false
+        tune_progress_kernel_begin("metal_crowns", 0)
         if (!partialMint) {   // a filtered mint leaves "runtime" untouched - no crowns to record
             // the two race halves come through different require paths, so their result element
             // types do not unify into one typed local - absorb each returned array where it lands
@@ -2646,6 +2648,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
             tune_detail("METAL_TWIN: no Metal device - tensor race skipped\n")
         }
         metal_crowns = join(mt_wins, ",")
+        tune_progress_kernel_end("metal_crowns", metal_crowns, !mt_ran ? "skipped" : (empty(mt_wins) ? "holds" : "beats"))
         delete mt_wins
     }
 

@@ -12,6 +12,7 @@ require dasllama/dasllama_par        // maybe_parallel_for (+ its emitted dispat
 require dasllama/dasllama_math       // get_dispatch_lanes — the requant wrappers shape their fan-out
 require dasllama/dasllama_kqformat public   // KqFmt + the plane stride truth (K4_QSB et al.) — re-exported down the gguf chain
 require dasllama/dasllama_tune       // [tuned]: the f16 row converts carry per-box loop hints
+require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
 
 // Tensor format conversion, platform-neutral: the pure codec layer — LE byte readers, K-quant
 // superblock dequants (+ pointer twins), superblock->plane transcodes, plane dequants, the
