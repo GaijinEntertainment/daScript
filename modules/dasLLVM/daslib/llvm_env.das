@@ -77,6 +77,10 @@ struct public TuneEnv {
     @clarg_default_doc = "unset (every family races)"
     @clarg_doc = "Comma-separated re-mint filter: a tuner races only kernel families whose name contains one of these tokens, and every skipped family's sidecar entry survives the upsert. Set by --tune-only on the application; the tuner children inherit it."
     tune_only : string = ""
+
+    @clarg_default_doc = "0"
+    @clarg_doc = "Relaunch depth, armed by the auto policy's re-exec for its child. A relaunched process that still reads a scope as untuned neither tunes nor relaunches again - it reports that the tune did not converge and runs the stamps it has - so a tune that cannot converge costs one restart instead of stacking processes until the box runs out of memory."
+    tune_relaunch : int = 0
 }
 
 let public g_env_tune = env_config(type<TuneEnv>)

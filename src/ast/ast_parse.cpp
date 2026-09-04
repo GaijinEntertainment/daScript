@@ -683,7 +683,7 @@ namespace das {
         }) || depCount > SER_MAX_MACRO_DEPS ) {
             serializer_read->seenNewModule = true;
             serializer_read->failed = depCount > SER_MAX_MACRO_DEPS;
-            logs << "ser: read failed '" << fileName << "'\n";
+            if ( !serializer_read->quietCache ) logs << "ser: read failed '" << fileName << "'\n";
             return false;
         }
 

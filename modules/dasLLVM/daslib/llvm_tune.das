@@ -2389,7 +2389,9 @@ def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gate
         }
     }
     if (empty(race)) {
-        print("llvm_tune: scope '{scopeName}' is covered by the '{klass}' defaults profile ({length(kernels)} kernel entries) - stamped at compile time, no restart\n")
+        if (tune_verbosity() != "silent") {
+            print("llvm_tune: scope '{scopeName}' is covered by the '{klass}' defaults profile ({length(kernels)} kernel entries) - stamped at compile time, no restart\n")
+        }
         delete kernels
         delete race
         delete_json(doc)
@@ -2424,6 +2426,10 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
                       defaultsDir : string = ""; gatedFamilies : string = "") {
     let v = tune_sidecar_verdict(manifestPath, fnames)
     if (!force && v.complete) {
+        return
+    }
+    if (g_env_tune.tune_relaunch > 0) {
+        print("llvm_tune: scope '{scopeName}' is still untuned after the relaunch (DAS_TUNE_RELAUNCH={g_env_tune.tune_relaunch}; {v.detail}) - the tune did not converge; kernels run the stamps as compiled\n")
         return
     }
     var onlyFilter = ""
@@ -2475,6 +2481,7 @@ def tune_auto_reexec() : bool {
         args |> push("{a}")
     }
     print("llvm_tune: re-launching to apply the fresh manifests\n")
+    set_env_variable("DAS_TUNE_RELAUNCH", "{g_env_tune.tune_relaunch + 1}")
     var rc : int
     unsafe {
         rc = popen_argv(args, 0.0) $(f) {

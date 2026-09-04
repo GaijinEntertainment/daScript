@@ -13,7 +13,9 @@ require llvm/daslib/llvm_tune
 // box lacked a feature this box has adopts AND races ONLY the unlocked family (DAS_TUNE_ONLY
 // armed for the tuner, cleared after), which does write and relaunch; no profile file = the
 // old full race. A scope that ships defaults must compile before the modules it covers -
-// cant_tune_scope_after_covered.das proves the apply refuses the other order. The fixture set
+// cant_tune_scope_after_covered.das proves the apply refuses the other order. The re-exec arms
+// DAS_TUNE_RELAUNCH for its child, and a child that still reads the scope as untuned stops
+// instead of tuning and relaunching again (case 8 - the fuse against a process chain). The fixture set
 // is COPIED into a per-process temp directory and every
 // spawn runs from the copy: [tune_scope(defaults=...)] resolves against the declaring file
 // and the per-app sidecar resolves beside the root script, so the defaults dir, the profile
@@ -24,8 +26,15 @@ require llvm/daslib/llvm_tune
 
 def private cleared_tune_env_prefix() : string {
     return (get_platform_name() == "windows" ?
-        "set DAS_TUNE_MODE=&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& set DAS_TUNE_ONLY=&& " :
-        "DAS_TUNE_MODE= DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_TUNE_ONLY= ")
+        "set DAS_TUNE_MODE=&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& set DAS_TUNE_ONLY=&& set DAS_TUNE_RELAUNCH=&& " :
+        "DAS_TUNE_MODE= DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_TUNE_ONLY= DAS_TUNE_RELAUNCH= ")
+}
+
+//! the environment a relaunched child sees: depth 1, everything else cleared
+def private relaunched_env_prefix() : string {
+    return (get_platform_name() == "windows" ?
+        "set DAS_TUNE_MODE=&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& set DAS_TUNE_ONLY=&& set DAS_TUNE_RELAUNCH=1&& " :
+        "DAS_TUNE_MODE= DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_TUNE_ONLY= DAS_TUNE_RELAUNCH=1 ")
 }
 
 def private spawn_child(cmd : string; var lines : array<string>) : int {
@@ -146,6 +155,8 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     t |> success(fullCover |> has("STATUS prof_add|llvm_tune_profiles_probe|k0|profile"), "case 2: the stamp's source is the profile")
     var coveredStat : FStat
     t |> success(!stat(sidecar, coveredStat), "case 2: a covered box writes no sidecar")
+    t |> success(fullCover |> has("(1/1 kernels tuned for this box)"), "case 2: the status count reads a profile stamp as tuned")
+    t |> success(!(fullCover |> has("run with --tune")), "case 2: no --tune hint on a covered box")
     delete fullCover
 
     // 3. a profile minted with no features leaves the k3 requires= seat unlocked here: adopt AND race just that family - the tuner's k2 outranks the adopted k0
@@ -157,6 +168,8 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     t |> success(unlockedSeat |> has("ONLY='prof_add'"), "case 3: the residue filter names the family")
     t |> success(unlockedSeat |> has("RESULT 7"), "case 3: the raced k2 tier ran")
     t |> success(unlockedSeat |> has("STATUS prof_add|llvm_tune_profiles_probe|k2|manifest"), "case 3: the raced winner stamps from the sidecar")
+    t |> equal(count_hits(unlockedSeat, "RELAUNCH=1"), 1, "case 3: the re-exec arms depth 1 for its child, and the child does not relaunch")
+    t |> success(!(unlockedSeat |> has("RELAUNCH=2")), "case 3: no process ever runs at depth 2")
     delete unlockedSeat
 
     // 4. --tune outranks the profile: full re-race, no adoption
@@ -208,6 +221,22 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     t |> success(refRun |> has("STATUS prof_add|llvm_tune_profiles_probe||reference"), "case 7: the stamp reads reference")
     t |> success(refRun |> has("RESULT 5"), "case 7: the original body ran")
     delete refRun
+
+    // 8. the relaunch fuse: a process that already IS the relaunched child (DAS_TUNE_RELAUNCH=1)
+    //    and still reads the scope as untuned neither tunes nor relaunches - it says so and runs
+    //    its fallback stamps, so a tune that cannot converge stops at one restart
+    remove(sidecar)
+    remove(profile)
+    var fused : array<string>
+    t |> equal(spawn_child("{relaunched_env_prefix()}\"{bin}\" -no-module-cache -jit \"{client}\"", fused), 0, "case 8 exit code")
+    t |> success(fused |> has("did not converge"), "case 8: the relaunched child reports the non-convergence\n{join(fused, "\n")}")
+    t |> success(fused |> has("DAS_TUNE_RELAUNCH=1"), "case 8: the report names the depth knob")
+    t |> success(!(fused |> has("FAKE TUNER")), "case 8: no second tuner")
+    t |> success(!(fused |> has("re-launching")), "case 8: no second relaunch")
+    t |> success(fused |> has("|fallback"), "case 8: the kernels run their fallback stamps")
+    t |> success(fused |> has("(0/1 kernels tuned for this box)"), "case 8: the status count reads a fallback stamp as untuned")
+    t |> success(fused |> has("run with --tune"), "case 8: the --tune hint fires below the profile tier")
+    delete fused
 
     rmdir_rec(work)
 }

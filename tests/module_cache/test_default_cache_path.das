@@ -45,6 +45,32 @@ def cache_files(stem : string) : int {
     return n
 }
 
+def cache_file_path(stem : string) : string {
+    var found = ""
+    fio::dir(CACHE_DIR) $(name) {
+        if (name |> starts_with("{stem}-") && name |> ends_with(".dascache")) {
+            found = path_join(CACHE_DIR, name)
+        }
+    }
+    return found
+}
+
+//! keeps the first half of the file - the stream header survives, a record in the middle does not
+def truncate_file(path : string) {
+    var half : array<uint8>
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            half |> resize(int64(fstat(f).size / 2ul))
+            fread(f, half)
+        }
+    }
+    fopen(path, "wb") $(f) {
+        if (f != null) {
+            fwrite(f, half)
+        }
+    }
+}
+
 def remove_cache_files(stem : string) {
     var victims : array<string>
     fio::dir(CACHE_DIR) $(name) {
@@ -59,6 +85,41 @@ def remove_cache_files(stem : string) {
 
 def quiet(out : string) : bool {
     return find(out, "deser:") < 0 && find(out, "ser:") < 0
+}
+
+//! an explicit -module-cache says how many modules the cache served and where the cutoff fell
+[test]
+def test_fallback_verdict_names_the_cutoff(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_mc_verdict", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let leafB = path_join(tmp, "mc_leaf_b.das")
+    fwrite(path_join(tmp, "mc_leaf_a.das"), "options gen2\nmodule mc_leaf_a\ndef leaf_a() : int \{\n    return 1\n\}\n")
+    fwrite(leafB, "options gen2\nmodule mc_leaf_b\ndef leaf_b() : int \{\n    return 2\n\}\n")
+    fwrite(path_join(tmp, "mc_root.das"), "options gen2\nrequire mc_leaf_a\nrequire mc_leaf_b\n[export]\ndef main \{\n    print(\"MARK_verdict \{leaf_a() + leaf_b()\}\\n\")\n\}\n")
+    let cmd = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" -module-cache \"{path_join(tmp, "explicit.dascache")}\" \"{path_join(tmp, "mc_root.das")}\""
+    var cold : string
+    t |> success(report_child(t, "verdict cold", run(cmd, cold), cold, "ser: wrote"), "the cold run writes the explicit cache")
+    fwrite(leafB, "options gen2\nmodule mc_leaf_b\ndef leaf_b() : int \{\n    return 20\n\}\n")
+    var warm : string
+    t |> success(report_child(t, "verdict warm", run(cmd, warm), warm, "MARK_verdict 21"), "the edited leaf is recompiled")
+    t |> success(find(warm, "deser: FALLBACK - 1 module(s) served from cache") >= 0, "the verdict counts the module served before the cutoff:\n{warm}")
+    t |> success(find(warm, "mc_leaf_b.das") >= 0 && find(warm, "(file changed)") >= 0, "the verdict names the cutoff file and its reason:\n{warm}")
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
+//! a cache file cut in the middle is read as far as it goes, silently, and rewritten
+def check_damaged_cache(t : T?; base, a : string) {
+    truncate_file(cache_file_path("mc_default_a"))
+    var damaged : string
+    let damagedRc = run("{base} {a}", damaged)
+    t |> success(report_child(t, "damaged cache", damagedRc, damaged, "MARK_mc_default_a"), "a run over a truncated cache file executes")
+    t |> success(quiet(damaged), "the default cache says nothing over a truncated cache file:\n{damaged}")
+    t |> equal(cache_files("mc_default_a"), 1, "the truncated file is rewritten in place")
 }
 
 //! the AST module cache is on by default - silent, at a path keyed by script, host flags and DAS* env - and the flags that turn it off or make it loud
@@ -90,6 +151,7 @@ def test_default_module_cache(t : T?) {
     t |> success(report_child(t, "default warm", warmRc, warm, "MARK_mc_default_a"), "the warm run executes")
     t |> success(quiet(warm), "the default cache says nothing on the warm run:\n{warm}")
     t |> equal(cache_files("mc_default_a"), 1, "the warm run adds no second file")
+    check_damaged_cache(t, base, a)
     var off : string
     let offRc = run("{base} -no-module-cache {b}", off)
     t |> success(report_child(t, "no-module-cache", offRc, off, "MARK_mc_default_b"), "-no-module-cache still executes")
