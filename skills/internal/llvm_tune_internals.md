@@ -30,8 +30,10 @@ file is only what maintaining the implementation needs on top of it.
 - **`stamp_llvm_code` records `tune_suffix` / `tune_from` / `tune_source`** as extra
   `[llvm_code]` args (generators ignore unknown args by contract), and `tune_status` reads that
   stamped truth off the AST - there is no macro-state bank to keep coherent.
-- **`--tune` is read at macro time** from the compiler argv after `--`, and stripped from the
-  re-exec so the child converges instead of looping.
+- **`--tune` is decided at runtime** by the guard (`tune_cli_force`, the same
+  `apply_cli_tune_flags` parse over `get_user_args()`), because a warm module cache can serve a
+  compile whose macros never saw this run's argv; the policy pass reads it at macro time only to
+  warn when no scope exists to tune. The re-exec strips it so the child converges.
 
 ## Where the pieces live
 

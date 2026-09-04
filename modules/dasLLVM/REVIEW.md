@@ -47,17 +47,21 @@
 - **A change to the tune framework - `daslib/llvm_tune.das` or its tests - is reviewed with
   `skills/internal/llvm_tune_internals.md`.**
 
-- **A test under `tests/` here that asserts a compile-time print - an `llvm_tune:` stamp or
-  announce line, a `[tune]`-family compile error - spawns its child daslang process with
-  `-no-module-cache`.** The front-end module cache is on by default and replays the cached AST
-  without re-running the macro, so the print lands on the first run and never again.
+- **A test under `tests/` here that asserts output a macro produced during compilation - an
+  `llvm_tune:` line the `[tune]` or `[tune_scope]` apply prints, a `[tune]`-family compile
+  error - or asserts its absence, spawns its child daslang process with `-no-module-cache`; a
+  test whose subject is the cache itself pins its own file with `-module-cache <temp>` instead
+  and never takes the flag.** The front-end module cache is on by default and replays the
+  cached AST without re-running the macro, so a positive assertion lands on the first run and
+  never again, and a silence assertion passes vacuously. A line the runtime guard prints - the
+  covered-box announce, `re-tuning (--tune)` - is not macro output and needs no flag.
 
 - **A diff that adds a top-level section to the tune sidecar (`<app>.tune.json`, written by
-  `daslib/llvm_tune.das`), or a new key or value type inside an existing section, updates
-  `modules/dasLLAMA/dasllama/dasllama_exchange_schema.das` in the same change and keeps
-  `modules/dasLLAMA/tests/test_exchange_schema.das` green** - the validator allow-lists
-  sections, so a section it does not know fails every newly minted sidecar at submission, and
-  the checked-in corpus the test sweeps cannot show it.
+  `daslib/llvm_tune.das`) updates `modules/dasLLAMA/dasllama/dasllama_exchange_schema.das` in
+  the same change and keeps `modules/dasLLAMA/tests/test_exchange_schema.das` green** - the
+  validator allow-lists sections, so a section it does not know fails every newly minted
+  sidecar at submission, and the checked-in corpus the test sweeps cannot show it. A new key
+  inside an existing section passes the validator as it stands.
 
 - **A diff introducing an override knob adds it to `ARCHITECTURE.md` sec.3's inventory in the
   same change.** An override knob is supplied at run time - an environment variable, a
@@ -104,5 +108,6 @@
   turns a NaN lane into a number, and an accuracy bound reads that as success.
 
 - **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, dropping a
-  directory from its tracked-fixture list, or a finding text that no longer names what failed.
-  What the gate enforces is read from the gate itself.
+  directory from its tracked-fixture list or removing the last tracked file under one (a guard
+  over nothing), or a finding text that no longer names what failed. What the gate enforces is
+  read from the gate itself.

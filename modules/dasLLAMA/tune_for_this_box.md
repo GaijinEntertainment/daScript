@@ -16,20 +16,24 @@ it plus the measurement discipline.
 
 ## Zero-config: `dasllama-server` tunes itself
 
-The everyday path needs no manual step. `dasllama_math_gen` declares
-`[tune_scope(name = "dasllama", tuner = "../harness/gen_tune_probe.das")]`, so the gen GEMM
-family resolves its per-box winner from `<das_root>/dasllama.tune.json` - shared by
-**every** dasLLAMA application on the box. `dasllama-server` declares
-`[tune_policy(missing = "auto")]`: the first start on an untuned box runs `gen_tune_probe`,
-writes the manifest, and relaunches itself with the winners; thereafter it serves directly and
-logs the tune status at startup. `--tune` forces a re-tune; `DAS_TUNE_POLICY=error` skips
-per-start tuning while developing (it prints the tuner command instead).
+The everyday path needs no manual step. `dasllama/dasllama_tune_scope.das` declares the
+`[tune_scope(name = "dasllama", tuner = "../harness/dasllama_tuner.das", defaults =
+"../performance/defaults")]` every engine module requires, so each `[tune]` and `[tuned]`
+kernel resolves its winner at compile time from the app's sidecar (`<app>.tune.json` beside
+the root script; `DAS_TUNE_MANIFEST` overrides), else from the shipped profile for this box's
+CPU class. A box its class profile covers is done at its first compile: no tuner, no sidecar,
+no relaunch. A box the profile covers only partly, or not at all, runs `dasllama_tuner` at
+first start under the default `auto` policy - it races only the families the profile could
+not answer, writes the sidecar, and relaunches with the winners; thereafter the app starts
+directly and logs the tune status. `--tune` forces a full re-mint, `--tune-only <family>`
+re-mints one family; `DAS_TUNE_POLICY=error` skips per-start tuning while developing (it
+prints the tuner command instead).
 
-Two sibling CLI tools share the same manifest - no per-app scope declaration, since requiring
-dasLLAMA pulls in its `[tune_scope]`: `ask` (prompt -> completion, reporting ttft + prefill/decode
-t/s) and `wav2txt` (audio -> text, reporting decode/transcribe time + real-time factor). Both carry
-the same `[tune_policy(missing = "auto")]`, so whichever of the three you run first tunes the box
-and the rest are instant. Tune once, and every dasLLAMA app on the box is tuned.
+The sibling CLI tools need no per-app scope declaration either, since requiring dasLLAMA pulls
+in its `[tune_scope]`: `ask` (prompt -> completion, reporting ttft + prefill/decode t/s) and
+`wav2txt` (audio -> text, reporting decode/transcribe time + real-time factor) get the same
+`auto` policy by default. The sidecar is per app, so each app mints what the shipped profile
+leaves unanswered on its own first start.
 
 The profiling suite drivers (`performance/gen_profile.das`, `performance/gen_asr_profile.das`)
 carry the same policy - an untuned box tunes itself before the first measurement, and the
@@ -41,10 +45,12 @@ The tuner benches declined perms ONCE (they share the reference body) - a foreig
 (arm64 skipping the x64 legs) tunes in ~1 minute, and the winner-picker no longer gets N
 noise-lottery tickets for one body.
 
-This zero-config path covers only the **gen GEMM manifest** (`gen_tune_probe`). The
-`[tuned]` loop-hint kernels (the `"kernels"` section of the same `<app>.tune.json` sidecar,
-below), the backend/thread/token-block runtime knobs, and the measurement discipline are still
-the manual, hands-on story - read on.
+`dasllama_tuner` runs both halves of the mint - `gen_tune_probe` for the `[tune]` generator
+grid, then `tune_kernels` for the `[tuned]` loop hints and the runtime knob snapshot - and
+stamps each half's wall into the sidecar's provenance (`mint_gen_ms`, `mint_kernels_ms`,
+`mint_total_ms`). What the zero-config path does not do is measure: the backend, thread and
+token-block choices a box profile records, and the discipline that makes such a measurement
+mean anything, are the hands-on story - read on.
 
 ---
 
@@ -55,7 +61,7 @@ the manual, hands-on story - read on.
 | Kernel backend (ISA) | auto by priority; `pin_kernel_backend(name)` for A/B; loader picks repack backends; profile `runtime.backend` pins | runtime | `matmul_q8q8*` wrappers |
 | Batch backend (hybrid) | `select_batch_backend(name)` / profile `runtime.batch_backend` / env `DASLLAMA_PIN_BATCH_BACKEND` (benches) - overrides ONLY the batch-shaped slots (prefill GEMM + mx4 batch) from a layout-compatible donor, GEMV slots stay with `runtime.backend`. For boxes where decode and prefill prefer different backends (e.g. portable GEMV + a row-major donor's batch). Survives load-time re-select | runtime | the batch matmul wrappers |
 | Loop hints per kernel (`vectorize_width` x `unroll_count`) | the sidecar's `"kernels"` keys, read at **compile time** by `[tuned]` | compile (JIT re-keys automatically) | all 25 swept `[tuned]` kernels: dot, axpy, add/mul/scale_inplace, copy_floats, softmax(+_sink - mirrored, not swept separately), rmsnorm, dot_q4, dot_q8q8, dot_mx4q8, quantize_q8_0_into_ptr, quantize_q8_0_bs_into_ptr, rope_scaled_neox_tab, gemm_f32_uk_4x16, dot_q8q8_laneq4x4, the f16 codec set (dot_f16, axpy_f16, cvt_f32_to_f16, cvt_f16_to_f32), and the q8 KV-codec set (dot_q8kv, dot_q8q8kv, axpy_q8kv, cvt_q8kv_to_f32, quantize_q8kv_row) |
-| Gen GEMM tile family (manifest) | `gen_tune_probe` (the `[tune_scope(name="dasllama")]` tuner - run by `dasllama-server`'s `policy=auto` / `--tune`, or by hand with `DAS_TUNE_MODE=tune`) benches the `[tune_perm]` grid and writes the winner to `<das_root>/dasllama.tune.json` - **guarded by the e2e confirm pass**: a winner that diverges from the per-ISA fallback must beat it in a real-model prefill A/B (`DASLLAMA_CONFIRM_MODEL=<q8 gguf>`, interleaved, challenger needs >x1.02, else the fallback stays pinned). The guard exists because the 1-core fixture regime CAN crown an e2e loser (SPR: amx won the tile bench, lost prefill ~2x; M1: a +3.3%-iso shape made only +2.0% e2e - rejected) | compile (stamp at `[tune]`) | `q8q8_tile_gen` + companions (the gen batch/gemv kernels) |
+| Gen GEMM tile family (manifest) | `gen_tune_probe` (the first half of the scope's tuner `harness/dasllama_tuner.das` - run by the default `auto` policy / `--tune`, or by hand with `DAS_TUNE_MODE=tune`) benches the `[tune_perm]` grid and writes the winner to `<das_root>/dasllama.tune.json` - **guarded by the e2e confirm pass**: a winner that diverges from the per-ISA fallback must beat it in a real-model prefill A/B (`DASLLAMA_CONFIRM_MODEL=<q8 gguf>`, interleaved, challenger needs >x1.02, else the fallback stays pinned). The guard exists because the 1-core fixture regime CAN crown an e2e loser (SPR: amx won the tile bench, lost prefill ~2x; M1: a +3.3%-iso shape made only +2.0% e2e - rejected) | compile (stamp at `[tune]`) | `q8q8_tile_gen` + companions (the gen batch/gemv kernels) |
 | K-quant tile families (manifest, per format) | the same `gen_tune_probe` tune run benches each kq family's own grid (mr x nrsplit per ISA tier) and writes `k4q8_tile_gen` / `k5q8_tile_gen` / `k6q8_tile_gen` entries - tile-best wins (the kq gemv is nrsplit-independent; same-mr rows share its plane), no child confirm pass (the stamp only moves that format's plane interleave, decode stays DRAM-bound - e2e-validated when the split landed: M1 mr4 = pp +10/+26/+22% on Q4_K_M/Q5_K_M/Q6_K, tg flat, MoE pp -3%; kq v2 lifted k4 pp512 to 0.88-0.95x upstream on a CLEAN box (das 151-163 vs upstream 172 - the earlier 158-vs-158 'parity' was two load-depressed reads coinciding) and MoE to 1.34x; the k5/k6 v2 port took Q5/Q6 pp to 0.84x/0.80x; kq v3 (panel-scratch byte-expanded tiles, 2026-07-12 PM) then took Q5 pp to 150-168 (1.14-1.28x upstream) and Q6 to 140-143 (1.01-1.03x), tg at v2 parity - the tile reads a byte panel unpacked per (group, token-block) while the DRAM planes stay packed (decode is model-level DRAM-bound: pure byte planes cost tg -30%). Iso (M1): tile k4 95 / k5 89 / k6 76 GMAC/s at the probe's x16 amortization, gemv 64 / 27.5 / 34.5 unchanged) | compile (stamp at `[tune]`) | `k{4,5,6}q8_tile_gen` + their gemv/layout companions (each format's planes take their OWN mr) |
 | Token block `TB` | `set_q8_token_block(n)` (default 128) / profile `runtime.q8_token_block` | runtime | the repack-tier batch kernel only |
 | L2 budget (TB cliff guard) | `set_q8_l2_budget(bytes)` (default 4 MB - provisional, one M1 Max) / profile `runtime.q8_l2_budget` | runtime | `effective_token_block(tb, n) = clamp(tb, 1, budget/n)` (dasllama_math.das) |

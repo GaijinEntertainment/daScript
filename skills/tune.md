@@ -296,6 +296,13 @@ whose macros never ran for this process, so a macro-time read of argv would
 miss `--tune`. `DAS_TUNE_POLICY` overrides the declared value -
 `DAS_TUNE_POLICY=fallback` is the CI kill switch.
 
+The re-exec arms `DAS_TUNE_RELAUNCH` for its child, and a relaunched process
+that still reads a scope as untuned neither tunes nor relaunches again: it
+reports that the tune did not converge and runs the stamps it has. Each link
+of a relaunch chain is a live process holding a JIT context, so a defect that
+flips completeness between the guard and the compile costs one restart instead
+of stacking processes until the box runs out of memory.
+
 `--tune-only <tokens>` (comma-separated; implies `--tune`) re-tunes only the
 kernel families whose name contains one of the tokens - after landing one
 family's kernels, `--tune-only gemm` re-mints that family in seconds instead

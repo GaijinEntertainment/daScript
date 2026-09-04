@@ -26,13 +26,7 @@
   only when its stored version equals `getVersion()`, so without the bump an older cache
   passes that check and every field after the new one decodes shifted.
 
-- **Weakening the default-cache silence check in
-  `tests/module_cache/test_default_cache_path.das` (repo root) is a defect** - it pins that a
-  run on the default cache path prints nothing, cold or warm, and that an explicit
-  `-module-cache` still prints its verdict.
-
-- **A diff that adds a diagnostic to a module-cache read - `trySerializeProgramModule`
-  (`src/ast/ast_parse.cpp`, repo root) or the module cumulative-hash check in
-  `module_builtin_ast_serialize.cpp` - prints it only when the serializer's `quietCache` is
-  false** - the default cache is on for every run, so an ungated line becomes output every
-  user sees.
+- **Every print the module cumulative-hash check in `module_builtin_ast_serialize.cpp` reaches
+  is gated on the serializer's `quietCache`; a diff that leaves one ungated is a defect** - the
+  default cache is on for every run that executes, so an ungated line becomes output every user
+  sees. The reader's other half, `trySerializeProgramModule`, answers to `src/ast/REVIEW.md`.

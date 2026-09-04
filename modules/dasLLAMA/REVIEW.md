@@ -11,12 +11,13 @@ the followup ledgers).
 
 **A timing rig - a script whose output is a measured wall-clock time or rate - or a kernel
 race - a run that times two kernel variants (arms) against each other in one process -
-wherever the diff puts it (`harness/`, `dasllama/`, a test), answers to this folder's
-`benchmarks/REVIEW.md`.**
+wherever it lives, answers to this folder's `benchmarks/REVIEW.md` in addition to its own
+folder's checklist.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
 code comment, or a PR body - or adds or changes a serving path, one that serves a weight
-format, modality, family, or backend, applies `REVIEW_MEASUREMENT.md`.**
+format, modality, family, or backend, or changes what a run with no flags and no environment
+overrides does, applies `REVIEW_MEASUREMENT.md`.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
@@ -162,9 +163,10 @@ template strings any of them look up, records a run of this folder's
 `tests/test_tokenizer.das` with its cases EXECUTED, not skipped.**
 
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.**
-An override is an environment knob, an exported runtime setter, or an on-disk state file that
-moves a gate, policy, or threshold off its default and thereby changes what the run writes,
-reads, mints, or computes - a timing knob included when it moves computed numerics. A knob
+An override is an environment knob, an exported runtime setter, or an on-disk state file - one
+a run writes or a user places, never data a build ships - that moves a gate, policy, or
+threshold off its default and thereby changes what the run writes, reads, mints, or computes -
+a timing knob included when it moves computed numerics. A knob
 that changes only WHEN work happens is not one, and a CLI flag is never one. A default-ON knob
 announces on the default path, naming the spelling that turns it off; a default-OFF knob
 announces when it is set. The announce is a line the run prints where the override changes the

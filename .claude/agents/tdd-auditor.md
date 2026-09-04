@@ -49,6 +49,12 @@ the run with a checked-out base file in place.
 - Time-box: a negative control is one mutation plus one targeted test run. If the only
   candidate run is heavy (a model run, a full suite, special hardware), report the branch
   UNPROVEN with the exact settling command instead of running it.
+- Cap what a control can spawn. A mutation in code that spawns processes - a tuner, a
+  relaunch, a child daslang - can turn a converging chain into an unbounded one, and every
+  link holds a JIT context: one such control has stacked 1797 processes and reset a 128 GiB
+  box through swap. Run every control under a process cap and a wall clock in the same shell
+  (`ulimit -u 200 -t 600; <command>` on unix), and where the platform has no cap (Windows),
+  report the branch UNPROVEN instead of running the control.
 
 ## What NOT to flag
 
