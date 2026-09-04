@@ -8,22 +8,21 @@ the whole directory.** A change reaches a test when it alters anything the test'
 depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture or
 corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
-**Leaving a test file out of every `run.das` suite is a defect, unless the file's header
-states why its cells cannot hold under `DASLLAMA_CPU_PREFILL=1`.** `DASLLAMA_CPU_PREFILL=1` is
-what the runner arms for every suite.
+**Every test file - a `.das` in this folder that dastest runs: one carrying at least one
+`[test]` function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the
+assertion - is listed in a `run.das` suite, or its header states why its cells cannot hold
+under `DASLLAMA_CPU_PREFILL=1`; a diff that leaves a test file in neither state is a defect.**
+`DASLLAMA_CPU_PREFILL=1` is what the runner arms for every suite.
 
 **Listing a test file whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` in any `run.das`
 suite is a defect, and so is leaving that fact out of the file's header.**
 
 **Invoking dastest directly on a test file in a `run.das` model suite (every suite but
-`model-free`) is a defect. A `model-free` file runs through the runner or under plain dastest.**
+`model-free`) is a defect - run it through `run.das`.**
 
 **Every test RUN runs under `-jit` - never the interpreter, never AOT.** A compile-only CI lane
 passes dastest's `--compile-only`. Under the interpreter a model-gated suite's cells skip, and
 a run of skips is not the coverage the suite owes.
-
-**A diff that puts a `[test]` file requiring any `dasllama/*` module outside this folder is a
-defect.** Out-of-folder instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
 
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**

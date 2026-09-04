@@ -73,10 +73,10 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
     } elif (name == "coverage") {
         return <- [ "modules/dasLLAMA/tests/test_kernel_coverage.das" ]
     } elif (name == "model-free") {
-        // every suite-less test with at least one cell that RUNS (not skips) with no model file present:
-        // the per-PR gate. A new such file registers here in the same change. Not here:
-        // test_cpu_prefill_tripwire (it asserts the guard the runner's DASLLAMA_CPU_PREFILL=1
-        // disarms - plain dastest only).
+        // every suite-less test file: the per-PR gate. A cell that needs a model or a fixture
+        // skips honestly when it is absent. A new such file registers here in the same change.
+        // Not here: test_cpu_prefill_tripwire (it asserts the guard the runner's
+        // DASLLAMA_CPU_PREFILL=1 disarms - plain dastest only).
         return <- [
                     "modules/dasLLAMA/tests/failed_dasllama_lint_require.das",
                     "modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das",
@@ -146,6 +146,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_softmax.das",
                     "modules/dasLLAMA/tests/test_think_split.das",
                     "modules/dasLLAMA/tests/test_tok_seed.das",
+                    "modules/dasLLAMA/tests/test_tokenizer.das",
                     "modules/dasLLAMA/tests/test_tts_textnorm.das",
                     "modules/dasLLAMA/tests/test_tts_postag.das",
                     "modules/dasLLAMA/tests/test_tts_g2p.das",

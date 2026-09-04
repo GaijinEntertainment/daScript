@@ -8,9 +8,12 @@ require dasllama/dasllama_kokoro
 require dasllama/dasllama_unicode   // cpt_to_utf8: building a phoneme the vocabulary lacks
 require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
+require dasllama/dasllama_styletts2   // the model driven straight from a phoneme string, to hold a synthesis against
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
+require daslib/rtti   // this_context().last_exception: the voice refusals are read as text
+require strings
 require math
 require _tts_parity
 require _model_tier
@@ -35,6 +38,27 @@ var private g_family : KokoroFamily
 
 def private kokoro_ids_of(ps : string) : array<int> {
     return <- kokoro_token_ids(g_family, ps)
+}
+
+def private panic_text_of(blk : block<() : void>) : string {
+    var why = ""
+    try {
+        invoke(blk)
+    } recover {
+        why = this_context().last_exception |> rtrim
+    }
+    return why
+}
+
+// The samples the model speaks for one phoneme string in one voice - the facade's chunk path with
+// its dialect pick taken out, so a synthesis can be held against the string it should have read.
+// Noise never moves the length, so the seed here need not be the facade's.
+def private samples_for(var m : TtsModel; ps : string; voice : string) : int64 {
+    var inscope ids <- kokoro_token_ids(m.kokoro, ps)
+    var inscope style : array<float>
+    styletts2_style(m.model, voice, kokoro_style_row(ps, m.model.style_rows), style)
+    var tm = TtsTimings()
+    return styletts2_synthesize(m.model, ids, style, 1.0, m.scratch.noise, 0ul, null, tm, m.scratch)
 }
 
 [test]
@@ -62,6 +86,36 @@ def test_kokoro_symbols(t : T?) {
         var inscope none <- kokoro_token_ids(fam, "zzz")
         t |> equal(length(none), 2, "nothing known: the two pads alone")
     }
+    t |> run("a pack name of the pipeline's shape carries its language") @(t : T?) {
+        t |> equal(kokoro_voice_lang("af_heart"), "en-us")
+        t |> equal(kokoro_voice_lang("am_michael"), "en-us")
+        t |> equal(kokoro_voice_lang("bf_emma"), "en-gb")
+        t |> equal(kokoro_voice_lang("bm_george"), "en-gb")
+        t |> equal(kokoro_voice_lang("ef_dora"), "es")
+        t |> equal(kokoro_voice_lang("em_alex"), "es")
+        t |> equal(kokoro_voice_lang("ff_siwis"), "fr-fr")
+        t |> equal(kokoro_voice_lang("hf_alpha"), "hi")
+        t |> equal(kokoro_voice_lang("hm_omega"), "hi")
+        t |> equal(kokoro_voice_lang("if_sara"), "it")
+        t |> equal(kokoro_voice_lang("pf_dora"), "pt-br")
+        t |> equal(kokoro_voice_lang("jf_alpha"), "ja")
+        t |> equal(kokoro_voice_lang("zf_xiaobei"), "zh")
+    }
+    t |> run("a name of any other shape names no language, whatever letter it opens with") @(t : T?) {
+        // every one of these opens with a letter the table above carries: the SHAPE is the rule,
+        // and a plain name read as a language code is a voice speaking the wrong accent
+        t |> equal(kokoro_voice_lang("emma"), "", "a plain name, not <language><f|m>_")
+        t |> equal(kokoro_voice_lang("female_1"), "", "an f in front, but no sex letter in second place")
+        t |> equal(kokoro_voice_lang("heart"), "")
+        t |> equal(kokoro_voice_lang("izzy"), "")
+        t |> equal(kokoro_voice_lang("jamie"), "")
+        t |> equal(kokoro_voice_lang("puck"), "")
+        t |> equal(kokoro_voice_lang("Bella"), "", "the shape is case-sensitive, like the pack names")
+        t |> equal(kokoro_voice_lang("af"), "", "too short to carry a name after the shape")
+        t |> equal(kokoro_voice_lang("af_"), "", "the shape needs a name to belong to")
+        t |> equal(kokoro_voice_lang(""), "")
+        t |> equal(kokoro_voice_lang("qf_none"), "", "the shape holds; the letter names no language")
+    }
     t |> run("the style row is the phoneme count less one, capped at the last row") @(t : T?) {
         t |> equal(kokoro_style_row("abc", 510), 2)
         t |> equal(kokoro_style_row("", 510), 0, "an empty string clamps up to row zero")
@@ -87,12 +141,20 @@ def test_kokoro_oracle(t : T?) {
     }
 }
 
+// the model and both front-end packs: every facade cell below needs all three
+def private facade_data_missing(t : T?) : bool {
+    if (!stat(gguf_path()).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid ||
+        !stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
+        t |> skip("kokoro-82m.gguf or the front-end packs not present")
+        return true
+    }
+    return false
+}
+
 [test]
 def test_kokoro_facade(t : T?) {
     t |> run("text in, speech out") @(t : T?) {
-        if (!stat(gguf_path()).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid ||
-            !stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
-            t |> skip("kokoro-82m.gguf or the front-end packs not present")
+        if (facade_data_missing(t)) {
             return
         }
         with_job_que() {
@@ -128,10 +190,12 @@ def test_kokoro_facade(t : T?) {
             to_log(LOG_INFO, "kokoro facade: {length(audio.pcm)} samples, peak {peak}; {timings_line(audio.timings, audio.sample_rate)}\n")
         }
     }
+}
+
+[test]
+def test_kokoro_dialects(t : T?) {
     t |> run("a British voice speaks the British inventory, and the vocabulary carries it") @(t : T?) {
-        if (!stat(gguf_path()).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid ||
-            !stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
-            t |> skip("kokoro-82m.gguf or the front-end packs not present")
+        if (facade_data_missing(t)) {
             return
         }
         with_job_que() {
@@ -163,6 +227,39 @@ def test_kokoro_facade(t : T?) {
             }
             t |> success(finite, "every sample finite")
             t |> success(peak > 0.05 && length(audio.pcm) > 24000, "bf_emma spoke {length(audio.pcm)} samples, peak {peak}")
+            // and the dialect the VOICE pins is the one the synthesis read: the two inventories
+            // predict different durations, so the sample count says which string reached the model
+            let spoken = strip(tts_normalize(line))
+            let n_gb = samples_for(m, tts_phonemize(m, spoken, "en-gb"), "bf_emma")
+            let n_us = samples_for(m, tts_phonemize(m, spoken, "en-us"), "bf_emma")
+            t |> success(n_gb != n_us, "the discriminator: the dialects speak {n_gb} and {n_us} samples")
+            t |> equal(long_length(audio.pcm), n_gb, "bf_emma read the British inventory ({n_us} would be the American one)")
+        }
+    }
+}
+
+[test]
+def test_kokoro_voice_refusals(t : T?) {
+    t |> run("a voice the front end cannot phonemize refuses, naming the language its pack speaks") @(t : T?) {
+        if (facade_data_missing(t)) {
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope m <- load_tts_model(gguf_path())
+            var inscope c <- caps(m)
+            t |> success(find_index(m.model.voice_names, "jf_alpha") >= 0, "the model carries the Japanese pack")
+            t |> success(find_index(c.voices, "jf_alpha") < 0, "and caps does not offer it")
+            let ja = panic_text_of() {
+                feint("{tts_voice_lang(m, "jf_alpha")}")
+            }
+            t |> success(find(ja, "unknown voice 'jf_alpha'") >= 0, "the refusal names the voice: {ja}")
+            t |> success(find(ja, "speaks ja") >= 0, "and the language the pack speaks: {ja}")
+            let nobody = panic_text_of() {
+                feint("{tts_voice_lang(m, "no-such-voice")}")
+            }
+            t |> success(find(nobody, "unknown voice 'no-such-voice'") >= 0, "a voice the model lacks refuses first: {nobody}")
+            t |> success(find(nobody, "speaks") < 0, "with no language to name: {nobody}")
         }
     }
 }

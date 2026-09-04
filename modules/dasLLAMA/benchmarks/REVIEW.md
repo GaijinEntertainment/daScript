@@ -75,7 +75,7 @@ reference environment the run measures, `DEFAULT_REF_SHA` in `setup_lcpp_ref.das
 moves the measured quantity. The re-mint or withdrawal lands in
 `../performance/records/<box>.json`, the file the affected rows live in.
 
-**A diff that adds or changes a timing instrument makes it exit non-zero on a run that ends
+**A diff that adds or changes an instrument makes it exit non-zero on a run that ends
 with zero result rows - wrong flags, failed load, a device that declines.** A run that matched
 nothing and reported success leaves a sidecar or a record untouched, and its caller cannot
 tell.

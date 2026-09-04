@@ -3,7 +3,7 @@
 # the two front-end packs, their .LICENSE sidecars, the licence texts and the model card
 # (harness/tts_model_card.md). Stages a copy, verifies every sha256 against the card's table,
 # then uploads one commit and prints the commit-pinned resolve URLs the serving catalog rows
-# take (performance/model_specs.das, serve_tts_tower).
+# take (performance/model_specs.das, serve_tts_set).
 #
 #   python publish_tts_hf.py --repo <user>/dasllama-tts [--models ~/Work/llama.cpp/models] [--dry-run]
 #
@@ -49,10 +49,9 @@ def stage(models_dir, work):
             sys.exit(f"{name}: the file is {size} bytes / {sha}, the card says {expected[name]} - rebuild the card's table or the file")
         shutil.copy2(src, os.path.join(work, name))
         sidecar = src + ".LICENSE"
-        if os.path.exists(sidecar):
-            shutil.copy2(sidecar, os.path.join(work, name + ".LICENSE"))
-        else:
-            print(f"warning: no licence sidecar beside {name}")
+        if not os.path.exists(sidecar):
+            sys.exit(f"missing {sidecar} - every published file ships its licence sidecar")
+        shutil.copy2(sidecar, os.path.join(work, name + ".LICENSE"))
     for lic in LICENCES:
         shutil.copy2(os.path.join(MODULE, lic), os.path.join(work, lic))
     shutil.copy2(CARD, os.path.join(work, "README.md"))

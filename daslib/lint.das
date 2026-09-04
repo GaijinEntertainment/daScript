@@ -674,6 +674,15 @@ class LintVisitor : AstVisitor {
         return icall.arguments[0]._type.baseType == Type.tString
     }
 
+    // The remedy repeats the site's own hex argument, and keeps a mixed-sign site's outer
+    // cast, so only the parse width changes.
+    def lint017_parse_remedy(cast_name : string; iname : string; icall : ExprCall?) : string {
+        let hex = length(icall.arguments) >= 2 ? describe(icall.arguments[1]) : "false"
+        let widened = "{iname}64(str, {hex})"
+        let same_sign = cast_name == (iname == "to_int" ? "int64" : "uint64")
+        return same_sign ? widened : "{cast_name}({widened})"
+    }
+
     def check_lint017_32bit_cast(expr : ExprCall?) : void {
         if (noLint || genericDepth > 0
             || (expr.name != "int64" && expr.name != "uint64")
@@ -690,7 +699,7 @@ class LintVisitor : AstVisitor {
             return
         }
         if (lint017_is_32bit_parse(iname, icall)) {
-            lint_error("LINT017: {expr.name}({iname}(...)) widens a 32-bit string parse - {iname} answers 0 for any value that overflows 32 bits, so the cast asks for a range the parse cannot give; call to_{expr.name}(str, false) instead", expr.at)
+            lint_error("LINT017: {expr.name}({iname}(...)) widens a 32-bit string parse - {iname} answers 0 for any value that overflows 32 bits, so the cast asks for a range the parse cannot give; call {lint017_parse_remedy(string(expr.name), iname, icall)} instead", expr.at)
         }
     }
 

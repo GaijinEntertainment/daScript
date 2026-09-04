@@ -32,6 +32,18 @@ def private ident_prefix(s : string) : string {
     return slice(s, 0, n)
 }
 
+// trailing identifier run of `s` ("" when s ends with a non-ident byte)
+def private ident_suffix(s : string) : string {
+    var n = 0
+    peek_data(s) $(d) {
+        n = length(d)
+        while (n > 0 && is_ident_byte(int(d[n - 1]))) {
+            n--
+        }
+    }
+    return slice(s, n)
+}
+
 // whole-word occurrence: `name` present with no identifier byte on either side
 def private contains_word(text : string; name : string) : bool {
     var found = false
@@ -528,14 +540,38 @@ def private check_image_backing_release {
 let private DASLLAMA_DIR = "modules/dasLLAMA/dasllama"
 let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
 
-// The stamp of the layout closure - every Archive serializer body, build_image, parse_image and
-// every *_prepare mint, hashed in file order. A closure change with IMAGE_VERSION unmoved is red;
-// the bump re-stamps both constants (the finding prints the values).
+// The stamp of the layout closure - every Archive serializer body, build_image, parse_image,
+// every *_prepare mint, the layout helpers and the layout constants' declaration lines, hashed
+// in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
+// value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 32
-let private IMAGE_LAYOUT_STAMP_HASH = 0x234b76b7a8d95d93ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x1326fdc547a28a5aul
+
+// The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
+// writer's append / zero-fill / header patch, and the header's scalar stores. Changing one
+// moves every plane offset while every serializer body reads the same.
+var private LAYOUT_HELPERS <- {
+    "pad_to_page", "plane_end", "image_total_bytes",
+    "w_append", "w_zeros", "w_header", "store_u32", "store_u64"
+}
+
+// The constants those helpers place bytes by, and the bands the two streaming writers stage
+// through. Their declaration lines are hashed with the bodies, so a value change reds the same
+// way an edited body does - the closure is deliberately wider than the byte-moving set, and a
+// change that provably moves nothing re-stamps the hash alone.
+var private LAYOUT_CONSTANTS <- {
+    "IMAGE_PAGE", "IMAGE_HEADER_BYTES", "SECTION_TABLE_SLACK",
+    "DWRITE_STAGING_BAND", "METAL_BAND_BLOCKS"
+}
 
 def private is_archive_serializer(header : string) : bool {
     return (header |> starts_with("def serialize") || header |> starts_with("def private serialize")) && find(header, "Archive") >= 0
+}
+
+// A meta serializer hand-lists a STRUCT's fields, so its count can be pinned; the bulk payload
+// forms take an `array` and have no field list of their own.
+def private is_meta_serializer(header : string) : bool {
+    return is_archive_serializer(header) && find(header, "array<") < 0
 }
 
 def private is_layout_function(header : string) : bool {
@@ -545,7 +581,29 @@ def private is_layout_function(header : string) : bool {
         rest = slice(rest, length("private "))
     }
     let name = ident_prefix(rest)
+    return true if (key_exists(LAYOUT_HELPERS, name))
     return name == "build_image" || name == "parse_image" || find(name, "_prepare") >= 0
+}
+
+// the declaration lines of the layout constants a file declares, in file order
+def private layout_constant_lines(path : string) : array<tuple<line : int; body : string>> {
+    var out : array<tuple<line : int; body : string>>
+    var line_no = 0
+    for (raw in split(strip_line_comments(fread(path)), "\n")) {
+        line_no++
+        var rest = ""
+        if (raw |> starts_with("let private ")) {
+            rest = slice(raw, length("let private "))
+        } elif (raw |> starts_with("let ")) {
+            rest = slice(raw, length("let "))
+        } else {
+            continue
+        }
+        if (key_exists(LAYOUT_CONSTANTS, ident_prefix(rest))) {
+            out |> push((line = line_no, body = strip(raw)))
+        }
+    }
+    return <- out
 }
 
 // every top-level function of the file whose header `pick` accepts: its header line number and
@@ -564,8 +622,14 @@ def private function_bodies(path : string; pick : block<(header : string) : bool
                 header_line = 0
             }
             if (pick |> invoke(raw)) {
-                header_line = line_no
-                lines |> push(raw)
+                // a `def ... => expr` one-liner has no closing brace - end its window on the
+                // header, or it swallows every line up to the next def
+                if (find(raw, "=>") >= 0) {
+                    out |> push((line = line_no, body = raw))
+                } else {
+                    header_line = line_no
+                    lines |> push(raw)
+                }
             }
         } elif (header_line > 0) {
             lines |> push(raw)
@@ -593,18 +657,29 @@ def private fnv1a(text : string; seed : uint64) : uint64 {
     return h
 }
 
+// A field write into the archive, in every spelling the serializers use: the pipe form
+// (`arch |> serialize`, which covers `serialize_raw`) and the call form a nested or bulk
+// serializer takes (`serialize(arch, ...)`, `serialize_pod_array(arch, ...)`).
+def private writes_meta_field(line : string) : bool {
+    return true if (find(line, "arch |> serialize") >= 0)
+    let at = find(line, "(arch,")
+    return false if (at < 0)
+    return ident_suffix(slice(line, 0, at)) |> starts_with("serialize")
+}
+
+[arch(at = "ARCHITECTURE_IMAGE.md#image-meta-tripwire")]
 def private check_meta_tripwires {
     dir(DASLLAMA_DIR) $(name) {
         return if (!ends_with(name, ".das"))
         let path = "{DASLLAMA_DIR}/{name}"
         var inscope fns <- function_bodies(path) $(header) {
-            return is_archive_serializer(header)
+            return is_meta_serializer(header)
         }
         for (f in fns) {
             var calls = 0
             var guarded = false
             for (line in split(f.body, "\n")) {
-                if (find(line, "arch |> serialize") >= 0) {
+                if (writes_meta_field(line)) {
                     calls++
                 }
                 if (find(line, "verify(count_meta_fields(") >= 0) {
@@ -619,6 +694,7 @@ def private check_meta_tripwires {
     }
 }
 
+[arch(at = "ARCHITECTURE_IMAGE.md#image-layout-stamp")]
 def private check_image_layout_stamp {
     var version = -1
     for (line in split(fread(IMAGE_FILE), "\n")) {
@@ -639,7 +715,12 @@ def private check_image_layout_stamp {
     files |> sort()
     var h = 0xcbf29ce484222325ul
     for (name in files) {
-        var inscope fns <- function_bodies("{DASLLAMA_DIR}/{name}") $(header) {
+        let p = "{DASLLAMA_DIR}/{name}"
+        var inscope consts <- layout_constant_lines(p)
+        for (c in consts) {
+            h = fnv1a("{name}\n{c.body}\n", h)
+        }
+        var inscope fns <- function_bodies(p) $(header) {
             return is_layout_function(header)
         }
         for (f in fns) {
@@ -649,7 +730,7 @@ def private check_image_layout_stamp {
     return if (h == IMAGE_LAYOUT_STAMP_HASH && version == IMAGE_LAYOUT_STAMP_VERSION)
     if (version == IMAGE_LAYOUT_STAMP_VERSION) {
         gate_finding(IMAGE_FILE,
-            "the image layout closure (every Archive serializer, build_image, parse_image, every *_prepare mint) changed and IMAGE_VERSION is still {version} - a stale image stays structurally valid and serves different bytes; bump IMAGE_VERSION, then set IMAGE_LAYOUT_STAMP_HASH = {h}ul and IMAGE_LAYOUT_STAMP_VERSION to the new version in modules/dasLLAMA/REVIEW.das (a change that provably leaves every byte where it was - a tripwire line, a rename - re-stamps the hash alone; that is a gate edit the weakening rule reviews)")
+            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint, the layout helpers pad_to_page/plane_end/image_total_bytes/w_append/w_zeros/w_header/store_u32/store_u64, and the layout constants IMAGE_PAGE/IMAGE_HEADER_BYTES/SECTION_TABLE_SLACK/DWRITE_STAGING_BAND/METAL_BAND_BLOCKS): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
     } else {
         gate_finding("modules/dasLLAMA/REVIEW.das",
             "the layout stamp is behind IMAGE_VERSION {version} - re-stamp: IMAGE_LAYOUT_STAMP_HASH = {h}ul, IMAGE_LAYOUT_STAMP_VERSION = {version}")

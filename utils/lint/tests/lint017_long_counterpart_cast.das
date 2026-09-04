@@ -18,8 +18,13 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // Good pattern:
 //   let n = long_length(arr)
 //   let m = to_int64(s, false)
+//
+// The parse remedy repeats the site's own hex argument and keeps a mixed-sign
+// site's outer cast, so only the parse width changes:
+//   int64(to_int(s, true))  -> to_int64(s, true)
+//   int64(to_uint(s))       -> int64(to_uint64(s, false))
 
-expect 50503:9
+expect 50503:12
 
 require strings
 require daslib/lint
@@ -70,6 +75,29 @@ def bad_uint64_to_int(s : string) : uint64 {
     return uint64(to_int(s))
 }
 
+// bad: a hex parse widens the same way, and the remedy stays hex (1 warning)
+def bad_int64_to_int_hex(s : string) : int64 {
+    return int64(to_int(s, true))
+}
+
+// bad: hex and mixed signedness at once (1 warning)
+def bad_uint64_to_int_hex(s : string) : uint64 {
+    return uint64(to_int(s, true))
+}
+
+// bad: the base is a runtime flag, so the remedy carries the flag (1 warning)
+def bad_int64_to_int_var_hex(s : string; isHex : bool) : int64 {
+    return int64(to_int(s, isHex))
+}
+
+struct Parsed {
+    n : int
+}
+
+def to_int(p : Parsed) : int {
+    return p.n
+}
+
 // good: 64-bit all the way through
 def good_long_length(arr : array<int>) : int64 {
     return long_length(arr)
@@ -83,6 +111,11 @@ def good_to_int64(s : string) : int64 {
 // good: a float parse is not a 32-bit integer parse
 def good_float_parse(s : string) : int64 {
     return int64(to_float(s))
+}
+
+// good: to_int over a non-string argument is not a string parse at all
+def good_non_string_to_int(p : Parsed) : int64 {
+    return int64(to_int(p))
 }
 
 // good: a fixed array has no long_length twin, so the cast is the only spelling

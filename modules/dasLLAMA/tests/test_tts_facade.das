@@ -8,10 +8,12 @@ require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_audio_io
 require dasllama/dasllama_kitten   // kitten_token_ids: the symbol table's drop rule, model-free
+require dasllama/dasllama_styletts2   // the voices table: a hand-built model whose pack names no language
 require dasllama/dasllama_unicode   // the chunker counts codepoints, so the cells do too
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + the batch lane cap
 require daslib/jobque_boost
 require daslib/defer
+require daslib/rtti   // this_context().last_exception: the voice refusals are read as text
 require daslib/fio
 require strings
 require daslib/strings_boost
@@ -22,6 +24,16 @@ require _tts_corpus   // the 200-sentence front-end fixture: the phonemes arm E 
 def private cpt_count(s : string) : int {
     var inscope c <- utf8_to_cpts(s)
     return length(c)
+}
+
+def private panic_text_of(blk : block<() : void>) : string {
+    var why = ""
+    try {
+        invoke(blk)
+    } recover {
+        why = this_context().last_exception |> rtrim
+    }
+    return why
 }
 
 // The TTS facade above the families. Model-free: the sentence chunker (the reference driver's
@@ -137,6 +149,25 @@ def test_chunker_rules(t : T?) {
         t |> equal(rejoined, bare, "the pieces are the run, in order, nothing dropped")
         var inscope d <- tts_chunks(bare, 513)
         t |> equal(length(d), 1, "a run exactly at the cap does not split")
+    }
+}
+
+// A pack whose name carries no language of the pipeline's shape: the refusal has no code to name,
+// and must say so in words rather than render a blank. Hand-built - every stocked pack is shaped.
+[test]
+def test_voice_refusal_without_a_language(t : T?) {
+    t |> run("a voice whose pack names no language refuses in words, not in an empty code") @(t : T?) {
+        var inscope m = TtsModel()
+        m.kind = TtsKind.kokoro
+        var inscope pack : array<float>
+        m.model.voices["emma"] <- pack   // the model HAS the voice; what it does not have is a language for it
+        let why = panic_text_of() {
+            feint("{tts_voice_lang(m, "emma")}")
+        }
+        t |> success(find(why, "unknown voice 'emma'") >= 0, "the refusal names the voice: {why}")
+        t |> success(find(why, "speaks a language the front end does not phonemize") >= 0,
+            "and says what it cannot do with it: {why}")
+        t |> success(find(why, "speaks , which") < 0, "no empty language code rendered into the sentence: {why}")
     }
 }
 
@@ -266,6 +297,30 @@ def test_facade_phonemizer(t : T?) {
                 refused = true
             }
             t |> success(refused, "an undeclared language panics at the call site")
+        }
+    }
+}
+
+// The model-keyed chunker picks the family's driver rule, and Kitten's is the arm no model-free
+// cell can reach: the boolean form is pinned above, Kokoro's bare text in test_tts_kokoro.das.
+[test]
+def test_chunker_model_rule(t : T?) {
+    t |> run("a Kitten model's chunks gain the driver's comma") @(t : T?) {
+        let gguf = path_join(models_dir(), "kitten-nano.gguf")
+        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
+            t |> skip("kitten-nano.gguf or the front-end packs not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope m <- load_tts_model(gguf)
+            var inscope bare <- tts_chunks(m, "hello how are you")
+            t |> equal(length(bare), 1)
+            t |> equal(bare[0], "hello how are you,", "KittenTTS's driver appends the prosodic close")
+            var inscope kept <- tts_chunks(m, "First one. Second")
+            t |> equal(length(kept), 2)
+            t |> equal(kept[0], "First one.", "punctuation the text carries stays as it is")
+            t |> equal(kept[1], "Second,")
         }
     }
 }

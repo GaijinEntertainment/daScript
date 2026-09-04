@@ -3,8 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_IMAGE.md`.
 
-**Routed from `REVIEW.md`: a diff touching `dasllama/dasllama_image.das`, or a `.dlim` mint,
-load, identity, or flavor concern wherever the diff puts it, applies this list together with
+**Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 `REVIEW.md`.**
 
 **A transform on the go-live path - repacking, quantizing, folding, permuting - is a defect;
@@ -54,20 +53,17 @@ property shapes never does.** A config-bound identity on a property-free family 
 image per tune state and reaps the others on every switch; a config-free identity on a
 property-shaped family serves the wrong bytes under a changed property.
 
-**A diff that changes the `.dlim` layout or serialization, or changes what an image at an
-UNCHANGED path contains, bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) in the same
-change.** Without the bump a stale image stays structurally valid and silently serves a
-different model; a content change that also changes the path cannot be reinterpreted and needs
-no bump. `REVIEW.das` holds the stamp of the layout closure - every `Archive` serializer body,
-`build_image`, `parse_image`, every `*_prepare` mint - and reds when the closure changed with the
-version unmoved; the bump re-stamps both constants with the values the finding prints, and a
-change whose path moved re-stamps the hash alone.
+**A diff that moves a byte in a `.dlim`, adds or drops a serialized field, or changes what an
+image at an UNCHANGED path contains, bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) in
+the same change; weakening the `REVIEW.das` layout-stamp check - narrowing its closure or
+dropping the cell - is a defect.** Without the bump a stale image stays structurally valid and
+silently serves a different model. What the stamp covers is the layout stamp section of
+`ARCHITECTURE_IMAGE.md`.
 
-**Every `serialize` / `serialize_image_meta` overload over an `Archive` that writes two or more
-fields opens with `verify(count_meta_fields(x) == K)`, and weakening a tripwire
-(`IMAGE_META_FIELDS` and its family twins) is a defect** - raising the constant without adding
-the field to the serializer leaves that field out of every image, and a serializer without the
-tripwire reads a forgotten field back as zero on every load. `REVIEW.das` checks the presence.
+**Weakening a meta field-count tripwire - `IMAGE_META_FIELDS` and the per-family constants
+beside it - or the `REVIEW.das` check that requires one, is a defect.** Raising the constant
+without adding the field to the serializer leaves that field out of every image, and a
+serializer without the tripwire reads a forgotten field back as zero on every load.
 
 **A filesystem or chunk-allocation decline while saving an image
 (`dasllama/dasllama_image.das`) never fails the load - warn, and serve what is still whole:

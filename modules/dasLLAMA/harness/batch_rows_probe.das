@@ -146,7 +146,7 @@ def main() : int {
         var prompt <- encode(tk, "The old lighthouse keeper watched the storm roll in from the west, counting the seconds between each flash and the thunder that followed, while the village below slept through it.", false)
         var base = 0.0lf
         for (bstr in split(cfg.bs, ",")) {
-            let nb = int64(to_int(strip(bstr)))
+            let nb = to_int64(strip(bstr), false)
             if (nb < 1l) {
                 continue
             }

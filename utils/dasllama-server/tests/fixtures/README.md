@@ -61,6 +61,7 @@ Speech fixtures (the same server, restarted with
 | File | Command |
 |---|---|
 | `stats_tts.json` | `curl $B/v1/stats` after a synthesis or two - the `tts` block (voices, sample rate, lane) rides the full stats shape |
+| `stats_tts_failed.json` | `curl $B/v1/stats` on a boot whose whole `--tts` file set is THERE but whose worker cannot load it - copy `kitten-nano.gguf` + `tts_postag.bin` into a scratch dir and write a `tts_g2p.bin` of ten bytes, `TG2P` then a version byte of 1 (an ordinary upgrade leaves exactly that), then boot `--tts <scratch>/kitten-nano.gguf --config <a one-key toml>` with no `--model`. The `tts` block with `ready: false`, empty `voices`, the requested `lane`, and the loader's own `error`, which the speech card prints instead of the studio. A file that is simply ABSENT is a different path - `configure_tts` drops the route before the worker starts, and the block never appears |
 | `config_tts.json` | `curl $B/config` on that same boot - the `tts` path and `tts_lane` as the speech studio's offer card reads them |
 | `speech.wav` | `curl -X POST $S -d '{"input":"Hi.","voice":"expr-voice-2-f","response_format":"wav"}' -o speech.wav` - raw bytes, keep the exact RIFF header. Say ONE short word: the answer is uncompressed 16-bit PCM, so every second costs ~48 KB |
 | `speech_error.json` | `curl -X POST $S -d '{"input":"Hi.","response_format":"mp3"}'` (the declined-format 400 body) |
@@ -76,8 +77,8 @@ Catalog/setup fixtures (same server, booted with NO model for the setup ones):
 | File | Command |
 |---|---|
 | `stats_setup.json` | `curl $B/v1/stats` on a no-model (setup mode) boot |
-| `catalog_idle.json` | `curl $B/catalog` on a boot whose `DASLLAMA_MODELS_DIR` names a scratch dir holding SYMLINKS to exactly what the fixture must read present: at least one catalog entry, plus `kitten-nano.gguf` and both `tts_g2p.bin` / `tts_postag.bin`, so the speech card's enable state is captured rather than derived. Symlink, never copy - a personal model library does not belong in a fixture, and neither does a second copy of one |
-| `catalog_empty.json` | the same call with `DASLLAMA_MODELS_DIR` on an EMPTY scratch dir: every entry, the ASR tower and the whole speech set absent - the document the download offers are read from |
+| `catalog_idle.json` | `bin/daslang -jit utils/dasllama-server/tests/fixtures/capture_catalog.das -- --presence <dir> catalog_idle.json` (repo root) over a scratch dir holding SYMLINKS to exactly what the fixture must read present: the entries and companions the committed fixture shows present, plus `kitten-nano.gguf` and both `tts_g2p.bin` / `tts_postag.bin`, so the speech card's enable state is captured rather than derived. Symlink, never copy - a personal model library does not belong in a fixture, and neither does a second copy of one |
+| `catalog_empty.json` | the same rail with `--presence <dir> catalog_empty.json` over an EMPTY scratch dir: every entry, the ASR tower and the whole speech set absent - the document the download offers are read from |
 | `catalog_downloading.json` + `catalog_done.json` | `bin/daslang -jit utils/dasllama-server/tests/fixtures/capture_catalog.das` (repo root) - boots a setup server on a scratch dir, downloads the smallest card FOR REAL, snapshots `/catalog` mid-flight and after it lands, normalizes paths, deletes the scratch download |
 | `catalog_refusal.json` | `POST $B/catalog/download` for a second entry while one runs (the 409 body) |
 

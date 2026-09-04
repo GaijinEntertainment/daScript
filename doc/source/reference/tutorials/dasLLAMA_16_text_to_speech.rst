@@ -48,15 +48,25 @@ caps(): ask, don't assume
 =========================
 
 ``caps`` answers what the loaded model serves: the voice names it accepts, the
-languages it speaks, the rate of the PCM it hands back, and whether it can
+language each one speaks, the rate of the PCM it hands back, and whether it can
 clone a voice from a recording. Ask for a voice or a language ``caps`` does not
 carry and the call panics — the request is never quietly swapped for something
 the model does have.
+
+``voices`` can come back **empty**. A model file may carry packs whose
+languages this front end does not phonemize — Kokoro ships fifty-four in nine
+languages, and ``caps`` lists the twenty-eight it can drive — so a build that
+phonemizes none of them offers none, and there is no first voice to fall back
+on. Check before you index.
 
 .. code-block:: das
 
    let c <- caps(m)
    print("{length(c.voices)} voices, {c.sample_rate} Hz, clones a voice: {c.cloning}\n")
+   if (empty(c.voices)) {
+       print("this model has no voice the front end can drive\n")
+       return
+   }
    let voice = c.voices[0]
 
 Speak it
@@ -106,6 +116,21 @@ same string here.
    // output: dˈɑktəɹ ʧˈɛn ɹˈɛd θɹˈi pˈYnt fˈIv pˈAʤᵻz ænd pˈAd twˈɛlv dˈɑləɹz.
 
 ``read`` comes out ``ɹˈɛd``, the past tense, because the tagger called it one.
+
+That two-argument form reads American English. A synthesis, though,
+phonemizes in the dialect **the voice was trained on** — Kokoro's ``bf_emma``
+reads ``en-gb`` where ``af_heart`` reads ``en-us`` — so a document about what
+a particular voice will say has to ask in that voice's language, or it
+describes a different sound. ``caps`` carries one language per voice in
+``voice_langs``, beside ``voices``; ``tts_voice_lang`` answers for a family
+alias too, and panics on a voice the model cannot drive with the message a
+synthesis would give.
+
+.. code-block:: das
+
+   let lang = tts_voice_lang(m, voice)          // "en-us" | "en-gb"
+   print("{voice} reads {lang}\n")
+   print("{tts_phonemize(m, spoken, lang)}\n")  // the string that voice is asked to say
 
 The front end is where ``synthesize`` spends its first microseconds, and
 ``TtsTimings`` counts them separately from the model stages.

@@ -12,8 +12,8 @@ require dasllama/dasllama_env
 // shipped next to each ggml-vocab-*.gguf), through the production facade (load_tokenizer_auto ->
 // encode/decode) so BOTH backends are covered: byte-level BPE (llama-bpe, qwen2, qwen35, gpt-2),
 // SPM-style BPE (gemma-4), and SentencePiece (phi-3, llama-spm). The vocab fixtures are
-// machine-local (gitignored model dir), so each case skips cleanly when absent — same contract as
-// the model parity tests.
+// machine-local (gitignored model dir), so each case skips cleanly when absent - the file rides
+// the runner's model-free suite and reports SKIPPED where the vocab fixtures are not stocked.
 
 // override the machine-local fixture root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
 def private models_dir() : string {

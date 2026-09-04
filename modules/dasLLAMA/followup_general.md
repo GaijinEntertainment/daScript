@@ -1190,11 +1190,9 @@
    reaches `panic(` from config input. Also owed: `main.das`'s `suppress_tune_for_setup` decides
    "no model configured" from argv alone (`--model` / `--config`), so a `--tts`-only start - a
    serving start that runs kernels - suppresses the tune mint.
-102. **Two gates the speech studio round asked for.** (1) `utils/dasllama-server/REVIEW.das`'s
-   fixture sweep reads each fixture into a `string`, which stops at the first NUL, so the one
-   binary fixture (`tests/fixtures/speech.wav`) is scanned for seven bytes while the gate
-   appears to cover it - an explicit binary skip, or a byte-array read, makes the coverage
-   honest (a gate edit under the weakening rule, so ruled, not slipped in). (2) A style rule:
+102. **A style rule the speech studio round asked for.** (The byte-array fixture sweep the same
+   round asked for landed with the text-to-speech follow-on: `utils/dasllama-server/REVIEW.das`
+   reads every fixture as bytes and sweeps by kind.) A style rule:
    `js?["k"] == null` / `!= null` on a `JsonValue?` is always wrong and always compiles - the
    safe index answers a shared null NODE, never a null pointer (`skills/daslang/references/json.md`
    says so); the presence test is `is_null`-shaped. One AST shape, no name reading; it cost
@@ -1226,3 +1224,67 @@
    label (Boris, 2026-09-03). Owed: a retrain on the permissive silver prose alone, scored by the
    rig's tagger agreement and heteronym cells against the 2422/2488 and 70/78 the mixed corpus
    gives; if the loss is a point or less, the permissive pack replaces it and the label goes.
+105. **A lint fixture's `expect 50503:N` is hand-counted.** `utils/lint/tests/*.das` pin the
+   number of findings a rule fires in a header line the fixture runner compares against the run;
+   a fixture that adds cases and forgets the count reds honestly, but one whose count drifts the
+   OTHER way (a case that stops firing while another starts) stays green. Owed: a
+   `utils/lint/REVIEW.das` check that every fixture's per-case markers (the `bad_*` / `good_*`
+   naming the folder already uses) sum to the header's count.
+106. **Three copies of the speech files' bytes and hashes.** The model card
+   (`harness/tts_model_card.md`), the publish script's verification and `performance/model_specs.das`
+   each carry the size and sha256 of the five files; the publish script checks itself against
+   the card, nothing checks the card against `serve_tts_set()`. Owed: a `harness/REVIEW.das` check
+   that the card's table and the catalog rows agree byte for byte, so a re-publish cannot leave
+   the catalog pinned to the previous upload.
+107. **`lex_part` is decoded two to three times per resolved word.** `dasllama_g2p.das` decodes
+   one merged value's dialect header in `grown_find -> lex_find_part -> lex_has -> lex_part`, again
+   in `entry_ps -> lex_is_dict -> lex_part`, and again for the reading itself on the dict path.
+   Each pass re-reads the flags byte and re-walks the American length prefix to find the British
+   part. One decode returning `(kind, a, b)` - a small `LexPart` struct threaded from
+   `lex_find_part` into `entry_ps` - collapses them. The front end sits outside `[hot_path]` and
+   the binary search dominates, so this is a measure-it row, not a hot-path defect.
+108. **The British `-ing` decline loses the GB stem vowel.** `suffix_ing` declines a British stem
+   ending in a schwa or a length mark because the reference has no rule for the linking r such a
+   stem wants; the word then falls to the fallback and reads as the AMERICAN word rewritten,
+   throwing away the British stem the lexicon supplied - "mentoring" reads with the American
+   r-coloured schwa where the GB stem "mentor" ends in the long open o. 61 words in the corpus
+   fixtures' vocabulary hit it. The reference build
+   does the same and carries its own TODO, so we do not diverge - but a linking-r rule (stem + r +
+   ing when the stem ends so) reads all 61 correctly and is testable against the GB lexicon's own
+   `-ing` entries, which spell exactly that (`anchoring`, `tutoring`, `harbouring`). Pinned today by
+   `tests/test_tts_g2p.das`'s British `-ing` arm, whose two expectations move when the rule lands.
+109. **Two `utils/dasllama-server/REVIEW.das` gates the fix batch asked for.** (1) Every file under
+   `tests/fixtures/` has a row in `tests/fixtures/README.md`, and every row names a file that
+   exists - a fixture with no capture rail cannot be re-captured, and a row describing a capture
+   that cannot produce its file (the `stats_tts_failed.json` row once described a MISSING pack,
+   which never yields a `tts` block) is worse than none. (2) A test that spawns `main.das` passes
+   `--config` - without it the child adopts whatever `dasllama-server.toml` sits in the cwd or
+   beside the program, a developer's own with `authoritative = true` included, so the test
+   measures that config, not its flags (`with_spawned_boot` now writes a one-key TOML; the gate
+   keeps the next spawn honest).
+110. **Audit-agent item, not a lint rule: a cap whose message says "characters" but whose test is
+   `length(<string>)`.** `length()` on a string is bytes; the server counted bytes against
+   `TTS_MAX_INPUT_CHARS` while the page counted UTF-16 units, so one paste was accepted by one
+   side and refused by the other. The facade already had `cpt_length` for exactly this and the
+   server did not reach it. A rule would have to guess semantics from a name, so this is an item
+   for the review-round auditors' checklist.
+111. **Gate candidates the review round's dragons surfaced, one line each.** (a) dasLLAMA:
+   `check_test_placement` - a `[test]` file requiring `dasllama/*` outside `tests/`, licensed
+   set = the four ledgered files in `tests/CLAUDE.md`. (b) `tests/REVIEW.das` (new): every test
+   file dastest runs is in a `run.das` suite or its header names `DASLLAMA_CPU_PREFILL`; every
+   test file has a `CMakeLists.txt` row. (c) `performance/REVIEW.das`: a `url =` / `bytes =` /
+   `sha256 =` literal in any `.das` under the folder other than `model_specs.das` and
+   `profile_common.das`; every `records/<box>.json` row's `tune_sha` names an archive that exists;
+   a `defaults/` profile's `provenance.dasllama_version` equals `DASLLAMA_RELEASE`. (d)
+   `harness/REVIEW.das` (new): `tune_kernels.das`'s `benches` list ends in `dot_q8q8_laneq4x4`.
+   (e) `benchmarks/REVIEW.das` (new): nothing under `benchmarks/` or `performance/` but the two
+   reference cells writes under `performance/records/`. (f) `daslib`: a `daslib/*.das` emitting a
+   `RULE_ID` that `utils/lint/REVIEW.das`'s `RULE_MODULES` lacks, and the reverse sweep (a fixture
+   or `lint.rst` section whose id no module still emits). (g) `utils/REVIEW.das`: a test file under
+   `utils/` named in no workflow row, or only in a `--compile-only` row. (h) `site-dasllama`: a
+   `_stories/*.md` entry with neither a figures comment nor a date and sha. (i) `dasLLVM`: every
+   `[EnvConfig]` field of `llvm_env.das` named in `ARCHITECTURE.md` sec.3; every `requires=` /
+   `g_target_x64_*` feature name present in `das_cpu_supports`. (j) `dasllama-server`: a fixture's
+   top-level key absent from `README.md`. (k) `REVIEW_IMAGE`: an addition on the left of a
+   `> msize` compare in `dasllama_image.das`; `REVIEW_TTS`: `styletts2_synthesize` carries
+   `[hot_path]`; a family name or tag string in the two shared TTS files.

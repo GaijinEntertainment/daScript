@@ -111,9 +111,11 @@ let private LENGTH_MARK = 720   // ː
 let private SCHWA = 601   // ə
 
 //! A vowel plus the rhotic, before a consonant or a word end: the British inventory drops the
-//! ɹ into the vowel it leaves. Keyed by the American vowel's codepoint.
+//! ɹ into the vowel it leaves. Keyed by the American vowel's codepoint, each row the majority
+//! reading of the pack's own merged entries there; a vowel with no row keeps its ɹ.
 let private GB_RHOTIC_PRE_C <- {
-    601 => "ə", 604 => "ɜː", 596 => "ɔː", 593 => "ɑː", 603 => "ɛː", 618 => "ɪə", 650 => "ʊə"   // nolint:STYLE039
+    601 => "ə", 604 => "ɜː", 596 => "ɔː", 593 => "ɑː", 603 => "ɛː", 618 => "ɪə", 650 => "ʊə",   // nolint:STYLE039
+    'I' => "Iə", 'W' => "Wə", 105 => "ɪə", 117 => "ʊə"   // nolint:STYLE039
 }
 
 //! The same pair before a vowel, where the ɹ links and survives
@@ -349,12 +351,15 @@ def private lex_is_dict(g : G2pModel; t : LexTable; i : int; british : bool) : b
     return g.data[a] == uint8(1)
 }
 
+//! the phonemes of a value span [a, b): the first byte is the entry kind, the rest the reading
+def private span_ps(g : G2pModel; a, b : int64) : string => bytes_str(g.data, a + 1l, int(b - a - 1l))
+
 //! a single-dialect table's entry: the CMUdict section, whose values carry no dialect part
 def private lex_plain_single(g : G2pModel; t : LexTable; i : int) : string {
     var a = 0l
     var b = 0l
     lex_value_span(g, t, i, a, b)
-    return bytes_str(g.data, a + 1l, int(b - a - 1l))
+    return span_ps(g, a, b)
 }
 
 //! a plain entry's phonemes
@@ -362,7 +367,7 @@ def private lex_plain(g : G2pModel; t : LexTable; i : int; british : bool) : str
     var a = 0l
     var b = 0l
     return "" if (!lex_part(g, t, i, british, a, b))
-    return bytes_str(g.data, a + 1l, int(b - a - 1l))
+    return span_ps(g, a, b)
 }
 
 //! a part-of-speech entry's reading for `tag`: `found` says the tag has a row, `present` that
@@ -538,9 +543,9 @@ def private gb_symbol(c : array<int>; i : int) : string {
 }
 
 def misaki_us_to_gb(ps : string) : string {
-    //! The American inventory's phonemes in the British one: a post-vocalic ɹ drops into the
-    //! vowel it leaves and links before a vowel, then the symbols the two spell differently.
-    //! What the American fallback chain owes a British voice, aligned off us_gold/gb_gold.
+    //! The American inventory's phonemes in the British one, aligned off us_gold/gb_gold: the
+    //! post-vocalic ɹ into the vowel it leaves, then the symbols the two spell differently.
+    //! AMERICAN INPUT ONLY - it reads every ɛɹ before a vowel as SQUARE, merry as Mary.
     var inscope c <- utf8_to_cpts(ps)
     let n = length(c)
     return build_string() $(var w) {
@@ -554,9 +559,7 @@ def misaki_us_to_gb(ps : string) : string {
                     w |> write(pair)
                 } else {
                     w |> write(gb_symbol(c, i))
-                    if (linking) {
-                        w |> write(cpt_to_utf8(RHOTIC))
-                    }
+                    w |> write(cpt_to_utf8(RHOTIC))
                 }
                 i += 2
                 continue
@@ -744,8 +747,10 @@ def private parent_tag(tag : string) : string {
 //! resolve one table entry (plain or part-of-speech keyed) for a tag and context
 def private entry_ps(g : G2pModel; t : LexTable; i : int; tag : string; ctx : TokenContext; has_ctx, british : bool; var present : bool&) : string {
     if (!lex_is_dict(g, t, i, british)) {
-        present = true
-        return lex_plain(g, t, i, british)
+        var a = 0l
+        var b = 0l
+        present = lex_part(g, t, i, british, a, b)
+        return present ? span_ps(g, a, b) : ""
     }
     var found = false
     if (has_ctx && ctx.future_vowel < 0) {
@@ -939,10 +944,14 @@ def private stem_ing(g : G2pModel; word : string; tag : string; stress : float; 
     return suffixed_ps(suffix_ing(r.ps, british), r.rating)
 }
 
-def private gold_plain(g : G2pModel; word : string; british : bool) : string {
-    let i = lex_find_part(g, g.gold, word, british)
-    return i >= 0 && !lex_is_dict(g, g.gold, i, british) ? lex_plain(g, g.gold, i, british) : ""
+//! a table's plain reading of `word` in this dialect, "" when the table has no such entry or
+//! keys it by part of speech
+def private lex_plain_reading(g : G2pModel; t : LexTable; word : string; british : bool) : string {
+    let i = lex_find_part(g, t, word, british)
+    return i >= 0 && !lex_is_dict(g, t, i, british) ? lex_plain(g, t, i, british) : ""
 }
+
+def private gold_plain(g : G2pModel; word : string; british : bool) : string => lex_plain_reading(g, g.gold, word, british)
 
 def private gold_dict(g : G2pModel; word, tag : string; british : bool) : string {
     let i = lex_find_part(g, g.gold, word, british)
@@ -969,7 +978,7 @@ def private special_case(g : G2pModel; word : string; tag : string; stress : flo
     }
     if (word == "am" || word == "Am" || word == "AM") {
         return get_nnp(g, word, british) if (starts_with(tag, "NN"))
-        return some_ps(gold_plain(g, "am", british), 4) if (ctx.future_vowel < 0 || word != "am" || (stress != NO_STRESS && stress > 0.0))
+        return suffixed_ps(gold_plain(g, "am", british), 4) if (ctx.future_vowel < 0 || word != "am" || (stress != NO_STRESS && stress > 0.0))
         return some_ps("ɐm", 4)   // nolint:STYLE039
     }
     if (word == "an" || word == "An" || word == "AN") {
@@ -983,7 +992,7 @@ def private special_case(g : G2pModel; word : string; tag : string; stress : flo
         return some_ps("b{cpt_to_utf8(PRIMARY)}I", 4)
     }
     if (word == "to" || word == "To" || (word == "TO" && (tag == "TO" || tag == "IN"))) {
-        return some_ps(gold_plain(g, "to", british), 4) if (ctx.future_vowel < 0)
+        return suffixed_ps(gold_plain(g, "to", british), 4) if (ctx.future_vowel < 0)
         return some_ps(ctx.future_vowel == 1 ? "tʊ" : "tə", 4)   // nolint:STYLE039
     }
     if (word == "in" || word == "In" || (word == "IN" && tag != "NNP")) {
@@ -998,9 +1007,9 @@ def private special_case(g : G2pModel; word : string; tag : string; stress : flo
     }
     if (word == "used" || word == "Used" || word == "USED") {
         if ((tag == "VBD" || tag == "JJ") && ctx.future_to) {
-            return some_ps(gold_dict(g, "used", "VBD", british), 4)
+            return suffixed_ps(gold_dict(g, "used", "VBD", british), 4)
         }
-        return some_ps(gold_dict(g, "used", "DEFAULT", british), 4)
+        return suffixed_ps(gold_dict(g, "used", "DEFAULT", british), 4)
     }
     return none_ps()
 }
@@ -1073,6 +1082,7 @@ def private get_number(g : G2pModel; word_in : string; british : bool) : PsResul
     var rating = 4
     if (starts_with(word, "-")) {
         let m = lookup(g, "minus", "", NO_STRESS, TokenContext(future_vowel = -1, future_to = false), false, british)
+        return none_ps() if (!m.ok)
         result |> push(m.ps)
         word = slice(word, 1)
     }
@@ -1252,9 +1262,27 @@ def g2p_predict(g : G2pModel; word : string) : array<string> {
     return <- out
 }
 
-//! The permissive fallback: each letter run of the token through CMUdict, else the spelling
-//! model; pieces join with no space, and a British caller takes the whole through the
-//! inventory rewrite - both sources answer in the American one. Rating 2.
+//! One letter run of a fallback token, in the dialect the caller asked for. The lexicon answers
+//! first - a glued group sends its WHOLE surface here as soon as one piece is unresolvable, and
+//! CMUdict is pruned of exactly the words both dialects carry. Only the American sources rewrite.
+def private fallback_piece(g : G2pModel; low : string; british : bool) : string {
+    var ps = lex_plain_reading(g, g.gold, low, british)
+    if (empty(ps)) {
+        ps = lex_plain_reading(g, g.silver, low, british)
+    }
+    return ps if (!empty(ps))
+    let k = lex_find(g, g.cmu, low)
+    if (k >= 0) {
+        ps = lex_plain_single(g, g.cmu, k)
+    } else {
+        var inscope phones <- g2p_predict(g, low)
+        ps = arpabet_to_misaki(phones)
+    }
+    return british ? misaki_us_to_gb(ps) : ps
+}
+
+//! The permissive fallback: each letter run of the token through the lexicon, then CMUdict,
+//! then the spelling model; pieces join with no space. Rating 2.
 def private fallback(g : G2pModel; text : string; british : bool) : PsResult {
     var inscope c <- utf8_to_cpts(text)
     var inscope parts : array<string>
@@ -1269,19 +1297,10 @@ def private fallback(g : G2pModel; text : string; british : bool) : PsResult {
         while (j < n && (is_ascii_alpha(c[j]) || (c[j] == '\'' && j + 1 < n && is_ascii_alpha(c[j + 1])))) {
             j++
         }
-        let low = lower_word(cpts_to_utf8(c, i, j))
-        let k = lex_find(g, g.cmu, low)
-        if (k >= 0) {
-            parts |> push(lex_plain_single(g, g.cmu, k))
-        } else {
-            var inscope phones <- g2p_predict(g, low)
-            parts |> push(arpabet_to_misaki(phones))
-        }
+        parts |> push(fallback_piece(g, lower_word(cpts_to_utf8(c, i, j)), british))
         i = j
     }
-    let us = join(parts, "")
-    return none_ps() if (empty(us))
-    return some_ps(british ? misaki_us_to_gb(us) : us, 2)
+    return suffixed_ps(join(parts, ""), 2)
 }
 
 // ---------------------------------------------------------------- tokens and groups

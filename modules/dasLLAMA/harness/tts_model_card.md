@@ -50,7 +50,9 @@ daslang utils/dasllama-server/txt2wav.das -- --tts kitten-nano.gguf --voice expr
 ```
 
 Kitten nano is the served default: 59 MB, eight voices, a real-time factor of 0.03 on an Apple
-M1 Max (the measured rows are the module's `PERF_LEDGER.md`). Its voices are `expr-voice-2-m` through `expr-voice-5-f`, and the upstream's alias names
+M1 Max (measured 2026-09-02; the record is the repository's `plans/dasllama-tts.md` until the
+module's `PERF_LEDGER.md` carries a speech row). Its voices are `expr-voice-2-m` through
+`expr-voice-5-f`, and the upstream's alias names
 (`Bella`, `Jasper`, ...) are accepted for them. Kokoro ships 54 packs, of which the front end
 drives the 28 English ones: the 20 American (`af_*`, `am_*` - `af_heart`, `am_adam`, ...) and
 the 8 British (`bf_*`, `bm_*` - `bf_emma`, `bm_george`, ...), each phonemized in its own
@@ -83,7 +85,7 @@ the reference implementations (block by block, and the front end sentence by sen
 
 | file | licence | terms |
 |---|---|---|
-| `kitten-nano.gguf`, `kitten-mini.gguf` | Apache-2.0 | KittenML's weights, converted; `LICENSE.APACHE-2.0` |
+| `kitten-nano.gguf`, `kitten-mini.gguf` | Apache-2.0 | KittenML's weights, converted; `LICENSE.APACHE-2.0`; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
 | `kokoro-82m.gguf` | Apache-2.0 | hexgrad's weights and voices, converted; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
 | `tts_g2p.bin` | Apache-2.0 and BSD-2-Clause | misaki and g2p_en (Apache-2.0), CMUdict (`LICENSE.CMUDICT`, Carnegie Mellon University) |
 | `tts_postag.bin` | CC BY-SA 4.0 | the tagger weights are trained on UD English-EWT (`LICENSE.UD_EWT`); the exception table and the silver tags come from spaCy (MIT, `LICENSE.SPACY`); Gutenberg prose is public domain |

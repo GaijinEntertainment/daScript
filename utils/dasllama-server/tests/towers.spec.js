@@ -3,12 +3,15 @@
 
 const { test, expect, fx, openControl, lastJson } = require('./fixtures');
 
-const E2B_TOWER_PATH = 'C:\\Users\\user\\.dasllama\\models\\mmproj-gemma-4-E2B-it-bf16.gguf';
-const ASR_PATH = 'C:\\Users\\user\\.dasllama\\models\\ggml-parakeet-tdt-0.6b-v3-f32.bin';
+// both towers as the capture records them: the E2B row's own pinned mmproj, and the parakeet
+// file at the path the capture's models dir implies
+const e2bEntry = doc => doc.entries.find(x => x.name === 'gemma-4-e2b');
+const E2B_TOWER_PATH = e2bEntry(fx('catalog_idle')).vision_path;
+const ASR_PATH = fx('catalog_idle').models_dir + '\\' + fx('catalog_idle').asr.file;
 
 function withVisionPresent(doc) {
     const d = JSON.parse(JSON.stringify(doc));
-    const e = d.entries.find(x => x.name === 'gemma-4-e2b');
+    const e = e2bEntry(d);
     e.vision_present = true;
     e.vision_path = E2B_TOWER_PATH;
     return d;
@@ -17,10 +20,19 @@ function withVisionPresent(doc) {
 // the capture box may stock the tower - this test's subject is the download OFFER
 function withVisionAbsent(doc) {
     const d = JSON.parse(JSON.stringify(doc));
-    const e = d.entries.find(x => x.name === 'gemma-4-e2b');
+    const e = e2bEntry(d);
     e.vision_present = false;
     e.vision_path = '';
     return d;
+}
+
+// a slot loaded at runtime: the stats know its towers, and no roster row mentions it
+function liveSlot(file, audio) {
+    const s = JSON.parse(JSON.stringify(fx('stats')));
+    s.models[0].name = file;
+    s.models[0].vision = true;
+    s.models[0].audio = audio;
+    return s;
 }
 
 function withAsrPresent(doc) {
@@ -83,6 +95,24 @@ test('a wired tower renders the vision check chip instead of a button', async ({
     await expect(row.locator('button', { hasText: 'enable vision' })).toHaveCount(0);
 });
 
+test('a live slot whose mmproj carried the audio tower says so on its chip', async ({ page }) => {
+    const doc = withVisionPresent(fx('catalog_idle'));
+    const e = e2bEntry(doc);
+    await openControl(page, { stats: liveSlot(e.file, true), catalog: doc });
+    const chip = page.locator('#cat-body tr', { hasText: e.display }).locator('.chip', { hasText: 'vision' });
+    await expect(chip).toHaveText('vision + audio ✓');
+    await expect(chip).toHaveAttribute('title', /audio encoder/);
+});
+
+test('a live slot with vision alone keeps the plain check chip', async ({ page }) => {
+    const doc = withVisionPresent(fx('catalog_idle'));
+    const e = e2bEntry(doc);
+    await openControl(page, { stats: liveSlot(e.file, false), catalog: doc });
+    const row = page.locator('#cat-body tr', { hasText: e.display });
+    // "ready" is the not-live wording - this row is live, so the chip must be the check
+    await expect(row.locator('.chip', { hasText: 'vision' })).toHaveText('vision ✓');
+});
+
 test('the dictation offer downloads the pinned parakeet tower', async ({ page }) => {
     const { posts } = await openControl(page, { catalog: fx('catalog_idle') });
     const b = page.locator('#asr-offer button');
@@ -107,6 +137,17 @@ test('a wired ASR config renders the dictation check chip', async ({ page }) => 
     c.surface.sources.asr = 'toml';
     await openControl(page, { config: c, catalog: withAsrPresent(fx('catalog_idle')) });
     await expect(page.locator('#asr-offer .chip')).toHaveText('dictation ✓');
+});
+
+test('a --asr the server itself sourced is wired, ticked override or not', async ({ page }) => {
+    // a cli key stays CLI-owned until the override is ticked - it is still this boot's dictation
+    const c = JSON.parse(JSON.stringify(fx('config')));
+    c.surface.config.asr = ASR_PATH;
+    c.surface.sources.asr = 'cli';
+    await openControl(page, { config: c, catalog: withAsrPresent(fx('catalog_idle')) });
+    await expect(page.locator('#en-asr')).not.toBeChecked();
+    await expect(page.locator('#asr-offer .chip')).toHaveText('dictation ✓');
+    await expect(page.locator('#asr-offer button')).toHaveCount(0);
 });
 
 test('setup-mode serve wires already-present towers into the fresh config', async ({ page }) => {

@@ -180,7 +180,7 @@ def private check_tracked_fixture_writes(path : string; lines : array<string>; s
             let named = tracked_dir_in(expand(line, trace))
             if (!empty(named)) {
                 gate_finding(path, line_no,
-                    "writes or removes a path under {TESTS_DIR}/{named}, which git tracks - a test works on a temp copy it makes itself, so the tree is unchanged after the suite runs")
+                    "writes or removes a path under {TESTS_DIR}/{named}, which git tracks - a test works on a temp copy it makes itself, so the tree is unchanged after the suite runs. This scan sees only the write line and the local declarations that line names, over the tracked directories listed here: a path a helper returns, a write a call level below the path, and a tracked file directly under {TESTS_DIR} pass it unreported")
             }
         }
         let decl = decl_init(line)

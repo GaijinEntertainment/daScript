@@ -15,7 +15,9 @@ lede: Three speech models, a text front end that is nothing but data, and an aft
      parakeet-tdt-0.6b-v2 on the synthesized audio and UTMOS22-strong, the reference arms' own audio
      re-scored on the same forms and scorer; the front-end parity counts are the test suite's own lines
      at das 850f0ba8a (2026-09-03): 171 of 200 American sentences, 149 of 157 British, 32 of 38
-     heteronyms against the reference front end's 24; the pack sizes are the pack builder's own print at
+     heteronyms against the reference front end's 24 (the American count reads 170 once the
+     fallback consults the lexicon before CMUdict, 2026-09-04: "PyTorch" moved from the
+     reference's spelling to the local addition's, the other rows unchanged); the pack sizes are the pack builder's own print at
      850f0ba8a (v1 12,719,239 bytes, v2 14,011,554; the tagger pack 12,566,510); the phoneme strings for
      Dr. Chen, the two Polish names and the hunt are the served front end's own answers on 2026-09-03 at
      das 2efa6dde1 (POST /v1/audio/phonemes, and the tutorial's live run for Dr. Chen); the hunt compared
@@ -26,12 +28,17 @@ lede: Three speech models, a text front end that is nothing but data, and an aft
      same box read nano 0.028-0.030 and kokoro 0.072-0.076 over four warm runs of a 15 s input (a 4%
      spread, so not a quiet-box measurement; the 2026-09-02 receipts stand as the published figures);
      the audio clips under files/tts/ are the served engine's own answers to POST /v1/audio/speech on
-     2026-09-03: dr-chen, brzezinski, grzegorz, hello-kitten and hello-bare-kitten by kitten-nano in the
-     voice expr-voice-5-f at das 2efa6dde1; hello-emma and hello-bare-emma by kokoro-82m in bf_emma at
+     2026-09-03: dr-chen, brzezinski, grzegorz and hello-kitten by kitten-nano in the voice
+     expr-voice-5-f at das 2efa6dde1; hello-emma and hello-bare-emma by kokoro-82m in bf_emma at
      das c08ae9bcf and 220e56bf3 (the two builds the hunt's last two paragraphs describe); the bare
      line's tail breath: ours 0.012-0.014 RMS at 74-95% above 4 kHz over 1320-1380 ms against the
      reference pipeline's 0.014-0.017 at 84-98% over 1340-1380 ms, versus 0.041 after the question mark
-     (2026-09-03, das 220e56bf3) -->
+     (2026-09-03, das 220e56bf3); the model sizes (59, 296, 353 MB) and Kokoro's 54 voice packs are the
+     model card's byte counts at the Hugging Face commit c5247896 (2026-09-03); "the same eighteen token
+     ids, the same 49,800 samples" is the reference-pipeline probe of 2026-09-03 at das c08ae9bcf; "19 MB"
+     is the pack builder's estimate for two more plain tables (2.7 + 3.6 MB packed, 2026-09-03) on top of
+     the v1 pack; "44,000 words" is the builder's own print at 850f0ba8a (cmudict 79,062 kept, 44,393
+     dropped) -->
 dasLLAMA exists to run inside games, and games are where the GPU is never yours. The frame
 owns it. What a game has to spare is a few CPU cores, sometimes, and an engine that lives on
 those cores gets to do the things a game would like an engine to do: hear the player
@@ -62,7 +69,7 @@ dˈɑktəɹ ʧˈɛn ɹˈɛd θɹˈi pˈYnt fˈIv pˈAʤᵻz ænd pˈAd twˈɛlv 
 
 Note "read" coming out as `ɹˈɛd`, the past tense, because the tagger looked at the sentence
 and said so. The reference pipelines do all this with a stack of Python packages and a
-phonemizer process, which is fine for a notebook and impossible next to a game executable. So
+phonemizer process, which is fine for a notebook. A game ships an executable and its data, so
 the front end here is data: a normalizer that reads numbers, dates, money, units and
 abbreviations the way a reader does, a part-of-speech tagger, and a pronunciation table with a
 spelling model behind it for the words the table does not know.
@@ -198,16 +205,16 @@ and the fallback dictionary dropped the 44,000 words both dialects already carry
 | bytes | 12,719,239 | 14,011,554 |
 
 On the British corpus, 149 of the 157 sentences the reference answers from its table alone
-come out identical, and the six that differ are ours by rule: the lead pipe, the bass player,
-this minute detail, the does are watching, get the lead out, and my resume. Never rhyme retain
-and Britain.
+come out identical. Eight differ: two are tag calls that could go either way, and six are ours
+by rule: the lead pipe, the bass player, this minute detail, the does are watching, get the
+lead out, and my resume. Never rhyme retain and Britain.
 
 ## Where it ends
 
 So the server speaks now, the page shows what the model heard before it spoke, and every chat
 answer can read itself out. British Emma still does the talking around here: she narrated our
-tutorial videos through a Kokoro server we had to keep running next to the recorder, and now
-she narrates them from the same engine that generated the script, at fourteen times real time
-on a laptop. Never again the other way. Kitten nano does it at thirty-eight times and leaves
+tutorial videos through a Kokoro server we had to keep running next to the recorder, and the
+engine that generated the script now answers that same request itself, at fourteen times real
+time on a laptop. Never again the other way. Kitten nano does it at thirty-eight times and leaves
 the rest of the core to the frame, which is the number a game reads first, and the one we set
 out to get.

@@ -72,8 +72,10 @@ def test_corpus_phonemes(t : T?) {
         to_log(LOG_INFO, "tts g2p: {200 - mismatches - beyond}/200 sentences phoneme-identical with the reference, {beyond} read a heteronym or a name the reference misses\n")
         // every remaining difference is a tag the reference tagger read differently on a word
         // with a tag-keyed reading (the tagger agrees with it on 97 percent of tokens); the
-        // tokenizer and the lexicon rules themselves are identical on the whole corpus
-        t |> success(mismatches <= 3, "{mismatches} sentences differ (budget 3 - tag calls)")
+        // tokenizer and the lexicon rules themselves are identical on the whole corpus. Pinned
+        // exactly: a budget silently absorbs the next regression, and both differences here are
+        // named - lj019 (a sentence-final abbreviation) and ht012 ("dove").
+        t |> equal(mismatches, 2, "{mismatches} sentences differ on a tag call")
         t |> equal(beyond, length(BEYOND_REFERENCE), "the sentences the rules and the lexicon additions read beyond the reference")
     }
     t |> run("heteronyms: both readings present") @(t : T?) {
@@ -107,9 +109,11 @@ def test_corpus_phonemes(t : T?) {
 
 // the sentences the front end reads past the reference: the heteronyms its rules settle ("lead
 // pipe" and "get the lead out", "bass player", "minute detail", "the does", "my resume") and the
-// names the lexicon additions of harness/g2p_local_additions.json carry
+// names the lexicon additions of harness/g2p_local_additions.json carry - ov004 among them since
+// the fallback consults the lexicon: "PyTorch" is a camelCase group no lookup resolves, so the
+// addition pˈItɔɹʧ reaches the reader only there, where the reference spells out pˈɪtəɹk
 let private BEYOND_REFERENCE <- { "ht001", "ht003", "ht010", "ht017", "ht024", "ht038",
-    "lj024", "lj027", "lj037", "ov000", "ov001", "ov003", "ov006", "ov009", "ov011", "ov012", "ov015", "ov016",
+    "lj024", "lj027", "lj037", "ov000", "ov001", "ov003", "ov004", "ov006", "ov009", "ov011", "ov012", "ov015", "ov016",
     "ov017", "ov018", "ov019", "ov020", "ov021", "ov022", "ov025", "ov027", "ov028" }
 
 [test, arch(at = "../ARCHITECTURE_TTS.md#tts-heteronym-context")]
@@ -311,6 +315,25 @@ def test_pieces(t : T?) {
         let spelled <- g2p_predict(g, "flombastic")
         t |> success(length(spelled) >= 6 && length(spelled) <= 12, "GRU spelled {length(spelled)} phones")
     }
+    t |> run("the fallback reads the lexicon before CMUdict") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        // one unresolvable piece sends the WHOLE glued group here, so a letter run both
+        // dialects' lexicons carry does reach the fallback - and CMUdict, pruned of exactly
+        // those words, has only its own coarser reading to offer (wˈɔtəɹ, hˈɛlO, hˈɪɹd)
+        t |> equal(strip(g2p_phonemize(g, tg, "the water-tzarina")), "ðə wˈɔTəɹtɑɹˈinə", "the lexicon's flapped water")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "hello-flurbnik")), "həlˈOflˈɜɹnbɪk")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "heard-flurbnik")), "hˈɜɹdflˈɜɹnbɪk")   // nolint:STYLE039
+        // the British rail reads the British part itself, not the American one through the
+        // rewrite - the bath-trap split lives in the lexicon and no rewrite can invent it
+        // (misaki_us_to_gb of the American bˈæθ is bˈaθ)
+        t |> equal(strip(g2p_phonemize(g, tg, "the water-tzarina", true)), "ðə wˈɔːtətɑːɹˈiːnə")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "hello-flurbnik", true)), "həlˈQflˈɜːnbɪk")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "heard-flurbnik", true)), "hˈɜːdflˈɜːnbɪk")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "bath-flurbnik", true)), "bˈɑːθflˈɜːnbɪk", "the British bath vowel")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "laughter-flurbnik", true)), "lˈɑːftəflˈɜːnbɪk")   // nolint:STYLE039
+    }
     t |> run("loads inside the budget") @(t : T?) {
         return if (!data_present(t))
         let t0 = ref_time_ticks()
@@ -390,8 +413,9 @@ def test_british_corpus(t : T?) {
         to_log(LOG_INFO, "tts g2p gb: {clean - mismatches - beyond}/{clean} lexicon-only sentences phoneme-identical with the reference British front end, {beyond} read a heteronym past it\n")
         t |> equal(clean, 157, "the sentences the reference answered from its lexicon alone")
         // the same class of remainder the American rail carries: a tag the reference tagger
-        // read differently on a word with a tag-keyed reading
-        t |> success(mismatches <= 3, "{mismatches} sentences differ (budget 3 - tag calls)")
+        // read differently on a word with a tag-keyed reading, pinned exactly for the same
+        // reason - the two are lj019 and ht012, the American rail's own pair
+        t |> equal(mismatches, 2, "{mismatches} sentences differ on a tag call")
         t |> equal(beyond, length(GB_BEYOND_REFERENCE), "the sentences our heteronym rules read beyond the reference")
     }
     t |> run("British: nothing American survives, and the American rail proves the sweep sees it") @(t : T?) {
@@ -434,6 +458,25 @@ def test_british_rules(t : T?) {
         t |> equal(strip(g2p_phonemize(g, tg, "podcasting", true)), "pˈɒdkɑːstɪŋ")   // nolint:STYLE039
         t |> equal(strip(g2p_phonemize(g, tg, "podcasts", true)), "pˈɒdkɑːsts")   // nolint:STYLE039
     }
+    t |> run("British: -ing declines a stem ending in a schwa or a length mark") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        // the British lexicon carries "mentor" mˈɛntɔː and "roster" ɹˈɒstə but neither -ing
+        // form, so the stemmer runs and declines: the reference has no rule for the linking r
+        // such a stem wants, and the word goes to the fallback (the American reading rewritten)
+        // rather than reading mˈɛntɔːɪŋ / ɹˈɒstəɪŋ out loud
+        t |> equal(strip(g2p_phonemize(g, tg, "mentor", true)), "mˈɛntɔː", "the length-mark stem")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "mentoring", true)), "mˈɛntəɹɪŋ")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "roster", true)), "ɹˈɒstə", "the schwa stem")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "rostering", true)), "ɹˈɒstəɹɪŋ")   // nolint:STYLE039
+        // -ed keeps the same stems, so the decline is the -ing rule's alone
+        t |> equal(strip(g2p_phonemize(g, tg, "mentored", true)), "mˈɛntɔːd")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "rostered", true)), "ɹˈɒstəd")   // nolint:STYLE039
+        // and the American rail, which has no such rule, stems both
+        t |> equal(strip(g2p_phonemize(g, tg, "mentoring")), "mˈɛntˌɔɹɪŋ")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "rostering")), "ɹˈɑstəɹɪŋ")   // nolint:STYLE039
+    }
     t |> run("British: the lexicon tier answers, and a word only the American tier carries is unknown") @(t : T?) {
         return if (!data_present(t))
         let g <- load_g2p(g2p_path())
@@ -447,6 +490,12 @@ def test_british_rules(t : T?) {
         t |> equal(strip(g2p_phonemize(g, tg, "The dogs barked at the water tower.")),
             "ðə dˈɔɡz bˈɑɹkt æt ðə wˈɔTəɹ tˈWəɹ.", "the American reading is rhotic and flapped")   // nolint:STYLE039
     }
+}
+
+// what the American fallback chain owes a British voice: the rewrite table itself, then the
+// chain end to end on words no lexicon carries
+[test]
+def test_british_rewrite(t : T?) {
     t |> run("the American inventory rewritten into the British one") @(t : T?) {
         // a post-vocalic ɹ drops into the vowel it leaves, and links before a vowel
         t |> equal(misaki_us_to_gb("hˈɜɹd"), "hˈɜːd")   // nolint:STYLE039
@@ -457,6 +506,22 @@ def test_british_rules(t : T?) {
         t |> equal(misaki_us_to_gb("kjˈʊɹd"), "kjˈʊəd")   // nolint:STYLE039
         t |> equal(misaki_us_to_gb("hˈɜɹdəɹ"), "hˈɜːdə")   // nolint:STYLE039
         t |> equal(misaki_us_to_gb("wˈɔɹəɹ"), "wˈɔːɹə", "the ɹ before a vowel links")   // nolint:STYLE039
+        // the rows derived from the pack's own merged entries at a non-linking position:
+        // queerly kwˈiɹli -> kwˈɪəli, procurement pɹəkjˈuɹmᵊnt -> pɹəkjˈʊəmᵊnt,
+        // ireful ˈIɹfᵊl -> ˈIəfʊl, ourself Wɹsˈɛlf -> Wəsˈɛlf
+        t |> equal(misaki_us_to_gb("hˈiɹd"), "hˈɪəd")   // nolint:STYLE039
+        t |> equal(misaki_us_to_gb("pˈuɹ"), "pˈʊə")   // nolint:STYLE039
+        t |> equal(misaki_us_to_gb("ˈIɹfᵊl"), "ˈIəfᵊl")   // nolint:STYLE039
+        t |> equal(misaki_us_to_gb("Wɹsˈɛlf"), "Wəsˈɛlf")   // nolint:STYLE039
+        // a vowel the pack gives no row keeps its ɹ - the pack's own Sverige svˈæɹjə -> svˈaɹjə
+        // is the evidence, and dropping a rhotic the British inventory does spell loses a sound
+        t |> equal(misaki_us_to_gb("svˈæɹjə"), "svˈaɹjə")   // nolint:STYLE039
+        t |> equal(misaki_us_to_gb("kˈæɹt"), "kˈaɹt")   // nolint:STYLE039
+        // ᵻ is American-only, so this reading never re-enters the rewrite; it pins the arm
+        t |> equal(misaki_us_to_gb("bˈᵻɹd"), "bˈɪɹd")   // nolint:STYLE039
+        // the merry/Mary limit: the American inventory spells both vowels ɛ, so ɛɹ before a
+        // vowel is SQUARE whatever the word was
+        t |> equal(misaki_us_to_gb("mˈɛɹi"), "mˈɛːɹi")   // nolint:STYLE039
         // then the symbols the two inventories spell differently
         t |> equal(misaki_us_to_gb("kˈæt"), "kˈat")   // nolint:STYLE039
         t |> equal(misaki_us_to_gb("bˈOt"), "bˈQt")   // nolint:STYLE039
@@ -466,11 +531,24 @@ def test_british_rules(t : T?) {
         t |> equal(misaki_us_to_gb("wˈɔTəɹ"), "wˈɔːtə", "and so does the T the pipeline folds it to")   // nolint:STYLE039
         t |> equal(misaki_us_to_gb("kəmpjˈutəɹ"), "kəmpjˈuːtə", "u lengthens; unstressed ə stays")   // nolint:STYLE039
         t |> equal(misaki_us_to_gb("sˈiti"), "sˈiːti", "i lengthens under stress only")   // nolint:STYLE039
-        // the rewrite is idempotent: a string already British passes through unchanged
-        for (ps in ["hˈɜɹd", "kˈɑɹd", "bˈɪɹd", "wˈɔɹəɹ", "kˈæt", "bˈOt", "bˈɑks", "wˈɔTəɹ", "kəmpjˈutəɹ", "sˈiti"]) {   // nolint:STYLE039
+        // the rewrite is idempotent on what it emits, so a caller may hand it a string it
+        // already answered (ᵻ excepted, and unreachable: no British reading carries one back in)
+        for (ps in ["hˈɜɹd", "kˈɑɹd", "bˈɪɹd", "wˈɔɹəɹ", "kˈæt", "bˈOt", "bˈɑks", "wˈɔTəɹ", "kəmpjˈutəɹ", "sˈiti",   // nolint:STYLE039
+                "hˈiɹd", "pˈuɹ", "ˈIɹfᵊl", "Wɹsˈɛlf", "mˈɛɹi", "svˈæɹjə", "kˈæɹt"]) {   // nolint:STYLE039
             let once = misaki_us_to_gb(ps)
             t |> equal(misaki_us_to_gb(once), once, "'{ps}' rewritten twice")
         }
+    }
+    t |> run("British: the fallback's rhotic vowels reach the whole word") @(t : T?) {
+        return if (!data_present(t))
+        let g <- load_g2p(g2p_path())
+        let tg <- load_pos_tagger(tagger_path())
+        // neither word is in either lexicon, so both read through CMUdict and the rewrite - and
+        // the iɹ and uɹ rows are what keeps their vowels from collapsing to iː and uː
+        t |> equal(strip(g2p_phonemize(g, tg, "comandeered", true)), "kɒməndˈɪəd")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "boorstin", true)), "bˈʊəstɪn")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "comandeered")), "kɑməndˈiɹd", "the American reading is rhotic")   // nolint:STYLE039
+        t |> equal(strip(g2p_phonemize(g, tg, "boorstin")), "bˈuɹstɪn")   // nolint:STYLE039
     }
     t |> run("British: the fallback chain is the American one rewritten") @(t : T?) {
         return if (!data_present(t))

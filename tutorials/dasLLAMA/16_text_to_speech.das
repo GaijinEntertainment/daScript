@@ -12,7 +12,8 @@ require strings
 // This tutorial covers:
 //   - load_tts_model — one loader for every TTS family, the front-end packs read beside the GGUF
 //   - caps() — the voices, the languages and the PCM rate a loaded model serves
-//   - tts_normalize / tts_phonemize — the text front end on its own, without synthesizing
+//   - tts_normalize / tts_phonemize / tts_voice_lang — the text front end on its own, in the
+//     dialect the picked voice reads, without synthesizing
 //   - set_tts_q8 / reset_tts_q8 / tts_serves_q8 — the two weight lanes, and the pin discipline
 //   - synthesize — text in, PCM out; write_wav_pcm16 puts it on disk
 //   - synthesize_stream — the same audio delivered sentence by sentence, as each piece lands
@@ -105,6 +106,12 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     print("voices ({length(c.voices)}): {join(c.voices, ", ")}\n")
     print("languages: {join(c.langs, ", ")}\n")
     print("rate: {c.sample_rate} Hz; clones a voice: {c.cloning}\n")
+    // caps().voices can be EMPTY: a model whose every voice pack speaks a language this front
+    // end does not phonemize offers none, and there is no first voice to fall back on.
+    if (empty(voice) && empty(c.voices)) {
+        print("{model_path} offers no voice this front end can drive - pass --voice, or use a model whose packs speak a language it phonemizes\n")
+        return
+    }
     let vname = empty(voice) ? c.voices[0] : voice
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -115,15 +122,23 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     // weight is touched. tts_normalize is the first pass — it rewrites numbers, money, dates,
     // times and abbreviations into the words a reader says. tts_phonemize is the last one: the
     // tagger of tts_postag.bin labels every token, and the grapheme-to-phoneme pass of
-    // tts_g2p.bin turns the labelled tokens into the 45 US phoneme symbols. The tag is what
+    // tts_g2p.bin turns the labelled tokens into that dialect's phoneme symbols. The tag is what
     // settles a heteronym — "read" the past tense and "read" the present tense are the same
     // letters and two different sounds. synthesize runs both passes for you; run them alone and
     // you see what the model is asked to say.
+    //
+    // A synthesis phonemizes in the DIALECT ITS VOICE WAS TRAINED ON, so this pass has to be
+    // asked in the same one, or you are reading a document about a different sound. Every voice
+    // carries its language: c.voice_langs[i] beside c.voices[i], and tts_voice_lang answers for
+    // an alias too. Kokoro's bf_emma reads en-gb where af_heart reads en-us; a KittenTTS voice is
+    // always en-us. The bare two-argument tts_phonemize reads American English.
     let sentence = "Dr. Chen read 3.5 pages and paid $12."
     let spoken = tts_normalize(sentence)
+    let vlang = tts_voice_lang(m, vname)
     print("\ntext:       {sentence}\n")
     print("normalized: {spoken}\n")
-    print("phonemes:   {tts_phonemize(m, spoken)}\n")
+    print("voice:      {vname} reads {vlang}\n")
+    print("phonemes:   {tts_phonemize(m, spoken, vlang)}\n")
 
     // ──────────────────────────────────────────────────────────────────────────
     // Section 4 — the sentence chunker
@@ -192,7 +207,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         let quick <- synthesize(m, TEXT, vname, 1.25)
         print("\n{vname} at speed 1.0:  {seconds(audio.pcm, audio.sample_rate)} s\n")
         print("{vname} at speed 1.25: {seconds(quick.pcm, quick.sample_rate)} s\n")
-        let alt = length(c.voices) > 1 ? c.voices[1] : c.voices[0]
+        let alt = length(c.voices) > 1 ? c.voices[1] : vname   // vname when the model offers one voice, or none it can drive
         let other <- synthesize(m, TEXT, alt)
         print("{alt} at speed 1.0:  {seconds(other.pcm, other.sample_rate)} s\n")
     }

@@ -57,10 +57,13 @@ def kokoro_token_ids(fam : KokoroFamily; ps : string) : array<int> {
 }
 
 def kokoro_voice_lang(name : string) : string {
-    //! The language a voice pack was trained on, as the reference pipeline's code, read from
-    //! the pack name's first letter: a American English, b British English, e Spanish, f
-    //! French, h Hindi, i Italian, p Brazilian Portuguese, j Japanese, z Mandarin; else "".
-    let first = empty(name) ? 0 : first_character(name)
+    //! The language a voice pack was trained on, as the reference pipeline's code: only a name of
+    //! the pipeline's shape ``<language><f|m>_<name>`` carries one, and its first letter names it -
+    //! a en-us, b en-gb, e es, f fr-fr, h hi, i it, p pt-br, j ja, z zh; any other shape reads "".
+    return "" if (length(name) < 4)
+    let sex = slice(name, 1, 3)
+    return "" if (sex != "f_" && sex != "m_")   // "emma" opens with a language's letter: shape first
+    let first = first_character(name)
     if (first == 'a') return "en-us"
     if (first == 'b') return "en-gb"
     if (first == 'e') return "es"

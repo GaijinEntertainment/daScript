@@ -29,18 +29,26 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   either English dialect: a gold lexicon with part-of-speech keyed entries, a silver lexicon,
   function-word rules that read what follows (the pass runs right to left), the heteronym
   rules of sec.2.34, inflection stemming, capitalization and acronym stress, then a fallback
-  chain - CMUdict pre-rendered into the same inventory, then a GRU spelling model - so no word
-  is ever dropped. The `british` flag picks the dialect: the gold and silver tables carry an
+  chain - the lexicon's own plain reading for each letter run, then CMUdict pre-rendered into
+  the same inventory, then a GRU spelling model - so no word is ever dropped. The lexicon leads
+  that chain because a glued group sends its WHOLE surface to the fallback as soon as one piece
+  is unresolvable, so a run both dialects carry does arrive there, and CMUdict is pruned of
+  exactly those words. The `british` flag picks the dialect: the gold and silver tables carry an
   American and a British value per key (a key present for one dialect only reads as unknown to
   the other, as the reference does), the inflection rules switch their suffix vowels and drop
-  the American flap, and the fallback chain - American by construction - rewrites its answer
+  the American flap, and the two American sources of the fallback chain rewrite their answer
   into the British inventory through a table derived from aligning the two lexicons (the
   non-rhotic rule keyed on whether a vowel follows, the goat, trap, lot and reduced vowels
-  onto their British symbols, the length marks); the bath-trap split reaches only lexicon
+  onto their British symbols, the length marks) - the lexicon's own reading is already British
+  and takes no rewrite, which matters because the rewrite is not the identity on one: it reads
+  the DRESS vowel before a linking rhotic as SQUARE, having nothing in the string to tell merry
+  from Mary. A vowel the two lexicons give no evidence for before a dropped rhotic keeps that
+  rhotic rather than losing it. The bath-trap split reaches only lexicon
   words. Loads `tts_g2p.bin`, pack
   version 2 (`harness/build_g2p_data.py`: the gold tier extended by
   `harness/g2p_local_additions.json`, the US and GB keys merged into one string table per
-  tier, the GRU stored as f16, CMUdict pruned of the words both dialects' lexicons carry),
+  tier, the GRU stored as f16, CMUdict pruned of the words both dialects' lexicons carry -
+  safe because the fallback reads the lexicon first),
   searched in place as byte-sorted string tables; a version 1 pack is refused by name. The
   200-sentence fixtures under `tests/_tts_fixtures/` (American, minted by
   `harness/mint_tts_g2p_fixture.py` from the G2P fidelity experiment; British, minted by
@@ -88,12 +96,18 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
 - **`dasllama_kokoro.das`** - the Kokoro family (Kokoro-82M): the reference pipeline's
   vocabulary (`kokoro.symbol_*` metadata - the front end's own inventory, no rewrite), its token
   wrapping and style-row rule (the phoneme string's character count less one). Fifty-four voice
-  packs of 510 rows.
+  packs of 510 rows, each named `<language><f|m>_<name>`; a pack's language is read from that
+  shape and only from it, because the language letters are ordinary first letters of ordinary
+  names, so a name of any other shape has no language rather than the one its first letter spells.
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
   picked by `general.architecture`; `tts_g2p.bin` and `tts_postag.bin` read from the GGUF's
-  directory), `caps` (the voices the front end can drive - a Kokoro pack's name carries its
-  language, and only the languages the family declares are listed or accepted; the rest
-  refuse with the language in the message), the front-end pair `tts_normalize` (the
+  directory; the packs it leaves out are named once in the log), `caps` (the voices the front
+  end can drive - a Kokoro pack's name carries its language, and only the languages the family
+  declares are listed or accepted; the rest refuse with the language in the message, or, where
+  the name carried none, with the fact that the front end cannot phonemize it), `tts_voice_lang`
+  (the language a voice reads in - the resolution `synthesize` runs, aliases included, so a
+  caller can phonemize in the dialect the voice will actually be spoken in), the front-end pair
+  `tts_normalize` (the
   normalization pass alone - the spoken form a synthesis reads, and it consults no pack) and
   `tts_phonemize` (one already normalized sentence in the front end's own inventory, the
   string each chunk carries before a family rewrites it into its own symbols; the language
@@ -109,7 +123,11 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   (the same, concatenated, timings summed). Every chunk draws its own source noise: the seed
   is the facade's constant plus the chunk's index, so consecutive sentences of one request
   never share a draw, and `synthesize` and `synthesize_stream` stay sample-identical because
-  both walk the same chunk list in the same order. Requires no `audio` module.
+  both walk the same chunk list in the same order. Requires no `audio` module. `REVIEW.das`'s
+  `check_tutorial_floor` walks both facade files - `dasllama.das` and this one - and licenses
+  exactly three kinds of def: a `def private` one, a `def operator` overload, and `finalize`,
+  the language's own teardown hook the compiler calls at `delete` (the check's `FLOOR_HOOKS`
+  set); none of the three is a name a tutorial could call, so none carries a teaching duty.
 
 Every local container on the TTS path is `var inscope`: the persistent heap frees nothing at
 scope exit, and a bare local holding a per-sentence buffer is a per-sentence leak that ends in

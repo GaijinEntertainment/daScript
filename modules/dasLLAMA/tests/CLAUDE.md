@@ -288,6 +288,10 @@ against the committed `site/files/dasllama/bench_records.json` (what daslang.io/
 renders); red means a records commit skipped `gen_site_records`.
 `test_tok_seed.das` - model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
+`test_tokenizer.das` - model-free suite; every cell is fixture-gated (the `ggml-vocab-*.gguf`
+corpora under the models dir, machine-local): the seven vocab families' `.inp`/`.out` corpora
+through `load_tokenizer_auto` -> `encode` / `decode`, ids exact and the decode round-trip
+lossless; reports SKIPPED where the vocab is not stocked.
 `test_exe_smoke.das` - model-free suite; model-gated (SmolLM2-135M, small tier): the
 standalone-exe context gate. Builds `_exe_smoke_root.das` with `-jit -exe` and runs the
 artifact - the one rail where globals restore as DATA, so a function-typed global with no
@@ -422,19 +426,26 @@ American-to-British rewrite table over pinned strings, idempotence included; mod
 (`tts_g2p.bin` + `tts_postag.bin`): the grapheme-to-phoneme rail phoneme-identical with the
 reference front end
 on the corpus (fed the same normalized text) except the sentences its heteronym rules and the
-lexicon additions of `harness/g2p_local_additions.json` read past it (named in the cell), the
+lexicon additions of `harness/g2p_local_additions.json` read past it (named in the cell), both
+rails' remaining mismatch counts pinned exactly at 2, the
 heteronym gate (both annotated readings present, 32 of 38 against the reference's 24; a verb
 tag out-ranks the collocation table), the function-word, splitter, inflection and number arms
-(a glued number past 2^31 reads its digits, never "zero"), the fallback chain, stress helpers,
+(a glued number past 2^31 reads its digits, never "zero"), the fallback chain (the lexicon's
+own plain reading before CMUdict, on both rails), stress helpers,
 the load budget and the pack's size budget; then the BRITISH half against
 `_tts_fixtures/g2p_corpus_gb.json` (loaded by `_tts_corpus_gb.das`, minted by
 `harness/mint_tts_g2p_gb_fixture.py` from the reference's own `british=True` front end with its
 espeak `en-gb` fallback): phoneme-identical on the 157 rows the reference answered from its
-lexicon alone (an `oov` row is not a lexicon-parity row - our own fallback is American
-rewritten), the inventory sweep - no American-only symbol and nothing outside `gb_gold`'s
-inventory survives in 200 sentences, with the same sweep over the American output as the
-must-EXCEED control - the inflection rules the flag switches, and the fallback rewrite on the
-fixture's probe words with the reference's espeak readings logged beside ours.
+lexicon alone (an `oov` row is not a lexicon-parity row - our own fallback answers from the
+lexicon, or from American sources rewritten), the inventory sweep - no American-only symbol
+and nothing outside `gb_gold`'s inventory survives in 200 sentences, with the same sweep over
+the American output as the must-EXCEED control - the inflection rules the flag switches (the
+-ing decline on a schwa- or length-mark-final stem among them), the rewrite table's
+pack-derived rhotic rows and its keep-the-r fallback for a vowel with no row, and the fallback
+rewrite on the fixture's probe words with the reference's espeak readings logged beside ours, and the
+British lexicon tier itself - the bath-trap split, the LOT vowel and the non-rhotic vowels
+answered from the British tier rather than the rewrite, with the American reading of the same
+line beside it.
 `test_tts_kitten.das` - model-free suite; the symbol-map and token-rule cells run everywhere
 (the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
 the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-<size>.gguf` +
@@ -442,20 +453,31 @@ the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-
 run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
 sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings.
 `test_tts_kokoro.das` - model-free: the symbol map over a synthetic phoneme string, the
-out-of-vocabulary drop, and the style-row clamps; model-gated (`kokoro-82m.gguf` +
+out-of-vocabulary drop, the style-row clamps, and the pack-name language rule (`<language><f|m>_`
+for all nine codes, and every other shape reading "" whatever letter it opens with - the letter
+alone would make "emma" Spanish); model-gated (`kokoro-82m.gguf` +
 `tts_oracle/kokoro/`): the vocabulary and style-row rule, the parity rail of `_tts_parity.das`
 against the PyTorch reference, a facade smoke cell through the front end's own inventory (the
-28 English packs, two declared languages, 8 of them British), and the British voice cell - one
+28 English packs, two declared languages, 8 of them British), the British voice cell - one
 line phonemized in both dialects, every British symbol proven to be in the model's own
-vocabulary by the token count, and `bf_emma` speaking.
+vocabulary by the token count, `bf_emma` speaking, and the sample count of that synthesis held
+against the model driven straight from each dialect's string, which is what proves the VOICE's
+dialect reached the synthesis - and the voice refusals (a pack whose language the front end
+lacks names that language; a voice the model has never heard of refuses first, with no language
+to name).
 `test_tts_facade.das` - model-free suite: the sentence chunker (the reference driver's boundary
 rule, the cap counted in codepoints, the hard split of a whitespace-free run, the appended
-comma as Kitten's driver rule and the bare text Kokoro's sends), the WAV container, the codec's malformed-lead and astral arms, kitten's
+comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the facade
+exposes (`tts_normalize`: abbreviation, decimal, money, clock, date, ordinal, percentage, unit,
+empty), the voice refusal a pack whose name carries NO language draws (hand-built model - the
+sentence must not render an empty code), the WAV container, the codec's malformed-lead and
+astral arms, kitten's
 dropped-symbol rule, and the `rtf` guard; model-gated (`kitten-nano.gguf` + the front-end
 packs): the streaming form's chunks concatenate to the buffered synthesis sample for sample,
 one synthesis at one lane and the other at the box's lanes, the phonemizer on the corpus rail,
-and the language form of `tts_phonemize` - the declared language reads as the bare form does,
-an undeclared one panics at the call site.
+the model-keyed chunker's Kitten arm (the driver's comma - the one arm no model-free cell
+reaches), and the language form of `tts_phonemize` - the declared language reads as the bare
+form does, an undeclared one panics at the call site.
 `test_tts_blocks.das` - model-free: the block home's two layouts against each other - every
 rows form (token-major [T][C]) held to its channel-major twin at the dot-envelope bar (a
 tolerance times the sum of |w|*|x| feeding each output, with a zeroed-tap poison leg that must

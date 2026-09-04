@@ -57,6 +57,19 @@ state in the shared process (many huge JIT compiles back to back), not the IR of
 program. Worth a dig if it recurs: repro would start from two-in-a-row engine compiles in
 one process, watching LLVM context/heap reuse.
 
+### `REVIEW.das`'s tracked-write scan - three blind spots
+
+The gate matches a tracked directory name in the write line plus the initializers of the
+`let`/`var` names that line mentions, against `TRACKED_FIXTURE_DIRS`. It therefore misses:
+(a) a path a helper returns (`remove(fixture_dir())`) - the expansion traces declarations,
+not return values; (b) a write two call levels down - a function containing a direct write is
+marked as a sink, a wrapper that only calls a marked one is not, and the marking is per file,
+so a helper in a sibling test file is invisible; (c) a tracked file directly under
+`modules/dasLLVM/tests` rather than inside a listed subdirectory. Closing (c) needs
+argument-position awareness: a naive "line names the tests dir" test fires on the sanctioned
+`copy_file(<fixture under tests/>, <temp>)` idiom. Until then the narrowed `REVIEW.md` rule
+carries the residual by hand.
+
 ### The shadow buffer (the endgame)
 
 A `--jit-debug`-family flag that makes the JIT emit its own bookkeeping into a

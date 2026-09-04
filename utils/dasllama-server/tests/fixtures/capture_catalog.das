@@ -2,12 +2,15 @@ options gen2
 options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
-// The scripted regeneration rail for catalog_downloading.json / catalog_done.json: boot the
-// real setup-mode server on a scratch catalog dir, download the SMALLEST card for real, and
-// snapshot /catalog mid-flight and after it lands - bytes as served, machine-local paths
-// normalized to the fixture convention (the one permitted edit). Run from the repo root:
+// The scripted regeneration rail for the /catalog fixtures: boot the real setup-mode server on
+// a catalog dir and snapshot /catalog - bytes as served, machine-local paths normalized to the
+// fixture convention (the one permitted edit). Run from the repo root.
 //   bin/daslang -jit utils/dasllama-server/tests/fixtures/capture_catalog.das
-// The download is a few GB from the pinned url; the scratch dir is deleted at the end.
+// downloads the SMALLEST card for real into a scratch dir it makes and deletes, snapshotting
+// mid-flight (catalog_downloading.json) and after it lands (catalog_done.json).
+//   bin/daslang -jit utils/dasllama-server/tests/fixtures/capture_catalog.das -- --presence <dir> <fixture>
+// snapshots the idle document over the caller's <dir> (symlinks to what must read present, or
+// nothing at all) into tests/fixtures/<fixture> - catalog_idle.json and catalog_empty.json.
 
 require ../../openai_server.das
 require ../../model_catalog.das
@@ -146,11 +149,25 @@ def private capture_both(base_url, cat_dir : string) {
     }
 }
 
+// the idle document over the caller's dir, as served, into one named fixture
+def private capture_presence(base_url, cat_dir, out_name : string) {
+    let body = fetch_catalog(base_url)
+    if (empty(body)) {
+        to_log(LOG_ERROR, "capture_catalog: /catalog answered nothing\n")
+        return
+    }
+    fwrite("{FIXTURE_DIR}/{out_name}", normalize_paths(body, cat_dir))
+    to_log(LOG_INFO, "capture_catalog: {out_name} captured over {cat_dir}\n")
+}
+
 [export]
 def main {
     var terr : string
     let tmp = temp_directory(terr)
-    let cat_dir = path_join(empty(tmp) ? "." : tmp, "dasllama_capture_{ref_time_ticks()}")
+    let args <- get_command_line_arguments()
+    let at = find_index(args, "--presence")
+    let presence = at >= 0 && at + 2 < length(args)
+    let cat_dir = presence ? args[at + 1] : path_join(empty(tmp) ? "." : tmp, "dasllama_capture_{ref_time_ticks()}")
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_setup_mode(true)
@@ -179,14 +196,18 @@ def main {
             }
             sleep(100u)
         }
-        if (ready) {
-            capture_both(base_url, cat_dir)
-        } else {
+        if (!ready) {
             to_log(LOG_ERROR, "capture_catalog: server never served /catalog\n")
+        } elif (presence) {
+            capture_presence(base_url, cat_dir, args[at + 2])
+        } else {
+            capture_both(base_url, cat_dir)
         }
         POST("{base_url}/shutdown", "") $(_resp) {}
         finished |> join
     }
-    rmdir_rec_result(cat_dir)   // the multi-GB scratch download goes with it
+    if (!presence) {
+        rmdir_rec_result(cat_dir)   // the multi-GB scratch download goes with it
+    }
     to_log(LOG_INFO, "capture_catalog: done\n")
 }

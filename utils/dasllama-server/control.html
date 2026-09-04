@@ -162,6 +162,7 @@ button.xs { font-size: 10px; padding: 2px 8px; }
 #s-count.over { color: var(--red); }
 #s-phon { margin-top: 10px; font-family: var(--font-mono); font-size: 11.5px; }
 #s-phon .norm { color: var(--fg-dim); white-space: pre-wrap; word-break: break-word; }
+#s-phon .lang { color: var(--amber); margin-left: 8px; white-space: nowrap; }
 #s-phon .chunk { border-top: 1px solid var(--rule); padding: 5px 0; margin-top: 5px; }
 #s-phon .chunk .t { color: var(--fg); white-space: pre-wrap; word-break: break-word; }
 #s-phon .chunk .p { color: var(--amber); white-space: pre-wrap; word-break: break-word; margin-top: 2px; }
@@ -257,6 +258,7 @@ button.danger { border-color: var(--red); color: var(--red); }
 button.danger:hover { background: rgba(217, 109, 79, 0.10); }
 button:disabled { opacity: 0.45; cursor: default; }
 .ctl-note { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
+.ctl-note.bad { color: var(--red); }
 </style>
 </head>
 <body>
@@ -394,7 +396,7 @@ button:disabled { opacity: 0.45; cursor: default; }
                 <button id="s-run" type="button" disabled>speak</button>
                 <label class="knob">voice <select id="s-voice"></select></label>
                 <label class="knob">speed <input type="range" id="s-speed" min="0.3" max="1.5" step="0.05" value="1"><span id="s-speed-v">1.00×</span></label>
-                <span class="ctl-note" id="s-count">0 / 4096</span>
+                <span class="ctl-note" id="s-count">0 / 4096 characters</span>
                 <span class="ctl-note" id="s-note">type a line and press speak — the waveform plays once, click it to replay</span>
             </div>
             <canvas id="s-wave" height="80" style="margin-top:10px"></canvas>
@@ -1482,21 +1484,30 @@ function audioNote(text) {
     strip.append(note);
 }
 
+// the button wears the LAST poll's verdict; a slot activated a moment ago has not reached it yet,
+// so a dimmed mic asks once more. The answer is decided at STOP, never before getUserMedia: a
+// network round trip inside the click consumes the user gesture, and Safari then refuses the
+// microphone outright.
+function probeTowers() {
+    return fetch("/v1/stats").then(r => r.ok ? r.json() : null).catch(() => null);
+}
+
+// true when the fresh answer arms the mic; it also settles which mode this clip records in
+async function towerArmed(btn, probe) {
+    const s = await probe;
+    if (!s || !(s.asr_workers > 0 || s.audio)) {
+        towerHint(ASR_OFFER);
+        return false;
+    }
+    micNativeAudio = !!s.audio && !(s.asr_workers > 0);
+    btn.classList.remove("off");
+    return true;
+}
+
 async function micToggle() {
     const btn = $("b-mic");
-    if (btn.classList.contains("off")) {
-        // the button wears the LAST poll's verdict; a slot activated a moment ago has not reached
-        // it yet, so ask once more before sending the user to the catalog
-        const s = await fetch("/v1/stats").then(r => r.ok ? r.json() : null).catch(() => null);
-        if (!s || !(s.asr_workers > 0 || s.audio)) {
-            towerHint(ASR_OFFER);
-            return;
-        }
-        micNativeAudio = !!s.audio && !(s.asr_workers > 0);
-        btn.classList.remove("off");
-    }
     if (micRec) {
-        const { ctx, node, stream, chunks } = micRec;
+        const { ctx, node, stream, chunks, probe } = micRec;
         micRec = null;
         btn.classList.remove("rec");
         btn.textContent = "● mic";
@@ -1504,6 +1515,7 @@ async function micToggle() {
         stream.getTracks().forEach(t => t.stop());
         const rate = ctx.sampleRate;
         await ctx.close();
+        if (probe && !await towerArmed(btn, probe)) return;
         if (!chunks.length) {
             audioNote("no audio captured — allow the microphone when the browser asks, then record again");
             return;
@@ -1534,6 +1546,7 @@ async function micToggle() {
         btn.disabled = false;
         return;
     }
+    const probe = btn.classList.contains("off") ? probeTowers() : null;   // rides ALONG, never ahead
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const ctx = new AudioContext();
@@ -1544,10 +1557,13 @@ async function micToggle() {
         node.onaudioprocess = e => { chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
         src.connect(node);
         node.connect(ctx.destination);
-        micRec = { ctx, node, stream, chunks };
+        micRec = { ctx, node, stream, chunks, probe };
         btn.classList.add("rec");
         btn.textContent = "■ stop";
     } catch (_e) {
+        // a dimmed button that cannot record says which of the two is missing: an un-wired tower
+        // walks the user to § 03, a refused microphone takes the button down
+        if (probe && !await towerArmed(btn, probe)) return;
         micDenied = true;   // no mic permission
         btn.style.display = "none";
     }
@@ -1769,13 +1785,17 @@ const VOICE_KEY = "dasllama.voice";
 const ttsClip = newClip(24000);
 let ttsVoices = [];
 
+// the cap counts CHARACTERS the way the server does — codepoints, not UTF-16 units, so an emoji
+// or any astral character costs one here and one there
+const cpLen = s => [...s].length;
+
 function rememberedVoice() {
     try { return localStorage.getItem(VOICE_KEY) || ""; } catch (_e) { return ""; }
 }
 
 function countSpeechInput() {
-    const n = $("s-text").value.length;
-    $("s-count").textContent = n + " / " + TTS_MAX_CHARS;
+    const n = cpLen($("s-text").value);
+    $("s-count").textContent = n + " / " + TTS_MAX_CHARS + " characters";
     $("s-count").classList.toggle("over", n > TTS_MAX_CHARS);
     $("s-run").disabled = n === 0 || n > TTS_MAX_CHARS;
 }
@@ -1824,14 +1844,25 @@ async function speechError(r) {
 }
 
 // /v1/audio/phonemes: what the front end makes of the same text, drawn under the waveform — the
-// normalizer's spoken form, then each chunk the synthesis takes above the phonemes it reads out.
+// normalizer's spoken form and the dialect it was read in, then each chunk the synthesis takes
+// above the phonemes it reads out.
 function renderPhonemes(doc) {
     const box = $("s-phon");
     box.replaceChildren();
-    const norm = document.createElement("div");
+    const line = document.createElement("div");
+    line.className = "normline";
+    const norm = document.createElement("span");
     norm.className = "norm";
     norm.textContent = doc.normalized || "";
-    box.append(norm);
+    line.append(norm);
+    if (doc.lang) {
+        const lg = document.createElement("span");
+        lg.className = "lang";
+        lg.textContent = doc.lang;
+        lg.title = "the dialect the picked voice speaks — the phonemes below are in it";
+        line.append(lg);
+    }
+    box.append(line);
     for (const c of doc.chunks || []) {
         const row = document.createElement("div");
         row.className = "chunk";
@@ -1847,8 +1878,10 @@ function renderPhonemes(doc) {
     box.style.display = "";
 }
 
-// rides the same queue as the synthesis, so it is fired first: the panel fills while the model
-// still speaks. A refusal leaves the panel hidden — the status line already carries the reason.
+// rides the same queue as the synthesis on the ONE speech worker, so it goes out only after the
+// wav is back: asked first, its normalize + chunk + g2p pass over the same text would sit in
+// front of the synthesis and land in the studio's own wall time. A refusal leaves the panel
+// hidden — the status line already carries the reason.
 async function loadPhonemes(input) {
     try {
         const r = await fetch("/v1/audio/phonemes", {
@@ -1869,7 +1902,6 @@ $("s-run").addEventListener("click", async () => {
     stopSpeaking();   // the studio takes the transport back from any answer still being read
     $("s-run").disabled = true;
     $("s-note").textContent = "synthesizing…";
-    const phonemes = loadPhonemes(input);
     const body = {
         input: input,
         voice: $("s-voice").value,
@@ -1902,7 +1934,7 @@ $("s-run").addEventListener("click", async () => {
     } catch (_e) {
         $("s-note").textContent = "request failed";
     }
-    await phonemes;
+    await loadPhonemes(input);
     countSpeechInput();
 });
 
@@ -1923,26 +1955,29 @@ function speechVoice() {
     return ((last && last.tts && last.tts.voices) || [])[0] || "";
 }
 
-// sentence boundaries first, then words, then the cap itself for a word longer than it
+// sentence boundaries first, then words, then the cap itself for a word longer than it. Every
+// size is in codepoints — the unit the route's cap counts, so a piece never splits a surrogate
+// pair and an astral-heavy answer is not cut at half the cap.
 function splitForSpeech(text, cap) {
     const out = [];
     let cur = "";
     const flush = () => { const t = cur.trim(); if (t) out.push(t); cur = ""; };
     for (const s of text.match(/[^.!?\n]*[.!?\n]+|[^.!?\n]+$/g) || []) {
-        if (s.length <= cap) {
-            if (cur.length + s.length > cap) flush();
+        if (cpLen(s) <= cap) {
+            if (cpLen(cur) + cpLen(s) > cap) flush();
             cur += s;
             continue;
         }
         flush();
         for (const w of s.split(/\s+/)) {
             if (!w) continue;
-            if (w.length > cap) {
+            const cps = [...w];
+            if (cps.length > cap) {
                 flush();
-                for (let i = 0; i < w.length; i += cap) out.push(w.slice(i, i + cap));
+                for (let i = 0; i < cps.length; i += cap) out.push(cps.slice(i, i + cap).join(""));
                 continue;
             }
-            if (cur.length + 1 + w.length > cap) flush();
+            if (cpLen(cur) + 1 + cps.length > cap) flush();
             cur += (cur ? " " : "") + w;
         }
     }
@@ -2046,12 +2081,17 @@ function syncSpeakButtons() {
             if (el.dataset.speak) addSpeakButton(el, el.dataset.speak);
         }
     }
-    $("b-speak").style.display = ready && lastSpokenAnswer() ? "" : "none";
+    // the bar button also stays up while IT is the one speaking — clearing the log mid-read must
+    // not take the stop control away with the answer
+    const bar = $("b-speak");
+    bar.style.display = ready && (lastSpokenAnswer() || speakingBtn === bar) ? "" : "none";
 }
 
 $("b-speak").addEventListener("click", () => {
+    const bar = $("b-speak");
+    if (speakingBtn === bar) { stopSpeaking(); return; }   // while it reads, it IS the stop control
     const el = lastSpokenAnswer();
-    if (el) speakAnswer($("b-speak"), el.dataset.speak);
+    if (el) speakAnswer(bar, el.dataset.speak);
 });
 
 // ===== config editor =====
@@ -2090,6 +2130,17 @@ let advOpen = false;      // the advanced-overrides fold; sticky across re-rende
 function fieldEnabled(k) {
     const en = $("en-" + k);
     return !!(en && en.checked);
+}
+
+// a path field is a DRAFT of the config the page saves: an unticked override is OMITTED on save,
+// so a path left in the box is not configured at all. A key the server itself sourced - cli or
+// toml - is this boot's own, ticked or not.
+function configuredPath(k) {
+    const el = $("f-" + k);
+    if (!el) return "";
+    const src = (cfgSurface && cfgSurface.sources && cfgSurface.sources[k]) || "default";
+    if (src === "default" && !fieldEnabled(k)) return "";
+    return String(el.value || "");
 }
 
 function buildField(f, cfg, src) {
@@ -3047,7 +3098,7 @@ function visionControl(e, dl) {
             renderRoster();
             if (await saveConfig()) {
                 const asr = catState && catState.asr;
-                const asrHint = (asr && !(asr.present && fieldEnabled("asr")))
+                const asrHint = (asr && !(asr.present && configuredPath("asr") !== ""))
                     ? " · dictation (below) can ride the same restart" : "";
                 noteWithRestart("vision tower wired for " + e.display + asrHint + " —");
             }
@@ -3089,8 +3140,7 @@ function renderAsrOffer(doc, dl) {
         return;
     }
     const asrEl = $("f-asr");
-    const wired = asrEl && String(asrEl.value || "") !== "" && fieldEnabled("asr");
-    if (!wired) {
+    if (configuredPath("asr") === "") {
         label.textContent = "parakeet v3 is downloaded — wire it in to enable dictation";
         const b = miniButton("enable dictation", async () => {
             const en = $("en-asr");
@@ -3115,9 +3165,14 @@ function renderAsrOffer(doc, dl) {
 const ttsName = f => f.replace(/\.gguf$/i, "");
 
 // smallest present model first: the enable default is the cheapest one on disk, and a box that
-// downloaded several picks among them
-function ttsEnableArm(strip, label, present) {
-    let pick = present[0];
+// downloaded several picks among them. The poll rebuilds this card every second, so the picker
+// is seeded from `kept` — the selection the last build carried — and the enable reads the live
+// element, never a closure the next rebuild orphans.
+function ttsEnableArm(strip, label, present, kept) {
+    const chosen = () => {
+        const sel = $("tts-pick");
+        return present.find(m => m.file === (sel ? sel.value : kept)) || present[0];
+    };
     if (present.length > 1) {
         const sel = document.createElement("select");
         sel.id = "tts-pick";
@@ -3127,11 +3182,11 @@ function ttsEnableArm(strip, label, present) {
             o.textContent = ttsName(m.file);
             sel.append(o);
         }
-        sel.value = pick.file;
-        sel.addEventListener("change", () => { pick = present.find(m => m.file === sel.value) || pick; });
         strip.append(sel);
+        sel.value = present.some(m => m.file === kept) ? kept : present[0].file;
     }
     const b = miniButton("enable speech", async () => {
+        const pick = chosen();
         const el = $("f-tts");
         const en = $("en-tts");
         if (!el || !en) return;
@@ -3143,7 +3198,7 @@ function ttsEnableArm(strip, label, present) {
     });
     label.textContent = present.length > 1
         ? "speech models are downloaded — pick one and wire it in"
-        : ttsName(pick.file) + " is downloaded — wire it in to speak";
+        : ttsName(present[0].file) + " is downloaded — wire it in to speak";
     strip.append(b, label);
 }
 
@@ -3151,7 +3206,7 @@ function ttsEnableArm(strip, label, present) {
 // model loads them), then the models, then the enable. The rail runs one download at a time,
 // so an absent pack pair is one button and the card re-offers what is still missing.
 // False back = the catalog has no tts list to offer from, and the caller says so instead.
-function ttsOfferArm(strip, dl) {
+function ttsOfferArm(strip, dl, kept) {
     const items = (catState && catState.tts) || [];
     if (!items.length) return false;
     const label = document.createElement("span");
@@ -3185,18 +3240,21 @@ function ttsOfferArm(strip, dl) {
         strip.append(label);
         return true;
     }
-    ttsEnableArm(strip, label, present);
+    ttsEnableArm(strip, label, present, kept);
     return true;
 }
 
-// the speech offer strip: the download ladder above, then the three PATH-mode states - wired,
-// configured but not yet loaded, and nothing configured with no catalog to offer from.
+// the speech offer strip: the download ladder above, then the four PATH-mode states - wired, the
+// configured pack that failed to load, configured but not yet loaded, and nothing configured
+// with no catalog to offer from.
 function renderTtsOffer() {
     const strip = $("tts-offer");
+    const picker = $("tts-pick");
+    const kept = picker ? picker.value : "";
     strip.replaceChildren();
-    const el = $("f-tts");
-    const path = el ? String(el.value || "") : "";
+    const path = configuredPath("tts");
     const tts = last && last.tts;
+    const dl = (catState && catState.download) || { state: "idle" };
     const label = document.createElement("span");
     label.className = "ctl-note";
     if (tts && tts.ready) {
@@ -3209,12 +3267,22 @@ function renderTtsOffer() {
         strip.append(chip, label);
         return;
     }
+    if (tts && tts.error) {
+        // a load that failed is not coming back on its own, so the card says why and re-opens the
+        // ladder instead of claiming the model is still on its way
+        const bad = document.createElement("span");
+        bad.className = "ctl-note bad";
+        bad.textContent = "speech failed to load: " + tts.error;
+        strip.append(bad);
+        ttsOfferArm(strip, dl, kept);
+        return;
+    }
     if (path) {
         label.textContent = "speech model configured, loading — " + path.split(/[\\/]/).pop();
         strip.append(label);
         return;
     }
-    if (ttsOfferArm(strip, (catState && catState.download) || { state: "idle" })) return;
+    if (ttsOfferArm(strip, dl, kept)) return;
     label.textContent = "no speech model configured — point the tts field in the config editor at a"
         + " kitten or kokoro GGUF (tts_g2p.bin + tts_postag.bin sit beside it)";
     strip.append(label);

@@ -482,11 +482,11 @@ def private render_table(path : string) {
         let line = build_string() $(w) {
             w |> write("| {pi} | {das_off(rows, pi)} | ")
             for (d in depths) {
-                w |> write("{cell(rows, "das", int64(to_int(strip(d))), pi)} | ")
+                w |> write("{cell(rows, "das", to_int64(strip(d), false), pi)} | ")
             }
             w |> write("{cell(rows, "llama.cpp", 0l, pi)} | ")
             for (d in depths) {
-                w |> write("{cell(rows, "llama.cpp", int64(to_int(strip(d))), pi)} | ")
+                w |> write("{cell(rows, "llama.cpp", to_int64(strip(d), false), pi)} | ")
             }
         }
         var same = "-"

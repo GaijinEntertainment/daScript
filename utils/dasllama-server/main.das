@@ -619,7 +619,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         asr = cfg.asr,
         mmproj = cfg.mmproj,
         tts = cfg.tts,
-        tts_lane = empty(cfg.tts_lane) ? TTS_LANE_DEFAULT : cfg.tts_lane,
+        tts_lane = pick_tts_lane(cfg.tts_lane),   // the lane configure_tts kept, not the spelling asked for
         image_mmproj = cfg.image_mmproj,
         asr_workers = cfg.asr_workers > 0 ? cfg.asr_workers : 1,
         ctx = cfg.ctx,

@@ -73,6 +73,7 @@ struct ModelSpec {
     serve_vram_gb : float = 0.0     // advertised working-set hint, not a fit check
     serve_default : bool = false    // the one the getting-started path recommends
     serve_vision : string           // vision-tower companion NAME ("" = text only); [[serve_vision_tower]] resolves it
+    serve_tts : bool = false        // a speech model of the served text-to-speech set ([[serve_tts_set]]); its packs ride the companions
 }
 
 // ===== Parity fixture ids (frozen from the simple_ids oracle — harness/parity.sh) =====
@@ -549,7 +550,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the text-to-speech carriers: local conversions with no board row (followup_general.md
         // row 77); the front-end packs every TTS model loads ride the kitten-nano row, the
         // per-model oracle dumps ride their own rows
-        ModelSpec(file = "kitten-nano.gguf", recipe = TTS_KITTEN_RECIPE,
+        ModelSpec(file = "kitten-nano.gguf", recipe = TTS_KITTEN_RECIPE, serve_tts = true,
             url = "{TTS_HF}/kitten-nano.gguf", bytes = 59331456l,
             sha256 = "4556948c36a29e4be5ad521e597a20ae817059c404fea3c5d935afa73506d9da",
             companions <- [
@@ -560,12 +561,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                     url = "{TTS_HF}/tts_postag.bin", bytes = 12566510l,
                     sha256 = "38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4"),
                 ProvEntry(name = "tts_oracle/kitten_nano", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
-        ModelSpec(file = "kitten-mini.gguf", recipe = TTS_KITTEN_RECIPE,
+        ModelSpec(file = "kitten-mini.gguf", recipe = TTS_KITTEN_RECIPE, serve_tts = true,
             url = "{TTS_HF}/kitten-mini.gguf", bytes = 295975008l,
             sha256 = "e127a95c6ffa390eccc5956e7156ff055e9f30078cf16361cbcd0eea6c21fdb5",
             companions <- [
                 ProvEntry(name = "tts_oracle/kitten_mini", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
-        ModelSpec(file = "kokoro-82m.gguf", recipe = TTS_KOKORO_RECIPE,
+        ModelSpec(file = "kokoro-82m.gguf", recipe = TTS_KOKORO_RECIPE, serve_tts = true,
             url = "{TTS_HF}/kokoro-82m.gguf", bytes = 352965024l,
             sha256 = "e0d6584b5b650730bd62e7b105a2e9502384bbe3fbebf3030113560355e6232f",
             companions <- [
@@ -581,7 +582,7 @@ def serve_tts_set() : array<tuple<entry : ProvEntry; pack : bool>> {
     var out : array<tuple<entry : ProvEntry; pack : bool>>
     var all <- model_specs()
     for (s in all) {
-        continue if (empty(s.url) || !(s.file |> starts_with("kitten-") || s.file |> starts_with("kokoro-")))
+        continue if (empty(s.url) || !s.serve_tts)
         out |> push((entry = ProvEntry(name = s.file, root = "llm", url = s.url, bytes = s.bytes, sha256 = s.sha256, recipe = s.recipe), pack = false))
         for (c in s.companions) {
             if (!empty(c.url)) {

@@ -7,9 +7,9 @@ the Metal backend, `../followup_vulkan.md` for anything about the Vulkan backend
 everything else.
 
 **A diff that adds or moves a row in `tune_kernels.das`'s `benches` list keeps
-`dot_q8q8_laneq4x4` last in the list `main` runs, in the order it runs them.** Running that
-bench pins one matmul backend for the rest of the process, so a row after it is timed against
-the pinned backend instead of the one it would have picked.
+`dot_q8q8_laneq4x4` last in that list.** Running that bench pins one matmul backend
+for the rest of the process, so a row after it is timed against the pinned backend instead of
+the one it would have picked.
 
 **A diff that points a `dashv` call in this folder at the sidecar exchange - dasllama.io's
 tune-sidecar service: sidecar lookup, download, or submit - is a defect; it calls the exchange

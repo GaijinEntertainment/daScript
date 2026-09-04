@@ -105,6 +105,10 @@ def main : int {
     var inscope m <- load_tts_model(cfg.tts)
     let load_s = double(get_time_usec(t_load)) / 1.0e6lf
     var inscope c <- caps(m)
+    if (empty(cfg.voice) && empty(c.voices)) {
+        to_log(LOG_ERROR, "txt2wav: {cfg.tts} offers no voice this front end can drive - every voice pack speaks a language it does not phonemize\n")
+        return 1
+    }
     let voice = empty(cfg.voice) ? c.voices[0] : cfg.voice
     let speed = cfg.speed > 0.0 ? cfg.speed : 1.0
 

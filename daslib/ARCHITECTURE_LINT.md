@@ -155,8 +155,15 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   there, so descending would report its arguments unused.
 - **C++ mirror pairs**: `lint022_optimized` / `lint022_calls_may_be_inlined` <->
   `Program::getOptimize` / `Program::patchInline`; `stale_scan_line` <->
-  `rtti_is_nolint_suppressed`; `is_inline_temp_name` <-> `INLINE_TEMP_PREFIX`. Nothing
-  fails when one side moves alone.
+  `rtti_is_nolint_suppressed`; `is_inline_temp_name` <-> `INLINE_TEMP_PREFIX`;
+  `lint017_is_32bit_parse`'s name set and `lint017_parse_remedy`'s twin spelling -
+  `to_int` and `to_uint` over a string are the 32-bit parses, `to_int64` and `to_uint64`
+  the 64-bit twins the remedy names - <-> the `fast_to_int`, `fast_to_uint`,
+  `fast_to_int64` and `fast_to_uint64` bindings in `Module_Strings`
+  (`src/builtin/module_builtin_string.cpp`), each registered over `("value", "hex")` with
+  `arg_init` supplying `false` for `hex`. That default is why a one-argument site parses
+  decimal and why the remedy repeats the site's own `hex` argument instead of spelling a
+  base of its own. Nothing fails when one side moves alone.
 
 ## 4. style_lint
 

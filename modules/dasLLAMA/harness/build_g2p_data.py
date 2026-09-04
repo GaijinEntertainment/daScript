@@ -7,7 +7,7 @@
 #     ALREADY rendered into the misaki inventory through the calibrated ARPAbet table
 #     (results/calibration.json of the G2P fidelity experiment), so the runtime fallback is a
 #     plain lookup; an entry both dialects' lexicons already carry is dropped, since the
-#     lexicon answers first for either of them,
+#     fallback consults the lexicon before this table for either of them,
 #   - the g2p_en 2.1.0 GRU sequence-to-sequence OOV model (checkpoint20.npz), f16, widened by
 #     the reader - the GRU runs only on a word no lexicon and no CMUdict entry covers.
 # Provenance and licences for all three: THIRD_PARTY_NOTICES.md at the repository root.
@@ -173,8 +173,11 @@ def main():
     cmu_path = os.path.join(os.environ["NLTK_DATA"], "corpora", "cmudict", "cmudict")
     cmu = read_cmudict(cmu_path)
     calib = G.load_calibration()["arpabet_misaki"]
-    # a word BOTH dialects' lexicons carry can never reach the fallback; one only a single
-    # dialect carries still can, through the other dialect's lookup
+    # a word BOTH dialects' lexicons carry has nothing to gain from a CMUdict row: the reader's
+    # fallback consults the lexicon's own plain reading first, in the dialect it was asked for,
+    # and only then this table. That is what makes the drop safe - a glued group sends its WHOLE
+    # surface to the fallback as soon as one piece is unresolvable, so such a word DOES reach it
+    # ("water-tzarina"), and a CMUdict row would only have offered the coarser reading.
     covered = (set(gold) | set(silver)) & (set(gb_gold) | set(gb_silver))
     dropped = sum(1 for w in cmu if w in covered)
     cmu_misaki = {w: G.arpabet_to_ipa(G.flap(ph, calib["flap"]), "misaki", calib["opts"])

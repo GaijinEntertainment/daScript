@@ -69,7 +69,22 @@ def load_tts_model(path : string) : TtsModel {
     let dir = dir_name(path)
     m.g2p <- load_g2p(path_join(dir, "tts_g2p.bin"))
     m.tagger <- load_pos_tagger(path_join(dir, "tts_postag.bin"))
+    log_dropped_voices(m)
     return <- m
+}
+
+[cold_path]
+def private log_dropped_voices(m : TtsModel) {
+    //! Name, once per load, the voice packs ``caps`` leaves out: the front end phonemizes none
+    //! of their languages, so a caller asking for one gets a refusal rather than a wrong accent.
+    var inscope langs <- front_end_langs(m)
+    var inscope dropped : array<string>
+    for (v in m.model.voice_names) {
+        continue if (find_index(langs, voice_lang(m, v)) >= 0)
+        dropped |> push(v)
+    }
+    return if (empty(dropped))
+    to_log(LOG_INFO, "dasLLAMA tts: {length(dropped)} voice pack(s) speak a language this front end does not phonemize, and are not offered: {join(dropped, ", ")}\n")
 }
 
 def set_tts_q8(on : bool) {
@@ -120,6 +135,13 @@ def caps(m : TtsModel) : TtsCaps {
         c.voice_langs |> push(lang)
     }
     return <- c
+}
+
+def tts_voice_lang(m : TtsModel; voice : string) : string {
+    //! The language the front end reads ``voice`` in - a canonical name from ``caps`` or a family
+    //! alias, resolved the way ``synthesize`` resolves it. A voice this model cannot drive panics
+    //! here with the message a synthesis would give, rather than making the caller speak a line.
+    return voice_lang(m, resolve_voice(m, voice))
 }
 
 // ===== front end =====
@@ -330,7 +352,9 @@ def private resolve_voice(m : TtsModel; voice : string) : string {
     let lang = voice_lang(m, vname)
     var inscope langs <- front_end_langs(m)
     if (find_index(langs, lang) < 0) {
-        panic("dasLLAMA tts: unknown voice '{voice}' for this front end - the pack speaks {lang}, which it does not phonemize")
+        // a pack whose name carries no language of the pipeline's own shape has none to name
+        let says = empty(lang) ? "speaks a language the front end does not phonemize" : "speaks {lang}, which it does not phonemize"
+        panic("dasLLAMA tts: unknown voice '{voice}' for this front end - the pack {says}")
     }
     return vname
 }

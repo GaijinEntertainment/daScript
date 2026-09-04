@@ -18,18 +18,24 @@ require dasllama/dasllama_tts                           // tts_normalize / tts_c
 
 // /v1/audio/speech on a TTS-only boot (no LLM slot): a WAV answer of speech length with a RIFF
 // header, the raw pcm form, the declined mp3, the missing input, the unknown voice, the TTS id
-// on /v1/models, the input cap and the speed range, the queue's refusal past its cap, the `tts`
-// block on /v1/stats, the /v1/audio/phonemes document on the same queue, and the weight lane the
-// worker pins.
+// on /v1/models, the input cap (counted in characters) and the speed range, the queue's refusal
+// past its cap, the `tts` block on /v1/stats, the /v1/audio/phonemes document on the same queue -
+// its `model` field, and the voice rule of a front end that phonemizes ONE language (every name
+// reads in it) - and the weight lane the worker pins.
 // Model-gated (kitten-nano.gguf + tts_g2p.bin + tts_postag.bin beside it) and JIT-only; skips
-// cleanly otherwise. The boot degrade, the no-TTS 503, the lane normalization and the catalog's
-// tts download arm are model-free and always run.
+// cleanly otherwise. Two more model-gated tests spawn main.das: the speech-only boot, and the
+// boot whose worker CANNOT load (a front-end pack from before this build), which must serve on
+// with the reason in the `tts` block. The multi-language voice rule (a named voice's own dialect,
+// and the refusals) is gated on kokoro-82m.gguf. The configure_tts degrade, the no-TTS 503, the
+// lane normalization and the catalog's tts download arm are model-free and always run.
 
 let TEST_PORT = 18136   // 18097/18098/18099/18101/18102/18120/18121/18131/18135 belong to the sibling suites
 let SPEECHLESS_PORT = 18137
 let LANE_PORT = 18138   // the f32-lane boot: a second worker, so it needs a port of its own
 let BOOT_PORT = 18139   // the spawned main.das boot
 let CATALOG_PORT = 18141   // 18140 belongs to the fixtures' capture_catalog rail
+let KOKORO_PORT = 18142    // the multi-language boot: its own worker, so its own port
+let STALE_PACK_PORT = 18143   // the spawned boot whose front-end pack predates this build
 let TTS_BURST = 24      // past the server's queue cap (16): the overflow must be refused, not queued
 let CHILD_TIMEOUT_SEC = 420.0   // the child parses, JITs and loads before it listens
 let BOOT_POLL_ATTEMPTS = 720    // x 500 ms — inside the child's own timeout, so a hung boot still joins
@@ -38,6 +44,7 @@ def private models_dir() : string {
     return models_dir_resolved()
 }
 let TTS_PATH = path_join(models_dir(), "kitten-nano.gguf")
+let KOKORO_PATH = path_join(models_dir(), "kokoro-82m.gguf")   // the multi-language front end: two dialects to be wrong about
 let BOGUS_TTS_PATH = path_join(models_dir(), "no-such-tts-model.gguf")   // never on disk: the degrade path
 
 struct private BurstAnswer {
@@ -50,10 +57,10 @@ struct private BootOutcome {
     tail : string
 }
 
-def private with_speech_server(port : int; lane : string; blk : block<(base_url : string) : void>) {
+def private with_speech_server(model_path : string; port : int; lane : string; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
-        new_thread() <| @capture(= lane) {
-            configure_tts(TTS_PATH, lane)   // the server thread is its own context: the lane pin has to be requested HERE
+        new_thread() <| @capture(= model_path, = lane) {
+            configure_tts(model_path, lane)   // the server thread is its own context: the lane pin has to be requested HERE
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
         }
@@ -416,7 +423,9 @@ def private check_tts_stats_block(t : T?; base_url : string; want_lane : string)
 def private check_phonemes(t : T?; base_url : string) {
     let input = "Dr. Chen paid $12."
     let want_norm = tts_normalize(input)
-    var inscope want <- tts_chunks(want_norm)
+    // kitten-nano is the fixture, and a Kitten model's chunker appends the driver's comma to a
+    // bare chunk: the rule is passed here rather than left to the default the model would pick
+    var inscope want <- tts_chunks(want_norm, TTS_CHUNK_CHARS, true)
     t |> equal(want_norm, "Doctor Chen paid twelve dollars.", "the normalizer's spoken form of the probe")
     phonemes_request(base_url, "\{\"input\": \"{input}\"}") $(status, text) {
         t |> equal(status, 200, text)
@@ -440,12 +449,48 @@ def private check_phonemes(t : T?; base_url : string) {
     }
 }
 
+// The voice rule on a model that phonemizes ONE language: there is no second dialect to be wrong
+// about, so every name reads in it - the alias the speech route resolves, and a name nobody
+// carries alike. The multi-language arm is the Kokoro test below.
+def private check_phonemes_voice_rule(t : T?; base_url : string) {
+    for (voice in ["Bella", "nobody-at-all"]) {
+        phonemes_request(base_url, "\{\"input\": \"Hello.\", \"voice\": \"{voice}\"}") $(status, text) {
+            t |> equal(status, 200, "'{voice}' on a one-language front end: {text}")
+            var err = ""
+            var js = read_json(text, err)
+            t |> equal(js?["lang"] ?? "", "en-us", "the only language it phonemizes")
+            if (js != null) {
+                unsafe {
+                    delete js
+                }
+            }
+        }
+    }
+    // the cap counts CHARACTERS, the way the page's text box does: 1500 em dashes are 1500 of
+    // them in 4500 bytes, well under the 4096 the route takes - a byte cap would refuse them
+    let dashes = build_string() $(w) {
+        for (_i in range(1500)) {
+            w |> write("—")
+        }
+    }
+    phonemes_request(base_url, "\{\"input\": \"{dashes}\"}") $(status, text) {
+        t |> equal(status, 200, "1500 characters in 4500 bytes: {slice(text, 0, min(160, length(text)))}")
+    }
+    phonemes_request(base_url, "\{\"input\": \"Hello.\", \"model\": \"kitten-nano\"}") $(status, text) {
+        t |> equal(status, 200, "the served id is accepted: {text}")
+    }
+    phonemes_request(base_url, "\{\"input\": \"Hello.\", \"model\": \"not-served\"}") $(status, text) {
+        t |> equal(status, 404, "the phonemes route reads `model` the way the speech route does: {text}")
+        t |> success(find(text, "kitten-nano") >= 0, "the refusal names the id that IS served: {text}")
+    }
+}
+
 [test]
 def test_speech_route(t : T?) {
     if (speech_model_missing(t)) {
         return
     }
-    with_speech_server(TEST_PORT, "q8") $(base_url) {
+    with_speech_server(TTS_PATH, TEST_PORT, "q8") $(base_url) {
         t |> run("/v1/models lists the TTS id") @(t : T?) {
             GET("{base_url}/v1/models") $(resp) {
                 t |> success(resp != null && resp.status_code == http_status.OK, "200")
@@ -479,6 +524,9 @@ def test_speech_route(t : T?) {
         t |> run("the phonemes route answers the normalized text and a phoneme string per chunk") @(t : T?) {
             check_phonemes(t, base_url)
         }
+        t |> run("a one-language front end phonemizes any voice name, and reads the model field") @(t : T?) {
+            check_phonemes_voice_rule(t, base_url)
+        }
         t |> run("the declined and malformed requests") @(t : T?) {
             speech_request(base_url, "\{\"input\": \"Hello.\", \"response_format\": \"mp3\"}") $(status, _ctype, _bytes, text) {
                 t |> equal(status, 400)
@@ -508,11 +556,68 @@ def test_speech_route(t : T?) {
     }
 }
 
+// A front end with TWO dialects has to be told which voice, because either answer would be a
+// claim about a sound: a voice it carries reads that voice's language, and one it does not is
+// refused in the speech route's own words rather than answered in the wrong accent.
+def private check_multi_language_phonemes(t : T?; base_url : string) {
+    var inscope langs <- { "bf_emma" => "en-gb", "af_heart" => "en-us", "bm_george" => "en-gb" }
+    for (voice, want in keys(langs), values(langs)) {
+        phonemes_request(base_url, "\{\"input\": \"The water tower.\", \"voice\": \"{voice}\"}") $(status, text) {
+            t |> equal(status, 200, "{voice}: {text}")
+            var err = ""
+            var js = read_json(text, err)
+            t |> equal(js?["lang"] ?? "", want, "{voice} reads {want}")
+            if (js != null) {
+                unsafe {
+                    delete js
+                }
+            }
+        }
+    }
+    // a British and an American reading of one line are different strings, or the lang field
+    // above is decoration
+    var gb = ""
+    var us = ""
+    phonemes_request(base_url, "\{\"input\": \"The water tower.\", \"voice\": \"bf_emma\"}") $(_status, text) {
+        gb = clone_string(text)
+    }
+    phonemes_request(base_url, "\{\"input\": \"The water tower.\", \"voice\": \"af_heart\"}") $(_status, text) {
+        us = clone_string(text)
+    }
+    t |> success(!empty(gb) && gb != us, "the two dialects answer different documents")
+    phonemes_request(base_url, "\{\"input\": \"Hello.\", \"voice\": \"nobody-at-all\"}") $(status, text) {
+        t |> equal(status, 400, "an unknown voice cannot be phonemized in a chosen dialect: {text}")
+        t |> success(find(text, "unknown voice") >= 0, "the speech route's own refusal: {text}")
+    }
+    phonemes_request(base_url, "\{\"input\": \"Hello.\", \"voice\": \"jf_alpha\"}") $(status, text) {
+        t |> equal(status, 400, "a pack whose language the front end lacks: {text}")
+        t |> success(find(text, "speaks ja") >= 0, "the refusal names the language the pack speaks: {text}")
+    }
+}
+
+[test]
+def test_phonemes_on_a_multi_language_model(t : T?) {
+    if (!jit_enabled()) {
+        t |> skip("JIT-only: the interpreter is too slow to load a TTS model")
+        return
+    }
+    if (!stat(KOKORO_PATH).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid ||
+        !stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
+        t |> skip("kokoro-82m.gguf or the front-end packs not present under {models_dir()}")
+        return
+    }
+    with_speech_server(KOKORO_PATH, KOKORO_PORT, "q8") $(base_url) {
+        t |> run("the phonemes route reads the voice's own dialect and refuses a voice it cannot") @(t : T?) {
+            check_multi_language_phonemes(t, base_url)
+        }
+    }
+}
+
 // the child boots from the SAME tree this test runs from: the parent's -dasroot / -module-cache
 // carry over, so a worktree run never compiles main.das against the binary's tree
-def private child_launch_args(server_das : string; port : int) : array<string> {
+def private child_launch_args(server_das : string; port : int; tts_path : string; config : string) : array<string> {
     var out : array<string>
-    out |> reserve(12)   // argv[0] + -jit + at most two forwarded flag pairs + the script + five own args
+    out |> reserve(14)   // argv[0] + -jit + at most two forwarded flag pairs + the script + seven own args
     var carry = ""   // a forwarded flag, held until its value arrives on the next argv entry
     for (a in get_command_line_arguments()) {   // a LOCKED array: iterate it, never bind or delete it
         if (empty(out)) {
@@ -527,31 +632,49 @@ def private child_launch_args(server_das : string; port : int) : array<string> {
         }
     }
     out |> push(clone_string(server_das))
-    for (a in ["--", "--tts", TTS_PATH, "--port", "{port}"]) {
+    // --config PINS the child's configuration: main.das otherwise auto-discovers a
+    // dasllama-server.toml in the cwd or beside itself, and a developer's own (which may be
+    // `authoritative = true`, outranking the flags) would decide what this child serves
+    for (a in ["--", "--tts", tts_path, "--port", "{port}", "--config", config]) {
         out |> push(clone_string(a))
     }
     return <- out
 }
 
-// A --tts boot with no --model is the ONE start shape only main.das can prove: its roster is
-// empty, so every roster-indexing step of the boot has to survive that, and the in-process
-// harness above never runs them (it calls configure_tts + run_server directly).
-[test]
-def test_speech_only_boot_through_main(t : T?) {
-    if (speech_model_missing(t)) {
-        return
+// a config carrying one harmless key: the child needs a READABLE one to be pinned to it, and
+// every value that matters rides its flags
+def private write_pinned_config(path : string) : bool {
+    var ok = false
+    fopen(path, "wb") $(f) {
+        if (f != null) {
+            f |> fwrite("streams = 4\n")
+            ok = true
+        }
     }
+    return ok
+}
+
+// main.das spawned as a child on `port` with `--tts model_path`, held while `blk` runs and shut
+// down after. A [tune] bootstrap exit relaunches once.
+def private with_spawned_boot(t : T?; what : string; port : int; model_path : string; blk : block<(base_url : string) : void>) {
     let server_das = path_join(get_this_module_dir(), "main.das")
     if (!stat(server_das).is_valid) {
         t |> skip("main.das is not beside this test")
         return
     }
-    let base_url = "http://127.0.0.1:{BOOT_PORT}"
+    var terr : string
+    let tmp = temp_directory(terr)
+    let config = path_join(empty(tmp) ? "." : tmp, "dasllama_boot_{port}_{ref_time_ticks()}.toml")
+    if (!write_pinned_config(config)) {
+        t |> skip("could not write the child's config at {config}")
+        return
+    }
+    let base_url = "http://127.0.0.1:{port}"
     var ready = false
     var why = ""
     with_channel(1) $(ch) {
         with_job_status(1) $(done) {
-            var inscope args <- child_launch_args(server_das, BOOT_PORT)
+            var inscope args <- child_launch_args(server_das, port, model_path, config)
             new_thread <| @capture(<- args) {
                 var out = ""
                 var rc = run_and_capture(args, out, CHILD_TIMEOUT_SEC)
@@ -579,20 +702,121 @@ def test_speech_only_boot_through_main(t : T?) {
                 sleep(500u)
             }
             if (ready) {
-                t |> run("a --tts boot with no --model serves the speech route") @(t : T?) {
-                    speech_request(base_url, "\{\"input\": \"The speech-only boot speaks.\"}") $(status, ctype, bytes, text) {
-                        t |> equal(status, 200, text)
-                        t |> success(find(ctype, "audio/wav") >= 0, "content type {ctype}")
-                        t |> success(length(bytes) > 44, "{length(bytes)} bytes of wav")
-                    }
-                    check_tts_stats_block(t, base_url, "q8")
-                }
+                invoke(blk, base_url)
             }
             POST("{base_url}/shutdown", "") $(_resp) {}
             done |> join()
         }
     }
-    t |> success(ready, "the speech-only boot listened. {why}")
+    remove(config)
+    t |> success(ready, "{what} listened. {why}")
+}
+
+// A --tts boot with no --model is the ONE start shape only main.das can prove: its roster is
+// empty, so every roster-indexing step of the boot has to survive that, and the in-process
+// harness above never runs them (it calls configure_tts + run_server directly).
+[test]
+def test_speech_only_boot_through_main(t : T?) {
+    if (speech_model_missing(t)) {
+        return
+    }
+    with_spawned_boot(t, "the speech-only boot", BOOT_PORT, TTS_PATH) $(base_url) {
+        t |> run("a --tts boot with no --model serves the speech route") @(t : T?) {
+            speech_request(base_url, "\{\"input\": \"The speech-only boot speaks.\"}") $(status, ctype, bytes, text) {
+                t |> equal(status, 200, text)
+                t |> success(find(ctype, "audio/wav") >= 0, "content type {ctype}")
+                t |> success(length(bytes) > 44, "{length(bytes)} bytes of wav")
+            }
+            check_tts_stats_block(t, base_url, "q8")
+        }
+    }
+}
+
+// the ten bytes load_g2p reads before it refuses: the "TG2P" magic and a version byte from before
+// the British tier (test_tts_g2p.das writes the same header for its own version cell)
+def private write_v1_g2p_pack(path : string) : bool {
+    var ok = false
+    fopen(path, "wb") $(f) {
+        if (f != null) {
+            var inscope bytes <- [uint8(0x54), uint8(0x47), uint8(0x32), uint8(0x50),
+                uint8(1), uint8(0), uint8(0), uint8(0), uint8(0), uint8(0)]
+            fwrite(f, bytes)
+            ok = true
+        }
+    }
+    return ok
+}
+
+// A directory holding the real model beside a front-end pack from before this build. The GGUF is
+// copied rather than named in place, because load_tts_model reads the packs from the MODEL's own
+// directory - which is exactly why an upgrade can leave a stale one there. "" back = skipped.
+def private stage_stale_pack_dir(t : T?) : string {
+    var terr : string
+    let tmp = temp_directory(terr)
+    let dir_path = path_join(empty(tmp) ? "." : tmp, "dasllama_stale_g2p_{ref_time_ticks()}")
+    mkdir_rec(dir_path)
+    let gguf = copy_file_result(TTS_PATH, path_join(dir_path, "kitten-nano.gguf"), true)
+    let tagger = copy_file_result(path_join(models_dir(), "tts_postag.bin"), path_join(dir_path, "tts_postag.bin"), true)
+    if (!(gguf is value) || !(tagger is value) || !write_v1_g2p_pack(path_join(dir_path, "tts_g2p.bin"))) {
+        t |> skip("could not stage a stale front-end pack under {dir_path}")
+        return ""
+    }
+    return dir_path
+}
+
+// everything, because the failed boot bakes its prepared image beside the copied GGUF first
+def private drop_staged_dir(dir_path : string) {
+    var inscope names : array<string>
+    dir(dir_path) $(name) {
+        if (name != "." && name != "..") {
+            names |> push(clone_string(name))
+        }
+    }
+    for (n in names) {
+        remove(path_join(dir_path, n))
+    }
+    rmdir(dir_path)
+}
+
+// The upgrade this degrade exists for: a new binary beside a tts_g2p.bin from before it. The
+// worker's load panics on the pack version - a failure no file check can see ahead of time - and
+// the boot has to come up anyway, because a crash-looping boot under a watchdog never gets a page
+// to fix the config from. Spawned through main.das: only the real boot path runs the fallback.
+[test]
+def test_boot_degrades_when_the_worker_cannot_load(t : T?) {
+    if (speech_model_missing(t)) {
+        return
+    }
+    let staged = stage_stale_pack_dir(t)
+    if (empty(staged)) {
+        return
+    }
+    with_spawned_boot(t, "the boot with a stale front-end pack", STALE_PACK_PORT, path_join(staged, "kitten-nano.gguf")) $(base_url) {
+        t |> run("the speech route drops, the boot serves on, and /v1/stats says why") @(t : T?) {
+            with_tts_stats(base_url) $(tts) {
+                t |> success(json_present(tts), "the tts block survives the failed load")
+                return if (!json_present(tts))
+                t |> equal(tts?["id"] ?? "", "kitten-nano", "named by the file's stem, the way it was configured")
+                t |> success(!(tts?["ready"] ?? true), "the worker never armed")
+                t |> equal(int(tts?["pending"] ?? -1l), 0, "and nothing is queued behind it")
+                t |> equal(length(json_strings(tts?["voices"])), 0, "no voice list to offer")
+                t |> equal(tts?["lane"] ?? "", "q8", "the lane the boot asked for")
+                let err = tts?["error"] ?? ""
+                t |> success(!empty(err), "the block carries the reason the page draws")
+                t |> success(find(err, "version 1") >= 0 && find(err, "tts_g2p.bin") >= 0,
+                    "and the reason is the stale pack: {err}")
+            }
+            speech_request(base_url, "\{\"input\": \"Hello.\"}") $(status, _ctype, _bytes, text) {
+                t |> equal(status, 503, "the route is dropped, not half-armed: {text}")
+            }
+            GET("{base_url}/v1/stats") $(resp) {
+                let body = resp == null ? "" : string(resp.body)
+                t |> success(find(body, "\"setup\":true") >= 0,
+                    "with no model behind it the boot answers as setup mode, so the page can fix the config: {body}")
+            }
+        }
+    }
+    drop_staged_dir(staged)
 }
 
 [test]
@@ -600,7 +824,7 @@ def test_speech_route_on_the_f32_lane(t : T?) {
     if (speech_model_missing(t)) {
         return
     }
-    with_speech_server(LANE_PORT, "f32") $(base_url) {
+    with_speech_server(TTS_PATH, LANE_PORT, "f32") $(base_url) {
         t |> run("the configured lane reaches the worker and comes back on /v1/stats") @(t : T?) {
             speech_request(base_url, "\{\"input\": \"The quick brown fox.\", \"voice\": \"Bella\"}") $(status, _ctype, bytes, text) {
                 t |> equal(status, 200, text)

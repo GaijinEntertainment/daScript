@@ -60,6 +60,52 @@ test('record, stop, send: the clip rides the message as an input_audio part, onc
     expect(typeof chatBody(posts).messages.at(-1).content).toBe('string');
 });
 
+test('a dimmed mic records inside the click and asks the server alongside', async ({ page }) => {
+    // the first poll says no tower, so the button is dimmed; every later /v1/stats is held back.
+    // getUserMedia must not wait behind that round trip — Safari drops the gesture across one.
+    const stats = n => (n === 0 ? fx('stats') : { __delay: 6000, json: audioStats() });
+    await openControl(page, { stats });
+    const mic = page.locator('#b-mic');
+    await expect(mic).toHaveClass(/off/);
+    await mic.click();
+    await expect(mic).toHaveClass(/rec/, { timeout: 3000 });
+    await page.waitForTimeout(400);
+    await mic.click();
+    // the fresh answer decided the mode at stop: an audio arm attaches the clip, no transcription
+    await expect(page.locator('#aud-strip')).toContainText('clip');
+    await expect(mic).not.toHaveClass(/off/);
+});
+
+test('a dimmed mic whose fresh answer still has no tower drops the clip and walks to the catalog', async ({ page }) => {
+    await openControl(page, { stats: fx('stats') });   // no ASR workers, no audio arm, ever
+    const mic = page.locator('#b-mic');
+    await expect(mic).toHaveClass(/off/);
+    await mic.click();
+    await expect(mic).toHaveClass(/rec/);
+    await page.waitForTimeout(300);
+    await mic.click();
+    await expect(page.locator('#cat-note')).toContainText('ASR tower');
+    await expect(page.locator('#aud-strip')).toBeHidden();
+});
+
+test('a recording that captured nothing says so instead of attaching an empty clip', async ({ page }) => {
+    // a microphone that yields no audio: the processor node never delivers a buffer
+    await page.addInitScript(() => {
+        const make = AudioContext.prototype.createScriptProcessor;
+        AudioContext.prototype.createScriptProcessor = function (...a) {
+            const node = make.apply(this, a);
+            Object.defineProperty(node, 'onaudioprocess', { set() { }, get() { return null; } });
+            return node;
+        };
+    });
+    await openControl(page, { stats: audioStats() });
+    await page.locator('#b-mic').click();
+    await expect(page.locator('#b-mic')).toHaveClass(/rec/);
+    await page.waitForTimeout(400);
+    await page.locator('#b-mic').click();
+    await expect(page.locator('#aud-strip')).toContainText('no audio captured');
+});
+
 test('attaching an image drops the pending clip — the server takes one media per message', async ({ page }) => {
     await openControl(page, { stats: audioStats() });
     await recordClip(page, 300);
