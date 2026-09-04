@@ -4,6 +4,7 @@ options indenting = 4
 require dastest/testing_boost public
 
 require strings
+require math
 require daslib/fio
 require daslib/strings_boost
 
@@ -167,7 +168,27 @@ def test_aot_generation_reads_cached_modules(t : T?) {
     rmdir_rec(tmp, err)
 }
 
-//! a cache file cut in the middle is read as far as it goes, silently, and rewritten
+//! overwrites the file's first 64 bytes - the stream header and version - with 0xff
+def scramble_header(path : string) {
+    var bytes : array<uint8>
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            bytes |> resize(int64(fstat(f).size))
+            fread(f, bytes)
+        }
+    }
+    for (i in range(min(64, length(bytes)))) {
+        bytes[i] = 0xffu8
+    }
+    fopen(path, "wb") $(f) {
+        if (f != null) {
+            fwrite(f, bytes)
+        }
+    }
+}
+
+//! a cache file cut in the middle, or one whose header is garbage, is read as far as it goes,
+//! silently, and rewritten
 def check_damaged_cache(t : T?; base, a : string) {
     truncate_file(cache_file_path("mc_default_a"))
     var damaged : string
@@ -175,6 +196,12 @@ def check_damaged_cache(t : T?; base, a : string) {
     t |> success(report_child(t, "damaged cache", damagedRc, damaged, "MARK_mc_default_a"), "a run over a truncated cache file executes")
     t |> success(quiet(damaged), "the default cache says nothing over a truncated cache file:\n{damaged}")
     t |> equal(cache_files("mc_default_a"), 1, "the truncated file is rewritten in place")
+    scramble_header(cache_file_path("mc_default_a"))
+    var garbage : string
+    let garbageRc = run("{base} {a}", garbage)
+    t |> success(report_child(t, "garbage header", garbageRc, garbage, "MARK_mc_default_a"), "a run over a cache file with a garbage header executes")
+    t |> success(quiet(garbage) && find(garbage, "das: ") < 0, "the default cache says nothing over a garbage header - no verdict, no serializer warning:\n{garbage}")
+    t |> equal(cache_files("mc_default_a"), 1, "the garbage file is rewritten in place")
 }
 
 //! the AST module cache is on by default - silent, at a path keyed by script, host flags and DAS* env - and the flags that turn it off or make it loud

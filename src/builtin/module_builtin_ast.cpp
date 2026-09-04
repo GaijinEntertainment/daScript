@@ -273,11 +273,11 @@ namespace das {
     void addModuleCacheDependency ( const char * path, Context *, LineInfoArg * ) {
         auto program = daScriptEnvironment::getBound()->g_Program;
         if ( !program || !path || !path[0] ) return;
-        bool virtualInput = strncmp(path, "env:", 4)==0 || strncmp(path, "arg:", 4)==0;
         // absolutize: the validating reader may run from a different cwd, and a relative
         // path there would stat the wrong (or no) file
         string fullPath = path;
 #if !defined(DAS_NO_FILEIO)
+        bool virtualInput = strncmp(path, "env:", 4)==0 || strncmp(path, "arg:", 4)==0;
         if ( !virtualInput ) {
 #if defined(_WIN32)
             // a drive-relative spelling (C:foo) resolves against that drive's own cwd, which a

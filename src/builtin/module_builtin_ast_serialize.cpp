@@ -2885,7 +2885,7 @@ namespace das {
         try {
             serializeProgramImpl(program, libGroup);
         } catch ( const dasException & r ) {
-            LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: " << r.what() << "\n";
+            if ( !quietCache ) LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: " << r.what() << "\n";
             failed = true;
             seenNewModule = true;
             if ( program ) program->failToCompile = true;
@@ -2895,7 +2895,7 @@ namespace das {
             // this method is noexcept for embedders built without EH; a non-das
             // exception (e.g. std::bad_alloc deep in deserialization) escaping here
             // would std::terminate. Contain it the same way and report failure.
-            LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: unknown exception\n";
+            if ( !quietCache ) LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: unknown exception\n";
             failed = true;
             seenNewModule = true;
             if ( program ) program->failToCompile = true;
@@ -2930,7 +2930,7 @@ namespace das {
         uint32_t version = getVersion();
         ser << version;
         if ( !ser.writing && version != getVersion() ) {
-            LOG(LogLevel::warning) << "das: deserialize: module cache version " << version
+            if ( !ser.quietCache ) LOG(LogLevel::warning) << "das: deserialize: module cache version " << version
                 << " does not match serializer version " << getVersion() << "\n";
             ser.failed = true;
             return;
@@ -3058,7 +3058,7 @@ namespace das {
                         program->library.addModule(existing);
                         continue;
                     }
-                    LOG(LogLevel::warning) << "das: serialize: module '" << name << "' not found";
+                    if ( !ser.quietCache ) LOG(LogLevel::warning) << "das: serialize: module '" << name << "' not found";
                     program->failToCompile = true;
                     return;
                 }
@@ -3083,7 +3083,7 @@ namespace das {
                 } catch ( const dasException & r ) {
                     if ( activeWasThisModule ) activeRoot = &gc_root::gc_get_thread_root();
                     delete deser;
-                    LOG(LogLevel::warning) << "das: serialize: reading module '" << name << "' (" << i << "/" << size
+                    if ( !ser.quietCache ) LOG(LogLevel::warning) << "das: serialize: reading module '" << name << "' (" << i << "/" << size
                                            << (existing ? ", already exists" : ", new") << "): " << r.what() << "\n";
                     program->failToCompile = true;
                     return;
@@ -3100,7 +3100,7 @@ namespace das {
             }
 
             if ( program->library.getModules().empty() ) {
-                LOG(LogLevel::warning) << "das: serialize: program '" << program->thisModuleName << "' stream has no modules\n";
+                if ( !ser.quietCache ) LOG(LogLevel::warning) << "das: serialize: program '" << program->thisModuleName << "' stream has no modules\n";
                 program->failToCompile = true;
                 return;
             }
