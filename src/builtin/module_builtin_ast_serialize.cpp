@@ -2909,7 +2909,7 @@ namespace das {
         if ( writing ) {
             ser << program->options << program->policies;
         } else {
-            // a record written under other policies is never served; the caller cuts the stream
+            // a record written under other policies is never served; the caller reparses it in place
             ser << program->options;
             CodeOfPolicies stored = program->policies;
             ser << stored;

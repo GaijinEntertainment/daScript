@@ -116,7 +116,7 @@ def test_fallback_verdict_names_the_cutoff(t : T?) {
 }
 
 //! a record written under one set of compile policies serves nothing to a compile under another:
-//! the same explicit cache read by a -no-lint run stops at the first module and is rewritten
+//! the same explicit cache read by a -no-lint run reparses every module in place and is rewritten
 [test]
 def test_policy_change_refuses_the_cache(t : T?) {
     var terr : string
@@ -135,10 +135,40 @@ def test_policy_change_refuses_the_cache(t : T?) {
     t |> success(report_child(t, "policy same", run("{base} {tail}", same), same, "deser: clean"), "the same policies serve every module")
     var changed : string
     t |> success(report_child(t, "policy changed", run("{base} -no-lint {tail}", changed), changed, "MARK_policy 3"), "a -no-lint run over the plain run's cache still executes")
-    t |> success(find(changed, "compile policies changed at") >= 0 && find(changed, "mc_pol_leaf.das") >= 0, "the verdict names the policy cutoff at the first module:\n{changed}")
+    t |> success(find(changed, "compile policies changed at") >= 0 && find(changed, "mc_pol_leaf.das") >= 0, "the leaf's record names the policy change:\n{changed}")
+    t |> success(find(changed, "deser: partial") >= 0, "the mismatch reparses in place rather than cutting the stream:\n{changed}")
     t |> success(find(changed, "ser: wrote") >= 0, "the cache is rewritten under the new policies")
     var rewritten : string
     t |> success(report_child(t, "policy rewritten", run("{base} -no-lint {tail}", rewritten), rewritten, "deser: clean"), "the rewritten cache serves the -no-lint compile")
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
+//! the record stamps a module's file by content: a rewrite that leaves the bytes alone serves the
+//! cache, and a same-size edit is a cutoff even inside the mtime's one-second grain
+[test]
+def test_source_stamp_is_content(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_mc_stamp", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let leaf = path_join(tmp, "mc_stamp_leaf.das")
+    let leafSrc = "options gen2\nmodule mc_stamp_leaf\ndef leaf() : int \{\n    return 2\n\}\n"
+    fwrite(leaf, leafSrc)
+    fwrite(path_join(tmp, "mc_stamp_root.das"), "options gen2\nrequire mc_stamp_leaf\n[export]\ndef main \{\n    print(\"MARK_stamp \{leaf()\}\\n\")\n\}\n")
+    let cmd = "{das_exe()} -dasroot {get_das_root()} -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_stamp_root.das")}"
+    var cold : string
+    t |> success(report_child(t, "stamp cold", run(cmd, cold), cold, "ser: wrote"), "the cold run writes the explicit cache")
+    sleep(1100u)    // past the mtime's one-second grain, so the rewrite below moves the mtime
+    fwrite(leaf, leafSrc)
+    var touched : string
+    t |> success(report_child(t, "stamp touched", run(cmd, touched), touched, "deser: clean"), "a rewrite that leaves the bytes alone still serves every module:\n{touched}")
+    fwrite(leaf, "options gen2\nmodule mc_stamp_leaf\ndef leaf() : int \{\n    return 3\n\}\n")
+    var edited : string
+    t |> success(report_child(t, "stamp edited", run(cmd, edited), edited, "MARK_stamp 3"), "a same-size edit is recompiled")
+    t |> success(find(edited, "file changed at") >= 0 && find(edited, "mc_stamp_leaf.das") >= 0, "the same-size edit is a cutoff at the leaf:\n{edited}")
     var err : string
     rmdir_rec(tmp, err)
 }

@@ -170,8 +170,8 @@ namespace das {
         vector<pair<Enumeration **,SerializeNodeId>>       enumerationRefs;
         // fieldRefs tuple contains: fieldptr, module, structname, fieldname
         vector<tuple<Structure::FieldDeclarationRef*, Module *, string, string>>       fieldRefs;
-        // parsedModules record: fileName, mtime, size, program, thisModule
-        vector<tuple<string, int64_t, int64_t, ProgramPtr, Module*>> parsedModules;
+        // parsedModules record: fileName, source content hash, source size, program, thisModule
+        vector<tuple<string, uint64_t, int64_t, ProgramPtr, Module*>> parsedModules;
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;
@@ -258,7 +258,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 201;   // 201: the policy stream carries lint_check and no_lint
+            return 202;   // 202: the record header stamps the source by content hash, not mtime; the policy stream carries lint_check and no_lint
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

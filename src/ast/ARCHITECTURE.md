@@ -8,8 +8,10 @@ described in `skills/internal/cpp_codebase_notes.md` (repo-only).
 
 The front end parses modules in require order. When a module cache is installed
 (`ModuleFileCache`), each module first tries `trySerializeProgramModule`. The reader stands at
-the next record and checks that the record names this file, that the file's mtime and size
-match, and that every compile-time input the record's macros pinned
+the next record and checks that the record names this file, that the size and content hash of
+the bytes the compile's `FileAccess` serves for that name match (never a stat, so a file that is
+not on disk under that name is covered, and a rewrite that leaves the bytes alone serves), and
+that every compile-time input the record's macros pinned
 (`add_module_cache_dependency` - a file's bytes, an environment variable's value under
 `env:NAME`, a command-line flag's occurrences under `arg:--flag`) still has the same content. A
 match deserializes the module and counts it as served; the module object is a `ModuleDas`, the
@@ -23,7 +25,9 @@ The module takes its own file from the access the way a parse leaves it (`letGoO
 a name the access cannot produce keeps the record's source-less object. The record also carries
 the `CodeOfPolicies` of the compile that wrote it, and a record whose policies differ from the
 reading compile's is never served - a lint compile and a run compile of one graph never share a
-record - the mismatch being a cutoff like a changed file. The first mismatch is the cutoff: the reader marks the stream failed, the
+record. The mismatch fails the record the way damage does, reparsed in place rather than cutting
+the stream (damage landing on the policy bytes must not cut it either), and the writeback that
+repairs it carries the new policies. The first mismatch is the cutoff: the reader marks the stream failed, the
 module and everything after it parse from source, and the writer rewrites the whole file - the
 served records re-serialized from the modules the reader restored, then the freshly parsed
 ones. A record whose header matched but whose payload fails to deserialize reparses in place,

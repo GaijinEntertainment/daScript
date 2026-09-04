@@ -13,7 +13,7 @@ require _llvm_cache_common
 // covered by llvm_ast_roundtrip's warm rounds; this file is the damage arm.
 
 // stomp printable garbage across the first record's PAYLOAD: past the stream header +
-// record header (mtime+size+filename+len - the temp-dir filename varies in length, hence
+// record header (hash+size+filename+len - the temp-dir filename varies in length, hence
 // the spread), far before the record's end (records here are >100KB), so the length field
 // stays intact and the skip lands true. Many spots on purpose: a single spot could land
 // inside a serialized string's CONTENT, which reads back silently - hitting structural
