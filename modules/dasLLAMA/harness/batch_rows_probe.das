@@ -146,7 +146,7 @@ def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sames
     return ms
 }
 
-def private print_chain_stats(feed : string; spec : int) {
+def private print_chain_stats(feed : string; spec : int) {   // nolint:LINT012,LINT019 — feed/spec read only in the das_metal half; unused on the linux lint lane
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let ss = metal_decode_spec_stats()
         print("  greedy chain ({feed} feed, spec {spec}): {ss.hits} hits, {ss.misses} misses (a miss reruns the step)\n")
