@@ -2,7 +2,11 @@
 // an exact multiset: an error that stops being reported fails this file just as loudly as a
 // new one, which is what keeps a crash from being traded for a silent accept.
 options gen2
-expect 30320, 30805, 30821, 30826, 30832
+expect 30107, 30320, 30805, 30821, 30826, 30832
+
+// A void expression handed to debug().
+def v {
+}
 
 // An inherited field redeclared as sealed, in a class deriving from a template.
 class template T {
@@ -15,4 +19,5 @@ class e : T {
 
 [export]
 def main {
+    debug(v())
 }

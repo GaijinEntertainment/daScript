@@ -106,7 +106,7 @@ namespace das
     ,   invalid_argument                                            =   30104    // 6 site(s)
     ,   invalid_argument_global                                     =   30105    // 4 site(s)
     ,   invalid_argument_name                                       =   30106    // 3 site(s)
-    ,   invalid_argument_type                                       =   30107    // 3 site(s)
+    ,   invalid_argument_type                                       =   30107    // 4 site(s)
     ,   invalid_array                                               =   30108    // 6 site(s)
     ,   invalid_array_dimension                                     =   30109    // 5 site(s)
     ,   invalid_array_dimension_type                                =   30110    // 1 site(s)

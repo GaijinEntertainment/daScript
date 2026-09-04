@@ -1604,6 +1604,11 @@ namespace das {
             error("debug comment must be string constant", "", "",
                   expr->at, CompilationError::invalid_debug_comment_type);
         }
+        if (expr->arguments[0]->type->isVoid()) {
+            error("void type is not allowed as argument", "", "",
+                  expr->at, CompilationError::invalid_argument_type);
+            return Visitor::visit(expr);
+        }
         TypeDecl::clone(expr->type, expr->arguments[0]->type);
         return Visitor::visit(expr);
     }
