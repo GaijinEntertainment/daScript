@@ -908,7 +908,7 @@ namespace das
         }
 #endif
         src = source;
-        len = sourceLength;
+        len = source ? sourceLength : 0;    // callers dereference src whenever len > 0
     }
 
     void TextFileInfo::freeSourceData() {
