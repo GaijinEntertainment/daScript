@@ -16,7 +16,8 @@ def das_exe() : string {
 }
 
 //! the child shares dastest's cwd (argv[0] is a cwd-relative interpreter path), so the default
-//! cache lands in this tree's own .jitted_scripts/module_cache - the test removes what it wrote
+//! cache lands in this tree's own .jitted_scripts/module_cache - the test removes what it wrote.
+//! Commands stay unquoted: a leading quote breaks Windows _popen (cmd /c quote stripping)
 def run(cmd : string; var output : string&) : int {
     return unsafe(popen_timeout(cmd, 300.0, $(f) {
         if (f != null) {
@@ -102,7 +103,7 @@ def test_fallback_verdict_names_the_cutoff(t : T?) {
     fwrite(path_join(tmp, "mc_leaf_a.das"), "options gen2\nmodule mc_leaf_a\ndef leaf_a() : int \{\n    return 1\n\}\n")
     fwrite(leafB, "options gen2\nmodule mc_leaf_b\ndef leaf_b() : int \{\n    return 2\n\}\n")
     fwrite(path_join(tmp, "mc_root.das"), "options gen2\nrequire mc_leaf_a\nrequire mc_leaf_b\n[export]\ndef main \{\n    print(\"MARK_verdict \{leaf_a() + leaf_b()\}\\n\")\n\}\n")
-    let cmd = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" -module-cache \"{path_join(tmp, "explicit.dascache")}\" \"{path_join(tmp, "mc_root.das")}\""
+    let cmd = "{das_exe()} -dasroot {get_das_root()} -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_root.das")}"
     var cold : string
     t |> success(report_child(t, "verdict cold", run(cmd, cold), cold, "ser: wrote"), "the cold run writes the explicit cache")
     fwrite(leafB, "options gen2\nmodule mc_leaf_b\ndef leaf_b() : int \{\n    return 20\n\}\n")
@@ -152,15 +153,15 @@ def test_aot_generation_reads_cached_modules(t : T?) {
     let root = get_das_root()
     let fixture = path_join(tmp, "mc_aot_fixture.das")
     fwrite(fixture, "options gen2\nrequire daslib/strings_boost\n[export]\ndef main \{\n    print(join([\"a\", \"b\"], \",\"))\n\}\n")
-    let gen = "\"{das_exe()}\" -dasroot \"{root}\" \"{path_join(root, "utils/aot/main.das")}\" -- -aot \"{fixture}\""
+    let gen = "{das_exe()} -dasroot {root} {path_join(root, "utils/aot/main.das")} -- -aot {fixture}"
     var cold : string
-    t |> equal(run("{gen} \"{path_join(tmp, "cold.cpp")}\"", cold), 0, "the cold generator run exits clean:\n{cold}")
+    t |> equal(run("{gen} {path_join(tmp, "cold.cpp")}", cold), 0, "the cold generator run exits clean:\n{cold}")
     let coldCpp = fread(path_join(tmp, "cold.cpp"))
     let coldHashes = count_lines_with(coldCpp, "hash=")
     t |> success(coldHashes > 0, "the cold run emits functions")
     t |> success(find(coldCpp, "AOT disabled due to this module") < 0, "no module reads as AOT-disabled on the cold run")
     var warm : string
-    t |> equal(run("{gen} \"{path_join(tmp, "warm.cpp")}\"", warm), 0, "the warm generator run exits clean:\n{warm}")
+    t |> equal(run("{gen} {path_join(tmp, "warm.cpp")}", warm), 0, "the warm generator run exits clean:\n{warm}")
     let warmCpp = fread(path_join(tmp, "warm.cpp"))
     t |> success(find(warmCpp, "AOT disabled due to this module") < 0, "no module reads as AOT-disabled when the generator's modules came from the cache")
     t |> equal(count_lines_with(warmCpp, "hash="), coldHashes, "the warm run emits the same functions as the cold run")
@@ -201,7 +202,7 @@ def test_source_lines_survive_the_cache(t : T?) {
     let root = path_join(tmp, "mc_src_root.das")
     fwrite(root, "options gen2\nrequire daslib/lint\nrequire mc_marked\n[export]\ndef main \{\n    print(\"MARK_src \{marked(7)\}\\n\")\n\}\n")
     remove_cache_files("mc_src_root")
-    let cmd = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" \"{root}\""
+    let cmd = "{das_exe()} -dasroot {get_das_root()} {root}"
     var cold : string
     t |> success(report_child(t, "marked cold", run(cmd, cold), cold, "MARK_src 7"), "the cold run compiles past the marked variable")
     // the root changes so it re-parses and its lint pass runs, while the marked module is served
@@ -251,10 +252,10 @@ def test_default_module_cache(t : T?) {
         remove_cache_files(stem)
         fwrite(path_join(tmp, "{stem}.das"), "options gen2\n[export]\ndef main \{\n    print(\"MARK_{stem}\\n\")\n\}\n")
     }
-    let base = "\"{das_exe()}\" -dasroot \"{root}\""
-    let a = "\"{path_join(tmp, "mc_default_a.das")}\""
-    let b = "\"{path_join(tmp, "mc_default_b.das")}\""
-    let c = "\"{path_join(tmp, "mc_default_c.das")}\""
+    let base = "{das_exe()} -dasroot {root}"
+    let a = "{path_join(tmp, "mc_default_a.das")}"
+    let b = "{path_join(tmp, "mc_default_b.das")}"
+    let c = "{path_join(tmp, "mc_default_c.das")}"
     var cold : string
     let coldRc = run("{base} {a}", cold)
     t |> success(report_child(t, "default cold", coldRc, cold, "MARK_mc_default_a"), "a plain run executes")
@@ -268,7 +269,7 @@ def test_default_module_cache(t : T?) {
     check_damaged_cache(t, base, a)
     check_off_modes(t, base, b, c)
     var loud : string
-    let loudRc = run("{base} -module-cache \"{path_join(tmp, "explicit.bin")}\" {a}", loud)
+    let loudRc = run("{base} -module-cache {path_join(tmp, "explicit.bin")} {a}", loud)
     t |> success(report_child(t, "explicit", loudRc, loud, "ser: wrote"), "an explicit -module-cache keeps the loud verdict")
     let win = get_platform_name() == "windows"
     var envRun : string
@@ -285,18 +286,18 @@ def test_default_module_cache(t : T?) {
     t |> equal(cache_files("mc_default_a"), 3, "script arguments after -- do not key a cache file")
     let ignored = path_join(tmp, "ignored.bin")
     var both : string
-    let bothRc = run("{base} -module-cache \"{ignored}\" -no-module-cache {b}", both)
+    let bothRc = run("{base} -module-cache {ignored} -no-module-cache {b}", both)
     t |> success(report_child(t, "explicit+off", bothRc, both, "MARK_mc_default_b"), "-module-cache with -no-module-cache still executes")
     t |> success(quiet(both), "-no-module-cache wins over -module-cache - no verdict line:\n{both}")
     var ignoredStat : FStat
     t |> success(!stat(ignored, ignoredStat), "-no-module-cache wins over -module-cache - the explicit file is not written")
     var serOff : string
-    let serOffRc = run("{base} -no-module-cache -ser \"{path_join(tmp, "explicit.ser")}\" {c}", serOff)
+    let serOffRc = run("{base} -no-module-cache -ser {path_join(tmp, "explicit.ser")} {c}", serOff)
     t |> success(serOffRc != 0, "-no-module-cache beside -ser is rejected, not silently honoured either way")
     t |> success(find(serOff, "do not combine") >= 0, "the rejection names the conflict:\n{serOff}")
     let binDir = dir_name(das_exe())
     let exeName = base_name(das_exe())
-    let viaPath = win ? "set \"PATH={binDir};%PATH%\"&& {exeName} -dasroot \"{root}\"" : "PATH=\"{binDir}:$PATH\" {exeName} -dasroot \"{root}\""
+    let viaPath = win ? "set \"PATH={binDir};%PATH%\"&& {exeName} -dasroot {root}" : "PATH={binDir}:$PATH {exeName} -dasroot {root}"
     var pathRun : string
     let pathRc = run("{viaPath} {a}", pathRun)
     t |> success(report_child(t, "via PATH", pathRc, pathRun, "MARK_mc_default_a"), "a PATH launch executes")
