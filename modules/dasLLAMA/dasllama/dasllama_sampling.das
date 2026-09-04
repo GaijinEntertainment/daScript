@@ -70,12 +70,12 @@ def sample_(var s : Session; params : SamplingParams) : int64 {
         apply_penalties_(s, params, s.logits, 0l)
         return argmax(s, vocab)
     }
-    return sample_row_(s, params, s.logits, 0l, vocab)
+    return sample_logits_row(s, params, s.logits, 0l, vocab)
 }
 
 //! sample_'s row form: the same sampler over the `vocab`-wide logits row at `off` in `row`
 //! (consumed in place). The accept walk draws each verify row through it.
-def sample_row_(var s : Session; params : SamplingParams; var row : array<float>; off, vocab : int64) : int64 { // nolint:STYLE037,STYLE038 — a flat dispatch over the sampling modes; each arm is independent and splitting it just hides the menu
+def sample_logits_row(var s : Session; params : SamplingParams; var row : array<float>; off, vocab : int64) : int64 { // nolint:STYLE037,STYLE038 — a flat dispatch over the sampling modes; each arm is independent and splitting it just hides the menu
     apply_penalties_(s, params, row, off)
     if (params.temp <= 0.0) {
         var mi = 0l
@@ -167,7 +167,7 @@ def sample_row_(var s : Session; params : SamplingParams; var row : array<float>
 }
 
 def private mtp_sample_row(var s : Session; var rows : array<float>; off, vocab : int64) : int64 {
-    return sample_row_(s, deref(s.spec_params), rows, off, vocab)
+    return sample_logits_row(s, deref(s.spec_params), rows, off, vocab)
 }
 
 [init]
