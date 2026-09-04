@@ -26,7 +26,7 @@ namespace das {
         return false;
     }
 
-    ExpressionPtr InferTypes::tryPromoteConstInt(const ExpressionPtr & expr, const TypeDeclPtr & targetType, bool & rangeError) {
+    ExpressionPtr InferTypes::tryPromoteConstInt(const ExpressionPtr & expr, const TypeDeclPtr & targetType, bool & rangeError, bool requireConstLiteral) {
         rangeError = false;
         if (!expr) return nullptr;
         if (!targetType) return nullptr;
@@ -44,6 +44,7 @@ namespace das {
         }
         if (!constExpr->rtti_isConstant()) return nullptr;
         auto srcConst = static_cast<ExprConst *>(constExpr);
+        if (requireConstLiteral && !srcConst->isConstLiteral) return nullptr;
         int64_t value = 0;
         if (srcConst->baseType == Type::tInt) {
             value = static_cast<int64_t>(static_cast<ExprConstInt *>(srcConst)->getValue());
@@ -145,6 +146,7 @@ namespace das {
             return nullptr;
         }
         newNode->promotedFromInt = true;
+        newNode->isConstLiteral = srcConst->isConstLiteral;
         return newNode;
     }
     ExpressionPtr InferTypes::visit(ExprOp1 *expr) {
@@ -462,7 +464,7 @@ namespace das {
         // try promoting int literal on either side to match the other side's type
         {
             bool rangeError = false;
-            if (auto promoted = tryPromoteConstInt(expr->right, expr->left->type, rangeError)) {
+            if (auto promoted = tryPromoteConstInt(expr->right, expr->left->type, rangeError, true)) {
                 reportAstChanged();
                 expr->right = promoted;
                 return Visitor::visit(expr);
@@ -471,7 +473,7 @@ namespace das {
                 expr->type = new TypeDecl(); // suppress downstream mismatching_numeric_type
                 return Visitor::visit(expr);
             }
-            if (auto promoted = tryPromoteConstInt(expr->left, expr->right->type, rangeError)) {
+            if (auto promoted = tryPromoteConstInt(expr->left, expr->right->type, rangeError, true)) {
                 reportAstChanged();
                 expr->left = promoted;
                 return Visitor::visit(expr);

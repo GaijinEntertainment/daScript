@@ -36,7 +36,7 @@ Every `def` needs a body.
 
 The parameter list may wrap, but **the return type must stay on the closing-paren line** - a
 continuation line starting `: int {` is
-`error[30151] syntax error, unexpected ':', expecting => or '{'`. (probe-verified 2026-08-16)
+`error[30151] syntax error, unexpected ':', expecting => or '{'`.
 
 ### var / let parameters
 
@@ -104,7 +104,7 @@ syntax error. Prefer the bare form; it works on method calls too: `obj.m(bias = 
 `error[30151] syntax error, unexpected '>', expecting '('`. Pass the type as an ordinary
 argument, `take(type<int>, 1, 2)`, against a parameter declared `t : type<auto(TT)>` (tag it
 `[unused_argument(t)]` - a `type<>` parameter occupies no stack and cannot be read); take
-`default<T>` when the body needs a value. (probe-verified 2026-08-16)
+`default<T>` when the body needs a value.
 
 Defaults between the explicit arguments and a trailing block are padded automatically:
 

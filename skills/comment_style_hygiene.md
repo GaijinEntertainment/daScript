@@ -55,8 +55,9 @@ doc, an assert) or lands in an `.md` beside the code. The ban is on what survive
 commit, not on writing - scaffold freely while working; the PR gate drains what remains.
 Where the key is unset or false, the kept set above still holds and every other `//` comment
 answers to the deletion test instead; in teaching folders (tutorials, examples) and
-load-bearing fixture corpora the prose carrying the lesson passes that test, and a comment
-that adds nothing to its line still goes.
+fixture corpora (directories of files the code under test reads as input, not tests that
+execute) the prose carrying the lesson passes that test, and a comment that adds nothing
+to its line still goes.
 
 **The header block - the comments above the first declaration - describes the FILE.** A
 comment there that describes the next declaration moves onto that declaration: as a `//!`
@@ -69,7 +70,8 @@ it in a name, a shape, or a test, or documents itself in the module's `.md`. Kep
 is earned: `//!` and `/** */` docs on a contract a CALLER must know - public API always, a
 non-public helper when callers inside the module need the contract - `NOLINT` /
 `clang-format` suppressions, the leading header block. Existing comments answer to the
-deletion test.
+deletion test; editing one so it stays true is not a new comment, and the edited comment
+answers to that test as a whole.
 
 **The deletion test settles any comment no kept set covers: remove it and re-read.** If
 the WHY goes dark it was load-bearing - restore it, rewritten in present tense; otherwise

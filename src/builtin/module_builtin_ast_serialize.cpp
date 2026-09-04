@@ -1664,7 +1664,7 @@ namespace das {
 
     void SerializeVisitor::serializeConst ( ExprConst * expr ) {
         serializeBase(expr);
-        ser << expr->baseType << expr->value << expr->foldedNonConst << expr->promotedFromInt << expr->inexactFloatPromotion;
+        ser << expr->baseType << expr->value << expr->foldedNonConst << expr->promotedFromInt << expr->inexactFloatPromotion << expr->isConstLiteral;
     }
 
     void SerializeVisitor::serializeMakeLocal ( ExprMakeLocal * expr ) {

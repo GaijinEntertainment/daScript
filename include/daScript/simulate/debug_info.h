@@ -236,7 +236,8 @@ namespace das
     };
 
     struct RequireRecord : BaseRequireRecord {
-        bool                isPublic;
+        bool                isPublic = false;
+        bool                cantBeRequired = false;
     };
 
     enum class MissingHint {

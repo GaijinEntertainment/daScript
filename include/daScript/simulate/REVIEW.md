@@ -21,9 +21,11 @@ checklist on its own.
 - **A diff that changes the layout of a `debug_info.h` struct - a field added, removed,
   reordered, or retyped, or a base changed - states a per-consumer verdict (updated / no
   change needed / rebuild required) in its own PR description: for the rtti binding
-  (`src/builtin/module_builtin_rtti.cpp`), for the das-side readers of the struct, and for
-  external-module rebuilds.**
+  (`src/builtin/module_builtin_rtti.cpp`), for the AST serializer
+  (`src/builtin/module_builtin_ast_serialize.cpp`), for the das-side readers of the struct,
+  and for external-module rebuilds.**
 
-- **A `debug_info.h` layout change that deletes or loosens an assertion in
-  `tests-cpp/small/test_debug_info_layout_pin.cpp` instead of re-pinning it to the new
-  layout is a defect.**
+- **A `debug_info.h` layout change re-pins to the new layout every assertion in
+  `tests-cpp/small/test_debug_info_layout_pin.cpp` it makes false, and adds an `offsetof`
+  pin for each field it adds** - a field that lands in tail padding leaves `sizeof`
+  unchanged, so no other assertion in that file fails.

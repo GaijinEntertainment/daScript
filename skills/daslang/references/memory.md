@@ -103,8 +103,8 @@ def work() {
 
 `defer` is **rejected** (`error[50503]`) directly inside a loop body - a loop's `finally` runs once,
 not per iteration - and at the top level of a lambda or generator body, where it would land in the
-`finally` that is the finalizer (run once, on `delete`), not a per-call cleanup
-(probe-verified 2026-08-20). A wrapping `{ }` block gives a per-iteration / per-call scope; a `$()`
+`finally` that is the finalizer (run once, on `delete`), not a per-call cleanup. A wrapping
+`{ }` block gives a per-iteration / per-call scope; a `$()`
 block body fires at exit as expected. `var inscope` has no loop restriction - the loop body is its
 own scope. (`defer_delete` is deprecated; use `var inscope`.)
 
@@ -258,7 +258,7 @@ Reading a variant through `is` + `as` is safe; so is a table lookup `tab[k]` (th
 
 The local-reference rule turns on *where the referent lives*, not on the syntax: `let r & = s.a` is
 fine when `s` is a stack local; with `s` a heap pointer it is
-`error[31019] local reference to non-local expression is unsafe`. (probe-verified 2026-08-16)
+`error[31019] local reference to non-local expression is unsafe`.
 
 `addr<T?>(x)` is sugar for `reinterpret<T?>(addr(x))` under a **single** `unsafe`; the target must
 be a pointer type.

@@ -16,7 +16,7 @@ Statically typed, everything zero-initialized.
 | Containers | `array<T>`, `table<K;V>`, `table<T>` (set form) |
 | Callable | `block`, `lambda`, `function` - see closures.md |
 | Indirection | `T?` pointer, `T&` reference, `T?#` temporary, `smart_ptr<T>`, `iterator<T>` |
-| Mutable string | `das_string`, a bound C++ `std::string`; compares with `string` directly, never wrapped in `string(...)` (probe-verified 2026-08-16) |
+| Mutable string | `das_string`, a bound C++ `std::string`; compares with `string` directly, never wrapped in `string(...)` |
 
 The first five groups pass by value, everything else by reference; `string` is immutable, a
 `const char*`.
@@ -41,7 +41,7 @@ is a syntax error.
 
 **Character literals take a smaller escape set** - `\b \t \n \f \r \\ \'` only. `'\v'` is
 `error[30151] syntax error, unexpected invalid token` though `"\v"` works; write the number,
-`11`. (probe-verified 2026-08-16)
+`11`.
 
 ## Conversions
 
@@ -49,9 +49,12 @@ is a syntax error.
 target type - `float(i)`, `int(3.7)` truncates toward zero - any numeric to any numeric.
 
 Bare *integer literals* promote to a known target type when the value fits: local/global
-initializers, struct field declarations, struct-ctor field values, variant-arm values, `=`,
-`:=`, compound assignment, either side of a binary operator, `return`. Call arguments,
-parameter defaults, and `<-` do **not** promote - write `foo(1.0)`, never `foo(1)`.
+initializers, struct field declarations, struct-ctor field values, variant-arm and tuple-element
+values, `=`, `:=`, compound assignment, either side of a binary operator, `return`. Call
+arguments, parameter defaults, and `<-` do **not** promote - write `foo(1.0)`, never `foo(1)`.
+In a binary operator only a literal adapts - `-1`, `~1`, `(1 + 1)` count, since they are built
+from literals - while a computed constant keeps its type: `31 - clz(0xFF)` is uint, and a
+`typeinfo` result or a macro-built constant is int. Cast those: `long_length(a) * int64(typeinfo sizeof(T))`.
 
 Integer and bitfield targets are range-checked (`var d : uint8 = 256` is an error);
 `float`/`double` targets always accept, so a literal above 2^24 silently loses precision in a
@@ -98,7 +101,7 @@ Values take a dot (`Numbers.one`). An enum name is its own strong type; out-of-r
 truncate to the storage type. `require daslib/enum_trait` enables `for (x in type<Chars>)`.
 Enum and bitfield bodies separate entries by newline **or** comma (`enum E { A, B }`) but,
 unlike struct and tuple bodies, reject `;`: `enum E { A; B }` is `error[30151] syntax error,
-unexpected ';', expecting '}'`. (probe-verified 2026-08-16)
+unexpected ';', expecting '}'`.
 
 ## Bitfields
 
@@ -142,7 +145,6 @@ Each destructured name binds like a `let`: a name already in scope, or repeated 
 `error[30704] can't destructure into <name>` (`error[30708]` in the `for` form); only `_`
 repeats freely. `options allow_local_variable_shadowing = true` does not lift it, and names
 taken by an `assume` alias are refused too ("name already taken by alias").
-(probe-verified 2026-08-16)
 
 Field names are part of the type: `tuple<int;float>` and `tuple<i:int;f:float>` do not assign to
 each other. A positional literal of *all* bare variable names may promote to a matching named
@@ -170,7 +172,8 @@ indices: `typeinfo variant_index<f>(v)` (compile error on an unknown name),
 `typeinfo safe_variant_index<nope>(v)` (`-1` instead). A case-field write (`v.i = 7`) and
 `set_variant_index(v, n)` each need `unsafe` and neither implies the other: a field write does
 not change the index. Anonymous form `variant<i_value:uint; f_value:float>`; two variants match
-when named cases, types, and order all match.
+when named cases, types, and order all match. A case value takes the struct-field sigils:
+`=` copies a copyable value, `<-` moves, `:=` clones and leaves the source intact.
 
 ## Fixed arrays
 
@@ -216,7 +219,7 @@ Safe without `unsafe`: `new`, `*p` / `deref(p)`, `p.field`, `p?.field`, `p ?? de
 
 **A `void?` carries no stride, so arithmetic on one is refused outright** - `error[30950]
 operations on 'void' pointers are prohibited`, even inside `unsafe`. Do byte math on `intptr(p)`,
-or reinterpret to `uint8?` first. (probe-verified 2026-08-16)
+or reinterpret to `uint8?` first.
 
 **Writing through a pointer needs both const positions open** - a non-const pointee *and* a
 `var` handle: `def f(var p : float?)` stores, while a plain `p : float?` parameter is

@@ -19,3 +19,9 @@
 
 - **A diff that adds a module under this folder adds it to `review_nttp.das`'s `require`
   list, in the same change** - a module off the list is a module the scan never sees.
+
+- **A diff that adds a streamed field to any type `module_builtin_ast_serialize.cpp`
+  serializes bumps the version `getVersion()` returns in
+  `include/daScript/ast/ast_serializer.h`, in the same change** - a reader accepts a stream
+  only when its stored version equals `getVersion()`, so without the bump an older cache
+  passes that check and every field after the new one decodes shifted.
