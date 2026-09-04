@@ -61,7 +61,7 @@ def quiet(out : string) : bool {
     return find(out, "deser:") < 0 && find(out, "ser:") < 0
 }
 
-//! the AST module cache is on by default - silent, at a cwd-derived path - and the flags that turn it off or make it loud
+//! the AST module cache is on by default - silent, at a path keyed by script, host flags and DAS* env - and the flags that turn it off or make it loud
 [test]
 def test_default_module_cache(t : T?) {
     var terr : string
@@ -106,6 +106,21 @@ def test_default_module_cache(t : T?) {
     let envRc = run(win ? "set \"DAS_MC_PROBE=1\"&& {base} {a}" : "DAS_MC_PROBE=1 {base} {a}", envRun)
     t |> success(report_child(t, "env-keyed", envRc, envRun, "MARK_mc_default_a"), "a DAS* environment change still executes")
     t |> equal(cache_files("mc_default_a"), 2, "a DAS* environment change keys a second cache file")
+    var flagged : string
+    let flaggedRc = run("{base} -v2syntax {a}", flagged)
+    t |> success(report_child(t, "flag-keyed", flaggedRc, flagged, "MARK_mc_default_a"), "a different host flag set still executes")
+    t |> equal(cache_files("mc_default_a"), 3, "a host flag before the script keys a third cache file")
+    var userArgs : string
+    let userRc = run("{base} {a} -- --probe", userArgs)
+    t |> success(report_child(t, "user-args", userRc, userArgs, "MARK_mc_default_a"), "script arguments after -- still execute")
+    t |> equal(cache_files("mc_default_a"), 3, "script arguments after -- do not key a cache file")
+    let ignored = path_join(tmp, "ignored.bin")
+    var both : string
+    let bothRc = run("{base} -module-cache \"{ignored}\" -no-module-cache {b}", both)
+    t |> success(report_child(t, "explicit+off", bothRc, both, "MARK_mc_default_b"), "-module-cache with -no-module-cache still executes")
+    t |> success(quiet(both), "-no-module-cache wins over -module-cache - no verdict line:\n{both}")
+    var ignoredStat : FStat
+    t |> success(!stat(ignored, ignoredStat), "-no-module-cache wins over -module-cache - the explicit file is not written")
     for (stem in stems) {
         remove_cache_files(stem)
     }

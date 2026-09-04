@@ -399,7 +399,7 @@ namespace das {
         };
         void install ( const string & readFrom, const string & writeTo, bool quiet = false );
         Result finish ();
-        static string defaultPath ( const string & scriptPath, const string & hostBinary );
+        static string defaultPath ( const string & scriptPath, const string & hostBinary, const string & hostOptions );
         SerializationStorageVector  readStorage, writeStorage;
         unique_ptr<AstSerializer>   reader, writer;
         string                      writePath;

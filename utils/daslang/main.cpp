@@ -56,8 +56,9 @@ static string serFile = "";   // -ser <path>: write the AST module cache (env se
 static string deserFile = ""; // -deser <path>: read the AST module cache during compile instead of parsing
 static string moduleCacheFile = ""; // -module-cache <path>: both - read when present, refresh when the compile diverged
 static bool moduleCacheExplicit = false; // -module-cache given
-static bool noModuleCache = false;  // -no-module-cache: off even where the cache is the default
+static bool noModuleCache = false;  // -no-module-cache: off, over -module-cache and the default alike
 static string hostBinary = "";      // argv[0]
+static string hostOptions = "";     // argv up to "--": the compile's own options key the default cache
 
 static bool noDynamicModules = false;
 static bool noLint = false;
@@ -494,12 +495,13 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     // is the self-maintaining composition: read the file when present, keep a writer armed,
     // and save only when the writeback fired (first run, or a changed module cut the
     // stream). serialize_main_module defaults true, so the whole program rides the cache.
-    string cacheReadPath = !deserFile.empty() ? deserFile : moduleCacheFile;
-    string cacheWritePath = !serFile.empty() ? serFile : moduleCacheFile;
+    string explicitCache = noModuleCache ? string() : moduleCacheFile;
+    string cacheReadPath = !deserFile.empty() ? deserFile : explicitCache;
+    string cacheWritePath = !serFile.empty() ? serFile : explicitCache;
     bool cacheQuiet = false;
     if ( !moduleCacheExplicit && !noModuleCache && serFile.empty() && deserFile.empty()
         && jitEnabled != JitMode::Executable && !compileOnly && !buildingDocumentation && !debuggerRequired ) {
-        cacheReadPath = cacheWritePath = ModuleFileCache::defaultPath(fn, hostBinary);
+        cacheReadPath = cacheWritePath = ModuleFileCache::defaultPath(fn, hostBinary, hostOptions);
         cacheQuiet = true;
     }
     moduleCache.install(cacheReadPath, cacheWritePath, cacheQuiet);
@@ -791,6 +793,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     }
     setCommandLineArguments(argc,argv);
     hostBinary = argv[0];
+    for ( int i=1; i < argc && strcmp(argv[i],"--")!=0; ++i ) {
+        hostOptions += argv[i];
+        hostOptions += '\n';
+    }
     das::vector<string> files;
     string mainName = "main";
     bool scriptArgs = false;

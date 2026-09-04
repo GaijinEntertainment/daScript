@@ -51,8 +51,9 @@ static TextPrinter tout;
 static string projectFile;
 static string project_root;
 static string moduleCacheFile;  // -module-cache <path>: AST module cache, read+refreshed per (re)compile
-static bool noModuleCache = false;  // -no-module-cache: off even where the cache is the default
+static bool noModuleCache = false;  // -no-module-cache: off, over -module-cache and the default alike
 static string hostBinary;           // argv[0]
+static string hostOptions;          // argv up to "--": the compile's own options key the default cache
 static vector<string> load_modules;
 static bool version2syntax = true;
 static bool trackAllocations = false;
@@ -224,10 +225,10 @@ static CompileResult compile_script(const string & fn) {
     // on the cold start. Same file is read and refreshed: a clean or resumed-only read
     // writes nothing, an edit rewrites the stream from the changed module's cutoff. The
     // cache lives in CompileResult - it owns deserialized FileInfos past this return.
-    string cachePath = moduleCacheFile;
+    string cachePath = noModuleCache ? string() : moduleCacheFile;
     bool cacheQuiet = false;
     if (cachePath.empty() && !noModuleCache) {
-        cachePath = ModuleFileCache::defaultPath(fn, hostBinary);
+        cachePath = ModuleFileCache::defaultPath(fn, hostBinary, hostOptions);
         cacheQuiet = true;
     }
     result.moduleCache.install(cachePath, cachePath, cacheQuiet);
@@ -895,6 +896,10 @@ int main(int argc, char * argv[]) {
 
     // Parse args
     hostBinary = argv[0];
+    for (int i = 1; i < argc && strcmp(argv[i], "--") != 0; i++) {
+        hostOptions += argv[i];
+        hostOptions += '\n';
+    }
     for (int i = 1; i < argc; i++) {
         string arg = argv[i];
         if (arg == "-project" && i + 1 < argc) {

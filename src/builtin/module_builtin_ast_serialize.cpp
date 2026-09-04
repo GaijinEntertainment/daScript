@@ -3332,7 +3332,7 @@ namespace das {
     }
 #endif
 
-    string ModuleFileCache::defaultPath ( const string & scriptPath, const string & hostBinary ) {
+    string ModuleFileCache::defaultPath ( const string & scriptPath, const string & hostBinary, const string & hostOptions ) {
         string norm = normalizeFileName(scriptPath.c_str());
         size_t slash = norm.find_last_of("/\\");
         string stem = slash == string::npos ? norm : norm.substr(slash + 1);
@@ -3354,7 +3354,7 @@ namespace das {
             if ( strncmp(*e, "DAS", 3) == 0 ) envs.push_back(*e);
         }
         sort(envs.begin(), envs.end());
-        string key = norm + host;
+        string key = norm + host + "\n" + hostOptions;
         for ( auto & e : envs ) {
             key += "\n";
             key += e;
