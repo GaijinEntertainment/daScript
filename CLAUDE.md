@@ -86,7 +86,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | Skill file | Read BEFORE... |
 |---|---|
 | `skills/project_overview.md` | First significant task - design philosophy, three execution tiers, macros-as-design-lens |
-| `skills/internal/build_and_debug.md` | Build flags, AOT build commands, exit-code/crash diagnosis, `options log_infer_passes` |
+| `skills/internal/build_and_debug.md` | Build flags, AOT build commands, exit-code/crash diagnosis, `options log_infer_passes`, the front-end AST module cache (`.jitted_scripts/module_cache/`, `-no-module-cache`) |
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference; writing or following an `[arch(at=...)]` citation |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/comment_style_hygiene.md` | Writing or reviewing comments, names, or local code shape in ANY language |

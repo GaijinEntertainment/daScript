@@ -69,11 +69,10 @@
   naming the knob where it takes effect.** A diff that only exposes the knob puts the line at
   the consumer instead, in that same diff.
 
-- **Never read an environment variable by a computed name - `get_env_variable(expr)` /
-  `has_env_variable(expr)` outside `daslib/llvm_env.das`. Spell the name as a literal in
-  `env_value_of("NAME")` / `env_is_set("NAME")`, or declare it as an `[EnvConfig]` field in
-  `daslib/llvm_env.das` and read the `g_env_*` field, instead** (the literal-name forms are
-  scanner-enforced by `tests/llvm_env_registry.das` here; weakening that test is a defect).
+- **Weakening `tests/llvm_env_registry.das` (beside this file) is a defect** - it bans
+  environment reads outside `daslib/llvm_env.das`, requires every name read to be a declared
+  `[EnvConfig]` field, and bans re-declared env helpers; dropping a scan, narrowing its
+  `STRICT_ROOTS`, or widening its `SKIP_FILES` weakens it.
 
 - **A host path a diff writes into the tune sidecar (`<app>.tune.json`, written by
   `daslib/llvm_tune.das`) goes through `tilde_home` (`daslib/fio.das`, repo root)** - a
@@ -87,21 +86,22 @@
   (`ARCHITECTURE.md#gep-constant-fold`).
 
 - **A feature name used in a `requires=` list or a `g_target_x64_*` gate has its cpuid line in
-  `das_cpu_supports` (`src/builtin/module_builtin_runtime.cpp`) in the same diff**
+  `das_cpu_supports` (`src/builtin/module_builtin_runtime.cpp`, repo root) in the same diff**
   (`ARCHITECTURE.md#x64-tier-gates`). A name the cpuid table does not know answers false on
   every box, so every perm that requires it silently declines to its fallback and no error names
   the cause.
 
-- **A diff that adds or changes a `build_vector_*` emitter on the inline-polynomial rail
-  (`daslib/llvm_jit_intrin.das`) emits every Horner step vecmath writes unfused, through
-  `vmath_poly_step`, and reaches for `vmath_fma` only where vecmath itself fuses. It also ships
-  that emitter's cells in `tests/llvm_vector_math.das`: a divergence arm comparing the emitted
-  form lane for lane with the interpreted twin, at every vector width the emitter serves, and a
-  NaN-lane cell asserting the two rails agree on which lanes come back NaN**
-  (`ARCHITECTURE.md#vector-poly-fusion`). One contracted step in a sign-alternating chain moves
-  the result by several ulp, the rail's point is that the three tiers agree, and a clamp or a
-  conversion written with ordered compares replaces a NaN lane with a number that every accuracy
-  bound reads as success.
+- **A diff that adds or changes a `build_vector_*` emitter (`daslib/llvm_jit_intrin.das`) emits
+  each Horner step unfused, through `vmath_poly_step`, and calls `vmath_fma` only for the steps
+  vecmath itself writes fused** (`ARCHITECTURE.md#vector-poly-fusion`). One fused step in a
+  sign-alternating chain moves the last few bits of the result, and the interpreter and AOT
+  answers do not move with it.
+
+- **A diff that adds or changes a `build_vector_*` emitter also adds two cells to
+  `tests/llvm_vector_math.das` (beside this file): one comparing the emitted result lane for
+  lane with the interpreted result, at every vector width the emitter serves, and one asserting
+  both answer NaN in the same lanes.** A clamp or a conversion written with ordered compares
+  turns a NaN lane into a number, and an accuracy bound reads that as success.
 
 - **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, dropping a
   directory from its tracked-fixture list, or a finding text that no longer names what failed.

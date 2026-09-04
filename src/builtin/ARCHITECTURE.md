@@ -42,9 +42,10 @@ The gate scans the module registry of its own program, so only modules its
 `.jitted_scripts/module_cache/<stem>-<hash>.dascache` - relative, so the cache follows the
 current directory, and it sits beside the JIT DLL cache. `<stem>` is the script's file name
 without its extension. `<hash>` is the first 8 hex digits of a 64-bit hash over the normalized
-script path, the host binary's mtime and size when it can be stat'ed, the host's own command
-line - every argument up to the first `--`, the arguments after it belong to the script - and
-every `NAME=VALUE` environment pair whose name starts with `DAS`, sorted.
+script path, the running executable's mtime and size (the host resolves its own path through the
+OS, so a launch by bare name through `PATH` keys the same file as a launch by path), the host's
+own command line - every argument up to the first `--`, the arguments after it belong to the
+script - and every `NAME=VALUE` environment pair whose name starts with `DAS`, sorted.
 
 The binary, the command line and the environment are in the key because each changes the
 compile without changing a source file: macros read the tune and JIT environment at compile
@@ -54,4 +55,5 @@ rebuild, a changed flag set or a changed `DAS*` variable is a different compile,
 own file instead of a stale hit, and two same-named scripts in different directories never
 share one. `-no-module-cache` disables the cache outright, over an explicit `-module-cache
 <path>` on the same command line as well as over the default, so a spawner can append it as an
-override.
+override; beside `-ser` / `-deser` - the explicit round-trip halves, whose verdict is the point
+of the run - the host rejects the command line instead of silently disabling them.

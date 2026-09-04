@@ -10,8 +10,8 @@ LLVM JIT; on every other tier the reference body runs verbatim.
 The design goal is that a shipped application reaches *its own box's* floor
 with **defaults that are data** - a small JSON sidecar - rather than a fork
 of the kernels per machine. The winners are compile-time stamps: the front
-end reads the sidecar and stamps the winning permutation onto the function
-before codegen.
+end reads the sidecar - or the library's shipped defaults profile - and
+stamps the winning permutation onto the function before codegen.
 
 The sidecar is **per-app**: `<app>.tune.json` beside the app - the root
 script this process runs (the first `.das` on the command line), or the
@@ -163,8 +163,8 @@ everyone else's (that upsert is the isolation contract; "is this scope tuned"
 is per-key completeness, not file existence). Reading winners needs no scope
 at all - every `[tune]` resolves against the app sidecar. `defaults=` (optional,
 resolved against the declaring file) names the directory of shipped defaults
-profiles (the *Shipped defaults profiles* section): an untuned box adopts its
-CPU class's profile instead of racing.
+profiles (the *Shipped defaults profiles* section): an untuned box stamps its
+CPU class's profile at compile time instead of racing.
 
 ```{warning}
 
@@ -208,12 +208,14 @@ startup and races only what the profile could not answer:
 
 A box the profile covers completely is **done at its first compile**: nothing
 is raced, no sidecar is written (a sidecar means something was *measured* on
-this box), and the process does not restart. A residue adopts the profile's
-entries into the app sidecar (a normal local write - staleness, box identity and
-the JIT DLL cache re-key all behave as for a mint), races the residue through
-the ordinary tuner spawn with the `--tune-only` filter armed, and re-execs -
-so a box whose own class is `x86-vnni512`, adopting an `x86-avx2` profile,
-races only the families whose `requires=` names an AVX-512 VNNI feature.
+this box), and the process does not restart. A box the profile covers only
+partly adopts the profile's entries into the app sidecar (a normal local write
+- staleness, box identity and the JIT DLL cache re-key all behave as for a
+mint), races the residue through the ordinary tuner spawn with the
+`--tune-only` filter armed, and re-execs (under `restart`, exits asking for a
+manual restart) - so a box whose own class is `x86-vnni512`, adopting an
+`x86-avx2` profile, races only the families whose `requires=` names an AVX-512
+VNNI feature.
 Adoption is skipped entirely under `--tune` - a forced re-race stays a full
 local mint. A profile whose pinned version differs is skipped and the walk
 continues to the next class down; when nothing in the ladder both exists and
@@ -221,9 +223,9 @@ matches, the box races the full grid.
 
 Because a kernel reads the profile at its own compile, the `[tune_scope]` that
 names `defaults=` must already be on the AST: declare it in a module every
-covered module `require`s. A `covers=` module that compiled before the scope is
-a compile error - its kernels would have stamped fallbacks while the startup
-guard read the same box as covered and never restarted.
+covered module `require`s. A `covers=` module that compiled before a
+`defaults=` scope is a compile error - its kernels would have stamped fallbacks
+while the startup guard read the same box as covered and never restarted.
 
 A maintainer produces a profile on the minting box after a full `--tune` mint
 with `tune_profile_export(path, klass)` - it refuses an empty or stale
@@ -235,8 +237,9 @@ profile's minting box already raced from the ones its own ISA unlocks.
 
 **Untuned does not start.** Any application whose program root has a `main`
 and whose libraries declare tune scopes gets the `auto` policy **by
-default** - no annotation needed: an incomplete or stale sidecar tunes at
-startup and re-execs, so one launch already serves tuned kernels. The
+default** - no annotation needed: an incomplete or stale sidecar with no
+shipped profile to answer it tunes at startup and re-execs, so one launch
+already serves tuned kernels. The
 `[tune_policy]` annotation on `main` overrides the flavor (the `auto` /
 `restart` flavors prepend a runtime guard to its body):
 
@@ -256,7 +259,9 @@ def main {
   - behavior when a scope's sidecar entries are absent or stale
 * - `fallback`
   - stamp `fallback=` silently (also what `DAS_TUNE_POLICY=fallback` - the
-    CI kill switch - forces everywhere)
+    CI kill switch - forces everywhere; it kills the rail, not the stamps - a
+    shipped profile still stamps, and only `DAS_TUNE_POLICY=reference` clears
+    stamps outright)
 * - `warn`
   - loud compile-time banner with the exact tuner command
 * - `error`
@@ -286,8 +291,9 @@ libraries compile before the root that would declare it.
 `--tune` after `--` on the application's command line forces the tune path
 even when the sidecar is complete (a re-tune; the flag is stripped from the
 re-exec so the child converges). The guard reads it at **runtime**, not at
-macro time: the module cache can serve a compile whose macros never saw this
-run's argv. `DAS_TUNE_POLICY` overrides the declared value -
+macro time: the AST module cache (on by default) can serve a warm compile
+whose macros never ran for this process, so a macro-time read of argv would
+miss `--tune`. `DAS_TUNE_POLICY` overrides the declared value -
 `DAS_TUNE_POLICY=fallback` is the CI kill switch.
 
 `--tune-only <tokens>` (comma-separated; implies `--tune`) re-tunes only the
@@ -317,9 +323,9 @@ and adopting its winners means new compile-time stamps regardless. That is
 why `auto` tunes at runtime and re-execs into a fresh compile rather than
 stamping in place - which also keeps the winners cross-module-safe (a
 required library's kernels are stamped at their own `[tune]` time, not
-mutated after the fact). A shipped profile needs no tuner, so it is the one
-source read at compile time. Re-exec is why an `auto` application's `main`
-must return `void` or `int`.
+mutated after the fact). A shipped profile needs no tuner, so unlike a mint
+it can be picked up by the very compile that needs it. Re-exec is why an
+`auto` application's `main` must return `void` or `int`.
 ```
 
 ## Standalone builds
@@ -336,7 +342,8 @@ A frozen artifact must not demand or run tuning:
   tuned stamps stay live.
 * **Standalone exe** (`llvm-jit -exe`) still *stamps* - an exe built beside a
   sidecar ships those winners (a local-use artifact by definition), and one
-  built without ships the generic `fallback=` stamps - but the policy rail
+  built without ships the build box's class-profile stamps, or the generic
+  `fallback=` stamps when no profile covers it - but the policy rail
   is dead (no `[tune_policy]`, no `--tune`). The exe DOES get the status
   `[init]`, so the artifact self-reports its baked stamps
   (`tune_status()` / `log_tune_status` work inside a standalone exe). A
@@ -371,9 +378,10 @@ The sidecar is `<app>.tune.json` beside the app: `utils/myapp/main.das`
 reads and writes `utils/myapp/main.tune.json`; a standalone exe (or an
 embedded host with no `.das` on its command line) uses the binary's own stem.
 The app identity is the first `.das` argument before `--` on the process
-command line - macro time and runtime read the same argv, so compile-time
-stamps and the harness write API always agree on the file. No declaration is
-needed; `DAS_TUNE_MANIFEST` overrides the location, and
+command line - the AST module cache keys on the root script and the `DAS*`
+environment, so a warm compile stamped this run's file too; a bare `--tune`
+after `--` is not in the key, which is why the policy guard reads it at
+runtime. No declaration is needed; `DAS_TUNE_MANIFEST` overrides the location, and
 `set_tune_manifest_runtime_path` points just the get/set APIs elsewhere for
 self-managed harnesses.
 
@@ -423,11 +431,12 @@ Two seams let a supervisor or a network service participate:
 
 `tune_status()` returns one row per `[tune]` function - its winning suffix,
 the source (`manifest` / `profile` / `fallback` / `reference`), the scope, and
-the file the stamp came from (the sidecar, or the profile). It is populated when the application declares `[tune_policy]`.
-`log_tune_status("myapp")` is the ready-made "am I tuned?" surface - it logs
-the table at `LOG_INFO` (`<n>/<total> kernels tuned for this box`, one line
-per function, plus a `--tune` hint when any kernel is on a non-manifest tier),
-and is a no-op when the table is empty. Call it at startup:
+the file the stamp came from (the sidecar, or the profile). It is populated
+when the application declares `[tune_policy]`. `log_tune_status("myapp")` is
+the ready-made "am I tuned?" surface - it logs the table at `LOG_INFO`
+(`<n>/<total> kernels tuned for this box`, one line per function, plus a
+`--tune` hint when any kernel is on the `fallback` or `reference` tier), and
+is a no-op when the table is empty. Call it at startup:
 
 ```das
 
@@ -475,11 +484,10 @@ a pipe is the only channel that spans the process chain:
 @tune end name=dot winner=vec8_u2 verdict=holds ms=4180
 ```
 
-`ms` on the end event is the family's wall time since its begin, so what each family
-costs - and what shipping a profile buys - is answerable from any mint's log. The dasLLAMA
-tuner reports its Metal crown race as one more family (`metal_crowns`) and stamps the two
-halves' and the whole mint's wall into the sidecar's provenance (`mint_gen_ms`,
-`mint_kernels_ms`, `mint_total_ms`), which the history archive then keeps per box.
+`ms` on the end event is the family's wall time since its begin, so what
+each family costs - and what shipping a profile buys - is answerable from
+any mint's log. A harness may also stamp its own mint walls into the
+sidecar's provenance, as dasLLAMA's does.
 
 A process **renders** the display when its own stdout is a terminal, and
 otherwise **forwards** the events untouched, so whatever is capturing it (a
