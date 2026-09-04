@@ -12,8 +12,9 @@ the next record and checks that the record names this file, that the file's mtim
 match, and that every compile-time input the record's macros pinned
 (`add_module_cache_dependency` - a file's bytes, an environment variable's value under
 `env:NAME`, a command-line flag's occurrences under `arg:--flag`) still has the same content. A
-match deserializes the module and
-counts it as served. The first mismatch is the cutoff: the reader marks the stream failed, the
+match deserializes the module and counts it as served; the module object is a `ModuleDas`, the
+class the parser builds, because the AOT emitter asks each module whether it can be AOT'd and a
+plain `Module` answers no. The first mismatch is the cutoff: the reader marks the stream failed, the
 module and everything after it parse from source, and the writer rewrites the whole file - the
 served records re-serialized from the modules the reader restored, then the freshly parsed
 ones. A record whose header matched but whose payload fails to deserialize reparses in place,

@@ -5,6 +5,7 @@ require dastest/testing_boost public
 
 require strings
 require daslib/fio
+require daslib/strings_boost
 
 //! the daslang binary to spawn - dastest runs as `daslang(.exe) dastest/dastest.das ...`,
 //! so argv[0] is the interpreter, not the test script
@@ -125,6 +126,45 @@ def check_off_modes(t : T?; base, b, c : string) {
     var aot : string
     run("{base} -use-aot {c}", aot)
     t |> equal(cache_files("mc_default_c"), 0, "-use-aot writes no cache, whether or not the binary carries AOT stubs")
+}
+
+def count_lines_with(text, needle : string) : int {
+    var n = 0
+    for (ln in split(text, "\n")) {
+        if (find(ln, needle) >= 0) {
+            n++
+        }
+    }
+    return n
+}
+
+//! the AOT generator is a daslang script whose shared modules a warm default cache serves; a
+//! deserialized module must still read as AOT-capable, or every stub it emits is empty
+[test]
+def test_aot_generation_reads_cached_modules(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_mc_aot", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let root = get_das_root()
+    let fixture = path_join(tmp, "mc_aot_fixture.das")
+    fwrite(fixture, "options gen2\nrequire daslib/strings_boost\n[export]\ndef main \{\n    print(join([\"a\", \"b\"], \",\"))\n\}\n")
+    let gen = "\"{das_exe()}\" -dasroot \"{root}\" \"{path_join(root, "utils/aot/main.das")}\" -- -aot \"{fixture}\""
+    var cold : string
+    t |> equal(run("{gen} \"{path_join(tmp, "cold.cpp")}\"", cold), 0, "the cold generator run exits clean:\n{cold}")
+    let coldCpp = fread(path_join(tmp, "cold.cpp"))
+    let coldHashes = count_lines_with(coldCpp, "hash=")
+    t |> success(coldHashes > 0, "the cold run emits functions")
+    t |> success(find(coldCpp, "AOT disabled due to this module") < 0, "no module reads as AOT-disabled on the cold run")
+    var warm : string
+    t |> equal(run("{gen} \"{path_join(tmp, "warm.cpp")}\"", warm), 0, "the warm generator run exits clean:\n{warm}")
+    let warmCpp = fread(path_join(tmp, "warm.cpp"))
+    t |> success(find(warmCpp, "AOT disabled due to this module") < 0, "no module reads as AOT-disabled when the generator's modules came from the cache")
+    t |> equal(count_lines_with(warmCpp, "hash="), coldHashes, "the warm run emits the same functions as the cold run")
+    var err : string
+    rmdir_rec(tmp, err)
 }
 
 //! a cache file cut in the middle is read as far as it goes, silently, and rewritten

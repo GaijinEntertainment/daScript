@@ -3065,7 +3065,7 @@ namespace das {
 
                 Module* deser = nullptr;
                 try {
-                    deser = new Module();
+                    deser = new ModuleDas();     // the parser's class: aotRequire answers cpp, a plain Module answers no_aot
                     deser->setModuleName(name);
                     if ( existing ) {
                         program->library.addModule(existing);
@@ -3286,7 +3286,7 @@ namespace das {
                     library.addModule(m);
                 }
             } else {
-                auto mod = new Module;
+                auto mod = new ModuleDas;
                 mod->setModuleName(name);
                 mod->fileName = fileName;
                 library.addModule(mod);
