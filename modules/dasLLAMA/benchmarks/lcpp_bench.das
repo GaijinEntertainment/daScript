@@ -1532,7 +1532,7 @@ def main() : int {
                 pp_gen |> resize(length(toks))
                 pp_dr |> resize(length(toks))
                 pp_ac |> resize(length(toks))
-                var sp = SamplingParams(temp = cfg.mtp_temp)   // both arms pick through it; greedy stays the argmax path
+                var sp = SamplingParams(temp = cfg.mtp_temp)
                 for (_rep in range(reps)) {
                     var total_us = 0l
                     var rep_gen = 0l
@@ -1620,7 +1620,7 @@ def main() : int {
                     forward_prefill(t, ps, toks[0], pl0, 0l)
                     forward_profile_reset()
                     static_if (typeinfo builtin_module_exists(das_metal)) {
-                        metal_decode_stage_reset()   // the stage report below covers this window alone
+                        metal_decode_stage_reset()
                     }
                     if (sp.temp > 0.0) {
                         set_seed_(ps, 4242)

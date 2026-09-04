@@ -516,7 +516,6 @@ def private gemma_trace_round(s : Session; pos, drafted, a, vocab : int64) {
     to_log(LOG_INFO, "{line}\n")
 }
 
-// the accept walk: the device-landed argmax match, or the sampled walk for a sampled stream
 def private gemma_accept_walk(var s : Session; drafted, vocab : int64) : int64 {
     if (mtp_walk_samples(s)) {
         return mtp_walk_sampled(s, drafted, vocab)

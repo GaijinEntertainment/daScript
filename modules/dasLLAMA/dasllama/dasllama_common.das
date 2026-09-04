@@ -3589,7 +3589,6 @@ def private mm_kq(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x 
     mm_at_kq_pre(y, t, fmt, woff, xq, xs, xbs, n, d)
 }
 
-// the per-format kq batch tile over a Q8_K-form activation image of ntok rows
 def private mm_b_kq_tile(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, ntok : int64) {
     if (fmt == KqFmt.k4) {
         matmul_kq_batch(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, ntok)
@@ -4646,13 +4645,14 @@ def mtp_verify_prep_n(t : Model; var s : Session; toks : array<int64>; n, pos : 
                      c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
 }
 
-// a state-sized copy (151 MB on a 27B hybrid) as lane-parallel memcpy chunks: the scalar loop
-// moved it at 6.6 GB/s, a quarter of a decode step per round
+//! the recurrent state is 151 MB on a 27B hybrid, so the round's snapshot copies it in lane-parallel chunks, not scalar
+let private MIN_LANE_FLOATS = 4l * 1024l * 1024l
+
 def private copy_floats_par(src : array<float>; var dst : array<float>; n : int64) {
     if (n <= 0l) {
         return
     }
-    let lanes = clamp(int(n / 4194304l), 1, 8)   // 16 MB per lane at least
+    let lanes = clamp(int(n / MIN_LANE_FLOATS), 1, 8)
     unsafe {
         let sp = addr < float const? >(src[0])
         var dp = addr(dst[0])
@@ -4814,7 +4814,6 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     let ts_walk = prof_ticks()
     var hit = false
     if (mtp_walk_samples(s)) {
-        // both rows, classifier tail applied, into the walk's row buffer
         s.mtp_logits_b |> overwrite_resize(2l * c.vocab_size)
         copy_floats(s.mtp_logits, 0l, s.mtp_logits_b, 0l, c.vocab_size)
         copy_floats(s.logits, 0l, s.mtp_logits_b, c.vocab_size, c.vocab_size)

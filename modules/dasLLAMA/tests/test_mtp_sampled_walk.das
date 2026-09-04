@@ -35,8 +35,8 @@ def private same_rng(a, b : int4) : bool {
 }
 
 // plain sampled decode over the same rows: the emitted tokens, and where the drafts stop matching
-def private reference_walk(var r : Session; params : SamplingParams; drafts : array<int64>; var a : int64&) : int64 {
-    a = 0l
+def private plain_sampled_decode(var r : Session; params : SamplingParams; drafts : array<int64>; var accepted : int64&) : int64 {
+    accepted = 0l
     for (i in range64(K + 1l)) {
         for (j in range64(VOCAB)) {
             r.logits[j] = r.mtp_logits_b[i * VOCAB + j]
@@ -44,7 +44,7 @@ def private reference_walk(var r : Session; params : SamplingParams; drafts : ar
         let d = sample_(r, params)
         if (i < K && d == drafts[i + 1l]) {
             r.recent |> push(d)
-            a++
+            accepted++
             continue
         }
         return d
@@ -54,8 +54,7 @@ def private reference_walk(var r : Session; params : SamplingParams; drafts : ar
 
 [test]
 def test_sampled_walk_matches_plain_sampled_decode(t : T?) {
-    // every draft is the only token with mass on its row: the walk must accept all three and draw
-    // the bonus row - four RNG draws, the same four the plain decode makes
+    //! every draft is the only token with mass on its row, so the walk accepts all three and draws the bonus row
     var s <- bare()
     var r <- bare()
     let drafts <- [0l, 3l, 5l, 1l]
@@ -75,7 +74,7 @@ def test_sampled_walk_matches_plain_sampled_decode(t : T?) {
     s.spec_params = unsafe(addr(sp))
     t |> success(mtp_walk_samples(s), "a sampler above zero temperature arms the sampled walk")
     var a_ref = 0l
-    let next_ref = reference_walk(r, sp, drafts, a_ref)
+    let next_ref = plain_sampled_decode(r, sp, drafts, a_ref)
     let a = mtp_walk_sampled(s, K, VOCAB)
     t |> equal(a, 3l, "every draft accepted")
     t |> equal(a, a_ref, "the accepted run equals the plain decode's")
@@ -92,8 +91,7 @@ def test_sampled_walk_matches_plain_sampled_decode(t : T?) {
 
 [test]
 def test_sampled_walk_stops_at_the_first_miss(t : T?) {
-    // row 1's draft has no mass: the walk accepts draft 1, misses on row 1, and the miss is the next
-    // token - two draws, and rows 2 and 3 are never touched
+    //! row 1's draft has no mass, so the walk accepts draft 1 and misses there; rows 2 and 3 are never touched
     var s <- bare()
     var r <- bare()
     let drafts <- [0l, 3l, 5l, 1l]
@@ -111,7 +109,7 @@ def test_sampled_walk_stops_at_the_first_miss(t : T?) {
     r.rng = random_seed(5)
     s.spec_params = unsafe(addr(sp))
     var a_ref = 0l
-    let next_ref = reference_walk(r, sp, drafts, a_ref)
+    let next_ref = plain_sampled_decode(r, sp, drafts, a_ref)
     let a = mtp_walk_sampled(s, K, VOCAB)
     t |> equal(a, 1l, "the first draft is accepted, the second is a miss")
     t |> equal(a, a_ref, "the accepted run equals the plain decode's")
@@ -125,9 +123,7 @@ def test_sampled_walk_stops_at_the_first_miss(t : T?) {
 
 [test]
 def test_sampled_walk_penalizes_with_the_accepted_drafts(t : T?) {
-    // top-k 1 makes the draw the penalized argmax. Row 1's top token IS the accepted draft 1 and
-    // the second draft repeats it; with the window advanced the repetition penalty halves it and
-    // the runner-up wins - a walk that forgot the window would accept two drafts here
+    //! top-k 1 makes each draw the penalized argmax: the second draft repeats the first, so only a walk that advanced the recent window rejects it
     var s <- bare()
     let drafts <- [0l, 3l, 3l, 1l]
     var rows <- [[0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0],

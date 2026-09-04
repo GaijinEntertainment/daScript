@@ -11,23 +11,18 @@ require dasllama/dasllama_math   // softmax/softcap on the logits row
 require daslib/random
 require math
 
-// Token sampling and the generation drivers. Nothing in the engine calls back into this — it sits
-// on top of forward()/eval_batch, which is why it can be a leaf module; the umbrella re-exports it
-// so every consumer of dasllama/dasllama keeps generate_/sample_/set_seed_/stats_.
+// Token sampling and the generation drivers on top of forward()/eval_batch. The engine reaches
+// this file through one registry only - the accept walk's row sampler installed at [init]; the
+// umbrella re-exports it so every consumer of dasllama/dasllama keeps generate_/sample_/set_seed_/stats_.
 
 // ===== Sampling =====
-
-// SamplingParams is dasllama_common's (a Session carries the sampler its speculative round draws
-// with); this module is the sampler over it.
 
 //! Seed the session's sampling RNG for reproducible generation.
 def set_seed_(var s : Session; seed : int) {
     s.rng = random_seed(seed)
 }
 
-// Repetition/presence/frequency penalties over the last `penalty_last_n` of `s.recent`, applied
-// to the logits row at `off` in `row`: each unique token penalized once, multiplicative then
-// presence+frequency*count.
+//! penalties over the last `penalty_last_n` of `s.recent` onto the row at `off` in `row`: each unique token once, multiplicative then presence + frequency*count
 def private apply_penalties_(s : Session; params : SamplingParams; var row : array<float>; off : int64) {
     // <= 0 treated as off too (not just 1): 0 would inf/NaN the logits, and additive-penalty clients send it
     let rep = params.penalty > 0.0 && params.penalty != 1.0
@@ -172,7 +167,6 @@ def sample_row_(var s : Session; params : SamplingParams; var row : array<float>
     return vocab - 1l
 }
 
-// the accept walk's row sampler: the session's spec_params over one verify row
 def private mtp_sample_row(var s : Session; var rows : array<float>; off, vocab : int64) : int64 {
     return sample_row_(s, deref(s.spec_params), rows, off, vocab)
 }

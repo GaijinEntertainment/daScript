@@ -5039,8 +5039,7 @@ def private count_mismatch_sampled(got : array<float>; ref_v : array<float>; d, 
     return bad
 }
 
-// the tolerant twin for accumulators whose summation order the kernel does not fix (the tensor
-// op's): |got - ref| within 1e-3 of max(|ref|, 1)
+// the tolerant twin for arms whose summation order the kernel does not fix (the tensor op's)
 def private count_mismatch_tol(got : array<float>; ref_v : array<float>; d, nb_streams, refd : int64;
                                var firstBad : int64&) : int64 {
     var bad = 0l

@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the Metal speculative round
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.28-2.30: the speculative round on Metal, the box knob that sets the depth a
+carries sections 2.28-2.39: the speculative round on Metal, the box knob that sets the depth a
 round drafts, and the argument-alignment contract a kernel declares on its `[metal_dispatch]` -
 the contract the batch driver's fixed-B mul_mv forms carry. The GPU backend role table these
 sections build on, the assistant-drafter driver's role row included, stays in
@@ -217,3 +217,12 @@ re-arm attempts far more often than a 2% upside pays for. So the sampler decides
 the session `sampled` whenever it draws at a temperature above zero, and the driver never chains
 such a session; a greedy sampler (temp 0) and a caller feeding the argmax directly keep the
 adaptive chain.
+
+### 2.39 The verify encodes on the serial encoder {#verify-serial-encoder}
+
+**The NextN round's verify builds its whole step on one serial compute encoder - the one decode
+path that does not take the concurrent rail.** `encode_verify_step` opens a single encoder on the
+round's command buffer, so every dispatch is implicitly barriered on the one before it. The
+concurrent rail buys nothing here: measured through the round's profiler sections on Qwen3.8-27B
+(M5 Max), the two forms show the same GPU time and the concurrent one doubles the host encode, so
+the round keeps the serial encoder and pays no hazard-tracker work per dispatch.

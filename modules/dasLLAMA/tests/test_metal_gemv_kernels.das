@@ -10,6 +10,7 @@ require ?das_metal dasllama/dasllama_metal_common   // g_dev - the pair walk rid
 require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown - the decode set is released before the leak gate of the next test
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers, kq plane builders + eyeball-dump compares
+require dasllama/dasllama_common   // nolint:STYLE030,LINT019 — MTP_MAX_ROWS, the verify's row cap the tiler's third tile reaches (das_metal half)
 require math
 
 // The K-quant decode GEMV corpus (single-stream KqGemv K4/K5/K5C/K6, the small-batch KqMv
@@ -917,9 +918,7 @@ def private tiler_rows_written(nrows : int) : int {
     return nrows <= 2 ? 2 : ((nrows + 3) / 4) * 4
 }
 
-// nrows live rows through the production tiler against the CPU dot. The x panel is padded to the
-// 4-row tile with zero rows and y holds the padded rows; the compare covers the whole panel, so a
-// live row the tiler skipped keeps its sentinel and reads as a mismatch.
+//! the compare covers the whole padded panel, so a live row the tiler skipped keeps its sentinel and reads as a mismatch
 def private gemv_rows_gate(t : T?; queue; nrows, ndim, ddim, ys : int) {
     let tag = "gemv_rows nrows={nrows} n={ndim} d={ddim} ys={ys}"
     var err : string
@@ -1034,7 +1033,7 @@ def test_metal_gemv_rows_tiles(t : T?) {
             var queue = metal_new_command_queue(g_dev)
             gemv_rows_gate(t, queue, 2, 256, 8, 24)
             gemv_rows_gate(t, queue, 5, 256, 8, 24)
-            gemv_rows_gate(t, queue, 9, 256, 8, 24)   // MTP_MAX_ROWS: the third tile
+            gemv_rows_gate(t, queue, int(MTP_MAX_ROWS), 256, 8, 24)
             w13sw_rows_gate(t, queue, 5, 320, 18)
             w13sw_rows_gate(t, queue, 9, 320, 18)
             metal_release(queue)

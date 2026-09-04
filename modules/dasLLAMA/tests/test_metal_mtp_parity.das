@@ -174,13 +174,10 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
     return st
 }
 
-// the sampled arms' sampler: top-k 1 makes every draw the penalized argmax, so a seeded sampled
-// stream is deterministic and the token-exact gate holds on the counting prompt
+//! top-k 1 makes every draw the penalized argmax, so a seeded sampled stream is deterministic and the token-exact gate holds
 let SAMPLED_PARAMS = SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1)
 
-// Free-running pair on the GPU: plain vs the speculative rail's committed stream, greedy or (with
-// `sampled`) through the session sampler - the spec session points its accept walk at the same
-// params. Only valid as a token-exact gate on a counting prompt (near-tie-free by construction).
+//! Free-running pair on the GPU, greedy or through the session sampler: only valid as a token-exact gate on a counting prompt (near-tie-free by construction).
 def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var plain, spec : array<int64>; depth : int64; var drafted, parked : int64&; sampled : bool = false) : int64 {   // nolint:LINT012,LINT019 — the body is the das_metal half
     var served = 0l   // nolint:LINT003,LINT019 — counted in the das_metal half
     parked = 0l
@@ -220,7 +217,7 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
                 for (i in range64(a)) {
                     spec |> push(sb.mtp_vbatch[i + 1l])
                 }
-                if (sb.mtp_pre_drawn) {   // the sampled walk parks the next draw; the argmax walk never does
+                if (sb.mtp_pre_drawn) {
                     parked++
                 }
                 tok = sampled ? sample_(sb, sp) : greedy_top(sb.logits, vocab)
@@ -256,8 +253,7 @@ def private served_twin(path : string; seq_cap : int64) : Model {
 // GPU-vs-GPU forced-feed envelope: two metal rails on the same feeds differ by kernel spelling
 // only (the standing kernel-swap gates sit near 0.01); 0.5 is the one-step decode gate's bar.
 let FF_TOL = 0.5
-// the batch driver's kq mul_mm (nine rows and up) stages x to half - a wider envelope than the
-// f32-x GEMV forms', flips still zero
+//! the nine-row kq mul_mm stages x to half - a wider envelope than the f32-x GEMV forms', flips still zero
 let MM_TOL = 1.0
 let FF_STEPS = 48l
 let COUNT_STEPS = 40l
@@ -652,8 +648,7 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
             count_cell(t, tr, trg, tag, count, 8l)
         }
 
-        // the sampled walk: the round draws every verify row through the session's sampler and the
-        // caller's sample_ takes the parked draw - free-run == plain sampled free-run, seeded
+        // the sampled walk: every verify row drawn through the session's sampler, seeded - free-run == plain sampled free-run
         if (arm_on(t, "mtp-sampled-{tag}")) {
             count_cell(t, tr, trg, tag, count, 1l, true)
             count_cell(t, tr, trg, tag, count, 2l, true)
@@ -760,7 +755,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
                     count_cell(t, tr, trg, tag, count, depth)
                     let st = gemma_drafter_stats()
                     to_log(LOG_INFO, "gemma drafter {tag} k{depth}: rounds={st.rounds} drafted={st.drafted} accepted={st.accepted}\n")
-                    if (depth < 4l && arm_on(t, "mtp-sampled-{tag}")) {   // the assistant round's sampled walk at depth 1 and 2
+                    if (depth < 4l && arm_on(t, "mtp-sampled-{tag}")) {
                         count_cell(t, tr, trg, tag, count, depth, true)
                     }
                 }

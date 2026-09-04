@@ -424,9 +424,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             continue
         }
         if (sch.mtp) {
-            // self-spec tick: draft + 2-row batched verify on this stream's own session (the stream
-            // trades its cross-stream batch row for up to two positions per tick). The accept walk
-            // draws with the stream's own sampler, so a sampled or penalized stream ticks too.
+            // self-spec tick: the stream trades its cross-stream batch row for up to two positions per tick.
             // Donation-side note: an accepted token is already evaled, so a "length" finish here
             // makes donate_stream's pending-eval redundant — harmless, and unreachable anyway:
             // every MTP-capable arch is a deltanet hybrid, which the prefix cache refuses.

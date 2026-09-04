@@ -557,9 +557,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             t |> success(sch.mtp_drafted > 0l, "the spec tick actually drafted ({sch.mtp_drafted} drafts)")
             t |> success(sch.mtp_accepted > 0l, "some drafts accepted ({sch.mtp_accepted} of {sch.mtp_drafted})")
             t |> equal(finished_of(events, 2l).n_gen, 24l)
-            // sampled: the tick draws each verify row through the stream's own sampler. Top-k 1
-            // makes every draw the penalized argmax, so the sampled stream is deterministic and
-            // must equal the plain scheduler's - through the same near-tie-free pins as above.
+            //! top-k 1 makes every draw the penalized argmax, so the seeded sampled stream is deterministic and must equal the plain scheduler's
             let sp = SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1)
             var sch1 <- create_scheduler(m, 1l, 4l, 8l, 16l)
             var events1 : array<SchedEvent>

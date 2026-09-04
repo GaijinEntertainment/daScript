@@ -1183,7 +1183,6 @@ def private enc_verify_site(t : Model; enc : MetalComputeEncoder?; fmt : KqFmt;
         let bw = blob_of(g_dev, t, woff)
         enc_gemv_rows(enc, nrows, bw.buf, bw.boff, bx, by, bn, bd, bys, n, rows, ys, uint64(ycol * 4l))
     } else {
-        //! mp = the live count: the verify's panel is padded to the 4-row GEMV tile, so nine rows take the small-batch forms, not the mul_mm
         enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, n, by, ys, ycol, bn, bd, bys, nrows, nrows)
     }
 }
@@ -1398,7 +1397,7 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
 // the 2-row verify [tok@pos, d@pos+1]: batch-form sites at nrows=2, SAME-SLAB route table
 // (cnt pos+1/pos+2 — the serial encoder orders row0's KV write before row1's read); dn scans
 // npos=2 in place on the decode DnMirror. Caller poked bx (embed pair) + 2-row rope tables.
-[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm")]
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm"), arch(at="../ARCHITECTURE_GPU_MTP.md#verify-serial-encoder")]
 def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     let c = t.config
     let dim = c.dim
@@ -1422,7 +1421,6 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
         memcpy(metal_buffer_contents(brt), addr < void? >(g_vrt[0]), bytes_rt)
     }
     var cb = metal_new_command_buffer_unretained(g_queue)
-    //! the serial encoder: the concurrent rail measured the same GPU time here and doubled the host encode
     var enc = metal_new_compute_encoder(cb)
     unsafe {
         var bw_att0 = upload_region(addr < void? >(t.fblob[t.rms_att_off]), uint64(dim * 4l))

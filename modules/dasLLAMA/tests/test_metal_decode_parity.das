@@ -1172,9 +1172,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 }
             }
 
-            // arm 15: the greedy chain stands down for a sampling caller - a decode sampled at
-            // temp > 0 neither hits nor misses the chain (a miss reruns the whole step), a greedy
-            // one rides it
+            // arm 15: the greedy chain stands down for a decode sampled at temp > 0 and rides for a greedy one
             if (arm_on(t, "arm15-spec-hint")) {
                 with_job_que() {
                     setup_dasllama_jobque()

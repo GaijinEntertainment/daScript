@@ -52,7 +52,6 @@ struct Args {
     help : bool
 }
 
-// the second-best token of the session's logits - the sampled token a greedy chain misses on
 def private runner_up(s : Session; vocab : int64) : int64 {
     var best = 0l
     var second = -1l
@@ -67,9 +66,10 @@ def private runner_up(s : Session; vocab : int64) : int64 {
     return second
 }
 
-// feed_k: -1 = the prompt's real-text tokens, 0 = the step's own argmax, K > 0 = the argmax except
-// every K-th step, which feeds the runner-up
-def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sameslab : bool; feed_k : int64 = -1l) : double {
+let FEED_TEXT = -1l
+let FEED_ARGMAX = 0l
+
+def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sameslab : bool; runner_up_every : int64 = FEED_TEXT) : double {
     let c = t.config
     var sess : array<Session>
     sess |> reserve(nb)
@@ -113,8 +113,8 @@ def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sames
         }
         if (nb == 1l && !sameslab) {
             var tok = cur[0]
-            if (feed_k >= 0l && step > 0l) {
-                tok = (feed_k > 0l && step % feed_k == 0l) ? runner_up(sess[0], c.vocab_size) : argmax(sess[0], c.vocab_size)
+            if (runner_up_every >= FEED_ARGMAX && step > 0l) {
+                tok = (runner_up_every > 0l && step % runner_up_every == 0l) ? runner_up(sess[0], c.vocab_size) : argmax(sess[0], c.vocab_size)
             }
             forward(t, sess[0], tok, sess[0].n_past)
             sess[0].n_past++
@@ -152,8 +152,7 @@ def private print_chain_stats(feed : string; spec : int) {
     }
 }
 
-// every row count of --bs, each under every knockout arm; the plain B = 1 sets the denominator
-def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : array<string>; var base : double&; feed_k : int64) : int {
+def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : array<string>; var base : double&; runner_up_every : int64) : int {
     var measured = 0
     for (bstr in split(cfg.bs, ",")) {
         let nb = int64(to_int(strip(bstr)))
@@ -166,7 +165,7 @@ def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : arra
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 set_metal_decode_skip(arm)
             }
-            let ms = time_rows(t, prompt, nb, int64(cfg.steps), cfg.sameslab, feed_k)
+            let ms = time_rows(t, prompt, nb, int64(cfg.steps), cfg.sameslab, runner_up_every)
             if (empty(arm)) {
                 full = ms
                 if (nb == 1l && !cfg.sameslab) {
@@ -177,8 +176,8 @@ def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : arra
                 print("B={nb}{mode}: {ms:.2f} ms/step  x{ratio:.2f} of the single step  ({ms / double(nb):.2f} ms per row)\n")
                 measured++
             } else {
-                let stage = full - ms   // what the skipped stage cost inside the full step
-                print("B={nb}{mode} minus {arm}: {ms:.2f} ms/step -> the {arm} stage is {stage:.2f} ms ({base > 0.0lf ? stage / base : 0.0lf:.2f} of the single step)\n")
+                let skipped_stage_ms = full - ms
+                print("B={nb}{mode} minus {arm}: {ms:.2f} ms/step -> the {arm} stage is {skipped_stage_ms:.2f} ms ({base > 0.0lf ? skipped_stage_ms / base : 0.0lf:.2f} of the single step)\n")
             }
         }
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -211,7 +210,7 @@ def main() : int {
     }
     set_metal_mode(MetalMode.required)
     let feed_parts <- split(cfg.feed, ":")
-    let feed_k = cfg.feed == "greedy" ? 0l : (length(feed_parts) == 2 ? int64(to_int(feed_parts[1])) : -1l)
+    let runner_up_every = cfg.feed == "greedy" ? FEED_ARGMAX : (length(feed_parts) == 2 ? int64(to_int(feed_parts[1])) : FEED_TEXT)
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_decode_speculate(cfg.spec)
     }
@@ -224,14 +223,14 @@ def main() : int {
         var prompt <- encode(tk, "The old lighthouse keeper watched the storm roll in from the west, counting the seconds between each flash and the thunder that followed, while the village below slept through it.", false)
         var base = 0.0lf
         let arms <- cfg.knockouts ? [ "", "gemv", "attn", "ew", "moe_rt" ] : [ "" ]
-        if (cfg.sameslab) {   //! the plain step through the single-row driver, as a labelled reference: the ladder's own B = 1 goes through the batch driver so every row count shares one driver, and it is the ratio column's denominator even when --bs skips 1
-            let plain = time_rows(t, prompt, 1l, int64(cfg.steps), false, feed_k)
+        if (cfg.sameslab) {   //! the denominator is the one-row BATCH step, so every row count shares one driver; the plain single-row step prints beside it as a labelled reference
+            let plain = time_rows(t, prompt, 1l, int64(cfg.steps), false, runner_up_every)
             print("plain step (single-row driver): {plain:.2f} ms\n")
             print_chain_stats(cfg.feed, cfg.spec)
             base = time_rows(t, prompt, 1l, int64(cfg.steps), true)
             print("one-row step (batch driver): {base:.2f} ms - the ratio column's denominator\n")
         }
-        measured = run_ladder(t, prompt, cfg, arms, base, feed_k)
+        measured = run_ladder(t, prompt, cfg, arms, base, runner_up_every)
         static_if (typeinfo builtin_module_exists(das_metal)) {
             metal_decode_shutdown()
             metal_prefill_shutdown()
