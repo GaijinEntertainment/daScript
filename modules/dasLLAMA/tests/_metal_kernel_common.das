@@ -9,7 +9,7 @@ module _metal_kernel_common shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_convert   // dequant_k{4,5,6}_plane_superblock — the kq reference dequant
-require llvm/daslib/f16_cvt         // f32_to_f16 — packing synthetic scale planes
+require daslib/f16_cvt              // f32_to_f16 — packing synthetic scale planes
 require ?das_metal metal/das_metal_boost
 
 // ===== device buffers =====

@@ -10,7 +10,7 @@ require strings
 require daslib/strings_boost
 require daslib/fio
 require daslib/utf8_utils
-require llvm/daslib/f16_cvt  // the pack stores the GRU as f16; the reader widens it once at load
+require daslib/f16_cvt  // the pack stores the GRU as f16; the reader widens it once at load
 require dasllama/dasllama_unicode
 require dasllama/dasllama_postag
 require dasllama/dasllama_textnorm

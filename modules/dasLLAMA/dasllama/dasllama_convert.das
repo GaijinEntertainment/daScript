@@ -6,7 +6,7 @@ module dasllama_convert shared public
 
 require dasllama/dasllama_lint public
 require math
-require llvm/daslib/f16_cvt   // f16<->f32 halfword codecs — the Q5_K encoder + every f16 scale read
+require daslib/f16_cvt   // f16<->f32 halfword codecs — the Q5_K encoder + every f16 scale read
 require daslib/jobque_boost public   // quantize_k5_plane threads its superblock loop
 require dasllama/dasllama_par        // maybe_parallel_for (+ its emitted dispatch counters)
 require dasllama/dasllama_math       // get_dispatch_lanes — the requant wrappers shape their fan-out

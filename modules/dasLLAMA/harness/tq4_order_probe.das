@@ -9,7 +9,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama_math
 require dasllama/dasllama_kv_codec  // quantize_tq4kv_row/cvt_tq4kv_to_f32 — the codec under probe
 require dasllama/dasllama_tokenizer
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require dasllama/dasllama_env
 
 // Is one channel order enough, or is it MoE-shaped? Run SmolLM2 over 5 text domains, learn a

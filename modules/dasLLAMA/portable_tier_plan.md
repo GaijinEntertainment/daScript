@@ -1,6 +1,8 @@
 # The portable tier - dasLLAMA without the JIT crowns: no-LLVM build, AOT, WASM64 - plan
 
-**Status: decisions settled (2026-09-04 discussion), pre-implementation.** The arc has one
+**Status: stage 0 landed (2026-09-04) - the coverage additions (a)-(h) are in `tests/` and green
+on this box, `test_parity` reproduces the frozen ids on the portable backend, and the four owed
+rule fixes are in; stage 1 in progress.** Decisions settled in the 2026-09-04 discussion. The arc has one
 product goal, reached in three stages that each prove the next one's premise: first a regular
 `-jit` build with the `[tune]` framework short-circuited (the portable tier running on JIT-compiled
 reference bodies), then an AOT compilation target under `examples/dasLLAMA/` on a very small
@@ -199,7 +201,7 @@ file.
 
 ## Stage 1 - the refactor, and the portable tier on a regular `-jit` build
 
-1. `daslib/f16_cvt.das`; 33 require spellings.
+1. `daslib/f16_cvt.das`; 37 require spellings (landed).
 2. The inert annotation module in daslib carrying `tune`, `tune_perm`, `tune_companion`,
    `tune_scope`, `tune_policy` and `llvm_code` as shells: `require ?llvm/daslib/llvm_tune
    llvm/daslib/llvm_tune`, then `static_if (typeinfo builtin_module_exists(llvm_tune))` in each

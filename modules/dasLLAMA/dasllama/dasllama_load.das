@@ -22,7 +22,7 @@ require dasllama/dasllama_tune
 require dasllama/dasllama_env
 require dasllama/dasllama_par
 require dasllama/dasllama_gpu_tier
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require daslib/json_boost
 require daslib/array_boost
 require dasllama/dasllama_tokenizer   // load_tokenizer_auto — load_model_ populates the Model's tokenizer

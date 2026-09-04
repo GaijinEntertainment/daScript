@@ -1,7 +1,7 @@
 options gen2
 options _dasllama_internal = true
 
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require math
 
 // Synthetic K-quant expert stacks in the vulkan tier's DEVICE layout, shared by the tier suite

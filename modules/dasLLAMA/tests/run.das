@@ -52,6 +52,9 @@ struct RunArgs {
     @clarg_short = "n"
     @clarg_doc = "Repeat count — explicit only (default 1, never best-of-N)"
     nreps : int = 1
+    @clarg_name = "no-tune"
+    @clarg_doc = "Short-circuit the [tune] framework in every child (DAS_TUNE_POLICY=reference): the reference bodies run — the portable tier's arm"
+    no_tune : bool
 
     @clarg_doc = "daslang binary (default: the binary running this script — a hardcoded ./bin/daslang picked up a STALE top-level exe on the MSVC layout)"
     das : string = ""
@@ -420,6 +423,9 @@ def private child_envs(cfg : RunArgs; win : bool; arm : string) : string {
         if (!empty(cfg.family)) {
             envs = "DASLLAMA_TEST_FAMILY='{cfg.family}' {envs}"
         }
+    }
+    if (cfg.no_tune) {
+        envs = (win ? "{envs}set \"DAS_TUNE_POLICY=reference\"&& " : "DAS_TUNE_POLICY=reference {envs}")
     }
     if (cfg.suite == "image-vulkan") {
         // the offline-bake suite: arm the tier so the probed config carries a vulkan section —

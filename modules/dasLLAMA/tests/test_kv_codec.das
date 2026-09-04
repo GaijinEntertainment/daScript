@@ -8,7 +8,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work + fused knob
 require dasllama/dasllama_kv_codec   // the codec kernel families under unit test
 require dasllama/dasllama_convert    // cvt_f32_to_f16/cvt_f16_to_f32 — the generic f16 rows
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
 require math

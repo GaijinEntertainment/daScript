@@ -12,7 +12,6 @@ def initialize(project_path : string) {
         "llvm_env",     // [EnvConfig] environment-knob registry (ENVIRONMENT.md generates from it)
         "aarch64_neon", // public NEON-intrinsic header (portable fallbacks + name-based JIT recognition)
         "x64_avx",      // public x86-64-intrinsic header (same contract, x64 mirror)
-        "f16_cvt",      // public f16<->f32 convert header (same contract, aarch64 + x64/F16C)
         "llvm_code",          // [llvm_code] user-side annotation
         "llvm_jit_code",      // [llvm_code] JIT-side generator registry
         "llvm_user_modules",  // user-extensible require list for generator modules

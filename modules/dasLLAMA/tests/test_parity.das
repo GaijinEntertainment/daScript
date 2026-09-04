@@ -4,7 +4,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
-require llvm/daslib/f16_cvt   // f16_to_f32 — the tied-cls arm reads the live scale plane
+require daslib/f16_cvt   // f16_to_f32 — the tied-cls arm reads the live scale plane
 require dasllama/dasllama_math   // pin_kernel_backend / kernel_backend_names / active_kernel_backend — the facade wraps none of them
 require dasllama/dasllama_env    // g_env_engine.pin_backend
 require daslib/defer   // the backend pin is restored on every path out of a pinned cell
