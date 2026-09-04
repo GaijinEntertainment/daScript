@@ -18,6 +18,7 @@ namespace das {
     };
 
     string getExecutableFileName ( void );
+    DAS_API size_t getExecutablePathName ( char * pathName, size_t pathNameCapacity );
     DAS_API string getDasRoot ( void );
     DAS_API void setDasRoot ( const string & dr );
 

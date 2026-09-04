@@ -792,7 +792,9 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         return -1;
     }
     setCommandLineArguments(argc,argv);
-    hostBinary = argv[0];
+    char exePath[4096];
+    size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
+    hostBinary = exeLen ? string(exePath, exeLen) : string(argv[0]);
     for ( int i=1; i < argc && strcmp(argv[i],"--")!=0; ++i ) {
         hostOptions += argv[i];
         hostOptions += '\n';
@@ -1046,6 +1048,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     }
     if ( moduleCacheExplicit && (!serFile.empty() || !deserFile.empty()) ) {
         printf("-module-cache already reads and writes; do not combine it with -ser/-deser\n");
+        return -1;
+    }
+    if ( noModuleCache && (!serFile.empty() || !deserFile.empty()) ) {
+        printf("-no-module-cache disables the cache; do not combine it with -ser/-deser\n");
         return -1;
     }
     // register modules

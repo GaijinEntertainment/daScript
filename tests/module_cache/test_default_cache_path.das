@@ -121,6 +121,17 @@ def test_default_module_cache(t : T?) {
     t |> success(quiet(both), "-no-module-cache wins over -module-cache - no verdict line:\n{both}")
     var ignoredStat : FStat
     t |> success(!stat(ignored, ignoredStat), "-no-module-cache wins over -module-cache - the explicit file is not written")
+    var serOff : string
+    let serOffRc = run("{base} -no-module-cache -ser \"{path_join(tmp, "explicit.ser")}\" {c}", serOff)
+    t |> success(serOffRc != 0, "-no-module-cache beside -ser is rejected, not silently honoured either way")
+    t |> success(find(serOff, "do not combine") >= 0, "the rejection names the conflict:\n{serOff}")
+    let binDir = dir_name(das_exe())
+    let exeName = base_name(das_exe())
+    let viaPath = win ? "set \"PATH={binDir};%PATH%\"&& {exeName} -dasroot \"{root}\"" : "PATH=\"{binDir}:$PATH\" {exeName} -dasroot \"{root}\""
+    var pathRun : string
+    let pathRc = run("{viaPath} {a}", pathRun)
+    t |> success(report_child(t, "via PATH", pathRc, pathRun, "MARK_mc_default_a"), "a PATH launch executes")
+    t |> equal(cache_files("mc_default_a"), 3, "a PATH launch keys the same file as the path launch - the binary is resolved, not read off argv[0]")
     for (stem in stems) {
         remove_cache_files(stem)
     }

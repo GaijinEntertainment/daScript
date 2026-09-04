@@ -895,7 +895,9 @@ int main(int argc, char * argv[]) {
     bool dumpLeaks = true;
 
     // Parse args
-    hostBinary = argv[0];
+    char exePath[4096];
+    size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
+    hostBinary = exeLen ? string(exePath, exeLen) : string(argv[0]);
     for (int i = 1; i < argc && strcmp(argv[i], "--") != 0; i++) {
         hostOptions += argv[i];
         hostOptions += '\n';
