@@ -674,11 +674,12 @@ class LintVisitor : AstVisitor {
         return icall.arguments[0]._type.baseType == Type.tString
     }
 
-    // The remedy repeats the site's own hex argument, and keeps a mixed-sign site's outer
-    // cast, so only the parse width changes.
+    // The remedy repeats the site's own string and hex arguments, and keeps a mixed-sign
+    // site's outer cast, so only the parse width changes.
     def lint017_parse_remedy(cast_name : string; iname : string; icall : ExprCall?) : string {
+        let str_arg = describe(icall.arguments[0])
         let hex = length(icall.arguments) >= 2 ? describe(icall.arguments[1]) : "false"
-        let widened = "{iname}64(str, {hex})"
+        let widened = "{iname}64({str_arg}, {hex})"
         let same_sign = cast_name == (iname == "to_int" ? "int64" : "uint64")
         return same_sign ? widened : "{cast_name}({widened})"
     }

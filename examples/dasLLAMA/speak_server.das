@@ -4,6 +4,7 @@ options stack = 524288   // the budget every program root here takes (options st
 require dashv/dashv_boost     // POST + get_body_bytes — the outbound HTTP client
 require daslib/clargs
 require daslib/fio
+require daslib/json_boost     // JV + write_json_compact: the request body escapes whatever --text carries
 
 // Speak a line through a running dasllama-server: POST the OpenAI speech shape to
 // /v1/audio/speech, write the WAV body to a file, report how much audio came back and how
@@ -81,7 +82,11 @@ def main : int {
         return 0
     }
     let base = empty(cfg.url) ? "http://127.0.0.1:8080" : cfg.url
-    let body = "\{\"input\": \"{cfg.text}\", \"voice\": \"{cfg.voice}\", \"speed\": {cfg.speed}}"
+    var body_doc = JV((input = cfg.text, voice = cfg.voice, speed = cfg.speed))
+    let body = write_json_compact(body_doc)
+    unsafe {
+        delete body_doc
+    }
 
     var status = 0
     var message = ""
