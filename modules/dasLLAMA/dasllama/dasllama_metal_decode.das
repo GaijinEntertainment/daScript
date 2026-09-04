@@ -1112,6 +1112,7 @@ def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam
             !key_exists(g_mirrors, s.uid)) {
         return false
     }
+    let ts_prep = prof_ticks()
     finish_pending_step()
     let mr = g_mirrors[s.uid]
     let dpos = pos - 1l
@@ -1131,8 +1132,13 @@ def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam
         memcpy(metal_buffer_contents(r.bcos), addr < void? >(s.rope_cos[0]), r.bytes_tab)
         memcpy(metal_buffer_contents(r.bsin), addr < void? >(s.rope_sin[0]), r.bytes_tab)
     }
+    prof_add("mtp.draft.prep", ts_prep)
+    let ts_enc = prof_ticks()
     encode_draft_step(t, r, !seam)
+    prof_add("mtp.draft.enc", ts_enc)
+    let ts_fin = prof_ticks()
     let ok = finish_draft_step(t, s, r, seam)
+    prof_add("mtp.draft.wait", ts_fin)
     release_step(r)
     return ok
 }
@@ -1391,7 +1397,7 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
 // the 2-row verify [tok@pos, d@pos+1]: batch-form sites at nrows=2, SAME-SLAB route table
 // (cnt pos+1/pos+2 — the serial encoder orders row0's KV write before row1's read); dn scans
 // npos=2 in place on the decode DnMirror. Caller poked bx (embed pair) + 2-row rope tables.
-[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm")]
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm"), arch(at="../ARCHITECTURE_GPU_MTP.md#verify-serial-encoder")]
 def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     let c = t.config
     let dim = c.dim
@@ -1462,7 +1468,10 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
 
 //! lands nrows KV rows + every row's logits; accept/reject bookkeeping is the caller's
 def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : int64) : bool {
+    let ts_wait = prof_ticks()
     metal_wait_until_completed(r.cb)
+    prof_add("mtp.verify.wait", ts_wait)
+    let ts_land = prof_ticks()
     let ok = !metal_command_buffer_failed(r.cb)
     if (ok) {
         let c = t.config
@@ -1491,6 +1500,7 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
         to_log(LOG_ERROR, "dasLLAMA metal MTP verify: dispatch failed ({cb_error_text(r.cb)})\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalDecodeDecline.gpu_error)
     }
+    prof_add("mtp.verify.land", ts_land)
     return ok
 }
 
@@ -1556,6 +1566,7 @@ def private mtp_trace_round(s : Session; pos, k, nr, a, vocab : int64) {
 def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {   // nolint:STYLE037,STYLE038 — draft chain / verify / accept walk / commit is one sequential protocol on shared locals
     let c = t.config
     let pos = s.n_past
+    mtp_round_begin(s)
     let k = clamp(k_req, 1l, 8l)
     var cold = (g_dev == null || !t.metal_blob || c.n_layer_nextn <= 0l || pos < 1l ||
         s.mtp_h_pos1 != pos || pos + k + 1l > c.seq_len || !metal_mtp_verify_ok(t, s))
@@ -1592,7 +1603,9 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
                 }
                 break
             }
+            let ts_amax = prof_ticks()
             var d = parallel_argmax(s.logits, c.vocab_size)
+            prof_add("mtp.draft.argmax", ts_amax)
             if (g_env_mtp_debug == "reject") {
                 d = 0l
             }
@@ -1610,6 +1623,8 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
     let ts_verify = prof_ticks()
     mtp_verify_prep_n(t, s, s.mtp_vbatch, nr, pos)
     finish_pending_step()
+    prof_add("mtp.verify.prep", ts_verify)
+    let ts_poke = prof_ticks()
     let mr = g_mirrors[s.uid]
     var r = acquire_step(t, s, pos + 1l, mr.koff, mr.voff, mr.cap_rows, [nrows = nr])
     if (!r.gpu_logits) {   // verify has no CPU classifier fallback (blog/bxf live under gpu_logits)
@@ -1654,7 +1669,10 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         memcpy(reinterpret<void?>(bc), addr < void? >(s.mtp_cat[0]), uint64(nr * rowb))
         memcpy(reinterpret<void?>(bc + nr * rowb), addr < void? >(s.mtp_xb_save[0]), uint64(rowb))
     }
+    prof_add("mtp.verify.poke", ts_poke)
+    let ts_enc = prof_ticks()
     encode_verify_step(t, r, pos)
+    prof_add("mtp.verify.enc", ts_enc)
     let vok = finish_verify_step(t, s, r, pos)
     if (!vok) {
         release_step(r)
@@ -1670,8 +1688,12 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
     prof_add("mtp.verify", ts_verify)
     let ts_walk = prof_ticks()
     var a = 0l
-    while (a < k && argmax_row(s.mtp_logits_b, a, c.vocab_size) == s.mtp_vbatch[a + 1l]) {
-        a++
+    if (mtp_walk_samples(s)) {
+        a = mtp_walk_sampled(s, k, c.vocab_size)
+    } else {
+        while (a < k && argmax_row(s.mtp_logits_b, a, c.vocab_size) == s.mtp_vbatch[a + 1l]) {
+            a++
+        }
     }
     if (g_env_mtp_debug == "trace") {
         mtp_trace_round(s, pos, k, nr, a, c.vocab_size)
@@ -2029,6 +2051,7 @@ def private discard_pre {
 // Pre-encode the PREDICTED next step (same session, pos + 1) while the current step runs on the
 // GPU. When speculation gates pass, the cb commits AND chains itself (argmax + embed gather, no
 // CPU poke); otherwise it stays uncommitted. Quietly declines when gates fail — slow path serves those.
+[arch(at="../ARCHITECTURE_GPU_MTP.md#greedy-chain")]
 def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog : MetalBuffer?) {
     // no encode-ahead for recurrent (two cbs race the one dn state buffer); a declined/absent-mirror skip = slow path serves it
     if (t.config.recr_mask != 0ul ||
@@ -2042,7 +2065,7 @@ def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog 
     let ts_enc = ref_time_ticks()
     var r = acquire_step(t, s, npos, mr.koff, mr.voff, mr.cap_rows)
     if (r.gpu_logits && prev_blog != null && spec_cls_capable(t) &&
-            !has_ple(t.config) && spec_armed()) {
+            !has_ple(t.config) && !s.sampled && spec_armed()) {
         // speculative chain: the cb runs the moment the previous one drains — CPU tail/sampling/next forward() all overlap GPU execution
         r.spec = true
         // a spec step is IN FLIGHT after forward() returns — must not touch session memory (staging only; acceptance lands it via finish_step)
@@ -2941,7 +2964,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     var bw_ds = upload_region(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert]), uint64(c.n_expert * 4l))
                     enc_moe_wscale(enc, bmsel, bmsel, bw_ds, u_moe_k, nrows)
                 }
-                if (t.experts_mx4) {
+                if (g_skip == "moe_rt") {   // moe_rt knockout: the routed expert GEMVs only (router/select stay live)
+                } elif (t.experts_mx4) {
                     var bwb1 = upload_region(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
                     var bwb3 = upload_region(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
                     // gmode == 1 doubles as the has-bias flag (see enc_moe_select above)
@@ -2969,7 +2993,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             }
             if (moe && g_skip != "gemv") {
                 let fe2 = fmt_at(t.we2_fmt, l)
-                if (t.experts_mx4) {
+                if (g_skip == "moe_rt") {   // the down projection is a routed expert GEMV too
+                } elif (t.experts_mx4) {
                     var bwb2 = upload_region(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim]), uint64(c.n_expert * dim * 4l))
                     var b2m = MoeGemvArgs(ndim = k_moe_nfe, ddim = k_dim, eplane = k_moe_eblk,
                         xs = k_moe_xs_dn, ss = k_moe_ss, bxs = k_moe_knfe, bys = k_moe_kdim, hasb = k_moe_gmode)
@@ -3367,7 +3392,7 @@ def dasllama_metal_decode_register() {
     g_env_attn_d = g_env_metal.attn_d
     g_env_mtp_debug = g_env_metal.mtp_debug
     if (!empty(g_env_metal.decode_skip)) {
-        g_skip = g_env_metal.decode_skip
+        set_metal_decode_skip(g_env_metal.decode_skip)   // routes through the unknown-token guard
         to_log(LOG_WARNING, "dasLLAMA metal decode: SKIP={g_skip} - timing-attribution mode, output is GARBAGE\n")
     }
     if (is_some(g_env_metal.spec)) {   // the spec chain's A/B rail: 0 off, 1 forced, -1 adaptive

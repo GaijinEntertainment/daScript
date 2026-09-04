@@ -1178,3 +1178,61 @@
    path) a head-baked and a head-less image share one identity: the trunk-alone image loads silently
    on an MTP run, and `dlim_image_verdict` calls both CURRENT. Done = the head fold lives in
    `image_identity`, with the one-time re-mint of the headed images that implies.
+100. **The K-quant mul_mm twins carry no `rows % 64` contract.** Their grid is `rows/64` and the
+   kernel stores whole 64-column tiles (`dasllama/dasllama_metal_kernels.das`, `MetalKqMulMmK45T`),
+   so a weight-row count off 64 drops the last columns silently at every kq mul_mm site: the batch
+   driver's `use_mm` gate checks `% 64` for the q8 mm only, and `enc_kq_site_b` at nine rows and up
+   takes the kq mm with no such gate. `mp % 32` is declared; `rows` is not. Done = a census of every
+   kq mul_mm site's `rows` (decode, prefill, the `_t` / `_th` twins), `rows % 64` declared where the
+   census clears, a site gate where it does not.
+101. **DONE (2026-09-03): the speculative round serves sampled streams - sample-and-match.** The
+   walk was an argmax compare, so the scheduler ran the MTP tick only at temp 0 with no penalties
+   (`dasllama/dasllama_scheduler.das`) and a sampled stream decoded plain. The reference build's
+   server speculates under temperature by sampling each verify row with the stream's own sampler
+   and accepting while the sample equals the draft - every emitted token is a genuine draw from
+   the target row, so the distribution is exact and no draft probabilities are needed. The acceptance rate becomes the target's probability of the draft
+   token (lower than the argmax match: ~0.6 against 0.77 at depth 1), so the gain is (1 + a) / c
+   with c the round's cost in steps - about 1.3x on a dense carrier at c = 1.2, a wash on
+   Qwen3.8-27B at today's c = 1.5 until the verify gets cheaper. Done = the walk samples row i
+   through `sample_` (the row copied into `s.logits`, `s.recent` advanced per accepted token) and
+   accepts while the draw equals the draft, the scheduler gate drops to "MTP on", and a seeded
+   counting run at temp 0.8 matches plain sampled decode token for token.
+102. **The NextN draft chain is k command buffers because untied embeddings have no GPU gather.**
+   `metal_mtp_spec_round` runs k `metal_mtp_draft_forward` calls - a submit, a wait, a 1 MB logits
+   readback and a CPU argmax each (about 0.4 ms of a 2.8 ms draft on Qwen3.8-27B, M5: `lcpp_bench
+   --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1`, the `mtp.draft.*` sections) - where the
+   gemma round chains its drafts in one command buffer with `enc_argmax` and `enc_embed` on the
+   device. The NextN chain cannot: `embed_row` for an untied model reads the fp32 token table in
+   `fblob` (`t.tok_emb_off`; 5 GB on Qwen3.8-27B, carried in the image), and the GPU gathers exist
+   only for tied Q8 (`MetalEmbedQ8`) and tied K6 (`MetalEmbedK6`). Done = a K-quant embed gather
+   over the token table's own plane (k4 first) that also retires the fp32 table from blob images,
+   then the round in the gemma shape: one command buffer, `bvtok` chaining, one wait.
+103. **A sampled stream's round has no break-even guard.** The sampled accept walk (#101) pays the
+   round cost c (about 1.45 steps on gemma-26B at depth 1) whether or not the draws match, and
+   acceptance under sampling is the target's probability of the draft, which a hot sampler
+   flattens: gemma-26B on the M5 at temp 0.8 accepts 74.7% (the greedy rate) and gains 1.26x, at
+   temp 2.0 it accepts 29.9% (7.6% on one prompt) and LOSES, 0.93x (`PERF_LEDGER.md`, the sampled
+   walk entry, carries the harness and flags). The round pays only
+   while the acceptance a clears c - 1. Done = a per-stream running acceptance (the last N rounds)
+   in the scheduler's tick, and the tick decodes plain while it sits under c - 1 - re-arming every
+   M plain steps to re-measure - with the gemma-26B temp 2.0 corpus as the gate (on must not lose
+   to off) and the temp 0.8 corpus as the control (the guard must not fire there).
+104. **The CPU kq batch tile has no two-token form.** `kq_batch_cell_gen` (`dasllama_math_gen`)
+   tiles four tokens and runs the token tail as one GEMV pass per row, so the speculative round's
+   two-row verify streams and dequantizes every weight twice (`mm_gemm` 1.75x a step on Qwen3.8-27B,
+   M5 CPU); padding two rows to the four-token tile with zero rows was timed against it
+   (`lcpp_bench --mtp-ab --prof --ngl 0`, `-jit` debug rail, M5, `-n 64 -r 1`, SpecBench-4 chat):
+   `mm_gemm` 5.17 -> 6.36 s over the profiled window, the round 0.78x -> 0.75x, so the tile costs
+   2.46 GEMV passes for four tokens - the path is compute-bound, about half dequant and half dots
+   per row (`PERF_LEDGER.md`, the CPU round split). Done = a
+   two-token tile in the generator (`dasllama_gemm_gen::k4_tile` and its siblings take the token
+   count as a perm), predicted ~1.5 passes for two rows, wired into the tail walk for ntok % 4 == 2
+   (and 3 = 2 + 1), bit-exact vs the per-token GEMVs like the four-token form, with the CPU
+   round's `mtp.verify` section as the witness.
+105. **A rejected CPU verify on a recurrent hybrid re-forwards the whole step.** `mtp_spec_eval`
+   snapshots the deltanet state before the two-row verify and, on a reject, restores it and runs a
+   plain forward to re-advance it past row 0 - 0.24 step per round at 82% acceptance (the same
+   ledger entry). Done = the verify's recurrent layers run the per-token core at npos 2 and copy
+   each layer's state slice AFTER row 0 into the snapshot buffers (`mtp_snap_pos = pos + 1`), so a
+   reject restores that snapshot and takes row 0's logits and hidden the verify already produced -
+   the non-recurrent reject path's shape - with `test_mtp_reject_rollback` as the gate.

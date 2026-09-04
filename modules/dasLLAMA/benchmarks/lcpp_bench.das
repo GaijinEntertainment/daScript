@@ -20,6 +20,7 @@ require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower eng
 require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require ?das_metal dasllama/dasllama_metal_prefill   // --asr --ngl: the chat-decoder prefill engage witness
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // --mtp-ab on a gemma-4 target: the assistant drafter sidecar attaches here
+require ?das_metal dasllama/dasllama_metal_common   // --prof: the decode drivers' per-step stage report (setup / encode / wait / gpu / readback)
 require dasllama/dasllama_mtp_gemma   // nolint:STYLE030,LINT019 — gemma_drafter_sidecar is read in the das_metal half
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
 require dasllama/dasllama_vision_embedder   // --image: the vision embedder (any family) + encode_image_
@@ -137,6 +138,10 @@ struct Args {
     @clarg_name = "mtp-ab"
     @clarg_doc = "A/B MTP/NextN self-speculation in-process, OFF then ON (needs a NextN head in the GGUF). Runs the tg-real row, NOT the llama-bench tg row — acceptance is meaningless on synthetic ids. Reports the draft accept rate; mutually exclusive with the other A/B levers"
     mtp_ab : bool
+
+    @clarg_name = "mtp-temp"
+    @clarg_doc = "Sampling temperature for BOTH --mtp-ab arms (default 0 = greedy): the off arm samples every token, the on arm's accept walk draws each verify row with the same sampler (sample-and-match), both seeded alike - the sampled speed and acceptance"
+    mtp_temp : float = 0.0
 
     @clarg_doc = "A/B the resident ladder's per-token re-encode in-process: every row runs twice, recorded-once then re-encoded every token. Prices the carrier class twins' push-borne pos/cnt (vulkan resident decode only); mutually exclusive with the other A/B levers"
     rerecord_ab : bool
@@ -1518,6 +1523,7 @@ def main() : int {
                 let mtp_on = cfg.mtp_ab && arm != 0
                 var drafted = 0l
                 var accepted = 0l
+                var parked = 0l   // rounds whose sampled walk parked the next draw: the --mtp-temp lever's engagement witness
                 var tps : array<double>
                 var pp_us : array<int64>      // per prompt across the reps: timed µs, tokens, drafts, accepts
                 var pp_gen : array<int64>
@@ -1527,6 +1533,7 @@ def main() : int {
                 pp_gen |> resize(length(toks))
                 pp_dr |> resize(length(toks))
                 pp_ac |> resize(length(toks))
+                var sp = SamplingParams(temp = cfg.mtp_temp)
                 for (_rep in range(reps)) {
                     var total_us = 0l
                     var rep_gen = 0l
@@ -1534,21 +1541,28 @@ def main() : int {
                         var rs <- make_run_state(c, KVDtype.f16, KVDtype.f16)
                         let pl = long_length(toks[pi])
                         forward_prefill(t, rs, toks[pi], pl, 0l)
+                        if (sp.temp > 0.0) {
+                            set_seed_(rs, 4242)
+                            rs.spec_params = unsafe(addr(sp))
+                        }
                         let t0 = ref_time_ticks()
                         var p_gen = ngen
                         if (mtp_on) {
                             rs.n_past = pl   // forward_prefill leaves n_past alone; the round drives it
-                            var tok = argmax_logit(rs, c.vocab_size)
+                            var tok = sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size)
                             var gen = 0l
                             while (gen < ngen) {
                                 gen += 1l + mtp_spec_round(t, rs, tok)   // tok + the accepted drafts; only the advance is timed
-                                tok = argmax_logit(rs, c.vocab_size)
+                                if (rs.mtp_pre_drawn) {
+                                    parked++
+                                }
+                                tok = sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size)
                             }
                             p_gen = gen   // a trailing accept may overshoot by 1 — count what ran
                         } else {
                             var pos = pl
                             for (_g in range64(ngen)) {
-                                forward(t, rs, argmax_logit(rs, c.vocab_size), pos)
+                                forward(t, rs, sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size), pos)
                                 pos++
                             }
                         }
@@ -1565,6 +1579,9 @@ def main() : int {
                     }
                     tps |> push(double(rep_gen) * 1.0e6lf / double(total_us))
                 }
+                if (mtp_on && sp.temp > 0.0 && parked == 0l) {
+                    panic("lcpp_bench: --mtp-temp {sp.temp} is set but the accept walk never parked a draw - the lever did not engage")
+                }
                 let st = row_stat("tg-real{ngen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps, {length(toks)} prompts)\n")
                 if (!mtp_on) {
@@ -1574,7 +1591,8 @@ def main() : int {
                 }
                 if (mtp_on) {
                     let rate = drafted > 0l ? double(accepted) * 100.0lf / double(drafted) : 0.0lf
-                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}; {mtp_pos_report()}\n")
+                    let walk = sp.temp > 0.0 ? " (sampled walk, temp {sp.temp})" : ""
+                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}{walk}; {mtp_pos_report()}\n")
                     mtp_pos_reset()
                     if (length(toks) > 1) {
                         for (pi in range(length(toks))) {
@@ -1608,23 +1626,33 @@ def main() : int {
                     let pl0 = long_length(toks[0])
                     forward_prefill(t, ps, toks[0], pl0, 0l)
                     forward_profile_reset()
+                    static_if (typeinfo builtin_module_exists(das_metal)) {
+                        metal_decode_stage_reset()
+                    }
+                    if (sp.temp > 0.0) {
+                        set_seed_(ps, 4242)
+                        ps.spec_params = unsafe(addr(sp))
+                    }
                     if (mtp_on) {
                         ps.n_past = pl0
-                        var ptok = argmax_logit(ps, c.vocab_size)
+                        var ptok = sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size)
                         var pgen = 0l
                         while (pgen < ngen) {
                             pgen += 1l + mtp_spec_round(t, ps, ptok)
-                            ptok = argmax_logit(ps, c.vocab_size)
+                            ptok = sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size)
                         }
                     } else {
                         var ppos = pl0
                         for (_g in range64(ngen)) {
-                            forward(t, ps, argmax_logit(ps, c.vocab_size), ppos)
+                            forward(t, ps, sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size), ppos)
                             ppos++
                         }
                     }
                     say(fmt, "--- forward_profile: {st.test} ---\n")
                     forward_profile_report()
+                    static_if (typeinfo builtin_module_exists(das_metal)) {
+                        metal_decode_stage_report()
+                    }
                     delete ps
                 }
                 continue

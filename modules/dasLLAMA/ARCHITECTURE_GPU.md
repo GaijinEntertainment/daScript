@@ -215,6 +215,15 @@ the production dialect against them - the bisect seat when the flash regresses.
 - **Mixed-integer matmul2d operands (float x int8, and the i8 x i8 per-block-fold form):**
   3.5x slower - the mixed-int combinations exist in MPP's type lists but lower off the NAX
   fast path. W8A8 claims from other stacks do not transfer through MPP.
+- **Matrix forms for the K-quant small-batch GEMV (2-8 verify columns), against the
+  four-column twin:** the simdgroup 8x8 multiply-accumulate runs at plain FMA rate on this GPU
+  (its tile loop is 65% of the kernel; without it the dequant-to-half stage alone is 1.5x a
+  single pass), so it buys 20-25% per column; the Metal-4 tensor op at an m = 8 tile is nearly
+  free per column but the dequant stage is the cost - 3.4x a single pass for eight columns where
+  the twin does four at 2.7x. Neither moves 3-4 rows; the tensor form beats the eight-column twin
+  by 40% at 5-8 rows. Arms `k4_mm8*`, `k4_tmm*`, `k4_tmv8*` in
+  `benchmarks/matmul/bench_metal_gemv_kernels.das` (the `_depths` ruler records say no depth
+  reaches those rows).
 
 **Sanctioned float-A stamps** - the kernel classes stamped `[metal_kernel(float_a_ok=true)]`:
 every tensor template's `XT = float` stamp - the live fallback wherever the half panel is absent
@@ -222,7 +231,8 @@ every tensor template's `XT = float` stamp - the live fallback wherever the half
 batch-decode/classifier `MetalQ8GemmTensorT` family, whose half-X extension is an open ledger
 item, and the double-buffered `*Db` staging templates (`MetalQ8MulMmDbT`, `MetalKqMulMmK45DbT`,
 `MetalKqMulMmK6DbT`), which pin `XT = float16` today - there the flag is scaffolding a future
-float stamp would need, not a live float operand.
+float stamp would need, not a live float operand - and the verify-width lab template
+`MetalKqLabK4Tmv8T` in the GEMV lab, whose A operand is the decode driver's f32 x panel.
 - **Fused single-kernel attention (scores in threadgroup, online softmax):** loses 10-80% to
   the pipelined three-pass at real shapes (`benchmarks/attn/bench_metal_pf_fused_attn.das`) -
   Metal's cross-kernel pipelining plus full-width softmax beat tg-scope fusion.

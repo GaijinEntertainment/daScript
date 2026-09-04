@@ -516,6 +516,17 @@ def private gemma_trace_round(s : Session; pos, drafted, a, vocab : int64) {
     to_log(LOG_INFO, "{line}\n")
 }
 
+def private gemma_accept_walk(var s : Session; drafted, vocab : int64) : int64 {
+    if (mtp_walk_samples(s)) {
+        return mtp_walk_sampled(s, drafted, vocab)
+    }
+    var a = 0l
+    while (a < drafted && sameslab_argmax(a) == s.mtp_vbatch[a + 1l]) {
+        a++
+    }
+    return a
+}
+
 // a round that cannot speculate takes one plain GPU step (output-invariant either way)
 def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) : int64 {
     let tc = ref_time_ticks()
@@ -537,6 +548,7 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     }
     let c = t.config
     let pos = s.n_past
+    mtp_round_begin(s)
     let k = clamp(k_req, 1l, MTP_MAX_ROWS - 1l)
     let dr & = g_gemma_drafter
     if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {   // sized for the NextN carriers only at make_run_state
@@ -555,6 +567,7 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     }
     finish_pending_step()
     let td = ref_time_ticks()
+    let ts_draft = prof_ticks()
     s.mtp_vbatch[0] = tok
     let gpu_chain = !g_gemma_draft_cpu
     let drafted = gpu_chain ? (gemma_draft_chain_gpu(t, s, tok, pos, k) ? k : 0l) : gemma_draft_chain_cpu(t, s, pos, k)
@@ -562,7 +575,9 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
         return gemma_plain_step(t, s, tok, pos)
     }
     g_gemma_us_draft += int64(get_time_usec(td))
+    prof_add("mtp.draft", ts_draft)
     let tv = ref_time_ticks()
+    let ts_verify = prof_ticks()
     let nr = drafted + 1l
     if (gpu_chain) {
         set_batch_same_slab_tokens(g_gemma_gpu.bvtok)
@@ -572,6 +587,8 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     if (!vok) {
         return gemma_plain_step(t, s, tok, pos)
     }
+    prof_add("mtp.verify", ts_verify)
+    let ts_walk = prof_ticks()
     if (gpu_chain) {
         unsafe {
             let tp = reinterpret<uint?>(metal_buffer_contents(g_gemma_gpu.bvtok))
@@ -582,10 +599,7 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     }
     g_gemma_drafted += drafted
     g_gemma_rounds++
-    var a = 0l
-    while (a < drafted && sameslab_argmax(a) == s.mtp_vbatch[a + 1l]) {
-        a++
-    }
+    let a = gemma_accept_walk(s, drafted, c.vocab_size)
     if (g_gemma_trace) {
         gemma_trace_round(s, pos, drafted, a, c.vocab_size)
     }
@@ -601,6 +615,7 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     g_gemma_accepted += a
     s.n_past = pos + a + 1l
     g_gemma_us_verify += int64(get_time_usec(tv))
+    prof_add("mtp.walk", ts_walk)
     return a
 }
 

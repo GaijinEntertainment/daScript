@@ -9,6 +9,8 @@ require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
 require ?das_metal dasllama/dasllama_metal_gemm  // the production 32x32 GEMM MSL (the batch-crossover row)
 require dasllama/dasllama_metal_kernels  // the production GEMV MSL (v0 baseline)
+require daslib/typemacro_boost  // [template_struct_instance] - the simdgroup-matrix lab stamps
+require ?das_metal dasllama/dasllama_metal_prefill  // MetalKqMulMmK45TensorT - the Metal-4 tensor GEMM stamped at verify widths
 require llvm/daslib/f16_cvt  // f16 bit converts for the K-quant superblock fills
 require math  // used only inside the Apple static_if half
 require strings
@@ -2518,6 +2520,249 @@ class MetalKqLabK4Ext2 {
     }
 }
 
+// The eight-column simdgroup-matrix form: one simdgroup owns 8 weight rows and dequantizes each
+// superblock ONCE to half (row-major [row][k] in threadgroup memory, transposed at the simdgroup
+// load); the x panel is staged once per threadgroup as 8 half columns; every k-tile then costs one
+// 8x8x8 multiply-accumulate for all 8 columns instead of a load and four FMAs per column. 128
+// threads = 4 simdgroups = 32 rows per threadgroup (rtg 32) on the KqMvArgs contract: x columns
+// past nr read the last live column, rows past ddim read the last row, neither is written.
+// Staged rows are 264 halves wide (256 + 8): a 512-byte stride would put all eight rows of a tile
+// in one threadgroup-memory bank. RT row tiles per simdgroup share one x tile load per k-tile; NSG
+// simdgroups per threadgroup keep 32 rows per threadgroup either way (the weight stage stays 16.5 KB).
+[ |> template_struct_instance]
+class template MetalKqLabK4Mm8T {
+    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
+    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+    @workgroup xs : float16[2112]           // one superblock of the x panel as half: [col 0..7][k], stride 264
+    @workgroup wt : float16[8448]           // 32 rows x 264 dequantized weights, NSG simdgroup regions of 8*RT rows
+    @workgroup yo : float[256]              // 32 rows x 8 cols of landed tiles
+    @template_constant RT : int = 1         // row tiles (of 8 rows) per simdgroup
+    @template_constant RTU : uint = 1u      // RT's uint spelling - override BOTH together
+    @template_constant NSG : uint = 4u      // simdgroups per threadgroup (32 / (8 * RT))
+    @template_constant XJ : int = 4         // x float4s staged per thread (512 / (32 * NSG))
+    @template_constant KO_DEQ : bool = false   // knockout: no dequantized weight stores (the tile loop reads stale stage)
+    @template_constant KO_MMA : bool = false   // knockout: no tile loads and no multiply-accumulate
+
+    [metal_kernel]
+    def lab_k4_mm8 {   // nolint:STYLE038 — MSL kernel body: stage, dequantize, tile loop, land - barrier-coupled
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let lane = gl_SubgroupInvocationID
+        let rows_sg = 8u * RTU
+        let rowbase = gl_WorkGroupID.x * 32u + sg * rows_sg
+        let lpr = 4u / RTU                  // lanes per weight row
+        let r = lane / lpr
+        let sub = lane % lpr
+        let row = min(rowbase + r, ka.ddim - 1u)
+        let nb = ka.ndim / 256u
+        let nb4 = ka.ndim / 4u
+        let nrm1 = ka.nr - 1u
+        let sgb = sg * rows_sg * 264u
+        let wbase = sgb + r * 264u   // nolint:LINT002 dead in the KO_DEQ stamp
+        var acc : simdgroup_float8x8[RT]   // nolint:LINT003 dead in the KO_MMA stamp
+        var ma : simdgroup_half8x8   // nolint:LINT002 dead in the KO_MMA stamp
+        var mb : simdgroup_half8x8   // nolint:LINT002 dead in the KO_MMA stamp
+        var sb = 0u
+        while (sb < nb) {
+            barrier()
+            for [unroll_full] (j in range(XJ)) {
+                let slot = uint(j) * 32u * NSG + lid
+                let col = slot / 64u
+                let k4 = slot % 64u
+                tg_store_half4(xs, col * 264u + k4 * 4u, x[min(col, nrm1) * nb4 + sb * 64u + k4])
+            }
+            let blk = row * nb + sb
+            let sv = ks4[blk]
+            let dd = float(ksh[blk * 8u])
+            let dm = float(ksh[blk * 8u + 1u])
+            for [unroll_full] (m in range(2 * RT)) {
+                let tx = sub + lpr * uint(m)
+                let q4i = tx / 4u
+                let hp = (tx % 4u) / 2u
+                let lo = (tx % 2u) * 4u
+                let nib = (tx % 4u) < 2u
+                let nsh = nib ? 0u : 4u   // nolint:LINT002 dead in the KO_DEQ stamp
+                let jl = 2u * q4i + hp
+                let sy = (sv.y >> (8u * jl)) & 255u
+                let szv = (sv.z >> (8u * jl)) & 255u
+                let sw = (sv.w >> (8u * jl)) & 255u
+                for [unroll_full] (ch in range(2)) {
+                    let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
+                    let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+                    let dl = dd * float(sc)   // nolint:LINT002 dead in the KO_DEQ stamp
+                    let ml = dm * float(mn)   // nolint:LINT002 dead in the KO_DEQ stamp
+                    let qb = blk * 32u + (q4i + uint(ch) * 2u) * 8u + lo   // nolint:LINT002 dead in the KO_DEQ stamp
+                    let k0 = (q4i + uint(ch) * 2u) * 64u + (nib ? 0u : 32u) + lo * 4u   // nolint:LINT002 dead in the KO_DEQ stamp
+                    static_if (!KO_DEQ) {
+                        for [unroll_full] (u in range(4)) {
+                            let qv = kqu[qb + uint(u)]
+                            let w4 = float4(float((qv >> nsh) & 15u), float((qv >> (8u + nsh)) & 15u),
+                                float((qv >> (16u + nsh)) & 15u), float((qv >> (24u + nsh)) & 15u)) * dl - float4(ml)
+                            tg_store_half4(wt, wbase + k0 + uint(u) * 4u, w4)
+                        }
+                    }
+                }
+            }
+            barrier()
+            static_if (!KO_MMA) {
+                for (kt in range(32)) {
+                    simdgroup_load(ma, xs, uint(kt) * 8u, 264u)
+                    for [unroll_full] (rt in range(RT)) {
+                        simdgroup_load(mb, wt, sgb + uint(rt) * 8u * 264u + uint(kt) * 8u, 264u, true)
+                        simdgroup_multiply_accumulate(acc[rt], ma, mb, acc[rt])
+                    }
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (rt in range(RT)) {
+            simdgroup_store(acc[rt], yo, (sg * RTU + uint(rt)) * 64u, 8u)
+        }
+        barrier()
+        for [unroll_full] (i in range(2 * RT)) {
+            let e = lane * 2u * RTU + uint(i)   // this simdgroup's RT tiles, 64 outputs each
+            let tile = e / 64u
+            let c = (e % 64u) / 8u
+            let orow = rowbase + tile * 8u + e % 8u
+            if (c < ka.nr && orow < ka.ddim) {
+                y[c * ka.ys + orow] = yo[sg * RTU * 64u + e]
+            }
+        }
+    }
+}
+
+class MetalKqLabK4Mm8 : MetalKqLabK4Mm8T {
+    override RT = 1
+    override RTU = 1u
+    override NSG = 4u
+    override XJ = 4
+}
+
+// The prefill's Metal-4 tensor GEMM (in-kernel k4 dequant to a 64-row half stage, matmul2d on the
+// tensor units) stamped at verify widths: an 8- and a 16-row M tile instead of 32.
+class MetalKqLabTmm8 : MetalKqMulMmK45TensorT {
+    typedef XT = float
+    override MT = 8u
+}
+
+class MetalKqLabTmm16 : MetalKqMulMmK45TensorT {
+    typedef XT = float
+    override MT = 16u
+}
+
+class MetalKqLabK4Mm8x2 : MetalKqLabK4Mm8T {
+    override RT = 2
+    override RTU = 2u
+    override NSG = 2u
+    override XJ = 8
+}
+
+class MetalKqLabK4Mm8KoDeq : MetalKqLabK4Mm8T {
+    override KO_DEQ = true
+}
+
+class MetalKqLabK4Mm8KoMma : MetalKqLabK4Mm8T {
+    override KO_MMA = true
+}
+
+// The tensor-unit form with the GEMV-shaped dequant: this threadgroup's ROWS weight rows dequantize
+// a KK-wide k-span into a [ROWS][LDB] half stage (4 quants per load, half4 stores; LDB = 72 pads
+// the 64-wide chunk as the prefill's twin does), the x rows stream from device memory as the f32 A
+// operand, and one cooperative matmul2d per span does all 8 columns. Lands 8 x ROWS straight into
+// y (a lab stamp: no live-column guard yet). LPR lanes share a row (128 / ROWS).
+[ |> template_struct_instance]
+class template MetalKqLabK4Tmv8T {
+    @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
+    @ssbo @binding = 1 ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 3 x : array<float>     // the f32 panel, [row][ndim] - rows 0..7 are read
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+    @workgroup wt : float16[8192]           // [ROWS][LDB] dequantized weights of one k-span (at most 32 x 256)
+    @template_constant ROWS : uint = 32u    // weight rows per threadgroup (the tensor tile's n)
+    @template_constant LPR : uint = 4u      // lanes per weight row = 128 / ROWS
+    @template_constant TXN : int = 1        // tx values per lane per chunk = 4 / LPR
+    @template_constant KK : uint = 64u      // k-span per tensor step (64 = one chunk, 256 = the superblock)
+    @template_constant NCH : int = 1        // chunks per step = KK / 64
+    @template_constant NSTEP : int = 4      // steps per superblock = 256 / KK
+    @template_constant LDB : uint = 72u     // stage row stride: 72 for a 64-wide span, KK otherwise
+
+    [metal_kernel(float_a_ok=true)]
+    def lab_k4_tmv8 {
+        let sg = gl_SubgroupID
+        let lane = gl_SubgroupInvocationID
+        let rowbase = gl_WorkGroupID.x * ROWS
+        let r = sg * (ROWS / 4u) + lane / LPR
+        let sub = lane % LPR
+        let row = min(rowbase + r, ka.ddim - 1u)
+        let nb = ka.ndim / 256u
+        var acc : float[512]
+        tmm2d_tg_begin_deva(acc, unsafe(addr(x[0])), 8u, ROWS, 4u, KK)
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let sv = ks4[blk]
+            let dd = float(ksh[blk * 8u])
+            let dm = float(ksh[blk * 8u + 1u])
+            for [unroll_full] (st in range(NSTEP)) {
+                barrier()
+                for [unroll_full] (ci in range(NCH)) {
+                    let c = uint(st) * uint(NCH) + uint(ci)   // the 64-wide chunk of the superblock
+                    let q4i = c % 2u
+                    let ch = c / 2u
+                    for [unroll_full] (i in range(TXN)) {
+                        let tx = sub + LPR * uint(i) + 4u * q4i
+                        let hp = (tx % 4u) / 2u
+                        let lo = (tx % 2u) * 4u
+                        let nib = (tx % 4u) < 2u
+                        let nsh = nib ? 0u : 4u
+                        let jl = 2u * q4i + hp
+                        let sy = (sv.y >> (8u * jl)) & 255u
+                        let szv = (sv.z >> (8u * jl)) & 255u
+                        let sw = (sv.w >> (8u * jl)) & 255u
+                        let sc = ch == 0u ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
+                        let mn = ch == 0u ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+                        let dl = dd * float(sc)
+                        let ml = dm * float(mn)
+                        let qb = blk * 32u + c * 8u + lo
+                        let kk0 = uint(ci) * 64u + (nib ? 0u : 32u) + lo * 4u
+                        for [unroll_full] (u in range(4)) {
+                            let qv = kqu[qb + uint(u)]
+                            let w4 = float4(float((qv >> nsh) & 15u), float((qv >> (8u + nsh)) & 15u),
+                                float((qv >> (16u + nsh)) & 15u), float((qv >> (24u + nsh)) & 15u)) * dl - float4(ml)
+                            tg_store_half4(wt, r * LDB + kk0 + uint(u) * 4u, w4)
+                        }
+                    }
+                }
+                barrier()
+                tmm2d_tg_step_deva(acc, unsafe(addr(x[sb * 256u + uint(st) * KK])), ka.ndim, wt, 8u, ROWS, KK)
+            }
+            sb++
+        }
+        tmm2d_tg_store(acc, unsafe(addr(y[rowbase])), 8u, ROWS, ka.ys)
+    }
+}
+
+class MetalKqLabK4Tmv8 : MetalKqLabK4Tmv8T {
+}
+
+class MetalKqLabK4Tmv8K : MetalKqLabK4Tmv8T {
+    override KK = 256u
+    override NCH = 4
+    override NSTEP = 1
+    override LDB = 256u
+}
+
+class MetalKqLabK4Tmv8R : MetalKqLabK4Tmv8T {
+    override ROWS = 64u
+    override LPR = 2u
+    override TXN = 2
+}
+
 class MetalKqLabK4R2C2 {
     @ssbo @binding = 0 ksh : array<float16>
     @ssbo @binding = 1 ks4 : array<uint4>
@@ -4290,6 +4535,9 @@ struct private LabVariant {
     q8_blob : bool = false                  // b0/b1 = the 34B interleaved q8_0 blob, dual-viewed (MetalQ8Gemv)
     tgsz : int = 128                        // threads per threadgroup (kq arms ride 64)
     rtg : int = 4                           // output rows per threadgroup (grid.x = ceil(d/rtg))
+    tmm : bool = false                      // the tensor GEMM grid: one M tile along x, d/64 output tiles along y
+    approx : bool = false                   // the compare tolerates accumulation-order drift (tensor accumulators)
+    ko : bool = false                       // a knockout stamp: timed, never compared (its output is garbage by design)
 }
 
 // exact-arithmetic Q8 fill: quants in [-8, 7], pow2 scales (same contract as the gemm lab)
@@ -4722,13 +4970,14 @@ let KQA_D6 = 9
 let KQA_G6 = 10
 let KQA_MVARGS = 11
 let KQA_MVARGS4 = 12
+let KQA_MVARGS8 = 13
 
 def private make_bufs(v : LabVariant; var wbuf; var sbuf; var wbbuf; var xfbuf; var xtbuf; var xqbuf; var xsbuf; var ybuf; var ndimbuf; var ddimbuf; var bbuf; var partbuf; var skbuf; var kqarr) {
     if (v.q8_blob) {   // production q8 GEMV contract: the ONE 34B blob bound twice (half + byte view)
         return <- [wbbuf, wbbuf, xfbuf, ybuf, ndimbuf, ddimbuf]
     }
     if (v.kq_mvb) {    // production KqMv contract: plane views 0-2, x, y, KqMvArgs uniform at 5
-        var argsbuf = v.b_list[0] == 4 ? kqarr[KQA_MVARGS4] : kqarr[KQA_MVARGS]
+        var argsbuf = v.b_list[0] == 8 ? kqarr[KQA_MVARGS8] : (v.b_list[0] == 4 ? kqarr[KQA_MVARGS4] : kqarr[KQA_MVARGS])
         if (v.kq == 5) {
             return <- [kqarr[KQA_C5], kqarr[KQA_C5], kqarr[KQA_Q5], xfbuf, ybuf, argsbuf]
         }
@@ -4790,6 +5039,25 @@ def private count_mismatch_sampled(got : array<float>; ref_v : array<float>; d, 
     return bad
 }
 
+// the tolerant twin for arms whose summation order the kernel does not fix (the tensor op's)
+def private count_mismatch_tol(got : array<float>; ref_v : array<float>; d, nb_streams, refd : int64;
+                               var firstBad : int64&) : int64 {
+    var bad = 0l
+    firstBad = -1l
+    for (b in range64(nb_streams)) {
+        for (j in range64(refd)) {
+            let r = ref_v[b * refd + j]
+            if (abs(got[b * d + j] - r) > 1.0e-3 * max(abs(r), 1.0)) {
+                if (firstBad < 0l) {
+                    firstBad = b * d + j
+                }
+                bad++
+            }
+        }
+    }
+    return bad
+}
+
 def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the lab A/B ladder: per-variant compile/dispatch/measure arms are one flow
     let rounds = g_env_bench.lab_rounds
     let refd = 128l
@@ -4824,7 +5092,8 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
                    ("qkv12b", 3840l, 8192l), ("wogl12b", 8192l, 3840l), ("w13_12b", 3840l, 15360l),
                    ("w2_12b", 15360l, 3840l),
                    ("qkv8b", 4096l, 6144l), ("wo8b", 4096l, 4096l), ("w13_8b", 4096l, 12288l),
-                   ("w2_8b", 12288l, 4096l), ("cls8b", 4096l, 151936l)]
+                   ("w2_8b", 12288l, 4096l), ("cls8b", 4096l, 151936l),
+                   ("q27b", 5120l, 5120l), ("w13_27b", 5120l, 17408l), ("w2_27b", 17408l, 5120l)]
     for (sh in shapes) {
         if (!want(g_env_bench.lab_shapes, sh._0)) {
             continue
@@ -4924,7 +5193,8 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         var kg6buf = anyk6 ? upload_array(dev, k6g_h, nsball * 210l) : null
         var kqmvargs = anymvb ? upload_kqmv_args(dev, uint(n), uint(d), 2u) : null
         var kqmvargs4 = anymvb ? upload_kqmv_args(dev, uint(n), uint(d), 4u) : null
-        var kqarr <- [kq4buf, ks4buf, kg4buf, kc4buf, kq5buf, kc5buf, kg5buf, kq6buf, ksc6buf, kd6buf, kg6buf, kqmvargs, kqmvargs4]
+        var kqmvargs8 = anymvb ? upload_kqmv_args(dev, uint(n), uint(d), 8u) : null
+        var kqarr <- [kq4buf, ks4buf, kg4buf, kc4buf, kq5buf, kc5buf, kg5buf, kq6buf, ksc6buf, kd6buf, kg6buf, kqmvargs, kqmvargs4, kqmvargs8]
         var xfbuf = upload_array(dev, xf, xrows * n * 4l)
         var xtbuf = upload_array(dev, xft, n * bmax * 4l)
         var xqbuf = upload_array(dev, xq, xrows * n)
@@ -4974,7 +5244,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
                     delete rbufs
                 }
             } else {
-                let vgroups = uint3(uint((d + int64(variants[vi].rtg) - 1l) / int64(variants[vi].rtg)), 1u, 1u)
+                let vgroups = variants[vi].tmm ? uint3(1u, uint(d / 64l), 1u) : uint3(uint((d + int64(variants[vi].rtg) - 1l) / int64(variants[vi].rtg)), 1u, 1u)
                 ms = time_reps(queue, psos[vi], bufs, variants[vi].gemm64_fx ? groups_gemm64 : ((variants[vi].gemm || variants[vi].gemm_fx) ? groups_gemm : vgroups), 1, variants[vi].tgmem, variants[vi].tgsz)
             }
             bufs |> clear()   // borrowed handles — delete of array<T?> would free the pointees
@@ -4986,10 +5256,17 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
                 continue
             }
             est = ms
+            if (variants[vi].ko) {
+                to_log(LOG_INFO, "{variants[vi].name}/B{nbatch} {sh._0}: timing-only knockout (output unchecked)\n")
+                alv = true
+                continue
+            }
             download_floats(ybuf, ygot, int64(nbatch) * d)
             var firstBad = -1l
             var bad = 0l
-            if (variants[vi].kq == 4) {
+            if (variants[vi].approx) {
+                bad = count_mismatch_tol(ygot, yref_k4, d, int64(nbatch), refd, firstBad)
+            } elif (variants[vi].kq == 4) {
                 bad = count_mismatch_sampled(ygot, yref_k4, d, int64(nbatch), refd, firstBad)
             } elif (variants[vi].kq == 5) {
                 bad = count_mismatch_sampled(ygot, yref_k5, d, int64(nbatch), refd, firstBad)
@@ -4998,7 +5275,8 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
             } else {
                 bad = count_mismatch_sampled(ygot, yref, d, int64(nbatch), refd, firstBad)
             }
-            b |> success(bad == 0l, "{variants[vi].name}/B{nbatch} {sh._0}: bit-exact vs CPU reference")
+            let compare = variants[vi].approx ? "within 1e-3 of max(|ref|, 1) vs CPU reference (accumulation order not fixed)" : "bit-exact vs CPU reference"
+            b |> success(bad == 0l, "{variants[vi].name}/B{nbatch} {sh._0}: {compare}")
             if (bad != 0l) {
                 to_log(LOG_ERROR, "{variants[vi].name}/B{nbatch} {sh._0}: {bad} mismatches, first at {firstBad}: got {ygot[firstBad]}\n")
             } else {
@@ -5023,7 +5301,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
                         delete rbufs
                     }
                 } else {
-                    let vgroups = uint3(uint((d + int64(variants[vi].rtg) - 1l) / int64(variants[vi].rtg)), 1u, 1u)
+                    let vgroups = variants[vi].tmm ? uint3(1u, uint(d / 64l), 1u) : uint3(uint((d + int64(variants[vi].rtg) - 1l) / int64(variants[vi].rtg)), 1u, 1u)
                     ms = time_reps(queue, psos[vi], bufs, variants[vi].gemm64_fx ? groups_gemm64 : ((variants[vi].gemm || variants[vi].gemm_fx) ? groups_gemm : vgroups), reps, variants[vi].tgmem, variants[vi].tgsz)
                 }
                 if (ms > 0.0lf && ms < bst) {
@@ -5068,6 +5346,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         if (anymvb) {
             metal_release(kqmvargs)
             metal_release(kqmvargs4)
+            metal_release(kqmvargs8)
         }
         if (anyblob) {
             metal_release(wbbuf)
@@ -5301,7 +5580,27 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
             LabVariant(name = "kq_mvb4_k6", src = MetalKqMvB4K6_metal_kq_mv_k6_msl, entry = MetalKqMvB4K6_metal_kq_mv_k6_msl_entry,
                        b_list <- [4], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
             LabVariant(name = "kq_mvb4h_k6", src = lab_kq_mvb4h_k6_msl, entry = lab_kq_mvb4h_k6_msl_entry,
-                       b_list <- [4], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8)
+                       b_list <- [4], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb8_k4", src = MetalKqMvB8K4_metal_kq_mvb8_msl, entry = MetalKqMvB8K4_metal_kq_mvb8_msl_entry,
+                       b_list <- [8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8, tgmem = MetalKqMvB8K4_metal_kq_mvb8_msl_tgmem),
+            LabVariant(name = "k4_mm8", src = MetalKqLabK4Mm8_lab_k4_mm8_msl, entry = MetalKqLabK4Mm8_lab_k4_mm8_msl_entry,
+                       b_list <- [8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, tgmem = MetalKqLabK4Mm8_lab_k4_mm8_msl_tgmem),
+            LabVariant(name = "k4_mm8x2", src = MetalKqLabK4Mm8x2_lab_k4_mm8_msl, entry = MetalKqLabK4Mm8x2_lab_k4_mm8_msl_entry,
+                       b_list <- [8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 32, tgmem = MetalKqLabK4Mm8x2_lab_k4_mm8_msl_tgmem),
+            LabVariant(name = "k4_tmm8", src = MetalKqLabTmm8_metal_kq_mulmm_t_msl, entry = MetalKqLabTmm8_metal_kq_mulmm_t_msl_entry,
+                       b_list <- [8], kq = 4, kq16 = true, tgsz = 128, tmm = true, approx = true, tgmem = MetalKqLabTmm8_metal_kq_mulmm_t_msl_tgmem),
+            LabVariant(name = "k4_tmm16", src = MetalKqLabTmm16_metal_kq_mulmm_t_msl, entry = MetalKqLabTmm16_metal_kq_mulmm_t_msl_entry,
+                       b_list <- [16], kq = 4, kq16 = true, tgsz = 128, tmm = true, approx = true, tgmem = MetalKqLabTmm16_metal_kq_mulmm_t_msl_tgmem),
+            LabVariant(name = "k4_mm8kodeq", src = MetalKqLabK4Mm8KoDeq_lab_k4_mm8_msl, entry = MetalKqLabK4Mm8KoDeq_lab_k4_mm8_msl_entry,
+                       b_list <- [8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, ko = true, tgmem = MetalKqLabK4Mm8KoDeq_lab_k4_mm8_msl_tgmem),
+            LabVariant(name = "k4_mm8komma", src = MetalKqLabK4Mm8KoMma_lab_k4_mm8_msl, entry = MetalKqLabK4Mm8KoMma_lab_k4_mm8_msl_entry,
+                       b_list <- [8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, ko = true, tgmem = MetalKqLabK4Mm8KoMma_lab_k4_mm8_msl_tgmem),
+            LabVariant(name = "k4_tmv8", src = MetalKqLabK4Tmv8_lab_k4_tmv8_msl, entry = MetalKqLabK4Tmv8_lab_k4_tmv8_msl_entry,
+                       b_list <- [2, 4, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, approx = true, tgmem = MetalKqLabK4Tmv8_lab_k4_tmv8_msl_tgmem),
+            LabVariant(name = "k4_tmv8k", src = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl, entry = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl_entry,
+                       b_list <- [2, 4, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 32, approx = true, tgmem = MetalKqLabK4Tmv8K_lab_k4_tmv8_msl_tgmem),
+            LabVariant(name = "k4_tmv8r", src = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl, entry = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl_entry,
+                       b_list <- [2, 4, 8], kq = 4, kq16 = true, kq_mvb = true, tgsz = 128, rtg = 64, approx = true, tgmem = MetalKqLabK4Tmv8R_lab_k4_tmv8_msl_tgmem)
         ]
         run_lab(b, variants)
         delete variants

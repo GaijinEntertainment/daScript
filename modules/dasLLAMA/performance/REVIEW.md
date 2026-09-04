@@ -1,7 +1,8 @@
 # dasLLAMA performance Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`.
+docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_ENGINE.md`, `../ARCHITECTURE_MEASUREMENT.md`. Planned
+work: `../followup_general.md`.
 
 **Never add a second validator for exchange submissions (record stores and tune sidecars) -
 validate through `../dasllama/dasllama_exchange_schema.das` instead.** The engine-free half (no
@@ -41,19 +42,24 @@ checkout the record's provenance spells, the python legs by
 folder whose `provenance.dasllama_version` differs from, or is absent where, the
 `DASLLAMA_RELEASE` string (`../dasllama/dasllama_version.das`) is a defect - re-mint.** For a
 sidecar with an `engine_sha`, read the value at that commit; a `defaults/` profile compares
-against the branch under review. A ruler record pins its engines through `meta.das_sha` and
-`meta.lcpp_version` instead.
+against the branch under review. A ruler record pins its engines through `meta.das_sha`, and
+through `meta.lcpp_version` when a reference arm ran (`-` when none did).
 
 **A diff that writes a row to `records/<box>.json` mints that row from a board cell.** A board
 cell is one `gen_bench_records.das` spawns, or a manual `../benchmarks/lcpp_bench.das` cell
 its `../PROFILE.md` section documents. A timing taken any other way stays out of `records/`
-and settles its own decision in the report where it was taken - with one licensed family:
+and settles its own decision in the report where it was taken.
 
-**A file under `records/mtp/` is a ruler record, written only by `../harness/mtp_ruler.das` -
-both engines in one run, our released exe first, the reference server second, every arm
-settled - and never by hand; a diff that writes one names the ruler run.** The ruler record is
-the speculative round's cell (`../ARCHITECTURE_MEASUREMENT.md` sec.2.28); its shape is the
-ruler's, and the board walkers (`list_record_stores`) do not read it.
+**A file under `records/mtp/` is written only by `../harness/mtp_ruler.das`, never by hand; a
+diff that adds one names the ruler command line in the PR body.** The ruler record is the
+speculative round's cell (`../ARCHITECTURE_MEASUREMENT.md` sec.2.28); its shape is the ruler's,
+and the board walkers (`list_record_stores`) do not read it.
+
+**A `records/mtp/` file that carries a reference-engine row with no our-engine row from the same
+run is a defect - re-mint the pair.** A file with our-engine rows alone conforms.
+
+**A `records/mtp/` file whose `meta.settle` is below the ruler's default names the reason in the
+PR body, and a diff that adds one names its rows `direction-grade` wherever it cites them.**
 
 **A diff that writes a `das` row to `records/<box>.json` times that row with the released
 `lcpp_bench` exe.** That exe is `../benchmarks/lcpp_bench.das` built by `daspkg release`.

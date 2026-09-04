@@ -3,24 +3,28 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `PERF_LEDGER.md`.
 
-Figure rules here bind the surfaces this module owns - its ledgers, its code comments, the PR
-body of a diff under it, and a checked-in doc anywhere in the repo whose subject is this
-module (a file under `plans/` at the repo root included). A number on a served
-page answers to `site/REVIEW.md` or `site-dasllama/REVIEW.md` (repo root) instead.
+Figure rules here bind the surfaces this module owns - its code comments, the PR body of a diff
+under it, and a checked-in doc under this module. A number on a served page answers to
+`site/REVIEW.md` or `site-dasllama/REVIEW.md` (repo root) instead.
 
-**A self-measured served-turn time entering `PERF_LEDGER.md` comes from the released
-`lcpp_bench` exe, never from the `-jit` script.** A served turn is one whole prefill-plus-decode
-run; a served-turn time is its tok/s figure or turn wall. The released exe is
-`benchmarks/lcpp_bench.das` built by `daspkg release`. A `--for-debug-purposes` row is the
-`-jit` script's own output, so it is never that time.
+**A `PERF_LEDGER.md` entry never states a tok/s figure or a turn wall that the `-jit` script
+produced - a `-jit` A/B pair enters as its ratio, with the arms' absolute rates left in the
+run's report.** A served turn is one whole prefill-plus-decode run; a turn wall is its wall.
+The served-turn figures the ledger does state come from the released `lcpp_bench` exe
+(`benchmarks/lcpp_bench.das` built by `daspkg release`) or a board cell.
 
-**A subtraction of two measured walls written into `PERF_LEDGER.md` carries both raw walls
-in the entry.**
+**A difference, ratio, or percentage of two measured walls, neither produced by the `-jit`
+script, written into `PERF_LEDGER.md` carries both raw walls in the entry.**
+
+**A `-jit` ratio written into `PERF_LEDGER.md` names the arm it is measured against.**
 
 **A diff that adds a `PERF_LEDGER.md` entry whose reading no board cell produced names the
 instrument that produced it - the script or exe whose output is that wall or rate.** A board
-cell is one `performance/gen_bench_records.das` spawns, or a manual `benchmarks/lcpp_bench.das`
-cell its `PROFILE.md` section documents.
+cell is a run `performance/gen_bench_records.das` spawns, or a manual `benchmarks/lcpp_bench.das`
+cell its `PROFILE.md` section documents; its reading lands as a row of
+`performance/records/<box>.json`. A ruler record (`performance/records/mtp/*.json`, written by
+`harness/mtp_ruler.das`) is not a board cell: a diff cannot mint or re-mint one in place of a
+board row.
 
 **A `PERF_LEDGER.md` entry tags its reading `direction-grade` when the reading compares across
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
@@ -37,15 +41,16 @@ that picks a winner between candidate kernel forms.** That timing settles its ad
 decision in the report of the run that took it and in the PR that lands the kernel. The
 winner enters the ledger only through a re-measured board cell.
 
-**A new servable capability gets its board cell in the same change.** A servable capability is
-a serving path no existing board cell exercises: a weight format, a modality, a family, or a
-backend - a q8 or f32 serving lane and a GPU tower (a GPU-run vision or audio encoder)
-included - or the path a run with no flags and no environment overrides takes. A kernel or
-form that only speeds up a path an existing cell already exercises is not one.
+**A diff that makes the engine serve tokens by a route no board cell exercises mints that cell
+in the same change.** A route is what a request takes end to end: a weight format, a modality,
+a family, a backend, a serving lane (q8 or f32), a GPU tower (a GPU-run vision or audio
+encoder), a sampler class (greedy, sampled) through the speculative round (a decode step that
+drafts several tokens and verifies them in one pass), or the path a run with no flags and no
+environment overrides takes.
 
 **A diff that claims to make an already-served path faster, from an author whose box mints
-that path, re-mints a board row (`performance/records/`) that exercises that path, in the
-same change, and names that row in the PR body.** A box mints a path when
+that path, re-mints a board row (`performance/records/<box>.json`) that exercises that path, in
+the same change, and names that row in the PR body.** A box mints a path when
 `performance/gen_bench_records.das` mints a row for it on that box rather than refusing or
 skipping it. Where no row exercises the path, the diff mints one. The board is the module's
 public memory of what serving costs; a kernel win that never lands there is invisible to the
@@ -62,10 +67,10 @@ quant mode and stamps box and engine provenance, so a number can never silently 
 format nobody serves or a kernel set nobody ships. A figure labeled as a prediction is not a
 reading, and this rule does not reach it.
 
-**A figure measuring one engine stage inside a served turn, or any other measured margin -
-a kernel-form delta, a gate knee (the input size at which a gate flips) - names the harness
-and flags that produced it.** A figure measuring one engine stage is a stage wall, a stage
-share, a stage speedup, or a cross-engine comparison of one stage. A figure a committed board
-cell produced - any metric of the row - names the record and row instead of the harness and
-flags. The naming sits in the figure's own sentence, in a table heading that covers the
-table's rows, or in a section-level provenance line that covers the paragraphs under it.
+**A measured figure that is not a whole served-turn reading - a stage wall or share, a
+kernel-form delta, an acceptance rate, a tokens-per-round count, a gate knee (the input size at
+which a gate flips) - names the harness and flags that produced it.** A figure a committed
+board cell or ruler record produced names the record and row instead of the harness and flags. The naming
+sits in the figure's own sentence, in a table heading that covers the table's rows, in a
+section-level provenance line that covers the paragraphs under it, or in a citation of the
+`PERF_LEDGER.md` entry whose provenance line covers it.

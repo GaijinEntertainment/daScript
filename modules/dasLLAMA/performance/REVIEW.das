@@ -151,6 +151,15 @@ def private check_defaults_profiles {
     }
 }
 
+// the ruler records live one level down, where the corpus walk above does not reach
+def private check_ruler_records {
+    let mtp_dir = "{RECORDS_DIR}/mtp"
+    dir(mtp_dir) $(name) {
+        return if (!(name |> ends_with(".json")))
+        gate_home_paths("{mtp_dir}/{name}")
+    }
+}
+
 def private check_records_corpus {
     dir(RECORDS_DIR) $(name) {
         return if (!(name |> ends_with(".json")) || name == "annotations.json")
@@ -206,5 +215,6 @@ def main() : int {
     check_schema_engine_free()
     check_single_exchange_client()
     check_records_corpus()
+    check_ruler_records()
     return gate_verdict("dasllama-performance")
 }

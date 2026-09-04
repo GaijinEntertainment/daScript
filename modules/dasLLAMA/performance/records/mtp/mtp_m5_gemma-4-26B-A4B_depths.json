@@ -1,0 +1,222 @@
+{
+	"meta" : {
+		"model_sha" : "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f\t0x3f226f6e0\t2026-07-20T19:30:57",
+		"head" : "mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+		"depths" : "1,2,3,4",
+		"date" : "2026-09-03 12:42",
+		"cpu" : "Apple M5 Max",
+		"ngl" : 99,
+		"model" : "gemma-4-26B-A4B-it-Q4_K_M.gguf",
+		"lcpp_server" : "",
+		"das_exe" : "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench",
+		"lcpp_version" : "-",
+		"corpus" : "modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt",
+		"threads" : 6,
+		"das_sha" : "048e00d07",
+		"ngen" : 128,
+		"head_sha" : "ea4f772ffb70e02127c5f142f9ed9af97add7ca0f2bcc7b277244a9771b436bd",
+		"reps" : 3
+	},
+	"rows" : [
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 0,
+			"off_tps" : 118.1,
+			"on_tps" : 129.6,
+			"drafted" : 225,
+			"accepted" : 156
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 1,
+			"off_tps" : 104.2,
+			"on_tps" : 115.4,
+			"drafted" : 225,
+			"accepted" : 156
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 2,
+			"off_tps" : 114.5,
+			"on_tps" : 147.9,
+			"drafted" : 201,
+			"accepted" : 180
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : 3,
+			"off_tps" : 112.8,
+			"on_tps" : 132.9,
+			"drafted" : 219,
+			"accepted" : 162
+		},
+		{
+			"engine" : "das",
+			"depth" : 1,
+			"prompt" : -1,
+			"off_tps" : 112.18,
+			"on_tps" : 130.41,
+			"note" : "mtp: 654/870 drafts accepted (75.2%) at depth 1; per-position accept: p1 75.2% (654/870)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 0,
+			"off_tps" : 124.1,
+			"on_tps" : 137.6,
+			"drafted" : 378,
+			"accepted" : 192
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 1,
+			"off_tps" : 117.9,
+			"on_tps" : 125.4,
+			"drafted" : 366,
+			"accepted" : 201
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 2,
+			"off_tps" : 123.7,
+			"on_tps" : 181.3,
+			"drafted" : 276,
+			"accepted" : 243
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : 3,
+			"off_tps" : 124.6,
+			"on_tps" : 152.5,
+			"drafted" : 336,
+			"accepted" : 213
+		},
+		{
+			"engine" : "das",
+			"depth" : 2,
+			"prompt" : -1,
+			"off_tps" : 122.52,
+			"on_tps" : 146.49,
+			"note" : "mtp: 849/1356 drafts accepted (62.6%) at depth 2; per-position accept: p1 73.9% (501/678) p2 51.3% (348/678)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 3,
+			"prompt" : 0,
+			"off_tps" : 124,
+			"on_tps" : 133.6,
+			"drafted" : 495,
+			"accepted" : 216
+		},
+		{
+			"engine" : "das",
+			"depth" : 3,
+			"prompt" : 1,
+			"off_tps" : 117.8,
+			"on_tps" : 115.8,
+			"drafted" : 504,
+			"accepted" : 216
+		},
+		{
+			"engine" : "das",
+			"depth" : 3,
+			"prompt" : 2,
+			"off_tps" : 123.6,
+			"on_tps" : 184.9,
+			"drafted" : 360,
+			"accepted" : 267
+		},
+		{
+			"engine" : "das",
+			"depth" : 3,
+			"prompt" : 3,
+			"off_tps" : 124.5,
+			"on_tps" : 139,
+			"drafted" : 477,
+			"accepted" : 228
+		},
+		{
+			"engine" : "das",
+			"depth" : 3,
+			"prompt" : -1,
+			"off_tps" : 122.42,
+			"on_tps" : 139.46,
+			"note" : "mtp: 927/1836 drafts accepted (50.5%) at depth 3; per-position accept: p1 69.1% (423/612) p2 47.1% (288/612) p3 35.3% (216/612)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 4,
+			"prompt" : 0,
+			"off_tps" : 123.9,
+			"on_tps" : 102.2,
+			"drafted" : 624,
+			"accepted" : 225
+		},
+		{
+			"engine" : "das",
+			"depth" : 4,
+			"prompt" : 1,
+			"off_tps" : 117.8,
+			"on_tps" : 97.8,
+			"drafted" : 600,
+			"accepted" : 234
+		},
+		{
+			"engine" : "das",
+			"depth" : 4,
+			"prompt" : 2,
+			"off_tps" : 119.8,
+			"on_tps" : 153.3,
+			"drafted" : 432,
+			"accepted" : 282
+		},
+		{
+			"engine" : "das",
+			"depth" : 4,
+			"prompt" : 3,
+			"off_tps" : 124.5,
+			"on_tps" : 108.5,
+			"drafted" : 588,
+			"accepted" : 240
+		},
+		{
+			"engine" : "das",
+			"depth" : 4,
+			"prompt" : -1,
+			"off_tps" : 121.45,
+			"on_tps" : 112.07,
+			"note" : "mtp: 981/2244 drafts accepted (43.7%) at depth 4; per-position accept: p1 71.7% (402/561) p2 47.6% (267/561) p3 33.2% (186/561) p4 22.5% (126/561)"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 0,
+			"text" : "# Aloha State of Mind: Finding the Soul of Hawaii Beyond the Beach\n\nThey say you don’t just vi"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 1,
+			"text" : "During a campaign stop in Norwalk, Iowa, Hillary Clinton’s security detail utilized two nearly"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 2,
+			"text" : "To find out how much the travel costs, follow these steps:\n\n1.  **Identify the cost of supplies:"
+		},
+		{
+			"engine" : "das",
+			"depth" : 0,
+			"prompt" : 3,
+			"text" : "There was no character named **Anna** in the television series *Once Upon a Time*.\n\nIt is possib"
+		}
+	]
+}

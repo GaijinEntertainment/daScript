@@ -1243,6 +1243,58 @@ commits: direction-grade.
   the step is nearly all weight streaming, so pairs add linearly out to the eighth row. The M5 Max has no
   three-row cliff: 1 / 2 / 3 / 4 / 5 / 8 rows = 20.8 / 17.3 / 24.7 / 24.6 / 42.1 / 42.7 ms = 1.00 /
   0.83 / 1.19 / 1.19 / 2.03 / 2.06x - the walk stays off there by the crown. Direction-grade.
+- **Depth ladder 1..4 on the M5 Max, both carriers (2026-09-03, ruler ours-only, settle 45 s -
+  the off arms drift 27.3 -> 26.0 across the four Qwen arms, so the speeds are direction-grade;
+  the acceptance counts are exact; records `mtp_m5_Qwen3.8-27B_depths.json` and
+  `mtp_m5_gemma-4-26B-A4B_depths.json`):** Qwen3.8-27B + Q8_0 head: depth 1 27.3 -> 33.6
+  (1.23x), depth 2 26.7 -> 31.6 (1.18x), depth 3 26.3 -> 34.4 (1.31x), depth 4 26.0 -> 19.7
+  (0.76x); per-position acceptance at depth 4: p1 81.3 p2 64.3 p3 34.5 p4 22.4% of rounds (depth 3:
+  86.4 / 69.3 / 35.2). gemma-26B + the assistant drafter: depth 1 112.2 -> 130.4 (1.16x), depth 2
+  122.5 -> 146.5 (1.20x), depth 3 122.4 -> 139.5 (1.14x), depth 4 121.5 -> 112.1 (0.92x); at depth
+  4: p1 71.7 p2 47.6 p3 33.2 p4 22.5%. Tokens per round 1.77 / 2.50 / 2.90 / 3.02 (Qwen) and 1.75 /
+  2.25 / 2.52 / 2.75 (gemma): the fourth draft adds a tenth to a quarter of a token. The implied
+  round cost in steps (tokens per round over the speedup) is 1.44 / 2.12 / 2.21 / 3.97 on Qwen
+  and 1.51 / 1.88 / 2.21 / 2.99 on gemma. Depth 3 is the best Qwen point on this box today.
+  Direction-grade.
+- **The sampled walk (sample-and-match, #101; `lcpp_bench --mtp-ab --mtp-temp`, `-jit` debug rail,
+  M5, depth 1, `-n 128 -r 1`, SpecBench-4 chat, both arms seeded alike; a `-jit` A/B enters as
+  its ratio, the arms' absolute rates stay in the run's report):** gemma-26B + the assistant
+  drafter at temp 0.8: on / off 1.26x, acceptance 74.7% - the greedy rate; the sampled off arm
+  sits 6% under the greedy off arm (the 262k-vocab CPU sample per token, ~0.5 ms). Per prompt 1.26
+  / 1.25 / 1.31 / 1.22x at 71.6 / 77.8 / 81.4 / 68.4%. At temp 2.0 the same pair accepts 29.9%
+  (42.7 / 15.5 / 71.6 / 7.6% per prompt) and the round LOSES: 0.93x, the two cold prompts 0.81x and
+  0.78x - the round's cost is paid whether the draws match or not (#103). An instruct model's chat
+  distributions are peaked, so at serving temperatures the draw matches the draft about as often
+  as the argmax did. Qwen3.8-27B + the Q8_0 NextN head at temp 0.8: 1.28x, acceptance 70.2% (greedy
+  77%); per prompt 1.26 / 1.30 / 1.40 / 1.17x at 58.0 / 71.6 / 89.6 / 64.9%. Direction-grade. Board
+  rows owed for both paths (`REVIEW_MEASUREMENT.md`'s re-mint duty): no `records/<box>.json` cell
+  runs a sampled decode or a CPU MTP round yet, so the sampled-decode and CPU-round cells are
+  minted with the arc's records-grade re-measure.
+- **Where the CPU round's time goes (Qwen3.8-27B-Q4_K_M + the Q8_0 head, M5 Max CPU rails
+  `--ngl 0`, `lcpp_bench --mtp-ab --prof` `-jit` debug rail, `-n 64 -r 1`, SpecBench-4 chat; the
+  `mtp.draft` / `mtp.snapshot` / `mtp.verify` / `mtp.walk` / `mtp.replay` sections; plain step
+  89 ms; a `-jit` A/B enters as its ratio):** on / off 0.78x at 82.3% acceptance, 1.82 tokens per
+  round. Per round in steps: the two-row verify 1.79, the recurrent-state snapshot 0.25 (151 MB
+  through a scalar copy loop, 22.7 ms), the reject re-forward 0.24 (a restore plus one plain step
+  on 18% of the rounds), the draft 0.09 - 2.37 steps for 1.82 tokens. The verify's `mm_gemm` is
+  1.75x a step's GEMVs because the kq batch tile is four-token granular and its token tail runs
+  one GEMV pass per row: two rows stream and dequantize the weights twice; the padded-tile arm
+  that was timed against it and refuted is followup #104's, with its numbers. LANDED: the
+  snapshot as lane-parallel memcpy, 22.7 -> 1.0 ms per round, the round 2.37 -> 2.13 steps
+  (0.78x -> 0.89x); verify and replay unchanged. The reject re-forward is the other lever (#105);
+  with a two-token tile the round is predicted at ~1.5 steps, 1.2x. Direction-grade.
+- **Where the NextN round's time goes (`lcpp_bench --prof`, `-jit` debug rail, Qwen3.8-27B on the
+  M5, prompt 0 of the corpus, 128 tokens, plain step 37 ms):** depth 1, 75 rounds: draft 3.1 ms
+  per draft (0.08 step), the two-row verify 45.7 ms (1.24x a step), walk 0.3, replay 0.5; depth 3,
+  54 rounds: draft 3.0 ms per draft (9 ms per round), the four-row verify 66 ms (1.79x a step),
+  walk 0.6, replay 1.3. The verify is 85-92% of the round; the draft chain is 6-11%. The round's
+  four-row verify costs 13% more than the batch driver's four-row same-slab step (1.59x) - the
+  head layer, the serial encoder and the host prep. **The gemma round the same way (gemma-26B +
+  the assistant drafter, prompt 0, plain step 8.1 ms):** depth 1, 75 rounds: the fused draft chain
+  0.03 ms per draft, the two-row verify 11.4 ms (1.41x a step), walk 0.01; depth 2, 63 rounds:
+  the three-row verify 13.9 ms (1.72x). The verify is 99% of the gemma round - the routed experts
+  re-streamed per row plus the batch step's own overhead (the batch driver's same-slab two-row step
+  reads 10.4 ms against this 8.1 ms greedy step). Direction-grade.
 - **A code prompt, gemma on the M5 (c3239b46c, `benchmarks/data/code1_prompts.txt`):** ours off
   123.4 -> depth 1 159.0 (1.29x, 85.5%) -> depth 2 174.0 (1.41x; p1 86.0 p2 68.0); llama.cpp off
   99.7 -> n_max 1 140.0 (84.1%) -> n_max 2 153.7. Acceptance is a property of the text: code

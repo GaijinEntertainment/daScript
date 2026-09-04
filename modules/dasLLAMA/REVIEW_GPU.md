@@ -36,10 +36,10 @@ select on the constant. The instance stamped without the guard shows no guard in
 `*_msl` global.
 
 **A `[metal_dispatch]` kernel whose main loop steps one fixed-size chunk at a time and never
-checks for a partial last chunk declares each alignment it assumes as one `<lhs> % N` item in
-`requires =`, comma-separated, `lhs` a `params=` name or a kargs (kernel-argument struct)
-field.** The generated builder then trips on the first misaligned dispatch instead of reading
-the next row.
+checks for a partial last chunk declares each alignment it assumes on a value the builder
+receives - a `params=` name or a kargs (kernel-argument struct) field - as one `<lhs> % N` item
+in `requires =`, comma-separated.** The generated builder then trips on the first misaligned
+dispatch instead of reading the next row.
 
 **A driver that keeps misaligned shapes off a kernel whose main loop steps one fixed-size chunk
 and never checks for a partial last chunk gates every dispatch site of that kernel on that
@@ -61,9 +61,10 @@ the section already covers as a property needs no new line.
 stream it from device instead.** A dequant, a transpose, or a layout or element-type change
 makes the forms differ. A staged pass-through costs the op more than the reads it saves.
 
-**Never fill a `@workgroup` tile with a per-element loop whose addressing needs a div or mod
-per element - give each work item a consecutive run of elements instead.** A lane-coalesced
-stride (`i += 32`) and a device-to-device copy loop are already coalesced and conform.
+**Never fill a `@workgroup` tile with a loop whose per-element address needs a div or mod of
+anything but the lane's own slot index (the index that steps by one from lane to lane); give
+each lane a consecutive run of elements, or a lane-coalesced stride (`i += 32`), instead.** A
+device-to-device copy loop is already coalesced and conforms.
 
 **Never decide a kernel row's validity or owner by scanning the per-bucket base and count
 arrays - read the one per-row entry instead.** The bucket-building kernel writes that per-row
@@ -185,12 +186,12 @@ builder instead.** Binding it separately adds a second place to get it wrong.
 **Never key a cache on a host address alone - carry the span and the form, the element type and
 layout the upload produces, in the key too.** A hit must cover the request.
 
-**A diff that lands a kernel class, driver arm, or backend capability in a file whose
-`ARCHITECTURE_GPU.md` sec.1.5 role row does not sanction it extends that row's ledger in the
-same change - or moves the code to the file whose row does.**
+**A diff that lands a kernel class, driver arm, or backend capability in a `dasllama/` file
+whose `ARCHITECTURE_GPU.md` sec.1.5 role row does not sanction it extends that row's ledger in
+the same change - or moves the code to the file whose row does.**
 
-**A module that creates its own GPU device or queue is a defect - a GPU family shares the one
-device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
+**A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
+the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
 
 **Never compile or release a Metal PSO (pipeline state object) from an engine file
 (`dasllama/`) other than the one that owns its kernel class** - it goes through that file's

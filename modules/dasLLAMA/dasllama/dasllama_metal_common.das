@@ -476,6 +476,11 @@ def public set_metal_decode_speculate(v : int) {
     g_spec_backoff = 1
 }
 
+//! The chaining rail's current mode (-1 adaptive, 0 off, 1 forced) - a test captures it to restore.
+def public metal_decode_spec_mode() : int {
+    return g_spec_mode
+}
+
 //! (speculative steps verified correct, mispredicted-and-rerun) since load.
 def public metal_decode_spec_stats() : tuple<hits : int64; misses : int64> {
     return (hits = g_spec_hits, misses = g_spec_misses)
@@ -495,11 +500,28 @@ def spec_armed() : bool {
     return true
 }
 
+// the stages the single-row and batch decode drivers honor as a knockout (g_skip != "<stage>")
+let DECODE_SKIP_STAGES <- ["gemv", "attn", "ew", "moe_rt", "moe_sh", "qkv", "wo"]
+
+def decode_skip_known(v : string) : bool {
+    for (s in DECODE_SKIP_STAGES) {
+        if (s == v) {
+            return true
+        }
+    }
+    return false
+}
+
 //! The knockout rail as an in-process setter (timing attribution — served output is GARBAGE while
-//! non-empty): `"gemv"` | `"attn"` | `"ew"`; `""` restores full math. Same rail as
-//! `DASLLAMA_METAL_DECODE_SKIP`, switchable between measurement windows.
+//! non-empty; `""` restores full math). Same rail as `DASLLAMA_METAL_DECODE_SKIP`.
 def public set_metal_decode_skip(v : string) {
+    if (!empty(v) && !decode_skip_known(v)) {
+        panic("dasLLAMA: unknown metal decode knockout '{v}' - the drivers read gemv, attn, ew, moe_rt, moe_sh, qkv, wo")
+    }
     g_skip = v
+    if (!empty(v)) {
+        to_log(LOG_INFO, "dasLLAMA: metal decode knockout armed - set_metal_decode_skip(\"{v}\"): the single-row and batch drivers skip that stage, so served output is not a model's\n")
+    }
 }
 
 //! Zero the cumulative per-stage timers + the served-step counter — windows a chase run's stage

@@ -92,7 +92,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_SCHED` | number | 1 | Graph scheduling mode for replay; 0 keeps capture order. |
 | `DASLLAMA_METAL_DECODE_CONCURRENT` | flag | on | Concurrent encoder for the single-stream decode step, with barriers only at detected hazards. |
 | `DASLLAMA_METAL_FUSE` | flag | on | The R1 epilogue-fusion kernel (post_attn_rms + add_rms); 0 restores separate dispatches for A/B. |
-| `DASLLAMA_METAL_SPEC` | number | -1 (adaptive) | MTP speculative decode chain: 0 off, 1 forced, -1 adaptive. |
+| `DASLLAMA_METAL_SPEC` | number | -1 (adaptive) | The single-row Metal decode's greedy chain (the next step pre-encoded on the GPU's own argmax): 0 off, 1 forced, -1 adaptive (backs off after a miss). A session sampled at temp > 0 never chains, whatever the mode. |
 | `DASLLAMA_METAL_GEMV_TG` | number | 4 | Rows per MoE router/expert GEMV threadgroup, clamped 1..32 (the dense GEMV geometry is fixed). |
 | `DASLLAMA_METAL_KQ_B8` | flag | on | Single-pass B8 twin for K-quant small-batch mv at B=5..8; 0 is the A/B rail. |
 | `DASLLAMA_METAL_KV_MIRROR_MB` | number | 4096 | Ceiling in MiB for the device-side KV mirror, clamped 64..4096. |

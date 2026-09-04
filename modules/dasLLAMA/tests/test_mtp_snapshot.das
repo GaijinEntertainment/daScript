@@ -27,15 +27,30 @@ def test_first_snapshot_of_a_large_recurrent_state(t : T?) {
     let nc = 48l * 3l * 5120l
     big_state(s.dn_state, ns, 1.5)
     big_state(s.dn_conv_state, nc, 0.25)
+    // a distinct value at an interior index of each of the copy's (up to eight) lane spans and one
+    // conv element: the lane-parallel copy must restore every span, not just the last element
+    let lanes = 8l
+    for (li in range64(lanes)) {
+        s.dn_state[li * ns / lanes + 1000l] = 3.0 + float(li)
+    }
+    s.dn_conv_state[nc / 2l] = 0.75
     s.dn_pos = 17l
     mtp_state_snapshot(s)
     t |> equal(long_length(s.mtp_snap_state), ns, "the state snapshot holds every float")
     t |> equal(long_length(s.mtp_snap_conv), nc, "the conv snapshot holds every float")
     t |> equal(s.mtp_snap_pos, 17l, "the position rides along")
     s.dn_state[ns - 1l] = -9.0
+    for (li in range64(lanes)) {
+        s.dn_state[li * ns / lanes + 1000l] = -9.0
+    }
+    s.dn_conv_state[nc / 2l] = -9.0
     s.dn_pos = 18l
     mtp_state_restore(s)
     t |> equal(s.dn_state[ns - 1l], 1.5, "restore puts the snapshot back")
+    for (li in range64(lanes)) {
+        t |> equal(s.dn_state[li * ns / lanes + 1000l], 3.0 + float(li), "restore covers lane {li}'s span, not only the last element")
+    }
+    t |> equal(s.dn_conv_state[nc / 2l], 0.75, "restore covers the conv state too")
     t |> equal(s.dn_pos, 17l, "restore rewinds the position")
     delete s
 }

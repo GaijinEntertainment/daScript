@@ -9,6 +9,7 @@ require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads t
 require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32/cvt_tq4kv_to_f32 — the cache-row dequant oracles
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
 require ?das_metal dasllama/dasllama_metal_decode  // stats/mirror/shutdown rails
+require ?das_metal dasllama/dasllama_metal_common  // the greedy chain's stats and mode (arm 15)
 require ?das_metal dasllama/dasllama_metal_prefill  // the Metal-prefill→GPU-decode hybrid arm
 require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
 require llvm/daslib/f16_cvt  // f16 KV row decode in the tolerance gate (Apple half only)
@@ -1168,6 +1169,43 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                     delete s70
                     delete p70
                     delete tr70
+                }
+            }
+
+            // arm 15: the greedy chain stands down for a decode sampled at temp > 0 and rides for a greedy one
+            if (arm_on(t, "arm15-spec-hint")) {
+                with_job_que() {
+                    setup_dasllama_jobque()
+                    let prev_spec = metal_decode_spec_mode()
+                    set_metal_decode_speculate(-1)   // the claim needs the adaptive default, whatever an earlier arm left
+                    select_prefill_override("metal")   // the blob twin has no CPU prefill
+                    set_metal_prefill_min_npos(1l)
+                    select_decode_override("metal")
+                    var ss = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                    set_seed_(ss, 7)
+                    let sp0 = metal_decode_spec_stats()
+                    let sampled = SamplingParams(temp = 0.8)
+                    let n_sampled = generate_(trg, ss, prompt2, sampled, 24l) $(_id : int64; _piece : string) : bool {
+                        return true
+                    }
+                    let sp1 = metal_decode_spec_stats()
+                    t |> success(n_sampled == 24l, "arm15: the sampled generation ran 24 tokens")
+                    t |> success(sp1.hits == sp0.hits && sp1.misses == sp0.misses, "arm15: a decode sampled at temp 0.8 leaves the greedy chain alone ({sp1.hits - sp0.hits} hits, {sp1.misses - sp0.misses} misses)")
+                    delete ss
+                    var sg = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                    let greedy = SamplingParams()
+                    let sp2 = metal_decode_spec_stats()
+                    generate_(trg, sg, prompt2, greedy, 24l) $(_id : int64; _piece : string) : bool {
+                        return true
+                    }
+                    let sp3 = metal_decode_spec_stats()
+                    t |> success(sp3.hits > sp2.hits, "arm15: a greedy decode rides the chain ({sp3.hits - sp2.hits} hits, {sp3.misses - sp2.misses} misses)")
+                    to_log(LOG_INFO, "arm15 eyeball: sampled {sp1.hits - sp0.hits} hits / {sp1.misses - sp0.misses} misses, greedy {sp3.hits - sp2.hits} hits / {sp3.misses - sp2.misses} misses\n")
+                    delete sg
+                    set_metal_decode_speculate(prev_spec)
+                    select_decode_override("")
+                    select_prefill_override("")
+                    set_metal_prefill_min_npos(64l)
                 }
             }
 

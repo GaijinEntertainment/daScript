@@ -422,6 +422,71 @@ def register_mtp_round_override(name : string; fn : MtpRoundOverrideFn) {
     g_mtp_round_overrides[name] = fn
 }
 
+//! The accept walk's sampler seam (the decode-override shape: the engine never requires the sampler):
+//! draws one token from row `off` of `rows` through the session's spec_params, consuming the row.
+typedef MtpSampleRowFn = function<(var s : Session; var rows : array<float>; off, vocab : int64) : int64>
+var private g_mtp_sample_row : MtpSampleRowFn
+var private g_mtp_sample_row_set = false
+
+def register_mtp_sample_row(fn : MtpSampleRowFn) {
+    g_mtp_sample_row = fn
+    g_mtp_sample_row_set = true
+}
+
+//! No penalty of any kind is armed: a repetition penalty at or below zero counts as off (zero would
+//! inf/NaN the logits, and additive-penalty clients send it).
+def penalties_off(p : SamplingParams) : bool {
+    let rep = p.penalty > 0.0 && p.penalty != 1.0
+    return !rep && p.presence_penalty == 0.0 && p.frequency_penalty == 0.0
+}
+
+//! A sampler that is a bare argmax: temperature at or below zero and no penalty - the only sampler
+//! whose pick equals the raw argmax the greedy accept walk compares.
+def sampler_is_argmax(p : SamplingParams) : bool {
+    return p.temp <= 0.0 && penalties_off(p)
+}
+
+//! Whether a round's accept walk goes through the caller's sampler: one is pointed at, the row
+//! sampler is installed, and the sampler is not a bare argmax (a penalized greedy sampler picks a
+//! penalized argmax, which the raw-argmax walk would not). Otherwise the walk is the argmax match.
+def mtp_walk_samples(s : Session) : bool {
+    if (s.spec_params == null || sampler_is_argmax(deref(s.spec_params))) {
+        return false
+    }
+    if (!g_mtp_sample_row_set) {
+        panic("dasLLAMA: a sampled stream reached the speculative round with no row sampler installed - the program must require dasllama/dasllama_sampling")
+    }
+    return true
+}
+
+//! Every speculative round opens here: a token the previous round parked must have been consumed
+//! by the caller's sample_ - a caller that read s.logits instead would emit a stale token later.
+def mtp_round_begin(s : Session) {
+    if (s.mtp_pre_drawn) {
+        panic("dasLLAMA: the speculative round's parked token was never consumed - the caller samples through sample_ after every round")
+    }
+}
+
+//! The sampled accept walk over the verify's k+1 rows in s.mtp_logits_b; returns a. The recent-token
+//! window is put back because the caller commits the accepted drafts itself.
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
+def mtp_walk_sampled(var s : Session; k, vocab : int64) : int64 {
+    let n0 = length(s.recent)
+    var a = 0l
+    while (true) {
+        let drawn = invoke(g_mtp_sample_row, s, s.mtp_logits_b, a * vocab, vocab)
+        if (a >= k || drawn != s.mtp_vbatch[a + 1l]) {
+            s.mtp_pre_tok = drawn
+            s.mtp_pre_drawn = true
+            break
+        }
+        s.recent |> push(drawn)   // nolint:PERF026,LINT019 — fires from the [hot_path] rounds' compiles; the caller pushes these same tokens a step later, the window grows by the round's k at most
+        a++
+    }
+    s.recent |> resize(n0)   // nolint:PERF026,LINT019 — fires from the [hot_path] rounds' compiles; shrinks back to the caller's window, the capacity stays
+    return a
+}
+
 //! One speculative round at the configured depth (get_mtp_depth): commits `tok`, returns the
 //! accepted draft count a with the accepted drafts in s.mtp_vbatch[1..a]. The metal round serves
 //! any depth for blob models; every other rail is the depth-1 mtp_spec_eval.
@@ -1824,6 +1889,20 @@ def kv_pool_bytes(pool : KVPool) : int64 {
     return total
 }
 
+//! Sampling parameters. Defaults are greedy (temp = 0, all cutoffs/penalties off) — bit-identical
+//! to argmax. Cutoff order: top-k on logits, then top-p and min-p on the softmaxed probabilities.
+//! The sampler is dasllama_sampling's; the struct lives here so a Session can point at its caller's.
+struct SamplingParams {
+    temp : float = 0.0             // <= 0 => greedy argmax; otherwise softmax temperature
+    top_k : int64 = 0l             // <= 0 or >= vocab => no top-k cutoff
+    top_p : float = 1.0            // nucleus: keep the smallest prob mass >= top_p (>= 1 = off)
+    min_p : float = 0.0            // drop tokens with prob < min_p * max prob (<= 0 = off)
+    penalty : float = 1.0          // multiplicative repetition penalty over recent tokens (1 = none; <= 0 treated as none)
+    presence_penalty : float = 0.0   // subtracted from the logit of every distinct token in the window
+    frequency_penalty : float = 0.0  // subtracted per occurrence in the window (OpenAI semantics)
+    penalty_last_n : int64 = 64l   // penalty window (most recent N generated tokens)
+}
+
 //! Per-step scratch buffers and the KV cache (allocated once, reused every token).
 struct Session {
     // Stable identity for device-side mirrors (Metal decode KV mirror keys on it): monotonic per
@@ -1839,6 +1918,10 @@ struct Session {
     rng : int4                // sampling RNG state (seeded in make_run_state; reseed via set_seed)
     recent : array<int64>     // recently generated tokens, for the repetition penalty
     sample_scratch : array<float>  // vocab-sized scratch for top-k selection
+    sampled : bool            //! the last sample_'s pick can differ from the raw argmax (a temperature, or a penalty at temp 0 - not a bare argmax): the Metal driver's greedy chain stands down
+    @do_not_delete spec_params : SamplingParams?   //! the caller's sampler, set before a speculative round for its accept walk to draw with; null or a bare argmax (temp <= 0, penalties off) keeps the argmax-match walk
+    mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
+    mtp_pre_tok : int64
     // last-generation timing, filled by the streaming generate() and read by stats()
     stat_n_prefill : int64    // prompt tokens prefilled
     stat_prefill_us : int64   // wall time to prefill the prompt (microseconds)
@@ -3534,6 +3617,38 @@ def private mm_kq(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x 
     mm_at_kq_pre(y, t, fmt, woff, xq, xs, xbs, n, d)
 }
 
+def private mm_b_kq_tile(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, ntok : int64) {
+    if (fmt == KqFmt.k4) {
+        matmul_kq_batch(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.k5) {
+        matmul_kq_batch(5, y, t.k5q, t.k5s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.k6) {
+        matmul_kq_batch(6, y, t.k6q, t.k6s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.q40) {
+        matmul_kq_batch(40, y, t.q40q, t.q40s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq4xs) {
+        matmul_kq_batch(44, y, t.iq4xsq, t.iq4xss, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.k3) {
+        matmul_kq_batch(3, y, t.k3q, t.k3s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq3s) {
+        matmul_kq_batch(33, y, t.iq3sq, t.iq3ss, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq3xxs) {
+        matmul_kq_batch(34, y, t.iq3xxsq, t.iq3xxss, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq4nl) {
+        matmul_kq_batch(45, y, t.iq4nlq, t.iq4nls, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.k2) {
+        matmul_kq_batch(2, y, t.k2q, t.k2s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq2s) {
+        matmul_kq_batch(23, y, t.iq2sq, t.iq2ss, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq2xs) {
+        matmul_kq_batch(24, y, t.iq2xsq, t.iq2xss, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq2xxs) {
+        matmul_kq_batch(25, y, t.iq2xxsq, t.iq2xxss, woff, xq, xs, xbs, n, d, ntok)
+    } else {
+        panic("mm_b_kq_tile: '{fmt}' has no kq plane pair")
+    }
+}
+
 // Batched K-quant matmul. Repacked loads with a kq batch kernel run the native tile: one threaded
 // bs-requant, then ONE weight-stationary GEMM (bit-for-bit npos x the per-position GEMV).
 // Otherwise positions run serially, each bs-quantized then a full row GEMV.
@@ -3545,35 +3660,7 @@ def mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff 
             return
         }
         let ts_gemm = prof_ticks()
-        if (fmt == KqFmt.k4) {
-            matmul_kq_batch(4, y, t.k4q, t.k4s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.k5) {
-            matmul_kq_batch(5, y, t.k5q, t.k5s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.k6) {
-            matmul_kq_batch(6, y, t.k6q, t.k6s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.q40) {
-            matmul_kq_batch(40, y, t.q40q, t.q40s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq4xs) {
-            matmul_kq_batch(44, y, t.iq4xsq, t.iq4xss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.k3) {
-            matmul_kq_batch(3, y, t.k3q, t.k3s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq3s) {
-            matmul_kq_batch(33, y, t.iq3sq, t.iq3ss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq3xxs) {
-            matmul_kq_batch(34, y, t.iq3xxsq, t.iq3xxss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq4nl) {
-            matmul_kq_batch(45, y, t.iq4nlq, t.iq4nls, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.k2) {
-            matmul_kq_batch(2, y, t.k2q, t.k2s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq2s) {
-            matmul_kq_batch(23, y, t.iq2sq, t.iq2ss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq2xs) {
-            matmul_kq_batch(24, y, t.iq2xsq, t.iq2xss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } elif (fmt == KqFmt.iq2xxs) {
-            matmul_kq_batch(25, y, t.iq2xxsq, t.iq2xxss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        } else {
-            panic("mm_b_kq: '{fmt}' has no kq plane pair")
-        }
+        mm_b_kq_tile(y, t, fmt, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
         prof_add("mm_gemm", ts_gemm)
         return
     }
@@ -4586,6 +4673,30 @@ def mtp_verify_prep_n(t : Model; var s : Session; toks : array<int64>; n, pos : 
                      c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
 }
 
+//! the recurrent state is 151 MB on a 27B hybrid, so the round's snapshot copies it in lane-parallel chunks, not scalar
+let private MIN_LANE_FLOATS = 4l * 1024l * 1024l
+
+def private copy_floats_par(src : array<float>; var dst : array<float>; n : int64) {
+    if (n <= 0l) {
+        return
+    }
+    assert(long_length(src) >= n && long_length(dst) >= n, "copy_floats_par: both arrays cover n")
+    let lanes = clamp(int(n / MIN_LANE_FLOATS), 1, 8)
+    unsafe {
+        let sp = addr < float const? >(src[0])
+        var dp = addr(dst[0])
+        maybe_parallel_for(lanes > 1, 0, lanes, lanes) $(lb, le) {
+            unsafe {
+                for (li in range(lb, le)) {
+                    let i0 = int64(li) * n / int64(lanes)
+                    let i1 = int64(li + 1) * n / int64(lanes)
+                    memcpy(reinterpret<void?>(dp + i0), reinterpret<void const?>(sp + i0), (i1 - i0) * 4l)
+                }
+            }
+        }
+    }
+}
+
 //! Snapshot/restore the deltanet recurrent state (conv history + S + dn_pos) around a speculative
 //! verify batch: a rejected draft has already advanced the state past itself. KV rows stay correct;
 //! only the recurrent state rolls back, then one plain forward re-advances it.
@@ -4595,14 +4706,14 @@ def mtp_state_snapshot(var s : Session) {
     let ns = long_length(s.dn_state)
     s.mtp_snap_conv |> overwrite_resize(nc)   // reserves once, a no-op after the first call
     s.mtp_snap_state |> overwrite_resize(ns)
-    copy_floats(s.dn_conv_state, 0l, s.mtp_snap_conv, 0l, nc)
-    copy_floats(s.dn_state, 0l, s.mtp_snap_state, 0l, ns)
+    copy_floats_par(s.dn_conv_state, s.mtp_snap_conv, nc)
+    copy_floats_par(s.dn_state, s.mtp_snap_state, ns)
     s.mtp_snap_pos = s.dn_pos
 }
 
 def mtp_state_restore(var s : Session) {
-    copy_floats(s.mtp_snap_conv, 0l, s.dn_conv_state, 0l, long_length(s.mtp_snap_conv))
-    copy_floats(s.mtp_snap_state, 0l, s.dn_state, 0l, long_length(s.mtp_snap_state))
+    copy_floats_par(s.mtp_snap_conv, s.dn_conv_state, long_length(s.mtp_snap_conv))
+    copy_floats_par(s.mtp_snap_state, s.dn_state, long_length(s.mtp_snap_state))
     s.dn_pos = s.mtp_snap_pos
     moe_gpu_dn_invalidate()   // restored CPU state is authoritative — device copies are stale
 }
@@ -4697,6 +4808,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         return invoke(g_mtp_spec_overrides[g_decode_override_name], t, s, tok, accepted)
     }
     let pos = s.n_past
+    mtp_round_begin(s)
     // pos < 1: nothing evaled yet — the zero-init mtp_h_pos1 sentinel COLLIDES with pos == 0
     // (0 != 0 would pass the cold check and draft at row -1), so gate it explicitly
     if (c.n_layer_nextn <= 0l || t.quant == QuantMode.q4_0 || pos < 1l || s.mtp_h_pos1 != pos
@@ -4706,13 +4818,18 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         return false
     }
     // draft x_{pos+1} from (h_{pos-1}, tok) at row pos-1 (rewrites that row's draft KV in place)
+    let ts_draft = prof_ticks()
     forward_mtp(t, s, tok, pos - 1l)
     let d = parallel_argmax(s.logits, c.vocab_size)
     s.mtp_drafted++
+    prof_add("mtp.draft", ts_draft)
     // batched verify: trunk over [tok@pos, d@pos+1] — weights stream once for both rows; the
     // warm inside this prefill writes the head's row pos = (h_pos, d), which doubles as the
     // accept-path backfill (a reject leaves it stale; the next draft at that row rewrites it)
+    let ts_snap = prof_ticks()
     mtp_state_snapshot(s)
+    prof_add("mtp.snapshot", ts_snap)
+    let ts_verify = prof_ticks()
     s.mtp_vbatch[0] = tok
     s.mtp_vbatch[1] = d
     let batch_cls = mtp_cls_batch_ok(t)
@@ -4722,8 +4839,19 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     } else {
         mtp_verify_row0(t, s)
     }
-    let truth = parallel_argmax(s.mtp_logits, c.vocab_size)
-    if (truth == d) {
+    prof_add("mtp.verify", ts_verify)
+    let ts_walk = prof_ticks()
+    var hit = false
+    if (mtp_walk_samples(s)) {
+        s.mtp_logits_b |> overwrite_resize(2l * c.vocab_size)
+        copy_floats(s.mtp_logits, 0l, s.mtp_logits_b, 0l, c.vocab_size)
+        copy_floats(s.logits, 0l, s.mtp_logits_b, c.vocab_size, c.vocab_size)
+        hit = mtp_walk_sampled(s, 1l, c.vocab_size) == 1l
+    } else {
+        hit = parallel_argmax(s.mtp_logits, c.vocab_size) == d
+    }
+    prof_add("mtp.walk", ts_walk)
+    if (hit) {
         s.mtp_accepted++
         accepted = d
         s.n_past = pos + 2l
@@ -4741,8 +4869,10 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         s.n_past = pos + 1l
         return false
     }
+    let ts_replay = prof_ticks()
     mtp_state_restore(s)
     forward(t, s, tok, pos)
+    prof_add("mtp.replay", ts_replay)
     s.n_past = pos + 1l
     return false
 }
