@@ -5313,7 +5313,7 @@ namespace das {
     }
     ExpressionPtr InferTypes::visitForSource(ExprFor *expr, Expression *that, bool last) {
         // now, for the one where we did not find anything
-        if (that->type) {
+        if (that->type && !that->type->isExprType()) {
             if (that->type->baseType != Type::tFixedArray &&
                 !that->type->isGoodIteratorType() &&
                 !that->type->isGoodArrayType() &&

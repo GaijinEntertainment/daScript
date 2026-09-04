@@ -2,7 +2,7 @@
 // an exact multiset: an error that stops being reported fails this file just as loudly as a
 // new one, which is what keeps a crash from being traded for a silent accept.
 options gen2
-expect 30107, 30110, 30320, 30805, 30821, 30826, 30832
+expect 30107, 30109, 30110, 30192, 30320, 30805, 30821, 30826, 30832
 
 // A void expression handed to debug().
 def v {
@@ -27,4 +27,16 @@ struct l {
 [export]
 def main {
     debug(v())
+}
+
+// A for-source whose type still carries an unresolved dim: the lambda's argument type never
+// reduces to a constant, so the synthesized each() call would hand the argument walk a type
+// no rule covers. Reduced from the machine-minimized 701-byte payload.
+def f9 : int {
+    return 3
+}
+
+def for_source_of_expr_type {
+    for (x in @@(a : int[f9()]) => 1) {
+    }
 }
