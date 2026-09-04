@@ -32,12 +32,12 @@
 <header class="dio-masthead"><div class="forge-container"><div class="dio-masthead__grid">
 <div>
 <h1>Local inference, <em>written in daslang.</em></h1>
-<p class="dio-masthead__lede">dasLLAMA is an LLM + speech-to-text inference engine written entirely in daslang and JIT-compiled. It loads stock GGUF files and runs them on cpu, metal, or vulkan. Kernels are auto-tuned per box; the winning variants are saved as a sidecar you can pick up instead of tuning yourself.</p>
+<p class="dio-masthead__lede">dasLLAMA is an LLM + speech-to-text inference engine written entirely in daslang and JIT-compiled. It loads stock GGUF files and runs them on cpu, metal, or vulkan. Kernels are auto-tuned per CPU class; the winning variants ship with the engine as class profiles, so a covered box is tuned by its first compile.</p>
 <div class="dio-masthead__links"><a href="https://daslang.io">built on daslang →</a><a href="https://daslang.io/dasllama.html">the scoreboard →</a><span>official measurements live on daslang.io; the full ladder lives here</span></div>
 </div>
 <div class="dio-facts">
-<!-- archs/backends are hand-maintained capability facts (no id = not JS-rendered); the two below
-     carry ids and are filled live from the ladder API by mountHome -->
+<!-- archs/backends are hand-maintained capability facts (no id = not JS-rendered); the one below
+     carries an id and is filled live from the ladder API by mountHome -->
 <div class="dio-fact"><div class="dio-fact__n">12</div><div class="dio-fact__l">model architectures, stock GGUF</div></div>
 <div class="dio-fact"><div class="dio-fact__n">3</div><div class="dio-fact__l">backends — cpu · metal · vulkan</div></div>
 <div class="dio-fact"><div class="dio-fact__n" id="dio-fact-measurements">—</div><div class="dio-fact__l">measurements on the ladder</div></div>

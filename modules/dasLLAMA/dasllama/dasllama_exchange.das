@@ -58,7 +58,7 @@ struct ExchangePolicy {
 //! lookup transmits the box identity, and the server sees the connection's IP like any web
 //! server). PLACEHOLDER wording — Gaijin legal owns the final text; the watchdog dialog
 //! (utils/watchdog/watchdog.py CONSENT_*) carries the same wording, keep the two in sync.
-let public EXCHANGE_CONSENT_NOTICE = "dasLLAMA can download a ready performance-tuning preset (a \"sidecar\") for this machine from dasllama.io, instead of spending ~12 minutes tuning locally.\nThe request sends only your hardware class - platform, CPU model and OS build. No serial numbers, user names or other personal data; no cookies. Sharing your own tuning results back is always confirmed separately.\nDetails: https://legal.gaijin.net/privacypolicy"
+let public EXCHANGE_CONSENT_NOTICE = "dasLLAMA can download a ready performance-tuning preset (a \"sidecar\") for this machine from dasllama.io, instead of tuning locally.\nThe request sends only your hardware class - platform, CPU model and OS build. No serial numbers, user names or other personal data; no cookies. Sharing your own tuning results back is always confirmed separately.\nDetails: https://legal.gaijin.net/privacypolicy"
 
 // structured events for the watchdog (same contract as @tune): folded into supervisor STATE
 def private sc_event(kind : string; kv : string) {

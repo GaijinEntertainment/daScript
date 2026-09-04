@@ -49,13 +49,17 @@ corpus or sweep it covers - is a defect.** The pinned set, each with what it pin
 (`../performance/model_specs.das`'s model-set table); `test_metal_prefill_kernels.das`'s
 softcap, sink (`hass`) and span cells; `test_site_records.das` (the byte-compare of
 `site/files/dasllama/bench_records.json` (repo root) against a fresh `merge_site_records`
-run); `test_exchange_schema.das` and `test_bench_records_schema.das` (the
-`write_bench_records` output, corpus sweeps included); `test_scheduler.das`'s media-stream
-bypass check (no cached hit at `prefix_attach`, no donated pages at `donate_stream`);
-`test_vulkan_kernels.das`'s tile-pick cell (which tile the Vulkan matmul picks for a given
-width and row count, and whether that dispatch splits its reduction across partial planes).
-A gate whose failure means a documented contract changed, rather than a kernel regressing, joins
-this list in the same change - as a file when every cell of it pins, as a named cell otherwise.
+run); `test_exchange_schema.das` (the exchange validator's corpus sweeps, and the `[tune_scope]`
+wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
+`test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included);
+`test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
+pages at `donate_stream`); `test_vulkan_kernels.das`'s tile-pick cell (which tile the Vulkan
+matmul picks for a given width and row count, and whether that dispatch splits its reduction
+across partial planes).
+
+**A diff that adds a gate whose failure means a documented contract changed, rather than a
+kernel regressing, adds it to the pinned set above in the same change** - as a file when every
+cell of it pins, as a named cell otherwise.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell
 that returns without asserting - the module is absent,

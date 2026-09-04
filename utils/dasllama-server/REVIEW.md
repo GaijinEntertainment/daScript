@@ -25,9 +25,9 @@ place `control.html` sends that field, in the same change.**
 before - a new route requires all of its fields - adds that field to every `control.html`
 request to that route, in the same change.**
 
-**A diff that changes what a route answers - an item, a field, or a value - re-captures every
-fixture under `tests/fixtures/` that records that route, in the same change.** The fixtures are
-the recorded response shape.
+**A diff that changes what a route answers - an item, a field, or a value, including one a
+required `dasllama/*` module supplies - re-captures every fixture under `tests/fixtures/` that
+records that route, in the same change.** The fixtures are the recorded response shape.
 
 **A diff that makes `control.html` or a Playwright `.spec.js` under `tests/` (beside this file)
 read a response key no fixture under `tests/fixtures/` carries is a defect - re-capture the

@@ -174,7 +174,7 @@ struct ModelEntry {
 }
 
 // registered from [init] so it lands before the tune-policy guard at the top of main: an
-// an untuned boot consults the exchange only when the config opts in (the exchange is closed; off by default)
+// untuned boot consults the exchange only when the config opts in (the exchange is closed; off by default)
 [init]
 def register_exchange_resolver {
     exchange_register_resolver("dasllama-server.toml")

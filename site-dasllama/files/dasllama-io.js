@@ -490,13 +490,12 @@
   }
 
   /* ── home page ────────────────────────────────────────────────── */
-  function mountHome(rows, sidecarCount) {
+  function mountHome(rows) {
     function put(id, text) {
       var n = document.getElementById(id);
       if (n) n.textContent = text;
     }
     put('dio-fact-measurements', String(rows.length));
-    put('dio-fact-sidecars', String(sidecarCount));
 
     var barsBox = document.getElementById('dio-teaser-bars');
     if (!barsBox) return;
@@ -745,9 +744,9 @@
   }
 
   if (document.getElementById('dio-teaser-bars')) {
-    Promise.all([loadBoard(), api('/api/sidecars').catch(function () { return { sidecars: [] }; })])
+    loadBoard()
       .then(function (res) {
-        mountHome(buildRows(res[0].runs, res[0].docs), (res[1].sidecars || []).length);
+        mountHome(buildRows(res.runs, res.docs));
       }).catch(function () {
         unreachable(document.getElementById('dio-teaser-bars'));
       });
