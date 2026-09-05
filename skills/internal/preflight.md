@@ -1,13 +1,23 @@
 # Preflight - CI lane <-> local mirror
 
-`daslang utils/internal/preflight/main.das` runs the fast tier (`--list-gates`
-prints every gate and its tier). `-- --full` adds the expensive gates: the
-untracked gate, dasgen freshness, the CI-only-das compile sweep, the doc gates,
-ctest, the interp/JIT/AOT suites, the sequence smoke, the dasImgui suite, and -
-when the diff touches `modules/dasLLAMA/` - the dasLLAMA `model-free` and
-`stocked` suites. `--only <names>` / `--skip <names>` select subsets;
-`--lint-skip-exe-rail` trims the lint gate to its interp rails. A gate whose
-host tool or module is missing reports `SKIP` with an install/rebuild hint.
+`daslang utils/internal/preflight/main.das` runs the **fast tier**: format, lint,
+ast-verify, cpp-syntax, review-md, md-ascii, hash-refs, untracked, dasgen, ci-das,
+ci-matrix (`python3 ci/test_ci_matrix.py`, when the diff touches `.github/` or `ci/`)
+and compile-sweep (every program root under `utils/`, `examples/`, `tutorials/`
+and the modules' examples and utils, compile-only, in parallel - the per-PR form
+of CI's examples and tutorial runs), serially, and a red stops the run. `-- --full`
+then runs the **lanes** at once - docs, tests-cpp, tests-interp, tests-jit,
+tests-aot, utils-tests - so the wall is the longest lane (`--serial` for
+diagnosis). **Module gates** never run from a tier: `--only imgui`, `--only
+sequence`, `--only dasllama-model-free` when the module is the work. A gate
+with a **reach set** skips, with the reason, when nothing under its paths or the
+core (`src/`, `include/`, `daslib/`, `dastest/`, `CMakeLists.txt`, `cmake/`)
+changed; `--only` runs a gate whatever changed. `--list-gates` prints tier, reach
+and description; `--skip <names>` drops gates; `--lint-skip-exe-rail` trims the
+lint gate to its interp rails. A gate whose host tool or module is missing
+reports `SKIP` with an install/rebuild hint. The budget the tiers serve: a full
+run fits 20 minutes on the M5 box, or the gate is not in preflight
+(`plans/ci_preflight_budget.md`).
 
 Each gate line carries its breakdown indented underneath, on PASS as well as FAIL: the
 build/run split for a gate that builds before it sweeps (`tests-aot`, `sequence`, `imgui`),
@@ -51,10 +61,12 @@ working-tree copy.
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `build.yml` (per-PR) | every PR commit (`pull_request`) + pushes to `master` | `build` matrix (5 targets x Debug/Release/RelWithDebInfo x sanitizers), `bundle_smoke`, `build_linux_gcc` |
-| `build.yml` (nightly) | `schedule` cron (daily 02:00 UTC) | `build_windows_mingw` + `build_windows_clangcl` (gated OFF per-PR) **plus the full build matrix, whose Release cells (sanitizers included) run the full AOT sweep** ("Slow Release Tests"). Breaks surface within ~24 h, not at PR time |
+| `build.yml` (per-PR) | every PR commit (`pull_request`) + pushes to `master` | `build` matrix (`ci/ci_matrix.py build`: Debug + Release on linux, linux_arm, darwin15, darwin26; windows 32 Release, windows 64 Release), `bundle_smoke`, `build_linux_gcc` |
+| `build.yml` (nightly) | `schedule` cron (daily 02:00 UTC) | `build_windows_mingw` + `build_windows_clangcl` (gated OFF per-PR) **plus the full build matrix - the per-PR cells, the sanitizer cells (linux Release asan/tsan/ubsan) and windows 64 Debug - whose Release cells run the full AOT sweep** ("Slow Release Tests"). Breaks surface within ~24 h, not at PR time |
 | `nightly_imgui.yml` | `schedule` cron (daily 03:00 UTC) + `workflow_dispatch` | dasImgui playwright suite on ubuntu + macos - section below |
-| `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
+| `extended_checks.yml` (per-PR) | every PR | two darwin15-arm64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON - section below |
+| `extended_checks.yml` (nightly) | `schedule` cron (daily 04:00 UTC) + `workflow_dispatch` | one job each on linux, darwin15 and windows running every step (role `all`), including the ones too slow for a PR: tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify tree sweep, doc-verify |
+| `codeql.yml` | every PR and `master` push touching `src/`, `include/`, `modules/`, `tests-cpp/` + a weekly cron | CodeQL over the C++ surface, ~20 min on a PR; no local mirror, so it stays per PR |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed | the doc gates |
@@ -76,7 +88,7 @@ part of ALL) as a compile+link gate, and run no AOT tests.
 | AOT sweep (full) | `cmake --build build --config Release --target test_aot`, then `bin/Release/test_aot.exe -use-aot dastest/dastest.das -- --use-aot --color --failures-only --max-file-time 30 --timeout 1800 --test tests` | nightly + manual dispatch only, so this is the **only** pre-push gate for AOT regressions outside tests/language - don't skip it |
 | AOT subset gate | `cmake --build build --config Release --target test_aot_subset` (add `--target run_tests_aot_subset` to sweep tests/language too) | what per-PR lanes build |
 | Debug lanes | `cmake --build build --config Debug --target daslang`, then the sweep against `bin/Debug/daslang.exe` - Debug coexists in-checkout with Release (`bin/Debug/`, `_debug.shared_module`) | Debug bypasses the fused interpreter permutations: a fused-path-only fix passes Release everywhere and trips Debug, and fused-path bugs need Release. Touched `src/simulate/simulate_fusion_*`? run both |
-| Sanitizer lanes (linux Release asan/tsan/ubsan) | WSL: `CC=clang CXX=clang++ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_USE_SANITIZER=<asan\|tsan\|ubsan>`, then the JIT sweep on `tests/language` | not mirrorable on Windows/mac. CI applies LSan suppressions (`format_error`, `uriParseSingleUriA`, `uriMakeOwner`) |
+| Sanitizer lanes (linux Release asan/tsan/ubsan) - nightly | WSL: `CC=clang CXX=clang++ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_USE_SANITIZER=<asan\|tsan\|ubsan>`, then the JIT sweep on `tests/language` | not mirrorable on Windows/mac. CI applies LSan suppressions (`format_error`, `uriParseSingleUriA`, `uriMakeOwner`). Nightly + dispatch only (40-55 minute jobs); force one early with `gh workflow run build.yml` |
 | linux_arm / darwin lanes | mac: same commands as linux; from Windows not mirrorable | ARM reds (LLVM SelectionDAG, alignment) are CI-only signals |
 
 ## build.yml - bundle_smoke (linux)
@@ -126,6 +138,22 @@ headers live there, and TUs like `src/simulate/fs_file_info.cpp` include them.
 
 ## extended_checks.yml
 
+Per PR the workflow is two darwin15 jobs, `extended_checks (darwin15, core)` and
+`extended_checks (darwin15, modules)`, each inside the 35-minute budget: `core` runs the
+tree's own gates - dasgen, utils tests, standalone exes, formatter, lint, ast-verify, the
+python gates, review-md discovery, dastest's own suite, the REVIEW.das gates, ci-das -
+and `modules` the module and service suites - ser/deser, MCP tools, boulder-dash,
+dasllama-server, env-knob registries, the dasLLVM vector-math rail, facade lint,
+dasweb-playground, dasllama-ladder, dasweb-buildd, dasweb-verify, the sequence smoke, the
+daslang_static sweep. A step's condition is `matrix.role != '<other>'`, so the nightly job
+(role `all`, one each on linux, darwin15, windows) runs every step plus the nightly-only ones:
+tutorial dry-runs and the run form of examples (preflight's `compile-sweep` is their per-PR
+mirror), the AST verify tree sweep and doc-verify (policy), coverage (a report, not a gate),
+and the nano cross-compile - platform-bound: its arm-none-eabi toolchain is an apt package no
+darwin cell and no developer box carries, so it has no per-PR cell and no local mirror. The cells are `ci/ci_matrix.py extended <event>`; `ci/test_ci_matrix.py`
+pins them and the condition spelling. The per-PR mirror of the nightly-only compile steps is
+preflight's `compile-sweep` gate.
+
 **CI configures with ALL release modules ON** - `ci/release_modules.txt` flips
 `DAS_HV/LLVM/AUDIO/PUGIXML/SQLITE/GLFW_DISABLED=OFF`. A local build with several
 OFF compiles none of the module-gated `.das` and C++ (dasOpenGL helpers,
@@ -141,9 +169,9 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 |---|---|---|
 | Markdown ASCII gate | preflight's `md-ascii` gate (fast tier, runs when the diff touches any `.md`); manual: `python3 ci/fix_md_ascii.py --check`, fix in place by dropping `--check` | em-dashes/arrows/ellipses in new markdown are the usual trip |
 | dasgen freshness | `<daslang> utils/internal/dasgen/gen_bind.das` then `git diff --exit-code -- include/daScript/builtin/` | regen + commit if dirty; `skills/internal/visitor_gen_bind.md` |
-| Run examples | `cmake --build build --config Release --target run_examples` | |
-| Utils tests | `cmake --build build --config Release --target run_utils_tests` | |
-| Tutorial dry-runs | `cmake --build build --config Release --target dry_run_tutorials` | compile rot in `tutorials/` after daslib API changes |
+| Run examples - **nightly** | `cmake --build build --config Release --target run_examples`; per PR, preflight's `compile-sweep` gate compiles every example root | the run form is 5-8 minutes a lane |
+| Utils tests | `cmake --build build --config Release --target run_utils_tests` - preflight's `utils-tests` lane | |
+| Tutorial dry-runs - **nightly** | `cmake --build build --config Release --target dry_run_tutorials`; per PR, preflight's `compile-sweep` gate compiles every tutorial root | compile rot in `tutorials/` after daslib API changes; the run form is 8-11 minutes a lane |
 | Standalone exes | `cmake --build build --config Release --target all_utils_exe`, plus `<daslang> -exe -output bin/das-fmt utils/das-fmt/dasfmt.das` and `... bin/das-lint utils/lint/main.das` | `-exe` needs dasLLVM + lld-link on PATH |
 | Sequence smoke | Windows: `pwsh examples/games/sequence/ci_smoke_test.ps1 "$(pwd)"`; linux/mac: `bash examples/games/sequence/ci_smoke_test.sh "$(pwd)"` | build the runtime modules first: `cmake --build build --config Release --target dasModuleGlfw dasModuleLiveHost dasModuleHV dasModuleAudio dasModulePUGIXML dasModuleStbImage`. **The only pre-merge lane compiling GLFW-gated `.das` like dasOpenGL** - run it for type-system / daslib-generics changes |
 | Formatter `--verify` | preflight's `format` gate runs it exactly (tracked files via `--files-from`); manual: `<daslang> utils/das-fmt/dasfmt.das -- --path ./ --verify --exclude-mask build/` | CI's second verify pass uses an `-exe`-compiled `bin/das-fmt.exe`; the mask skips generated `.das` under the build dir (nightly doc-verify extracts RST snippets there) |
@@ -151,13 +179,14 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 | ast-verify changed `.das` | preflight's `ast-verify` gate - `<daslang> -dry-run --ast-verify-batch <file>` per changed `.das` plus the `tests/linq/test_linq_fold.das` qmacro canary, parallel, 300 s per-file timeout, skipping `cant_`/`failed_`/`invalid_` and `utils/internal/ast-fuzz/selftest/`. An `AST verify` line, crash or timeout fails; a compile error belongs to whoever owns the file; a file inside the verifier's own require closure (`daslib/ast*.das`, `daslib/rtti.das`, `daslib/strings_boost.das` - `error[20510]` under the force-include) is reported *not verifiable*, never clean | mirrors the workflow's "Run ast-verify on changed .das files". Batch mode is the ruled gate form (`skills/das_macros.md`); with no pre-infer walk, a tree a macro breaks mid-inference surfaces as a compiler crash instead of a located report - hence crash = red, and plain `--ast-verify` on that file locates it. Each item is a whole-engine compile (2-3x a plain one). Width is physical cores halved; `-j` only lowers it |
 | REVIEW.das gates | `<daslang> utils/internal/review-md/all.das` | every `REVIEW.das` in the tree, fail-fix; also run per-diff in the make_pr step-0a walk |
 | dastest own suite | `<daslang> dastest/dastest.das -- --failures-only --test dastest/tests` | framework suite + `review_gate` library tests; whole-directory, so a new file needs no CI row |
-| daslang_static sweep | `cmake --build build --config Release --target daslang_static`, then `bin/Release/daslang_static.exe dastest/dastest.das -- --color --failures-only --test tests` | catches static-registration / no-dynamic-modules divergence |
+| daslang_static sweep | `cmake --build build --config Release --target daslang_static`, then `bin/Release/daslang_static.exe dastest/dastest.das -- --color --failures-only --test tests` | the `modules` role; catches static-registration / no-dynamic-modules divergence, which no preflight gate mirrors |
+| CI matrix test | preflight's `ci-matrix` gate (fast tier, reach `.github/` and `ci/`); manual: `python3 ci/test_ci_matrix.py` | the per-event cells of `ci/ci_matrix.py` and the `matrix.role != '<other>'` spelling of every `extended_checks.yml` step condition |
 | Ser/deser sweep | `<daslang> dastest/dastest.das -- --test tests --ser serialized.bin` then `... --deser serialized.bin` | after touching AST serialization (`ast_serializer.cpp`, flag-bit additions) |
 | AST verify tree sweep - **not a PR gate** (the per-PR arm is the row above) | `find tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \| xargs -0 -P8 -n1 timeout 120 <daslang> --ast-verify-batch -compile-only` - an `AST verify` line is a failure; compile errors are expected (many tests assert one). This one-liner attributes neither a crash (`CRASH:` banner) nor a timeout (rc 124) to its file - for those copy the step's `/tmp/ast_verify_one.sh` helper out of the workflow | runs on `extended_checks.yml`'s 04:00 cron: one daslang process per test file, each re-parsing daslib. Force it early with `gh workflow run extended_checks.yml`. Run locally after touching macro or AST-building code - `skills/das_macros.md` |
 | Authored-doc code blocks - **not a PR gate** | `<daslang> utils/internal/doc-verify/main.das` (exit 0 = every authored RST page's das blocks compile; report at `build/doc_verify/report.json`) | nightly cron + `workflow_dispatch`, posix cells only: ~35 min, one daslang spawn per page. Run locally after editing `doc/source/reference/**` or `doc/source/stdlib/handmade/**`, or after daslib/module API changes docs quote - `skills/internal/doc_sweep.md` |
-| MCP tools test | `<daslang> dastest/dastest.das -- --color --failures-only --test utils/mcp/test_tools.das` | linux-only in CI, runs anywhere; MCP signature changes break it silently - run after editing `utils/mcp/` |
+| MCP tools test | `cmake --build build --config Release --target tree_sitter_daslang` (the grammar library plus the `sgconfig.yml` its post-build step stamps - without them ast-grep knows no `daslang` language), then `<daslang> dastest/dastest.das -- --color --failures-only --test utils/mcp/test_tools.das` | the `modules` role; MCP signature changes break it silently - run after editing `utils/mcp/` |
 | dasImgui build | nothing to install - dasImgui is in-tree (`modules/dasImgui`), built like any default-ON module | external ABI canaries (dasImguiImplot, dasImguiNodeEditor + the rest of the daspkg-index) run in `nightly_daspkg_index.yml`; `skills/internal/abi_break_sweep.md` |
-| Coverage | `<daslang> dastest/dastest.das -- --cov-path coverage.lcov --color --test tests/language --timeout 1800` + `dascov` | |
+| Coverage - **nightly** (linux) | `<daslang> dastest/dastest.das -- --cov-path coverage.lcov --color --test tests/language --timeout 1800` + `dascov` | |
 
 ## doc.yml - the gates
 

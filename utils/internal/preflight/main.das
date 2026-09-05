@@ -33,8 +33,11 @@ require compile_db
 
 [CommandLineArgs]
 struct Config {
-    @clarg_doc = "Run the full tier (adds untracked, dasgen, ci-das, docs, tests-cpp, interp/JIT/AOT suites, sequence smoke)"
+    @clarg_doc = "Run the fast tier and then every lane at once (docs, tests-cpp, interp/JIT/AOT suites, utils tests); module gates need --only"
     full : bool
+
+    @clarg_doc = "Lanes run serially instead of concurrently (diagnosis; the wall becomes the sum)"
+    serial : bool
 
     @clarg_doc = "Diff base for changed-file detection (default: origin/master)"
     base : string = "origin/master"
@@ -112,6 +115,7 @@ struct PreflightCtx {
     base : string
     changed_das : array<string>
     changed_cpp : array<string>
+    changed_all : array<string>     // every changed path vs base, any extension, plus untracked files - the reach tests read this
     changed_hdr : int
     jobs : int
     jit_jobs : int
@@ -364,6 +368,36 @@ def collect_changed_files(base : string; var das_files, cpp_files : array<string
             }
         }
     }
+}
+
+//! every changed path vs `base` (committed and working tree) plus untracked files, as git prints them
+def collect_changed_paths(base : string) : array<string> {
+    var seen : table<string>
+    var out : array<string>
+    let probe = run_argv(["git", "rev-parse", "--verify", "--quiet", base])
+    var ranges : array<string>
+    if (probe.rc == 0) {
+        ranges |> push("{base}...HEAD")
+    }
+    ranges |> push("HEAD")
+    for (r in ranges) {
+        let d = run_argv(["git", "diff", "--name-only", r])
+        continue if (d.rc != 0)
+        for (f in non_empty_lines(d.out)) {
+            continue if (key_exists(seen, f))
+            seen |> insert(f)
+            out |> push(f)
+        }
+    }
+    let u = run_argv(["git", "ls-files", "--others", "--exclude-standard"])
+    if (u.rc == 0) {
+        for (f in non_empty_lines(u.out)) {
+            continue if (key_exists(seen, f))
+            seen |> insert(f)
+            out |> push(f)
+        }
+    }
+    return <- out
 }
 
 // ===== gate runners =====
@@ -1129,6 +1163,179 @@ def gate_ci_das(ctx : PreflightCtx) : GateResult {
         seconds = seconds_since(t0), detail = detail)
 }
 
+//! the CI matrix test: ci/ci_matrix.py's per-event cells and the extended_checks role conditions
+def gate_ci_matrix() : GateResult {
+    let t0 = ref_time_ticks()
+    if (!tool_available("python3", "--version")) {
+        return GateResult(name = "ci-matrix", status = GateStatus.Skip, seconds = seconds_since(t0), detail = "python3 not found on PATH")
+    }
+    let r = run_argv(["python3", "ci/test_ci_matrix.py"], 120.0)
+    return GateResult(name = "ci-matrix", status = r.rc == 0 ? GateStatus.Pass : GateStatus.Fail, seconds = seconds_since(t0),
+        detail = r.rc == 0 ? "" : "ci/test_ci_matrix.py red - a workflow matrix cell or an extended_checks role condition (must be matrix.role != '<other>')",
+        output = r.out)
+}
+
+//! the trees whose program roots the compile sweep compiles
+let SWEEP_TREES <- ["utils", "examples", "tutorials"]
+
+def private collect_das_files(dir : string; var out : array<string>&) {
+    fio::dir(dir) $(name) {
+        return if (name == "." || name == "..")
+        let p = "{dir}/{name}"
+        var st : FStat
+        if (stat(p, st) && st.is_dir) {
+            collect_das_files(p, out)
+        } elif (name |> ends_with(".das")) {
+            out |> push(p)
+        }
+    }
+}
+
+//! every program root under the swept trees - utils/, examples/, tutorials/ and the modules' examples,
+//! tutorials and utils folders - split into the light pool and the engine-heavy serial set
+def collect_sweep_roots() : tuple<light : array<string>; heavy : array<string>> {
+    var files : array<string>
+    for (tree in SWEEP_TREES) {
+        collect_das_files(tree, files)
+    }
+    fio::dir("modules") $(mod) {
+        return if (mod == "." || mod == "..")
+        for (sub in ["examples", "tutorials", "utils"]) {
+            let p = "modules/{mod}/{sub}"
+            var st : FStat
+            if (stat(p, st) && st.is_dir) {
+                collect_das_files(p, files)
+            }
+        }
+    }
+    var light : array<string>
+    var heavy : array<string>
+    for (f in files) {
+        continue if (sweep_excluded(f) || !is_sweep_root_path(f))
+        let text = fread(f)
+        continue if (!is_sweep_root_text(text))
+        if (is_heavy_sweep_root(text)) {
+            heavy |> push(f)
+        } else {
+            light |> push(f)
+        }
+    }
+    sort(light)
+    sort(heavy)
+    return <- (light <- light, heavy <- heavy)
+}
+
+struct SweepItem {
+    index : int
+    path : string
+}
+
+struct SweepResult {
+    index : int
+    rc : int
+    out : string
+}
+
+//! one `daslang -compile-only` per root, `workers` in flight - the pooled shape of run_verify_workers
+def private run_sweep_workers(daslang : string; files : array<string>; workers : int; timeout : float) : array<SweepResult> {
+    let n = length(files)
+    var results : array<SweepResult>
+    results |> resize(n)
+    return <- results if (n == 0)
+    let nw = clamp(workers, 1, n)
+    with_channel(n) $(inCh) {
+        with_channel(n) $(outCh) {
+            with_job_status(nw) $(done) {
+                for (_t in range(nw)) {
+                    new_thread <| @ {
+                        for_each_clone(inCh) $(item : SweepItem#) {
+                            var out : string
+                            let path = string(item.path)
+                            let argv <- [daslang, "-compile-only", "-dasroot", ".", path]
+                            let rc = unsafe(popen_argv(argv, timeout, $(f) {
+                                if (f != null) {
+                                    out := fread(f)
+                                }
+                            }))
+                            outCh |> push_clone(SweepResult(index = item.index, rc = rc, out = out))
+                            outCh |> notify()
+                        }
+                        inCh |> release()
+                        outCh |> release()
+                        done |> notify_and_release()
+                    }
+                }
+                for (i in range(n)) {
+                    inCh |> push_clone(SweepItem(index = i, path = files[i]))
+                    inCh |> notify()
+                }
+                for (r in each_clone(outCh, type<SweepResult>)) {
+                    if (r.index >= 0 && r.index < n) {
+                        results[r.index].index = r.index
+                        results[r.index].rc = r.rc
+                        results[r.index].out := r.out
+                    }
+                }
+                done |> join()
+            }
+        }
+    }
+    return <- results
+}
+
+//! the per-PR form of CI's examples and tutorial runs: does every program root still compile
+def gate_compile_sweep(ctx : PreflightCtx) : GateResult {
+    let t0 = ref_time_ticks()
+    let roots <- collect_sweep_roots()
+    let total = length(roots.light) + length(roots.heavy)
+    if (total == 0) {
+        return GateResult(name = "compile-sweep", status = GateStatus.Skip, seconds = seconds_since(t0), detail = "no program roots found under {join(SWEEP_TREES, ", ")}")
+    }
+    //! cores, not get_total_hw_threads(): the latter is the jobque's own worker count (5 on an 18-core M5)
+    let workers = compute_worker_count(length(roots.light), ctx.jobs > 0 ? ctx.jobs : get_total_hw_cores())
+    let t_pool = ref_time_ticks()
+    let light <- run_sweep_workers(ctx.daslang, roots.light, workers, 300.0)
+    let pool_s = seconds_since(t_pool)
+    // the engine roots share one module graph: one explicit cache, written by the first, served to the rest
+    let cache = unique_temp_path("preflight_sweep", ".dascache")
+    let t_serial = ref_time_ticks()
+    var red = 0
+    let output = build_string() $(w) {
+        for (root, r in roots.light, light) {
+            continue if (r.rc == 0)
+            red ++
+            w |> write("=== {root} (exit {r.rc}) ===\n{r.out}\n")
+        }
+        for (root in roots.heavy) {
+            let r = run_argv([ctx.daslang, "-compile-only", "-dasroot", ".", "-module-cache", cache, root], 600.0)
+            continue if (r.rc == 0)
+            red ++
+            w |> write("=== {root} (exit {r.rc}) ===\n{r.out}\n")
+        }
+    }
+    let serial_s = seconds_since(t_serial)
+    remove(cache)
+    let shape = "{length(roots.light)} in a {workers}-wide pool ({fmt(":.0f", float(pool_s))}s), {length(roots.heavy)} engine roots serial through one module cache ({fmt(":.0f", float(serial_s))}s); {length(SWEEP_EXCLUDED)} trees excluded"
+    if (red > 0) {
+        return GateResult(name = "compile-sweep", status = GateStatus.Fail, seconds = seconds_since(t0),
+            detail = "{red} of {total} program root(s) fail to compile - {shape}", output = output)
+    }
+    return GateResult(name = "compile-sweep", status = GateStatus.Pass, seconds = seconds_since(t0),
+        detail = "{total} program root(s) compile - {shape}")
+}
+
+//! CI's "Run utils tests" step: every utils/*/tests suite through the cmake target
+def gate_utils_tests(ctx : PreflightCtx) : GateResult {
+    let t0 = ref_time_ticks()
+    if (empty(ctx.build_dir)) {
+        return GateResult(name = "utils-tests", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "no configured build dir — cmake -B build first")
+    }
+    return run_test_gate("utils-tests",
+        ["cmake", "--build", ctx.build_dir, "--config", ctx.config, "--target", "run_utils_tests"],
+        "utils test suites failed (cmake --target run_utils_tests)")
+}
+
 // ===== test suites =====
 
 def slowest_files_block(out : string) : string {
@@ -1272,9 +1479,17 @@ def gate_tests_aot(ctx : PreflightCtx) : GateResult {
             detail = "test_aot binary not found next to daslang ({test_aot})")
     }
     // 2x CI's per-file cap - same chained-load reasoning as gate_tests_interp
-    return run_test_gate("tests-aot",
+    var g <- run_test_gate("tests-aot",
         [test_aot, "-use-aot", "dastest/dastest.das", "--", "--use-aot", "--failures-only", "--timing-outliers", "10", "--max-file-time", "60", "--timeout", "1800", "--test", "tests"],
-        "AOT suite failures (error[50101] → skills/internal/aot_hash_desync_debugging.md)", t0)
+        "AOT suite failures", t0)
+    if (g.status == GateStatus.Fail) {
+        if (find(g.output, "error[50101]") >= 0) {
+            g.detail = "AOT link failed: error[50101] → skills/internal/aot_hash_desync_debugging.md"
+        } else {
+            g.detail = "AOT-only failures in {failed_files_block(g.output)} — green under -jit/interp means the AOT emitter (daslib/aot_cpp.das) or aot.h"
+        }
+    }
+    return <- g
 }
 
 def gate_sequence(ctx : PreflightCtx) : GateResult {
@@ -1376,36 +1591,46 @@ def gate_dasllama(ctx : PreflightCtx; suite : string) : GateResult {
 
 // ===== orchestration =====
 
+//! tiers: `fast` runs serially first on every run and a red stops the run; `lane` runs only under --full,
+//! every lane at once, so the wall is the longest lane; `module` never runs from a tier - `--only <gate>`
+//! runs it when the module is the work. `reach`: the path prefixes whose change reaches the gate (the core
+//! reaches everything; empty = the gate runs whatever changed)
 struct GateInfo {
     name : string
-    full_only : bool
+    tier : string
     doc : string
+    reach : array<string>
 }
 
 def gate_table() : array<GateInfo> {
     return <- [
-        GateInfo(name = "untracked", full_only = true, doc = "no untracked files at PR time — commit, delete, or ignore each"),
-        GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors CI)"),
-        GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings; --lint-skip-exe-rail drops the exe rail"),
-        GateInfo(name = "hash-refs", full_only = false, doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
-        GateInfo(name = "review-md", full_only = false, doc = "REVIEW.das gates of every folder the diff touches (utils/internal/review-md; mirrors CI's extended_checks step)"),
-        GateInfo(name = "md-ascii", full_only = false, doc = "ci/fix_md_ascii.py --check when the diff touches .md (mirrors CI's Markdown ASCII gate in extended_checks)"),
-        GateInfo(name = "ast-verify", full_only = false, doc = "daslang -dry-run --ast-verify-batch on changed .das (parallel, 300s/file; mirrors CI) - an AST verify line, a crash, or a timeout fails"),
-        GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
-        GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
-        GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
-        GateInfo(name = "docs", full_only = true, doc = "the seven doc.yml gates (das2rst, imgui2rst, vulkan2rst, stubs, uncategorized, docs/untracked, sphinx html)"),
-        GateInfo(name = "tests-cpp", full_only = true, doc = "ctest -L small"),
-        GateInfo(name = "tests-interp", full_only = true, doc = "full interpreter suite"),
-        GateInfo(name = "tests-jit", full_only = true, doc = "full JIT suite (skips when dasLLVM absent)"),
-        GateInfo(name = "tests-aot", full_only = true, doc = "build test_aot + full AOT suite"),
-        GateInfo(name = "sequence", full_only = true, doc = "sequence game release smoke (only pre-merge compile of GLFW-gated das)"),
-        GateInfo(name = "imgui", full_only = true, doc = "dasImgui playwright suite (nightly-only CI — this local mirror is the only pre-merge gate for it)"),
-        GateInfo(name = "dasllama-model-free", full_only = true, doc = "dasLLAMA model-free suite via tests/run.das (skips unless the diff touches modules/dasLLAMA/; no CI lane)"),
-        GateInfo(name = "dasllama-stocked", full_only = true, doc = "dasLLAMA stocked suite - the model-gated files, a run of skips without models (skips unless the diff touches modules/dasLLAMA/; no CI lane)")
+        GateInfo(name = "untracked", tier = "fast", doc = "no untracked files at PR time — commit, delete, or ignore each"),
+        GateInfo(name = "format", tier = "fast", doc = "formatter --verify on tracked .das (mirrors CI)"),
+        GateInfo(name = "lint", tier = "fast", doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings; --lint-skip-exe-rail drops the exe rail"),
+        GateInfo(name = "hash-refs", tier = "fast", doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
+        GateInfo(name = "review-md", tier = "fast", doc = "REVIEW.das gates of every folder the diff touches (utils/internal/review-md; CI's extended_checks step runs every gate)"),
+        GateInfo(name = "md-ascii", tier = "fast", doc = "ci/fix_md_ascii.py --check when the diff touches .md (mirrors CI's Markdown ASCII gate in extended_checks)"),
+        GateInfo(name = "ast-verify", tier = "fast", doc = "daslang -dry-run --ast-verify-batch on changed .das (parallel, 300s/file; mirrors CI) - an AST verify line, a crash, or a timeout fails"),
+        GateInfo(name = "cpp-syntax", tier = "fast", doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
+        GateInfo(name = "dasgen", tier = "fast", doc = "gen_bind.das freshness vs include/daScript/builtin/", reach <- ["src/builtin/", "include/daScript/builtin/", "utils/internal/dasgen/"]),
+        GateInfo(name = "ci-das", tier = "fast", doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
+        GateInfo(name = "ci-matrix", tier = "fast", doc = "python3 ci/test_ci_matrix.py - the CI job matrices per event and the extended_checks role conditions (mirrors CI's core-role step)", reach <- [".github/", "ci/"]),
+        GateInfo(name = "compile-sweep", tier = "fast", doc = "compile-only of every program root under utils/, examples/, tutorials/ and the modules' examples and utils, in parallel (the per-PR form of CI's examples and tutorial runs)"),
+        GateInfo(name = "docs", tier = "lane", doc = "the seven doc.yml gates (das2rst, imgui2rst, vulkan2rst, stubs, uncategorized, docs/untracked, sphinx html)", reach <- ["doc/", "daslib/", "src/builtin/", "modules/dasImgui/", "modules/dasVulkan/", "modules/dasLLAMA/dasllama/"]),
+        GateInfo(name = "tests-cpp", tier = "lane", doc = "ctest -L small"),
+        GateInfo(name = "tests-interp", tier = "lane", doc = "full interpreter suite"),
+        GateInfo(name = "tests-jit", tier = "lane", doc = "full JIT suite (skips when dasLLVM absent)"),
+        GateInfo(name = "tests-aot", tier = "lane", doc = "build test_aot + full AOT suite (per-PR CI compiles only the subset; the sweep is nightly's)"),
+        GateInfo(name = "utils-tests", tier = "lane", doc = "run_utils_tests - every utils/*/tests suite (mirrors CI's extended_checks step)", reach <- ["utils/"]),
+        GateInfo(name = "sequence", tier = "module", doc = "sequence game release smoke; nightly CI - run it when working on the game", reach <- ["examples/games/sequence/"]),
+        GateInfo(name = "imgui", tier = "module", doc = "dasImgui playwright suite; nightly CI - run it when working on dasImgui", reach <- ["modules/dasImgui/", "modules/dasGlfw/", "modules/dasClipboard/"]),
+        GateInfo(name = "dasllama-model-free", tier = "module", doc = "dasLLAMA model-free suite via tests/run.das - the module's every-change gate (run.das -- --changed while working)", reach <- ["modules/dasLLAMA/"]),
+        GateInfo(name = "dasllama-stocked", tier = "module", doc = "dasLLAMA stocked suite - the model-gated files, the module's per-PR run on a box with models", reach <- ["modules/dasLLAMA/"])
     ]
 }
 
+//! --only and --skip name gates outright; otherwise the fast tier always runs, the lane tier under --full,
+//! and the module tier never
 def want_gate(cfg : Config; info : GateInfo) : bool {
     let only_list <- split_csv(cfg.only)
     let skip_list <- split_csv(cfg.skip)
@@ -1418,7 +1643,58 @@ def want_gate(cfg : Config; info : GateInfo) : bool {
         }
         return false
     }
-    return cfg.full || !info.full_only
+    return tier_runs(info.tier, cfg.full)
+}
+
+//! one lane = one child preflight running `--only <gate>` with the parent's settings; every lane at once
+//! (one thread per child), so the wall is the longest lane. The child's own verdict lines are the result.
+def private run_lanes(ctx : PreflightCtx; cfg : Config; names : array<string>) : array<GateResult> {
+    var argvs : array<array<string>>
+    argvs |> reserve(length(names))
+    for (name in names) {
+        var av <- [ctx.daslang, "utils/internal/preflight/main.das", "--", "--only", name, "--base", cfg.base,
+                   "--daslang", ctx.daslang, "--build-dir", cfg.build_dir]
+        if (cfg.jobs > 0) {
+            av |> push("-j")
+            av |> push("{cfg.jobs}")
+        }
+        if (cfg.jit_jobs >= 0) {
+            av |> push("--jit-jobs")
+            av |> push("{cfg.jit_jobs}")
+        }
+        if (cfg.jit_max_file_time >= 0.0) {
+            av |> push("--jit-max-file-time")
+            av |> push("{cfg.jit_max_file_time}")
+        }
+        if (!empty(cfg.config_file)) {
+            av |> push("--config-file")
+            av |> push(cfg.config_file)
+        }
+        if (cfg.verbose) {
+            av |> push("-v")
+        }
+        argvs |> emplace(av)
+    }
+    let children <- run_chunk_workers(argvs)
+    var results : array<GateResult>
+    results |> reserve(length(names) + 8)   // the docs lane reports its seven gates
+    for (name, child in names, children) {
+        let reports <- parse_gate_reports(child.stdout)
+        if (empty(reports)) {
+            results |> emplace(GateResult(name = name, status = GateStatus.Fail,
+                detail = "lane child exited {child.exit_code} without a verdict", output = child.stdout))
+            continue
+        }
+        for (rep in reports) {
+            var r = GateResult(name = rep.name, seconds = rep.seconds, detail = rep.detail, breakdown = rep.breakdown)
+            r.status = rep.tag == "PASS" ? GateStatus.Pass : (rep.tag == "SKIP" ? GateStatus.Skip : GateStatus.Fail)
+            if (r.status == GateStatus.Fail || cfg.verbose) {
+                r.output = child.stdout
+            }
+            results |> emplace(r)
+        }
+    }
+    return <- results
 }
 
 def status_tag(s : GateStatus) : string {
@@ -1465,7 +1741,8 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     }
     if (cfg.list_gates) {
         for (info in gate_table()) {
-            to_log(LOG_INFO, "{info.name}\t{info.full_only ? "full" : "fast"}\t{info.doc}\n")
+            let reach = empty(info.reach) ? "any change" : "reach: {join(info.reach, " ")} (+core)"
+            to_log(LOG_INFO, "{info.name}\t{info.tier}\t{reach}\t{info.doc}\n")
         }
         return 0
     }
@@ -1528,6 +1805,7 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     ctx.clang = clang_info.exe
     ctx.clang_is_cl = clang_info.is_cl
     collect_changed_files(cfg.base, ctx.changed_das, ctx.changed_cpp, ctx.changed_hdr)
+    ctx.changed_all <- collect_changed_paths(cfg.base)
 
     let tier = cfg.full ? "full" : "fast"
     let n_das = length(ctx.changed_das)
@@ -1538,8 +1816,21 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
 
     var results : array<GateResult>
     let t_all = ref_time_ticks()
+    var lanes : array<string>
+    let by_only = !empty(cfg.only)   // a gate named outright runs whatever changed - "working on imgui: run imgui"
     for (info in gate_table()) {
         continue if (!want_gate(cfg, info))
+        if (!by_only && !reach_hit(ctx.changed_all, info.reach)) {
+            var r = GateResult(name = info.name, status = GateStatus.Skip,
+                detail = "nothing under {join(info.reach, ", ")} or the core changed vs {cfg.base}")
+            report_gate(r, cfg.verbose)
+            results |> emplace(r)
+            continue
+        }
+        if (info.tier == "lane" && !by_only && !cfg.serial) {
+            lanes |> push(info.name)   // deferred: every lane runs at once after the fast tier
+            continue
+        }
         to_log(LOG_INFO, "[RUN ] {info.name}\n")
         if (info.name == "docs") {
             var doc_results : array<GateResult>
@@ -1570,6 +1861,8 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 r <- gate_dasgen(ctx)
             } elif (info.name == "ci-das") {
                 r <- gate_ci_das(ctx)
+            } elif (info.name == "ci-matrix") {
+                r <- gate_ci_matrix()
             } elif (info.name == "tests-cpp") {
                 r <- gate_tests_cpp(ctx)
             } elif (info.name == "tests-interp") {
@@ -1586,6 +1879,10 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 r <- gate_dasllama(ctx, "model-free")
             } elif (info.name == "dasllama-stocked") {
                 r <- gate_dasllama(ctx, "stocked")
+            } elif (info.name == "compile-sweep") {
+                r <- gate_compile_sweep(ctx)
+            } elif (info.name == "utils-tests") {
+                r <- gate_utils_tests(ctx)
             }
             report_gate(r, cfg.verbose)
             results |> emplace(r)
@@ -1598,6 +1895,27 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
             }
         }
         break if (cfg.fail_fast && any_fail)
+    }
+    if (!empty(lanes)) {
+        var fast_red = false
+        for (r in results) {
+            fast_red ||= r.status == GateStatus.Fail
+        }
+        if (fast_red) {
+            results |> reserve(length(results) + length(lanes))
+            for (name in lanes) {   // the expensive lanes wait for a green fast tier
+                var r = GateResult(name = name, status = GateStatus.Skip, detail = "not run: the fast tier is red")
+                report_gate(r, cfg.verbose)
+                results |> emplace(r)
+            }
+        } else {
+            to_log(LOG_INFO, "[RUN ] lanes, concurrently: {join(lanes, ", ")}\n")
+            let lane_results <- run_lanes(ctx, cfg, lanes)
+            for (r in lane_results) {
+                report_gate(r, cfg.verbose)
+            }
+            results |> push_from(lane_results)
+        }
     }
 
     var n_pass = 0

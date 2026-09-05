@@ -38,6 +38,7 @@ namespace das {
     const char * get_dasenv_jobque_team_eager_exit ()  { return das_getenv("DAS_JOBQUE_TEAM_EAGER_EXIT"); }
     const char * get_dasenv_team_prof ()               { return das_getenv("DAS_TEAM_PROF"); }
     const char * get_dasenv_trace_module_load ()       { return das_getenv("DAS_TRACE_MODULE_LOAD"); }
+    const char * get_dasenv_module_cache_limit ()      { return das_getenv("DAS_MODULE_CACHE_LIMIT"); }
 
     const char * get_columns ()                     { return das_getenv("COLUMNS"); }
 }

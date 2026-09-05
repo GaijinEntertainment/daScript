@@ -17,8 +17,8 @@ what identifies one - the fields that decide whether two `.dlim`s are the same i
 to `modules/dasLLAMA/REVIEW.md` (repo root) too.** A `utils/` diff never opens that checklist
 on its own.
 
-**Weakening `REVIEW.das` (beside this file) is a defect.** What the gate checks is read from the
-script itself, and each check's finding text states its rule.
+**Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing what a check
+walks, or rewriting a finding text so it no longer names what failed.**
 
 **A diff that drops a tool from `DAS_UTILS_SHIPPED_EXES` (`CMakeLists.txt`, beside this file)
 while keeping that tool's directory records the decision to stop shipping it in that tool's
@@ -31,9 +31,10 @@ list never carried leaves no record.
 
 **A test the diff adds or changes that covers a change under `utils/`, whose load-bearing
 assertions a CI row can run against the change, ships with a CI row that executes those
-assertions, wherever the diff puts the test, added in the same change if no row already covers
-it.** A row that only compile-checks the test (`dastest --compile-only`) does
-not execute them. A test whose assertions no row executes never runs again.
+assertions on every pull request, wherever the diff puts the test, added in the same change if
+no row already covers it.** A row that only compile-checks the test (`dastest --compile-only`)
+does not execute them, and a nightly-only row runs them after the merge. A test whose
+assertions no row executes never runs again.
 
 **A test the diff adds or changes that covers a change under `utils/`, whose load-bearing
 assertions no CI row can run for want of hardware or data, ships with a row that compile-checks it - `dastest

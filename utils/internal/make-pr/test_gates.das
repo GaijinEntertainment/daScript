@@ -16,6 +16,17 @@ def test_want_gate(t : T?) {
 }
 
 [test]
+def test_in_default_chain(t : T?) {
+    for (g in ["sync", "stamp-reach", "jit-smoke"]) {
+        t |> success(in_default_chain("", g), "{g} is in the default chain")
+    }
+    for (g in NAMED_ONLY_GATES) {
+        t |> success(!in_default_chain("", g), "{g} is not in the default chain")
+        t |> success(in_default_chain(g, g), "--only {g} runs it")
+    }
+}
+
+[test]
 def test_unknown_gate_names(t : T?) {
     let no_skip : array<string>
     t |> equal(length(unknown_gate_names("", no_skip)), 0)

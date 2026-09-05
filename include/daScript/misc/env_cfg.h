@@ -32,6 +32,7 @@ namespace das {
     DAS_API const char * get_dasenv_jobque_team_eager_exit ();
     DAS_API const char * get_dasenv_team_prof ();
     DAS_API const char * get_dasenv_trace_module_load ();
+    DAS_API const char * get_dasenv_module_cache_limit ();
 
     // ambient variables daslang reads but does not own
     DAS_API const char * get_columns ();

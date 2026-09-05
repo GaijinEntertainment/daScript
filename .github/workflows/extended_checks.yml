@@ -34,12 +34,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - id: skip_check
         uses: fkirc/skip-duplicate-actions@v5
         with:
           concurrent_skipping: 'same_content'
           do_not_skip: '["pull_request", "workflow_dispatch"]'
+      # The job matrix is data in ci/ci_matrix.py, evaluated per event here (ci/test_ci_matrix.py pins it).
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ci
+      - id: matrix
+        # two statements: a substitution inside echo would hide the script's exit code
+        run: |
+          set -eu
+          matrix=$(python3 ci/ci_matrix.py extended '${{ github.event_name }}')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   ###########################################################
   extended_checks:
@@ -50,6 +61,7 @@ jobs:
     if: >-
       (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
       || (github.event_name != 'schedule' && needs.pre_job.outputs.should_skip != 'true')
+    name: "extended_checks (${{ matrix.target }}, ${{ matrix.role }})"
     runs-on: ${{ matrix.runner }}
     # actions: write needed for `gh cache delete` in the sccache refresh step.
     permissions:
@@ -57,26 +69,18 @@ jobs:
       actions: write
     strategy:
       fail-fast: false
-      # The windows lane runs on the nightly cron and manual dispatch only —
-      # retired from the per-PR path: it re-runs the same shared das surface
-      # MSVC-slower while adding no windows-only checks (build.yml's windows
-      # cells are the per-PR MSVC gate), and it runs uncached by design (see
-      # the sccache comment below). The event ternary appears on BOTH the
-      # target axis and the include list: an include whose target is absent
-      # from the axis would be ADDED as a standalone cell, not dropped.
-      matrix:
-        target: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["linux", "darwin15", "windows"]') || fromJSON('["linux", "darwin15"]') }}
-        architecture: [64, arm64]
-
-        include: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"target":"linux","runner":"ubuntu-latest","build_system":"cmake","cmake_generator":"Ninja"},{"target":"darwin15","architecture":"arm64","runner":"macos-15","architecture_string":"arm64","build_system":"cmake","cmake_generator":"Ninja"},{"target":"windows","runner":"windows-latest","build_system":"cmake","cmake_generator":"Ninja","architecture_string":"x64"}]') || fromJSON('[{"target":"linux","runner":"ubuntu-latest","build_system":"cmake","cmake_generator":"Ninja"},{"target":"darwin15","architecture":"arm64","runner":"macos-15","architecture_string":"arm64","build_system":"cmake","cmake_generator":"Ninja"}]') }}
-
-        exclude:
-          - target: linux
-            architecture: arm64
-          - target: windows
-            architecture: arm64
-          - target: darwin15
-            architecture: 64
+      # The cells come from ci/ci_matrix.py (pre_job evaluates it for this event). Per PR: two
+      # darwin15 jobs split by role, each inside the 35-minute budget - `core` runs the tree's
+      # own gates (formatter, lint, ast-verify, dasgen, ci-das, REVIEW.das, the python gates,
+      # utils tests, the standalone exes), `modules` the module and service suites (ser/deser,
+      # MCP, dasllama-server, facade lint, sequence, dasweb, ladder, boulder-dash). A step's role
+      # condition is always `matrix.role != '<other>'`, so the nightly `all` role runs every
+      # step - one job each on linux, darwin15 and windows, plus the steps too slow for a PR
+      # (tutorial dry-runs, the run form of examples, daslang_static, coverage, nano). The
+      # windows lane is nightly-only: it re-runs the same shared das surface MSVC-slower while
+      # adding no windows-only checks (build.yml's windows cells are the per-PR MSVC gate), and
+      # it runs uncached by design (see the sccache comment below).
+      matrix: ${{ fromJSON(needs.pre_job.outputs.matrix) }}
 
     steps:
     - name: "SCM Checkout"
@@ -188,10 +192,11 @@ jobs:
         # The launcher exported via env also wraps the GLFW/libhv
         # ExternalProject sub-builds — harmless on gcc/clang.
         # SCCACHE_CACHE_SIZE bounds the slot: the default is 10G, so an unbounded
-        # slot grows until it evicts other caches in the repository. 500M holds a
-        # full linux/macOS object set with room — build.yml's linux Release slot
-        # sits at ~94MB.
-        echo "SCCACHE_CACHE_SIZE=500M" >> $GITHUB_ENV
+        # slot grows until it evicts other caches in the repository. A Release
+        # build of daslang + daslang_static + the sequence smoke's module targets
+        # is ~800MB of objects; 1500M holds all of it, so the nightly save lands
+        # a complete set and a PR lane's build is a cache read.
+        echo "SCCACHE_CACHE_SIZE=1500M" >> $GITHUB_ENV
         echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
         echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
     # Stable per-config key in its own `sccache-extended-*` namespace so it never
@@ -253,13 +258,13 @@ jobs:
         esac
 
     - name: "Refresh sccache slot"
-      if: matrix.target != 'windows' && github.ref == 'refs/heads/master'
+      if: matrix.target != 'windows' && matrix.role != 'modules' && github.ref == 'refs/heads/master'
       env:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
       run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
     - name: "Save sccache objects"
-      if: matrix.target != 'windows' && github.ref == 'refs/heads/master'
+      if: matrix.target != 'windows' && matrix.role != 'modules' && github.ref == 'refs/heads/master'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/sccache
@@ -271,15 +276,23 @@ jobs:
       run: npm install -g @ast-grep/cli tree-sitter-cli@0.26.8
 
     - name: "Run dasgen and check generated files are up to date"
+      if: matrix.role != 'modules'
       run: cmake --build ./build --config Release --target check_dasgen
 
     - name: "Run examples from modules"
+      # Nightly: the run form costs 5-8 minutes; per PR, preflight's compile-sweep gate
+      # compiles every example and tutorial root, and the ci-das step below covers the
+      # CI-only surface.
+      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
       run: cmake --build ./build --config Release --target run_examples
 
     - name: "Run utils tests"
+      if: matrix.role != 'modules'
       run: cmake --build ./build --config Release --target run_utils_tests
 
     - name: "Run tutorial dry-runs"
+      # Nightly, for the same reason as the examples' run form (8-11 minutes per lane).
+      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
       run: cmake --build ./build --config Release --target dry_run_tutorials
 
     - name: "Check the example games stay wired to the site"
@@ -288,8 +301,8 @@ jobs:
       # step, the examples-page card and its poster, the playground sample and the
       # interpreted fallback's file bundle. All of that is hand-maintained, and the
       # deploy that consumes it only runs on master, so a mismatch is invisible until
-      # the site is already broken. Linux only: it reads files, nothing platform-bound.
-      if: matrix.target == 'linux'
+      # the site is already broken. The core role: it reads files, nothing platform-bound.
+      if: matrix.role != 'modules'
       run: $BIN/daslang examples/games/REVIEW.das
 
     - name: "Verify authored-doc code blocks (nightly only)"
@@ -301,9 +314,10 @@ jobs:
       run: $BIN/daslang ./utils/internal/doc-verify/main.das -- --daslang $BIN/daslang
 
     - name: "Cross-compile nano for cortex-m4"
-      # nano's drift tripwire - the only freestanding build in CI. Linux only:
-      # one arch catches the drift, and the toolchain is an apt away.
-      if: matrix.target == 'linux'
+      # nano's drift tripwire - the only freestanding build in CI. Nightly, on the linux
+      # cell: the toolchain is an apt package no darwin cell (the per-PR platform) and no
+      # developer box carries, so no per-PR cell and no preflight gate can run it.
+      if: matrix.target == 'linux' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
       run: |
         set -eux
         # newlib and its libstdc++ are only *recommended* by gcc-arm-none-eabi,
@@ -313,6 +327,8 @@ jobs:
         ci/nano_arm_build.sh "$BIN/daslang"
 
     - name: "Build standalone executables"
+      # core: the formatter and lint steps below run the das-fmt / das-lint exes this builds
+      if: matrix.role != 'modules'
       run: |
         set -eux
         cmake --build ./build --config Release --target all_utils_exe
@@ -320,6 +336,7 @@ jobs:
         $BIN/daslang -exe -output ./bin/das-lint ./utils/lint/main.das
 
     - name: "Sequence release smoke test"
+      if: matrix.role != 'core'
       # Full daspkg install -> release -> launch cycle on the in-tree sequence
       # game. Exercises release_include_dll + the loader fixes (Windows
       # LoadLibraryEx, POSIX rpath $ORIGIN / @loader_path) end-to-end.
@@ -359,6 +376,7 @@ jobs:
         esac
 
     - name: "Run formatter"
+      if: matrix.role != 'modules'
       run: |
         set -eux
         cmake --build ./build --config Release --target check_format
@@ -366,14 +384,16 @@ jobs:
         $BIN/das-fmt.exe --path ./ --verify --exclude-mask build/
 
     - name: "Run lint on changed .das and .md files"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         BASE_REF="${{ github.event.pull_request.base.ref }}"
         BASE_REF="${BASE_REF:-master}"
         # a changed .md arms its folder's document rules (LINT025/026/027) with no .das compiled;
         # a repo-root .md arms the whole tree - intended, and a few seconds with nothing to compile
-        mapfile -t CHANGED < <(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- '*.das' '*.md')
+        # (a read loop, not mapfile: the darwin runner's /bin/bash is 3.2)
+        CHANGED=()
+        while IFS= read -r f; do CHANGED+=("$f"); done < <(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- '*.das' '*.md')
         if [ ${#CHANGED[@]} -eq 0 ]; then
           echo "no .das or .md files changed; skipping lint"
           exit 0
@@ -386,7 +406,7 @@ jobs:
         $BIN/das-lint.exe "${CHANGED[@]}" --quiet --disable LINT019
 
     - name: "Run ast-verify on changed .das files"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       # a bare exit 143 with no finding is the runner killing the step (memory: each item is a
       # whole-engine compile under the verifier) - the explicit deadline makes that a named failure
       timeout-minutes: 90
@@ -394,7 +414,8 @@ jobs:
         set -eux
         BASE_REF="${{ github.event.pull_request.base.ref }}"
         BASE_REF="${BASE_REF:-master}"
-        mapfile -t CHANGED < <(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- '*.das')
+        CHANGED=()
+        while IFS= read -r f; do CHANGED+=("$f"); done < <(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- '*.das')
         # canary: macro-PRODUCED AST is only verified where a macro expands, and the tree-wide
         # sweep is nightly-only - so the heaviest qmacro consumer verifies on every PR
         CHANGED+=("tests/linq/test_linq_fold.das")
@@ -409,7 +430,9 @@ jobs:
         f="$1"
         case "$(basename "$f")" in cant_*|failed_*|invalid_*) exit 0 ;; esac
         case "$f" in *ast-fuzz/selftest/*) exit 0 ;; esac   # deliberately broken fixtures; test_ast_fuzz.das owns them
-        out=$(timeout 300 "$BIN/daslang" -dry-run --ast-verify-batch "$f" 2>&1); rc=$?
+        # perl's alarm survives the exec, so the deadline holds on darwin too (no coreutils timeout there);
+        # a compile the alarm kills exits 142 (SIGALRM), GNU timeout's 124 kept for the linux nightly
+        out=$(perl -e 'alarm shift; exec @ARGV' 300 "$BIN/daslang" -dry-run --ast-verify-batch "$f" 2>&1); rc=$?
         if grep -q 'error\[20510\]' <<< "$out"; then
           # the verifier's own require closure (daslib/ast, ast_boost, ...) cannot be a main file
           # under the force-include - say so instead of counting a non-run as clean
@@ -421,7 +444,7 @@ jobs:
           grep 'AST verify' <<< "$out" | sort -u | head -5
           exit 1
         fi
-        if [ "$rc" -eq 124 ]; then
+        if [ "$rc" -eq 124 ] || [ "$rc" -eq 142 ]; then
           echo "ast-verify timed out (300s) on $f"
           exit 1
         fi
@@ -442,10 +465,13 @@ jobs:
         printf '%s\0' "${CHANGED[@]}" | xargs -0 -P 2 -n 1 /tmp/ast_verify_changed.sh
 
     - name: "Test daslang_static"
+      # modules role, per PR: static-registration / no-dynamic-modules divergence has no local mirror
+      if: matrix.role != 'core'
       run: |
         set -eux
         $BIN/daslang_static _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests
     - name: "Test ser/deser"
+      if: matrix.role != 'core'
       run: |
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --ser serialized.bin
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --deser serialized.bin
@@ -495,46 +521,57 @@ jobs:
           | xargs -0 -P "$(nproc)" -n 1 /tmp/ast_verify_one.sh
 
     - name: "Test MCP tools"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'core'
       run: |
         set -eux
+        # the ast-grep tools need the daslang grammar library and the sgconfig.yml its post-build
+        # step stamps - run_utils_tests builds it in the core role, this job must build it itself
+        cmake --build ./build --config Release --target tree_sitter_daslang
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/mcp/test_tools.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/mcp/test_crosstree_guard.das
 
     - name: "Test LSP cross-tree guard (python)"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         python3 utils/lsp/test_crosstree_guard.py
 
+    - name: "Test CI matrix and role conditions (python)"
+      # ci/ci_matrix.py is what pre_job fed this very run; the test pins its per-event cells and
+      # the `matrix.role != '<other>'` spelling of every step condition in this workflow
+      if: matrix.role != 'modules'
+      run: |
+        set -eux
+        python3 ci/test_ci_matrix.py
+
     - name: "Test shipped-skills gate (python)"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         python3 ci/test_check_shipped_skills.py
 
     - name: "Markdown ASCII gate (python)"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         python3 ci/test_fix_md_ascii.py
         python3 ci/fix_md_ascii.py --check
 
     - name: "Test watchdog tray wording (python)"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         python3 utils/watchdog/test_tray_state.py
         python3 utils/watchdog/test_consent.py
 
     - name: "Test pip wheel repack (python)"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         python3 ci/test_wheel_build.py
 
     - name: "Test boulder-dash samples (both copies)"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'core'
       run: |
         set -eux
         # dastest walks the folder: every test_*.das runs, files without [test]
@@ -543,7 +580,7 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./web/examples/ui/samples/examples/boulder-dash
 
     - name: "Test review-md discovery"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/review-md/test_scan.das
@@ -555,13 +592,13 @@ jobs:
     - name: "Test dastest own suite"
       # the whole directory, so a new dastest/tests file is covered with no
       # hand-added row (this also runs the review_gate library tests)
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./dastest/tests
 
     - name: "Test benchmark results updater"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./benchmarks/sql/tests/test_update_results.das
@@ -569,7 +606,7 @@ jobs:
     - name: "Run REVIEW.das gates"
       # the CI counterpart of the make_pr step-0a walk (fail-fix: agents only
       # ever review a mechanically-clean tree)
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         $BIN/daslang ./utils/internal/review-md/all.das
@@ -578,17 +615,19 @@ jobs:
       # the deploy runs the same generator; this is the per-PR half - a committed
       # index.html/feed.xml/sitemap.xml that the generator would rewrite is a red lane,
       # and so is a page missing its title, description, OpenGraph tags or Atom link
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
-        pip install markdown
+        # into the interpreter that runs the script: on the darwin runner `pip` and `python3` differ,
+        # and a Homebrew python refuses a system-site install without the last flag
+        python3 -m pip install markdown || python3 -m pip install --user markdown || python3 -m pip install --break-system-packages markdown
         python3 site-dasllama/build_news.py --root site-dasllama
         git diff --exit-code -- site-dasllama/index.html site-dasllama/stories.html site-dasllama/stories site-dasllama/feed.xml site-dasllama/sitemap.xml
         test -z "$(git status --porcelain -- site-dasllama/stories)"   # a story page the generator wrote but nobody committed
         python3 site-dasllama/test_metadata.py
 
     - name: "Test pr-babysit verdict core"
-      if: matrix.target == 'linux'
+      if: matrix.role != 'modules'
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/pr-babysit/test_watch_verdict.das
@@ -599,7 +638,7 @@ jobs:
       # the dasHV + dasAudio + dasllama facade surface the server reaches,
       # catching any API/module breakage in CI. The exchange-client, catalog,
       # and setup-mode suites are model-free and run fully (loopback only).
-      if: matrix.target == 'linux'
+      if: matrix.role != 'core'
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server.das
@@ -618,7 +657,7 @@ jobs:
       # ban, declaration coverage, generated-ENVIRONMENT.md drift. Model-free,
       # sub-second — this lane is what makes each REVIEW's "the registry test
       # enforces it" sentence true.
-      if: matrix.target == 'linux'
+      if: matrix.role != 'core'
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/test_env_registry.das
@@ -630,7 +669,7 @@ jobs:
       # aarch64, and the cells pin vecmath's answers - log2(0) is -127 there, while
       # the x64 JIT keeps @llvm.log2 and returns -inf. Needs -jit or the emitters
       # never run. Model-free, ~2 seconds.
-      if: matrix.target == 'darwin15'
+      if: matrix.target == 'darwin15' && matrix.role != 'core'
       run: |
         set -eux
         $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLVM/tests/llvm_vector_math.das
@@ -638,7 +677,7 @@ jobs:
     - name: "Test dasllama facade lint"
       # The DASLLAMA001 smokes: a direct engine require kabooms (expected-compile-failure
       # file), and the per-file options escape admits one. Model-free, sub-second.
-      if: matrix.target == 'linux'
+      if: matrix.role != 'core'
       run: |
         set -eux
         $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/failed_dasllama_lint_require.das
@@ -652,7 +691,7 @@ jobs:
       # ./tests` never reaches them — without this step the store, importer,
       # config and HTTP tests run only by hand. The server suites bind
       # 127.0.0.1:19011/19012/19013 and shut themselves down.
-      if: matrix.target == 'linux'
+      if: matrix.role != 'core'
       run: |
         set -eux
         for suite in test_samples_store test_curated_import test_playground_config test_playground_server test_build_queue test_build_artifacts test_build_endpoints; do
@@ -663,7 +702,7 @@ jobs:
       # The dasllama.io exchange service (sidecars + ladder records). In-dir
       # suites like the playground's; the server suite binds 127.0.0.1:19015
       # and shuts itself down, the store/config suites run against :memory:.
-      if: matrix.target == 'linux'
+      if: matrix.role != 'core'
       run: |
         set -eux
         for suite in test_ladder_store test_ladder_config test_ladder_server; do
@@ -674,7 +713,7 @@ jobs:
       # The wasm build worker (compute-box side of the same pipeline). In-dir
       # suites like the playground's; the client suite runs a stub playground
       # on 127.0.0.1:19014 and shuts itself down.
-      if: matrix.target == 'linux'
+      if: matrix.role != 'core'
       run: |
         set -eux
         for suite in test_buildd_config test_buildd_core test_buildd_client test_roll_toolchain; do
@@ -688,7 +727,7 @@ jobs:
       # (a require breaking, a manifest entry pointing at a moved file)
       # before the site serves it. The browser leg against the live site is
       # a nightly (nightly_playground.yml), not a per-PR check.
-      if: matrix.target == 'linux'
+      if: matrix.role != 'core'
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/dasweb-verify/test_verify_core.das
@@ -710,12 +749,14 @@ jobs:
       # dasOpenGL's GLFW-gated files and the imgui-consuming tools
       # (jobque-timeline, the dasHerd UI root). Single source of truth with the
       # local mirror: utils/internal/preflight's ci-das gate reads the same list file.
+      if: matrix.role != 'modules'
       run: |
         set -eux
         $BIN/daslang utils/internal/preflight/main.das -- --only ci-das
 
     - name: "Coverage"
-      if: matrix.target == 'linux'
+      # a report, not a gate (dascov fails on nothing it measures); nightly on the linux cell
+      if: matrix.target == 'linux' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
       run: |
         $BIN/daslang dastest/dastest.das -- --cov-path coverage.lcov --color --test ./tests/language --timeout 1800
         $BIN/dascov.exe -- coverage.lcov --exclude tests/language

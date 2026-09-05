@@ -306,10 +306,10 @@ def main() : int {
         return 1
     }
     if ((want("sync") && !gate_sync()) ||
-            (want("review-md") && !gate_review_md(daslang)) ||
+            (in_default_chain(g_cfg.only, "review-md") && want("review-md") && !gate_review_md(daslang)) ||
             (want("stamp-reach") && !gate_stamp_reach()) ||
-            (want("dupes") && !gate_dupes(daslang)) ||
-            (want("ast-verify") && !gate_ast_verify(daslang)) ||
+            (in_default_chain(g_cfg.only, "dupes") && want("dupes") && !gate_dupes(daslang)) ||
+            (in_default_chain(g_cfg.only, "ast-verify") && want("ast-verify") && !gate_ast_verify(daslang)) ||
             (want("jit-smoke") && !gate_jit_smoke(daslang))) {
         return 2
     }

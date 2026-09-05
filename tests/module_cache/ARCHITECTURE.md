@@ -12,7 +12,8 @@ this document states what the folder is and why its tests take the shape they do
   count and the cutoff; on an explicit cache it also pins the two stamps a record carries - the
   compile's policies, whose change reparses every module in place and rewrites the file, and
   the module's source, stamped by content so a byte-identical rewrite serves and a same-size
-  edit cuts off.
+  edit cuts off; and the directory's size cap - children run inside a temp directory, so the
+  default cache they fill and prune is their own, never the tree's.
 - `test_macro_dep_invalidate.das` - a compile-time input a macro pinned through
   `add_module_cache_dependency` is compared by content, not mtime: a byte-identical rewrite
   serves the record, a changed file re-parses from that module on and says so.
