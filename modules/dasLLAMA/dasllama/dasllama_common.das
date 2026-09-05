@@ -5277,7 +5277,8 @@ def chat_content() : ChatPart {
 
 //! Install the ChatML turn set (``<|im_start|>``/``<|im_end|>``) the whole qwen family shares,
 //! empty-think suppress included — every ``<|im_start|>`` GGUF maps here, thinking fine-tunes
-//! too; the suppress renders only when the vocab carries the think specials.
+//! too; template resolution removes unsupported reasoning forms, and the suppress additionally
+//! requires the think specials in the vocab.
 def chatml_chat(var ct : ChatTemplate) {
     ct.system.parts <- [chat_special("<|im_start|>"), chat_text("system\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
     ct.user.parts <- [chat_special("<|im_start|>"), chat_text("user\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]

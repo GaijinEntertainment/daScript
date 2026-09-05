@@ -21,7 +21,11 @@ family-blind.
    default in force, a present bool overrides.
 2. **`think_suppress`** (thinking -> off, Qwen-shaped): prefills an empty, closed thought block
    on the generation prompt (Qwen3's `enable_thinking=false`). Renders only when thinking is
-   off AND the vocab has the specials.
+   off AND the vocab has the specials. For an embedded ChatML generation branch, suppression
+   also requires its `enable_thinking` switch. Qwen3 Instruct-2507 shares reasoning tokens and
+   history replay logic with thinking models, but its bare generation branch declares no
+   reasoning: it defaults off, never prefills an empty thought, and leaves reply text intact.
+   Templates without a recognizable generation branch retain the architecture fallback.
 3. **`think_gate` + `assistant_open_think`** (off -> thinking, gemma-4-shaped): the gate
    (`<|think|>`) opens the system turn - rendered even when no system prompt is set - and the
    generation prompt switches to the bare `assistant_open_think` header so the model emits its
@@ -67,6 +71,7 @@ DeepSeek framing). Tool-capable replies split reasoning FIRST, then
 |---|---|---|---|---|
 | Qwen 2.5 (qwen2, qwen2moe) | n/a (no think vocab) | symmetric (inert) | hermes | Qwen2.5-0.5B |
 | Qwen 3 / 3.5 / 3.6 (qwen3, qwen3moe, qwen35, qwen35moe, qwen3next) | on | symmetric | hermes | Qwen3-0.6B / Qwen3.5-0.8B |
+| Qwen3 Instruct-2507 (embedded bare generation branch) | off | none | hermes | Qwen3-4B-Instruct-2507 |
 | GLM-4 MoE (glm4moe) | on | symmetric | none declared | **none local - zen2 leg pending, below** |
 | gpt-oss | on | channel_switch | harmony (developer-turn namespace, commentary-channel calls) | gpt-oss-20b (11 GB, large-tier) |
 | gemma-4 E-series | on (instruct = opt-out via the closed-channel prefill) | asymmetric | gemma4 (declaration/call/response DSL) | gemma-4-E2B |
