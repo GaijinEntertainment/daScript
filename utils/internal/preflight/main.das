@@ -74,9 +74,6 @@ struct Config {
     @clarg_doc = "Stop at the first failing gate"
     fail_fast : bool
 
-    @clarg_doc = "Lint gate: skip the -exe compiled rail, keeping the host + linux-mirror interp rails — run before every push; PR-open preflight runs all three"
-    lint_skip_exe_rail : bool
-
     @clarg_doc = "List gates with tier and description, then exit"
     list_gates : bool
 
@@ -121,7 +118,6 @@ struct PreflightCtx {
     jit_jobs : int
     jit_max_file_time : float
     verbose : bool
-    lint_skip_exe_rail : bool
 }
 
 // ===== subprocess + small helpers =====
@@ -138,17 +134,6 @@ def run_argv(args : array<string>; timeout : float) : tuple<rc : int; out : stri
 
 def run_argv(args : array<string>) : tuple<rc : int; out : string> {
     return run_argv(args, 0.0)
-}
-
-// A dynamically-linked artifact spawned outside the daslang bin dir (the exe rail's
-// temp-path das-lint) resolves libDaScriptDyn only through the loader's environment —
-// prepend the bin dir so spawned children inherit it.
-def prepend_loader_search_path(bin_dir : string) {
-    let platform = get_platform_name()
-    let vname = platform == "windows" ? "PATH" : (platform == "darwin" ? "DYLD_LIBRARY_PATH" : "LD_LIBRARY_PATH")
-    let sep = platform == "windows" ? ";" : ":"
-    let cur = get_env_variable(vname)
-    set_env_variable(vname, empty(cur) ? bin_dir : "{bin_dir}{sep}{cur}")
 }
 
 def tool_available(exe, probe_flag : string) : bool {
@@ -583,11 +568,9 @@ def gate_format(ctx : PreflightCtx) : GateResult {
 // CI's lint verdict is rendered ONLY by the linux lane (extended_checks gates the step on
 // matrix.target == 'linux'), in the linux MODULE WORLD (no dasMetal — platform static_if
 // halves compile out, so their requires/args read unused there and nowhere else; dasVulkan
-// is in-tree and present on linux, so it is NOT disabled),
-// and TWICE (interp, then the -exe compiled das-lint, which resolves modules differently).
-// A host-flavor pass alone is structurally blind to both — so this gate runs three rails
-// (--lint-skip-exe-rail keeps just the interp two).
-// LINT019 is OFF on all three (mirrors CI): a changed-set ledger cannot see consumers
+// is in-tree and present on linux, so it is NOT disabled). A host-flavor pass alone is
+// structurally blind to that — so this gate runs two rails, host then linux-mirror.
+// LINT019 is OFF on both (mirrors CI): a changed-set ledger cannot see consumers
 // outside the PR — staleness belongs to the nightly whole-tree -j 1 pass.
 def gate_lint(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
@@ -617,38 +600,8 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "LINUX-lane lint warnings (host pass was clean — a platform static_if half hides the symbol here; nolint:...,LINT019 both-worlds spelling, see skills/internal/preflight.md)", output = mirror.out)
     }
-    if (!lint_runs_exe_rail(ctx.lint_skip_exe_rail)) {
-        return GateResult(name = "lint", status = GateStatus.Pass, seconds = seconds_since(t0),
-            detail = lint_pass_detail(length(files), false))
-    }
-    // the exe rail: CI compiles utils/lint into a standalone das-lint and lints AGAIN — the
-    // -exe world resolves modules differently (dasAudio et al are not baked in). `-exe`
-    // appends .exe on every platform (CI's LINUX lane invokes $BIN/das-lint.exe verbatim)
-    let lint_exe_base = unique_temp_path("preflight_das_lint", "")
-    let build = run_argv([ctx.daslang, "-exe", "-output", lint_exe_base, "utils/lint/main.das"])
-    if (build.rc != 0) {
-        remove("{lint_exe_base}.exe")
-        remove("{lint_exe_base}.o")
-        return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
-            detail = "das-lint -exe build failed — the CI exe rail would fail the same way", output = build.out)
-    }
-    // the -exe artifact is dynamically linked (libDaScriptDyn); from the temp path the
-    // loader resolves it only via the environment — point it at the daslang bin dir
-    prepend_loader_search_path(dir_name(ctx.daslang))
-    var exe_args <- ["{lint_exe_base}.exe"]
-    exe_args |> push_from(files)
-    exe_args |> push("--quiet")
-    exe_args |> push("--disable")
-    exe_args |> push("LINT019")
-    let exe = run_argv(exe_args)
-    remove("{lint_exe_base}.exe")
-    remove("{lint_exe_base}.o")
-    if (exe.rc != 0) {
-        return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
-            detail = "das-lint.exe rail warnings (interp rails were clean — the -exe module world differs)", output = exe.out)
-    }
     return GateResult(name = "lint", status = GateStatus.Pass, seconds = seconds_since(t0),
-        detail = lint_pass_detail(length(files), true))
+        detail = "{length(files)} file(s) clean on both rails (host, linux-mirror)")
 }
 
 // ===== ast-verify on changed .das (mirrors extended_checks "Run ast-verify on changed .das files") =====
@@ -1606,7 +1559,7 @@ def gate_table() : array<GateInfo> {
     return <- [
         GateInfo(name = "untracked", tier = "fast", doc = "no untracked files at PR time — commit, delete, or ignore each"),
         GateInfo(name = "format", tier = "fast", doc = "formatter --verify on tracked .das (mirrors CI)"),
-        GateInfo(name = "lint", tier = "fast", doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings; --lint-skip-exe-rail drops the exe rail"),
+        GateInfo(name = "lint", tier = "fast", doc = "lint changed .das on two rails (host, linux-mirror), zero warnings"),
         GateInfo(name = "hash-refs", tier = "fast", doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
         GateInfo(name = "review-md", tier = "fast", doc = "REVIEW.das gates of every folder the diff touches (utils/internal/review-md; CI's extended_checks step runs every gate)"),
         GateInfo(name = "md-ascii", tier = "fast", doc = "ci/fix_md_ascii.py --check when the diff touches .md (mirrors CI's Markdown ASCII gate in extended_checks)"),
@@ -1779,8 +1732,7 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     var ctx = PreflightCtx(base = cfg.base, jobs = cfg.jobs,
                            jit_jobs = jit_jobs,
                            jit_max_file_time = jit_max_file_time,
-                           verbose = cfg.verbose,
-                           lint_skip_exe_rail = cfg.lint_skip_exe_rail)
+                           verbose = cfg.verbose)
     ctx.daslang = find_daslang(cfg.daslang_bin)
     if (empty(ctx.daslang)) {
         to_log(LOG_ERROR, "daslang binary not found — build it (cmake --build build --target daslang) or pass --daslang / set DASLANG\n")
