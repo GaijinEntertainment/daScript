@@ -152,7 +152,7 @@ blob twin's CPU batch fallback would trip the blob-only panic).
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free - runs with no model stocked; also the layout fingerprint and the dev-W
 bake tables, whose rebuild-not-append contract and per-format key arithmetic are pure taxonomy
-over a job list) `smol metal gemma tower whisper voxtral
+over a job list) `smol untied metal metal-untied gemma tower whisper voxtral
 parakeet qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
 mtower`; `gemma4e` is the E2B metal-blob
 mint+map arm - the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
@@ -181,7 +181,11 @@ required-mode, step-floor and shutdown-re-arm contract; the voxtral arm re-saves
 5.4 GB image from cold every run by design (it IS the >2 GiB-plane IO coverage); the `metal`
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
 teacher-forced logits-tolerance parity cell (greedy token equality is NOT a valid bar on a
-135M - genuine near-ties flip on ~0.02 gaps under ~0.75 cross-backend noise). The ASR-family
+135M - genuine near-ties flip on ~0.02 gaps under ~0.75 cross-backend noise); `metal-untied`
+is its untied twin on TinyLlama-1.1B - the blob plane carrying the classifier AND the
+embedding's linear q8 copy (`emb_q8` without `cls_q8`): the layout gate admits the copy, cold
+mint and warm map keep the q8 table with no fp32 copy, GPU serve, the same teacher-forced bar
+(`--arm metal` and `--arm untied` both select it - substring match). The ASR-family
 arms (`parakeet` transcript-exact, `qwen3a`/`canary`/`gemma4a` element-exact planes,
 `canary-dec` = the opt-in fp32 Model rail, token-exact) re-save their images from cold each
 run like the voxtral arm. The canary arm carries both lanes: the f32 element-exact cell and
@@ -638,7 +642,7 @@ panic cell uses it.
 model blocks tagged with a listed family run - `family_on(t, name)` in
 `_model_tier.das`, EXACT token match, loud `t |> skip` like the arm filter. Model-free blocks
 carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`, `matrix` and
-`coverage`, plus the image `smol` and `metal` arms and the `image-vulkan` `vulkan` arm),
+`coverage`, plus the image `smol`, `untied`, `metal` and `metal-untied` arms and the `image-vulkan` `vulkan` arm),
 `qwen2`, `qwen3`, `phi3`,
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe` (the support-matrix family cells), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),

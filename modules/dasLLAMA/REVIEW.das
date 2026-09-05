@@ -544,8 +544,8 @@ let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
 // every *_prepare mint, the layout helpers and the layout constants' declaration lines, hashed
 // in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 32
-let private IMAGE_LAYOUT_STAMP_HASH = 0x1326fdc547a28a5aul
+let private IMAGE_LAYOUT_STAMP_VERSION = 33
+let private IMAGE_LAYOUT_STAMP_HASH = 0x16cc08ecdcac17c4ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, and the header's scalar stores. Changing one

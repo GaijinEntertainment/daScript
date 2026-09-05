@@ -34,6 +34,19 @@ clears them behind the exe gate at batch start and after each model's last cell,
 re-baked from its gguf on demand. Judging stays forbidden; owning the directory for the batch is
 what licenses deletion without judgment.
 
+### 2.1n A planar image never stands in for the blob flavor {#image-flavor-rebake}
+
+A metal-mode load resolves its flavor in order: the blob image under the metal tag maps first; a
+planar image under the plain identity maps next, and serves only when the model cannot take the
+blob form - a shape the drivers decline, or a layout the bind-alignment gate refuses. Otherwise the
+rail drops the mapping and rebakes the blob flavor from the gguf, so a CPU run that minted the planar
+image first never leaves a GPU box serving from the CPU planes; the planar file stays for CPU loads.
+The question the mapped planar image answers is `metal_blob_form_ok` - quant, packing flags, layout
+- and not `metal_blob_eligible`: that one also refuses a mapped model, because the in-place
+transform would write borrowed planes, and the rebake never transforms the mapping. Metal mode pins
+the portable backend, so the packing flags are false there and the form question reduces to shape
+and layout.
+
 ### 2.1a Page alignment is the no-copy contract {#image-page-alignment}
 
 Every plane section starts on a 16 KiB boundary (`IMAGE_PAGE`, the Apple-Silicon page) and the

@@ -55,7 +55,7 @@ var g_disp_chunks = 0l   // chunks (jobs) pushed across those dispatches
 var g_disp_inline = 0l   // maybe_parallel_for calls that ran inline instead
 var private g_jobque_checked = false
 
-[arch(at="../ARCHITECTURE_RUNTIME.md#jobque-policy")]
+[arch(at="../ARCHITECTURE_RUNTIME.md#jobque-policy"), cold_path]   // runs once, on the first dispatch: its log line is not the kernels' hot path
 def private check_jobque_configured() {
     return if (!is_job_que_available())   // no queue: the arms run inline, nothing to configure
     g_jobque_checked = true

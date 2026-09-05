@@ -105,6 +105,57 @@ def test_parity_tied_cls_q8_rows(t : T?) {
     }
 }
 
+// emb_q8 invariant, the untied half: a Q8 load of a Q8_0 embedding with a SEPARATE output.weight drops the
+// fp32 table too (rows dequant from the linear transcode at emb_q8_off, bit-identical to the fp32 decode);
+// without it an untied model carries vocab x dim floats, 1.5 GB on a 152k-vocab 4B. stories15M is the smallest untied Q8_0 file.
+[test]
+def test_parity_untied_emb_q8_rows(t : T?) {
+    t |> run("untied Q8 load: emb_q8 embedding rows bit-match the fp32 table, no fp32 table kept") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "stories15M-Q8_0.gguf")
+        if (!model_available(t, path)) return
+        var t32 <- load_gguf(path, QuantMode.fp32)
+        var t8 <- load_gguf(path, QuantMode.q8)
+        t |> success(!t32.emb_q8 && t32.tok_emb_off >= 0l, "fp32 load keeps the fblob table")
+        t |> success(!t8.config.shared_weights, "the fixture is untied (output.weight on disk)")
+        t |> success(!t8.cls_q8, "untied: the classifier flag stays off")
+        t |> success(t8.emb_q8, "untied Q8_0 load takes the emb_q8 path")
+        t |> success(t8.tok_emb_off < 0l, "no fp32 table in fblob")
+        t |> success(t8.emb_q8_off != t8.wcls_off, "the embedding copy is not the classifier plane")
+        let dim = t8.config.dim
+        var bad = 0l
+        for (token in [0l, 1l, 1000l, t8.config.vocab_size - 1l]) {
+            for (i in range64(dim)) {
+                let el = t8.emb_q8_off + token * dim + i
+                let want = t32.fblob[t32.tok_emb_off + token * dim + i]
+                let sc = t8.wscale_f16 ? f16_to_f32(uint(t8.qscales16[el / 32l])) : t8.qscales[el / 32l]
+                if (float(t8.qblob[el]) * sc != want) {
+                    bad++
+                }
+            }
+        }
+        t |> success(bad == 0l, "embedding rows bit-identical ({bad} mismatches)")
+        // the row reader the forward pass uses agrees with the raw plane arithmetic
+        var inscope row : array<float>
+        row |> resize(dim)
+        unsafe {
+            embed_row(t8, 1000l, addr(row[0]))
+        }
+        var bad_row = 0l
+        for (i in range64(dim)) {
+            if (row[i] != t32.fblob[t32.tok_emb_off + 1000l * dim + i]) {
+                bad_row++
+            }
+        }
+        t |> success(bad_row == 0l, "embed_row reads the same values ({bad_row} mismatches)")
+        delete t32
+        delete t8
+    }
+}
+
 // the deltanet-plane engage count for one plane kind — a silently-demoted tag would otherwise
 // pass the parity green on the q8 fallback rail
 def private dn_kq_engaged(fmts : array<KqFmt>) : int64 {

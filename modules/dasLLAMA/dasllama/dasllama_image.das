@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 32   // the TTS AdaIN/AdaLayerNorm affines are vec-only: their tiled `wt` twin no longer rides the blob
+let IMAGE_VERSION = 33   // an untied Q8 load keeps its Q8_0 token table as quants (emb_q8): the fp32 copy left fblob, a linear q8 copy joined qblob
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -723,6 +723,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.wsh3_off)
     arch |> serialize_raw(t.wcls_off)
     arch |> serialize_raw(t.cls_q8)
+    arch |> serialize_raw(t.emb_q8)
     arch |> serialize_raw(t.emb_q8_off)
     arch |> serialize_raw(t.quant)
     arch |> serialize_raw(t.dn_conv_off)
@@ -741,7 +742,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
 }
 
 // the 3 deliberate skips: blocks, image_map, image_bytes
-let IMAGE_META_FIELDS = 75 + 3
+let IMAGE_META_FIELDS = 76 + 3
 
 // the tokenizer's tripwires: the SentencePiece backend's five serialized meta fields + its three
 // derived tables (lookup, pair_merge, bkey_id); the BPE backend's seven (merge_rank rides as the
@@ -1623,9 +1624,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         let img = image_path_for(path, "", qs)
         if (load_model_image(img, t, "", qs)) {
             vulkan_bake_flavor(t, path, vk_tag)
-            //! metal_blob_eligible must agree, or the rebake below refuses and re-mints the SAME
-            //! planar file every load (a repacking backend passes the mint-time shape gate)
-            if (!(want_metal && metal_model_servable(t) && metal_blob_eligible(t))) {
+            //! the layout gate must agree, or the rebake below refuses and re-mints the SAME planar
+            //! file every load (a repacking backend passes the mint-time shape gate); the mapping's
+            //! borrowed planes are not the question - the rebake reads the gguf, never this mapping
+            if (!(want_metal && metal_model_servable(t) && metal_blob_form_ok(t))) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
                 return <- t
             }
