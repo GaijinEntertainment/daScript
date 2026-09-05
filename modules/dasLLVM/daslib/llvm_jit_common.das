@@ -395,8 +395,6 @@ var public g_handled_field_offset_globals : table<string; tuple<modName : string
 // several user hints (alwaysinline, loop-vectorize/unroll metadata), so when true the
 // LlvmJitVisitor skips ALL user hint application (function + loop) — avoids wasm32 miscompiles.
 var public g_target_is_wasm = false
-// wasm +relaxed-simd, always appended by wasm_target_features: gates the idot family's native int8 dot.
-var public g_target_wasm_relaxed_simd = false
 
 // The resolved host_features truth of the last flag pass (see init_jit_target_flags): true when
 // the g_target_* gates came from the running box's cpuid/host features, false on the generic/
@@ -524,7 +522,7 @@ var public g_jit_check_handled_abi = false
 
 [arch(at = "../ARCHITECTURE.md#idot-lowerings")]
 def private wasm_target_features() : string {
-    return g_target_wasm_threads ? "+simd128,+relaxed-simd,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+relaxed-simd,+nontrapping-fptoint"
+    return g_target_wasm_threads ? "+simd128,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+nontrapping-fptoint"
 }
 
 def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef) {
@@ -618,7 +616,6 @@ def public init_jit_clopts() {
 def public init_jit_target_flags(target_triple : string = ""; host_features : bool = true) {
     g_target_host_features = host_features
     g_target_is_wasm = target_triple |> starts_with("wasm")
-    g_target_wasm_relaxed_simd = g_target_is_wasm
     // Host path (empty triple): the module targets the host, so the daslang binary's own arch is the
     // JIT target arch. Explicit cross-compile triple: read the arch off the triple prefix.
     g_target_is_aarch64 = (empty(target_triple)
@@ -647,7 +644,7 @@ def public init_jit_target_flags(target_triple : string = ""; host_features : bo
         ? get_platform_name() == "linux"
         : find(target_triple, "linux") >= 0)
     g_target_arm64_dotprod = g_target_is_aarch64 && (arm64_forced_feature("dotprod")
-        || (empty(target_triple) && host_features))
+        || (empty(target_triple) && host_features && (host_llvm_feature("dotprod") || cpu_supports("dotprod"))))
     g_target_arm64_i8mm = g_target_is_aarch64 && (arm64_forced_feature("i8mm")
         || (empty(target_triple) && host_features && (host_llvm_feature("i8mm") || cpu_supports("i8mm"))))
     // aarch64 fullfp16 (see declaration comment): darwin-arm64 == Apple Silicon == always.
@@ -944,6 +941,9 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
     } else {
         let forced = g_target_is_x64 ? x64_forced_plus_features() : (g_target_is_aarch64 ? arm64_forced_plus_features() : "")
         let feats = empty(forced) ? features_msg : (empty(features_msg) ? forced : "{features_msg},{forced}")
+        if (!empty(forced)) {
+            to_log(LOG_INFO, "LLVM JIT: {g_target_is_x64 ? "DAS_JIT_X64_FORCE_FEATURES" : "DAS_JIT_ARM64_FORCE_FEATURES"} appends {forced} to the generic machine {cpu_msg}\n")
+        }
         targetMachine = create_target_machine(triple_msg, cpu_msg, feats, opt_level)
     }
 

@@ -9,7 +9,6 @@ checklist as well as this one.**
 **A test that owns its own `CMakeLists.txt`, wherever the diff puts it, answers to the
 `big/` subfolder's checklist as well as this one.**
 
-**A diff adding or changing a test that cannot fail on some lane - it skips there, or its
-subject compiles there to an implementation the test does not exercise (a per-source flag one
-compiler honors and another ignores, a `#if` arm the lane never takes) - says in the PR which
-lane runs it for real, naming the command.**
+**A diff adding or changing a C++ test under this folder that cannot fail on some lane - it
+skips there, or its subject compiles there to an implementation the test does not exercise - says
+in the PR which lane runs it for real, naming the command.**

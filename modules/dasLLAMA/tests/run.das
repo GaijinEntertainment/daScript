@@ -441,8 +441,9 @@ def private child_envs(cfg : RunArgs; win : bool; arm : string) : string {
     // the perf rig's. Without this every child auto-mints its own sidecar tune, computes a
     // FOREIGN image identity, and its save GC-purges the rig's images as dead siblings
     // (observed 2026-07-30: fam-gemma4 freed 34 GB of bench flavors). A caller-set
-    // DAS_TUNE_MANIFEST inherits; a box without a minted manifest keeps sidecar behavior.
-    if (empty(g_env_core.tune_manifest)) {
+    // DAS_TUNE_MANIFEST inherits; a box without a minted manifest keeps sidecar behavior. The
+    // --no-tune arm pins nothing: an explicit manifest disables the policy rail it runs on.
+    if (empty(g_env_core.tune_manifest) && !cfg.no_tune) {
         let manifest = "modules/dasLLAMA/performance/{derive_box_name(g_env_prof.box)}.tune.json"
         var mst : FStat
         if (stat(manifest, mst)) {
@@ -558,6 +559,10 @@ def select_areas(cfg : RunArgs) : tuple<status : int; areas : array<string>> {
 
 //! the suite forms' argument contract: 0 = run, else main's exit code
 def check_suite_args(cfg : RunArgs) : int {
+    if (cfg.no_tune && (cfg.suite == "image" || cfg.suite == "image-vulkan")) {   //! the arm runs with the image rail off, and the image suites ARE the rail
+        to_log(LOG_ERROR, "--no-tune sets DASLLAMA_IMAGE=0 in every child, so it cannot drive the image suites - drop --no-tune or pick another suite\n")
+        return 2
+    }
     if (cfg.suite == "model-free" || cfg.suite == "stocked") {
         if (cfg.full || !empty(cfg.arm)) {   //! the per-PR gates have no arms to scope: a filter would silently shrink them
             to_log(LOG_ERROR, "--suite {cfg.suite} takes neither --arm nor --full: it is a whole per-PR gate (--exclude names what it drops)\n")

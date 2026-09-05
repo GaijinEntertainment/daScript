@@ -135,10 +135,13 @@ An aarch64 host target reads its CPU features from two sources, because neither 
 the features - and a part this LLVM cannot name maps to the generic CPU, where SDOT and SMMLA
 have no instruction to select and codegen aborts. `cpu_supports` reads the operating system
 instead (sysctl / `AT_HWCAP` / `IsProcessorFeaturePresent`), so it answers for silicon LLVM has
-never heard of. Both the tier gates (`init_jit_target_flags`) and the target machine's feature
-string (`create_default_target_machine`) therefore take the union of the two: an LLVM host-string
-hit OR a `cpu_supports` hit (fullfp16 additionally reads darwin-arm64 as always-on - every
-Apple Silicon part has it). A cross-compile triple takes neither - only the force env - and so
+never heard of. The tier gates (`init_jit_target_flags` - `g_target_arm64_dotprod`, `_i8mm`,
+`_fullfp16`) and the target machine's feature string (`create_default_target_machine`) therefore
+take the union of the two: an LLVM host-string hit OR a `cpu_supports` hit (fullfp16 additionally
+reads darwin-arm64 as always-on - every Apple Silicon part has it). One asymmetry: the host rail's
+machine string carries `+dotprod` unconditionally (every part the JIT has run on has it), while the
+DotProd GATE probes like its siblings - on an ARMv8.0 host the gate declines and the `sdot4` family
+compiles its fallback, whatever the string says. A cross-compile triple takes neither - only the force env - and so
 does a generic-CPU standalone exe (one carrying no `[llvm_code]` kernel): its machine is the
 ARMv8.0 baseline, which cannot select SDOT or SMMLA, so the DotProd and i8mm gates
 (`g_target_arm64_dotprod`, `g_target_arm64_i8mm`) stay off there and every `aarch64_neon` call
@@ -286,13 +289,13 @@ The exact integer dots on the 8-bit lattice have three lowerings, picked by targ
 `+dotprod` append, or the force env on the generic rail), the SIMD128 form on a wasm target
 (`idot_wasm_simd128`), generic widen-multiply IR everywhere else. The native arms exist because
 neither backend produces them from the generic form: AArch64 expands it to zip/uzp/smull instead
-of folding to SDOT, and the wasm backend runs it a fifth as fast. The wasm form has two arms. With
-`+relaxed-simd` the ISA carries the dot itself, `i32x4.relaxed_dot_i8x16_i7x16_add_s`, exact only
-while its second operand is in [0, 127]; the sign trick puts it there, since
-`dot(w, x) == dot(sign(x)*w, |x|)` and Q8_0 quants are in [-127, 127] by construction
-(`d = amax/127`), so no lane wraps on the flip. Without the feature the ISA still has the two halves
-of an int8 dot, `i16x8.extmul_{low,high}_i8x16_s` and `i32x4.extadd_pairwise_i16x8_s`; the pairwise
-sums land as byte pairs, and one even/odd shuffle-add folds them into the quad lanes the generic
-form defines. `wasm_target_features` always asks for `+relaxed-simd`: every engine that runs
-memory64 shipped relaxed SIMD first, and the feature changes no ABI, so a runtime archive built
-without it links unchanged.
+of folding to SDOT, and the wasm backend runs it a fifth as fast. The wasm form is the ISA's two
+halves of an int8 dot, `i16x8.extmul_{low,high}_i8x16_s` (what LLVM makes of `mul(sext, sext)`) and
+`i32x4.extadd_pairwise_i16x8_s`; the pairwise sums land as byte pairs, and one even/odd shuffle-add
+folds them into the quad lanes the generic form defines - exact for every int8 lane, like the
+builtin's contract. The relaxed-SIMD dot (`i32x4.relaxed_dot_i8x16_i7x16_add_s`) is deliberately
+NOT used: its second operand is 7-bit, so the sign trick that would feed it (`dot(w, x) ==
+dot(sign(x)*w, |x|)`) wraps at -128 in either operand and answers the wrong sign there, and
+`+relaxed-simd` is a whole-module switch that also turns float-vector `min`/`max` and `mad` into
+engine-defined instructions (NaN and signed-zero answers, fusion) - the feature string stays
+`+simd128,+nontrapping-fptoint`, matching the runtime archive.

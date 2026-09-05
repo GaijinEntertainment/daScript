@@ -14,9 +14,9 @@
 <content type="html">&lt;p&gt;The engine behind the ladder now also ships as a WebAssembly build. &lt;code&gt;daspkg release wasm&lt;/code&gt;
 compiles the storyteller - llama2.c&#x27;s stories15M writing a children&#x27;s tale while KittenTTS nano
 reads it aloud - into one 26 MB wasm64 module, and the two models arrive as prepared &lt;code&gt;.dlim&lt;/code&gt;
-images, 76 MB with the two English phoneme packs, the same format the native engine maps.
-Decode, phonemizer and vocoder all run on Web Workers in the page; nothing is interpreted.
-Chrome, Edge or Firefox 133+ (memory64). &lt;a href=&quot;examples.html&quot;&gt;Try it&lt;/a&gt;.&lt;/p&gt;</content>
+images, 76 MB with the two English front-end packs, the same format the native engine maps. The
+speech thread and the parallel kernels run on Web Workers in the page; nothing is interpreted.
+Chrome or Edge 133+, Firefox 134+ (memory64). &lt;a href=&quot;examples.html&quot;&gt;Try it&lt;/a&gt;.&lt;/p&gt;</content>
 </entry>
 <entry>
 <title>dasLLAMA speaks - KittenTTS nano and mini, Kokoro-82M, and a text front end that is nothing but data.</title>

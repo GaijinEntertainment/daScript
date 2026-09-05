@@ -43,8 +43,10 @@ on an `EXCLUDED` line, so a trimmed run cannot read as full. `--no-tune` compose
 every child runs with `DAS_TUNE_POLICY=reference`, so the `[tune]` families and the `[tuned]`
 hints fall to their reference bodies - the portable tier's arm of the gate. That arm also runs
 with `DASLLAMA_IMAGE=0`: the reference policy is a different box identity, and a `.dlim` minted
-under it would GC-purge the box's tuned images, so image-rail cells skip there and keep their
-coverage on the tuned arm. The runner redirects
+under it would GC-purge the box's tuned images, so the runner refuses `--no-tune` with the
+`image` and `image-vulkan` suites, and the two image-reading cells outside them (`test_tts_kitten`'s
+image cell, `test_audio_embedder`'s direct-route cell) skip on the knob and keep their coverage on
+the tuned arm. The runner redirects
 the COMPLETE output to a log file, and prints that path on the DONE line. It owns the dastest
 timeout, and repeats a file only when `--nreps` is passed explicitly (default 1, never
 best-of-N). Every child runs `-jit -module-cache .jitted_scripts/module_cache/dastest.dascache`;
@@ -528,13 +530,18 @@ pack-derived rhotic rows and its keep-the-r fallback for a vowel with no row, an
 rewrite on the fixture's probe words with the reference's espeak readings logged beside ours, and the
 British lexicon tier itself - the bath-trap split, the LOT vowel and the non-rhotic vowels
 answered from the British tier rather than the rewrite, with the American reading of the same
-line beside it.
+line beside it. Then the AMERICAN-ONLY pack (`tts_g2p_en_us.bin`, skips when absent): phoneme-identical
+with the full pack on the 200 sentences, British refused by name on it (the full pack reading
+British is the control), and the directory rule of `g2p_pack_path` - the full pack wins where
+both sit, the American twin serves alone, an empty directory panics naming it.
 `test_tts_kitten.das` - stocked suite; the symbol-map and token-rule cells run everywhere
 (the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
 the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-<size>.gguf` +
 `tts_oracle/kitten_<size>/` under the models dir, both from `performance/build_tts_data.das`)
 run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
-sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings.
+sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings;
+the image cell (skips under `DASLLAMA_IMAGE=0`) loads kitten-nano through `load_styletts2` on a
+`.dlim` - the speed priors and aliases ride the image meta, the q8 sibling bakes when absent.
 `test_tts_kokoro.das` - stocked suite; model-free cells: the symbol map over a synthetic phoneme
 string, the out-of-vocabulary drop, the style-row clamps, and the pack-name language rule
 (`<language><f|m>_` for all nine codes, and every other shape reading "" whatever letter it opens

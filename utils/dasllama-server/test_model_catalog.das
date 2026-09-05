@@ -92,9 +92,9 @@ def test_catalog_table(t : T?) {
                 packs++
             }
         }
-        t |> equal(length(set), 5, "the set is three models and two packs")
-        t |> equal(packs, 2, "two front-end packs")
-        for (want in ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_postag.bin"]) {
+        t |> equal(length(set), 6, "the set is three models and three packs")
+        t |> equal(packs, 3, "three front-end packs: the full phoneme pack, its American-only twin, the tagger")
+        for (want in ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin"]) {
             t |> success(key_exists(names, want), "the set carries {want}")
         }
     }

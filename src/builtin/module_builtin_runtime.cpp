@@ -2042,31 +2042,30 @@ namespace das
         #endif
     }
 
-    // The cross-compilation TARGET platform, or "" on a normal (non-cross) run.
-    // Unlike get_platform_name() (the host, a compile-time #if), this reads the
-    // active jit cross-compile target from the command line (`--jit-target=<triple>`
-    // after `--`) -- already in g_CommandLineArguments at process start, so it is
-    // valid at .das_module-initialize time, before the jit codegen macro runs.
-    // Lets a .das_module register a target-native module only when cross-compiling
-    // for that target (e.g. dasOpenGL registers its wasm GLES3 module for emscripten,
-    // while a normal desktop run keeps the pure-das opengl.das). Only the wasm triple
-    // is mapped today (-> "emscripten"); other cross targets return "".
-    // the --jit-target triple this compile emits for, "" on a native compile. A property of the
-    // whole compile (the triple is fixed before the first module parses), so the folds below are
-    // compile-time constants: an artifact for another machine decides its tiers from the target.
+    // The --jit-target triple this compile emits for, "" on a native compile. Read from the
+    // command line (`--jit-target=<triple>` or `--jit-target <triple>` after `--`), already in
+    // g_CommandLineArguments at process start, so it is valid at .das_module-initialize time,
+    // before the jit codegen macro runs. A property of the whole compile (the triple is fixed
+    // before the first module parses), so the folds below are compile-time constants: an artifact
+    // for another machine decides its tiers from the target. das_get_cross_platform_name maps the
+    // triple to a platform name - only the wasm triples are mapped today (-> "emscripten"), which
+    // lets a .das_module register a target-native module only when cross-compiling for that
+    // target (dasOpenGL registers its wasm GLES3 module for emscripten; a desktop run keeps the
+    // pure-das opengl.das).
     const char * das_get_target_triple() {
         char ** argv = (char **) g_CommandLineArguments.data;
         uint64_t n = g_CommandLineArguments.size;
+        const char * found = "";   // the LAST occurrence wins, as every other argv reader here takes it
         for ( uint64_t i=0; i<n; ++i ) {
             const char * a = argv[i];
             if ( !a ) continue;
             if ( strncmp(a, "--jit-target=", 13)==0 ) {
-                return a + 13;
+                found = a + 13;
             } else if ( strcmp(a, "--jit-target")==0 && i+1<n && argv[i+1] ) {
-                return argv[i+1];
+                found = argv[i+1];
             }
         }
-        return "";
+        return found;
     }
 
     const char * das_get_cross_platform_name() {

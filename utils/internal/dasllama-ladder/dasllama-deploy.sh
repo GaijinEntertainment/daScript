@@ -103,6 +103,34 @@ caddy_apply() {
     snippet="$APP/current/caddy.snippet"
     [ -f "$snippet" ] || { echo "no $snippet - install a release first"; exit 1; }
     if grep -q "reverse_proxy 127.0.0.1:$PORT" "$CADDYFILE"; then
+        # the routes are in; a later snippet may still carry a block the vhost lacks - today the
+        # `header /examples/*` isolation block - so splice each such block on its own
+        if grep -q "header /examples/\*" "$snippet" && ! grep -q "header /examples/\*" "$CADDYFILE"; then
+            ts=$(date +%Y%m%d-%H%M%S)
+            cp "$CADDYFILE" "$CADDYFILE.bak-$ts"
+            awk -v snip="$snippet" '
+                /^dasllama\.io \{/ && !done {
+                    print
+                    inblock = 0
+                    while ((getline line < snip) > 0) {
+                        if (line ~ /^header \/examples\/\*/) inblock = 1
+                        if (inblock) print "\t" line
+                        if (inblock && line ~ /^\}/) inblock = 0
+                    }
+                    close(snip); done=1; next
+                }
+                { print }
+            ' "$CADDYFILE.bak-$ts" > "$CADDYFILE"
+            if ! grep -q "header /examples/\*" "$CADDYFILE"; then
+                echo "caddy: header splice inserted nothing (dasllama.io vhost not matched) - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
+            fi
+            if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
+                echo "caddy validate FAILED - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
+            fi
+            systemctl reload caddy
+            echo "caddy: /examples/* isolation headers spliced + reloaded (backup $CADDYFILE.bak-$ts)"
+            return 0
+        fi
         echo "caddy: /api already spliced - nothing to do"; return 0
     fi
     ts=$(date +%Y%m%d-%H%M%S)

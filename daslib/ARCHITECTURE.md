@@ -215,3 +215,18 @@ Three companions carry a concern each; a section number is unique across all fou
 
 - **`_table_index_and_init` exists for infer's `default_init_containers` rewrite of
   non-store `tab[key]`** - it has no daslib call site and is not dead.
+
+## 37. tune {#tune-shells-module-exists}
+
+- **Every tune annotation - `[tune]`, `[tuned]`, `[tune_perm]`, `[tune_scope]`, `[tune_policy]`,
+  `[llvm_code]` - registers HERE and nowhere else, as a shell that forwards to the framework in
+  `llvm/daslib/llvm_tune` when that module is visible and answers "unchanged" when it is not.** A
+  module's macro state is per module, so a shell and the `[tune_scope]` bank it reads have to
+  share one macro context; `tune_status` and `log_tune_status` are shells of the same kind.
+- **The shells decide with `typeinfo module_exists(llvm_tune)`, a pair with the trait's C++ half
+  in `src/ast/ast_infer_type.cpp` (`module_exists`): visible from the compiling module, which is
+  what the `require ?llvm llvm/daslib/llvm_tune public` line above them decided.** Nothing fails
+  when the two sides drift - `tests/language/optional_require.das` pins the trait's visibility
+  half on fixtures, and `tests/daslib/test_tune_shells.das` is tier-agnostic by design - so the pair
+  is recorded here: a trait that answered off the process registry instead would take the
+  framework arm inside a tool's nested compile, where the framework is not mounted.

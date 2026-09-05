@@ -2670,6 +2670,12 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         to_log(LOG_ERROR, "release wasm: unsafe app name `{app_name}` (no path separators / `.` / `..`)\n")
         return 1
     }
+    for (m in disabled_modules) {   // a .das_package string that reaches the cross-compile command line
+        if (!is_safe_pkg_name(m)) {
+            to_log(LOG_ERROR, "release wasm: unsafe module name `{m}` in release_wasm_disable_module (no path separators / `.` / `..` / spaces)\n")
+            return 1
+        }
+    }
     let main_path = path_join(root, main_script)
     if (!fexist(main_path)) {
         to_log(LOG_ERROR, "release wasm: app `{app_name}` main script not found: {main_path}\n")

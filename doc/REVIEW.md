@@ -1,9 +1,8 @@
 # doc (the Sphinx manual) Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** RST
-mechanics are `skills/internal/documentation_rst.md` (repo root) and the prose itself is
-`skills/internal/tutorial_prose.md` (repo root); how a page reads is reviewed there, not
-here.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+doc: `skills/internal/documentation_rst.md` (repo root). The prose itself is
+`skills/internal/tutorial_prose.md` (repo root); how a page reads is reviewed there, not here.
 
 **Weakening `REVIEW.das` (beside this file) is a defect - a diff that makes it read fewer
 files, or report less than it did before the change with the same `ALLOWED_HOSTS`, is weaker.**

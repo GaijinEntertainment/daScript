@@ -290,6 +290,10 @@ def private serialize_image_meta(var arch : Archive; var m : StyleTts2Model) {
     arch |> serialize(m.decoder)
     arch |> serialize(m.source)
     arch |> serialize_raw(m.q8)
+    // the family records are hand-listed too, so each pins its own count: a field added to one of
+    // them and not written here would read back zero on every image load
+    verify(count_meta_fields(m.kitten) == 2)   // grew KittenFamily? extend this list
+    verify(count_meta_fields(m.kokoro) == 1)   // grew KokoroFamily? extend this list
     arch |> serialize(m.kitten.speed_priors)
     arch |> serialize(m.kitten.aliases)
     arch |> serialize(m.kokoro.sym)
@@ -780,6 +784,9 @@ def load_styletts2(path : string) : StyleTts2Model {
         let ts = ref_time_ticks()
         let preferred_tag = q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
         let other_tag = q8 ? ST2_IMAGE_TAG : ST2_IMAGE_TAG_Q8
+        if (!stat(path).is_valid) {
+            panic("dasLLAMA styletts2: '{path}' does not exist")
+        }
         if (!load_image(path, m, preferred_tag) && !load_image(path, m, other_tag)) {
             panic("dasLLAMA styletts2: '{path}' is not a prepared TTS image for this box (identity {image_identity(ST2_IMAGE_TAG_Q8)} / {image_identity(ST2_IMAGE_TAG)}) - bake it from the source gguf with dasllama-convert")
         }

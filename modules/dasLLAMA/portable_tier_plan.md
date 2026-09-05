@@ -442,7 +442,9 @@ browser demo is a stretch on the same artifact.
 logger over the JIT-cross Kitten artifact (`--cpu-prof` hangs emscripten's pthread pool at
 worker load; `--prof` with `DAS_JOBQUE_THREADS=2` does not): 77% of every tick in one lambda,
 the portable `q8q8_batch_kernel`'s row loop, which is `dot_q8q8` inlined - the TTS rows GEMMs.
-A one-lane micro-bench (4096-wide row, node, GMAC/s) sized the alternatives:
+A one-lane micro-bench sized the alternatives - a scratch `q8bench` daspkg package (not checked in)
+timing all three forms over one 4096-wide row in ONE node process, `release wasm` with
+`--profiling-funcs`, GMAC/s; the native column is the same package under `-jit` on this M1 Max:
 
 | form | native arm64 JIT | wasm64, before | wasm64, after |
 |---|---|---|---|
@@ -450,14 +452,13 @@ A one-lane micro-bench (4096-wide row, node, GMAC/s) sized the alternatives:
 | `dot_q8q8_idot4x4` (idot4 builtin, per-block hsum) | 52 | 1.9 | 9.1 |
 | `dot_q8q8_idot4_ps` (idot4, vector epilogue, one hsum per row) | 46-54 | - | 13.8 |
 
-Two changes, both general: the JIT's signed `idot` family gets a wasm lowering -
-`i32x4.relaxed_dot_i8x16_i7x16_add_s` through the sign trick (dot(w, x) = dot(sign(x)*w, |x|),
-exact because Q8_0 quants sit in [-127, 127]), with the extmul + `extadd_pairwise` chain as the
-fallback where relaxed SIMD is absent - and `+relaxed-simd` joins the wasm feature string (every
-engine that runs memory64 shipped it first; no ABI moves). The portable kernels pick
+Two changes, both general: the JIT's signed `idot` family gets a wasm lowering - the exact
+extmul + `extadd_pairwise` chain (the 9.1 row above); the relaxed 7-bit dot behind the 13.8 row was
+withdrawn in review, because the sign trick that feeds it wraps at -128 in either operand and
+`+relaxed-simd` re-means float-vector min/max/mad engine-wide - and the portable kernels pick
 `dot_q8q8_idot4_ps` (and its s16 twin) on a wasm target at compile time and keep the template
 everywhere else. Gates: `tests/jit_tests/wasm_idot_lowering.das` (the cross dump carries the
-relaxed dot, the host dump no wasm intrinsic) and the new `test_q8q8_idot4_ps` cell in the
+pairwise adds and no relaxed dot, the host dump no wasm intrinsic) and the new `test_q8q8_idot4_ps` cell in the
 kernel-family test (fp64 bar, s16 twin bit-identical). End to end: Kitten nano under node on 4
 lanes 0.27x -> 0.14x real time; in Chrome 0.37-0.43x -> 0.23-0.26x (the generator stage 1.1 s
 -> 0.57 s per sentence). Not measurements, one box. Next rungs by the same profile: the

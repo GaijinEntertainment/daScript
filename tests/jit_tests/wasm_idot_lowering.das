@@ -1,8 +1,10 @@
-// The signed idot family on the wasm64 cross target lowers to the ISA's own int8 dot,
-// i32x4.relaxed_dot_i8x16_i7x16_add_s (the sign trick makes the second operand 7-bit), and never
-// to the generic widen-multiply chain that runs a fifth as fast there; a host compile of the same
-// fixture emits no wasm intrinsic. Compile-only keeps both compiles on this host and never touches
-// the artifact cache, so --jit-dump prints every time.
+// The signed idot family on the wasm64 cross target lowers to the ISA's exact int8 dot halves -
+// the i16x8 extmul products summed by i32x4.extadd_pairwise_i16x8_s and folded even/odd - and never
+// to the generic widen-multiply chain that runs a fifth as fast there; the relaxed 7-bit dot is
+// refused by design (it wraps at -128, and +relaxed-simd re-means min/max/mad), so the dump carries
+// no relaxed intrinsic either. A host compile of the same fixture emits no wasm intrinsic.
+// Compile-only keeps both compiles on this host and never touches the artifact cache, so --jit-dump
+// prints every time.
 options gen2
 options no_aot
 
@@ -12,7 +14,8 @@ require daslib/strings_boost
 require strings
 
 let FIXTURE = "{get_das_root()}/tests/jit_tests/_wasm_idot_fixture.das"
-let RELAXED_DOT = "llvm.wasm.relaxed.dot.i8x16.i7x16.add.signed"
+let PAIRWISE_ADD = "llvm.wasm.extadd.pairwise.signed"
+let RELAXED_DOT = "llvm.wasm.relaxed.dot"
 
 def private spawn_child(cmd : string; var lines : array<string>) : int {
     var rc : int
@@ -50,11 +53,12 @@ def test_wasm_idot_lowering(t : T?) {
     }
     let args <- get_command_line_arguments()  // locked view — do not delete
     let bin = args[0]
-    t |> run("the wasm64 cross compile lowers idot4 to the relaxed int8 dot") @(t : T?) {
+    t |> run("the wasm64 cross compile lowers idot4 to the exact pairwise int8 dot") @(t : T?) {
         var ln : array<string>
         spawn_child("\"{bin}\" -jit \"{FIXTURE}\" -- --jit-target=wasm64-unknown-emscripten --jit-compile-only --jit-dump", ln)
-        let dots = count_with(ln, RELAXED_DOT)
-        t |> success(dots >= 2, "the declaration and the call of {RELAXED_DOT} are in the dump ({dots} lines, {length(ln)} lines total)")
+        let pairs = count_with(ln, PAIRWISE_ADD)
+        t |> success(pairs >= 3, "the declaration and the two half calls of {PAIRWISE_ADD} are in the dump ({pairs} lines, {length(ln)} lines total)")
+        t |> success(count_with(ln, RELAXED_DOT) == 0, "the relaxed 7-bit dot is never emitted")
         t |> success(count_with(ln, "idot_prod") == 0, "no generic widen-multiply chain remains")
     }
     t |> run("a host compile emits no wasm intrinsic") @(t : T?) {

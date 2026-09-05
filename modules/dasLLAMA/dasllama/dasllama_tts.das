@@ -67,8 +67,10 @@ def load_tts_model(path : string) : TtsModel {
     return <- m
 }
 
+//! The phoneme pack a model directory serves: the full pack when present, else the American-only
+//! twin; neither is a panic naming the directory.
 [arch(at = "../ARCHITECTURE_TTS.md#tts-g2p-pack-tiers")]
-def private g2p_pack_path(dir : string) : string {
+def g2p_pack_path(dir : string) : string {
     let full = path_join(dir, "tts_g2p.bin")
     return full if (stat(full).is_valid)
     let us = path_join(dir, "tts_g2p_en_us.bin")

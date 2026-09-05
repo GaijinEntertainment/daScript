@@ -37,8 +37,9 @@ top-level `.html` page here, or in a script or stylesheet under `files/`, that n
 `site/files/dasllama-table.css` (repo root) defines and no `id="..."` in those files declares -
 is a defect.**
 
-**A claim in any text this folder publishes or documents - a page, a `_news/*.md` or
-`_stories/*.md` entry, or `README.md` - that is not true at publish time is a defect.** A dated
+**A claim in any text under this folder a reader or an operator reads as fact - a page, a
+`_news/*.md` or `_stories/*.md` entry, `README.md`, a tool's docstring - that is not true at
+publish time is a defect.** A dated
 `_news` or `_stories` entry is read as a claim about its own date; standing page copy - a
 masthead, section prose, a meta tag - is read as a claim about now, and a diff that falsifies
 standing copy fixes it in the same change. Check a claim about what a shipped tool does against

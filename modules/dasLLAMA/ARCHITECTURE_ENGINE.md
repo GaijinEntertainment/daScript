@@ -188,8 +188,8 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   registration. A hand-written tile that the generator could emit belongs in the generator.
 - **`dasllama_tune.das`** - the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`). Tuning
   POLICY lives here; tuned VALUES live in the box's sidecar, never in source. The framework is
-  OPTIONAL: the `llvm_tune` require is path-guarded and every use of it sits behind
-  `static_if (typeinfo builtin_module_exists(llvm_tune))`, so a build without dasLLVM opens no
+  OPTIONAL: the `llvm_tune` require is `?llvm`-guarded and every use of it sits behind
+  `static_if (typeinfo module_exists(llvm_tune))`, so a build without dasLLVM opens no
   sidecar, reads no policy env and reports nothing - `[tuned]` stamps the declared `fallback=`
   (or `DEFAULT_PERM`) and the AST rewrite is unchanged. `box_profile_verdict_at` answers the
   reason NAME rather than llvm_tune's enum for the same reason: a signature cannot be gated.

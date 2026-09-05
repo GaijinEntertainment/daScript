@@ -12,7 +12,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // the three tools), and every sibling is tuned.
 
 require dasllama/dasllama       // load_model / generate / the shared [tune_scope]
-require llvm/daslib/llvm_tune   // [tune_policy] + tune_status
+require daslib/tune             // [tune_policy] + log_tune_status - the shells; the framework rides in when the build has dasLLVM
 require daslib/jobque_boost
 require daslib/clargs
 require daslib/fio

@@ -47,11 +47,12 @@ decision in the report of the run that took it and in the PR that lands the kern
 winner enters the ledger only through a re-measured board cell.
 
 **A diff that makes the engine serve tokens by a route no board cell exercises mints that cell
-in the same change.** A route is what a request takes end to end: a weight format, a modality,
-a family, a backend, a serving lane (q8 or f32), a GPU tower (a GPU-run vision or audio
-encoder), a sampler class (greedy, sampled) through the speculative round (a decode step that
-drafts several tokens and verifies them in one pass), or the path a run with no flags and no
-environment overrides takes.
+in the same change.** A route is anything that changes which code serves the tokens end to end:
+a weight format, a modality, a family, a backend, a serving lane (q8 or f32), a GPU tower (a
+GPU-run vision or audio encoder), a sampler class (greedy, sampled) through the speculative
+round (a decode step that drafts several tokens and verifies them in one pass), a compile tier
+(JIT, AOT, interpreted reference bodies), a cross target (wasm64), or the path a run with no
+flags and no environment overrides takes.
 
 **A diff that claims to make an already-served path faster, from an author whose box mints
 that path, re-mints a board row (`performance/records/<box>.json`) that exercises that path, in

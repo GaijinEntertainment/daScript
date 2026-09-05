@@ -56,6 +56,7 @@ def test_cross_target_folds(t : T?) {
         t |> success(ln |> has("TARGET_ARCH=[{get_architecture_name()}]"), "the target arch is the host's")
         t |> success(ln |> has("CROSS_PLATFORM=[]"), "no cross platform")
         t |> success(ln |> has("CROSS=[no]"), "a native compile takes the native arm")
+        t |> success(ln |> has("LET_WASM=[false]"), "a module-level let over the target folds false natively")
     }
     t |> run("a wasm64 cross target answers wasm64 and turns the framework inert") @(t : T?) {
         var ln : array<string>
@@ -65,6 +66,12 @@ def test_cross_target_folds(t : T?) {
         t |> success(ln |> has("HOST_ARCH=[{get_architecture_name()}]"), "the host arch stays the host's")
         t |> success(ln |> has("CROSS_PLATFORM=[emscripten]"), "the cross platform is emscripten")
         t |> success(ln |> has("CROSS=[yes]"), "a cross compile takes the cross arm")
+        t |> success(ln |> has("LET_WASM=[true]"), "a module-level let over the target folds true for wasm64")
+    }
+    t |> run("the last --jit-target on the command line wins, as every other argv reader takes it") @(t : T?) {
+        var ln : array<string>
+        spawn_child("\"{bin}\" -jit \"{FIXTURE}\" -- --jit-target=x86_64-unknown-linux-gnu --jit-target=wasm64-unknown-emscripten --jit-compile-only", ln)
+        t |> success(ln |> has("TRIPLE=[wasm64-unknown-emscripten]"), "the last triple folds: {join(ln, " | ")}")
     }
     t |> run("an x86_64 linux cross target answers x86_64") @(t : T?) {
         var ln : array<string>

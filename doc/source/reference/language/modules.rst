@@ -104,7 +104,11 @@ same program in a nested context (lint, the language server, a test harness)
 promotes nothing, and there the trait answers false for every das target. Guard the
 use of a guarded das target with ``typeinfo module_exists(target)`` instead: it asks
 whether the target is visible from the compiling module, which is exactly what the
-guarded ``require`` decided, so the answer is the same on both rails.
+guarded ``require`` decided, so the answer is the same on both rails. Two edges of that
+rule: the name must be the module's own name (an alias from ``require X as Y`` answers
+false, like any name the library does not know), and inside a generic function the
+compiling module is the one INSTANTIATING the generic, not the one that declared it - a
+guard in a generic body reads the caller's view.
 
 Pair it with :ref:`typeinfo builtin_module_exists <generic_programming>` to guard
 code that uses the optional target's symbols — ``static_if`` drops the untaken

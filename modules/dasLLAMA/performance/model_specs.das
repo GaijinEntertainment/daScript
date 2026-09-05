@@ -577,10 +577,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
     ]
 }
 
-//! The text-to-speech set the serving catalog offers: the three converted GGUFs and the two
-//! front-end packs every one of them loads, as pinned on the borisbat/dasllama-tts repository -
-//! a view over the rows above (the packs ride the kitten-nano row's companions). Every entry
-//! carries url + bytes + sha256; `pack` tells the two apart from the models.
+//! The text-to-speech set the serving catalog offers: the three converted GGUFs and the three
+//! front-end packs (the full phoneme pack, its American-only twin, the tagger), as pinned on the
+//! borisbat/dasllama-tts repository - a view over the rows above (the packs ride the kitten-nano
+//! row's companions). Every entry carries url + bytes + sha256; `pack` tells the packs apart from
+//! the models.
 def serve_tts_set() : array<tuple<entry : ProvEntry; pack : bool>> {
     var out : array<tuple<entry : ProvEntry; pack : bool>>
     var all <- model_specs()

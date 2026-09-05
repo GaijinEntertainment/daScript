@@ -470,8 +470,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         access->addExtraModule("ast_verify", getDasRoot() + "/daslib/ast_verify.das");
     }
     // -use-aot links the stubs compiled into THIS binary against the script it runs; a function
-    // with no stub interprets (never fail_on_no_aot here - the host may be dastest, whose own
-    // framework has no stubs, and which sets both policies for the test files it compiles)
+    // with no stub interprets (never fail_on_no_aot here - the host may be dastest, whose driver
+    // has no stubs even where its testing.das does, and which sets aot / fail_on_no_aot itself
+    // for the test files it compiles)
     policies.aot = useAot;
     policies.fail_on_no_aot = false;
     if ( useAot ) {
@@ -807,7 +808,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     // over it bake the target into each module, so a cached native compile must not serve a cross one
     for ( int i=1, sep=0; i < argc; ++i ) {
         if ( !sep ) { sep = strcmp(argv[i],"--")==0; continue; }
-        if ( strncmp(argv[i],"--jit-target",12)==0 ) {
+        if ( strcmp(argv[i],"--jit-target")==0 || strncmp(argv[i],"--jit-target=",13)==0 ) {
             hostOptions += argv[i];
             hostOptions += '\n';
             if ( strcmp(argv[i],"--jit-target")==0 && i+1<argc ) {
