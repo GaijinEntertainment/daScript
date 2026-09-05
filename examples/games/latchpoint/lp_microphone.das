@@ -14,6 +14,12 @@ var microphone_level = 0.0
 let MICROPHONE_RATE = 16000
 let MICROPHONE_LIMIT = MICROPHONE_RATE * 20
 
+def recording_has_signal(samples : array<float>) : bool {
+    var peak = 0.0
+    for (sample in samples) { peak = max(peak, abs(sample)) }
+    return peak >= 0.00001
+}
+
 def cancel_microphone() {
     if (microphone_active) { sound_record_stop() }
     microphone_active = false
@@ -62,6 +68,13 @@ def finish_microphone() {
     if (length(microphone_samples) < MICROPHONE_RATE / 4) {
         reply_text = "Recording was too short. Hold V while speaking, or press E to type."
         set_robot_phase(conversation_resident, RobotPhase.idle)
+        return
+    }
+    if (!recording_has_signal(microphone_samples)) {
+        microphone_samples |> clear()
+        reply_text = "Microphone delivered silence. Check microphone permission and input device, or press E to type."
+        conversation_stage = "failed"
+        set_robot_phase(conversation_resident, RobotPhase.failed)
         return
     }
     let path = path_join(get_das_root(), "logs/latchpoint-input/microphone.wav")

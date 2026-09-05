@@ -1,4 +1,14 @@
 options gen2
+
+def camera_dragging(left, right : bool) : bool {
+    return left || right
+}
+
+def ui_scissor_rect(x, y, width, height : int; logical_size, pixel_size : int2) : int4 {
+    let scale = float2(pixel_size) / max(float2(logical_size), float2(1.0))
+    return int4(int(float(x) * scale.x), int(float(logical_size.y - y - height) * scale.y),
+        int(float(width) * scale.x), int(float(height) * scale.y))
+}
 require glfw/glfw_boost public
 require math public
 

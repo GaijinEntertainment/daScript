@@ -21,6 +21,11 @@ require daslib/fio
 
 var display_w = 1280
 var display_h = 800
+var framebuffer_w = 1280
+var framebuffer_h = 800
+var trace_gl_errors = false
+var scene_gl_error = 0u
+var hud_gl_error = 0u
 var hud_font : Font?
 var keys : bool[512]
 var previous_mouse = float2(0.0)
@@ -204,7 +209,8 @@ var on_cursor <- @(_window : GLFWwindow const?; var x, y : double) {
 
 def move_avatar(dt : float) {
     let mouse = glfwGetCursorPos(live_window)
-    if (!editing && !menu_open && glfwGetMouseButton(live_window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS) {
+    if (!editing && !menu_open && camera_dragging(glfwGetMouseButton(live_window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS,
+            glfwGetMouseButton(live_window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS)) {
         let delta = mouse - previous_mouse
         heading += delta.x * 0.003
         pitch = clamp(pitch - delta.y * 0.003, -1.1, 1.1)
@@ -222,7 +228,8 @@ def move_avatar(dt : float) {
 
 def panel(x, y, width, height : int; color : float3) {
     glEnable(GL_SCISSOR_TEST)
-    glScissor(x, display_h - y - height, width, height)
+    let rect = ui_scissor_rect(x, y, width, height, int2(display_w, display_h), int2(framebuffer_w, framebuffer_h))
+    glScissor(rect.x, rect.y, rect.z, rect.w)
     glClearColor(color.x, color.y, color.z, 1.0)
     glClear(GL_COLOR_BUFFER_BIT)
     glDisable(GL_SCISSOR_TEST)
@@ -375,7 +382,7 @@ def draw_hud() {
         text_line("CARGO / {items}", 40.0, y + 142.0, 0.33, AMBER)
     }
     text_line(editing ? "ENTER SEND    ESC CANCEL    FREE-FORM CONVERSATION" :
-        "WASD / ARROWS MOVE   RIGHT-DRAG LOOK   E TYPE   HOLD V SPEAK   F USE   ESC MENU", 38.0, float(display_h - 28), 0.29)
+        "WASD / ARROWS MOVE   CLICK-DRAG LOOK   E TYPE   HOLD V SPEAK   F USE   ESC MENU", 38.0, float(display_h - 28), 0.29)
     if (world.archive_inspected) {
         text_line("RECORD RECOVERED / SHIFT COMPLETE", 430.0, 64.0, 0.36, TEAL)
     } elif (world.archive_open) {
@@ -445,6 +452,7 @@ struct RenderArgs {
     reduced_flashes : bool = false
     ssr : bool = true
     dust : bool = true
+    trace_errors : bool = false
 }
 
 [live_command(description="Inspect rendering. Args: material (0 lit,1 roughness,2 metalness,3 normals), bloom,ao,time (-1 realtime),reduced_flashes,ssr,dust")]
@@ -457,6 +465,8 @@ def cmd_render_settings(input : JsonValue?) : JsonValue? {
     reduced_flashes = args.reduced_flashes
     render_ssr = args.ssr
     render_dust = args.dust
+    trace_gl_errors = args.trace_errors
+    trace_render_errors = args.trace_errors
     return JV(args)
 }
 
@@ -515,7 +525,8 @@ def cmd_hdr_check(_input : JsonValue?) : JsonValue? {
         if (!hdr_pixel_valid(pixel)) { invalid++ }
         else { peak = max(peak, max(pixel.x, max(pixel.y, pixel.z))) }
     }
-    return JV((invalid = invalid, peak = peak, hdr = fx_hdr, gl_error = glGetError()))
+    return JV((invalid = invalid, peak = peak, hdr = fx_hdr, gl_error = glGetError(),
+        scene_error = scene_gl_error, hud_error = hud_gl_error, stages = JV(render_errors)))
 }
 
 struct TalkArgs {
@@ -561,8 +572,9 @@ def init() {
 [export]
 def update() {
     return if (!live_begin_frame())
-    live_get_framebuffer_size(display_w, display_h)
-    return if (display_w <= 0 || display_h <= 0)
+    live_get_framebuffer_size(framebuffer_w, framebuffer_h)
+    glfwGetWindowSize(live_window, safe_addr(display_w), safe_addr(display_h))
+    return if (display_w <= 0 || display_h <= 0 || framebuffer_w <= 0 || framebuffer_h <= 0)
     let dt = min(get_dt(), 0.05)
     ambient_activity_allowed = !menu_open && !editing && !microphone_active && empty(pending_job) && speech_sid == INVALID_SID
     move_avatar(dt)
@@ -573,8 +585,11 @@ def update() {
     tick_yard_audio(get_uptime())
     tick_microphone()
     tick_chatter(get_uptime())
-    render_yard(display_w, display_h, get_uptime())
+    if (trace_gl_errors) { glGetError() }
+    render_yard(framebuffer_w, framebuffer_h, get_uptime())
+    if (trace_gl_errors) { scene_gl_error = glGetError() }
     draw_hud()
+    if (trace_gl_errors) { hud_gl_error = glGetError() }
     live_end_frame()
 }
 

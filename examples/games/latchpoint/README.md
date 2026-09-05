@@ -24,12 +24,20 @@ cmake --build build --config Release --target daslang-live -j 24 -- /nodeReuse:f
 powershell -NoProfile -File examples/games/latchpoint/start-game.ps1
 ```
 
+On macOS/Linux, build the checkout's runtime/modules, configure `server.local.toml` with
+local model paths, and use `bash examples/games/latchpoint/start-server.sh` followed by
+`bash examples/games/latchpoint/start-game.sh`. On macOS the game launcher creates an ad-hoc
+signed development app at `bin/Latchpoint.app` and opens it through Launch Services. This is
+important for microphone permission: a binary launched directly under SSH can receive only
+silence because macOS attributes its capture request to SSH and refuses a prompt. Allow
+Latchpoint microphone access when prompted after pressing V. No privacy database is modified.
+
 The launcher opens the game. Ports are 18082 for inference and 19091 for live development;
 there is no game bridge on 18083. Active logs go
 to `logs/latchpoint-scene/`. The launcher disables the front-end module cache to avoid an
 observed late-bound OpenGL failure after cached compilation; normal live reload still works.
 
-- WASD or arrow keys: move (Left/Right strafe); either Shift: hurry; right mouse drag: look.
+- WASD or arrow keys: move (Left/Right strafe); either Shift: hurry; left or right click-drag: look.
 - E near a resident: type a conversation; Enter: send; Escape: cancel typing.
 - Numpad Enter also confirms/sends. P toggles subtle robot voice coloration for the next line.
 - Hold V near a resident: record up to 20 seconds; release to transcribe locally, edit, and
@@ -122,6 +130,8 @@ Reload after editing dependencies; the host watches the entry point automaticall
 `cmd_render_settings` accepts `material` (0 lit, 1 roughness, 2 metalness, 3 normals),
 `bloom`, `ao`, and `time` (-1 for realtime). `cmd_hdr_check` reads back HDR pixels and GL
 errors; its readback stalls are diagnostic, not rendering benchmark measurements.
+`trace_errors=true` in rendering settings enables per-pass GL error capture, reported as
+`stages` by `cmd_hdr_check`. Disable it for performance measurements.
 
 Rendering reuses River Run's shadow/post-processing modules, with a twilight sky, twelve
 local lights, a shadowed swinging lamp, static yard reflection probe, bounded SSR, dust and

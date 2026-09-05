@@ -5,6 +5,7 @@ require dastest/testing_boost public
 require lp_dialogue
 require daslib/jobque_boost
 require main
+require lp_microphone
 
 [test]
 def test_cancelled_response(suite : T?) {
@@ -29,6 +30,10 @@ def test_cancelled_response(suite : T?) {
 
 [test]
 def test_busy_input(suite : T?) {
+    suite |> run("silent capture is rejected without starting recognition") @(t : T?) {
+        t |> success(!recording_has_signal([0.0, 0.0, 0.0]))
+        t |> success(recording_has_signal([0.0, 0.05, -0.02]))
+    }
     suite |> run("a retry while the old request drains does not erase typed text") @(t : T?) {
         var output = unsafe(stream_create())
         var done = job_status_create()
@@ -46,4 +51,22 @@ def test_busy_input(suite : T?) {
         inference_done = 0ul
         unsafe { stream_remove(output); job_status_remove(done) }
     }
+}
+
+[test]
+def test_empty_recognition(t : T?) {
+    var output = unsafe(stream_create())
+    var done = job_status_create()
+    inference_stream = unsafe(reinterpret<uint64>(output))
+    inference_done = unsafe(reinterpret<uint64>(done))
+    var response = InferenceResponse(code = 200, text = "   ")
+    output |> push_archive(response)
+    conversation_stage = "asr"
+    conversation_resident = 1
+    pending_job = "native"
+    discard_inference = false
+    editing = false
+    poll_dialogue()
+    t |> success(empty(pending_job) && !editing)
+    t |> equal(conversation_stage, "failed")
 }
