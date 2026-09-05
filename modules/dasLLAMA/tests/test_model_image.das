@@ -648,6 +648,64 @@ def test_metal_flavor_image(tst : T?) {
             select_kernel_backend(prior_backend)
         }
     }
+    // the untied twin on the blob flavor: TinyLlama carries its own output.weight, so the blob plane
+    // holds the classifier AND the embedding's linear q8 copy (emb_q8 without cls_q8) - the layout
+    // the SmolLM2 cell never reaches: the blob gate admits the copy, the transform carries it into
+    // mblob, and embed_row reads it there
+    tst |> run("TinyLlama-1.1B q8 (untied): metal flavor - blob mint + map + GPU serve on the emb_q8 table") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "llama") || !arm_on(t, "metal-untied")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            if (!has_decode_override("metal")) {
+                t |> skip("metal overrides not registered")
+                return
+            }
+            let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            let prior_backend = active_kernel_backend()
+            pin_kernel_backend("portable")
+            set_metal_mode(MetalMode.off)
+            var tc <- load_model(path, QuantMode.q8)
+            t |> success(!tc.metal_blob && tc.emb_q8 && !tc.cls_q8, "CPU-mode load stays planar and serves the untied q8 table")
+            let table_floats = tc.config.vocab_size * tc.config.dim
+            var prompt <- counting_ids(tc)
+            var g_cpu <- gen_ids(tc, prompt, 16)
+            delete tc
+            let img_m = image_path_for(path, METAL_IMAGE_TAG)
+            remove(img_m)
+            set_metal_mode(MetalMode.when_available)
+            var tm <- load_model(path, QuantMode.q8)
+            t |> success(tm.metal_blob, "metal-mode load is blob-form - the layout gate admits the untied emb_q8 copy")
+            t |> success(tm.image_map != null && stat(img_m).is_valid, "cold metal load saved and serves the metal-flavor image")
+            t |> success(tm.emb_q8 && !tm.cls_q8 && tm.tok_emb_off < 0l && long_length(tm.fblob) < table_floats,
+                "the blob flavor keeps the untied q8 table and no fp32 copy (fblob {long_length(tm.fblob)} floats against a {table_floats}-float table)")
+            var g_mint <- gen_ids(tm, prompt, 16)   // every token's embedding row read from the blob copy
+            var tp <- load_model_(path, QuantMode.q8)
+            let np = long_length(prompt)
+            var teach <- [for (i in range64(np - 1l, long_length(g_cpu))); g_cpu[i]]
+            let maxd = forced_logits_maxd(tp, tm, prompt, teach, "TinyLlama metal forced")
+            t |> success(maxd < 4.0, "teacher-forced GPU logits within 4.0 of the CPU control (maxd {maxd})")
+            delete teach
+            delete tp
+            delete tm
+            var tw <- load_model(path, QuantMode.q8)
+            t |> success(tw.image_map != null && tw.metal_blob && tw.emb_q8 && !tw.cls_q8, "warm metal load maps the blob image with the untied q8 table")
+            var g_map <- gen_ids(tw, prompt, 16)
+            t |> success(count_mismatch(g_mint, g_map) == 0l, "mint vs mapped tokens")
+            delete tw
+            delete g_cpu
+            delete g_mint
+            delete g_map
+            delete prompt
+            clear_kernel_backend_pin()
+            select_kernel_backend(prior_backend)
+        }
+    }
 }
 
 [test]
