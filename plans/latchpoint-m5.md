@@ -45,3 +45,17 @@ Next measured comparisons: CPU total/phase limits under the same game scene, the
 inference with the same prompts and active rendering. Record response latency plus frame-time
 distribution/spikes, including ambient+player overlap. Do not infer hard core affinity from a
 thread-count setting, or infer smoothness from an average FPS alone.
+
+## First Metal playtest
+
+Switched the M5 local config to `gpu = "metal"` and the Qwen slot to `backend = "gpu"`,
+retaining eight CPU lanes, two streams, the same model/context and unchanged game rendering.
+The CPU config and pre-switch cumulative stats are preserved under `logs/latchpoint-m5/`.
+Watchdog's `/restart` completed without restarting the game. A short chat smoke returned a
+valid answer; runtime logs confirmed resident Metal prefill and decode on Apple M5 Max.
+The first request compiled schedules and warmed the GPU path, so it is not a steady-state
+latency comparison. Rendering contention and conversation responsiveness await playtesting.
+
+Telemetry follow-up: `/v1/stats` still reported `backend_effective = "cpu"`, `holds_gpu = false`
+and zero GPU memory after the Metal request. This disagrees with actual resident execution logs;
+do not use those status fields alone to infer fallback or GPU memory usage for this run.
