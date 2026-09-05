@@ -444,6 +444,9 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
                         return
                     }
                     return if (program._options |> find_arg("rtti") ?as tBool ?? false)
+                    let program_module = program |> get_this_module()
+                    let program_file = program_module != null ? string(program_module.fileName) : "<no module>"
+                    log::info("deser {i + 1:d}/{count:d}: {program_file}")
                     simulate(program) $(sok, context, serrors) {
                         if (!sok) {
                             log::error("Failed to simulate program {i}\n{serrors}")
@@ -460,6 +463,7 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
             }
         }
         delete_ast_serializer(ser)
+        log::info("Deserialized run finished: {count:d} programs, {res.total:d} tests, {res.errors:d} error(s)")
     }
     return res
 }

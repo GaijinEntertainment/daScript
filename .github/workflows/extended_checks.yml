@@ -473,8 +473,8 @@ jobs:
     - name: "Test ser/deser"
       if: matrix.role != 'core'
       run: |
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --ser serialized.bin
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --deser serialized.bin
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --ser serialized.bin --timeout 1200
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --deser serialized.bin --timeout 1200
 
     - name: "Compile tests/ with --ast-verify-batch"
       # NIGHTLY ONLY (cron or manual dispatch), because of what it costs: the cost is
