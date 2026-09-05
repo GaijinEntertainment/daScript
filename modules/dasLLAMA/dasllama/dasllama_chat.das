@@ -164,8 +164,6 @@ def chat_template(m : Model) : ChatTemplate {
     if (!empty(kind)) {
         var ct <- chat_template_of_kind(kind)
         if (kind == "qwen2") {
-            // Instruct-2507 shares the thinking vocab AND history replay tags with Qwen3.
-            // Only the generation branch declares whether new replies support reasoning.
             let gen = rfind(m.chat_template_str, "add_generation_prompt")
             if (gen >= 0) {
                 let tail = slice(m.chat_template_str, gen)
