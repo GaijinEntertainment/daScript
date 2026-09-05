@@ -177,7 +177,7 @@ struct ModelEntry {
 // untuned boot consults the exchange only when the config opts in (the exchange is closed; off by default)
 [init]
 def register_exchange_resolver {
-    static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+    static_if (typeinfo module_exists(dasllama_exchange)) {
         exchange_register_resolver("dasllama-server.toml")
     }
 }
@@ -853,7 +853,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     log_tune_status("dasllama-server")
     // a fresh local tune that has not been shared: submit now (always) or surface the offer
     // (ask — the watchdog balloon + the control page's exchange card); quiet otherwise
-    static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+    static_if (typeinfo module_exists(dasllama_exchange)) {
         exchange_boot_submit_check(exchange_policy_from_config(g_cfg.config))
     }
     // GPU backend lands BEFORE the load: the metal mode pins the row-major backend the GPU

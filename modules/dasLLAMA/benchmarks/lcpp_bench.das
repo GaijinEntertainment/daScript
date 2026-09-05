@@ -1272,7 +1272,7 @@ var private g_debug_run = false
 
 // the exchange client compiles only where the tune framework does, so --submit has a rail to refuse on
 def private exchange_compiled_in() : bool {
-    static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+    static_if (typeinfo module_exists(dasllama_exchange)) {
         return true
     } else {
         return false
@@ -1857,7 +1857,7 @@ def main() : int {
     }
     print("{text}\n")
     if (cfg.submit) {
-        static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+        static_if (typeinfo module_exists(dasllama_exchange)) {
             let url = empty(g_env_exchange.exchange_url) ? EXCHANGE_URL_DEFAULT : g_env_exchange.exchange_url
             let serr = exchange_submit_records_doc(url, text)
             if (!empty(serr)) {

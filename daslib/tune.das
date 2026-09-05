@@ -15,8 +15,9 @@ require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public
 //! shells every program can spell. The framework that implements them lives in
 //! `llvm/daslib/llvm_tune` and `llvm/daslib/llvm_code`, reached through the path guards above
 //! and re-exported, so `require daslib/tune` gives exactly what `require llvm/daslib/llvm_tune`
-//! gave; the guarded require is also the witness that makes `builtin_module_exists` below
-//! answer for this compile. Every tune annotation registers HERE and nowhere else, because a
+//! gave; the guarded require is also the witness that makes `module_exists` below answer for
+//! this compile (`module_exists`, not `builtin_module_exists`: the program's own library, the
+//! same answer inside a tool's nested compile). Every tune annotation registers HERE and nowhere else, because a
 //! module's macro state is per-module: the `[tune_scope]` bank and the pass that reads it have
 //! to run in one macro context. Without dasLLVM every apply is a no-op - no sidecar read, no
 //! stamp, no `_variants()` registry, no tuner spawn - and the reference body IS the function.
@@ -26,7 +27,7 @@ require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public
 class private TunePermShell : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
-        static_if (typeinfo builtin_module_exists(llvm_tune)) {
+        static_if (typeinfo module_exists(llvm_tune)) {
             return tune_perm_apply(func, group, args, errors)
         } else {
             return true
@@ -38,7 +39,7 @@ class private TunePermShell : AstFunctionAnnotation {
 class private TuneCompanionShell : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
-        static_if (typeinfo builtin_module_exists(llvm_tune)) {
+        static_if (typeinfo module_exists(llvm_tune)) {
             return tune_companion_apply(func, group, args, errors)
         } else {
             return true
@@ -50,7 +51,7 @@ class private TuneCompanionShell : AstFunctionAnnotation {
 class private TuneShell : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
-        static_if (typeinfo builtin_module_exists(llvm_tune)) {
+        static_if (typeinfo module_exists(llvm_tune)) {
             return tune_apply(func, group, args, errors)
         } else {
             return true
@@ -62,7 +63,7 @@ class private TuneShell : AstFunctionAnnotation {
 class private TuneScopeShell : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
-        static_if (typeinfo builtin_module_exists(llvm_tune)) {
+        static_if (typeinfo module_exists(llvm_tune)) {
             return tune_scope_apply(st, group, args, errors)
         } else {
             return true
@@ -74,7 +75,7 @@ class private TuneScopeShell : AstStructureAnnotation {
 class private TunePolicyShell : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
-        static_if (typeinfo builtin_module_exists(llvm_tune)) {
+        static_if (typeinfo module_exists(llvm_tune)) {
             return tune_policy_apply(func, group, args, errors)
         } else {
             return true
@@ -86,7 +87,7 @@ class private TunePolicyShell : AstFunctionAnnotation {
 class private LlvmCodeShell : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
-        static_if (typeinfo builtin_module_exists(llvm_code)) {
+        static_if (typeinfo module_exists(llvm_code)) {
             return llvm_code_apply(func, group, args, errors)
         } else {
             return true
@@ -97,7 +98,7 @@ class private LlvmCodeShell : AstFunctionAnnotation {
 [infer_macro]
 class private TuneDefaultPolicyShell : AstPassMacro {
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        static_if (typeinfo builtin_module_exists(llvm_tune)) {
+        static_if (typeinfo module_exists(llvm_tune)) {
             return tune_default_policy_apply(prog, mod)
         } else {
             return false

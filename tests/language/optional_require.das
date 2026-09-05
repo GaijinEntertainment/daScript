@@ -43,6 +43,19 @@ def test_optional_require_path_guard(t : T?) {
     // path guard resolved (daslib/fio is always mounted): the target loaded and its symbols work
     t |> equal(optional_require_fixture_pathguard::pathguard_marker(), 43)
     t |> success(typeinfo builtin_module_exists(optional_require_fixture_pathguard))
+    // module_exists asks the compiling program's own library, not the process registry: the
+    // loaded das target and a required builtin answer true, the skipped target and a name
+    // nobody required answer false - and a tool's nested compile, which promotes nothing,
+    // answers the same
+    t |> success(typeinfo module_exists(optional_require_fixture_pathguard))
+    t |> success(typeinfo module_exists(math))
+    t |> success(!typeinfo module_exists(optional_require_fixture_skipme))
+    t |> success(!typeinfo module_exists(no_such_guard_xyz))
+    static_if (typeinfo module_exists(optional_require_fixture_pathguard)) {
+        t |> equal(optional_require_fixture_pathguard::pathguard_marker(), 43)
+    } else {
+        this_symbol_must_never_resolve_module_exists_xyz()
+    }
     // path guard unresolvable: the require was SKIPPED even though the target file exists on disk —
     // the pin for path-guard semantics (a plain-name guard would have loaded it via the fallback)
     t |> success(!typeinfo builtin_module_exists(optional_require_fixture_skipme))
