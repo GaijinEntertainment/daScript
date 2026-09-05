@@ -1,0 +1,18 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("storyteller")
+    package_description("Storyteller: a tiny story LLM writes on screen while KittenTTS reads it aloud - dasGlfw + dasOpenGL + dasAudio over dasLLAMA")
+}
+
+[export]
+def release() {
+    release_main("main.das")   // one source for the desktop run AND wasm64 (daspkg release wasm)
+    // host-only GPU tiers: absent from the wasm build, so their guarded requires resolve as absent
+    release_wasm_disable_module("dasvulkan")
+    release_wasm_disable_module("dasmetal")
+    release_wasm_disable_module("dasaccelerate")
+}
