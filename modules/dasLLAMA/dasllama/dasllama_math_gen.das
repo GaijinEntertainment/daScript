@@ -12,7 +12,7 @@ require dasllama/dasllama_math_default  // dot_q8q8_f16s — the row-major tails
 require dasllama/dasllama_repack  // the grp<mr> repack family + kq panel unpack (pure transforms; the _gen/_bake twins below feed them numbers)
 require daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
 require daslib/tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code], inert without dasLLVM; PUBLIC so the auto-policy infer pass reaches app roots that require this module
-require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public  // PUBLIC so tune_status reaches app roots that require this module; PATH guard: this file names no framework symbol itself
+require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public  // PUBLIC so tune_status reaches app roots that require this module; PATH guard: the one framework call below sits under static_if
 require dasllama/dasllama_tune_scope  // the dasllama [tune_scope] must be on the AST before this module's [tune] kernels pick their perms
 require dasllama/dasllama_gemm_schema
 require daslib/jobque_boost public
@@ -2750,7 +2750,9 @@ def dasllama_math_gen_register() {
     // line is unconditional-when-set — active overrides announce themselves
     if (g_env_bench.allow_untuned) {
         to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ALLOW_UNTUNED=1 - tune mint suppressed; untuned kernels run fallback, numbers are not publishable\n")
-        tune_suppress_mint("DASLLAMA_ALLOW_UNTUNED=1")
+        static_if (typeinfo builtin_module_exists(llvm_tune)) {
+            tune_suppress_mint("DASLLAMA_ALLOW_UNTUNED=1")
+        }
     }
     // the cross-box override's q51 reach: x64-gen keeps disk-order q51 slots, so the generic
     // grp<mr> q51 repack registers here for bakes whose TARGET has grp q51 planes
