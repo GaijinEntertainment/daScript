@@ -97,15 +97,21 @@ EOF
     echo "provisioned: user=$SVCUSER data=$DATA unit=$UNIT; restic snapshot line added"
 }
 
+vhost_has() {
+    # true when the dasllama.io block of the shared Caddyfile carries $1 - the other vhosts
+    # (daslang.io) may spell the same directive, so a whole-file grep is not the question
+    awk '/^dasllama\.io \{/ { b = 1 } b { print } b && /^\}/ { b = 0 }' "$CADDYFILE" | grep -q "$1"
+}
+
 caddy_apply() {
     # Splice caddy.snippet (from the installed release) into the dasllama.io vhost, ahead of
     # root/file_server. Idempotent, validated before reload, with a timestamped Caddyfile backup.
     snippet="$APP/current/caddy.snippet"
     [ -f "$snippet" ] || { echo "no $snippet - install a release first"; exit 1; }
-    if grep -q "reverse_proxy 127.0.0.1:$PORT" "$CADDYFILE"; then
+    if vhost_has "reverse_proxy 127.0.0.1:$PORT"; then
         # the routes are in; a later snippet may still carry a block the vhost lacks - today the
         # `header /examples/*` isolation block - so splice each such block on its own
-        if grep -q "header /examples/\*" "$snippet" && ! grep -q "header /examples/\*" "$CADDYFILE"; then
+        if grep -q "header /examples/\*" "$snippet" && ! vhost_has "header /examples/\*"; then
             ts=$(date +%Y%m%d-%H%M%S)
             cp "$CADDYFILE" "$CADDYFILE.bak-$ts"
             awk -v snip="$snippet" '
@@ -121,7 +127,7 @@ caddy_apply() {
                 }
                 { print }
             ' "$CADDYFILE.bak-$ts" > "$CADDYFILE"
-            if ! grep -q "header /examples/\*" "$CADDYFILE"; then
+            if ! vhost_has "header /examples/\*"; then
                 echo "caddy: header splice inserted nothing (dasllama.io vhost not matched) - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
             fi
             if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
@@ -146,7 +152,7 @@ caddy_apply() {
     # The awk match is exact (`dasllama.io {`); if the vhost is ever reformatted (shared address,
     # renamed) it matches nothing, validate still passes on the unchanged file, and we would
     # wrongly report success. Confirm the proxy line actually landed before reloading.
-    if ! grep -q "reverse_proxy 127.0.0.1:$PORT" "$CADDYFILE"; then
+    if ! vhost_has "reverse_proxy 127.0.0.1:$PORT"; then
         echo "caddy: splice inserted nothing (dasllama.io vhost not matched) - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
     fi
     if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then

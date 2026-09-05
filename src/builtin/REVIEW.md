@@ -7,7 +7,11 @@
   fix a bind the scan reports by switching the bind, and never drop a module from
   `review_nttp.das`'s `require` list, which sets the modules the scan covers. The scan reads the
   binds compiled into the RUNNING binary, so a diff that changes a bind runs the gate against a
-  binary built from the diff - a stale binary yields a false green.
+  binary built from the diff - a stale binary yields a false green. The Inline modules are `$`
+  (builtin), `math`, `strings` and `jit`. In those, a plain-value bind - one returning nothing, or
+  a value that is neither a reference nor written into the caller's result slot - registers
+  through `addExternInline` or `addExternInlineEx`; `REVIEW.das` holds this list and the scan's
+  `inlineOnlyModules` to the same names.
 
 - **A diff that adds a module under this folder adds it to `review_nttp.das`'s `require`
   list, in the same change** - a module off the list is a module the scan never sees.

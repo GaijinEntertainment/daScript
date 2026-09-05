@@ -176,9 +176,8 @@ defect.** A stocked artifact is anything the test reads out of `models_dir()` th
 build does not produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps.
 Any one of these names the producer: a row in `../performance/model_specs.das`; a row's
 `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
-script beside `model_specs.das` in `../performance/`. For an oracle dump, the mint script
-stocked beside the dumps under `models_dir()` also counts, and the test that loads the dump
-names it.
+script beside `model_specs.das` in `../performance/`; for an oracle dump, the mint script stocked
+beside the dumps under `models_dir()`, named by the test that loads the dump.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header -
 the backend, the flash-attention setting, and the mmproj precision the dump came from - is a
@@ -216,9 +215,8 @@ model and its blob twin share one shape, so one session serves both.
 
 **A diff that adds a model-loading block to a `run.das` MODEL suite (`decode`, `mtp`, `prefill`,
 `matrix`, `image`, `image-vulkan`, `coverage` - not `model-free` or `stocked`) tags it with its
-family.** The family
-tag is the token passed to `family_on(t, name)` (`_model_tier.das`). An untagged block
-silently joins every family's gate.
+family.** The family tag is the token passed to `family_on(t, name)` (`_model_tier.das`). An
+untagged block silently joins every family's gate.
 
 **No CPU-control batch parity runs against `Llama-3.3-70B-Instruct-Q4_K_M.gguf`.** The
 batched code paths get their parity on small models, through pins.
