@@ -1,0 +1,72 @@
+# The pre-merge budget: preflight in 20 minutes, CI in 35 per job
+
+Ruling: on the M5 box `preflight --full` fits in 20 minutes or a gate is not in preflight; a per-PR CI job
+fits in 35 minutes or its steps go to the nightly run. What does not fit is retired, not tolerated.
+
+## Baseline (measured 2026-09-04, module-cache follow-up branch)
+
+Local chain (`make-pr` then `preflight --full`), serial on 16 cores:
+
+| Phase | Wall | Composition |
+|---|---|---|
+| make-pr gates | 12.5 min | sync, review-md walk, stamp-reach, dupes (the bulk), ast-verify, jit-smoke |
+| preflight, non-dasLLAMA | ~20 min | tests-jit ~6.5, sphinx docs ~3.3, AOT build+run ~2 (7 cold), interp ~1.7, imgui ~1.4, sequence <1, the fast gates ~3 |
+| dasllama-model-free | ~6 min | 63 files, warm caches; ~10 s/file is engine compile the module cache does not reach |
+| dasllama-stocked | ~25 min | model wall: test_batch_decode 263 s, test_ple_modes ~560 s, gemma3v 109 s, vision_chat ~110 s |
+
+CI, last master run (9836bcb91): extended_checks linux 75 min (build 23.7, examples 8.4, tutorials 7.8,
+dasllama-server 6.9, utils tests 4.2, coverage 3.5, ser/deser 2.8, static 2.8, facade lint 2.3, MCP 2.3),
+extended_checks darwin15 46 min (build 16.3, tutorials 10.9, examples 5.6); build lane 55 min (asan 55, windows
+Debug 52, tsan 51, windows Release 50, linux Release 46, ubsan 45, bundle_smoke 41 - the build step is the
+cost: linux Release 1302 objects in 30 min, cold); CodeQL 42.5. sccache: `SCCACHE_CACHE_SIZE=500M` while one
+Release build is 718 MB of objects, so no slot ever holds a build (linux: cold every run; windows: 22% hits);
+the repo holds 17 GB of caches, 4.3 GB of it ten per-commit CodeQL databases; the limit is ~25 GB.
+
+Structural causes: everything serial; review-md and ast-verify run in both halves of the chain; no reach
+model for module-owned gates; dupes (advisory) on the critical path; the dasLLAMA per-file engine compile.
+
+## Preflight (utils/internal/preflight)
+
+Tiers, printed by `--list-gates`:
+
+- **fast** (serial, first; a red stops the run before the lanes): untracked, format, lint, ast-verify,
+  cpp-syntax, review-md, md-ascii, hash-refs, dasgen, ci-das, compile-sweep (every program root under
+  `utils/`, `examples/`, `tutorials/`, the modules' examples and utils, `-compile-only`, parallel - 995 roots
+  in 18 s here).
+- **lane** (`--full`, run concurrently, wall = the longest): tests-cpp, tests-interp, tests-jit, tests-aot,
+  docs, utils-tests (`run_utils_tests`, ~100 s here).
+- **module** (never in `--full`; `--only <gate>` when working on the module): imgui, sequence,
+  dasllama-model-free, dasllama-stocked.
+- **reach**: a gate names the path prefixes that reach it; `src/`, `include/`, `daslib/`, `dastest/`,
+  `CMakeLists.txt` reach everything. A diff that misses a gate's reach skips it with the reason.
+- make-pr's default chain drops review-md and ast-verify (preflight owns them) and dupes (an advisory
+  report: `make-pr --only dupes` when wanted); it keeps sync, stamp-reach, jit-smoke, then chains preflight.
+
+Acceptance: a full run with a core change under 20 minutes on the M5 box; a dasLLAMA-only diff in about 5.
+
+## CI (.github/workflows)
+
+- sccache slots sized to a build: `SCCACHE_CACHE_SIZE=1200M` on every slot (16 build slots + 2 extended
+  = ~22 GB of the 25). CodeQL to nightly (frees 4.3 GB and 42 min per PR).
+- extended_checks per PR = two darwin15 jobs: `core` (build; formatter, lint, ast-verify, dasgen, ci-das,
+  md-ascii, REVIEW.das gates; compile-sweep; utils tests; standalone exes; dastest own suite; the small
+  python tests) and `modules` (build; dasllama-server; MCP tools; facade lint; ser/deser; sequence smoke;
+  dasweb; boulder-dash; dasllama-ladder). Estimated 26 / 31 min at today's build cost, ~20 with a warm
+  sccache. linux and windows extended_checks, tutorial dry-runs, the run form of examples, daslang_static,
+  coverage, nano cross-compile: nightly (same workflow, `event_name == 'schedule'`).
+- build lane per PR: Release + Debug on linux/darwin/windows/linux_arm as today minus asan/tsan/ubsan and
+  windows Debug, which go nightly. Every remaining job is a build step; the sccache fix is what moves it.
+
+Acceptance: every per-PR job under 35 minutes on the first PR after the change (measure with the Actions API:
+run, job, step walls; the script in the session scratchpad becomes `utils/internal/ci-timing/` if kept).
+
+## dasLLAMA long tests (after the above)
+
+- Compile dressed as a test: `test_exe_smoke` (108 s, builds an exe), `test_tok_seed` (90 s) and
+  `test_parity_pregate` (91 s) require `lcpp_bench` by path and pay its engine compile for a header
+  parser and a pregate - the helpers move into a small module the bench requires.
+- Model wall, per file: `test_batch_decode` 263 s, `test_ple_modes` ~560 s, `test_gemma3v` 109 s,
+  `test_vision_chat` ~110 s, `test_kquant` 82 s, `test_whisper` 80 s, `test_parity` 40 s - fewer carriers,
+  one load per file, smaller fixtures.
+- The engine compile floor: the module cache surviving into dastest's runtime `compile_file` (per test
+  file key; an engine record is ~210 MB - why, first).

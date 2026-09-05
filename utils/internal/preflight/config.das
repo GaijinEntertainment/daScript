@@ -31,6 +31,90 @@ def public has_path_under(paths : array<string>; prefix : string) : bool {
     return false
 }
 
+def public has_path_under_any(paths : array<string>; prefixes : array<string>) : bool {
+    for (prefix in prefixes) {
+        if (has_path_under(paths, prefix)) {
+            return true
+        }
+    }
+    return false
+}
+
+//! the paths whose change reaches every gate that names a reach set
+let public CORE_REACH <- ["src/", "include/", "daslib/", "dastest/", "CMakeLists.txt", "cmake/"]
+
+//! The pure half of a gate's reach test: a gate with an empty reach set runs whatever changed; one
+//! with a reach set runs when a changed path sits under one of its prefixes or under the core.
+def public reach_hit(changed : array<string>; reach : array<string>) : bool {
+    return true if (empty(reach))
+    return has_path_under_any(changed, reach) || has_path_under_any(changed, CORE_REACH)
+}
+
+//! The pure half of the compile sweep's root filter: a `.das` under the swept trees that is not a test,
+//! not generated, and not a module tree reached through a junction inside an example.
+def public is_sweep_root_path(path : string) : bool {
+    let p = path |> replace("\\", "/")
+    let name = base_name(p)
+    // "/modules/" inside the path is a module tree nested in an example - a junction the module's own gates cover
+    return ((p |> ends_with(".das"))
+        && !(name |> starts_with("test_")) && !(name |> starts_with("_"))
+        && find(p, "/tests/") < 0 && find(p, "/_aot_generated/") < 0
+        && find(p, "/modules/") < 0)
+}
+
+struct public GateReport {
+    tag : string
+    name : string
+    seconds : double
+    detail : string
+    breakdown : string
+}
+
+//! A lane child's gate lines, `[TAG] name (12.3s) — detail`, each with the indented breakdown under it,
+//! in print order. A child that died before its report yields none; the docs lane yields several.
+def public parse_gate_reports(out : string) : array<GateReport> {
+    var reports : array<GateReport>
+    var breakdown : array<string>
+    var open_report = false
+    for (raw in split(out, "\n")) {
+        let ln = raw |> replace("\r", "")
+        if (open_report && ln |> starts_with("       ") && !empty(strip(ln))) {
+            breakdown |> push(strip(ln))
+            continue
+        }
+        if (open_report) {
+            reports[length(reports) - 1].breakdown = join(breakdown, "\n")
+            breakdown |> clear()
+            open_report = false
+        }
+        continue if (!(ln |> starts_with("[")))
+        let close = find(ln, "]")
+        continue if (close < 0)
+        let tag = strip(slice(ln, 1, close))
+        continue if (tag != "PASS" && tag != "FAIL" && tag != "SKIP")
+        let rest = slice(ln, close + 1)
+        var head = strip(rest)
+        var seconds = 0.0lf
+        var detail = ""
+        let dash = find(head, " — ")
+        if (dash >= 0) {
+            detail = strip(slice(head, dash + length(" — ")))
+            head = strip(slice(head, 0, dash))
+        }
+        let open = find(head, " (")
+        if (open >= 0 && head |> ends_with("s)")) {
+            seconds = double(to_float(slice(head, open + 2, length(head) - 2)))
+            head = strip(slice(head, 0, open))
+        }
+        reports |> push(GateReport(tag = tag, name = head, seconds = seconds, detail = detail))
+        open_report = true
+    }
+    if (open_report) {
+        reports[length(reports) - 1].breakdown = join(breakdown, "\n")
+    }
+    return <- reports
+}
+
 def public valid_jit_max_file_time_override(value : float) : bool {
     return value == -1.0 || value >= 0.0
 }

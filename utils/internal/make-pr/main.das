@@ -305,11 +305,15 @@ def main() : int {
         }
         return 1
     }
+    // the default chain: sync, stamp-reach, jit-smoke, then preflight --full. review-md and ast-verify are
+    // preflight's fast-tier gates (one pass per gate); dupes is an advisory report off the critical path -
+    // each still runs by name through --only
+    let named = !empty(g_cfg.only)
     if ((want("sync") && !gate_sync()) ||
-            (want("review-md") && !gate_review_md(daslang)) ||
+            (named && want("review-md") && !gate_review_md(daslang)) ||
             (want("stamp-reach") && !gate_stamp_reach()) ||
-            (want("dupes") && !gate_dupes(daslang)) ||
-            (want("ast-verify") && !gate_ast_verify(daslang)) ||
+            (named && want("dupes") && !gate_dupes(daslang)) ||
+            (named && want("ast-verify") && !gate_ast_verify(daslang)) ||
             (want("jit-smoke") && !gate_jit_smoke(daslang))) {
         return 2
     }

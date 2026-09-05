@@ -1,13 +1,22 @@
 # Preflight - CI lane <-> local mirror
 
-`daslang utils/internal/preflight/main.das` runs the fast tier (`--list-gates`
-prints every gate and its tier). `-- --full` adds the expensive gates: the
-untracked gate, dasgen freshness, the CI-only-das compile sweep, the doc gates,
-ctest, the interp/JIT/AOT suites, the sequence smoke, the dasImgui suite, and -
-when the diff touches `modules/dasLLAMA/` - the dasLLAMA `model-free` and
-`stocked` suites. `--only <names>` / `--skip <names>` select subsets;
-`--lint-skip-exe-rail` trims the lint gate to its interp rails. A gate whose
-host tool or module is missing reports `SKIP` with an install/rebuild hint.
+`daslang utils/internal/preflight/main.das` runs the **fast tier**: format, lint,
+ast-verify, cpp-syntax, review-md, md-ascii, hash-refs, untracked, dasgen, ci-das
+and compile-sweep (every program root under `utils/`, `examples/`, `tutorials/`
+and the modules' examples and utils, compile-only, in parallel - the per-PR form
+of CI's examples and tutorial runs), serially, and a red stops the run. `-- --full`
+then runs the **lanes** at once - docs, tests-cpp, tests-interp, tests-jit,
+tests-aot, utils-tests - so the wall is the longest lane (`--serial` for
+diagnosis). **Module gates** never run from a tier: `--only imgui`, `--only
+sequence`, `--only dasllama-model-free` when the module is the work. A gate
+with a **reach set** skips, with the reason, when nothing under its paths or the
+core (`src/`, `include/`, `daslib/`, `dastest/`, `CMakeLists.txt`, `cmake/`)
+changed; `--only` runs a gate whatever changed. `--list-gates` prints tier, reach
+and description; `--skip <names>` drops gates; `--lint-skip-exe-rail` trims the
+lint gate to its interp rails. A gate whose host tool or module is missing
+reports `SKIP` with an install/rebuild hint. The budget the tiers serve: a full
+run fits 20 minutes on the M5 box, or the gate is not in preflight
+(`plans/ci_preflight_budget.md`).
 
 Each gate line carries its breakdown indented underneath, on PASS as well as FAIL: the
 build/run split for a gate that builds before it sweeps (`tests-aot`, `sequence`, `imgui`),
