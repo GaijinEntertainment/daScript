@@ -388,3 +388,82 @@ def test_default_module_cache(t : T?) {
     var err : string
     rmdir_rec(tmp, err)
 }
+
+def records_in(dir, stem : string) : int {
+    var n = 0
+    fio::dir(dir) $(name) {
+        if (name |> starts_with("{stem}-") && name |> ends_with(".dascache")) {
+            n++
+        }
+    }
+    return n
+}
+
+def record_size_in(dir, stem : string) : uint64 {
+    var size = 0ul
+    fio::dir(dir) $(name) {
+        if (name |> starts_with("{stem}-") && name |> ends_with(".dascache")) {
+            size = stat(path_join(dir, name)).size
+        }
+    }
+    return size
+}
+
+//! the default cache directory holds at most DAS_MODULE_CACHE_LIMIT megabytes: past it the oldest
+//! records go, a record read this run counts as fresh, the record just written stays, and an
+//! explicit -module-cache path is never pruned
+[test]
+def test_default_cache_evicts_to_the_limit(t : T?) {
+    let hostArgs <- get_command_line_arguments()
+    if (find_index(hostArgs, "--use-aot") >= 0) {
+        t |> skip("an AOT-consuming host never installs the default cache")
+        return
+    }
+    var terr : string
+    let tmp = create_temp_directory("das_mc_evict", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let win = get_platform_name() == "windows"
+    //! the children run inside the temp directory, so the default cache they prune is their own
+    let enter = win ? "cd /d {tmp} && set \"DAS_MODULE_CACHE_LIMIT=1\"&&" : "cd {tmp} && DAS_MODULE_CACHE_LIMIT=1"
+    let base = "{enter} {get_full_file_name(das_exe())} -dasroot {get_das_root()}"
+    let cacheDir = path_join(tmp, ".jitted_scripts/module_cache")
+    for (stem in ["ev_a", "ev_b", "ev_c", "ev_d"]) {
+        fwrite(path_join(tmp, "{stem}.das"), "options gen2\n[export]\ndef main \{\n    print(\"MARK_{stem}\\n\")\n\}\n")
+    }
+    var out : string
+    t |> success(report_child(t, "evict a", run("{base} {path_join(tmp, "ev_a.das")}", out), out, "MARK_ev_a"), "the first root writes its record")
+    let one = record_size_in(cacheDir, "ev_a")
+    t |> success(one > 0ul && 2ul * one <= 1048576ul && 3ul * one > 1048576ul, "a hello record ({one} bytes) sizes so that two fit the 1 MB limit and three do not - retune the limit if daslib grew")
+    sleep(1100u)    //! past the mtime's one-second grain, so the records order by age
+    t |> success(report_child(t, "evict b", run("{base} {path_join(tmp, "ev_b.das")}", out), out, "MARK_ev_b"), "the second root writes its record")
+    sleep(1100u)
+    t |> success(report_child(t, "evict c", run("{base} {path_join(tmp, "ev_c.das")}", out), out, "MARK_ev_c"), "the third root writes its record")
+    t |> equal(records_in(cacheDir, "ev_a"), 0, "the oldest record went when the third pushed the directory past the limit")
+    t |> equal(records_in(cacheDir, "ev_b"), 1, "the middle record stays")
+    t |> equal(records_in(cacheDir, "ev_c"), 1, "the record just written stays")
+    sleep(1100u)
+    t |> success(report_child(t, "evict b warm", run("{base} {path_join(tmp, "ev_b.das")}", out), out, "MARK_ev_b"), "a warm run reads the second record")
+    sleep(1100u)
+    t |> success(report_child(t, "evict d", run("{base} {path_join(tmp, "ev_d.das")}", out), out, "MARK_ev_d"), "a fourth root writes its record")
+    t |> equal(records_in(cacheDir, "ev_b"), 1, "the record the warm run read counted as fresh and survived")
+    t |> equal(records_in(cacheDir, "ev_c"), 0, "the record no run touched since was the oldest and went")
+    t |> equal(records_in(cacheDir, "ev_d"), 1, "the record just written stays")
+    let explicitDir = path_join(tmp, "explicit")
+    for (stem in ["ev_a", "ev_b", "ev_c"]) {
+        let cachePath = path_join(explicitDir, "{stem}.dascache")
+        let script = path_join(tmp, "{stem}.das")
+        t |> success(report_child(t, "explicit {stem}", run("{base} -module-cache {cachePath} {script}", out), out, "ser: wrote"), "an explicit cache writes under the limit too")
+    }
+    var explicitFiles = 0
+    fio::dir(explicitDir) $(name) {
+        if (name |> ends_with(".dascache")) {
+            explicitFiles++
+        }
+    }
+    t |> equal(explicitFiles, 3, "an explicit -module-cache directory is never pruned")
+    var err : string
+    rmdir_rec(tmp, err)
+}

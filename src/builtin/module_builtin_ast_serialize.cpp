@@ -9,10 +9,18 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/misc/anyhash.h"
 #include "daScript/misc/sysos.h"
+#include "daScript/misc/env_cfg.h"
 #include <cstdarg>
 #include <cstdio>
 #include <sys/stat.h>
 #include <algorithm>
+#ifdef _WIN32
+#include <io.h>
+#include <sys/utime.h>
+#else
+#include <dirent.h>
+#include <utime.h>
+#endif
 #ifdef _WIN32
 #include <direct.h>
 #include <stdlib.h>
@@ -3305,6 +3313,83 @@ namespace das {
     }
 #endif
 
+    static const char * MODULE_CACHE_DEFAULT_DIR = ".jitted_scripts/module_cache/";
+
+    // DAS_MODULE_CACHE_LIMIT, megabytes: 4096 unless set, 0 = no eviction; garbage keeps the default
+    static uint64_t moduleCacheLimitBytes () {
+        uint64_t mb = 4096;
+        if ( const char * env = get_dasenv_module_cache_limit() ) {
+            if ( *env ) {
+                char * end = nullptr;
+                unsigned long long v = strtoull(env, &end, 10);
+                if ( end && *end == 0 ) mb = uint64_t(v);
+            }
+        }
+        return mb * 1024ull * 1024ull;
+    }
+
+    struct CacheRecordInfo {
+        string      path;
+        uint64_t    size;
+        int64_t     mtime;
+    };
+
+    static void listCacheRecords ( const string & dir, vector<CacheRecordInfo> & out ) {
+#ifdef _WIN32
+        struct _finddata_t c_file;
+        string findPath = dir + "*.dascache";
+        intptr_t hFile = _findfirst(findPath.c_str(), &c_file);
+        if ( hFile != -1L ) {
+            do {
+                out.push_back({dir + c_file.name, uint64_t(c_file.size), int64_t(c_file.time_write)});
+            } while ( _findnext(hFile, &c_file) == 0 );
+            _findclose(hFile);
+        }
+#else
+        if ( DIR * d = opendir(dir.c_str()) ) {
+            while ( dirent * e = readdir(d) ) {
+                string name = e->d_name;
+                if ( name.size() < 9 || name.compare(name.size() - 9, 9, ".dascache") != 0 ) continue;
+                string p = dir + name;
+                struct stat st;
+                if ( stat(p.c_str(), &st) == 0 ) out.push_back({p, uint64_t(st.st_size), int64_t(st.st_mtime)});
+            }
+            closedir(d);
+        }
+#endif
+    }
+
+    static void touchFile ( const string & path ) {
+#ifdef _WIN32
+        (void) _utime(path.c_str(), nullptr);
+#else
+        (void) utime(path.c_str(), nullptr);
+#endif
+    }
+
+    // LRU eviction of the DEFAULT cache directory down to the limit after a writeback; the record
+    // just written stays, and a record a run read was touched, so it is never the oldest. An
+    // explicit -module-cache path is the user's directory and is never pruned.
+    static void evictModuleCache ( const string & justWrote ) {
+        size_t dirLen = strlen(MODULE_CACHE_DEFAULT_DIR);
+        if ( justWrote.compare(0, dirLen, MODULE_CACHE_DEFAULT_DIR) != 0 ) return;
+        uint64_t limit = moduleCacheLimitBytes();
+        if ( limit == 0 ) return;
+        vector<CacheRecordInfo> recs;
+        listCacheRecords(MODULE_CACHE_DEFAULT_DIR, recs);
+        uint64_t total = 0;
+        for ( auto & r : recs ) total += r.size;
+        if ( total <= limit ) return;
+        sort(recs.begin(), recs.end(), [](const CacheRecordInfo & a, const CacheRecordInfo & b) {
+            return a.mtime != b.mtime ? a.mtime < b.mtime : a.path < b.path;
+        });
+        for ( auto & r : recs ) {
+            if ( total <= limit ) break;
+            if ( r.path == justWrote ) continue;
+            if ( remove(r.path.c_str()) == 0 ) total -= r.size;
+        }
+    }
+
     string ModuleFileCache::defaultPath ( const string & scriptPath, const string & hostBinary, const string & hostOptions ) {
         string norm = normalizeFileName(scriptPath.c_str());
         size_t slash = norm.find_last_of("/\\");
@@ -3324,7 +3409,8 @@ namespace das {
 #else
         for ( char ** e = environ; e && *e; ++e ) {
 #endif
-            if ( strncmp(*e, "DAS", 3) == 0 ) envs.push_back(*e);
+            // the cache's own size cap is a policy on the directory, not a compile input
+            if ( strncmp(*e, "DAS", 3) == 0 && strncmp(*e, "DAS_MODULE_CACHE_LIMIT=", 23) != 0 ) envs.push_back(*e);
         }
         sort(envs.begin(), envs.end());
         string key = norm + host + "\n" + hostOptions;
@@ -3363,6 +3449,7 @@ namespace das {
                 reader = make_unique<AstSerializer>(&readStorage, false);
                 reader->quietCache = quiet;
                 env.serializer_read = reader.get();
+                touchFile(readFrom);    // a record in use is the newest for the eviction's LRU
             }
         }
         if ( !writePath.empty() ) {
@@ -3430,6 +3517,7 @@ namespace das {
                     }
                     if ( !res.wrote ) remove(tmpPath.c_str());   // never leave a corpse
                     res.saveFailed = !res.wrote;
+                    if ( res.wrote ) evictModuleCache(writePath);
                 } else {
                     res.saveFailed = true;
                 }

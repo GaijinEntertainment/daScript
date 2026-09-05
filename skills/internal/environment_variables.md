@@ -60,6 +60,12 @@ the log.
 config change, and it reverts the moment the variable goes away. Surrounding whitespace is ignored
 and unknown codes are harmless. The `-no-lint` command-line flag skips the lint pass entirely.
 
+## Module cache
+
+| Variable | Type | Effect |
+|---|---|---|
+| `DAS_MODULE_CACHE_LIMIT` | number (MB) | Size cap of the default module-cache directory (`.jitted_scripts/module_cache/`, `skills/internal/build_and_debug.md`). After a run writes a record, the oldest records by mtime go until the directory fits; a record a run read counts as fresh. Default 4096; `0` turns eviction off; garbage keeps the default. An explicit `-module-cache <path>` is never pruned. The only `DAS*` variable the record key leaves out. |
+
 ## Diagnostics
 
 | Variable | Type | Effect |

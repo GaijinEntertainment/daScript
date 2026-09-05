@@ -57,3 +57,11 @@ share one. `-no-module-cache` disables the cache outright, over an explicit `-mo
 <path>` on the same command line as well as over the default, so a spawner can append it as an
 override; beside `-ser` / `-deser` - the explicit round-trip halves, whose verdict is the point
 of the run - the host rejects the command line instead of silently disabling them.
+
+Every variant is its own record and an engine root's record is 200 MB, so the default directory
+is capped: after a writeback `ModuleFileCache::finish` lists the directory's `.dascache` files
+and removes the oldest by mtime until it fits `DAS_MODULE_CACHE_LIMIT` megabytes (4096 unless
+set; `0` disables eviction), never the record just written. `install` touches the record it
+reads, so a record in use is the newest and a stale variant the oldest. Only the default
+directory is pruned - an explicit `-module-cache <path>` is the user's - and the limit variable
+is the one `DAS*` name the record key skips, since it decides nothing about a compile.
