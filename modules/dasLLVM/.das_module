@@ -2,21 +2,8 @@ options gen2
 
 require daslib/fio
 
-[export, arch(at = "../../daslib/ARCHITECTURE.md#tune-shells-module-exists")]
+[export]
 def initialize(project_path : string) {
-    // the `llvm` witness module (src/dasLLVM.cpp) exists only in a build configured with dasLLVM:
-    // registered here in a DLL build (the 2-arg form skips silently when the .shared_module was
-    // never built), compiled in ahead of this script in a static one. Without it nothing under
-    // `llvm/` resolves - a direct `require llvm/daslib/x` is then a missing prerequisite and
-    // `require ?llvm ...` reads "this build has no LLVM" - so the das files being on disk never
-    // stands in for the framework
-    var witness = typeinfo builtin_module_exists(llvm)
-    if (das_is_dll_build()) {
-        witness = register_dynamic_module("{project_path}/dasModuleLLVM.shared_module", "Module_LLVM") != null || witness
-    }
-    if (!witness) {
-        return
-    }
     let daslib_paths = [
         "llvm_boost", "llvm_debug", "llvm_jit", "llvm_targets",
         "llvm_dsl",
@@ -37,5 +24,11 @@ def initialize(project_path : string) {
     }
     for (path in bindings_paths) {
         register_native_path("llvm", "bindings/{path}", "{project_path}/bindings/{path}.das")
+    }
+    if (das_is_dll_build()) {
+        // the `llvm` witness module (src/dasLLVM.cpp) exists only in a build configured with
+        // dasLLVM; the 2-arg form skips silently when the .shared_module was never built, and
+        // that silence is what `require ?llvm` reads as "this build has no LLVM"
+        register_dynamic_module("{project_path}/dasModuleLLVM.shared_module", "Module_LLVM")
     }
 }
