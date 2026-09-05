@@ -173,6 +173,27 @@ def test_source_stamp_is_content(t : T?) {
     rmdir_rec(tmp, err)
 }
 
+//! a module's `options gen2` derives its syntax policy from the source; the policy compare sees the
+//! same derivation, so a -v1syntax host serves a gen2 module instead of rewriting the cache every run
+[test]
+def test_source_derived_syntax_policy_serves(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_mc_gen2", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    fwrite(path_join(tmp, "mc_gen2_leaf.das"), "options gen2\nmodule mc_gen2_leaf\ndef leaf() : int \{\n    return 5\n\}\n")
+    fwrite(path_join(tmp, "mc_gen2_root.das"), "options gen2\nrequire mc_gen2_leaf\n[export]\ndef main \{\n    print(\"MARK_gen2 \{leaf()\}\\n\")\n\}\n")
+    let cmd = "{das_exe()} -dasroot {get_das_root()} -v1syntax -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_gen2_root.das")}"
+    var cold : string
+    t |> success(report_child(t, "gen2 cold", run(cmd, cold), cold, "MARK_gen2 5"), "a -v1syntax host compiles a module that opts into gen2")
+    var warm : string
+    t |> success(report_child(t, "gen2 warm", run(cmd, warm), warm, "deser: clean"), "the warm run serves the gen2 module - no policy mismatch on a source-derived flag:\n{warm}")
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
 //! the modes that never install the default cache: the opt-out flag, a compile with no run, an AOT-consuming run
 def check_off_modes(t : T?; base, b, c : string) {
     var off : string

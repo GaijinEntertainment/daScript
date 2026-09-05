@@ -648,6 +648,21 @@ namespace das {
         stampModuleSource(src, len, size, hash);
     }
 
+    bool detectGen2Syntax ( const char * text, uint32_t length, bool& value );
+
+    // the parse derives version_2_syntax from the source (`options gen2`); the record carries the
+    // derived value, so the compare must see the same derivation
+    static void deriveSourcePolicies ( const FileAccessPtr & access, const string & fileName, CodeOfPolicies & policies ) {
+        if ( FileInfo * fi = access->getFileInfo(fileName) ) {
+            const char * src = nullptr;
+            uint32_t len = 0;
+            fi->getSourceAndLength(src, len);
+            bool gen2 = policies.version_2_syntax;
+            detectGen2Syntax(src, len, gen2);
+            policies.version_2_syntax = gen2;
+        }
+    }
+
     bool trySerializeProgramModule (
             ProgramPtr          & program,
             const FileAccessPtr & access,
@@ -756,6 +771,7 @@ namespace das {
         // no per-module logging on the happy path - the standalone sink has no level
         // threshold, so a line here prints once per warm module; the verdict line and the
         // failure branches below carry everything a human needs
+        deriveSourcePolicies(access, fileName, program->policies);
         bool read_ok = serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer.thisModuleGroup = &libGroup;
             serializer.fileAccess = access.get();
