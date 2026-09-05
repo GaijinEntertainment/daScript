@@ -236,3 +236,5 @@ Three companions carry a concern each; a section number is unique across all fou
   module, which is how a tool that reads a `<name>_variants()` registry through a direct require
   once compiled in a witness-less world with inert shells and no registry; a world that cannot
   mount the framework now refuses the require, and a lint skips the file as one it cannot compile.
+  The daslib doors to `llvm/` - `tune` and `just_in_time` - and the documentation generator
+  spell the guard, so a program reaching LLVM only through them compiles in every build.
