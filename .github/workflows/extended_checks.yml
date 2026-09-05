@@ -524,6 +524,9 @@ jobs:
       if: matrix.role != 'core'
       run: |
         set -eux
+        # the ast-grep tools need the daslang grammar library and the sgconfig.yml its post-build
+        # step stamps - run_utils_tests builds it in the core role, this job must build it itself
+        cmake --build ./build --config Release --target tree_sitter_daslang
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/mcp/test_tools.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/mcp/test_crosstree_guard.das
 
