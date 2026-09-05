@@ -2800,7 +2800,9 @@ namespace das {
         X(force_inscope_pod) X(log_inscope_pod) X(debugger) X(profiler) X(jit_enabled) \
         X(jit_jit_all_functions) X(jit_debug_info) X(jit_opt_level) X(jit_size_level) X(jit_dll_mode) \
         X(jit_output_path) X(jit_path_to_shared_lib) X(jit_path_to_linker) X(threadlock_context) \
-        X(lint_check) X(no_lint)
+        X(lint_check) X(no_lint) X(abi_stamp) X(paranoid_validation) X(cross_platform) X(aot_result) \
+        X(no_init_check) X(always_report_candidates_threshold) X(jit_exe_mode) X(jit_emit_object) \
+        X(jit_emit_prologue) X(dll_search_paths)
 
     static bool cachedPoliciesMatch ( const CodeOfPolicies & a, const CodeOfPolicies & b ) {
     #define DAS_POLICY_FIELD_SAME(f) if ( !(a.f == b.f) ) return false;

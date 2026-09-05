@@ -258,7 +258,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 202;   // 202: the record header stamps the source by content hash, not mtime; the policy stream carries lint_check and no_lint
+            return 203;   // 203: the record header stamps the source by content hash, not mtime; the policy stream carries every CodeOfPolicies field
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
