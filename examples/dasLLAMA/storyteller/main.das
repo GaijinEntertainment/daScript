@@ -92,18 +92,18 @@ var g_model = Model()
 var g_session = Session()
 var g_params = SamplingParams(temp = 0.8, top_k = 40l, penalty = 1.1)
 var g_phase = Phase.idle
-var g_lines : array<string>       // the story as wrapped screen lines
-var g_sentence : array<string>    // the pieces of the sentence being written, handed to speech at its end
+var g_wrapped_lines : array<string>
+var g_sentence_pieces : array<string>
 var g_ntokens = 0
 var g_stories = 0
 
 var g_say : Stream?               // frame thread -> speech thread: sentences
 var g_speech : Stream?            // speech thread -> frame thread: clips
-var g_speech_done : Channel?      // the speech thread signals it before it ends
-var g_clips : array<Speech>       // clips waiting for the speaker
-var g_now = 0.0                   // seconds since start, from frame dt
+var g_speech_done : Channel?
+var g_clips : array<Speech>
+var g_elapsed_s = 0.0
 var g_speaking_until = 0.0
-var g_pending_speech = 0          // sentences sent and not yet played
+var g_unplayed_sentences = 0
 var g_audio_initialized = false
 var g_asch : AudioSystemChannels
 var g_font : Font?
@@ -111,8 +111,6 @@ var g_frames = 0
 var g_space_was = false
 var display_w = 0
 var display_h = 0
-
-// --- speech thread ---
 
 def start_speech_thread(tts_path, voice_pick : string; var say, speech : Stream?; var done : Channel?) {
     new_thread() <| @capture(= tts_path, = voice_pick, = say, = speech, = done) {
@@ -141,7 +139,7 @@ def start_speech_thread(tts_path, voice_pick : string; var say, speech : Stream?
 def say(text : string) {
     var l = Line(text = text, story = g_stories)
     g_say |> push_archive(l)
-    g_pending_speech++
+    g_unplayed_sentences++
 }
 
 def poll_speech() {
@@ -152,35 +150,33 @@ def poll_speech() {
             g_clips |> emplace(clip)
         }
     }
-    if (g_now >= g_speaking_until && !empty(g_clips)) {
+    if (g_elapsed_s >= g_speaking_until && !empty(g_clips)) {
         let seconds = float(length(g_clips[0].pcm)) / float(max(g_clips[0].rate, 1))
         var pcm <- g_clips[0].pcm
         play_sound_from_pcm(g_clips[0].rate, 1, pcm)
         g_clips |> erase(0)
-        g_speaking_until = g_now + seconds
-        g_pending_speech--
+        g_speaking_until = g_elapsed_s + seconds
+        g_unplayed_sentences--
     }
 }
-
-// --- the story ---
 
 def start_story() {
     delete g_session
     g_session <- create_session(g_model)
     set_seed(g_session, int(ref_time_ticks() % 2147483647l))   // a fresh session samples the same story every time otherwise
-    g_lines |> clear()
-    g_lines |> push("")
-    g_sentence |> clear()
-    g_sentence |> reserve(64)
+    g_wrapped_lines |> clear()
+    g_wrapped_lines |> push("")
+    g_sentence_pieces |> clear()
+    g_sentence_pieces |> reserve(64)
     g_ntokens = 0
     g_stories++
-    g_clips |> clear()          // the previous story's unplayed clips; its sentences still in flight come back tagged and drop
-    g_pending_speech = 0
-    g_speaking_until = g_now
+    g_clips |> clear()
+    g_unplayed_sentences = 0
+    g_speaking_until = g_elapsed_s
     var prompt <- encode(g_model, PROMPT, true)
     eval(g_model, g_session, prompt)
     append_text(PROMPT)
-    g_sentence |> push(PROMPT)
+    g_sentence_pieces |> push(PROMPT)
     g_phase = Phase.writing
 }
 
@@ -193,21 +189,20 @@ def append_text(piece : string) {
     var inscope parts <- split(piece, "\n")
     for (i, part in iter_range(parts), parts) {
         if (i > 0) {
-            g_lines |> push("")
+            g_wrapped_lines |> push("")
         }
-        let li = length(g_lines) - 1
-        g_lines[li] = "{g_lines[li]}{part}"
+        let li = length(g_wrapped_lines) - 1
+        g_wrapped_lines[li] = "{g_wrapped_lines[li]}{part}"
         wrap_last_line()
     }
 }
 
-// break the last line at its last space before the wrap column, as often as it takes
 def wrap_last_line() {
-    while (length(g_lines[length(g_lines) - 1]) > WRAP_CHARS) {
-        let li = length(g_lines) - 1
+    while (length(g_wrapped_lines[length(g_wrapped_lines) - 1]) > WRAP_CHARS) {
+        let li = length(g_wrapped_lines) - 1
         var head = ""
         var tail = ""
-        peek_data(g_lines[li]) $(d) {
+        peek_data(g_wrapped_lines[li]) $(d) {
             var cut = rfind(slice(d, 0, WRAP_CHARS), " ")
             if (cut <= 0) {
                 cut = WRAP_CHARS
@@ -215,8 +210,8 @@ def wrap_last_line() {
             head = clone_string(slice(d, 0, cut))
             tail = clone_string(slice(d, cut))
         }
-        g_lines[li] = head
-        g_lines |> push(strip(tail))
+        g_wrapped_lines[li] = head
+        g_wrapped_lines |> push(strip(tail))
     }
 }
 
@@ -237,10 +232,10 @@ def write_step() {
         g_ntokens++
         let text = plain_quotes(piece(g_model, tok))
         append_text(text)
-        g_sentence |> push(text)
+        g_sentence_pieces |> push(text)
         if (sentence_ends(text)) {
-            say(strip(join(g_sentence, "")))
-            g_sentence |> clear()
+            say(strip(join(g_sentence_pieces, "")))
+            g_sentence_pieces |> clear()
         }
         one[0] = tok
         eval(g_model, g_session, one)
@@ -248,16 +243,15 @@ def write_step() {
 }
 
 def finish_story() {
-    let rest = strip(join(g_sentence, ""))
+    let rest = strip(join(g_sentence_pieces, ""))
     if (!empty(rest)) {
         say(rest)
     }
-    g_sentence |> clear()
+    g_sentence_pieces |> clear()
     g_phase = Phase.told
 }
 
-// --- text layer, in design pixels against a 1280x720 reference ---
-
+//! the text layer's coordinates are design pixels against a 1280x720 reference
 def hud_scale() : float {
     return max(float(display_h) / 720.0, 0.5)
 }
@@ -283,19 +277,17 @@ def draw_story() {
     draw_text("storyteller", 60.0, 60.0, 0.6, dim)
     var y = 130.0
     let step = 34.0 * TEXT_SIZE / 0.72
-    let first = max(0, length(g_lines) - VISIBLE_LINES)   // a long story scrolls: the newest lines stay on screen
-    for (i in range(first, length(g_lines))) {
-        draw_text(g_lines[i], 60.0, y, TEXT_SIZE, ink)
+    let first = max(0, length(g_wrapped_lines) - VISIBLE_LINES)   // a long story scrolls: the newest lines stay on screen
+    for (i in range(first, length(g_wrapped_lines))) {
+        draw_text(g_wrapped_lines[i], 60.0, y, TEXT_SIZE, ink)
         y += step
     }
     let status = (g_phase == Phase.idle ? "press SPACE for a story"
         : g_phase == Phase.writing ? "writing..."
-        : g_pending_speech > 0 || g_now < g_speaking_until ? "reading aloud..."
+        : g_unplayed_sentences > 0 || g_elapsed_s < g_speaking_until ? "reading aloud..."
         : "the end - press SPACE for another")
     draw_text(status, 60.0, 660.0, SMALL_SIZE, g_phase == Phase.idle ? accent : dim)
 }
-
-// --- lifecycle ---
 
 [export]
 def init() {
@@ -333,7 +325,7 @@ def update() {
         return
     }
     g_frames++
-    g_now += get_dt()
+    g_elapsed_s += get_dt()
     live_get_framebuffer_size(display_w, display_h)
     glViewport(0, 0, display_w, display_h)
     glClearColor(0.07, 0.06, 0.09, 1.0)
@@ -361,7 +353,7 @@ def update() {
 
 [export]
 def shutdown() {
-    say("")   // the speech thread's stop word
+    say("")
     g_speech_done |> join()
     unsafe {
         channel_remove(g_speech_done)
@@ -380,7 +372,7 @@ def shutdown() {
 
 def done_for_smoke() : bool {
     return true if (g_args.max_frames > 0 && g_frames >= g_args.max_frames)
-    return g_args.autoplay && g_phase == Phase.told && g_pending_speech == 0 && g_now >= g_speaking_until
+    return g_args.autoplay && g_phase == Phase.told && g_unplayed_sentences == 0 && g_elapsed_s >= g_speaking_until
 }
 
 // eval_main_loop drives the block once per frame: a blocking while-loop natively, the
@@ -395,6 +387,6 @@ def main() {
     }
     shutdown()
     if (g_args.autoplay) {
-        print("{join(g_lines, "\n")}\n")
+        print("{join(g_wrapped_lines, "\n")}\n")
     }
 }

@@ -96,9 +96,7 @@ def test_exe_host_cpu(t : T?) {
     spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{PLAIN_EXE}\" \"{PLAIN_SCRIPT}\"", lp)
     t |> success(!(lp |> has(HOST_CPU_LINE)), "kernel-free exe build must stay generic")
 
-    // a kernel-free exe that calls the feature-gated intrinsic families (SDOT, SMMLA, the AVX2
-    // dot) stays on the generic baseline: the build must not emit an instruction that machine
-    // cannot select — the gates decline to the fallback bodies — and the artifact prints their answers
+    //! an intrinsic call alone must not promote the exe off the generic baseline - the gates decline to the fallback bodies, so the build emits nothing that machine cannot select
     var lb : array<string>
     let rcb = spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{BASELINE_EXE}\" \"{BASELINE_SCRIPT}\"", lb)
     t |> equal(0, rcb, "the intrinsic-calling kernel-free exe must build on the generic baseline: {join(lb, "\n")}")

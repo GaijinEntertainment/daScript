@@ -577,6 +577,7 @@ def test_silu4_batch(t : T?) {
         let inline_wide = silu4_batch_case(r, 256, 512)
         var threaded = BatchCase()
         with_job_que() {
+            setup_dasllama_jobque_()
             threaded = silu4_batch_case(r, 256, 512)
         }
         report_moved(t, "silu4_batch", r)
@@ -589,6 +590,7 @@ def test_silu4_batch(t : T?) {
     t |> run("silu4_batch falls back whole where the row length or the row count forbids a split") @(t : T?) {
         var r = ActSweep()
         with_job_que() {
+            setup_dasllama_jobque_()
             let odd = silu4_batch_case(r, 250, 64)
             let single = silu4_batch_case(r, 64, 1)
             let tail = silu4_batch_case(r, 4, 1025)

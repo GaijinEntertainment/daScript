@@ -1,7 +1,7 @@
 # dasLLAMA architecture - text to speech
 
 The companion `ARCHITECTURE.md` indexes: the TTS file charters (sec.1.7c) and the mechanisms the
-TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the contract.
+TTS files implement (sec.2.28-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) is the contract.
 
 ## 1. File charters
 
@@ -272,3 +272,13 @@ exposes `expected` so the normalizer cell and the rig read the one correction; t
 (`harness/mint_tts_g2p_fixture.py`) carries the table so a re-mint reproduces it. The reference
 line is the reference arms' own WAVs re-scored from the experiment's transcripts on the same
 forms with the same scorer, the clock suffix ("a m", "am") counted as one word on both sides.
+
+### 2.43 The phoneme pack ships in two tiers {#tts-g2p-pack-tiers}
+
+`build_g2p_data.py` mints two packs from one source: `tts_g2p.bin`, carrying both dialect tiers,
+and `tts_g2p_en_us.bin` under `--dialect us`, the American tier alone - four megabytes smaller,
+and what the web serving set ships. A pack names its own tier in its source line, which `load_g2p`
+reads into `G2pModel.us_only`. `load_tts_model` takes the full pack from the model's directory when
+it is there and the American-only twin otherwise, and panics when neither is. On the American-only
+pack `g2p_phonemize` refuses a British request by name and `caps` offers no British voice, so a
+Kokoro `bf_*` / `bm_*` pack is simply not on the list.

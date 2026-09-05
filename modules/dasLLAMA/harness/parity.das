@@ -58,10 +58,7 @@ struct Args {
     help : bool
 }
 
-// `--backend`, defaulting to DASLLAMA_PIN_BACKEND: resolve the name against the registry and pin
-// it, or refuse. Called before load_gguf — select_matmul_backend_for_load_ reads the pin to pick
-// the weight layout the loader repacks into — and after the --ngl block, so the flag outranks the
-// portable pin metal mode applies.
+//! applied after the --ngl block, so --backend outranks the portable pin metal mode applies
 def private apply_backend_pin(flag : string) : bool {
     let name = empty(flag) ? g_env_engine.pin_backend : flag
     if (empty(name)) {
@@ -123,7 +120,7 @@ def main : int {
     if (t.config.seq_len > 2048l) {
         t.config.seq_len = 2048l
     }
-    print("GEN_BACKEND: {active_kernel_backend()} (batch: {active_batch_backend()})\n")   // the GEN_ block's header — a log names the backend its ids came off
+    print("GEN_BACKEND: {active_kernel_backend()} (batch: {active_batch_backend()})\n")
     var s = make_run_state(t.config, cfg.kv, cfg.kv)
     var rc = 0
     with_job_que() {

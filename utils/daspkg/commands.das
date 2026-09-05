@@ -2693,8 +2693,7 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
     //    with --list-shared-modules writing the referenced-module set.
     //    --disable-module dashv: libhv is native-only (no wasm archive), so keep it
     //    unloaded on the cross-compile host — a guarded `require ?dashv` then resolves
-    //    as absent instead of pulling in a module whose wasm archive can't exist. The
-    //    package's release_wasm_disable_module() names the others of that kind it reaches.
+    //    as absent instead of pulling in a module whose wasm archive can't exist.
     //    -project-root {root}: dyn-module discovery roots at the PACKAGE dir, not the
     //    main script's dir. They differ when release_main() points outside the package
     //    (e.g. an example whose .das_package sits beside the source) — without this the

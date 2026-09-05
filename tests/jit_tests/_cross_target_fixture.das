@@ -1,8 +1,8 @@
 options gen2
 
-// child for cross_target_folds.das: prints the compile-time target folds, and which static_if arm
-// the cross-target test the tune framework's inert gate uses selects, so the parent can compare a
-// native compile against --jit-target=<triple>
+// child for cross_target_folds.das: prints the compile-time target folds and which arm a static_if
+// over the target triple selects (the same test the tune framework's inert gate makes), so the
+// parent can compare a native compile against --jit-target=<triple>
 
 [export]
 def main {

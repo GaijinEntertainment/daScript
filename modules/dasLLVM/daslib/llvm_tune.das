@@ -360,7 +360,6 @@ def private pin_module_cache_dependency(path : string) {
     add_module_cache_dependency(path)
 }
 
-// every candidate on the class ladder a profile lookup tries, existing or not
 def private pin_profile_chain(defaultsDir : string) {
     var chain <- tune_class_chain()
     for (c in chain) {
@@ -1566,7 +1565,7 @@ def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePe
     aargs |> push((argname = "tune_suffix", argvalue = RttiValue(tString = perm.suffix)))
     aargs |> push((argname = "tune_from", argvalue = RttiValue(tString = from)))
     aargs |> push((argname = "tune_source", argvalue = RttiValue(tString = source)))
-    fn |> append_annotation("tune", "llvm_code", aargs)   // the annotation is registered by daslib/tune, not by the module that implements it
+    fn |> append_annotation("tune", "llvm_code", aargs)
     fn.sideEffectFlags.userScenario = true
     delete aargs
 }
@@ -1641,9 +1640,6 @@ def private emit_registry(var mod : Module?; base : FunctionPtr; perms : array<T
 }
 
 // ===== the annotations =====
-
-// Registered by `daslib/tune`, whose shells forward here and do nothing without this module:
-// one macro context has to own both the perm/scope banks and the passes that read them.
 
     //! `[tune_perm(<generator args>)]` — one grid row for the `tune(...)` that must follow it in
     //! the same bracket. Args pass to the generator verbatim and fold into the JIT DLL cache
@@ -1752,7 +1748,7 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
     pin_module_cache_dependency(mpath)
     var manifest <- read_manifest(mpath, manifestFound)
     var suffix = ""
-    var tuneSource = ""   // manifest | profile | fallback - the tune_source the stamp records
+    var tuneSource = ""   // manifest | profile | fallback
     var tuneSourcePath = ""
     if (manifestFound) {
         suffix = manifest?[fname] ?? ""
@@ -1771,7 +1767,7 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
             tuneSourcePath = profilePath
         }
     }
-    // clear an adopted winner this box can't run (ISA-gated → would decline to reference; or not in this build's grid → would crash-loop) so the fallback ;-chain picks a legal perm and it boots
+    // clear a winner this box can't run - ISA-gated (declines to reference) or absent from this build's grid (crash-loop) - so the fallback chain picks a legal perm
     if (!empty(suffix) && suffix != "reference") {
         var known = false
         var eligible = true
@@ -1792,7 +1788,7 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
             tuneSourcePath = ""
         }
     }
-    var companionOwnSuffix : array<string>   // a companion's OWN entry (the harness's gemv seat) when it names an eligible perm of this grid; else it follows the main
+    var companionOwnSuffix : array<string>   // a companion's own entry when it names an eligible perm of this grid; empty follows the main
     companionOwnSuffix |> resize(length(comps))
     if (tuneSource == "manifest" || tuneSource == "profile") {
         for (ci, c in count(), comps) {
@@ -2884,7 +2880,6 @@ class private TunePolicyDefaultMarker : AstFunctionAnnotation {
     //! play and no declared `[tune_policy]` behaves as `missing = "auto"`. Escapes and the
     //! once-only marker: `skills/tune.md`. A root without `main` never tunes (dastest files).
 def tune_default_policy_apply(_prog : ProgramPtr; _mod : Module?) : bool {
-    // fires only for roots that SEE daslib/tune, so a scope-owning library must re-export it public
     return false if (is_in_completion() || !empty("{compiling_module().name}") || empty(g_scopes))
     warn_manifest_untuned()   // self-gates on DAS_TUNE_MANIFEST; covers exe and declared-policy roots too
     return false if (tune_policy_gated() && !exe_status_report())
@@ -2902,7 +2897,6 @@ def tune_default_policy_apply(_prog : ProgramPtr; _mod : Module?) : bool {
         // standalone build: no policy, but the artifact self-reports its stamps
         emit_status_init(errs)
     } else {
-        // O0 cannot represent winners raced under O3 - default fallback (DAS_TUNE_POLICY wins)
         let flavor = jit_cli_opt_level() == 0 ? "fallback" : "auto"
         ok = apply_tune_policy(main_fn, flavor, errs)
     }

@@ -18,11 +18,6 @@ require ../performance/model_specs.das   // the model-set table — parity evide
 //   frozen under; regenerate with harness/parity.sh. The board's --parity pregate reads the same rows.
 // Models are gitignored multi-GB files: absent = clean skip (a real local regression, a no-op in CI).
 
-// DASLLAMA_PIN_BACKEND points these gates at one kernel backend, the way the benches read it —
-// the pin lands BEFORE the load, so select_matmul_backend_for_load_ picks the layout it repacks
-// into. pin_kernel_backend is process-wide, so the entry backend is restored on every path out.
-// Unknown name => the body never runs and the cell skips naming it, never a silent run on the
-// default backend.
 def private with_parity_backend(t : T?; blk : block<() : void>) {
     let name = g_env_engine.pin_backend
     if (empty(name)) {

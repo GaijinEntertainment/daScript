@@ -248,7 +248,7 @@ struct StyleTts2Model {
     decoder : St2Decoder = St2Decoder()
     source : SineSourceCfg = SineSourceCfg()
     q8 : bool               // the lane this image was minted on: the rows GEMMs serve Q8_0 quants
-    kitten : KittenFamily   // the family's driver data rides the meta, so an image serves without its gguf
+    kitten : KittenFamily
     kokoro : KokoroFamily
     blob : PlaneF = PlaneF()
     qblob : PlaneI8 = PlaneI8()
@@ -731,8 +731,6 @@ def stage_styletts2(path : string; q8 : bool = false) : St2Staging {
     return <- st
 }
 
-// the family's driver keys, staged with the model so they ride its image: Kitten's per-voice
-// speed priors and alias names, Kokoro's symbol table
 def private stage_family_data(m : GGUFMeta; bytes : array<uint8>#; var e : StyleTts2Model) {
     if (e.family == "kitten-tts") {
         for (v in e.voice_names) {
@@ -780,9 +778,9 @@ def load_styletts2(path : string) : StyleTts2Model {
     if (path |> ends_with(".dlim")) {
         apply_box_profile_runtime()
         let ts = ref_time_ticks()
-        let first = q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG   // the policy's lane first: no wrong-tag decline in the normal case
-        let second = q8 ? ST2_IMAGE_TAG : ST2_IMAGE_TAG_Q8
-        if (!load_image(path, m, first) && !load_image(path, m, second)) {
+        let preferred_tag = q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
+        let other_tag = q8 ? ST2_IMAGE_TAG : ST2_IMAGE_TAG_Q8
+        if (!load_image(path, m, preferred_tag) && !load_image(path, m, other_tag)) {
             panic("dasLLAMA styletts2: '{path}' is not a prepared TTS image for this box (identity {image_identity(ST2_IMAGE_TAG_Q8)} / {image_identity(ST2_IMAGE_TAG)}) - bake it from the source gguf with dasllama-convert")
         }
         st2_bind(m)

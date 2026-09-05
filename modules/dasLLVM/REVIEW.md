@@ -111,3 +111,8 @@
   directory from its tracked-fixture list or removing the last tracked file under one (a guard
   over nothing), or a finding text that no longer names what failed. What the gate enforces is
   read from the gate itself.
+
+- **A diff that appends target features to a machine's feature string appends the forced ones
+  (`x64_forced_plus_features` / `arm64_forced_plus_features`, `daslib/llvm_jit_common.das`) AFTER
+  the detected host features.** LLVM's `SubtargetFeatures` takes the last occurrence of a name, so
+  a forced feature placed first is silently overridden by detection.

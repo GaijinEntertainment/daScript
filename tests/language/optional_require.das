@@ -43,10 +43,7 @@ def test_optional_require_path_guard(t : T?) {
     // path guard resolved (daslib/fio is always mounted): the target loaded and its symbols work
     t |> equal(optional_require_fixture_pathguard::pathguard_marker(), 43)
     t |> success(typeinfo builtin_module_exists(optional_require_fixture_pathguard))
-    // module_exists asks what is visible from this module, not the process registry: the
-    // loaded das target and a required builtin answer true, the skipped target and a name
-    // nobody required answer false - and a tool's nested compile, which promotes nothing,
-    // answers the same
+    //! module_exists is scoped to what THIS module can see, not the process registry - a loaded das target and a required builtin answer true, a skipped target and an unrequired name answer false
     t |> success(typeinfo module_exists(optional_require_fixture_pathguard))
     t |> success(typeinfo module_exists(math))
     t |> success(!typeinfo module_exists(optional_require_fixture_skipme))

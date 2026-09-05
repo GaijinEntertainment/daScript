@@ -14,8 +14,7 @@ require daslib/aarch64_neon
 
 def sx8(v : int) : int => ((v & 0xff) ^ 0x80) - 0x80
 
-// byte e (0..3) of packed lane `lane`, sign-extended
-def packed_byte(lane : int; e : int) : int => sx8(lane >> (e * 8))
+def packed_byte_sx(lane : int; e : int) : int => sx8(lane >> (e * 8))
 
 def ref_sdot4(acc : int4; w : int8 const?; x : int8 const?) : int4 {
     var r = acc
@@ -37,7 +36,7 @@ def ref_sdot4_w(acc : int4; w : int4; x : int8 const?) : int4 {
         for (j in range(4)) {
             var s = 0
             for (e in range(4)) {
-                s += packed_byte(w[j], e) * int(x[4 * j + e])
+                s += packed_byte_sx(w[j], e) * int(x[4 * j + e])
             }
             r[j] += s
         }
@@ -65,7 +64,7 @@ def ref_sdot4_laneq_w(acc : int4; w : int4; x : int8 const?; lane : int) : int4 
         for (j in range(4)) {
             var s = 0
             for (e in range(4)) {
-                s += packed_byte(w[j], e) * int(x[4 * lane + e])
+                s += packed_byte_sx(w[j], e) * int(x[4 * lane + e])
             }
             r[j] += s
         }
@@ -126,8 +125,7 @@ def fill_nibbles(var g : Lcg; var dst : array<uint8>) {
 
 let TRIALS = 256
 
-// the helpers seed off a global each [test] writes, so a pure call with constant arguments
-// cannot be folded at compile time and reaped before the JIT sees its call sites
+//! each [test] bumps this before calling a helper: a pure call with constant arguments folds away at compile time, before the JIT ever sees its call sites
 var g_salt = 0u
 
 // mismatch count over TRIALS random int8 vectors; the lane is a compile-time constant of the

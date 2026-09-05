@@ -61,9 +61,7 @@ def private check_test_targets(f : string; text : string) {
     }
 }
 
-// Every source a `set_source_files_properties` names exists beside its CMakeLists. The
-// property applies to nothing when the file moves, so a test whose compile flag went
-// missing builds the ordinary way and stays green.
+//! every source a `set_source_files_properties` names exists beside its CMakeLists - a property naming a moved file applies to nothing and its test builds green without the flag
 def private check_source_property_paths(f : string; text : string) {
     let folder = dir_name(f)
     for (blk in cmake_command_blocks(text, "set_source_files_properties")) {

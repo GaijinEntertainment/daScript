@@ -172,7 +172,7 @@ and a standalone exe binds every extern its functions name at startup, so a read
 sees only the compiler-free runtime archive, has nothing to bind it to.
 
 The shipped defaults profiles are the same kind of input: with no sidecar entry a kernel
-stamps its class entry out of `<defaults>/<class>.tune-defaults.json`, so `locate_profile_doc`
+stamps its class entry out of `<defaults>/<class>.tune-defaults.json`, so `pin_profile_chain`
 registers every candidate on the class ladder it tries, existing or not - a profile that
 appears, or is re-exported after a re-mint, must invalidate the stamps minted without it. The
 staleness gate itself compares the sidecar's mtime with the running binary's, which no content
@@ -278,3 +278,21 @@ vecmath carries no vector sinh/cosh/tanh, so `SimPolicy` binds `vsinh`/`vcosh`/`
 exp polynomial's error rather than agreeing with them - the opposite trade from every other
 emitter on the rail, taken because the consumer (GELU over float4 rows) otherwise pays four
 libm calls per vector. `tests/llvm_vector_math.das` asserts the size of that divergence.
+
+## 9. The idot family's target lowerings {#idot-lowerings}
+
+The exact integer dots on the 8-bit lattice have three lowerings, picked by target: one
+`@llvm.aarch64.neon.sdot` where the target has DotProd (`g_target_arm64_dotprod` - the host rail's
+`+dotprod` append, or the force env on the generic rail), the SIMD128 form on a wasm target
+(`idot_wasm_simd128`), generic widen-multiply IR everywhere else. The native arms exist because
+neither backend produces them from the generic form: AArch64 expands it to zip/uzp/smull instead
+of folding to SDOT, and the wasm backend runs it a fifth as fast. The wasm form has two arms. With
+`+relaxed-simd` the ISA carries the dot itself, `i32x4.relaxed_dot_i8x16_i7x16_add_s`, exact only
+while its second operand is in [0, 127]; the sign trick puts it there, since
+`dot(w, x) == dot(sign(x)*w, |x|)` and Q8_0 quants are in [-127, 127] by construction
+(`d = amax/127`), so no lane wraps on the flip. Without the feature the ISA still has the two halves
+of an int8 dot, `i16x8.extmul_{low,high}_i8x16_s` and `i32x4.extadd_pairwise_i16x8_s`; the pairwise
+sums land as byte pairs, and one even/odd shuffle-add folds them into the quad lanes the generic
+form defines. `wasm_target_features` always asks for `+relaxed-simd`: every engine that runs
+memory64 shipped relaxed SIMD first, and the feature changes no ABI, so a runtime archive built
+without it links unchanged.

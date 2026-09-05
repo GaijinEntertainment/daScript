@@ -74,9 +74,7 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
             if (empty(image_path) && starts_with(name, "{base_name(mm)}.0x") && ends_with(name, ".dlim")) {
                 let cand = path_join(models_dir(), name)
                 let tag = image_family_tag(cand)
-                // an image baked under another box identity (a different tune policy, another
-                // backend pin) sits beside the current one with its own hash - only the path the
-                // rail would mint for THIS identity is loadable by the direct route
+                //! only the path the rail mints for THIS box identity is loadable by the direct route - a foreign-identity bake sits beside it under its own hash
                 if (tag |> starts_with("gemma4a-") && cand == image_path_for(mm, tag)) {
                     image_path = cand
                 }

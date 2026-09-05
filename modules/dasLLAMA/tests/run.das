@@ -427,9 +427,6 @@ def private child_envs(cfg : RunArgs; win : bool; arm : string) : string {
         }
     }
     if (cfg.no_tune) {
-        // the reference policy changes the box identity every .dlim is stamped with, and a mint
-        // under a foreign identity GC-purges the box's tuned images as dead siblings - so the
-        // portable arm runs with the image rail off; image-rail coverage stays with the tuned arm
         envs = (win ? "{envs}set \"DAS_TUNE_POLICY=reference\"&& set \"DASLLAMA_IMAGE=0\"&& "
             : "DAS_TUNE_POLICY=reference DASLLAMA_IMAGE=0 {envs}")
     }

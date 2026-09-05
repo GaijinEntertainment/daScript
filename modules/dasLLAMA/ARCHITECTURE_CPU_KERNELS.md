@@ -43,3 +43,15 @@ code bytes in its qword, `VPMULTISHIFTQB` spreads the symbols into bytes, one `v
 magnitudes, and the signs ride the activation copy as a mask `(x ^ m) - m`. The lattice row shares
 its tile body and planes with the 512/mr16 row, so only the gemv differs - what the gemv's own seat
 (`ARCHITECTURE_MEASUREMENT.md` sec.2.26) races.
+
+### 2.42 A CPU tier selects on the TARGET, not the host {#cpu-tier-target-select}
+
+The arm64 SDOT tier registers its backends only under the JIT and only for an arm64 TARGET - the
+artifact's architecture, never the running host's. Off the JIT the `sdot4` family runs its scalar
+fallback bodies, which are slower than the portable `dot_q8q8` the vectorizer handles, so the
+portable tier stays selected wherever hardware SDOT is not emitted.
+
+The portable tier picks its dot form on the target at compile time. On wasm SIMD128 the
+auto-vectorized template dot is the slow form - the ISA carries no int8 dot for LLVM to find,
+while the `idot4` builtin lowers there to the ISA's own widening multiply-adds - so a wasm target
+takes `dot_q8q8_idot4_ps`. Every other target keeps the template.

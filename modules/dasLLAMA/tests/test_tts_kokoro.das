@@ -132,7 +132,7 @@ def test_kokoro_oracle(t : T?) {
         }
         delete g_family
         {
-            var inscope staged <- load_styletts2(gguf_path())   // the symbol table rides the model's own carrier
+            var inscope staged <- load_styletts2(gguf_path())
             g_family := staged.kokoro
         }
         t |> success(length(g_family.sym) > 100, "{length(g_family.sym)} symbols in the vocabulary")

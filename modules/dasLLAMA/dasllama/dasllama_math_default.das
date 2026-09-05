@@ -147,8 +147,8 @@ def dot_q8q8_idot4x4_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?
 }
 
 //! The vector-epilogue idot4 dot: per 32-block one idot4 pair, then float4 accumulate under the block's
-//! scale - no horizontal sum until the row ends, two rotating float4 accumulators. The wasm SIMD128 form (7.7 vs the
-//! template's 4.8 GMAC/s on one lane: dot_q8q8_idot4x4's per-block hsum is four lane extracts there). Called from lifted lambdas.
+//! scale - no horizontal sum until the row ends, two rotating float4 accumulators. The wasm SIMD128 form
+//! (dot_q8q8_idot4x4's per-block hsum is four lane extracts there). Called from lifted lambdas.
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
 def dot_q8q8_idot4_ps(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
     let nb = n / 32l
@@ -219,11 +219,9 @@ def dot_q8q8_idot4_ps_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const
     return f.x + f.y + f.z + f.w
 }
 
-// On wasm SIMD128 the auto-vectorized template dot is the slow form: the ISA has no int8 dot for
-// LLVM to find, while the idot4 builtin lowers there to the ISA's own widening multiply-adds. The
-// portable kernels pick per target at compile time; every other host keeps the template.
 let private WASM_TARGET = get_target_architecture_name() == "wasm64" || get_target_architecture_name() == "wasm32"
 
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#cpu-tier-target-select")]
 def private dot_q8q8_p(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
     return WASM_TARGET ? dot_q8q8_idot4_ps(wq, ws, xq, xs, n) : dot_q8q8(wq, ws, xq, xs, n)
 }

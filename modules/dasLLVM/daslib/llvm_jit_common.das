@@ -395,8 +395,7 @@ var public g_handled_field_offset_globals : table<string; tuple<modName : string
 // several user hints (alwaysinline, loop-vectorize/unroll metadata), so when true the
 // LlvmJitVisitor skips ALL user hint application (function + loop) — avoids wasm32 miscompiles.
 var public g_target_is_wasm = false
-// wasm with +relaxed-simd (the feature string wasm_target_features appends): the signed idot family
-// lowers to the ISA's own int8 dot there instead of the extmul + pairwise-add chain.
+// wasm +relaxed-simd, always appended by wasm_target_features: gates the idot family's native int8 dot.
 var public g_target_wasm_relaxed_simd = false
 
 // The resolved host_features truth of the last flag pass (see init_jit_target_flags): true when
@@ -447,9 +446,7 @@ var public g_target_x64_amx = false
 // targets. Gates emission that calls Linux-only externs (the amx witness's arch_prctl).
 var public g_target_os_linux = false
 
-// ARMv8.2 DotProd (SDOT — the aarch64_neon sdot4 family, the idot ss form). Host targets always
-// (the +dotprod append, ARCHITECTURE.md#aarch64-feature-truth); a generic-CPU exe or a cross triple
-// only via DAS_JIT_ARM64_FORCE_FEATURES — the baseline machine cannot select SDOT.
+// ARMv8.2 DotProd (SDOT — the aarch64_neon sdot4 family, the idot ss form); rails: ARCHITECTURE.md#aarch64-feature-truth
 var public g_target_arm64_dotprod = false
 
 // ARMv8.6 i8mm (SMMLA — 2×2 s8 matrix-multiply-accumulate; Apple M2/A15+, Graviton3+; M1 has
@@ -525,9 +522,7 @@ var public g_target_wasm_threads = false
 // mismatch. Diagnoses the MSVC-host vs wasm/clang-target C++ ABI layout class. Opt-in, off by default.
 var public g_jit_check_handled_abi = false
 
-// +relaxed-simd rides along: the signed idot family lowers to i32x4.relaxed_dot_i8x16_i7x16_add_s
-// there, and every engine that runs memory64 (Chrome 133+, Firefox 134+, node 22+) shipped relaxed
-// SIMD first. It changes no ABI, so the runtime archive built without it links unchanged.
+[arch(at = "../ARCHITECTURE.md#idot-lowerings")]
 def private wasm_target_features() : string {
     return g_target_wasm_threads ? "+simd128,+relaxed-simd,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+relaxed-simd,+nontrapping-fptoint"
 }
@@ -623,7 +618,7 @@ def public init_jit_clopts() {
 def public init_jit_target_flags(target_triple : string = ""; host_features : bool = true) {
     g_target_host_features = host_features
     g_target_is_wasm = target_triple |> starts_with("wasm")
-    g_target_wasm_relaxed_simd = g_target_is_wasm   // wasm_target_features always asks for +relaxed-simd
+    g_target_wasm_relaxed_simd = g_target_is_wasm
     // Host path (empty triple): the module targets the host, so the daslang binary's own arch is the
     // JIT target arch. Explicit cross-compile triple: read the arch off the triple prefix.
     g_target_is_aarch64 = (empty(target_triple)
@@ -651,8 +646,6 @@ def public init_jit_target_flags(target_triple : string = ""; host_features : bo
     g_target_os_linux = (empty(target_triple)
         ? get_platform_name() == "linux"
         : find(target_triple, "linux") >= 0)
-    // aarch64 dotprod (see declaration comment): the host rail force-appends +dotprod, so host
-    // truth IS the rail; the generic exe / cross rails take the force env only.
     g_target_arm64_dotprod = g_target_is_aarch64 && (arm64_forced_feature("dotprod")
         || (empty(target_triple) && host_features))
     g_target_arm64_i8mm = g_target_is_aarch64 && (arm64_forced_feature("i8mm")
@@ -949,9 +942,6 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
         }
         targetMachine = create_target_machine(triple_msg, cpu_msg, feats, opt_level)
     } else {
-        // the force env (emission-only, see the g_target_x64_* declarations) reaches BOTH rails:
-        // AFTER the host features, where the last occurrence wins in LLVM's SubtargetFeatures, and
-        // onto the generic baseline, so the gates it raised never emit what the machine cannot select
         let forced = g_target_is_x64 ? x64_forced_plus_features() : (g_target_is_aarch64 ? arm64_forced_plus_features() : "")
         let feats = empty(forced) ? features_msg : (empty(features_msg) ? forced : "{features_msg},{forced}")
         targetMachine = create_target_machine(triple_msg, cpu_msg, feats, opt_level)
