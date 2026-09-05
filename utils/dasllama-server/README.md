@@ -245,6 +245,8 @@ unverified NEVER auto-applies), `exchange_submit = ask | always | never` (defaul
 `always` shares it automatically), and `exchange_url` (baked default `https://dasllama.io`).
 `DASLLAMA_EXCHANGE_URL` / `DASLLAMA_EXCHANGE_ACCEPT` env override for tests and one-shot
 watchdog relaunches. Lookup failure is never fatal - the boot falls through to the local tuner.
+The exchange client rides the tune framework, so a build without dasLLVM carries none of it: the
+boot resolver and submit check are never registered and every `/exchange*` route answers 404.
 
 **First-contact consent (GDPR):** nothing is sent to the exchange until a choice is
 expressed. Setting any `exchange_*` key (TOML or env) IS that choice; on the zero-config

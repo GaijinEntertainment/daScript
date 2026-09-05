@@ -14,7 +14,8 @@ options _dasllama_internal = true
 require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math          // setup_dasllama_jobque_ + apply_box_profile_runtime knobs (engine-level, not re-exported)
 require dasllama/dasllama_tune          // box_profile_path (the applied per-box manifest, recorded in the platform block)
-require llvm/daslib/llvm_tune           // [tune_policy] + log_tune_status — the box tunes itself before measuring
+require daslib/tune                     // [tune_policy] - inert without dasLLVM
+require llvm/daslib/llvm_tune           // log_tune_status — the box tunes itself before measuring
 require daslib/jobque_boost
 require profile_common
 require daslib/clargs

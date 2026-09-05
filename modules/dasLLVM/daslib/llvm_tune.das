@@ -1555,7 +1555,7 @@ def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePe
     aargs |> push((argname = "tune_suffix", argvalue = RttiValue(tString = perm.suffix)))
     aargs |> push((argname = "tune_from", argvalue = RttiValue(tString = from)))
     aargs |> push((argname = "tune_source", argvalue = RttiValue(tString = source)))
-    fn |> append_annotation("llvm_code", "llvm_code", aargs)
+    fn |> append_annotation("tune", "llvm_code", aargs)   // the annotation is registered by daslib/tune, not by the module that implements it
     fn.sideEffectFlags.userScenario = true
     delete aargs
 }
@@ -1631,249 +1631,243 @@ def private emit_registry(var mod : Module?; base : FunctionPtr; perms : array<T
 
 // ===== the annotations =====
 
+// Registered by `daslib/tune`, whose shells forward here and do nothing without this module:
+// one macro context has to own both the perm/scope banks and the passes that read them.
+
     //! `[tune_perm(<generator args>)]` — one grid row for the `tune(...)` that must follow it in
     //! the same bracket. Args pass to the generator verbatim and fold into the JIT DLL cache
     //! key; `suffix="..."` overrides the auto-derived variant name.
-[function_macro(name = "tune_perm")]
-class private TunePermAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
-        g_perm_rows[perm_key(func)] |> emplace(build_perm_row(args))
-        return true
-    }
+def tune_perm_apply(var func : FunctionPtr; var _group : ModuleGroup;
+                    args : AnnotationArgumentList; var _errors : das_string) : bool {
+    g_perm_rows[perm_key(func)] |> emplace(build_perm_row(args))
+    return true
 }
 
     //! `[tune_companion(fn = "sibling", gen = "generator_key")]` — stamps `sibling` with the SAME
     //! perm from the same sidecar entry, so a kernel and (say) its repack-layout query can never
     //! desync. List these after the [tune_perm] grid and before tune(...). See `skills/tune.md`.
-[function_macro(name = "tune_companion")]
-class private TuneCompanionAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+def tune_companion_apply(var func : FunctionPtr; var _group : ModuleGroup;
+                         args : AnnotationArgumentList; var errors : das_string) : bool {
     // the bank doubles as the order guard: rows after tune(...) or before any perm are ignored
-        if (!(g_perm_rows |> key_exists(perm_key(func)))) {
-            errors := "[tune_companion] on {func.name}: list it AFTER the [tune_perm] rows and BEFORE tune(...) in the same bracket"
-            return false
-        }
-        var row : TuneCompanion
-        let fv = find_arg(args, "fn")
-        if (fv is tString) { row.fnname = fv as tString }
-        let gv = find_arg(args, "gen")
-        if (gv is tString) { row.genkey = gv as tString }
-        if (empty(row.fnname) || empty(row.genkey)) {
-            errors := "[tune_companion] on {func.name}: fn=\"<function>\" and gen=\"<generator key>\" are both required"
-            return false
-        }
-        g_companion_rows[perm_key(func)] |> emplace(row)
-        return true
+    if (!(g_perm_rows |> key_exists(perm_key(func)))) {
+        errors := "[tune_companion] on {func.name}: list it AFTER the [tune_perm] rows and BEFORE tune(...) in the same bracket"
+        return false
     }
+    var row : TuneCompanion
+    let fv = find_arg(args, "fn")
+    if (fv is tString) { row.fnname = fv as tString }
+    let gv = find_arg(args, "gen")
+    if (gv is tString) { row.genkey = gv as tString }
+    if (empty(row.fnname) || empty(row.genkey)) {
+        errors := "[tune_companion] on {func.name}: fn=\"<function>\" and gen=\"<generator key>\" are both required"
+        return false
+    }
+    g_companion_rows[perm_key(func)] |> emplace(row)
+    return true
 }
 
     //! `[tune(gen="key", fallback="suffix")]` — LAST in a bracket of `[tune_perm]` rows, which it
     //! consumes. Normal runs stamp one winner (sidecar > fallback > reference); tune/test runs
     //! stamp the whole grid plus a `<name>_variants()` registry. Mode contract: module docstring.
-[function_macro(name = "tune")]
-class private TuneAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; // nolint:STYLE037,STYLE038 — the [tune] resolution ladder: manifest/fallback/reference arms in precedence order
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
-        let gv = find_arg(args, "gen")
-        if (!(gv is tString) || empty(gv as tString)) {
-            errors := "[tune] on {func.name}: gen=\"<[llvm_code] generator key>\" is required"
-            return false
-        }
-        let genKey = gv as tString
-        var perms <- take_perms(func, errors)
-        if (empty(errors) && empty(perms)) {
-            errors := "[tune] on {func.name}: no [tune_perm(...)] rows - list them BEFORE tune(...) in the same annotation bracket"
-        }
-        var comps <- take_companions(func, errors)
-        if (!empty(errors)) {
-            delete perms
-            delete comps
-            return false
-        }
-        if (func.result.baseType == Type.autoinfer) {
+def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE037,STYLE038 — the [tune] resolution ladder: manifest/fallback/reference arms in precedence order
+               args : AnnotationArgumentList; var errors : das_string) : bool {
+    let gv = find_arg(args, "gen")
+    if (!(gv is tString) || empty(gv as tString)) {
+        errors := "[tune] on {func.name}: gen=\"<[llvm_code] generator key>\" is required"
+        return false
+    }
+    let genKey = gv as tString
+    var perms <- take_perms(func, errors)
+    if (empty(errors) && empty(perms)) {
+        errors := "[tune] on {func.name}: no [tune_perm(...)] rows - list them BEFORE tune(...) in the same annotation bracket"
+    }
+    var comps <- take_companions(func, errors)
+    if (!empty(errors)) {
+        delete perms
+        delete comps
+        return false
+    }
+    if (func.result.baseType == Type.autoinfer) {
     // function_to_type runs pre-infer: an implicit result reaches the registry as `auto`
-            errors := "[tune] on {func.name}: an explicit return type is required (add ': void' or the real type)"
-            delete perms
-            delete comps
-            return false
-        }
+        errors := "[tune] on {func.name}: an explicit return type is required (add ': void' or the real type)"
+        delete perms
+        delete comps
+        return false
+    }
     // overrides grid modes too: a stale DAS_TUNE_MODE must not leak stubs into generated C++
-        if (tune_stamp_free_gate()) {
-            let noPerms : array<TunePerm>
-            var gok = emit_registry(compiling_module(), func, noPerms, errors)
-            for (c in comps) {
-                if (gok) {
-                    gok = emit_registry(compiling_module(), c.fn, noPerms, errors)
-                }
-            }
-            delete perms
-            delete comps
-            return gok
-        }
-        let mode = tune_mode()
-        if (mode == "tune" || mode == "test") {
-            // visible generation cost: a silent permutation stamp reads as a hung compile from outside
-            let ctail = empty(comps) ? "" : " (+{length(comps)} companions each)"
-            print("llvm_tune: [tune] {func.name}: stamping {length(perms)} permutations{ctail}\n")
-            let ok = stamp_grid(func, genKey, perms, comps, errors)
-            delete perms
-            delete comps
-            return ok
-        }
-        if (mode != "normal") {
-            errors := "[tune] on {func.name}: unknown DAS_TUNE_MODE '{mode}' (normal | tune | test)"
-            delete perms
-            delete comps
-            return false
-        }
-        if (g_env_tune.tune_policy == "reference") {
-            let noPerms : array<TunePerm>
-            var rok = emit_registry(compiling_module(), func, noPerms, errors)
-            for (c in comps) {
-                break if (!rok)
-                rok = emit_registry(compiling_module(), c.fn, noPerms, errors)
-            }
-            delete perms
-            delete comps
-            return rok
-        }
-    // no entry falls back rather than dropping to reference, so a sidecar written before a kernel family landed cannot untune it
-        let fname = "{func.name}"
-        var manifestFound = false
-        let mpath = tune_manifest_path()
-        var manifest <- read_manifest(mpath, manifestFound)
-        var suffix = ""
-        var tuneSource = ""   // manifest | profile | fallback - the tune_source the stamp records
-        var tuneSourcePath = ""
-        if (manifestFound) {
-            suffix = manifest?[fname] ?? ""
-            if (!empty(suffix)) {
-                tuneSource = "manifest"
-                tuneSourcePath = mpath
+    if (tune_stamp_free_gate()) {
+        let noPerms : array<TunePerm>
+        var gok = emit_registry(compiling_module(), func, noPerms, errors)
+        for (c in comps) {
+            if (gok) {
+                gok = emit_registry(compiling_module(), c.fn, noPerms, errors)
             }
         }
-        var profileKlass = ""
-        var profilePath = ""
-        var profile <- empty(suffix) ? profile_kernels(profileKlass, profilePath) : no_kernels()
-        if (empty(suffix)) {
-            suffix = profile?[fname] ?? ""
-            if (!empty(suffix)) {
-                tuneSource = "profile"
-                tuneSourcePath = profilePath
-            }
-        }
-        // clear an adopted winner this box can't run (ISA-gated → would decline to reference; or not in this build's grid → would crash-loop) so the fallback ;-chain picks a legal perm and it boots
-        if (!empty(suffix) && suffix != "reference") {
-            var known = false
-            var eligible = true
-            for (p in perms) {
-                if (p.suffix == suffix) {
-                    known = true
-                    eligible = perm_requires_ok(p)
-                    break
-                }
-            }
-            if (!known || !eligible) {
-                if (tune_verbosity() != "silent") {
-                    let why = known ? "fails its requires= on this box" : "is not in this build's grid"
-                    print("llvm_tune: {fname} {tuneSource} winner '{suffix}' {why} - using the fallback chain\n")
-                }
-                suffix = ""
-                tuneSource = ""
-                tuneSourcePath = ""
-            }
-        }
-        var companionOwnSuffix : array<string>   // a companion's OWN entry (the harness's gemv seat) when it names an eligible perm of this grid; else it follows the main
-        companionOwnSuffix |> resize(length(comps))
-        if (tuneSource == "manifest" || tuneSource == "profile") {
-            for (ci, c in count(), comps) {
-                let own = tuneSource == "manifest" ? (manifest?["{c.fnname}"] ?? "") : (profile?["{c.fnname}"] ?? "")
-                for (p in perms) {
-                    if (p.suffix == own && perm_requires_ok(p)) {
-                        companionOwnSuffix[ci] = own
-                    }
-                }
-            }
-        }
-        let fromPick = !empty(suffix)
-        var ok = true
-        if (empty(suffix)) {
-            tuneSource = "fallback"
-    // ';'-chain in declaration order, first passing requires= wins; none eligible => reference
-            let fv = find_arg(args, "fallback")
-            if (fv is tString) {
-                for (cand in split(fv as tString, ";")) {
-                    continue if (empty(cand))
-                    var found = false
-                    for (p in perms) {
-                        if (p.suffix == cand) {
-                            found = true
-                            if (perm_requires_ok(p)) {
-                                suffix = cand
-                            }
-                            break
-                        }
-                    }
-                    if (!found) {
-                        errors := "[tune] on {func.name}: fallback perm '{cand}' is not in the [tune_perm] grid"
-                        ok = false
-                    }
-                    break if (!ok || !empty(suffix))
-                }
-            }
-        }
-        delete manifest
-        delete profile
-        if (ok && !empty(suffix) && suffix != "reference") {
-            ok = false
-            for (p in perms) {
-                if (p.suffix == suffix) {
-                    stamp_llvm_code(func, genKey, p, fromPick ? tuneSourcePath : "", tuneSource)
-                    for (ci, c in count(), comps) {
-                        var stampedOwn = false
-                        if (!empty(companionOwnSuffix[ci]) && companionOwnSuffix[ci] != suffix) {
-                            for (q in perms) {
-                                if (q.suffix == companionOwnSuffix[ci]) {
-                                    stamp_llvm_code(c.fn, c.genkey, q, tuneSourcePath, tuneSource)
-                                    stampedOwn = true
-                                }
-                            }
-                            if (stampedOwn && tune_verbosity() == "verbose") {
-                                print("llvm_tune: {c.fnname} <- {companionOwnSuffix[ci]} (its own entry, {tuneSourcePath})\n")
-                            }
-                        }
-                        if (!stampedOwn) {
-                            stamp_llvm_code(c.fn, c.genkey, p, fromPick ? tuneSourcePath : "", tuneSource)
-                        }
-                    }
-                    if (tune_verbosity() == "verbose") {
-                        print("llvm_tune: {fname} <- {suffix} ({fromPick ? tuneSourcePath : "fallback"})\n")
-                    }
-                    ok = true
-                    break
-                }
-            }
-            if (!ok) {
-                errors := "[tune] on {func.name}: perm '{suffix}' is not in the [tune_perm] grid"
-            }
-        }
-    // reference-row-only registries, so harness code referencing <name>_variants() still compiles
-        if (ok) {
-            let noPerms : array<TunePerm>
-            ok = emit_registry(compiling_module(), func, noPerms, errors)
-            for (c in comps) {
-                if (ok) {
-                    ok = emit_registry(compiling_module(), c.fn, noPerms, errors)
-                }
-            }
-        }
-        delete companionOwnSuffix
+        delete perms
+        delete comps
+        return gok
+    }
+    let mode = tune_mode()
+    if (mode == "tune" || mode == "test") {
+        // visible generation cost: a silent permutation stamp reads as a hung compile from outside
+        let ctail = empty(comps) ? "" : " (+{length(comps)} companions each)"
+        print("llvm_tune: [tune] {func.name}: stamping {length(perms)} permutations{ctail}\n")
+        let ok = stamp_grid(func, genKey, perms, comps, errors)
         delete perms
         delete comps
         return ok
     }
+    if (mode != "normal") {
+        errors := "[tune] on {func.name}: unknown DAS_TUNE_MODE '{mode}' (normal | tune | test)"
+        delete perms
+        delete comps
+        return false
+    }
+    if (g_env_tune.tune_policy == "reference") {
+        let noPerms : array<TunePerm>
+        var rok = emit_registry(compiling_module(), func, noPerms, errors)
+        for (c in comps) {
+            break if (!rok)
+            rok = emit_registry(compiling_module(), c.fn, noPerms, errors)
+        }
+        delete perms
+        delete comps
+        return rok
+    }
+    // no entry falls back rather than dropping to reference, so a sidecar written before a kernel family landed cannot untune it
+    let fname = "{func.name}"
+    var manifestFound = false
+    let mpath = tune_manifest_path()
+    var manifest <- read_manifest(mpath, manifestFound)
+    var suffix = ""
+    var tuneSource = ""   // manifest | profile | fallback - the tune_source the stamp records
+    var tuneSourcePath = ""
+    if (manifestFound) {
+        suffix = manifest?[fname] ?? ""
+        if (!empty(suffix)) {
+            tuneSource = "manifest"
+            tuneSourcePath = mpath
+        }
+    }
+    var profileKlass = ""
+    var profilePath = ""
+    var profile <- empty(suffix) ? profile_kernels(profileKlass, profilePath) : no_kernels()
+    if (empty(suffix)) {
+        suffix = profile?[fname] ?? ""
+        if (!empty(suffix)) {
+            tuneSource = "profile"
+            tuneSourcePath = profilePath
+        }
+    }
+    // clear an adopted winner this box can't run (ISA-gated → would decline to reference; or not in this build's grid → would crash-loop) so the fallback ;-chain picks a legal perm and it boots
+    if (!empty(suffix) && suffix != "reference") {
+        var known = false
+        var eligible = true
+        for (p in perms) {
+            if (p.suffix == suffix) {
+                known = true
+                eligible = perm_requires_ok(p)
+                break
+            }
+        }
+        if (!known || !eligible) {
+            if (tune_verbosity() != "silent") {
+                let why = known ? "fails its requires= on this box" : "is not in this build's grid"
+                print("llvm_tune: {fname} {tuneSource} winner '{suffix}' {why} - using the fallback chain\n")
+            }
+            suffix = ""
+            tuneSource = ""
+            tuneSourcePath = ""
+        }
+    }
+    var companionOwnSuffix : array<string>   // a companion's OWN entry (the harness's gemv seat) when it names an eligible perm of this grid; else it follows the main
+    companionOwnSuffix |> resize(length(comps))
+    if (tuneSource == "manifest" || tuneSource == "profile") {
+        for (ci, c in count(), comps) {
+            let own = tuneSource == "manifest" ? (manifest?["{c.fnname}"] ?? "") : (profile?["{c.fnname}"] ?? "")
+            for (p in perms) {
+                if (p.suffix == own && perm_requires_ok(p)) {
+                    companionOwnSuffix[ci] = own
+                }
+            }
+        }
+    }
+    let fromPick = !empty(suffix)
+    var ok = true
+    if (empty(suffix)) {
+        tuneSource = "fallback"
+    // ';'-chain in declaration order, first passing requires= wins; none eligible => reference
+        let fv = find_arg(args, "fallback")
+        if (fv is tString) {
+            for (cand in split(fv as tString, ";")) {
+                continue if (empty(cand))
+                var found = false
+                for (p in perms) {
+                    if (p.suffix == cand) {
+                        found = true
+                        if (perm_requires_ok(p)) {
+                            suffix = cand
+                        }
+                        break
+                    }
+                }
+                if (!found) {
+                    errors := "[tune] on {func.name}: fallback perm '{cand}' is not in the [tune_perm] grid"
+                    ok = false
+                }
+                break if (!ok || !empty(suffix))
+            }
+        }
+    }
+    delete manifest
+    delete profile
+    if (ok && !empty(suffix) && suffix != "reference") {
+        ok = false
+        for (p in perms) {
+            if (p.suffix == suffix) {
+                stamp_llvm_code(func, genKey, p, fromPick ? tuneSourcePath : "", tuneSource)
+                for (ci, c in count(), comps) {
+                    var stampedOwn = false
+                    if (!empty(companionOwnSuffix[ci]) && companionOwnSuffix[ci] != suffix) {
+                        for (q in perms) {
+                            if (q.suffix == companionOwnSuffix[ci]) {
+                                stamp_llvm_code(c.fn, c.genkey, q, tuneSourcePath, tuneSource)
+                                stampedOwn = true
+                            }
+                        }
+                        if (stampedOwn && tune_verbosity() == "verbose") {
+                            print("llvm_tune: {c.fnname} <- {companionOwnSuffix[ci]} (its own entry, {tuneSourcePath})\n")
+                        }
+                    }
+                    if (!stampedOwn) {
+                        stamp_llvm_code(c.fn, c.genkey, p, fromPick ? tuneSourcePath : "", tuneSource)
+                    }
+                }
+                if (tune_verbosity() == "verbose") {
+                    print("llvm_tune: {fname} <- {suffix} ({fromPick ? tuneSourcePath : "fallback"})\n")
+                }
+                ok = true
+                break
+            }
+        }
+        if (!ok) {
+            errors := "[tune] on {func.name}: perm '{suffix}' is not in the [tune_perm] grid"
+        }
+    }
+    // reference-row-only registries, so harness code referencing <name>_variants() still compiles
+    if (ok) {
+        let noPerms : array<TunePerm>
+        ok = emit_registry(compiling_module(), func, noPerms, errors)
+        for (c in comps) {
+            if (ok) {
+                ok = emit_registry(compiling_module(), c.fn, noPerms, errors)
+            }
+        }
+    }
+    delete companionOwnSuffix
+    delete perms
+    delete comps
+    return ok
 }
 
 // ===== [tune_scope] / [tune_policy] — the tuner-wiring UX rail =====
@@ -1896,64 +1890,61 @@ def private module_compiled(name : string) : bool {
     //! `[tune_scope(name = "mylib", tuner = "harness.das")]` on a dummy struct in the library that
     //! owns the `[tune]` functions, declared ABOVE them: names the tuner that regenerates this
     //! library's winners in the ONE per-app sidecar. `tuner=` resolves against the declaring file.
-[structure_macro(name = "tune_scope")]
-class private TuneScopeAnnotation : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
-        if (tune_aot_gate()) return true
-        let nv = find_arg(args, "name")
-        if (!(nv is tString) || empty(nv as tString)) {
-            errors := "[tune_scope]: name=\"<scope name>\" is required"
+def tune_scope_apply(var st : StructurePtr; var _group : ModuleGroup;
+                     args : AnnotationArgumentList; var errors : das_string) : bool {
+    if (tune_aot_gate()) return true
+    let nv = find_arg(args, "name")
+    if (!(nv is tString) || empty(nv as tString)) {
+        errors := "[tune_scope]: name=\"<scope name>\" is required"
+        return false
+    }
+    let sname = nv as tString
+    var tuner = ""
+    let tv = find_arg(args, "tuner")
+    if (tv is tString) {
+        tuner = resolve_decl_path(string(st.at.fileInfo.name), tv as tString)
+    }
+    var covers = ""
+    let cv = find_arg(args, "covers")
+    if (cv is tString) {
+        covers = cv as tString
+    }
+    var versionKey = ""
+    var versionExpected = ""
+    let vv = find_arg(args, "version_of")
+    if (vv is tString) {
+        var keyOverride = ""
+        let kv = find_arg(args, "version_key")
+        if (kv is tString) {
+            keyOverride = kv as tString
+        }
+        var verr = ""
+        if (!resolve_version_of(get_ptr(compiling_program()), vv as tString, keyOverride, versionKey, versionExpected, verr)) {
+            errors := "[tune_scope]: {verr}"
             return false
         }
-        let sname = nv as tString
-        var tuner = ""
-        let tv = find_arg(args, "tuner")
-        if (tv is tString) {
-            tuner = resolve_decl_path(string(st.at.fileInfo.name), tv as tString)
-        }
-        var covers = ""
-        let cv = find_arg(args, "covers")
-        if (cv is tString) {
-            covers = cv as tString
-        }
-        var versionKey = ""
-        var versionExpected = ""
-        let vv = find_arg(args, "version_of")
-        if (vv is tString) {
-            var keyOverride = ""
-            let kv = find_arg(args, "version_key")
-            if (kv is tString) {
-                keyOverride = kv as tString
-            }
-            var verr = ""
-            if (!resolve_version_of(get_ptr(compiling_program()), vv as tString, keyOverride, versionKey, versionExpected, verr)) {
-                errors := "[tune_scope]: {verr}"
+    }
+    var defaults = ""
+    let dv = find_arg(args, "defaults")
+    if (dv is tString) {
+        defaults = resolve_decl_path(string(st.at.fileInfo.name), dv as tString)
+    }
+    if (!empty(defaults)) {
+        for (m in split(covers, ";")) {
+            continue if (empty(m))
+            if (module_compiled(m)) {
+                errors := "[tune_scope] '{sname}': covers= module '{m}' compiled before this scope, so its kernels could not read the defaults profile - require this scope's module from '{m}'"
                 return false
             }
         }
-        var defaults = ""
-        let dv = find_arg(args, "defaults")
-        if (dv is tString) {
-            defaults = resolve_decl_path(string(st.at.fileInfo.name), dv as tString)
-        }
-        if (!empty(defaults)) {
-            for (m in split(covers, ";")) {
-                continue if (empty(m))
-                if (module_compiled(m)) {
-                    errors := "[tune_scope] '{sname}': covers= module '{m}' compiled before this scope, so its kernels could not read the defaults profile - require this scope's module from '{m}'"
-                    return false
-                }
-            }
-        }
-        // overwrite, not error: shared-module macro state persists across compiles in one process
-        g_scopes["{compiling_module().name}"] = TuneScope(scopeName = sname,
-            modName = "{compiling_module().name}", covers = covers,
-            manifestPath = tune_manifest_path(), tunerPath = tuner,
-            versionKey = versionKey, versionExpected = versionExpected,
-            defaultsPath = defaults)
-        return true
     }
+    // overwrite, not error: shared-module macro state persists across compiles in one process
+    g_scopes["{compiling_module().name}"] = TuneScope(scopeName = sname,
+        modName = "{compiling_module().name}", covers = covers,
+        manifestPath = tune_manifest_path(), tunerPath = tuner,
+        versionKey = versionKey, versionExpected = versionExpected,
+        defaultsPath = defaults)
+    return true
 }
 
 // The tune flags, parsed off the APP's command line — we share an argv we do not own, so this
@@ -2841,32 +2832,29 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
     //! `[tune_policy(missing = "...")]` on the app's `main`: what to do about scopes whose sidecar
     //! entries are missing or stale — `fallback` | `warn` | `error` | `auto` (THE DEFAULT, declared
     //! or not) | `restart`. Full semantics and the escapes: `skills/tune.md`.
-[function_macro(name = "tune_policy")]
-class private TunePolicyAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
-        // the manifest warning is the default pass's job — it fires for every root, this apply's gate included
-        if (tune_policy_gated() && !exe_status_report()) {
-            return true
-        }
-        var errs = ""
-        if (tune_exe_gate()) {
-            // standalone build: no policy, but the artifact self-reports its stamps
-            emit_status_init(errs)
-        } else {
-            var policy = "auto"
-            let mv = find_arg(args, "missing")
-            if (mv is tString) {
-                policy = mv as tString
-            }
-            apply_tune_policy(func, policy, errs)
-        }
-        if (!empty(errs)) {
-            errors := errs
-            return false
-        }
+def tune_policy_apply(var func : FunctionPtr; var _group : ModuleGroup;
+                      args : AnnotationArgumentList; var errors : das_string) : bool {
+    // the manifest warning is the default pass's job — it fires for every root, this apply's gate included
+    if (tune_policy_gated() && !exe_status_report()) {
         return true
     }
+    var errs = ""
+    if (tune_exe_gate()) {
+        // standalone build: no policy, but the artifact self-reports its stamps
+        emit_status_init(errs)
+    } else {
+        var policy = "auto"
+        let mv = find_arg(args, "missing")
+        if (mv is tString) {
+            policy = mv as tString
+        }
+        apply_tune_policy(func, policy, errs)
+    }
+    if (!empty(errs)) {
+        errors := errs
+        return false
+    }
+    return true
 }
 
 // inert once-only marker the TuneDefaultPolicy pass stamps onto main — appending an
@@ -2883,36 +2871,33 @@ class private TunePolicyDefaultMarker : AstFunctionAnnotation {
     //! The "untuned does not start" default: a program root with a `main`, some `[tune_scope]` in
     //! play and no declared `[tune_policy]` behaves as `missing = "auto"`. Escapes and the
     //! once-only marker: `skills/tune.md`. A root without `main` never tunes (dastest files).
-[infer_macro]
-class private TuneDefaultPolicy : AstPassMacro {
-    def override apply(prog : ProgramPtr; _mod : Module?) : bool {
-    // fires only for roots that SEE llvm_tune, so a scope-owning library must re-export it public
-        return false if (is_in_completion() || !empty("{compiling_module().name}") || empty(g_scopes))
-        warn_manifest_untuned()   // self-gates on DAS_TUNE_MANIFEST; covers exe and declared-policy roots too
-        return false if (tune_policy_gated() && !exe_status_report())
-        var main_fn = compiling_module() |> find_unique_function("main", false)
-        return false if (main_fn == null)
-        for (ann in main_fn.annotations) {
-            // declared policy wins; the marker means this pass already ran
-            return false if (ann.annotation.name == "tune_policy"
-                || ann.annotation.name == "tune_policy_default_applied")
-        }
-        main_fn |> append_annotation("llvm_tune", "tune_policy_default_applied")
-        var errs = ""
-        var ok = true
-        if (tune_exe_gate()) {
-            // standalone build: no policy, but the artifact self-reports its stamps
-            emit_status_init(errs)
-        } else {
-            // O0 cannot represent winners raced under O3 - default fallback (DAS_TUNE_POLICY wins)
-            let flavor = jit_cli_opt_level() == 0 ? "fallback" : "auto"
-            ok = apply_tune_policy(main_fn, flavor, errs)
-        }
-        if (!ok || !empty(errs)) {
-    // macro_error mid-infer-pass is dropped by the retry loop — print + panic actually stops it
-            print("llvm_tune: {errs}\n")
-            panic("llvm_tune default policy: {errs}")
-        }
-        return true   // modified — re-run infer over the injected status/guard
+def tune_default_policy_apply(_prog : ProgramPtr; _mod : Module?) : bool {
+    // fires only for roots that SEE daslib/tune, so a scope-owning library must re-export it public
+    return false if (is_in_completion() || !empty("{compiling_module().name}") || empty(g_scopes))
+    warn_manifest_untuned()   // self-gates on DAS_TUNE_MANIFEST; covers exe and declared-policy roots too
+    return false if (tune_policy_gated() && !exe_status_report())
+    var main_fn = compiling_module() |> find_unique_function("main", false)
+    return false if (main_fn == null)
+    for (ann in main_fn.annotations) {
+        // declared policy wins; the marker means this pass already ran
+        return false if (ann.annotation.name == "tune_policy"
+            || ann.annotation.name == "tune_policy_default_applied")
     }
+    main_fn |> append_annotation("llvm_tune", "tune_policy_default_applied")
+    var errs = ""
+    var ok = true
+    if (tune_exe_gate()) {
+        // standalone build: no policy, but the artifact self-reports its stamps
+        emit_status_init(errs)
+    } else {
+        // O0 cannot represent winners raced under O3 - default fallback (DAS_TUNE_POLICY wins)
+        let flavor = jit_cli_opt_level() == 0 ? "fallback" : "auto"
+        ok = apply_tune_policy(main_fn, flavor, errs)
+    }
+    if (!ok || !empty(errs)) {
+    // macro_error mid-infer-pass is dropped by the retry loop — print + panic actually stops it
+        print("llvm_tune: {errs}\n")
+        panic("llvm_tune default policy: {errs}")
+    }
+    return true   // modified — re-run infer over the injected status/guard
 }

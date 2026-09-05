@@ -2845,6 +2845,7 @@ namespace das {
                         // allowPromoted: pairs with the `require ?guard` check (ast_parse.cpp), which
                         // also accepts shared das modules compiled earlier in the process
                         auto mod = Module::requireEx(evar->name, true);
+                        if ( !mod ) mod = program->library.findModule(evar->name);
                         reportAstChanged();
                         return new ExprConstBool(expr->at, mod != nullptr);
                     } else {

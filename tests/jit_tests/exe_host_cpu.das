@@ -28,7 +28,7 @@ def private write_probe_script(path : string; with_kernel : bool) : bool {
         if (f != null) {
             fprint(f, "options gen2\n")
             if (with_kernel) {
-                fprint(f, "require llvm/daslib/llvm_code\n")
+                fprint(f, "require daslib/tune\n")
                 fprint(f, "[llvm_code(name = \"llvm_code_selftest::host_features\")]\n")
                 fprint(f, "def host_rail() : int \{ return -1 \}\n")
                 fprint(f, "[export] def main() \{ print(\"HOSTF=[\{host_rail()}]\\n\"); \}\n")

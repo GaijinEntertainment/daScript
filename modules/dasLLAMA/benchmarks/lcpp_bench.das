@@ -31,7 +31,7 @@ require daslib/module_path            // get_this_module_dir — the default pro
 require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses on a build without the marker rail
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
-require dasllama/dasllama_exchange   // --submit: POST the stamped records to the exchange
+require ?llvm/daslib/llvm_tune dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: --submit POSTs the stamped records to the exchange, which rides the tune framework
 require llvm/daslib/llvm_tune   // tune_app_script — the exe-vs-script discriminator behind --for-debug-purposes
 require daslib/jobque_boost
 require daslib/clargs
@@ -1270,6 +1270,15 @@ def private tests_of(rows : array<RowStat>) : table<string; BenchTest> {
 // flavor is stamped debug-jit so no board or oracle can mistake it for measurement
 var private g_debug_run = false
 
+// the exchange client compiles only where the tune framework does, so --submit has a rail to refuse on
+def private exchange_compiled_in() : bool {
+    static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+        return true
+    } else {
+        return false
+    }
+}
+
 def private flavor_stamp(base : string) : string {
     let b = tune_gate_bypassed() ? "untuned:{base}" : base
     return g_debug_run ? "debug-jit:{b}" : b
@@ -1349,6 +1358,10 @@ def main() : int {
         // debug-jit numbers are stamped so no board mistakes them for measurement — they must
         // not reach the public exchange either; a submission is the released exe's job
         print("error: --submit refused on a debug -jit run - the numbers are debug-grade; submit from the released exe\n")
+        return 1
+    }
+    if (cfg.submit && !exchange_compiled_in()) {
+        print("error: --submit refused - this build carries no sidecar exchange client (no tune framework)\n")
         return 1
     }
     // the standing per-box methodology, enforced here rather than left to the environment
@@ -1844,13 +1857,15 @@ def main() : int {
     }
     print("{text}\n")
     if (cfg.submit) {
-        let url = empty(g_env_exchange.exchange_url) ? EXCHANGE_URL_DEFAULT : g_env_exchange.exchange_url
-        let serr = exchange_submit_records_doc(url, text)
-        if (!empty(serr)) {
-            say(fmt, "records NOT submitted to {url}: {serr}\n")
-            return 1
+        static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+            let url = empty(g_env_exchange.exchange_url) ? EXCHANGE_URL_DEFAULT : g_env_exchange.exchange_url
+            let serr = exchange_submit_records_doc(url, text)
+            if (!empty(serr)) {
+                say(fmt, "records NOT submitted to {url}: {serr}\n")
+                return 1
+            }
+            say(fmt, "records submitted to {url}\n")
         }
-        say(fmt, "records submitted to {url}\n")
     }
     return 0
 }

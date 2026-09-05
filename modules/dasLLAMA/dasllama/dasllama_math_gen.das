@@ -11,8 +11,9 @@ require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_default  // dot_q8q8_f16s — the row-major tails of the s16 twins
 require dasllama/dasllama_repack  // the grp<mr> repack family + kq panel unpack (pure transforms; the _gen/_bake twins below feed them numbers)
 require daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
-require llvm/daslib/llvm_tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code]; PUBLIC so the auto-policy infer pass and tune_status reach app roots that require this module
-require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tune] kernels pick their perms
+require daslib/tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code], inert without dasLLVM; PUBLIC so the auto-policy infer pass reaches app roots that require this module
+require llvm/daslib/llvm_tune public  // PUBLIC so the auto-policy infer pass and tune_status reach app roots that require this module
+require dasllama/dasllama_tune_scope  // the dasllama [tune_scope] must be on the AST before this module's [tune] kernels pick their perms
 require dasllama/dasllama_gemm_schema
 require daslib/jobque_boost public
 require dasllama/dasllama_par

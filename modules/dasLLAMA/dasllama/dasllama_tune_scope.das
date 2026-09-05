@@ -5,7 +5,8 @@ options _dasllama_internal = true
 module dasllama_tune_scope shared public
 
 require dasllama/dasllama_lint public
-require llvm/daslib/llvm_tune public  // the scope annotation; PUBLIC so the auto-policy infer pass and tune_status reach app roots
+require daslib/tune public  // the [tune_scope] annotation, inert without dasLLVM; PUBLIC so the auto-policy infer pass reaches app roots
+require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public  // OPTIONAL; PUBLIC so the auto-policy infer pass and tune_status reach app roots
 require dasllama/dasllama_version  // nolint:STYLE030 — version_of= below names DASLLAMA_RELEASE by string; the module must be in this compile
 
 //! The scope reaches the AST before any covered module compiles - the scope apply refuses a covered

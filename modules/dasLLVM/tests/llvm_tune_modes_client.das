@@ -1,6 +1,7 @@
 options gen2
 
 require dastest/testing_boost
+require daslib/tune
 require llvm/daslib/llvm_tune
 
 // Doubles as the child fixture for llvm_tune_modes.das (spawned with DAS_TUNE_MODE=test, -jit:

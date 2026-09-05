@@ -4,6 +4,16 @@ Read before touching `modules/dasLLVM/daslib/llvm_tune.das` or its tests. The fr
 itself - every annotation, the policy rail, the sidecar contract - is `skills/tune.md`; this
 file is only what maintaining the implementation needs on top of it.
 
+`llvm_tune.das` registers no annotation of its own. All six names plus the default-policy
+infer pass are registered by `daslib/tune`, whose shells forward here - `tune_apply`,
+`tune_perm_apply`, `tune_companion_apply`, `tune_scope_apply`, `tune_policy_apply`,
+`tune_default_policy_apply`, and `llvm_code_apply` in `llvm_code.das` - under
+`static_if (typeinfo builtin_module_exists(llvm_tune))`, and do nothing when the guard is
+false. Adding an annotation means adding both halves. A shell may not stay behind in this
+module: **a module's macro state is per-module**, so `g_scopes`, `g_perm_rows` and
+`g_companion_rows` are only consistent while every writer and reader runs in one macro
+context - which is why the infer pass moved to `daslib/tune` with the annotations.
+
 ## Macro-context traps
 
 - **Cross-module restamp does not work.** Mutating a *required* library's already-compiled
@@ -29,7 +39,9 @@ file is only what maintaining the implementation needs on top of it.
   `collect_status` reads the stamps back off the AST.
 - **`stamp_llvm_code` records `tune_suffix` / `tune_from` / `tune_source`** as extra
   `[llvm_code]` args (generators ignore unknown args by contract), and `tune_status` reads that
-  stamped truth off the AST - there is no macro-state bank to keep coherent.
+  stamped truth off the AST - there is no macro-state bank to keep coherent. It appends the
+  annotation from module `tune`, the module that registers `[llvm_code]`; readers match it by
+  name, so nothing downstream cares which module it came from.
 - **`--tune` is decided at runtime** by the guard (`tune_cli_force`, the same
   `apply_cli_tune_flags` parse over `get_user_args()`), because a warm module cache can serve a
   compile whose macros never saw this run's argv; the policy pass reads it at macro time only to
@@ -37,9 +49,11 @@ file is only what maintaining the implementation needs on top of it.
 
 ## Where the pieces live
 
-- The default policy is injected by the `TuneDefaultPolicy` infer pass. A root is detected by
-  the anonymous module name, and the `tune_policy` marker annotation the pass appends is its
-  once-only guard.
+- The default policy is injected by the `TuneDefaultPolicyShell` infer pass in `daslib/tune`,
+  which forwards to `tune_default_policy_apply` here. A root is detected by the anonymous
+  module name, and the `tune_policy` marker annotation the pass appends is its once-only guard.
+  The pass reaches a root that sees `daslib/tune`, so a scope-owning library re-exports THAT
+  (`require daslib/tune public`).
 - `scope_fnames_joined` appends a `version_of` pin to the joined kernel names as one
   `@version:key=value` token, so every carrier of that string - the policy guards, the
   resolver contract, daspkg's status walk - enforces the pin with no signature change.
