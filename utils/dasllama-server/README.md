@@ -139,6 +139,11 @@ transcriptions at once. Each worker owns its model/context and reuses language-s
 scratch, so memory settles at the workers' high-water mark. OpenAI is stateless - the client
 resends the full transcript each turn.
 
+The main server context configures the shared job queue. ASR, TTS and media worker contexts
+enable their own fork-context pools before loading or evaluating a model: that setting is
+context-local, not inherited from the main context. Worker setup preserves the shared queue's
+team/FIFO policy and applies only the worker's selected team-dispatch participation.
+
 ## Supervised deployment
 
 dasllama-server is JIT-only (per-box `[tune]`/`[llvm_code]` kernels, plus a shared-module `[init]`
