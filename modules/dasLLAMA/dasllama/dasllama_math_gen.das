@@ -2763,7 +2763,7 @@ def dasllama_math_gen_register() {
     // needs_repack keeps this out of auto-select (direct callers stay on arm64-sdot). q8_layout
     // must be evaluated at selection time, not [init] — [init]s run before the JIT installs
     // generated code (the slice C mr8 bug); arm64 needs no availability predicate.
-    if (get_architecture_name() == "arm64" && jit_enabled()) {
+    if (get_target_architecture_name() == "arm64" && jit_enabled()) {
         register_kernel_backend(KernelBackend(name = "arm64-gen", mm = @@q8q8_kernel_gen,
             batch = @@q8q8_batch_kernel_neon_laneq_gen, group3 = @@q8q8_group3_gen,
             repack = @@repack_q8q8_gen,
@@ -2795,7 +2795,7 @@ def dasllama_math_gen_register() {
     // x64 twin: the ONLY x64-specific wiring is the availability predicate — the witness must
     // be true only if the family actually emitted (a declined stamp falls back to slow NEON
     // scalar bodies here). avx2 is the family's minimum tier.
-    if (get_architecture_name() == "x86_64" && jit_enabled() && cpu_supports("avx2")) {
+    if (get_target_architecture_name() == "x86_64" && jit_enabled() && cpu_supports("avx2")) {
         register_kernel_backend(KernelBackend(name = "x64-gen", mm = @@q8q8_kernel_gen,
             batch = @@q8q8_batch_kernel_neon_laneq_gen, group3 = @@q8q8_group3_gen,
             repack = @@repack_q8q8_gen,

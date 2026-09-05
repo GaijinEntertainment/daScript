@@ -803,6 +803,19 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         hostOptions += argv[i];
         hostOptions += '\n';
     }
+    // a --jit-target after the separator is a compile input too: get_target_triple and every fold
+    // over it bake the target into each module, so a cached native compile must not serve a cross one
+    for ( int i=1, sep=0; i < argc; ++i ) {
+        if ( !sep ) { sep = strcmp(argv[i],"--")==0; continue; }
+        if ( strncmp(argv[i],"--jit-target",12)==0 ) {
+            hostOptions += argv[i];
+            hostOptions += '\n';
+            if ( strcmp(argv[i],"--jit-target")==0 && i+1<argc ) {
+                hostOptions += argv[i+1];
+                hostOptions += '\n';
+            }
+        }
+    }
     das::vector<string> files;
     string mainName = "main";
     bool scriptArgs = false;
