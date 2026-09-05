@@ -318,9 +318,12 @@ native AOT host (same box, not a measurement). No dasLLVM is embedded, so `requi
 false inside the artifact and no tune framework exists in it. Two link-time findings: the
 Accelerate driver's TU stays out wherever `das_accelerate` is not built (its C++ calls the
 binding by symbol), and the AOT type tables need a 512 MB initial heap on top of the web build's
-embeds. The artifact is 306 MB: the playground's module embeds (fonts, glTF, audio, imgui) ride
-along because they are directory-scoped link options in `web/CMakeLists.txt` - a dasLLAMA-only
-embed set is the size item. Next: wasmtime (no JS host), the browser page, ASR and TTS examples.
+embeds. The artifact is 60 MB - 35 MB of code, 24 MB of data (about 10 MB of embedded `.das`,
+the rest the AOT type tables). It was 306 MB before the web build's embed step learned to
+exclude build residue: `_aot_generated/` C++ and `.jitted_scripts/` caches sit inside the
+embedded source trees in a working checkout and outweighed the sources twenty to one; the
+playground's `daslang_static` carried the same 95 MB. Next: wasmtime (no JS host), the browser
+page, ASR and TTS examples.
 
 - Route: the stage-2 example's AOT C++ through emcc against `web/output64` (memory64 +
   pthreads), under node first (NODEFS mounts), the browser after.
