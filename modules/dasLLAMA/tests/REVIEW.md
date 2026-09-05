@@ -20,6 +20,16 @@ is what the runner arms for every suite.
 **Invoking dastest directly on a test file in a `run.das` model suite (every suite but
 `model-free` and `stocked`) is a defect - run it through `run.das`.**
 
+**A diff that gives `run.das` an `[init]` function, or any top-level statement that runs on
+require, is a defect - it stays `[export] main` only.** `test_run_suites.das` and
+`test_run_summary.das` require `run` by bare same-dir name to read its tables; an `[init]`
+would fire inside every one of those test processes.
+
+**A cell asserting a chat template's INSTRUCT wire - a closed empty thought block and no
+thinking gate - calls `set_thinking(c, false)` on its renderer before the first turn.**
+`ChatTemplate.think_default` is `true` unless a family clears it, so an un-opted-out turn 1
+renders the gate and arms the channel-marker stops, and the cell asserts the wrong wire.
+
 **Every test RUN runs under `-jit` - never the interpreter, never AOT.** A compile-only CI lane
 passes dastest's `--compile-only`. Under the interpreter a model-gated suite's cells skip, and
 a run of skips is not the coverage the suite owes.

@@ -145,7 +145,7 @@ def test_policy_change_refuses_the_cache(t : T?) {
 }
 
 //! the record stamps a module's file by content: a rewrite that leaves the bytes alone serves the
-//! cache, and a same-size edit is a cutoff even inside the mtime's one-second grain
+//! cache, and a same-size edit is a cutoff - the stamp never reads mtime
 [test]
 def test_source_stamp_is_content(t : T?) {
     var terr : string
@@ -161,7 +161,7 @@ def test_source_stamp_is_content(t : T?) {
     let cmd = "{das_exe()} -dasroot {get_das_root()} -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_stamp_root.das")}"
     var cold : string
     t |> success(report_child(t, "stamp cold", run(cmd, cold), cold, "ser: wrote"), "the cold run writes the explicit cache")
-    sleep(1100u)    // past the mtime's one-second grain, so the rewrite below moves the mtime
+    sleep(1100u)    //! past the mtime's one-second grain, so the rewrite below moves the mtime
     fwrite(leaf, leafSrc)
     var touched : string
     t |> success(report_child(t, "stamp touched", run(cmd, touched), touched, "deser: clean"), "a rewrite that leaves the bytes alone still serves every module:\n{touched}")

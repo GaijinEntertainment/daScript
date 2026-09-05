@@ -117,7 +117,7 @@ namespace das {
         ModuleLibrary *     moduleLibrary = nullptr;
     // some passes require module group (it's passed from top-level)
         ModuleGroup *       thisModuleGroup = nullptr;
-        FileAccess *        fileAccess = nullptr;       // the compile's access: a served record's FileInfo resolves through it, source included
+        FileAccess *        fileAccess = nullptr;
         Module *            thisModule = nullptr;
         Module *            astModule = nullptr;
         bool                writing = false;
@@ -134,7 +134,7 @@ namespace das {
         uint64_t            servedModules = 0;
         string              cutoffFile;
         string              cutoffReason;
-        bool                policyMismatch = false;     // the record's CodeOfPolicies differ from the compiling program's
+        bool                policyMismatch = false;
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up

@@ -26,6 +26,12 @@
   only when its stored version equals `getVersion()`, so without the bump an older cache
   passes that check and every field after the new one decodes shifted.
 
+- **A diff that adds a field to `CodeOfPolicies` (`include/daScript/simulate/code_of_policies.h`)
+  adds it to `DAS_MODULE_CACHE_POLICY_FIELDS` in `module_builtin_ast_serialize.cpp`, in the same
+  change, and streams or compares no policy field outside that list** - the one list is both the
+  record's policy stream and the compare that refuses a record written under other policies, so a
+  field missing from it is a policy the cache silently ignores.
+
 - **Every print the module cumulative-hash check in `module_builtin_ast_serialize.cpp` reaches
   is gated on the serializer's `quietCache`; a diff that leaves one ungated is a defect** - the
   default cache is on unasked for an ordinary run, so an ungated line becomes output every user

@@ -17,7 +17,7 @@ require math
 require dasllama/dasllama_env
 require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
 
-let MODULE_CACHE = ".jitted_scripts/module_cache/dastest.dascache"   // `-jit -module-cache`: serves dastest's own graph; the test program dastest compiles at runtime is past the cache and pays the engine compile
+let MODULE_CACHE = ".jitted_scripts/module_cache/dastest.dascache"
 
 [CommandLineArgs]
 struct RunArgs {
@@ -88,11 +88,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
     } elif (name == "coverage") {
         return <- [ "modules/dasLLAMA/tests/test_kernel_coverage.das" ]
     } elif (name == "model-free") {
-        // the every-change gate: every suite-less test file that reaches NO machine-local fixture
-        // root (models_dir / model_available / llama2c_dir / whisper_dir) - it runs the same with
-        // nothing stocked. A new such file registers here in the same change; test_run_suites.das
-        // reads every listed file and fails a misfiled one. Not here: test_cpu_prefill_tripwire
-        // (it asserts the guard the runner's DASLLAMA_CPU_PREFILL=1 disarms - plain dastest only).
         return <- [
                     "modules/dasLLAMA/tests/failed_dasllama_lint_require.das",
                     "modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das",
@@ -159,9 +154,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das" ]
     } elif (name == "stocked") {
-        // the per-PR gate on a box with models stocked: every suite-less test file that reaches a
-        // machine-local fixture root. Each cell skips honestly when its file is absent, so the
-        // suite is a run of skips on a bare box. `--exclude test_ple_modes` is its iteration form.
         return <- [
                     "modules/dasLLAMA/tests/test_attn_span.das",
                     "modules/dasLLAMA/tests/test_audio.das",
@@ -322,13 +314,13 @@ def areas_for_path(path : string) : array<string> {
     let rel = slice(p, length("modules/dasLLAMA/"))
     let name = base_name(p)
     if (rel |> starts_with("models/")) {
-        return <- ["audio"]   // the checked-in silero VAD weights
+        return <- ["audio"]   //! the checked-in silero VAD weights
     }
-    if (!(name |> ends_with(".das")) || name == "run.das") {   // documents, fixture data, the runner itself: the tooling area
+    if (!(name |> ends_with(".das")) || name == "run.das") {
         return <- ["infra"]
     }
     if (rel |> starts_with("tests/")) {
-        if (name |> starts_with("_")) {   // a shared fixture reaches every test that requires it
+        if (name |> starts_with("_")) {
             if (name |> starts_with("_tts_")) {
                 return <- ["tts"]
             } elif (name == "_vision_oracle.das") {
@@ -336,7 +328,7 @@ def areas_for_path(path : string) : array<string> {
             } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das") {
                 return <- ["llm"]
             }
-            return <- clone_to_move(AREAS)   // _model_tier and the rest: every area
+            return <- clone_to_move(AREAS)
         }
         return <- [for (a in AREAS); a; where find_index(area_tests(a), name) >= 0]
     }
@@ -523,7 +515,7 @@ def private select_areas(cfg : RunArgs) : tuple<status : int; areas : array<stri
         for (p in changed_paths(cfg.base)) {
             let hit <- areas_for_path(p)
             if (empty(hit)) {
-                if ((p |> replace("\\", "/")) |> starts_with("modules/dasLLAMA/")) {   // a model-suite file: its arms are the caller's to scope
+                if ((p |> replace("\\", "/")) |> starts_with("modules/dasLLAMA/")) {
                     to_log(LOG_INFO, "CHANGED {p} -> a model suite file: run its suite with --arm scoped to the change\n")
                 }
                 continue
@@ -546,7 +538,7 @@ def private select_areas(cfg : RunArgs) : tuple<status : int; areas : array<stri
 //! the suite forms' argument contract: 0 = run, else main's exit code
 def private check_suite_args(cfg : RunArgs) : int {
     if (cfg.suite == "model-free" || cfg.suite == "stocked") {
-        if (cfg.full || !empty(cfg.arm)) {   // the per-PR gates have no arms to scope: a filter would silently shrink them
+        if (cfg.full || !empty(cfg.arm)) {   //! the per-PR gates have no arms to scope: a filter would silently shrink them
             to_log(LOG_ERROR, "--suite {cfg.suite} takes neither --arm nor --full: it is a whole per-PR gate (--exclude names what it drops)\n")
             return 2
         }
@@ -591,7 +583,7 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
     let win = get_platform_name() == "windows"
     let envs = child_envs(cfg, win, cfg.arm)
     let image_envs = child_envs(cfg, win, image_arms)
-    let tmo = cfg.full ? 3600 : 1200   // the full gate holds the 8B/70B tails; 1200 s is the arm-mode budget
+    let tmo = cfg.full ? 3600 : 1200   //! the full gate holds the 8B/70B tails; 1200 s is the arm-mode budget
     let reps = max(cfg.nreps, 1)
     let das_exe = empty(cfg.das) ? get_command_line_arguments()[0] : cfg.das
     mkdir(dir_name(MODULE_CACHE))
@@ -654,7 +646,7 @@ def main() : int {
         print_help(get_command_info(type<RunArgs>), "modules/dasLLAMA/tests/run.das")
         return 0
     }
-    var sel <- select_areas(cfg)   // --area / --changed replace --suite; either is the whole set, arms included
+    var sel <- select_areas(cfg)
     if (sel.status >= 0) {
         return sel.status
     }

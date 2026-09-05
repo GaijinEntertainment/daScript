@@ -636,7 +636,6 @@ namespace das {
 #endif
     }
 
-    // a module file's record stamp: size + hash of the bytes the compile's access serves (never a stat)
     static void stampModuleSource ( const char * src, uint32_t len, int64_t & size, uint64_t & hash ) {
         size = src ? int64_t(len) : -1;
         hash = (src && len) ? hash_block64((const uint8_t *) src, size_t(len)) : FNV64A_SEED;
@@ -734,7 +733,7 @@ namespace das {
                 return false;
             }
         }
-        // the stamp is the source's size + content hash: a file the access cannot produce (size -1) never matches
+        // a file the access cannot produce stamps size -1, so it never matches a record
         if ( saved_filename != fileName || file_size < 0 || file_size != saved_size || file_hash != saved_hash ) {
             // a CHANGED (or added/removed) module invalidates everything after it - das
             // modules depend on earlier ones (macros), so this stays the prefix cutoff
@@ -775,9 +774,7 @@ namespace das {
             return true;
         }
 
-        // a record written under other policies fails like a damaged one: reparsed in place below
-        // (every later record fails the same way) and repaired by the writeback, which carries the
-        // new policies. A cutoff here would let corruption landing on the policy bytes cut the stream
+        // a policy mismatch is repaired by the writeback, so it is not builtin drift
         bool policyMismatch = serializer_read->policyMismatch;
         serializer_read->policyMismatch = false;
         if ( policyMismatch ) serializer_read->builtinHashDrift = false;
@@ -1493,7 +1490,7 @@ namespace das {
             *serializer_write << version;
         }
         for ( auto & parsedModule : serializer_write->parsedModules ) {
-            auto & [fileName, fileHash, fileSize, program, thisModule] = parsedModule; // tuple<string, uint64_t, int64_t, ProgramPtr, Module *>
+            auto & [fileName, fileHash, fileSize, program, thisModule] = parsedModule;
             *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);

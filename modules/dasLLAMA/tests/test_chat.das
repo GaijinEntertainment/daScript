@@ -511,7 +511,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         // a mid-conversation set_thinking(true) cannot inject the gate (the system turn already
         // rendered) — the prompt stays instruct-shaped and the channel-marker stops stay armed
         var c5 = create_chat_renderer(m, "", 8l)
-        set_thinking(c5, false)   // gemma-4 defaults to thinking: opt out, or turn 1 renders the gate and arms it
+        set_thinking(c5, false)
         add_user(c5, USR)
         var replay : array<int64>
         render_assistant(m, c5, "The answer.", replay)   // consumes turn 1, thinking off — no gate
@@ -637,7 +637,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
             "\"description\": \"Get current weather\", \"parameters\": \{\"type\": \"object\", " +
             "\"properties\": \{\"city\": \{\"type\": \"string\"}}, \"required\": [\"city\"]}}}")
         var c = create_chat_renderer(m, "", 8l)
-        set_thinking(c, false)   // these cells pin the INSTRUCT wire (closed empty thought, no <|think|> gate); gemma-4 defaults to thinking
+        set_thinking(c, false)
         var tools : array<string>
         tools |> push(tooldef)
         set_tools(c, tools)
@@ -737,7 +737,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         // [user, asst(calls), tool, user]: the displaced results render FIRST (in the open turn),
         // then the turn closes, then the user turn — transcript order on the wire
         var c = create_chat_renderer(m, "", 8l)
-        set_thinking(c, false)   // the instruct wire, as above
+        set_thinking(c, false)
         add_user(c, USR)
         var calls : array<string>
         calls |> push("\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}}")

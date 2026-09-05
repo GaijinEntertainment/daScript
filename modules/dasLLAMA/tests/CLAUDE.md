@@ -36,7 +36,9 @@ Every suite but `model-free` and `stocked` needs `--arm`. `--full` parses and is
 whole gate; `--exclude <substr,...>` drops the files whose name contains a token and names each
 on an `EXCLUDED` line, so a trimmed run cannot read as full. The runner redirects
 the COMPLETE output to a log file, and prints that path on the DONE line. It owns the dastest
-timeout. It repeats only when `--nreps` is passed explicitly (default 1, never best-of-N).
+timeout. Every child runs `-jit -module-cache .jitted_scripts/module_cache/dastest.dascache`;
+that cache serves dastest's own module graph only - the test program dastest compiles at
+runtime sits past it, so each child still pays the engine compile. It repeats only when `--nreps` is passed explicitly (default 1, never best-of-N).
 `preflight --full` runs both per-PR suites when the diff touches `modules/dasLLAMA/` (gates
 `dasllama-model-free`, `dasllama-stocked`) and skips them otherwise.
 

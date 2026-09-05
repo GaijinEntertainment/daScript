@@ -890,8 +890,6 @@ namespace das {
                     default: SERIALIZER_VERIFYF(false, "Unreachable");
                 }
                 info->serialize(*this);
-                // the record carries name and length only; LineInfos point at the compile's FileAccess file,
-                // source included. A name the access cannot produce keeps the record object (deleteUponFinish)
                 if ( fileAccess && !info->name.empty() ) {
                     if ( FileInfo * live = fileAccess->getFileInfo(info->name) ) {
                         info = live;
@@ -915,7 +913,6 @@ namespace das {
         } else {
             FileInfo * info_ptr = nullptr; *this << info_ptr;
             if ( fileAccess && info_ptr ) {
-                // the module owns its own file the way a parse leaves it: taken from the access
                 if ( auto owned = fileAccess->letGoOfFileInfo(info_ptr->name) ) {
                     info = das::move(owned);
                     return *this;
@@ -2781,8 +2778,6 @@ namespace das {
     };
 
 
-    // every policy field a cache record carries - one list for the stream and for the compare,
-    // so a field cannot be streamed and not compared (or the reverse)
     #define DAS_MODULE_CACHE_POLICY_FIELDS(X) \
         X(aot) X(aot_module) X(aot_macros) X(tune_frozen) X(completion) X(building_documentation) \
         X(export_all) X(serialize_main_module) X(keep_alive) X(very_safe_context) X(max_infer_passes) \
@@ -2909,7 +2904,6 @@ namespace das {
         if ( writing ) {
             ser << program->options << program->policies;
         } else {
-            // a record written under other policies is never served; the caller reparses it in place
             ser << program->options;
             CodeOfPolicies stored = program->policies;
             ser << stored;

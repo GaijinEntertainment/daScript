@@ -22,7 +22,7 @@ def public untracked_from_ls(out : string) : array<string> {
 
 //! The pure half of the dasLLAMA gates' trigger: does a changed path (as `git diff --name-only`
 //! prints them - repo-relative, forward slashes, maybe CR-terminated) sit under `prefix`?
-def public any_path_under(paths : array<string>; prefix : string) : bool {
+def public has_path_under(paths : array<string>; prefix : string) : bool {
     for (p in paths) {
         if (strip(p) |> starts_with(prefix)) {
             return true

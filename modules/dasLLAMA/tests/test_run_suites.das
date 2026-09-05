@@ -2,7 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require run   // the suite runner's own tables and filter - bare same-dir require; run.das is [export] main only, no [init]
+require run
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -37,7 +37,7 @@ def private reaches_fixture_root(text : string) : bool {
 def test_suite_split_matches_the_files(t : T?) {
     var seen : table<string; void?>
     for (file in suite_files("model-free")) {
-        continue if (base_name(file) == "test_run_suites.das")   // this file names the roots as strings and reaches none
+        continue if (base_name(file) == "test_run_suites.das")   //! this file names the roots as strings and reaches none
         let text = file_text(file)
         t |> success(!empty(text), "model-free file exists and reads: {file}")
         t |> success(!reaches_fixture_root(text), "a model-free file reaches no fixture root - move it to `stocked`: {file}")

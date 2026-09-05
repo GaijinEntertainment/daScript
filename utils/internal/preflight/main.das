@@ -1357,9 +1357,7 @@ def gate_imgui(ctx : PreflightCtx) : GateResult {
         "dasImgui playwright suite failed (nightly_imgui.yml is its only CI lane — this local gate is the only pre-merge check)", t0)
 }
 
-//! The dasLLAMA runner's two per-PR suites (modules/dasLLAMA/tests/CLAUDE.md), each its own
-//! full-tier gate, and each runs only when the diff touches modules/dasLLAMA/ - the suites cost
-//! tens of minutes and nothing outside the module reaches them.
+//! Diff-scoped: nothing outside modules/dasLLAMA/ reaches these suites.
 def gate_dasllama(ctx : PreflightCtx; suite : string) : GateResult {
     let name = "dasllama-{suite}"
     let t0 = ref_time_ticks()
@@ -1368,7 +1366,7 @@ def gate_dasllama(ctx : PreflightCtx; suite : string) : GateResult {
         return GateResult(name = name, status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "git diff {ctx.base}..HEAD failed - fetch origin first")
     }
-    if (!any_path_under(non_empty_lines(changed.out), "modules/dasLLAMA/")) {
+    if (!has_path_under(non_empty_lines(changed.out), "modules/dasLLAMA/")) {
         return GateResult(name = name, status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "nothing under modules/dasLLAMA/ changed vs {ctx.base}")
     }
