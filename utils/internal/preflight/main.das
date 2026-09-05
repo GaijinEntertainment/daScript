@@ -1165,8 +1165,25 @@ def gate_ci_das(ctx : PreflightCtx) : GateResult {
 
 //! the trees whose program roots the compile sweep compiles
 let SWEEP_TREES <- ["utils", "examples", "tutorials"]
-//! roots the sweep cannot compile on a stock build, each with why (a native module an option builds)
-let SWEEP_EXCLUDED <- { "examples/crash/main.das" => "requires the native `crash` module, built only under its CMake option" }
+//! trees the sweep leaves alone, each with why: a native module a CMake option builds, a resolution the
+//! plain compile cannot do, a platform the box is not, fixtures that are broken on purpose
+let SWEEP_EXCLUDED <- {
+    "examples/crash/" => "the native `crash` module, built only under its CMake option",
+    "examples/daStrudel/sfx_lab/" => "a project-root example: its modules resolve through -project_root",
+    "examples/daspkg/" => "daspkg package examples: roots resolve through daspkg install",
+    "examples/fatman/" => "WASM-only programs",
+    "examples/games/sequence/" => "GLFW-gated: the sequence gate compiles and runs it",
+    "modules/dasClangBind/examples/" => "needs libclang (opt-in module)",
+    "modules/dasSMT/examples/" => "needs z3 (opt-in module)",
+    "utils/internal/ast-fuzz/selftest/" => "deliberately broken fixtures test_ast_fuzz.das owns"
+}
+
+def private sweep_excluded(path : string) : bool {
+    for (prefix in keys(SWEEP_EXCLUDED)) {
+        return true if (path |> starts_with(prefix))
+    }
+    return false
+}
 
 def private collect_das_files(dir : string; var out : array<string>&) {
     fio::dir(dir) $(name) {
@@ -1205,7 +1222,7 @@ def collect_sweep_roots() : tuple<light : array<string>; heavy : array<string>> 
     var light : array<string>
     var heavy : array<string>
     for (f in files) {
-        continue if (key_exists(SWEEP_EXCLUDED, f) || !is_sweep_root_path(f))
+        continue if (sweep_excluded(f) || !is_sweep_root_path(f))
         let text = fread(f)
         continue if (find(text, "[export]") < 0 || find(text, "def main") < 0)
         if (find(text, SWEEP_HEAVY_REQUIRE) >= 0) {
@@ -1285,10 +1302,14 @@ def gate_compile_sweep(ctx : PreflightCtx) : GateResult {
     if (total == 0) {
         return GateResult(name = "compile-sweep", status = GateStatus.Skip, seconds = seconds_since(t0), detail = "no program roots found under {join(SWEEP_TREES, ", ")}")
     }
-    let workers = compute_worker_count(length(roots.light), ctx.jobs > 0 ? ctx.jobs : get_total_hw_threads())
+    // cores, not get_total_hw_threads(): the latter is the jobque's own worker count (5 on an 18-core M5)
+    let workers = compute_worker_count(length(roots.light), ctx.jobs > 0 ? ctx.jobs : get_total_hw_cores())
+    let t_pool = ref_time_ticks()
     let light <- run_sweep_workers(ctx.daslang, roots.light, workers, 300.0)
+    let pool_s = seconds_since(t_pool)
     // the engine roots share one module graph: one explicit cache, written by the first, served to the rest
     let cache = unique_temp_path("preflight_sweep", ".dascache")
+    let t_serial = ref_time_ticks()
     var red = 0
     let output = build_string() $(w) {
         for (root, r in roots.light, light) {
@@ -1303,13 +1324,15 @@ def gate_compile_sweep(ctx : PreflightCtx) : GateResult {
             w |> write("=== {root} (exit {r.rc}) ===\n{r.out}\n")
         }
     }
+    let serial_s = seconds_since(t_serial)
     remove(cache)
+    let shape = "{length(roots.light)} in a {workers}-wide pool ({fmt(":.0f", float(pool_s))}s), {length(roots.heavy)} engine roots serial through one module cache ({fmt(":.0f", float(serial_s))}s); {length(SWEEP_EXCLUDED)} trees excluded"
     if (red > 0) {
         return GateResult(name = "compile-sweep", status = GateStatus.Fail, seconds = seconds_since(t0),
-            detail = "{red} of {total} program root(s) fail to compile", output = output)
+            detail = "{red} of {total} program root(s) fail to compile - {shape}", output = output)
     }
     return GateResult(name = "compile-sweep", status = GateStatus.Pass, seconds = seconds_since(t0),
-        detail = "{total} program root(s) compile ({length(roots.light)} in a {workers}-wide pool, {length(roots.heavy)} engine roots serial through one module cache; excluded: {length(SWEEP_EXCLUDED)})")
+        detail = "{total} program root(s) compile - {shape}")
 }
 
 //! CI's "Run utils tests" step: every utils/*/tests suite through the cmake target
