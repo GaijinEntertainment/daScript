@@ -180,8 +180,13 @@ entry here:**
   build, because MoltenVK's over-cap failure is an opaque `INITIALIZATION_FAILED` - and the
   resident driver declines residency with it (`vk_rdec_prepare`). `[metal_dispatch]` has no
   footprint gate: Metal's own pipeline compile fails loudly with the footprint in the error.
-- **Vulkan has no shapes module yet** - `resident_upload` declines ad hoc by feature name; the
-  gap is `followup_vulkan.md` item 1, not a precedent to copy.
+- **Vulkan has no shapes module yet** - `resident_upload` declines ad hoc by feature name, and
+  every decline says its reason: the whole-model driver's gates speak through one
+  `resident driver declined - <reason>; the per-op rails serve` line, each per-op rail walk
+  reports the layers it left on the CPU with the first layer's reason and its VRAM-budget stop,
+  a dense model's FFN gets its own line (the per-op tier has no dense-FFN rail), and the
+  per-call resident overrides say each pass-to-CPU reason once per armed model
+  (`rdec_pass_once`). The gap is `followup_vulkan.md` item 1, not a precedent to copy.
 - **The device-side token-embedding gather is Vulkan-only.** The engine asks one probe before
   it embeds (`register_embed_gpu_gate`, `dasllama_common.das`); on true it stashes the token
   ids, skips the CPU embed loop, and the resident driver gathers the rows on device through

@@ -308,6 +308,10 @@ the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lan
 tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream
 deltanet cell needs Qwen3.5-0.8B-Q8_0 and `DASLLAMA_GPU=1` on a box whose tier serves the
 deltanet decode step, and skips otherwise.
+`test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
+from a Config or a synthetic Model shell (`resident_unserved_features`,
+`attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
+shape is named in the text a user reads, a served one yields "".
 `test_gpu_model_swap.das` - stocked suite; two models through one process on the armed tier
 (Qwen3-0.6B, SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own
 weights, the pin on the upload rail dropping a still-installed model's device state first; skips

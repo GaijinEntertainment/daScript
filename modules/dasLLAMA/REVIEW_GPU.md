@@ -207,6 +207,14 @@ own init/release pair.
 **A decline counter beside the decline site is a defect - decline counting lives in
 `dasllama/dasllama_metal_common.das`.**
 
+**A Vulkan-tier serving gate that leaves a model, a layer, a plane, or a session off the GPU
+path it guards without logging the concrete reason is a defect** - a load-time gate (the
+whole-model driver's `resident_upload`, a per-op rail walk in `moe_gpu_upload_resident`) logs
+per decision at load; a per-call gate (a resident override) logs once per reason per armed
+model. A serving gate is any predicate whose false branch hands work the GPU could have served
+to the CPU rails. A bare `return false` or `continue` there is the silent fallback a user finds
+only by profiling.
+
 **A diff that adds or removes a Metal-only or Vulkan-only hook, role, served path, or
 backend-only capability - a hook in sec.1.5's per-driver registered-hook or borrowed-kernel
 lists included, a seat of the `dasllama_gpu_tier` cooperation SPI excluded (the closed list's
@@ -230,7 +238,9 @@ only - an in-suite `tests/test_metal_*_parity.das` instrument run through `tests
 **Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
 Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows the tier that serves
 the changed path armed (`resident driver armed` for the whole-model driver, `GPU MoE tier: ...
-resident` for the per-op tier).** The Vulkan driver declines codec-mismatched sessions silently.
+resident` for the per-op tier).** The Vulkan driver hands a codec-mismatched session to the
+CPU rails with one `resident override passed a call` line per reason - a log without it and
+without the armed line measured the CPU.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq
