@@ -7,10 +7,10 @@ docs: `CLAUDE.md` (repo root), `skills/internal/preflight.md`.
 it runs (`check_shipped_skills.py`) - is a defect**: every bundle it failed before the diff
 still fails. A new `--exclude` or skip may name only a file no check flagged before the diff.
 
-**Weakening `ci/test_ci_matrix.py` - dropping its role-condition assertion or its per-event
-matrix-cell assertions - is a defect.** The nightly `extended_checks` job runs with role `all`
-and is the only run of the steps too slow for a PR, so a step conditioned on its own role
-would run nowhere in full; that test is what keeps every condition `matrix.role != '<other>'`.
+**Weakening `ci/test_ci_matrix.py` - dropping or loosening any assertion it makes - is a
+defect.** One assertion carries the role split: every `matrix.role` condition in
+`extended_checks.yml` is spelled `!=`, because the nightly job sets `role: all` and an `==`
+condition would skip its step in every nightly job.
 
-**Weakening `REVIEW.das` (beside this file) is a defect.** What the gate checks is read from the
-script itself, and each check's finding text states its rule.
+**Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing what a check
+walks, or rewriting a finding text so it no longer names what failed.**

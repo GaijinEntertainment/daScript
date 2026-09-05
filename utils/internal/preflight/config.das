@@ -62,6 +62,67 @@ def public is_sweep_root_path(path : string) : bool {
         && find(p, "/modules/") < 0)
 }
 
+//! the tier rule: the fast tier runs on every run, the lane tier under --full, the module tier never
+def public tier_runs(tier : string; full : bool) : bool {
+    return tier == "fast" || (full && tier == "lane")
+}
+
+//! trees the compile sweep leaves alone, each with why: a native module a CMake option builds, a resolution the
+//! plain compile cannot do, a platform the box is not, fixtures that are broken on purpose
+let public SWEEP_EXCLUDED <- {
+    "examples/crash/" => "the native `crash` module, built only under its CMake option",
+    "examples/daStrudel/sfx_lab/" => "a project-root example: its modules resolve through -project_root",
+    "examples/daspkg/" => "daspkg package examples: roots resolve through daspkg install",
+    "examples/fatman/" => "WASM-only programs",
+    "examples/games/sequence/" => "GLFW-gated: the sequence gate compiles and runs it",
+    "modules/dasClangBind/examples/" => "needs libclang (opt-in module)",
+    "modules/dasSMT/examples/" => "needs z3 (opt-in module)",
+    "utils/internal/ast-fuzz/selftest/" => "deliberately broken fixtures test_ast_fuzz.das owns"
+}
+
+def public sweep_excluded(path : string) : bool {
+    for (prefix in keys(SWEEP_EXCLUDED)) {
+        return true if (path |> starts_with(prefix))
+    }
+    return false
+}
+
+//! a program root is a file with an exported main; a module or a fixture is not
+def public is_sweep_root_text(text : string) : bool {
+    return find(text, "[export]") >= 0 && find(text, "def main") >= 0
+}
+
+//! the require whose roots pay the engine compile (~24 s each on the M5 box) - they run serially
+//! through one shared module cache instead of contending in the pool
+let public SWEEP_HEAVY_REQUIRE = "require dasllama/"
+
+def public is_heavy_sweep_root(text : string) : bool {
+    return find(text, SWEEP_HEAVY_REQUIRE) >= 0
+}
+
+//! The files dastest's closing FAILURES block names, comma-joined, at most five.
+def public failed_files_block(out : string) : string {
+    var files : array<string>
+    var inside = false
+    for (raw in split(out, "\n")) {
+        let ln = strip(raw)
+        if (ln == "FAILURES:") {
+            inside = true
+            continue
+        }
+        continue if (!inside)
+        break if (empty(ln))
+        let dash = find(ln, " — ")
+        files |> push(dash >= 0 ? slice(ln, 0, dash) : ln)
+    }
+    if (length(files) > 5) {
+        let more = length(files) - 5
+        files |> resize(5)
+        files |> push("and {more} more")
+    }
+    return empty(files) ? "the suite (no FAILURES block in the output)" : join(files, ", ")
+}
+
 struct public GateReport {
     tag : string
     name : string

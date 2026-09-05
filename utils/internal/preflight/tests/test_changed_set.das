@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 
 require dastest/testing_boost public
+require daslib/strings_boost
 
 require ../config.das
 
@@ -70,4 +71,53 @@ def test_parse_gate_reports(t : T?) {
     t |> equal(tagged[0].name, "tests-cpp", "the gate name behind the [I] prefix")
     t |> equal(tagged[0].breakdown, "Top 1 slowest files:\n2.0s  tests/b.das", "the breakdown behind the prefix, trimmed")
     t |> equal(tagged[1].tag, "SKIP", "a warning-level skip line parses")
+    // the edges: a whitespace-only indented line ends the breakdown (a blank line does), a `[` line with no
+    // `]` is prose, a name with ` (` that is not a seconds group keeps it, and a child cut off mid-breakdown
+    // still closes its report
+    let edges = "[PASS] lint (2.0s)\n       Top 1 slowest files:\n            \n       1.0s  x.das\n[bracket without close\n[PASS] docs (sphinx) — ok\n[FAIL] tests-jit (9.5s)\n       12.0s  tests/z.das"
+    let e <- parse_gate_reports(edges)
+    t |> equal(length(e), 3, "three verdicts")
+    t |> equal(e[0].breakdown, "Top 1 slowest files:", "a whitespace-only indented line ends the breakdown, not a blank row in it")
+    t |> equal(e[1].name, "docs (sphinx)", "a parenthesis that is not a seconds group stays in the name")
+    t |> success(e[1].seconds == 0.0lf, "no seconds parsed from it")
+    t |> equal(e[2].breakdown, "12.0s  tests/z.das", "the last report closes without a trailing newline")
+}
+
+[test]
+def test_tier_runs(t : T?) {
+    t |> success(tier_runs("fast", false), "the fast tier runs without --full")
+    t |> success(tier_runs("fast", true), "and with it")
+    t |> success(!tier_runs("lane", false), "a lane waits for --full")
+    t |> success(tier_runs("lane", true), "and runs under it")
+    t |> success(!tier_runs("module", false) && !tier_runs("module", true), "a module gate never runs from a tier")
+}
+
+[test]
+def test_sweep_excluded(t : T?) {
+    t |> success(sweep_excluded("examples/crash/crash.das"), "an excluded tree's root")
+    t |> success(sweep_excluded("utils/internal/ast-fuzz/selftest/broken.das"), "the fuzz fixtures")
+    t |> success(!sweep_excluded("examples/crashes/x.das"), "a prefix match is on the whole path segment")
+    t |> success(!sweep_excluded("utils/lint/main.das"), "a swept tool root")
+    for (why in values(SWEEP_EXCLUDED)) {
+        t |> success(!empty(why), "every exclusion carries its reason")
+    }
+}
+
+[test]
+def test_sweep_root_text(t : T?) {
+    t |> success(is_sweep_root_text("options gen2\n[export]\ndef main() \{\n\}\n"), "an exported main is a root")
+    t |> success(!is_sweep_root_text("options gen2\ndef helper() \{\n\}\n"), "a module without main is not")
+    t |> success(!is_sweep_root_text("def main() \{\n\}\n"), "an unexported main is not a program root")
+    t |> success(is_heavy_sweep_root("require dasllama/dasllama\n[export]\ndef main() \{\}\n"), "an engine require is heavy")
+    t |> success(!is_heavy_sweep_root("require daslib/fio\n[export]\ndef main() \{\}\n"), "a plain root is light")
+}
+
+[test]
+def test_failed_files_block(t : T?) {
+    let one = "13205 tests, 13201 passed, 1 failed\n\nFAILURES:\n  tests/json/test_sscan_json.das — 1 failed, 0 errors\n\nFAILED! (109.3s)\n"
+    t |> equal(failed_files_block(one), "tests/json/test_sscan_json.das", "the file before the dash")
+    t |> equal(failed_files_block("all green\n"), "the suite (no FAILURES block in the output)", "no block, a stated default")
+    let rows <- [for (i in range(7)); "  tests/t{i}.das — 1 failed"]
+    let many = "FAILURES:\n" + join(rows, "\n") + "\n"
+    t |> equal(failed_files_block(many), "tests/t0.das, tests/t1.das, tests/t2.das, tests/t3.das, tests/t4.das, and 2 more", "five named, the rest counted")
 }

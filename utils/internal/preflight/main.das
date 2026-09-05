@@ -1176,25 +1176,6 @@ def gate_ci_matrix() : GateResult {
 }
 
 let SWEEP_TREES <- ["utils", "examples", "tutorials"]
-//! trees the sweep leaves alone, each with why: a native module a CMake option builds, a resolution the
-//! plain compile cannot do, a platform the box is not, fixtures that are broken on purpose
-let SWEEP_EXCLUDED <- {
-    "examples/crash/" => "the native `crash` module, built only under its CMake option",
-    "examples/daStrudel/sfx_lab/" => "a project-root example: its modules resolve through -project_root",
-    "examples/daspkg/" => "daspkg package examples: roots resolve through daspkg install",
-    "examples/fatman/" => "WASM-only programs",
-    "examples/games/sequence/" => "GLFW-gated: the sequence gate compiles and runs it",
-    "modules/dasClangBind/examples/" => "needs libclang (opt-in module)",
-    "modules/dasSMT/examples/" => "needs z3 (opt-in module)",
-    "utils/internal/ast-fuzz/selftest/" => "deliberately broken fixtures test_ast_fuzz.das owns"
-}
-
-def private sweep_excluded(path : string) : bool {
-    for (prefix in keys(SWEEP_EXCLUDED)) {
-        return true if (path |> starts_with(prefix))
-    }
-    return false
-}
 
 def private collect_das_files(dir : string; var out : array<string>&) {
     fio::dir(dir) $(name) {
@@ -1208,10 +1189,6 @@ def private collect_das_files(dir : string; var out : array<string>&) {
         }
     }
 }
-
-//! the require whose roots pay the engine compile (~24 s each on the M5 box) - they run serially
-//! through one shared module cache instead of contending in the pool
-let SWEEP_HEAVY_REQUIRE = "require dasllama/"
 
 //! every program root under the swept trees - utils/, examples/, tutorials/ and the modules' examples,
 //! tutorials and utils folders - split into the light pool and the engine-heavy serial set
@@ -1235,8 +1212,8 @@ def collect_sweep_roots() : tuple<light : array<string>; heavy : array<string>> 
     for (f in files) {
         continue if (sweep_excluded(f) || !is_sweep_root_path(f))
         let text = fread(f)
-        continue if (find(text, "[export]") < 0 || find(text, "def main") < 0)
-        if (find(text, SWEEP_HEAVY_REQUIRE) >= 0) {
+        continue if (!is_sweep_root_text(text))
+        if (is_heavy_sweep_root(text)) {
             heavy |> push(f)
         } else {
             light |> push(f)
@@ -1379,29 +1356,6 @@ def slowest_files_block(out : string) : string {
         }
     }
     return join(rows, "\n")
-}
-
-//! The files dastest's closing FAILURES block names, comma-joined, at most five.
-def failed_files_block(out : string) : string {
-    var files : array<string>
-    var inside = false
-    for (raw in split(out, "\n")) {
-        let ln = strip(raw)
-        if (ln == "FAILURES:") {
-            inside = true
-            continue
-        }
-        continue if (!inside)
-        break if (empty(ln))
-        let dash = find(ln, " — ")
-        files |> push(dash >= 0 ? slice(ln, 0, dash) : ln)
-    }
-    if (length(files) > 5) {
-        let more = length(files) - 5
-        files |> resize(5)
-        files |> push("and {more} more")
-    }
-    return empty(files) ? "the suite (no FAILURES block in the output)" : join(files, ", ")
 }
 
 //! Runs a test sweep as one gate. `t_gate`, when set, is the gate's own start - a build ran
@@ -1688,7 +1642,7 @@ def want_gate(cfg : Config; info : GateInfo) : bool {
         }
         return false
     }
-    return info.tier == "fast" || (cfg.full && info.tier == "lane")
+    return tier_runs(info.tier, cfg.full)
 }
 
 //! one lane = one child preflight running `--only <gate>` with the parent's settings; every lane at once

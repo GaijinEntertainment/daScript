@@ -17,8 +17,8 @@ what identifies one - the fields that decide whether two `.dlim`s are the same i
 to `modules/dasLLAMA/REVIEW.md` (repo root) too.** A `utils/` diff never opens that checklist
 on its own.
 
-**Weakening `REVIEW.das` (beside this file) is a defect.** What the gate checks is read from the
-script itself, and each check's finding text states its rule.
+**Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing what a check
+walks, or rewriting a finding text so it no longer names what failed.**
 
 **A diff that drops a tool from `DAS_UTILS_SHIPPED_EXES` (`CMakeLists.txt`, beside this file)
 while keeping that tool's directory records the decision to stop shipping it in that tool's

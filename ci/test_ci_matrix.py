@@ -116,6 +116,36 @@ class WorkflowShapes(unittest.TestCase):
         text = self.read("build.yml")
         self.assertIn("if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'", text)
 
+    # the steps that run only on the nightly cron, pinned by name: moving another step off the per-PR path is
+    # a deliberate edit here, with its preflight mirror or platform reason stated in the workflow
+    NIGHTLY_ONLY_STEPS = {
+        "Run examples from modules",
+        "Run tutorial dry-runs",
+        "Verify authored-doc code blocks (nightly only)",
+        "Cross-compile nano for cortex-m4",
+        "Compile tests/ with --ast-verify-batch",
+        "Coverage",
+    }
+
+    def step_conditions(self, text):
+        """{step name: its first `if:` line} for every named step of a workflow."""
+        conditions, current = {}, None
+        for line in text.splitlines():
+            m = re.match(r'\s*- name: "(.*)"\s*$', line)
+            if m:
+                current = m.group(1)
+                conditions.setdefault(current, "")
+                continue
+            m = re.match(r"\s*if: (.*)$", line)
+            if m and current is not None and not conditions[current]:
+                conditions[current] = m.group(1)
+        return conditions
+
+    def test_nightly_only_steps_are_exactly_the_pinned_set(self):
+        conditions = self.step_conditions(self.read("extended_checks.yml"))
+        nightly = {name for name, cond in conditions.items() if "github.event_name == 'schedule'" in cond}
+        self.assertEqual(nightly, self.NIGHTLY_ONLY_STEPS)
+
 
 class CommandLine(unittest.TestCase):
     def run_tool(self, *args):
@@ -131,6 +161,15 @@ class CommandLine(unittest.TestCase):
 
     def test_rejects_an_unknown_matrix(self):
         self.assertEqual(self.run_tool("release", "push").returncode, 2)
+
+    def test_rejects_a_missing_event(self):
+        self.assertEqual(self.run_tool("build").returncode, 2)
+
+    def test_each_kind_emits_its_own_cell_shape(self):
+        build = json.loads(self.run_tool("build", "pull_request").stdout)["include"]
+        extended = json.loads(self.run_tool("extended", "pull_request").stdout)["include"]
+        self.assertTrue(all("sanitizers" in c and "role" not in c for c in build))
+        self.assertTrue(all("role" in c and "sanitizers" not in c for c in extended))
 
 
 if __name__ == "__main__":

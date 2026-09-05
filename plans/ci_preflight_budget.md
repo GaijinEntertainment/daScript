@@ -76,6 +76,25 @@ wide; size pools by `get_total_hw_cores()`.
 Acceptance: every per-PR job under 35 minutes on the first PR after the change (measure with the Actions API:
 run, job, step walls; the script in the session scratchpad becomes `utils/internal/ci-timing/` if kept).
 
+## Ledger - not done in the preflight arc
+
+- Preflight's orchestration arms have no unit test: `run_lanes` (the empty-report arm, the tag map, a
+  short child list), `collect_changed_paths`, the reach-skip and lane-deferral arms of `main`, the gate
+  functions' skip/fail arms (`gate_ci_matrix`, `gate_utils_tests`, `gate_tests_aot`'s two details), the
+  sweep workers' bounds arms. The pure halves (`tier_runs`, `sweep_excluded`, `is_sweep_root_text`,
+  `is_heavy_sweep_root`, `failed_files_block`, `parse_gate_reports`, `reach_hit`, `is_sweep_root_path`)
+  live in `config.das` with `tests/test_changed_set.das`; the arms above need a spawned-child harness
+  (`tests/dastest/test_preflight_config.das` is the precedent).
+- Gate candidates the audits named: a `.github/workflows/REVIEW.das` that fails `continue-on-error` or
+  a trailing `|| true` on any per-PR job's step; `examples/games/REVIEW.das` reporting a `pages.yml` line
+  that names two or more game ids outside a `for g in` loop; `include/daScript/simulate/REVIEW.das`
+  pinning the set of table-key hashing sites (five of eight live outside that folder, so the checklist
+  never opens for them) - or routing every site through `KeyHash` so the rule retires.
+- `compute_worker_count(n, 0)` in `utils/common/parallel_workers.das` defaults to `get_total_hw_threads()`,
+  the jobque's worker count (5 on the 18-core M5): the cpp-syntax sweep and detect-dupe run 5 wide here.
+- Two tracked generated files come back modified after every cmake build (same bytes, another line
+  layout): `modules/dasUnitTest/unit_test.das.inc`, `tutorials/integration/cpp/class_adapters_module.das.inc`.
+
 ## dasLLAMA long tests (after the above)
 
 - Compile dressed as a test: `test_exe_smoke` (108 s, builds an exe), `test_tok_seed` (90 s) and
