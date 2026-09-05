@@ -28,7 +28,8 @@ root), rtti and the C API call `hash_function` on the key type they hold. `KeyHa
 `TTable`, the `__builtin_table_*` templates in `aot.h`, and the rehash a grow performs on every
 stored non-string key (a string table reuses its stored hashes): it takes the workhorse detour
 for a handled type and hashes a builtin type as itself, telling them apart by
-`WrapsBuiltinValue` (`cast.h`; `jit_abi.h` marks the vectors and ranges). The detour on a
+`WrapsBuiltinValue` (`cast.h`, beside `WrapType`'s primary; a translation unit that sees the
+vec4f detour from `jit_abi.h` sees the marks too, and one that sees neither hashes raw either way). The detour on a
 builtin vector or range would hash a `vec4f`'s 16 bytes against the node's 8 or 12, and the raw
 bytes of a handled type narrower than its workhorse (an 8-byte `ImVec2` wrapped to `vec4f`)
 would miss the node's 16; either way every such key moves to another bucket at the first grow.

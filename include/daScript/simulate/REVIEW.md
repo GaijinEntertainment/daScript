@@ -20,8 +20,8 @@ checklist on its own.
   table grow rehashes every non-string key with `KeyHash` (`runtime_table.h`), so a site that
   hashes a key type differently loses every key of that type at the first grow.
 
-- **A diff that changes `KeyHash` (`runtime_table.h`) or `WrapsBuiltinValue` (`cast.h`,
-  `jit_abi.h`) states in its own PR description which key types change hash value.**
+- **A diff that changes `KeyHash` (`runtime_table.h`) or `WrapsBuiltinValue` (`cast.h`) states
+  in its own PR description which key types change hash value.**
 
 - **A diff that makes the hot path more expensive per evaluated expression is a defect - an
   added load, branch, call, copy, or counter, a direct call becoming indirect, a static

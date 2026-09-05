@@ -1163,7 +1163,7 @@ def gate_ci_das(ctx : PreflightCtx) : GateResult {
         seconds = seconds_since(t0), detail = detail)
 }
 
-//! the trees whose program roots the compile sweep compiles
+//! the CI matrix test: ci/ci_matrix.py's per-event cells and the extended_checks role conditions
 def gate_ci_matrix() : GateResult {
     let t0 = ref_time_ticks()
     if (!tool_available("python3", "--version")) {
@@ -1175,6 +1175,7 @@ def gate_ci_matrix() : GateResult {
         output = r.out)
 }
 
+//! the trees whose program roots the compile sweep compiles
 let SWEEP_TREES <- ["utils", "examples", "tutorials"]
 
 def private collect_das_files(dir : string; var out : array<string>&) {

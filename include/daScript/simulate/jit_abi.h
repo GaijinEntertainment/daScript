@@ -18,20 +18,6 @@ template <> struct WrapType<urange> { enum { value = true }; typedef vec4f type;
 template <> struct WrapType<range64> { enum { value = true }; typedef vec4f type; typedef vec4f rettype; };
 template <> struct WrapType<urange64> { enum { value = true }; typedef vec4f type; typedef vec4f rettype; };
 
-template <> struct WrapsBuiltinValue<float2> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<float3> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<float4> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<int2> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<int3> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<int4> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<uint2> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<uint3> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<uint4> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<range> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<urange> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<range64> { enum { value = true }; };
-template <> struct WrapsBuiltinValue<urange64> { enum { value = true }; };
-
 template <> struct WrapType<Func> { enum { value = true }; typedef void * type; typedef void * rettype; };
 template <> struct WrapType<Lambda> { enum { value = true }; typedef void * type; typedef void * rettype; };
 
