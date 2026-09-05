@@ -417,6 +417,51 @@ def gen_cube {
     return <- frag
 }
 
+//! Rounded box centered at the origin, with outward normals and per-face UVs.
+//! Radius is in object units, clamped to the smallest half extent; segments is 1..12.
+def gen_beveled_box(half_size : float3; radius : float; segments : int = 3) : GeometryFragment {
+    let extent = max(abs(half_size), float3(0.0001))
+    let bevel = clamp(radius, 0.0, min(extent.x, min(extent.y, extent.z)) * 0.99)
+    var inscope source <- gen_cube()
+    if (bevel <= 0.000001) {
+        for (vertex in source.vertices) { vertex.xyz *= extent }
+        source.bmin = -extent
+        source.bmax = extent
+        return <- source
+    }
+    let steps = clamp(segments, 1, 12)
+    let count = (steps + 1) * 2
+    let inner = extent - float3(bevel)
+    var result = GeometryFragment(prim = GeometryFragmentType.triangles, bmin = -extent, bmax = extent)
+    result.vertices |> reserve(6 * count * count)
+    result.indices |> reserve(36 * (count - 1) * (count - 1))
+    for (face in range(6)) {
+        let corner = source.vertices[face * 4].xyz * extent
+        let edge_u = source.vertices[face * 4 + 1].xyz * extent - corner
+        let edge_v = source.vertices[face * 4 + 3].xyz * extent - corner
+        let du = bevel / length(edge_u)
+        let dv = bevel / length(edge_v)
+        let first = length(result.vertices)
+        for (y in range(count)) {
+            let v = y <= steps ? float(y) / float(steps) * dv : 1.0 - float(count - 1 - y) / float(steps) * dv
+            for (x in range(count)) {
+                let u = x <= steps ? float(x) / float(steps) * du : 1.0 - float(count - 1 - x) / float(steps) * du
+                let position = corner + edge_u * u + edge_v * v
+                let anchor = clamp(position, -inner, inner)
+                let normal = normalize(position - anchor)
+                result.vertices |> push(GeometryPreviewVertex(xyz = anchor + normal * bevel, normal = normal, uv = float2(u, v)))
+            }
+        }
+        for (y in range(count - 1)) {
+            for (x in range(count - 1)) {
+                let a = first + y * count + x
+                result.indices |> push_from(fixed_array(a, a + 1, a + count + 1, a + count + 1, a + count, a))
+            }
+        }
+    }
+    return <- result
+}
+
 def gen_image_checkerboard(w, h : int; c1, c2 : uint) {
     var surface <- ImageSurface(width = w, height = h)
     surface.pixels |> resize(w * h)

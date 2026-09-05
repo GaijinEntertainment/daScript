@@ -1,0 +1,29 @@
+port = 18082
+gpu = "off"
+threads = 8
+team_dispatch = "hybrid"
+streams = 2
+ctx = 8192
+chunk = 64
+page_rows = 64
+quant = "q8"
+kv_dtype = "f16"
+max_tokens = 160
+exchange_accept = "off"
+exchange_submit = "never"
+
+[[models]]
+name = "qwen3-30b"
+path = "D:/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"
+backend = "cpu"
+default = true
+
+[[models]]
+name = "gemma-e2b"
+path = "C:/Users/Boris/.dasllama/models/gemma-4-E2B-it-Q4_K_M.gguf"
+backend = "cpu"
+
+[[models]]
+name = "gemma-e4b"
+path = "C:/Users/Boris/.dasllama/models/gemma-4-E4B-it-Q4_K_M.gguf"
+backend = "cpu"

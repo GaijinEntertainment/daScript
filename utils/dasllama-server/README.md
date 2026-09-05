@@ -139,6 +139,11 @@ transcriptions at once. Each worker owns its model/context and reuses language-s
 scratch, so memory settles at the workers' high-water mark. OpenAI is stateless - the client
 resends the full transcript each turn.
 
+The main server context configures the shared job queue. ASR, TTS and media worker contexts
+enable their own fork-context pools before loading or evaluating a model: that setting is
+context-local, not inherited from the main context. Worker setup preserves the shared queue's
+team/FIFO policy and applies only the worker's selected team-dispatch participation.
+
 ## Supervised deployment
 
 dasllama-server is JIT-only (per-box `[tune]`/`[llvm_code]` kernels, plus a shared-module `[init]`
@@ -341,8 +346,9 @@ mode too. E.g. Qwen3.6's instruct-mode card settings: `"temperature": 0.7, "top_
 
 ### Thinking control and `reasoning_content`
 
-`enable_thinking` is tri-state: ABSENT leaves the family's own default in force (the
-Qwen3/3.5/3.6, GLM, gemma-4, and gpt-oss families all think by default), and a present bool -
+`enable_thinking` is tri-state: ABSENT leaves the model template's own default in force
+(thinking-capable Qwen3/3.5/3.6, GLM, gemma-4, and gpt-oss templates default on; a bare Qwen
+Instruct generation branch such as Qwen3 Instruct-2507 defaults off), and a present bool -
 top-level or the llama.cpp spelling
 `"chat_template_kwargs": {"enable_thinking": ...}` - overrides it. `false` on a
 `<think>`-family appends the template's empty think block so the model answers directly;

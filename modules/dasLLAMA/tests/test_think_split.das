@@ -5,6 +5,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // the facade fires the arch [init] registrations arch_chat reads
 require dasllama/dasllama_chat   // split_reasoning_/think_feed_/think_finish_ — the template-level seam under test
+require dasllama/dasllama_tokenizer
 require daslib/strings_boost
 require math
 
@@ -59,6 +60,45 @@ def private check_all_chunkings(t : T?; tmpl : ChatTemplate; reply, want_r, want
 }
 
 // ===== symmetric: Qwen / GLM (<think> ... </think>) =====
+
+[test]
+def test_chatml_instruct_reasoning(t : T?) {
+    t |> run("ChatML instruct generation ignores history-only reasoning markers") @(t : T?) {
+        var m = Model()
+        m.arch = "qwen3moe"
+        m.chat_template_str = "enable_thinking <think> reasoning_content </think> add_generation_prompt <|im_start|>assistant\\n"
+        m.tok.kind = TokKind.bpe
+        m.tok.bpe.lookup["<think>"] = 1l
+        m.tok.bpe.lookup["</think>"] = 2l
+        var ct <- chat_template(m)
+        t |> success(ct.think_mode == ThinkMode.none, "history markers do not declare reasoning")
+        t |> success(!ct.think_default, "instruct defaults to non-thinking")
+        t |> success(empty(ct.think_suppress.parts), "no unsupported empty think prefill")
+        var chat = create_chat_renderer(m)
+        t |> success(!chat.enable_thinking && !chat.think_vocab, "server probe reports thinking off despite vocab")
+        set_thinking(chat, true)
+        t |> success(make_think_stream_(chat).mode == ThinkMode.none, "request cannot arm unsupported reasoning")
+        delete chat
+        check_all_chunkings(t, ct, "<think>quoted</think> answer", "", "<think>quoted</think> answer")
+        delete ct
+        delete m
+    }
+    t |> run("ChatML hybrid and thinking-only generation keep their reasoning modes") @(t : T?) {
+        var m = Model()
+        m.arch = "qwen3"
+        m.chat_template_str = "<|im_start|>assistant add_generation_prompt enable_thinking <think> </think>"
+        var hybrid <- chat_template(m)
+        t |> success(hybrid.think_mode == ThinkMode.symmetric && hybrid.think_default)
+        t |> success(!empty(hybrid.think_suppress.parts), "hybrid has an off switch")
+        m.chat_template_str = "<|im_start|>assistant add_generation_prompt <think>"
+        var thinking <- chat_template(m)
+        t |> success(thinking.think_mode == ThinkMode.symmetric && thinking.think_default)
+        t |> success(empty(thinking.think_suppress.parts), "thinking-only has no template off switch")
+        delete thinking
+        delete hybrid
+        delete m
+    }
+}
 
 [test]
 def test_split_symmetric(t : T?) {

@@ -158,6 +158,11 @@ def public textureLod(s : sampler2D; uv : float2; lod : float) : float4 {
 }
 
 [unused_argument(s, uv, lod), sideeffects]
+def public textureLod(s : samplerCube; uv : float3; lod : float) : float4 {
+    return float4(0.0, 0.0, 0.0, 0.0)
+}
+
+[unused_argument(s, uv, lod), sideeffects]
 def public textureLod(s : sampler3D; uv : float3; lod : float) : float4 {
     return float4(0.0, 0.0, 0.0, 0.0)
 }
