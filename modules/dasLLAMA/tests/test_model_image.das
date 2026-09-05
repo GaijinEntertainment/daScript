@@ -505,9 +505,11 @@ def test_model_image_roundtrip(t : T?) {
         text_image_roundtrip(t, path, 24)
         var m <- load_model(path, QuantMode.q8)
         t |> success(m.emb_q8 && !m.cls_q8 && m.tok_emb_off < 0l, "the mapped image serves the untied q8 table with no fp32 copy")
+        // the whole image is smaller than the f32 table alone (27 MB against 37 MB on stories15M): an
+        // image that still carried the table could not be, whatever else it packs
         let img_bytes = int64(stat(image_path_for(path)).size)
         let table_f32 = m.config.vocab_size * m.config.dim * 4l
-        t |> success(img_bytes < table_f32 + int64(stat(path).size), "the image ({img_bytes >> 20l} MB) is smaller than the gguf plus an f32 table: no f32 table rode along")
+        t |> success(img_bytes < table_f32, "the image ({img_bytes >> 20l} MB) is smaller than the f32 table it no longer carries ({table_f32 >> 20l} MB)")
         delete m
     }
 }
