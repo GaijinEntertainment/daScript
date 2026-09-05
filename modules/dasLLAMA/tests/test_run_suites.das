@@ -50,6 +50,27 @@ def test_suite_split_matches_the_files(t : T?) {
     }
 }
 
+//! every test file in the folder sits in some run.das suite; the one exemption is the CPU-prefill
+//! tripwire, whose header says why (it asserts the guard the runner disarms for every child)
+[test]
+def test_every_file_sits_in_a_suite(t : T?) {
+    var listed : table<string; void?>   // nolint:STYLE027 - a nested walk over the suite tables, not one comprehension
+    for (suite in ["decode", "mtp", "prefill", "matrix", "kernels", "image", "image-vulkan", "coverage", "model-free", "stocked"]) {
+        for (file in suite_files(suite)) {
+            listed |> insert(base_name(file), null)
+        }
+    }
+    let exempt <- ["test_cpu_prefill_tripwire.das"]
+    var count = 0
+    fio::dir("modules/dasLLAMA/tests") $(name) {
+        if ((name |> starts_with("test_") || name |> starts_with("failed_")) && name |> ends_with(".das")) {
+            count++
+            t |> success(key_exists(listed, name) || find_index(exempt, name) >= 0, "a test file sits in a run.das suite, or is the declared tripwire exemption: {name}")
+        }
+    }
+    t |> success(count > 50, "the folder listing walked the test files ({count})")
+}
+
 [test]
 def test_exclude_filter(t : T?) {
     let files <- ["modules/dasLLAMA/tests/test_ple_modes.das", "modules/dasLLAMA/tests/test_parity.das", "modules/dasLLAMA/tests/test_flash.das"]
