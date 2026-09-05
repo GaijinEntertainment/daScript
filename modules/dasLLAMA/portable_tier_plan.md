@@ -63,10 +63,16 @@ with LLVM on the host only; wasm32 cross is unsupported by design (pointer-width
 - **`f16_cvt` moves to `daslib/f16_cvt.das`.** The JIT recognizes it by mangled name from a
   target-independent table (`llvm_jit_intrin.das:232-234`), so the move changes nothing for
   the JIT; 33 require spellings change.
-- **`aarch64_neon` and `x64_avx` stay in dasLLVM.** Nothing in the engine requires `x64_avx`.
-  The NEON tier file registers only under `jit_enabled()`, so its require becomes the path
-  guard `?llvm/daslib/aarch64_neon` from the umbrella; the harness, probe and benchmark that
-  require it are JIT-only by nature.
+- **`aarch64_neon` and `x64_avx` move to daslib too** (ruled 2026-09-04, landed). The first
+  cut kept them in dasLLVM behind a path guard on the NEON tier; the no-LLVM gate then showed
+  the generated families' reference bodies in `dasllama_math_gen.das` call the NEON module's
+  `dot_q8q8_laneq4` and `idot4`, so the whole generated tier and the six tests that require it
+  fell out of a no-LLVM build. Both intrinsic modules are pure das with zero requires; the JIT
+  recognizes them by module name, unchanged. With them in daslib the NEON tier and `math_gen`
+  compile everywhere, their `[init]` registrations self-gate on `jit_enabled()` and the arch,
+  and the kq ladder runs on the no-LLVM tier. The three pure table builders `test_kquant`
+  borrowed from the IR generator (`pm1_of`, `vbmi_alphabet`, `vbmi_pack_word`) moved to
+  `dasllama_gemm_schema.das` for the same reason.
 - **`require ?G target` names a guard module, never the target** (`ds2_parser.ypp:849-861`,
   `parser_impl.cpp:1225-1279`). There is no module named `llvm` (dasLLVM is a pure-das dasbind
   package), so `?llvm` and `builtin_module_exists(llvm)` are permanently false; the working

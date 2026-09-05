@@ -12,7 +12,7 @@ require dasllama/dasllama_math_default  // dot_q8q8_f16s — the row-major tails
 require dasllama/dasllama_repack  // the grp<mr> repack family + kq panel unpack (pure transforms; the _gen/_bake twins below feed them numbers)
 require daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
 require daslib/tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code], inert without dasLLVM; PUBLIC so the auto-policy infer pass reaches app roots that require this module
-require llvm/daslib/llvm_tune public  // PUBLIC so the auto-policy infer pass and tune_status reach app roots that require this module
+require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public  // PUBLIC so tune_status reaches app roots that require this module; PATH guard: this file names no framework symbol itself
 require dasllama/dasllama_tune_scope  // the dasllama [tune_scope] must be on the AST before this module's [tune] kernels pick their perms
 require dasllama/dasllama_gemm_schema
 require daslib/jobque_boost public

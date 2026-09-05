@@ -28,7 +28,7 @@ require ?das_metal dasllama/dasllama_metal_prefill  // metal_tensor_race (Apple 
 require ?das_metal dasllama/dasllama_metal_kernels  // metal_tensor_race_decode (Apple static_if half)
 require tuner_cli               // the shared tuner CLI
 require tuner_noise             // the noise gate + the measured floor, shared with the other half
-require llvm/daslib/aarch64_neon // sdot4_laneq (referenced by the cloned laneq template bodies)
+require daslib/aarch64_neon // sdot4_laneq (referenced by the cloned laneq template bodies)
 require daslib/f16_cvt           // f16 references + the cloned f16-kernel template bodies
 require math                     // mad (referenced by the cloned template bodies)
 require daslib/json

@@ -18,8 +18,8 @@ require daslib/jobque_profile  // JOBQUE_PROFILING_ENABLED — the compile-time 
 require dasllama/dasllama_kv_codec public  // the KV-cache codec families — kv_store_row/kv_load_row/kv_dot/kv_axpy dispatch into them
 require dasllama/dasllama_convert   // cvt_f32_to_f16/cvt_f16_to_f32 — the f16 rows (wscale plane + the f16 KV codec)
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
-require ?llvm/daslib/aarch64_neon dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backend at [init] under the JIT alone; PATH guard: without dasLLVM its intrinsics are scalar fallbacks slower than portable, so the tier stays out
-require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // [init]-only: registers "arm64-gen" (the generated GEMM family, arm64 load-select tier). PATH guard: the module hard-requires llvm_tune, so it loads exactly when dasLLVM is mounted
+require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backend at [init] under arm64 + JIT alone; compiles everywhere (daslib/aarch64_neon carries scalar fallbacks)
+require dasllama/dasllama_math_gen  // [init]-only: registers "arm64-gen" / "x64-gen" (the generated GEMM family) under the JIT alone; compiles everywhere - its reference bodies are the portable tier's kq kernels
 require daslib/tune public  // the tune annotations + the auto-policy pass, inert without dasLLVM; PUBLIC for the same reach as the line below
 require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public  // re-export ONLY llvm_tune (not math_gen's whole public surface — its jobque_boost would flood requirers with ambiguities): tune_status reaches every app that requires this module
 require ?das_metal dasllama/dasllama_metal_gemm  // [init]-only: registers "metal" (the GPU prefill-GEMM batch donor). STRICT guard: the C++ das_metal module exists on Apple builds only, so non-Apple lanes never compile the Metal driver

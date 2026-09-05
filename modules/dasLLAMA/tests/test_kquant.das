@@ -6,7 +6,7 @@ options _function_length = 300        // and each gate carries its whole fixture
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_gemm_gen   // vbmi_pack_word / vbmi_alphabet / pm1_of - the lattice's pure table builders
+require dasllama/dasllama_gemm_schema   // vbmi_pack_word / vbmi_alphabet / pm1_of - the lattice's pure table builders
 require dasllama/dasllama_layout   // moe_gpu_gather_stack_kq - the device-plane gather oracle
 require _model_tier
 require dasllama/dasllama_gguf
