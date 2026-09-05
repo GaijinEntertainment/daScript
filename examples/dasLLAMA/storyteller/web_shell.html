@@ -43,7 +43,7 @@
 
   // the two prepared images (baked for this build's identity by dasllama-convert --config) and the
   // two English front-end packs - no gguf crosses the wire
-  var MODEL_FILES = ['stories15M.dlim', 'kitten-nano.dlim', 'tts_g2p.bin', 'tts_postag.bin'];
+  var MODEL_FILES = ['stories15M.dlim', 'kitten-nano.dlim', 'tts_g2p_en_us.bin', 'tts_postag.bin'];
   var modelsBase = new URLSearchParams(location.search).get('models') || 'models/';
   if (!modelsBase.endsWith('/')) modelsBase += '/';
 

@@ -11,6 +11,7 @@ require dasllama/dasllama_unicode   // utf8_to_cpts: the inventory sweep reads c
 require _tts_corpus
 require _tts_corpus_gb
 require _model_tier   // models_dir(): tts_g2p.bin and tts_postag.bin live in the model store
+require daslib/rtti   // this_context().last_exception: the American-only pack's British refusal is read as text
 
 // TTS grapheme-to-phoneme against the 200-sentence corpus: phoneme-identical with the reference
 // front end (arm E of the fidelity experiment, fed the same normalized text), the heteronym
@@ -244,6 +245,46 @@ def private write_pack_header(path : string; version : int) {
         uint8(version), uint8(0), uint8(0), uint8(0), uint8(0), uint8(0)]
     fwrite(f, bytes)
     fclose(f)
+}
+
+// The American-only twin (build_g2p_data.py --dialect us, the web serving set's pack): the same
+// American reading as the full pack on the whole corpus, and British refused by name.
+[test]
+def test_us_only_pack(t : T?) {
+    t |> run("the American-only pack reads the corpus as the full pack does and refuses British") @(t : T?) {
+        return if (!data_present(t))
+        let us_path = path_join(models_dir(), "tts_g2p_en_us.bin")
+        if (!stat(us_path).is_valid) {
+            t |> skip("tts_g2p_en_us.bin absent in {models_dir()}")
+            return
+        }
+        let full <- load_g2p(g2p_path())
+        let us <- load_g2p(us_path)
+        let tg <- load_pos_tagger(tagger_path())
+        t |> success(!full.us_only, "the full pack carries both tiers")
+        t |> success(us.us_only, "the American pack says so in its source line: {us.source}")
+        let rows <- load_tts_corpus()
+        var differs = 0
+        for (r in rows) {
+            let a = g2p_phonemize(full, tg, r.norm)
+            let b = g2p_phonemize(us, tg, r.norm)
+            if (a != b) {
+                differs++
+                to_log(LOG_INFO, "tts g2p us-only differs {r.id}: full {a}\n       us   {b}\n")
+            }
+        }
+        t |> equal(differs, 0, "American readings identical on {length(rows)} sentences")
+        var refused = ""
+        try {
+            let gb = g2p_phonemize(us, tg, "the water is warm", true)
+            to_log(LOG_INFO, "tts g2p us-only british read: {gb}\n")
+        } recover {
+            refused = this_context().last_exception
+        }
+        t |> success(find(refused, "American tier only") >= 0, "British on the American pack is refused by name: {refused}")
+        let gb_full = g2p_phonemize(full, tg, "the water is warm", true)
+        t |> success(!empty(gb_full), "the control: the full pack reads British")
+    }
 }
 
 [test]

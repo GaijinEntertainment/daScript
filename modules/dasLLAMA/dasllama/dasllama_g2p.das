@@ -38,6 +38,7 @@ struct LexTable {
 struct G2pModel {
     data : array<uint8>
     source : string
+    us_only : bool   //! the pack carries the American tier alone (build_g2p_data.py --dialect us): British is refused by name
     gold : LexTable
     silver : LexTable
     cmu : LexTable
@@ -237,6 +238,7 @@ def load_g2p(path : string) : G2pModel {
     let src_len = rd_u16(g.data, o)
     o += 2l
     g.source = bytes_str(g.data, o, src_len)
+    g.us_only = find(g.source, "dialect us") >= 0
     o += int64(src_len)
     g.gold = read_lex_table(g.data, o)
     g.silver = read_lex_table(g.data, o)
@@ -1756,6 +1758,9 @@ def g2p_tokens(g : G2pModel; tagged : array<PosToken>; british : bool = false) :
 //! Phonemes for normalized text, in the inventory `british` names: tokens joined with the
 //! source spacing.
 def g2p_phonemize(g : G2pModel; tg : PosTagger; text : string; british : bool = false) : string {
+    if (british && g.us_only) {
+        panic("dasLLAMA tts: this phoneme pack carries the American tier only ({g.source}) - British English needs the full tts_g2p.bin")
+    }
     var inscope tagged <- pos_tokenize_tag(tg, text)
     var inscope toks <- g2p_tokens(g, tagged, british)
     return build_string() $(var w) {
