@@ -35,7 +35,14 @@ def test_robot_activity(suite : T?) {
         reset_ambient_test()
         for (i in range(480)) {
             let time = float(i) * 0.1
+            let head = drill_head_position(time)
+            let contact = drill_contact_position()
+            // Track front is y=-0.93; keep the plate and widest cutter clear.
+            t |> success(contact.y + 0.36 < BRACK_POSITION.y - 0.93)
+            t |> success(head.y + 0.245 < BRACK_POSITION.y - 0.93)
+            t |> success(head.z - 0.47 >= contact.z - 0.0001)
             if (drill_contact(time) > 0.0) {
+                t |> success(abs(head.z - 0.47 - contact.z) < 0.003)
                 t |> success(drill_extension(time) > 0.99)
                 t |> success(drill_speed(time) > 0.99)
             }

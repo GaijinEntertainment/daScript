@@ -59,7 +59,13 @@ def drill_rotation(time : float) : float {
 }
 
 def drill_contact_position() : float3 {
-    return BRACK_POSITION + float3(1.12, -0.90, 0.26)
+    return BRACK_POSITION + float3(1.12, -1.50, 0.26)
+}
+
+def drill_head_position(time : float) : float3 {
+    // The lowest cutting edge is 0.47 below the head. Retract vertically,
+    // keeping the entire tool and plate ahead of the tracks in every pose.
+    return drill_contact_position() + float3(0.0, 0.0, 0.47 + 0.26 * (1.0 - drill_extension(time)))
 }
 
 def inspection_lamp(time : float) : float {

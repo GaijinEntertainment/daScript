@@ -93,19 +93,13 @@ def bind_image_any(unit : int; tex : uint; format : uint; access : uint = GL_REA
     glBindImageTexture(uint(unit), tex, 0, false, 0, access, format)
 }
 
+//! Unbind drawing objects without mutating VAO-owned element or attribute state.
 def bind_ffp() {
     glUseProgram(0u)
     glBindFramebuffer(GL_FRAMEBUFFER, 0u)
     glBindVertexArray(0u)
-    // glBindBuffer(GL_ARRAY_BUFFER, 0u)
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0u)
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, 0u)
-    var maxAttr = 16
-    glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, safe_addr(maxAttr))
-    for (va in range(maxAttr)) {
-        glDisableVertexAttribArray(uint(va))
-    }
 }
 
 def glUniformAny(location : int; value : int) {
@@ -410,7 +404,5 @@ def load_image_from_file(fname : string implicit; dir1, dir2 : string; can_fail 
     }
     return img
 }
-
-
 
 

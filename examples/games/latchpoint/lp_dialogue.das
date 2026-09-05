@@ -187,6 +187,7 @@ def poll_dialogue() {
         }
         bridge_online = true
         if (conversation_stage == "asr") {
+            if (empty(strip(response.text))) { fail_native_reply("No speech recognized. Check the microphone input, or press E to type."); return }
             input_text = clone_string(response.text)
             editing = true
             pending_job = ""

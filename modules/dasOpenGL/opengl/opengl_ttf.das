@@ -250,6 +250,5 @@ def public draw_quads(font : Font; quads : array<FontVertex>; mvp : float4x4; ti
     glUseProgram(0u)
     glDisable(GL_BLEND)
     glBindVertexArray(0u)
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0u)
     bind_ffp()
 }

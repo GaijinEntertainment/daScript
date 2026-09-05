@@ -17,6 +17,17 @@ var @live render_material_mode = 0
 var @live render_bloom = true
 var @live render_ao = true
 var @live render_time_override = -1.0
+var trace_render_errors = false
+var render_errors : array<int2>
+
+def trace_render_stage(stage : int) {
+    return if (!trace_render_errors)
+    for (_i in range(8)) {
+        let error = glGetError()
+        if (error == 0u) { break }
+        render_errors |> push(int2(stage, int(error)))
+    }
+}
 var lamp_shadow_fbo = 0u
 var lamp_shadow_tex = 0u
 var probe_fbo = 0u
@@ -447,17 +458,20 @@ def brack_model(time : float) {
     let hand = p + float3(-0.84, -1.05 - handover * 0.45, 0.8 + handover * 0.50 + inspection * 0.18)
     rod(p + float3(-1.05, -0.50, 1.0), hand, 0.10)
     part(hand, float3(0.23, 0.24, 0.20), IRON, POLISHED, Shape.sphere)
-    let extension = drill_extension(time)
-    let drill_offset = float3(0.0, -0.46, -0.02) * extension
-    rod(p + float3(0.72, 0.0, 1.38), p + float3(1.12, -0.44, 0.97) + drill_offset, 0.17, RUST)
-    for (i in range(5)) { part(p + float3(1.12, -0.44, 0.75 - float(i) * 0.10) + drill_offset,
+    let drill_head = drill_head_position(time)
+    let elbow = p + float3(1.20, -0.85, 1.40)
+    rod(p + float3(0.72, 0.0, 1.38), elbow, 0.17, RUST)
+    part(elbow, float3(0.19), CHROME, DARK_METAL, Shape.sphere)
+    rod(elbow, drill_head + float3(0.0, 0.0, 0.16), 0.13, RUST)
+    rod(drill_head + float3(0.0, 0.0, 0.16), drill_head, 0.09, CHROME)
+    for (i in range(5)) { part(drill_head - float3(0.0, 0.0, float(i) * 0.10),
         float3(0.24 - float(i) * 0.035, 0.24 - float(i) * 0.035, 0.07), CHROME, POLISHED, Shape.cylinder) }
     for (blade in range(3)) {
         for (level in range(4)) {
             let a = float(blade) * PI * 2.0 / 3.0 + drill_rotation(time) + float(level) * 0.65
             let b = a + 0.65
             let radius = 0.245 - float(level) * 0.035
-            let center = p + float3(1.12, -0.44, 0.75 - float(level) * 0.10) + drill_offset
+            let center = drill_head - float3(0.0, 0.0, float(level) * 0.10)
             rod(center + float3(cos(a) * radius, sin(a) * radius, 0.0),
                 center + float3(cos(b) * (radius - 0.035), sin(b) * (radius - 0.035), -0.10), 0.018, BLACK)
         }
@@ -745,12 +759,16 @@ def run_yard_atmosphere(width, height : int) {
     lp_effect_texel = float2(1.0 / float(width), 1.0 / float(height))
     vs_post_bind_uniform(atmosphere_program)
     fs_latch_atmosphere_bind_uniform(atmosphere_program)
+    trace_render_stage(61)
     fullscreen_pass()
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, atmosphere_fbo)
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, scene_fbo)
-    var target = fixed_array(GL_COLOR_ATTACHMENT0)
-    glDrawBuffers(1, unsafe(addr(target[0])))
-    glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST)
+    trace_render_stage(62)
+    glBindFramebuffer(GL_FRAMEBUFFER, atmosphere_fbo)
+    glReadBuffer(GL_COLOR_ATTACHMENT0)
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, scene_color)
+    trace_render_stage(63)
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height)
+    trace_render_stage(64)
     glBindFramebuffer(GL_FRAMEBUFFER, scene_fbo)
 }
 
@@ -784,6 +802,7 @@ def draw_yard_dust() {
 }
 
 def render_yard(width, height : int; time : float) {
+    if (trace_render_errors) { render_errors |> clear() }
     let render_time = render_time_override >= 0.0 ? render_time_override : time
     update_yard_lights(render_time)
     let aspect = float(width) / float(height)
@@ -813,9 +832,11 @@ def render_yard(width, height : int; time : float) {
     glUseProgram(ao_blur_program)
     fs_latch_ao_blur_bind_uniform(ao_blur_program)
     build_dynamic(render_time)
+    trace_render_stage(1)
     begin_shadow_pass()
     draw_yard(true)
     end_shadow_pass()
+    trace_render_stage(2)
     let sun_vp = v_light_vp
     v_light_vp = lp_lamp_vp
     glBindFramebuffer(GL_FRAMEBUFFER, lamp_shadow_fbo)
@@ -826,15 +847,21 @@ def render_yard(width, height : int; time : float) {
     glCullFace(GL_BACK)
     v_light_vp = sun_vp
     lp_lamp_shadow := lamp_shadow_tex
+    trace_render_stage(3)
     capture_yard_probe()
+    trace_render_stage(4)
     begin_scene_pass(f_HorizonColor)
     draw_twilight_sky()
     draw_yard(false)
+    trace_render_stage(5)
     run_yard_atmosphere(width, height)
+    trace_render_stage(6)
     draw_yard_dust()
     draw_drill_sparks(render_time)
+    trace_render_stage(7)
     run_postfx(PostSettings(exposure = 1.35, bloom_strength = render_bloom ? 0.24 : 0.0, ao_strength = 1.0,
         ao_apply = render_ao ? 0.8 : 0.0,
         grade_tint = float3(0.87, 1.02, 0.94), grade_amount = 0.15, vignette_strength = 0.25,
         grain = 0.012, tan_half_fov = f_CamScale, z_far = 130.0, time = time))
+    trace_render_stage(8)
 }

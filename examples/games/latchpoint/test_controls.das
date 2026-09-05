@@ -3,6 +3,15 @@ require dastest/testing_boost public
 require lp_controls
 
 [test]
+def test_pointer_and_retina(t : T?) {
+    t |> success(camera_dragging(true, false))
+    t |> success(camera_dragging(false, true))
+    t |> success(!camera_dragging(false, false))
+    t |> equal(ui_scissor_rect(10, 20, 100, 40, int2(1280, 800), int2(2560, 1600)), int4(20, 1480, 200, 80))
+    t |> equal(ui_scissor_rect(10, 20, 100, 40, int2(1280, 800), int2(1280, 800)), int4(10, 740, 100, 40))
+}
+
+[test]
 def test_navigation(suite : T?) {
     suite |> run("menu hit testing matches visible buttons") @(t : T?) {
         let screen = float2(1280.0, 800.0)
