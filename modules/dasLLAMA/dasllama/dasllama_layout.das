@@ -100,16 +100,11 @@ def private metal_blob_layout_ok(t : Model) : bool {
         (!t.emb_q8 || metal_blob_off_ok(t.emb_q8_off, KqFmt.q8)))
 }
 
-//! Can `t` take the blob form? The refusal half of the transform, split out so the image writer
-//! can commit to the metal flavor without first building the blob plane in RAM.
-def metal_blob_eligible(t : Model) : bool {
+//! Can `t`'s LAYOUT take the blob form - the packing flags and the bind-alignment gate, ownership
+//! aside? The question a mapped planar image answers before the rail rebakes the metal flavor.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-flavor-rebake")]
+def metal_blob_form_ok(t : Model) : bool {
     if (t.quant != QuantMode.q8 || t.kq_repacked || t.mx4_repacked || kernel_backend_needs_repack(active_kernel_backend())) {
-        return false
-    }
-    if (t.image_map != null) {
-        // image-backed planes are borrowed READ-ONLY views — the in-place k4s/k5s/k6s
-        // rewrites would fault. Transform an owned load (load_model_ / DASLLAMA_IMAGE=0).
-        to_log(LOG_WARNING, "dasLLAMA: metal-blob transform declined - the model is image-mapped (borrowed planes); transform an owned gguf load\n")
         return false
     }
     if (!metal_blob_layout_ok(t)) {
@@ -117,6 +112,18 @@ def metal_blob_eligible(t : Model) : bool {
         return false
     }
     return true
+}
+
+//! Can THIS `t` take the blob form in place? The refusal half of the transform, split out so the
+//! image writer can commit to the metal flavor without first building the blob plane in RAM.
+def metal_blob_eligible(t : Model) : bool {
+    if (t.image_map != null) {
+        // image-backed planes are borrowed READ-ONLY views — the in-place k4s/k5s/k6s
+        // rewrites would fault. Transform an owned load (load_model_ / DASLLAMA_IMAGE=0).
+        to_log(LOG_WARNING, "dasLLAMA: metal-blob transform declined - the model is image-mapped (borrowed planes); transform an owned gguf load\n")
+        return false
+    }
+    return metal_blob_form_ok(t)
 }
 
 //! Block count of the blob plane and its stride — the 34B gguf-native block_q8_0, which is the

@@ -1624,9 +1624,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         let img = image_path_for(path, "", qs)
         if (load_model_image(img, t, "", qs)) {
             vulkan_bake_flavor(t, path, vk_tag)
-            //! metal_blob_eligible must agree, or the rebake below refuses and re-mints the SAME
-            //! planar file every load (a repacking backend passes the mint-time shape gate)
-            if (!(want_metal && metal_model_servable(t) && metal_blob_eligible(t))) {
+            //! the layout gate must agree, or the rebake below refuses and re-mints the SAME planar
+            //! file every load (a repacking backend passes the mint-time shape gate); the mapping's
+            //! borrowed planes are not the question - the rebake reads the gguf, never this mapping
+            if (!(want_metal && metal_model_servable(t) && metal_blob_form_ok(t))) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
                 return <- t
             }
