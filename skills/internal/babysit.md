@@ -56,7 +56,7 @@ matrix between rounds.
 6. Repeat until Section 0 holds; **only then** wait for CI green and merge.
 
 **Every push that changes a `.das` file since the last push runs the pre-push lint gate
-first**: `daslang utils/internal/preflight/main.das -- --only lint,review-md --lint-skip-exe-rail`
+first**: `daslang utils/internal/preflight/main.das -- --only lint,review-md`
 (rails and cost: `skills/internal/preflight.md`, the lint row). MCP `lint` on the file just
 edited is NOT this gate: this run lints every `.das` the branch changed against
 `origin/master`, exactly as CI does, so a clean single-file lint still pushes red. **A push
