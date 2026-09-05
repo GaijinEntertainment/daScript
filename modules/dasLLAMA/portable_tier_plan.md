@@ -307,8 +307,23 @@ decode/prefill numbers sit beside the stage-1 floor.
 
 ## Stage 3 - WASM64
 
+**Status: the AOT-through-emcc rail runs (2026-09-04).** The same `dasllama_aot` target builds in
+the wasm64 web tree (`web/build64`, `DAS_WASM_MEMORY64` + pthreads): the repo's host daslang
+generates the engine C++ (the host-generated set compiles for wasm64 unchanged - 8-byte pointers
+on both sides, every layout `static_assert` holds), em++ compiles the ~100 TUs, and the engine's
+das files embed into MEMFS beside daslib. `examples/dasLLAMA/wasm/run_node.js` mounts the repo
+and the model's directory through NODEFS and calls main with `-use-aot`; on SmolLM2-135M-Q8 the
+64 greedy tokens match the native JIT run exactly, decode 46 t/s under node 25 against 54 on the
+native AOT host (same box, not a measurement). No dasLLVM is embedded, so `require ?llvm` is
+false inside the artifact and no tune framework exists in it. Two link-time findings: the
+Accelerate driver's TU stays out wherever `das_accelerate` is not built (its C++ calls the
+binding by symbol), and the AOT type tables need a 512 MB initial heap on top of the web build's
+embeds. The artifact is 306 MB: the playground's module embeds (fonts, glTF, audio, imgui) ride
+along because they are directory-scoped link options in `web/CMakeLists.txt` - a dasLLAMA-only
+embed set is the size item. Next: wasmtime (no JS host), the browser page, ASR and TTS examples.
+
 - Route: the stage-2 example's AOT C++ through emcc against `web/output64` (memory64 +
-  pthreads), under `wasmtime -W memory64=y -W exceptions=y` first, the browser after.
+  pthreads), under node first (NODEFS mounts), the browser after.
 - The GPU tiers already self-gate the way a wasm build needs (verified 2026-09-04 with
   `--disable-module dasvulkan`: the umbrella loads, `builtin_module_exists(vulkan)` is false,
   kernel units green interpreted and under the JIT). The Vulkan tier hangs off one guarded
