@@ -56,6 +56,22 @@ namespace das {
 #endif
     }
 
+    static int last_socket_error () {
+#ifdef _WIN32
+        return WSAGetLastError();
+#else
+        return errno;
+#endif
+    }
+
+    static bool socket_would_block ( int err ) {
+#ifdef _WIN32
+        return err==WSAEWOULDBLOCK;
+#else
+        return err==EAGAIN || err==EWOULDBLOCK || err==EINTR;
+#endif
+    }
+
     bool set_socket_blocking ( socket_t fd, bool blocking ) {
 #ifdef _WIN32
         unsigned long mode = blocking ? 0 : 1;
@@ -75,7 +91,7 @@ namespace das {
         errno = 0;
         server_fd = socket(AF_INET, SOCK_STREAM, 0);
         if ( !server_fd ) {
-            onError("can't socket", errno);
+            onError("can't socket", last_socket_error());
             return false;
         }
         struct sockaddr_in address;
@@ -87,17 +103,17 @@ namespace das {
         setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
 #endif
         if ( ::bind(server_fd, (struct sockaddr *)&address,sizeof(address))<0 ) {
-            onError("can't bind", errno);
+            onError("can't bind", last_socket_error());
             closesocket(server_fd);
             return false;
         }
         if ( listen(server_fd, 3) < 0) {
-            onError("can't listen", errno);
+            onError("can't listen", last_socket_error());
             closesocket(server_fd);
             return false;
         }
         if ( !set_socket_blocking(server_fd,false) ) {
-            onError("can't set nbio", errno);
+            onError("can't set nbio", last_socket_error());
             closesocket(server_fd);
             return false;
         }
@@ -140,8 +156,8 @@ namespace das {
                     return true;
                 }
             } else {
-                res = errno;
-                if ( res!=0 && res!=EAGAIN && res!=EWOULDBLOCK ) {
+                res = last_socket_error();
+                if ( !socket_would_block(res) ) {
                     onError ( "can't send", res);
                     closesocket(client_fd);
                     client_fd = 0;
@@ -159,7 +175,7 @@ namespace das {
             client_fd = accept(server_fd, (struct sockaddr *)&address,(socklen_t*)&addrlen);
             if ( !invalid_socket(client_fd) ) {
                 if ( !set_socket_blocking(client_fd,false) ) {
-                    onError("can't set client nbio", errno);
+                    onError("can't set client nbio", last_socket_error());
                     closesocket(client_fd);
                     client_fd = 0;
                 }
@@ -181,8 +197,8 @@ namespace das {
                 closesocket(client_fd);
                 client_fd = 0;
             } else { // res<0
-                res = errno;
-                if ( res!=0 && res!=EAGAIN && res!=EWOULDBLOCK ) {
+                res = last_socket_error();
+                if ( !socket_would_block(res) ) {
                     onError("connection closed on error", res);
                     onDisconnect();
                     closesocket(client_fd);
