@@ -145,7 +145,7 @@ require strudel/strudel_sf2_voice
 require strudel/strudel_pattern
 require spirv/spirv_reflect
 require dasllama/dasllama
-require llvm/daslib/llvm_tune   // documentation context keeps [tune] fully inert
+require ?llvm llvm/daslib/llvm_tune   // nolint:STYLE030,LINT019 — the framework's is_building_documentation check keeps [tune] inert; a build without dasLLVM has no framework to keep inert
 
 def document_module_math(_root : string) {
     var mod = get_module("math")

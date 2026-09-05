@@ -6,10 +6,7 @@ module just_in_time shared private
 //! JIT compilation configuration.
 //!
 //! Bootstraps the Just-In-Time compiler by requiring the platform-appropriate
-//! LLVM-based JIT backend module.
+//! LLVM-based JIT backend module - through the `llvm` witness guard, so a program
+//! requiring this module still compiles, and runs interpreted, in a build without dasLLVM.
 
-/*
-    this is a JIT configuration file. We require platform appropriate jit module, as well as set necessary options.
-*/
-
-require llvm/daslib/llvm_macro
+require ?llvm llvm/daslib/llvm_macro   // nolint:STYLE030,LINT019 — a side-effect require: the module's presence is what arms the JIT
