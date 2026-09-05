@@ -572,8 +572,10 @@ namespace das {
             }
         }
         // a by-value cycle cannot exist (the layout would be infinite); what remains unsorted is a
-        // container-mediated cycle, which needs no definition order - it keeps the original order
-        // after everything the sort did place
+        // container-mediated cycle's members plus every struct that depends on one of them. The
+        // members need no definition order (TArray<T> holds no T), so they keep the original order
+        // after everything the sort did place; a by-value dependent of a cycle member still emits
+        // an incomplete type there, as it did before this fallback existed
         if ( sorted.size() != structs.size() ) {
             das_hash_set<Structure *> placed;
             for ( auto s : sorted ) placed.insert(s);

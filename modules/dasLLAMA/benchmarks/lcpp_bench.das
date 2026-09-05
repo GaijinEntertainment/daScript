@@ -32,7 +32,7 @@ require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses o
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
 require ?llvm dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: --submit POSTs the stamped records to the exchange, which rides the tune framework
-require llvm/daslib/llvm_tune   // tune_app_script — the exe-vs-script discriminator behind --for-debug-purposes
+require ?llvm llvm/daslib/llvm_tune   // nolint:STYLE030,LINT019 — OPTIONAL: tune_app_script, the exe-vs-script discriminator behind --for-debug-purposes
 require daslib/jobque_boost
 require daslib/clargs
 require daslib/fio
@@ -1306,7 +1306,11 @@ def main() : int {
     }
     // measurement exists only from the released exe: a -jit SCRIPT run reads whatever sidecar
     // sits beside the script and re-keys nothing — its numbers must never enter records
-    g_debug_run = !empty(tune_app_script())
+    static_if (typeinfo module_exists(llvm_tune)) {
+        g_debug_run = !empty(tune_app_script())
+    } else {
+        g_debug_run = true   // no framework, no released exe: a reference-kernel run is never a record
+    }
     if (g_debug_run && !cfg.for_debug_purposes) {
         print("lcpp_bench: this is a -jit SCRIPT run - measurement runs the released exe (daspkg release).\n")
         print("  pass --for-debug-purposes to proceed as a debug instrument; output is stamped debug-jit and is not record-grade\n")

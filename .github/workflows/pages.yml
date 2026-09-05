@@ -594,7 +594,11 @@ jobs:
            && [ -f web/output64/examples/storyteller/storyteller.js ] \
            && [ -f web/output64/examples/storyteller/storyteller.wasm ] \
            && gh release download dasllama-web --repo GaijinEntertainment/daScript \
-                --dir _site_dasllama/examples/storyteller/models --clobber; then
+                --dir _site_dasllama/examples/storyteller/models --clobber \
+           && test -s _site_dasllama/examples/storyteller/models/stories15M.dlim \
+           && test -s _site_dasllama/examples/storyteller/models/kitten-nano.dlim \
+           && test -s _site_dasllama/examples/storyteller/models/tts_g2p_en_us.bin \
+           && test -s _site_dasllama/examples/storyteller/models/tts_postag.bin; then
             cp web/output64/examples/storyteller/storyteller.html _site_dasllama/examples/storyteller/
             cp web/output64/examples/storyteller/storyteller.js   _site_dasllama/examples/storyteller/
             cp web/output64/examples/storyteller/storyteller.wasm _site_dasllama/examples/storyteller/

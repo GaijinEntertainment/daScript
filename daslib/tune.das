@@ -107,3 +107,29 @@ class private TuneDefaultPolicyShell : AstPassMacro {
         }
     }
 }
+
+//! Log the tune status table at `LOG_INFO`, prefixed by `appName`: `<n>/<total> kernels tuned for
+//! this box`, one line per function, a `--tune` hint when any kernel sits on a fallback tier.
+//! Silent when the table is empty, and in a build without the framework - nothing was stamped.
+[arch(at = "ARCHITECTURE.md#tune-shells-module-exists")]
+def log_tune_status(appName : string) {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        var st <- tune_status()
+        if (empty(st)) {
+            delete st
+            return
+        }
+        var tuned = 0
+        for (s in st) {
+            tuned += (s.source == "manifest" || s.source == "profile") ? 1 : 0
+        }
+        to_log(LOG_INFO, "{appName}: tune status ({tuned}/{length(st)} kernels tuned for this box):\n")
+        for (s in st) {
+            to_log(LOG_INFO, "  {s.fname}: {empty(s.suffix) ? "reference" : s.suffix} ({s.source})\n")
+        }
+        if (tuned < length(st)) {
+            to_log(LOG_INFO, "{appName}: run with --tune to tune the remaining kernels for this box\n")
+        }
+        delete st
+    }
+}

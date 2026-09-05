@@ -296,7 +296,7 @@ def dasllama_jobque_threads_cap() {
 // Elsewhere mode 2 is a REAL mask — stays opt-in. DAS_JOBQUE_AFFINITY and app calls override.
 [init]
 def dasllama_jobque_affinity_default() {
-    if (get_platform_name() == "darwin" && get_jobque_affinity() < 0) {
+    if (get_platform_name() == "darwin" && empty(get_target_triple()) && get_jobque_affinity() < 0) {   // the HOST's darwin, never a cross artifact's
         set_jobque_affinity(2)
     }
 }

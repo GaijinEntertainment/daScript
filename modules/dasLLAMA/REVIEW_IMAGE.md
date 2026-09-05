@@ -53,10 +53,13 @@ property shapes never does.** A config-bound identity on a property-free family 
 image per tune state and reaps the others on every switch; a config-free identity on a
 property-shaped family serves the wrong bytes under a changed property.
 
-**A diff that moves a byte in a `.dlim`, adds or drops a serialized field, or changes what an
-image at an UNCHANGED path contains, bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) in
-the same change; weakening the `REVIEW.das` layout-stamp check - narrowing its closure or
-dropping the cell - is a defect.** Without the bump a stale image stays structurally valid and
+**A diff that changes what an image at an UNCHANGED path contains without changing the meta
+closure's struct shape - a moved byte, a re-meaning of a serialized field, a serializer body
+change that the layout fingerprint cannot see - bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`)
+in the same change; weakening the `REVIEW.das` layout-stamp check - narrowing its closure or
+dropping the cell - is a defect.** A struct field added or dropped moves `layout_fingerprint()`,
+which the load compares by name, so that image refuses loudly and a re-stamp of the closure hash
+discharges it; without the fingerprint's help a stale image stays structurally valid and
 silently serves a different model. What the stamp covers is the layout stamp section of
 `ARCHITECTURE_IMAGE.md`.
 

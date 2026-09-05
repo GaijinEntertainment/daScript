@@ -917,28 +917,6 @@ def tune_status() : array<TuneStatus> {
     return clone_to_move(g_tune_status)
 }
 
-    //! Log the tune status table at `LOG_INFO` — the shared "am I tuned?" surface, prefixed by
-    //! `appName`. Prints `<n>/<total> kernels tuned for this box`, one line per function, and a
-    //! `--tune` hint when any kernel sits on a fallback/reference tier. No-op when empty.
-def log_tune_status(appName : string) {
-    var st <- tune_status()
-    if (empty(st)) {
-        delete st
-        return
-    }
-    var tuned = 0
-    for (s in st) {
-        tuned += (s.source == "manifest" || s.source == "profile") ? 1 : 0
-    }
-    to_log(LOG_INFO, "{appName}: tune status ({tuned}/{length(st)} kernels tuned for this box):\n")
-    for (s in st) {
-        to_log(LOG_INFO, "  {s.fname}: {empty(s.suffix) ? "reference" : s.suffix} ({s.source})\n")
-    }
-    if (tuned < length(st)) {
-        to_log(LOG_INFO, "{appName}: run with --tune to tune the remaining kernels for this box\n")
-    }
-    delete st
-}
 
 // ===== [tune_scope] data — library-owned tuner wiring =====
 
@@ -2656,6 +2634,7 @@ def private warn_manifest_untuned() {
     for (scope in values(g_scopes)) {
         let key = "{scope.scopeName}|{scope.manifestPath}"
         continue if (g_manifest_warned |> key_exists(key))
+        pin_module_cache_dependency(scope.manifestPath)
         let v = tune_sidecar_verdict(scope.manifestPath, scope_fnames_joined(scope))
         continue if (v.complete)
         g_manifest_warned |> insert(key)
@@ -2739,6 +2718,7 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             seen |> insert(scope.scopeName)
             // per-scope KEY completeness, not file existence — the sidecar is shared
             let scopeFnames = scope_fnames_joined(scope)
+            pin_module_cache_dependency(scope.manifestPath)
             let v = tune_sidecar_verdict(scope.manifestPath, scopeFnames)
             continue if (!force && v.complete && policy != "auto")
             if (force || policy == "auto") {

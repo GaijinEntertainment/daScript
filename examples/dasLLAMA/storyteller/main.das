@@ -25,7 +25,8 @@ require strings
 //
 //   bin/daslang -jit examples/dasLLAMA/storyteller/main.das -- --models <dir>
 //
-// <dir> holds the two models and the front-end packs tts_g2p.bin and tts_postag.bin. A model
+// <dir> holds the two models and the front-end packs - tts_g2p.bin (or its American-only twin
+// tts_g2p_en_us.bin, which the web set ships) and tts_postag.bin. A model
 // is its gguf (the default names) or a prepared .dlim image baked for the running build's
 // identity (dasllama-convert --config) - the web build ships images only, the shell names them.
 // The language model runs on the frame thread in per-frame token budgets, so the loop never
@@ -47,8 +48,11 @@ struct StoryArgs {
     @clarg_doc = "Voice name or alias (default: the model's last voice)"
     voice : string
 
-    @clarg_doc = "Start a story at once and quit when it has been read out - the smoke rail"
+    @clarg_doc = "Start a story at once (the browser shell's start button) - the loop then runs on, space for the next"
     autoplay : bool
+
+    @clarg_doc = "Start a story at once and quit when it has been read out - the smoke rail"
+    smoke : bool
 
     @clarg_doc = "Stop after this many frames (0 = never) - the smoke rail"
     max_frames : int
@@ -314,7 +318,7 @@ def init() {
     g_speech_done = unsafe(channel_create())
     g_speech_done |> append(1)
     start_speech_thread(path_join(g_args.models, g_args.tts_model), g_args.voice, g_say, g_speech, g_speech_done)
-    if (g_args.autoplay) {
+    if (g_args.autoplay || g_args.smoke) {
         start_story()
     }
 }
@@ -372,7 +376,7 @@ def shutdown() {
 
 def done_for_smoke() : bool {
     return true if (g_args.max_frames > 0 && g_frames >= g_args.max_frames)
-    return g_args.autoplay && g_phase == Phase.told && g_unplayed_sentences == 0 && g_elapsed_s >= g_speaking_until
+    return g_args.smoke && g_phase == Phase.told && g_unplayed_sentences == 0 && g_elapsed_s >= g_speaking_until
 }
 
 // eval_main_loop drives the block once per frame: a blocking while-loop natively, the
@@ -386,7 +390,7 @@ def main() {
         return !exit_requested()
     }
     shutdown()
-    if (g_args.autoplay) {
+    if (g_args.smoke) {
         print("{join(g_wrapped_lines, "\n")}\n")
     }
 }

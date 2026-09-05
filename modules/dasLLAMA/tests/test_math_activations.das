@@ -550,7 +550,7 @@ def test_sigmoid_gate(t : T?) {
 [test]
 def test_swiglu_oai(t : T?) {
     t |> run("swiglu_oai against an fp64 reference carrying the trained clamps") @(t : T?) {
-        report(t, "swiglu_oai", sweep_swiglu_oai(false))
+        report_moved(t, "swiglu_oai", sweep_swiglu_oai(false))
         report(t, "swiglu_oai4", sweep_swiglu_oai(true))
     }
     t |> run("the gate limit and the up-branch band are the activation, not an optimization") @(t : T?) {

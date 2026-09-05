@@ -264,13 +264,15 @@ A chain of template ancestors delivers one copy of the annotation per level, so 
 the marker runs a second time over a structure it already rewrote.
 
 **A diff that adds or renames a public intrinsic in `aarch64_neon.das`, `x64_avx.das` or
-`f16_cvt.das` changes the matching row of the lookup tables in
-`modules/dasLLVM/daslib/llvm_jit_intrin.das` (repo root) in the same change.** The JIT recognizes
-these calls by function name alone, so a missing row runs the portable fallback on every target
-with every test green - the `tests/jit_tests` twins compare hardware against a reference body and
-catch a wrong emitter, never a missing one.
+`f16_cvt.das` changes its row in the lookup table of `modules/dasLLVM/daslib/llvm_jit_intrin.das`
+(repo root) that is gated on the CPU feature the instruction needs, in the same change.** The JIT
+recognizes these calls by function name alone, so a missing row runs the portable fallback on
+every target with every test green, and a row in a table gated on a weaker feature emits an
+instruction the generic machine cannot select - the `tests/jit_tests` twins compare hardware
+against a reference body and catch a wrong emitter, never a missing or misplaced one.
 
-**A function in `x64_avx.das` that exists to reach a wider or newer CPU tier than another
-function in that file computes its result by calling that function - never by a hand-written
-scalar loop.** A box whose CPU lacks the tier then runs the recognized narrower path instead of
-scalar code.
+**A function in `aarch64_neon.das`, `x64_avx.das` or `f16_cvt.das` that is the wider- or
+newer-tier variant of the same math another function in that file computes calls that function -
+never a hand-written scalar loop.** A box whose CPU lacks the tier then runs the recognized
+narrower path instead of scalar code. A tier function with no same-math sibling (`smmla`'s 2x8
+by 8x2 shape) keeps its own fallback body.

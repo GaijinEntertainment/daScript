@@ -4,6 +4,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_g2p
 require dasllama/dasllama_postag
+require dasllama/dasllama_tts   // g2p_pack_path - the directory rule the facade loads by
 require strings
 require daslib/strings_boost
 require daslib/fio
@@ -282,6 +283,29 @@ def test_us_only_pack(t : T?) {
         t |> success(find(refused, "American tier only") >= 0, "British on the American pack is refused by name: {refused}")
         let gb_full = g2p_phonemize(full, tg, "the water is warm", true)
         t |> success(!empty(gb_full), "the control: the full pack reads British")
+    }
+    t |> run("the directory rule: the full pack wins where both sit, the American twin serves alone, an empty directory panics") @(tt : T?) {
+        return if (!data_present(tt))
+        let us_path = path_join(models_dir(), "tts_g2p_en_us.bin")
+        if (!stat(us_path).is_valid) {
+            tt |> skip("tts_g2p_en_us.bin absent in {models_dir()}")
+            return
+        }
+        tt |> equal(g2p_pack_path(models_dir()), g2p_path(), "both packs beside the models: the full pack wins")
+        let only_us = tmp_path("packs_us")
+        mkdir(only_us)
+        write_pack_header(path_join(only_us, "tts_g2p_en_us.bin"), 2)   // the path rule stats, it never reads
+        tt |> equal(g2p_pack_path(only_us), path_join(only_us, "tts_g2p_en_us.bin"), "the American twin serves alone")
+        let none = tmp_path("packs_none")
+        mkdir(none)
+        var refused = ""
+        try {
+            let p : string = g2p_pack_path(none)
+            to_log(LOG_INFO, "tts g2p pack path on an empty dir answered {p}\n")
+        } recover {
+            refused = this_context().last_exception
+        }
+        tt |> success(find(refused, "no phoneme pack") >= 0, "an empty directory panics naming the packs it lacks: {refused}")
     }
 }
 

@@ -89,8 +89,9 @@
   `ConstantExpr`, and the setter's cast writes through the wrong type into it
   (`ARCHITECTURE.md#gep-constant-fold`).
 
-- **A feature name used in a `requires=` list or a `g_target_x64_*` gate has its cpuid line in
-  `das_cpu_supports` (`src/builtin/module_builtin_runtime.cpp`, repo root) in the same diff**
+- **A feature name used in a `requires=` list or a `g_target_*` tier gate
+  (`daslib/llvm_jit_common.das`) has its cpuid line in `das_cpu_supports`
+  (`src/builtin/module_builtin_runtime.cpp`, repo root) in the same diff**
   (`ARCHITECTURE.md#x64-tier-gates`). A name the cpuid table does not know answers false on
   every box, so every perm that requires it silently declines to its fallback and no error names
   the cause.
@@ -101,18 +102,22 @@
   sign-alternating chain moves the last few bits of the result, and the interpreter and AOT
   answers do not move with it.
 
-- **A diff that adds or changes a `build_vector_*` emitter also adds two cells to
-  `tests/llvm_vector_math.das` (beside this file): one comparing the emitted result lane for
-  lane with the interpreted result, at every vector width the emitter serves, and one asserting
-  both answer NaN in the same lanes.** A clamp or a conversion written with ordered compares
-  turns a NaN lane into a number, and an accuracy bound reads that as success.
+- **A diff that adds or changes an intrinsic emitter whose daslang body is the reference
+  implementation - a `build_vector_*` emitter, an `idot` lowering - also adds a cell comparing
+  the emitted result with the interpreted result over the operand range the emitter serves
+  (every vector width for `build_vector_*`, the full int8 lattice for a dot), and for a float
+  emitter one asserting both answer NaN in the same lanes; a lowering only a cross target runs
+  states in the PR body the artifact that compared them.** A clamp or a conversion written with
+  ordered compares turns a NaN lane into a number, and an accuracy bound reads that as success;
+  an IR-shape test names the instruction and never a number.
 
-- **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, dropping a
-  directory from its tracked-fixture list or removing the last tracked file under one (a guard
-  over nothing), or a finding text that no longer names what failed. What the gate enforces is
-  read from the gate itself.
+- **A change that makes `REVIEW.das` (beside this file) report fewer inputs is a defect:**
+  dropping a check, shrinking a scanned set or a tracked-fixture directory (a guard over nothing),
+  widening an exemption list without naming the exempted input's reason beside it, or a finding
+  text that no longer names what failed. What the gate enforces is read from the gate itself.
 
-- **A diff that appends target features to a machine's feature string appends the forced ones
+- **A diff that builds an x64 or aarch64 machine's feature string appends the forced ones
   (`x64_forced_plus_features` / `arm64_forced_plus_features`, `daslib/llvm_jit_common.das`) AFTER
   the detected host features.** LLVM's `SubtargetFeatures` takes the last occurrence of a name, so
-  a forced feature placed first is silently overridden by detection.
+  a forced feature placed first is silently overridden by detection. A wasm machine has no force
+  knob and no detected features, so the rule does not reach it.

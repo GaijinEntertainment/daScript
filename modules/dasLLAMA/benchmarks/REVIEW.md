@@ -71,10 +71,11 @@ no attribution across stages - is not a difference.
 and corpus - or withdraws the affected rows and names the withdrawal and its reason in the PR
 body.** A board cell is a timed cell of the published results board: one
 `../performance/gen_bench_records.das` spawns, or a manual `lcpp_bench.das` cell with its own
-`../PROFILE.md` section. What a cell times changes when a change to its code, to its input
-corpus, or to the pinned reference build - anything that decides which reference binary or
-reference environment the run measures, `DEFAULT_REF_SHA` in `setup_lcpp_ref.das` included -
-moves the measured quantity. The re-mint or withdrawal lands in
+`../PROFILE.md` section. What a cell times changes when a change inside its timed body, to its
+input corpus, or to the pinned reference build (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or
+anything else deciding which reference binary or environment the run measures) moves the
+measured quantity; a change outside the timed body - a flag, a require, the submit path - does
+not. The re-mint or withdrawal lands in
 `../performance/records/<box>.json`, the file the affected rows live in.
 
 **A diff that adds or changes an instrument makes it exit non-zero on a run that ends

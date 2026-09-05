@@ -338,6 +338,10 @@ def private sniff_tts_family(path : string) : string {
 // default, fp32 = the reference lane); -o lands the image anywhere - a serving directory holds
 // two .dlim files and the two front-end packs, no gguf.
 def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : int {
+    if (family != "kitten-tts" && family != "kokoro") {   // a StyleTTS2-lineage file of a family the assembly has no data reader for would bake empty tables
+        to_log(LOG_ERROR, "dasllama-convert: '{cfg.model}' declares TTS architecture '{family}', which dasLLAMA does not serve (kitten-tts | kokoro)\n")
+        return 2
+    }
     if (cfg.flavor != Flavor.planar) {
         to_log(LOG_ERROR, "dasllama-convert: TTS sources have a single (planar) image flavor\n")
         return 2
@@ -382,6 +386,9 @@ def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : in
     }
     let total_ms = int64(get_time_usec(ts)) / 1000l
     to_log(LOG_INFO, "dasllama-convert: wrote {int64(st.size) >> 20l} MB in {total_ms} ms total\n")
+    if (cfg.out == "") {
+        dlim_gc_stale(cfg.model, tag, q8 ? "q8" : "fp32")   // the fresh bake beside the source proves ITS LANE's siblings dead
+    }
     return 0
 }
 

@@ -1,6 +1,7 @@
 # web (the WASM build and its shells) Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** A file
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+doc: `README.md`. A file
 under this folder is served when the deploy (`.github/workflows/pages.yml`, repo root),
 `daspkg release wasm`, or a build step that feeds either copies it into a page a visitor
 loads.

@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x6ful   // the signed idot family lowers to extmul + extadd_pairwise on wasm SIMD128 (0x6e: the aarch64 SDOT / SMMLA tables gate on DotProd / i8mm, not the arch alone, and the force env reaches the generic exe machine (0x6d: the inline polynomial rail carries NaN: tanh selects the operand back over its ordered clamp, and the sincos quadrant / tan octant convert through llvm.fptosi.sat instead of poisoning on NaN and out-of-range (0x6c: aarch64 vector tan/exp2/log2/log/pow join the inline polynomial rail bit-exactly with the interpreter, sinh/cosh/tanh ride the exp one; 0x6b: aarch64 vector sin/cos ride the inline polynomial; 0x6a: srem/urem for 32-bit %; 0x69: every string argument of an extern is substituted, not just the ones which asked)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x70ul   // the wasm feature string drops +relaxed-simd and the idot family keeps only the exact extmul + extadd_pairwise lowering on wasm SIMD128 (0x6f: the first wasm idot lowering; 0x6e: the aarch64 SDOT / SMMLA tables gate on DotProd / i8mm, not the arch alone, and the force env reaches the generic exe machine (0x6d: the inline polynomial rail carries NaN: tanh selects the operand back over its ordered clamp, and the sincos quadrant / tan octant convert through llvm.fptosi.sat instead of poisoning on NaN and out-of-range (0x6c: aarch64 vector tan/exp2/log2/log/pow join the inline polynomial rail bit-exactly with the interpreter, sinh/cosh/tanh ride the exp one; 0x6b: aarch64 vector sin/cos ride the inline polynomial; 0x6a: srem/urem for 32-bit %; 0x69: every string argument of an extern is substituted, not just the ones which asked)
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
@@ -785,6 +785,12 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     // script-level `options jit_target = "..."`.
     let opt_target = (prog._options |> find_arg("jit_target")) ?as tString ?? ""
     let target_triple = cli_opts.target |> unwrap_or(opt_target)
+    // the compile-time target folds (get_target_triple, get_target_architecture_name) read the
+    // command line, never this option: a script-level triple the command line does not carry
+    // would emit for one target with every tier gate folded for the host
+    if (!empty(target_triple) && get_target_triple() != target_triple) {
+        panic("LLVM JIT: the target triple `{target_triple}` is not on the command line - pass --jit-target={target_triple} after the `--` separator (the compile-time target folds read argv, so `options jit_target` alone folds the host's tiers into a cross artifact)")
+    }
     let gen_wasm = gen_exe && (target_triple |> starts_with("wasm"))
     // Optional CLI override for the wasm runtime archive location. Falls
     // back to `options jit_runtime_lib = "..."` then write_wasm's

@@ -1563,26 +1563,12 @@ def private idot_sdot_aarch64(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : 
     return LLVMBuildCall2(ctx.builder, fnTy, decl, callArgs, "idot4")
 }
 
-// Returns null when this LLVM lacks the pairwise intrinsic, so callers fall through to the generic lowering.
+// The exact wasm SIMD128 int8 dot: extmul halves + pairwise widening adds + one even/odd fold. Returns
+// null when this LLVM lacks the pairwise intrinsic, so callers fall through to the generic lowering.
 [arch(at = "../ARCHITECTURE.md#idot-lowerings")]
 def private idot_wasm_simd128(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let v8i16 = LLVMVectorType(ctx.types.t_int16, 8u)
     let v4i32 = ctx.types.LLVMInt4Type()
-    if (g_target_wasm_relaxed_simd) {
-        let rid = LLVMLookupIntrinsicID("llvm.wasm.relaxed.dot.i8x16.i7x16.add.signed")
-        var noTypes : array<LLVMOpaqueType?>
-        var rdecl = rid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, rid, noTypes) : null
-        if (rdecl != null) {
-            let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
-            let mask = LLVMBuildAShr(ctx.builder, b, build_const_int_splat(ctx.types.t_int8, 16, 7), "xsign")
-            let wsg = LLVMBuildSub(ctx.builder, LLVMBuildXor(ctx.builder, a, mask, ""), mask, "wsigned")
-            let xabs = LLVMBuildSub(ctx.builder, LLVMBuildXor(ctx.builder, b, mask, ""), mask, "xabs")
-            var fnArgTypes <- [v16i8, v16i8, v4i32]
-            var fnTy = LLVMFunctionType(v4i32, fnArgTypes)
-            var callArgs <- [wsg, xabs, acc != null ? acc : LLVMConstNull(v4i32)]
-            return LLVMBuildCall2(ctx.builder, fnTy, rdecl, callArgs, "idot4_relaxed")
-        }
-    }
     let id = LLVMLookupIntrinsicID("llvm.wasm.extadd.pairwise.signed")
     var declTypes <- [v4i32]                        // overloaded on the widened result vector type
     var decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, declTypes) : null

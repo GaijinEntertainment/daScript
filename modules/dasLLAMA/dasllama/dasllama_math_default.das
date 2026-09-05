@@ -219,15 +219,17 @@ def dot_q8q8_idot4_ps_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const
     return f.x + f.y + f.z + f.w
 }
 
-let private WASM_TARGET = get_target_architecture_name() == "wasm64" || get_target_architecture_name() == "wasm32"
+//! a def, not a module global: team lanes run no global initializers, and the fold below is a
+//! compile-time constant either way
+def private wasm_target() : bool => get_target_architecture_name() == "wasm64" || get_target_architecture_name() == "wasm32"
 
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#cpu-tier-target-select")]
 def private dot_q8q8_p(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
-    return WASM_TARGET ? dot_q8q8_idot4_ps(wq, ws, xq, xs, n) : dot_q8q8(wq, ws, xq, xs, n)
+    return wasm_target() ? dot_q8q8_idot4_ps(wq, ws, xq, xs, n) : dot_q8q8(wq, ws, xq, xs, n)
 }
 
 def private dot_q8q8_f16s_p(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {
-    return WASM_TARGET ? dot_q8q8_idot4_ps_f16s(wq, ws, xq, xs, n) : dot_q8q8_f16s(wq, ws, xq, xs, n)
+    return wasm_target() ? dot_q8q8_idot4_ps_f16s(wq, ws, xq, xs, n) : dot_q8q8_f16s(wq, ws, xq, xs, n)
 }
 
 // ----- parallel_for dispatch profiler (off by default) -----

@@ -23,6 +23,8 @@ lane's platform, in its PR body or commit message; a green run of that lane on t
 commit is that evidence.** A check that fails for a non-defect turns a green branch red for
 everyone.
 
-**A step in `pages.yml` that names the deployed games spells the list as a `for g in <ids>; do`
-loop, never inline.** `examples/games/REVIEW.das` (repo root) reads the deployed list from
-those loops; an inline list beside a surviving loop is one nothing cross-checks.
+**A step in `pages.yml` that names more than one id under `examples/games/` spells them as a
+`for g in <ids>; do` loop, never inline.** `examples/games/REVIEW.das` (repo root) reads the
+deployed list from those loops; an inline list beside a surviving loop is one nothing
+cross-checks. An example outside `examples/games/` (a graphics showcase, a dasLLAMA app) is not
+on that list and is named on its own.

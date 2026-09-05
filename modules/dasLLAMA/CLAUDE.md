@@ -16,8 +16,10 @@ directly). A changed file in a model suite (decode | mtp | prefill | matrix | im
 area - `--changed` names it and runs nothing for it; run that suite with `--arm` scoped to the
 change. Before a PR: `--suite model-free`, then `--suite stocked` on a box with models - a PR's
 `stocked` run carries no `--exclude`; `--exclude test_ple_modes` is the between-PR iteration
-form. The runner's `REPORT` and `NEXT` lines say what ran, what the run skipped (a filtered arm,
-an absent device, or a missing model), and what is still owed. The rest: `tests/CLAUDE.md`.
+form. `--no-tune` runs any suite but the image suites on the reference kernel bodies
+(`DAS_TUNE_POLICY=reference`, the image rail off) - the portable tier's arm. The runner's `REPORT`
+and `NEXT` lines say what ran, what the run skipped (a filtered arm, an absent device, or a
+missing model), and what is still owed. The rest: `tests/CLAUDE.md`.
 
 Follow the daslang **gen2** conventions - the root `CLAUDE.md` rules apply to every `.das` file
 here.

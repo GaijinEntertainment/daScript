@@ -199,7 +199,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%),
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments|with_argv)$%%),
         group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock|get_time_nsec|mktime|iso8601_now|format_time|clock)$%%),
-        group_by_regex("Platform queries", mod, %regex~(get_context_share_counter|das_is_dll_build|das_is_exceptions_enabled|is_standalone_exe|get_platform_name|get_running_platform_name|get_cross_platform_name|get_architecture_name|cpu_supports)$%%),
+        group_by_regex("Platform queries", mod, %regex~(get_context_share_counter|das_is_dll_build|das_is_exceptions_enabled|is_standalone_exe|get_platform_name|get_running_platform_name|get_cross_platform_name|get_architecture_name|get_target_triple|get_target_architecture_name|cpu_supports)$%%),
         group_by_regex("String formatting", mod, %regex~(fmt)$%%),
         hide_group(group_by_regex("Temp string reclaim", mod, %regex~(_temp_string_result)$%%)),
         group_by_regex("Argument consumption", mod, %regex~(consume_argument)$%%),
