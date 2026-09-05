@@ -2807,7 +2807,9 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         // context/jobque mutexes). __wrap_emscripten_futex_wait (src/hal/wasm_thread_malloc.cpp)
         // busy-polls on the worklet instead, delegating all other threads to the real impl. No
         // emscripten fork needed — the wrap + shim live in libDaScript_runtime.a (like the malloc lock).
-        w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -pthread -sPTHREAD_POOL_SIZE=16 -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 -Wl,--wrap=emscripten_futex_wait")
+        // EXPORTED_RUNTIME_METHODS=FS,ENV: a custom shell stages files into MEMFS and sets the
+        // program's environment knobs in Module.preRun (the C environment is built from Module.ENV at startup).
+        w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS,ENV -pthread -sPTHREAD_POOL_SIZE=16 -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 -Wl,--wrap=emscripten_futex_wait")
         for (a in emcc_args) {
             w |> write(" {a}")
         }

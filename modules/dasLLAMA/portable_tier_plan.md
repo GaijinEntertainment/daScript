@@ -361,6 +361,29 @@ and the JIT-cross artifact each diverge from it around token 40 - every tier ord
 reductions differently, and a 15M model's flat logits flip on that. SmolLM-135M matched
 token-exact across all three; the frozen parity gates stay per tier.
 
+**The browser demo runs (2026-09-05).** `examples/dasLLAMA/storyteller/` is the first card of
+the examples page: stories15M-Q8 writes a children's story on screen two tokens a frame
+(dasGlfw + dasOpenGL text), each finished sentence goes to a `new_thread` speech worker, and
+Kitten nano reads it in the kid voice through dasAudio while the next one is written; Space
+starts a new story. One `main.das` for both targets, the same shape as `examples/games`
+(`glfw_live` + `live_host` + `eval_main_loop`); `daspkg release wasm` gives a 27 MB wasm64
+app, the JIT-cross rail. The package's own shell (`web_shell.html`) fetches the four model
+files (113 MB: the two ggufs and the g2p / POS-tag packs) into MEMFS with one progress bar
+and waits for a click - browsers start audio only from a gesture - so the release rail now
+exports `FS` and `ENV` to the shell (`-sEXPORTED_RUNTIME_METHODS=FS,ENV`). In Chrome under a
+cross-origin-isolated server: stories at typing speed, Kitten nano at 0.37-0.43x real time
+(three sentences of audio per second of synthesis, four workers), the AudioContext running,
+no SIGILL - finding (1) did not reproduce in Chrome's trap handling. Three lessons from the
+native run, general: the jobque fork-context pool is armed PER CONTEXT, so a `new_thread` body
+that runs inference calls `setup_dasllama_jobque()` itself or every parallel kernel clones the
+whole program (Kitten at rtf 15 instead of 0.05 - the facade doc-comment says so now); a
+`new_thread` lambda's captured `Stream?` / `Channel?` are released by the thread body or the
+lambda finalizer panics and takes the process down; a fresh `Session` samples from a fixed seed
+(`set_seed` from the clock, or every story is the same story). The TinyStories corpus separates
+stories with BOS, so BOS is a stop token beside EOS, and it writes curly quotes the screen
+font has no glyphs for. Serving: the models sit beside the page (`models/`, or `?models=<url>`);
+the `.dlim` question (half the download for Kitten) and an OPFS reader stay open.
+
 - Route: the stage-2 example's AOT C++ through emcc against `web/output64` (memory64 +
   pthreads), under node first (NODEFS mounts), the browser after.
 - The GPU tiers already self-gate the way a wasm build needs (verified 2026-09-04 with

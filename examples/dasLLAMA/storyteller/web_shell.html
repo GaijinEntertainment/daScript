@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>storyteller</title>
+<style>
+  html, body {
+    margin: 0; height: 100%; background: #12101a; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; color: #d6cfbf;
+  }
+  #canvas { width: 100%; height: 100%; object-fit: contain; border: 0; outline: none; display: block; }
+  #gate {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; background: #12101a; cursor: default;
+  }
+  #gate h1 { font-weight: 500; font-size: 26px; margin: 0; color: #f4e9d2; letter-spacing: 0.02em; }
+  #gate p { margin: 0; color: #8d8577; }
+  #bar { width: 320px; height: 6px; border-radius: 3px; background: #2a2636; overflow: hidden; }
+  #bar i { display: block; height: 100%; width: 0; background: #f2b955; transition: width 0.15s; }
+  #start {
+    display: none; padding: 10px 28px; border-radius: 22px; border: 1px solid #f2b955;
+    background: transparent; color: #f2b955; font: inherit; font-size: 16px; cursor: pointer;
+  }
+  #start:hover { background: #f2b955; color: #12101a; }
+</style>
+</head>
+<body>
+<!-- The storyteller's shell: fetches the story model, the TTS model and its phoneme packs into
+     MEMFS before the program starts, then waits for a click - browsers only let audio start
+     from a gesture. Models come from ./models/ beside the page, or ?models=<base url>. -->
+<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+<div id="gate">
+  <h1>storyteller</h1>
+  <p id="status">fetching the models...</p>
+  <div id="bar"><i id="fill"></i></div>
+  <button id="start">start</button>
+</div>
+<script>
+  var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1 };
+  window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key]) e.preventDefault(); }, { passive: false });
+
+  var MODEL_FILES = ['stories15M-Q8_0.gguf', 'kitten-nano.gguf', 'tts_g2p.bin', 'tts_postag.bin'];
+  var modelsBase = new URLSearchParams(location.search).get('models') || 'models/';
+  if (!modelsBase.endsWith('/')) modelsBase += '/';
+
+  function setStatus(text) { document.getElementById('status').textContent = text; }
+  function setProgress(done, total) {
+    document.getElementById('fill').style.width = total ? (100 * done / total) + '%' : '0';
+  }
+
+  // fetch every model with one shared progress bar; sizes come from Content-Length when the
+  // server sends it, so a missing header only makes the bar coarse, never wrong
+  async function fetchModels(onFile) {
+    var sizes = await Promise.all(MODEL_FILES.map(async function (name) {
+      var r = await fetch(modelsBase + name, { method: 'HEAD' });
+      return r.ok ? Number(r.headers.get('Content-Length') || 0) : 0;
+    }));
+    var total = sizes.reduce(function (a, b) { return a + b; }, 0), done = 0;
+    for (var i = 0; i < MODEL_FILES.length; i++) {
+      var name = MODEL_FILES[i];
+      var r = await fetch(modelsBase + name);
+      if (!r.ok) throw new Error(name + ': HTTP ' + r.status);
+      var chunks = [], reader = r.body.getReader();
+      for (;;) {
+        var step = await reader.read();
+        if (step.done) break;
+        chunks.push(step.value);
+        done += step.value.length;
+        setProgress(done, total);
+        setStatus('fetching ' + name + '  ' + (done / 1048576).toFixed(0) + ' / ' + (total / 1048576).toFixed(0) + ' MB');
+      }
+      var bytes = new Uint8Array(chunks.reduce(function (a, c) { return a + c.length; }, 0)), off = 0;
+      chunks.forEach(function (c) { bytes.set(c, off); off += c.length; });
+      onFile(name, bytes);
+    }
+  }
+
+  var Module = {
+    canvas: (function () {
+      var c = document.getElementById('canvas');
+      c.addEventListener('click', function () { c.focus(); });
+      var origGetContext = c.getContext.bind(c);
+      c.getContext = function (type) {
+        if (/webgl/i.test(String(type))) {
+          try { parent.postMessage({ type: 'canvas-visible', width: c.width, height: c.height }, '*'); } catch (e) { /* no embedder */ }
+        }
+        return origGetContext.apply(c, arguments);
+      };
+      return c;
+    })(),
+    arguments: ['--models', '/models', '--autoplay'],
+    preRun: [function () {
+      // the C environment is built from Module.ENV at startup: knobs set later never reach getenv
+      Module.ENV.DASLLAMA_IMAGE = '0';          // no prepared-image sidecar: MEMFS is per visit
+      Module.ENV.DASLLAMA_ALLOW_UNTUNED = '1';  // the portable kernels, no tune sidecar
+      Module.FS.mkdir('/models');
+      Module.addRunDependency('storyteller-models');
+      fetchModels(function (name, bytes) { Module.FS.writeFile('/models/' + name, bytes); })
+        .then(function () {
+          setStatus('the models are here');
+          setProgress(1, 1);
+          var start = document.getElementById('start');
+          start.style.display = 'block';
+          start.addEventListener('click', function () {
+            document.getElementById('gate').remove();
+            document.getElementById('canvas').focus();
+            Module.removeRunDependency('storyteller-models');
+          });
+        })
+        .catch(function (err) { setStatus('could not fetch the models: ' + err.message); });
+    }],
+  };
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>
