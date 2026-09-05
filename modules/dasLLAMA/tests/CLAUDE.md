@@ -41,7 +41,10 @@ Every suite but `model-free` and `stocked` needs `--arm`. `--full` parses and is
 whole gate; `--exclude <substr,...>` drops the files whose name contains a token and names each
 on an `EXCLUDED` line, so a trimmed run cannot read as full. `--no-tune` composes with any suite:
 every child runs with `DAS_TUNE_POLICY=reference`, so the `[tune]` families and the `[tuned]`
-hints fall to their reference bodies - the portable tier's arm of the gate. The runner redirects
+hints fall to their reference bodies - the portable tier's arm of the gate. That arm also runs
+with `DASLLAMA_IMAGE=0`: the reference policy is a different box identity, and a `.dlim` minted
+under it would GC-purge the box's tuned images, so image-rail cells skip there and keep their
+coverage on the tuned arm. The runner redirects
 the COMPLETE output to a log file, and prints that path on the DONE line. It owns the dastest
 timeout, and repeats a file only when `--nreps` is passed explicitly (default 1, never
 best-of-N). Every child runs `-jit -module-cache .jitted_scripts/module_cache/dastest.dascache`;
