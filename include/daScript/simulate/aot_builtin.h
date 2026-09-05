@@ -22,6 +22,8 @@ namespace das {
     DAS_API bool is_compiling ( );
     DAS_API bool is_compiling_macros ( );
     DAS_API bool is_standalone_exe ( );
+    DAS_API bool das_is_jit_function ( const Func func );
+    DAS_API bool das_is_aot_function ( const Func func );
     DAS_API uint64_t get_context_share_counter ( Context * context );
 
     DAS_API char * builtin_das_root ( Context * context, LineInfoArg * at );

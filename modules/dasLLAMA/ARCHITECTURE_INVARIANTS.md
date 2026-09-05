@@ -9,17 +9,22 @@ Durable "why it is built this way" facts harvested from the design docs archived
 
 **From `x64_arch.md`:**
 
-- **The LIBRARY never runs interpreted or AOT - the scaffolding may.** Inference - anything that
-  runs a model (eval / decode / prefill / generate) - is `-jit`-only, hard stop: an interpreted or
-  AOT model run is not "slow but correct", it is out of contract, and the library panics on it.
-  Loop hints and intrinsic lowering exist only in the JIT, and the JIT tier is the only one the
-  oracles gate. **Scaffolding is exempt:** conversion utilities (`.dlim` bake, image processing),
-  debug scripts, and batch/driver tools that spawn the real runner as a child may run interpreted.
-  Enforcement is `guard_interp_gguf_load` (`dasllama_image.das` - big-load panic +
-  `DASLLAMA_ALLOW_INTERP_LOAD` escape for the conversion path) plus `guard_interp_inference`
-  (`dasllama_math.das`), which panics at the library seams: `make_run_state`, ASR session
-  creation, and `vad_chunk_prob`. Intrinsic fallback bodies exist for off-ARCH correctness
-  *inside* the JIT, not as runnable tiers.
+- **The LIBRARY never runs interpreted - the scaffolding may.** Inference - anything that runs
+  a model (eval / decode / prefill / generate) - runs on a compiled tier, hard stop: an
+  interpreted model run is not "slow but correct", it is out of contract, and the library panics
+  on it. Three tiers pass: the JIT (the crown - loop hints, intrinsic lowering and the tuned
+  kernels exist only there, and it is the tier the oracles gate), a standalone `-exe`, and a host
+  that linked the engine's AOT stubs (the portable tier: the reference bodies as the C++ the AOT
+  emitter produced, `examples/dasLLAMA`, `-use-aot`). **Scaffolding is exempt:** conversion
+  utilities (`.dlim` bake, image processing), debug scripts, and batch/driver tools that spawn
+  the real runner as a child may run interpreted. Enforcement is `guard_interp_gguf_load`
+  (`dasllama_image.das` - big-load panic + `DASLLAMA_ALLOW_INTERP_LOAD` escape for the
+  conversion path) plus `guard_interp_inference` (`dasllama_math.das`), which panics at the
+  library seams: `make_run_state`, ASR session creation, and `vad_chunk_prob`. Both read the
+  AOT tier through `aot_kernels_linked` - a runtime probe of one kernel's binding, never
+  `aot_enabled()`, which folds at compile time and desyncs the semantic hash between AOT
+  generation and the AOT run. Intrinsic fallback bodies are what the AOT tier runs where the
+  JIT would lower an instruction; inside the JIT they exist for off-ARCH correctness.
 - **Correctness before speed, token-for-token.** The engine is validated against external oracles
   (llama2.c + upstream `simple_ids`) plus per-arch parity fixtures. A new kernel passes the suite
   *and* the oracles with the new backend active before any perf claim.

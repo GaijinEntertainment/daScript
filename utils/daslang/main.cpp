@@ -469,12 +469,16 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         // (--ast-verify-batch keeps only the post-infer one, read from argv by the module).
         access->addExtraModule("ast_verify", getDasRoot() + "/daslib/ast_verify.das");
     }
+    // -use-aot links the stubs compiled into THIS binary against the script it runs; a function
+    // with no stub interprets (never fail_on_no_aot here - the host may be dastest, whose own
+    // framework has no stubs, and which sets both policies for the test files it compiles)
+    policies.aot = useAot;
+    policies.fail_on_no_aot = false;
     if ( useAot ) {
-        // don't set policies.aot here - the host program (e.g. dastest) doesn't need AOT linking
-        // the --use-aot flag (after --) tells dastest to enable AOT for test files it compiles
-        policies.fail_on_no_aot = false;
-    } else {
-        policies.fail_on_no_aot = false;
+        // the stubs were generated tune-frozen (a cross-box artifact carries no per-box [tune]
+        // stamps); a stamped compile here would hash every tune-family kernel differently and
+        // link none of them
+        policies.tune_frozen = true;
     }
     policies.fail_on_lack_of_aot_export = false;
     policies.aot_macros = aotMacros;    // -aot-macros: force quote lowering (daslib/quote) in a normal run

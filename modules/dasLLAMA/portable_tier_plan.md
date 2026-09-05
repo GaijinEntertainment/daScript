@@ -253,17 +253,48 @@ the framework short-circuited is green on the stage-0 gates and parity; the floo
 
 ## Stage 2 - an AOT compilation target under `examples/dasLLAMA/`
 
-- One example program (a small-LLM chat, then ASR and TTS twins) registered as an AOT target,
-  the first exception to `modules/dasLLAMA/CMakeLists.txt:7` ("never AOT'd"), scoped to that
-  example.
-- `guard_interp_inference` accepts `aot_enabled()` beside `jit_enabled()` and
-  `is_standalone_exe()`; `guard_interp_gguf_load` likewise. This is the rule adjustment the
-  invariants doc gets in the same change.
-- The stamped-function hash question is moot under `-aot` (`tune_frozen`), and with the
-  stage-1 shells the AOT emitter sees ordinary functions.
-- Expect heavy TUs and a long C++ compile: the engine closure is large. Known AOT traps from
-  earlier arcs to watch first: int64 pointer indexing, managed-vector for-in.
-- Parity against the stage-1 JIT run on the same model is the pass criterion, ids exact.
+**Status: the target exists and the exit's parity half holds (2026-09-04).** `examples/dasLLAMA/CMakeLists.txt`
+builds `dasllama_aot` (opt-in, `EXCLUDE_FROM_ALL`): the daslang host with every CPU engine
+module's C++ stubs linked in (`DAS_AOT_LIB` over `dasllama/*.das` minus the Vulkan and Metal
+tiers, the LLVM IR generators and the exchange server, which interpret as scaffolding) plus the
+daslib modules the CPU path calls that `libDaScriptAot` does not carry. `bin/dasllama_aot -use-aot
+examples/dasLLAMA/run.das -- SmolLM2-135M-Instruct-Q8_0.gguf` reproduces the `-jit` reference-policy
+run's 64 greedy tokens exactly. The run links 4637 functions; the 1178 it does not are the excluded
+Metal tier plus 38 generic instantiations attributed to `json` / `strings_boost` / `strings_convert`
+(libDaScriptAot's stubs, minted from another root - harmless, they interpret).
+
+What it took, each a general fix rather than a dasLLAMA one:
+
+- `-use-aot` now does what its help text says: the host compiles the script with `policies.aot`
+  (and `tune_frozen`, the generator's policy) so the linked stubs bind; a function with no stub
+  interprets (`fail_on_no_aot` stays off in the host). Before, only dastest honored the flag.
+- The guards read the AOT tier through `aot_kernels_linked()` - `is_aot_function` on one kernel
+  (`dasllama_math::silu`), a runtime probe - never `aot_enabled()`, which folds differently under
+  generation and the consuming run and would desync every caller's hash. `ARCHITECTURE_INVARIANTS.md`
+  sec.3 carries the adjusted rule.
+- `das_accelerate` had no `aotRequire`, and a C++ module without one AOT-disables every das
+  module whose require closure reaches it - the whole engine above `dasllama_math_accelerate`
+  emitted empty TUs (`// AOT disabled due to module requirements`) with no error anywhere. The
+  module now ships `dasAccelerate.h`. Lint candidate: every in-tree C++ module class overrides
+  `aotRequire` (a tests-cpp or CMake-time gate).
+- The emitter's topological structure sort read a function type's parameter types as by-value
+  dependencies, saw a false cycle (`BatchWorkspace` embeds `Session`; a `function<(...BatchWorkspace...)>`
+  typedef names it) and fell back to source order - C++ then embedded an incomplete type.
+  `collectStructDeps` skips function / lambda / block types, and a residual (container-mediated)
+  cycle keeps the sorted prefix. Gate: `tests/aot/test_struct_order.das`.
+- `das_is_aot_function` / `das_is_jit_function` and the jobque affinity pair had no AOT header
+  declaration (`aot_builtin.h`, `aot_builtin_jobque.h`); the generated C++ named them undeclared.
+- The AOT TUs include every closure module's C++ header, so the target compiles with dasAudio's,
+  dasMinfft's and dasVulkan's (volk) include dirs; the generator reads `aotRequire` out of the
+  loaded shared modules, so those are regeneration inputs too (`DAS_AOT_EXTRA_DEPENDS`).
+
+The exit's numbers half is open: on the M5 box, contended by a build, the AOT decode ran 54 t/s
+against the JIT reference policy's 360 t/s on the same model (prefill 74 vs 617) - not a
+measurement, a gap of the size the vectorization leg predicts (clang over the emitted loop
+shapes versus the JIT's auto-vectorizer). Next: the same rail for the ASR and TTS examples, a
+model-free gate for the AOT target (CI has no models; the build itself is the compile gate, and a
+synthetic-weights run is the cheapest runtime one), Linux and Windows builds of the target, and the
+stage-2 profile that decides which kernels the vectorization leg rewrites first.
 
 **Exit:** the example compiles and runs the small model with exact parity to the JIT run; its
 decode/prefill numbers sit beside the stage-1 floor.

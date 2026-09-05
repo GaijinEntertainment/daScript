@@ -44,6 +44,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_range64_ctor_args.das | AOT most-vexing-parse - a for-source of constructor-style casts only (`range64(int64(a), int64(b))`) must emit a variable, not a function declaration | |
 | test_op2_operand_order_emit.das | AOT binary-op operand sequencing - impure-operand ops wrap in `das_ordered2` (braced init = left-to-right), pure and short-circuit ops don't | |
 | _ordered_op2_fixture.das | *(helper)* the op2 shapes the sequencing test emits - impure policy/plain/xor, pure, `&&`/`\|\|` | |
+| test_struct_order.das | AOT structure emission order - an outer struct embeds a later-declared inner whose function-typed field names the outer in its signature; a signature is not a by-value dependency, so the topological sort must still place the inner first | |
 
 ## apply/
 

@@ -25,11 +25,20 @@ require daslib/f16_cvt  // f16<->f32 converts: JIT half intrinsics on aarch64 / 
 // can be passed zero-copy as views into one big model blob and outputs can be written
 // straight into a view (e.g. the KV cache). Dims/indices are int64 for large models.
 
-//! The library-seam ``-jit`` stop: dasLLAMA inference NEVER runs interpreted (kernels 10-40x
-//! slower). Inference seams call it; scaffolding that only parses or peeks never crosses it.
+//! True when the engine's kernels are the C++ the AOT emitter produced - the host linked this
+//! module's stubs (examples/dasLLAMA, `-use-aot`). A runtime probe of one kernel's binding, not
+//! `aot_enabled()`: that one folds at compile time, differently under AOT generation and the
+//! AOT-consuming run, and would desync every caller's semantic hash (error[50101]).
+def aot_kernels_linked() : bool {
+    return is_aot_function(@@ < (var x : float?; size : int64) : void > silu)
+}
+
+//! The library-seam compiled-tier stop: dasLLAMA inference NEVER runs interpreted (kernels 10-40x
+//! slower). The JIT, a standalone exe, and linked AOT stubs each pass; inference seams call it,
+//! scaffolding that only parses or peeks never crosses it.
 def guard_interp_inference(what : string) {
-    if (!jit_enabled() && !is_standalone_exe()) {
-        panic("dasLLAMA: {what} requires -jit (or a compiled exe) - interpreted inference runs the kernels 10-40x slower")
+    if (!jit_enabled() && !is_standalone_exe() && !aot_kernels_linked()) {
+        panic("dasLLAMA: {what} requires -jit, a compiled exe, or an AOT host with the engine's stubs (-use-aot) - interpreted inference runs the kernels 10-40x slower")
     }
 }
 
