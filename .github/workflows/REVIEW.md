@@ -17,11 +17,6 @@ the workflow, and the diff names the preflight gate that keeps its check per PR
 (`skills/internal/preflight.md` sec."extended_checks.yml"); a step with no such gate stays per
 PR.**
 
-**Weakening `ci/test_ci_matrix.py` - dropping its role-condition assertion or its per-event
-matrix-cell assertions - is a defect.** The nightly `extended_checks` job runs with role `all`
-and is the only run of the steps too slow for a PR, so a step conditioned on its own role
-would run nowhere in full; that test is what keeps every condition `matrix.role != '<other>'`.
-
 **A diff that adds or changes a per-PR gate step states a run of the command the diff adds or
 changes, on the lane's platform, in its PR body or commit message; a green run of that lane on
 the PR's head commit is that evidence.** A step that fails for a non-defect turns a green

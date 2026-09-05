@@ -60,8 +60,8 @@ wide; size pools by `get_total_hw_cores()`.
 - sccache: build.yml's slots were never capped (the default 10G; the compressed tarballs run 104 MB to
   971 MB) - the 500M cap was extended_checks' alone, and it is now 1500M so the nightly save holds a
   complete object set. The nightly-only cells (sanitizers, windows 64 Debug) save no slot: nothing
-  restores one (frees ~1.3 GB). CodeQL: master pushes + the weekly cron, no `pull_request` trigger
-  (frees the per-commit ~430 MB databases and 20-40 min per PR).
+  restores one (frees ~1.3 GB). CodeQL stays per PR: 20 min on the last PR, inside the budget, and no
+  local gate mirrors it (its ~430 MB per-commit databases stay; the repo's caches total ~12 GB of 25).
 - extended_checks per PR = two darwin15 jobs, `core` and `modules` (the step lists: `skills/internal/preflight.md`
   sec."extended_checks.yml"). Estimated 20-26 min each at a warm sccache. linux and windows extended_checks,
   tutorial dry-runs, the run form of examples, coverage, nano cross-compile: nightly (same workflow,

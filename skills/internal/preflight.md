@@ -66,7 +66,7 @@ working-tree copy.
 | `nightly_imgui.yml` | `schedule` cron (daily 03:00 UTC) + `workflow_dispatch` | dasImgui playwright suite on ubuntu + macos - section below |
 | `extended_checks.yml` (per-PR) | every PR | two darwin15-arm64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON - section below |
 | `extended_checks.yml` (nightly) | `schedule` cron (daily 04:00 UTC) + `workflow_dispatch` | one job each on linux, darwin15 and windows running every step (role `all`), including the ones too slow for a PR: tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify tree sweep, doc-verify |
-| `codeql.yml` | pushes to `master` touching C++ + a weekly cron | CodeQL over the C++ surface; alerts in the Security tab, no per-PR run |
+| `codeql.yml` | every PR and `master` push touching `src/`, `include/`, `modules/`, `tests-cpp/` + a weekly cron | CodeQL over the C++ surface, ~20 min on a PR; no local mirror, so it stays per PR |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed | the doc gates |

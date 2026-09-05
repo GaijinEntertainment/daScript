@@ -31,9 +31,10 @@ list never carried leaves no record.
 
 **A test the diff adds or changes that covers a change under `utils/`, whose load-bearing
 assertions a CI row can run against the change, ships with a CI row that executes those
-assertions, wherever the diff puts the test, added in the same change if no row already covers
-it.** A row that only compile-checks the test (`dastest --compile-only`) does
-not execute them. A test whose assertions no row executes never runs again.
+assertions on every pull request, wherever the diff puts the test, added in the same change if
+no row already covers it.** A row that only compile-checks the test (`dastest --compile-only`)
+does not execute them, and a nightly-only row runs them after the merge. A test whose
+assertions no row executes never runs again.
 
 **A test the diff adds or changes that covers a change under `utils/`, whose load-bearing
 assertions no CI row can run for want of hardware or data, ships with a row that compile-checks it - `dastest

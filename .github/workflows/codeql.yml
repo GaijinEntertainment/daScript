@@ -1,14 +1,22 @@
 name: "CodeQL"
 
 # CodeQL static analysis over the C++ surface (src, include, modules,
-# tests-cpp). build-mode none — no traced build. It runs on master pushes and
-# the weekly cron, not per PR: a scan is 20-40 minutes and caches a ~430MB
-# database per commit, and its alerts land in the Security tab either way -
-# the per-PR copy only moved the same finding one merge earlier. .das files
-# are invisible to CodeQL — that surface is covered by the in-tree lint.
+# tests-cpp). build-mode none — no traced build, so a run costs minutes, not a
+# full build per PR; switch to a built mode only if finding quality ever
+# warrants it. PR checks flag NEW alerts only; the pre-existing backlog lives
+# in the Security tab and does not gate PRs. .das files are invisible to
+# CodeQL — that surface is covered by the in-tree lint.
 
 on:
   push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'modules/**'
+      - 'tests-cpp/**'
+      - '.github/workflows/codeql.yml'
+  pull_request:
     branches: [master]
     paths:
       - 'src/**'
