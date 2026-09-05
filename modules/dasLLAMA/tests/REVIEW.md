@@ -4,12 +4,11 @@
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-**Every PR runs `run.das -- --suite model-free` and, on a box with models stocked, `--suite
-stocked` (`preflight --full` runs both when the diff touches `modules/dasLLAMA/`), plus every
-test here the change reaches - never the whole directory.** A change reaches a test when it
-alters anything the test's result depends on - the test file, a shared helper, engine code it
-exercises, an in-tree fixture or corpus it reads, or a name it asserts on; a comment-only edit
-reaches none.
+**Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
+the models stocked, plus every test here the change reaches - never the whole directory.** A
+change reaches a test when it alters anything the test's result depends on - the test file, a
+shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name it
+asserts on; a comment-only edit reaches none.
 
 **A PR's `stocked` run carries no `--exclude`** - `--suite stocked --exclude test_ple_modes` is
 the iteration form between PRs; a PR that ships on it never ran the PLE coverage.
@@ -25,14 +24,13 @@ is what the runner arms for every suite.
 
 **`run.das` runs nothing on require - no `[init]`, and no global whose initializer spawns,
 logs, writes the environment or touches the filesystem; a diff that adds one is a defect.**
-`test_run_suites.das` and `test_run_summary.das` require `run` by bare same-dir name to read
-its tables, so anything that fires on require fires inside every one of those test processes.
-Data tables (`AREAS`, `MODULE_AREAS`) are what the tests are there to read.
+`test_run_suites.das` and `test_run_summary.das` require `run` by bare same-dir name, so
+anything that fires on require fires inside every one of those test processes.
 
 **A cell asserting a chat template's INSTRUCT wire - a closed empty thought block and no
-thinking gate - calls `set_thinking(c, false)` on its renderer before the first turn.**
+thinking gate - calls `set_thinking(c, false)` on its `ChatSession` before the first turn.**
 `ChatTemplate.think_default` is `true` unless a family clears it, so an un-opted-out turn 1
-renders the gate and arms the channel-marker stops, and the cell asserts the wrong wire.
+renders the thinking gate and the cell asserts the wrong wire.
 
 **Every test RUN runs under `-jit` - never the interpreter, never AOT.** A compile-only CI lane
 passes dastest's `--compile-only`. Under the interpreter a model-gated suite's cells skip, and
@@ -46,15 +44,6 @@ in the same change, every `CLAUDE.md` clause that names that gate's suite, fixtu
 or skip condition.** A clause that only names the file (a brace list, a suite roster) carries
 nothing to correct.
 
-**Weakening `test_run_suites.das` is a defect** - it pins the per-PR split (a suite-less file
-that reaches a machine-local fixture root - `models_dir()`, `model_available()`,
-`llama2c_dir()`, `whisper_dir()` - sits in `stocked`, every other one in `model-free`), the
-folder census (every test file sits in a `run.das` suite, the CPU-prefill tripwire the one
-declared exemption), the area tables (every per-PR file has an `area_tests` row; every arm an
-area names exists; every arm the image suite declares is reachable from an area or listed as
-unclaimed) and the `--exclude` filter. `model-free` is the every-change gate and runs the same
-on a bare box; `stocked` is the per-PR model coverage and a run of skips without models.
-
 **A new test file listed in `run.das`'s `model-free` or `stocked` suite, or in no `run.das`
 suite at all, whose name does not say what it covers, gets a `CLAUDE.md` entry in the same
 change** - `run.das`'s `model-free` and `stocked` lists together are the complete census, the
@@ -62,10 +51,8 @@ change** - `run.das`'s `model-free` and `stocked` lists together are the complet
 
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm
-filter mechanics" section and, for an image-suite arm, `run.das`'s `area_image_arms` (or its
-unclaimed list in `test_run_suites.das`) in the same change** - an arm the census does not
-name is unreachable to whoever is choosing what to run, and an arm no area claims never runs
-from `--area` or `--changed`.
+filter mechanics" section in the same change** - an arm the census does not name is
+unreachable to whoever is choosing what to run.
 
 **A pinned gate's coverage never shrinks - not its asserts, not its bounds, not the corpus or
 sweep it covers, and not the set of runs that reach it; a diff that shrinks one is a defect.**
@@ -90,9 +77,8 @@ kernel regressing, adds it to the pinned set above in the same change** - as a f
 cell of it pins, as a named cell otherwise.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell
-that returns without asserting - the module is absent,
-its models are not stocked, no device answered, a capability declined - registers `t |> skip`
-there; `feint` is a print, not a skip.
+that returns without asserting - the module is absent, its models are not stocked, no device
+answered, a capability declined - registers `t |> skip` there; `feint` is a print, not a skip.
 
 **A cell's skip condition keys on a fact the box owns - a device capability, a run-mode knob's
 value, a host toolchain's presence, a compile-time module-presence check
@@ -103,8 +89,8 @@ dump a test wrote).** An artifact condition goes permanently false when its prod
 
 **A test that loads a model above the large tier (`LARGE_TIER_BYTES`, `_model_tier.das`)
 without gating on `DASLLAMA_PARITY_FULL=1` is a defect** - `DASLLAMA_PARITY_FULL=1` is a final
-pre-PR switch, not the iteration loop. In this folder the spelling is `model_available` (`_model_tier.das`).
-A test that cannot require `_model_tier.das` open-codes the same env check.
+pre-PR switch, not the iteration loop. In this folder the spelling is `model_available`
+(`_model_tier.das`). A test that cannot require `_model_tier.das` open-codes the same env check.
 
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image
 rail never calls `load_model`, `load_model_cached`, or `load_model_image` - it loads each
@@ -236,8 +222,8 @@ once at context init.
 
 **A cell that cannot set an environment-read knob before its reader starts, and whose text
 that prints with a red - the cell label or the assert - does not name the value it asserts
-under, is a defect.** An environment-read knob is one
-the running config reads once, at context init.
+under, is a defect.** An environment-read knob is one the running config reads once, at
+context init.
 
 **A cell asserting the UNPINNED default lane never compares against a hardcoded lane - it
 compares against the predicates the lane policy itself consults, `float_batch_override_active()`
@@ -275,8 +261,8 @@ outside the new bar.** A bar nothing has ever exceeded is not known to discrimin
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's
 smallest GGUF that sits under `LARGE_TIER_BYTES` (`_model_tier.das`) (the file homes are
-`CLAUDE.md`'s "Model-free / no-arm tests" and "Out-of-folder test files" notes). A family whose vocab carries no thinking
-or tool markers has no format to test.
+`CLAUDE.md`'s "Model-free / no-arm tests" and "Out-of-folder test files" notes). A family
+whose vocab carries no thinking or tool markers has no format to test.
 
 **A kernel-unit cell whose kernel reads f16 operands and whose oracle is wider-precision
 feeds inputs that are exact in f16.** Otherwise the compare measures input rounding, and the

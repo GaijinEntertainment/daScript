@@ -226,10 +226,10 @@ omission a compile refusal (`test_lens_tgmem_gate` above).
 
 ## Model-free / no-arm tests
 
-Which files belong to the `model-free` and `stocked` suites is `REVIEW.md`'s to say: a file
-that reaches a machine-local fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`,
-`whisper_dir()`) is `stocked`, every other suite-less file is `model-free`, and
-`test_run_suites.das` reads the files and fails a misfiled one. A `stocked` cell skips honestly
+The split between the `model-free` and `stocked` suites: a file that reaches a machine-local
+fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`, `whisper_dir()`) is
+`stocked`, every other suite-less file is `model-free`, and `test_run_suites.das` reads the
+files and fails a misfiled one (the pinned gate `REVIEW.md` names for the split). A `stocked` cell skips honestly
 when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box it is
 the model coverage the per-PR gate owes - `test_ple_modes` alone is ~10 min. The runner sets
 `DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride

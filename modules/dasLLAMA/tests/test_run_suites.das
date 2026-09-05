@@ -70,6 +70,8 @@ def test_every_file_sits_in_a_suite(t : T?) {
         }
     }
     t |> success(count > 50, "the folder listing walked the test files ({count})")
+    // the runner is required by this file and test_run_summary.das: nothing may fire on require
+    t |> success(find(file_text("{TESTS_DIR}/run.das"), "[init]") < 0, "run.das carries no [init] - it runs nothing on require")
 }
 
 //! the area tables cover the per-PR census exactly: every area file is a model-free or stocked file,
