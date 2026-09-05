@@ -21,7 +21,24 @@ from mcp_bridge import BridgeError, DapBridge, _read_dap_frame
 ROOT = Path(__file__).resolve().parents[2]
 BRIDGE = ROOT / "utils" / "dap" / "mcp_bridge.py"
 FIXTURE = ROOT / "utils" / "dap" / "_fixture.das"
-DASLANG = Path(os.environ.get("DASLANG", ROOT / "bin" / "daslang")).resolve()
+
+
+def _default_daslang() -> Path:
+    candidates = [
+        ROOT / "bin" / "daslang",
+        ROOT / "bin" / "daslang.exe",
+        ROOT / "build" / "daslang",
+        ROOT / "build" / "daslang.exe",
+        ROOT / "bin" / "Release" / "daslang",
+        ROOT / "bin" / "Release" / "daslang.exe",
+    ]
+    usable = [path for path in candidates if path.is_file()]
+    if not usable:
+        return ROOT / "bin" / "daslang"
+    return max(usable, key=lambda path: path.stat().st_mtime)
+
+
+DASLANG = Path(os.environ.get("DASLANG_DAP_BIN", _default_daslang())).resolve()
 STEPPING_OVERRIDE = os.environ.get("DAS_TEST_STEPPING")
 STEPPING_DEBUGGER = (
     STEPPING_OVERRIDE == "1" if STEPPING_OVERRIDE is not None else False

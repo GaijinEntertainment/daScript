@@ -122,8 +122,7 @@ Breakpoints and execution
    Resolve a visible variable to a hardware data-breakpoint identifier and
    replace the active data breakpoints.
 
-``debug_continue``, ``debug_pause``, ``debug_step_in``,
-``debug_step_over``, and ``debug_step_out``
+``debug_continue``, ``debug_pause``, ``debug_step_in``, ``debug_step_over``, and ``debug_step_out``
    Control execution of the selected DAP thread.
 
 Inspection and events

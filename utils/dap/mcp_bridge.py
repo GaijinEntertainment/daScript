@@ -766,7 +766,9 @@ class DapBridge:
             return executable
         candidates = [
             self.repo_root / "bin" / "daslang",
+            self.repo_root / "bin" / "daslang.exe",
             self.repo_root / "build" / "daslang",
+            self.repo_root / "build" / "daslang.exe",
             self.repo_root / "bin" / "Release" / "daslang",
             self.repo_root / "bin" / "Release" / "daslang.exe",
         ]

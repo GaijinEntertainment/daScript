@@ -16,7 +16,8 @@ def main() {
     var seed = 40
     let answer = dap_add_one(seed)
     var guard = 0
-    while (guard < 1000) {
+    let started = ref_time_ticks()
+    while (get_time_usec(started) < 300000) {
         guard += 1
         sleep(1u)
     }
