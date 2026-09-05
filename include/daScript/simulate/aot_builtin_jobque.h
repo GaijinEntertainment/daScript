@@ -276,6 +276,8 @@ namespace das {
     DAS_API int32_t get_jobque_worker_limit ( Context * context, LineInfoArg * at );
     DAS_API void set_jobque_team_rank_gate ( bool on, Context * context, LineInfoArg * at );
     DAS_API bool get_jobque_team_rank_gate ( Context * context, LineInfoArg * at );
+    DAS_API void setJobqueAffinity ( int32_t mode );
+    DAS_API int32_t getJobqueAffinity ();
     DAS_API uint64_t count_jobque_leaks();
     DAS_API void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
     DAS_API void set_jobque_fork_pool ( bool keep, bool skipInit, Context * context, LineInfoArg * at );

@@ -1446,6 +1446,7 @@ if (NOT ${DAS_TESTS_DISABLED})
     # AOT examples are enabled — gate the inclusion accordingly.
     if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
         include(examples/pathTracer/CMakeLists.txt)
+        include(examples/dasLLAMA/CMakeLists.txt)
     endif()
     if(NOT ${DAS_AOT_EXAMPLES_DISABLED} AND NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4))
         include(tests/aot/CMakeLists.txt)

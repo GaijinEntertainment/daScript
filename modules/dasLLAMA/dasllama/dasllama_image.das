@@ -1525,7 +1525,7 @@ def private cache_via_image_(var m; var out; img : string; tag : string; quant :
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-interp-load")]
 def private guard_interp_gguf_load(path : string) {
-    if (jit_enabled() || is_standalone_exe()) {
+    if (jit_enabled() || is_standalone_exe() || aot_kernels_linked()) {
         return
     }
     var st : FStat

@@ -511,6 +511,8 @@ namespace das {
 
     static void collectStructDeps ( const TypeDeclPtr & type, Structure * owner, das_hash_set<Structure *> & deps ) {
         if ( !type ) return;
+        // a function, lambda or block value is a handle: the types in its signature are not stored by value
+        if ( type->baseType == Type::tFunction || type->baseType == Type::tLambda || type->baseType == Type::tBlock ) return;
         if ( type->baseType == Type::tStructure && type->structType && type->structType != owner ) {
             if ( type->isPointer() ) return;   // pointers don't need full definition
             if ( !deps.insert(type->structType).second ) return;   // already visited
@@ -569,7 +571,16 @@ namespace das {
                 }
             }
         }
-        if ( sorted.size() != structs.size() ) return; // cycle - keep original order
+        // a by-value cycle cannot exist (the layout would be infinite); what remains unsorted is a
+        // container-mediated cycle, which needs no definition order - it keeps the original order
+        // after everything the sort did place
+        if ( sorted.size() != structs.size() ) {
+            das_hash_set<Structure *> placed;
+            for ( auto s : sorted ) placed.insert(s);
+            for ( auto & sp : structs ) {
+                if ( !placed.count(sp) ) sorted.push_back(sp);
+            }
+        }
         // reorder structs to match sorted order
         das_hash_map<Structure *, StructurePtr> byPtr;
         for ( auto & sp : structs ) byPtr[sp] = sp;

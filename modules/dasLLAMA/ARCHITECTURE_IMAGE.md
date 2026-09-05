@@ -77,7 +77,9 @@ A gguf load's O(model) transform loops run about ten times slower interpreted - 
 takes 53 s against 5.5 s jitted, and a 69 GB hybrid extrapolates to an hour (the repack itself is
 native tune kernels and costs the same either way). A prepared image costs nothing interpreted,
 because mapping and borrowing planes runs no such loop. That asymmetry is why the guard fires on
-the gguf path and never on the image path.
+the gguf path and never on the image path. The guard passes on every compiled tier - the JIT, a
+standalone exe, and a host that linked the engine's AOT stubs (`aot_kernels_linked`, the probe
+`guard_interp_inference` shares) - because the transform loops are native on each.
 
 ### 2.1e Publishing an image {#image-publish}
 
