@@ -346,8 +346,9 @@ mode too. E.g. Qwen3.6's instruct-mode card settings: `"temperature": 0.7, "top_
 
 ### Thinking control and `reasoning_content`
 
-`enable_thinking` is tri-state: ABSENT leaves the family's own default in force (the
-Qwen3/3.5/3.6, GLM, gemma-4, and gpt-oss families all think by default), and a present bool -
+`enable_thinking` is tri-state: ABSENT leaves the model template's own default in force
+(thinking-capable Qwen3/3.5/3.6, GLM, gemma-4, and gpt-oss templates default on; a bare Qwen
+Instruct generation branch such as Qwen3 Instruct-2507 defaults off), and a present bool -
 top-level or the llama.cpp spelling
 `"chat_template_kwargs": {"enable_thinking": ...}` - overrides it. `false` on a
 `<think>`-family appends the template's empty think block so the model answers directly;

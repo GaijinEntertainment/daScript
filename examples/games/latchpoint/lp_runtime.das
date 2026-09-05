@@ -151,14 +151,31 @@ def runtime_load(text : string) : bool {
     return true
 }
 
-def runtime_save() : bool {
-    return false if (!save_valid)
-    let text = runtime_snapshot()
-    if (fexist(save_path)) {
+def private publish_runtime_save(text, backup_suffix : string) : bool {
+    let staging = save_path + ".new"
+    if (fexist(staging) && !remove(staging)) { return false }
+    if (!fwrite(staging, text)) { remove(staging); return false }
+    if (fexist(save_path) && !empty(backup_suffix)) {
         var error : string
-        if (!copy_file(save_path, save_path + ".previous", true, error)) { return false }
+        if (!copy_file(save_path, save_path + backup_suffix, true, error)) { remove(staging); return false }
     }
-    return fwrite(save_path, text)
+    if (get_platform_name() == "windows" && fexist(save_path) && !remove(save_path)) {
+        remove(staging)
+        return false
+    }
+    if (!rename(staging, save_path)) {
+        remove(staging)
+        return false
+    }
+    return true
+}
+
+def runtime_save(replace_invalid : bool = false) : bool {
+    return false if (!save_valid && !replace_invalid)
+    let suffix = !save_valid && fexist(save_path) ? ".corrupt" : ".previous"
+    if (!publish_runtime_save(runtime_snapshot(), suffix)) { return false }
+    save_valid = true
+    return true
 }
 
 def runtime_trace(event, data : string) {
@@ -169,12 +186,30 @@ def runtime_trace(event, data : string) {
     }
 }
 
-def init_runtime() {
-    save_path = runtime_path("saves/scene.json")
+def load_runtime_save(path : string) {
+    save_path = path
     mkdir_rec(dir_name(save_path))
+    save_valid = true
+    let primary_exists = fexist(save_path)
+    if (primary_exists) {
+        if (runtime_load(fread(save_path))) { return }
+        save_valid = false
+    }
+    let previous = save_path + ".previous"
+    return if (!fexist(previous))
+    let recovered = fread(previous)
+    return if (!runtime_load(recovered))
+    if (primary_exists) {
+        var error : string
+        return if (!copy_file(save_path, save_path + ".corrupt", true, error))
+    }
+    save_valid = publish_runtime_save(recovered, "")
+}
+
+def init_runtime() {
+    load_runtime_save(runtime_path("saves/scene.json"))
     trace_path = path_join(get_das_root(), "logs/latchpoint-playtests/native-runtime-v1.jsonl")
     mkdir_rec(dir_name(trace_path))
-    if (fexist(save_path)) { save_valid = runtime_load(fread(save_path)) }
     runtime_trace("runtime", "daslang-native-v1")
 }
 

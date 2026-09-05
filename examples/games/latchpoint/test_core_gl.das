@@ -21,22 +21,33 @@ def test_core_profile_cleanup(t : T?) {
     for (_i in range(8)) { glGetError() }
     glBindVertexArray(0u)
     glDisableVertexAttribArray(0u)
-    t |> equal(glGetError(), GL_INVALID_OPERATION, "control: mutating vertex attributes without a VAO is invalid")
-    bind_ffp()
-    t |> equal(glGetError(), 0u, "generic cleanup must not mutate VAO zero")
-    create_ttf_objects()
-    var font <- load_ttf(path_join(get_das_root(), "modules/dasStbImage/fonts/droidsansmono.ttf"))
-    if (font.bitmap.width > 0) {
-        upload_font_texture(font)
-        var quads <- font |> create_quads("core")
-        font |> draw_quads(quads, identity4x4(), float3(1.0))
-        delete quads
-        destroy_font_texture(font)
-        t |> equal(glGetError(), 0u, "font draw and cleanup are core-profile safe")
-    } else {
-        t |> failure("Could not load the test font")
+    let control_error = glGetError()
+    t |> run("driver rejects attribute mutation without a VAO") @(t : T?) {
+        if (control_error == 0u) {
+            t |> skip("This OpenGL driver permits glDisableVertexAttribArray with VAO zero, so the strict negative control is unavailable")
+            return
+        }
+        t |> equal(control_error, GL_INVALID_OPERATION, "the strict core-profile control rejects only the expected operation")
     }
-    delete font
+    t |> run("bind_ffp leaves VAO-zero state valid") @(t : T?) {
+        bind_ffp()
+        t |> equal(glGetError(), 0u, "generic cleanup must not mutate VAO zero")
+    }
+    t |> run("font draw cleanup leaves core state valid") @(t : T?) {
+        create_ttf_objects()
+        var font <- load_ttf(path_join(get_das_root(), "modules/dasStbImage/fonts/droidsansmono.ttf"))
+        if (font.bitmap.width > 0) {
+            upload_font_texture(font)
+            var quads <- font |> create_quads("core")
+            font |> draw_quads(quads, identity4x4(), float3(1.0))
+            delete quads
+            destroy_font_texture(font)
+            t |> equal(glGetError(), 0u, "font draw and cleanup are core-profile safe")
+        } else {
+            t |> failure("Could not load the test font")
+        }
+        delete font
+    }
     glfwDestroyWindow(window)
     glfwTerminate()
 }

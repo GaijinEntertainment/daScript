@@ -658,6 +658,7 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_model_catalog.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_setup_mode.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_model_override.das
+        $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_worker_dispatch.das
 
     - name: "Test env-knob registries"
       # The [EnvConfig] enforcement tests (daslib/env_registry scanners): raw-read

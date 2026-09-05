@@ -71,13 +71,18 @@ def begin_chatter(topic : string; resident : int; time : float) {
     runtime_trace("ambient_requested", topic)
 }
 
-def finish_chatter_packet(var packet : InferenceResponse; time : float) {
+def finish_chatter_packet(var packet : InferenceResponse; time : float; allow_followup : bool = true) {
     if (!chatter_still_relevant(time) || packet.code != 200 || !empty(packet.error)) {
         runtime_trace("ambient_discarded", chatter_topic)
         chatter_stage = ""
         return
     }
     if (chatter_stage == "generating") {
+        if (!allow_followup) {
+            runtime_trace("ambient_discarded", chatter_topic)
+            chatter_stage = ""
+            return
+        }
         var error : string
         let body = read_json(packet.text, error)
         let choice = body?.choices?[0]
@@ -109,13 +114,17 @@ def finish_chatter_packet(var packet : InferenceResponse; time : float) {
     }
 }
 
-def tick_chatter(time : float) {
-    if (speech_is_ambient && (!chatter_enabled || chatter_player_busy())) { interrupt_voice() }
+def poll_chatter(time : float; allow_followup : bool = true) {
     if (chatter_job.done != 0ul && inference_job_ready(chatter_job)) {
         var packet <- collect_inference_job(chatter_job)
         chatter_job = InferenceJob()
-        finish_chatter_packet(packet, time)
+        finish_chatter_packet(packet, time, allow_followup)
     }
+}
+
+def tick_chatter(time : float) {
+    if (speech_is_ambient && (!chatter_enabled || chatter_player_busy())) { interrupt_voice() }
+    poll_chatter(time, true)
     let drill = drill_contact(time)
     let record = robot_work_cycle(2, time)
     let lamp = inspection_lamp(time)

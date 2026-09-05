@@ -76,7 +76,7 @@ wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
 pages at `donate_stream`); `test_vulkan_kernels.das`'s tile-pick cell (which tile the Vulkan
 matmul picks for a given width and row count, and whether that dispatch splits its reduction
-across partial planes).
+across partial planes); `utils/dasllama-server/test_worker_dispatch.das` (repo root: worker-local fork pools, shared queue policy).
 
 **A diff that adds a gate whose failure means a documented contract changed, rather than a
 kernel regressing, adds it to the pinned set above in the same change** - as a file when every

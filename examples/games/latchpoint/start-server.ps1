@@ -7,6 +7,7 @@ $runtime = Join-Path $repoRoot 'bin/Release/daslang.exe'
 $runRoot = Join-Path $repoRoot 'logs/latchpoint-server'
 if (!(Test-Path -LiteralPath $runtime)) { throw "Build this checkout's daslang runtime first: $runtime" }
 if (!(Test-Path -LiteralPath $Config)) { throw "Create $Config from server.example.toml with your model paths." }
+$Config = (Resolve-Path -LiteralPath $Config).Path
 New-Item -ItemType Directory -Force $runRoot | Out-Null
 $env:DAS_JOBQUE_THREADS = '8'
 $env:DASLLAMA_GPU = '0'

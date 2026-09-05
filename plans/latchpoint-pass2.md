@@ -56,7 +56,7 @@ dialogue experiment remains available in the terminal driver without `--grounded
 `player_regression.json` replays the user's actuator, workshop, coil, guidance, partial
 archive-condition, and eventual-unlock wording. The latest run passed 14/14 state checks;
 the location and guidance transcripts named the actual workshop bench and admitted the
-absence of a leading controller. Typical gameplay turns were around 1–2 seconds on the
+absence of a leading controller. Typical gameplay turns were around 1-2 seconds on the
 eight-lane CPU setup; classification uses temperature 0, while creative chat uses 0.5.
 
 No second verifier model was added. A useful next experiment is a pre-speech verifier for

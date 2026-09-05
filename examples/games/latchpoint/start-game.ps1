@@ -7,6 +7,7 @@ New-Item -ItemType Directory -Force $runRoot | Out-Null
 $sceneReady = $false
 try { $null = Invoke-RestMethod 'http://127.0.0.1:19091/status' -TimeoutSec 2; $sceneReady = $true } catch { }
 if (!$sceneReady) {
-    Start-Process $runtime -ArgumentList @('-no-module-cache', "$PSScriptRoot/main.das", '--live-port', '19091') -WorkingDirectory $runRoot -WindowStyle Hidden -RedirectStandardOutput "$runRoot/game-live.stdout.log" -RedirectStandardError "$runRoot/game-live.stderr.log"
+    $script = '"{0}"' -f (Join-Path $PSScriptRoot 'main.das')
+    Start-Process $runtime -ArgumentList @('-no-module-cache', $script, '--live-port', '19091') -WorkingDirectory $runRoot -WindowStyle Hidden -RedirectStandardOutput "$runRoot/game-live.stdout.log" -RedirectStandardError "$runRoot/game-live.stderr.log"
 }
 Write-Output 'Latchpoint is a native daslang game: inference server :18082 and live development :19091. No Python bridge.'

@@ -88,7 +88,7 @@ def native_new_game() {
     delete world
     world = WorldState()
     delete histories
-    if (!runtime_save()) { runtime_load(before); reply_text = "Could not save the new game."; return }
+    if (!runtime_save(true)) { runtime_load(before); reply_text = "Could not save the new game."; return }
     reset_avatar()
     workshop_aperture = 0.0
     archive_aperture = 0.0
@@ -104,8 +104,9 @@ def native_new_game() {
 }
 
 def submit_interaction(kind, text : string; resident : int = -1) {
-    return if (!empty(pending_job) || !save_valid)
+    return if (!empty(pending_job))
     if (kind == "new_game") { native_new_game(); return }
+    return if (!save_valid)
     if (kind == "physical") {
         if (physical_at_avatar() != text) { reply_text = "Move closer to the component."; return }
         let before = runtime_snapshot()

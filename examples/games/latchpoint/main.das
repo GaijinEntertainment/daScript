@@ -569,21 +569,31 @@ def init() {
     menu_selection = has_saved_game ? 1 : 0
 }
 
+def framebuffer_drawable(window_w, window_h, buffer_w, buffer_h : int) : bool {
+    return window_w > 0 && window_h > 0 && buffer_w > 0 && buffer_h > 0
+}
+
+def tick_nonvisual(time : float; can_draw : bool) {
+    poll_dialogue()
+    tick_microphone()
+    poll_chatter(time, can_draw)
+}
+
 [export]
 def update() {
     return if (!live_begin_frame())
     live_get_framebuffer_size(framebuffer_w, framebuffer_h)
     glfwGetWindowSize(live_window, safe_addr(display_w), safe_addr(display_h))
-    return if (display_w <= 0 || display_h <= 0 || framebuffer_w <= 0 || framebuffer_h <= 0)
     let dt = min(get_dt(), 0.05)
-    ambient_activity_allowed = !menu_open && !editing && !microphone_active && empty(pending_job) && speech_sid == INVALID_SID
+    let can_draw = framebuffer_drawable(display_w, display_h, framebuffer_w, framebuffer_h)
+    ambient_activity_allowed = can_draw && !menu_open && !editing && !microphone_active && empty(pending_job) && speech_sid == INVALID_SID
+    tick_nonvisual(get_uptime(), can_draw)
+    return if (!can_draw)
     move_avatar(dt)
     if (!menu_open) { tick_follow(dt) }
-    poll_dialogue()
     tick_behavior(dt)
     tick_generator(dt)
     tick_yard_audio(get_uptime())
-    tick_microphone()
     tick_chatter(get_uptime())
     if (trace_gl_errors) { glGetError() }
     render_yard(framebuffer_w, framebuffer_h, get_uptime())
@@ -596,8 +606,14 @@ def update() {
 [export]
 def shutdown() {
     cancel_microphone()
+    if (!is_reload()) {
+        release_player_inference()
+        release_inference_job(chatter_job)
+    }
     shutdown_yard_audio()
-    save_avatar()
+    if (avatar_save_allowed(menu_open) && !save_avatar_on_shutdown(menu_open, avatar_save_path())) {
+        to_log(LOG_WARNING, "Could not save Latchpoint avatar position.")
+    }
     glfw_chain_clear(live_window)
     finalize(cube)
     finalize(sphere)

@@ -90,6 +90,33 @@ def collect_inference_job(job : InferenceJob) : InferenceResponse {
     return <- result
 }
 
+def release_inference_job(var job : InferenceJob&) {
+    return if (job.stream == 0ul || job.done == 0ul)
+    if (inference_job_ready(job)) {
+        var inscope ignored <- collect_inference_job(job)
+    } else {
+        var output = unsafe(reinterpret<Stream?>(job.stream))
+        var done = unsafe(reinterpret<JobStatus?>(job.done))
+        new_thread() <| @capture(= output, = done) {
+            done |> join()
+            unsafe {
+                stream_remove(output)
+                job_status_remove(done)
+            }
+        }
+        output |> release()
+        done |> release()
+    }
+    job = InferenceJob()
+}
+
+def release_player_inference() {
+    var job = InferenceJob(stream = inference_stream, done = inference_done)
+    release_inference_job(job)
+    inference_stream = 0ul
+    inference_done = 0ul
+}
+
 def poll_inference(blk : block<(var response : InferenceResponse) : void>) : bool {
     return false if (!inference_busy())
     var done = unsafe(reinterpret<JobStatus?>(inference_done))

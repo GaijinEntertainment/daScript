@@ -1,6 +1,8 @@
 options gen2
 require dastest/testing_boost public
 require lp_controls
+require lp_world
+require daslib/fio
 
 [test]
 def test_pointer_and_retina(t : T?) {
@@ -41,4 +43,18 @@ def test_navigation(suite : T?) {
         state[GLFW_KEY_LEFT] = true
         t |> equal(movement_axes(state), float2(0.0, 1.0))
     }
+}
+
+[test]
+def test_lifecycle_guards(t : T?) {
+    let temp = create_temp_file_result("latchpoint_pose", ".json")
+    t |> success(temp is value, "temporary pose file created")
+    return if (!(temp is value))
+    let path = temp as value
+    t |> success(fwrite(path, "saved pose"))
+    t |> success(!save_avatar_on_shutdown(true, path), "closing the untouched initial menu does not save")
+    t |> equal(fread(path), "saved pose", "the existing Continue pose remains byte-identical")
+    t |> success(save_avatar_on_shutdown(false, path), "an active game persists its current pose")
+    t |> success(fread(path) != "saved pose", "active gameplay replaces the pose")
+    remove(path)
 }

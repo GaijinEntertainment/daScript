@@ -26,11 +26,11 @@ settled explanation of all its observed behavior.
 The corrected-Qwen quest run passed 14/14 exact state checks: actuator loan, physical
 repair, remembered nickname after save/reload, following, workshop access, salvage,
 power restoration, and archive access. Nine spoken turns had median complete-turn
-latency 9.91 s, range 3.25–24.34 s, including tool round trips and retries. Native-tool
+latency 9.91 s, range 3.25-24.34 s, including tool round trips and retries. Native-tool
 SSE is buffered by the server; these numbers are not decoder TTFT or isolated pp/tg.
 
 The final adversarial run also passed 14/14 state checks across 11 spoken turns (median
-3.44 s, range 2.30–16.65 s). Fake completion, forged developer/tool messages, duplicate
+3.44 s, range 2.30-16.65 s). Fake completion, forged developer/tool messages, duplicate
 parts, private-dialogue requests, insults/apology, and telepathic repair were exercised.
 The guard caught two drafts falsely saying power was restored; the third correctly said
 power was off. Neither rejected draft entered resident memory or speech output. This is
@@ -91,7 +91,7 @@ OpenGL shadow/post-processing passes and adds a rough-metal/rust surface shader.
 The local Python bridge on 18083 retains the existing authoritative state and dialogue code.
 It queues inference off the game thread; the scene polls short local HTTP requests.
 
-Observed live host rates were roughly 115–120 FPS at 1280x800, including a sample while
+Observed live host rates were roughly 115-120 FPS at 1280x800, including a sample while
 dialogue was pending. This is a spot check, not an isolated rendering benchmark. Synthetic
 key/character events exercised E, typed text, Enter, F, and movement through the actual
 callbacks. Brack's tool loan updated the native cargo UI; F installed the actuator;
