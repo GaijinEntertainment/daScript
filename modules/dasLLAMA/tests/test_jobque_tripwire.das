@@ -32,8 +32,10 @@ def private fixture_cmd() : string {
 
 [test]
 def test_bare_queue_panics(t : T?) {
+    let win = get_platform_name() == "windows"
+    let cmd = win ? "set \"DASLLAMA_ALLOW_BARE_JOBQUE=0\"&& {fixture_cmd()}" : "DASLLAMA_ALLOW_BARE_JOBQUE=0 {fixture_cmd()}"
     var out : string
-    let rc = run(fixture_cmd(), out)
+    let rc = run(cmd, out)
     t |> success(rc != 0, "a bare queue's first engine dispatch panics (rc {rc}):\n{out}")
     t |> success(find(out, "setup_dasllama_jobque()") >= 0, "the panic names the call to make:\n{out}")
     t |> success(find(out, "TRIPWIRE_DONE") < 0, "the program did not run on:\n{out}")

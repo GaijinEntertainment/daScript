@@ -3802,6 +3802,12 @@ def private process_asr_job(
         audio_s = float(length(samples)) / 16000.0))
 }
 
+//! Configure the worker context without changing the shared queue's dispatch policy.
+def configure_media_worker_dispatch(team_dispatch : bool) {
+    set_jobque_fork_pool(true, true)
+    set_jobque_thread_team_mode(team_dispatch)
+}
+
 def private asr_worker_main(
                             worker_index : int;
                             model_path, mmproj_path : string;
@@ -3810,7 +3816,7 @@ def private asr_worker_main(
                             var events : Channel?&
                             ) {
     this_context().name := "dasllama_asr_{worker_index}"
-    set_jobque_thread_team_mode(team_dispatch)
+    configure_media_worker_dispatch(team_dispatch)
     var model = AsrModel()
     var load_failure = ""
     let load_failed = catch_worker_panic(load_failure) {
@@ -4172,7 +4178,7 @@ def private tts_ready_event(model : TtsModel) : TtsEvent {
 
 def private tts_worker_main(model_path : string; lane : string; team_dispatch : bool; var jobs : Channel?&; var events : Channel?&) {
     this_context().name := "dasllama_tts"
-    set_jobque_thread_team_mode(team_dispatch)   // a new OS thread defaults to team publishes; the worker's kernels run inline like the ASR workers' unless the policy is `team`
+    configure_media_worker_dispatch(team_dispatch)
     var inscope model = TtsModel()
     var load_failure = ""
     // the lane pins HERE, in the context that loads: this thread started every dasLLAMA module
@@ -4610,7 +4616,7 @@ def private media_encode_one(job : MediaJob; var embs : table<string; VisionEmbe
 
 def private media_worker_main(slot_path_lines : string; var jobs : Channel?&; var events : Channel?&) {
     this_context().name := "dasllama_media"
-    set_jobque_thread_team_mode(false)
+    configure_media_worker_dispatch(false)
     var embs : table<string; VisionEmbedder>
     var states : table<string; VisionState>
     var audio_embs : table<string; AudioEmbedder>
