@@ -152,7 +152,7 @@ blob twin's CPU batch fallback would trip the blob-only panic).
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free - runs with no model stocked; also the layout fingerprint and the dev-W
 bake tables, whose rebuild-not-append contract and per-format key arithmetic are pure taxonomy
-over a job list) `smol metal gemma tower whisper voxtral
+over a job list) `smol untied metal gemma tower whisper voxtral
 parakeet qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
 mtower`; `gemma4e` is the E2B metal-blob
 mint+map arm - the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
@@ -638,7 +638,7 @@ panic cell uses it.
 model blocks tagged with a listed family run - `family_on(t, name)` in
 `_model_tier.das`, EXACT token match, loud `t |> skip` like the arm filter. Model-free blocks
 carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`, `matrix` and
-`coverage`, plus the image `smol` and `metal` arms and the `image-vulkan` `vulkan` arm),
+`coverage`, plus the image `smol`, `untied` and `metal` arms and the `image-vulkan` `vulkan` arm),
 `qwen2`, `qwen3`, `phi3`,
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe` (the support-matrix family cells), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),

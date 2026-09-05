@@ -835,8 +835,8 @@ struct ArchBlocks {
 }
 
 //! The whole model. `fblob` holds the fp32 embedding + norm weights; the big 2D weights live in
-//! exactly one of wblob (fp32) / qblob+qscales (Q8) / q4blob+q4scales (Q4) per `quant`. For
-//! shared_weights, cls_q8 (tied Q8_0) drops the fp32 table: classifier + embedding both read qblob.
+//! exactly one of wblob (fp32) / qblob+qscales (Q8) / q4blob+q4scales (Q4) per `quant`. A Q8 load of
+//! a Q8_0 embedding (emb_q8) drops the fp32 table: rows read qblob; tied (cls_q8), the classifier reads it too.
 struct Model {
     config : Config = Config()
     arch : string = ""              // GGUF general.architecture, resolved at load — drives the chat template
@@ -1048,10 +1048,12 @@ struct Model {
     wsh2_off : int64        // ffn_down_shexp: layers x (n_ff_shexp x dim)
     wsh3_off : int64        // ffn_up_shexp:   layers x (dim x n_ff_shexp)
     wcls_off : int64
-    // Tied-classifier Q8: the classifier lives in qblob at wcls_off (repacked) and the fp32
-    // embedding table is NOT in fblob — token rows dequant from the second, LINEAR transcode at
-    // emb_q8_off. Set only by load_gguf for shared_weights + QuantMode.q8 + Q8_0 token_embd on disk.
+    // Tied-classifier Q8: the classifier lives in qblob at wcls_off (repacked); set only by
+    // load_gguf for shared_weights + QuantMode.q8 + Q8_0 token_embd on disk.
     cls_q8 : bool = false
+    // Q8 embedding: the fp32 table is NOT in fblob — token rows dequant from the LINEAR transcode
+    // at emb_q8_off. Any QuantMode.q8 load of a Q8_0 token_embd, tied (cls_q8 implies it) or not.
+    emb_q8 : bool = false
     emb_q8_off : int64
     quant : QuantMode
     rope_freqs : array<float>   // per-pair RoPE scaling (Llama-3.1 NTK-by-parts); empty = none
@@ -4188,12 +4190,12 @@ def private dequant_embq_row(t : Model; off, n : int64; var dst : float?) {
     }
 }
 
-// Copy token `token`'s embedding row into dst — from fp32 fblob, or (cls_q8) dequanted from the
+// Copy token `token`'s embedding row into dst — from fp32 fblob, or (emb_q8) dequanted from the
 // linear Q8 copy at emb_q8_off (embq when trimmed), or (cls_kq) from the K-quant plane at
 // wcls_off (embq/embs when trimmed). Rows are whole superblocks (the K-quant row invariant).
 def embed_row(t : Model; token : int64; var dst : float?) {   // nolint:STYLE037,STYLE038 — a KqFmt ladder x trimmed/repacked; arms differ only in the plane pair and its strides
     let dim = t.config.dim
-    if (t.cls_q8) {
+    if (t.emb_q8) {
         if (t.planes_trimmed) {
             dequant_embq_row(t, token * dim, dim, dst)
         } else {

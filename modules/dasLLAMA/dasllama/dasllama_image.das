@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 32   // the TTS AdaIN/AdaLayerNorm affines are vec-only: their tiled `wt` twin no longer rides the blob
+let IMAGE_VERSION = 33   // an untied Q8 load keeps its Q8_0 token table as quants (emb_q8): the fp32 copy left fblob, a linear q8 copy joined qblob
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -723,6 +723,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.wsh3_off)
     arch |> serialize_raw(t.wcls_off)
     arch |> serialize_raw(t.cls_q8)
+    arch |> serialize_raw(t.emb_q8)
     arch |> serialize_raw(t.emb_q8_off)
     arch |> serialize_raw(t.quant)
     arch |> serialize_raw(t.dn_conv_off)
@@ -741,7 +742,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
 }
 
 // the 3 deliberate skips: blocks, image_map, image_bytes
-let IMAGE_META_FIELDS = 75 + 3
+let IMAGE_META_FIELDS = 76 + 3
 
 // the tokenizer's tripwires: the SentencePiece backend's five serialized meta fields + its three
 // derived tables (lookup, pair_merge, bkey_id); the BPE backend's seven (merge_rank rides as the

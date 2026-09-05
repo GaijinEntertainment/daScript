@@ -490,6 +490,26 @@ def test_model_image_roundtrip(t : T?) {
         }
         text_image_roundtrip(t, path, 24)
     }
+    // the untied twin: a separate output.weight, so the image carries the classifier plane AND
+    // the embedding's own linear q8 copy (emb_q8) with no fp32 table - the smol arm never sees that layout
+    t |> run("stories15M q8 (untied): gguf load vs mapped image, token-for-token") @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "untied")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "stories15M-Q8_0.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        text_image_roundtrip(t, path, 24)
+        var m <- load_model(path, QuantMode.q8)
+        t |> success(m.emb_q8 && !m.cls_q8 && m.tok_emb_off < 0l, "the mapped image serves the untied q8 table with no fp32 copy")
+        let img_bytes = int64(stat(image_path_for(path)).size)
+        let table_f32 = m.config.vocab_size * m.config.dim * 4l
+        t |> success(img_bytes < table_f32 + int64(stat(path).size), "the image ({img_bytes >> 20l} MB) is smaller than the gguf plus an f32 table: no f32 table rode along")
+        delete m
+    }
 }
 
 // ===== the metal (blob-only) flavor =====

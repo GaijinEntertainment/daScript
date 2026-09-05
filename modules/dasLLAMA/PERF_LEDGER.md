@@ -814,6 +814,18 @@ what it costs today and what the fix would change.
   kernels only (default kernels still matched the oracle 24/24) -> moved to the counting prompt
   like Qwen2.5/Phi, oracle-refrozen. fp32/q4 loads and non-Q8_0 embeddings keep the exact old
   path. (Spotted wave 3.)
+- **DONE (2026-09-05): the UNTIED Q8 embedding keeps its Q8_0 quants too (`Model.emb_q8`).**
+  `cls_q8` had coupled "tied classifier on the disk quants" with "no fp32 table", so a Q8 load
+  of a model with its own `output.weight` still decoded `token_embd` to fp32 into fblob: vocab x
+  dim x 4 bytes of RAM and image on every untied model (37 MB on stories15M, 1.56 GB on the
+  152k-vocab Qwen3-4B, 1.24 GB on Qwen3-30B-A3B - sized, not measured). Now any Q8 load of a
+  Q8_0 `token_embd` transcodes the LINEAR copy at emb_q8_off and drops the table; tied models are
+  unchanged (`cls_q8` = tied && emb_q8). Rows bit-identical to the fp32 decode
+  (`test_parity_untied_emb_q8_rows`); stories15M's image 51 MB -> 26.6 MB, mint + map + token-exact
+  (image suite arm `untied`). IMAGE_VERSION 33: every image re-mints once. Vulkan's device embed
+  gather has no untied-q8 arm yet (the f32-upload arm declines, the CPU embed loop serves);
+  the Metal blob flavor's untied-q8 leg is untested on this box. (Spotted by the storyteller's
+  wasm download budget.)
 - **DONE (perf pass, 2026-07-02): V-from-K layers fuse the K->V copy with the weightless V-norm.**
   Decode (mm_qkv) and prefill both rmsnorm k->v out-of-place when v_norm is on (bit-identical to
   copy + in-place norm; the block's v_norm step skips those layers). (Spotted wave 3.)

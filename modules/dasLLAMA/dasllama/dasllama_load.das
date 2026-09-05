@@ -189,7 +189,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
     let layers = c.n_layers + c.n_layer_nextn
     var fo = 0l
     var bf16 = 0l
-    if (t.cls_q8 || cls_kq(t)) {
+    if (t.emb_q8 || cls_kq(t)) {
         t.tok_emb_off = -1l   // no fp32 embedding table — rows dequant from emb_q8_off / the kq plane
     } else {
         t.tok_emb_off = fo
@@ -432,6 +432,11 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         }
     } else {
         t.wcls_off = kq_take(cur, t.wcls_fmt, c.vocab_size * dim)
+        if (t.emb_q8) {
+            // untied Q8: the embedding's own linear copy, beside the separately quantized classifier
+            t.emb_q8_off = cur.wo
+            cur.wo += c.vocab_size * dim
+        }
     }
     if (c.n_layer_nextn > 0l) {   // MTP/NextN extras (the block's standard tensors rode the walks above)
         t.mtp_ehproj_off = kq_take(cur, t.mtp_ehproj_fmt, 2l * dim * dim)
@@ -2078,11 +2083,11 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
-        // tied Q8 loads of a Q8_0 embedding matmul the classifier on the DISK quants (the reference
-        // arithmetic) and drop the fp32 table — see Model.cls_q8. Other disk types keep the exact
-        // fp32 path (a requantized classifier would drift from the oracle for no parity gain).
-        t.cls_q8 = (t.config.shared_weights && mode == QuantMode.q8
-            && gguf_tensor_type(m, "token_embd.weight") == GGML_TYPE_Q8_0)
+        // a Q8 load of a Q8_0 embedding keeps the table as its disk quants (Model.emb_q8: rows dequant on
+        // demand to the values the fp32 decode would hold); tied, the classifier matmuls those quants too (Model.cls_q8).
+        // Other disk types keep the exact fp32 path (a requantized classifier would drift from the oracle for no parity gain).
+        t.emb_q8 = mode == QuantMode.q8 && gguf_tensor_type(m, "token_embd.weight") == GGML_TYPE_Q8_0
+        t.cls_q8 = t.config.shared_weights && t.emb_q8
         // ssm_beta/ssm_alpha disk type routes their matmul (must precede layout_offsets): F32
         // files keep them fp32 in fblob (their matmul runs in f32); quantized files ride qblob.
         // Also before detect_kq_formats — the dn tags demote on grouped (qwen3next) files.
@@ -2334,10 +2339,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             t.qscales |> reserve(sz.pleq8_n / 32l)
             t.qscales |> resize(sz.pleq8_n / 32l)
         }
-        // embedding + norms -> fblob (decoded to fp32 from whatever the disk type is); cls_q8 /
+        // embedding + norms -> fblob (decoded to fp32 from whatever the disk type is); emb_q8 /
         // cls_kq keep the embedding out of fblob — the quantized copies transcode with the big
         // weights below
-        if (!t.cls_q8 && !cls_kq(t)) {
+        if (!t.emb_q8 && !cls_kq(t)) {
             gguf_read_tensor_f32(m, bytes, "token_embd.weight", t.fblob, t.tok_emb_off, vocab * dim)
         }
         // gpt-oss names its pre-FFN norm post_attention_norm (same graph role as ffn_norm)
@@ -2571,6 +2576,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         if (!t.config.shared_weights) {
             load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.wcls_fmt)
+            if (t.emb_q8) {
+                // untied Q8: the embedding's linear copy the row reads dequant from (never repacked)
+                load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch)
+            }
         } elif (t.cls_q8) {
             // tied Q8: classifier copy (repacked below) + the linear copy embedding rows read.
             // Through load_big (its q8 arm is the same transcode) so the streaming plan records both.

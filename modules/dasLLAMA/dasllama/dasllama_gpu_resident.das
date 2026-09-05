@@ -239,7 +239,7 @@ def trim_model_planes(var t : Model) : bool {   // nolint:STYLE037,STYLE038 — 
     }
     let dim = t.config.dim
     let vocab = t.config.vocab_size
-    if (t.cls_q8) {
+    if (t.emb_q8) {
         // mblob-style 34B interleaved blocks over the emb region (dequant_embq_row's layout)
         let nb = vocab * dim / 32l
         t.embq |> reserve_resize(nb * 34l)   // vocab-scaled: ~600 MB at a 248k-vocab 27B, one grow
@@ -629,7 +629,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
     let emb_q8_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
         && c.shared_weights && t.cls_q8 && cls_fmt == KqFmt.q8)
     let emb_f32_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
-        && !t.cls_q8 && !cls_kq(t) && !t.planes_trimmed
+        && !t.emb_q8 && !cls_kq(t) && !t.planes_trimmed   // an untied q8 table has no f32 copy to upload: the CPU embed loop serves it
         && resident_plan(t, seq_cap, rkdt, rkdt).emb_f32_bytes > 0l)   // the plan counted it at this context
     var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
     planes |> reserve(c.n_layers * 7l + 1l)

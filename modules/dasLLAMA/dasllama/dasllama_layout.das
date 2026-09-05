@@ -97,7 +97,7 @@ def private metal_blob_layout_ok(t : Model) : bool {
     }
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     return (metal_blob_off_ok(t.wcls_off, cls_fmt) &&
-        (!t.cls_q8 || metal_blob_off_ok(t.emb_q8_off, KqFmt.q8)))
+        (!t.emb_q8 || metal_blob_off_ok(t.emb_q8_off, KqFmt.q8)))
 }
 
 //! Can `t` take the blob form? The refusal half of the transform, split out so the image writer
