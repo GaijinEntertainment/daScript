@@ -338,7 +338,7 @@ def release() {
 
 `release_wasm_main` exists because the desktop entry often `require`s host-only stacks (live-reload, libhv HTTP, threaded jobque) that don't cross-compile. The web variant swaps those for a `live_stub` shim (plain GLFW window + frame clock + no-op `[live_command]`) and guards music off (threaded strudel needs the jobque worker; SFX is single-threaded and stays on). One `.das_package` drives both targets.
 
-**Module-side hooks** (in a module's own `.das_package`, accumulated across all linked modules):
+**Module-side hooks** (in a module's own `.das_package`, accumulated across all linked modules; an app's own `.das_package` may call `release_emcc_arg` too - its flags come last on the link line, so they win):
 
 | Hook | Effect |
 |---|---|
