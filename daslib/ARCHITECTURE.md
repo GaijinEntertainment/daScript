@@ -230,11 +230,10 @@ Three companions carry a concern each; a section number is unique across all fou
   half on fixtures, and `tests/daslib/test_tune_shells.das` is tier-agnostic by design - so the pair
   is recorded here: a trait that answered off the process registry instead would take the
   framework arm inside a tool's nested compile, where the framework is not mounted.
-- **`modules/dasLLVM/.das_module` registers the `llvm/daslib/*` paths only after the witness
-  registered (or was compiled in), so without dasLLVM a direct `require llvm/daslib/x` is a missing
-  prerequisite and never a hollow compile.** The framework's das files compile without their C++
-  module, which is how a tool that reads a `<name>_variants()` registry through a direct require
-  once compiled in a witness-less world with inert shells and no registry; a world that cannot
-  mount the framework now refuses the require, and a lint skips the file as one it cannot compile.
-  The daslib doors to `llvm/` - `tune` and `just_in_time` - and the documentation generator
-  spell the guard, so a program reaching LLVM only through them compiles in every build.
+- **The `llvm/daslib/*` files resolve in every build that carries `modules/dasLLVM/`; only the
+  witness decides what `?llvm` and `module_exists(llvm_tune)` answer.** The framework's das files
+  compile without their C++ module, so a direct `require llvm/daslib/llvm_tune` in a build without
+  dasLLVM compiles with the shells inert and no `<name>_variants()` registry - a program that
+  reads one is framework-only and says so with that direct require. `daslib/just_in_time` keeps
+  its direct require for the opposite reason: a static host that never registered the witness
+  still runs the JIT through the LLVM library, and the guard would switch it off.
