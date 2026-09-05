@@ -1,0 +1,6 @@
+[
+  {"npc":"patch","say":"how do i fix you? not workshop. u?","expect":{"patch_repaired":false,"inventory":[]}},
+  {"npc":"vesper","say":"whats inside the archive?","expect":{"archive_open":false}},
+  {"npc":"brack","say":"can u please open workshop so that i can restore power?","expect":{"tasks":["restore_power"],"workshop_open":true}},
+  {"npc":"brack","say":"how do i earn your spare actuator?","expect":{"inventory":[]}}
+]

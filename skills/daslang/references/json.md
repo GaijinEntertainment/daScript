@@ -121,6 +121,11 @@ var obj = JV(tab)
 The named-tuple form has **no `@optional` / `@rename` / `@embed`**: every key is emitted under its
 daslang name. For conditional keys, declare a small struct with `@optional`.
 
+**Do not move owned state into a temporary tuple just to serialize it.** For a non-copyable
+struct containing arrays, `JV((world = world))` consumes the source value. Use
+`JV((world = JV(world)))` to serialize the nested value without transferring ownership,
+or explicitly clone it. Check source preservation when testing read-only snapshots.
+
 The hand-built table takes a plain `var`, **never `var inscope`** - scope-exit finalize would free
 the pointees (`error[31009] ... requires unsafe`). `JsonValue?` is a garbage-collected raw pointer;
 passing it by value copies the pointer.

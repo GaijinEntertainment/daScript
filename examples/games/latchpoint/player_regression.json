@@ -1,0 +1,14 @@
+[
+  {"physical":"salvage actuator","expect":{"inventory":["actuator"]}},
+  {"npc":"patch","say":"i got your actuator","expect":{"patch_repaired":false}},
+  {"physical":"install actuator","expect":{"patch_repaired":true,"inventory":[]}},
+  {"npc":"brack","say":"could you please open the workshop","expect":{"workshop_open":true}},
+  {"npc":"patch","say":"where do i find coil?"},
+  {"npc":"patch","say":"can you guide me there?"},
+  {"npc":"vesper","say":"can u open archive","expect":{"archive_open":false,"patch_repaired":true,"power":false}},
+  {"physical":"salvage coil","expect":{"inventory":["coil"]}},
+  {"physical":"install coil","expect":{"power":true,"inventory":[]}},
+  {"reload":true},
+  {"npc":"vesper","say":"please open it now","expect":{"archive_open":true}},
+  {"npc":"brack","say":"your mother was a shopping cart","expect":{"power":true,"archive_open":true}}
+]
