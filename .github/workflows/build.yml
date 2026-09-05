@@ -16,9 +16,10 @@ on:
     #    builds test_aot_subset (tests/language, part of ALL) as a compile+link
     #    gate and runs no AOT tests at all (preflight --full's tests-aot lane is
     #    the pre-push AOT sweep).
-    # bundle_smoke / gcc stay per-PR-only. A manual `workflow_dispatch` runs
-    # the FULL workflow: every per-PR job, both toolchains, the nightly cells,
-    # and the full AOT suite.
+    # gcc stays per-PR-only; bundle_smoke runs on the cron too, which is what
+    # seeds its sccache slot. A manual `workflow_dispatch` runs the FULL
+    # workflow: every per-PR job, both toolchains, the nightly cells, and the
+    # full AOT suite.
     # 02:00 UTC: dead time for EU working hours — the nightly is ~12 jobs and
     # must not compete with daytime PR lanes for runners.
     - cron: '0 2 * * *'
@@ -653,9 +654,17 @@ jobs:
   # still gated at release-cut time in release.yml.
   ###########################################################
     needs: pre_job
-    # Per-PR/push lane (also runs on manual `workflow_dispatch`); skipped only on the nightly `schedule` cron.
-    if: needs.pre_job.outputs.should_skip != 'true' && github.event_name != 'schedule'
+    # Per-PR/push lane and manual dispatch, plus the nightly cron on the canonical repo: the cron
+    # is what seeds this job's sccache slot below (a master push run is usually pre_job-skipped
+    # as a concurrent duplicate of the PR that just merged, so its save rarely lands).
+    if: >-
+      (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
+      || (github.event_name != 'schedule' && needs.pre_job.outputs.should_skip != 'true')
     runs-on: ubuntu-latest
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
@@ -683,6 +692,24 @@ jobs:
           libxinerama-dev \
           libxi-dev
 
+    # Its own sccache slot, same local-disk shape as the matrix cells: the release-modules
+    # configure compiles a surface no matrix cell does (dasHV, dasLLVM, dasAudio, dasSQLITE,
+    # dasGLFW, ...), so a matrix slot would serve it few hits. 2000M holds the full object set.
+    - uses: mozilla-actions/sccache-action@v0.0.10
+    - run: |
+        echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+        echo "SCCACHE_CACHE_SIZE=2000M" >> $GITHUB_ENV
+        echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+    # PRs restore read-only; the cron builds cold and saves (the seeder), a master push saves too.
+    - name: "Restore sccache objects"
+      if: github.event_name != 'schedule'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-bundle-linux-64-Release
+
     - name: "Build: Daslang with release modules"
       run: |
         set -eux
@@ -691,6 +718,19 @@ jobs:
         CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=Release \
           -G Ninja $ACTIVE_MODULES
         cmake --build ./build --config Release --parallel
+
+    - name: "Refresh sccache slot"
+      if: github.ref == 'refs/heads/master'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-bundle-linux-64-Release
+      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
+    - name: "Save sccache objects"
+      if: github.ref == 'refs/heads/master'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-bundle-linux-64-Release
 
     - name: "Install bundle"
       run: |
