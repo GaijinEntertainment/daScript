@@ -14,13 +14,14 @@ checklist on its own.
   that refuses a record written under other policies, so a field missing from it is a policy the
   cache silently ignores.
 
-- **A diff that hashes a table key hashes what the interpreter's table node hashes for that
-  key type: a builtin key (`heap.h`'s `makeTableKeyValueNode` list - scalars, vectors, ranges,
-  strings, pointers) as itself through `hash_function(context, key)`, a handled key as the
-  workhorse its annotation's `makeValueType()` names; and a diff that changes `KeyHash`
-  (`runtime_table.h`) or `WrapsBuiltinValue` (`cast.h`, `jit_abi.h`) states which key types
-  change hash value.** A table grow rehashes every non-string key with `KeyHash`, so a site that
-  hashes a key type differently loses every key of that type past the first grow.
+- **A diff that hashes a table key hashes a builtin key type - one in `heap.h`'s
+  `makeTableKeyValueNode` list - as itself through `hash_function(context, key)` (`hash.h`),
+  and a handled key type as the value type its annotation's `makeValueType()` returns.** A
+  table grow rehashes every non-string key with `KeyHash` (`runtime_table.h`), so a site that
+  hashes a key type differently loses every key of that type at the first grow.
+
+- **A diff that changes `KeyHash` (`runtime_table.h`) or `WrapsBuiltinValue` (`cast.h`,
+  `jit_abi.h`) states in its own PR description which key types change hash value.**
 
 - **A diff that makes the hot path more expensive per evaluated expression is a defect - an
   added load, branch, call, copy, or counter, a direct call becoming indirect, a static
@@ -30,7 +31,8 @@ checklist on its own.
   `invoke` / `invokeEx` (`simulate.h`), or an AOT-side function or template under this
   folder that generated code executes per evaluated expression. Such a diff - including one
   an optimized build flattens to nothing - lands its entry under `ARCHITECTURE.md`'s
-  sanctioned hot-path additions in the same diff; that ledger defines what the entry says.
+  sanctioned hot-path additions in the same diff: what was added, where, why correctness
+  required it, and the alternative that was rejected.
 
 - **A diff that changes the layout of a `debug_info.h` struct - a field added, removed,
   reordered, or retyped, or a base changed - states a per-consumer verdict (updated / no
