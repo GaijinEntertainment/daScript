@@ -29,12 +29,14 @@ if(NOT DAS_TOOLS_DISABLED)
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter)"
+        USES_TERMINAL
     )
     add_custom_target(run_tests_interpreter_isolated
         COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --isolated-mode --timeout ${DAS_TEST_TIMEOUT_ISOLATED}
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter, isolated retry)"
+        USES_TERMINAL
     )
 
     if(NOT DAS_LLVM_DISABLED)
@@ -61,12 +63,14 @@ if(NOT DAS_TOOLS_DISABLED)
             DEPENDS daslang
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
             COMMENT "Running tests (JIT, isolated-parallel)"
+            USES_TERMINAL
         )
         add_custom_target(run_tests_jit_isolated
             COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_TEST_COMMON} --isolated-mode --timeout 3600
             DEPENDS daslang
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
             COMMENT "Running tests (JIT, isolated retry)"
+            USES_TERMINAL
         )
     endif()
 endif()
@@ -80,6 +84,7 @@ if(TARGET test_aot)
         DEPENDS test_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT)"
+        USES_TERMINAL
     )
 endif()
 
@@ -92,6 +97,7 @@ if(TARGET test_aot_subset)
         DEPENDS test_aot_subset
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT, tests/language subset)"
+        USES_TERMINAL
     )
 endif()
 
@@ -106,5 +112,6 @@ if(TARGET test_llvm_aot)
         DEPENDS test_llvm_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (LLVM-AOT)"
+        USES_TERMINAL
     )
 endif()
