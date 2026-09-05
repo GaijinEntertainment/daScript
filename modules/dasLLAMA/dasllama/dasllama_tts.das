@@ -61,10 +61,22 @@ def load_tts_model(path : string) : TtsModel {
         panic("dasLLAMA tts: '{path}' has architecture '{m.model.family}', which is not a TTS family")
     }
     let dir = dir_name(path)
-    m.g2p <- load_g2p(path_join(dir, "tts_g2p.bin"))
+    m.g2p <- load_g2p(g2p_pack_path(dir))
     m.tagger <- load_pos_tagger(path_join(dir, "tts_postag.bin"))
     log_dropped_voices(m)
     return <- m
+}
+
+// the directory decides the phoneme pack: the full one when present, else the American-only twin
+// the web serving set ships (British voices are then not offered)
+def private g2p_pack_path(dir : string) : string {
+    let full = path_join(dir, "tts_g2p.bin")
+    return full if (stat(full).is_valid)
+    let us = path_join(dir, "tts_g2p_en_us.bin")
+    if (!stat(us).is_valid) {
+        panic("dasLLAMA tts: no phoneme pack beside the model - neither {full} nor {us}")
+    }
+    return us
 }
 
 [cold_path]
@@ -99,12 +111,12 @@ def tts_serves_q8() : bool {
 }
 
 def private front_end_langs(m : TtsModel) : array<string> {
-    //! The languages the front end phonemizes for this model, as the reference pipeline's
-    //! codes. Both families ship American English; Kokoro adds British, which its ``bf_*`` and
-    //! ``bm_*`` packs speak. A family speaks a language only once its lexicon rung lands here.
+    //! The languages the front end phonemizes for this model, as the reference pipeline's codes. Both
+    //! families ship American English; Kokoro adds British (its ``bf_*`` / ``bm_*`` packs) when the phoneme
+    //! pack carries the British tier. A family speaks a language only once its lexicon rung lands here.
     var inscope langs : array<string>
     langs |> push("en-us")
-    if (m.kind == TtsKind.kokoro) {
+    if (m.kind == TtsKind.kokoro && !m.g2p.us_only) {
         langs |> push("en-gb")
     }
     return <- langs

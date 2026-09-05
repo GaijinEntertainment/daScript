@@ -158,6 +158,9 @@ def main():
     ap.add_argument("--local-additions", help="json {word: misaki phonemes} merged over the gold tier")
     ap.add_argument("--focus-words", help="also write the tag-keyed gold words, one per line, lowercased - the "
                     "tagger's silver prose is sampled around them (mint_postag_silver.py --focus-words)")
+    ap.add_argument("--dialect", choices=["both", "us"], default="both",
+                    help="'us' packs the American tier alone (the web serving set): the GB lexicon values and "
+                         "GB-only keys are dropped, CMUdict and the speller stay; the reader refuses British on it by name")
     a = ap.parse_args()
     sys.path.insert(0, os.path.join(a.root, "scripts"))
     os.environ.setdefault("NLTK_DATA", os.path.join(a.root, ".nltk"))
@@ -169,6 +172,8 @@ def main():
     tables = load_lexicons(data_dir, a.local_additions, a.focus_words)
     gold, silver = tables["us_gold"], tables["us_silver"]
     gb_gold, gb_silver = tables["gb_gold"], tables["gb_silver"]
+    if a.dialect == "us":
+        gb_gold, gb_silver = {}, {}
 
     cmu_path = os.path.join(os.environ["NLTK_DATA"], "corpora", "cmudict", "cmudict")
     cmu = read_cmudict(cmu_path)
@@ -178,7 +183,9 @@ def main():
     # and only then this table. That is what makes the drop safe - a glued group sends its WHOLE
     # surface to the fallback as soon as one piece is unresolvable, so such a word DOES reach it
     # ("water-tzarina"), and a CMUdict row would only have offered the coarser reading.
-    covered = (set(gold) | set(silver)) & (set(gb_gold) | set(gb_silver))
+    # an American-only pack is asked for American alone, so every word its lexicon carries is covered
+    covered = ((set(gold) | set(silver)) if a.dialect == "us"
+               else (set(gold) | set(silver)) & (set(gb_gold) | set(gb_silver)))
     dropped = sum(1 for w in cmu if w in covered)
     cmu_misaki = {w: G.arpabet_to_ipa(G.flap(ph, calib["flap"]), "misaki", calib["opts"])
                   for w, ph in cmu.items() if w not in covered}
@@ -202,16 +209,19 @@ def main():
                 ("gru", tensor_section(arrays, graphemes, phonemes))]
     buf = bytearray()
     buf += struct.pack("<II", MAGIC, VERSION)
-    source = ("misaki 0.9.4 us_gold/us_silver + gb_gold/gb_silver; CMUdict 0.7a first pronunciations via the "
+    lexicons = "us_gold/us_silver; dialect us" if a.dialect == "us" else "us_gold/us_silver + gb_gold/gb_silver"
+    source = (f"misaki 0.9.4 {lexicons}; CMUdict 0.7a first pronunciations via the "
               "calibrated ARPAbet->misaki table; g2p_en 2.1.0 checkpoint20").encode("utf8")
     buf += struct.pack("<H", len(source)) + source
     for _name, sec in sections:
         buf += sec
     with open(a.out, "wb") as f:
         f.write(buf)
+    misaki_files = ("misaki us_gold.json / us_silver.json " if a.dialect == "us"
+                    else "misaki us_gold.json / us_silver.json / gb_gold.json / gb_silver.json ")
     with open(a.out + ".LICENSE", "w", encoding="utf8") as f:
-        f.write("tts_g2p.bin - derived data, see the dasLLAMA THIRD_PARTY_NOTICES.md\n\n"
-                "misaki us_gold.json / us_silver.json / gb_gold.json / gb_silver.json "
+        f.write(f"{os.path.basename(a.out)} - derived data, see the dasLLAMA THIRD_PARTY_NOTICES.md\n\n"
+                f"{misaki_files}"
                 "(hexgrad, Apache License 2.0)\n"
                 "CMUdict 0.7a (Copyright (C) 1993-2008 Carnegie Mellon University, BSD 2-Clause), "
                 "first pronunciations rendered into the misaki inventory\n"

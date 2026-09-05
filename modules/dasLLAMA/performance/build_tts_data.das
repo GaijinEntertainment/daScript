@@ -53,8 +53,12 @@ def main() : int {
     let fixture = path_join(get_das_root(), "modules/dasLLAMA/tests/_tts_fixtures/g2p_corpus.json")
     let silver = path_join(args.root, "work/silver_focus")
     let focus = path_join(args.root, "work/focus_words.txt")
+    // the full pack, then its American-only twin - the web serving set's, no British tier
+    let additions = path_join(harness, "g2p_local_additions.json")
     return 1 if (!step("pack the G2P data", [py, path_join(harness, "build_g2p_data.py"), args.root, "--out", path_join(store, "tts_g2p.bin"),
-        "--local-additions", path_join(harness, "g2p_local_additions.json"), "--focus-words", focus]))
+            "--local-additions", additions, "--focus-words", focus])
+        || !step("pack the American-only G2P data", [py, path_join(harness, "build_g2p_data.py"), args.root, "--out", path_join(store, "tts_g2p_en_us.bin"),
+            "--local-additions", additions, "--dialect", "us"]))
     if (args.silver_sents > 0) {
         var inscope prose : array<string>
         dir(path_join(args.root, "work/gutenberg")) $(name) {
