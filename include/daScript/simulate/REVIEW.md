@@ -8,6 +8,13 @@ into generated code, a flag or field a daslib predicate reads - applies `daslib/
 too; checklist discovery walks changed paths only, so the C++ half never opens the daslib
 checklist on its own.
 
+- **A diff that adds a field to `CodeOfPolicies` (`code_of_policies.h`) adds it to
+  `DAS_MODULE_CACHE_POLICY_FIELDS` in `src/builtin/module_builtin_ast_serialize.cpp`, in the
+  same change** - that list drives both the module-cache record's policy stream and the compare
+  that refuses a record written under other policies, so a field missing from it is a policy the
+  cache silently ignores; a served module then carries the old value of a policy the compile
+  changed.
+
 - **A diff that makes the hot path more expensive per evaluated expression is a defect - an
   added load, branch, call, copy, or counter, a direct call becoming indirect, a static
   dispatch becoming virtual, and an unboxed value becoming a boxed round-trip all count.**

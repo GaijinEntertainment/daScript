@@ -26,18 +26,16 @@
   stream only when its stored version equals `getVersion()`, so without the bump an older cache
   passes that check and decodes the changed bytes as something else.
 
-- **A diff that adds a field to `CodeOfPolicies` (`include/daScript/simulate/code_of_policies.h`)
-  adds it to `DAS_MODULE_CACHE_POLICY_FIELDS` in `module_builtin_ast_serialize.cpp`, in the same
-  change** - the list is every field of the struct: it is both the record's policy stream and the
-  compare that refuses a record written under other policies, and a field missing from it is a
-  policy the cache silently ignores.
+- **A diff that streams or compares a `CodeOfPolicies` field in `module_builtin_ast_serialize.cpp`
+  outside `DAS_MODULE_CACHE_POLICY_FIELDS` is a defect - put the field on the list instead** - the
+  list drives both the record's policy stream and the compare that refuses a record written under
+  other policies, so a field handled outside it is written without being compared, or compared
+  without being written. A diff that adds a field to `CodeOfPolicies` itself applies
+  `include/daScript/simulate/REVIEW.md`.
 
-- **`module_builtin_ast_serialize.cpp` streams and compares the cached policies only through
-  `DAS_MODULE_CACHE_POLICY_FIELDS`; a diff that names a policy field elsewhere in that file's
-  stream or compare is a defect** - a field streamed outside the list is one the compare does not
-  see, and the reverse.
-
-- **Every diagnostic the module-cache read path in `module_builtin_ast_serialize.cpp` prints is
-  gated on the serializer's `quietCache`; a diff that adds an ungated one is a defect** - the
-  default cache is on unasked for an ordinary run, so an ungated line becomes output every user
-  sees. The reader's other half, `trySerializeProgramModule`, answers to `src/ast/REVIEW.md`.
+- **A diff that adds a diagnostic to `AstSerializer::serializeProgram` or
+  `AstSerializer::serializeProgramImpl` in `module_builtin_ast_serialize.cpp`, or drops the
+  `quietCache` gate from one already there, is a defect - gate every line those two functions
+  print on the serializer's `quietCache`** - the default cache is on unasked for an ordinary run,
+  so an ungated line becomes output every user sees. A diff to `trySerializeProgramModule`
+  (`src/ast/ast_parse.cpp`) applies `src/ast/REVIEW.md` too.
