@@ -10,6 +10,8 @@ benchdata.db
 # build artifacts
 web/build_pt/
 .codex/
+!.codex/
+!.codex/config.toml.example
 .agents/
 build/
 build-ninja/
