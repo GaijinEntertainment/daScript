@@ -125,24 +125,38 @@ Substeps by what changed: handwritten RST only -> **4f, 4g** (das2rst regenerate
 
 ## 6. The PR body - two layers, one artifact
 
-**Top - the reviewer document.** Plain prose, no headers, ESL-plain (short sentences, common words, no idioms, one clause per thought).
+**Top - the reviewer document.** The consumer-impact line when there is one, then four parts in this order: `**Why.**`, `**What changes.**`, `**Observable behavior.**`, `**Where to look.**` - bold labels spelled exactly so, never markdown headers, nothing else before the `<details>` block. Budget: 100 words; 200 is the ceiling, not a second target - a reviewer reads the top in thirty seconds.
 
+- ESL-plain: short sentences, common words, no idioms, one clause per thought.
 - **Line 1 = consumer impact, bold** whenever there is any - ABI break, required rebuild, behavior change; never buried in a bullet.
-- One paragraph per topic, ~150 words total, the largest arcs ~300.
-- Never narrate machinery (agents, review rounds, gate lists) - state conclusions; a finding's origin is at most a tag ("negative-controlled").
+- `**Why.**` - the problem, prose, one or two sentences. A measured problem carries the number that proves it; a correctness problem carries the wrong behavior. No history of how it was found.
+- `**What changes.**` - a bullet list, one bullet per mechanism, one sentence each: what the code does now that it did not before.
+- `**Observable behavior.**` - a bullet list of `before -> after` lines: what a user, a test, or CI sees differently. Never omitted: with nothing to list it reads `**Observable behavior.** None - <why nothing>.` (`None - refactor only.`, `None - docs only.`).
+- `**Where to look.**` - entry points and risky spots, prose, one sentence.
+- In the top layer, never narrate machinery (agents, review rounds, gate lists) - state conclusions; a finding's origin is at most a tag ("negative-controlled"). A skipped or deviating gate is disclosed in `### Validation`, never up top.
+- Rationale for the change past the `**Why.**` part is cut, not moved down the body. A present-tense mechanism worth keeping lands in the touched folder's ARCHITECTURE.md in the same change; the rest is history and stays in git.
 
 **Fold - the ledger.** One `<details>` block. Heading names are FIXED - later sessions grep for them. Omit an empty section; never rename one.
 
-- `### Validation` - exceptions only; a full green run is not news, CI re-proves it. Report (a) evidence CI cannot produce - a local-only gate (full AOT sweep, external shared_module rebuild after an ABI break, a WSL/platform repro) - and (b) deviations: a gate skipped, a partial result, a known-red cell with its control, each with its reason. Numbers only where a result is partial.
+- `### Validation` - exceptions only; a full green run is not news, CI re-proves it. Report (a) evidence CI cannot produce - a local-only gate (full AOT sweep, external shared_module rebuild after an ABI break, a WSL/platform repro) - and (b) deviations: a gate skipped, a partial result, a known-red cell with its control (the run showing the same red without your change), each with its reason. Numbers only where a result is partial.
 - `### Claims - stated, not tested` - every UNPROVEN claim (the TDD audit's state-it-in-the-PR resolution): the claim, how it was verified instead, what a break would look like.
 - `### Not done` - deliberate omissions, residuals, ledgered follow-ups.
 
 ```markdown
-**ABI break: <impact> - <who> must <do what>.**   <- only when true
+**<ABI break | rebuild required | behavior change>: <impact> - <who> must <do what>.**   <- only when true
 
-<problem -> change -> why, 1-3 paragraphs>
+**Why.** <the problem, 1-2 sentences; its number if measured, the wrong behavior if not>
 
-Where to look: <entry points, risky spots>.
+**What changes.**
+- <mechanism 1: what the code does now, one sentence>
+- <mechanism 2>
+
+**Observable behavior.**
+- <before> -> <after>
+- <before> -> <after>
+**Observable behavior.** None - <why nothing>.   <- instead of the list, when there is nothing to list
+
+**Where to look.** <entry points, risky spots, one sentence>
 
 <details>
 <summary>Validation, claims, ledger</summary>
