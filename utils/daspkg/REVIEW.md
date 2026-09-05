@@ -35,6 +35,10 @@ missing a scope key, that is, an entry of the `tune_scopes` list in the deps JSO
 one the package's `release()` declares that way: a starter file deployed once, then owned by
 the user.
 
+**A diff that removes `daspkg` from `DAS_UTILS_SHIPPED_EXES` in `utils/CMakeLists.txt` is a
+defect.** The removal drops the prebuilt daspkg exe from the release bundle, and the parent's
+gate cannot see a removed entry - it reads this sentence to know the decision stands.
+
 **A `cmd_release` bundle that finishes without writing `.daspkg_release.manifest` is a
 defect.** `release wasm` is out: it wipes its output directory first, so it has no stale file to
 account for.

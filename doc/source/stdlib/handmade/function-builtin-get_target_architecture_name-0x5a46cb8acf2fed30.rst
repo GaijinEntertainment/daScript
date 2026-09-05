@@ -1,0 +1,1 @@
+Returns the architecture component of the compile target, such as `"wasm64"`, `"wasm32"`, `"aarch64"` or `"x86_64"`; the host's own architecture when no `--jit-target` names another. Folded to a constant like `get_target_triple`, it is the switch a kernel uses to pick a per-target body.

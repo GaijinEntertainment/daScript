@@ -1,0 +1,1 @@
+Returns the LLVM target triple the program is being compiled for, such as `"wasm64-unknown-emscripten"`, read from the command line's `--jit-target` (the last one wins); `""` for the host. The compiler folds the call to a constant, so a `static_if` or an `if` on it costs nothing at run time and the code for the other target is not compiled.

@@ -5,6 +5,7 @@ require dasllama/dasllama
 require daslib/jobque_boost
 require daslib/defer
 require daslib/strings_boost
+require daslib/fio
 require strings
 
 // Tutorial dasLLAMA-16: Text to Speech
@@ -126,6 +127,11 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     // settles a heteronym — "read" the past tense and "read" the present tense are the same
     // letters and two different sounds. synthesize runs both passes for you; run them alone and
     // you see what the model is asked to say.
+    //
+    // g2p_pack_path names the phoneme pack the loader took from the model's directory: the full
+    // tts_g2p.bin when it is there, else the American-only tts_g2p_en_us.bin - the smaller pack a
+    // browser build ships, which reads no British voice.
+    print("phoneme pack: {base_name(g2p_pack_path(dir_name(model_path)))}\n")
     //
     // A synthesis phonemizes in the DIALECT ITS VOICE WAS TRAINED ON, so this pass has to be
     // asked in the same one, or you are reading a document about a different sound. Every voice

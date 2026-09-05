@@ -292,10 +292,9 @@ neither backend produces them from the generic form: AArch64 expands it to zip/u
 of folding to SDOT, and the wasm backend runs it a fifth as fast. The wasm form is the ISA's two
 halves of an int8 dot, `i16x8.extmul_{low,high}_i8x16_s` (what LLVM makes of `mul(sext, sext)`) and
 `i32x4.extadd_pairwise_i16x8_s`; the pairwise sums land as byte pairs, and one even/odd shuffle-add
-folds them into the quad lanes the generic form defines - exact for every int8 lane, like the
-builtin's contract. The relaxed-SIMD dot (`i32x4.relaxed_dot_i8x16_i7x16_add_s`) is deliberately
-NOT used: its second operand is 7-bit, so the sign trick that would feed it (`dot(w, x) ==
-dot(sign(x)*w, |x|)`) wraps at -128 in either operand and answers the wrong sign there, and
-`+relaxed-simd` is a whole-module switch that also turns float-vector `min`/`max` and `mad` into
-engine-defined instructions (NaN and signed-zero answers, fusion) - the feature string stays
-`+simd128,+nontrapping-fptoint`, matching the runtime archive.
+folds them into the quad lanes the generic form defines - exact for every int8 lane. The
+relaxed-SIMD dot (`i32x4.relaxed_dot_i8x16_i7x16_add_s`) is NOT used: its second operand is 7-bit,
+so the sign trick that would feed it (`dot(w, x) == dot(sign(x)*w, |x|)`) wraps at -128 in either
+operand and answers the wrong sign there, and `+relaxed-simd` is a whole-module switch that also
+turns float-vector `min`/`max` and `mad` into engine-defined instructions (NaN and signed-zero
+answers, fusion) - the feature string stays `+simd128,+nontrapping-fptoint`, the runtime archive's.

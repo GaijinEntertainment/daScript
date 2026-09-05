@@ -290,8 +290,7 @@ def private serialize_image_meta(var arch : Archive; var m : StyleTts2Model) {
     arch |> serialize(m.decoder)
     arch |> serialize(m.source)
     arch |> serialize_raw(m.q8)
-    // the family records are hand-listed too, so each pins its own count: a field added to one of
-    // them and not written here would read back zero on every image load
+    // the family records are hand-listed too, so each pins its count - an unwritten field reads back zero
     verify(count_meta_fields(m.kitten) == 2)   // grew KittenFamily? extend this list
     verify(count_meta_fields(m.kokoro) == 1)   // grew KokoroFamily? extend this list
     arch |> serialize(m.kitten.speed_priors)
