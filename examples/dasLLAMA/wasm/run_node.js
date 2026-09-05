@@ -9,6 +9,9 @@
 //   model.gguf  - a host path; its directory is mounted read-write, so the image rail is
 //                 held off (DASLLAMA_IMAGE=0): a mint under the wasm identity would land
 //                 beside the model
+//   args        - the script's own arguments; with none, the mounted model path is passed as
+//                 the one positional argument (run.das), otherwise they are passed verbatim
+//                 with every `@model` replaced by that path (speak.das takes --model @model)
 const path = require('path');
 
 const outputDir = process.argv[2] && path.resolve(process.argv[2]);
@@ -38,8 +41,7 @@ Module.onRuntimeInitialized = function() {
     Module.FS.mount(Module.FS.filesystems.NODEFS, { root: repoRoot }, '/repo');
     Module.FS.mkdir('/models');
     Module.FS.mount(Module.FS.filesystems.NODEFS, { root: path.dirname(model) }, '/models');
-    Module.callMain([
-        '-use-aot', path.posix.join('/repo', script), '--',
-        path.posix.join('/models', path.basename(model)), ...extra
-    ]);
+    const mounted = path.posix.join('/models', path.basename(model));
+    const scriptArgs = extra.length ? extra.map((a) => a.replace(/@model/g, mounted)) : [mounted];
+    Module.callMain(['-use-aot', path.posix.join('/repo', script), '--', ...scriptArgs]);
 };
