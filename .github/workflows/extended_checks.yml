@@ -618,7 +618,9 @@ jobs:
       if: matrix.role != 'modules'
       run: |
         set -eux
-        pip install markdown
+        # into the interpreter that runs the script: on the darwin runner `pip` and `python3` differ,
+        # and a Homebrew python refuses a system-site install without the last flag
+        python3 -m pip install markdown || python3 -m pip install --user markdown || python3 -m pip install --break-system-packages markdown
         python3 site-dasllama/build_news.py --root site-dasllama
         git diff --exit-code -- site-dasllama/index.html site-dasllama/stories.html site-dasllama/stories site-dasllama/feed.xml site-dasllama/sitemap.xml
         test -z "$(git status --porcelain -- site-dasllama/stories)"   # a story page the generator wrote but nobody committed
