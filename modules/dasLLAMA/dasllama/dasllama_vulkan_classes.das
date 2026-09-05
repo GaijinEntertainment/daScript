@@ -569,6 +569,7 @@ struct RouterArgs {
     ne : uint     // expert rows
     dim : uint    // row width
     woff : uint   // this layer's row base in the span's router plane (elements)
+    obase : uint  // output row base (the resident deltanet arm lands beta/alpha rows in the smalls)
 }
 
 [vk_dispatch(name = "router_gemv_cls", grid = "ne", params = "ne : int64")]
@@ -601,7 +602,7 @@ class RouterGemv {
                 tot += part[sgi]
                 sgi++
             }
-            logits[e] = tot
+            logits[pa.obase + e] = tot
         }
     }
 }
@@ -2197,6 +2198,8 @@ struct DaAttnArgs {
     kbase : uint    // layer base into the shared K mirror (0 for the standalone seam)
     vbase : uint
     scale : float   // the KV count to attend rides tok[0].cnt
+    qstride : uint  // q head stride: 0 = hs; 2*hs on a gated-q model ([q | gate] per head)
+    gated : uint    // 1 = multiply the head's output by sigmoid of its gate half before the store
 }
 
 // decode attention (one query row): one wg per head, GQA, KT-typed K/V mirror. Online softmax
@@ -2224,9 +2227,10 @@ class template DaAttnT {
         let npart = 256u / hs     // V-phase partial groups; thread tid = group g, output dim c
         let g = tid / hs
         let c = tid % hs
+        let qstride = pa.qstride == 0u ? hs : pa.qstride
         var i = tid
         while (i < hs) {
-            qrow[i] = q[h * hs + i]
+            qrow[i] = q[h * qstride + i]
             i += 256u
         }
         if (tid == 0u) {
@@ -2307,7 +2311,12 @@ class template DaAttnT {
                 tot += sc[gg * hs + tid]
                 gg++
             }
-            y[h * hs + tid] = tot * linv
+            var o = tot * linv
+            if (pa.gated != 0u) {   // the per-head sigmoid out-gate: the gate half sits beside q in the packed row
+                let gt = q[h * qstride + hs + tid]
+                o = o / (1.0 + exp(-gt))
+            }
+            y[h * hs + tid] = o
         }
     }
 }
@@ -6290,13 +6299,14 @@ struct QknRopeArgs {
     qd : uint
     kvd : uint
     hs : uint
-    half : uint
+    half : uint     // rotation pairs per head: hs/2, or rot/2 on a partial-rope model (the rest of the head passes through)
     neox : uint
     nh : uint       // q heads (wgs >= nh are k heads)
     layerbase : uint   // this layer's K/V mirror base; the row rides tok[0].pos
     qwoff : uint    // q norm-weight row base in wn
     kwoff : uint
     eps : float
+    qstride : uint  // q head stride in qrows: 0 = hs; 2*hs on a gated-q model ([q | gate] per head, roped in place)
 }
 
 // qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row; verbatim
@@ -6321,7 +6331,8 @@ class template QknRopeKvT : RmsWgBase {
         let is_k = wid >= pa.nh
         let h = is_k ? wid - pa.nh : wid
         let tid = gl_LocalInvocationID.x
-        let sbase = is_k ? pa.qd + h * pa.hs : h * pa.hs
+        let qstride = pa.qstride == 0u ? pa.hs : pa.qstride
+        let sbase = is_k ? pa.qd + h * pa.hs : h * qstride
         var v = 0.0
         if (tid < pa.hs) {
             v = is_k ? kvsrc[sbase + tid] : qrows[sbase + tid]
@@ -6352,17 +6363,28 @@ class template QknRopeKvT : RmsWgBase {
                     kmir[mrow + h * pa.hs + e1] = r1
                 }
             } else {
-                qrows[h * pa.hs + e0] = r0
-                qrows[h * pa.hs + e1] = r1
+                qrows[h * qstride + e0] = r0
+                qrows[h * qstride + e1] = r1
             }
         }
-        // v is not roped or normed — the k-head wgs copy their own raw row into the V plane
+        // the normed, unrotated tail of a partial-rope head goes back in place too
+        if (!is_k && tid >= 2u * pa.half && tid < pa.hs) {
+            qrows[h * qstride + tid] = row[tid]
+        }
+        // v is not roped or normed — the k-head wgs copy their own raw row into the V plane; on a
+        // partial-rope model the normed, unrotated tail of the k head lands in the mirror the same way
         if (is_k && tid < pa.hs) {
             let mrow = pa.layerbase + tok[0u].pos * pa.kvd
             static_if (CLAMP16) {
                 vmir[mrow + h * pa.hs + tid] = float16(clamp(kvsrc[pa.qd + pa.kvd + h * pa.hs + tid], -65504.0, 65504.0))
+                if (tid >= 2u * pa.half) {
+                    kmir[mrow + h * pa.hs + tid] = float16(clamp(row[tid], -65504.0, 65504.0))
+                }
             } else {
                 vmir[mrow + h * pa.hs + tid] = kvsrc[pa.qd + pa.kvd + h * pa.hs + tid]
+                if (tid >= 2u * pa.half) {
+                    kmir[mrow + h * pa.hs + tid] = row[tid]
+                }
             }
         }
     }

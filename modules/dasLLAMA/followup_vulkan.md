@@ -32,16 +32,20 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    `resident_upload` rejects 12 family features ad hoc, by name). Build
    `dasllama_vulkan_shapes` on the Metal pattern: portable, no `vulkan` require, feeds the
    same decline-reason reporting.
-2. **Family coverage in the resident driver** - today it serves the llama-family std shape
-   only. Metal's drivers serve MoE (Wave C), DeltaNet hybrids (Wave D), gemma4 (PLE,
-   sandwich norms), gpt-oss (sinks, swiglu_oai). The vulkan kernels for MoE/deltanet already
-   exist in the cooperative tier - the work is resident-driver plumbing, not new shaders.
-   Walkthrough datum (2026-08-06): qwen35-0.8B serves CORRECTLY on the per-op rails but the
-   per-layer submit+fence cadence caps it at 35% tg / 8% pp of the upstream whole-graph run -
-   the hybrid-ladder extension is the fix, and the carrier conversion already made
-   dn_step_cls a TokMeta class kernel, so recurrent layers can encode straight into the
-   recorded token cmd; what remains is ladder plumbing (recurrent roles in rd_record_token,
-   dn state on g_rd).
+2. **Family coverage in the resident driver** - the DECODE half of the deltanet hybrid ladder
+   landed (`plans/vulkan_hybrid_ladder.md`; `ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v): the
+   token command carries recurrent layers (the fused step over per-layer state slots), gated
+   attention and partial rotary, the K/V mirror has one slot per attention layer, and the nextn
+   block no longer declines. Qwen3.5-9B UD-Q5_K_XL decodes resident at 49.7 tg (0.88x of
+   upstream; was 11.1 on the per-op rails). STILL OPEN in this item: (a) the resident PREFILL
+   window chain has no recurrent, gated-q or partial-rope arm - a hybrid prefills on the CPU
+   (95.7 pp512 on the 9B vs upstream 2527) and the decode takes the mirror over
+   (`resident_prefill_shape_ok`); (b) the other families Metal serves - MoE (Wave C), gemma4
+   (PLE, sandwich norms), gpt-oss (sinks, swiglu_oai) - stay per-op; (c) the decode-role
+   profiler (`rdq_sample`) has no per-role table for the hybrid stamp count - it reports the
+   whole span only; (d) the q8 beta/alpha arm serves the 0.8B (Q8_0 rows), the f32 arm the 9B
+   (F32 rows) - a kernel-unit cell for `router_gemv_cls` at a non-zero `obase` is owed
+   (`REVIEW_GPU.md`'s new-kargs-field rule; today the 9B model run is the only witness).
 3. **KV codecs on device** - Vulkan's mirror serves f16 (the armed default) and f32 through
    the codec-templated kernel stamps; Metal additionally carries q8_0/tq4. Port the quant
    codecs next (the CPU truth is `dasllama_convert`'s KV codec functions; the Metal quant

@@ -212,6 +212,13 @@ grows: on a discrete card the two compete directly, and evicting weights to grow
 re-uploading gigabytes. A decline carries a reason, and where the numbers allow one it carries
 the remedy that works - a shorter context, because the weights are fixed and the KV is not.
 
+**The auto arm's headroom is the larger of 2 GiB and 27% of the tier's cap.** WDDM demotes a
+process's buffers to system memory by how full the card is, not by a fixed leave-behind, and a
+demoted plane reads at PCIe speed with no error: on the 16 GB reference card the 9B hybrid at a
+12.5 GB plan (the fixed 2 GiB headroom under the 14.7 GB cap) decoded at 6.8 tok/s, at 12 GB
+pinned 3.4, at 11 GB pinned 49.8. The share keeps a 16 GB card's plan near 10.7 GB and leaves
+an 8 GB card's plan where the fixed term already put it.
+
 An OPTIONAL plane rides only the room left under the budget at THIS context - what remains of
 `budget_bytes - headroom_bytes` after weights, KV and scratch; the reserved headroom itself
 stays unfilled. It never shrinks any of the three, and it reports zero bytes when it does not

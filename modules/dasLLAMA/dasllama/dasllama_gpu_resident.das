@@ -425,6 +425,7 @@ let private RDEC_PF_ROWS = 512l                    // mirrors PF_WINDOW (dasllam
 let private RDEC_VRAM_HEADROOM = 2_147_483_648l    // auto-arm slack past the tier's desktop reserve:
                                                    // filling weights + KV to the cap brim measured a
                                                    // 12x WDDM-demotion collapse on a live desktop
+let private RDEC_VRAM_HEADROOM_PCT = 27l           // ... and on a big card a share of the cap (ARCHITECTURE_GPU_VULKAN.md 2.2n)
 let private RDEC_MISC_BYTES = 67_108_864l          // decode smalls + batch act planes + metas
 
 // the driver's device allocations past weights + KV — the prefill window buffers dominate.
@@ -459,8 +460,9 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
     }
     p.kv_bytes = seq_cap * (krow + vrow)
     p.scratch_bytes = rdec_scratch_bytes(t)
-    // a pinned VRAM_MB is the user's contract — fill it; the auto arm keeps desktop slack
-    p.headroom_bytes = gpu_want_vram_mb() > 0l ? 0l : RDEC_VRAM_HEADROOM
+    // a pinned VRAM_MB is the user's contract — fill it; the auto arm keeps desktop slack, and past
+    // the fixed 2 GiB a share of the cap: WDDM demotes by the card's fill, not by a fixed leave-behind
+    p.headroom_bytes = gpu_want_vram_mb() > 0l ? 0l : max(RDEC_VRAM_HEADROOM, p.budget_bytes * RDEC_VRAM_HEADROOM_PCT / 100l)
     // every 2D plane a dense forward reads: the attention quad, the FFN triple, the classifier
     for (l in range64(c.n_layers)) {
         let qd = layer_qd(c, l)
@@ -482,6 +484,14 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
             p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w1_fmt, l)))
             p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
             p.weight_bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
+        }
+        if (layer_is_recurrent(c, l) && l < long_length(t.dnqkv_offs) && t.dnqkv_offs[l] >= 0l) {
+            // the deltanet triple (q8 planes) + the beta/alpha rows (q8 planes, or the f32 rows uploaded whole)
+            let q8 = int(KqFmt.q8)
+            p.weight_bytes += moe_gpu_plane_bytes(c.dim, dn_conv_dim(c), q8)
+            p.weight_bytes += moe_gpu_plane_bytes(c.dim, c.ssm_d_inner, q8)
+            p.weight_bytes += moe_gpu_plane_bytes(c.ssm_d_inner, c.dim, q8)
+            p.weight_bytes += t.dn_ba_f32 ? 2l * c.ssm_dt_rank * c.dim * 4l : 2l * moe_gpu_plane_bytes(c.dim, c.ssm_dt_rank, q8)
         }
     }
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
@@ -527,6 +537,7 @@ def set_resident_prefill_allowed_(allowed : bool) {
 def private rdec_hydrate_host(t : Model; var s : Session) {
     let c = t.config
     for (l in range64(c.n_layers)) {
+        continue if (layer_is_recurrent(c, l))
         rdec_read_kv_bulk(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), g_rdec_cnt)
     }
     s.rdec_hydrated = true
@@ -607,20 +618,38 @@ def resident_unserved_features(c : Config) : string {
     name_list_add(names, c.v_norm, "v-norm")
     name_list_add(names, c.attn_sinks, "attention sinks")
     name_list_add(names, c.moe_dense_shexp, "dense shared expert")
-    name_list_add(names, c.n_layer_nextn > 0l, "in-file nextn (MTP) block")
-    name_list_add(names, c.q_gated, "gated attention (2x-wide q)")
     name_list_add(names, c.attn_logit_softcap != 0.0, "attention logit softcap")
     name_list_add(names, c.final_logit_softcap != 0.0, "final logit softcap")
     name_list_add(names, c.pre_post_norm, "pre/post norms")
-    name_list_add(names, c.rope_dim > 0l && c.rope_dim != c.head_size, "partial rotary ({c.rope_dim} of {c.head_size})")
+    // gated attention and partial rotary ride the fused qk-norm+rope kernel: without qk-norm no kernel carries them
+    name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
+    name_list_add(names, c.rope_dim > 0l && c.rope_dim != c.head_size && !c.qk_norm, "partial rotary ({c.rope_dim} of {c.head_size}) without qk-norm")
     return names
+}
+
+//! Does the resident PREFILL window chain serve this config's shape? Its recurrent, gated-q and
+//! partial-rope arms are not written yet: such a model prefills on the CPU and the resident decode
+//! takes the mirror over.
+def resident_prefill_shape_ok(c : Config) : bool {
+    return c.recr_mask == 0ul && !c.q_gated && (c.rope_dim == 0l || c.rope_dim == c.head_size)
 }
 
 //! Why layer `l` keeps the whole-model driver off the model - "" when the layer fits the
 //! recorder's one fixed geometry (hidden `hid0`, head size `hs`, kv width `kvd`, own K/V).
 def resident_layer_decline(t : Model; l, hid0, hs, kvd : int64) : string {
     let c = t.config
-    if (layer_is_recurrent(c, l)) return "layer {l} is recurrent (no deltanet arm in the whole-model driver)"
+    if (layer_is_recurrent(c, l)) {
+        // the deltanet step reads q8 planes (the loader tags them so for the GPU tiers) and the
+        // beta/alpha rows either as q8 planes or as the f32 rows the driver uploads whole
+        if (l >= long_length(t.dnqkv_offs) || t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l) {
+            return "layer {l} lacks a deltanet plane"
+        }
+        if (!dn_layer_q8(t, l)) return "layer {l} carries kq-tagged deltanet planes (the step reads q8)"
+        if (!t.dn_ba_f32 && (t.dnbeta_offs[l] < 0l || t.dnalpha_offs[l] < 0l)) return "layer {l} lacks its beta/alpha planes"
+        if (!rdec_dn_installed()) return "layer {l} is recurrent and the tier installed no deltanet seats for the whole-model driver"
+        if (layer_hidden(t, l) != hid0) return "layer {l} FFN width {layer_hidden(t, l)} differs from layer 0's {hid0}"
+        return ""
+    }
     if (layer_is_sliding(c, l)) return "layer {l} attends over a sliding window"
     if (t.kv_src[l] != l) return "layer {l} shares layer {t.kv_src[l]}'s K/V"
     if (t.wq_offs[l] < 0l || t.wk_offs[l] < 0l || t.wv_offs[l] < 0l) return "layer {l} lacks a q/k/v plane"
@@ -628,6 +657,25 @@ def resident_layer_decline(t : Model; l, hid0, hs, kvd : int64) : string {
     if (layer_head_size(c, l) != hs) return "layer {l} head size {layer_head_size(c, l)} differs from layer 0's {hs}"
     if (layer_kv_dim(c, l) != kvd) return "layer {l} kv width {layer_kv_dim(c, l)} differs from layer 0's {kvd}"
     return ""
+}
+
+// the f32 arm's beta/alpha rows for every recurrent layer, in layer order, one device upload
+def private resident_upload_dn_ba(t : Model; n_recurrent : int64) {
+    let c = t.config
+    let dim = c.dim
+    let nvh = c.ssm_dt_rank
+    var rows : array<float>
+    rows |> reserve_resize(n_recurrent * 2l * nvh * dim)
+    var at = 0l
+    for (l in range64(c.n_layers)) {
+        continue if (!layer_is_recurrent(c, l))
+        copy_floats(t.fblob, t.dn_betaf_off + l * dim * nvh, rows, at, nvh * dim)
+        at += nvh * dim
+        copy_floats(t.fblob, t.dn_alphaf_off + l * dim * nvh, rows, at, nvh * dim)
+        at += nvh * dim
+    }
+    rdec_upload_dn_ba(rows)
+    delete rows
 }
 
 //! Reserve arenas + place every dense plane + wire the resident decode driver. Returns false (and
@@ -648,21 +696,27 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
     if (!empty(pin) && pin != "vulkan") return rdec_decline("prefill is pinned to '{pin}' (DASLLAMA_PIN_PREFILL)")
     if (!empty(active_prefill_override())) return rdec_decline("the '{active_prefill_override()}' prefill override is active")
     let c = t.config
-    // one line names every missing arm at once - the features and the recurrent layers together
-    var feats = resident_unserved_features(c)
-    var n_recurrent = 0l
+    let feats = resident_unserved_features(c)
+    if (!empty(feats)) return rdec_decline("no arm for: {feats}")
+    // a hybrid's recurrent layers keep no K/V: the mirror has one slot per ATTENTION layer, and the
+    // attention geometry comes from the first attention layer (layer 0 is recurrent on qwen35)
+    var n_attn = 0l
+    var l_attn0 = -1l
     for (l in range64(c.n_layers)) {
-        if (layer_is_recurrent(c, l)) {
-            n_recurrent++
+        if (!layer_is_recurrent(c, l)) {
+            n_attn++
+            if (l_attn0 < 0l) {
+                l_attn0 = l
+            }
         }
     }
-    name_list_add(feats, n_recurrent > 0l, "{n_recurrent} of {c.n_layers} recurrent (deltanet) layers")
-    if (!empty(feats)) return rdec_decline("no arm for: {feats}")
+    if (n_attn == 0l) return rdec_decline("no attention layer (the whole-model driver serves attention or hybrid stacks)")
+    let n_recurrent = c.n_layers - n_attn
     let dim = c.dim
     let hid0 = layer_hidden(t, 0l)
-    let hs = layer_head_size(c, 0l)
-    let qd = layer_qd(c, 0l)
-    let kvd = layer_kv_dim(c, 0l)
+    let hs = layer_head_size(c, l_attn0)
+    let qd = layer_qd(c, l_attn0)
+    let kvd = layer_kv_dim(c, l_attn0)
     // the prefill Q-tile attention kernel's geometry (da_attn_b: 32-dim lanes, hs-strided staging)
     if (hs % 32l != 0l || hs > 256l) return rdec_decline("head size {hs} (the prefill attention tile takes 32-multiples up to 256)")
     let neox = c.rope_neox
@@ -672,6 +726,11 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
         let why = resident_layer_decline(t, l, hid0, hs, kvd)
         if (!empty(why)) return rdec_decline(why)
     }
+    var dng = RdecDnGeom()
+    if (n_recurrent > 0l) {
+        dng = RdecDnGeom(cd = dn_conv_dim(c), kd = dn_key_dim(c), di = c.ssm_d_inner, nvh = c.ssm_dt_rank,
+                         nkh = c.ssm_n_group, ds = c.ssm_d_state, dconv = c.ssm_d_conv, ba_f32 = t.dn_ba_f32)
+    }
     // tally arena blocks per format
     var need : table<int; int64>
     let emb_q8_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
@@ -680,13 +739,23 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
         && !t.emb_q8 && !cls_kq(t) && !t.planes_trimmed   // an untied q8 table has no f32 copy to upload: the CPU embed loop serves it
         && resident_plan(t, seq_cap, rkdt, rkdt).emb_f32_bytes > 0l)   // the plan counted it at this context
     var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
-    planes |> reserve(c.n_layers * 7l + 1l)
+    planes |> reserve(c.n_layers * 8l + 1l)
     for (l in range64(c.n_layers)) {
         let lf = resident_layer_fmts(t, l)
-        planes |> push((n = dim, rows = qd, f = lf.fq))
-        planes |> push((n = dim, rows = kvd, f = lf.fk))
-        planes |> push((n = dim, rows = kvd, f = lf.fv))
-        planes |> push((n = qd, rows = dim, f = lf.fo))
+        if (layer_is_recurrent(c, l)) {
+            planes |> push((n = dim, rows = dng.cd, f = KqFmt.q8))
+            planes |> push((n = dim, rows = dng.di, f = KqFmt.q8))
+            planes |> push((n = dng.di, rows = dim, f = KqFmt.q8))
+            if (!dng.ba_f32) {
+                planes |> push((n = dim, rows = dng.nvh, f = KqFmt.q8))
+                planes |> push((n = dim, rows = dng.nvh, f = KqFmt.q8))
+            }
+        } else {
+            planes |> push((n = dim, rows = c.q_gated ? 2l * qd : qd, f = lf.fq))   // a gated q plane is [q | gate] per head
+            planes |> push((n = dim, rows = kvd, f = lf.fk))
+            planes |> push((n = dim, rows = kvd, f = lf.fv))
+            planes |> push((n = qd, rows = dim, f = lf.fo))
+        }
         planes |> push((n = dim, rows = hid0, f = lf.f1))
         planes |> push((n = dim, rows = hid0, f = lf.f3))
         planes |> push((n = hid0, rows = dim, f = lf.f2))
@@ -715,33 +784,61 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
     let mr = repacked ? active_q8_layout_mr() : 1l
     let kg = repacked ? active_q8_kgroup() : 4l
     let wb = repacked ? active_q8_wbias() : 0l
-    if (!rdec_prepare(c.n_layers, dim, qd, kvd, hs, c.n_heads, hid0, c.vocab_size, seq_cap, neox,
+    let rot = c.rope_dim > 0l ? c.rope_dim : hs
+    if (!rdec_prepare(c.n_layers, n_attn, dim, qd, kvd, hs, c.n_heads, hid0, c.vocab_size, seq_cap, neox,
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
-                      rkdt == KVDtype.f16)) {
+                      rkdt == KVDtype.f16, c.q_gated, rot, dng)) {
         return rdec_decline("the device prepare declined (a kernel class or the mirror range - the tier's line above)")
+    }
+    if (n_recurrent > 0l && dng.ba_f32) {
+        resident_upload_dn_ba(t, n_recurrent)
     }
     // place + wire each layer. One quantized X image feeds each consumer group (qkv shares one,
     // gate/up another), so a group must agree on its quant form — mixed groups decline
+    var mir_idx = 0l
+    var rec_idx = 0l
     for (l in range64(c.n_layers)) {
         let lf = resident_layer_fmts(t, l)
-        let cq = rdec_quant_class(lf.fq)
-        if (cq != rdec_quant_class(lf.fk) || cq != rdec_quant_class(lf.fv)
-                || rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
-            return rdec_decline("layer {l} mixes activation-quant forms (qkv {int(lf.fq)}/{int(lf.fk)}/{int(lf.fv)}, ffn {int(lf.f1)}/{int(lf.f3)})")
+        if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
+            return rdec_decline("layer {l} mixes activation-quant forms (ffn {int(lf.f1)}/{int(lf.f3)})")
         }
-        let bq = resident_place(t, lf.fq, t.wq_offs[l], dim, qd, mr, kg, wb)
-        let bk = resident_place(t, lf.fk, t.wk_offs[l], dim, kvd, mr, kg, wb)
-        let bv = resident_place(t, lf.fv, t.wv_offs[l], dim, kvd, mr, kg, wb)
-        let bo = resident_place(t, lf.fo, t.wo_offs[l], qd, dim, mr, kg, wb)
         let b1 = resident_place(t, lf.f1, t.w1_offs[l], dim, hid0, mr, kg, wb)
         let b3 = resident_place(t, lf.f3, t.w3_offs[l], dim, hid0, mr, kg, wb)
         let b2 = resident_place(t, lf.f2, t.w2_offs[l], hid0, dim, mr, kg, wb)
-        // a placement can fail (arena exhausted); fail closed to the CPU loop rather than wire a -1 block
-        if (bq < 0l || bk < 0l || bv < 0l || bo < 0l || b1 < 0l || b3 < 0l || b2 < 0l) {
-            return rdec_decline("arena placement failed at layer {l}")
+        if (b1 < 0l || b3 < 0l || b2 < 0l) return rdec_decline("arena placement failed at layer {l}")
+        if (layer_is_recurrent(c, l)) {
+            let bqkv = resident_place(t, KqFmt.q8, t.dnqkv_offs[l], dim, dng.cd, mr, kg, wb)
+            let bz = resident_place(t, KqFmt.q8, t.dngate_offs[l], dim, dng.di, mr, kg, wb)
+            let bout = resident_place(t, KqFmt.q8, t.dnout_offs[l], dng.di, dim, mr, kg, wb)
+            let bbeta = dng.ba_f32 ? -1l : resident_place(t, KqFmt.q8, t.dnbeta_offs[l], dim, dng.nvh, mr, kg, wb)
+            let balpha = dng.ba_f32 ? -1l : resident_place(t, KqFmt.q8, t.dnalpha_offs[l], dim, dng.nvh, mr, kg, wb)
+            if (bqkv < 0l || bz < 0l || bout < 0l || (!dng.ba_f32 && (bbeta < 0l || balpha < 0l))) {
+                return rdec_decline("arena placement failed at recurrent layer {l}")
+            }
+            unsafe {
+                rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, rec_idx * 2l * dng.nvh * dim,
+                    int(KqFmt.q8), int(KqFmt.q8), int(KqFmt.q8), int(lf.f1), int(lf.f3), int(lf.f2),
+                    addr<float const?>(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * dng.cd]),
+                    addr<float const?>(t.fblob[t.dn_norm_off + l * dng.ds]),
+                    addr<float const?>(t.fblob[t.dn_a_off + l * dng.nvh]),
+                    addr<float const?>(t.fblob[t.dn_dt_off + l * dng.nvh]))
+            }
+            rec_idx++
+            continue
         }
-        rdec_set_layer(l, bq, bk, bv, bo, b1, b3, b2,
+        let cq = rdec_quant_class(lf.fq)
+        if (cq != rdec_quant_class(lf.fk) || cq != rdec_quant_class(lf.fv)) {
+            return rdec_decline("layer {l} mixes activation-quant forms (qkv {int(lf.fq)}/{int(lf.fk)}/{int(lf.fv)})")
+        }
+        let bq = resident_place(t, lf.fq, t.wq_offs[l], dim, c.q_gated ? 2l * qd : qd, mr, kg, wb)   // [q | gate] per head when gated
+        let bk = resident_place(t, lf.fk, t.wk_offs[l], dim, kvd, mr, kg, wb)
+        let bv = resident_place(t, lf.fv, t.wv_offs[l], dim, kvd, mr, kg, wb)
+        let bo = resident_place(t, lf.fo, t.wo_offs[l], qd, dim, mr, kg, wb)
+        // a placement can fail (arena exhausted); fail closed to the CPU loop rather than wire a -1 block
+        if (bq < 0l || bk < 0l || bv < 0l || bo < 0l) return rdec_decline("arena placement failed at layer {l}")
+        rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2,
             int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2))
+        mir_idx++
     }
     let bcls = resident_place(t, cls_fmt, t.wcls_off, dim, c.vocab_size, mr, kg, wb)
     if (bcls < 0l) return rdec_decline("classifier placement failed")
@@ -780,6 +877,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
     if (c.qk_norm) {
         let qkw = c.n_layers * 2l * dim + dim
         for (l in range64(c.n_layers)) {
+            continue if (layer_is_recurrent(c, l))   // no q/k norm rows on a recurrent layer; its slots stay zero
             for (i in range64(hs)) {
                 norms[qkw + l * 2l * hs + i] = t.fblob[t.rms_q_offs[l] + i]
                 norms[qkw + (l * 2l + 1l) * hs + i] = t.fblob[t.rms_k_offs[l] + i]
@@ -805,7 +903,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
 [unused_argument(half)]
 def private rdec_rope_row(t : Model; pos, hs, half : int64; var dst : array<float>; base : int64) {
     let c = t.config
-    build_rope_row_packed(dst, base, pos, hs, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale, t.rope_freqs)
+    let rot = c.rope_dim > 0l ? c.rope_dim : hs   // a partial-rope model's row is rot/2 cos + rot/2 sin, its frequencies over rot
+    build_rope_row_packed(dst, base, pos, rot, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale, t.rope_freqs)
 }
 
 // per-token scratch rows (capacity-retained; the driver is single-resident by the arbiter)
@@ -823,6 +922,8 @@ enum private RdecPass {
     continuation    // a prefill that continues an existing history
     span            // a non-causal (media) span
     pinned_off      // the resident prefill is pinned off (a multi-stream scheduler)
+    rewind          // a hybrid's position is not its forward-only deltanet state's next one
+    hybrid_prefill  // the resident window chain has no recurrent, gated-q or partial-rope arm yet
 }
 
 var private g_rdec_pass_said : table<int>
@@ -856,10 +957,38 @@ def private rdec_pass_once(kind : RdecPass; a, b : int64) {
         why = "the prefill continues an existing history from position {a}"
     } elif (kind == RdecPass.span) {
         why = "the eval carries a non-causal span"
+    } elif (kind == RdecPass.rewind) {
+        why = "position {a} is not the deltanet state's next position {b} (the recurrent state is forward-only)"
+    } elif (kind == RdecPass.hybrid_prefill) {
+        why = "the resident window chain has no recurrent, gated-q or partial-rope arm yet - the CPU prefills, the resident decode takes the mirror over"
     } else {
         why = "the resident prefill is pinned off (a multi-stream scheduler owns the sessions)"
     }
     to_log(LOG_INFO, "dasLLAMA: resident override passed a call to the CPU rails - {why} (said once per reason)\n")
+}
+
+// the session takes the single mirror: its host K/V rows [0, pos) go up per attention layer, the generation becomes its
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]   // a session's first resident token, or its return after another session's prefill
+def private rdec_take_mirror(t : Model; var s : Session; pos : int64) {
+    let c = t.config
+    for (l in range64(c.n_layers)) {
+        continue if (layer_is_recurrent(c, l))
+        rdec_sync_kv(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos)
+    }
+    g_rdec_cnt = pos
+    g_rdec_gen++
+    s.rdec_gen = g_rdec_gen
+    s.rdec_hydrated = true   // the host still holds everything the mirror does
+}
+
+[hot_path]   // per token on a hybrid: every recurrent layer's slot binds to this session's state - one pointer compare on the owner's path
+def private rdec_dn_own_all(var s : Session; n_layers : int64) {
+    for (l in range64(n_layers)) {
+        continue if (s.dn_state_prefix[l] < 0l)
+        unsafe {
+            rdec_dn_own(l, addr(s.dn_state[s.dn_state_prefix[l]]), addr(s.dn_conv_state[s.dn_conv_prefix[l]]))
+        }
+    }
 }
 
 // the resident whole-stack decode override (registered as "vulkan") — the mirror builds as positions arrive
@@ -877,25 +1006,37 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
         rdec_pass_once(RdecPass.paged, 0l, 0l)
         return false
     }
-    if (pos > g_rdec_cnt) {
-        rdec_pass_once(RdecPass.gap, pos, g_rdec_cnt)
-        return false
-    }
-    // ownership guard: the single mirror holds ONE session's rows (superseded => host has ours)
-    if (s.rdec_gen != g_rdec_gen) {
-        if (s.rdec_gen != 0l && !s.rdec_hydrated) {
-            panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration - engine bug (the steal path must hydrate first)")
-        }
-        rdec_pass_once(RdecPass.superseded, 0l, 0l)
-        return false
-    }
     if (pos + 1l > g_rdec_cap) {
         // capacity exhausted: hydrate host KV from the mirror, then the CPU rails take over
-        rdec_hydrate_host(t, s)
+        if (s.rdec_gen == g_rdec_gen) {
+            rdec_hydrate_host(t, s)
+        }
         rdec_pass_once(RdecPass.cap, pos, g_rdec_cap)
         return false
     }
     let c = t.config
+    // the mirror lacks this session's rows [0, pos): they come up from the host cache when it is authoritative
+    if (s.rdec_gen != g_rdec_gen || pos > g_rdec_cnt) {
+        if (s.rdec_gen == g_rdec_gen && s.rdec_gen != 0l) {
+            rdec_pass_once(RdecPass.gap, pos, g_rdec_cnt)   // our own mirror short of pos: nothing on the host past cnt either
+            return false
+        }
+        if (s.rdec_gen != 0l && !s.rdec_hydrated) {
+            panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration - engine bug (the steal path must hydrate first)")
+        }
+        rdec_take_mirror(t, s, pos)
+    }
+    if (c.recr_mask != 0ul) {
+        // the recurrent state is forward-only (the engine's own guard, which the whole forward bypasses)
+        if (pos == 0l) {
+            dn_reset(s)
+        } elif (pos != s.dn_pos) {
+            rdec_pass_once(RdecPass.rewind, pos, s.dn_pos)
+            return false
+        }
+        s.dn_pos = pos + 1l
+        rdec_dn_own_all(s, c.n_layers)
+    }
     let dim = c.dim
     let hs = layer_head_size(c, 0l)
     g_rdec_x |> resize(dim)
@@ -938,6 +1079,10 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     }
     if (s.attn_uniform_end != 0l) {
         rdec_pass_once(RdecPass.span, 0l, 0l)
+        return false
+    }
+    if (!resident_prefill_shape_ok(t.config)) {
+        rdec_pass_once(RdecPass.hybrid_prefill, 0l, 0l)
         return false
     }
     if (start_pos != 0l) {
@@ -1001,6 +1146,10 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
             rdec_pass_once(RdecPass.cap, ws.positions[i], g_rdec_cap)
             return false
         }
+        if (c.recr_mask != 0ul && ws.positions[i] != 0l && ws.positions[i] != s.dn_pos) {
+            rdec_pass_once(RdecPass.rewind, ws.positions[i], s.dn_pos)
+            return false
+        }
     }
     if (dasllama_noisy()) {
         to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")   // nolint:PERF026,PERF028 — noisy-gated diagnostics
@@ -1013,7 +1162,15 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
         let pos = ws.positions[i]
         // resync this session's KV history [0, pos) into the mirror (same codec — byte rows)
         for (l in range64(c.n_layers)) {
+            continue if (layer_is_recurrent(c, l))
             rdec_sync_kv(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos)
+        }
+        if (c.recr_mask != 0ul) {
+            if (pos == 0l) {
+                dn_reset(s)
+            }
+            s.dn_pos = pos + 1l
+            rdec_dn_own_all(s, c.n_layers)
         }
         // this row's embedded residual is already in ws.scr.x_b; its rope row for pos
         for (k in range64(dim)) {
@@ -1025,6 +1182,7 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
         let krowb = kv_row_bytes(s.kv_dtype_k, kvd)
         let vrowb = kv_row_bytes(s.kv_dtype_v, kvd)
         for (l in range64(c.n_layers)) {
+            continue if (layer_is_recurrent(c, l))
             unsafe {
                 rdec_read_kv(l, pos, kv_layer_kbase(s, l, c.seq_len) + pos * krowb,
                     kv_layer_vbase(s, l, c.seq_len) + pos * vrowb)
@@ -1036,10 +1194,10 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
     return true
 }
 
-[hot_path, unused_argument(t), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
+[hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
 def private vulkan_embed_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
     return (active_prefill_override() == "vulkan" && g_rdec_active && g_resident_prefill_allowed && g_rdec_emb_gpu
-        && start_pos == 0l && npos <= g_rdec_cap
+        && resident_prefill_shape_ok(t.config) && start_pos == 0l && npos <= g_rdec_cap
         && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null
         && s.attn_uniform_end == 0l && empty(s.mrope_pos) && !s.ds_active)
 }

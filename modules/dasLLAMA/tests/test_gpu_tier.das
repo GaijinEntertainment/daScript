@@ -21,6 +21,15 @@ var private g_token_pos = -1l
 var private g_token_cnt = -1l
 var private g_prepared = false
 var private g_prepared_kv16 = false
+var private g_prepared_n_attn = -1l
+var private g_prepared_gated = false
+var private g_prepared_rot = -1l
+var private g_prepared_dn_cd = -1l
+var private g_dn_layer_l = -1l
+var private g_dn_layer_ba_off = -1l
+var private g_dn_ba_rows = -1l
+var private g_dn_own_l = -1l
+var private g_dn_own_state : uint64
 
 def private d_reserve(fmt : int; cap_blocks : int64) : bool {
     g_reserve_fmt = fmt
@@ -32,17 +41,37 @@ def private d_reserve(fmt : int; cap_blocks : int64) : bool {
 def private d_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => 7l
 
 [unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm)]
-def private d_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool) : bool {
+def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom) : bool {
     g_prepared = true
     g_prepared_kv16 = kv16
+    g_prepared_n_attn = n_attn
+    g_prepared_gated = q_gated
+    g_prepared_rot = rot
+    g_prepared_dn_cd = dn.cd
     return true
 }
 
 [unused_argument(norms)]
 def private d_norms(norms : array<float>) {}
 
-[unused_argument(l, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2)]
-def private d_set_layer(l, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) {}
+[unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2)]
+def private d_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) {}
+
+[unused_argument(bqkv, bz, bout, bbeta, balpha, b1, b3, b2, fqkv, fz, fout, f1, f3, f2, convw, wnormp, ap, dtp)]
+def private d_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) {
+    g_dn_layer_l = l
+    g_dn_layer_ba_off = ba_off
+}
+
+def private d_upload_dn_ba(rows : array<float>) {
+    g_dn_ba_rows = long_length(rows)
+}
+
+[unused_argument(histp)]
+def private d_dn_own(l : int64; stp : float?; histp : float?) {
+    g_dn_own_l = l
+    g_dn_own_state = intptr(stp)
+}
 
 [unused_argument(cls_block, cls_fmt)]
 def private d_set_cls(cls_block : int64; cls_fmt : int) {}
@@ -122,9 +151,14 @@ def test_gpu_tier_contract(t : T?) {
         var wq : array<uint8>
         var ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 512l, 2l, 5), 7l)
-        t |> success(rdec_prepare(2l, 64l, 64l, 64l, 8l, 8l, 128l, 100l, 32l, true, 1e-5, 1.0, false, true))
+        t |> success(rdec_prepare(2l, 1l, 64l, 64l, 64l, 8l, 8l, 128l, 100l, 32l, true, 1e-5, 1.0, false, true, true, 4l,
+            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true)))
         t |> success(g_prepared, "prepare double must have run")
         t |> success(g_prepared_kv16, "kv16 must forward to the double")
+        t |> equal(g_prepared_n_attn, 1l)
+        t |> success(g_prepared_gated, "the gated-q flag must forward to the double")
+        t |> equal(g_prepared_rot, 4l)
+        t |> equal(g_prepared_dn_cd, 96l)
         var x : array<float>
         var cs : array<float>
         var logits : array<float>
@@ -170,6 +204,29 @@ def test_gpu_tier_contract(t : T?) {
         set_moe_gpu_arm("", @@arm_off)
         t |> success(!moe_gpu_tier_arm_(), "reset to unarmed for the rest of the process")
         t |> success(!moe_gpu_backend_registered(), "registration witness resets with the hook")
+    }
+}
+
+[test]
+def test_rdec_dn_seats(t : T?) {
+    t |> run("the hybrid seats install separately and forward what they are handed") @(t : T?) {
+        t |> success(!rdec_dn_installed(), "no hybrid seats before their install")
+        install_moe_gpu_resident_dn(@@d_set_dn_layer, @@d_upload_dn_ba, @@d_dn_own)
+        t |> success(rdec_dn_installed(), "the hybrid install must flip its witness")
+        rdec_set_dn_layer(3l, 1l, 2l, 3l, -1l, -1l, 4l, 5l, 6l, 4096l, 0, 0, 0, 0, 0, 0, null, null, null, null)
+        t |> equal(g_dn_layer_l, 3l)
+        t |> equal(g_dn_layer_ba_off, 4096l)
+        var ba : array<float>
+        ba |> resize(48)
+        rdec_upload_dn_ba(ba)
+        t |> equal(g_dn_ba_rows, 48l)
+        var st : array<float>
+        st |> resize(8)
+        unsafe {
+            rdec_dn_own(2l, addr(st[0]), addr(st[4]))
+            t |> equal(g_dn_own_l, 2l)
+            t |> equal(g_dn_own_state, intptr(addr(st[0])))
+        }
     }
 }
 

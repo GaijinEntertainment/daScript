@@ -34,17 +34,19 @@ def test_resident_unserved_features(t : T?) {
         let c = Config()
         t |> equal(resident_unserved_features(c), "")
     }
-    t |> run("the qwen35 shape names every feature the driver lacks, in one list") @(t : T?) {
+    t |> run("the qwen35 shape is served whole (nextn block, gated q, partial rope over qk-norm); without qk-norm the two attention arms are named") @(t : T?) {
         var c = Config()
         c.q_gated = true
+        c.qk_norm = true
         c.n_layer_nextn = 1l
         c.head_size = 256l
         c.rope_dim = 64l
+        t |> equal(resident_unserved_features(c), "")
+        c.qk_norm = false
         let s = resident_unserved_features(c)
-        t |> success(names(s, "in-file nextn (MTP) block"), "nextn named: {s}")
-        t |> success(names(s, "gated attention"), "gated attention named: {s}")
-        t |> success(names(s, "partial rotary (64 of 256)"), "partial rotary named with its widths: {s}")
-        t |> equal(length(split(s, ", ")), 3)
+        t |> success(names(s, "gated attention without qk-norm"), "gated attention named: {s}")
+        t |> success(names(s, "partial rotary (64 of 256) without qk-norm"), "partial rotary named with its widths: {s}")
+        t |> equal(length(split(s, ", ")), 2)
     }
     t |> run("one feature alone is one name, no separator") @(t : T?) {
         var c = Config()
@@ -69,14 +71,20 @@ def test_attn_chain_unserved_features(t : T?) {
 
 [test]
 def test_resident_layer_decline(t : T?) {
-    t |> run("a recurrent layer is named by number; the attention layers around it pass") @(t : T?) {
+    t |> run("a recurrent layer without deltanet planes is named by number; the attention layers around it pass") @(t : T?) {
         var m <- shell(3l, 2ul)
         let hid0 = layer_hidden(m, 0l)
         let hs = layer_head_size(m.config, 0l)
         let kvd = layer_kv_dim(m.config, 0l)
         t |> equal(resident_layer_decline(m, 0l, hid0, hs, kvd), "")
-        t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 is recurrent"), "layer 1 named")
+        t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 lacks a deltanet plane"), "layer 1 named")
         t |> equal(resident_layer_decline(m, 2l, hid0, hs, kvd), "")
+        // planes present but kq-tagged: the step reads q8, the layer says so by number
+        m.dnqkv_offs <- [-1l, 0l, -1l]
+        m.dngate_offs <- [-1l, 0l, -1l]
+        m.dnout_offs <- [-1l, 0l, -1l]
+        m.dnqkv_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 carries kq-tagged deltanet planes"), "kq-tagged named")
         delete m
     }
     t |> run("shared K/V, a missing plane and a differing FFN width each name the layer") @(t : T?) {

@@ -1611,6 +1611,7 @@ def vk_drop_model_state {
     g_rdq_n = 0u          // decode-role profiler likewise — averages must not span models
     g_rdq_count = 0l
     g_rdq_total = 0.0lf
+    g_rdq_wall_us = 0.0lf
     g_rdq_pro = 0.0lf
     g_rdq_tail = 0.0lf
     for (i in range(16)) {
@@ -2001,6 +2002,18 @@ struct RLayer {
     m_q, m_k, m_v, m_wo : HostBuf
     m_gate, m_up, m_down : HostBuf
     made : bool
+    // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
+    recurrent : bool
+    mir_idx : int64 = -1l           // this attention layer's K/V mirror slot; -1 = recurrent (no KV)
+    bqkv, bz, bout, bbeta, balpha : int64   // arena blocks: fused qkv, z gate, out projection, the q8 beta/alpha rows (-1 on the f32 arm)
+    fqkv, fz, fout : int
+    ba_off : int64                  // the f32 arm: this layer's [beta ; alpha] row base in dn_ba_dev (elements)
+    s_dnqkv, s_dnz, s_dnout : VkDescriptorSet
+    s_dnbeta, s_dnalpha : VkDescriptorSet   // q8 arm: GEMVs landing in the smalls at the beta/g rows
+    s_dnba : VkDescriptorSet                // f32 arm: the router-form GEMV over dn_ba_dev, two pushes
+    s_dnstep : VkDescriptorSet
+    m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
+    dn : DnStep                     // state + smalls + the session owner (the per-op step's shape; its cmd/tok/sets stay unused here)
 }
 
 struct RDec {
@@ -2024,7 +2037,19 @@ struct RDec {
     gate_dev, up_dev : uint64
     ffnout_dev : uint64
     xb2_dev : uint64              // wo output
-    k_mirror, v_mirror : uint64   // [n_layers x seq_cap x kv_dim] elements of the kv16 codec
+    k_mirror, v_mirror : uint64   // [n_attn x seq_cap x kv_dim] elements of the kv16 codec (attention layers own rows; RLayer.mir_idx)
+    n_attn : int64                // attention layers = mirror slots
+    q_gated : bool                // the q GEMV writes [q | gate] per head (2*qd rows); rope/attention read q head-strided
+    rot : int64                   // rotary width per head (hs, or the partial-rope width)
+    // the hybrid (deltanet) form: geometry + the buffers every recurrent layer shares
+    hybrid : bool
+    dn_cd, dn_kd, dn_di, dn_nvh, dn_nkh, dn_ds, dn_dconv : int64
+    dn_ba_f32 : bool              // beta/alpha rows are f32 (dn_ba_dev) rather than q8 arena planes
+    dn_proj_dev : uint64          // [cd + di] floats: the fused qkv row, the z row at cd
+    dn_ba_dev : uint64            // f32 arm: every recurrent layer's [beta ; alpha] rows, [2 x nvh x dim] per layer
+    dn_ba_bytes : int64
+    dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
+    dn_parity : int               // the shared conv-ring parity: every recurrent layer steps once per token
     norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     cos_dev : uint64              // this token's rope row (cos[half] + sin[half])
     logits_dev : uint64
@@ -2127,6 +2152,7 @@ var g_rdq_total = 0.0lf
 var g_rdq_pro = 0.0lf
 var g_rdq_tail = 0.0lf
 var g_rdq_role : double[16]
+var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
 
 let PFQ_CAP = 2048u
 var g_pfq_pool : QueryPool
@@ -2253,6 +2279,10 @@ let VHS_GACTS = 0x400000u  // the gate/up feed images
 let VHS_LOG = 0x800000u   // the router logits
 let VHS_META = 0x1000000u  // the three stacks' slot metas + the combine weights
 let VHZ_SK = 0x40000u     // cm2 split-k partial planes (the reduce's input scratch) — shares the VHZ namespace with the roles it interleaves
+let VHZ_DNP = 0x80000u    // deltanet projection row (qkv + z)
+let VHZ_DNST = 0x100000u  // deltanet per-layer state (in place)
+let VHZ_DNSM = 0x200000u  // deltanet per-layer smalls (beta/g rows + the conv ring)
+let VHZ_DNO = 0x400000u   // deltanet requantized o row (oq + os)
 
 struct VkHaz {
     w : uint            // bits with a pending (unbarriered) write

@@ -1,0 +1,111 @@
+# Vulkan hybrid ladder - the whole-model resident driver serves Qwen3.5-class hybrids
+
+The arc after PR #3932. Branch `bbatkin/vk-hybrid-ladder`, commit one is the serving-decline
+logging (every gate names its reason). Ledger home: `modules/dasLLAMA/followup_vulkan.md` item 2
+(family coverage in the resident driver); the k-native deltanet planes and the device KV codecs
+stay their own items (`PERF_LEDGER.md` k4 dn planes, `followup_vulkan.md` item 3).
+
+## The target
+
+Qwen3.5-9B-MTP-UD-Q5_K_XL on the 5060 Ti. Today the resident driver declines it on four arms it
+lacks (the load log names them: in-file nextn block, gated attention, partial rotary 64 of 256,
+24 of 32 recurrent layers), so the per-op tier serves attention and deltanet on the device and
+streams the 32 dense FFNs (3330 MB) through the CPU every token:
+
+| row | ours (per-op tier) | llama.cpp Vulkan b10660 | ratio |
+|---|---|---|---|
+| pp512 | 131.8 | 2527.0 | 0.052x |
+| tg128 | 11.07 | 56.74 | 0.195x |
+
+llama.cpp's decode is bandwidth-bound: 6.4 GB per token in 17.6 ms, about 363 GB/s. Fully
+resident with the Q8-transcoded deltanet planes the model reads ~6.9 GB per token; at the
+driver's usual ~360 GB/s that is ~52 tok/s (0.92x), and the k-native dn planes close the rest.
+Parity bar is Boris's: same or better on the row.
+
+Dev vehicle for correctness: Qwen3.5-0.8B-Q8_0 (fits every arm, minutes per run). The 9B UD
+file is the headline and the regression gate. Dev runs carry `DASLLAMA_ALLOW_UNTUNED=1` (the
+rebuilt binary aged the sidecar; Boris ruled no re-mint until Vulkan is fully functional).
+
+## What exists - the port pattern
+
+- Metal's resident loop (`dasllama_metal_decode.das` `encode_layer`) already serves this shape:
+  the recurrent branch (qkv/z/beta/alpha GEMVs, conv, l2norm, delta scan, gated out-norm, out
+  GEMV) with per-layer device state slices, the gated-attention deinterleave and sigmoid gate,
+  partial rope, and the NextN draft arm at `l == n_layers`.
+- Every Vulkan kernel the ladder needs is a class kernel already: the fused decode step
+  `dn_step_cls` with its per-layer `DnStep` (state, smalls, parity ring, session owner -
+  `ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2u), the chunked prefill chain
+  `dn_conv_cls` / `dn_scan_p1_cls` / `dn_scan_p2_cls` (`record_dn_cmd`), and the attention
+  prep/attention pair `at_prep_cls` / `at_attn_cls` whose `flags` already carry the gated
+  deinterleave and the sigmoid epilogue (`record_at_cmd`).
+- The resident token command (`rd_encode_token`) is one recorded chain per layer: requant, q/k/v
+  GEMVs over arena planes, qk-norm+rope storing the mirror row, attention over the mirror,
+  requant, wo, add+rms, gate/up, act, down, add+rms. Its kernels are `qkn_rope_cls` / `rope_kv_cls`
+  / `da_attn_cls` over the `k_mirror`/`v_mirror` slabs, sized `n_layers x seq_cap x kv_dim`.
+
+## The design (ruled by default; a fork worth Boris's eye is marked)
+
+1. **Recurrent layers ride the token command.** `RLayer` grows a recurrent form: arena blocks for
+   qkv/z/out (Q8-transcoded, the loader already tags dn planes q8 for the GPU tiers) plus the
+   beta/alpha rows (q8 planes, or the f32 fblob rows the 35B carries), the GEMV sets, and a
+   `DnStep` slot. The chain per recurrent layer: requant, qkv GEMV (cd rows), z GEMV (di rows,
+   y base cd), beta/alpha GEMVs into the smalls, `dn_step_cls`, out GEMV (di -> dim), add+rms.
+   State stays where sec.2.2u put it - the `DnStep` owner slots keyed by the session's host
+   addresses, flushed home on a switch - so the single-session resident driver and the per-op
+   tier share one state discipline and one release path (`vk_dn_step_release`).
+2. **The KV mirror gets per-layer bases: only attention layers own rows.** Today
+   `mirbase = l * seq_cap * kvd`; a hybrid at 32k would carve 4 GB where 1 GB is used. The plan
+   sizes `kv_bytes` per layer already (`layer_kv_dim` is 0 on recurrent layers); prepare takes
+   the attention-layer count and each RLayer carries its mirror base. `rdec_sync_kv` /
+   `read_kv` / hydrate address by the same base.
+3. **Gated attention in the resident kernels, not a detour through the batch chain.** The q GEMV
+   writes `2 * qd` rows in the per-head `[q | gate]` layout; the qk-norm+rope class and the
+   decode attention class take a `gated` word (the `at_prep` / `at_attn` arms transplanted): q
+   is read head-strided from the packed row, the gate row stashed, and the attention epilogue
+   multiplies by `sigmoid(gate)` before the wo requant. The q buffer grows to `2 * qd`.
+4. **Partial rope is a `rot` word on the rope kernels**: rotate pairs `< rot / 2` per head, the
+   rest pass through; the cos/sin row carries `rot / 2` entries. The per-op quad chain already
+   does this (`rot` in the attention-quad walk); the resident kernels get the same word.
+5. **The nextn block is not a decline.** The trunk is `n_layers`; the MTP head's planes are
+   separate offsets the CPU round reads (Vulkan's speculative round is the CPU round today,
+   `followup_vulkan.md` item 5). `resident_upload` drops `n_layer_nextn > 0` from its feature
+   list; nothing in the resident arm walks past `n_layers`. Fork for Boris: an MTP head resident
+   as a 33rd layer of the token command (the Metal shape) is a later item, not this arc.
+6. **Prefill: the window chain gets the recurrent layer.** `pf_run` encodes, per recurrent layer,
+   the chunked chain over the arena planes (`dn_conv`, `scan_p1`, `scan_p2`, requant, out GEMM)
+   with the state and conv tail carried across windows on the device, and the gated attention
+   through the `at_prep`/`at_attn` flags the batch chain already has (the cm2 flash tile has no
+   gated epilogue - gated layers keep `at_attn`, as `at_fa_serves` says). Decode lands first;
+   prefill is the second half.
+7. **Batch decode** stays what it is: the single-session chain per row, KV synced in and out.
+   The deltanet state for a row rides the `DnStep` owner switch (flush + cold upload per layer
+   per switch) - correct, and slow for two streams; per-session slots are `followup_vulkan.md`
+   item 38, after this arc.
+
+## Order of work
+
+1. DONE - Decode: recurrent RLayer + `dn_step_cls` in the token command, per-layer mirror bases, the
+   nextn gate dropped. Gate: `tests/test_gpu_resident_hybrid.das` (resident logits vs the CPU chain
+   within the deltanet bar on Qwen3.5-0.8B-Q8_0), `test_gpu_model_swap` under `DASLLAMA_GPU=1`.
+2. DONE - Decode: the `qstride`/`gated` words on `qkn_rope_cls` / `da_attn_cls`, `half = rot / 2` and
+   the `rot`-built cos row. The 0.8B cell runs the whole model resident: maxdiff 0.19-0.25 on a
+   bar of ~0.5, argmax equal every step, controls red. Found on the way: the arena tally and
+   placement used `qd` rows for a gated q plane (2 x qd) - half the plane unplaced, garbage gate.
+3. IN PROGRESS - The 9B UD file. Resident: tg128 49.74 +- 0.79 (was 11.07; llama.cpp 56.74, 0.877x),
+   GPU span 19.5 ms/token, wall 20.0; pp512 95.7 (CPU prefill until step 4). Trap fixed: the auto
+   VRAM plan (cap - 2 GiB) armed at 12.5 GB of the 16 GB card and WDDM demoted (6.8 tok/s; 12 GB
+   pinned 3.4, 11 GB pinned 49.8) - the auto headroom is now max(2 GiB, 27% of the cap)
+   (`ARCHITECTURE_GPU_VULKAN.md` 2.2n). Still owed here: the two-stream server scenario (the
+   9/4 run), `harness/parity.das` pinned greedy on the 0.8B under `DASLLAMA_GPU=1`.
+4. Prefill: the window chain's recurrent and gated arms. Gate: prefill parity cells on the 0.8B,
+   pp512 row on the 9B.
+5. Docs: `ARCHITECTURE_GPU_VULKAN_DECODE.md` gains the hybrid token-command section (anchored,
+   `[arch]` on the recorder), `followup_vulkan.md` item 2 closes, the decline list in
+   `resident_upload` shrinks to what still declines.
+
+## Measurement
+
+One rig: `benchmarks/lcpp_bench.das` under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1
+--for-debug-purposes`, reference `D:/Work/llama.cpp/build-vulkan/bin/Release/llama-bench.exe
+-ngl 99` run by hand (the bench's `--ref` passes `-ngl 0`). One row at a time, 16 lanes.
+`DASLLAMA_GPU_PROF=1` for the per-role token split when a row disappoints.
