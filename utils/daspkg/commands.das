@@ -2665,10 +2665,16 @@ def private ensure_external_wasm_archives(pkg_dir, wasm_lib_dir : string; var bu
 // Build one app: cross-compile → discover modules → emcc-link → stage assets.
 def private release_one_wasm_app(root, out_dir, app_name, main_script : string; // nolint:STYLE037,STYLE038 — flat per-app wasm release steps + their error arms
                                  wasm_lib_dir, runtime_archive, shell_path : string;
-                                 include_globs, exclude_globs : array<string>) : int {
+                                 include_globs, exclude_globs, disabled_modules, app_emcc_args : array<string>) : int {
     if (!is_safe_pkg_name(app_name)) {
         to_log(LOG_ERROR, "release wasm: unsafe app name `{app_name}` (no path separators / `.` / `..`)\n")
         return 1
+    }
+    for (m in disabled_modules) {   // a .das_package string that reaches the cross-compile command line
+        if (!is_safe_pkg_name(m)) {
+            to_log(LOG_ERROR, "release wasm: unsafe module name `{m}` in release_wasm_disable_module (no path separators / `.` / `..` / spaces)\n")
+            return 1
+        }
     }
     let main_path = path_join(root, main_script)
     if (!fexist(main_path)) {
@@ -2700,7 +2706,13 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
     //    cross-compile scans the script's folder and misses the package's modules/<dep>.
     // --jit-threads: emit +atomics,+bulk-memory so the object's ABI matches the -pthread runtime
     // archive (the wasm build is threaded — see cmd_build_wasm). The link below adds -pthread.
-    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" --disable-module dashv \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-threads --jit-runtime-lib=\"{runtime_archive}\""
+    let disable_args = build_string() $(w) {
+        write(w, "--disable-module dashv")
+        for (m in disabled_modules) {
+            write(w, " --disable-module {m}")
+        }
+    }
+    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" {disable_args} \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-threads --jit-runtime-lib=\"{runtime_archive}\""
     var xc_out : string
     let xc_rc = run_cmd(xc_cmd, xc_out)
     if (xc_rc != 0 || !fexist(obj_path)) {
@@ -2777,6 +2789,9 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         }
     }
 
+    // the app's own release_emcc_arg() lines come last, after every module's: an app-level flag wins
+    emcc_args |> push_from(app_emcc_args)
+
     // 4. emcc link → <app>.{html,js,wasm}. run_cmd handles the Windows
     //    cmd.exe outer-quote wrapping, so quoted paths survive on every host.
     let html_out = path_join(app_out_dir, "{app_name}.html")
@@ -2800,7 +2815,9 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         // context/jobque mutexes). __wrap_emscripten_futex_wait (src/hal/wasm_thread_malloc.cpp)
         // busy-polls on the worklet instead, delegating all other threads to the real impl. No
         // emscripten fork needed — the wrap + shim live in libDaScript_runtime.a (like the malloc lock).
-        w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -pthread -sPTHREAD_POOL_SIZE=16 -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 -Wl,--wrap=emscripten_futex_wait")
+        // EXPORTED_RUNTIME_METHODS=FS,ENV: a custom shell stages files into MEMFS and sets the
+        // program's environment knobs in Module.preRun (the C environment is built from Module.ENV at startup).
+        w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS,ENV -pthread -sPTHREAD_POOL_SIZE=16 -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 -Wl,--wrap=emscripten_futex_wait")
         for (a in emcc_args) {
             w |> write(" {a}")
         }
@@ -2892,5 +2909,5 @@ def cmd_release_wasm(root : string; out_dir : string; wasm_lib_dir_override : st
     }
 
     mkdir_rec(out_dir)
-    return release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs)
+    return release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs, spec.wasm_disabled_modules, spec.emcc_args)
 }

@@ -7,8 +7,9 @@
 #include <Accelerate/Accelerate.h>
 
 #include "daScript/daScript.h"
+#include "dasAccelerate.h"
 
-using namespace das;
+namespace das {
 
 // BLASSetThreading/BLASGetThreading exist only in the macOS 15 / iOS 18 SDK headers — the
 // __builtin_available checks below gate RUNTIME, but an older SDK fails at COMPILE time
@@ -37,10 +38,10 @@ static inline void accel_pin_single_thread() {
 
 // C[m x n] = A[m x k] * B[n x k]^T, row-major — the exact call shape ggml-blas.cpp uses for
 // mul_mat (activations A stay token-major, weights B stay row-major, no pre-transpose).
-static void accel_sgemm_nt(int32_t m, int32_t n, int32_t k,
-                           const float * a, int32_t lda,
-                           const float * b, int32_t ldb,
-                           float * c, int32_t ldc) {
+void accel_sgemm_nt(int32_t m, int32_t n, int32_t k,
+                    const float * a, int32_t lda,
+                    const float * b, int32_t ldb,
+                    float * c, int32_t ldc) {
     accel_pin_single_thread();
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                 m, n, k,
@@ -51,9 +52,9 @@ static void accel_sgemm_nt(int32_t m, int32_t n, int32_t k,
 
 // y[n] = W[n x k] * x[k], row-major — the decode-lane probe (uncrowned on M1; here for the
 // M4/M5-SME applicability sweep, never gated out).
-static void accel_sgemv_n(int32_t n, int32_t k,
-                          const float * w, int32_t ldw,
-                          const float * x, float * y) {
+void accel_sgemv_n(int32_t n, int32_t k,
+                   const float * w, int32_t ldw,
+                   const float * x, float * y) {
     accel_pin_single_thread();
     cblas_sgemv(CblasRowMajor, CblasNoTrans, n, k, 1.0f, w, ldw, x, 1, 0.0f, y, 1);
 }
@@ -64,10 +65,10 @@ static void accel_sgemv_n(int32_t n, int32_t k,
 // Filter create+destroy is ~0.2us (bnns_hgemm_probe), so per-call creation is free and no
 // pointer-lifetime coupling exists. rc: 0 = ok, nonzero = BNNS unavailable or refused —
 // the caller falls back to the portable path.
-static int32_t accel_bnns_hgemm_nt(int32_t m, int32_t n, int32_t k,
-                                   const uint16_t * a, int32_t lda,
-                                   const uint16_t * b, int32_t ldb,
-                                   float * c, int32_t ldc) {
+int32_t accel_bnns_hgemm_nt(int32_t m, int32_t n, int32_t k,
+                            const uint16_t * a, int32_t lda,
+                            const uint16_t * b, int32_t ldb,
+                            float * c, int32_t ldc) {
     if (__builtin_available(macOS 11.0, iOS 14.0, tvOS 14.0, watchOS 7.0, *)) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"   // classic BNNS: deprecated 15.0 for BNNSGraph, still the only C-callable dynamic matmul
@@ -99,7 +100,7 @@ static int32_t accel_bnns_hgemm_nt(int32_t m, int32_t n, int32_t k,
 
 // Calling thread's effective BLAS threading mode after the pin: 0 = multi, 1 = single,
 // -1 = BLASSetThreading unavailable (pre-macOS-15). Diagnostics for the contention rig.
-static int32_t accel_threading_mode() {
+int32_t accel_threading_mode() {
     accel_pin_single_thread();
 #if DAS_ACCEL_HAS_BLAS_THREADING
     if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, watchOS 11.0, *)) {
@@ -108,8 +109,6 @@ static int32_t accel_threading_mode() {
 #endif
     return -1;
 }
-
-namespace das {
 
 class Module_DasAccelerate : public Module {
 public:
@@ -130,6 +129,10 @@ public:
                 ->args({"m", "n", "k", "a", "lda", "b", "ldb", "c", "ldc"});
         addExtern<DAS_BIND_FUN(accel_threading_mode)>(*this, lib, "accel_threading_mode",
             SideEffects::modifyExternal, "accel_threading_mode");
+    }
+    virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
+        tw << "#include \"../modules/dasAccelerate/src/dasAccelerate.h\"\n";
+        return ModuleAotType::cpp;
     }
 };
 

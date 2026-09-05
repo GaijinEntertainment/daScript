@@ -2,6 +2,7 @@ options gen2
 
 module llvm_tune_scope_early public
 
+require daslib/tune public
 require llvm/daslib/llvm_tune public
 
 // Helper for cant_tune_scope_after_covered.das: a kernel module with no scope of its own, so the

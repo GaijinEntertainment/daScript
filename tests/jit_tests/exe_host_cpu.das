@@ -19,7 +19,10 @@ let KERNEL_SCRIPT = "{OUTPUT_DIR}/exe_host_cpu_kernel.das"
 let KERNEL_EXE = "{OUTPUT_DIR}/exe_host_cpu_kernel"
 let PLAIN_SCRIPT = "{OUTPUT_DIR}/exe_host_cpu_plain.das"
 let PLAIN_EXE = "{OUTPUT_DIR}/exe_host_cpu_plain"
+let BASELINE_SCRIPT = "{get_das_root()}/tests/jit_tests/_exe_baseline_intrin.das"
+let BASELINE_EXE = "{OUTPUT_DIR}/exe_baseline_intrin"
 let HOST_CPU_LINE = "targeting the current box"
+let BASELINE_ANSWER = "INTRIN=[1496,2480,1496]"   //! the fallback bodies over w = x = 1..16: sum of squares per lane group, the 2x2 block products, the same dot again
 
 def private write_probe_script(path : string; with_kernel : bool) : bool {
     var ok = false
@@ -28,7 +31,7 @@ def private write_probe_script(path : string; with_kernel : bool) : bool {
         if (f != null) {
             fprint(f, "options gen2\n")
             if (with_kernel) {
-                fprint(f, "require llvm/daslib/llvm_code\n")
+                fprint(f, "require daslib/tune\n")
                 fprint(f, "[llvm_code(name = \"llvm_code_selftest::host_features\")]\n")
                 fprint(f, "def host_rail() : int \{ return -1 \}\n")
                 fprint(f, "[export] def main() \{ print(\"HOSTF=[\{host_rail()}]\\n\"); \}\n")
@@ -93,11 +96,23 @@ def test_exe_host_cpu(t : T?) {
     spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{PLAIN_EXE}\" \"{PLAIN_SCRIPT}\"", lp)
     t |> success(!(lp |> has(HOST_CPU_LINE)), "kernel-free exe build must stay generic")
 
-    // run the built exe where the platform can load the shared lib (same gates as jit_exe.das:
+    //! an intrinsic call alone must not promote the exe off the generic baseline - the gates decline to the fallback bodies, so the build emits nothing that machine cannot select
+    var lb : array<string>
+    let rcb = spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{BASELINE_EXE}\" \"{BASELINE_SCRIPT}\"", lb)
+    t |> equal(0, rcb, "the intrinsic-calling kernel-free exe must build on the generic baseline: {join(lb, "\n")}")
+    t |> success(!(lb |> has(HOST_CPU_LINE)), "an intrinsic call alone never promotes the exe to the host cpu")
+
+    // run the built exes where the platform can load the shared lib (same gates as jit_exe.das:
     // Windows lacks RPATH; static builds ship no runtime lib for the exe to call into)
-    if (get_platform_name() != "windows" && das_is_dll_build() && fexist("{KERNEL_EXE}.exe")) {
+    let can_run = get_platform_name() != "windows" && das_is_dll_build()
+    if (can_run && fexist("{KERNEL_EXE}.exe")) {
         var lr : array<string>
         spawn_child("\"{KERNEL_EXE}.exe\"", lr)
         t |> success(lr |> has("HOSTF=[1]"), "the exe must bake the HOST feature rail, not generic (0) or reference (-1)")
+    }
+    if (can_run && fexist("{BASELINE_EXE}.exe")) {
+        var lr : array<string>
+        spawn_child("\"{BASELINE_EXE}.exe\"", lr)
+        t |> success(lr |> has(BASELINE_ANSWER), "the baseline exe computes the fallback bodies' answers: {join(lr, "\n")}")
     }
 }

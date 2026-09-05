@@ -9,7 +9,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama_math
 require dasllama/dasllama_kv_codec  // the tq4 codec + FWHT rotation under probe
 require dasllama/dasllama_tokenizer
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require dasllama/dasllama_env
 
 // Basis A/B on REAL cache rows: run SmolLM2 over real text with an f32 KV cache, then re-quantize

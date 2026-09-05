@@ -1,7 +1,6 @@
 options gen2
 options no_aot
 
-require strings
 require dastest/testing_boost
 require daslib/fio
 require ../../dastest/worker_policy.das
@@ -50,22 +49,6 @@ def test_preflight_config(tt : T?) {
 
         var inscope blanks <- untracked_from_ls("\n\r\n   \n")
         t |> equal(0, length(blanks))
-    }
-
-    tt |> run("lint rail selection and its Pass detail are pinned") <| @(t : T?) {
-        t |> success(lint_runs_exe_rail(false))
-        t |> success(!lint_runs_exe_rail(true))
-        t |> equal("3 file(s) clean on all three rails (host, linux-mirror, exe)", lint_pass_detail(3, true))
-        t |> equal("1 file(s) clean on interp rails (host, linux-mirror); exe rail skipped", lint_pass_detail(1, false))
-    }
-
-    tt |> run("--show-help lists the rail-skip flag the skills hardcode") <| @(t : T?) {
-        let exe = get_command_line_arguments()[0]
-        let tool = path_join(get_das_root(), "utils/internal/preflight/main.das")
-        var out : string
-        let rc = run_and_capture([exe, tool, "--", "--show-help"], out, 120.0)
-        t |> equal(0, rc)
-        t |> success(find(out, "--lint-skip-exe-rail") >= 0, "help lists --lint-skip-exe-rail")
     }
 
     tt |> run("invalid settings fail closed to defaults") <| @(t : T?) {

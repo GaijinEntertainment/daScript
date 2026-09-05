@@ -18,9 +18,10 @@ require daslib/jobque_profile  // JOBQUE_PROFILING_ENABLED — the compile-time 
 require dasllama/dasllama_kv_codec public  // the KV-cache codec families — kv_store_row/kv_load_row/kv_dot/kv_axpy dispatch into them
 require dasllama/dasllama_convert   // cvt_f32_to_f16/cvt_f16_to_f32 — the f16 rows (wscale plane + the f16 KV codec)
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
-require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backend at [init]; no-op off-ARM
-require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // [init]-only: registers "arm64-gen" (the generated GEMM family, arm64 load-select tier). PATH guard: the module hard-requires llvm_tune, so it loads exactly when dasLLVM is mounted
-require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public  // re-export ONLY llvm_tune (not math_gen's whole public surface — its jobque_boost would flood requirers with ambiguities): the auto-policy pass and tune_status reach every app that requires this module
+require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backend at [init] under arm64 + JIT alone; compiles everywhere (daslib/aarch64_neon carries scalar fallbacks)
+require dasllama/dasllama_math_gen  // [init]-only: registers "arm64-gen" / "x64-gen" (the generated GEMM family) under the JIT alone; compiles everywhere - its reference bodies are the portable tier's kq kernels
+require daslib/tune public  // the tune annotations + the auto-policy pass, inert without dasLLVM; PUBLIC for the same reach as the line below
+require ?llvm llvm/daslib/llvm_tune public  // re-export ONLY llvm_tune (not math_gen's whole public surface — its jobque_boost would flood requirers with ambiguities): tune_status reaches every app that requires this module
 require ?das_metal dasllama/dasllama_metal_gemm  // [init]-only: registers "metal" (the GPU prefill-GEMM batch donor). STRICT guard: the C++ das_metal module exists on Apple builds only, so non-Apple lanes never compile the Metal driver
 require ?das_accelerate dasllama/dasllama_math_accelerate  // [init]-only: arms the "+AMX" float-batch override when DASLLAMA_ACCEL=1. Same Apple-only guard shape as the metal driver
 require dasllama/dasllama_gguf
@@ -1476,16 +1477,16 @@ def apply_box_profile_runtime_checked(path : string) {
     g_box_profile_runtime_applied = false   // both flags describe THIS apply, never an earlier one
     g_box_profile_runtime_declined = ""
     let reason = box_profile_verdict_at(path)
-    if (reason == TuneSidecarReason.absent) {
-        g_box_profile_runtime_declined = "{reason}"
+    if (reason == "absent") {
+        g_box_profile_runtime_declined = reason
         return
     }
-    if (reason == TuneSidecarReason.foreign_box || reason == TuneSidecarReason.unreadable) {
-        g_box_profile_runtime_declined = "{reason}"
+    if (reason == "foreign_box" || reason == "unreadable") {
+        g_box_profile_runtime_declined = reason
         to_log(LOG_INFO, "dasLLAMA: tune sidecar {path} not applied ({reason}) - its runtime knobs are the minting box's state\n")
         return
     }
-    if (reason == TuneSidecarReason.stale_binary) {
+    if (reason == "stale_binary") {
         to_log(LOG_INFO, "dasLLAMA: tune sidecar predates the binary - kernel winners fall back; the runtime knobs are box state and apply\n")
     }
     apply_box_profile_runtime_at(path)

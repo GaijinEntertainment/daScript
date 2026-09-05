@@ -52,6 +52,9 @@ struct RunArgs {
     @clarg_short = "n"
     @clarg_doc = "Repeat count — explicit only (default 1, never best-of-N)"
     nreps : int = 1
+    @clarg_name = "no-tune"
+    @clarg_doc = "Short-circuit the [tune] framework in every child (DAS_TUNE_POLICY=reference): the reference bodies run — the portable tier's arm"
+    no_tune : bool
 
     @clarg_doc = "daslang binary (default: the binary running this script — a hardcoded ./bin/daslang picked up a STALE top-level exe on the MSVC layout)"
     das : string = ""
@@ -117,6 +120,8 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_kernel_backend.das",
                     "modules/dasLLAMA/tests/test_kgroup_repack.das",
                     "modules/dasLLAMA/tests/test_kqformat.das",
+                    "modules/dasLLAMA/tests/test_math_activations.das",
+                    "modules/dasLLAMA/tests/test_math_elementwise.das",
                     "modules/dasLLAMA/tests/test_matmul.das",
                     "modules/dasLLAMA/tests/test_matmul_batch.das",
                     "modules/dasLLAMA/tests/test_metal_gemm.das",
@@ -128,12 +133,15 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_jobque_tripwire.das",
                     "modules/dasLLAMA/tests/test_plane.das",
                     "modules/dasLLAMA/tests/test_ple_check.das",
+                    "modules/dasLLAMA/tests/test_prefill_cpu_kernels.das",
                     "modules/dasLLAMA/tests/test_program_roots.das",
+                    "modules/dasLLAMA/tests/test_q8q8_family.das",
                     "modules/dasLLAMA/tests/test_quant.das",
                     "modules/dasLLAMA/tests/test_repack.das",
                     "modules/dasLLAMA/tests/test_repack_lane_context.das",
                     "modules/dasLLAMA/tests/test_rmsnorm.das",
                     "modules/dasLLAMA/tests/test_rope.das",
+                    "modules/dasLLAMA/tests/test_rope_apply.das",
                     "modules/dasLLAMA/tests/test_run_suites.das",
                     "modules/dasLLAMA/tests/test_run_summary.das",
                     "modules/dasLLAMA/tests/test_silu.das",
@@ -145,6 +153,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_tts_textnorm.das",
                     "modules/dasLLAMA/tests/test_tts_blocks.das",
                     "modules/dasLLAMA/tests/test_tool_formats.das",
+                    "modules/dasLLAMA/tests/test_tower_asr_kernels.das",
                     "modules/dasLLAMA/tests/test_tower_helpers.das",
                     "modules/dasLLAMA/tests/test_tune_interrupt.das",
                     "modules/dasLLAMA/tests/test_unicode.das",
@@ -222,7 +231,7 @@ let TESTS_DIR = "modules/dasLLAMA/tests"
 def area_tests(area : string) : array<string> {
     if (area == "audio") {
         return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_dasllama_lint_contracts.das",
-                    "test_tower_helpers.das", "test_vad.das", "test_whisper.das" ]
+                    "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das", "test_whisper.das" ]
     } elif (area == "vision") {
         return <- [ "test_attn_span.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
@@ -243,12 +252,15 @@ def area_tests(area : string) : array<string> {
                     "test_flash.das", "test_forward.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das",
                     "test_gpu_model_swap.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kgroup_repack.das", "test_kqformat.das", "test_kquant.das",
-                    "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_matmul.das", "test_matmul_batch.das",
+                    "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_math_activations.das",
+                    "test_math_elementwise.das", "test_matmul.das", "test_matmul_batch.das",
                     "test_metal_float_a_gate.das", "test_metal_gemm.das", "test_metal_role_infer.das", "test_mtp.das",
                     "test_mtp_gemma_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mxfp4.das",
                     "test_par_indexed.das", "test_parity.das", "test_parity_cache.das", "test_parity_pregate.das",
-                    "test_plane.das", "test_ple_check.das", "test_ple_modes.das", "test_prefill.das", "test_quant.das",
-                    "test_repack.das", "test_repack_lane_context.das", "test_rmsnorm.das", "test_rope.das", "test_sampling.das",
+                    "test_plane.das", "test_ple_check.das", "test_ple_modes.das", "test_prefill.das", "test_prefill_cpu_kernels.das",
+                    "test_q8q8_family.das", "test_quant.das",
+                    "test_repack.das", "test_repack_lane_context.das", "test_rmsnorm.das", "test_rope.das", "test_rope_apply.das",
+                    "test_sampling.das",
                     "test_scheduler.das", "test_silu.das", "test_softmax.das", "test_think_split.das", "test_tokenizer.das",
                     "test_tool_formats.das", "test_unicode.das", "test_vulkan_dec_tail.das", "test_vulkan_kernels.das",
                     "test_vulkan_moe_cm2.das", "test_vulkan_tier.das" ]
@@ -414,6 +426,10 @@ def private child_envs(cfg : RunArgs; win : bool; arm : string) : string {
             envs = "DASLLAMA_TEST_FAMILY='{cfg.family}' {envs}"
         }
     }
+    if (cfg.no_tune) {
+        envs = (win ? "{envs}set \"DAS_TUNE_POLICY=reference\"&& set \"DASLLAMA_IMAGE=0\"&& "
+            : "DAS_TUNE_POLICY=reference DASLLAMA_IMAGE=0 {envs}")
+    }
     if (cfg.suite == "image-vulkan") {
         // the offline-bake suite: arm the tier so the probed config carries a vulkan section —
         // the bake itself is DRY (no device calls), so this is safe on GPU-less boxes too
@@ -425,8 +441,9 @@ def private child_envs(cfg : RunArgs; win : bool; arm : string) : string {
     // the perf rig's. Without this every child auto-mints its own sidecar tune, computes a
     // FOREIGN image identity, and its save GC-purges the rig's images as dead siblings
     // (observed 2026-07-30: fam-gemma4 freed 34 GB of bench flavors). A caller-set
-    // DAS_TUNE_MANIFEST inherits; a box without a minted manifest keeps sidecar behavior.
-    if (empty(g_env_core.tune_manifest)) {
+    // DAS_TUNE_MANIFEST inherits; a box without a minted manifest keeps sidecar behavior. The
+    // --no-tune arm pins nothing: an explicit manifest disables the policy rail it runs on.
+    if (empty(g_env_core.tune_manifest) && !cfg.no_tune) {
         let manifest = "modules/dasLLAMA/performance/{derive_box_name(g_env_prof.box)}.tune.json"
         var mst : FStat
         if (stat(manifest, mst)) {
@@ -542,6 +559,10 @@ def select_areas(cfg : RunArgs) : tuple<status : int; areas : array<string>> {
 
 //! the suite forms' argument contract: 0 = run, else main's exit code
 def check_suite_args(cfg : RunArgs) : int {
+    if (cfg.no_tune && (cfg.suite == "image" || cfg.suite == "image-vulkan")) {   //! the arm runs with the image rail off, and the image suites ARE the rail
+        to_log(LOG_ERROR, "--no-tune sets DASLLAMA_IMAGE=0 in every child, so it cannot drive the image suites - drop --no-tune or pick another suite\n")
+        return 2
+    }
     if (cfg.suite == "model-free" || cfg.suite == "stocked") {
         if (cfg.full || !empty(cfg.arm)) {   //! the per-PR gates have no arms to scope: a filter would silently shrink them
             to_log(LOG_ERROR, "--suite {cfg.suite} takes neither --arm nor --full: it is a whole per-PR gate (--exclude names what it drops)\n")

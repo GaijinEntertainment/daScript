@@ -8,7 +8,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 //   bin/daslang -jit utils/dasllama-server/txt2wav.das -- --tts <kitten-nano.gguf> --text "Hello." --out hello.wav [--voice expr-voice-2-f] [--speed 1.0]
 
 require dasllama/dasllama            // load_tts_model / synthesize / write_wav_pcm16 / the shared [tune_scope]
-require llvm/daslib/llvm_tune        // [tune_policy] + log_tune_status
+require daslib/tune                  // [tune_policy] + log_tune_status - the shells; the framework rides in when the build has dasLLVM
 require daslib/jobque_boost
 require daslib/clargs
 require daslib/defer          // defer() { reset_tts_q8() } — the weight-lane pin never outlives the run

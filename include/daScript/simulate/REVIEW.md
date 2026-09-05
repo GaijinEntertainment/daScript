@@ -32,7 +32,10 @@ checklist on its own.
   folder that generated code executes per evaluated expression. Such a diff - including one
   an optimized build flattens to nothing - lands its entry under `ARCHITECTURE.md`'s
   sanctioned hot-path additions in the same diff: what was added, where, why correctness
-  required it, and the alternative that was rejected.
+  required it, and the alternative that was rejected. Cost is judged in the build the repo
+  ships: a change that costs more only under a relaxed-math or otherwise non-default compiler
+  flag states which flavor and how much in its PR description, and ledgers only when the
+  shipped build pays.
 
 - **A diff that changes the layout of a `debug_info.h` struct - a field added, removed,
   reordered, or retyped, or a base changed - states a per-consumer verdict (updated / no

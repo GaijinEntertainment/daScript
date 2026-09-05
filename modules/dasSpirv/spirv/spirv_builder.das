@@ -714,7 +714,8 @@ def public const_double(var m : SpirvModule; v : double) : uint {
 // value), so this is type + result-id only. Keyed separately so it never collides with const_int 0/1.
 // f32 -> f16 bits, round-to-nearest-even — the das CPU reference semantics exactly (its
 // float16 converts are RNE too, so a folded CPU constant and this routine agree bit-for-bit).
-// Pure das because the f16_cvt daslib lives in dasLLVM (not requireable from here).
+// Its own body rather than daslib/f16_cvt's f32_to_f16: that one flattens every nan to sign|0x7E00,
+// this one carries a payload bit through.
 def public float_to_half_bits(v : float) : uint {
     let bits = unsafe(reinterpret<uint>(v))
     let s = (bits >> 16u) & 0x8000

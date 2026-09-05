@@ -131,6 +131,7 @@ struct ReleaseSpec {
     emcc_args : array<string>           //!< extra emcc flags this module contributes to a `daspkg release wasm` link (e.g. "-sUSE_GLFW=3"); gathered from every referenced module
     embed_paths : array<string>         //!< "src@dst" embed pairs this module needs in the wasm MEMFS (e.g. a HUD font); gathered from every referenced module
     web_shell : string                  //!< optional emcc `--shell-file` HTML for `release wasm`; empty = daslang's minimal canvas shell
+    wasm_disabled_modules : array<string> //!< host module folders (`dasvulkan`) kept unloaded on the `release wasm` cross-compile, so a guarded `require ?name` resolves as absent there
     wasm_build_command : string         //!< shell command that builds this EXTERNAL module's wasm archives (run with cwd = module dir); empty = in-tree module built by `daspkg build --wasm`
     wasm_archives : array<string>       //!< archives required by wasm link; build outputs are module-relative, SDK archives may be named from the staged wasm lib dir
     requires_jit : bool                 //!< app is JIT-only (per-box [tune]/[llvm_code] kernels); a baked -exe would run broken, so `daspkg release` refuses it
@@ -210,6 +211,13 @@ def release_emcc_arg(arg : string) {
 //! Declare a file a module needs embedded in the wasm MEMFS for `release wasm` (emcc `--embed-file src@dst`). `src` is relative to the module dir (this .das_package's location, like release_main / release_wasm_archive), so it resolves for an external module under <project>/modules/<dep> too; `dst` is the absolute MEMFS path the runtime opens at (e.g. dasStbImage embeds its HUD font at `/modules/dasStbImage/fonts/droidsansmono.ttf`).
 def release_embed_file(src, dst : string) {
     _release_spec.embed_paths |> push("{src}@{dst}")
+}
+
+//! Keep a host module (folder name, case-insensitive) out of the `release wasm` cross-compile:
+//! it runs on the host, where a module with no wasm build still satisfies a guarded `require ?name`.
+//! dashv is disabled by the rail; an app reaching vulkan, das_metal or das_accelerate names those.
+def release_wasm_disable_module(name : string) {
+    _release_spec.wasm_disabled_modules |> push(name)
 }
 
 //! Choose the emcc `--shell-file` HTML wrapper for `release wasm`. Empty (the

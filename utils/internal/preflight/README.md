@@ -27,9 +27,8 @@ daslang utils/internal/preflight/main.das -- --list-gates
 daslang utils/internal/preflight/main.das -- --only docs,ci-das
 daslang utils/internal/preflight/main.das -- --skip tests-aot --full
 
-# pre-push lint gate: the changed-set lint without the -exe rail (rails and
-# cost: skills/internal/preflight.md, the lint row)
-daslang utils/internal/preflight/main.das -- --only lint --lint-skip-exe-rail
+# pre-push lint gate: the changed-set lint (rails and cost: skills/internal/preflight.md, the lint row)
+daslang utils/internal/preflight/main.das -- --only lint
 ```
 
 A gate with a reach set (`dasgen`, `docs`, `utils-tests`, `ci-matrix`, the module gates) skips

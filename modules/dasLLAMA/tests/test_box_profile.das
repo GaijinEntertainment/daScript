@@ -7,7 +7,7 @@ require dasllama/dasllama_math  // the knob setters/getters (incl. set/get_q8_to
 require daslib/fio
 require dasllama/dasllama_env
 require dasllama/dasllama_tune   // box_profile_verdict_at
-require llvm/daslib/llvm_tune    // tune_box_identity, TuneSidecarReason
+require llvm/daslib/llvm_tune    // tune_box_identity
 
 // The tune sidecar's "runtime" section: apply_box_profile_runtime(path) sets the runtime knobs
 // and logs each applied entry. The explicit-path form keeps the test independent of the app's
@@ -260,7 +260,7 @@ def test_stale_binary_sidecar_keeps_runtime(t : T?) {
     t |> success(fwrite(path, js), "profile written")
     var err : string
     t |> success(set_mtime(path, mktime(2020, 1, 1, 0, 0, 0), err), "mtime set into the past ({err})")
-    t |> equal(box_profile_verdict_at(path), TuneSidecarReason.stale_binary, "reads as binary-stale")
+    t |> equal(box_profile_verdict_at(path), "stale_binary", "reads as binary-stale")
     apply_box_profile_runtime_checked(path)
     t |> equal(get_q8_token_block(), 320l, "runtime knob applied off a binary-stale sidecar")
     t |> success(box_profile_runtime_applied(), "the applied flag is up")
@@ -276,7 +276,7 @@ def test_foreign_sidecar_applies_nothing(t : T?) {
     let path = path_join(dir, "dasllama_test_box_profile_foreign.json")
     let js = "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"dasllama-test-foreign-box\"\}\}"
     t |> success(fwrite(path, js), "profile written")
-    t |> equal(box_profile_verdict_at(path), TuneSidecarReason.foreign_box, "reads as another box's")
+    t |> equal(box_profile_verdict_at(path), "foreign_box", "reads as another box's")
     apply_box_profile_runtime_checked(path)
     t |> equal(get_q8_token_block(), 128l, "runtime knob NOT applied off another box's sidecar")
     t |> equal(box_profile_runtime_declined(), "foreign_box", "the decline names its reason")

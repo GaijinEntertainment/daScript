@@ -9,8 +9,8 @@ require dasllama/dasllama_scheduler   // continuous-batching scheduler (layer 3 
 require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
-require dasllama/dasllama_exchange   // the /exchange surface + submit rails
-require llvm/daslib/llvm_tune   // tune_manifest_path — the /exchange apply target
+require ?llvm dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: the /exchange surface + submit rails, which ride the tune framework
+require ?llvm llvm/daslib/llvm_tune   // nolint:STYLE030,LINT019 — OPTIONAL: tune_manifest_path, the /exchange apply target, reached only inside the exchange arms
 require daslib/defer            // defer() { delete js } — free the parsed request JSON on every exit path
 require model_catalog           // the curated list + the /catalog download rail
 require daslib/jobque_boost
@@ -3560,10 +3560,8 @@ def private handle_config_save(var req : HttpRequest?; var resp : HttpResponse?)
 
 // ===== the exchange surface (GET /exchange + the apply/submit/retune levers) =====
 
-def private exchange_policy_now : ExchangePolicy {
-    // the save path covers every start shape: --config, auto-discovered, and config-less
-    // (where the file may not exist yet and the baked defaults stand)
-    return exchange_policy_from_config(g_config_save_path)
+def private exchange_absent(var resp : HttpResponse?) : http_status {   // nolint:LINT022 — reached only from the no-framework static_if arm, which a build with dasLLVM drops
+    return resp |> JSON(error_body("the sidecar exchange is not in this build (no tune framework)", "not_found"), http_status.NOT_FOUND)
 }
 
 // The exchange control routes are an operator surface reached through the loopback control
@@ -3614,12 +3612,17 @@ def private deny_operator(var resp : HttpResponse?) : http_status {
     return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
 }
 
+[arch(at = "README.md#exchange-policy")]
 def private handle_exchange_get(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     if (!is_loopback_req(req)) {
         // the status carries the local sidecar path (username in it) — operator-only, like the rest
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
-    return resp |> JSON(exchange_status_json(exchange_policy_now()))
+    static_if (typeinfo module_exists(dasllama_exchange)) {
+        return resp |> JSON(exchange_status_json(exchange_policy_from_config(g_config_save_path)))
+    } else {
+        return exchange_absent(resp)
+    }
 }
 
 def private handle_exchange_matches(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -3627,99 +3630,119 @@ def private handle_exchange_matches(var req : HttpRequest?; var resp : HttpRespo
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
     // a live exchange lookup — seconds on the tick thread; the page requests it explicitly
-    return resp |> JSON(exchange_matches_json(exchange_policy_now()))
+    static_if (typeinfo module_exists(dasllama_exchange)) {
+        return resp |> JSON(exchange_matches_json(exchange_policy_from_config(g_config_save_path)))
+    } else {
+        return exchange_absent(resp)
+    }
 }
 
 def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
-    var jerr = ""
-    var js = read_json(string(req.body), jerr)
-    defer() {
-        unsafe {
-            delete js
+    static_if (typeinfo module_exists(dasllama_exchange)) {
+        var jerr = ""
+        var js = read_json(string(req.body), jerr)
+        defer() {
+            unsafe {
+                delete js
+            }
         }
+        let sha : string = js?["sha"] ?? ""
+        if (empty(sha)) {
+            return resp |> JSON(error_body("body must carry the sidecar sha", "invalid_request_error"), http_status.BAD_REQUEST)
+        }
+        // the listing box the page picked: passed through so the downloaded sidecar is verified to
+        // match what the exchange listed — the same lying-exchange gate the boot resolver applies
+        let box : string = js?["box"] ?? ""
+        let err = exchange_fetch_and_apply(exchange_policy_from_config(g_config_save_path).url, sha, tune_manifest_path(), box)
+        if (!empty(err)) {
+            return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
+        }
+        // explicitly fetching a sidecar IS engaging the exchange - record the consent it expresses
+        exchange_record_consent(true)
+        to_log(LOG_INFO, "dasllama-server: exchange sidecar {sha} applied via the control page; draining for restart\n")
+        g_shutdown_requested = true
+        g_restart_requested = true
+        return resp |> JSON("\{\"ok\":true,\"restarting\":true}", http_status.OK)
+    } else {
+        return exchange_absent(resp)
     }
-    let sha : string = js?["sha"] ?? ""
-    if (empty(sha)) {
-        return resp |> JSON(error_body("body must carry the sidecar sha", "invalid_request_error"), http_status.BAD_REQUEST)
-    }
-    // the listing box the page picked: passed through so the downloaded sidecar is verified to
-    // match what the exchange listed — the same lying-exchange gate the boot resolver applies
-    let box : string = js?["box"] ?? ""
-    let err = exchange_fetch_and_apply(exchange_policy_now().url, sha, tune_manifest_path(), box)
-    if (!empty(err)) {
-        return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
-    }
-    // explicitly fetching a sidecar IS engaging the exchange - record the consent it expresses
-    exchange_record_consent(true)
-    to_log(LOG_INFO, "dasllama-server: exchange sidecar {sha} applied via the control page; draining for restart\n")
-    g_shutdown_requested = true
-    g_restart_requested = true
-    return resp |> JSON("\{\"ok\":true,\"restarting\":true}", http_status.OK)
 }
 
 def private handle_exchange_submit(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
-    let err = exchange_submit_current(exchange_policy_now())
-    if (!empty(err)) {
-        return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
+    static_if (typeinfo module_exists(dasllama_exchange)) {
+        let err = exchange_submit_current(exchange_policy_from_config(g_config_save_path))
+        if (!empty(err)) {
+            return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
+        }
+        to_log(LOG_INFO, "dasllama-server: this box's tune submitted to the exchange\n")
+        return resp |> JSON("\{\"ok\":true}", http_status.OK)
+    } else {
+        return exchange_absent(resp)
     }
-    to_log(LOG_INFO, "dasllama-server: this box's tune submitted to the exchange\n")
-    return resp |> JSON("\{\"ok\":true}", http_status.OK)
 }
 
 def private handle_exchange_consent(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
-    var jerr = ""
-    var js = read_json(string(req.body), jerr)
-    defer() {
-        unsafe {
-            delete js
+    static_if (typeinfo module_exists(dasllama_exchange)) {
+        var jerr = ""
+        var js = read_json(string(req.body), jerr)
+        defer() {
+            unsafe {
+                delete js
+            }
         }
+        if (js == null) {
+            return resp |> JSON(error_body("invalid JSON: {jerr}", "invalid_request_error"), http_status.BAD_REQUEST)
+        }
+        let av = js?["accept"]
+        if (av == null || !(av.value is _bool)) {
+            return resp |> JSON(error_body("body must carry accept:true|false", "invalid_request_error"), http_status.BAD_REQUEST)
+        }
+        let accepted = av.value as _bool
+        if (!exchange_record_consent(accepted)) {
+            return resp |> JSON(error_body("could not write the consent file", "server_error"), http_status.INTERNAL_SERVER_ERROR)
+        }
+        let manifest = tune_manifest_path()
+        if (accepted && (!stat(manifest).is_valid || tune_sidecar_stale(manifest))) {
+            // untuned (or stale) box just enabled the exchange — restart so the boot resolver
+            // runs the lookup; a tuned box records the choice and keeps serving
+            to_log(LOG_INFO, "dasllama-server: exchange enabled via the control page; draining for restart to run the lookup\n")
+            g_shutdown_requested = true
+            g_restart_requested = true
+            return resp |> JSON("\{\"ok\":true,\"accepted\":true,\"restarting\":true}", http_status.OK)
+        }
+        to_log(LOG_INFO, "dasllama-server: exchange consent recorded ({accepted ? "accepted" : "declined"}) via the control page\n")
+        return resp |> JSON("\{\"ok\":true,\"accepted\":{accepted}}", http_status.OK)
+    } else {
+        return exchange_absent(resp)
     }
-    if (js == null) {
-        return resp |> JSON(error_body("invalid JSON: {jerr}", "invalid_request_error"), http_status.BAD_REQUEST)
-    }
-    let av = js?["accept"]
-    if (av == null || !(av.value is _bool)) {
-        return resp |> JSON(error_body("body must carry accept:true|false", "invalid_request_error"), http_status.BAD_REQUEST)
-    }
-    let accepted = av.value as _bool
-    if (!exchange_record_consent(accepted)) {
-        return resp |> JSON(error_body("could not write the consent file", "server_error"), http_status.INTERNAL_SERVER_ERROR)
-    }
-    let manifest = tune_manifest_path()
-    if (accepted && (!stat(manifest).is_valid || tune_sidecar_stale(manifest))) {
-        // untuned (or stale) box just enabled the exchange — restart so the boot resolver
-        // runs the lookup; a tuned box records the choice and keeps serving
-        to_log(LOG_INFO, "dasllama-server: exchange enabled via the control page; draining for restart to run the lookup\n")
-        g_shutdown_requested = true
-        g_restart_requested = true
-        return resp |> JSON("\{\"ok\":true,\"accepted\":true,\"restarting\":true}", http_status.OK)
-    }
-    to_log(LOG_INFO, "dasllama-server: exchange consent recorded ({accepted ? "accepted" : "declined"}) via the control page\n")
-    return resp |> JSON("\{\"ok\":true,\"accepted\":{accepted}}", http_status.OK)
 }
 
 def private handle_exchange_retune(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
-    let err = exchange_request_retune()
-    if (!empty(err)) {
-        // the marker write failed and the sidecar is untouched — do NOT drain/restart
-        return resp |> JSON(error_body(err, "server_error"), http_status.INTERNAL_SERVER_ERROR)
+    static_if (typeinfo module_exists(dasllama_exchange)) {
+        let err = exchange_request_retune()
+        if (!empty(err)) {
+            // the marker write failed and the sidecar is untouched — do NOT drain/restart
+            return resp |> JSON(error_body(err, "server_error"), http_status.INTERNAL_SERVER_ERROR)
+        }
+        to_log(LOG_INFO, "dasllama-server: re-tune armed (sidecar removed, exchange skipped once); draining for restart\n")
+        g_shutdown_requested = true
+        g_restart_requested = true
+        return resp |> JSON("\{\"ok\":true,\"restarting\":true,\"tune\":true}", http_status.OK)
+    } else {
+        return exchange_absent(resp)
     }
-    to_log(LOG_INFO, "dasllama-server: re-tune armed (sidecar removed, exchange skipped once); draining for restart\n")
-    g_shutdown_requested = true
-    g_restart_requested = true
-    return resp |> JSON("\{\"ok\":true,\"restarting\":true,\"tune\":true}", http_status.OK)
 }
 
 def private emit_asr_event(events : Channel?; event : AsrEvent) {

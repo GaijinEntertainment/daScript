@@ -327,7 +327,8 @@ jobs:
         ci/nano_arm_build.sh "$BIN/daslang"
 
     - name: "Build standalone executables"
-      # core: the formatter and lint steps below run the das-fmt / das-lint exes this builds
+      # core: the formatter step below runs the das-fmt exe this builds; das-lint is built so the
+      # shipped lint.exe is proven to compile (the bundle smoke test runs it on daslib)
       if: matrix.role != 'modules'
       run: |
         set -eux
@@ -403,7 +404,6 @@ jobs:
         # outside the PR, and >=16 files parallelize into per-file ledgers - both produce
         # false stales. The nightly whole-tree -j 1 pass owns staleness.
         $BIN/daslang ./utils/lint/main.das -- "${CHANGED[@]}" --quiet --disable LINT019
-        $BIN/das-lint.exe "${CHANGED[@]}" --quiet --disable LINT019
 
     - name: "Run ast-verify on changed .das files"
       if: matrix.role != 'modules'

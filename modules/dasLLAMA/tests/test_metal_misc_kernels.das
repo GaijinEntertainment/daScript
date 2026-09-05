@@ -13,7 +13,7 @@ require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + t
 require ?das_metal _metal_kernel_common   // shared buf helpers + eyeball-dump compares
 require ?das_metal _mtl_toy               // the [metal_dispatch] multi-kernel fixture
 require ?das_metal dasllama/dasllama_metal_lens   // set_metal_requires_hook - the requires= tripwire observer
-require llvm/daslib/f16_cvt         // f32_to_f16 — packing the synthetic scale planes
+require daslib/f16_cvt              // f32_to_f16 — packing the synthetic scale planes
 require math
 require daslib/fio                  // the lens tgmem gate's spawned compiles
 require strings

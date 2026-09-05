@@ -23,12 +23,13 @@ require dasllama/dasllama_common // the runtime-knob getters (the profile's "run
 require dasllama/dasllama_mtp_gemma   // gemma_drafter_sidecar - the assistant-depth confirm's vehicle test
 require dasllama/dasllama_tune   // [dasllama_grid] emitter
 require llvm/daslib/llvm_tune    // tune_sidecar_merge — the app-sidecar upsert writer
+require daslib/tune              // [tune_policy] - inert without dasLLVM
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_tensor_race (Apple static_if half)
 require ?das_metal dasllama/dasllama_metal_kernels  // metal_tensor_race_decode (Apple static_if half)
 require tuner_cli               // the shared tuner CLI
 require tuner_noise             // the noise gate + the measured floor, shared with the other half
-require llvm/daslib/aarch64_neon // sdot4_laneq (referenced by the cloned laneq template bodies)
-require llvm/daslib/f16_cvt      // f16 references + the cloned f16-kernel template bodies
+require daslib/aarch64_neon // sdot4_laneq (referenced by the cloned laneq template bodies)
+require daslib/f16_cvt           // f16 references + the cloned f16-kernel template bodies
 require math                     // mad (referenced by the cloned template bodies)
 require daslib/json
 require daslib/json_boost

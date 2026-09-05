@@ -38,11 +38,15 @@ One loader, the packs beside the model
 so no family name appears in the call. Two more files travel with the model:
 ``tts_g2p.bin`` and ``tts_postag.bin``, and the loader reads them from the
 model's directory. A file that is not a TTS family panics and names the
-architecture it found.
+architecture it found. ``g2p_pack_path`` names the phoneme pack the loader
+takes from a directory: ``tts_g2p.bin`` when it is there, else the
+American-only ``tts_g2p_en_us.bin`` - the smaller pack a browser build ships,
+which reads no British voice.
 
 .. code-block:: das
 
    var m <- load_tts_model("kitten-nano.gguf")   // tts_g2p.bin + tts_postag.bin sit beside it
+   print("phoneme pack: {base_name(g2p_pack_path(dir_name("kitten-nano.gguf")))}\n")
 
 caps(): ask, don't assume
 =========================

@@ -3,6 +3,7 @@
 options gen2
 expect 20800:3
 
+require daslib/tune
 require llvm/daslib/llvm_tune
 
 // 1. spec is not module/CONST

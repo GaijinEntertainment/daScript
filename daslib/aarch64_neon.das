@@ -6,11 +6,13 @@ module aarch64_neon shared public
 //
 // Every function here computes the correct result on ANY target via its daslang body — so the
 // interpreter, AOT, and non-ARM JIT builds all just run that body. On an aarch64 JIT target the
-// LLVM JIT recognizes the call BY NAME (see g_aarch64_intrin_lookup in llvm_jit_intrin.das, gated
-// on g_target_is_aarch64) and emits the hardware NEON instruction in place of the call. There is
+// LLVM JIT recognizes the call BY NAME (the g_aarch64_*_intrin_lookup tables in llvm_jit_intrin.das,
+// gated on the target arch and on the instruction's feature: TBL is baseline, SDOT needs DotProd,
+// SMMLA needs i8mm) and emits the hardware NEON instruction in place of the call. There is
 // nothing to annotate and nothing to require from the llvm module — the recognition is purely
 // name-based at JIT codegen time, so the fallback runs verbatim everywhere the intrinsic isn't
-// emitted. Callers therefore get the fast path for free on arm64 and stay correct elsewhere.
+// emitted: a foreign arch, or a generic-CPU aarch64 exe whose baseline machine lacks the feature.
+// Callers therefore get the fast path for free on arm64 and stay correct elsewhere.
 
 //! Signed dot-product (`SDOT` / `@llvm.aarch64.neon.sdot`): load 16 int8 from each of `w` and `x`
 //! (16-wide unaligned loads), multiply elementwise, and accumulate consecutive groups of 4 products
@@ -43,17 +45,16 @@ def sdot4_w(acc : int4; w : int4; x : int8 const?) : int4 {
     var s3 = 0
     unsafe {
         for (e in range(4)) {
-            s0 += sxb(w.x, e) * int(x[e])
-            s1 += sxb(w.y, e) * int(x[4 + e])
-            s2 += sxb(w.z, e) * int(x[8 + e])
-            s3 += sxb(w.w, e) * int(x[12 + e])
+            s0 += sign_extend_byte(w.x, e) * int(x[e])
+            s1 += sign_extend_byte(w.y, e) * int(x[4 + e])
+            s2 += sign_extend_byte(w.z, e) * int(x[8 + e])
+            s3 += sign_extend_byte(w.w, e) * int(x[12 + e])
         }
     }
     return acc + int4(s0, s1, s2, s3)
 }
 
-// sign-extend byte e (0..3, little-endian) of a packed int lane
-def private sxb(lane : int; e : int) : int => (((lane >> (e * 8)) & 0xff) ^ 0x80) - 0x80
+def private sign_extend_byte(lane : int; e : int) : int => (((lane >> (e * 8)) & 0xff) ^ 0x80) - 0x80
 
 //! Byte table lookup of LOW nibbles (`TBL` / `vqtbl1q_s8(table, nib & 0x0f)`): each of 16 `nib`
 //! bytes has its low nibble (masked to 0..15, never out of table) looked up in `table`; the 16
@@ -123,10 +124,10 @@ def sdot4_laneq_w(acc : int4; w : int4; x : int8 const?; lane : int) : int4 {
         let x1 = int(x[b + 1])
         let x2 = int(x[b + 2])
         let x3 = int(x[b + 3])
-        r.x += sxb(w.x, 0) * x0 + sxb(w.x, 1) * x1 + sxb(w.x, 2) * x2 + sxb(w.x, 3) * x3
-        r.y += sxb(w.y, 0) * x0 + sxb(w.y, 1) * x1 + sxb(w.y, 2) * x2 + sxb(w.y, 3) * x3
-        r.z += sxb(w.z, 0) * x0 + sxb(w.z, 1) * x1 + sxb(w.z, 2) * x2 + sxb(w.z, 3) * x3
-        r.w += sxb(w.w, 0) * x0 + sxb(w.w, 1) * x1 + sxb(w.w, 2) * x2 + sxb(w.w, 3) * x3
+        r.x += sign_extend_byte(w.x, 0) * x0 + sign_extend_byte(w.x, 1) * x1 + sign_extend_byte(w.x, 2) * x2 + sign_extend_byte(w.x, 3) * x3
+        r.y += sign_extend_byte(w.y, 0) * x0 + sign_extend_byte(w.y, 1) * x1 + sign_extend_byte(w.y, 2) * x2 + sign_extend_byte(w.y, 3) * x3
+        r.z += sign_extend_byte(w.z, 0) * x0 + sign_extend_byte(w.z, 1) * x1 + sign_extend_byte(w.z, 2) * x2 + sign_extend_byte(w.z, 3) * x3
+        r.w += sign_extend_byte(w.w, 0) * x0 + sign_extend_byte(w.w, 1) * x1 + sign_extend_byte(w.w, 2) * x2 + sign_extend_byte(w.w, 3) * x3
     }
     return r
 }

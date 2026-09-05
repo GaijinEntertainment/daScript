@@ -5,7 +5,8 @@ options _dasllama_internal = true
 require daslib/clargs
 require daslib/fio
 require profile_common
-require llvm/daslib/llvm_tune   // [tune_policy]: provisioning only — never auto-tune
+require daslib/tune             // [tune_policy]: provisioning only — never auto-tune
+require llvm/daslib/llvm_tune   // the framework the annotation forwards to, and the visibility the auto-policy pass needs
 
 // Merge every per-box record store (performance/records/<box>.json) into the one file the site
 // renders: site/files/dasllama/bench_records.json. Boxes never collide on the run key (box is part

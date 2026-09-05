@@ -99,8 +99,16 @@ unavailable, the require is skipped silently. This enables the contributor patte
 in ``llvm/daslib/llvm_user_modules.das``: a ``require ?<impl-path> <registration>``
 line pulls a das package's registration glue exactly when that package is mounted.
 ``typeinfo builtin_module_exists`` additionally sees **shared das modules**
-(``module X shared``) compiled earlier in the program, so the usual ``static_if``
-guard works for das-module contributors too.
+(``module X shared``) promoted by the running script - but a tool that compiles the
+same program in a nested context (lint, the language server, a test harness)
+promotes nothing, and there the trait answers false for every das target. Guard the
+use of a guarded das target with ``typeinfo module_exists(target)`` instead: it asks
+whether the target is visible from the compiling module, which is exactly what the
+guarded ``require`` decided, so the answer is the same on both rails. Two edges of that
+rule: the name must be the module's own name (an alias from ``require X as Y`` answers
+false, like any name the library does not know), and inside a generic function the
+compiling module is the one INSTANTIATING the generic, not the one that declared it - a
+guard in a generic body reads the caller's view.
 
 Pair it with :ref:`typeinfo builtin_module_exists <generic_programming>` to guard
 code that uses the optional target's symbols — ``static_if`` drops the untaken

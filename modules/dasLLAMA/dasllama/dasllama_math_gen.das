@@ -10,9 +10,10 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_default  // dot_q8q8_f16s — the row-major tails of the s16 twins
 require dasllama/dasllama_repack  // the grp<mr> repack family + kq panel unpack (pure transforms; the _gen/_bake twins below feed them numbers)
-require llvm/daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
-require llvm/daslib/llvm_tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code]; PUBLIC so the auto-policy infer pass and tune_status reach app roots that require this module
-require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tune] kernels pick their perms
+require daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
+require daslib/tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code], inert without dasLLVM; PUBLIC so the auto-policy infer pass reaches app roots that require this module
+require ?llvm llvm/daslib/llvm_tune public  // PUBLIC so tune_status reaches app roots that require this module; witness guard: the one framework call below sits under static_if
+require dasllama/dasllama_tune_scope  // nolint:STYLE029,LINT019 — an ORDER dependency, not a symbol use: the dasllama [tune_scope] must be on the AST before this module's [tune] kernels pick their perms
 require dasllama/dasllama_gemm_schema
 require daslib/jobque_boost public
 require dasllama/dasllama_par
@@ -44,7 +45,7 @@ require math
 // ISA-agnostic slot traversals: "arm64-gen" (priority 25, the arm64 load-select tier since
 // slice C) and "x64-gen" (priority 25, witness-gated — only selectable when the stamped
 // family emitted). dasllama_common pulls it in behind a path guard
-// (`require ?llvm/daslib/llvm_tune`), so any Q8/mx4 model load on a gen-capable box runs the
+// (`require ?llvm`), so any Q8/mx4 model load on a gen-capable box runs the
 // generated family. The generators live in dasllama/dasllama_gemm_gen.das (llvm-jit context,
 // wired via llvm/daslib/llvm_user_modules.das).
 
@@ -2748,8 +2749,12 @@ def dasllama_math_gen_register() {
     // untuned box still pays the minutes-long auto-tune before the gate ever runs. The log
     // line is unconditional-when-set — active overrides announce themselves
     if (g_env_bench.allow_untuned) {
-        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ALLOW_UNTUNED=1 - tune mint suppressed; untuned kernels run fallback, numbers are not publishable\n")
-        tune_suppress_mint("DASLLAMA_ALLOW_UNTUNED=1")
+        static_if (typeinfo module_exists(llvm_tune)) {
+            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ALLOW_UNTUNED=1 - tune mint suppressed; untuned kernels run fallback, numbers are not publishable\n")
+            tune_suppress_mint("DASLLAMA_ALLOW_UNTUNED=1")
+        } else {
+            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ALLOW_UNTUNED=1 - no tune framework in this build; every kernel runs its reference body, numbers are not publishable\n")
+        }
     }
     // the cross-box override's q51 reach: x64-gen keeps disk-order q51 slots, so the generic
     // grp<mr> q51 repack registers here for bakes whose TARGET has grp q51 planes
@@ -2760,7 +2765,7 @@ def dasllama_math_gen_register() {
     // needs_repack keeps this out of auto-select (direct callers stay on arm64-sdot). q8_layout
     // must be evaluated at selection time, not [init] — [init]s run before the JIT installs
     // generated code (the slice C mr8 bug); arm64 needs no availability predicate.
-    if (get_architecture_name() == "arm64" && jit_enabled()) {
+    if (get_target_architecture_name() == "arm64" && jit_enabled()) {
         register_kernel_backend(KernelBackend(name = "arm64-gen", mm = @@q8q8_kernel_gen,
             batch = @@q8q8_batch_kernel_neon_laneq_gen, group3 = @@q8q8_group3_gen,
             repack = @@repack_q8q8_gen,
@@ -2792,7 +2797,7 @@ def dasllama_math_gen_register() {
     // x64 twin: the ONLY x64-specific wiring is the availability predicate — the witness must
     // be true only if the family actually emitted (a declined stamp falls back to slow NEON
     // scalar bodies here). avx2 is the family's minimum tier.
-    if (get_architecture_name() == "x86_64" && jit_enabled() && cpu_supports("avx2")) {
+    if (get_target_architecture_name() == "x86_64" && jit_enabled() && cpu_supports("avx2")) {
         register_kernel_backend(KernelBackend(name = "x64-gen", mm = @@q8q8_kernel_gen,
             batch = @@q8q8_batch_kernel_neon_laneq_gen, group3 = @@q8q8_group3_gen,
             repack = @@repack_q8q8_gen,

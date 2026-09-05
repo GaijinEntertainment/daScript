@@ -1781,6 +1781,12 @@ def test_run_das_package_release(t : T?) {
         tt |> equal(2, length(info.wasm_archives))
         tt |> equal("_wasm/liblibDasModuleTest.a", info.wasm_archives[0])
         tt |> equal("_wasm/liblibTestApp.a", info.wasm_archives[1])
+        // the two wasm-only knobs cross the same hand-written marshaller: a dropped copy would
+        // cross-compile with the module mounted and the flag missing, silently
+        tt |> equal(1, length(info.wasm_disabled_modules))
+        tt |> equal("dasvulkan", info.wasm_disabled_modules[0])
+        tt |> equal(1, length(info.emcc_args))
+        tt |> equal("--profiling-funcs", info.emcc_args[0])
     }
     t |> run("returns true with empty spec when release() is missing") @(tt : T?) {
         var info : PackageReleaseInfo
@@ -1881,7 +1887,7 @@ def test_cmd_release_ships_minted_scope_manifest(t : T?) {
             fwrite(f, payload)
         }
         fopen("{tmp_root}/main.das", "wb") $(f) {
-            fwrite(f, "options gen2\nrequire llvm/daslib/llvm_tune\n[tune_scope(name=\"stubscope\", tuner=\"stub_tuner.das\")]\nstruct StubScope \{\n    unused : int\n\}\n[export]\ndef main() \{\n    print(\"hi\\n\")\n\}\n")
+            fwrite(f, "options gen2\nrequire daslib/tune\nrequire llvm/daslib/llvm_tune\n[tune_scope(name=\"stubscope\", tuner=\"stub_tuner.das\")]\nstruct StubScope \{\n    unused : int\n\}\n[export]\ndef main() \{\n    print(\"hi\\n\")\n\}\n")
         }
         fopen("{tmp_root}/stub_tuner.das", "wb") $(f) {
             fwrite(f, "options gen2\nrequire daslib/fio\n[export]\ndef main() \{\n    fopen(get_env_variable(\"DAS_TUNE_MANIFEST\"), \"wb\") $(mf) \{\n        fwrite(mf, fread(\"{tmp_root}/stub_payload.json\"))\n    \}\n\}\n")

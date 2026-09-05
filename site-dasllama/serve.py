@@ -4,6 +4,12 @@ staged the same way the deploy does: forge.css / nav-dropdown.css / dasllama-tab
 github-star.js come from ../site/files (single source of truth in the repo), everything
 else from here.
 
+/examples/<id>/ is served from ../web/output64/examples/<id>/ - where `daspkg release wasm`
+writes a browser example - with the two cross-origin-isolation headers the Caddy vhost sends
+there (the -pthread wasm64 builds need SharedArrayBuffer). Build one, copy its model set into
+<id>/models/ (the deploy downloads the same set from the `dasllama-web` release into the staged
+tree), and the card works here as deployed.
+
 /api/* is proxied to a locally running ladder service (utils/internal/dasllama-ladder on :8201),
 mirroring the Caddy vhost — start one with real data to preview the live pages:
 
@@ -19,6 +25,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE_FILES = os.path.normpath(os.path.join(HERE, "..", "site", "files"))
+EXAMPLES_OUT = os.path.normpath(os.path.join(HERE, "..", "web", "output64", "examples"))
 SHARED = {"forge.css", "nav-dropdown.css", "dasllama-table.css", "github-star.js"}
 PORT = 8932
 LADDER = "http://127.0.0.1:8201"
@@ -32,6 +39,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith("/api/"):
             return self.proxy_api()
         return super().do_GET()
+
+    def end_headers(self):
+        # mirrors the `header /examples/*` block of utils/internal/dasllama-ladder/caddy.snippet
+        if self.path.startswith("/examples/"):
+            self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+            self.send_header("Cross-Origin-Embedder-Policy", "credentialless")
+        super().end_headers()
 
     def proxy_api(self):
         try:
@@ -63,6 +77,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             name = os.path.basename(clean)
             if name in SHARED:
                 return os.path.join(SITE_FILES, name)
+        if clean.startswith("/examples/"):
+            rel = os.path.normpath(clean[len("/examples/"):])
+            # an absolute remainder (a doubled slash) would make os.path.join drop the base
+            if rel and not rel.startswith("..") and not os.path.isabs(rel):
+                return os.path.join(EXAMPLES_OUT, rel)
         return super().translate_path(path)
 
 

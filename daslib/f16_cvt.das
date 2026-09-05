@@ -25,7 +25,7 @@ def f16_to_f32(h : uint) : float {
     }
     let sign = (h & 0x8000u) << 16u
     var bits : uint
-    if (exp == 0x1Fu) {  // inf / nan
+    if (exp == 0x1Fu) {
         bits = sign | 0x7F800000u | (mant << 13u)
     } else {  // normal: rebias exponent 15 -> 127 (+112), widen mantissa 10 -> 23 bits
         bits = sign | ((exp + 112u) << 23u) | (mant << 13u)
@@ -39,7 +39,7 @@ def f32_to_f16(f : float) : uint {
     let bits = unsafe(reinterpret<uint>(f))
     let sign = (bits >> 16u) & 0x8000u
     let absb = bits & 0x7FFFFFFFu
-    if (absb > 0x7F800000u) {          // nan -> quiet nan
+    if (absb > 0x7F800000u) {
         return sign | 0x7E00u
     }
     if (absb >= 0x47800000u) {         // inf, or >= 65536 (overflows past f16 max)

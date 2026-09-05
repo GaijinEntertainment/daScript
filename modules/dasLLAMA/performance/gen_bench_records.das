@@ -7,7 +7,8 @@ options _dasllama_internal = true
 require profile_common
 require dasllama/dasllama_env   // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require dasllama/dasllama_image   // dlim_wipe + dlim_inventory — the batch lifecycle and the re-mint tripwire
-require llvm/daslib/llvm_tune   // [tune_policy]: the orchestrator never measures — it must never self-tune
+require daslib/tune             // [tune_policy]: the orchestrator never measures — it must never self-tune
+require llvm/daslib/llvm_tune   // the framework the annotation forwards to, and the visibility the auto-policy pass needs
 require daslib/clargs
 require daslib/fio
 require math

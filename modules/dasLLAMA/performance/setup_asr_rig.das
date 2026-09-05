@@ -4,6 +4,7 @@ options _dasllama_internal = true
 
 require profile_common
 require dasllama/dasllama_env
+require daslib/tune   // [tune_policy] - inert without dasLLVM
 require daslib/clargs
 require daslib/fio
 require strings

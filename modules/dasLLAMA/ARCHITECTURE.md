@@ -66,11 +66,13 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   rig, the tune gate, the sanctioned instrumentation rails, kernel-race fidelity, the gemv's own
   tune seat, the CPU kernel bench's fixture conditions, the speculative round's ruler record, the
   `[tuned]` perm precedence, and the mint wall in the sidecar's provenance.
-- `ARCHITECTURE_CPU_KERNELS.md` - sec.2.22-2.24: the sub-block-packed k3/k6 planes, the grid
-  formats' panel and row-group decodes, and the VBMI symbol lattice.
-- `ARCHITECTURE_TTS.md` - sec.2.28-2.35: the TTS block home's two layouts, tap stacking, the
+- `ARCHITECTURE_CPU_KERNELS.md` - sec.2.22-2.24, 2.42: the sub-block-packed k3/k6 planes, the grid
+  formats' panel and row-group decodes, the VBMI symbol lattice, and the tier that selects on the
+  target rather than the host.
+- `ARCHITECTURE_TTS.md` - sec.2.28-2.35, 2.43: the TTS block home's two layouts, tap stacking, the
   padded concat width, the per-synthesis carrier, the served carrier on the image rail, the
-  sine source's operation order, the heteronym context, and the rig's scoring.
+  sine source's operation order, the heteronym context, the rig's scoring, and the two-tier
+  phoneme pack.
 
 ## 3. Inherited invariants
 

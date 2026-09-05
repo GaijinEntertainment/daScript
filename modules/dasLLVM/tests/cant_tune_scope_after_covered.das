@@ -4,6 +4,7 @@
 options gen2
 expect 20800:1
 
+require daslib/tune
 require llvm/daslib/llvm_tune
 require llvm_tune_scope_early
 

@@ -10,7 +10,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 //   bin/daslang -jit utils/dasllama-server/wav2txt.das -- --asr <asr.gguf> --file <audio.wav> [--out t.txt]
 
 require dasllama/dasllama            // load_asr_model / transcribe / the shared [tune_scope]
-require llvm/daslib/llvm_tune        // [tune_policy] + log_tune_status
+require daslib/tune                  // [tune_policy] + log_tune_status - the shells; the framework rides in when the build has dasLLVM
 require daslib/jobque_boost
 require daslib/clargs
 require daslib/fio

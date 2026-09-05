@@ -248,6 +248,8 @@ struct StyleTts2Model {
     decoder : St2Decoder = St2Decoder()
     source : SineSourceCfg = SineSourceCfg()
     q8 : bool               // the lane this image was minted on: the rows GEMMs serve Q8_0 quants
+    kitten : KittenFamily
+    kokoro : KokoroFamily
     blob : PlaneF = PlaneF()
     qblob : PlaneI8 = PlaneI8()
     image_map : void?
@@ -266,9 +268,9 @@ def weights_walk(var io : TtsBlobIo; var m : StyleTts2Model) {
     }
 }
 
-// serialize_image_meta covers 14 fields; voices (views bound from voice_spans), image_map and
+// serialize_image_meta covers 16 fields; voices (views bound from voice_spans), image_map and
 // image_bytes are the deliberate skips
-let private ST2_META_FIELDS = 14 + 3
+let private ST2_META_FIELDS = 16 + 3
 let ST2_IMAGE_TAG = "tts-f32"
 let ST2_IMAGE_TAG_Q8 = "tts-q8"
 
@@ -288,6 +290,12 @@ def private serialize_image_meta(var arch : Archive; var m : StyleTts2Model) {
     arch |> serialize(m.decoder)
     arch |> serialize(m.source)
     arch |> serialize_raw(m.q8)
+    // the family records are hand-listed too, so each pins its count - an unwritten field reads back zero
+    verify(count_meta_fields(m.kitten) == 2)   // grew KittenFamily? extend this list
+    verify(count_meta_fields(m.kokoro) == 1)   // grew KokoroFamily? extend this list
+    arch |> serialize(m.kitten.speed_priors)
+    arch |> serialize(m.kitten.aliases)
+    arch |> serialize(m.kokoro.sym)
 }
 
 [unused_argument(m)]
@@ -357,6 +365,8 @@ def finalize(var m : StyleTts2Model) {
     delete m.text_encoder
     delete m.predictor
     delete m.decoder
+    delete m.kitten
+    delete m.kokoro
     delete m.blob
     delete m.qblob
     if (m.image_map != null) {
@@ -679,8 +689,8 @@ def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) :
 }
 
 //! Read a converted StyleTTS2-lineage GGUF (harness/convert_kitten.py, harness/convert_kokoro.py)
-//! into the mint-side carrier: served layouts minted, voices and STFT convention read, every
-//! weight moved into the staging blob. Family keys are the family file's to read.
+//! into the mint-side carrier: served layouts minted, voices, STFT convention and the family's
+//! driver keys read, every weight moved into the staging blob.
 [arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail")]
 def stage_styletts2(path : string; q8 : bool = false) : St2Staging {
     var inscope st = St2Staging()
@@ -712,6 +722,7 @@ def stage_styletts2(path : string; q8 : bool = false) : St2Staging {
         for (v in st.e.voice_names) {
             st.e.voices[v] <- read_arr(m, bytes, "voice.{v}")
         }
+        stage_family_data(m, bytes, st.e)
         read_albert(m, bytes, st.e.albert)
         read_text_encoder(m, bytes, st.e.text_encoder)
         read_predictor(m, bytes, st.e.predictor)
@@ -723,6 +734,27 @@ def stage_styletts2(path : string; q8 : bool = false) : St2Staging {
     return <- st
 }
 
+def private stage_family_data(m : GGUFMeta; bytes : array<uint8>#; var e : StyleTts2Model) {
+    if (e.family == "kitten-tts") {
+        for (v in e.voice_names) {
+            if (gguf_has(m, "kitten.speed_prior.{v}")) {
+                e.kitten.speed_priors[v] = gguf_f32(m, bytes, "kitten.speed_prior.{v}")
+            }
+        }
+        var inscope anames <- gguf_str_array(m, bytes, "kitten.alias_names")
+        var inscope avoices <- gguf_str_array(m, bytes, "kitten.alias_voices")
+        for (an, av in anames, avoices) {
+            e.kitten.aliases[an] = av
+        }
+    } elif (e.family == "kokoro") {
+        var inscope cpts <- gguf_int_array(m, bytes, "kokoro.symbol_cpts")
+        var inscope ids <- gguf_int_array(m, bytes, "kokoro.symbol_ids")
+        for (c, i in cpts, ids) {
+            e.kokoro.sym[int(c)] = int(i)
+        }
+    }
+}
+
 //! Mint a served model from a staged read without touching disk - the in-memory image rail,
 //! the off-rail control for suites. The staged read's lane picks the tag.
 def mint_styletts2(var st : St2Staging; var out : StyleTts2Model) {
@@ -731,13 +763,36 @@ def mint_styletts2(var st : St2Staging; var out : StyleTts2Model) {
     st2_bind(out)
 }
 
-//! Load a converted StyleTTS2-lineage GGUF through its prepared image on the current lane: the
-//! sibling `.dlim` maps when it exists, else the GGUF stages, bakes and maps
-//! (``DASLLAMA_IMAGE=0`` mints in memory).
+//! Bake a GGUF's prepared image to `out` on the lane `q8` names - the converter's TTS arm. The
+//! box's backend pin (the converter's ``--config``) decides the q8 plane's repack. false = not written.
+def bake_styletts2_image(path, out : string; q8 : bool) : bool {
+    var inscope st <- stage_styletts2(path, q8)
+    var inscope m = StyleTts2Model()
+    return cache_via_image_staged(st, m, out, q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG)
+}
+
+//! Load a converted StyleTTS2-lineage GGUF through its prepared image on the current lane (the sibling `.dlim` maps when it
+//! exists, else the GGUF stages, bakes and maps; ``DASLLAMA_IMAGE=0`` mints in memory), or a `.dlim` path directly: the
+//! file names its lane, and the gguf is not needed.
 [arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def load_styletts2(path : string) : StyleTts2Model {
     var inscope m = StyleTts2Model()
     let q8 = st2_serve_q8()
+    if (path |> ends_with(".dlim")) {
+        apply_box_profile_runtime()
+        let ts = ref_time_ticks()
+        let preferred_tag = q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
+        let other_tag = q8 ? ST2_IMAGE_TAG : ST2_IMAGE_TAG_Q8
+        if (!stat(path).is_valid) {
+            panic("dasLLAMA styletts2: '{path}' does not exist")
+        }
+        if (!load_image(path, m, preferred_tag) && !load_image(path, m, other_tag)) {
+            panic("dasLLAMA styletts2: '{path}' is not a prepared TTS image for this box (identity {image_identity(ST2_IMAGE_TAG_Q8)} / {image_identity(ST2_IMAGE_TAG)}) - bake it from the source gguf with dasllama-convert")
+        }
+        st2_bind(m)
+        to_log(LOG_INFO, "dasLLAMA styletts2: prepared image mapped in {get_time_usec(ts) / 1000} ms on its {m.q8 ? "q8" : "f32"} lane - {path}\n")
+        return <- m
+    }
     let tag = st2_tag()
     st2_announce_lane()
     if (g_env_engine.image) {

@@ -25,11 +25,18 @@ def private read_lines(path : string) : array<string> {
     return <- split(replace(text, "\r\n", "\n"), "\n")
 }
 
+//! every .das under a root dir, subdirectories included: a program root may sit in its own folder
+//! (examples/dasLLAMA/storyteller/main.das)
 def private das_files_of(dir_path : string) : array<string> {
     var files : array<string>
     fio::dir("{get_das_root()}/{dir_path}") $(name) {
+        return if (name == "." || name == "..")
+        let rel = "{dir_path}/{name}"
         if (name |> ends_with(".das")) {
-            files |> push("{dir_path}/{name}")
+            files |> push(rel)
+        } elif (stat("{get_das_root()}/{rel}").is_dir) {
+            var sub <- das_files_of(rel)
+            files |> push_from(sub)
         }
     }
     return <- files
@@ -57,6 +64,8 @@ def test_program_roots(t : T?) {
                     requires_dasllama ||= line |> starts_with("require dasllama/")
                     has_main ||= (line |> starts_with("def main")) || (line |> starts_with("def main("))
                     has_stack ||= line |> starts_with(STACK_LINE)
+                    // the loaders whose model prefills (LLM, ASR decoder, audio tower); a TTS
+                    // carrier runs no prefill, so a TTS-only root owes no intent
                     loads_model ||= find(line, "load_model(") >= 0 || find(line, "load_asr_model(") >= 0 || find(line, "load_audio_tower(") >= 0
                     // CODE only: roots' allow_cpu_prefill() tail comments NAME set_metal_mode, so a
                     // raw-line scan would let a comment satisfy the check

@@ -6,7 +6,8 @@ options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + apply_box_profile_runtime
-require llvm/daslib/llvm_tune   // [tune_policy]: the confirm arm measures WHAT THE MANIFEST SAYS — never self-tune
+require daslib/tune             // [tune_policy]: the confirm arm measures WHAT THE MANIFEST SAYS — never self-tune
+require llvm/daslib/llvm_tune   // the framework the annotation forwards to, and the visibility the auto-policy pass needs
 require daslib/jobque_boost
 require strings
 require math

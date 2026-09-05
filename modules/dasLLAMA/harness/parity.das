@@ -49,9 +49,31 @@ struct Args {
     @clarg_doc = "GPU layers, llama-bench spelling: 0 = CPU, anything else = the whole graph on Metal, required (default: 0)"
     ngl : int = 0
 
+    @clarg_default_doc = "DASLLAMA_PIN_BACKEND, else the measured auto-selection"
+    @clarg_doc = "Pin the matmul kernel backend by name (portable, arm64-sdot, ...); overrides DASLLAMA_PIN_BACKEND"
+    backend : string = ""
+
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
     help : bool
+}
+
+//! applied after the --ngl block, so --backend outranks the portable pin metal mode applies
+def private apply_backend_pin(flag : string) : bool {
+    let name = empty(flag) ? g_env_engine.pin_backend : flag
+    if (empty(name)) {
+        return true
+    }
+    var names <- kernel_backend_names()
+    let known = find_index(names, name) >= 0
+    if (!known) {
+        print("error: unknown backend '{name}' - registered: {join(names, ", ")}\n")
+    }
+    delete names
+    if (known) {
+        pin_kernel_backend(name)
+    }
+    return known
 }
 
 def private parse_ids(s : string) : array<int64> {
@@ -87,6 +109,7 @@ def main : int {
     if (cfg.ngl != 0) {   // before load_model — pins the portable backend, activates the metal overrides
         set_metal_mode(MetalMode.required)
     }
+    return 2 if (!apply_backend_pin(cfg.backend))
     var t <- load_gguf(cfg.model, cfg.quant)
     t.tok <- load_tokenizer_auto(cfg.model)   // load_gguf skips the tokenizer; GEN_TEXT needs it
     if (cfg.ngl != 0 && !convert_model_to_metal_blob(t)) {   // the Metal drivers serve blob-form models only
@@ -97,8 +120,8 @@ def main : int {
     if (t.config.seq_len > 2048l) {
         t.config.seq_len = 2048l
     }
-    let c = t.config
-    var s = make_run_state(c, cfg.kv, cfg.kv)
+    print("GEN_BACKEND: {active_kernel_backend()} (batch: {active_batch_backend()})\n")
+    var s = make_run_state(t.config, cfg.kv, cfg.kv)
     var rc = 0
     with_job_que() {
         setup_dasllama_jobque_()

@@ -9,8 +9,8 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // dot_q8q8_idot4x4/_f16s — the plain-das GEMV dots this backend dispatches
 require dasllama/dasllama_tune  // [tuned]: reconstitute the laneq4x4 tile from its template with per-box loop hints
 require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
-require llvm/daslib/aarch64_neon  // tbl16/sdot4_w/sdot4_laneq: the mx4 + laneq tiles' JIT intrinsics
-require llvm/daslib/f16_cvt  // f16_to_f32 — the wscale_f16 twins widen the binary16 scale in-loop
+require daslib/aarch64_neon  // tbl16/sdot4_w/sdot4_laneq: the mx4 + laneq tiles' JIT intrinsics
+require daslib/f16_cvt  // f16_to_f32 — the wscale_f16 twins widen the binary16 scale in-loop
 require daslib/jobque_boost public  // kernels expand parallel_for; consumers need its symbols
 require dasllama/dasllama_par  // maybe_parallel_for
 
@@ -451,12 +451,9 @@ def mx4q8_rows_kernel_neon(var yp : float?; wn : uint8 const?; we : uint8 const?
     }
 }
 
-[init]
+[init, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#cpu-tier-target-select")]
 def dasllama_math_aarch64_neon_register() {
-    // Only register the SDOT backends under JIT on arm64. Off-JIT (interpreter or AOT) sdot4/sdot4_laneq
-    // run their SCALAR fallback body — slower than the portable dot_q8q8, which the vectorizer handles —
-    // so the portable backend stays selected everywhere the hardware SDOT isn't emitted.
-    if (get_architecture_name() == "arm64" && jit_enabled()) {
+    if (get_target_architecture_name() == "arm64" && jit_enabled()) {
         // arm64-sdot: idot4x4 on row-major weights (idot4 → SDOT) — the auto-selected default for direct callers
         // (tests, benchmarks). priority 10 out-ranks portable (0).
         register_kernel_backend(KernelBackend(name = "arm64-sdot", mm = @@q8q8_kernel_neon_idot4x4,

@@ -135,10 +135,18 @@ An aarch64 host target reads its CPU features from two sources, because neither 
 the features - and a part this LLVM cannot name maps to the generic CPU, where SDOT and SMMLA
 have no instruction to select and codegen aborts. `cpu_supports` reads the operating system
 instead (sysctl / `AT_HWCAP` / `IsProcessorFeaturePresent`), so it answers for silicon LLVM has
-never heard of. Both the tier gates (`init_jit_target_flags`) and the target machine's feature
-string (`create_default_target_machine`) therefore take the union of the two: an LLVM host-string
-hit OR a `cpu_supports` hit (fullfp16 additionally reads darwin-arm64 as always-on - every
-Apple Silicon part has it). A cross-compile triple takes neither - only the force env.
+never heard of. The tier gates (`init_jit_target_flags` - `g_target_arm64_dotprod`, `_i8mm`,
+`_fullfp16`) and the target machine's feature string (`create_default_target_machine`) therefore
+take the union of the two: an LLVM host-string hit OR a `cpu_supports` hit (fullfp16 additionally
+reads darwin-arm64 as always-on - every Apple Silicon part has it). One asymmetry: the host rail's
+machine string carries `+dotprod` unconditionally (every part the JIT has run on has it), while the
+DotProd GATE probes like its siblings - on an ARMv8.0 host the gate declines and the `sdot4` family
+compiles its fallback, whatever the string says. A cross-compile triple takes neither - only the force env - and so
+does a generic-CPU standalone exe (one carrying no `[llvm_code]` kernel): its machine is the
+ARMv8.0 baseline, which cannot select SDOT or SMMLA, so the DotProd and i8mm gates
+(`g_target_arm64_dotprod`, `g_target_arm64_i8mm`) stay off there and every `aarch64_neon` call
+that needs either compiles its daslang fallback body. The gates and the machine string are one
+truth on both rails: a force-env feature raises the gate AND is appended to the generic machine.
 
 The two ways a feature reaches the target machine's string license different things. A
 detection-derived append - `+dotprod` always, `+i8mm` when `cpu_supports` confirms it - is
@@ -151,19 +159,23 @@ have, so the artifact is for another machine and executing it here traps.
 `[tuned]` and `[tune_policy]` stamp a function's hints at macro time out of the tune sidecar,
 and the module cache stores the stamped AST. A re-mint therefore has to invalidate the cached
 record, or a later run serves stamps minted against the old sidecar until some source file
-changes. `read_manifest` (`daslib/llvm_tune.das`) registers the sidecar path with
-`add_module_cache_dependency` on every read; the record carries the path with the file's byte
-size and content hash, and the reader re-validates both before it trusts the payload. Content,
-not mtime: an app that rewrites its sidecar byte-identically on exit must not churn the cache.
+changes. The stamping paths (`tune_apply`, `tune_kernel_pick`) register the sidecar path with
+`add_module_cache_dependency` through `pin_module_cache_dependency` before they read it; the
+record carries the path with the file's byte size and content hash, and the reader re-validates
+both before it trusts the payload. Content, not mtime: an app that rewrites its sidecar
+byte-identically on exit must not churn the cache.
 
 The registration runs before the staleness gate, and for a path that does not exist yet,
 because the mints that matter most produce no successful read - the first mint has no sidecar,
 and a re-mint replaces one the gate rejected. An absent file registers as size -1 and hash 0,
-which the next run's re-validation sees change. Registering is a no-op outside compilation, so
-the manifest's runtime readers reach the same call unconditionally.
+which the next run's re-validation sees change. The pin sits beside the read, not inside
+`read_manifest`: the runtime shares that reader (the box-profile pin at load, `tune_status`),
+and a standalone exe binds every extern its functions name at startup, so a reader carrying the
+`ast_core` extern would drag the compiler module into every exe - and a wasm cross-link, which
+sees only the compiler-free runtime archive, has nothing to bind it to.
 
 The shipped defaults profiles are the same kind of input: with no sidecar entry a kernel
-stamps its class entry out of `<defaults>/<class>.tune-defaults.json`, so `locate_profile_doc`
+stamps its class entry out of `<defaults>/<class>.tune-defaults.json`, so `pin_profile_chain`
 registers every candidate on the class ladder it tries, existing or not - a profile that
 appears, or is re-exported after a re-mint, must invalidate the stamps minted without it. The
 staleness gate itself compares the sidecar's mtime with the running binary's, which no content
@@ -269,3 +281,20 @@ vecmath carries no vector sinh/cosh/tanh, so `SimPolicy` binds `vsinh`/`vcosh`/`
 exp polynomial's error rather than agreeing with them - the opposite trade from every other
 emitter on the rail, taken because the consumer (GELU over float4 rows) otherwise pays four
 libm calls per vector. `tests/llvm_vector_math.das` asserts the size of that divergence.
+
+## 9. The idot family's target lowerings {#idot-lowerings}
+
+The exact integer dots on the 8-bit lattice have three lowerings, picked by target: one
+`@llvm.aarch64.neon.sdot` where the target has DotProd (`g_target_arm64_dotprod` - the host rail's
+`+dotprod` append, or the force env on the generic rail), the SIMD128 form on a wasm target
+(`idot_wasm_simd128`), generic widen-multiply IR everywhere else. The native arms exist because
+neither backend produces them from the generic form: AArch64 expands it to zip/uzp/smull instead
+of folding to SDOT, and the wasm backend runs it a fifth as fast. The wasm form is the ISA's two
+halves of an int8 dot, `i16x8.extmul_{low,high}_i8x16_s` (what LLVM makes of `mul(sext, sext)`) and
+`i32x4.extadd_pairwise_i16x8_s`; the pairwise sums land as byte pairs, and one even/odd shuffle-add
+folds them into the quad lanes the generic form defines - exact for every int8 lane. The
+relaxed-SIMD dot (`i32x4.relaxed_dot_i8x16_i7x16_add_s`) is NOT used: its second operand is 7-bit,
+so the sign trick that would feed it (`dot(w, x) == dot(sign(x)*w, |x|)`) wraps at -128 in either
+operand and answers the wrong sign there, and `+relaxed-simd` is a whole-module switch that also
+turns float-vector `min`/`max` and `mad` into engine-defined instructions (NaN and signed-zero
+answers, fusion) - the feature string stays `+simd128,+nontrapping-fptoint`, the runtime archive's.

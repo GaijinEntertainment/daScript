@@ -62,3 +62,15 @@ struct TtsNoise {
     @scratch normal : array<float>    //! [samples x harmonics], sample-major
     captured : bool                   //! supplied by an oracle dump: a synthesis reads it as is and never redraws
 }
+
+//! Kitten's driver data beside the shared model: per-voice speed priors and the alias names.
+//! Staged from the GGUF's ``kitten.*`` keys into the carrier, so it rides the prepared image.
+struct KittenFamily {
+    speed_priors : table<string; float>
+    aliases : table<string; string>
+}
+
+//! Kokoro's driver data beside the shared model: codepoint -> token id, from ``kokoro.*``.
+struct KokoroFamily {
+    sym : table<int; int>
+}

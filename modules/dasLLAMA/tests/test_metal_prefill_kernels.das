@@ -12,7 +12,7 @@ require ?das_metal dasllama/dasllama_metal_prefill  // the Phase-6 prefill kerne
 require ?das_metal dasllama/dasllama_metal_kernels  // the Wave C MoE routing kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers + fixtures; only the tag-less mismatch compares stay local
-require llvm/daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
+require daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
 require math
 
 // The Phase-6 GPU prefill kernels vs their dasLLAMA CPU twins on synthetic data. rmsnorm /

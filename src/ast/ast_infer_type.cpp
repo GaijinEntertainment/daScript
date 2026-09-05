@@ -2313,7 +2313,7 @@ namespace das {
         }
         // verify
         bool allowMissingTypeExpr = false;
-        if (expr->trait == "builtin_function_exists" || expr->trait == "builtin_module_exists") {
+        if (expr->trait == "builtin_function_exists" || expr->trait == "builtin_module_exists" || expr->trait == "module_exists") {
             allowMissingTypeExpr = true;
         }
         bool allowMissingType = false;
@@ -2847,6 +2847,26 @@ namespace das {
                         auto mod = Module::requireEx(evar->name, true);
                         reportAstChanged();
                         return new ExprConstBool(expr->at, mod != nullptr);
+                    } else {
+                        error("unsupported module name subexpression ", expr->subexpr->__rtti, "",
+                              expr->at, CompilationError::invalid_typeinfo_module_subexpression);
+                    }
+                }
+            } else if (expr->trait == "module_exists") {
+                if (!expr->subexpr) {
+                    error("module_exists requires subexpression", "", "",
+                          expr->at, CompilationError::missing_typeinfo_subexpression);
+                } else {
+                    if (expr->subexpr->rtti_isVar()) {
+                        auto evar = static_cast<ExprVar*>(expr->subexpr);
+                        // visible from the compiling module - the module itself, one it requires, or one a
+                        // require re-exports public - C++ or das, promoted or not: the same answer whether
+                        // the program compiles as the running script or inside a tool's nested compile,
+                        // and "in the program somewhere" is not enough for the call the taken arm makes
+                        auto mod = program->library.findModule(evar->name);
+                        bool visible = mod && program->thisModule->isVisibleDirectly(mod);
+                        reportAstChanged();
+                        return new ExprConstBool(expr->at, visible);
                     } else {
                         error("unsupported module name subexpression ", expr->subexpr->__rtti, "",
                               expr->at, CompilationError::invalid_typeinfo_module_subexpression);

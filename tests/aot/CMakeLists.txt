@@ -51,10 +51,10 @@ FILE(GLOB AOT_DASPEG_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tes
 
 FILE(GLOB AOT_DASGLTF_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasGLTF/*.das")
 
-# dasLLAMA IS NEVER AOT'D. No dasLLAMA test — old or new — joins test_aot: the engine is
-# -jit only (its AOT story ends at the generic compile of the tree), and its require graph
-# reaches dasVulkan, which is in-tree but carries no AOT registration at all, so a dasLLAMA
-# AOT TU would have no Vulkan half to link against. Do not re-register it here.
+# No dasLLAMA test — old or new — joins test_aot: the suite is -jit (tests/run.das), and its
+# require graph reaches dasVulkan, which is in-tree but carries no AOT registration at all, so
+# a dasLLAMA test TU would have no Vulkan half to link against. Do not re-register it here.
+# The engine's own AOT tier is the opt-in examples/dasLLAMA target (CPU modules only).
 
 FILE(GLOB AOT_DECS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/decs/*.das")
 # Exclude expect-error tests (they intentionally fail to compile)
@@ -273,9 +273,9 @@ FILE(GLOB AOT_METAL_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "test
 list(FILTER AOT_METAL_FILES EXCLUDE REGEX "/_")
 SET(AOT_METAL_MODULE_FILES
     tests/metal/_metal_common.das
-    # f16_cvt is a generic dasLLVM daslib helper the tensor-ops test requires; it used to ride
+    # f16_cvt is a generic daslib helper the tensor-ops test requires; it used to ride
     # the (deleted) dasLLAMA module lib — dasLLAMA itself is NEVER AOT'd (see above)
-    modules/dasLLVM/daslib/f16_cvt.das
+    daslib/f16_cvt.das
 )
 IF(APPLE)
     # das_metal_boost hard-requires the APPLE-gated das_metal C++ module; the GPU-behavioral

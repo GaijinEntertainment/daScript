@@ -5,7 +5,7 @@ options _dasllama_internal = true
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost
 require ?das_metal dasllama/dasllama_metal_prefill    // production MetalQ8MulMmTH128 MSL
-require llvm/daslib/f16_cvt   // f32_to_f16 - the blob's f16 scale halfwords
+require daslib/f16_cvt   // f32_to_f16 - the blob's f16 scale halfwords
 require strings
 
 // Phase-2 #16 sizing probe: the w2 (down-projection) shape at Qwen3-8B/512 geometry on the

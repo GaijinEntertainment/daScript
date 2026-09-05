@@ -4,7 +4,8 @@ IF(NOT DAS_LLAMA_INCLUDED)
 
     ADD_MODULE_DAS_FROM_DESCRIPTOR(dasllama dasllama)
 
-    # dasLLAMA IS NEVER AOT'D — -jit only; no AOT source/depends exports (see tests/aot/CMakeLists.txt).
+    # dasLLAMA's tests are never in test_aot (see tests/aot/CMakeLists.txt); the engine's AOT
+    # tier is the opt-in examples/dasLLAMA target, which AOTs the CPU modules itself.
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/dasllama
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA

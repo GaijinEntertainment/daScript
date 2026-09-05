@@ -187,7 +187,12 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   generator, the layout/perm schema shared by generator and runtime, and the `[tune]` family
   registration. A hand-written tile that the generator could emit belongs in the generator.
 - **`dasllama_tune.das`** - the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`). Tuning
-  POLICY lives here; tuned VALUES live in the box's sidecar, never in source.
+  POLICY lives here; tuned VALUES live in the box's sidecar, never in source. The framework is
+  OPTIONAL: the `llvm_tune` require is `?llvm`-guarded and every use of it sits behind
+  `static_if (typeinfo module_exists(llvm_tune))`, so a build without dasLLVM opens no
+  sidecar, reads no policy env and reports nothing - `[tuned]` stamps the declared `fallback=`
+  (or `DEFAULT_PERM`) and the AST rewrite is unchanged. `box_profile_verdict_at` answers the
+  reason NAME rather than llvm_tune's enum for the same reason: a signature cannot be gated.
 - **`dasllama_tune_scope.das`** - the one `[tune_scope]` declaration (tuner, covered modules,
   version pin, shipped defaults), in a module every kernel module requires: a kernel reads its
   class entry in the defaults profile at its own compile, so the scope must be on the AST first.
@@ -247,7 +252,12 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   explicit `exchange_*` config counts as the expressed choice, otherwise the `<stem>.consent`
   sidecar-sibling file governs - unset asks on a real terminal, or emits
   `@sidecar consent state=needed` for the watchdog dialog / control page, and no request
-  leaves until a surface records "accepted".
+  leaves until a surface records "accepted". The client is meaningless without a sidecar, so
+  every requirer takes it through the guard `require ?llvm dasllama/dasllama_exchange` (`llvm`
+  is the C++ witness module dasLLVM compiles in exactly when the build is configured with it)
+  and wraps each use in `static_if (typeinfo module_exists(dasllama_exchange))`: with no tune
+  framework in the build the server's `/exchange` routes answer `not_found`, the boot resolver
+  and submit check are never registered, and `lcpp_bench --submit` refuses before it measures.
 - **`benchmarks/asr/mem_census.sh`** - the peak-memory census (`/usr/bin/time -l` around one
   asr_bench process per cell; macOS only) - the interim footprint instrument until a footprint
   leg lands in `gen_bench_records`; its numbers live in `PERF_LEDGER.md`, never the stores.
