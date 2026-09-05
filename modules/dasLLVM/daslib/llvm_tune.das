@@ -352,18 +352,30 @@ def tune_sidecar_stale(path : string) : bool {
     return box_match_key(sidecar_box(path, "{sfs.mtime}")) != box_match_key(tune_box_identity())
 }
 
+    //! The compile-time half of a sidecar or profile read: the module cache records the file, existing
+    //! or not, so a re-mint invalidates the stamps minted against it. Kept out of every reader the
+    //! runtime shares - a standalone exe binds each extern at startup (the cited section says why).
+[arch(at="../ARCHITECTURE.md#tune-sidecar-cache-pin")]
+def private pin_module_cache_dependency(path : string) {
+    add_module_cache_dependency(path)
+}
+
+// every candidate on the class ladder a profile lookup tries, existing or not
+def private pin_profile_chain(defaultsDir : string) {
+    var chain <- tune_class_chain()
+    for (c in chain) {
+        pin_module_cache_dependency(path_join(defaultsDir, "{c}.tune-defaults.json"))
+    }
+    delete chain
+}
+
 // the sidecar's "kernels" section as a flat { function name : perm suffix } map;
 // found = the file existed, parsed to an object, and is NOT stale vs the running binary
 // (a "kernels"-less but fresh sidecar counts as found-empty: runtime-knob-only files)
-[arch(at="../ARCHITECTURE.md#tune-sidecar-cache-pin")]
 def private read_manifest(path : string; var found : bool&) : table<string; string> {
     found = false
     var tab : table<string; string>
-    if (empty(path)) {
-        return <- tab
-    }
-    add_module_cache_dependency(path)
-    if (tune_sidecar_stale(path)) {
+    if (empty(path) || tune_sidecar_stale(path)) {
         return <- tab
     }
     let text = fread(path)
@@ -399,15 +411,11 @@ def tune_manifest_get(fname : string) : string {
     return r
 }
 
-[arch(at="../ARCHITECTURE.md#tune-sidecar-cache-pin")]
 def private locate_profile_doc(defaultsDir, verKey, verVal : string; compileTime : bool; var klass, ppath : string&) : JsonValue? {
     var chain <- tune_class_chain()
     var doc : JsonValue?
     for (c in chain) {
         let p = path_join(defaultsDir, "{c}.tune-defaults.json")
-        if (compileTime) {
-            add_module_cache_dependency(p)
-        }
         let text = fread(p)
         continue if (empty(text))
         var err = ""
@@ -470,6 +478,7 @@ def private profile_kernels(var klass, ppath : string&) : table<string; string> 
                 }
                 var k = ""
                 var p = ""
+                pin_profile_chain(dir)
                 var doc = locate_profile_doc(dir, verKey, verVal, true, k, p)
                 continue if (doc == null)
                 let ks = doc?["kernels"]
@@ -495,6 +504,7 @@ def private profile_kernels(var klass, ppath : string&) : table<string; string> 
 def tune_kernel_pick(fname : string; var source : string&) : string {
     var found = false
     let mpath = tune_manifest_path()
+    pin_module_cache_dependency(mpath)
     var tab <- read_manifest(mpath, found)
     var r = tab?[fname] ?? ""
     delete tab
@@ -1739,6 +1749,7 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
     let fname = "{func.name}"
     var manifestFound = false
     let mpath = tune_manifest_path()
+    pin_module_cache_dependency(mpath)
     var manifest <- read_manifest(mpath, manifestFound)
     var suffix = ""
     var tuneSource = ""   // manifest | profile | fallback - the tune_source the stamp records

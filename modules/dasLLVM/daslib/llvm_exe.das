@@ -301,8 +301,8 @@ class public CollectExternVisitor : AstVisitor {
         if (empty(cpp_name)) return
         let reg_fn_name = "jit_register_{cpp_name}"
         to_log(LOG_INFO, "LLVM EXE: NEED_MODULE({cpp_name}) for `{mod_name}`\n")
-        // ast_core / network_core live in the compiler lib, so their jit_register thunk forces a whole-compiler-lib link.
-        if (mod_name == "ast_core" || mod_name == "network_core") {
+        // ast_core / ast / network_core / network live in the compiler lib, so their jit_register thunk forces a whole-compiler-lib link.
+        if (mod_name == "ast_core" || mod_name == "ast" || mod_name == "network_core" || mod_name == "network") {
             needs_whole_lib = true
         }
         // One call per thunk process-wide (not idempotent); get-or-add avoids a silent rename to an undefined symbol.
@@ -918,9 +918,9 @@ def private emit_module_registration(m : Module?; dynamic_modules : table<string
     let mod_name = string(m.name)
     return if (reg_visited |> key_exists(mod_name))
     reg_visited[mod_name] = true
-    // dylibs register via the runtime load path; ast_core / network_core / jit are prophylactic-skipped here (a real caller still gets them via ensure_module + needs_whole_lib).
+    // dylibs register via the runtime load path; the compiler-lib modules (ast_core, ast, network_core, network, jit) are prophylactic-skipped here (a real caller still gets them via ensure_module + needs_whole_lib) - an engine's macro-time require of daslib/ast reaches them with no runtime caller, and the wasm runtime archive has no thunk for them.
     return if (dynamic_modules |> key_exists(mod_name)
-        || mod_name == "ast_core" || mod_name == "network_core" || mod_name == "jit")
+        || mod_name == "ast_core" || mod_name == "ast" || mod_name == "network_core" || mod_name == "network" || mod_name == "jit")
     module_for_each_dependency(m) $(var dep : Module?; var _pub : bool) {
         emit_module_registration(dep, dynamic_modules, emitted_reg, reg_visited,
             builder, g_mod, register_mod_type, has_cpp_modules)

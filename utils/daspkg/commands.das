@@ -2665,7 +2665,7 @@ def private ensure_external_wasm_archives(pkg_dir, wasm_lib_dir : string; var bu
 // Build one app: cross-compile → discover modules → emcc-link → stage assets.
 def private release_one_wasm_app(root, out_dir, app_name, main_script : string; // nolint:STYLE037,STYLE038 — flat per-app wasm release steps + their error arms
                                  wasm_lib_dir, runtime_archive, shell_path : string;
-                                 include_globs, exclude_globs : array<string>) : int {
+                                 include_globs, exclude_globs, disabled_modules : array<string>) : int {
     if (!is_safe_pkg_name(app_name)) {
         to_log(LOG_ERROR, "release wasm: unsafe app name `{app_name}` (no path separators / `.` / `..`)\n")
         return 1
@@ -2693,14 +2693,21 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
     //    with --list-shared-modules writing the referenced-module set.
     //    --disable-module dashv: libhv is native-only (no wasm archive), so keep it
     //    unloaded on the cross-compile host — a guarded `require ?dashv` then resolves
-    //    as absent instead of pulling in a module whose wasm archive can't exist.
+    //    as absent instead of pulling in a module whose wasm archive can't exist. The
+    //    package's release_wasm_disable_module() names the others of that kind it reaches.
     //    -project-root {root}: dyn-module discovery roots at the PACKAGE dir, not the
     //    main script's dir. They differ when release_main() points outside the package
     //    (e.g. an example whose .das_package sits beside the source) — without this the
     //    cross-compile scans the script's folder and misses the package's modules/<dep>.
     // --jit-threads: emit +atomics,+bulk-memory so the object's ABI matches the -pthread runtime
     // archive (the wasm build is threaded — see cmd_build_wasm). The link below adds -pthread.
-    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" --disable-module dashv \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-threads --jit-runtime-lib=\"{runtime_archive}\""
+    let disable_args = build_string() $(w) {
+        write(w, "--disable-module dashv")
+        for (m in disabled_modules) {
+            write(w, " --disable-module {m}")
+        }
+    }
+    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" {disable_args} \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-threads --jit-runtime-lib=\"{runtime_archive}\""
     var xc_out : string
     let xc_rc = run_cmd(xc_cmd, xc_out)
     if (xc_rc != 0 || !fexist(obj_path)) {
@@ -2892,5 +2899,5 @@ def cmd_release_wasm(root : string; out_dir : string; wasm_lib_dir_override : st
     }
 
     mkdir_rec(out_dir)
-    return release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs)
+    return release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs, spec.wasm_disabled_modules)
 }

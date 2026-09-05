@@ -156,16 +156,20 @@ have, so the artifact is for another machine and executing it here traps.
 `[tuned]` and `[tune_policy]` stamp a function's hints at macro time out of the tune sidecar,
 and the module cache stores the stamped AST. A re-mint therefore has to invalidate the cached
 record, or a later run serves stamps minted against the old sidecar until some source file
-changes. `read_manifest` (`daslib/llvm_tune.das`) registers the sidecar path with
-`add_module_cache_dependency` on every read; the record carries the path with the file's byte
-size and content hash, and the reader re-validates both before it trusts the payload. Content,
-not mtime: an app that rewrites its sidecar byte-identically on exit must not churn the cache.
+changes. The stamping paths (`tune_apply`, `tune_kernel_pick`) register the sidecar path with
+`add_module_cache_dependency` through `pin_module_cache_dependency` before they read it; the
+record carries the path with the file's byte size and content hash, and the reader re-validates
+both before it trusts the payload. Content, not mtime: an app that rewrites its sidecar
+byte-identically on exit must not churn the cache.
 
 The registration runs before the staleness gate, and for a path that does not exist yet,
 because the mints that matter most produce no successful read - the first mint has no sidecar,
 and a re-mint replaces one the gate rejected. An absent file registers as size -1 and hash 0,
-which the next run's re-validation sees change. Registering is a no-op outside compilation, so
-the manifest's runtime readers reach the same call unconditionally.
+which the next run's re-validation sees change. The pin sits beside the read, not inside
+`read_manifest`: the runtime shares that reader (the box-profile pin at load, `tune_status`),
+and a standalone exe binds every extern its functions name at startup, so a reader carrying the
+`ast_core` extern would drag the compiler module into every exe - and a wasm cross-link, which
+sees only the compiler-free runtime archive, has nothing to bind it to.
 
 The shipped defaults profiles are the same kind of input: with no sidecar entry a kernel
 stamps its class entry out of `<defaults>/<class>.tune-defaults.json`, so `locate_profile_doc`

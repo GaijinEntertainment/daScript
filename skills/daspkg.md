@@ -345,6 +345,7 @@ def release() {
 | `release_emcc_arg("-sUSE_GLFW=3")` | Append an emcc link flag (dasGlfw declares this) |
 | `release_embed_file(src, dst)` | `--embed-file src@dst` into MEMFS (dasStbImage embeds its HUD font) |
 | `release_web_shell("path.html")` | Override the default canvas shell (`web/templates/wasm_canvas_shell.html`) |
+| `release_wasm_disable_module("dasvulkan")` | Keep a host module out of the cross-compile so its guarded `require ?name` resolves as absent, as the wasm build sees it (the rail disables dashv itself; an app reaching vulkan, das_metal or das_accelerate names those) |
 
 ### Game source contract (cross-compiles UNCHANGED)
 
