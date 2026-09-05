@@ -60,7 +60,8 @@ To contribute macro-time state into A's registry the contributor must compile in
 two pieces: an optional require (`require ?<guard> <target>`; a plain `require` resolves before
 `static_if`, so `static_if` alone cannot gate it), plus
 `static_if (typeinfo builtin_module_exists(<guard>))` around the registration call and any
-dispatcher branch naming the contributor's symbols. Adapters may still *emit* code referencing
+dispatcher branch naming the contributor's symbols - `typeinfo module_exists(<target>)` when the
+guard is a path and the target a das module, so a tool's nested compile takes the same arm. Adapters may still *emit* code referencing
 those symbols by name - that resolves at the user's splice site and is unaffected.
 
 ## Pass macros - which hook sees what

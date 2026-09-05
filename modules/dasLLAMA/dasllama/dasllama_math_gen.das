@@ -2750,7 +2750,7 @@ def dasllama_math_gen_register() {
     // line is unconditional-when-set — active overrides announce themselves
     if (g_env_bench.allow_untuned) {
         to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ALLOW_UNTUNED=1 - tune mint suppressed; untuned kernels run fallback, numbers are not publishable\n")
-        static_if (typeinfo builtin_module_exists(llvm_tune)) {
+        static_if (typeinfo module_exists(llvm_tune)) {
             tune_suppress_mint("DASLLAMA_ALLOW_UNTUNED=1")
         }
     }

@@ -2313,7 +2313,7 @@ namespace das {
         }
         // verify
         bool allowMissingTypeExpr = false;
-        if (expr->trait == "builtin_function_exists" || expr->trait == "builtin_module_exists") {
+        if (expr->trait == "builtin_function_exists" || expr->trait == "builtin_module_exists" || expr->trait == "module_exists") {
             allowMissingTypeExpr = true;
         }
         bool allowMissingType = false;
@@ -2845,7 +2845,24 @@ namespace das {
                         // allowPromoted: pairs with the `require ?guard` check (ast_parse.cpp), which
                         // also accepts shared das modules compiled earlier in the process
                         auto mod = Module::requireEx(evar->name, true);
-                        if ( !mod ) mod = program->library.findModule(evar->name);
+                        reportAstChanged();
+                        return new ExprConstBool(expr->at, mod != nullptr);
+                    } else {
+                        error("unsupported module name subexpression ", expr->subexpr->__rtti, "",
+                              expr->at, CompilationError::invalid_typeinfo_module_subexpression);
+                    }
+                }
+            } else if (expr->trait == "module_exists") {
+                if (!expr->subexpr) {
+                    error("module_exists requires subexpression", "", "",
+                          expr->at, CompilationError::missing_typeinfo_subexpression);
+                } else {
+                    if (expr->subexpr->rtti_isVar()) {
+                        auto evar = static_cast<ExprVar*>(expr->subexpr);
+                        // the compiling program's own library: a module this program required (directly or
+                        // through another module), C++ or das, promoted or not - the same answer whether the
+                        // program compiles as the running script or inside a tool's nested compile
+                        auto mod = program->library.findModule(evar->name);
                         reportAstChanged();
                         return new ExprConstBool(expr->at, mod != nullptr);
                     } else {

@@ -210,10 +210,10 @@ file.
 1. `daslib/f16_cvt.das`; 37 require spellings (landed).
 2. The inert annotation module in daslib carrying `tune`, `tune_perm`, `tune_companion`,
    `tune_scope`, `tune_policy` and `llvm_code` as shells: `require ?llvm/daslib/llvm_tune
-   llvm/daslib/llvm_tune`, then `static_if (typeinfo builtin_module_exists(llvm_tune))` in each
+   llvm/daslib/llvm_tune`, then `static_if (typeinfo module_exists(llvm_tune))` in each
    `apply` delegating to the framework, else return true and do nothing. The shell's own
-   path-guarded require is the witness, so the order caveat on `builtin_module_exists`
-   (`ast_infer_type.cpp:2833-2848`) does not bite. Framework change: its annotation classes
+   path-guarded require is the witness (`module_exists`, not `builtin_module_exists` - see the
+   ruling under "Open questions"). Framework change: its annotation classes
    stop self-registering under those names (two registrations of `[tune]` would resolve
    ambiguously) and expose their `apply` as plain functions the shells forward to. The
    `_variants()` registries are emitted only by the framework; the engine references none
@@ -356,17 +356,14 @@ the honest wasm candidates, and smaller is on the table.
   therefore runs in a worktree with `modules/dasLLVM` removed, the installed-SDK shape. If the
   in-tree case should also work, the cheapest honest witness is a C++ module registered only
   when LLVM is configured (the `?sqlite` pattern), and the guards become `?<witness> ...`.
-- **`builtin_module_exists` on a shared das module flips under tool-driven compiles.** A file
-  with `require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune` and
-  `static_if (typeinfo builtin_module_exists(llvm_tune))` takes the framework arm under
-  `bin/daslang file.das` and the no-framework arm under `bin/daslang utils/lint/main.das -- file.das`:
-  `Module::requireEx` (`src/ast/ast_infer_type.cpp:2847`, `src/ast/ast_module.cpp:284`) scans the
-  bound process's promoted-module list, which a nested compile does not populate. C++-module
-  guards are immune. Consequence today: lint, and presumably ast-verify and the MCP checks,
-  audit the no-framework half of every guarded file and never the framework half (suppressed
-  per site with the house `nolint:...,LINT019` spelling). Two fixes, both C++: the witness module
-  above (then `builtin_module_exists(<witness>)` is a linked-module question), or making the
-  trait answer "is this module in the compiling program" for shared das modules.
+- **RULED: a second trait.** `builtin_module_exists` on a shared das module flipped under
+  tool-driven compiles (`Module::requireEx` scans the process's promoted-module list, which a
+  nested compile never populates), so lint, ast-verify and the MCP checks audited the
+  no-framework arm of every guarded file. The ruling keeps `builtin_module_exists` as it was
+  (the process registry) and adds `typeinfo module_exists(X)`: the compiling program's own
+  library, the same answer on both rails. Every path-guarded das target in the tree
+  (`llvm_tune`, `llvm_code`, `dasllama_exchange`, `dasllama_gemm_gen`) now asks `module_exists`;
+  C++-module guards keep `builtin_module_exists`. Gate: `tests/language/optional_require.das`.
 
 - Which small-LLM carrier gets the parity fixture for stages 1 and 2 (SmolLM2-135M already has
   a cls_q8 parity cell, `test_parity.das:76`).

@@ -3622,7 +3622,7 @@ def private handle_exchange_get(var req : HttpRequest?; var resp : HttpResponse?
         // the status carries the local sidecar path (username in it) — operator-only, like the rest
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
-    static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+    static_if (typeinfo module_exists(dasllama_exchange)) {
         return resp |> JSON(exchange_status_json(exchange_policy_from_config(g_config_save_path)))
     } else {
         return exchange_absent(resp)
@@ -3634,7 +3634,7 @@ def private handle_exchange_matches(var req : HttpRequest?; var resp : HttpRespo
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
     // a live exchange lookup — seconds on the tick thread; the page requests it explicitly
-    static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+    static_if (typeinfo module_exists(dasllama_exchange)) {
         return resp |> JSON(exchange_matches_json(exchange_policy_from_config(g_config_save_path)))
     } else {
         return exchange_absent(resp)
@@ -3645,7 +3645,7 @@ def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpRespons
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
-    static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+    static_if (typeinfo module_exists(dasllama_exchange)) {
         var jerr = ""
         var js = read_json(string(req.body), jerr)
         defer() {
@@ -3679,7 +3679,7 @@ def private handle_exchange_submit(var req : HttpRequest?; var resp : HttpRespon
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
-    static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+    static_if (typeinfo module_exists(dasllama_exchange)) {
         let err = exchange_submit_current(exchange_policy_from_config(g_config_save_path))
         if (!empty(err)) {
             return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
@@ -3695,7 +3695,7 @@ def private handle_exchange_consent(var req : HttpRequest?; var resp : HttpRespo
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
-    static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+    static_if (typeinfo module_exists(dasllama_exchange)) {
         var jerr = ""
         var js = read_json(string(req.body), jerr)
         defer() {
@@ -3734,7 +3734,7 @@ def private handle_exchange_retune(var req : HttpRequest?; var resp : HttpRespon
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
-    static_if (typeinfo builtin_module_exists(dasllama_exchange)) {
+    static_if (typeinfo module_exists(dasllama_exchange)) {
         let err = exchange_request_retune()
         if (!empty(err)) {
             // the marker write failed and the sidecar is untouched — do NOT drain/restart

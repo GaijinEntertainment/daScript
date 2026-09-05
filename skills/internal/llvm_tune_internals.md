@@ -8,7 +8,7 @@ file is only what maintaining the implementation needs on top of it.
 infer pass are registered by `daslib/tune`, whose shells forward here - `tune_apply`,
 `tune_perm_apply`, `tune_companion_apply`, `tune_scope_apply`, `tune_policy_apply`,
 `tune_default_policy_apply`, and `llvm_code_apply` in `llvm_code.das` - under
-`static_if (typeinfo builtin_module_exists(llvm_tune))`, and do nothing when the guard is
+`static_if (typeinfo module_exists(llvm_tune))`, and do nothing when the guard is
 false. Adding an annotation means adding both halves. A shell may not stay behind in this
 module: **a module's macro state is per-module**, so `g_scopes`, `g_perm_rows` and
 `g_companion_rows` are only consistent while every writer and reader runs in one macro

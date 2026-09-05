@@ -14,7 +14,7 @@ require ?dasllama/dasllama_gemm_gen dasllama/dasllama_gemm_register  // nolint:S
 //! `require ?<impl-path> <registration>` line above — a PATH guard loads exactly when the
 //! contributor's package is mounted (the guard's own file resolves), so this
 //! module never hard-depends on the contributor. Pair each line with a `static_if
-//! (typeinfo builtin_module_exists(<impl>))` around the registration call below; registered
+//! (typeinfo module_exists(<impl>))` around the registration call below; registered
 //! generators are name-keyed and inert for programs whose `[llvm_code]` annotations never
 //! name them.
 
@@ -27,7 +27,7 @@ def public register_user_llvm_code_generators {
     }
     g_registered = true
     llvm_code_selftest::register_selftest()  // worked example + self-test generator (add_i32, add_plus_k)
-    static_if (typeinfo builtin_module_exists(dasllama_gemm_gen)) {
+    static_if (typeinfo module_exists(dasllama_gemm_gen)) {
         dasllama_gemm_register::register_dasllama_gemm_code_generators()
     }
 }
