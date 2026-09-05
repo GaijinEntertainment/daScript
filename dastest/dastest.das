@@ -53,6 +53,7 @@ struct FailedFile {
 
 var private fileTimings : array<FileTiming>
 var private failedFiles : array<FailedFile>
+var private currentTestFile : string
 var private timingOutliers : int = 0
 var private maxFileTime : float = 0.0
 var private jsonFilePath : string
@@ -444,6 +445,10 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
                         return
                     }
                     return if (program._options |> find_arg("rtti") ?as tBool ?? false)
+                    let program_module = program |> get_this_module()
+                    let program_file = program_module != null ? string(program_module.fileName) : "<no module>"
+                    log::info("deser {i + 1:d}/{count:d}: {program_file}")
+                    currentTestFile = program_file
                     simulate(program) $(sok, context, serrors) {
                         if (!sok) {
                             log::error("Failed to simulate program {i}\n{serrors}")
@@ -460,6 +465,7 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
             }
         }
         delete_ast_serializer(ser)
+        log::info("Deserialized run finished: {count:d} programs, {res.total:d} tests, {res.errors:d} error(s)")
     }
     return res
 }
@@ -590,6 +596,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         for (file in files) {
             let uri = ctx.uriPaths ? file_name_to_uri(file) : file
             let fileTime = ref_time_ticks()
+            currentTestFile = file
             let status = suite::test_file(file, ctx)
             let fileDt = get_time_nsec(fileTime) / 1000
             if (status.errors + status.failed == 0) {
@@ -769,7 +776,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
 def timeout_tests(var res : SuiteResult; start_time : int64; timeout_sec : float) {
     res.errors++
     res.total++
-    log::error("Test timed out after {timeout_sec}s")
+    log::error("Test timed out after {timeout_sec}s while running {currentTestFile}")
     // timeout fires from a worker thread; fio::exit is the cross-thread
     // cancellation mechanism (bypasses shutdown dump — acceptable for this path).
     unsafe {

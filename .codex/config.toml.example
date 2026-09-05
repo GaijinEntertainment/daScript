@@ -1,0 +1,31 @@
+# Project-local Codex MCP setup.
+# Copy this file to .codex/config.toml from the repository root:
+#   cp .codex/config.toml.example .codex/config.toml
+# The MCP commands and working directory are relative to this checkout.
+
+[mcp_servers.daslang]
+command = "python3"
+args = ["utils/mcp/mcp_supervisor.py", "--repo-root", "."]
+cwd = "."
+enabled = true
+required = true
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+
+[mcp_servers.daslang-lsp]
+command = "python3"
+args = ["utils/lsp/mcp_bridge.py", "--repo-root", "."]
+cwd = "."
+enabled = true
+required = true
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+
+[mcp_servers.daslang-dap]
+command = "python3"
+args = ["utils/dap/mcp_bridge.py", "--repo-root", "."]
+cwd = "."
+enabled = true
+required = true
+startup_timeout_sec = 20
+tool_timeout_sec = 120

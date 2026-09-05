@@ -21,6 +21,8 @@ MAKE_TYPE_FACTORY(Prologue,Prologue)
 
 namespace das
 {
+    void debuggerThreadContextDestroyed ( Context & context );
+
     struct PrologueAnnotation : ManagedStructureAnnotation<Prologue,false> {
         PrologueAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Prologue", ml) {
             addField<DAS_BIND_MANAGED_FIELD(info)>("info");
@@ -49,26 +51,28 @@ namespace debugger {
     struct DebugAgentAdapter : DebugAgent, DapiDebugAgent_Adapter {
         DebugAgentAdapter ( char * pClass, const StructInfo * info, Context * ctx )
             : DapiDebugAgent_Adapter(info), classPtr(pClass), classInfo(info), context(ctx) {
+            if ( !context->contextMutex ) context->contextMutex = new recursive_mutex;
         }
         virtual void onBeforeGC ( Context * ctx ) override {
             if ( auto fnOnBeforeGC = get_onBeforeGC(classPtr) ) {
-                context->lock();
-                invoke_onBeforeGC(context,fnOnBeforeGC,classPtr,*ctx);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onBeforeGC(context,fnOnBeforeGC,classPtr,*ctx);
+                });
             }
         }
         virtual void onAfterGC ( Context * ctx ) override {
             if ( auto fnOnAfterGC = get_onAfterGC(classPtr) ) {
-                context->lock();
-                invoke_onAfterGC(context,fnOnAfterGC,classPtr,*ctx);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onAfterGC(context,fnOnAfterGC,classPtr,*ctx);
+                });
             }
         }
         virtual bool onUserCommand ( const char * cmd ) override {
             if ( auto fnOnUserCommand = get_onUserCommand(classPtr) ) {
-                context->lock();
-                auto res = invoke_onUserCommand(context,fnOnUserCommand,classPtr,(char *)cmd);
-                context->unlock();
+                bool res = false;
+                context->threadlock_context([&](){
+                    res = invoke_onUserCommand(context,fnOnUserCommand,classPtr,(char *)cmd);
+                });
                 return res;
             } else {
                 return false;
@@ -76,95 +80,97 @@ namespace debugger {
         }
         virtual void onInstall ( DebugAgent * agent ) override {
             if ( auto fnOnInstall = get_onInstall(classPtr) ) {
-                context->lock();
-                invoke_onInstall(context,fnOnInstall,classPtr,agent);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onInstall(context,fnOnInstall,classPtr,agent);
+                });
             }
         }
         virtual void onUninstall ( DebugAgent * agent ) override {
             if ( auto fnOnUninstall = get_onUninstall(classPtr) ) {
-                context->lock();
-                invoke_onUninstall(context,fnOnUninstall,classPtr,agent);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onUninstall(context,fnOnUninstall,classPtr,agent);
+                });
             }
         }
         virtual void onCreateContext ( Context * ctx ) override {
             if ( auto fnOnCreateContext = get_onCreateContext(classPtr)) {
-                context->lock();
-                invoke_onCreateContext(context,fnOnCreateContext,classPtr,*ctx);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onCreateContext(context,fnOnCreateContext,classPtr,*ctx);
+                });
             }
         }
         virtual void onDestroyContext ( Context * ctx ) override {
+            debuggerThreadContextDestroyed(*ctx);
             if ( auto fnOnDestroyContext = get_onDestroyContext(classPtr) ) {
-                context->lock();
-                invoke_onDestroyContext(context,fnOnDestroyContext,classPtr,*ctx);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onDestroyContext(context,fnOnDestroyContext,classPtr,*ctx);
+                });
             }
         }
         virtual void onSimulateContext ( Context * ctx ) override {
             if ( auto fnOnSimulateContext = get_onSimulateContext(classPtr)) {
-                context->lock();
-                invoke_onSimulateContext(context,fnOnSimulateContext,classPtr,*ctx);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onSimulateContext(context,fnOnSimulateContext,classPtr,*ctx);
+                });
             }
         }
         virtual void onSingleStep ( Context * ctx, const LineInfo & at ) override {
             if ( auto fnOnSingleStep = get_onSingleStep(classPtr) ) {
-                context->lock();
-                invoke_onSingleStep(context,fnOnSingleStep,classPtr,*ctx,at);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onSingleStep(context,fnOnSingleStep,classPtr,*ctx,at);
+                });
             }
         }
         virtual void onInstrument ( Context * ctx, const LineInfo & at ) override {
             if ( ctx==context ) return; // do not step into the same context
             if ( auto fnOnInstrument = get_onInstrument(classPtr) ) {
-                context->lock();
-                invoke_onInstrument(context,fnOnInstrument,classPtr,*ctx,at);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onInstrument(context,fnOnInstrument,classPtr,*ctx,at);
+                });
             }
         }
         virtual void onInstrumentFunction ( Context * ctx, SimFunction * sim, bool entering, uint64_t userData ) override {
             if ( ctx==context ) return;  // do not step into the same context
             if ( auto fnOnInstrumentFunction = get_onInstrumentFunction(classPtr) ) {
-                context->lock();
-                invoke_onInstrumentFunction(context,fnOnInstrumentFunction,classPtr,*ctx,sim,entering,userData);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onInstrumentFunction(context,fnOnInstrumentFunction,classPtr,*ctx,sim,entering,userData);
+                });
             }
         }
         virtual void onBreakpoint ( Context * ctx, const LineInfo & at, const char * reason, const char * text ) override {
             if ( auto fnOnBreakpoint = get_onBreakpoint(classPtr) ) {
-                context->lock();
-                invoke_onBreakpoint(context,fnOnBreakpoint,classPtr,*ctx,at,(char *)reason,(char *)text);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onBreakpoint(context,fnOnBreakpoint,classPtr,*ctx,at,(char *)reason,(char *)text);
+                });
             }
         }
         virtual void onVariable ( Context * ctx, const char * category, const char * name, TypeInfo * info, void * data ) override {
             if ( auto fnOnVariable = get_onVariable(classPtr) ) {
-                context->lock();
-                invoke_onVariable(context,fnOnVariable,classPtr,*ctx,(char *)category,(char *)name,*info,data);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onVariable(context,fnOnVariable,classPtr,*ctx,(char *)category,(char *)name,*info,data);
+                });
             }
         }
         virtual void onTick () override {
             if ( auto fnOnTick = get_onTick(classPtr) ) {
-                context->lock();
-                invoke_onTick(context,fnOnTick,classPtr);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onTick(context,fnOnTick,classPtr);
+                });
             }
         }
         virtual void onCollect ( Context * ctx, const LineInfo & at ) override {
             if ( auto fnOnCollect = get_onCollect(classPtr) ) {
-                context->lock();
-                invoke_onCollect(context,fnOnCollect,classPtr,*ctx,at);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onCollect(context,fnOnCollect,classPtr,*ctx,at);
+                });
             }
         }
         virtual bool onLog ( Context * ctx, const LineInfo * at, int level, const char * text ) override {
             if ( auto fnOnLog = get_onLog(classPtr) ) {
-                context->lock();
-                auto res = invoke_onLog(context,fnOnLog,classPtr,ctx,at,level,(char *)text);
-                context->unlock();
+                bool res = false;
+                context->threadlock_context([&](){
+                    res = invoke_onLog(context,fnOnLog,classPtr,ctx,at,level,(char *)text);
+                });
                 return res;
             } else {
                 return false;
@@ -172,9 +178,9 @@ namespace debugger {
         }
         virtual void onBreakpointsReset ( const char * file, int breakpointsNum ) override {
             if ( auto fnOnBreakpointsReset = get_onBreakpointsReset(classPtr) ) {
-                context->lock();
-                invoke_onBreakpointsReset(context,fnOnBreakpointsReset,classPtr,(char *)file, breakpointsNum);
-                context->unlock();
+                context->threadlock_context([&](){
+                    invoke_onBreakpointsReset(context,fnOnBreakpointsReset,classPtr,(char *)file, breakpointsNum);
+                });
             }
         }
         virtual void onAllocate ( Context * ctx, void * data, uint64_t size, const LineInfo & at ) override {
@@ -908,22 +914,74 @@ namespace debugger {
         return make_smart<DebugAgentAdapter>((char *)pClass,info,context);
     }
 
-    atomic<bool>          stopped;
     atomic<bool>          stop_requested;
-    atomic<bool>          debugger_started;
     mutex                 debugger_mutex;
+    condition_variable    debugger_ready;
     condition_variable    debugger_stopped;
+    bool                  debugger_started = false;
+    bool                  debugger_context_ready = false;
+    Context *             debugger_wait_context = nullptr;
+    uint64_t              debugger_generation = 0;
 
     bool debuggerStopRequested ( ) {
         return stop_requested.load();
     }
 
     void shutdownDebuggers ( ) {
-        if (debugger_started.load()) {
-            das::unique_lock lock(das::debugger_mutex);
-            stop_requested.store(1);
-            debugger_stopped.wait(lock, []() { return stopped.load(); });
+        das::unique_lock lock(das::debugger_mutex);
+        if ( !debugger_started ) return;
+        stop_requested.store(true);
+        debugger_ready.notify_all();
+        debugger_stopped.wait(lock, []() { return !debugger_started; });
+    }
+
+    void debuggerThreadContextReady ( Context & context ) {
+        {
+            lock_guard guard{debugger_mutex};
+            if ( !debugger_started || debugger_wait_context != &context ) return;
+            debugger_context_ready = true;
         }
+        debugger_ready.notify_all();
+    }
+
+    uint64_t debuggerThreadStarted ( Context & context ) {
+        lock_guard guard{debugger_mutex};
+        if ( debugger_started ) return 0;
+        stop_requested.store(false);
+        debugger_wait_context = &context;
+        debugger_context_ready = false;
+        debugger_started = true;
+        return ++debugger_generation;
+    }
+
+    void debuggerThreadContextDestroyed ( Context & context ) {
+        {
+            lock_guard guard{debugger_mutex};
+            if ( !debugger_started || debugger_wait_context != &context ) return;
+            debugger_wait_context = nullptr;
+            stop_requested.store(true);
+        }
+        debugger_ready.notify_all();
+    }
+
+    bool debuggerThreadWait ( uint64_t generation ) {
+        das::unique_lock lock(das::debugger_mutex);
+        debugger_ready.wait(lock, [generation]() {
+            return generation != debugger_generation || debugger_context_ready || stop_requested.load();
+        });
+        return generation == debugger_generation && debugger_context_ready && !stop_requested.load();
+    }
+
+    void debuggerThreadFinished ( uint64_t generation ) {
+        {
+            lock_guard guard{debugger_mutex};
+            if ( generation != debugger_generation ) return;
+            debugger_wait_context = nullptr;
+            debugger_context_ready = false;
+            stop_requested.store(false);
+            debugger_started = false;
+        }
+        debugger_stopped.notify_all();
     }
 
     void debuggerSetContextSingleStep ( Context & context, bool step ) {
@@ -1483,6 +1541,9 @@ namespace debugger {
             addExtern<DAS_BIND_FUN(debuggerSetContextSingleStep)>(*this, lib,  "set_single_step",
                 SideEffects::modifyExternal, "debuggerSetContextSingleStep")
                     ->args({"context","enabled"});
+            addExtern<DAS_BIND_FUN(debuggerThreadContextReady)>(*this, lib, "debugger_thread_context_ready",
+                SideEffects::modifyExternal, "debuggerThreadContextReady")
+                    ->arg("context");
             addExtern<DAS_BIND_FUN(debuggerStackWalk)>(*this, lib, "stackwalk",
                 SideEffects::modifyExternal, "debuggerStackWalk")
                     ->args({"context","line"});
@@ -1714,4 +1775,3 @@ namespace debugger {
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_Debugger,das);
-

@@ -247,6 +247,43 @@ debuggers show custom watch variables and application diagnostics:
     // output:
     //   Diagnostics: collection_count = 1
 
+When the built-in DAP debugger stops, it calls
+``collect_debug_agent_state`` for the paused context automatically.  Each
+``category`` reported by an agent becomes an additional DAP scope in the
+top stack frame.  Each ``name`` becomes a variable in that scope, and
+structures, arrays, and other compound values can be expanded with the
+normal DAP ``variables`` request.  A DAP client should therefore enumerate
+*all* scopes returned for a frame instead of assuming that only ``Locals``,
+``Arguments``, and ``Globals`` exist.
+
+These state-reporting modules are sometimes called **debugger macros**.  A
+program opts in by requiring the module; its init code installs a
+``DapiDebugAgent``, and categories reported by the module appear as extra
+scopes when execution pauses.
+The DAP transport needs no module-specific support.
+
+Two modules provide ready-made examples:
+
+================================================  ============================================================
+Module                                            Scopes
+================================================  ============================================================
+``require opengl/opengl_state``                   ``OPENGL``, ``OPENGL program``, ``OPENGL arrays``, and others
+``require daslib/decs_state``                     ``DECS archetype`` and ``DECS requests``
+================================================  ============================================================
+
+``opengl/opengl_boost`` already requires ``opengl_state``.  The OpenGL
+agent reports state only for a paused context marked as an OpenGL context,
+where querying the current GL state is valid.  ``daslib/decs_boost`` already
+requires ``decs_state`` and therefore enables DECS inspection without an
+additional ``require``.  Code that uses only the lower-level ``opengl`` or
+``decs`` module can require the corresponding state module explicitly.
+
+Keep ``onCollect`` bounded and minimize changes to application state.  It runs
+synchronously while the debuggee is paused, so expensive collection directly
+increases debugger latency.  A collector may consume diagnostic state when
+the underlying API requires it; for example, reading OpenGL errors clears the
+error flag, while reading debug messages removes the returned messages.
+
 
 Agent existence checks
 =======================

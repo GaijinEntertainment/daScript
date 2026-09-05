@@ -1218,35 +1218,31 @@ namespace das {
         }).detach();
     }
 
-    extern condition_variable debugger_stopped;
-    extern atomic<bool>       debugger_started;
-    extern atomic<bool>       stopped;
-    extern mutex              debugger_mutex;
-    extern atomic<bool>       stop_requested;
-
-    static void stop_debugger() {
-        g_jobQueTotalThreads --;
-        {
-            lock_guard guard{debugger_mutex};
-            stopped.store(true);
-        }
-        debugger_stopped.notify_all();
-    }
+    uint64_t debuggerThreadStarted ( Context & context );
+    bool debuggerThreadWait ( uint64_t generation );
+    void debuggerThreadFinished ( uint64_t generation );
+    void shutdownDebuggers ( );
 
     void new_debugger_thread ( const Block & lambda, Context * context, LineInfoArg * lineinfo ) {
-        g_jobQueTotalThreads ++;
-        debugger_started.store(true);
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::thread_clone)));
         forkContext->sharedPtrContext = true;
         auto bound = daScriptEnvironment::getBound();
+        auto generation = debuggerThreadStarted(*context);
+        if ( !generation ) {
+            forkContext.reset();
+            context->throw_error_at(lineinfo, "debugger thread is already active");
+        }
+        g_jobQueTotalThreads ++;
         thread([=]() mutable {
             daScriptEnvironment::setBound(bound);
-            das_invoke<void>::invoke(forkContext.get(), lineinfo, lambda);
+            if ( debuggerThreadWait(generation) ) {
+                das_invoke<void>::invoke(forkContext.get(), lineinfo, lambda);
+            }
             forkContext.reset();
-            stop_debugger();
-            stop_requested = false;
             shutdownThreadLocalDebugAgent();
+            g_jobQueTotalThreads --;
+            debuggerThreadFinished(generation);
         }).detach();
     }
 
@@ -1855,6 +1851,7 @@ namespace das {
         virtual ~Module_JobQue() {
             g_jobQueAvailable--;
             if ( g_jobQueAvailable == 0 ) {
+                shutdownDebuggers();
                 while ( g_jobQueTotalThreads ) {
                     builtin_sleep(0);
                 }
@@ -1870,4 +1867,3 @@ namespace das {
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_JobQue,das);
-
