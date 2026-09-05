@@ -2802,7 +2802,12 @@ namespace das {
         X(jit_output_path) X(jit_path_to_shared_lib) X(jit_path_to_linker) X(threadlock_context) \
         X(lint_check) X(no_lint) X(abi_stamp) X(paranoid_validation) X(cross_platform) X(aot_result) \
         X(no_init_check) X(always_report_candidates_threshold) X(jit_exe_mode) X(jit_emit_object) \
-        X(jit_emit_prologue) X(dll_search_paths)
+        X(jit_emit_prologue) X(dll_search_paths) X(aot_lib) X(standalone_context) X(gc_infer_collect) \
+        X(gc_infer_collect_nodes) X(gc_infer_collect_pct) X(report_invisible_functions) \
+        X(report_private_functions) X(log_compile_time) X(log_total_compile_time) \
+        X(log_module_compile_time) X(log_optimization) X(log_optimization_passes) X(force_escape_free) \
+        X(force_allocate_on_stack) X(force_partial_escape_free) X(log_escape_analysis) X(log_gc_time) \
+        X(debug_infer_flag) X(temp_table_lint_warning)
 
     static bool cachedPoliciesMatch ( const CodeOfPolicies & a, const CodeOfPolicies & b ) {
     #define DAS_POLICY_FIELD_SAME(f) if ( !(a.f == b.f) ) return false;
