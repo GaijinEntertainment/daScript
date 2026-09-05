@@ -3,13 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>storyteller</title>
+<title>storyteller — dasllama.io</title>
+<meta name="description" content="A small story model writes a children's tale while KittenTTS reads it aloud - dasLLAMA compiled to WebAssembly, running in your browser.">
+<link rel="icon" href="/files/dasllama-favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/files/fonts/fonts.css">
+<link rel="stylesheet" href="/files/forge.css">
+<link rel="stylesheet" href="/files/dasllama-io.css">
+<script src="/files/github-star.js" defer></script>
+<!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <style>
-  html, body {
-    margin: 0; height: 100%; background: #12101a; overflow: hidden;
-    display: flex; align-items: center; justify-content: center;
+  html, body { margin: 0; height: 100%; background: #12101a; overflow: hidden; }
+  body {
+    display: flex; flex-direction: column;
     font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; color: #d6cfbf;
   }
+  /* the site's nav sits above the stage; the stage takes the rest of the viewport */
+  .dio-nav { flex: none; }
+  #stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
   #canvas { width: 100%; height: 100%; object-fit: contain; border: 0; outline: none; display: block; }
   #gate {
     position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
@@ -27,15 +38,27 @@
 </style>
 </head>
 <body>
-<!-- The storyteller's shell: fetches the story model, the TTS model and its phoneme packs into
-     MEMFS before the program starts, then waits for a click - browsers only let audio start
-     from a gesture. Models come from ./models/ beside the page, or ?models=<base url>. -->
+<!-- The storyteller's shell: the dasllama.io nav on top (its css and script come from the
+     site root, /files/), then the stage. The shell fetches the story model, the TTS model and
+     its phoneme packs into MEMFS before the program starts, then waits for a click - browsers
+     only let audio start from a gesture. Models come from ./models/ beside the page, or
+     ?models=<base url>. -->
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="/examples.html">examples</a><a class="dio-tab" href="/stories.html">stories</a><a class="dio-tab" href="/ladder.html">ladder</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+</div></div></nav>
+<div id="stage">
 <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 <div id="gate">
   <h1>storyteller</h1>
   <p id="status">fetching the models...</p>
   <div id="bar"><i id="fill"></i></div>
   <button id="start">start</button>
+</div>
 </div>
 <script>
   var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1 };

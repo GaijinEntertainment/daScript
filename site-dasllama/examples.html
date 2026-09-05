@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>ladder — dasllama.io</title>
-<meta name="description" content="Every dasLLAMA measurement — official boards and community submissions, with receipts, hardware, and the llama.cpp reference run where one rode along."/>
-<meta property="og:title" content="dasLLAMA ladder"/>
-<meta property="og:description" content="Every measurement in the world — official and community — with receipts."/>
+<title>examples — dasllama.io</title>
+<meta name="description" content="dasLLAMA examples you can run: the engine compiled to WebAssembly in your browser, or built for your machine. Nothing here runs interpreted."/>
+<meta property="og:title" content="dasllama.io examples"/>
+<meta property="og:description" content="The engine, compiled: run it in the browser or build it for your machine."/>
 <meta property="og:type" content="website"/>
-<meta property="og:url" content="https://dasllama.io/ladder.html"/>
-<link rel="canonical" href="https://dasllama.io/ladder.html"/>
+<meta property="og:url" content="https://dasllama.io/examples.html"/>
+<link rel="canonical" href="https://dasllama.io/examples.html"/>
 <link rel="icon" href="files/dasllama-favicon.svg" type="image/svg+xml"/>
 <link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
 <link rel="stylesheet" href="files/fonts/fonts.css"/>
@@ -24,42 +24,43 @@
 <div class="dio-nav__left">
 <button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab" href="examples.html">examples</a><a class="dio-tab" href="stories.html">stories</a><a class="dio-tab is-active" href="ladder.html">ladder</a></div>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="examples.html">examples</a><a class="dio-tab" href="stories.html">stories</a><a class="dio-tab" href="ladder.html">ladder</a></div>
 </div>
 <div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
 </div></div></nav>
 
-<header class="dio-head"><div class="forge-container"><div class="dio-head__row" style="justify-content:flex-end">
-<div class="dio-head__aside" id="dio-ladder-stats"><b>—</b> rows · <b>—</b> boxes<br/><b>—</b> last submission<br/><a href="https://daslang.io/doc/reference/dasllama_methodology.html" style="color:var(--amber-dim);border-bottom:1px solid var(--rule)">methodology ↗</a></div>
+<header class="dio-head"><div class="forge-container"><div class="dio-head__row">
+<div>
+<h1>The engine, <em>running.</em></h1>
+<p class="dio-head__lede">Every example here is dasLLAMA itself - compiled to WebAssembly and running in your browser, or built for your machine.</p>
+</div>
 </div></div></header>
 
+<section class="forge-ex-grid" style="padding-top:12px">
 <div class="forge-container">
+<div class="forge-ex-grid__list" style="grid-template-columns:repeat(auto-fill,minmax(400px,1fr))">
 
-<!-- filter selects are built by dasllama-io.js from the rows actually on the board -->
-<div class="dl-filters" id="ladder-filters"></div>
+<a class="forge-ex-card" href="examples/storyteller/storyteller.html" aria-label="open Storyteller">
+  <div class="forge-ex-card__screen">
+    <img class="forge-ex-card__poster" src="files/examples/storyteller-poster.png" alt="Storyteller screenshot" loading="lazy"/>
+    <div class="forge-ex-card__scanlines" aria-hidden="true"></div>
+    <div class="forge-ex-card__hover"><span class="forge-ex-card__playbtn" aria-hidden="true">▶</span></div>
+  </div>
+  <div class="forge-ex-card__body">
+    <div class="forge-ex-card__titlerow">
+      <h3 class="forge-ex-card__name">Storyteller</h3>
+      <span class="forge-ex-card__kind">llm + tts · in the browser</span>
+    </div>
+    <p class="forge-ex-card__desc">A small story model writes a children's tale one token at a time while KittenTTS reads it aloud. Both models arrive as prepared <code>.dlim</code> images; the whole engine - decode, phonemizer, vocoder - runs in your browser on Web Workers.</p>
+    <div class="forge-ex-card__tags"><span class="forge-ex-tag">llm</span><span class="forge-ex-tag">tts</span><span class="forge-ex-tag">wasm64</span><span class="forge-ex-tag">threads</span></div>
+    <div class="forge-ex-card__foot"><span>space · next story</span><span>Chrome, Edge or Firefox 133+ (memory64)</span></div>
+  </div>
+</a>
 
-<div class="dl-viewbar">
-<div class="dl-seg" id="view"><button data-view="bars">bars</button><button class="is-on" data-view="table">table</button></div>
-<div class="dl-seg" id="metric" style="visibility:hidden"><button class="is-on" data-metric="pp">pp512</button><button data-metric="tg">tg128</button></div>
 </div>
-
-<!-- both views render from /api/runs joined with the verbatim /api/submission/:id documents -->
-<div class="dl-bars" id="bars" hidden></div>
-
-<div class="dl-table-wrap" id="table-wrap"><table class="dl-table dl-table--bench" id="ladder-table">
-<tbody><tr><td class="dl-empty">loading the ladder…</td></tr></tbody>
-</table></div>
-
-<div class="dl-caption" id="ladder-caption"></div>
-
-<div class="dl-legend">
-<span><span class="dl-src__dot dl-src__dot--ok"></span>verified — promoted by us</span>
-<span><span class="dl-src__dot dl-src__dot--un"></span>unverified — kept, not promoted</span>
-<span><span class="dl-src__badge dl-src__badge--official">official</span>measured by us</span>
-<span><span class="dl-src__badge">community</span>submitted</span>
+<p class="dio-head__lede" style="margin-top:28px;max-width:720px">Source for every example lives under <a href="https://github.com/GaijinEntertainment/daScript/tree/master/examples/dasLLAMA">examples/dasLLAMA</a> in the repository; the browser builds are made with <code>daspkg release wasm</code> from the same sources.</p>
 </div>
-<p class="dio-note">Rows render client-side from <span style="color:var(--fg-dim)">/api/runs</span>; every number and command line in a receipt comes from the verbatim submission document. · <a href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology ↗</a></p>
-</div>
+</section>
 
 <footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
 <div>
