@@ -115,7 +115,7 @@ jobs:
         # The workflow file itself is a build input (it carries the configure flags
         # for web/build64 below), so hash it too — a change to the build steps must
         # miss a stale cache rather than skip the rebuild and reuse old archives.
-        key: wasm-${{ runner.os }}-${{ hashFiles('.github/workflows/pages.yml', 'CMakeLists.txt', 'web/CMakeLists.txt', 'web/stage_playground_imgui_samples.cmake', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daslang/**', 'utils/daspkg/**', 'examples/games/**', 'examples/graphics/**', 'examples/pathTracer/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
+        key: wasm-${{ runner.os }}-${{ hashFiles('.github/workflows/pages.yml', 'CMakeLists.txt', 'web/CMakeLists.txt', 'web/stage_playground_imgui_samples.cmake', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daslang/**', 'utils/daspkg/**', 'examples/games/**', 'examples/graphics/**', 'examples/pathTracer/**', 'examples/dasLLAMA/storyteller/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
 
     # Host daslang — one games-capable build (dasLLVM for cross-compile + dasGlfw
     # + dasOpenGL shared modules for the games) that serves BOTH das2rst and the
@@ -314,6 +314,18 @@ jobs:
             echo "physarum_lab wasm build OK"
         else
             echo "WARNING: physarum_lab wasm build failed — its examples card will be skipped this deploy."
+        fi
+
+        # 7. dasllama.io/examples storyteller — dasLLAMA itself compiled to wasm64 (the story
+        #    model + KittenTTS, both served as prepared .dlim images the dasllama.io stage step
+        #    downloads from the rolling `dasllama-web` release). Its .das_package turns the GPU
+        #    modules off, so the host needs no Metal/Vulkan. Non-fatal like the games; the
+        #    dasllama.io stage step stages the card's page only when all three outputs exist.
+        if ./bin/daslang utils/daspkg/main.das -- \
+                release wasm --root examples/dasLLAMA/storyteller --out "$REPO/web/output64/examples"; then
+            echo "storyteller wasm build OK"
+        else
+            echo "WARNING: storyteller wasm build failed — the dasllama.io storyteller page will be a placeholder this deploy."
         fi
 
     - name: "Compile-gate the curated playground samples"
@@ -555,6 +567,8 @@ jobs:
         fi
 
     - name: "Stage dasllama.io for deployment"
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # gh release download of the browser examples' model sets
       run: |
         set -eux
         mkdir -p _site_dasllama/files
@@ -566,7 +580,29 @@ jobs:
         python3 site-dasllama/test_metadata.py
 
         cp site-dasllama/index.html _site_dasllama/
+        cp site-dasllama/examples.html _site_dasllama/
         cp site-dasllama/stories.html _site_dasllama/
+
+        # The browser examples: the wasm64 build from step 7 above plus its model set from the
+        # rolling `dasllama-web` release (prepared .dlim images + the phoneme packs, ~70 MB -
+        # build artifacts like the tutorial MP4s, never in git; re-minted and re-uploaded with
+        # --clobber on every IMAGE_VERSION bump). Served same-origin, so the page needs no CORS;
+        # the Caddy vhost adds the isolation headers under /examples/ (caddy.snippet). A missing
+        # build or set stages a placeholder page, so the card never 404s.
+        mkdir -p _site_dasllama/examples/storyteller
+        if [ -f web/output64/examples/storyteller/storyteller.html ] \
+           && [ -f web/output64/examples/storyteller/storyteller.js ] \
+           && [ -f web/output64/examples/storyteller/storyteller.wasm ] \
+           && gh release download dasllama-web --repo GaijinEntertainment/daScript \
+                --dir _site_dasllama/examples/storyteller/models --clobber; then
+            cp web/output64/examples/storyteller/storyteller.html _site_dasllama/examples/storyteller/
+            cp web/output64/examples/storyteller/storyteller.js   _site_dasllama/examples/storyteller/
+            cp web/output64/examples/storyteller/storyteller.wasm _site_dasllama/examples/storyteller/
+        else
+            echo "WARNING: storyteller build or model set incomplete — staging a placeholder so the card doesn't 404."
+            rm -rf _site_dasllama/examples/storyteller/models
+            printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Storyteller — building</title><style>html,body{margin:0;height:100%}body{background:#12101a;color:#d6cfbf;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site_dasllama/examples/storyteller/storyteller.html
+        fi
         mkdir -p _site_dasllama/stories
         cp -R site-dasllama/stories/. _site_dasllama/stories/
         cp site-dasllama/ladder.html _site_dasllama/

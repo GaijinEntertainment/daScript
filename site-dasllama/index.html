@@ -24,7 +24,7 @@
 <div class="dio-nav__left">
 <button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<div class="dio-tabs"><a class="dio-tab is-active" href="/">home</a><a class="dio-tab" href="stories.html">stories</a><a class="dio-tab" href="ladder.html">ladder</a></div>
+<div class="dio-tabs"><a class="dio-tab is-active" href="/">home</a><a class="dio-tab" href="examples.html">examples</a><a class="dio-tab" href="stories.html">stories</a><a class="dio-tab" href="ladder.html">ladder</a></div>
 </div>
 <div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
 </div></div></nav>
@@ -62,8 +62,17 @@
 <div id="dio-feed-items">
 <!-- news:begin — everything between the markers is generated from _news/*.md by
      build_news.py (run at deploy AND checked in, so preview matches production) -->
-<article class="dio-item dio-item--lead is-open" id="n-2026-09-03-text-to-speech" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-09-03</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">dasLLAMA speaks - KittenTTS nano and mini, Kokoro-82M, and a text front end that is nothing but data.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<article class="dio-item dio-item--lead is-open" id="n-2026-09-05-storyteller-in-the-browser" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-09-05</span><span class="dio-item__tag">examples</span><h2 class="dio-item__title">dasLLAMA runs in the browser - the storyteller, compiled to wasm64, opens the new examples page.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>The engine behind the ladder now also ships as a WebAssembly build. <code>daspkg release wasm</code>
+compiles the storyteller - llama2.c's stories15M writing a children's tale while KittenTTS nano
+reads it aloud - into one 26 MB wasm64 module, and the two models arrive as prepared <code>.dlim</code>
+images, 76 MB with the two English phoneme packs, the same format the native engine maps.
+Decode, phonemizer and vocoder all run on Web Workers in the page; nothing is interpreted.
+Chrome, Edge or Firefox 133+ (memory64). <a href="examples.html">Try it</a>.</p></div>
+</article>
+<article class="dio-item" id="n-2026-09-03-text-to-speech" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-09-03</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">dasLLAMA speaks - KittenTTS nano and mini, Kokoro-82M, and a text front end that is nothing but data.</h2><span class="dio-item__chev">▾</span></div>
 <div class="dio-item__body"><p>Three text-to-speech models serve from the same engine and the same tuned kernels as the
 language models, on the CPU, through <code>/v1/audio/speech</code> on dasllama-server and a speech
 studio on its control page. On an M1 Max the served 8-bit lane reads a real-time factor of
@@ -145,7 +154,7 @@ scoreboard and carries official measurements only.</p></div>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
 <p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
 </div>
-<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="stories.html">stories</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="examples.html">examples</a><a class="dio-footer__link" href="stories.html">stories</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
 <div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a><a class="dio-footer__link" href="https://daslang.io/playground/index.html">playground</a></div>
 <div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
 <div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>
