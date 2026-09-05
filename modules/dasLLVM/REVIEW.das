@@ -26,9 +26,10 @@ var private SINK_CALLS <- {
     "fwrite", "copy_file", "copy_file_result", "set_mtime", "set_mtime_result"
 }
 
-// The require category every register_native_path row in the descriptor carries; each of its
-// other identifier-shaped quoted tokens names a module file.
-var private DESCRIPTOR_CATEGORY_TOKENS <- { "llvm" }
+// The require category every register_native_path row in the descriptor carries, and the C++
+// witness module's registration name (register_dynamic_module - a .shared_module, no .das file);
+// each of the descriptor's other identifier-shaped quoted tokens names a module file.
+var private DESCRIPTOR_CATEGORY_TOKENS <- { "llvm", "Module_LLVM" }
 
 def private is_ident_byte(b : int) : bool {
     return is_alnum(b) || b == '_'
