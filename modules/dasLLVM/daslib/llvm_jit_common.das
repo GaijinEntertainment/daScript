@@ -395,6 +395,9 @@ var public g_handled_field_offset_globals : table<string; tuple<modName : string
 // several user hints (alwaysinline, loop-vectorize/unroll metadata), so when true the
 // LlvmJitVisitor skips ALL user hint application (function + loop) — avoids wasm32 miscompiles.
 var public g_target_is_wasm = false
+// wasm with +relaxed-simd (the feature string wasm_target_features appends): the signed idot family
+// lowers to the ISA's own int8 dot there instead of the extmul + pairwise-add chain.
+var public g_target_wasm_relaxed_simd = false
 
 // The resolved host_features truth of the last flag pass (see init_jit_target_flags): true when
 // the g_target_* gates came from the running box's cpuid/host features, false on the generic/
@@ -522,8 +525,11 @@ var public g_target_wasm_threads = false
 // mismatch. Diagnoses the MSVC-host vs wasm/clang-target C++ ABI layout class. Opt-in, off by default.
 var public g_jit_check_handled_abi = false
 
+// +relaxed-simd rides along: the signed idot family lowers to i32x4.relaxed_dot_i8x16_i7x16_add_s
+// there, and every engine that runs memory64 (Chrome 133+, Firefox 134+, node 22+) shipped relaxed
+// SIMD first. It changes no ABI, so the runtime archive built without it links unchanged.
 def private wasm_target_features() : string {
-    return g_target_wasm_threads ? "+simd128,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+nontrapping-fptoint"
+    return g_target_wasm_threads ? "+simd128,+relaxed-simd,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+relaxed-simd,+nontrapping-fptoint"
 }
 
 def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef) {
@@ -617,6 +623,7 @@ def public init_jit_clopts() {
 def public init_jit_target_flags(target_triple : string = ""; host_features : bool = true) {
     g_target_host_features = host_features
     g_target_is_wasm = target_triple |> starts_with("wasm")
+    g_target_wasm_relaxed_simd = g_target_is_wasm   // wasm_target_features always asks for +relaxed-simd
     // Host path (empty triple): the module targets the host, so the daslang binary's own arch is the
     // JIT target arch. Explicit cross-compile triple: read the arch off the triple prefix.
     g_target_is_aarch64 = (empty(target_triple)

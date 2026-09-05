@@ -146,6 +146,92 @@ def dot_q8q8_idot4x4_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?
     return f0 + f1 + f2 + f3
 }
 
+//! The vector-epilogue idot4 dot: per 32-block one idot4 pair, then float4 accumulate under the block's
+//! scale - no horizontal sum until the row ends, two rotating float4 accumulators. The wasm SIMD128 form (7.7 vs the
+//! template's 4.8 GMAC/s on one lane: dot_q8q8_idot4x4's per-block hsum is four lane extracts there). Called from lifted lambdas.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_idot4_ps(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    let nb = n / 32l
+    var f0 = float4(0.0, 0.0, 0.0, 0.0)
+    var f1 = float4(0.0, 0.0, 0.0, 0.0)
+    var bi = 0l
+    unsafe {
+        let wv = reinterpret<byte16 const?>(wq)
+        let xv = reinterpret<byte16 const?>(xq)
+        while (bi + 2l <= nb) {
+            let v = bi * 2l
+            var a0 = idot4(wv[v], xv[v])
+            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
+            var a1 = idot4(wv[v + 2l], xv[v + 2l])
+            a1 = idot4(a1, wv[v + 3l], xv[v + 3l])
+            let s0 = ws[bi] * xs[bi]
+            let s1 = ws[bi + 1l] * xs[bi + 1l]
+            f0 += float4(a0) * float4(s0, s0, s0, s0)
+            f1 += float4(a1) * float4(s1, s1, s1, s1)
+            bi += 2l
+        }
+        while (bi < nb) {
+            let v = bi * 2l
+            var a0 = idot4(wv[v], xv[v])
+            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
+            let s0 = ws[bi] * xs[bi]
+            f0 += float4(a0) * float4(s0, s0, s0, s0)
+            bi++
+        }
+    }
+    let f = f0 + f1
+    return f.x + f.y + f.z + f.w
+}
+
+//! The wscale_f16 twin of dot_q8q8_idot4_ps: the per-block weight scale is a raw binary16 halfword
+//! widened in-loop. Not `private`: called from lifted worker lambdas.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
+def dot_q8q8_idot4_ps_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    let nb = n / 32l
+    var f0 = float4(0.0, 0.0, 0.0, 0.0)
+    var f1 = float4(0.0, 0.0, 0.0, 0.0)
+    var bi = 0l
+    unsafe {
+        let wv = reinterpret<byte16 const?>(wq)
+        let xv = reinterpret<byte16 const?>(xq)
+        while (bi + 2l <= nb) {
+            let v = bi * 2l
+            var a0 = idot4(wv[v], xv[v])
+            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
+            var a1 = idot4(wv[v + 2l], xv[v + 2l])
+            a1 = idot4(a1, wv[v + 3l], xv[v + 3l])
+            let s0 = f16_to_f32(uint(ws[bi])) * xs[bi]
+            let s1 = f16_to_f32(uint(ws[bi + 1l])) * xs[bi + 1l]
+            f0 += float4(a0) * float4(s0, s0, s0, s0)
+            f1 += float4(a1) * float4(s1, s1, s1, s1)
+            bi += 2l
+        }
+        while (bi < nb) {
+            let v = bi * 2l
+            var a0 = idot4(wv[v], xv[v])
+            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
+            let s0 = f16_to_f32(uint(ws[bi])) * xs[bi]
+            f0 += float4(a0) * float4(s0, s0, s0, s0)
+            bi++
+        }
+    }
+    let f = f0 + f1
+    return f.x + f.y + f.z + f.w
+}
+
+// On wasm SIMD128 the auto-vectorized template dot is the slow form: the ISA has no int8 dot for
+// LLVM to find, while the idot4 builtin lowers there to the ISA's own widening multiply-adds. The
+// portable kernels pick per target at compile time; every other host keeps the template.
+let private WASM_TARGET = get_target_architecture_name() == "wasm64" || get_target_architecture_name() == "wasm32"
+
+def private dot_q8q8_p(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    return WASM_TARGET ? dot_q8q8_idot4_ps(wq, ws, xq, xs, n) : dot_q8q8(wq, ws, xq, xs, n)
+}
+
+def private dot_q8q8_f16s_p(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    return WASM_TARGET ? dot_q8q8_idot4_ps_f16s(wq, ws, xq, xs, n) : dot_q8q8_f16s(wq, ws, xq, xs, n)
+}
+
 // ----- parallel_for dispatch profiler (off by default) -----
 // Records each worker's start time (rel. to pf-start) into g_pf_ws[rb]; a large first/last-worker gap
 // = workers trickling in (job pool waking from sleep) — the suspected prefill stall.
@@ -185,7 +271,7 @@ def private q8q8_kernel(var yp : float?; wp : int8 const?; sp : float const?; xq
     maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
-                myp[i] = dot_q8q8(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
+                myp[i] = dot_q8q8_p(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
             }
         }
     }
@@ -213,7 +299,7 @@ def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float cons
                         let wrow = wp + int64(i) * n
                         let srow = sp + int64(i) * nb
                         for (tk in range64(ntok)) {
-                            myp[tk * d + int64(i)] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+                            myp[tk * d + int64(i)] = dot_q8q8_p(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
                         }
                     }
                 }
@@ -242,7 +328,7 @@ def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float cons
                 let wrow = wp + int64(i) * n
                 let srow = sp + int64(i) * nb
                 for (tk in range64(ntok)) {
-                    myp[tk * d + int64(i)] = dot_q8q8(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+                    myp[tk * d + int64(i)] = dot_q8q8_p(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
                 }
             }
         }
@@ -256,7 +342,7 @@ def q8q8_rows_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp :
     let nb = n / 32l
     unsafe {
         for (i in range64(rb, re)) {
-            yp[i] = dot_q8q8(wp + i * n, sp + i * nb, xqp, xsp, n)
+            yp[i] = dot_q8q8_p(wp + i * n, sp + i * nb, xqp, xsp, n)
         }
     }
 }
@@ -273,13 +359,13 @@ def private q8q8_group3_kernel(var y0p : float?; var y1p : float?; var y2p : flo
             for (gi in range(rb, re)) {
                 let g = int64(gi)
                 if (g < d0) {
-                    w0[g] = dot_q8q8(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
+                    w0[g] = dot_q8q8_p(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
                 } elif (g < d0 + d1) {
                     let r = g - d0
-                    w1[r] = dot_q8q8(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
+                    w1[r] = dot_q8q8_p(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
                 } else {
                     let r = g - d0 - d1
-                    w2[r] = dot_q8q8(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
+                    w2[r] = dot_q8q8_p(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
                 }
             }
         }
@@ -295,7 +381,7 @@ def private q8q8_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const
     maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
-                myp[i] = dot_q8q8_f16s(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
+                myp[i] = dot_q8q8_f16s_p(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
             }
         }
     }
@@ -310,7 +396,7 @@ def private q8q8_batch_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16
                 let wrow = wp + int64(i) * n
                 let srow = sp + int64(i) * nb
                 for (tk in range64(ntok)) {
-                    myp[tk * d + int64(i)] = dot_q8q8_f16s(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+                    myp[tk * d + int64(i)] = dot_q8q8_f16s_p(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
                 }
             }
         }
@@ -322,7 +408,7 @@ def q8q8_rows_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; 
     let nb = n / 32l
     unsafe {
         for (i in range64(rb, re)) {
-            yp[i] = dot_q8q8_f16s(wp + i * n, sp + i * nb, xqp, xsp, n)
+            yp[i] = dot_q8q8_f16s_p(wp + i * n, sp + i * nb, xqp, xsp, n)
         }
     }
 }
@@ -339,13 +425,13 @@ def private q8q8_group3_kernel_s16(var y0p : float?; var y1p : float?; var y2p :
             for (gi in range(rb, re)) {
                 let g = int64(gi)
                 if (g < d0) {
-                    w0[g] = dot_q8q8_f16s(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
+                    w0[g] = dot_q8q8_f16s_p(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
                 } elif (g < d0 + d1) {
                     let r = g - d0
-                    w1[r] = dot_q8q8_f16s(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
+                    w1[r] = dot_q8q8_f16s_p(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
                 } else {
                     let r = g - d0 - d1
-                    w2[r] = dot_q8q8_f16s(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
+                    w2[r] = dot_q8q8_f16s_p(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
                 }
             }
         }
@@ -363,7 +449,7 @@ def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?
                 let row = ii % d
                 let woff = offs[r * 2l]
                 let xoff = offs[r * 2l + 1l]
-                var v = dot_q8q8_f16s(wp + woff + row * n, sp + woff / 32l + row * nb, xqp + xoff, xsp + xoff / 32l, n)
+                var v = dot_q8q8_f16s_p(wp + woff + row * n, sp + woff / 32l + row * nb, xqp + xoff, xsp + xoff / 32l, n)
                 if (bp != null) {
                     v += bp[boffs[r] + row]
                 }
@@ -1570,7 +1656,7 @@ def q8q8_groupn_kernel(var yp : float?; wp : int8 const?; sp : float const?; off
                 let row = ii % d
                 let woff = offs[r * 2l]
                 let xoff = offs[r * 2l + 1l]
-                var v = dot_q8q8(wp + woff + row * n, sp + woff / 32l + row * nb, xqp + xoff, xsp + xoff / 32l, n)
+                var v = dot_q8q8_p(wp + woff + row * n, sp + woff / 32l + row * nb, xqp + xoff, xsp + xoff / 32l, n)
                 if (bp != null) {
                     v += bp[boffs[r] + row]
                 }

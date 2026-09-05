@@ -600,6 +600,58 @@ def test_q8q8_wscale_f16(t : T?) {
     }
 }
 
+// The vector-epilogue idot4 dots - the portable kernels' wasm form - on every host: each row of
+// each token within the fp64 bar, the s16 twin bit-identical to its f32 twin over the widened plane.
+// n=64 is the paired-block main loop alone, n=96 adds the single-block tail.
+def private idot4_ps_gate(t : T?; n : int64) {
+    let d = 64l
+    let nb = n / 32l
+    let ntok = 3l
+    var wf : array<float>
+    var xf : array<float>
+    fill_unit(wf, d * n, 0x1D074u)
+    fill_unit(xf, ntok * n, 0x1D075u)
+    let wq0 <- quantize_q8_0(wf, d * n)
+    var ws16m : array<uint16>
+    var ws32m : array<float>
+    s16_planes(wq0.scales, d * nb, ws16m, ws32m)
+    var xq : array<int8>
+    var xs : array<float>
+    quantize_rows(xf, ntok, n, xq, xs)
+    var ref : array<float>
+    var bar : array<float>
+    ref_image(wq0.q, ws32m, xq, xs, ntok, d, n, ref, bar)
+    var y : array<float>
+    var y16 : array<float>
+    y |> resize(ntok * d)
+    y16 |> resize(ntok * d)
+    unsafe {
+        let wp = addr<int8 const?>(wq0.q[0])
+        let sp = addr<float const?>(ws32m[0])
+        let sp16 = addr<uint16 const?>(ws16m[0])
+        let xqp = addr<int8 const?>(xq[0])
+        let xsp = addr<float const?>(xs[0])
+        for (p in range64(ntok)) {
+            for (i in range64(d)) {
+                y[p * d + i] = dot_q8q8_idot4_ps(wp + i * n, sp + i * nb, xqp + p * n, xsp + p * nb, n)
+                y16[p * d + i] = dot_q8q8_idot4_ps_f16s(wp + i * n, sp16 + i * nb, xqp + p * n, xsp + p * nb, n)
+            }
+        }
+    }
+    held(t, y, ref, bar, "dot_q8q8_idot4_ps, n={n}")
+    identical(t, y16, y, "dot_q8q8_idot4_ps_f16s bit-matches its f32 twin over the widened plane, n={n}")
+    poisoned(t, y, ref, bar, "dot_q8q8_idot4_ps, n={n}")
+}
+
+[test]
+def test_q8q8_idot4_ps(t : T?) {
+    for (n in WIDTHS) {
+        t |> run("vector-epilogue idot4 dots vs fp64 and the s16 twin, n={n}") @(t : T?) {
+            idot4_ps_gate(t, n)
+        }
+    }
+}
+
 def private group3_gate(t : T?; n : int64) {
     let d0 = 32l
     let d1 = 40l

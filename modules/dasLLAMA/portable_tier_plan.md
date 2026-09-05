@@ -438,6 +438,33 @@ browser demo is a stretch on the same artifact.
 
 ## The vectorization leg (between stages 1 and 3, measured)
 
+**First rung landed (2026-09-05): the int8 dot on wasm.** The profile came from node's V8 tick
+logger over the JIT-cross Kitten artifact (`--cpu-prof` hangs emscripten's pthread pool at
+worker load; `--prof` with `DAS_JOBQUE_THREADS=2` does not): 77% of every tick in one lambda,
+the portable `q8q8_batch_kernel`'s row loop, which is `dot_q8q8` inlined - the TTS rows GEMMs.
+A one-lane micro-bench (4096-wide row, node, GMAC/s) sized the alternatives:
+
+| form | native arm64 JIT | wasm64, before | wasm64, after |
+|---|---|---|---|
+| `dot_q8q8` tuned template (auto-vectorized) | 36 | 4.8 | 4.8 |
+| `dot_q8q8_idot4x4` (idot4 builtin, per-block hsum) | 52 | 1.9 | 9.1 |
+| `dot_q8q8_idot4_ps` (idot4, vector epilogue, one hsum per row) | 46-54 | - | 13.8 |
+
+Two changes, both general: the JIT's signed `idot` family gets a wasm lowering -
+`i32x4.relaxed_dot_i8x16_i7x16_add_s` through the sign trick (dot(w, x) = dot(sign(x)*w, |x|),
+exact because Q8_0 quants sit in [-127, 127]), with the extmul + `extadd_pairwise` chain as the
+fallback where relaxed SIMD is absent - and `+relaxed-simd` joins the wasm feature string (every
+engine that runs memory64 shipped it first; no ABI moves). The portable kernels pick
+`dot_q8q8_idot4_ps` (and its s16 twin) on a wasm target at compile time and keep the template
+everywhere else. Gates: `tests/jit_tests/wasm_idot_lowering.das` (the cross dump carries the
+relaxed dot, the host dump no wasm intrinsic) and the new `test_q8q8_idot4_ps` cell in the
+kernel-family test (fp64 bar, s16 twin bit-identical). End to end: Kitten nano under node on 4
+lanes 0.27x -> 0.14x real time; in Chrome 0.37-0.43x -> 0.23-0.26x (the generator stage 1.1 s
+-> 0.57 s per sentence). Not measurements, one box. Next rungs by the same profile: the
+remaining 23% is spread thin (Snake's `sin` rows at 2.6%, libm `sinf`, the q8 quantizer), so the
+next win is structural - the two-token GEMM shape for the rows conv (`q8q8_batch_kernel` reads
+each weight row once per token) - or the story model's decode profile, not yet taken.
+
 Under the JIT the reference loops are auto-vectorized, so stage 1 is the SIMD-achievable floor
 for the default kernels. AOT and WASM have no vectorizer we control: the emitted C++ goes
 through clang, gcc or emcc, whose auto-vectorization of daslang loop shapes is hit and miss,
