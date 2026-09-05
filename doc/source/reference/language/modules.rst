@@ -101,9 +101,10 @@ line pulls a das package's registration glue exactly when that package is mounte
 ``typeinfo builtin_module_exists`` additionally sees **shared das modules**
 (``module X shared``) promoted by the running script - but a tool that compiles the
 same program in a nested context (lint, the language server, a test harness)
-promotes nothing, and there the trait answers false for every das target. Guard a
-path-guarded das target with ``typeinfo module_exists(target)`` instead: it asks the
-compiling program's own library, so the answer is the same on both rails.
+promotes nothing, and there the trait answers false for every das target. Guard the
+use of a guarded das target with ``typeinfo module_exists(target)`` instead: it asks
+whether the target is visible from the compiling module, which is exactly what the
+guarded ``require`` decided, so the answer is the same on both rails.
 
 Pair it with :ref:`typeinfo builtin_module_exists <generic_programming>` to guard
 code that uses the optional target's symbols — ``static_if`` drops the untaken

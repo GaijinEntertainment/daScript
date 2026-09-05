@@ -31,7 +31,7 @@ require daslib/module_path            // get_this_module_dir — the default pro
 require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses on a build without the marker rail
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
-require ?llvm/daslib/llvm_tune dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: --submit POSTs the stamped records to the exchange, which rides the tune framework
+require ?llvm dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: --submit POSTs the stamped records to the exchange, which rides the tune framework
 require llvm/daslib/llvm_tune   // tune_app_script — the exe-vs-script discriminator behind --for-debug-purposes
 require daslib/jobque_boost
 require daslib/clargs

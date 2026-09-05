@@ -7,17 +7,19 @@ module tune shared public
 require daslib/ast
 require daslib/ast_boost
 
-require ?llvm/daslib/llvm_code llvm/daslib/llvm_code public
-require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public
+require ?llvm llvm/daslib/llvm_code public
+require ?llvm llvm/daslib/llvm_tune public
 
 //! The six kernel-tuning annotations - `[tune_perm]`, `[tune_companion]`, `[tune]`,
 //! `[tune_scope]`, `[tune_policy]` and `[llvm_code]` - plus the default-policy infer pass, as
 //! shells every program can spell. The framework that implements them lives in
-//! `llvm/daslib/llvm_tune` and `llvm/daslib/llvm_code`, reached through the path guards above
-//! and re-exported, so `require daslib/tune` gives exactly what `require llvm/daslib/llvm_tune`
-//! gave; the guarded require is also the witness that makes `module_exists` below answer for
-//! this compile (`module_exists`, not `builtin_module_exists`: the program's own library, the
-//! same answer inside a tool's nested compile). Every tune annotation registers HERE and nowhere else, because a
+//! `llvm/daslib/llvm_tune` and `llvm/daslib/llvm_code`, reached through the `?llvm` guards
+//! above and re-exported, so `require daslib/tune` gives exactly what `require llvm/daslib/llvm_tune`
+//! gave. The guard is the `llvm` C++ witness module, compiled in exactly when the build is
+//! configured with dasLLVM - the das files being on disk never counts; the guarded require is
+//! then what makes `module_exists` below answer for this compile (`module_exists`, not
+//! `builtin_module_exists`: visible from this module, the same answer inside a tool's nested
+//! compile). Every tune annotation registers HERE and nowhere else, because a
 //! module's macro state is per-module: the `[tune_scope]` bank and the pass that reads it have
 //! to run in one macro context. Without dasLLVM every apply is a no-op - no sidecar read, no
 //! stamp, no `_variants()` registry, no tuner spawn - and the reference body IS the function.

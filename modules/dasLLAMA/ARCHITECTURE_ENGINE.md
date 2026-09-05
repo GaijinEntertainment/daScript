@@ -253,11 +253,11 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   sidecar-sibling file governs - unset asks on a real terminal, or emits
   `@sidecar consent state=needed` for the watchdog dialog / control page, and no request
   leaves until a surface records "accepted". The client is meaningless without a sidecar, so
-  every requirer takes it through the path guard `require ?llvm/daslib/llvm_tune
-  dasllama/dasllama_exchange` and wraps each use in
-  `static_if (typeinfo builtin_module_exists(dasllama_exchange))`: with no tune framework in the
-  build the server's `/exchange` routes answer `not_found`, the boot resolver and submit check
-  are never registered, and `lcpp_bench --submit` refuses before it measures.
+  every requirer takes it through the guard `require ?llvm dasllama/dasllama_exchange` (`llvm`
+  is the C++ witness module dasLLVM compiles in exactly when the build is configured with it)
+  and wraps each use in `static_if (typeinfo module_exists(dasllama_exchange))`: with no tune
+  framework in the build the server's `/exchange` routes answer `not_found`, the boot resolver
+  and submit check are never registered, and `lcpp_bench --submit` refuses before it measures.
 - **`benchmarks/asr/mem_census.sh`** - the peak-memory census (`/usr/bin/time -l` around one
   asr_bench process per cell; macOS only) - the interim footprint instrument until a footprint
   leg lands in `gen_bench_records`; its numbers live in `PERF_LEDGER.md`, never the stores.

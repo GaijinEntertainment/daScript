@@ -9,7 +9,7 @@ require dasllama/dasllama_scheduler   // continuous-batching scheduler (layer 3 
 require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
-require ?llvm/daslib/llvm_tune dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: the /exchange surface + submit rails, which ride the tune framework
+require ?llvm dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: the /exchange surface + submit rails, which ride the tune framework
 require llvm/daslib/llvm_tune   // tune_manifest_path — the /exchange apply target
 require daslib/defer            // defer() { delete js } — free the parsed request JSON on every exit path
 require model_catalog           // the curated list + the /catalog download rail

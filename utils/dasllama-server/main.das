@@ -26,7 +26,7 @@ require openai_server           // the server + route handlers (this directory)
 require model_catalog           // catalog_models_dir — the models-dir resolution
 require dasllama/dasllama       // load_model / QuantMode / load_asr_model
 require llvm/daslib/llvm_tune   // [tune_policy] + tune_status (the injected guard resolves here)
-require ?llvm/daslib/llvm_tune dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: the sidecar exchange (boot resolver + submit check), which rides the tune framework
+require ?llvm dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: the sidecar exchange (boot resolver + submit check), which rides the tune framework
 require jobque                  // set_jobque_threads_cap / set_jobque_affinity
 require daslib/clargs
 require daslib/toml

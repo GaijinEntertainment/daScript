@@ -12,7 +12,7 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/json_boost  // read_json / read_json_field (re-exports daslib/json)
 require daslib/strings_boost  // nolint:STYLE030,LINT019 - split/find, reached only by the no-framework fallback-chain scan
-require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune   // OPTIONAL: the per-app tune sidecar (path, staleness, kernels read)
+require ?llvm llvm/daslib/llvm_tune  // OPTIONAL: the per-app tune sidecar (path, staleness, kernels read)
 
 // ===== Tune spec =====
 

@@ -2859,12 +2859,14 @@ namespace das {
                 } else {
                     if (expr->subexpr->rtti_isVar()) {
                         auto evar = static_cast<ExprVar*>(expr->subexpr);
-                        // the compiling program's own library: a module this program required (directly or
-                        // through another module), C++ or das, promoted or not - the same answer whether the
-                        // program compiles as the running script or inside a tool's nested compile
+                        // visible from the compiling module - the module itself, one it requires, or one a
+                        // require re-exports public - C++ or das, promoted or not: the same answer whether
+                        // the program compiles as the running script or inside a tool's nested compile,
+                        // and "in the program somewhere" is not enough for the call the taken arm makes
                         auto mod = program->library.findModule(evar->name);
+                        bool visible = mod && program->thisModule->isVisibleDirectly(mod);
                         reportAstChanged();
-                        return new ExprConstBool(expr->at, mod != nullptr);
+                        return new ExprConstBool(expr->at, visible);
                     } else {
                         error("unsupported module name subexpression ", expr->subexpr->__rtti, "",
                               expr->at, CompilationError::invalid_typeinfo_module_subexpression);

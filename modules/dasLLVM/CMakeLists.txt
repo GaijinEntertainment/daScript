@@ -7,6 +7,14 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 
 	SET(DAS_LLVM_DIR ${PROJECT_SOURCE_DIR}/modules/dasLLVM)
 
+    # the `llvm` witness module (src/dasLLVM.cpp): compiled in exactly when this package is, so
+    # `require ?llvm <target>` follows the configure - the das files below are on disk in every
+    # checkout and would otherwise satisfy a path guard in a build without LLVM
+    ADD_MODULE_CPP(LLVM)
+    ADD_MODULE_LIB(libDasModuleLLVM dasModuleLLVM ${DAS_LLVM_DIR}/src/dasLLVM.cpp)
+    SETUP_CPP11(libDasModuleLLVM)
+    SETUP_CPP11(dasModuleLLVM)
+
     LIST(APPEND CMAKE_MODULE_PATH ${DAS_LLVM_DIR})
 
     set(DAS_LLVM_LIB_OUTPUT "${PROJECT_SOURCE_DIR}/lib")

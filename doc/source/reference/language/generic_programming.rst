@@ -153,7 +153,7 @@ All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` arg
 * ``typeinfo builtin_function_exists(expr)`` — true if a ``@@function`` exists
 * ``typeinfo builtin_annotation_exists(expr)`` — true if an annotation type exists
 * ``typeinfo builtin_module_exists(expr)`` — true if a module is registered in the process: a linked C++ module, or a shared das module promoted by a running script
-* ``typeinfo module_exists(expr)`` — true if the compiling program's own library holds the module, i.e. this program required it (directly or through another module); the answer is the same inside a tool's nested compile, which is what a ``require ?path`` witness needs
+* ``typeinfo module_exists(expr)`` — true if the module is visible from the compiling module: the module itself, one it requires, or one a require re-exports ``public``; the answer is the same inside a tool's nested compile, which is what a guarded ``require`` needs
 * ``typeinfo is_argument(expr)`` — true if the expression is a function argument
 * ``typeinfo mangled_name(expr)`` — returns the mangled name of a ``@@function``
 
