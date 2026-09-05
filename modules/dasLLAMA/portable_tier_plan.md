@@ -225,10 +225,25 @@ file.
 5. The NEON tier's require takes the path guard.
 6. `tests/run.das` gets a no-tune arm (the framework's reference policy; `run.das:309`
    hard-codes `-jit` with no knob today), and the suite plus the parity rails run under it on
-   the stage-0 gates.
+   the stage-0 gates. (Landed as `--no-tune`; the whole-suite run under it is 2.5 h and was
+   cancelled - the suite rework in flight elsewhere is the gate, this arc runs single files.)
 7. Measure the portable floor on the reference small models (decode and prefill, ASR and
    TTS cells), under the measurement discipline: it is the number every later tier is judged
    against.
+8. The `-jit -exe` rail under the reference policy (landed). A standalone exe targets the host
+   CPU only when the program carries `[llvm_code]` kernels (`llvm_jit_run.das`,
+   `has_generated_kernel`); with the framework short-circuited there are none, the exe is the
+   generic ARMv8.0 baseline, and the NEON tier's reference bodies still name-resolved
+   `aarch64_neon::sdot4` to SDOT - a fatal `Cannot select` at codegen. The SDOT and SMMLA
+   tables now gate on `g_target_arm64_dotprod` / `g_target_arm64_i8mm` (host rail: always /
+   detected; generic and cross rails: the force env only), and a force-env feature reaches the
+   generic machine's string, so the gates and the machine stay one truth
+   (`modules/dasLLVM/ARCHITECTURE.md#aarch64-feature-truth`). The generic exe runs the NEON
+   tier on the scalar `sdot4` fallback - slower than the portable backend's auto-vectorized
+   `dot_q8q8`; whether the `[init]` backend gates should also consult the exe's feature rail is a
+   stage-2 question, alongside the same shape under AOT. Gates: `tests/jit_tests/aarch64_neon.das`
+   (hardware vs reference per intrinsic), the baseline probe in `tests/jit_tests/exe_host_cpu.das`
+   (red on the pre-fix emitter), and `test_exe_smoke` under `DAS_TUNE_POLICY=reference`.
 
 **Exit:** a `-DDAS_LLVM_DISABLED=ON` tree compiles the engine and its suite; a `-jit` run with
 the framework short-circuited is green on the stage-0 gates and parity; the floor is in

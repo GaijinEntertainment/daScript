@@ -179,17 +179,24 @@ let g_intrin_lookup <- {
     "math::normalize" => @@intrinsic_math_normalize
 }
 
-// AArch64 NEON intrinsics (the llvm/aarch64_neon header), consulted only when the JIT target is
+// AArch64 NEON intrinsics (the daslib/aarch64_neon module), consulted only when the JIT target is
 // aarch64. On any other target has_intrinsic returns false for these keys and the call's own
 // daslang body — the portable fallback in the declaring module — compiles as a normal function.
-// That silent degrade-to-fallback contract holds for every table in this section.
+// That silent degrade-to-fallback contract holds for every table in this section. The baseline
+// table is ARMv8.0 (TBL); the SDOT and SMMLA tables carry their own feature gates
+// (g_target_arm64_dotprod / g_target_arm64_i8mm), because a generic-CPU exe targets the
+// baseline machine, where either instruction is a fatal "Cannot select" at codegen.
 let g_aarch64_intrin_lookup <- {
+    "aarch64_neon::tbl16_lo" => @@intrinsic_tbl16,
+    "aarch64_neon::tbl16_hi" => @@intrinsic_tbl16
+}
+let g_aarch64_dotprod_intrin_lookup <- {   // ARMv8.2 DotProd
     "aarch64_neon::sdot4" => @@intrinsic_sdot4,
     "aarch64_neon::sdot4_laneq" => @@intrinsic_sdot4_laneq,
     "aarch64_neon::sdot4_w" => @@intrinsic_sdot4_w,
-    "aarch64_neon::sdot4_laneq_w" => @@intrinsic_sdot4_laneq_w,
-    "aarch64_neon::tbl16_lo" => @@intrinsic_tbl16,
-    "aarch64_neon::tbl16_hi" => @@intrinsic_tbl16,
+    "aarch64_neon::sdot4_laneq_w" => @@intrinsic_sdot4_laneq_w
+}
+let g_aarch64_i8mm_intrin_lookup <- {   // ARMv8.6 i8mm
     "aarch64_neon::smmla" => @@intrinsic_smmla
 }
 
@@ -276,6 +283,16 @@ def public has_intrinsic(expr : ExprCallFunc?) {
             result = true
         }
     }
+    if (!result && g_target_arm64_dotprod) {
+        g_aarch64_dotprod_intrin_lookup |> get(call_name) $(_pfun) {
+            result = true
+        }
+    }
+    if (!result && g_target_arm64_i8mm) {
+        g_aarch64_i8mm_intrin_lookup |> get(call_name) $(_pfun) {
+            result = true
+        }
+    }
     if (!result && g_target_x64_avx2) {
         g_x64_intrin_lookup |> get(call_name) $(_pfun) {
             result = true
@@ -317,6 +334,16 @@ def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder
     }
     if (result == null && g_target_is_aarch64) {
         g_aarch64_intrin_lookup |> get(call_name) $(pfun) {
+            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
+        }
+    }
+    if (result == null && g_target_arm64_dotprod) {
+        g_aarch64_dotprod_intrin_lookup |> get(call_name) $(pfun) {
+            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
+        }
+    }
+    if (result == null && g_target_arm64_i8mm) {
+        g_aarch64_i8mm_intrin_lookup |> get(call_name) $(pfun) {
             result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
         }
     }
@@ -1513,9 +1540,9 @@ def intrinsic_math_sinh_cosh_tanh(var ctx : JitCtx; expr : ExprCallFunc?; argume
 }
 
 // ===== the idot family: exact integer dots on the 8-bit lattice =====
-// Two lowerings: the signed x signed form emits ONE @llvm.aarch64.neon.sdot on the aarch64
-// host-features rail (g_target_host_features = exactly when +dotprod is force-appended, see
-// init_jit_target_flags); everything else gets generic widen-multiply IR. The AArch64 backend
+// Two lowerings: the signed x signed form emits ONE @llvm.aarch64.neon.sdot where the target has
+// DotProd (g_target_arm64_dotprod: the host rail's +dotprod append, or the force env on the
+// generic rail); everything else gets generic widen-multiply IR. The AArch64 backend
 // does NOT fold the generic form to SDOT (probe: zip/uzp/smull expansion), hence the native arm.
 // The unsigned x signed form needs USDOT (i8mm — absent on M1); it rides the i8mm un-gate item.
 def private idot_products(var ctx : JitCtx; expr : ExprCallFunc?; a, b : LLVMOpaqueValue?; aIdx : int) : LLVMOpaqueValue? {   // nolint:LINT014 — shared by the idot intrinsics
@@ -1545,7 +1572,7 @@ def private idot_sdot_aarch64(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : 
 
 def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let aUnsigned = expr.arguments[0]._type.vectorBaseType == Type.tUInt8
-    if (g_target_is_aarch64 && g_target_host_features && !aUnsigned) {
+    if (g_target_arm64_dotprod && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var s = idot_sdot_aarch64(ctx, LLVMConstNull(v4i32), arguments[0], arguments[1])
         if (s != null) {
@@ -1577,7 +1604,7 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
     let hasAcc = length(arguments) == 3
     let aIdx = hasAcc ? 1 : 0
     let aUnsigned = expr.arguments[aIdx]._type.vectorBaseType == Type.tUInt8
-    if (g_target_is_aarch64 && g_target_host_features && !aUnsigned) {
+    if (g_target_arm64_dotprod && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var acc = hasAcc ? arguments[0] : LLVMConstNull(v4i32)
         var s = idot_sdot_aarch64(ctx, acc, arguments[aIdx], arguments[aIdx + 1])

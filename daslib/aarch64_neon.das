@@ -6,11 +6,13 @@ module aarch64_neon shared public
 //
 // Every function here computes the correct result on ANY target via its daslang body — so the
 // interpreter, AOT, and non-ARM JIT builds all just run that body. On an aarch64 JIT target the
-// LLVM JIT recognizes the call BY NAME (see g_aarch64_intrin_lookup in llvm_jit_intrin.das, gated
-// on g_target_is_aarch64) and emits the hardware NEON instruction in place of the call. There is
+// LLVM JIT recognizes the call BY NAME (the g_aarch64_*_intrin_lookup tables in llvm_jit_intrin.das,
+// gated on the target arch and on the instruction's feature: TBL is baseline, SDOT needs DotProd,
+// SMMLA needs i8mm) and emits the hardware NEON instruction in place of the call. There is
 // nothing to annotate and nothing to require from the llvm module — the recognition is purely
 // name-based at JIT codegen time, so the fallback runs verbatim everywhere the intrinsic isn't
-// emitted. Callers therefore get the fast path for free on arm64 and stay correct elsewhere.
+// emitted: a foreign arch, or a generic-CPU aarch64 exe whose baseline machine lacks the feature.
+// Callers therefore get the fast path for free on arm64 and stay correct elsewhere.
 
 //! Signed dot-product (`SDOT` / `@llvm.aarch64.neon.sdot`): load 16 int8 from each of `w` and `x`
 //! (16-wide unaligned loads), multiply elementwise, and accumulate consecutive groups of 4 products

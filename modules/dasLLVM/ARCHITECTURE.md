@@ -138,7 +138,12 @@ instead (sysctl / `AT_HWCAP` / `IsProcessorFeaturePresent`), so it answers for s
 never heard of. Both the tier gates (`init_jit_target_flags`) and the target machine's feature
 string (`create_default_target_machine`) therefore take the union of the two: an LLVM host-string
 hit OR a `cpu_supports` hit (fullfp16 additionally reads darwin-arm64 as always-on - every
-Apple Silicon part has it). A cross-compile triple takes neither - only the force env.
+Apple Silicon part has it). A cross-compile triple takes neither - only the force env - and so
+does a generic-CPU standalone exe (one carrying no `[llvm_code]` kernel): its machine is the
+ARMv8.0 baseline, which cannot select SDOT or SMMLA, so the DotProd and i8mm gates
+(`g_target_arm64_dotprod`, `g_target_arm64_i8mm`) stay off there and every `aarch64_neon` call
+that needs either compiles its daslang fallback body. The gates and the machine string are one
+truth on both rails: a force-env feature raises the gate AND is appended to the generic machine.
 
 The two ways a feature reaches the target machine's string license different things. A
 detection-derived append - `+dotprod` always, `+i8mm` when `cpu_supports` confirms it - is
