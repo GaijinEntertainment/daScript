@@ -10,8 +10,8 @@ other tier the reference body runs verbatim.
 `daslib/tune` registers all six annotations - `[tune]`, `[tune_perm]`,
 `[tune_companion]`, `[tune_scope]`, `[tune_policy]`, `[llvm_code]` - and the
 default-policy pass; the framework behind them is `llvm/daslib/llvm_tune`,
-which `daslib/tune` reaches through the `?llvm` witness guard (present exactly when the build is configured with dasLLVM) and re-exports. **Any program
-can spell the annotations and compile whether or not dasLLVM is configured.**
+which `daslib/tune` reaches through the `?llvm` witness guard (present exactly when the build is configured with dasLLVM) and re-exports; the `llvm/daslib/*` paths themselves resolve only with the witness, so a direct `require llvm/daslib/llvm_tune` marks a program as framework-only - it fails to compile without dasLLVM instead of compiling hollow. **Any program
+that reaches the framework through `daslib/tune` alone can spell the annotations and compile whether or not dasLLVM is configured.**
 Without dasLLVM every one of them does nothing at all - no sidecar read, no
 stamp, no `<name>_variants()` registry, no tuner spawn - and the reference
 body IS the function.

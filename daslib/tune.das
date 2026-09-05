@@ -113,23 +113,33 @@ class private TuneDefaultPolicyShell : AstPassMacro {
 //! Silent when the table is empty, and in a build without the framework - nothing was stamped.
 [arch(at = "ARCHITECTURE.md#tune-shells-module-exists")]
 def log_tune_status(appName : string) {
-    static_if (typeinfo module_exists(llvm_tune)) {
-        var st <- tune_status()
-        if (empty(st)) {
-            delete st
-            return
-        }
-        var tuned = 0
-        for (s in st) {
-            tuned += (s.source == "manifest" || s.source == "profile") ? 1 : 0
-        }
-        to_log(LOG_INFO, "{appName}: tune status ({tuned}/{length(st)} kernels tuned for this box):\n")
-        for (s in st) {
-            to_log(LOG_INFO, "  {s.fname}: {empty(s.suffix) ? "reference" : s.suffix} ({s.source})\n")
-        }
-        if (tuned < length(st)) {
-            to_log(LOG_INFO, "{appName}: run with --tune to tune the remaining kernels for this box\n")
-        }
-        delete st
+    var inscope rows <- tune_status_rows()
+    if (empty(rows)) {
+        return
     }
+    var tuned = 0
+    for (r in rows) {
+        tuned += (r.source == "manifest" || r.source == "profile") ? 1 : 0
+    }
+    to_log(LOG_INFO, "{appName}: tune status ({tuned}/{length(rows)} kernels tuned for this box):\n")
+    for (r in rows) {
+        to_log(LOG_INFO, "  {r.fname}: {empty(r.suffix) ? "reference" : r.suffix} ({r.source})\n")
+    }
+    if (tuned < length(rows)) {
+        to_log(LOG_INFO, "{appName}: run with --tune to tune the remaining kernels for this box\n")
+    }
+}
+
+//! The status table as plain strings - the framework's row type never crosses the guard, so the
+//! caller above is one function in every build; empty without the framework.
+def private tune_status_rows() : array<tuple<fname : string; suffix : string; source : string>> {
+    var rows : array<tuple<fname : string; suffix : string; source : string>>
+    static_if (typeinfo module_exists(llvm_tune)) {
+        var inscope st <- tune_status()
+        rows |> reserve(length(st))
+        for (s in st) {
+            rows |> push((fname = s.fname, suffix = s.suffix, source = s.source))
+        }
+    }
+    return <- rows
 }
