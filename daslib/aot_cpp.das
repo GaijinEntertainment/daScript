@@ -619,9 +619,13 @@ class public PrologueMarker : AstVisitor {
 };
 
 class UseTypeMarker : AstVisitor {
-    //! AST visitor that collects structs and enums used in AOT-eligible functions.
+    //! AST visitor that collects structs, enums and handled types used in AOT-eligible functions,
+    //! and the modules whose functions the used functions and globals call (externs included).
     useStructs : table<Structure?>;
     useEnums : table<Enumeration?>;
+    useHandles : table<TypeAnnotation?>;
+    useModules : table<Module?>;
+    inUsedCode : bool = false;
 
     def override preVisitTypeDecl(typeDecl : TypeDeclPtr) {
     }
@@ -630,8 +634,30 @@ class UseTypeMarker : AstVisitor {
         return !fn.flags.noAot;
     }
 
+    def override preVisitFunction(fun : FunctionPtr) {
+        inUsedCode = fun.flags.used;
+    }
+    def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
+        inUsedCode = false;
+        return <- fun;
+    }
     def override preVisitExpression(expr : ExpressionPtr) {
         mark(expr._type);
+    }
+    def override preVisitExprCall(expr : ExprCall?) {
+        markCallee(expr.func);
+    }
+    def override preVisitExprOp1(expr : ExprOp1?) {
+        markCallee(expr.func);
+    }
+    def override preVisitExprOp2(expr : ExprOp2?) {
+        markCallee(expr.func);
+    }
+    def override preVisitExprOp3(expr : ExprOp3?) {
+        markCallee(expr.func);
+    }
+    def override preVisitExprAddr(expr : ExprAddr?) {
+        markCallee(expr.func);
     }
     def override preVisitFunctionArgument(fn : FunctionPtr; variable : VariablePtr; lastArg : bool) {
         mark(variable._type);
@@ -640,7 +666,17 @@ class UseTypeMarker : AstVisitor {
         mark(variable._type);
     }
     def override preVisitGlobalLetVariable(variable : Variable?; lastArg : bool) {
+        inUsedCode = variable.flags.used;
         mark(variable._type);
+    }
+    def override visitGlobalLetVariable(var variable : VariablePtr; lastArg : bool) : VariablePtr {
+        inUsedCode = false;
+        return <- variable;
+    }
+    def markCallee(fn : Function?) {
+        if (inUsedCode && fn != null && fn._module != null) {
+            useModules.insert(fn._module);
+        }
     }
     def mark(decl : TypeDeclPtr) {
         if (decl == null) return ;
@@ -658,6 +694,12 @@ class UseTypeMarker : AstVisitor {
                  decl.baseType == Type.tEnumeration64) {
             assert(decl.enumType != null);
             useEnums.insert(decl.enumType);
+        } elif (decl.baseType == Type.tHandle) {
+            //! a handled type decides whether a C++ module is linked, so only code the runtime
+            //! program reaches counts - a dead function naming FILE? must not pull fio_core in
+            if (inUsedCode && decl.annotation != null) {
+                useHandles.insert(decl.annotation);
+            }
         } else {
             if (decl.firstType != null) mark(decl.firstType);
             if (decl.secondType != null) mark(decl.secondType);
@@ -4372,12 +4414,33 @@ def public dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; 
     write(*tw, "static AotListBase impl(registerAotFunctions);\n");
 }
 
+//! The builtin C++ modules in the order `register_builtin_modules_impl` (`src/builtin/modules.cpp`)
+//! registers them. A module constructor requires `strings` / `rtti_core` by name, so this order is
+//! the one every host already relies on; it goes first in a standalone context's registration.
+let public DEFAULT_MODULE_ORDER = [
+    "Module_BuiltIn", "Module_Math", "Module_Strings", "Module_Rtti", "Module_Ast", "Module_Jit",
+    "Module_Debugger", "Module_Network", "Module_UriParser", "Module_JobQue", "Module_FIO", "Module_DASBIND"
+]
+
+def private isCppModule(mod : Module?) : bool {
+    return !empty(mod.cppClassName)
+}
+
+def private canAotModule(mod : Module?) : bool {
+    var ok = false
+    build_string() $(wr) {
+        ok = mod |> aot_require(unsafe(addr(wr)))
+    }
+    return ok
+}
+
 def private collectUsedModules(program : ProgramPtr) : table<Module?> {
-    //! Modules owning a function, struct or enum the runtime program still reaches.
+    //! Modules owning a function (externs included), struct, enum or handled type the runtime
+    //! program still reaches.
     var used : table<Module?>
     program.get_ptr() |> for_each_module_no_order($(pm) {
         pm |> for_each_module_function($(pfun) {
-            if (pfun.index >= 0 && pfun.flags.used && !pfun.flags.builtIn && pfun._module != null) {
+            if (pfun.index >= 0 && pfun.flags.used && pfun._module != null) {
                 used |> insert(pfun._module)
             }
         })
@@ -4396,23 +4459,148 @@ def private collectUsedModules(program : ProgramPtr) : table<Module?> {
             used |> insert(en._module)
         }
     }
+    for (ann in keys(utm.useHandles)) {
+        if (ann._module != null) {
+            used |> insert(ann._module)
+        }
+    }
+    for (mod in keys(utm.useModules)) {
+        used |> insert(mod)
+    }
     unsafe {
         delete utm
     }
     return <- used
 }
 
+//! a module of a standalone context's registration list, with its cross-TU registration rank
+struct public StandaloneModuleEntry {
+    mod : Module?
+    rank : int
+}
+
+def private insertWithDependencies(var linked, visited : table<Module?>; var mod : Module?) {
+    //! `visited` tracks the walk, not membership: a module already linked as used still has
+    //! its dependencies to bring in
+    if (visited |> key_exists(mod)) return
+    visited |> insert(mod)
+    linked |> insert(mod)
+    module_for_each_dependency(mod) $(dep; _pub) {
+        if (isCppModule(dep) && canAotModule(dep)) {
+            insertWithDependencies(linked, visited, dep)
+        }
+    }
+}
+
+def private cppDependencyDepth(linked : table<Module?>; var visiting : table<Module?>; var mod : Module?) : int {
+    //! 1 + the deepest linked C++ dependency - a rank that puts dependencies first across TUs;
+    //! `visiting` cuts dependency cycles (modules require each other), which count as depth 0
+    if (visiting |> key_exists(mod)) return 0
+    visiting |> insert(mod)
+    var depth = 0
+    module_for_each_dependency(mod) $(dep; _pub) {
+        if (isCppModule(dep) && (linked |> key_exists(dep))) {
+            let depDepth = cppDependencyDepth(linked, visiting, dep)
+            if (depDepth > depth) {
+                depth = depDepth
+            }
+        }
+    }
+    visiting |> erase(mod)
+    return depth + 1
+}
+
+def public collectLinkedModules(program : ProgramPtr) : table<Module?> {
+    //! Modules a standalone context links: what the runtime program uses, and - once that reaches a
+    //! C++ module beyond the builtin one - the default C++ modules the compiler loaded plus every
+    //! linked C++ module's dependencies, because module constructors require those by name.
+    var linked <- collectUsedModules(program)
+    var reachesCpp = false
+    for (mod in keys(linked)) {
+        if (isCppModule(mod) && mod.cppClassName != "Module_BuiltIn") {
+            reachesCpp = true
+        }
+    }
+    if (!reachesCpp) {
+        return <- linked
+    }
+    var cppModules : array<Module?>
+    program.get_ptr() |> for_each_module($(mod) {
+        if (mod.name != "" && isCppModule(mod)) {
+            cppModules |> push(mod)
+        }
+    })
+    var visited : table<Module?>
+    for (mod in cppModules) {
+        let isDefault = DEFAULT_MODULE_ORDER |> find_index(string(mod.cppClassName)) >= 0
+        if ((isDefault || (linked |> key_exists(mod))) && canAotModule(mod)) {
+            insertWithDependencies(linked, visited, mod)
+        }
+    }
+    return <- linked
+}
+
+def public standaloneModuleRegistration(program : ProgramPtr) : array<StandaloneModuleEntry> {
+    //! The C++ modules a standalone context registers: the builtin set first in
+    //! `DEFAULT_MODULE_ORDER`, then the rest dependencies-first; the rank orders the same way
+    //! across TUs. Empty when the program reaches no C++ module beyond the builtin one.
+    let linked <- collectLinkedModules(program)
+    var ordered : array<StandaloneModuleEntry>
+    var visited : table<Module?>
+    var cppModules : array<Module?>
+    program.get_ptr() |> for_each_module($(mod) {
+        if (mod.name != "" && isCppModule(mod) && (linked |> key_exists(mod))) {
+            cppModules |> push(mod)
+        }
+    })
+    if (length(cppModules) <= 1) {
+        return <- ordered
+    }
+    ordered |> reserve(length(cppModules))
+    var rank = 0
+    for (className in DEFAULT_MODULE_ORDER) {
+        for (mod in cppModules) {
+            if (mod.cppClassName == className && !(visited |> key_exists(mod))) {
+                visited |> insert(mod)
+                ordered |> push(StandaloneModuleEntry(mod = mod, rank = rank))
+            }
+        }
+        rank++
+    }
+    var rest : array<Module?>
+    for (mod in cppModules) {
+        appendDependenciesFirst(rest, visited, linked, mod)
+    }
+    for (mod in rest) {
+        var visiting : table<Module?>
+        ordered |> push(StandaloneModuleEntry(mod = mod, rank = length(DEFAULT_MODULE_ORDER) + cppDependencyDepth(linked, visiting, mod)))
+    }
+    return <- ordered
+}
+
+def private appendDependenciesFirst(var ordered : array<Module?>; var visited : table<Module?>; linked : table<Module?>; var mod : Module?) {
+    if (visited |> key_exists(mod)) return
+    visited |> insert(mod)
+    module_for_each_dependency(mod) $(dep; _pub) {
+        if (linked |> key_exists(dep) && isCppModule(dep)) {
+            appendDependenciesFirst(ordered, visited, linked, dep)
+        }
+    }
+    ordered |> push(mod)
+}
+
 def public getRequiredModulesFor(program : ProgramPtr; prune_to_used : bool = false) {
     //! Collects required module declarations and checks for no-AOT modules in the program.
-    //! `prune_to_used` drops modules the runtime program never reaches - standalone only.
+    //! `prune_to_used` drops modules the runtime program never reaches - standalone only - and then
+    //! the linked set alone decides; `fromExtraDependency` is a host-process fact (ARCHITECTURE_EMIT sec. 5).
     var modules_str : array<string>
     var noAotModule = false
-    let used <- prune_to_used ? collectUsedModules(program) : table<Module?>()
+    let linked <- prune_to_used ? collectLinkedModules(program) : table<Module?>()
     program.get_ptr() |> for_each_module($(mod) {
         if (mod.name == "") {
-        } elif (mod.moduleFlags.fromExtraDependency && mod.name != "builtin") {
-        } elif (prune_to_used && mod.name != "$" && mod.name != "builtin" && !(used |> key_exists(mod))) {
+        } elif (prune_to_used && mod.name != "$" && mod.name != "builtin" && !(linked |> key_exists(mod))) {
             modules_str |> push(" // require {mod.name} - compile time only, not linked\n")
+        } elif (!prune_to_used && mod.moduleFlags.fromExtraDependency && mod.name != "builtin") {
         } else {
             modules_str |> push(build_string() $(wr) {
                 write(wr, " // require {mod.name}\n")
