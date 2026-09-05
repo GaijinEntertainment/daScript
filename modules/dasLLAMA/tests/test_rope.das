@@ -114,9 +114,23 @@ def test_rope_gen_ff_ones(t : T?) {
     }
 }
 
+//! a float's rank on the ulp line: the raw bits for a non-negative value, mirrored for a negative one, so
+//! -0.0 and +0.0 share rank 0 and a difference across the sign bit counts the values it spans
+def private ulp_rank(x : float) : int64 {
+    let bits = unsafe(reinterpret<int>(x))
+    return bits >= 0 ? int64(bits) : -2147483648l - int64(bits)
+}
+
+def private ulps_apart(a, b : float) : int64 {
+    return abs(ulp_rank(a) - ulp_rank(b))
+}
+
+//! the two layouts agree to the ulp, not the bit: under -jit the packed row's single loop vectorizes
+//! onto the aarch64 polynomial sin/cos rail while the tabs' nested loop stays on scalar libm, and the
+//! two disagree in the last bit on a few elements; the multiplication orders still coincide at fscale=1
 [test]
 def test_rope_gen_cross_layout(t : T?) {
-    t |> run("packed row == two-tab row at fscale=1 (the orders coincide there)") @(t : T?) {
+    t |> run("packed row and two-tab row agree within 1 ulp at fscale=1 (the orders coincide there)") @(t : T?) {
         var ct : array<float>
         var st : array<float>
         var ff <- ff_none()
@@ -126,11 +140,17 @@ def test_rope_gen_cross_layout(t : T?) {
         var packed : array<float>
         packed |> resize(int(hs))
         build_rope_row_packed(packed, 0l, pos, hs, 10000.0, 1.0, 1.0, ff)
-        var same = true
+        var worst = 0l
         for (j in range(int(hs / 2l))) {
-            same &&= packed[j] == ct[j] && packed[int(hs / 2l) + j] == st[j]
+            worst = max(worst, ulps_apart(packed[j], ct[j]))
+            worst = max(worst, ulps_apart(packed[int(hs / 2l) + j], st[j]))
         }
-        t |> success(same, "layouts must agree element-wise at fscale=1")
+        t |> success(worst <= 1l, "layouts agree within 1 ulp at fscale=1 (worst {worst} ulp)")
+        //! the bar's control: a cos value 2 ulps off its table twin lands outside it
+        let poisoned = unsafe(reinterpret<float>(unsafe(reinterpret<int>(ct[3])) + 2))
+        t |> success(ulps_apart(poisoned, ct[3]) > 1l, "a 2-ulp poison lands outside the bar")
+        t |> equal(ulps_apart(-0.0, 0.0), 0l, "the two zeros are one value on the ulp line")
+        t |> equal(ulps_apart(-1e-45, 1e-45), 2l, "a difference across the sign bit counts the values it spans")
         delete ct
         delete st
         delete packed
