@@ -372,6 +372,7 @@ def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : in
     let ts = ref_time_ticks()
     var baked = false
     with_job_que() {
+        setup_dasllama_jobque()
         baked = bake_styletts2_image(cfg.model, out, q8)
     }
     var st : FStat

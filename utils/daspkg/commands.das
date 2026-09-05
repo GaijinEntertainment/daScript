@@ -2665,7 +2665,7 @@ def private ensure_external_wasm_archives(pkg_dir, wasm_lib_dir : string; var bu
 // Build one app: cross-compile → discover modules → emcc-link → stage assets.
 def private release_one_wasm_app(root, out_dir, app_name, main_script : string; // nolint:STYLE037,STYLE038 — flat per-app wasm release steps + their error arms
                                  wasm_lib_dir, runtime_archive, shell_path : string;
-                                 include_globs, exclude_globs, disabled_modules : array<string>) : int {
+                                 include_globs, exclude_globs, disabled_modules, app_emcc_args : array<string>) : int {
     if (!is_safe_pkg_name(app_name)) {
         to_log(LOG_ERROR, "release wasm: unsafe app name `{app_name}` (no path separators / `.` / `..`)\n")
         return 1
@@ -2784,6 +2784,9 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         }
     }
 
+    // the app's own release_emcc_arg() lines come last, after every module's: an app-level flag wins
+    emcc_args |> push_from(app_emcc_args)
+
     // 4. emcc link → <app>.{html,js,wasm}. run_cmd handles the Windows
     //    cmd.exe outer-quote wrapping, so quoted paths survive on every host.
     let html_out = path_join(app_out_dir, "{app_name}.html")
@@ -2901,5 +2904,5 @@ def cmd_release_wasm(root : string; out_dir : string; wasm_lib_dir_override : st
     }
 
     mkdir_rec(out_dir)
-    return release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs, spec.wasm_disabled_modules)
+    return release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs, spec.wasm_disabled_modules, spec.emcc_args)
 }
