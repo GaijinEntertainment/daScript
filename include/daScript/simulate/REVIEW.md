@@ -14,6 +14,12 @@ checklist on its own.
   that refuses a record written under other policies, so a field missing from it is a policy the
   cache silently ignores.
 
+- **A diff that hashes a table key computes `hash_function(context, key)` on the key's own
+  type, or goes through `KeyHash` (`runtime_table.h`), which hashes the same bytes.** A table
+  grow rehashes every key with `KeyHash`, so a site that hashes the key over a different number
+  of bytes - a 2- or 3-lane vector, or a range widened to `vec4f` - loses every key past the
+  first grow.
+
 - **A diff that makes the hot path more expensive per evaluated expression is a defect - an
   added load, branch, call, copy, or counter, a direct call becoming indirect, a static
   dispatch becoming virtual, and an unboxed value becoming a boxed round-trip all count.**
