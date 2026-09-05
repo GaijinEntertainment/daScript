@@ -10,11 +10,13 @@ options _dasllama_internal = true
 //! Phi-3, Gemma-2/3/4, gpt-oss) — ``load_model`` dispatches on GGUF metadata, so the same
 //! program runs any of them; ``arch_names()`` lists the live registry.
 //!
-//! Run model programs with ``-jit`` (interpreted inference is far too slow), wrap the
-//! generation in ``with_job_que()`` from ``daslib/jobque_boost`` so the kernels can thread, and
-//! declare ``options stack = 524288`` — the forward chain outgrows the 16K default, and
-//! a required module cannot raise the program's stack for you. See ``examples/dasLLAMA/run.das``
-//! and ``chat.das`` for the canonical shape.
+//! Run model programs with ``-jit``: interpreted inference is far too slow. Wrap the model work
+//! in ``with_job_que()`` from ``daslib/jobque_boost`` so the kernels can thread. Call
+//! ``setup_dasllama_jobque()`` inside it, before the first ``load_model``, ``generate`` or ``eval``:
+//! the engine panics on a queue nobody configured, because a bare queue runs ~200x slower.
+//! Declare ``options stack = 524288``: the forward chain outgrows the 16K default, and a required
+//! module cannot raise the program's stack for you. See ``examples/dasLLAMA/run.das`` and
+//! ``chat.das`` for the canonical shape.
 
 module dasllama shared public
 

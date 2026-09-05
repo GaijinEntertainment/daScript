@@ -1,0 +1,1 @@
+Report whether the current context pools its per-job fork contexts, which `set_jobque_fork_pool` turns on. The flag belongs to the context, not the queue, so it stays on across queues created after the call; a library that needs a configured queue reads it to tell a bare one apart.

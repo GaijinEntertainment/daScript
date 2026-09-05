@@ -5,6 +5,7 @@ options _dasllama_internal = true
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_spm
 require dasllama/dasllama_convert
+require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require math
 
@@ -48,6 +49,7 @@ def main {
 
     // 2) divergence: fp32 greedy vs the REAL all-weights Q4 forward, same model
     with_job_que() {
+        setup_dasllama_jobque_()
         var sref <- make_run_state(c)
         let ref_ids <- generate(t, sref, [1l], N_TOKENS)  // gold: fp32 (quant defaults fp32)
         quantize_weights_q4(t)                            // sets t.quant = q4_0

@@ -57,6 +57,7 @@ def test_forward_end_to_end(t : T?) {
         let prev_act = get_act_vec()
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
         with_job_que() {
+            setup_dasllama_jobque_()
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
@@ -88,6 +89,7 @@ def test_forward_q8(t : T?) {
         let prev_act = get_act_vec()
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
         with_job_que() {
+            setup_dasllama_jobque_()
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
@@ -153,6 +155,7 @@ def test_forward_q4(t : T?) {
         let prev_act = get_act_vec()
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
         with_job_que() {
+            setup_dasllama_jobque_()
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
@@ -182,6 +185,7 @@ def test_forward_threaded_decode_attention(t : T?) {
         var s_inl <- make_run_state(c)
         let prev_thr = get_target_chunk_work()
         with_job_que() {
+            setup_dasllama_jobque_()
             // same token sequence through both sessions; heads write disjoint att/xb slices, so the
             // threaded head loop must be BIT-exact vs inline — any diff is a race, not a tolerance
             set_target_chunk_work(1l)   // always thread (every attention work count >= 2 lanes)

@@ -13,6 +13,7 @@ require dasllama/dasllama_vision
 require dasllama/dasllama_vision_embedder
 require dasllama/dasllama_metal_tower   // registers the GPU tower hooks ([init]) — without it the load picks the CPU q8 lane
 require dasllama/dasllama_env
+require dasllama/dasllama_math   // setup_dasllama_jobque_
 require metal/das_metal_boost
 require ../performance/profile_common.das   // tune_gate — the standing pre-measure stack
 
@@ -30,6 +31,7 @@ def private cpu_burn(ms : int) {
 [export]
 def main() {
     with_job_que() {
+        setup_dasllama_jobque_()
         probe()
     }
 }

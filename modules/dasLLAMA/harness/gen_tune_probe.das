@@ -1450,6 +1450,7 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
         tbest[i] = gbest[i]
     }
     with_job_que() {   // the lane count and the team dispatch both need the live jobque
+        setup_dasllama_jobque_()
         if (get_total_hw_jobs() > 1) {
             var kefx <- build_kq_fixture(fmt, 14336l, 512l, 1l)
             let TILES = 320l

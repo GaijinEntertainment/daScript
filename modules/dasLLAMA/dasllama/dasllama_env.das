@@ -62,6 +62,9 @@ struct public EngineEnv {
     @clarg_doc = "A/B rail for the dispatch caller's thread priority, -2..2; unset claims the top notch."
     caller_prio : int = 2
 
+    @clarg_doc = "Let the engine dispatch on a job queue nobody configured with setup_dasllama_jobque: a loud warning instead of the panic. A bare queue decodes ~200x slower, so only a run measuring that regime wants it."
+    allow_bare_jobque : bool = false
+
     @clarg_doc = "Regenerate the stored parity truth files instead of comparing against them."
     truth_refresh : bool = false
 

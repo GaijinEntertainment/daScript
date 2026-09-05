@@ -40,6 +40,7 @@ def private file_row(path : string; r, all : int64) : array<float> {
 def private greedy_turn(var m : Model; user : string; n : int64) : string {
     var text = ""
     with_job_que() {
+        setup_dasllama_jobque()
         var s <- make_run_state(m.config)
         var chat = create_chat(m, "")
         add_user(chat, user)

@@ -225,3 +225,21 @@ skewed routing draw becomes one unit that straggles the barrier - measured 620 a
 on a zipf k4 draw (`harness/moe_kq_probe.das`). The CPU arms therefore split a region into sub-regions of at most 32 rows:
 sub-regions of one expert share its weight offset, and the per-expert bias lists repeat once per
 sub-region. The GPU arms keep whole regions - their kernels chunk by work already.
+
+### 2.20 The engine dispatches only on a configured job queue {#jobque-policy}
+
+A queue as `create_job_que` makes it clones and destroys a fork context per job, wakes one worker
+per push, and parks a worker the moment its job ends. The engine's fork/join dispatch issues ~160
+small dispatches per decoded token, so on that queue an E2B q8 forward step takes 3.6 s against
+16 ms configured - the whole gap, not a fraction of it, and each of the four knobs in
+`setup_dasllama_jobque()` removes one factor (team mode alone leaves 2.0 s; the fork pool,
+batched dispatch or the spin window alone each leave ~25 ms). The pool of fork contexts is the
+observable: `set_jobque_fork_pool` is per context and outlives the queue, and the setup call
+always turns it on. A caller that sets the pool directly, as the dispatch probes and benches do,
+has configured its queue by the same token.
+
+The first counted dispatch of a process therefore reads it, once: a queue without the pool panics
+naming the setup call, and `DASLLAMA_ALLOW_BARE_JOBQUE=1` downgrades that to a warning for a run
+that means to measure the bare regime. A process with no queue at all runs its arms inline and is
+not checked. The engine's own scoped queues - the ones `load_gguf` and `load_gguf_streaming` spin
+for a caller that has none - configure themselves, so the rule reaches only queues a caller opened.

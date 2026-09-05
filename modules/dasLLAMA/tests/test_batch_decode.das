@@ -212,6 +212,7 @@ def test_batch_decode_fp32(t : T?) {
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
+            setup_dasllama_jobque_()
             batch_vs_ref(t, tr, KVDtype.f32, 8l, 1.0e-6, "fp32")
         }
         set_fused_decode(prev_fused)
@@ -234,6 +235,7 @@ def test_batch_decode_q8(t : T?) {
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
+            setup_dasllama_jobque_()
             batch_vs_ref(t, tr, KVDtype.f32, 8l, 1.0e-6, "q8")
         }
         set_fused_decode(prev_fused)
@@ -254,6 +256,7 @@ def test_batch_decode_f16_kv(t : T?) {
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
+            setup_dasllama_jobque_()
             batch_vs_ref(t, tr, KVDtype.f16, 8l, 1.0e-6, "f16kv")
         }
         set_fused_decode(prev_fused)
@@ -283,6 +286,7 @@ def test_batch_decode_q8_kv(t : T?) {
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
+            setup_dasllama_jobque_()
             batch_vs_ref(t, tr, KVDtype.q8_0, 8l, 1.0e-6, "q8_0kv")
         }
         set_fused_decode(prev_fused)
@@ -312,6 +316,7 @@ def test_batch_decode_tq4_kv(t : T?) {
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
+            setup_dasllama_jobque_()
             batch_vs_ref(t, tr, KVDtype.tq4, 8l, 1.0e-6, "tq4kv")
         }
         set_fused_decode(prev_fused)
@@ -330,6 +335,7 @@ def test_batch_decode_q4_fallback(t : T?) {
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
+            setup_dasllama_jobque_()
             batch_vs_ref(t, tr, KVDtype.f32, 6l, 0.0, "q4_0")   // fallback IS forward(): bit-exact
         }
         set_fused_decode(prev_fused)
@@ -350,6 +356,7 @@ def test_batch_decode_b1_delegation(t : T?) {
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
+            setup_dasllama_jobque_()
             var p0 <- prompt_a()
             var ref <- run_ref(tr, KVDtype.f32, p0, 6l, vocab)
             var s <- make_run_state(c)
@@ -402,6 +409,7 @@ def test_batch_decode_shrink(t : T?) {
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
+            setup_dasllama_jobque_()
             var p0 <- prompt_a()
             var p1 <- prompt_b()
             var p2 <- prompt_c()
@@ -476,6 +484,7 @@ def test_batch_decode_tuned(t : T?) {
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
+            setup_dasllama_jobque_()
             batch_vs_ref(t, tr, KVDtype.f32, 8l, 1.0e-3, "tuned")
         }
         set_fused_decode(prev_fused)
