@@ -147,8 +147,10 @@ dasllama-server, env-knob registries, the dasLLVM vector-math rail, facade lint,
 dasweb-playground, dasllama-ladder, dasweb-buildd, dasweb-verify, the sequence smoke, the
 daslang_static sweep. A step's condition is `matrix.role != '<other>'`, so the nightly job
 (role `all`, one each on linux, darwin15, windows) runs every step plus the nightly-only ones:
-tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify
-tree sweep, doc-verify. The cells are `ci/ci_matrix.py extended <event>`; `ci/test_ci_matrix.py`
+tutorial dry-runs and the run form of examples (preflight's `compile-sweep` is their per-PR
+mirror), the AST verify tree sweep and doc-verify (policy), coverage (a report, not a gate),
+and the nano cross-compile - platform-bound: its arm-none-eabi toolchain is an apt package no
+darwin cell and no developer box carries, so it has no per-PR cell and no local mirror. The cells are `ci/ci_matrix.py extended <event>`; `ci/test_ci_matrix.py`
 pins them and the condition spelling. The per-PR mirror of the nightly-only compile steps is
 preflight's `compile-sweep` gate.
 

@@ -46,7 +46,11 @@ jobs:
         with:
           sparse-checkout: ci
       - id: matrix
-        run: echo "matrix=$(python3 ci/ci_matrix.py extended '${{ github.event_name }}')" >> "$GITHUB_OUTPUT"
+        # two statements: a substitution inside echo would hide the script's exit code
+        run: |
+          set -eu
+          matrix=$(python3 ci/ci_matrix.py extended '${{ github.event_name }}')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   ###########################################################
   extended_checks:
@@ -310,9 +314,10 @@ jobs:
       run: $BIN/daslang ./utils/internal/doc-verify/main.das -- --daslang $BIN/daslang
 
     - name: "Cross-compile nano for cortex-m4"
-      # nano's drift tripwire - the only freestanding build in CI. Linux only:
-      # one arch catches the drift, and the toolchain is an apt away.
-      if: matrix.target == 'linux'
+      # nano's drift tripwire - the only freestanding build in CI. Nightly, on the linux
+      # cell: the toolchain is an apt package no darwin cell (the per-PR platform) and no
+      # developer box carries, so no per-PR cell and no preflight gate can run it.
+      if: matrix.target == 'linux' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
       run: |
         set -eux
         # newlib and its libstdc++ are only *recommended* by gcc-arm-none-eabi,
@@ -745,7 +750,8 @@ jobs:
         $BIN/daslang utils/internal/preflight/main.das -- --only ci-das
 
     - name: "Coverage"
-      if: matrix.target == 'linux'
+      # a report, not a gate (dascov fails on nothing it measures); nightly on the linux cell
+      if: matrix.target == 'linux' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
       run: |
         $BIN/daslang dastest/dastest.das -- --cov-path coverage.lcov --color --test ./tests/language --timeout 1800
         $BIN/dascov.exe -- coverage.lcov --exclude tests/language

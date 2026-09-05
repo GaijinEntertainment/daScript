@@ -54,7 +54,11 @@ jobs:
         with:
           sparse-checkout: ci
       - id: matrix
-        run: echo "matrix=$(python3 ci/ci_matrix.py build '${{ github.event_name }}')" >> "$GITHUB_OUTPUT"
+        # two statements: a substitution inside echo would hide the script's exit code
+        run: |
+          set -eu
+          matrix=$(python3 ci/ci_matrix.py build '${{ github.event_name }}')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
       - name: Cache LLVM
         uses: actions/cache@v3
