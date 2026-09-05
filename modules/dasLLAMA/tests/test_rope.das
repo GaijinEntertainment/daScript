@@ -114,8 +114,15 @@ def test_rope_gen_ff_ones(t : T?) {
     }
 }
 
-def private ulps_apart(a, b : float) : int {
-    return abs(unsafe(reinterpret<int>(a)) - unsafe(reinterpret<int>(b)))
+//! a float's rank on the ulp line: the raw bits for a non-negative value, mirrored for a negative one, so
+//! -0.0 and +0.0 share rank 0 and a difference across the sign bit counts the values it spans
+def private ulp_rank(x : float) : int64 {
+    let bits = unsafe(reinterpret<int>(x))
+    return bits >= 0 ? int64(bits) : -2147483648l - int64(bits)
+}
+
+def private ulps_apart(a, b : float) : int64 {
+    return abs(ulp_rank(a) - ulp_rank(b))
 }
 
 //! the two layouts agree to the ulp, not the bit: under -jit the packed row's single loop vectorizes
@@ -133,15 +140,17 @@ def test_rope_gen_cross_layout(t : T?) {
         var packed : array<float>
         packed |> resize(int(hs))
         build_rope_row_packed(packed, 0l, pos, hs, 10000.0, 1.0, 1.0, ff)
-        var worst = 0
+        var worst = 0l
         for (j in range(int(hs / 2l))) {
             worst = max(worst, ulps_apart(packed[j], ct[j]))
             worst = max(worst, ulps_apart(packed[int(hs / 2l) + j], st[j]))
         }
-        t |> success(worst <= 1, "layouts agree within 1 ulp at fscale=1 (worst {worst} ulp)")
+        t |> success(worst <= 1l, "layouts agree within 1 ulp at fscale=1 (worst {worst} ulp)")
         //! the bar's control: a cos value 2 ulps off its table twin lands outside it
         let poisoned = unsafe(reinterpret<float>(unsafe(reinterpret<int>(ct[3])) + 2))
-        t |> success(ulps_apart(poisoned, ct[3]) > 1, "a 2-ulp poison lands outside the bar")
+        t |> success(ulps_apart(poisoned, ct[3]) > 1l, "a 2-ulp poison lands outside the bar")
+        t |> equal(ulps_apart(-0.0, 0.0), 0l, "the two zeros are one value on the ulp line")
+        t |> equal(ulps_apart(-1e-45, 1e-45), 2l, "a difference across the sign bit counts the values it spans")
         delete ct
         delete st
         delete packed
