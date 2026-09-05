@@ -72,12 +72,16 @@ struct public GateReport {
 
 //! A lane child's gate lines, `[TAG] name (12.3s) — detail`, each with the indented breakdown under it,
 //! in print order. A child that died before its report yields none; the docs lane yields several.
+//! A captured child writes through to_log, so every line may carry a `[I] ` / `[W] ` / `[E] ` level prefix.
 def public parse_gate_reports(out : string) : array<GateReport> {
     var reports : array<GateReport>
     var breakdown : array<string>
     var open_report = false
     for (raw in split(out, "\n")) {
-        let ln = raw |> replace("\r", "")
+        var ln = raw |> replace("\r", "")
+        if ((ln |> starts_with("[I] ")) || (ln |> starts_with("[W] ")) || (ln |> starts_with("[E] "))) {
+            ln = slice(ln, 4)
+        }
         if (open_report && ln |> starts_with("       ") && !empty(strip(ln))) {
             breakdown |> push(strip(ln))
             continue

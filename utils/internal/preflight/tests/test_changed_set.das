@@ -64,4 +64,10 @@ def test_parse_gate_reports(t : T?) {
     t |> equal(many[1].detail, "sphinx-build not found", "its reason")
     t |> equal(many[2].tag, "FAIL", "a fail parses")
     t |> equal(length(parse_gate_reports("died before reporting\n")), 0, "no verdict line yields no report")
+    let logged = "[I] [RUN ] tests-cpp\n[I] [PASS] tests-cpp (20.1s)\n[I]        Top 1 slowest files:\n[I]        2.0s  tests/b.das\n[I] \n[W] [SKIP] imgui — no display\n"
+    let tagged <- parse_gate_reports(logged)
+    t |> equal(length(tagged), 2, "a to_log level prefix on every captured line is not the verdict tag")
+    t |> equal(tagged[0].name, "tests-cpp", "the gate name behind the [I] prefix")
+    t |> equal(tagged[0].breakdown, "Top 1 slowest files:\n2.0s  tests/b.das", "the breakdown behind the prefix, trimmed")
+    t |> equal(tagged[1].tag, "SKIP", "a warning-level skip line parses")
 }

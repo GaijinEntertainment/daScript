@@ -1370,6 +1370,29 @@ def slowest_files_block(out : string) : string {
     return join(rows, "\n")
 }
 
+//! The files dastest's closing FAILURES block names, comma-joined, at most five.
+def failed_files_block(out : string) : string {
+    var files : array<string>
+    var inside = false
+    for (raw in split(out, "\n")) {
+        let ln = strip(raw)
+        if (ln == "FAILURES:") {
+            inside = true
+            continue
+        }
+        continue if (!inside)
+        break if (empty(ln))
+        let dash = find(ln, " — ")
+        files |> push(dash >= 0 ? slice(ln, 0, dash) : ln)
+    }
+    if (length(files) > 5) {
+        let more = length(files) - 5
+        files |> resize(5)
+        files |> push("and {more} more")
+    }
+    return empty(files) ? "the suite (no FAILURES block in the output)" : join(files, ", ")
+}
+
 //! Runs a test sweep as one gate. `t_gate`, when set, is the gate's own start - a build ran
 //! ahead of the sweep, and the gate's seconds must count it, with the split in the breakdown.
 def run_test_gate(name : string; args : array<string>; fail_hint : string; t_gate : int64 = 0l) : GateResult {
@@ -1490,9 +1513,17 @@ def gate_tests_aot(ctx : PreflightCtx) : GateResult {
             detail = "test_aot binary not found next to daslang ({test_aot})")
     }
     // 2x CI's per-file cap - same chained-load reasoning as gate_tests_interp
-    return run_test_gate("tests-aot",
+    var g <- run_test_gate("tests-aot",
         [test_aot, "-use-aot", "dastest/dastest.das", "--", "--use-aot", "--failures-only", "--timing-outliers", "10", "--max-file-time", "60", "--timeout", "1800", "--test", "tests"],
-        "AOT suite failures (error[50101] → skills/internal/aot_hash_desync_debugging.md)", t0)
+        "AOT suite failures", t0)
+    if (g.status == GateStatus.Fail) {
+        if (find(g.output, "error[50101]") >= 0) {
+            g.detail = "AOT link failed: error[50101] → skills/internal/aot_hash_desync_debugging.md"
+        } else {
+            g.detail = "AOT-only failures in {failed_files_block(g.output)} — green under -jit/interp means the AOT emitter (daslib/aot_cpp.das) or aot.h"
+        }
+    }
+    return <- g
 }
 
 def gate_sequence(ctx : PreflightCtx) : GateResult {
@@ -1605,7 +1636,7 @@ struct GateInfo {
     reach : array<string>
 }
 
-def gate_table() : array<GateInfo> {   // nolint:STYLE038 - a flat gate table, one row per line
+def gate_table() : array<GateInfo> {
     return <- [
         GateInfo(name = "untracked", tier = "fast", doc = "no untracked files at PR time — commit, delete, or ignore each"),
         GateInfo(name = "format", tier = "fast", doc = "formatter --verify on tracked .das (mirrors CI)"),

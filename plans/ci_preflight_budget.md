@@ -44,6 +44,14 @@ Tiers, printed by `--list-gates`:
 
 Acceptance: a full run with a core change under 20 minutes on the M5 box; a dasLLAMA-only diff in about 5.
 
+Measured (2026-09-04, this branch, a core diff of 10 das / 3 cpp files): `preflight --full` 11.5 min wall.
+Fast tier 3.1 min serial (compile-sweep 108 s - 730 light roots in an 18-wide pool 66 s + 25 engine roots
+serial through one module cache 42 s; lint 24; cpp-syntax 18 - a header change sweeps 203 TUs; ci-das 12;
+format 6; review-md 7). Lanes concurrent, wall = tests-aot 513 s (test_aot build 402 + run 111); docs 336
+(sphinx-html 297); utils-tests 186; tests-jit 184; tests-interp 116; tests-cpp 20. The pool width lesson:
+`get_total_hw_threads()` is the jobque's worker count (5 on the 18-core M5), so a pool sized by it runs 5
+wide; size pools by `get_total_hw_cores()`.
+
 ## CI (.github/workflows)
 
 - sccache slots sized to a build: `SCCACHE_CACHE_SIZE=1200M` on every slot (16 build slots + 2 extended
