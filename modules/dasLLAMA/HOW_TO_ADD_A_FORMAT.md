@@ -263,8 +263,8 @@ the MoE GEMV/mul_mm trio for the format - ledgered for the M5 kernel pass.
 
 **Dev-loop invocation (adopted 2026-08-31):** every correctness-loop run (probe tests,
 parity, run.das spot checks) is the fast stack by default - `daslang.exe -jit <app>.das ...`
-installs the AST module cache and the split-module JIT unasked (a warm no-edit rerun is
-seconds, an edit loop about a minute at lcpp_bench scale on zen2). A bench that must see
+installs the AST module cache and the split-module JIT unasked (the measured walls, per box
+and stack: `plans/jit_compile_time.md`). A bench that must see
 one-unit codegen passes `--jit-split-modules=0` after the `--` separator; a records row
 measures a released `-exe`, which always is one unit. `-no-module-cache` opts out of the
 cache. QUIRK 21 still applies to emitter edits. Numbers, caveats and the invalidation ledger:
