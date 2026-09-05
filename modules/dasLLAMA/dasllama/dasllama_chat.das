@@ -162,7 +162,26 @@ def private chat_template_of_kind(kind : string) : ChatTemplate {
 def chat_template(m : Model) : ChatTemplate {
     let kind = detect_chat_kind(m.chat_template_str)
     if (!empty(kind)) {
-        return <- chat_template_of_kind(kind)
+        var ct <- chat_template_of_kind(kind)
+        if (kind == "qwen2") {
+            // Instruct-2507 shares the thinking vocab AND history replay tags with Qwen3.
+            // Only the generation branch declares whether new replies support reasoning.
+            let gen = rfind(m.chat_template_str, "add_generation_prompt")
+            if (gen >= 0) {
+                let tail = slice(m.chat_template_str, gen)
+                let hybrid = contains(tail, "enable_thinking")
+                if (!hybrid) {
+                    ct.think_suppress.parts |> clear()
+                    if (!contains(tail, "<think>")) {
+                        ct.think_mode = ThinkMode.none
+                        ct.think_default = false
+                        ct.think_open = ""
+                        ct.think_close = ""
+                    }
+                }
+            }
+        }
+        return <- ct
     }
     if (m.arch == "llama" && m.tok.kind == TokKind.spm) {
         return <- zephyr_chat_template()
