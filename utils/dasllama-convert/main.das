@@ -30,6 +30,7 @@ require dasllama/dasllama_layout        // convert_model_to_metal_blob — bake-
 require dasllama/dasllama_gguf          // GGUFMeta — bake-side, deliberately not facade
 require dasllama/dasllama_math          // pin_backend_for_bake — bake-side, deliberately not facade
 require dasllama/dasllama_gpu_tier      // moe_gpu_bake_tag — bake-side, deliberately not facade
+require dasllama/dasllama_styletts2     // bake_styletts2_image — the TTS arm, bake-side, deliberately not facade
 require daslib/clargs
 require daslib/jobque_boost
 require daslib/fio
@@ -309,6 +310,80 @@ def private convert_asr(cfg : ConvertArgs; kind : string; qm : QuantMode) : int 
     return 0
 }
 
+// "" = not a TTS carrier; else the StyleTTS2-lineage family the GGUF's architecture names
+// (kitten-tts | kokoro) - a `styletts2.sample_rate` key is what makes it one
+def private sniff_tts_family(path : string) : string {
+    var st : FStat
+    if (!stat(path, st) || st.is_dir || int64(st.size) < 8l) {
+        return ""
+    }
+    var family = ""
+    let f = fopen(path, "rb")
+    if (f == null) {
+        return ""
+    }
+    fmap(f) $(var bytes : array<uint8>#) {
+        if (rd_u32(bytes, 0l) == 0x46554747u) {
+            var inscope m <- parse_gguf_meta(bytes)
+            if (gguf_has(m, "styletts2.sample_rate")) {
+                family = gguf_str(m, bytes, "general.architecture")
+            }
+        }
+    }
+    fclose(f)
+    return family
+}
+
+// TTS carriers bake through the family's own staging on the lane -q names (q8 = the served
+// default, fp32 = the reference lane); -o lands the image anywhere - a serving directory holds
+// two .dlim files and the two front-end packs, no gguf.
+def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : int {
+    if (cfg.flavor != Flavor.planar) {
+        to_log(LOG_ERROR, "dasllama-convert: TTS sources have a single (planar) image flavor\n")
+        return 2
+    }
+    if (cfg.trim || cfg.stream) {
+        to_log(LOG_ERROR, "dasllama-convert: --trim/--stream apply to decoder GGUFs, not TTS sources\n")
+        return 2
+    }
+    let q8 = qm == QuantMode.q8
+    if (!q8 && qm != QuantMode.fp32) {
+        to_log(LOG_ERROR, "dasllama-convert: TTS sources bake q8 or fp32\n")
+        return 2
+    }
+    let tag = q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
+    let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
+    to_log(LOG_INFO, "dasllama-convert: {cfg.model} ({family})\n")
+    to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
+    to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag)}\n")
+    if (!cfg.keep_stale_tmp) {
+        sweep_stale_tmp(cfg.model)
+    }
+    if (stat(out).is_valid) {
+        if (!cfg.force) {
+            to_log(LOG_INFO, "dasllama-convert: image already present — nothing to do (use --force to rebuild)\n")
+            return 0
+        }
+        if (!remove(out)) {
+            to_log(LOG_ERROR, "dasllama-convert: cannot remove '{out}' for the --force rebuild\n")
+            return 1
+        }
+    }
+    let ts = ref_time_ticks()
+    var baked = false
+    with_job_que() {
+        baked = bake_styletts2_image(cfg.model, out, q8)
+    }
+    var st : FStat
+    if (!baked || !stat(out, st)) {
+        to_log(LOG_ERROR, "dasllama-convert: '{out}' did not land — see the log above\n")
+        return 1
+    }
+    let total_ms = int64(get_time_usec(ts)) / 1000l
+    to_log(LOG_INFO, "dasllama-convert: wrote {int64(st.size) >> 20l} MB in {total_ms} ms total\n")
+    return 0
+}
+
 def private flavor_tag(f : Flavor) : string {
     if (f == Flavor.metal) {
         return METAL_IMAGE_TAG
@@ -428,6 +503,10 @@ def main() : int {
     let asr_kind = sniff_asr_kind(cfg.model)
     if (asr_kind != "") {
         return convert_asr(cfg, asr_kind, qm)
+    }
+    let tts_family = sniff_tts_family(cfg.model)
+    if (tts_family != "") {
+        return convert_tts(cfg, tts_family, qm)
     }
     if (cfg.trim && cfg.flavor != Flavor.vulkan) {
         to_log(LOG_ERROR, "dasllama-convert: --trim is a vulkan-flavor property (add -f vulkan)\n")

@@ -381,8 +381,23 @@ whole program (Kitten at rtf 15 instead of 0.05 - the facade doc-comment says so
 lambda finalizer panics and takes the process down; a fresh `Session` samples from a fixed seed
 (`set_seed` from the clock, or every story is the same story). The TinyStories corpus separates
 stories with BOS, so BOS is a stop token beside EOS, and it writes curly quotes the screen
-font has no glyphs for. Serving: the models sit beside the page (`models/`, or `?models=<url>`);
-the `.dlim` question (half the download for Kitten) and an OPFS reader stay open.
+font has no glyphs for. Serving: the models sit beside the page (`models/`, or `?models=<url>`).
+
+**Images only across the wire (2026-09-05).** The page fetches two `.dlim` files and the two
+English front-end packs, no gguf. The TTS carrier now serves without its gguf: the family's
+driver data (Kitten's speed priors and aliases, Kokoro's symbol table) rides the image meta,
+`load_tts_model` takes a `.dlim` path (the file names its lane), and `dasllama-convert` grew a
+TTS arm (`-o` anywhere). An image is keyed by the build's identity, so the browser's images
+are baked natively against the wasm build's configuration: a scratch script cross-compiled to
+wasm64 prints `dlim_config_json` under node (identity
+`v32p1|q8|portable|s16|q8 mr4 b0 g4|kq 4/../4|q51 mr1|nat 1101`), and `dasllama-convert
+--config wasm.json -o serve/<name>.dlim` bakes against it - the portable backend exists on
+every host, so the fail-closed verify passes. Kitten's image is half its gguf (30 MB against
+59). The story model's is not: 51 MB against a 26.7 MB gguf, because the image widens the
+token-embedding table to f32 (9.2M of the 15.2M parameters) where the gguf holds it as Q8_0.
+A q8 token-table plane in the image (the PLE rail already gathers rows from one) is the engine
+item that would bring it to ~17 MB; until then the two-image download is 108 MB against the
+gguf pair's 113. An OPFS reader stays open.
 
 - Route: the stage-2 example's AOT C++ through emcc against `web/output64` (memory64 +
   pthreads), under node first (NODEFS mounts), the browser after.

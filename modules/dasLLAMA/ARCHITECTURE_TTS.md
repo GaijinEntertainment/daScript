@@ -223,8 +223,14 @@ control). Two lanes, each its own image: `tts-q8`, the served default - the rows
 weights as Q8_0 quants in an int8 plane repacked for the box's backend, the tag config-bound -
 and `tts-f32`, the file's planes under a config-free tag, the reference lane the parity rail
 and the block test hold against, which carries no optimization duty: the rig held q8 at f32
-quality, and f32 costs memory for nothing. The meta blob carries the scalars, the spans and the
-voice roster through the leaf structs' own `serialize` overloads; the loader binds every weight
+quality, and f32 costs memory for nothing. The meta blob carries the scalars, the spans, the
+voice roster and the family's driver data (Kitten's per-voice speed priors and alias names,
+Kokoro's symbol table - staged from the GGUF's `kitten.*` / `kokoro.*` keys with the weights)
+through the leaf structs' own `serialize` overloads, so an image serves without its GGUF: a
+`.dlim` path maps the lane the file was baked on, whatever the policy asks (`load_styletts2`
+tries the policy's tag first, then the other), and `dasllama-convert` bakes one offline
+(`bake_styletts2_image`, `-o` anywhere) under a supplied `--config` for another box's identity.
+The loader binds every weight
 array as a borrowed view over the mapped plane after the parse (post-load runs before the
 planes bind), so the carrier and every struct holding it take an explicit `finalize`. The
 layout fingerprint refuses a struct-shape change by name; a served-layout change that keeps the
