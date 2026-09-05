@@ -23,6 +23,7 @@ require dasllama/dasllama_common // the runtime-knob getters (the profile's "run
 require dasllama/dasllama_mtp_gemma   // gemma_drafter_sidecar - the assistant-depth confirm's vehicle test
 require dasllama/dasllama_tune   // [dasllama_grid] emitter
 require llvm/daslib/llvm_tune    // tune_sidecar_merge — the app-sidecar upsert writer
+require daslib/tune              // [tune_policy] - inert without dasLLVM
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_tensor_race (Apple static_if half)
 require ?das_metal dasllama/dasllama_metal_kernels  // metal_tensor_race_decode (Apple static_if half)
 require tuner_cli               // the shared tuner CLI

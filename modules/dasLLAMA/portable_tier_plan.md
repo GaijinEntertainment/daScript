@@ -295,6 +295,27 @@ the honest wasm candidates, and smaller is on the table.
 
 ## Open questions
 
+- **What "dasLLVM absent" means in a SOURCE tree.** The `?llvm/daslib/...` path guard asks whether
+  the guard's file resolves, and the `.das_module` folder scan (`src/ast/dyn_modules.cpp`)
+  resolves `modules/dasLLVM/` from the filesystem whatever `DAS_LLVM_DISABLED` says. So in a
+  source tree configured without LLVM the guard is TRUE, the generated tier loads, and its
+  `[extern(library="LLVM.dll")]` bindings fail at compile time; only an installed SDK without
+  dasLLVM (its install rules sit inside the CMake guard) has the guard false. The stage-1 gate
+  therefore runs in a worktree with `modules/dasLLVM` removed, the installed-SDK shape. If the
+  in-tree case should also work, the cheapest honest witness is a C++ module registered only
+  when LLVM is configured (the `?sqlite` pattern), and the guards become `?<witness> ...`.
+- **`builtin_module_exists` on a shared das module flips under tool-driven compiles.** A file
+  with `require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune` and
+  `static_if (typeinfo builtin_module_exists(llvm_tune))` takes the framework arm under
+  `bin/daslang file.das` and the no-framework arm under `bin/daslang utils/lint/main.das -- file.das`:
+  `Module::requireEx` (`src/ast/ast_infer_type.cpp:2847`, `src/ast/ast_module.cpp:284`) scans the
+  bound process's promoted-module list, which a nested compile does not populate. C++-module
+  guards are immune. Consequence today: lint, and presumably ast-verify and the MCP checks,
+  audit the no-framework half of every guarded file and never the framework half (suppressed
+  per site with the house `nolint:...,LINT019` spelling). Two fixes, both C++: the witness module
+  above (then `builtin_module_exists(<witness>)` is a linked-module question), or making the
+  trait answer "is this module in the compiling program" for shared das modules.
+
 - Which small-LLM carrier gets the parity fixture for stages 1 and 2 (SmolLM2-135M already has
   a cls_q8 parity cell, `test_parity.das:76`).
 - Whether `test_groupn.das`'s independent reference is fp64 dequant (the kq ladder's choice) or

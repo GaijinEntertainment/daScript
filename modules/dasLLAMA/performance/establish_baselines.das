@@ -14,7 +14,8 @@ options _dasllama_internal = true
 require profile_common
 require daslib/clargs
 require strings
-require llvm/daslib/llvm_tune   // [tune_policy]: this tool benches the reference only — never auto-tune
+require daslib/tune             // [tune_policy]: this tool benches the reference only — never auto-tune
+require llvm/daslib/llvm_tune   // the framework the annotation forwards to, and the visibility the auto-policy pass needs
 require dasllama/dasllama_env
 
 [CommandLineArgs]

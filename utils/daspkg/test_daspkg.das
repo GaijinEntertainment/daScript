@@ -1881,7 +1881,7 @@ def test_cmd_release_ships_minted_scope_manifest(t : T?) {
             fwrite(f, payload)
         }
         fopen("{tmp_root}/main.das", "wb") $(f) {
-            fwrite(f, "options gen2\nrequire llvm/daslib/llvm_tune\n[tune_scope(name=\"stubscope\", tuner=\"stub_tuner.das\")]\nstruct StubScope \{\n    unused : int\n\}\n[export]\ndef main() \{\n    print(\"hi\\n\")\n\}\n")
+            fwrite(f, "options gen2\nrequire daslib/tune\nrequire llvm/daslib/llvm_tune\n[tune_scope(name=\"stubscope\", tuner=\"stub_tuner.das\")]\nstruct StubScope \{\n    unused : int\n\}\n[export]\ndef main() \{\n    print(\"hi\\n\")\n\}\n")
         }
         fopen("{tmp_root}/stub_tuner.das", "wb") $(f) {
             fwrite(f, "options gen2\nrequire daslib/fio\n[export]\ndef main() \{\n    fopen(get_env_variable(\"DAS_TUNE_MANIFEST\"), \"wb\") $(mf) \{\n        fwrite(mf, fread(\"{tmp_root}/stub_payload.json\"))\n    \}\n\}\n")
