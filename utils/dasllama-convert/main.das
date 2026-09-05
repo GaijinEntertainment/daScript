@@ -283,6 +283,7 @@ def private convert_asr(cfg : ConvertArgs; kind : string; qm : QuantMode) : int 
     }
     let ts = ref_time_ticks()
     with_job_que() {
+        setup_dasllama_jobque()
         // the family wrap loads eagerly on the miss and saves the image itself
         if (kind == "whisper") {
             var inscope m <- load_whisper_model(cfg.model, q8)
@@ -483,6 +484,7 @@ def main() : int {
     let ts = ref_time_ticks()
     // the job que carries the transcode/repack passes; the load spins its own if we do not
     with_job_que() {
+        setup_dasllama_jobque()
         if (cfg.stream) {
             // NO apply_box_profile_runtime() here: it already ran before the --config override,
             // and re-reading the sidecar would revert the config's pinned knobs AFTER the

@@ -205,6 +205,7 @@ def main {   // nolint:STYLE037,STYLE038 — flat probe driver: every basis arm 
     tr.config.seq_len = min(tr.config.seq_len, 512l)
     var s <- make_run_state(tr.config, KVDtype.f32, KVDtype.f32)
     with_job_que() {
+        setup_dasllama_jobque_()
         eval_(tr, s, ids)
     }
     let c & = unsafe(tr.config)
@@ -412,6 +413,7 @@ def main {   // nolint:STYLE037,STYLE038 — flat probe driver: every basis arm 
     print("  held-out prompt tokens: {length(ids_b)}\n")
     var s_b <- make_run_state(tr.config, KVDtype.f32, KVDtype.f32)
     with_job_que() {
+        setup_dasllama_jobque_()
         eval_(tr, s_b, ids_b)
     }
     measure_sorted(s_b, s_b, c, hs, s_b.n_past, s_b.n_past, false, "chan in-sample")

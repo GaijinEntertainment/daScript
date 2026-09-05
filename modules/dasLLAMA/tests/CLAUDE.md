@@ -296,6 +296,12 @@ installed tier).
 `test_program_roots.das` - model-free: every dasllama program root (tutorials, examples,
 server tools) declares `options stack = 524288`, and every model-loading root declares its
 prefill intent.
+`test_jobque_tripwire.das` - model-free: the engine's first dispatch on a job queue nobody
+configured panics naming `setup_dasllama_jobque()` (a bare queue decodes ~200x slower - the
+fork-context clone per job, a wake per job, workers parking at once), `DASLLAMA_ALLOW_BARE_JOBQUE=1`
+downgrades it to a warning, a configured queue is silent; the bare arms spawn
+`_jobque_tripwire_root.das`. Every `with_job_que()` block a test opens around the engine calls
+`setup_dasllama_jobque_()` first, or the tripwire reds it.
 `test_audio.das` - stocked suite; model-free cells: the audio front-end units (gelu-erf, hann
 window, mel filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle
 gates (ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles - CPU-claim cells, tower

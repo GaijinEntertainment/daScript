@@ -8,6 +8,7 @@ require ../benchmarks/lcpp_bench.das   // parity_check — the board pregate's v
 require ../performance/model_specs.das   // spec_by_file — the table rows the pregate binds
 require dasllama/dasllama_common       // get_kquant_native — the mode the kq arm must restore
 require dasllama/dasllama_load          // load_model_ — the slice cell loads its own carrier
+require dasllama/dasllama_math          // setup_dasllama_jobque_ — the slice cell's queue (engine-level, not re-exported)
 require dasllama/dasllama_gpu_resident  // moe_gpu_resident_active — the slice cell needs the driver armed
 require ?vulkan dasllama/dasllama_vulkan_prefill   // g_pf_ffn_slice — the slice's A/B arm
 require daslib/jobque_boost             // with_job_que — a 512-token prefill dispatches its CPU stages as jobs
@@ -102,6 +103,7 @@ def test_parity_last_layer_slice(t : T?) {
             var served_whole = false
             var served_slice = false
             with_job_que() {
+                setup_dasllama_jobque_()
                 g_pf_ffn_slice = false
                 var s0 <- make_run_state(t8.config, KVDtype.f16, KVDtype.f16)
                 forward_prefill(t8, s0, prompt, plen, 0l)

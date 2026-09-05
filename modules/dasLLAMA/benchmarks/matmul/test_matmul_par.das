@@ -35,6 +35,7 @@ def test_matmul_threaded(t : T?) {
         ypar |> resize(d)
         matmul_naive(yref, w, x, int64(n), int64(d))
         with_job_que() {
+            setup_dasllama_jobque_()
             matmul(ypar, w, x, int64(n), int64(d))
         }
         var maxerr = 0.0
@@ -93,6 +94,7 @@ def test_matmul_q8q8_group3(t : T?) {
         y0 |> resize(int(d0)); y1 |> resize(int(d1)); y2 |> resize(int(d2))
         r0 |> resize(int(d0)); r1 |> resize(int(d1)); r2 |> resize(int(d2))
         with_job_que() {
+            setup_dasllama_jobque_()
             matmul_q8q8_group3(y0, y1, y2, qall.q, qall.scales, 0l, d0 * n, (d0 + d1) * n, xq, xs, n, d0, d1, d2)
             matmul_variants::matmul_q8q8(r0, q0.q, q0.scales, xq, xs, n, d0)
             matmul_variants::matmul_q8q8(r1, q1.q, q1.scales, xq, xs, n, d1)

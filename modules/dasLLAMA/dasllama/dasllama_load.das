@@ -1474,13 +1474,14 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
 
 
 def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
-    //! The conversion passes (transcode/repack/wscale) thread across the jobque; spin a scoped one
-    //! for the load when the caller hasn't (the server/tools start theirs after the model loads).
+    //! The conversion passes (transcode/repack/wscale) thread across the jobque; spin a scoped,
+    //! configured one for the load when the caller hasn't (the server/tools start theirs after the model loads).
     if (is_job_que_available()) {
         return <- load_gguf_impl(path, mode)
     }
     var t = Model()
     with_job_que() {
+        setup_dasllama_jobque_()
         t <- load_gguf_impl(path, mode)
     }
     return <- t
@@ -1495,6 +1496,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
     if (!is_job_que_available()) {
         var okj = false
         with_job_que() {
+            setup_dasllama_jobque_()
             okj = load_gguf_streaming(path, mode, t, jobs, want_blob, blk)
         }
         return okj
