@@ -54,16 +54,22 @@ wide; size pools by `get_total_hw_cores()`.
 
 ## CI (.github/workflows)
 
-- sccache slots sized to a build: `SCCACHE_CACHE_SIZE=1200M` on every slot (16 build slots + 2 extended
-  = ~22 GB of the 25). CodeQL to nightly (frees 4.3 GB and 42 min per PR).
-- extended_checks per PR = two darwin15 jobs: `core` (build; formatter, lint, ast-verify, dasgen, ci-das,
-  md-ascii, REVIEW.das gates; compile-sweep; utils tests; standalone exes; dastest own suite; the small
-  python tests) and `modules` (build; dasllama-server; MCP tools; facade lint; ser/deser; sequence smoke;
-  dasweb; boulder-dash; dasllama-ladder). Estimated 26 / 31 min at today's build cost, ~20 with a warm
-  sccache. linux and windows extended_checks, tutorial dry-runs, the run form of examples, daslang_static,
-  coverage, nano cross-compile: nightly (same workflow, `event_name == 'schedule'`).
+- The matrices are data: `ci/ci_matrix.py build|extended <event>` emits the cells, `pre_job` evaluates it,
+  the fan-out job reads `fromJSON(needs.pre_job.outputs.matrix)`; `ci/test_ci_matrix.py` pins both sets
+  and the role-condition spelling (`.github/workflows/REVIEW.md`).
+- sccache: build.yml's slots were never capped (the default 10G; the compressed tarballs run 104 MB to
+  971 MB) - the 500M cap was extended_checks' alone, and it is now 1500M so the nightly save holds a
+  complete object set. The nightly-only cells (sanitizers, windows 64 Debug) save no slot: nothing
+  restores one (frees ~1.3 GB). CodeQL: master pushes + the weekly cron, no `pull_request` trigger
+  (frees the per-commit ~430 MB databases and 20-40 min per PR).
+- extended_checks per PR = two darwin15 jobs, `core` and `modules` (the step lists: `skills/internal/preflight.md`
+  sec."extended_checks.yml"). Estimated 20-26 min each at a warm sccache. linux and windows extended_checks,
+  tutorial dry-runs, the run form of examples, daslang_static, coverage, nano cross-compile: nightly (same
+  workflow, `event_name == 'schedule' || 'workflow_dispatch'`, role `all`). Two darwin lane steps that were
+  linux-only needed portable shells: `mapfile` (bash 3.2 on the runner) became a read loop, `timeout`
+  (no coreutils) became perl's `alarm`.
 - build lane per PR: Release + Debug on linux/darwin/windows/linux_arm as today minus asan/tsan/ubsan and
-  windows Debug, which go nightly. Every remaining job is a build step; the sccache fix is what moves it.
+  windows 64 Debug, which are nightly-only cells. Every remaining job is a build step.
 
 Acceptance: every per-PR job under 35 minutes on the first PR after the change (measure with the Actions API:
 run, job, step walls; the script in the session scratchpad becomes `utils/internal/ci-timing/` if kept).

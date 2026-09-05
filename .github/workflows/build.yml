@@ -9,14 +9,16 @@ on:
     # Nightly: runs everything the per-PR lanes deliberately skip —
     #  * the heavy Windows toolchain builds (mingw, clang-cl), gated OFF per-PR
     #    below (see their `if:`), including their FULL AOT sweeps;
-    #  * the main matrix (Release cells carry the FULL test_aot build + AOT
-    #    suite — "Slow Release Tests"; Debug cells ride along, matrix can't be
-    #    filtered in a job-level `if`). Per-PR CI only builds test_aot_subset
-    #    (tests/language, part of ALL) as a compile+link gate and runs no AOT
-    #    tests at all.
+    #  * the main matrix in its nightly shape (ci/ci_matrix.py): the per-PR
+    #    cells plus the sanitizer cells and windows 64 Debug, each a 40-55
+    #    minute job over the 35-minute PR budget; the Release cells carry the
+    #    FULL test_aot build + AOT suite — "Slow Release Tests". Per-PR CI only
+    #    builds test_aot_subset (tests/language, part of ALL) as a compile+link
+    #    gate and runs no AOT tests at all (preflight --full's tests-aot lane is
+    #    the pre-push AOT sweep).
     # bundle_smoke / gcc stay per-PR-only. A manual `workflow_dispatch` runs
-    # the FULL workflow: every per-PR job, both toolchains, and the full AOT
-    # suite.
+    # the FULL workflow: every per-PR job, both toolchains, the nightly cells,
+    # and the full AOT suite.
     # 02:00 UTC: dead time for EU working hours — the nightly is ~12 jobs and
     # must not compete with daytime PR lanes for runners.
     - cron: '0 2 * * *'
@@ -38,6 +40,7 @@ jobs:
     # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - id: skip_check
         uses: fkirc/skip-duplicate-actions@v5
@@ -45,6 +48,13 @@ jobs:
           # All of these options are optional, so you can remove them if you are happy with the defaults
           concurrent_skipping: 'same_content'
           do_not_skip: '["pull_request", "workflow_dispatch", "release"]'
+
+      # The build matrix is data in ci/ci_matrix.py, evaluated per event here (ci/test_ci_matrix.py pins it).
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ci
+      - id: matrix
+        run: echo "matrix=$(python3 ci/ci_matrix.py build '${{ github.event_name }}')" >> "$GITHUB_OUTPUT"
 
       - name: Cache LLVM
         uses: actions/cache@v3
@@ -62,13 +72,12 @@ jobs:
     # `schedule` cron the matrix runs too — the Release cells carry the full
     # AOT suite (see "Slow Release Tests") — unconditionally on the canonical
     # repo (no pre_job skip: master unchanged overnight must still produce the
-    # nightly AOT signal). Debug cells ride along at night without an AOT step;
-    # `matrix` context is not available in a job-level `if`, so they can't be
-    # excluded here (actions runs with a matrix clause fail as a workflow-file
-    # error before any job spawns).
+    # nightly AOT signal). The cell list is per event - ci/ci_matrix.py, read
+    # through pre_job - because `matrix` is not available in a job-level `if`.
     if: >-
       (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
       || (github.event_name != 'schedule' && needs.pre_job.outputs.should_skip != 'true')
+    name: "build (${{ matrix.target }}, ${{ matrix.architecture }}, ${{ matrix.cmake_preset }}, ${{ matrix.sanitizers }})"
     runs-on: ${{ matrix.runner }}
     # actions: write needed for `gh cache delete` in the sccache refresh step.
     permissions:
@@ -79,159 +88,14 @@ jobs:
       das_llvm_disabled: 'OFF'
     strategy:
       fail-fast: false
-      matrix:
-        target: [linux, linux_arm, darwin15, darwin26, windows]
-        architecture: [32, 64, arm64]
-        cmake_preset: [ Debug, Release ]
-        sanitizers: [none]
-
-        include:
-          - target: linux
-            release_target: linux
-            release_arch: x86_64
-            runner: ubuntu-latest
-            archive_ext: tar.gz
-            sanitizers: none
-
-          # Sanitizer matrix — Linux + Release + full tests (dastest + test_aot
-          # + ctest). Release keeps walltime in budget; the previous Debug+ASAN
-          # was prohibitive for production CI. See issue #2530.
-          - target: linux
-            architecture: 64
-            runner: ubuntu-latest
-            cmake_preset: Release
-            sanitizers: asan
-            build_name: linux_asan
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: linux
-            architecture: 64
-            runner: ubuntu-latest
-            cmake_preset: Release
-            sanitizers: tsan
-            build_name: linux_tsan
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: linux
-            architecture: 64
-            runner: ubuntu-latest
-            cmake_preset: Release
-            sanitizers: ubsan
-            build_name: linux_ubsan
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: linux_arm
-            release_target: linux
-            release_arch: arm64
-            runner: ubuntu-24.04-arm
-            archive_ext: tar.gz
-
-          - target: darwin15
-            architecture: arm64
-            release_target: darwin15
-            release_arch: arm64
-            runner: macos-15 # Apple Silicon arm64, M2
-            architecture_string: arm64
-            archive_ext: tar.gz
-
-          - target: darwin26
-            release_target: darwin26
-            release_arch: arm64
-            runner: macos-26 # Apple Silicon arm64, M2
-            architecture_string: arm64
-            archive_ext: tar.gz
-
-          - target: windows
-            runner: windows-latest
-            archive_ext: zip
-
-          - target: windows
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: darwin15
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: darwin26
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: linux
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: linux_arm
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: windows
-            release_target: windows
-            release_arch: x86
-            architecture: 32
-            architecture_string: Win32
-
-          - target: windows
-            release_target: windows
-            release_arch: x86_64
-            architecture: 64
-            architecture_string: x64
-
-          # The regular Win64 Release lane is the fast MSVC compile/interpreter
-          # gate. LLVM + the JIT sweep are preserved by the nightly copy below.
-          - target: windows
-            architecture: 64
-            cmake_preset: Release
-            llvm_disabled: 'ON'
-            jit_disabled: 'ON'
-
-          # Debug Win64 also skips JIT. RelWithDebInfo is a separate
-          # nightly-only memory/leak diagnostic.
-          - target: windows
-            architecture: 64
-            cmake_preset: Debug
-            jit_disabled: 'ON'
-
-        exclude:
-          # macOS Intel (darwin15 x86_64) has no prebuilt LLVM.dll (the
-          # llvm-release workflow doesn't build one) and Apple no longer makes
-          # new Intel macOS runners worth gating on. Drop entirely.
-          - target: darwin15
-            architecture: 64
-
-          - target: darwin15
-            architecture: 32
-
-          - target: darwin26
-            architecture: 32
-
-          - target: darwin26
-            architecture: 64
-
-          - target: linux
-            architecture: 32
-
-          - target: linux
-            architecture: arm64
-
-          - target: linux_arm
-            architecture: 32
-
-          - target: linux_arm
-            architecture: arm64 # todo
-
-          - target: windows
-            architecture: arm64 # todo https://github.com/actions/partner-runner-images/tree/main?tab=readme-ov-file#available-images
-
-          # win32 Debug outgrew its test budgets (the interpreter sweep double-times-out at
-          # 1800s + 5400s on master's own scheduled runs, ~2.5h wall before failing) and the
-          # 32-bit rail is legacy — win32 Release stays as the 32-bit compile+test gate.
-          - target: windows
-            architecture: 32
-            cmake_preset: Debug
+      # ci/ci_matrix.py build <event>: Release + Debug on linux, linux_arm, darwin15,
+      # darwin26; windows 32 Release (the 32-bit compile+test gate - win32 Debug outgrew
+      # its test budgets) and windows 64 Release (the fast MSVC gate, LLVM and JIT off;
+      # build_windows_release_llvm_nightly keeps the JIT sweep). The nightly cron and a
+      # manual dispatch add the sanitizer cells (linux Release asan/tsan/ubsan, full
+      # tests) and windows 64 Debug, tagged nightly_only. No darwin x86_64: no prebuilt
+      # LLVM.dll for it, and no Intel runner worth gating on.
+      matrix: ${{ fromJSON(needs.pre_job.outputs.matrix) }}
 
     steps:
     - name: "SCM Checkout"
@@ -440,14 +304,16 @@ jobs:
             ;;
         esac
 
+    # A nightly-only cell saves no slot: nothing restores it (the cron does not
+    # restore, and no PR lane runs the cell), so the tarball would only hold quota.
     - name: "Refresh sccache slot"
-      if: github.ref == 'refs/heads/master'
+      if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'
       env:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}
       run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
     - name: "Save sccache objects"
-      if: github.ref == 'refs/heads/master'
+      if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/sccache
