@@ -64,8 +64,10 @@ wide; size pools by `get_total_hw_cores()`.
   (frees the per-commit ~430 MB databases and 20-40 min per PR).
 - extended_checks per PR = two darwin15 jobs, `core` and `modules` (the step lists: `skills/internal/preflight.md`
   sec."extended_checks.yml"). Estimated 20-26 min each at a warm sccache. linux and windows extended_checks,
-  tutorial dry-runs, the run form of examples, daslang_static, coverage, nano cross-compile: nightly (same
-  workflow, `event_name == 'schedule' || 'workflow_dispatch'`, role `all`). Two darwin lane steps that were
+  tutorial dry-runs, the run form of examples, coverage, nano cross-compile: nightly (same workflow,
+  `event_name == 'schedule' || 'workflow_dispatch'`, role `all`). daslang_static stays per PR (modules role):
+  a step leaves the per-PR path only when a preflight gate mirrors it, and nothing local sweeps the static
+  binary. `ci/test_ci_matrix.py` runs in the core role and as preflight's `ci-matrix` gate. Two darwin lane steps that were
   linux-only needed portable shells: `mapfile` (bash 3.2 on the runner) became a read loop, `timeout`
   (no coreutils) became perl's `alarm`.
 - build lane per PR: Release + Debug on linux/darwin/windows/linux_arm as today minus asan/tsan/ubsan and

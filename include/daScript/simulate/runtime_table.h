@@ -12,11 +12,7 @@ namespace das
 
     DAS_API extern const char * rts_null;
 
-    // One hash per key type on every rail: the value nodes, the JIT helpers, the JSON scanner and the
-    // C API hash `hash_function(context, key)` on the key's own type, so the rehash a grow performs and
-    // AOT's TTable must too. The workhorse detour stays only where it changes no bytes (Time -> int64,
-    // Handle -> uint64, smart pointers, 16-byte vectors); a 2/3-lane vector or a range widened to vec4f
-    // would hash 16 bytes against the nodes' 8 or 12, and every key past the first grow would go missing.
+    // the same bytes as hash_function(ctx, key) on every rail - ARCHITECTURE.md, "Table key hashing"
     template <typename KeyType>
     struct KeyHash {
         __forceinline uint64_t operator () ( Context & context, const KeyType & key ) {

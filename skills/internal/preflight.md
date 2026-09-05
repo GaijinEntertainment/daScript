@@ -1,7 +1,8 @@
 # Preflight - CI lane <-> local mirror
 
 `daslang utils/internal/preflight/main.das` runs the **fast tier**: format, lint,
-ast-verify, cpp-syntax, review-md, md-ascii, hash-refs, untracked, dasgen, ci-das
+ast-verify, cpp-syntax, review-md, md-ascii, hash-refs, untracked, dasgen, ci-das,
+ci-matrix (`python3 ci/test_ci_matrix.py`, when the diff touches `.github/` or `ci/`)
 and compile-sweep (every program root under `utils/`, `examples/`, `tutorials/`
 and the modules' examples and utils, compile-only, in parallel - the per-PR form
 of CI's examples and tutorial runs), serially, and a red stops the run. `-- --full`
@@ -64,7 +65,7 @@ working-tree copy.
 | `build.yml` (nightly) | `schedule` cron (daily 02:00 UTC) | `build_windows_mingw` + `build_windows_clangcl` (gated OFF per-PR) **plus the full build matrix - the per-PR cells, the sanitizer cells (linux Release asan/tsan/ubsan) and windows 64 Debug - whose Release cells run the full AOT sweep** ("Slow Release Tests"). Breaks surface within ~24 h, not at PR time |
 | `nightly_imgui.yml` | `schedule` cron (daily 03:00 UTC) + `workflow_dispatch` | dasImgui playwright suite on ubuntu + macos - section below |
 | `extended_checks.yml` (per-PR) | every PR | two darwin15-arm64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON - section below |
-| `extended_checks.yml` (nightly) | `schedule` cron (daily 04:00 UTC) + `workflow_dispatch` | one job each on linux, darwin15 and windows running every step (role `all`), including the ones too slow for a PR: tutorial dry-runs, the run form of examples, daslang_static, coverage, the nano cross-compile, the AST verify tree sweep, doc-verify |
+| `extended_checks.yml` (nightly) | `schedule` cron (daily 04:00 UTC) + `workflow_dispatch` | one job each on linux, darwin15 and windows running every step (role `all`), including the ones too slow for a PR: tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify tree sweep, doc-verify |
 | `codeql.yml` | pushes to `master` touching C++ + a weekly cron | CodeQL over the C++ surface; alerts in the Security tab, no per-PR run |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
@@ -143,11 +144,11 @@ tree's own gates - dasgen, utils tests, standalone exes, formatter, lint, ast-ve
 python gates, review-md discovery, dastest's own suite, the REVIEW.das gates, ci-das -
 and `modules` the module and service suites - ser/deser, MCP tools, boulder-dash,
 dasllama-server, env-knob registries, the dasLLVM vector-math rail, facade lint,
-dasweb-playground, dasllama-ladder, dasweb-buildd, dasweb-verify, the sequence smoke. A
-step's condition is `matrix.role != '<other>'`, so the nightly job (role `all`, one each on
-linux, darwin15, windows) runs every step plus the nightly-only ones: tutorial dry-runs, the
-run form of examples, daslang_static, coverage, the nano cross-compile, the AST verify tree
-sweep, doc-verify. The cells are `ci/ci_matrix.py extended <event>`; `ci/test_ci_matrix.py`
+dasweb-playground, dasllama-ladder, dasweb-buildd, dasweb-verify, the sequence smoke, the
+daslang_static sweep. A step's condition is `matrix.role != '<other>'`, so the nightly job
+(role `all`, one each on linux, darwin15, windows) runs every step plus the nightly-only ones:
+tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify
+tree sweep, doc-verify. The cells are `ci/ci_matrix.py extended <event>`; `ci/test_ci_matrix.py`
 pins them and the condition spelling. The per-PR mirror of the nightly-only compile steps is
 preflight's `compile-sweep` gate.
 
@@ -176,7 +177,8 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 | ast-verify changed `.das` | preflight's `ast-verify` gate - `<daslang> -dry-run --ast-verify-batch <file>` per changed `.das` plus the `tests/linq/test_linq_fold.das` qmacro canary, parallel, 300 s per-file timeout, skipping `cant_`/`failed_`/`invalid_` and `utils/internal/ast-fuzz/selftest/`. An `AST verify` line, crash or timeout fails; a compile error belongs to whoever owns the file; a file inside the verifier's own require closure (`daslib/ast*.das`, `daslib/rtti.das`, `daslib/strings_boost.das` - `error[20510]` under the force-include) is reported *not verifiable*, never clean | mirrors the workflow's "Run ast-verify on changed .das files". Batch mode is the ruled gate form (`skills/das_macros.md`); with no pre-infer walk, a tree a macro breaks mid-inference surfaces as a compiler crash instead of a located report - hence crash = red, and plain `--ast-verify` on that file locates it. Each item is a whole-engine compile (2-3x a plain one). Width is physical cores halved; `-j` only lowers it |
 | REVIEW.das gates | `<daslang> utils/internal/review-md/all.das` | every `REVIEW.das` in the tree, fail-fix; also run per-diff in the make_pr step-0a walk |
 | dastest own suite | `<daslang> dastest/dastest.das -- --failures-only --test dastest/tests` | framework suite + `review_gate` library tests; whole-directory, so a new file needs no CI row |
-| daslang_static sweep - **nightly** | `cmake --build build --config Release --target daslang_static`, then `bin/Release/daslang_static.exe dastest/dastest.das -- --color --failures-only --test tests` | catches static-registration / no-dynamic-modules divergence; run it locally after touching module registration |
+| daslang_static sweep | `cmake --build build --config Release --target daslang_static`, then `bin/Release/daslang_static.exe dastest/dastest.das -- --color --failures-only --test tests` | the `modules` role; catches static-registration / no-dynamic-modules divergence, which no preflight gate mirrors |
+| CI matrix test | preflight's `ci-matrix` gate (fast tier, reach `.github/` and `ci/`); manual: `python3 ci/test_ci_matrix.py` | the per-event cells of `ci/ci_matrix.py` and the `matrix.role != '<other>'` spelling of every `extended_checks.yml` step condition |
 | Ser/deser sweep | `<daslang> dastest/dastest.das -- --test tests --ser serialized.bin` then `... --deser serialized.bin` | after touching AST serialization (`ast_serializer.cpp`, flag-bit additions) |
 | AST verify tree sweep - **not a PR gate** (the per-PR arm is the row above) | `find tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \| xargs -0 -P8 -n1 timeout 120 <daslang> --ast-verify-batch -compile-only` - an `AST verify` line is a failure; compile errors are expected (many tests assert one). This one-liner attributes neither a crash (`CRASH:` banner) nor a timeout (rc 124) to its file - for those copy the step's `/tmp/ast_verify_one.sh` helper out of the workflow | runs on `extended_checks.yml`'s 04:00 cron: one daslang process per test file, each re-parsing daslib. Force it early with `gh workflow run extended_checks.yml`. Run locally after touching macro or AST-building code - `skills/das_macros.md` |
 | Authored-doc code blocks - **not a PR gate** | `<daslang> utils/internal/doc-verify/main.das` (exit 0 = every authored RST page's das blocks compile; report at `build/doc_verify/report.json`) | nightly cron + `workflow_dispatch`, posix cells only: ~35 min, one daslang spawn per page. Run locally after editing `doc/source/reference/**` or `doc/source/stdlib/handmade/**`, or after daslib/module API changes docs quote - `skills/internal/doc_sweep.md` |

@@ -460,9 +460,8 @@ jobs:
         printf '%s\0' "${CHANGED[@]}" | xargs -0 -P 2 -n 1 /tmp/ast_verify_changed.sh
 
     - name: "Test daslang_static"
-      # Nightly: the same interpreter sweep build.yml runs per PR, through the static binary
-      # (3 minutes a lane) - a link-shape regression is a day's signal, not a PR's.
-      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      # modules role, per PR: static-registration / no-dynamic-modules divergence has no local mirror
+      if: matrix.role != 'core'
       run: |
         set -eux
         $BIN/daslang_static _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests
@@ -528,6 +527,14 @@ jobs:
       run: |
         set -eux
         python3 utils/lsp/test_crosstree_guard.py
+
+    - name: "Test CI matrix and role conditions (python)"
+      # ci/ci_matrix.py is what pre_job fed this very run; the test pins its per-event cells and
+      # the `matrix.role != '<other>'` spelling of every step condition in this workflow
+      if: matrix.role != 'modules'
+      run: |
+        set -eux
+        python3 ci/test_ci_matrix.py
 
     - name: "Test shipped-skills gate (python)"
       if: matrix.role != 'modules'

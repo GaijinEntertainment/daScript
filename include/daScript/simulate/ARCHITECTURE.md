@@ -11,6 +11,24 @@ every program on every step. Amortized container work - growth in `src/simulate/
 (repo root) / `runtime_table.h`, reached from eval nodes but running once per capacity change - is outside
 the hot set; its cost is judged against the allocate/copy/rehash it rides.
 
+## Table key hashing
+
+A table key has one hash on every rail: `hash_function(context, key)` on the key's own type -
+`hash_uint32`/`hash_uint64` for the scalar specializations, `hash_blockz64` for strings, and
+`hash_block64` over `sizeof(key)` bytes for everything else, so an `int2` hashes 8 bytes, a
+`float3` 12, a `range` through its 8-byte specialization. The interpreter's table nodes
+(`runtime_table_nodes.h`), the JIT helpers (`src/builtin/module_jit.cpp`, repo root), the JSON
+scanner (`src/simulate/json_scan.cpp`), rtti and the C API all call it directly. `KeyHash`
+(`runtime_table.h`) is the same hash for the callers that hold a key of a wrapped C++ type -
+AOT's `TTable`, the `__builtin_table_*` templates in `aot.h`, and the rehash a grow performs
+on every stored key: it takes the workhorse detour (`Time` to `int64`, a handle to `uint64`,
+a smart pointer to its raw pointer, a 16-byte vector to `vec4f`) only when the workhorse has
+the key's byte width, because those specializations hash the same bytes; a 2- or 3-lane vector
+or a range is hashed as itself, since widened to `vec4f` it would hash 16 bytes and every key
+would move to another bucket at the first grow. Non-string tables are open-addressed from
+their first slot (only string keys pack linearly up to 8), so a disagreement shows on a
+one-key table as much as on a large one.
+
 ## Sanctioned hot-path additions
 
 The ledger the checklist's hot-path rule routes to. Each entry: what was added, where, why

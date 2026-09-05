@@ -1164,6 +1164,17 @@ def gate_ci_das(ctx : PreflightCtx) : GateResult {
 }
 
 //! the trees whose program roots the compile sweep compiles
+def gate_ci_matrix() : GateResult {
+    let t0 = ref_time_ticks()
+    if (!tool_available("python3", "--version")) {
+        return GateResult(name = "ci-matrix", status = GateStatus.Skip, seconds = seconds_since(t0), detail = "python3 not found on PATH")
+    }
+    let r = run_argv(["python3", "ci/test_ci_matrix.py"], 120.0)
+    return GateResult(name = "ci-matrix", status = r.rc == 0 ? GateStatus.Pass : GateStatus.Fail, seconds = seconds_since(t0),
+        detail = r.rc == 0 ? "" : "ci/test_ci_matrix.py red - a workflow matrix cell or an extended_checks role condition (must be matrix.role != '<other>')",
+        output = r.out)
+}
+
 let SWEEP_TREES <- ["utils", "examples", "tutorials"]
 //! trees the sweep leaves alone, each with why: a native module a CMake option builds, a resolution the
 //! plain compile cannot do, a platform the box is not, fixtures that are broken on purpose
@@ -1302,7 +1313,7 @@ def gate_compile_sweep(ctx : PreflightCtx) : GateResult {
     if (total == 0) {
         return GateResult(name = "compile-sweep", status = GateStatus.Skip, seconds = seconds_since(t0), detail = "no program roots found under {join(SWEEP_TREES, ", ")}")
     }
-    // cores, not get_total_hw_threads(): the latter is the jobque's own worker count (5 on an 18-core M5)
+    //! cores, not get_total_hw_threads(): the latter is the jobque's own worker count (5 on an 18-core M5)
     let workers = compute_worker_count(length(roots.light), ctx.jobs > 0 ? ctx.jobs : get_total_hw_cores())
     let t_pool = ref_time_ticks()
     let light <- run_sweep_workers(ctx.daslang, roots.light, workers, 300.0)
@@ -1648,6 +1659,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "cpp-syntax", tier = "fast", doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", tier = "fast", doc = "gen_bind.das freshness vs include/daScript/builtin/", reach <- ["src/builtin/", "include/daScript/builtin/", "utils/internal/dasgen/"]),
         GateInfo(name = "ci-das", tier = "fast", doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
+        GateInfo(name = "ci-matrix", tier = "fast", doc = "python3 ci/test_ci_matrix.py - the CI job matrices per event and the extended_checks role conditions (mirrors CI's core-role step)", reach <- [".github/", "ci/"]),
         GateInfo(name = "compile-sweep", tier = "fast", doc = "compile-only of every program root under utils/, examples/, tutorials/ and the modules' examples and utils, in parallel (the per-PR form of CI's examples and tutorial runs)"),
         GateInfo(name = "docs", tier = "lane", doc = "the seven doc.yml gates (das2rst, imgui2rst, vulkan2rst, stubs, uncategorized, docs/untracked, sphinx html)", reach <- ["doc/", "daslib/", "src/builtin/", "modules/dasImgui/", "modules/dasVulkan/", "modules/dasLLAMA/dasllama/"]),
         GateInfo(name = "tests-cpp", tier = "lane", doc = "ctest -L small"),
@@ -1894,6 +1906,8 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 r <- gate_dasgen(ctx)
             } elif (info.name == "ci-das") {
                 r <- gate_ci_das(ctx)
+            } elif (info.name == "ci-matrix") {
+                r <- gate_ci_matrix()
             } elif (info.name == "tests-cpp") {
                 r <- gate_tests_cpp(ctx)
             } elif (info.name == "tests-interp") {
