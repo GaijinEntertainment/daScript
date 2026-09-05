@@ -6,6 +6,12 @@ require lp_render
 
 [test]
 def test_feedback_and_sound(suite : T?) {
+    suite |> run("one music target combines capture and speech ducking") @(t : T?) {
+        t |> equal(music_duck_factor(false, false), 1.0)
+        t |> equal(music_duck_factor(false, true), 0.27)
+        t |> equal(music_duck_factor(true, false), 0.1)
+        t |> equal(music_duck_factor(true, true), 0.1, "microphone and ASR remain intelligible over robot speech")
+    }
     suite |> run("generated mechanical loops have bounded samples and quiet seams") @(t : T?) {
         let samples <- mechanical_pcm(0.5, 60.0, 0.15, 0.5, true)
         t |> equal(length(samples), EFFECT_RATE / 2)

@@ -212,10 +212,22 @@ def tick_robot_voice() {
     }
 }
 
-def tick_yard_audio(time : float) {
+def music_duck_factor(input_busy, speech_busy : bool) : float {
+    return 0.1 if (input_busy)
+    return 0.27 if (speech_busy)
+    return 1.0
+}
+
+def update_music_duck(input_busy : bool) {
+    return if (!audio_ready)
+    strudel_set_volume(music_volume * music_duck_factor(input_busy, speech_sid != INVALID_SID), 0.25)
+}
+
+def tick_yard_audio(time : float; input_busy : bool) {
     return if (!audio_ready)
     set_head_position(avatar, float3(sin(heading), cos(heading), 0.0))
     tick_robot_voice()
+    update_music_duck(input_busy)
     if (heard_feedback != feedback_serial) {
         positional_cue(feedback_positive ? cue_pcm : click_pcm, avatar, 0.65)
         heard_feedback = feedback_serial
@@ -224,7 +236,6 @@ def tick_yard_audio(time : float) {
         strudel_command(world.power ? "power_on" : "power_off")
         music_powered = world.power
     }
-    strudel_set_volume(music_volume * (speech_sid == INVALID_SID ? 1.0 : 0.27), 0.25)
     set_volume(generator_sid, effects_volume * (world.power ? 1.0 : (starter_engaged ? 0.45 : 0.0)), 0.3)
     set_volume(wind_sid, effects_volume, 0.3)
     let moving = float2(abs(workshop_aperture - previous_gate.x), abs(archive_aperture - previous_gate.y))

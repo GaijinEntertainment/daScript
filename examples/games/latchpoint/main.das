@@ -576,6 +576,7 @@ def framebuffer_drawable(window_w, window_h, buffer_w, buffer_h : int) : bool {
 def tick_nonvisual(time : float; can_draw : bool) {
     poll_dialogue()
     tick_microphone()
+    update_music_duck(microphone_active || conversation_stage == "asr")
     poll_chatter(time, can_draw)
 }
 
@@ -593,7 +594,7 @@ def update() {
     if (!menu_open) { tick_follow(dt) }
     tick_behavior(dt)
     tick_generator(dt)
-    tick_yard_audio(get_uptime())
+    tick_yard_audio(get_uptime(), microphone_active || conversation_stage == "asr")
     tick_chatter(get_uptime())
     if (trace_gl_errors) { glGetError() }
     render_yard(framebuffer_w, framebuffer_h, get_uptime())

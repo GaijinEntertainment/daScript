@@ -72,13 +72,14 @@ def actuator_available() : bool {
     return find_index(world.salvaged, "actuator") < 0
 }
 
-def reset_avatar() {
+def reset_avatar(pose_path : string = "") {
     avatar = float3(0.0, -9.0, 1.65)
     heading = 0.0
     pitch = -0.06
     patch_position = float3(-3.2, 0.2, 0.0)
     patch_heading = 0.0
-    save_avatar()
+    let destination = empty(pose_path) ? avatar_save_path() : pose_path
+    if (!save_avatar_to(destination)) { to_log(LOG_WARNING, "Could not save Latchpoint avatar position.") }
 }
 
 def avatar_save_allowed(menu_is_open : bool) : bool {

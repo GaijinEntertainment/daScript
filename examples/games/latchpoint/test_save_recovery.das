@@ -14,6 +14,9 @@ def test_new_game_replaces_a_corrupt_save(t : T?) {
     return if (empty(root))
     let old_path = save_path
     let path = path_join(root, "scene.json")
+    let real_pose_path = avatar_save_path()
+    let real_pose_before = fread(real_pose_path)
+    let real_pose_stat = stat(real_pose_path)
     save_path = path
     save_valid = false
     fwrite(path, "corrupt save")
@@ -23,6 +26,13 @@ def test_new_game_replaces_a_corrupt_save(t : T?) {
     t |> success(!world.power, "New Game installs the fresh world")
     t |> success(runtime_load(fread(path)), "the replacement save is valid")
     t |> equal(fread(path + ".corrupt"), "corrupt save", "the rejected save remains recoverable")
+    let pose_path = path_join(root, "scene-pose.json")
+    t |> success(fexist(pose_path), "New Game writes its pose beside the selected world save")
+    t |> equal(fread(real_pose_path), real_pose_before, "New Game does not change the normal pose save")
+    let real_pose_after = stat(real_pose_path)
+    if (real_pose_stat.is_valid && real_pose_after.is_valid) {
+        t |> equal(real_pose_after.mtime, real_pose_stat.mtime, "New Game does not rewrite the normal pose save")
+    }
     save_path = old_path
     rmdir_rec(root)
 }

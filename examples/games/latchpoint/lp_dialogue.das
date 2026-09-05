@@ -89,7 +89,7 @@ def native_new_game() {
     world = WorldState()
     delete histories
     if (!runtime_save(true)) { runtime_load(before); reply_text = "Could not save the new game."; return }
-    reset_avatar()
+    reset_avatar(path_join(dir_name(save_path), "scene-pose.json"))
     workshop_aperture = 0.0
     archive_aperture = 0.0
     starter_progress = 0.0

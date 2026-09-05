@@ -4,7 +4,6 @@ options persistent_heap
 require audio/audio_record
 require lp_audio
 require lp_dialogue
-require strudel/strudel_player
 
 var microphone_active = false
 var microphone_samples : array<float>
@@ -98,5 +97,4 @@ def tick_microphone() {
     if (microphone_active && (length(microphone_samples) >= MICROPHONE_LIMIT || get_uptime() - microphone_since > 20.0)) {
         finish_microphone()
     }
-    if (microphone_active || conversation_stage == "asr") { strudel_set_volume(music_volume * 0.1, 0.1) }
 }
