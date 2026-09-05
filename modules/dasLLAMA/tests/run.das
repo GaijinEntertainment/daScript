@@ -102,7 +102,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_bench_records_schema.das",
                     "modules/dasLLAMA/tests/test_box_ident.das",
                     "modules/dasLLAMA/tests/test_box_profile.das",
-                    "modules/dasLLAMA/tests/test_chat.das",
                     "modules/dasLLAMA/tests/test_mtp_snapshot.das",
                     "modules/dasLLAMA/tests/test_mtp_sampled_walk.das",
                     "modules/dasLLAMA/tests/test_dasllama_lint_contracts.das",
@@ -232,7 +231,7 @@ let TESTS_DIR = "modules/dasLLAMA/tests"
 def area_tests(area : string) : array<string> {
     if (area == "audio") {
         return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_dasllama_lint_contracts.das",
-                    "test_tower_helpers.das", "test_vad.das", "test_whisper.das" ]
+                    "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das", "test_whisper.das" ]
     } elif (area == "vision") {
         return <- [ "test_attn_span.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
@@ -253,12 +252,15 @@ def area_tests(area : string) : array<string> {
                     "test_flash.das", "test_forward.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das",
                     "test_gpu_model_swap.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kgroup_repack.das", "test_kqformat.das", "test_kquant.das",
-                    "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_matmul.das", "test_matmul_batch.das",
+                    "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_math_activations.das",
+                    "test_math_elementwise.das", "test_matmul.das", "test_matmul_batch.das",
                     "test_metal_float_a_gate.das", "test_metal_gemm.das", "test_metal_role_infer.das", "test_mtp.das",
                     "test_mtp_gemma_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mxfp4.das",
                     "test_par_indexed.das", "test_parity.das", "test_parity_cache.das", "test_parity_pregate.das",
-                    "test_plane.das", "test_ple_check.das", "test_ple_modes.das", "test_prefill.das", "test_quant.das",
-                    "test_repack.das", "test_repack_lane_context.das", "test_rmsnorm.das", "test_rope.das", "test_sampling.das",
+                    "test_plane.das", "test_ple_check.das", "test_ple_modes.das", "test_prefill.das", "test_prefill_cpu_kernels.das",
+                    "test_q8q8_family.das", "test_quant.das",
+                    "test_repack.das", "test_repack_lane_context.das", "test_rmsnorm.das", "test_rope.das", "test_rope_apply.das",
+                    "test_sampling.das",
                     "test_scheduler.das", "test_silu.das", "test_softmax.das", "test_think_split.das", "test_tokenizer.das",
                     "test_tool_formats.das", "test_unicode.das", "test_vulkan_dec_tail.das", "test_vulkan_kernels.das",
                     "test_vulkan_moe_cm2.das", "test_vulkan_tier.das" ]
