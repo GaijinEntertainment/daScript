@@ -22,5 +22,5 @@ buffer.**
 values from the IEEE bits instead.** A build with `-ffinite-math-only` folds those calls to
 constants.
 
-**Never read `errno` after a socket call in `network.cpp` - use `last_socket_error()` instead.**
-Winsock reports through `WSAGetLastError()` and leaves `errno` at 0.
+**Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing the files or
+lines a check scans, or rewriting a finding text so it no longer names what failed.**

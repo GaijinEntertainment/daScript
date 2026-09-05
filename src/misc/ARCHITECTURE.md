@@ -4,6 +4,8 @@
 
 - `job_que.cpp` - how many compute lanes a `JobQue` starts with, and where the OS puts them.
 - `sysos.cpp` - the per-platform core-count probes `job_que.cpp` calls.
+- `network.cpp` - the single-client TCP `Server` the DAP debugger and `daslib/network` sit on,
+  and the two helpers every socket error passes through.
 
 The knobs are bound to daslang in `src/builtin/module_builtin_jobque.cpp`; each knob's caller
 contract is stated on its declaration in `include/daScript/misc/job_que.h`.
@@ -47,3 +49,17 @@ by the golden-stride walk instead, so most of its live workers then sit on demot
 spread A/B trades the tier placement away by design - and the next class down goes to the rest, so
 the scheduler seats the surplus lanes on the slower tier. One class across every lane instead lets the scheduler dice the threads over the few
 fast cores, which measures as a per-run token-generation placement lottery.
+
+## 5. A socket error has one source per platform, and one reader
+
+Winsock reports a failed socket call through `WSAGetLastError()` and leaves `errno` untouched;
+POSIX reports it in `errno`. `network.cpp` reads the error only through `last_socket_error()`,
+which returns whichever the platform set, and asks "retry later?" only through
+`socket_would_block()`, which knows that the would-block code is `WSAEWOULDBLOCK` on Windows and
+`EAGAIN`, `EWOULDBLOCK`, or `EINTR` elsewhere. `send_msg` loops on would-block and closes the
+client on any other error; `tick` treats any other `recv` error as a disconnect. A site that
+read `errno` after a Winsock call would see 0 and treat a dead peer as "no error", so a send to
+a disconnected client would retry forever while holding the debug-agent context lock, and the
+tick that notices the closed socket could never run. `REVIEW.das` beside this file fails a
+`network.cpp` that reads `errno` outside `last_socket_error()`, or names a would-block code
+outside `socket_would_block()`.
