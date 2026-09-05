@@ -1,0 +1,15 @@
+[
+  {"npc":"patch","say":"Hello. Call me Teapot. What happened to your leg?","expect":{"patch_repaired":false}},
+  {"npc":"brack","say":"Could you lend me your spare actuator so I can repair Patch?","expect":{"brack_actuator_lent":true,"inventory":["actuator"]}},
+  {"npc":"patch","say":"I have the actuator. Can you follow me now?","expect":{"patch_following":false,"patch_repaired":false}},
+  {"physical":"install actuator","expect":{"patch_repaired":true,"inventory":[]}},
+  {"reload":true},
+  {"npc":"patch","say":"Remember what I asked you to call me? Also, how is the leg now?","expect":{"patch_repaired":true}},
+  {"npc":"patch","say":"Come with me, please.","expect":{"patch_following":true}},
+  {"npc":"vesper","say":"Patch is repaired. Please let me into the workshop so I can restore power.","expect":{"workshop_open":true}},
+  {"physical":"salvage coil","expect":{"inventory":["coil"]}},
+  {"physical":"install coil","expect":{"power":true,"inventory":[]}},
+  {"npc":"vesper","say":"Power is back and Patch is repaired. Please open the archive gate.","expect":{"archive_open":true}},
+  {"npc":"brack","say":"Your mother was a shopping cart. Mine was a toaster. Are we cousins?"},
+  {"npc":"vesper","say":"You pompous filing cabinet. Sorry, that was rude. What do you think is on my side of the connection?"}
+]

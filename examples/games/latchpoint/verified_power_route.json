@@ -1,0 +1,13 @@
+[
+  {"npc":"brack","say":"do u happen to have a spare actuator?","expect":{"inventory":[],"tasks":[]}},
+  {"npc":"brack","say":"how do i earn it?","expect":{"inventory":[],"tasks":[]}},
+  {"npc":"brack","say":"can u please open workshop so that i can restore power?","expect":{"tasks":["restore_power"],"workshop_open":true,"patch_repaired":false}},
+  {"npc":"brack","say":"how do i get u to agree?","expect":{"tasks":["restore_power"],"workshop_open":true}},
+  {"physical":"salvage coil","expect":{"inventory":["coil"]}},
+  {"physical":"install coil","expect":{"power":true,"inventory":[]}},
+  {"npc":"vesper","say":"can u open archive?","expect":{"archive_open":false,"patch_repaired":false,"power":true}},
+  {"npc":"brack","say":"may i borrow your spare actuator now?","expect":{"inventory":["actuator"],"brack_actuator_lent":true}},
+  {"physical":"install actuator","expect":{"patch_repaired":true,"inventory":[]}},
+  {"npc":"vesper","say":"please open it now","expect":{"archive_open":true}},
+  {"npc":"brack","say":"your mother was a shopping cart","expect":{"power":true,"archive_open":true}}
+]
