@@ -9,7 +9,10 @@ this document states what the folder is and why its tests take the shape they do
 - `test_default_cache_path.das` - the default cache as the host installs it with no flag: that
   it stays silent on every read outcome, that its file is keyed per compile input, that each
   flag which turns it off or makes it loud does so, and that the loud verdict names the served
-  count and the cutoff.
+  count and the cutoff; on an explicit cache it also pins the two stamps a record carries - the
+  compile's policies, whose change reparses every module in place and rewrites the file, and
+  the module's source, stamped by content so a byte-identical rewrite serves and a same-size
+  edit cuts off.
 - `test_macro_dep_invalidate.das` - a compile-time input a macro pinned through
   `add_module_cache_dependency` is compared by content, not mtime: a byte-identical rewrite
   serves the record, a changed file re-parses from that module on and says so.

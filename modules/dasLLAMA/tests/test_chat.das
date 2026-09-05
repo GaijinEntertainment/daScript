@@ -511,6 +511,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         // a mid-conversation set_thinking(true) cannot inject the gate (the system turn already
         // rendered) — the prompt stays instruct-shaped and the channel-marker stops stay armed
         var c5 = create_chat_renderer(m, "", 8l)
+        set_thinking(c5, false)
         add_user(c5, USR)
         var replay : array<int64>
         render_assistant(m, c5, "The answer.", replay)   // consumes turn 1, thinking off — no gate
@@ -636,6 +637,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
             "\"description\": \"Get current weather\", \"parameters\": \{\"type\": \"object\", " +
             "\"properties\": \{\"city\": \{\"type\": \"string\"}}, \"required\": [\"city\"]}}}")
         var c = create_chat_renderer(m, "", 8l)
+        set_thinking(c, false)
         var tools : array<string>
         tools |> push(tooldef)
         set_tools(c, tools)
@@ -678,6 +680,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
 
         // call replay: the DSL block continues the model turn, which stays OPEN (no close parts)
         var c2 = create_chat_renderer(m, "", 8l)
+        set_thinking(c2, false)
         add_user(c2, USR)
         var calls : array<string>
         calls |> push("\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}}")
@@ -734,6 +737,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         // [user, asst(calls), tool, user]: the displaced results render FIRST (in the open turn),
         // then the turn closes, then the user turn — transcript order on the wire
         var c = create_chat_renderer(m, "", 8l)
+        set_thinking(c, false)
         add_user(c, USR)
         var calls : array<string>
         calls |> push("\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}}")
@@ -767,6 +771,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
 
         // [user, asst(calls), user] with NO results: only the leaked close heals
         var c2 = create_chat_renderer(m, "", 8l)
+        set_thinking(c2, false)
         add_user(c2, USR)
         var toks2 : array<int64>
         render_assistant_calls(m, c2, "", calls, toks2)

@@ -20,6 +20,17 @@ def public untracked_from_ls(out : string) : array<string> {
     return <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
 }
 
+//! The pure half of the dasLLAMA gates' trigger: does a changed path (as `git diff --name-only`
+//! prints them - repo-relative, forward slashes, maybe CR-terminated) sit under `prefix`?
+def public has_path_under(paths : array<string>; prefix : string) : bool {
+    for (p in paths) {
+        if (strip(p) |> starts_with(prefix)) {
+            return true
+        }
+    }
+    return false
+}
+
 def public valid_jit_max_file_time_override(value : float) : bool {
     return value == -1.0 || value >= 0.0
 }

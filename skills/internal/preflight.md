@@ -1,13 +1,13 @@
 # Preflight - CI lane <-> local mirror
 
-`daslang utils/internal/preflight/main.das` runs the fast tier: format, lint,
-clang frontend pass on changed C++ (a full src+tests-cpp sweep when a header
-changed). `-- --full` adds the untracked gate, dasgen freshness, the
-CI-only-das compile sweep, the doc gates, ctest, the interp/JIT/AOT suites and
-the sequence smoke. `--list-gates`; `--only <names>` / `--skip <names>` select
-subsets; `--lint-skip-exe-rail` trims the lint gate to its interp rails. A gate
-whose host tool or module is missing reports `SKIP` with an install/rebuild
-hint.
+`daslang utils/internal/preflight/main.das` runs the fast tier (`--list-gates`
+prints every gate and its tier). `-- --full` adds the expensive gates: the
+untracked gate, dasgen freshness, the CI-only-das compile sweep, the doc gates,
+ctest, the interp/JIT/AOT suites, the sequence smoke, the dasImgui suite, and -
+when the diff touches `modules/dasLLAMA/` - the dasLLAMA `model-free` and
+`stocked` suites. `--only <names>` / `--skip <names>` select subsets;
+`--lint-skip-exe-rail` trims the lint gate to its interp rails. A gate whose
+host tool or module is missing reports `SKIP` with an install/rebuild hint.
 
 Each gate line carries its breakdown indented underneath, on PASS as well as FAIL: the
 build/run split for a gate that builds before it sweeps (`tests-aot`, `sequence`, `imgui`),
@@ -15,18 +15,25 @@ and dastest's `Top 10 slowest files` table for a suite sweep (preflight passes
 `--timing-outliers 10`). The run closes with a time-by-gate table, largest first, so the gate
 holding the wall clock names itself.
 
-Two gates mirror no CI lane:
+These gates mirror no CI lane:
 
+- **dasllama-model-free / dasllama-stocked** - `<daslang> -jit modules/dasLLAMA/tests/run.das
+  -- --suite model-free` and `--suite stocked` (the module's per-PR gates,
+  `modules/dasLLAMA/tests/CLAUDE.md`), full tier, each SKIPs unless `git diff --name-only
+  <base>..HEAD` has a path under `modules/dasLLAMA/`. `model-free` is tens of minutes;
+  `stocked` is tens of minutes on a box with models and a run of skips without them. On a
+  failure (or under `--verbose`) the gate prints the runner's output; each file's log path is
+  on its `DONE` line.
 - **untracked** - `git ls-files --others --exclude-standard` must print nothing:
   commit, delete, or ignore each leftover (`.gitignore` when every clone mints
   it, `.git/info/exclude` for box-local keeps).
 - **hash-refs** - a bare `#N` in `origin/master..HEAD` commit messages far below
   the repo's newest issue/PR number, which GitHub mislinks permanently once
   pushed (spelling: `skills/internal/make_pr.md` step 6). SKIPs without `gh`.
-- **review-md** - the `REVIEW.das` gates of every folder the diff touches, the walk
-  `utils/internal/review-md/main.das` runs (CI: the extended_checks `Run REVIEW.das gates`
-  step, which runs every gate). A checklist edit that breaks a gate's expectation - a
-  token the gate greps for, a routed file it counts - is red here, not on CI.
+
+**review-md** - the `REVIEW.das` gates of every folder the diff touches, the walk
+`utils/internal/review-md/main.das` runs. CI's extended_checks `Run REVIEW.das gates` step runs
+every gate in the tree; this gate is that lane's pre-push half, scoped to the diff.
 
 `--full` is Release-only and fails immediately on a Debug host. Debug serves
 `--only`/`--skip` subset diagnosis only - never as a substitute when a Windows
@@ -92,7 +99,7 @@ below. After regenerating dasClangBind bindings run the self-binder per
 
 preflight's `cpp-syntax` gate mirrors this lane's frontend: clang-cl `/Zs`
 (parse + semantic analysis + template instantiation, no codegen) on changed C++,
-escalating to ALL ~160 src+tests-cpp TUs (~15-30 s) when a core header changed
+escalating to every tracked `src` + `tests-cpp` TU (~15-30 s) when a core header changed
 (a header edit breaks instantiation in untouched TUs). It catches neither
 link-stage nor codegen-only divergence.
 
@@ -194,7 +201,7 @@ stray include. WSL-mirrorable with the workflow's exact commands; otherwise keep
 
 ## nightly_imgui.yml
 
-Each of the ~151 tests spawns a `daslang-live` subprocess hosting a feature app
+Each test spawns a `daslang-live` subprocess hosting a feature app
 from `modules/dasImgui/examples/` and drives it over the HTTP live API. The
 `modules/dasImgui/tests/.das_test` gate keeps the directory out of per-PR
 `--test tests/` sweeps; targeting the folder directly (nightly, and the mirror

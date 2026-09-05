@@ -117,6 +117,7 @@ namespace das {
         ModuleLibrary *     moduleLibrary = nullptr;
     // some passes require module group (it's passed from top-level)
         ModuleGroup *       thisModuleGroup = nullptr;
+        FileAccess *        fileAccess = nullptr;
         Module *            thisModule = nullptr;
         Module *            astModule = nullptr;
         bool                writing = false;
@@ -133,6 +134,7 @@ namespace das {
         uint64_t            servedModules = 0;
         string              cutoffFile;
         string              cutoffReason;
+        bool                policyMismatch = false;
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
@@ -168,8 +170,8 @@ namespace das {
         vector<pair<Enumeration **,SerializeNodeId>>       enumerationRefs;
         // fieldRefs tuple contains: fieldptr, module, structname, fieldname
         vector<tuple<Structure::FieldDeclarationRef*, Module *, string, string>>       fieldRefs;
-        // parsedModules record: fileName, mtime, size, program, thisModule
-        vector<tuple<string, int64_t, int64_t, ProgramPtr, Module*>> parsedModules;
+        // parsedModules record: fileName, source content hash, source size, program, thisModule
+        vector<tuple<string, uint64_t, int64_t, ProgramPtr, Module*>> parsedModules;
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;
@@ -256,7 +258,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 200;   // 200: the constant stream carries ExprConst::isConstLiteral
+            return 204;   // 204: the record header stamps the source by content hash, not mtime; the policy stream carries every CodeOfPolicies field
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

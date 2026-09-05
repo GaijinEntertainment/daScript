@@ -60,7 +60,7 @@ def test_jit_ast_roundtrip(t : T?) {
     expect_round(t, "round 2 deser", "{base} -deser \"{tmp}/ast.bin\" -jit {script}",
         ["obj cache - 3/3 partitions cached", "SPLIT_RESULT 340 19 36 33 -1"],
         ["deser: partial", "deser: clean"])
-    // round 3: edit mod_a so the cache is stale - the rail must FALL BACK (mtime mismatch),
+    // round 3: edit mod_a so the cache is stale - the rail must FALL BACK (content changed),
     // and the mixed program (mod_b deserialized, mod_a + main parsed) still keys mod_b's .o
     t |> success(copy_fixture(fixtures, tmp, "_llvm_split_modules_mod_a.das",
         "=> helper_b(x) + slow_b(x)", "=> helper_b(x) + slow_b(x) + 1"), "round 3 edit mod_a")

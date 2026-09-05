@@ -28,6 +28,11 @@ fixture. A test or tool merely opening a stocked model file by name does not rou
 downloads tune winners to a box and submits that box's winners back - its schema, or a
 tune-boot path that reaches it, applies `performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
 
+**A diff that adds a module under `dasllama/` whose changes reach some of `tests/run.das`'s
+areas but not all - `audio`, `vision`, `tts`, `llm`, `infra` - gives it a `MODULE_AREAS` row
+naming those areas, in the same change.** A module with no row reaches every area, so the
+omission costs every later `run.das -- --changed` the whole suite, never coverage.
+
 **Every `dasllama/` change applies this folder's `tests/REVIEW.md` - open it explicitly: the
 folder walk does not surface it for a `dasllama/`-only diff.**
 

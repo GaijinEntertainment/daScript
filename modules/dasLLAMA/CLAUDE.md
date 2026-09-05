@@ -8,6 +8,17 @@ are about to work in before writing code here. The rules binding a diff are `REV
 `PERF_LEDGER.md` is the measured record; `tests/CLAUDE.md` is the test discipline (run suites
 ONLY through `tests/run.das`).
 
+## Test workflow
+
+After an edit: `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed` runs the tests
+the changed files reach (areas `audio | vision | tts | llm | infra`; `--area <a,b>` names them
+directly). A changed file in a model suite (decode | mtp | prefill | matrix | image) reaches no
+area - `--changed` names it and runs nothing for it; run that suite with `--arm` scoped to the
+change. Before a PR: `--suite model-free`, then `--suite stocked` on a box with models - a PR's
+`stocked` run carries no `--exclude`; `--exclude test_ple_modes` is the between-PR iteration
+form. The runner's `REPORT` and `NEXT` lines say what ran, what the run skipped (a filtered arm,
+an absent device, or a missing model), and what is still owed. The rest: `tests/CLAUDE.md`.
+
 Follow the daslang **gen2** conventions - the root `CLAUDE.md` rules apply to every `.das` file
 here.
 
@@ -22,8 +33,7 @@ fix it in the same session when a step turns out wrong.
 |---|---|
 | `HOW_TO_ADD_A_FORMAT.md` | Adding a weight format (a new `KqFmt`): GGUF type -> planes -> CPU kernels -> tune family -> Vulkan -> Metal -> tests |
 | `BRINGUP.md` | Bringing a profiling box up from zero (the records rig; `METHODOLOGY.md` is the published method) |
-
-Planned entries in the series: adding a model family, a vision tower, an audio tower, TTS.
+| `HOW_TO_GET_SIDECAR.md` | Taking an untuned box to a committed CPU-class profile (`performance/defaults/<class>.tune-defaults.json`) |
 
 ## Skill files (REQUIRED)
 

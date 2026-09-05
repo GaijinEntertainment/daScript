@@ -8,17 +8,45 @@ one-arm fix into an afternoon.
 
 ```
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|mtp|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate, no --arm
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate that needs no models - runs the same on a bare box, no --arm
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # the per-PR gate on a box with models: the model-gated files, no --arm
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the ~10 min PLE file
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # after an edit: the areas the changed files reach
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | llm | infra (comma list)
 ```
 
-`all` (the default) runs the decode, MTP and prefill parity files, the support matrix, the kernel
-files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vulkan`, `coverage`
-and `model-free`.
+An AREA is what someone working on audio, vision, TTS, the LLM engine or the tooling runs after an
+edit: every model-free and stocked file of the area (`area_tests` in `run.das`, a file may sit in
+two) plus the `image` suite's arms the area owns (`area_image_arms`; the `gemma` arm - the E2B
+image round-trip - belongs to no area, because as an `--arm` substring it would drag every other
+`gemma*` arm along; reach it with `--suite image --arm gemma`). `--changed` derives the areas
+from `git diff --name-only <base>` (`--base`, default `origin/master`; a base git cannot resolve
+is refused) plus the module's untracked files: a test file maps to its own areas, a
+`tests/_*.das` fixture to the areas it serves, an engine module through the `MODULE_AREAS` table
+(a module without a row is CORE and reaches every area - the safe default), the checked-in
+`models/` weights to `audio`, any non-`.das` file - `run.das` included - to `infra`,
+`performance/` and `harness/` to `infra`, `benchmarks/`'s `.das` to `llm`, and any other path
+under the module to every area. Each mapping prints as a `CHANGED path -> areas` line; a changed
+model-suite file prints a hint instead, because its arms are the caller's to scope. The run ends
+with `REPORT` (files, failures, cells skipped - a filtered arm, an absent device, or a missing
+model - and files excluded) and `NEXT` (the model suites' `--arm` form when `llm` ran; the per-PR
+suites still owed).
 
-Every suite but `model-free` needs `--arm`. `--full` parses and is then refused, so `--arm` is
-the only way in. `--suite model-free` takes neither - it is the whole gate. The runner redirects
+`all` (the default) runs the decode, MTP and prefill parity files, the support matrix, the kernel
+files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vulkan`, `coverage`,
+`model-free` and `stocked`.
+
+Every suite but `model-free` and `stocked` needs `--arm`. `--full` parses and is then refused, so
+`--arm` is the only way in. `--suite model-free` and `--suite stocked` take neither - each is a
+whole gate; `--exclude <substr,...>` drops the files whose name contains a token and names each
+on an `EXCLUDED` line, so a trimmed run cannot read as full. The runner redirects
 the COMPLETE output to a log file, and prints that path on the DONE line. It owns the dastest
-timeout. It repeats only when `--nreps` is passed explicitly (default 1, never best-of-N).
+timeout, and repeats a file only when `--nreps` is passed explicitly (default 1, never
+best-of-N). Every child runs `-jit -module-cache .jitted_scripts/module_cache/dastest.dascache`;
+that cache serves dastest's own module graph only - the test program dastest compiles at
+runtime sits past it, so each child still pays the engine compile.
+`preflight --full` runs both per-PR suites when the diff touches `modules/dasLLAMA/` (gates
+`dasllama-model-free`, `dasllama-stocked`) and skips them otherwise.
 
 ## The iteration loop
 
@@ -200,12 +228,17 @@ dispatch that skips `metal_set_threadgroup_memory_length` for a kernel with `@wo
 reads garbage silently - no error, a plausible wrong number - which is why the lens makes the
 omission a compile refusal (`test_lens_tgmem_gate` above).
 
-## Model-free / no-arm tests
+## The per-PR suites - model-free and stocked
 
-Which files belong to the `model-free` suite is `REVIEW.md`'s to say. The runner sets
-`DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride
-the `model-free` suite: the runner disarms the guard that tripwire asserts. The map below is
-partial. `run.das`'s `model-free` list is the census.
+The split between the `model-free` and `stocked` suites: a file that reaches a machine-local
+fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`, `whisper_dir()`) is `stocked`,
+every other suite-less file is `model-free`, and `test_run_suites.das` reads the files and fails a
+misfiled one (the pinned gate `REVIEW.md` names for the split). A `stocked` cell skips honestly
+when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box it is
+the model coverage the per-PR gate owes - `test_ple_modes` alone is ~10 min. The runner sets
+`DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride either
+suite: the runner disarms the guard that tripwire asserts. The map below is partial. `run.das`'s
+two lists together are the census.
 `test_vulkan_dec_tail.das` - model-free (a Vulkan device, else skips): the per-op tier's decode
 era against a CPU reference - the decode attention block (K-quant and q8 quads, both rope
 pairings, the hydrate arms), the decode FFN tail, and the whole-token decode span with its
@@ -247,29 +280,29 @@ drafts (a walk that forgot the window would accept the repeated draft).
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
 `test_tool_formats.das` - the per-ToolMode wire codecs (dasllama_tools), model-free: defs
 serializers and call parsers for harmony/gemma4/mistral/llama_json against verbatim fixtures.
-`test_scheduler.das` - the continuous-batching scheduler (dasllama_scheduler) against
+`test_scheduler.das` - stocked suite; the continuous-batching scheduler (dasllama_scheduler) against
 `generate()` references; skips honestly without SmolLM2-135M / the MTP fixture, `-jit` only.
 The SmolLM cells drop the loaded model's GPU state (`moe_gpu_drop_model`) so they serve on
 the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lane, and the
 tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream
 deltanet cell needs Qwen3.5-0.8B-Q8_0 and `DASLLAMA_GPU=1` on a box whose tier serves the
 deltanet decode step, and skips otherwise.
-`test_gpu_model_swap.das` - two models through one process on the armed tier (Qwen3-0.6B,
-SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own weights,
-the pin on the upload rail dropping a still-installed model's device state first; skips
-without both models or the armed tier. Its model-free cell drives that pre-load drop through
-its own entry with a stale mark installed and checks the MoE layer request survives it
-(needs only an installed tier).
+`test_gpu_model_swap.das` - stocked suite; two models through one process on the armed tier
+(Qwen3-0.6B, SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own
+weights, the pin on the upload rail dropping a still-installed model's device state first; skips
+without both models or the armed tier. Its model-free cell drives that pre-load drop through its
+own entry with a stale mark installed and checks the MoE layer request survives it (needs only an
+installed tier).
 `test_program_roots.das` - model-free: every dasllama program root (tutorials, examples,
 server tools) declares `options stack = 524288`, and every model-loading root declares its
 prefill intent.
-`test_audio.das` - model-free: the audio front-end units (gelu-erf, hann window, mel
-filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle gates
-(ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles - CPU-claim cells, tower knob
-pinned OFF) and the `test_encoder_blocks_gpu` cell, the qwen2audio + voxtral 32-layer
+`test_audio.das` - stocked suite; model-free cells: the audio front-end units (gelu-erf, hann
+window, mel filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle
+gates (ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles - CPU-claim cells, tower
+knob pinned OFF) and the `test_encoder_blocks_gpu` cell, the qwen2audio + voxtral 32-layer
 CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas - Apple builds, `-jit`;
 skips honestly without the qwen2audio / voxtral mmprojs.
-`test_whisper.das` - model-free suite; model-gated: the whisper/parakeet/canary/gemma4a/omni
+`test_whisper.das` - stocked suite; model-gated: the whisper/parakeet/canary/gemma4a/omni
 oracle cells, the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
 f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp; the strict token-identity cell
 pins the simdgroup lane, and its tolerance-graded twin pins the crowns ON and asserts WORD
@@ -281,7 +314,7 @@ mels across calls); its ungated cells are the model-free half.
 `asr_encode_bucket`) over constructed structs, the audio families' lane knobs (qwen3a /
 gemma4a / canary: the un-pinned default against the predicate the policy itself consults, both
 pins, and reset from the EXACT pin), and parakeet's SPM detokenizer over a toy vocab.
-`test_mtp_gemma_drafter.das` - model-free suite AND the `mtp` suite: the gemma-4 assistant
+`test_mtp_gemma_drafter.das` - stocked suite AND the `mtp` suite: the gemma-4 assistant
 drafter (`dasllama/dasllama_mtp_gemma`); only `mtp-gdraft-refuse` runs with no model, the other
 arms gate on the files and on `--family gemma4moe`.
 `test_model_specs.das` - model-free: the model-set table's shape invariants
@@ -290,13 +323,13 @@ parity-evidence shape), the derived provenance view's invariants (unique names, 
 https urls), the mmproj pairing lookup (`mmproj_companion` - the companion found by name, not
 by position; >= 2 official vision rows), and the pinned image fixture's provenance
 (`bench_image_fixture` rides some spec's companion list).
-`test_parity.das` - model-free suite; model-gated: the frozen token-for-token parity gates. ONE
+`test_parity.das` - stocked suite; model-gated: the frozen token-for-token parity gates. ONE
 generic loop drives every evidence-carrying spec of the model-set table through its declared
 pinned arms (evidence is DATA on `ModelSpec.parity` - ids + arms, regenerated via
 `../harness/parity.sh`); hand-written arms remain only for the tied-cls bit-match and the gpt-oss
 shared-load double fixture. Every compare logs both decoded streams. Large carriers gate
 on `DASLLAMA_PARITY_FULL=1` via `model_available`.
-`test_parity_pregate.das` - model-free suite; model-gated: the board parity pregate
+`test_parity_pregate.das` - stocked suite; model-gated: the board parity pregate
 (`lcpp_bench --parity`, via `parity_check` fed a controlled spec) on small carriers - the real
 fixture passes, a flipped id fails, an evidence-less spec is refused, the text-form prompt
 encodes through the tokenizer (E2B), the kq-native arm engages and restores the mode
@@ -305,17 +338,26 @@ bench's engine compile.
 `test_run_summary.das` - model-free: `run.das`'s own `log_summary` log scraper (last marker line
 wins, end of file closes an unterminated final line, doubled marker yields one line), fed
 synthetic log files from a per-process temp dir. Requires `run` by bare same-dir name.
+`test_run_suites.das` - model-free: `run.das`'s per-PR split read against the files' text (no
+`model-free` file reaches a fixture root, every `stocked` file does, no file sits in both, every
+listed file exists), the folder census (every test file sits in a `run.das` suite, the
+CPU-prefill tripwire the declared exemption; `run.das` carries no `[init]`), the area tables
+(every area file sits in the census, every census file has an area, every arm an area names
+exists, every image-suite arm is reachable from an area or listed as unclaimed), the pure
+planners behind an area run, the argument contracts, the change-to-area map behind `--changed`,
+the `--exclude` filter's semantics, and a dry run of the runner with a no-op child binary.
+Requires `run` by bare same-dir name.
 `test_site_records.das` - model-free: the records-vs-site drift gate - `merge_site_records`
 (required by relative path, pays the engine compile) regenerated in memory and byte-compared
 against the committed `site/files/dasllama/bench_records.json` (what daslang.io/dasllama.html
 renders); red means a records commit skipped `gen_site_records`.
 `test_tok_seed.das` - model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
-`test_tokenizer.das` - model-free suite; every cell is fixture-gated (the `ggml-vocab-*.gguf`
+`test_tokenizer.das` - stocked suite; every cell is fixture-gated (the `ggml-vocab-*.gguf`
 corpora under the models dir, machine-local): the seven vocab families' `.inp`/`.out` corpora
 through `load_tokenizer_auto` -> `encode` / `decode`, ids exact and the decode round-trip
 lossless; reports SKIPPED where the vocab is not stocked.
-`test_exe_smoke.das` - model-free suite; model-gated (SmolLM2-135M, small tier): the
+`test_exe_smoke.das` - stocked suite; model-gated (SmolLM2-135M, small tier): the
 standalone-exe context gate. Builds `_exe_smoke_root.das` with `-jit -exe` and runs the
 artifact - the one rail where globals restore as DATA, so a function-typed global with no
 boot-restore `[init]` dies on its first invoke while every `-jit` suite stays green. ~90 s.
@@ -328,30 +370,30 @@ branches that decide what lands on the public board, which no model suite reache
 `test_sizing_helpers.das` - model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse, `overwrite_resize` grow-only no-init) fed directly, including
 grows past the `max_unreserved_size` guard that must not panic.
-`test_deltanet.das` - model-free: the deltanet session-state sizing at 27B geometry through
-`make_run_state` (S state + widened-conv history past the guard); model-gated: the
-chunked-vs-recurrent prefill equivalence probe on Qwen3.5-0.8B, in the forced-feed
-logits-tolerance form with the tier's deltanet chain and decode step pinned off (its claim is
-the CPU chunk algebra).
+`test_deltanet.das` - stocked suite; model-free cells: the deltanet session-state sizing at 27B
+geometry through `make_run_state` (S state + widened-conv history past the guard); model-gated:
+the chunked-vs-recurrent prefill equivalence probe on Qwen3.5-0.8B, in the forced-feed
+logits-tolerance form with the tier's deltanet chain and decode step pinned off (its claim is the
+CPU chunk algebra).
 `test_vision.das` - model-free: the vision preprocessing rail (geometry, letterbox, normalize)
 bit-exact against pinned mtmd oracle hashes (dumps + mint scripts in the models dir's
 `gemma4-vision-oracle/` and `qwen3vl-vision-oracle/` - the qwen rail letterboxes at align 32),
 plus the stbimage decode/dump round-trips in a per-process temp dir.
-`test_gemma4uv.das` - the gemma4uv embedder tier-1 parity vs the `-p encode` oracle dumps
-(f32-mmproj-minted - the bf16 oracle carries bf16-dot activation noise); gates per-token
+`test_gemma4uv.das` - stocked suite; the gemma4uv embedder tier-1 parity vs the `-p encode` oracle
+dumps (f32-mmproj-minted - the bf16 oracle carries bf16-dot activation noise); gates per-token
 mean/v0..v3 at 2e-4 with the measured maxdiff logged; skips honestly without the mmproj or dumps.
 On Apple builds the CPU gate pins the tower knob off, and a second test gates the GPU tier-1
-encode against the same dumps on a scale-relative bar (2e-4 + 4e-3*token-rms) - exceeding it
-is a red, the bar each fixture actually held is logged either way, and engage is proven per
-fixture by the encodes counter.
-`test_gemma4v.das` - the gemma4v ViT tower (E-series) tier-1 parity vs the `-p encode` dumps
-minted on the f32-widened mmproj, CPU, `-fa off` (`mint_e2b.sh` / `mint_e4b.sh`): eight E2B
-fixtures (96^2 cb through 672x336) on the scale-relative bar 2e-4 + 4e-3*token-rms, the measured
-maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed through the
-staging planes must miss the oracle - the sidecar scalars are load-bearing); plus the E4B
-rung - the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam
-subset with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps.
-`test_gemma3v.das` - the gemma3 SigLIP tower (gemma-3-4b mmproj) tier-1 parity vs the
+encode against the same dumps on a scale-relative bar (2e-4 + 4e-3*token-rms) - exceeding it is a
+red, the bar each fixture actually held is logged either way, and engage is proven per fixture by
+the encodes counter.
+`test_gemma4v.das` - stocked suite; the gemma4v ViT tower (E-series) tier-1 parity vs the `-p
+encode` dumps minted on the f32-widened mmproj, CPU, `-fa off` (`mint_e2b.sh` / `mint_e4b.sh`):
+eight E2B fixtures (96^2 cb through 672x336) on the scale-relative bar 2e-4 + 4e-3*token-rms, the
+measured maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed through
+the staging planes must miss the oracle - the sidecar scalars are load-bearing); plus the E4B rung
+- the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam subset
+with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps.
+`test_gemma3v.das` - stocked suite; the gemma3 SigLIP tower (gemma-3-4b mmproj) tier-1 parity vs the
 `-p encode` dumps minted on the f32-widened f16 mmproj, CPU, `-fa off`
 (`gemma3-vision-oracle/mint_gemma3.sh`): the canvas is FIXED 896^2 (learned position table), so
 the five fixtures vary content, not geometry; exact lane on the 2e-4 + 4e-3*token-rms bar, the
@@ -366,7 +408,7 @@ would read as f32 garbage), and a third crowned encode on the twin-W route
 (`set_metal_tensor_crowns("mulmm_q8")` + `set_metal_tower_f16(true)`, the lane pinned exact so
 the twin is baked), witnessed by the `metal_tower_f16_encodes` delta. Skips honestly without
 the mmproj or dumps.
-`test_qwen3v.das` - the qwen3v tower tier-1 parity vs the `-p encode` dumps minted on
+`test_qwen3v.das` - stocked suite; the qwen3v tower tier-1 parity vs the `-p encode` dumps minted on
 f32-widened mmprojs, CPU (`qwen3vl-vision-oracle/mint.sh` + `mint_4b.sh`): the Omni leg
 (`qwen3vl_merger` no deepstack) on seven fixtures (cb96 = the pos-table downscale arm,
 cb640x320 = the merge-reorder/transposed-grid gate) at 2e-4 + 1.5e-2*token-rms (the ff_pad
@@ -396,39 +438,38 @@ bf16-sourced tower, one fixture, its own f16-encodes delta, which is what proves
 bake covers bf16 files and not just f16 ones); and a model-free lane-knob cell.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).
-`test_qwen25v.das` - the qwen25v tower (Qwen2.5-Omni's window-attention ViT, projector
-`qwen2.5o`) tier-1 parity vs the `-p encode` dumps minted on the f32-widened dual-tower
+`test_qwen25v.das` - stocked suite; the qwen25v tower (Qwen2.5-Omni's window-attention ViT,
+projector `qwen2.5o`) tier-1 parity vs the `-p encode` dumps minted on the f32-widened dual-tower
 mmproj, CPU (`qwen3vl-vision-oracle/mint_25o.sh`): five fixtures, four of them shaped - cb112 =
-the single-window arm, cb448 = four full windows, cb616x336 = ragged window edges, and
-quad448 = the WINDOW DISCRIMINATOR (four exact-value quadrants; uniform/periodic fixtures
-make every window
-statistically identical, so an all-full-attention poison hides under them - quad reds it at
-10.7 vs the 2e-4 + 1e-2*rms bar) - plus the merged-patch-grid panic gate. No q8 lane in
-this tower, so no q8-lane cells. On Apple builds the CPU gate pins the tower knob off, and a
-GPU rung gates four fixtures through the Metal window-ViT driver on the 8e-2*rms bar (the
-32-layer mix amplifies the f16-operand GEMM noise and re-rolls on low-bit kernel changes;
-quad448 is OFF this rung's numeric set for exactly that reason - window-distinct content
-realizes the amplification at 0.18-0.4*rms), with engage proven per fixture by the
-encodes/blocks counters, a twin-route counter witness (crowns pinned), the knob-off decline
-leg, a zeroed-block GPU-lane poison through BOTH staging planes, and the SHALLOW routing
-cells - 1-layer truncated towers (pure-window and all-full) on quad content, GPU vs the CPU
-chain at 0.1 abs, the chaos-free window discrimination for the DRIVER (the kernel's own
-block-diagonal strictness is the kernels-suite `tower_win` gate). Skips honestly without the
-mmproj or dumps.
+the single-window arm, cb448 = four full windows, cb616x336 = ragged window edges, and quad448 =
+the WINDOW DISCRIMINATOR (four exact-value quadrants; uniform/periodic fixtures make every window
+statistically identical, so an all-full-attention poison hides under them - quad reds it at 10.7
+vs the 2e-4 + 1e-2*rms bar) - plus the merged-patch-grid panic gate. No q8 lane in this tower, so
+no q8-lane cells. On Apple builds the CPU gate pins the tower knob off, and a GPU rung gates four
+fixtures through the Metal window-ViT driver on the 8e-2*rms bar (the 32-layer mix amplifies the
+f16-operand GEMM noise and re-rolls on low-bit kernel changes; quad448 is OFF this rung's numeric
+set for exactly that reason - window-distinct content realizes the amplification at 0.18-0.4*rms),
+with engage proven per fixture by the encodes/blocks counters, a twin-route counter witness
+(crowns pinned), the knob-off decline leg, a zeroed-block GPU-lane poison through BOTH staging
+planes, and the SHALLOW routing cells - 1-layer truncated towers (pure-window and all-full) on
+quad content, GPU vs the CPU chain at 0.1 abs, the chaos-free window discrimination for the DRIVER
+(the kernel's own block-diagonal strictness is the kernels-suite `tower_win` gate). Skips honestly
+without the mmproj or dumps.
 `_vision_oracle.das` is the shared dump parser / fixture generator / per-token compare /
 over-bar scorer (the must-EXCEED half of a poison leg) all vision tier-1 tests use (the
 `quad` generator and the q1/q2/q3 quarter-offset probe fields live here).
-`test_audio_embedder.das` - model-free: the `AudioEmbedder` carrier's own arms - the no-audio
-refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on the E2B mmproj,
-carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft token).
-`test_vision_embedder.das` - model-free: the `VisionEmbedder` carrier's own arms over
-constructed carriers - the text-only (none) shape, the loader's refusals by name (missing
-file, audio-only mmproj), and the `vision_exec_fmt` lane stamp (the qwen3v q8 flag reaching
-it; qwen25v exact-only); model-gated: the gemma4uv arm on the 12B mmproj - the sniffed
+`test_audio_embedder.das` - stocked suite; model-free cells: the `AudioEmbedder` carrier's own
+arms - the no-audio refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on
+the E2B mmproj, carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft
+token).
+`test_vision_embedder.das` - stocked suite; model-free cells: the `VisionEmbedder` carrier's own
+arms over constructed carriers - the text-only (none) shape, the loader's refusals by name
+(missing file, audio-only mmproj), and the `vision_exec_fmt` lane stamp (the qwen3v q8 flag
+reaching it; qwen25v exact-only); model-gated: the gemma4uv arm on the 12B mmproj - the sniffed
 family tag, the 48 px align, the 3840 projection width.
 `test_ple_check.das` - model-free: the PLE go-live tripwire (`ple_check_table`) on synthetic
 Model shells - short plane trips per format arm, full plane passes, non-PLE exempt.
-`test_ple_modes.das` - model-free suite; model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE
+`test_ple_modes.das` - stocked suite; model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE
 token table's pinned-plane rail across serving modes - fp32 keeps the Q8_0 table on a
 dedicated q8 plane (offset 0, plane == table exactly, gather rows BIT-match the file dequant,
 wblob provably too small to carry the expansion) and a K-quant table on its native kq plane;
@@ -439,25 +480,24 @@ decimal readers, the reference normalizer's own examples, the fixed upstream def
 failing-first cases, and the 200-sentence corpus (`_tts_fixtures/g2p_corpus.json`, loaded by
 `_tts_corpus.das`) against the reference normalizer's output - or the fixture's hand-corrected
 `expected` form where that output is not what a person says - idempotence included.
-`test_tts_postag.das` - model-free: the tagger's word class and shape features (the trainer's
-own hyphen rule, the d/h/q suffixes), the tokenizer's comma and colon infix rules, and the
-missing-pack panic; model-gated (`tts_postag.bin` in the models dir): the TTS tokenizer
-token-for-token against the reference tokenizer on the corpus, the tagger's agreement with the
-reference tagger (overall and on the heteronym words), the packed file's header floors, and
-the load budget.
-`test_tts_g2p.das` - model-free: the missing-pack panic, the pack-version refusal (a synthetic
-version 1 header in a per-process temp dir; the stocked pack is its positive control) and the
-American-to-British rewrite table over pinned strings, idempotence included; model-gated
-(`tts_g2p.bin` + `tts_postag.bin`): the grapheme-to-phoneme rail phoneme-identical with the
-reference front end
-on the corpus (fed the same normalized text) except the sentences its heteronym rules and the
-lexicon additions of `harness/g2p_local_additions.json` read past it (named in the cell), both
-rails' remaining mismatch counts pinned exactly at 2, the
-heteronym gate (both annotated readings present, 32 of 38 against the reference's 24; a verb
-tag out-ranks the collocation table), the function-word, splitter, inflection and number arms
-(a glued number past 2^31 reads its digits, never "zero"), the fallback chain (the lexicon's
-own plain reading before CMUdict, on both rails), stress helpers,
-the load budget and the pack's size budget; then the BRITISH half against
+`test_tts_postag.das` - stocked suite; model-free cells: the tagger's word class and shape
+features (the trainer's own hyphen rule, the d/h/q suffixes), the tokenizer's comma and colon
+infix rules, and the missing-pack panic; model-gated (`tts_postag.bin` in the models dir): the TTS
+tokenizer token-for-token against the reference tokenizer on the corpus, the tagger's agreement
+with the reference tagger (overall and on the heteronym words), the packed file's header floors,
+and the load budget.
+`test_tts_g2p.das` - stocked suite; model-free cells: the missing-pack panic, the pack-version
+refusal (a synthetic version 1 header in a per-process temp dir; the stocked pack is its positive
+control) and the American-to-British rewrite table over pinned strings, idempotence included;
+model-gated (`tts_g2p.bin` + `tts_postag.bin`): the grapheme-to-phoneme rail phoneme-identical
+with the reference front end on the corpus (fed the same normalized text) except the sentences its
+heteronym rules and the lexicon additions of `harness/g2p_local_additions.json` read past it
+(named in the cell), both rails' remaining mismatch counts pinned exactly at 2, the heteronym gate
+(both annotated readings present, 32 of 38 against the reference's 24; a verb tag out-ranks the
+collocation table), the function-word, splitter, inflection and number arms (a glued number past
+2^31 reads its digits, never "zero"), the fallback chain (the lexicon's own plain reading before
+CMUdict, on both rails), stress helpers, the load budget and the pack's size budget; then the
+BRITISH half against
 `_tts_fixtures/g2p_corpus_gb.json` (loaded by `_tts_corpus_gb.das`, minted by
 `harness/mint_tts_g2p_gb_fixture.py` from the reference's own `british=True` front end with its
 espeak `en-gb` fallback): phoneme-identical on the 157 rows the reference answered from its
@@ -471,38 +511,36 @@ rewrite on the fixture's probe words with the reference's espeak readings logged
 British lexicon tier itself - the bath-trap split, the LOT vowel and the non-rhotic vowels
 answered from the British tier rather than the rewrite, with the American reading of the same
 line beside it.
-`test_tts_kitten.das` - model-free suite; the symbol-map and token-rule cells run everywhere
+`test_tts_kitten.das` - stocked suite; the symbol-map and token-rule cells run everywhere
 (the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
 the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-<size>.gguf` +
 `tts_oracle/kitten_<size>/` under the models dir, both from `performance/build_tts_data.das`)
 run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
 sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings.
-`test_tts_kokoro.das` - model-free: the symbol map over a synthetic phoneme string, the
-out-of-vocabulary drop, the style-row clamps, and the pack-name language rule (`<language><f|m>_`
-for all nine codes, and every other shape reading "" whatever letter it opens with - the letter
-alone would make "emma" Spanish); model-gated (`kokoro-82m.gguf` +
+`test_tts_kokoro.das` - stocked suite; model-free cells: the symbol map over a synthetic phoneme
+string, the out-of-vocabulary drop, the style-row clamps, and the pack-name language rule
+(`<language><f|m>_` for all nine codes, and every other shape reading "" whatever letter it opens
+with - the letter alone would make "emma" Spanish); model-gated (`kokoro-82m.gguf` +
 `tts_oracle/kokoro/`): the vocabulary and style-row rule, the parity rail of `_tts_parity.das`
-against the PyTorch reference, a facade smoke cell through the front end's own inventory (the
-28 English packs, two declared languages, 8 of them British), the British voice cell - one
-line phonemized in both dialects, every British symbol proven to be in the model's own
-vocabulary by the token count, `bf_emma` speaking, and the sample count of that synthesis held
-against the model driven straight from each dialect's string, which is what proves the VOICE's
-dialect reached the synthesis - and the voice refusals (a pack whose language the front end
-lacks names that language; a voice the model has never heard of refuses first, with no language
-to name).
-`test_tts_facade.das` - model-free suite: the sentence chunker (the reference driver's boundary
-rule, the cap counted in codepoints, the hard split of a whitespace-free run, the appended
-comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the facade
-exposes (`tts_normalize`: abbreviation, decimal, money, clock, date, ordinal, percentage, unit,
-empty), the voice refusal a pack whose name carries NO language draws (hand-built model - the
-sentence must not render an empty code), the WAV container, the codec's malformed-lead and
-astral arms, kitten's
-dropped-symbol rule, and the `rtf` guard; model-gated (`kitten-nano.gguf` + the front-end
-packs): the streaming form's chunks concatenate to the buffered synthesis sample for sample,
-one synthesis at one lane and the other at the box's lanes, the phonemizer on the corpus rail,
-the model-keyed chunker's Kitten arm (the driver's comma - the one arm no model-free cell
-reaches), and the language form of `tts_phonemize` - the declared language reads as the bare
-form does, an undeclared one panics at the call site.
+against the PyTorch reference, a facade smoke cell through the front end's own inventory (the 28
+English packs, two declared languages, 8 of them British), the British voice cell - one line
+phonemized in both dialects, every British symbol proven to be in the model's own vocabulary by
+the token count, `bf_emma` speaking, and the sample count of that synthesis held against the model
+driven straight from each dialect's string, which is what proves the VOICE's dialect reached the
+synthesis - and the voice refusals (a pack whose language the front end lacks names that language;
+a voice the model has never heard of refuses first, with no language to name).
+`test_tts_facade.das` - stocked suite; model-free cells: the sentence chunker (the reference
+driver's boundary rule, the cap counted in codepoints, the hard split of a whitespace-free run,
+the appended comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the
+facade exposes (`tts_normalize`: abbreviation, decimal, money, clock, date, ordinal, percentage,
+unit, empty), the voice refusal a pack whose name carries NO language draws (hand-built model -
+the sentence must not render an empty code), the WAV container, the codec's malformed-lead and
+astral arms, kitten's dropped-symbol rule, and the `rtf` guard; model-gated (`kitten-nano.gguf` +
+the front-end packs): the streaming form's chunks concatenate to the buffered synthesis sample for
+sample, one synthesis at one lane and the other at the box's lanes, the phonemizer on the corpus
+rail, the model-keyed chunker's Kitten arm (the driver's comma - the one arm no model-free cell
+reaches), and the language form of `tts_phonemize` - the declared language reads as the bare form
+does, an undeclared one panics at the call site.
 `test_tts_blocks.das` - model-free: the block home's two layouts against each other - every
 rows form (token-major [T][C]) held to its channel-major twin at the dot-envelope bar (a
 tolerance times the sum of |w|*|x| feeding each output, with a zeroed-tap poison leg that must
@@ -524,13 +562,13 @@ F0 phase drift the file header explains).
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference.
-`test_attn_span.das` - the non-causal image span (`eval_embd_` with `non_causal = true`): mask direction by
-perturbation (causal row 0 blind to the last row, span row 0 sees it), classic/blocked/flash
-agreement, and the flag-reset bit-exactness; plus the FUSED mid-turn span (`eval_embd_span_`):
-splice equivalence via a whole-cache decode-logits witness (classic/blocked bit-exact, flash
-tolerance) and the per-query mask direction inside one eval; plus the deepstack wide-row rail
-(stamped `n_deepstack`): zero-tail wide == narrow bit-exact, nonzero tails move the logits,
-slice 0 vs slice 2 add at different depths, no stale plane after the quantum; stories15M
+`test_attn_span.das` - stocked suite; the non-causal image span (`eval_embd_` with `non_causal =
+true`): mask direction by perturbation (causal row 0 blind to the last row, span row 0 sees it),
+classic/blocked/flash agreement, and the flag-reset bit-exactness; plus the FUSED mid-turn span
+(`eval_embd_span_`): splice equivalence via a whole-cache decode-logits witness (classic/blocked
+bit-exact, flash tolerance) and the per-query mask direction inside one eval; plus the deepstack
+wide-row rail (stamped `n_deepstack`): zero-tail wide == narrow bit-exact, nonzero tails move the
+logits, slice 0 vs slice 2 add at different depths, no stale plane after the quantum; stories15M
 fixture (test_flash's), skips without it.
 `test_cpu_prefill_tripwire.das` - the CPU-prefill guard: an undeclared prefill trips - span,
 causal, MROPE-quantum, and DEEPSTACK-quantum alike (the metal rail serves all four, so a
@@ -538,32 +576,29 @@ CPU-served one is a silent fallback);
 same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which is why it
 cannot live in test_attn_span - that file arms it in `[init]`). Metal-capable builds only;
 plain dastest only.
-`test_vision_chat.das` - the image chat turn end to end, one pair per vision carrier plus the
-showcase: the 12B gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`), the E2B
-gemma4v pair (E2B Q8 decoder + bf16 mmproj - small tier, runs without the flag), the
-gemma-3-4b gemma3v pair (small tier), the gemma-3-12b pair (the same SigLIP tower at
-projection 3840 - large tier, `DASLLAMA_PARITY_FULL=1`), and the Qwen3-Omni qwen3v pair
-(large tier - the mrope leg: grid reaches the chat, the session's rope delta reflects the
-grid advance), the Qwen3-VL 4B deepstack pair (small tier - wide 10240-float rows through
-the chat, the caption, and the zeroed-slices decoder control: tails zeroed on the same rows
-must move the prefill logits, measured 10.4 - a caption alone cannot see a decoder that
-ignores the slices), the rows-seam cell (same 4B pair - pre-encoded wide rows through
-`add_user_image_rows_` on a plain chat reproduce the embedder walk token-for-token; the seam
-lcpp_bench prices, where a hand-splice can feed deepstack decoders a narrow scrambled span),
-the Qwen2.5-Omni-3B qwen25v pair (small tier - the window ViT + the
-qwen2vl NON-interleaved MROPE decoder; the vocab spells the span markers
-`<|vision_bos|>`/`<|vision_eos|>`, resolved by the chat layer's vocab-driven fallback)
-plus the `test_omni_showcase` cell in the same file (one Omni session: an image turn, then a text turn
-whose answer needs the image turn across the mrope position delta; the chat AudioTower serves the whisper-class families only):
-the prompt stream shape around the splice
-(marker ids, media-first, span length from the geometry) and the greedy caption, logged in
-full. NOT token-parity with
+`test_vision_chat.das` - stocked suite; the image chat turn end to end, one pair per vision
+carrier plus the showcase: the 12B gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`),
+the E2B gemma4v pair (E2B Q8 decoder + bf16 mmproj - small tier, runs without the flag), the
+gemma-3-4b gemma3v pair (small tier), the gemma-3-12b pair (the same SigLIP tower at projection
+3840 - large tier, `DASLLAMA_PARITY_FULL=1`), and the Qwen3-Omni qwen3v pair (large tier - the
+mrope leg: grid reaches the chat, the session's rope delta reflects the grid advance), the
+Qwen3-VL 4B deepstack pair (small tier - wide 10240-float rows through the chat, the caption, and
+the zeroed-slices decoder control: tails zeroed on the same rows must move the prefill logits,
+measured 10.4 - a caption alone cannot see a decoder that ignores the slices), the rows-seam cell
+(same 4B pair - pre-encoded wide rows through `add_user_image_rows_` on a plain chat reproduce the
+embedder walk token-for-token; the seam lcpp_bench prices, where a hand-splice can feed deepstack
+decoders a narrow scrambled span), the Qwen2.5-Omni-3B qwen25v pair (small tier - the window ViT +
+the qwen2vl NON-interleaved MROPE decoder; the vocab spells the span markers
+`<|vision_bos|>`/`<|vision_eos|>`, resolved by the chat layer's vocab-driven fallback) plus the
+`test_omni_showcase` cell in the same file (one Omni session: an image turn, then a text turn
+whose answer needs the image turn across the mrope position delta; the chat AudioTower serves the
+whisper-class families only): the prompt stream shape around the splice (marker ids, media-first,
+span length from the geometry) and the greedy caption, logged in full. NOT token-parity with
 llama-mtmd-cli - the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
-arm defaults to instruct. On Apple
-builds the turn also carries the tower legs: the default caption's image encode must show an
-encodes delta (GPU-served), then a knob-off chat repeats the turn on the CPU embedder and
-must clear the same caption bar - the caption names the cats and is a description, not a
-fragment - with zero tower dispatches and the knob decline counted.
+arm defaults to instruct. On Apple builds the turn also carries the tower legs: the default
+caption's image encode must show an encodes delta (GPU-served), then a knob-off chat repeats the
+turn on the CPU embedder and must clear the same caption bar - the caption names the cats and is a
+description, not a fragment - with zero tower dispatches and the knob decline counted.
 
 ## Model loads - never the image rail
 

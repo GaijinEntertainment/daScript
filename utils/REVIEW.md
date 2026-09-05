@@ -40,7 +40,7 @@ assertions no CI row can run for want of hardware or data, ships with a row that
 --compile-only` for a `.das` test - in the same change.**
 
 **A test the diff adds or changes that covers a change under `utils/`, whose load-bearing
-assertions no CI row runs against the build the diff produces, records its executed run in the
-PR description**: the machine the assertions ran on, what that machine had that CI lacks, and
-the pass count. A row that tests an already-deployed artifact proves nothing about the diff
-under review.
+assertions no CI row can run for want of hardware or data, records in the PR description an
+executed run against the build the diff produces**: the machine the assertions ran on, what
+that machine had that CI lacks, and the pass count. A run against an already-deployed artifact
+proves nothing about the diff under review.

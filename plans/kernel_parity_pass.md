@@ -29,11 +29,12 @@ Branch `bbatkin/kernel-parity`, stacked on the PR-1 tip; rebases onto master aft
    ```
    Vulkan has the same rig on our side in `harness/vk_gemm_probe.das` (`ref` arm = llama.cpp's own
    coopmat2 SPV blob inside our harness; `k6x flat` = compose without scale reads).
-3. **Outer loop: the app, only when a spelling wins rig 1.** `-jit -module-cache
-   .jitted_scripts/module_cache/<app>.dascache <app>.das -- --jit-split-modules=-1` (5 s warm,
-   65 s after a kernel edit); `--tune-only <family>` re-crowns one family; `DAS_TUNE_POLICY=reference`
-   is the A/B baseline. The stock monolith invocation runs once per landed kernel for the table
-   row. `rm -rf .jitted_scripts` after an emitter edit (`dasllama_gemm_gen.das`) - QUIRK 21.
+3. **Outer loop: the app, only when a spelling wins rig 1.** `daslang -jit <app>.das` - the
+   module cache and the split-module JIT are the defaults (5 s warm, 65 s after a kernel edit);
+   `--tune-only <family>` re-crowns one family; `DAS_TUNE_POLICY=reference` is the A/B
+   baseline. The one-unit invocation (`-- --jit-split-modules=0`, or the released `-exe`) runs
+   once per landed kernel for the table row. `rm -rf .jitted_scripts` after an emitter edit
+   (`dasllama_gemm_gen.das`) - QUIRK 21.
 
 Rules that ride along: bench at `DAS_JOBQUE_THREADS=16`, tests at 8; one row at a time; one
 proven fact per push; research before any kernel edit (the two memos below).

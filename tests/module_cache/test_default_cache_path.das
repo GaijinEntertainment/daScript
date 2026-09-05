@@ -115,6 +115,86 @@ def test_fallback_verdict_names_the_cutoff(t : T?) {
     rmdir_rec(tmp, err)
 }
 
+//! a record written under one set of compile policies serves nothing to a compile under another:
+//! the same explicit cache read by a -no-lint run reparses every module in place and is rewritten
+[test]
+def test_policy_change_refuses_the_cache(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_mc_policy", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    fwrite(path_join(tmp, "mc_pol_leaf.das"), "options gen2\nmodule mc_pol_leaf\ndef leaf() : int \{\n    return 3\n\}\n")
+    fwrite(path_join(tmp, "mc_pol_root.das"), "options gen2\nrequire mc_pol_leaf\n[export]\ndef main \{\n    print(\"MARK_policy \{leaf()\}\\n\")\n\}\n")
+    let base = "{das_exe()} -dasroot {get_das_root()}"
+    let tail = "-module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_pol_root.das")}"
+    var cold : string
+    t |> success(report_child(t, "policy cold", run("{base} {tail}", cold), cold, "ser: wrote"), "the cold run writes the explicit cache")
+    var same : string
+    t |> success(report_child(t, "policy same", run("{base} {tail}", same), same, "deser: clean"), "the same policies serve every module")
+    var changed : string
+    t |> success(report_child(t, "policy changed", run("{base} -no-lint {tail}", changed), changed, "MARK_policy 3"), "a -no-lint run over the plain run's cache still executes")
+    t |> success(find(changed, "compile policies changed at") >= 0 && find(changed, "mc_pol_leaf.das") >= 0, "the leaf's record names the policy change:\n{changed}")
+    t |> success(find(changed, "deser: partial") >= 0, "the mismatch reparses in place rather than cutting the stream:\n{changed}")
+    t |> success(find(changed, "ser: wrote") >= 0, "the cache is rewritten under the new policies")
+    var rewritten : string
+    t |> success(report_child(t, "policy rewritten", run("{base} -no-lint {tail}", rewritten), rewritten, "deser: clean"), "the rewritten cache serves the -no-lint compile")
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
+//! the record stamps a module's file by content: a rewrite that leaves the bytes alone serves the
+//! cache, and a same-size edit is a cutoff - the stamp never reads mtime
+[test]
+def test_source_stamp_is_content(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_mc_stamp", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let leaf = path_join(tmp, "mc_stamp_leaf.das")
+    let leafSrc = "options gen2\nmodule mc_stamp_leaf\ndef leaf() : int \{\n    return 2\n\}\n"
+    fwrite(leaf, leafSrc)
+    fwrite(path_join(tmp, "mc_stamp_root.das"), "options gen2\nrequire mc_stamp_leaf\n[export]\ndef main \{\n    print(\"MARK_stamp \{leaf()\}\\n\")\n\}\n")
+    let cmd = "{das_exe()} -dasroot {get_das_root()} -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_stamp_root.das")}"
+    var cold : string
+    t |> success(report_child(t, "stamp cold", run(cmd, cold), cold, "ser: wrote"), "the cold run writes the explicit cache")
+    sleep(1100u)    //! past the mtime's one-second grain, so the rewrite below moves the mtime
+    fwrite(leaf, leafSrc)
+    var touched : string
+    t |> success(report_child(t, "stamp touched", run(cmd, touched), touched, "deser: clean"), "a rewrite that leaves the bytes alone still serves every module:\n{touched}")
+    fwrite(leaf, "options gen2\nmodule mc_stamp_leaf\ndef leaf() : int \{\n    return 3\n\}\n")
+    var edited : string
+    t |> success(report_child(t, "stamp edited", run(cmd, edited), edited, "MARK_stamp 3"), "a same-size edit is recompiled")
+    t |> success(find(edited, "file changed at") >= 0 && find(edited, "mc_stamp_leaf.das") >= 0, "the same-size edit is a cutoff at the leaf:\n{edited}")
+    t |> success(find(edited, "ser: file content changed") >= 0, "the loud cache names the content change:\n{edited}")
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
+//! a module's `options gen2` derives its syntax policy from the source; the policy compare sees the
+//! same derivation, so a -v1syntax host serves a gen2 module instead of rewriting the cache every run
+[test]
+def test_source_derived_syntax_policy_serves(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_mc_gen2", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    fwrite(path_join(tmp, "mc_gen2_leaf.das"), "options gen2\nmodule mc_gen2_leaf\ndef leaf() : int \{\n    return 5\n\}\n")
+    fwrite(path_join(tmp, "mc_gen2_root.das"), "options gen2\nrequire mc_gen2_leaf\n[export]\ndef main \{\n    print(\"MARK_gen2 \{leaf()\}\\n\")\n\}\n")
+    let cmd = "{das_exe()} -dasroot {get_das_root()} -v1syntax -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_gen2_root.das")}"
+    var cold : string
+    t |> success(report_child(t, "gen2 cold", run(cmd, cold), cold, "MARK_gen2 5"), "a -v1syntax host compiles a module that opts into gen2")
+    var warm : string
+    t |> success(report_child(t, "gen2 warm", run(cmd, warm), warm, "deser: clean"), "the warm run serves the gen2 module - no policy mismatch on a source-derived flag:\n{warm}")
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
 //! the modes that never install the default cache: the opt-out flag, a compile with no run, an AOT-consuming run
 def check_off_modes(t : T?; base, b, c : string) {
     var off : string

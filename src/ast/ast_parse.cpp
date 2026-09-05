@@ -636,6 +636,33 @@ namespace das {
 #endif
     }
 
+    static void stampModuleSource ( const char * src, uint32_t len, int64_t & size, uint64_t & hash ) {
+        size = src ? int64_t(len) : -1;
+        hash = (src && len) ? hash_block64((const uint8_t *) src, size_t(len)) : FNV64A_SEED;
+    }
+
+    static void stampModuleSource ( const FileAccessPtr & access, const string & fileName, int64_t & size, uint64_t & hash ) {
+        const char * src = nullptr;
+        uint32_t len = 0;
+        if ( FileInfo * fi = access->getFileInfo(fileName) ) fi->getSourceAndLength(src, len);
+        stampModuleSource(src, len, size, hash);
+    }
+
+    bool detectGen2Syntax ( const char * text, uint32_t length, bool& value );
+
+    // the parse derives version_2_syntax from the source (`options gen2`); the record carries the
+    // derived value, so the compare must see the same derivation
+    static void deriveSourcePolicies ( const FileAccessPtr & access, const string & fileName, CodeOfPolicies & policies ) {
+        if ( FileInfo * fi = access->getFileInfo(fileName) ) {
+            const char * src = nullptr;
+            uint32_t len = 0;
+            fi->getSourceAndLength(src, len);
+            bool gen2 = policies.version_2_syntax;
+            detectGen2Syntax(src, len, gen2);
+            policies.version_2_syntax = gen2;
+        }
+    }
+
     bool trySerializeProgramModule (
             ProgramPtr          & program,
             const FileAccessPtr & access,
@@ -673,16 +700,17 @@ namespace das {
             }
         }
 
-        int64_t file_mtime = access->getFileMtime(fileName.c_str());
-        int64_t file_size = access->getFileSize(fileName.c_str());
-        int64_t saved_mtime = 0;
+        int64_t file_size = -1;
+        uint64_t file_hash = 0;
+        stampModuleSource(access, fileName, file_size, file_hash);
+        uint64_t saved_hash = 0;
         int64_t saved_size = -1;
         string saved_filename{};
         uint64_t payload_size = 0;
         uint32_t depCount = 0;
         vector<tuple<string,int64_t,uint64_t>> savedDeps;
         if ( !serializer_read->trySerialize([&](AstSerializer & serializer) {
-            serializer << saved_mtime;
+            serializer << saved_hash;
             serializer << saved_size;
             serializer << saved_filename;
             // macro file dependencies (Program::moduleCacheDependencies) ride the record
@@ -720,9 +748,8 @@ namespace das {
                 return false;
             }
         }
-        // mtime alone is 1-second granular - a same-second rewrite would serve the stale
-        // AST with no diagnostic, so the size rides beside it in the header
-        if ( saved_filename != fileName || file_mtime != saved_mtime || file_size != saved_size ) {
+        // a file the access cannot produce stamps size -1, so it never matches a record
+        if ( saved_filename != fileName || file_size < 0 || file_size != saved_size || file_hash != saved_hash ) {
             // a CHANGED (or added/removed) module invalidates everything after it - das
             // modules depend on earlier ones (macros), so this stays the prefix cutoff
             serializer_read->seenNewModule = true;
@@ -732,12 +759,9 @@ namespace das {
             if ( !serializer_read->quietCache ) {
                 if (saved_filename != fileName) {
                     logs << "ser: file name mismatch. Expected '" << saved_filename << "', got '" << fileName << "'\n";
-                }
-                if (file_mtime != saved_mtime) {
-                    logs << "ser: file mtime mismatch. Expected " << saved_mtime << ", got " << file_mtime << "\n";
-                }
-                if (file_size != saved_size) {
-                    logs << "ser: file size mismatch. Expected " << saved_size << ", got " << file_size << "\n";
+                } else {
+                    logs << "ser: file content changed. Expected size " << saved_size << " hash " << saved_hash
+                         << ", got size " << file_size << " hash " << file_hash << "\n";
                 }
             }
             return false;
@@ -747,8 +771,10 @@ namespace das {
         // no per-module logging on the happy path - the standalone sink has no level
         // threshold, so a line here prints once per warm module; the verdict line and the
         // failure branches below carry everything a human needs
+        deriveSourcePolicies(access, fileName, program->policies);
         bool read_ok = serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer.thisModuleGroup = &libGroup;
+            serializer.fileAccess = access.get();
             serializer.serializeProgram(program, libGroup);
         });
 
@@ -759,13 +785,19 @@ namespace das {
             // must round-trip through the deserialized program or the next write drops them
             program->moduleCacheDependencies = das::move(savedDeps);
             if ( serializer_write != nullptr ) {
-                serializer_write->parsedModules.push_back({fileName, file_mtime, file_size, program, program->thisModule.get()});
+                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get()});
             }
             return true;
         }
 
+        // a policy mismatch is repaired by the writeback, so it is not builtin drift
+        bool policyMismatch = serializer_read->policyMismatch;
+        serializer_read->policyMismatch = false;
+        if ( policyMismatch ) serializer_read->builtinHashDrift = false;
         if ( !serializer_read->quietCache ) {
-            if ( !read_ok ) {
+            if ( policyMismatch ) {
+                logs << "ser: compile policies changed at '" << fileName << "' - the record was written by a compile with different policies\n";
+            } else if ( !read_ok ) {
                 logs << "ser: read failed '" << fileName << "'\n";
             } else if ( program->failed() ) {
                 logs << "ser: program failed '" << fileName << "'\n";
@@ -797,6 +829,10 @@ namespace das {
             serializer_read->resumedModules ++;
             if ( !serializer_read->quietCache ) logs << "ser: reparsing in place '" << fileName << "'\n";
             return false;
+        }
+        if ( policyMismatch ) {
+            serializer_read->cutoffFile = fileName;
+            serializer_read->cutoffReason = "compile policies changed";
         }
         serializer_read->seenNewModule = true;
         serializer_read->failed = true;
@@ -1033,6 +1069,7 @@ namespace das {
         uint64_t myParseT = 0, myInferT = 0, myOptT = 0, myMacroModT = 0;
         auto macroTicks0 = daScriptEnvironment::getBound()->macroTimeTicks;
         program->inferPassesUsed = 0;  // reset once per module; inferTypesDirty accumulates across all inferTypes legs (incl. restartInfer)
+        program->policies = policies;   // before the cache read: the reader compares the record's policies against this compile's
 
         if ( trySerializeProgramModule(program, access, fileName, libGroup, logs) ) {
             return program;
@@ -1071,14 +1108,15 @@ namespace das {
         parserState.das_def_tab_size = daScriptEnvironment::getBound()->das_def_tab_size;
         parserState.das_gen2_make_syntax = policies.gen2_make_syntax;
         yyscan_t scanner = nullptr;
-        int64_t file_mtime = access->getFileMtime(fileName.c_str());
-        int64_t file_size = access->getFileSize(fileName.c_str());
+        int64_t file_size = -1;
+        uint64_t file_hash = 0;
         if ( auto fi = access->getFileInfo(fileName) ) {
             callCompilationCallback(moduleName, fileName, "parse");
             parserState.g_FileAccessStack.push_back(fi);
             const char * src = nullptr;
             uint32_t len = 0;
             fi->getSourceAndLength(src,len);
+            stampModuleSource(src, len, file_size, file_hash);
             bool gen2 = policies.version_2_syntax;
             detectGen2Syntax(src, len, gen2);
             program->policies.version_2_syntax = gen2;
@@ -1333,7 +1371,7 @@ namespace das {
             }
             auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
             if ( serializer_write != nullptr ) {
-                serializer_write->parsedModules.push_back({fileName, file_mtime, file_size, program, program->thisModule.get()});
+                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get()});
             }
             return program;
         }
@@ -1468,8 +1506,8 @@ namespace das {
             *serializer_write << version;
         }
         for ( auto & parsedModule : serializer_write->parsedModules ) {
-            auto & [fileName, fileMtime, fileSize, program, thisModule] = parsedModule; // tuple<string, int64_t, int64_t, ProgramPtr, Module *>
-            *serializer_write << fileMtime;
+            auto & [fileName, fileHash, fileSize, program, thisModule] = parsedModule;
+            *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
             uint32_t depCount = uint32_t(program->moduleCacheDependencies.size());
