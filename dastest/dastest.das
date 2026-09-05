@@ -299,6 +299,7 @@ def private run_iso_batch(input : IsoInput#; t : int; perTestTimeout : float; ou
     // Batch timeout: per-test budget scaled by batch size (<=0 means none).
     let batchTimeout = perTestTimeout <= 0.0 ? perTestTimeout : perTestTimeout * float(nFiles)
     var br : BatchRun
+    log::started("worker {t + 1} starts: {join(input.uris, " ")}")
     run_iso_subprocess("{input.batchCmd}{widx}", batchTimeout, br)
     let k = min(length(br.results), nFiles)
     // Reported files (a prefix of the batch). The per-file JSON is authoritative,
@@ -593,10 +594,13 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     } elif (!empty(deser_file)) {
         res = deserialize_path(ctx, files, deser_file)
     } elif (!isolatedMode) {
+        var fileIndex = 0
         for (file in files) {
             let uri = ctx.uriPaths ? file_name_to_uri(file) : file
             let fileTime = ref_time_ticks()
             currentTestFile = file
+            fileIndex ++
+            log::started("run {fileIndex}/{length(files)}: {uri}")
             let status = suite::test_file(file, ctx)
             let fileDt = get_time_nsec(fileTime) / 1000
             if (status.errors + status.failed == 0) {
