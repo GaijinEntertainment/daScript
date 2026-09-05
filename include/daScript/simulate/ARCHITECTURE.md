@@ -13,21 +13,27 @@ the hot set; its cost is judged against the allocate/copy/rehash it rides.
 
 ## Table key hashing
 
-A table key has one hash on every rail: `hash_function(context, key)` on the key's own type -
-`hash_uint32`/`hash_uint64` for the scalar specializations, `hash_blockz64` for strings, and
-`hash_block64` over `sizeof(key)` bytes for everything else, so an `int2` hashes 8 bytes, a
-`float3` 12, a `range` through its 8-byte specialization. The interpreter's table nodes
-(`runtime_table_nodes.h`), the JIT helpers (`src/builtin/module_jit.cpp`, repo root), the JSON
-scanner (`src/simulate/json_scan.cpp`), rtti and the C API all call it directly. `KeyHash`
-(`runtime_table.h`) is the same hash for the callers that hold a key of a wrapped C++ type -
-AOT's `TTable`, the `__builtin_table_*` templates in `aot.h`, and the rehash a grow performs
-on every stored key: it takes the workhorse detour (`Time` to `int64`, a handle to `uint64`,
-a smart pointer to its raw pointer, a 16-byte vector to `vec4f`) only when the workhorse has
-the key's byte width, because those specializations hash the same bytes; a 2- or 3-lane vector
-or a range is hashed as itself, since widened to `vec4f` it would hash 16 bytes and every key
-would move to another bucket at the first grow. Non-string tables are open-addressed from
-their first slot (only string keys pack linearly up to 8), so a disagreement shows on a
-one-key table as much as on a large one.
+A table key hashes on every rail as the interpreter's table node hashes it. A builtin key type -
+`heap.h`'s `makeTableKeyValueNode` list: scalars, the vectors, the ranges, strings, pointers -
+hashes as itself, `hash_function(context, key)`: `hash_uint32`/`hash_uint64` for the scalar and
+range specializations, `hash_blockz64` for strings, `hash_block64` over `sizeof(key)` bytes
+otherwise (8 for an `int2`, 12 for a `float3`). A handled key - a `ManagedValueAnnotation<OT>`
+such as `Time` or a module's id type - hashes as its workhorse, `WrapType<OT>::type`, because
+that is the das value type the annotation declares (`makeValueType`) and what the compiler casts
+the key to before the node hashes it; `EntityId` hashes as an `int32`, `BigEntityId` as a
+`vec4f`. The interpreter's table nodes (`runtime_table_nodes.h`), the JIT helpers
+(`src/builtin/module_jit.cpp`, repo root), the JSON scanner (`src/simulate/json_scan.cpp`, repo
+root), rtti and the C API call `hash_function` on the key type they hold. `KeyHash`
+(`runtime_table.h`) is the same hash for the callers that hold a key of a C++ type - AOT's
+`TTable`, the `__builtin_table_*` templates in `aot.h`, and the rehash a grow performs on every
+stored non-string key (a string table reuses its stored hashes): it takes the workhorse detour
+for a handled type and hashes a builtin type as itself, telling them apart by
+`WrapsBuiltinValue` (`cast.h`; `jit_abi.h` marks the vectors and ranges). The detour on a
+builtin vector or range would hash a `vec4f`'s 16 bytes against the node's 8 or 12, and the raw
+bytes of a handled type narrower than its workhorse (an 8-byte `ImVec2` wrapped to `vec4f`)
+would miss the node's 16; either way every such key moves to another bucket at the first grow.
+Non-string tables are open-addressed from their first slot (only string keys pack linearly up
+to 8), so a disagreement shows on a one-key table as much as on a large one.
 
 ## Sanctioned hot-path additions
 

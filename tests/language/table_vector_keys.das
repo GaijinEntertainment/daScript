@@ -1,10 +1,13 @@
 options gen2
 
 require dastest/testing_boost public
+require UnitTest
 
-// Vector- and range-keyed tables past their first grow (8 slots): every key inserted stays
-// findable, erasable and countable. A second hash definition for these key widths shows up
-// exactly here - the rehash a grow performs re-buckets with it, and the lookups then miss.
+// Vector-, range- and handled-keyed tables past their first grow (8 slots): every key inserted
+// stays findable, erasable and countable. A second hash definition for a key type shows up
+// exactly here - the rehash a grow performs re-buckets with it, and the lookups then miss. A
+// builtin key hashes as itself, a handled key as its workhorse; Point3 (12 bytes, workhorse
+// vec4f) is the handled type whose raw bytes and workhorse differ.
 
 let N = 40
 
@@ -55,6 +58,22 @@ def test_uint2_and_range_keys(t : T?) {
     for (i in range(N)) {
         t |> equal(i, tab2?[uint2(uint(i), 3u)] ?? -1, "uint2 key {i} after the grows")
         t |> equal(i, tabr?[range(i, i + 10)] ?? -1, "range key {i} after the grows")
+    }
+}
+
+[test]
+def test_handled_keys(t : T?) {
+    var ids : table<EntityId; int>
+    var pts : table<Point3; int>
+    for (i in range(N)) {
+        ids[EntityId(i + 100)] = i
+        pts[Point3(float(i), 2.0, 3.0)] = i
+    }
+    t |> equal(N, length(ids))
+    t |> equal(N, length(pts))
+    for (i in range(N)) {
+        t |> equal(i, ids?[EntityId(i + 100)] ?? -1, "EntityId key {i} after the grows")
+        t |> equal(i, pts?[Point3(float(i), 2.0, 3.0)] ?? -1, "Point3 key {i} after the grows")
     }
 }
 

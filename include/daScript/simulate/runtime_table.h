@@ -12,12 +12,12 @@ namespace das
 
     DAS_API extern const char * rts_null;
 
-    // the same bytes as hash_function(ctx, key) on every rail - ARCHITECTURE.md, "Table key hashing"
+    // what the interpreter's table node hashes for this key type - ARCHITECTURE.md, "Table key hashing"
     template <typename KeyType>
     struct KeyHash {
         __forceinline uint64_t operator () ( Context & context, const KeyType & key ) {
             using workhorse = typename WrapType<KeyType>::type;
-            if constexpr ( is_same<KeyType, workhorse>::value || sizeof(KeyType) != sizeof(workhorse) ) {
+            if constexpr ( is_same<KeyType, workhorse>::value || WrapsBuiltinValue<KeyType>::value ) {
                 return hash_function(context, key);
             } else {
                 return hash_function(context, cast<workhorse>::to(cast<KeyType>::from(key)));
