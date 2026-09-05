@@ -1540,10 +1540,12 @@ def intrinsic_math_sinh_cosh_tanh(var ctx : JitCtx; expr : ExprCallFunc?; argume
 }
 
 // ===== the idot family: exact integer dots on the 8-bit lattice =====
-// Two lowerings: the signed x signed form emits ONE @llvm.aarch64.neon.sdot where the target has
+// Three lowerings: the signed x signed form emits ONE @llvm.aarch64.neon.sdot where the target has
 // DotProd (g_target_arm64_dotprod: the host rail's +dotprod append, or the force env on the
-// generic rail); everything else gets generic widen-multiply IR. The AArch64 backend
-// does NOT fold the generic form to SDOT (probe: zip/uzp/smull expansion), hence the native arm.
+// generic rail), the wasm SIMD128 form of idot_wasm_simd128 on a wasm target (the relaxed int8
+// dot through the sign trick, else extmul + pairwise adds); everything else gets generic
+// widen-multiply IR. The AArch64 backend does NOT fold the generic form to SDOT (probe:
+// zip/uzp/smull expansion) and the wasm backend runs it a fifth as fast, hence the native arms.
 // The unsigned x signed form needs USDOT (i8mm — absent on M1); it rides the i8mm un-gate item.
 def private idot_products(var ctx : JitCtx; expr : ExprCallFunc?; a, b : LLVMOpaqueValue?; aIdx : int) : LLVMOpaqueValue? {   // nolint:LINT014 — shared by the idot intrinsics
     let v16i32 = LLVMVectorType(ctx.types.t_int32, 16u)
@@ -1570,8 +1572,73 @@ def private idot_sdot_aarch64(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : 
     return LLVMBuildCall2(ctx.builder, fnTy, decl, callArgs, "idot4")
 }
 
+// The wasm SIMD128 form of the signed idot4: the ISA has no int8 dot, but it has the two halves of
+// one - i16x8.extmul_{low,high}_i8x16_s (a sign-extending 8-lane multiply, which is what LLVM
+// makes of mul(sext lo8, sext lo8)) and i32x4.extadd_pairwise_i16x8_s. Pairwise sums land as
+// byte pairs (0-1, 2-3, ...), so one even/odd shuffle-add folds them into the quad lanes the
+// generic form defines. Returns null when the LLVM at hand lacks the pairwise intrinsic.
+def private idot_wasm_simd128(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let v8i16 = LLVMVectorType(ctx.types.t_int16, 8u)
+    let v4i32 = ctx.types.LLVMInt4Type()
+    if (g_target_wasm_relaxed_simd) {
+        // relaxed SIMD has the dot itself: i32x4.relaxed_dot_i8x16_i7x16_add_s, exact when its second
+        // operand is in [0, 127]. The sign trick puts it there - dot(w, x) == dot(sign(x)*w, |x|) - and
+        // Q8_0 quants are in [-127, 127] by construction (d = amax/127), so no lane wraps on the flip.
+        let rid = LLVMLookupIntrinsicID("llvm.wasm.relaxed.dot.i8x16.i7x16.add.signed")
+        var noTypes : array<LLVMOpaqueType?>
+        var rdecl = rid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, rid, noTypes) : null
+        if (rdecl != null) {
+            let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
+            let mask = LLVMBuildAShr(ctx.builder, b, build_const_int_splat(ctx.types.t_int8, 16, 7), "xsign")
+            let wsg = LLVMBuildSub(ctx.builder, LLVMBuildXor(ctx.builder, a, mask, ""), mask, "wsigned")
+            let xabs = LLVMBuildSub(ctx.builder, LLVMBuildXor(ctx.builder, b, mask, ""), mask, "xabs")
+            var fnArgTypes <- [v16i8, v16i8, v4i32]
+            var fnTy = LLVMFunctionType(v4i32, fnArgTypes)
+            var callArgs <- [wsg, xabs, acc != null ? acc : LLVMConstNull(v4i32)]
+            return LLVMBuildCall2(ctx.builder, fnTy, rdecl, callArgs, "idot4_relaxed")
+        }
+    }
+    let id = LLVMLookupIntrinsicID("llvm.wasm.extadd.pairwise.signed")
+    var declTypes <- [v4i32]                        // overloaded on the widened result vector type
+    var decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, declTypes) : null
+    if (decl == null) {
+        return null
+    }
+    var fnArgTypes <- [v8i16]
+    var fnTy = LLVMFunctionType(v4i32, fnArgTypes)
+    let alo = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, a, a, [0, 1, 2, 3, 4, 5, 6, 7], ""), v8i16, "")
+    let ahi = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, a, a, [8, 9, 10, 11, 12, 13, 14, 15], ""), v8i16, "")
+    let blo = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, b, b, [0, 1, 2, 3, 4, 5, 6, 7], ""), v8i16, "")
+    let bhi = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, b, b, [8, 9, 10, 11, 12, 13, 14, 15], ""), v8i16, "")
+    var plo <- [LLVMBuildMul(ctx.builder, alo, blo, "idot_lo")]
+    var phi <- [LLVMBuildMul(ctx.builder, ahi, bhi, "idot_hi")]
+    let qlo = LLVMBuildCall2(ctx.builder, fnTy, decl, plo, "idot_pairs_lo")
+    let qhi = LLVMBuildCall2(ctx.builder, fnTy, decl, phi, "idot_pairs_hi")
+    let even = LLVMBuildShuffleVector(ctx.builder, ctx.types, qlo, qhi, [0, 2, 4, 6], "")
+    let odd = LLVMBuildShuffleVector(ctx.builder, ctx.types, qlo, qhi, [1, 3, 5, 7], "")
+    var s = LLVMBuildAdd(ctx.builder, even, odd, "idot4")
+    if (acc != null) {
+        s = LLVMBuildAdd(ctx.builder, acc, s, "idot4_acc")
+    }
+    return s
+}
+
 def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let aUnsigned = expr.arguments[0]._type.vectorBaseType == Type.tUInt8
+    if (g_target_is_wasm && !aUnsigned) {
+        let v4i32 = ctx.types.LLVMInt4Type()
+        var s = idot_wasm_simd128(ctx, null, arguments[0], arguments[1])
+        if (s != null) {
+            let rid = LLVMLookupIntrinsicID("llvm.vector.reduce.add")
+            var rtys <- [v4i32]
+            var rdecl = rid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, rid, rtys) : null
+            if (rdecl != null) {
+                var rtyp = LLVMFunctionType(ctx.types.t_int32, [v4i32])
+                var rargs <- [s]
+                return LLVMBuildCall2(ctx.builder, rtyp, rdecl, rargs, "idot")
+            }
+        }
+    }
     if (g_target_arm64_dotprod && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var s = idot_sdot_aarch64(ctx, LLVMConstNull(v4i32), arguments[0], arguments[1])
@@ -1604,6 +1671,12 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
     let hasAcc = length(arguments) == 3
     let aIdx = hasAcc ? 1 : 0
     let aUnsigned = expr.arguments[aIdx]._type.vectorBaseType == Type.tUInt8
+    if (g_target_is_wasm && !aUnsigned) {
+        var s = idot_wasm_simd128(ctx, hasAcc ? arguments[0] : null, arguments[aIdx], arguments[aIdx + 1])
+        if (s != null) {
+            return s
+        }
+    }
     if (g_target_arm64_dotprod && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var acc = hasAcc ? arguments[0] : LLVMConstNull(v4i32)
