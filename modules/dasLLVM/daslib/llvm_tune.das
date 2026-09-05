@@ -70,12 +70,13 @@ def jit_cli_opt_level() : int {
     return cli.opt_level |> unwrap_or(compiling_program().policies.jit_opt_level)
 }
 
-    //! True when this compile must stay stamp-free: `policies.tune_frozen` (the cross-box
-    //! artifact mark) or an AOT-consuming run without the JIT (a stamp changes the semantic
-    //! hash). Every tune annotation goes inert; only reference-row registries are emitted.
+    //! True when this compile must stay stamp-free - `policies.tune_frozen`, an AOT-consuming run
+    //! without the JIT (a stamp changes the semantic hash), or a `--jit-target` cross target (the
+    //! artifact runs on a box this sidecar never measured): every tune annotation goes inert.
 def tune_aot_gate() : bool {
     return (compiling_program().policies.tune_frozen
-        || (compiling_program().policies.aot && !compiling_program().policies.jit_enabled))
+        || (compiling_program().policies.aot && !compiling_program().policies.jit_enabled)
+        || !empty(get_target_triple()))
 }
 
 //! True when this compile must retain reference bodies. Documentation roots

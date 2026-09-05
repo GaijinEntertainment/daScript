@@ -319,10 +319,18 @@ decode/prefill numbers sit beside the stage-1 floor.
   --disable-module dasmetal` (the wasm and console shape) so the seam cannot regress silently.
 - Repairs on the way, all small: the `wasm_cross` CI lane configures without
   `-DDAS_WASM_MEMORY64=ON` (`wasm_build.yml:209`) so `web/CMakeLists.txt:374` registers no
-  examples and the lane is a green no-op; `get_architecture_name()` answers `wasm32` on a
-  memory64 build (`module_builtin_runtime.cpp:2064`) and the engine keys backends off that
-  string; `DAS_MAX_HW_JOBS` is 4 on wasm (`platform.h:629`); the two emsdk pins contradict
-  (`wasm_build.yml:188` vs `pages.yml:73`).
+  examples and the lane is a green no-op; `DAS_MAX_HW_JOBS` is 4 on wasm (`platform.h:629`);
+  the two emsdk pins contradict (`wasm_build.yml:188` vs `pages.yml:73`). Done 2026-09-04:
+  `get_architecture_name()` answers `wasm64` on a memory64 build.
+- **No tuning under a cross target, by construction (landed 2026-09-04).** Two folds answer for
+  the artifact a compile EMITS: `get_target_triple()` (the `--jit-target` triple, "" native) and
+  `get_target_architecture_name()` (the triple's arch, the host's with no triple). The tune
+  framework's inert gate (`tune_aot_gate`) fires on any cross target, so `[tune]`, `[tuned]` and
+  `[llvm_code]` emit nothing but reference bodies into a wasm or console exe; the engine's
+  kernel-tier `[init]` gates ask the target arch, so a wasm cross-compile from an arm64 box
+  registers no NEON tier. The `--jit-target` argument keys the module cache (it sits after the
+  `--` separator, which the key ignored, so a cached native compile served a cross one with the
+  host's folds). Gate: `tests/jit_tests/cross_target_folds.das`.
 - Limits to design around: SIMD is 128-bit through the `-msse2` shim and that flag is
   load-bearing (`web/CMakeLists.txt:34`; without it vecmath drops to scalar); a process-wide
   malloc spinlock under shared memory (`src/hal/wasm_thread_malloc.cpp`); the main-thread join
