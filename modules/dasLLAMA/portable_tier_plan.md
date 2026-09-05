@@ -74,9 +74,13 @@ with LLVM on the host only; wasm32 cross is unsupported by design (pointer-width
   borrowed from the IR generator (`pm1_of`, `vbmi_alphabet`, `vbmi_pack_word`) moved to
   `dasllama_gemm_schema.das` for the same reason.
 - **`require ?G target` names a guard module, never the target** (`ds2_parser.ypp:849-861`,
-  `parser_impl.cpp:1225-1279`). There is no module named `llvm` (dasLLVM is a pure-das dasbind
-  package), so `?llvm` and `builtin_module_exists(llvm)` are permanently false; the working
-  spelling is the path guard `?llvm/daslib/llvm_tune`. `get_platform_name()`,
+  `parser_impl.cpp:1225-1279`). The guard for everything LLVM is `?llvm`: dasLLVM is a pure-das
+  dasbind package, so it now carries one C++ witness module named `llvm`
+  (`modules/dasLLVM/src/dasLLVM.cpp`), compiled in exactly when the build is configured with
+  dasLLVM. The build configuration decides, never the files on disk - a wasm build never
+  compiles the witness, and a console build with the LLVM sources present but configured out
+  loads no framework, no sidecar, no IR generator (ruled 2026-09-04; the path-guard spelling
+  `?llvm/daslib/llvm_tune` that preceded it satisfied itself off the filesystem). `get_platform_name()`,
   `get_cross_platform_name()` and `get_architecture_name()` fold at compile time
   (`module_builtin_runtime.cpp:2887-2907`), so a synthetic `wasm` module buys nothing for code
   gating. `require !?X` is about five parser lines plus the hand-written pre-parse scanner
@@ -347,15 +351,12 @@ the honest wasm candidates, and smaller is on the table.
 
 ## Open questions
 
-- **What "dasLLVM absent" means in a SOURCE tree.** The `?llvm/daslib/...` path guard asks whether
-  the guard's file resolves, and the `.das_module` folder scan (`src/ast/dyn_modules.cpp`)
-  resolves `modules/dasLLVM/` from the filesystem whatever `DAS_LLVM_DISABLED` says. So in a
-  source tree configured without LLVM the guard is TRUE, the generated tier loads, and its
-  `[extern(library="LLVM.dll")]` bindings fail at compile time; only an installed SDK without
-  dasLLVM (its install rules sit inside the CMake guard) has the guard false. The stage-1 gate
-  therefore runs in a worktree with `modules/dasLLVM` removed, the installed-SDK shape. If the
-  in-tree case should also work, the cheapest honest witness is a C++ module registered only
-  when LLVM is configured (the `?sqlite` pattern), and the guards become `?<witness> ...`.
+- **RULED: "dasLLVM absent" is the build configuration's word.** The path guard
+  `?llvm/daslib/llvm_tune` satisfied itself off the filesystem, so a source tree configured
+  with `-DDAS_LLVM_DISABLED=ON` still loaded the framework. The two scenarios that matter - a
+  wasm build, where no tuning may exist, and a console build (PS5 in dagor) with the LLVM
+  sources on disk for the PC build but configured out - both need the configure to decide. The
+  `llvm` C++ witness module (see "Settled decisions") is that word; every guard is `?llvm`.
 - **RULED: a second trait.** `builtin_module_exists` on a shared das module flipped under
   tool-driven compiles (`Module::requireEx` scans the process's promoted-module list, which a
   nested compile never populates), so lint, ast-verify and the MCP checks audited the

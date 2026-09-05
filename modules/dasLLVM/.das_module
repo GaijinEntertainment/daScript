@@ -25,4 +25,10 @@ def initialize(project_path : string) {
     for (path in bindings_paths) {
         register_native_path("llvm", "bindings/{path}", "{project_path}/bindings/{path}.das")
     }
+    if (das_is_dll_build()) {
+        // the `llvm` witness module (src/dasLLVM.cpp) exists only in a build configured with
+        // dasLLVM; the 2-arg form skips silently when the .shared_module was never built, and
+        // that silence is what `require ?llvm` reads as "this build has no LLVM"
+        register_dynamic_module("{project_path}/dasModuleLLVM.shared_module", "Module_LLVM")
+    }
 }

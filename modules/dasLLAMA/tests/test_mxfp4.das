@@ -5,7 +5,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // dot_mx4q8_scalar + the "portable" backend
 require dasllama/dasllama_math_aarch64_neon   // dot_mx4q8 (TBL+SDOT under arm64 JIT, scalar fallback elsewhere)
-require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // nolint:STYLE030,LINT019 — registers the "arm64-gen"/"x64-gen" repack tier when dasLLVM is mounted
+require ?llvm dasllama/dasllama_math_gen  // nolint:STYLE030,LINT019 — registers the "arm64-gen"/"x64-gen" repack tier when dasLLVM is mounted
 require math
 
 // MXFP4·Q8 kernels: the E8M0 scale decode, the dot leaves (scalar reference vs the NEON-intrinsic

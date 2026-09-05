@@ -92,8 +92,8 @@ require ?pugixml pugixml/PUGIXML_boost  // load only if module `pugixml` is avai
   if the target does not exist; with the guard present a missing target errors normally. A guard
   containing `/` is satisfied when that path resolves, a plain name when that module is registered.
   Pair with `static_if (typeinfo builtin_module_exists(guard)) { ... }` for a C++ guard, and
-  with `static_if (typeinfo module_exists(target)) { ... }` for a path-guarded das target (the
-  program's own library answers, the same inside a tool's nested compile).
+  with `static_if (typeinfo module_exists(target)) { ... }` around uses of the guarded target
+  (true when the target is visible from this module, the same inside a tool's nested compile).
 
 ## Qualified calls
 
