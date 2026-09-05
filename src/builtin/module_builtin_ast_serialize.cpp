@@ -14,12 +14,14 @@
 #include <cstdio>
 #include <sys/stat.h>
 #include <algorithm>
+#if !DAS_NO_FILEIO
 #ifdef _WIN32
 #include <io.h>
 #include <sys/utime.h>
 #else
 #include <dirent.h>
 #include <utime.h>
+#endif
 #endif
 #ifdef _WIN32
 #include <direct.h>
@@ -3313,6 +3315,7 @@ namespace das {
     }
 #endif
 
+#if !DAS_NO_FILEIO
     static const char * MODULE_CACHE_DEFAULT_DIR = ".jitted_scripts/module_cache/";
 
     // DAS_MODULE_CACHE_LIMIT, megabytes: 4096 unless set, 0 = no eviction; garbage keeps the default
@@ -3389,6 +3392,7 @@ namespace das {
             if ( remove(r.path.c_str()) == 0 ) total -= r.size;
         }
     }
+#endif
 
     string ModuleFileCache::defaultPath ( const string & scriptPath, const string & hostBinary, const string & hostOptions ) {
         string norm = normalizeFileName(scriptPath.c_str());
