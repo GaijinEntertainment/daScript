@@ -325,6 +325,42 @@ embedded source trees in a working checkout and outweighed the sources twenty to
 playground's `daslang_static` carried the same 95 MB. Next: wasmtime (no JS host), the browser
 page, ASR and TTS examples.
 
+**The JIT-cross rail runs too (2026-09-04 night).** `daspkg release wasm` on a package whose
+main is `examples/dasLLAMA/speak.das` or `run.das` produces a 20 MB wasm64 app (compiled code
+only, no compiler, no embeds beyond the modules' own) that runs under node. Two rail fixes
+made it so, both general: `release_wasm_disable_module("dasvulkan")` (and dasmetal,
+dasaccelerate) keeps host-only modules out of the cross-compile so their guarded requires
+resolve as absent, and the tune sidecar's module-cache pin moved out of the manifest reader the
+runtime shares (`ast_core`'s `add_module_cache_dependency` rode into every exe; the wasm runtime
+archive has no thunk for it). The tune framework is inert on the cross target by the
+cross-target rule, so the artifact carries reference bodies through LLVM's own vectorizer.
+
+Kitten nano, the same line (6.7 s of audio), four workers on wasm, seven native; one box,
+contended, not measurements:
+
+| host | Kitten nano, x real time | stories15M Q8, decode t/s |
+|---|---|---|
+| native JIT, tuned | 29-37 | 4550 |
+| native AOT host (`dasllama_aot`) | 21 | - |
+| wasm64, AOT C++ through emcc (node) | 4.0 | 357 |
+| wasm64, JIT cross (`daspkg release wasm`, node) | 4.4 | 376-389 |
+
+Findings on the way: (1) the JIT-cross Kitten artifact dies with SIGILL under node's default
+memory64 trap handling and runs clean under `--no-wasm-memory64-trap-handling`; the AOT
+artifact never trips it, and the story artifact runs either way - a V8 trap-handler edge or an
+access pattern of the emitted code, open, and a browser risk for that rail. (2) emscripten
+builds the C environment from `Module.ENV` during startup, so a node driver must set the
+engine's knobs in `preRun`, not after the runtime initializes: the first drivers set
+`DASLLAMA_IMAGE=0` too late, the wasm runs minted wasm-identity `.dlim` files beside the box's
+models, and the image GC reaped the box's own q8 Kitten image (re-minted by the next native
+run - the hazard the image rail documents; both drivers now hold the knob in `preRun`, and a
+run with the fixed driver mints nothing). (3) Parity is
+numeric, not token-exact, across tiers on stories15M: with `_jit_fast_math` off, the JIT's
+reference and tuned policies agree with each other, and the native AOT host, the wasm AOT host
+and the JIT-cross artifact each diverge from it around token 40 - every tier orders its
+reductions differently, and a 15M model's flat logits flip on that. SmolLM-135M matched
+token-exact across all three; the frozen parity gates stay per tier.
+
 - Route: the stage-2 example's AOT C++ through emcc against `web/output64` (memory64 +
   pthreads), under node first (NODEFS mounts), the browser after.
 - The GPU tiers already self-gate the way a wasm build needs (verified 2026-09-04 with

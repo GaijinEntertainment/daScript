@@ -8,7 +8,7 @@
 //   script.das  - a path inside the repo (examples/dasLLAMA/run.das)
 //   model.gguf  - a host path; its directory is mounted read-write, so the image rail is
 //                 held off (DASLLAMA_IMAGE=0): a mint under the wasm identity would land
-//                 beside the model
+//                 beside the model, and the image GC would reap the box's own image
 //   args        - the script's own arguments; with none, the mounted model path is passed as
 //                 the one positional argument (run.das), otherwise they are passed verbatim
 //                 with every `@model` replaced by that path (speak.das takes --model @model)
@@ -33,15 +33,22 @@ process.on('unhandledRejection', (reason) => {
     process.exit(1);
 });
 
-const Module = require(path.join(outputDir, 'dasllama_aot.js'));
-Module.onRuntimeInitialized = function() {
-    Module.ENV.DASLLAMA_IMAGE = '0';
-    Module.ENV.DASLLAMA_ALLOW_UNTUNED = '1';
-    Module.FS.mkdir('/repo');
-    Module.FS.mount(Module.FS.filesystems.NODEFS, { root: repoRoot }, '/repo');
-    Module.FS.mkdir('/models');
-    Module.FS.mount(Module.FS.filesystems.NODEFS, { root: path.dirname(model) }, '/models');
-    const mounted = path.posix.join('/models', path.basename(model));
-    const scriptArgs = extra.length ? extra.map((a) => a.replace(/@model/g, mounted)) : [mounted];
-    Module.callMain(['-use-aot', path.posix.join('/repo', script), '--', ...scriptArgs]);
+// the module script adopts a pre-existing global Module: preRun is the one hook that runs before
+// emscripten builds the C environment from ENV, so the knobs land there, not after init
+const Module = {
+    preRun: [function() {
+        Module.ENV.DASLLAMA_IMAGE = '0';
+        Module.ENV.DASLLAMA_ALLOW_UNTUNED = '1';
+        Module.FS.mkdir('/repo');
+        Module.FS.mount(Module.FS.filesystems.NODEFS, { root: repoRoot }, '/repo');
+        Module.FS.mkdir('/models');
+        Module.FS.mount(Module.FS.filesystems.NODEFS, { root: path.dirname(model) }, '/models');
+    }],
+    onRuntimeInitialized: function() {
+        const mounted = path.posix.join('/models', path.basename(model));
+        const scriptArgs = extra.length ? extra.map((a) => a.replace(/@model/g, mounted)) : [mounted];
+        Module.callMain(['-use-aot', path.posix.join('/repo', script), '--', ...scriptArgs]);
+    },
 };
+global.Module = Module;
+require(path.join(outputDir, 'dasllama_aot.js'));
