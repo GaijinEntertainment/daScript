@@ -309,6 +309,14 @@ decode/prefill numbers sit beside the stage-1 floor.
 
 - Route: the stage-2 example's AOT C++ through emcc against `web/output64` (memory64 +
   pthreads), under `wasmtime -W memory64=y -W exceptions=y` first, the browser after.
+- The GPU tiers already self-gate the way a wasm build needs (verified 2026-09-04 with
+  `--disable-module dasvulkan`: the umbrella loads, `builtin_module_exists(vulkan)` is false,
+  kernel units green interpreted and under the JIT). The Vulkan tier hangs off one guarded
+  require in `dasllama_transformer.das` (`require ?vulkan dasllama/dasllama_math_vulkan`), the
+  same shape as the five `?das_metal` lines beside it; every unguarded `require vulkan` sits
+  inside the tier's own files, which only load through that guard. Owed once the suite rework
+  lands: a model-free gate that spawns the umbrella under `--disable-module dasvulkan
+  --disable-module dasmetal` (the wasm and console shape) so the seam cannot regress silently.
 - Repairs on the way, all small: the `wasm_cross` CI lane configures without
   `-DDAS_WASM_MEMORY64=ON` (`wasm_build.yml:209`) so `web/CMakeLists.txt:374` registers no
   examples and the lane is a green no-op; `get_architecture_name()` answers `wasm32` on a
