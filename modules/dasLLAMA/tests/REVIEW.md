@@ -6,10 +6,13 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 
 **Every PR runs `run.das -- --suite model-free` and, on a box with models stocked, `--suite
 stocked` (`preflight --full` runs both when the diff touches `modules/dasLLAMA/`), plus every
-test here the change reaches - never the whole directory.** `--suite stocked --exclude
-test_ple_modes` is the iteration form between PRs, never the PR's run. A change reaches a test when it alters anything the test's result
-depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture or
-corpus it reads, or a name it asserts on; a comment-only edit reaches none.
+test here the change reaches - never the whole directory.** A change reaches a test when it
+alters anything the test's result depends on - the test file, a shared helper, engine code it
+exercises, an in-tree fixture or corpus it reads, or a name it asserts on; a comment-only edit
+reaches none.
+
+**A PR's `stocked` run carries no `--exclude`** - `--suite stocked --exclude test_ple_modes` is
+the iteration form between PRs; a PR that ships on it never ran the PLE coverage.
 
 **A test file - a `.das` in this folder that dastest runs: one carrying at least one `[test]`
 function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion
@@ -20,10 +23,11 @@ is what the runner arms for every suite.
 **Invoking dastest directly on a test file in a `run.das` model suite (every suite but
 `model-free` and `stocked`) is a defect - run it through `run.das`.**
 
-**A diff that gives `run.das` an `[init]` function, or any top-level statement that runs on
-require, is a defect - it stays `[export] main` only.** `test_run_suites.das` and
-`test_run_summary.das` require `run` by bare same-dir name to read its tables; an `[init]`
-would fire inside every one of those test processes.
+**`run.das` runs nothing on require - no `[init]`, and no global whose initializer spawns,
+logs, writes the environment or touches the filesystem; a diff that adds one is a defect.**
+`test_run_suites.das` and `test_run_summary.das` require `run` by bare same-dir name to read
+its tables, so anything that fires on require fires inside every one of those test processes.
+Data tables (`AREAS`, `MODULE_AREAS`) are what the tests are there to read.
 
 **A cell asserting a chat template's INSTRUCT wire - a closed empty thought block and no
 thinking gate - calls `set_thinking(c, false)` on its renderer before the first turn.**
@@ -37,39 +41,38 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds a gate (one test cell), removes a gate, or moves a gate to another suite or
-arm, in a file whose `CLAUDE.md` paragraph LISTS its gates, updates that paragraph in the same
-change.** A
-paragraph lists its gates when any clause of it names a specific fixture, model, arm, or skip
-condition; a paragraph that only names the file (a brace list, a suite roster) carries nothing
-to update.
+**A diff that adds, removes or moves a gate (one test cell, or a file between suites) corrects,
+in the same change, every `CLAUDE.md` clause that names that gate's suite, fixture, model, arm
+or skip condition.** A clause that only names the file (a brace list, a suite roster) carries
+nothing to correct.
 
-**A suite-less test file that reaches a machine-local fixture root - `models_dir()`,
-`model_available()`, `llama2c_dir()`, `whisper_dir()` - sits in `run.das`'s `stocked` list,
-never `model-free`; one that reaches none sits in `model-free`.** `model-free` is the
-every-change gate and runs the same on a bare box; `stocked` is the per-PR model coverage and a
-run of skips without models. `test_run_suites.das` reads every listed file and fails a misfiled
-one.
+**Weakening `test_run_suites.das` is a defect** - it pins the per-PR split (a suite-less file
+that reaches a machine-local fixture root - `models_dir()`, `model_available()`,
+`llama2c_dir()`, `whisper_dir()` - sits in `stocked`, every other one in `model-free`), the
+folder census (every test file sits in a `run.das` suite, the CPU-prefill tripwire the one
+declared exemption), the area tables (every per-PR file has an `area_tests` row; every arm an
+area names exists; every arm the image suite declares is reachable from an area or listed as
+unclaimed) and the `--exclude` filter. `model-free` is the every-change gate and runs the same
+on a bare box; `stocked` is the per-PR model coverage and a run of skips without models.
 
 **A new test file listed in `run.das`'s `model-free` or `stocked` suite, or in no `run.das`
 suite at all, whose name does not say what it covers, gets a `CLAUDE.md` entry in the same
 change** - `run.das`'s `model-free` and `stocked` lists together are the complete census, the
 `CLAUDE.md` map is deliberately partial.
 
-**A new `model-free` or `stocked` file also gets a row in `run.das`'s `area_tests` (audio |
-vision | tts | llm | infra; two rows when it serves two areas), and a new engine module that
-serves one area gets a `MODULE_AREAS` row.** `test_run_suites.das` fails a per-PR file with no
-area. A module without a row reaches every area, so an omission there costs time, never
-coverage.
-
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm
-filter mechanics" section in the same change** - an arm the census does not name is
-unreachable to whoever is choosing what to run.
+filter mechanics" section and, for an image-suite arm, `run.das`'s `area_image_arms` (or its
+unclaimed list in `test_run_suites.das`) in the same change** - an arm the census does not
+name is unreachable to whoever is choosing what to run, and an arm no area claims never runs
+from `--area` or `--changed`.
 
-**Weakening a contract-pinning gate - dropping an assert, loosening a bound, or narrowing the
-corpus or sweep it covers - is a defect.** The pinned set, each with what it pins:
-`test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill intent);
+**A pinned gate's coverage never shrinks - not its asserts, not its bounds, not the corpus or
+sweep it covers, and not the set of runs that reach it; a diff that shrinks one is a defect.**
+A pinned file that reaches a fixture root sits in `stocked`, where the per-PR run reaches it;
+that is not a shrink. The pinned set, each with what it pins:
+`test_run_suites.das` (the per-PR split, the folder census, the area tables, the `--exclude`
+filter); `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill intent);
 `test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`
 (`../performance/model_specs.das`'s model-set table); `test_metal_prefill_kernels.das`'s
 softcap, sink (`hass`) and span cells; `test_site_records.das` (the byte-compare of

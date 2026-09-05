@@ -89,12 +89,34 @@ def test_area_tables_match_the_census(t : T?) {
         t |> success(key_exists(covered, name), "a per-PR file has an area - add it to `area_tests`: {name}")
     }
     let image = file_text("{TESTS_DIR}/test_model_image.das")
+    var claimed : array<string>
     for (a in AREAS) {
         for (tok in split(area_image_arms(a), ",")) {
             continue if (empty(tok))
             t |> success(find(image, "arm_on(t, \"{tok}") >= 0, "the image suite has an arm the area names: {a}/{tok}")
+            claimed |> push(tok)
         }
     }
+    // the reverse: every arm the image suite declares is reachable from some area, or is named here as
+    // deliberately unclaimed - `gemma` is an --arm substring of five vision arms (CLAUDE.md says how to reach it)
+    let unclaimed <- ["gemma"]
+    let marker = "arm_on(t, \""
+    var at = find(image, marker)
+    var n_arms = 0
+    while (at >= 0) {
+        let start = at + length(marker)
+        let stop = find(image, "\"", start)
+        break if (stop < 0)
+        let arm = slice(image, start, stop)   // nolint:PERF031 - a few dozen short arm names, read once
+        n_arms++
+        var hit = find_index(unclaimed, arm) >= 0
+        for (tok in claimed) {
+            hit ||= find(arm, tok) >= 0
+        }
+        t |> success(hit, "an image-suite arm is reachable from an area, or listed as unclaimed: {arm}")
+        at = find(image, marker, stop)
+    }
+    t |> success(n_arms > 10, "the image suite's arm literals were walked ({n_arms})")
 }
 
 //! the change-to-area map behind --changed
