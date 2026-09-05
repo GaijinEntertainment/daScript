@@ -230,3 +230,9 @@ Three companions carry a concern each; a section number is unique across all fou
   half on fixtures, and `tests/daslib/test_tune_shells.das` is tier-agnostic by design - so the pair
   is recorded here: a trait that answered off the process registry instead would take the
   framework arm inside a tool's nested compile, where the framework is not mounted.
+- **`modules/dasLLVM/.das_module` registers the `llvm/daslib/*` paths only after the witness
+  registered (or was compiled in), so without dasLLVM a direct `require llvm/daslib/x` is a missing
+  prerequisite and never a hollow compile.** The framework's das files compile without their C++
+  module, which is how a tool that reads a `<name>_variants()` registry through a direct require
+  once compiled in a witness-less world with inert shells and no registry; a world that cannot
+  mount the framework now refuses the require, and a lint skips the file as one it cannot compile.
