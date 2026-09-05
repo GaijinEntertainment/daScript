@@ -35,3 +35,8 @@ fixture for the route that answers with that key first.**
 
 **A diff that adds a key to what a route answers lists it in that route's `README.md` row, in
 the same change.** The row is where a consumer learns the key exists.
+
+**A function in this folder that names a type from `dasllama_exchange` in its signature is a
+defect.** That module is optional (`require ?llvm`) and its types do not exist in a build without
+dasLLVM; call `exchange_policy_from_config(g_config_save_path)` inside a
+`static_if (typeinfo module_exists(dasllama_exchange))` arm at each site instead.

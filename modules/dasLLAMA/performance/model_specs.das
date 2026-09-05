@@ -557,7 +557,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                 ProvEntry(name = "tts_g2p.bin", root = "llm", recipe = TTS_PACKS_RECIPE,
                     url = "{TTS_HF}/tts_g2p.bin", bytes = 14011554l,
                     sha256 = "d7b6afea7a0901a877d10531054d3f967845c58f415f0ea937decd8a3081ccd5"),
-                ProvEntry(name = "tts_g2p_en_us.bin", root = "llm", recipe = TTS_PACKS_RECIPE,   // the American-only twin: the web serving set's pack
+                ProvEntry(name = "tts_g2p_en_us.bin", root = "llm", recipe = TTS_PACKS_RECIPE,
                     url = "{TTS_HF}/tts_g2p_en_us.bin", bytes = 10257455l,
                     sha256 = "6f69d2e74565bd7d876b8d1f4042bf8c1c5b615387fa26ff45215cf447932154"),
                 ProvEntry(name = "tts_postag.bin", root = "llm", recipe = TTS_PACKS_RECIPE,

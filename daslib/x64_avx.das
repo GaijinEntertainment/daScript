@@ -109,10 +109,6 @@ def mx4_dequant32(lut : int8 const?; wn : uint8 const?; var dst : int8?) {
     }
 }
 
-// ===== AVX kernel matrix tiers (VNNI / AVX-512), each gated on its own g_target_x64_* flag =====
-// Every body DELEGATES to the established intrinsic of the same math, so a box without the tier
-// degrades to the recognized ymm sign-trick path rather than to scalar code.
-
 //! dot32 with the VNNI dot step: same signature, same exact int4 result, lane for lane. With
 //! 256-bit VNNI (AVX-VNNI, or AVX512-VNNI+VL) the VPMADDUBSW+VPMADDWD pair becomes ONE VPDPBUSD
 //! (u8xs8 quad dot into i32, no 16-bit intermediate); sign trick and high/low fold are unchanged.

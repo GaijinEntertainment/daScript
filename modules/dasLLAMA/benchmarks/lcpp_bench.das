@@ -1270,7 +1270,6 @@ def private tests_of(rows : array<RowStat>) : table<string; BenchTest> {
 // flavor is stamped debug-jit so no board or oracle can mistake it for measurement
 var private g_debug_run = false
 
-// the exchange client compiles only where the tune framework does, so --submit has a rail to refuse on
 def private exchange_compiled_in() : bool {
     static_if (typeinfo module_exists(dasllama_exchange)) {
         return true

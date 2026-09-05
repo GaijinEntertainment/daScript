@@ -235,6 +235,8 @@ Config precedence: `defaults < config TOML < explicit CLI flags` - unless the TO
 `authoritative = true` (what the control page saves), which flips the top: `defaults < CLI <
 authoritative TOML`.
 
+### The sidecar exchange {#exchange-policy}
+
 The sidecar exchange rides three config-only keys (no CLI flags - one code path). **The
 exchange is closed: both policies default to off, and only an explicit key turns them on** -
 a box its shipped class profile covers stamps its kernels at compile time and never needed the
@@ -245,6 +247,9 @@ unverified NEVER auto-applies), `exchange_submit = ask | always | never` (defaul
 `always` shares it automatically), and `exchange_url` (baked default `https://dasllama.io`).
 `DASLLAMA_EXCHANGE_URL` / `DASLLAMA_EXCHANGE_ACCEPT` env override for tests and one-shot
 watchdog relaunches. Lookup failure is never fatal - the boot falls through to the local tuner.
+Every `/exchange*` route resolves its policy from `g_config_save_path`, the path a `POST /config`
+writes. That path covers every start shape - `--config`, auto-discovered, and config-less, where
+the file may not exist yet and the baked defaults stand.
 The exchange client rides the tune framework, so a build without dasLLVM carries none of it: the
 boot resolver and submit check are never registered and every `/exchange*` route answers 404.
 

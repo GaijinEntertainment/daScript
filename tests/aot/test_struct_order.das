@@ -4,7 +4,7 @@ require dastest/testing_boost public
 
 // AOT emits structures in by-value dependency order, not source order: Outer embeds Inner,
 // which is declared later, and Inner's function-typed field names Outer in its signature. A
-// sort that read the signature as a by-value dependency saw a cycle and fell back to source
+// sort that reads the signature as a by-value dependency sees a cycle and falls back to source
 // order, where the generated C++ embeds an incomplete type. The AOT build of this file is the
 // gate; the assertions only keep the shapes alive. (An `array<Outer>` field inside Inner would
 // be a real C++ cycle - TArray<T> takes sizeof(T) - so that shape stays out of the test.)

@@ -451,11 +451,8 @@ def mx4q8_rows_kernel_neon(var yp : float?; wn : uint8 const?; we : uint8 const?
     }
 }
 
-[init]
+[init, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#cpu-tier-target-select")]
 def dasllama_math_aarch64_neon_register() {
-    // SDOT backends only under JIT for an arm64 TARGET (the artifact's arch, never the host's).
-    // Off-JIT the sdot4 family runs its SCALAR fallback, slower than the portable dot_q8q8 the
-    // vectorizer handles, so portable stays selected wherever hardware SDOT isn't emitted.
     if (get_target_architecture_name() == "arm64" && jit_enabled()) {
         // arm64-sdot: idot4x4 on row-major weights (idot4 → SDOT) — the auto-selected default for direct callers
         // (tests, benchmarks). priority 10 out-ranks portable (0).

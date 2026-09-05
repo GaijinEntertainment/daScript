@@ -22,8 +22,8 @@ def private close(t : T?; got, want : float; what : string) {
 let N = 64l
 let D = 4l   // one interleaved group per region (laneq-compatible), no tail
 let NREG = 3l
-let REF_ULP = 2.0e-6   // per-32-block fp32 fold margin — the bar scales with the accumulation length
-let REF_POISON = 0.05  // added to one expected element; the bar must not swallow it
+let REF_ULP_PER_BLOCK = 2.0e-6
+let REF_POISON = 0.05
 
 def private build_offs() : array<int64> {
     return <- [N * D * 0l, 0l, N * D * 1l, 0l, N * D * 2l, N]
@@ -41,10 +41,7 @@ def private slice_f(src : array<float>; off, n : int64) : array<float> {
     return <- [for (i in range64(off, off + n)); src[i]]
 }
 
-// The independent truth for one q8 row: an fp64 dot over the region's dequantized Q8_0 blocks —
-// int8 products summed exactly in int, both block scales applied in double. `env` is that sum
-// taken on block magnitudes: the envelope the kernels' fp32 per-block folds round inside, which is
-// what the bar is derived from. Layout-free, so it judges repacked and row-major backends alike.
+//! The independent fp64 truth for one q8 row; `env` is the same sum on block magnitudes, the envelope the bar derives from. Layout-free, so repacked and row-major backends judge alike.
 def private ref_dot_q8_f64(wq : array<int8>; ws : array<float>; woff : int64;
                            xq : array<int8>; xs : array<float>; xoff : int64; n : int64) : tuple<dot : double; env : double> {
     var res : tuple<dot : double; env : double>
@@ -77,8 +74,7 @@ def test_q8q8_groupn(t : T?) {
         let wq0 <- quantize_q8_0(wf, NREG * D * N)
         let xq <- quantize_q8_0(xf, 2l * N)
         var offs <- build_offs()
-        // the fp64 reference and its bar, built once off the row-major quants: both are
-        // backend-free, since a repack only permutes the same weights
+        //! reference and bar built once off the row-major quants - a repack only permutes the same weights, so both are backend-free
         var refy : array<float>
         var refbar : array<float>
         refy |> resize(int(NREG * D))
@@ -87,7 +83,7 @@ def test_q8q8_groupn(t : T?) {
             for (row in range64(D)) {
                 let rf = ref_dot_q8_f64(wq0.q, wq0.scales, r * D * N + row * N, xq.q, xq.scales, offs[r * 2l + 1l], N)
                 refy[r * D + row] = float(rf.dot)
-                refbar[r * D + row] = REF_ULP * float(N / 32l) * max(float(rf.env), 1.0)
+                refbar[r * D + row] = REF_ULP_PER_BLOCK * float(N / 32l) * max(float(rf.env), 1.0)
             }
         }
         let saved = active_kernel_backend()

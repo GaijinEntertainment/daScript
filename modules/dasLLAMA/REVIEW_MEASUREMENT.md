@@ -83,3 +83,9 @@ board cell or ruler record produced names the record and row instead of the harn
 sits in the figure's own sentence, in a table heading that covers the table's rows, in a
 section-level provenance line that covers the paragraphs under it, or in a citation of the
 `PERF_LEDGER.md` entry whose provenance line covers it.
+
+**A diff that pins the kernel backend - `pin_kernel_backend`, `select_kernel_backend`, or
+`DASLLAMA_PIN_BACKEND` - pins it before the load it governs, and on a name the box has not
+registered refuses or skips rather than running on the default.** The loader repacks weights
+into the pinned backend's layout, so a pin set after the load never reaches them, and a
+misspelled pin that falls through measures the default backend under the pinned one's name.

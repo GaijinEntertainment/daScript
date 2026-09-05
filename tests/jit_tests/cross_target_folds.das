@@ -1,7 +1,7 @@
 // The target-side folds: get_target_triple / get_target_architecture_name answer for the artifact
 // a compile EMITS (the --jit-target triple), the host's values with no triple, and a static_if
-// over the triple - the test the tune framework's inert gate makes - selects the cross arm, so a
-// wasm or console artifact built on a tuned box carries reference bodies and no sidecar stamps.
+// over the triple selects the cross arm (the tune framework's inert gate makes the same test), so
+// a wasm or console artifact built on a tuned box carries reference bodies and no sidecar stamps.
 // Compile-only keeps the cross run on this host: the folds are decided from argv before the
 // first module parses, and main runs interpreted. The children run with the default module
 // cache on purpose: a --jit-target after the separator keys the cache, or a cached native

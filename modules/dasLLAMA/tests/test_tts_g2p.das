@@ -247,8 +247,6 @@ def private write_pack_header(path : string; version : int) {
     fclose(f)
 }
 
-// The American-only twin (build_g2p_data.py --dialect us, the web serving set's pack): the same
-// American reading as the full pack on the whole corpus, and British refused by name.
 [test]
 def test_us_only_pack(t : T?) {
     t |> run("the American-only pack reads the corpus as the full pack does and refuses British") @(t : T?) {

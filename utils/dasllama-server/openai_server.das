@@ -3560,11 +3560,6 @@ def private handle_config_save(var req : HttpRequest?; var resp : HttpResponse?)
 
 // ===== the exchange surface (GET /exchange + the apply/submit/retune levers) =====
 
-// Every route below reads its policy from `exchange_policy_from_config(g_config_save_path)` — the
-// save path covers every start shape: --config, auto-discovered, and config-less (where the file
-// may not exist yet and the baked defaults stand). It is spelled at each site rather than hoisted
-// because `ExchangePolicy` is a type of the optional exchange module: without the tune framework
-// there is no such type to name in a signature, and each route answers `exchange_absent` instead.
 def private exchange_absent(var resp : HttpResponse?) : http_status {   // nolint:LINT022 — reached only from the no-framework static_if arm, which a build with dasLLVM drops
     return resp |> JSON(error_body("the sidecar exchange is not in this build (no tune framework)", "not_found"), http_status.NOT_FOUND)
 }
@@ -3617,6 +3612,7 @@ def private deny_operator(var resp : HttpResponse?) : http_status {
     return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
 }
 
+[arch(at = "README.md#exchange-policy")]
 def private handle_exchange_get(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     if (!is_loopback_req(req)) {
         // the status carries the local sidecar path (username in it) — operator-only, like the rest

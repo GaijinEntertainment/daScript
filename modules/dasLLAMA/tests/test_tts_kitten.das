@@ -264,7 +264,7 @@ def test_kitten_generator_hook(t : T?) {
     }
 }
 
-[test]
+[test, arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail")]
 def test_kitten_image(t : T?) {
     t |> run("nano: the staged read, the mapped image and the in-memory mint agree on both lanes") @(t : T?) {
         if (!stat(gguf_path("nano")).is_valid) {
@@ -292,8 +292,6 @@ def test_kitten_image(t : T?) {
         let q8_img = image_path_for(gguf_path("nano"), ST2_IMAGE_TAG_Q8)
         t |> success(f32_img != q8_img, "each lane is its own prepared image:\n  {f32_img}\n  {q8_img}")
     }
-    // ARCHITECTURE_TTS.md sec.2.32: an image serves without its gguf - the family's driver data
-    // rides the meta, and a .dlim path maps the lane the file was baked on, whatever the policy says
     t |> run("nano: the image loads by its own path, the family data riding its meta") @(t : T?) {
         if (!stat(gguf_path("nano")).is_valid) {
             t |> skip("kitten-nano.gguf not present")
@@ -308,7 +306,7 @@ def test_kitten_image(t : T?) {
             var inscope from_gguf <- load_styletts2(gguf_path("nano"))   // bakes the q8 sibling when it is not there yet
             let img = image_path_for(gguf_path("nano"), ST2_IMAGE_TAG_Q8)
             t |> success(stat(img).is_valid, "the q8 lane's image is on disk: {img}")
-            set_styletts2_q8(false)   // the policy asks for f32: the file still serves its own lane
+            set_styletts2_q8(false)
             defer() {
                 reset_styletts2_q8()
             }
@@ -322,7 +320,7 @@ def test_kitten_image(t : T?) {
                 t |> equal(from_gguf.kitten.aliases?[an] ?? "", av, "alias {an}")
             }
             if (stat(path_join(models_dir(), "tts_g2p.bin")).is_valid && stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
-                var inscope tm <- load_tts_model(img)   // the facade: the packs still come from the directory
+                var inscope tm <- load_tts_model(img)
                 var inscope c <- caps(tm)
                 var inscope a <- synthesize(tm, "The image spoke.", c.voices[length(c.voices) - 1], 1.0)
                 t |> success(long_length(a.pcm) > 8000l, "the facade synthesized {long_length(a.pcm)} samples from the image")

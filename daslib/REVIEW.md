@@ -262,3 +262,15 @@ a value.
 marker annotation to the instance it finishes, and returns unchanged when it sees that marker.**
 A chain of template ancestors delivers one copy of the annotation per level, so a macro without
 the marker runs a second time over a structure it already rewrote.
+
+**A diff that adds or renames a public intrinsic in `aarch64_neon.das`, `x64_avx.das` or
+`f16_cvt.das` changes the matching row of the lookup tables in
+`modules/dasLLVM/daslib/llvm_jit_intrin.das` (repo root) in the same change.** The JIT recognizes
+these calls by function name alone, so a missing row runs the portable fallback on every target
+with every test green - the `tests/jit_tests` twins compare hardware against a reference body and
+catch a wrong emitter, never a missing one.
+
+**A function in `x64_avx.das` that exists to reach a wider or newer CPU tier than another
+function in that file computes its result by calling that function - never by a hand-written
+scalar loop.** A box whose CPU lacks the tier then runs the recognized narrower path instead of
+scalar code.

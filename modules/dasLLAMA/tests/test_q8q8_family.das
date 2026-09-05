@@ -600,9 +600,7 @@ def test_q8q8_wscale_f16(t : T?) {
     }
 }
 
-// The vector-epilogue idot4 dots - the portable kernels' wasm form - on every host: each row of
-// each token within the fp64 bar, the s16 twin bit-identical to its f32 twin over the widened plane.
-// n=64 is the paired-block main loop alone, n=96 adds the single-block tail.
+//! The portable kernels' wasm form, gated on every host: n=64 is the paired-block main loop alone, n=96 adds the single-block tail.
 def private idot4_ps_gate(t : T?; n : int64) {
     let d = 64l
     let nb = n / 32l
