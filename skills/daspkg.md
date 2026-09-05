@@ -344,7 +344,7 @@ def release() {
 |---|---|
 | `release_emcc_arg("-sUSE_GLFW=3")` | Append an emcc link flag (dasGlfw declares this) |
 | `release_embed_file(src, dst)` | `--embed-file src@dst` into MEMFS (dasStbImage embeds its HUD font) |
-| `release_web_shell("path.html")` | Override the default canvas shell (`web/templates/wasm_canvas_shell.html`) |
+| `release_web_shell("path.html")` | Override the default canvas shell (`web/templates/wasm_canvas_shell.html`). The link exports `FS` and `ENV`, so a shell's `Module.preRun` can stage files into MEMFS (`Module.FS.writeFile`) and set environment knobs (`Module.ENV.X = ...` - the C environment is built from it at startup, later writes never reach `getenv`); hold the run with `addRunDependency` while fetching |
 | `release_wasm_disable_module("dasvulkan")` | Keep a host module out of the cross-compile so its guarded `require ?name` resolves as absent, as the wasm build sees it (the rail disables dashv itself; an app reaching vulkan, das_metal or das_accelerate names those) |
 
 ### Game source contract (cross-compiles UNCHANGED)

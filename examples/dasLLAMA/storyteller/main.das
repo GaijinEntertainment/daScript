@@ -64,6 +64,7 @@ let TOKENS_PER_FRAME = 2          // ~120 tokens a second at 60 Hz: readable typ
 let BOS_TOKEN = 1l                // llama2 vocabulary; the TinyStories corpus separates stories with BOS, so it is the stop word too
 let EOS_TOKEN = 2l
 let WRAP_CHARS = 74               // droidsansmono is monospace: characters are the wrap unit
+let VISIBLE_LINES = 15            // what fits between the title and the status line at the reference size
 let TEXT_SIZE = 0.72
 let SMALL_SIZE = 0.52
 
@@ -75,11 +76,13 @@ enum Phase {
 
 struct Line {
     text : string   //! a sentence for the speech thread; "" asks it to stop
+    story : int     //! which story it belongs to: a clip from an older story is dropped unheard
 }
 
 struct Speech {
     pcm : array<float>
     rate : int
+    story : int
 }
 
 var g_args = StoryArgs()
@@ -123,7 +126,7 @@ def start_speech_thread(tts_path, voice_pick : string; var say, speech : Stream?
                     return
                 }
                 var inscope a <- synthesize(m, l.text, voice, 1.0)
-                var clip = Speech(pcm := a.pcm, rate = a.sample_rate)
+                var clip = Speech(pcm := a.pcm, rate = a.sample_rate, story = l.story)
                 speech |> push_archive(clip)
             }
         }
@@ -134,7 +137,7 @@ def start_speech_thread(tts_path, voice_pick : string; var say, speech : Stream?
 }
 
 def say(text : string) {
-    var l = Line(text = text)
+    var l = Line(text = text, story = g_stories)
     g_say |> push_archive(l)
     g_pending_speech++
 }
@@ -143,7 +146,9 @@ def poll_speech() {
     g_speech |> try_pop() $(bytes) {
         var clip : Speech
         mem_archive_load(bytes, clip)
-        g_clips |> emplace(clip)
+        if (clip.story == g_stories) {
+            g_clips |> emplace(clip)
+        }
     }
     if (g_now >= g_speaking_until && !empty(g_clips)) {
         let seconds = float(length(g_clips[0].pcm)) / float(max(g_clips[0].rate, 1))
@@ -160,17 +165,26 @@ def poll_speech() {
 def start_story() {
     delete g_session
     g_session <- create_session(g_model)
+    set_seed(g_session, int(ref_time_ticks() % 2147483647l))   // a fresh session samples the same story every time otherwise
     g_lines |> clear()
     g_lines |> push("")
     g_sentence |> clear()
     g_sentence |> reserve(64)
     g_ntokens = 0
     g_stories++
+    g_clips |> clear()          // the previous story's unplayed clips; its sentences still in flight come back tagged and drop
+    g_pending_speech = 0
+    g_speaking_until = g_now
     var prompt <- encode(g_model, PROMPT, true)
     eval(g_model, g_session, prompt)
     append_text(PROMPT)
     g_sentence |> push(PROMPT)
     g_phase = Phase.writing
+}
+
+// the corpus writes curly quotes; the screen font carries ASCII, so they would vanish
+def plain_quotes(piece : string) : string {
+    return piece |> replace("“", "\"") |> replace("”", "\"") |> replace("‘", "'") |> replace("’", "'")
 }
 
 def append_text(piece : string) {
@@ -219,7 +233,7 @@ def write_step() {
             return
         }
         g_ntokens++
-        let text = piece(g_model, tok)
+        let text = plain_quotes(piece(g_model, tok))
         append_text(text)
         g_sentence |> push(text)
         if (sentence_ends(text)) {
@@ -267,8 +281,9 @@ def draw_story() {
     draw_text("storyteller", 60.0, 60.0, 0.6, dim)
     var y = 130.0
     let step = 34.0 * TEXT_SIZE / 0.72
-    for (ln in g_lines) {
-        draw_text(ln, 60.0, y, TEXT_SIZE, ink)
+    let first = max(0, length(g_lines) - VISIBLE_LINES)   // a long story scrolls: the newest lines stay on screen
+    for (i in range(first, length(g_lines))) {
+        draw_text(g_lines[i], 60.0, y, TEXT_SIZE, ink)
         y += step
     }
     let status = (g_phase == Phase.idle ? "press SPACE for a story"
