@@ -44,6 +44,12 @@ in the same change, every `CLAUDE.md` clause that names that gate's suite, fixtu
 or skip condition.** A clause that only names the file (a brace list, a suite roster) carries
 nothing to correct.
 
+**A diff that changes `run.das`'s flag surface - a flag, a suite name, an area name, or what a
+flag runs - corrects `CLAUDE.md`'s "Run suites ONLY through the runner" block and
+`../CLAUDE.md`'s "Test workflow" section in the same change.** Both restate the surface for an
+agent that reads them cold; a copy the code has left behind sends that agent to a flag that no
+longer does what the text says.
+
 **A new test file listed in `run.das`'s `model-free` or `stocked` suite, or in no `run.das`
 suite at all, whose name does not say what it covers, gets a `CLAUDE.md` entry in the same
 change** - `run.das`'s `model-free` and `stocked` lists together are the complete census, the

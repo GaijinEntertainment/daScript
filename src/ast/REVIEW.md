@@ -9,5 +9,6 @@
 
 - **A diff that moves a module-cache read diagnostic out of `trySerializeProgramModule` - into
   a helper it calls, or another function - extends `REVIEW.das`'s scan to the new home in the
-  same change.** The gate scans that one function's body; a print that leaves it leaves the
-  gate, and an ungated line there is output every user of the default cache sees.
+  same change.** The gate scans that one function's body, so a print moved out of it is a print
+  the gate no longer checks, and an ungated line there is output every user of the default cache
+  sees.
