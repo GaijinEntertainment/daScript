@@ -494,7 +494,7 @@ def skipped_cells(summary : string) : int {
 //! the area set of an --area / --changed run, canonical order. `status` >= 0 is main's exit code
 //! (an argument error; a --changed run that reaches nothing); -1 means run `areas` (empty = a
 //! suite run)
-def private select_areas(cfg : RunArgs) : tuple<status : int; areas : array<string>> {
+def select_areas(cfg : RunArgs) : tuple<status : int; areas : array<string>> {
     var none : array<string>
     if (!cfg.changed && empty(cfg.area)) {
         return <- (status = -1, areas <- none)
@@ -512,6 +512,10 @@ def private select_areas(cfg : RunArgs) : tuple<status : int; areas : array<stri
         want |> insert(a, null)
     }
     if (cfg.changed) {
+        if (empty(git_lines("rev-parse --verify --quiet {cfg.base}"))) {   // a base git cannot resolve would read as "nothing changed"
+            to_log(LOG_ERROR, "--base '{cfg.base}' is not a commit git knows - fetch origin, or name another base\n")
+            return <- (status = 2, areas <- none)
+        }
         for (p in changed_paths(cfg.base)) {
             let hit <- areas_for_path(p)
             if (empty(hit)) {
@@ -536,7 +540,7 @@ def private select_areas(cfg : RunArgs) : tuple<status : int; areas : array<stri
 }
 
 //! the suite forms' argument contract: 0 = run, else main's exit code
-def private check_suite_args(cfg : RunArgs) : int {
+def check_suite_args(cfg : RunArgs) : int {
     if (cfg.suite == "model-free" || cfg.suite == "stocked") {
         if (cfg.full || !empty(cfg.arm)) {   //! the per-PR gates have no arms to scope: a filter would silently shrink them
             to_log(LOG_ERROR, "--suite {cfg.suite} takes neither --arm nor --full: it is a whole per-PR gate (--exclude names what it drops)\n")
@@ -555,7 +559,7 @@ def private check_suite_args(cfg : RunArgs) : int {
 
 //! the run's files and the arm filter its image-suite child gets: an area plan, or the suite table
 //! under the plain --arm
-def private plan_files(cfg : RunArgs; areas : array<string>) : tuple<files : array<string>; image_arms : string> {
+def plan_files(cfg : RunArgs; areas : array<string>) : tuple<files : array<string>; image_arms : string> {
     if (!empty(areas)) {
         return <- area_plan(areas)
     }
@@ -622,7 +626,7 @@ def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_exclud
     let scope = !empty(areas) ? "areas {join(areas, ",")}" : "suite {cfg.suite}"
     let failed_list = empty(tally.failed_tags) ? "" : " ({join(tally.failed_tags, ", ")})"
     let excluded = n_excluded == 0 ? "" : ", {n_excluded} file(s) excluded"
-    to_log(tally.failures == 0 ? LOG_INFO : LOG_ERROR, "REPORT {scope}: {n_files} file(s), {tally.failures} failed{failed_list}, {tally.skipped} cell(s) skipped (a missing model or fixture skips loudly - stock it to cover it){excluded}\n")
+    to_log(tally.failures == 0 ? LOG_INFO : LOG_ERROR, "REPORT {scope}: {n_files} file(s), {tally.failures} failed{failed_list}, {tally.skipped} cell(s) skipped (a filtered arm, an absent device, or a missing model or fixture - each skips loudly){excluded}\n")
     if (!empty(areas)) {
         if (find_index(areas, "llm") >= 0) {
             to_log(LOG_INFO, "NEXT the model suites (decode | prefill | matrix) take --arm scoped to the change: run.das -- --arm <arms> --suite <name>\n")

@@ -34,6 +34,12 @@ gives it a `MODULE_AREAS` row in `tests/run.das` in the same change.** The row i
 area, so the omission costs every later `--changed` run the whole suite, never coverage. A
 module the whole engine shares (math, gguf, the kernels) takes no row on purpose.
 
+**A diff that changes `tests/run.das`'s flag surface - a flag, a suite name, an area name, or
+what a flag runs - corrects this folder's `CLAUDE.md` "Test workflow" section and
+`tests/CLAUDE.md`'s run block in the same change.** Both restate the surface for an agent
+that reads them cold; a copy the code has left behind sends that agent to a flag that no
+longer does what the text says.
+
 **Every `dasllama/` change applies this folder's `tests/REVIEW.md` - open it explicitly: the
 folder walk does not surface it for a `dasllama/`-only diff.**
 

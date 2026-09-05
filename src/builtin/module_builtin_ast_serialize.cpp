@@ -2880,8 +2880,8 @@ namespace das {
 
     void AstSerializer::serializeProgramImpl ( ProgramPtr program, ModuleGroup & libGroup ) {
         auto & ser = *this;
-        // version gate — the module-cache path (trySerializeProgramModule) checks only
-        // mtime+filename before this; a cache written by a different serializer version must
+        // version gate — the module-cache path (trySerializeProgramModule) checks only the
+        // file name and content stamp before this; a cache written by a different serializer version must
         // fail cleanly here (the caller falls back to a full parse on ser.failed), not misparse
         // every field after the first layout difference
         uint32_t version = getVersion();

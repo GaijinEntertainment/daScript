@@ -261,7 +261,7 @@ outside the new bar.** A bar nothing has ever exceeded is not known to discrimin
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's
 smallest GGUF that sits under `LARGE_TIER_BYTES` (`_model_tier.das`) (the file homes are
-`CLAUDE.md`'s "Model-free / no-arm tests" and "Out-of-folder test files" notes). A family
+`CLAUDE.md`'s "The per-PR suites - model-free and stocked" and "Out-of-folder test files" notes). A family
 whose vocab carries no thinking or tool markers has no format to test.
 
 **A kernel-unit cell whose kernel reads f16 operands and whose oracle is wider-precision

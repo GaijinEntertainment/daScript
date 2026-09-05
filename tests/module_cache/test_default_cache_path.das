@@ -169,6 +169,7 @@ def test_source_stamp_is_content(t : T?) {
     var edited : string
     t |> success(report_child(t, "stamp edited", run(cmd, edited), edited, "MARK_stamp 3"), "a same-size edit is recompiled")
     t |> success(find(edited, "file changed at") >= 0 && find(edited, "mc_stamp_leaf.das") >= 0, "the same-size edit is a cutoff at the leaf:\n{edited}")
+    t |> success(find(edited, "ser: file content changed") >= 0, "the loud cache names the content change:\n{edited}")
     var err : string
     rmdir_rec(tmp, err)
 }

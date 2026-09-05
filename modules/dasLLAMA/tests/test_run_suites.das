@@ -100,7 +100,7 @@ def test_area_tables_match_the_census(t : T?) {
         }
     }
     // the reverse: every arm the image suite declares is reachable from some area, or is named here as
-    // deliberately unclaimed - `gemma` is an --arm substring of five vision arms (CLAUDE.md says how to reach it)
+    // deliberately unclaimed - `gemma` is an --arm substring of every other gemma* arm (CLAUDE.md says how to reach it)
     let unclaimed <- ["gemma"]
     let marker = "arm_on(t, \""
     var at = find(image, marker)
@@ -140,8 +140,113 @@ def test_areas_for_path(t : T?) {
     t |> equal(join(areas_for_path("modules/dasLLAMA/models/silero_vad.bin"), ","), "audio", "the checked-in VAD weights reach audio")
     t |> equal(join(areas_for_path("modules\\dasLLAMA\\dasllama\\dasllama_tts.das"), ","), "tts", "a backslash path maps the same")
     t |> equal(length(areas_for_path("src/ast/ast_parse.cpp")), 0, "a path outside the module reaches nothing")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_vision_oracle.das"), ","), "vision", "the vision oracle fixture reaches vision")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_metal_kernel_common.das"), ","), "llm", "the metal kernel fixture reaches llm")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_vk_kq_fixtures.das"), ","), "llm", "a vulkan fixture reaches llm")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/harness/parity.sh"), ","), "infra", "the harness tree reaches infra")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/benchmarks/lcpp_bench.das"), ","), "llm", "the benchmarks tree reaches llm")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/some_new_tree/x.das"), ","), every, "an unmapped tree reaches every area - the safe default")
     t |> equal(skipped_cells("37 tests, 23 passed, 0 failed, 0 errors, 14 skipped"), 14, "the summary's skipped count is read")
     t |> equal(skipped_cells(""), 0, "no summary reads as no skips")
+}
+
+//! the pure planners behind an area run: the file set is the areas' census files, deduplicated and
+//! sorted, with the image suite's file appended once when any area owns image arms
+[test]
+def test_area_plan(t : T?) {
+    let tts <- area_plan(["tts"])
+    t |> equal(length(tts.files), 7, "tts plans its seven files")
+    t |> equal(tts.image_arms, "", "tts owns no image arms, so no image file")
+    t |> success(find_index(tts.files, "{TESTS_DIR}/test_model_image.das") < 0, "no image file without arms")
+    for (i in range(1, length(tts.files))) {
+        t |> success(tts.files[i - 1] < tts.files[i], "the plan is sorted: {tts.files[i - 1]} < {tts.files[i]}")
+    }
+    let both <- area_plan(["audio", "vision"])
+    let n_image = length([for (f in both.files); f; where f == "{TESTS_DIR}/test_model_image.das"])
+    t |> equal(n_image, 1, "two arm-owning areas append the image file once")
+    t |> equal(both.files[length(both.files) - 1], "{TESTS_DIR}/test_model_image.das", "the image file rides last")
+    t |> success(find(both.image_arms, "whisper") >= 0 && find(both.image_arms, "gemma3v") >= 0, "the arm string is the union: {both.image_arms}")
+    let n_tower = length([for (f in both.files); f; where f == "{TESTS_DIR}/test_tower_helpers.das"])
+    t |> equal(n_tower, 1, "a file in both areas plans once")
+    let cfg = RunArgs(suite = "decode", arm = "arm12")
+    let none : array<string>
+    let suite <- plan_files(cfg, none)
+    t |> equal(length(suite.files), 1, "a suite run plans the suite table")
+    t |> equal(suite.image_arms, "arm12", "a suite run passes --arm through")
+    let area <- plan_files(cfg, ["tts"])
+    t |> equal(length(area.files), 7, "an area run plans the area, whatever --suite says")
+}
+
+//! the argument contracts: an area run refuses --arm/--full/--suite and an unknown area; a per-PR
+//! suite refuses --arm and --full; a model suite wants exactly one of --arm and --full, and --full is refused
+[test]
+def test_argument_contracts(t : T?) {
+    let plain = RunArgs()
+    let none <- select_areas(plain)
+    t |> equal(none.status, -1, "no --area and no --changed: a suite run")
+    t |> equal(length(none.areas), 0, "and no areas")
+    let tts = RunArgs(area = "tts,audio")
+    let two <- select_areas(tts)
+    t |> equal(two.status, -1, "named areas run")
+    t |> equal(join(two.areas, ","), "audio,tts", "areas come back in canonical order")
+    let bogus = RunArgs(area = "bogus")
+    t |> equal(select_areas(bogus).status, 2, "an unknown area is refused")
+    let mixed = RunArgs(area = "tts", suite = "decode")
+    t |> equal(select_areas(mixed).status, 2, "--area beside --suite is refused")
+    let armed = RunArgs(area = "tts", arm = "x")
+    t |> equal(select_areas(armed).status, 2, "--area beside --arm is refused")
+    t |> equal(check_suite_args(RunArgs(suite = "stocked")), 0, "a per-PR suite runs bare")
+    t |> equal(check_suite_args(RunArgs(suite = "stocked", arm = "x")), 2, "a per-PR suite refuses --arm")
+    t |> equal(check_suite_args(RunArgs(suite = "decode")), 2, "a model suite with neither --arm nor --full is refused")
+    t |> equal(check_suite_args(RunArgs(suite = "decode", arm = "arm12")), 0, "a model suite with --arm runs")
+    t |> equal(check_suite_args(RunArgs(suite = "decode", full = true)), 2, "--full is refused while the Metal build-out is in progress")
+}
+
+def private das_exe() : string {
+    let args <- get_command_line_arguments()
+    return empty(args) ? "" : args[0]
+}
+
+def private run_runner(args : string; var output : string&) : int {
+    return unsafe(popen_timeout("{das_exe()} -dasroot {get_das_root()} {TESTS_DIR}/run.das -- {args}", 120.0, $(f) {
+        if (f != null) {
+            output = fread(f)
+        }
+    }))
+}
+
+//! the runner end to end with a no-op child binary: the AREAS line, the image file's arm env, the
+//! REPORT and NEXT lines, and the refusals main prints
+[test]
+def test_runner_dry_run(t : T?) {
+    if (get_platform_name() == "windows") {
+        t |> skip("the dry run stands in a POSIX no-op binary for the child")
+        return
+    }
+    var out : string
+    t |> equal(run_runner("--area audio,vision --das /usr/bin/true", out), 0, "a dry area run exits clean:\n{out}")
+    t |> success(find(out, "AREAS audio,vision") >= 0, "the AREAS line names the areas")
+    t |> success(find(out, "START test_model_image.das: ") >= 0, "the image file runs")
+    let image_start = find(out, "START test_model_image.das: ")
+    let image_line_end = find(out, "\n", image_start)
+    let image_line = slice(out, image_start, image_line_end)
+    t |> success(find(image_line, "DASLLAMA_TEST_ARMS='whisper,") >= 0 && find(image_line, "gemma3v") >= 0, "the image child gets the union of the areas' arms:\n{image_line}")
+    let audio_start = find(out, "START test_audio.das: ")
+    let audio_line = slice(out, audio_start, find(out, "\n", audio_start))
+    t |> success(find(audio_line, "DASLLAMA_TEST_ARMS=''") >= 0, "every other child gets no arm filter:\n{audio_line}")
+    t |> success(find(out, "REPORT areas audio,vision: ") >= 0, "the REPORT line names the scope")
+    t |> success(find(out, "NEXT before the PR") >= 0, "the NEXT line names the per-PR suites")
+    var llm : string
+    t |> equal(run_runner("--area infra --das /usr/bin/true --exclude test_exe_smoke", llm), 0, "an infra dry run with an exclusion exits clean")
+    t |> success(find(llm, "EXCLUDED test_exe_smoke.das") >= 0 && find(llm, "1 file(s) excluded") >= 0, "the exclusion is loud and counted:\n{llm}")
+    var refused : string
+    t |> equal(run_runner("--suite stocked --exclude test", refused), 2, "an exclusion that drops every file is refused")
+    t |> success(find(refused, "dropped every file") >= 0, "and says so:\n{refused}")
+    var changed : string
+    t |> equal(run_runner("--changed --base HEAD --das /usr/bin/true", changed), 0, "a --changed run against HEAD exits clean:\n{changed}")
+    t |> success(find(changed, "CHANGED") >= 0 || find(changed, "nothing") >= 0, "it either maps a change or says nothing reached an area:\n{changed}")
+    var no_base : string
+    t |> equal(run_runner("--changed --base no-such-ref-here --das /usr/bin/true", no_base), 2, "a base git cannot resolve is refused, never read as nothing changed:\n{no_base}")
 }
 
 [test]
