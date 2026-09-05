@@ -9,7 +9,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // dot_q8q8_idot4x4/_f16s — the plain-das GEMV dots this backend dispatches
 require dasllama/dasllama_tune  // [tuned]: reconstitute the laneq4x4 tile from its template with per-box loop hints
 require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
-require llvm/daslib/aarch64_neon  // tbl16/sdot4_w/sdot4_laneq: the mx4 + laneq tiles' JIT intrinsics
+require daslib/aarch64_neon  // tbl16/sdot4_w/sdot4_laneq: the mx4 + laneq tiles' JIT intrinsics
 require daslib/f16_cvt  // f16_to_f32 — the wscale_f16 twins widen the binary16 scale in-loop
 require daslib/jobque_boost public  // kernels expand parallel_for; consumers need its symbols
 require dasllama/dasllama_par  // maybe_parallel_for

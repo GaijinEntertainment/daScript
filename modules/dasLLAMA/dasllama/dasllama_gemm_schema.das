@@ -104,3 +104,33 @@ def kq_ssb(fmt : int) : int64 {
 def kq_reads_packed_planes(fmt : int64) : bool {
     return fmt == 4l || fmt == 40l || fmt == 44l || fmt == 3l || fmt == 45l || fmt == 2l
 }
+
+//! eight +-1 bytes for sign byte `sb`, lane k negative when bit k is set
+def pm1_of(sb : int) : uint64 {
+    var v = 0ul
+    for (k in range(8)) {
+        v |= uint64(((sb >> k) & 1) != 0 ? 0xFF : 0x01) << uint64(8 * k)
+    }
+    return v
+}
+
+//! the grid's symbol alphabet: the halved iq3xxs magnitudes, iq3s's odd magnitudes, the iq2 family's three
+def vbmi_alphabet(kq : int) : array<int> {
+    if (kq == 34) return <- [2, 6, 10, 14, 18, 22, 26, 31]
+    if (kq == 33) return <- [1, 3, 5, 7, 9, 11, 13, 15]
+    return <- [8, 25, 43]
+}
+
+//! a grid word's low `nbytes` weight bytes as packed symbols (weight t at bits t*bits); a byte outside the alphabet is a broken table
+def vbmi_pack_word(word : uint; alpha : array<int>; bits, nbytes : int) : int {
+    var code = 0
+    for (t in range(nbytes)) {
+        let wb = int((word >> uint(8 * t)) & 0xFFu)
+        let si = alpha |> find_index(wb)
+        if (si < 0) {
+            panic("vbmi lattice: grid byte {wb} is outside the alphabet")
+        }
+        code |= si << (bits * t)
+    }
+    return code
+}

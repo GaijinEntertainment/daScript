@@ -1502,15 +1502,6 @@ def private grid_rows_path(te : TileEmit) : bool {
     return false
 }
 
-//! eight +-1 bytes for sign byte `sb`, lane k negative when bit k is set
-def public pm1_of(sb : int) : uint64 {   // test_kquant round-trips the sign expansion
-    var v = 0ul
-    for (k in range(8)) {
-        v |= uint64(((sb >> k) & 1) != 0 ? 0xFF : 0x01) << uint64(8 * k)
-    }
-    return v
-}
-
 //! the row-pair decode's sign table: the 128 ksigns codes with the code's parity as the 8th bit
 //! (ksigns[i] == i | parity(i) << 7), each as its eight +-1 bytes
 def private sign_pm1_emit_globals(var te : TileEmit; mod : LLVMOpaqueModule?) {
@@ -1876,13 +1867,6 @@ def private vbmi_push_iq2(te : TileEmit; var p0, p1 : array<LLVMOpaqueValue?>; w
     p1 |> push(LLVMConstInt(te.types.t_int8, uint64(vbmi_pack_word(w1, alpha, 2, 4)), 0))
 }
 
-//! the grid's symbol alphabet: the halved iq3xxs magnitudes, iq3s's odd magnitudes, the iq2 family's three
-def public vbmi_alphabet(kq : int) : array<int> {   // test_kquant round-trips the code planes
-    if (kq == 34) return <- [2, 6, 10, 14, 18, 22, 26, 31]
-    if (kq == 33) return <- [1, 3, 5, 7, 9, 11, 13, 15]
-    return <- [8, 25, 43]
-}
-
 //! the grid gemv's module-level tables: the format's grid, the ksigns +-1 table when the row form reads it, the lattice's
 def private grid_emit_globals(var te : TileEmit; fmt : int; mod : LLVMOpaqueModule?) {
     if (fmt == 33) {
@@ -1906,20 +1890,6 @@ def private vbmi_tag(kq : int) : string => kq == 25 ? "iq2xxs" : (kq == 24 ? "iq
 
 //! grid entries per format: the compact plane's byte count
 def private vbmi_entries(kq : int) : int => (kq == 25 || kq == 34) ? 256 : (kq == 23 ? 1024 : 512)
-
-//! a grid word's low `nbytes` weight bytes as packed symbols (weight t at bits t*bits); a byte outside the alphabet is a broken table
-def public vbmi_pack_word(word : uint; alpha : array<int>; bits, nbytes : int) : int {
-    var code = 0
-    for (t in range(nbytes)) {
-        let wb = int((word >> uint(8 * t)) & 0xFFu)
-        let si = alpha |> find_index(wb)
-        if (si < 0) {
-            panic("vbmi lattice: grid byte {wb} is outside the alphabet")
-        }
-        code |= si << (bits * t)
-    }
-    return code
-}
 
 def private vbmi_const_bytes(te : TileEmit; mod : LLVMOpaqueModule?; name : string; var elems : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var g = LLVMAddGlobal(mod, LLVMArrayType(te.types.t_int8, uint(length(elems))), name)

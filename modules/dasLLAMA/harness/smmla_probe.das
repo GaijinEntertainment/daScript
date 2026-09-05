@@ -1,7 +1,7 @@
 options gen2
 options _dasllama_internal = true
 require daslib/jobque_boost
-require llvm/daslib/aarch64_neon
+require daslib/aarch64_neon
 require dasllama/dasllama_env
 
 // SMMLA (i8mm) single-core scout: correctness + ALU-throughput ratio vs SDOT on the same
