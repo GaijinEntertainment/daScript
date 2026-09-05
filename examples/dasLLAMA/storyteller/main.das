@@ -25,8 +25,10 @@ require strings
 //
 //   bin/daslang -jit examples/dasLLAMA/storyteller/main.das -- --models <dir>
 //
-// <dir> holds stories15M-Q8_0.gguf, kitten-nano.gguf, tts_g2p.bin and tts_postag.bin. The
-// language model runs on the frame thread in per-frame token budgets, so the loop never
+// <dir> holds the two models and the front-end packs tts_g2p.bin and tts_postag.bin. A model
+// is its gguf (the default names) or a prepared .dlim image baked for the running build's
+// identity (dasllama-convert --config) - the web build ships images only, the shell names them.
+// The language model runs on the frame thread in per-frame token budgets, so the loop never
 // blocks; speech synthesis runs on its own thread, fed sentences through one stream and
 // answering with PCM through another, and the frame thread plays the clips back to back.
 

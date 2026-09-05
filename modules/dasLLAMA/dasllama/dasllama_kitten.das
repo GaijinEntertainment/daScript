@@ -7,10 +7,9 @@ module dasllama_kitten shared public
 require dasllama/dasllama_lint public
 require math
 require strings
-require daslib/fio
-require dasllama/dasllama_gguf
 require dasllama/dasllama_common
 require dasllama/dasllama_unicode
+require dasllama/dasllama_tts_types
 require dasllama/dasllama_styletts2
 
 //! The KittenTTS family (nano, mini): the reference driver's token table, re-spacing and
@@ -93,37 +92,6 @@ def kitten_token_ids(ps : string) : array<int> {
 def kitten_style_row(norm_text : string; rows : int) : int {
     var inscope cps <- utf8_to_cpts(norm_text)
     return clamp(length(cps), 0, rows - 1)
-}
-
-//! Kitten's driver data beside the shared model: per-voice speed priors and the alias names.
-struct KittenFamily {
-    speed_priors : table<string; float>
-    aliases : table<string; string>
-}
-
-//! Read the `kitten.*` metadata of a converted KittenTTS GGUF.
-def load_kitten_family(path : string) : KittenFamily {
-    var inscope fam = KittenFamily()
-    let f = fopen(path, "rb")
-    if (f == null) {
-        panic("dasLLAMA kitten: cannot open model '{path}'")
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        var inscope m <- parse_gguf_meta(bytes)
-        var inscope voices <- gguf_str_array(m, bytes, "styletts2.voices")
-        for (v in voices) {
-            if (gguf_has(m, "kitten.speed_prior.{v}")) {
-                fam.speed_priors[v] = gguf_f32(m, bytes, "kitten.speed_prior.{v}")
-            }
-        }
-        var inscope anames <- gguf_str_array(m, bytes, "kitten.alias_names")
-        var inscope avoices <- gguf_str_array(m, bytes, "kitten.alias_voices")
-        for (an, av in anames, avoices) {
-            fam.aliases[an] = av
-        }
-    }
-    fclose(f)
-    return <- fam
 }
 
 //! Resolve a voice name or alias to a canonical voice; "" when unknown.

@@ -10,6 +10,7 @@ require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_styletts2
 require dasllama/dasllama_image   // image_path_for - the two lanes' file identities
+require dasllama/dasllama_env   // g_env_engine.image: the by-path load needs an image on disk
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
@@ -290,6 +291,43 @@ def test_kitten_image(t : T?) {
         let f32_img = image_path_for(gguf_path("nano"), ST2_IMAGE_TAG)
         let q8_img = image_path_for(gguf_path("nano"), ST2_IMAGE_TAG_Q8)
         t |> success(f32_img != q8_img, "each lane is its own prepared image:\n  {f32_img}\n  {q8_img}")
+    }
+    // ARCHITECTURE_TTS.md sec.2.32: an image serves without its gguf - the family's driver data
+    // rides the meta, and a .dlim path maps the lane the file was baked on, whatever the policy says
+    t |> run("nano: the image loads by its own path, the family data riding its meta") @(t : T?) {
+        if (!stat(gguf_path("nano")).is_valid) {
+            t |> skip("kitten-nano.gguf not present")
+            return
+        }
+        if (!g_env_engine.image) {
+            t |> skip("DASLLAMA_IMAGE=0: no image on disk to load by path")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope from_gguf <- load_styletts2(gguf_path("nano"))   // bakes the q8 sibling when it is not there yet
+            let img = image_path_for(gguf_path("nano"), ST2_IMAGE_TAG_Q8)
+            t |> success(stat(img).is_valid, "the q8 lane's image is on disk: {img}")
+            set_styletts2_q8(false)   // the policy asks for f32: the file still serves its own lane
+            defer() {
+                reset_styletts2_q8()
+            }
+            var inscope m <- load_styletts2(img)
+            t |> success(m.q8, "the file's lane is the served lane")
+            t |> equal(length(m.voice_names), 8)
+            t |> equal(length(m.kitten.aliases), length(from_gguf.kitten.aliases), "the aliases rode the image ({length(m.kitten.aliases)})")
+            t |> equal(length(m.kitten.speed_priors), length(from_gguf.kitten.speed_priors), "the speed priors rode the image ({length(m.kitten.speed_priors)})")
+            t |> success(!empty(m.kitten.aliases) && !empty(m.kitten.speed_priors), "the gguf carries family data to compare")
+            for (an, av in keys(m.kitten.aliases), values(m.kitten.aliases)) {
+                t |> equal(from_gguf.kitten.aliases?[an] ?? "", av, "alias {an}")
+            }
+            if (stat(path_join(models_dir(), "tts_g2p.bin")).is_valid && stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
+                var inscope tm <- load_tts_model(img)   // the facade: the packs still come from the directory
+                var inscope c <- caps(tm)
+                var inscope a <- synthesize(tm, "The image spoke.", c.voices[length(c.voices) - 1], 1.0)
+                t |> success(long_length(a.pcm) > 8000l, "the facade synthesized {long_length(a.pcm)} samples from the image")
+            }
+        }
     }
 }
 

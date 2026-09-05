@@ -41,7 +41,9 @@
   var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1 };
   window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key]) e.preventDefault(); }, { passive: false });
 
-  var MODEL_FILES = ['stories15M-Q8_0.gguf', 'kitten-nano.gguf', 'tts_g2p.bin', 'tts_postag.bin'];
+  // the two prepared images (baked for this build's identity by dasllama-convert --config) and the
+  // two English front-end packs - no gguf crosses the wire
+  var MODEL_FILES = ['stories15M.dlim', 'kitten-nano.dlim', 'tts_g2p.bin', 'tts_postag.bin'];
   var modelsBase = new URLSearchParams(location.search).get('models') || 'models/';
   if (!modelsBase.endsWith('/')) modelsBase += '/';
 
@@ -90,10 +92,10 @@
       };
       return c;
     })(),
-    arguments: ['--models', '/models', '--autoplay'],
+    arguments: ['--models', '/models', '--story-model', 'stories15M.dlim', '--tts-model', 'kitten-nano.dlim', '--autoplay'],
     preRun: [function () {
       // the C environment is built from Module.ENV at startup: knobs set later never reach getenv
-      Module.ENV.DASLLAMA_IMAGE = '0';          // no prepared-image sidecar: MEMFS is per visit
+      Module.ENV.DASLLAMA_IMAGE = '0';          // never mint a sidecar into MEMFS: the images arrive prepared
       Module.ENV.DASLLAMA_ALLOW_UNTUNED = '1';  // the portable kernels, no tune sidecar
       Module.FS.mkdir('/models');
       Module.addRunDependency('storyteller-models');
