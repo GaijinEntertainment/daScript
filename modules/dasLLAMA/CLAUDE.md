@@ -8,6 +8,14 @@ are about to work in before writing code here. The rules binding a diff are `REV
 `PERF_LEDGER.md` is the measured record; `tests/CLAUDE.md` is the test discipline (run suites
 ONLY through `tests/run.das`).
 
+## Test workflow
+
+After an edit: `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed` runs the tests
+the changed files reach (areas `audio | vision | tts | llm | infra`; `--area <a,b>` names them
+directly). Before a PR: `--suite model-free`, then `--suite stocked` on a box with models
+(`--exclude test_ple_modes` while iterating). The runner's `REPORT` and `NEXT` lines say what
+ran, what a missing model skipped, and what is still owed. The rest: `tests/CLAUDE.md`.
+
 Follow the daslang **gen2** conventions - the root `CLAUDE.md` rules apply to every `.das` file
 here.
 

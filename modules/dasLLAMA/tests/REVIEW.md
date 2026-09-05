@@ -46,6 +46,12 @@ suite at all, whose name does not say what it covers, gets a `CLAUDE.md` entry i
 change** - `run.das`'s `model-free` and `stocked` lists together are the complete census, the
 `CLAUDE.md` map is deliberately partial.
 
+**A new `model-free` or `stocked` file also gets a row in `run.das`'s `area_tests` (audio |
+vision | tts | llm | infra; two rows when it serves two areas), and a new engine module that
+serves one area gets a `MODULE_AREAS` row.** `test_run_suites.das` fails a per-PR file with no
+area. A module without a row reaches every area, so an omission there costs time, never
+coverage.
+
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm
 filter mechanics" section in the same change** - an arm the census does not name is

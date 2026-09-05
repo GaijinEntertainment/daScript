@@ -4,6 +4,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 require dastest/testing_boost public
 require run   // the suite runner's own tables and filter - bare same-dir require; run.das is [export] main only, no [init]
 require daslib/fio
+require daslib/strings_boost
 require strings
 
 // The runner's per-PR suite split, model-free: `model-free` holds only files that reach no
@@ -69,6 +70,54 @@ def test_every_file_sits_in_a_suite(t : T?) {
         }
     }
     t |> success(count > 50, "the folder listing walked the test files ({count})")
+}
+
+//! the area tables cover the per-PR census exactly: every area file is a model-free or stocked file,
+//! every such file has at least one area, and every image-suite arm an area names exists
+[test]
+def test_area_tables_match_the_census(t : T?) {
+    var census <- [for (f in suite_files("model-free")); base_name(f)]
+    census |> push_from([for (f in suite_files("stocked")); base_name(f)])
+    var covered : table<string; void?>
+    for (a in AREAS) {
+        for (name in area_tests(a)) {
+            t |> success(find_index(census, name) >= 0, "an area file sits in the model-free or stocked census: {a}/{name}")
+            covered |> insert(name, null)
+        }
+    }
+    for (name in census) {
+        t |> success(key_exists(covered, name), "a per-PR file has an area - add it to `area_tests`: {name}")
+    }
+    let image = file_text("{TESTS_DIR}/test_model_image.das")
+    for (a in AREAS) {
+        for (tok in split(area_image_arms(a), ",")) {
+            continue if (empty(tok))
+            t |> success(find(image, "arm_on(t, \"{tok}") >= 0, "the image suite has an arm the area names: {a}/{tok}")
+        }
+    }
+}
+
+//! the change-to-area map behind --changed
+[test]
+def test_areas_for_path(t : T?) {
+    let every = join(AREAS, ",")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_audio.das"), ","), "audio", "an audio module reaches audio")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tower.das"), ","), "audio,vision", "the shared tower reaches both towers")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_math.das"), ","), every, "a core module reaches every area")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_brand_new.das"), ","), every, "a module without a row reaches every area - the safe default")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_gemma3v.das"), ","), "vision", "a test file reaches its own area")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_tower_helpers.das"), ","), "audio,vision", "a two-area test reaches both")
+    t |> equal(length(areas_for_path("modules/dasLLAMA/tests/test_metal_decode_parity.das")), 0, "a model-suite file reaches no area - it takes --arm")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_tts_oracle.das"), ","), "tts", "a TTS fixture reaches tts")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_model_tier.das"), ","), every, "the shared tier helper reaches every area")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/performance/model_specs.das"), ","), "infra", "the performance tree reaches infra")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/REVIEW.md"), ","), "infra", "a document under tests/ reaches infra, not a model suite")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/run.das"), ","), "infra", "the runner itself reaches infra (its own tests live there)")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/models/silero_vad.bin"), ","), "audio", "the checked-in VAD weights reach audio")
+    t |> equal(join(areas_for_path("modules\\dasLLAMA\\dasllama\\dasllama_tts.das"), ","), "tts", "a backslash path maps the same")
+    t |> equal(length(areas_for_path("src/ast/ast_parse.cpp")), 0, "a path outside the module reaches nothing")
+    t |> equal(skipped_cells("37 tests, 23 passed, 0 failed, 0 errors, 14 skipped"), 14, "the summary's skipped count is read")
+    t |> equal(skipped_cells(""), 0, "no summary reads as no skips")
 }
 
 [test]

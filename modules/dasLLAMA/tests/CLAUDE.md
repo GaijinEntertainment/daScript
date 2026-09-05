@@ -11,7 +11,21 @@ one-arm fix into an afternoon.
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the every-change gate: files that reach no model or fixture, no --arm
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # the per-PR gate on a box with models: the model-gated files, no --arm
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the ~10 min PLE file
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # after an edit: the areas the changed files reach
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | llm | infra (comma list)
 ```
+
+An AREA is what someone working on audio, vision, TTS, the LLM engine or the tooling runs after an
+edit: every model-free and stocked file of the area (`area_tests` in `run.das`, a file may sit in
+two) plus the `image` suite's arms the area owns (`area_image_arms`). `--changed` derives the
+areas from `git diff --name-only --base` plus the module's untracked files: a test file maps to
+its own areas, a `tests/_*.das` fixture to the areas it serves, an engine module through the
+`MODULE_AREAS` table (a module without a row is CORE and reaches every area - the safe default),
+`performance/`, `harness/` and `.md` to `infra`, `benchmarks/` to `llm`. Each mapping prints as
+a `CHANGED path -> areas` line; a changed model-suite file prints a hint instead, because its
+arms are the caller's to scope. The run ends with `REPORT` (files, failures, cells skipped for a
+missing model, files excluded) and `NEXT` (the model suites' `--arm` form when `llm` ran; the
+per-PR suites still owed).
 
 `all` (the default) runs the decode, MTP and prefill parity files, the support matrix, the kernel
 files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vulkan`, `coverage`,
