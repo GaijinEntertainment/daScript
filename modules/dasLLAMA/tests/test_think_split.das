@@ -66,7 +66,6 @@ def test_chatml_instruct_reasoning(t : T?) {
     t |> run("ChatML instruct generation ignores history-only reasoning markers") @(t : T?) {
         var m = Model()
         m.arch = "qwen3moe"
-        // Instruct-2507 retains reasoning replay logic, but its generation branch is bare.
         m.chat_template_str = "enable_thinking <think> reasoning_content </think> add_generation_prompt <|im_start|>assistant\\n"
         m.tok.kind = TokKind.bpe
         m.tok.bpe.lookup["<think>"] = 1l
