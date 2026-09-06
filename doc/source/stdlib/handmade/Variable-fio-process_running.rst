@@ -1,0 +1,1 @@
+The value ``process_poll`` and ``process_wait`` return while the child is still running.  ``INT32_MIN``: no signal number and no ordinary exit code takes that value; the one collision is a Windows process that returns ``0x80000000`` as its own status on purpose.

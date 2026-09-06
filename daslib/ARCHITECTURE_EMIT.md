@@ -83,10 +83,20 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   index. `[init]` function order is not re-derived at all: the emitter reads the
   simulated context's list through rtti `for_each_init_function`, so the C++ late-init
   sort stays the single source of truth.
-- **Cross-module limits fail loud at emit time**: only main-module, AOT-emitted `[init]`
-  functions can be called from the ctor (required-module and `[no_aot]` ones are collected
-  emit errors with the reason), because the standalone TU only emits the entry module's
-  function bodies.
+- **The TU holds every used function of every module.** A standalone context is one
+  translation unit with no other to link, so `prepareProgramForEmission`'s markers, the
+  block-variable collector, `registerAotCpp`'s `ArgsConverter` thunks and
+  `StandaloneContextGen` each walk the entry module through `visit_module` and then every
+  foreign used function through `visit(fn, adapter)` (`foreignUsedFunctions`, aot_cpp): a
+  builtin is C++ already, a template never emits, a used `[no_aot]` function was refused by
+  name before the walk. A generic instance several modules instantiated has one AOT name,
+  so declarations, bodies, thunks and table rows are emitted once per name. A foreign
+  global's initializer temporaries collect under the collector's null key, the one
+  `__init_script` declares. `UseTypeMarker` walks the foreign functions too, so an extern
+  or handled type reached only from one still links its module.
+- **Cross-module `[init]` is refused at emit time**: only entry-module, AOT-emitted `[init]`
+  functions are called from the ctor; a required module's and `[no_aot]` ones are collected
+  emit errors with the reason.
 - **Every used function must have an AOT body** - a standalone context has no
   interpreter, so a used `noAot` function (the `[no_aot]` annotation, or `NoAotMarker`
   finding a type AOT cannot express) is a collected emit error, never a

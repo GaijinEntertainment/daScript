@@ -13,16 +13,17 @@ change.** The integration suite is `bin/daslang dastest/dastest.das -- --test
 utils/daspkg/test_daspkg_git.das`, and it needs network (the `borisbat/daspkg-test-*` fixture
 repos).
 
-**A change to `cmd_release`, `cmd_release_wasm`, or a `release_*` helper states in the review
-whether the release was run on macOS.** The release layout differs per platform (`.app` bundle
-vs flat directory).
+**A diff that changes any code on the `daspkg release` path - `cmd_release`, `cmd_release_wasm`,
+and the `ship_*` / `release_*` helpers they call in `commands.das` - states in the review whether
+the release was run on macOS.** The release layout differs per platform (`.app` bundle vs flat
+directory).
 
 **A diff that adds a command or a flag also adds its `print_usage` line and its `README.md`
 table row, in the same change.**
 
-**A `cmd_release` bundle that ships an exe without a tune sidecar beside it is a defect** - the
+**A `cmd_release` bundle whose main exe ships without a tune sidecar beside it is a defect** - the
 tune sidecar is the `<bundle>.tune.json` file of measured kernel choices the exe reads at run
-time.
+time; a tool shipped by `release_include_tool` carries no `[tune]` kernels and needs none.
 
 **A diff that lets a release path other than `--quick` reuse a sidecar from an earlier run is a
 defect.**
@@ -46,7 +47,9 @@ account for.
 **A test in `test_daspkg.das` that reaches the network is a defect** - network coverage belongs
 in `test_daspkg_git.das`.
 
-**A shell command built from any string a `.das_package` supplies - a package, bundle, app or
-module name - outside `commands.das`, or without an `is_safe_pkg_name` check on that string
-first, is a defect** - `is_safe_pkg_name` is private to `commands.das`. The emcc flags of
-`release_emcc_arg` are the carve-out: free-form shell text by design, appended verbatim.
+**A shell command or filesystem path built from any string a `.das_package` supplies - a
+package, bundle, app, module or tool name - outside `commands.das`, or without an
+`is_safe_pkg_name` check on that string first, is a defect** - `is_safe_pkg_name` is private to
+`commands.das`, and a name carrying a separator or `..` reads or writes outside the directory
+the path was built for. The emcc flags of `release_emcc_arg` are the carve-out: free-form shell
+text by design, appended verbatim.

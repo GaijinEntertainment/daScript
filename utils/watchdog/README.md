@@ -1,38 +1,41 @@
 # watchdog
 
-One Python supervisor for any daslang program that needs to stay up. It restarts the child with
-bounded backoff, captures crashes into bundles, reports startup progress, and optionally exposes a
-per-program control page.
+One supervisor for any daslang program that needs to stay up. It restarts the child with
+bounded backoff, captures crashes into bundles, reports startup progress, and polls health.
+It supervises `utils/dasllama-server` (JIT) in-tree and the dictation bot in the das-telegram
+package (a baked exe).
 
-It supervises `utils/dasllama-server` (JIT) in-tree and the dictation bot in the
-das-telegram package (a baked exe) - and was merged from the two forks those grew.
+It ships as a static executable, `bin/watchdog` (`bin/Release/watchdog.exe` in an MSVC tree): a
+`-ctx` standalone context on the full runtime with `libDaScript` and dasHV linked as static
+archives. It compiles nothing at run time, loads no shared module, and holds no lock on any file
+a deploy replaces, so a deploy can overwrite the runtime while the watchdog runs. The same code
+runs under the interpreter for development: `daslang utils/watchdog/main.das -- --cwd <dir>`.
 
 ## Running it
 
-In a deployed bundle, with no arguments:
+In a deployed bundle, beside the program, with no arguments:
 
 ```
-python watchdog.py
+./watchdog
 ```
 
 That works because the watchdog resolves what to supervise in this order, first match winning:
 
 1. **A command-line flag** - `--program`, `--script`, `--name`, and the rest (`--help` lists them).
-2. **`watchdog.json`** beside `watchdog.py` - every key sets the *default* for the flag of the same
-   name, so a flag still overrides it. An unknown key is a hard error: silently ignoring a typo
-   would supervise the program with the wrong wiring and nothing would say so.
-3. **Layout discovery** - `main.das` next to `bin/Release/daslang.exe` means `daslang -jit main.das`;
-   exactly one `*.exe` in the directory means that program. Anything ambiguous is an error, never a
-   guess.
+2. **`watchdog.json`** beside the executable - every key is a flag name with underscores, and
+   sets the *default* for that flag, so a flag still overrides it. An unknown key is a hard error:
+   silently ignoring a typo would supervise the program with the wrong wiring and nothing would
+   say so. A `server_args` array is the default for what follows `--`.
+3. **Layout discovery** - `main.das` means `daslang -jit main.das`, with the daslang found beside
+   it (`bin/Release/daslang(.exe)`) or beside the watchdog itself, which is how `bin/watchdog`
+   in a source tree finds `bin/daslang`; exactly one `*.exe` in the directory means that
+   program. Anything ambiguous is an error, never a guess.
 
-Both in-tree programs are discoverable, so their `watchdog.json` only pins the identity that the
-log, pid file and notifications key on (`cadmus`, `dasllama`) plus whatever discovery cannot know -
-that the bot has no HTTP health endpoint, for instance.
-
-From the source tree the watchdog no longer sits beside what it supervises, so pass `--cwd`:
+Everything after `--` goes to the child verbatim. From the source tree the watchdog does not sit
+beside what it supervises, so pass `--cwd`:
 
 ```
-python utils/watchdog/watchdog.py --cwd utils/dasllama-server
+bin/watchdog --cwd utils/dasllama-server
 ```
 
 ## Exit codes it acts on
@@ -40,117 +43,88 @@ python utils/watchdog/watchdog.py --cwd utils/dasllama-server
 | code | meaning |
 |---|---|
 | 0 | intentional shutdown - the watchdog stops too |
-| 3 | tune bootstrap wrote the sidecar (local tuner OR an exchange download - both print a "restart to apply the winners" marker); relaunch immediately (JIT only) |
+| 3 | tune bootstrap wrote the sidecar (the child printed "restart to apply the winners"); relaunch immediately (script mode only) |
 | 4 | config restart requested by a control page; relaunch immediately |
 | other | crash - report, notify, bundle, restart with bounded exponential backoff |
 
-Exit 3 *without* the marker is a tuner abort (noise gate, or a tray-requested stop). A noise
-abort restarts with backoff - an immediate relaunch on a loud box just aborts again. A
-tray-requested stop relaunches immediately with the policy the user picked (below).
+Exit 3 *without* the marker is a tuner abort (the noise gate found the box too loud to trust);
+it restarts with backoff, because an immediate relaunch on a loud box just aborts again. A code
+comes back from the child's `main`: a das `exit(N)` is an abnormal termination and reports 1.
+
+## Stopping it
+
+Ctrl-C or SIGTERM asks the child to stop: through `--stop-file` (the path is handed to the child
+in the `--stop-env` variable, `CADMUS_STOP_FILE` by default, and the file is created on the
+request), through a POST to `--shutdown-url`, or with `--no-shutdown` by terminating it. The
+stop is a ladder with an end: after `--stop-timeout` seconds the child is terminated, ten
+seconds later killed, and ten seconds after that left behind (`child_unkillable`, exit 1).
+Supervision otherwise ends with 0.
+
+Two watchdogs would mean two children fighting over one port, so the pid file (`--pid-file`,
+`logs/<name>-watchdog.pid` by default) both records and protects: a second start refuses while
+the recorded pid is alive.
 
 ## Startup stages
 
-A cold JIT start takes minutes (DLL cache miss, codegen, per-box tuning, model load), which used to
-look like a hang punctuated by health-check spam. The watchdog now tracks ranked, monotonic stages -
-`jit_cached`, `jit_codegen`, `jit_linked`, `exchange_lookup`, `tuning`, `tune_restart`,
-`model_load`, `asr_init`, `ready` - and logs a `stage` event on each forward move, with how long
-the previous stage took.
-
-Ranked and monotonic matters: a tune runs many codegen/link cycles, and a naive matcher flaps
-between stages once per kernel variant. Health is logged only on transition plus a heartbeat, so a
+A cold JIT start takes minutes (DLL cache miss, codegen, per-box tuning, model load), which
+would otherwise look like a hang punctuated by health-check spam. The watchdog tracks ranked,
+monotonic stages from the child's own log lines - `jit_cached`, `jit_codegen`, `jit_linked`,
+`exchange_lookup`, `tuning`, `tune_restart`, `model_load`, `asr_init`, `ready` - and logs a
+`stage` event on each forward move, with how long the previous stage took. Ranked and monotonic
+matters: a tune runs many codegen/link cycles, and a naive matcher flaps between stages once
+per kernel variant; `tune_restart` is the one legitimate rewind, since the process restarts to
+apply the winners. Health is logged only on transition plus a heartbeat every five minutes, so a
 long quiet run stays quiet.
 
-Stages are still detected from the child's own log prose, which is brittle by nature. The planned
-replacement is an explicit `das-stage: <name>` token emitted by the program, with these regexes
-kept as fallback.
+`llvm_tune` emits structured progress as `@tune <kind> k=v ...` lines; the watchdog logs a
+`tune` event at the kernel boundaries (`plan`, `end`, `abort`) and drops the hundreds of steps
+between them.
 
-### Tune progress
+## The log
 
-The one part no longer inferred from prose. `llvm_tune` emits structured progress as
-`@tune <kind> k=v ...` lines, and a supervised child never owns a terminal, so it *forwards* those
-events rather than drawing a progress bar - which is what makes them ours to consume.
-
-The watchdog folds them into `STATE["tune"]` (`scope`, `done`/`total` kernels, `kernel`,
-`round`/`rounds`, `phase`, `live`) for the control plugin's status route, and logs a `tune` event
-only at `plan` and `end` - a real tune is hundreds of steps, and logging each one would recreate
-the flood these events exist to replace. On a measured run that is **26 log records from 551
-events**, where the whole raw tuner output used to be JSON-wrapped into the log line by line.
-
-Every field is a counter. Nothing is an estimate: the tuner cannot know how long it has left, so
-no ETA is published and none should be synthesized from these numbers.
-
-### The exchange (`@sidecar` events, the tray's tune actions)
-
-dasllama's exchange client emits `@sidecar <kind> k=v ...` on the same contract (`lookup`,
-`none`, `offer`, `apply`, `pending_submit`, `submitted`, `consent`); the watchdog folds them
-into `STATE["sidecar"]` and logs each one. `consent state=needed` (the GDPR first-contact
-gate: the client found no recorded choice and no terminal to ask on) raises a native
-Accept/Decline dialog - osascript on macOS, MessageBoxW on Windows, a plain notification
-pointing at the control page elsewhere - once per consent file for the watchdog's lifetime.
-The answer lands in the consent file the event names (url-encoded `path=`); Accept during a
-tune also rides the stop rail below (mode `consent`: stop at the boundary, relaunch clean,
-the fresh boot runs the now-consented lookup). Walking away from the dialog answers nothing.
-Balloons announce a decision but never carry the action - the tray menu and the control page
-do:
-
-- **Use available sidecar instead (stops tuning)** - visible while a tune is in flight AND an
-  unverified offer exists. Writes the tune-control file (the tuner polls `DAS_TUNE_CONTROL` at
-  kernel-family boundaries, so the measurement in flight always completes), then relaunches with
-  a ONE-SHOT `DASLLAMA_EXCHANGE_ACCEPT=any` - consent that never outlives the click.
-- **Stop tuning, run untuned** - visible while a tune is in flight. Same stop file, then a
-  `DAS_TUNE_POLICY=fallback` hold kept in `STATE["sticky_env"]` and re-applied on every spawn,
-  so a later crash-restart cannot surprise the box with a ~12-minute tune. The hold shows as
-  `* tuning off` in the tooltip and is revocable via **Resume tuning**; a control-page config
-  restart (which a re-tune rides) also clears it, so the re-tune is not silently defeated.
-- **Resume tuning** - visible only while a run-untuned hold is active; clears it so the next
-  start tunes normally again.
-- **Share this box's tune...** - visible while a `pending_submit` offer stands and the server is
-  healthy; opens the control page at the exchange card.
-
-Balloons fire once per distinct sidecar sha across restarts, so an untuned noise-abort loop does
-not re-announce the same offer every boot.
-
-The tray menu is a pure function of `STATE`, but note the mechanism: pystray bakes each item's
-`visible`/`enabled` when the menu is BUILT and does **not** re-evaluate them when the menu opens.
-The supervision tick's `update_menu()` on a `STATE` transition is therefore the only thing that
-refreshes the dynamic items - so its transition key must name every `STATE` field an item's
-predicate reads (health, the sidecar state, `tuning_disabled`), or that item never appears.
-
-## Control plugin
-
-If a `watchdog_control.py` sits beside `watchdog.py`, the watchdog imports it and calls
-`start(logger, args)`, injecting `host` (the watchdog module) first so the plugin can use
-`host.emit(...)` and `host.read_state()` rather than re-declaring them and drifting.
-
-Supervision stays generic; anything that knows what a *particular* program is lives in the plugin.
-The dictation bot's `watchdog_control.py` (das-telegram package) is the worked example: it owns `dictation.toml`,
-the prompt set, generation defaults and the activity feed, and is ~480 lines that have no business
-in a supervisor. A plugin that fails to import is reported and skipped, never fatal - keeping the
-program alive outranks being able to reconfigure it.
-
-`host.read_state()` publishes supervision state (`child_pid`, `child_started_at`,
-`child_exit_code`, `restart_delay`, `stage`, `healthy`, `serving_since`, `tune`, `sidecar`,
-`tuning_disabled`) for the plugin's status route. Transient control keys (`tune_stop`,
-`sticky_env`, `resume_tuning`) also live in `STATE` but are consumed by the supervision loop -
-a status route should not surface them.
-
-## Shipping it
-
-`watchdog.py` lives outside every package, so manifests reach it with `release_include_from`, which
-sources relative to the daslang root:
-
-```das
-release_include_from("utils/watchdog/watchdog.py")
-release_include("watchdog_control.py")   // package-local, if the program has one
-release_include("watchdog.json")
-```
-
-A missing source fails the release rather than shipping a bundle quietly short a file.
+`logs/<name>-watchdog.log` (`--log`), one JSON object per line, `{"ts", "event", ...}`, rotated
+at 20 MB with five backups, and echoed to stdout. The events: `watchdog_started`,
+`child_started`, `spawn_failed`, `child` (one per line the child wrote), `stage`, `tune`,
+`health`, `health_heartbeat`, `recovered`, `child_exited`, `intentional_shutdown`,
+`tune_bootstrap_complete`, `tune_incomplete`, `config_restart_relaunch`, `crash`,
+`crash_bundle`, `stop_file_requested`, `shutdown_requested`, `shutdown_request_failed`,
+`terminate_requested`, `kill_requested`, `child_unkillable`, `watchdog_already_running`,
+`wer_ready` / `wer_not_ready` / `wer_installed` / `wer_install_failed`, `watchdog_stopped`.
+In-tree readers: `smoke_test.cmake` and `tests/watchdog/test_watchdog.das`.
 
 ## Crash capture
 
-Crash bundles collect the log, any WER minidump, the program's symbols, the tune sidecar and the JIT
-artifact cache into `logs/crashes/<name>-<stamp>-pid<pid>/`, pruned to the newest N. WER local dumps
-need a one-time elevated `--install-local-dumps`; `--require-dumps` refuses to start without a
-policy, for a deployment where losing the dump is not acceptable. See `examples/crash/README.md` for
-which failure families are visible to which tier.
+Crash bundles collect the log, any WER minidump, the program's symbols, the tune sidecar and
+the JIT artifacts the child named into `logs/crashes/<name>-<stamp>-pid<pid>/`, pruned to the
+newest `--crash-bundles`. WER local dumps need a one-time elevated `--install-local-dumps`
+(Windows); `--require-dumps` refuses to start without a policy, for a deployment where losing
+the dump is not acceptable. See `examples/crash/README.md` for which failure families are
+visible to which tier.
+
+## Notifications
+
+A crash, a recovery and a refused start raise a desktop notification: a PowerShell balloon on
+Windows, Notification Center through `osascript` on macOS, `notify-send` on Linux, nothing where
+none exists. Never fatal.
+
+## Shipping it
+
+A package manifest names the tool once for every platform:
+
+```das
+release_include_tool("watchdog")         // bin/watchdog or bin/Release/watchdog.exe -> bundle root
+release_include("watchdog.json")
+```
+
+A build without the executable fails the release rather than shipping a bundle quietly short
+a supervisor.
+
+## Layout
+
+- `watchdog.das` - the library: configuration, discovery, the log, stages, crash capture, and
+  `Supervisor`, a state machine the host ticks (`tick()` / `request_stop()` / `run()`).
+- `main.das` - the entry for both hosts: `start` / `tick` / `request_stop` / `result` for the
+  executable, `main` for the interpreter.
+- `main.cpp` - the executable's `main`: argv, the pid, the signals, the loop.
+- `smoke_test.cmake` - the `watchdog_smoke` ctest: the binary supervising a daslang child through
+  a crash and a clean exit. The library's own tests are `tests/watchdog/`.

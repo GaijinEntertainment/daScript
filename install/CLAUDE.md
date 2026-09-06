@@ -209,7 +209,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 - `utils/benchctl/` - benchmark result database + statistical comparison (needs the sqlite module)
 - `utils/dasllama-server/` - OpenAI-compatible dasLLAMA inference server (JIT-only; `deploy-jit.ps1` builds a standalone bundle)
 - `utils/dasllama-convert/` - offline GGUF -> `.dlim` model prep
-- `utils/watchdog/` - Python supervisor for long-running daslang programs (`python utils/watchdog/watchdog.py --cwd <program-dir>`)
+- `utils/watchdog/` - supervisor for long-running daslang programs: the static `bin/watchdog --cwd <program-dir>` (no compiler, no shared module, no lock on the files a deploy replaces), or `daslang utils/watchdog/main.das -- --cwd <program-dir>` under the interpreter
 - `utils/jobque-timeline/` - per-lane jobque trace viewer (ImGui)
 - `utils/vscode-daslang-test/` - VSCode Test Explorer extension for dastest (source; build per its README)
 - `tree-sitter-daslang/` - tree-sitter grammar, shared library, highlighting queries (`sgconfig.yml` at the SDK root wires ast-grep to it)

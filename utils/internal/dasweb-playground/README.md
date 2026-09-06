@@ -10,8 +10,9 @@ curated-sample listing and the wasm build queue. Review rules: `REVIEW.md` (bind
 # development (interpreted or -jit)
 daslang utils/internal/dasweb-playground/main.das -- --port 8101 --db samples.db
 
-# supervised production form (inside a daspkg release bundle)
-python3 watchdog.py
+# supervised production form (inside a daspkg release bundle): the static watchdog binary
+# the release ships at the bundle root (release_include_tool), no Python on the box
+./watchdog
 
 # release bundle
 daslang utils/daspkg/main.das -- release --root utils/internal/dasweb-playground --out <dir>

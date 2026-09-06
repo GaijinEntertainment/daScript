@@ -13,7 +13,7 @@ def release() {
     release_main("main.das")
     release_name("dasweb-buildd")
     release_include_if_missing("dasweb-buildd.toml")   // initialize once; preserve deployed edits on upgrades
-    release_include_from("utils/watchdog/watchdog.py")
+    release_include_tool("watchdog")
     release_include_if_missing("watchdog.json")
     release_include("run_build.sh")                    // the sandboxed build recipe the service invokes
     release_include("Containerfile")                   // the sandbox image definition; run_build.sh refuses to build without it

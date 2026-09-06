@@ -690,6 +690,23 @@ def rmdir_rec_result(path : string) : fs_result_bool {
     return fs_result_bool(value = res)
 }
 
+typedef process = SubProcess?
+
+def with_process(argv : array<string>; cwd : string; env : array<string>; blk : block<(var p : process) : void>) {
+    //! Spawn `argv` as a long-lived child (no shell; a forward-slash ``argv[0]`` spawns everywhere), run
+    //! `blk` with the live handle, then close it on scope exit - closing kills a child still running (the
+    //! Windows job tree, the POSIX group). `cwd` empty inherits the parent's; `env` is ``KEY=VALUE`` overrides.
+    var p = unsafe(spawn_process(argv, cwd, env))
+    invoke(blk, p)
+    unsafe(close_process(p))
+}
+
+def with_process(argv : array<string>; blk : block<(var p : process) : void>) {
+    //! `with_process` inheriting the parent's directory and environment.
+    let noenv : array<string>
+    with_process(argv, "", noenv, blk)
+}
+
 def run_and_capture(args : array<string>; var output : string&; timeout_sec : float = 0.0) : int {
     //! Run an external command and capture its stdout+stderr (merged into one pipe by the underlying ``popen_argv``). Returns the process exit code;
     //! -1 means the spawn itself failed. No shell is involved, and a forward-slash ``args[0]`` spawns on every platform (``popen_argv`` hands Windows the backslash spelling).

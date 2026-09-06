@@ -1,0 +1,1 @@
+Asks the child and everything it spawned to stop: ``SIGTERM`` to its process group on POSIX, ``TerminateJobObject`` with exit code 15 on Windows, where nothing gentler reaches a console-less process.  Follow with ``process_wait`` and, if still running, ``process_kill``.

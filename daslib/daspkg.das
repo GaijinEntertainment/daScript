@@ -137,6 +137,7 @@ struct ReleaseSpec {
     requires_jit : bool                 //!< app is JIT-only (per-box [tune]/[llvm_code] kernels); a baked -exe would run broken, so `daspkg release` refuses it
     include_symbols : bool              //!< ship debug symbols for every shipped binary into `<bundle>/symbols/`
     external_files : array<string>      //!< "src@dst" pairs shipped from outside the package; src is relative to <das_root>, dst to the bundle root
+    tools : array<string>               //!< built tools shipped by bare name from <das_root>/bin/ (bin/Release/ in an MSVC tree) to the bundle root; the platform adds .exe
 }
 
 var _release_spec : ReleaseSpec
@@ -177,13 +178,18 @@ def release_include_if_missing(pattern : string) {
     _release_spec.include_if_missing_globs |> push(pattern)
 }
 
-//! Ship a file that lives OUTSIDE this package — `release_include` only globs downward from the package root, so shared tooling (e.g. `utils/watchdog/watchdog.py`) is unreachable to it. `source` is relative to `<das_root>`; `dest` is relative to the bundle root and defaults to `source`'s file name. Errors loudly if the source is missing, so a moved file fails the release instead of silently shipping nothing.
+//! Ship a file that lives OUTSIDE this package — `release_include` only globs downward from the package root, so shared tooling (e.g. `dastest/dastest.das`) is unreachable to it. `source` is relative to `<das_root>`; `dest` is relative to the bundle root and defaults to `source`'s file name. Errors loudly if the source is missing, so a moved file fails the release instead of silently shipping nothing.
 def release_include_from(source, dest : string) {
     _release_spec.external_files |> push("{source}@{dest}")
 }
 
 def release_include_from(source : string) {
     _release_spec.external_files |> push("{source}@")
+}
+
+//! Ship a tool the daslang build produced - `bin/<name>` (`bin/<name>.exe` on Windows, also looked for under `bin/Release/` in an MSVC tree) - to the bundle root, so a manifest names it once for every platform. A build without it fails the release rather than shipping a bundle short a tool. The supervisor is the worked example: `release_include_tool("watchdog")`.
+def release_include_tool(name : string) {
+    _release_spec.tools |> push(name)
 }
 
 def release_exclude(pattern : string) {

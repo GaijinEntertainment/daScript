@@ -117,7 +117,7 @@ pick on the control page's exchange card; a proactive offer after repeated noise
 aborts (the noisy-box case); and DURING a tune via the live tray menu - where doing
 nothing means the tune just finishes.
 
-**Watchdog changes** (`utils/watchdog/watchdog.py`; backoff/health/crash logic UNCHANGED):
+**Watchdog changes** (`utils/watchdog/watchdog.das`; backoff/health/crash logic UNCHANGED):
 
 - The tray menu becomes a pure function of STATE - pystray re-evaluates callables on
   menu open, `icon.update_menu()` on transitions. Items: "Use available sidecar instead

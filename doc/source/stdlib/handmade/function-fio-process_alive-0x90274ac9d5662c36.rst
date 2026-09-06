@@ -1,0 +1,1 @@
+Whether a process with this id exists - any process, not only a child - for a single-instance guard reading a pid file.  Probes without signalling: ``kill(pid, 0)`` on POSIX (a process that exists but is not ours to signal counts as alive), ``OpenProcess`` plus the still-active exit status on Windows.  A pid of zero or less is never alive.

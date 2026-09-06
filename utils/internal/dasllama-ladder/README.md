@@ -87,7 +87,7 @@ re-race, cross-box matrix, version diff) is in `plans/dasllama_io_site.md`.
 
 ## 6. Deploy
 
-Mirrors dasweb-playground: a `daspkg release` bundle, supervised by `systemd -> watchdog.py`,
+Mirrors dasweb-playground: a `daspkg release` bundle, supervised by `systemd -> watchdog`,
 fronted by Caddy on the `dasllama.io` vhost. `dasllama-deploy.sh` is the box-side tool, run
 through the scoped sudoers drop-in (`dasllama-deploy.sudoers`) - the one privileged surface.
 

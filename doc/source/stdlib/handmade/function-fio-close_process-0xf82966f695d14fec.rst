@@ -1,0 +1,1 @@
+Frees the handle.  A child still running dies with it - the Windows job object closes, the POSIX process group is killed and reaped - so a supervisor never leaks a child or leaves a zombie.  A null handle is ignored.

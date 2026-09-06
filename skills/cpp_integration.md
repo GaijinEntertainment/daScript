@@ -338,10 +338,13 @@ module the context links and calls `Module::Initialize()` before constructing it
 by name - the runtime cannot add to an initialized registry and keep `Initialize`/`Shutdown`
 balanced.
 
-**Only what the program reaches is linked** - a module the script used at compile time alone is
-neither included nor registered. Worked example: `examples/standalone/06_full_runtime/` - read
-it for the shape; building it needs the daslang repository, since the bundle carries no dasHV
-headers or archive. The recipe above works from a bundle for any C++ module you build yourself.
+**Only what the program reaches is linked, and everything it reaches is emitted** - a module the
+script used at compile time alone is neither included nor registered, while every used function
+of every das module the script requires (daslib, a shared module of your own, class methods
+called through their slot) lands in the one generated translation unit; there is no other TU to
+link. Worked example: `examples/standalone/06_full_runtime/` - read it for the shape; building
+it needs the daslang repository, since the bundle carries no dasHV headers or archive. The recipe
+above works from a bundle for any C++ module you build yourself.
 
 ## Diagnostics - `TextPrinter`, never `fprintf(stderr, ...)`
 

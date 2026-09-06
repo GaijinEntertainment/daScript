@@ -56,8 +56,7 @@ struct ExchangePolicy {
 
 //! The first-contact notice, shown before ANY request leaves for the exchange (GDPR: the
 //! lookup transmits the box identity, and the server sees the connection's IP like any web
-//! server). PLACEHOLDER wording — Gaijin legal owns the final text; the watchdog dialog
-//! (utils/watchdog/watchdog.py CONSENT_*) carries the same wording, keep the two in sync.
+//! server). PLACEHOLDER wording — Gaijin legal owns the final text.
 let public EXCHANGE_CONSENT_NOTICE = "dasLLAMA can download a ready performance-tuning preset (a \"sidecar\") for this machine from dasllama.io, instead of tuning locally.\nThe request sends only your hardware class - platform, CPU model and OS build. No serial numbers, user names or other personal data; no cookies. Sharing your own tuning results back is always confirmed separately.\nDetails: https://legal.gaijin.net/privacypolicy"
 
 // structured events for the watchdog (same contract as @tune): folded into supervisor STATE
@@ -366,8 +365,8 @@ def exchange_consent_status() : string {
     return (word == "accepted" || word == "declined") ? word : ""
 }
 
-//! Record the first-contact choice (console prompt, watchdog dialog, control page — every
-//! surface lands here). Emits the `@sidecar consent` event so the supervisor state follows.
+//! Record the first-contact choice (console prompt, control page — every surface lands
+//! here). Emits the `@sidecar consent` event so the supervisor state follows.
 def exchange_record_consent(accept : bool) : bool {
     let word = accept ? "accepted" : "declined"
     if (!fwrite(exchange_consent_path(), "{word}\n")) {
@@ -402,7 +401,7 @@ def private consent_prompt_console() : bool {
 
 // The gate the resolver runs before the first request leaves. True = a request may be made.
 // No recorded choice: a real terminal asks inline; anything else stays offline this boot and
-// surfaces the question where a human is (watchdog dialog, control page) via the event.
+// surfaces the question where a human is (the control page) via the event.
 def private exchange_consent_gate() : bool {
     let status = exchange_consent_status()
     if (status == "accepted") {

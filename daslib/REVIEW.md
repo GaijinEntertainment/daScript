@@ -137,10 +137,11 @@ spell it are `aotStructName` and the `VarInfo` emitter's inline
 `aotSuffixNameEx(info.name, "_S", ...)`. One site changed alone writes `offsetof`s that
 name a struct declared under a different name.
 
-**A diff that adds or changes a function that runs `CppAot` or any subclass of it
-keeps `buildStructEnumCollisions` running before that visitor runs - directly or in a
-helper it calls.** The table decides when a name gets its collision suffix, and a run
-that skips the seeding spells structs differently from the run that seeded it.
+**A diff that adds or changes a function that emits a struct or enum C++ name - anything
+reaching `aotStructName` / `aotEnumName`, a `CppAot` subclass and `ArgsConverter` alike -
+keeps `buildStructEnumCollisions` running before it, directly or in a helper it calls.**
+The table decides when a name gets its collision suffix, and a run that skips the seeding
+spells structs differently from the run that seeded it.
 
 **Never pass a synthesized access expression's location to `match_error` - pass a pattern
 node's location.** `match_error` stores the `LineInfo` pointer BORROWED, and access nodes

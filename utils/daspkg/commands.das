@@ -1983,6 +1983,38 @@ def private ship_external_files(bundle_name, dst_dir : string; external_files : 
 }
 
 
+//! A built tool ships by bare name from `<das_root>/bin/` - the installed SDK and single-config
+//! trees - or `bin/Release/` in an MSVC tree, with the platform's `.exe`, to the bundle root.
+def public ship_tools(bundle_name, dst_dir : string; tools : array<string>; var shipped : array<string>; das_root : string) : int {
+    let ext = get_platform_name() == "windows" ? ".exe" : ""
+    shipped |> reserve(length(shipped) + length(tools))
+    for (name in tools) {
+        if (!is_safe_pkg_name(name)) {
+            to_log(LOG_ERROR, "release: `{bundle_name}` declared release_include_tool(\"{name}\") - a tool is a bare name, no path separators\n")
+            return 1
+        }
+        var src = path_join(das_root, "bin/{name}{ext}")
+        if (!fexist(src)) {
+            src = path_join(das_root, "bin/Release/{name}{ext}")
+        }
+        if (!fexist(src)) {
+            to_log(LOG_ERROR, "release: `{bundle_name}` declared release_include_tool(\"{name}\") but neither bin/{name}{ext} nor bin/Release/{name}{ext} exists under {das_root}\n")
+            return 1
+        }
+        let dst = path_join(dst_dir, "{name}{ext}")
+        var err : string
+        if (!copy_file(src, dst, true, err)) {
+            to_log(LOG_ERROR, "release: copy_file({src} -> {dst}) failed: {err}\n")
+            return 1
+        }
+        scrub_external_rpaths(dst)
+        ship_symbols_for(src, shipped)
+        shipped |> push("{name}{ext}")
+    }
+    log("  ship tools: {length(tools)} file(s)\n")
+    return 0
+}
+
 def private ship_native_dlls(dep_name, dst_dir : string; native_dlls : array<string>;
                              var shipped : array<string>; rel_prefix : string) : int {
     let platform = get_platform_name()
@@ -2505,6 +2537,10 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     if (!empty(spec.external_files)) {
         let rc4 = ship_external_files(bundle_name, bundle_dir, spec.external_files, shipped)
         if (rc4 != 0) return rc4
+    }
+    if (!empty(spec.tools)) {
+        let rc5 = ship_tools(bundle_name, bundle_dir, spec.tools, shipped, get_das_root())
+        if (rc5 != 0) return rc5
     }
 
     // 5. macOS .app: write Contents/Info.plist. Bundle ID source priority:

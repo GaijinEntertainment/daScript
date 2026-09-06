@@ -273,9 +273,6 @@ FILE(GLOB AOT_METAL_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "test
 list(FILTER AOT_METAL_FILES EXCLUDE REGEX "/_")
 SET(AOT_METAL_MODULE_FILES
     tests/metal/_metal_common.das
-    # f16_cvt is a generic daslib helper the tensor-ops test requires; it used to ride
-    # the (deleted) dasLLAMA module lib — dasLLAMA itself is NEVER AOT'd (see above)
-    daslib/f16_cvt.das
 )
 IF(APPLE)
     # das_metal_boost hard-requires the APPLE-gated das_metal C++ module; the GPU-behavioral
@@ -290,6 +287,7 @@ SET(AOT_DASLIB_FILES
     tests/daslib/tty_test.das
     tests/daslib/test_sha_256.das
     tests/daslib/test_faker.das
+    tests/daslib/test_tune_shells.das
 )
 
 FILE(GLOB AOT_MCP_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/mcp/*.das")
@@ -391,7 +389,7 @@ set(DAS_AOT_SUITES
     jobque json jsonrpc language linq lint long_array_table loops lpipe lsp
     macro_boost macro_call match math mcp md_boost module_cache module_tests option promote quote
     reader_macro regex rtti safe_addr soa spoof strings stbimage table_packed template
-    tests type_lattice type_traits typemacro uri with_boost delegate)
+    tests type_lattice type_traits typemacro uri watchdog with_boost delegate)
 foreach(_s IN LISTS DAS_AOT_SUITES)
     string(TOUPPER ${_s} _u)
     # suites with an irregular dir / a filter / a curated list define AOT_<UC>_FILES above;

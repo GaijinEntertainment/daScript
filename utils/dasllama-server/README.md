@@ -157,17 +157,17 @@ Set-Location E:/dasllama-server
 
 # Run once from an elevated PowerShell. Installs an app-specific WER normal-minidump policy;
 # it does not dump the model weights/private heap.
-python ./watchdog.py --install-local-dumps
+.\watchdog.exe --install-local-dumps
 
 # Day-to-day launch, no elevation. dasllama-server.toml is auto-loaded from this directory.
 $env:DAS_JOBQUE_THREADS = "16"
-python ./watchdog.py --require-dumps
+.\watchdog.exe --require-dumps
 ```
 
-From the source tree the watchdog no longer sits beside the script, so pass `--cwd`:
+From the source tree the watchdog does not sit beside the script, so pass `--cwd`:
 
 ```powershell
-python utils/watchdog/watchdog.py --cwd utils/dasllama-server --jit-stack
+bin/Release/watchdog.exe --cwd utils/dasllama-server --jit-stack
 ```
 
 The first JIT start on an untuned box writes the tune sidecar and exits with code 3; the watchdog
@@ -175,20 +175,20 @@ recognizes that bootstrap exit and relaunches. That cold path - DLL cache miss, 
 (`jit_codegen` -> `jit_linked` -> `tuning` -> `model_load` -> `ready`) with the elapsed time of
 each, and reports health only on transition plus a heartbeat.
 
-It writes rotating JSON-line logs, samples process memory once a minute, and polls `/v1/models`
+It writes rotating JSON-line logs and polls `/v1/models`
 (use `--health-url`/`--shutdown-url` for a non-default port). `--jit-stack` records every generated
 daslang call in the logical stack; Windows JIT links also retain a compact `.map` beside the
 `.dll/.o`. After a crash it waits for the WER minidump, copies it with the matching JIT artifacts,
 tune manifest, metadata and log into `logs/crashes/`, shows a Windows notification, and restarts
 with bounded exponential backoff. The ten newest bundles are retained.
 
-Full watchdog reference - config keys, discovery rules, control plugins: `utils/watchdog/README.md`.
+Full watchdog reference - config keys, discovery rules, the log: `utils/watchdog/README.md`.
 
 ## Deploying (daspkg release)
 
 `release_requires_jit()` makes `daspkg release` refuse this package outright: baking a `-exe`
 would drop the per-box JIT kernels and ship a broken binary. Deploy by staging the JIT bundle -
-`main.das`, `bin/Release/daslang.exe` plus the runtime DLLs and shared modules, `watchdog.py`,
+`main.das`, `bin/Release/daslang.exe` plus the runtime DLLs and shared modules, `watchdog.exe`,
 `watchdog.json`, `control.html` - into the target directory, and keep the deployed
 `dasllama-server.toml` and `dasllama-server.tune.json` across upgrades. Stop a running server first;
 Windows locks the DLLs.
@@ -257,9 +257,9 @@ boot resolver and submit check are never registered and every `/exchange*` route
 expressed. Setting any `exchange_*` key (TOML or env) IS that choice; on the zero-config
 path the recorded choice lives in `<app>.tune.consent` beside the sidecar
 (`accepted`/`declined`, one word). With no recorded choice: an interactive terminal asks
-inline (Enter = Accept); a supervised boot emits `@sidecar consent state=needed` - the
-watchdog shows a native Accept/Decline dialog - and this page's exchange card carries the
-same banner (`POST /exchange/consent`). Until one of those answers, the box tunes locally
+inline (Enter = Accept); a supervised boot emits `@sidecar consent state=needed`, and this
+page's exchange card carries the banner (`POST /exchange/consent`). Until one of those
+answers, the box tunes locally
 and no request leaves. The `gpu` key (`auto | off | metal | metal-required | vulkan`) is the first-class
 backend selector, and **defaults-first: unset (with no legacy `--metal` flag) behaves as
 `auto`** - the boot probes the box and serves on the best detected backend (the Metal rails

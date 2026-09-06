@@ -4214,6 +4214,12 @@ def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?; prun
     var utm = new UseTypeMarker();
     make_visitor(*utm) $(adapter) {
         visit(program, adapter);
+        if (prune_to_used) {                       // a standalone context emits the foreign functions too
+            var foreign <- foreignUsedFunctions(program, false)
+            for (fn in foreign) {
+                visit(fn, adapter)
+            }
+        }
     }
     let remUS = program._options  |> find_arg("remove_unused_symbols") ?as tBool ?? true;
     let kept <- prune_to_used ? collectUsedModules(program) : table<Module?>()
@@ -4337,6 +4343,23 @@ def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; this_mo
     return <- fnn;
 }
 
+//! The used functions living outside the entry module. A standalone context is one translation
+//! unit, so each is emitted there or nowhere - builtins are C++ already, templates never emit.
+//! `before_no_aot_marking` keeps the ones NoAotMarker has yet to judge; after it, `[no_aot]` is out.
+def public foreignUsedFunctions(program : ProgramPtr; before_no_aot_marking : bool) : array<Function?> {
+    let thisModule = program.getThisModule
+    var foreign : array<Function?>
+    program.get_ptr() |> for_each_module_no_order($(pm) {
+        if (pm == thisModule) return
+        pm |> for_each_module_function($(pfun) {
+            if (pfun.index < 0 || !pfun.flags.used || pfun.flags.builtIn || pfun.moreFlags.isTemplate
+                    || (!before_no_aot_marking && pfun.flags.noAot)) return
+            foreign |> push(pfun)
+        })
+    })
+    return <- foreign
+}
+
 def public collectProgramUsedFunctions(program : ProgramPtr; all_modules : bool; is_all : bool) : array<Function?> {
     //! Collects all used functions from a program's modules for AOT code generation.
     var modules : array<Module?>;
@@ -4351,6 +4374,21 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
     var visitor = new ArgsConverter(logs, cross_platform);
     make_visitor(*visitor) $(adapter_marker) {
         visit(program, adapter_marker);
+        if (all_modules) {
+            // a whole-program table (a standalone context) needs a thunk per foreign row as well;
+            // a generic instance several modules share has one name and gets one thunk
+            var thunked : table<string>
+            for (pfun in collectProgramUsedFunctions(program, false, false)) {
+                thunked |> insert(aotFuncName(pfun))
+            }
+            var foreign <- foreignUsedFunctions(program, false)
+            for (fn in foreign) {
+                let name = aotFuncName(fn)
+                if (thunked |> key_exists(name)) continue
+                thunked |> insert(name)
+                visit(fn, adapter_marker)
+            }
+        }
     }
     unsafe {
         delete visitor
@@ -4360,9 +4398,12 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
         write(*logs, "\n#ifdef _MSC_VER\n#pragma optimize(\"\", off)\n#endif\n");
         write(*logs, "struct AotFunction \{ uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); \};\n");
         write(*logs, "static AotFunction functions[] = \{\n");
+        var listed : table<string>
         for (fn in fnn) {
             let is_cmres = fn.flags.copyOnReturn || fn.flags.moveOnReturn ? "true" : "false";
             let fn_name = aotFuncName(fn);
+            if (listed |> key_exists(fn_name)) continue
+            listed |> insert(fn_name)
             write(*logs, "    // {get_aot_hash_comment(fn)}\n");
             write(*logs, "    \{ {fn.aotHash}, {is_cmres}, (void*)&{fn_name}, &__wrap_{fn_name} \},\n");
         }
@@ -4448,6 +4489,10 @@ def private collectUsedModules(program : ProgramPtr) : table<Module?> {
     var utm = new UseTypeMarker()
     make_visitor(*utm) $(adapter) {
         visit(program, adapter)
+        var foreign <- foreignUsedFunctions(program, false)
+        for (fn in foreign) {
+            visit(fn, adapter)
+        }
     }
     for (st in keys(utm.useStructs)) {
         if (st._module != null) {

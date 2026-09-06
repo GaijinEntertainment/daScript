@@ -251,7 +251,7 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   The first-contact consent gate (GDPR) sits ahead of every lookup once a policy is on: an
   explicit `exchange_*` config counts as the expressed choice, otherwise the `<stem>.consent`
   sidecar-sibling file governs - unset asks on a real terminal, or emits
-  `@sidecar consent state=needed` for the watchdog dialog / control page, and no request
+  `@sidecar consent state=needed` for the control page, and no request
   leaves until a surface records "accepted". The client is meaningless without a sidecar, so
   every requirer takes it through the guard `require ?llvm dasllama/dasllama_exchange` (`llvm`
   is the C++ witness module dasLLVM compiles in exactly when the build is configured with it)

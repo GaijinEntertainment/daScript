@@ -148,7 +148,7 @@ scheduler 12/12, server 17/17 live (post-work stats assertions), page via mock+p
   the program (created if the server started config-less). `GET /config` returns effective
   config + per-key source (default / cli / toml) for the form.
 - **Restart**: `POST /restart` = drain like `/shutdown`, then exit with a **distinct** exit
-  code (3 stays tune-restart; pick 4 = config-restart; `watchdog.py` treats both as relaunch,
+  code (3 stays tune-restart; pick 4 = config-restart; the watchdog treats both as relaunch,
   logs them apart).
 - **Model picker**: server enumerates `*.gguf` / `*.dlim` in the configured model's directory
   (`load_model` already auto-caches gguf->`.dlim` beside the file in q8 mode - show which rail
