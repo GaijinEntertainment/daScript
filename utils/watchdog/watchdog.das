@@ -1130,8 +1130,21 @@ class public Supervisor {
 
 //! Everything before the loop. Returns the supervisor to drive, or null with `exit_code` set
 //! when the program is done (help, --install-local-dumps, a refused start).
+def private wants_help(args : array<string>) : bool {
+    for (arg in args) {
+        if (arg == "--") return false
+        if (arg == "--help" || arg == "-h") return true
+    }
+    return false
+}
+
 def public watchdog_start(args : array<string>; program_dir : string; self_pid : int; var exit_code : int&) : Supervisor? {
     exit_code = 0
+    if (wants_help(args)) {
+        print_help(get_command_info(type<WatchdogConfig>), "watchdog")
+        print("Everything after -- goes to the supervised program.\n")
+        return null
+    }
     var resolved <- resolve_config(args, program_dir)
     if (!empty(resolved.error)) {
         print("{resolved.error}\n")

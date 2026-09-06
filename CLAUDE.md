@@ -238,6 +238,9 @@ diagnostic in any tier.
   fresh clone per registration, not the same variable passed twice.
 - **`new WithCtor(field = v)` skips the user constructor** - it is plain field-init, so
   inherited fields stay zero. Write `new WithCtor(args)` when the constructor must run.
+- **`exit(N)` does not set the process exit code under the daslang CLI.** It unwinds as an
+  abnormal termination and the process reports 1, whatever `N` was - a supervisor or shell sees a
+  crash. A code the parent must read comes from `def main() : int { return N }`.
 
 ### Code style - prefer idiomatic forms
 
