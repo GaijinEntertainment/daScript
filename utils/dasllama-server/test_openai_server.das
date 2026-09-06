@@ -602,7 +602,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
             }
             remove(junk)
             // POST /restart — LAST in the block: the server starts draining after this. The exit-4
-            // half of the contract lives in main.das + watchdog.py (not exercisable here).
+            // half of the contract lives in main.das + utils/watchdog (not exercisable here).
             POST("{base_url}/restart", "") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> success(find(string(resp.body), "\"restarting\":true") >= 0, "restart response flags restarting")

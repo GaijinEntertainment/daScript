@@ -50,7 +50,7 @@ Type=simple
 User=$SVCUSER
 Group=$SVCUSER
 WorkingDirectory=$APP/current
-ExecStart=/usr/bin/python3 watchdog.py
+ExecStart=$APP/current/watchdog
 Restart=on-failure
 RestartSec=5
 

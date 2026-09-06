@@ -65,6 +65,15 @@ fopen(path, "rb") $(f) {
 - `run_and_capture(args, var output, timeout_sec = 0.0) : int` runs a child with no shell, capturing
   merged stdout+stderr. A forward-slash `args[0]` spawns on every host - the spawn hands Windows
   the backslash spelling its CreateProcess wants.
+- A long-lived child - a supervisor's, a server's - is `with_process(argv[, cwd, env]) <| $(var p)
+  { ... }` over `spawn_process` / `close_process`: `process_drain(p) <| $(line) { ... }` hands over
+  each complete line of merged stdout+stderr ready right now and returns false at EOF (never
+  blocks), `process_poll(p)` is the exit code or `process_running`, `process_wait(p, timeout_sec)`
+  the same with a wait, `process_terminate` / `process_kill` signal the whole tree (a Windows job,
+  a POSIX process group), `process_pid` / `process_alive(pid)` for a pid file. `cwd` empty inherits;
+  `env` is `KEY=VALUE` overrides; a relative `argv[0]` naming a path resolves against the caller's
+  directory. Closing a handle kills a child still running. A child's exit code comes from
+  `def main() : int` - a das `exit(N)` reports 1.
 
 ## Mutating operations and their three error forms
 

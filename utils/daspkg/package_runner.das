@@ -49,6 +49,7 @@ struct PackageReleaseInfo {
     requires_jit : bool
     include_symbols : bool
     external_files : array<string>
+    tools : array<string>
 }
 
 
@@ -158,6 +159,9 @@ def run_das_package_release(das_package_path : string; var info : PackageRelease
             info.include_symbols = src.include_symbols
             for (e in src.external_files) {
                 info.external_files |> push(clone_string(e))
+            }
+            for (tool in src.tools) {
+                info.tools |> push(clone_string(tool))
             }
         }
     }

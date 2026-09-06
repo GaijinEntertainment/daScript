@@ -15,7 +15,7 @@ death degrades to a backed-up queue, never a site outage. Review rules: `REVIEW.
 daslang utils/internal/dasweb-buildd/main.das -- --token dev --toolchain <40-hex> --build-cmd "bash run_build.sh"
 
 # supervised production form (inside a daspkg release bundle)
-python3 watchdog.py
+./watchdog
 
 # release bundle
 daslang utils/daspkg/main.das -- release --root utils/internal/dasweb-buildd --out <dir>

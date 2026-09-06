@@ -1,0 +1,1 @@
+The child's exit code if it has exited, else ``process_running``; never waits.  On POSIX a child killed by a signal reports the signal number, as ``popen_argv`` does.  The code is remembered, so a later call answers the same.

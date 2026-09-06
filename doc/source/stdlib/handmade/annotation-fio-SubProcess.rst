@@ -1,0 +1,1 @@
+A long-lived child process spawned by ``spawn_process``: an opaque handle a supervisor polls, drains and signals across many ticks, unlike the block-scoped ``popen_argv``.  Free it with ``close_process``, or hold it in a ``with_process`` block.

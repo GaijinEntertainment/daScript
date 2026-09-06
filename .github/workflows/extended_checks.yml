@@ -564,13 +564,6 @@ jobs:
         python3 ci/test_fix_md_ascii.py
         python3 ci/fix_md_ascii.py --check
 
-    - name: "Test watchdog tray wording (python)"
-      if: matrix.role != 'modules'
-      run: |
-        set -eux
-        python3 utils/watchdog/test_tray_state.py
-        python3 utils/watchdog/test_consent.py
-
     - name: "Test pip wheel repack (python)"
       if: matrix.role != 'modules'
       run: |

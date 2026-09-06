@@ -112,7 +112,7 @@ is not.
 - `logger_init_tee("dasweb-playground")` in init -> ndjson to `logs/dasweb-playground.log` + stdout.
   No rotation in daslang; rotation is the watchdog's (20 MB x 5 - raise if request volume
   makes the window too short; the request log must cover at least days, not hours).
-- Supervisor = the shared `utils/watchdog/watchdog.py` (same one dasllama-server and the
+- Supervisor = the shared `utils/watchdog/` static executable (same one dasllama-server and the
   dictation bot ship). Contract the service honors:
   - exit **0** = intentional shutdown (watchdog stops), **4** = config-restart request,
     anything else = crash -> notify + bounded-backoff restart + crash bundle.
@@ -121,7 +121,7 @@ is not.
   - `POST /shutdown` - graceful stop; flips the service's own context flag.
 - `watchdog.json`: `{ "name": "dasweb-playground", "health_url": "http://127.0.0.1:8101/healthz",
   "shutdown_url": "http://127.0.0.1:8101/shutdown" }`.
-- systemd unit `dasweb-playground.service`: `ExecStart=python3 watchdog.py`, `WorkingDirectory=`
+- systemd unit `dasweb-playground.service`: `ExecStart=<release>/watchdog`, `WorkingDirectory=`
   the release bundle, `Restart=on-failure` (guards the watchdog itself), `User=dasweb`.
   Watchdog does the child restarts, stages, crash bundles; journald gets the watchdog's stdout.
 
@@ -145,7 +145,7 @@ ln -sfn releases/<sha> /srv/apps/dasweb-playground/current && systemctl restart 
 
 - `.das_package`: `release_main("main.das")`, `release_name("dasweb-playground")`,
   `release_include_if_missing("dasweb-playground.toml")` (preserve deployed edits),
-  `release_include_from("utils/watchdog/watchdog.py")`, `release_include("watchdog.json")`.
+  `release_include_tool("watchdog")`, `release_include("watchdog.json")`.
 - Bundle exe is named `dasweb-playground.exe` even on Linux (daspkg convention; CI's sequence
   smoke test relies on the same).
 - **Launch with cwd = bundle dir** - a relocated exe's `get_das_root()` degrades to cwd

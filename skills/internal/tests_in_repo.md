@@ -16,13 +16,11 @@ passes PR CI and fails the nightly. Creating a new test directory => register it
 see `skills/internal/aot_testing.md` sec. "Registering a New Test Directory" for the irregular cases -
 or the nightly/preflight fails with `error[50101]: AOT link failed`.
 
-If a specific file genuinely can't AOT (emitter bug, interpreted-only by design): put
-`options no_aot` IN THE FILE **and** exclude it from the directory's AOT glob, with a
-comment + issue link on both. Glob exclusion alone is NOT enough - test_aot still *runs*
-the file and trips 50101 on its missing stubs; `options no_aot` is what makes the runtime
-skip AOT linking for it. (2026-06-11: in-file `options no_aot` currently fails in the AOT
-hash itself - fix incoming on master; until it lands, interp-only tests are gated by the
-directory filter below instead.)
+If a specific file genuinely can't AOT (emitter bug, a process-spawning or timing test,
+interpreted-only by design): put `options no_aot` IN THE FILE. The AOT build silently skips
+such files (`tests/aot/CMakeLists.txt`), and the runtime skips AOT linking for them, so a
+suite whose every file is `no_aot` still registers in `DAS_AOT_SUITES` like any other. A
+whole directory that can't AOT is gated by the directory filter below instead.
 
 ## The `tests/.das_test` directory filter - and its root-path caveat
 

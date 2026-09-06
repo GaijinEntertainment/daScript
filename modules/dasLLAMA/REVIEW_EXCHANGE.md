@@ -33,12 +33,11 @@ falls back to the sidecar on the box and the winners built into the binary.**
 
 **A diff that adds a tune-boot-path (`exchange_scope_resolver` /
 `exchange_boot_submit_check`) consent question with no terminal to ask on also emits that
-question as a `@sidecar` event, in the same change** - the watchdog dialog and the control
-page are the answer surfaces a supervised boot has.
+question as a `@sidecar` event, in the same change** - the control page is the answer surface
+a supervised boot has.
 
 **A diff that changes the exchange consent notice wording updates every checked-in copy in
 the same change, and a diff that adds a copy names it here in the same change:
-`EXCHANGE_CONSENT_NOTICE` (`dasllama/dasllama_exchange.das`), `CONSENT_TITLE` /
-`CONSENT_TEXT` (`utils/watchdog/watchdog.py`, repo root), and the captured
+`EXCHANGE_CONSENT_NOTICE` (`dasllama/dasllama_exchange.das`) and the captured
 `utils/dasllama-server/tests/fixtures/exchange.json` (repo root).** The console prompt and the
 control page render the served constant, so they are not copies.

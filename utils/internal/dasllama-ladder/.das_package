@@ -13,7 +13,7 @@ def release() {
     release_main("main.das")
     release_name("dasllama-ladder")
     release_include_if_missing("dasllama-ladder.toml") // initialize once; preserve deployed edits (paths, submit_open) on upgrades
-    release_include_from("utils/watchdog/watchdog.py")
+    release_include_tool("watchdog")
     release_include_if_missing("watchdog.json")        // carries the port + health/shutdown urls — an operator edit must survive upgrades
     release_include("admin.das")                       // operator curation CLI; run with a daslang SDK on the box
     release_include("admin.html")                      // the loopback /admin/ operator page, served beside the sources

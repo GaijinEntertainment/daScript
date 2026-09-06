@@ -2136,11 +2136,11 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/dasllama-convert/main.das
     DESTINATION utils/dasllama-convert
 )
 
-# Install watchdog (supervisor for long-running daslang programs; the worked
-# example in the daspkg skill's release_include_from docs)
+# Install watchdog (supervisor for long-running daslang programs; the static exe installs
+# beside daslang from utils/CMakeLists.txt, these are the library and the interpreter entry)
 install(FILES
-    ${PROJECT_SOURCE_DIR}/utils/watchdog/watchdog.py
-    ${PROJECT_SOURCE_DIR}/utils/watchdog/dummy_server.py
+    ${PROJECT_SOURCE_DIR}/utils/watchdog/watchdog.das
+    ${PROJECT_SOURCE_DIR}/utils/watchdog/main.das
     ${PROJECT_SOURCE_DIR}/utils/watchdog/README.md
     DESTINATION utils/watchdog
 )

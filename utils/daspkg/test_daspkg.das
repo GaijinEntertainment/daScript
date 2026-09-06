@@ -56,6 +56,37 @@ def moved_bundle_exe_path(moved_root, name : string) : string {
 }
 
 [test]
+def test_ship_tools(t : T?) {
+    t |> run("a tool ships by bare name from bin/, then bin/Release/, with the platform's exe suffix; a missing tool fails the release") @(t : T?) {
+        let tmp = create_temp_directory_result("daspkg tools ")
+        if (!(tmp is value)) {
+            t |> failure("could not create temp directory: {tmp as error}")
+            return
+        }
+        let root = tmp as value
+        let das_root = path_join(root, "root")
+        let bundle = path_join(root, "bundle")
+        let ext = get_platform_name() == "windows" ? ".exe" : ""
+        mkdir(das_root)
+        mkdir(path_join(das_root, "bin"))
+        mkdir(path_join(path_join(das_root, "bin"), "Release"))
+        mkdir(bundle)
+        fwrite(path_join(das_root, "bin/flat{ext}"), "flat")
+        fwrite(path_join(das_root, "bin/Release/msvc{ext}"), "msvc")
+        var shipped : array<string>
+        t |> equal(ship_tools("pkg", bundle, ["flat", "msvc"], shipped, das_root), 0, "both tools resolve")
+        t |> equal(length(shipped), 2)
+        t |> success(fexist(path_join(bundle, "flat{ext}")), "bin/<tool> lands at the bundle root")
+        t |> success(fexist(path_join(bundle, "msvc{ext}")), "bin/Release/<tool> lands at the bundle root")
+        var none : array<string>
+        t |> equal(ship_tools("pkg", bundle, ["absent"], none, das_root), 1, "a tool no build produced fails the release")
+        t |> equal(length(none), 0)
+        let cleanup = rmdir_rec_result(root)
+        t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+}
+
+[test]
 def test_package_name_from_source(t : T?) {
     t |> run("github URL") @(t : T?) {
         t |> equal(package_name_from_source("github.com/user/dasImgui"), "dasImgui")

@@ -9,7 +9,7 @@
 # all resolve.
 #
 # Run:  powershell -File utils/dasllama-server/deploy-jit.ps1 [-Dest E:\dasllama-server]
-# Then, from the bundle:  python watchdog.py    (finds bin/Release/daslang.exe, runs -jit main.das)
+# Then, from the bundle:  .\watchdog.exe    (finds bin/Release/daslang.exe, runs -jit main.das)
 #
 # The config (dasllama-server.toml) is PRESERVED if it already exists.
 
@@ -45,11 +45,11 @@ foreach ($m in @("dasLLAMA","dasLLVM","dasVulkan","dasHV","dasSpirv","dasAudio",
 
 # 4. server sources + control page + watchdog at the bundle root (main.das's require siblings
 #    live beside it; SERVE_FILE reads control.html from the main.das dir). The watchdog is the
-#    shared supervisor from utils/watchdog; watchdog.json pins the deployment name.
+#    shared supervisor, the static bin\Release\watchdog.exe; watchdog.json pins the deployment name.
 foreach ($f in @("main.das","openai_server.das","llm_scheduler.das","ask.das","wav2txt.das","control.html","watchdog.json","tray.ico",".das_package")) {
     Copy-Item (Join-Path $PSScriptRoot $f) $Dest -Force
 }
-Copy-Item (Join-Path $Repo "utils\watchdog\watchdog.py") $Dest -Force
+Copy-Item (Join-Path $Repo "bin\Release\watchdog.exe") $Dest -Force
 # ship the box tune sidecar (main.das's app sidecar) so first launch runs the tuned kernels
 # instead of re-tuning (which would exit 3 restart-loop under the watchdog).
 $tune = Join-Path $PSScriptRoot "main.tune.json"
@@ -70,4 +70,4 @@ foreach ($stale in @("dasllama-server.exe","dasllama-server.lib","dasllama-serve
     if (Test-Path $p) { Remove-Item $p -Force }
 }
 
-Write-Host "deploy-jit: done. Launch from $Dest with:  python watchdog.py"
+Write-Host "deploy-jit: done. Launch from $Dest with:  .\watchdog.exe"
