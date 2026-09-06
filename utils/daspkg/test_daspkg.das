@@ -2014,7 +2014,7 @@ def test_cmd_release_fat(t : T?) {
         tt |> success(!fexist("{tmp_root}/main.tune.json"), "a fat release mints no sidecar beside the script")
         let bundle_dir = dir_name(bundle_exe_path(out_dir, "fatstub"))
         tt |> success(!fexist(path_join(bundle_dir, "fatstub.tune.json")), "the bundle ships no tune sidecar")
-        tt |> success(fexist(bundle_exe_path(out_dir, "fatstub")) || fexist("{bundle_exe_path(out_dir, "fatstub")}.exe"), "the fat exe is in the bundle")
+        tt |> success(fexist(bundle_exe_path(out_dir, "fatstub")), "the fat exe is in the bundle")
         force_rmdir(tmp_root)
         force_rmdir(out_dir)
     }
@@ -2040,7 +2040,7 @@ def test_cmd_release_fat(t : T?) {
         for (bad in ["x86-avx2 DAS_X=1", "x86-avx2;echo", "x86-avx2\"", "../x86-avx2"]) {
             tt |> success(cmd_release(tmp_root, out_dir, false, false, bad) != 0, "'{bad}' is refused")
         }
-        tt |> success(!fexist(bundle_exe_path(out_dir, "fatstub")) && !fexist("{bundle_exe_path(out_dir, "fatstub")}.exe"), "no exe was built for a refused class name")
+        tt |> success(!fexist(bundle_exe_path(out_dir, "fatstub")), "no exe was built for a refused class name")
         force_rmdir(tmp_root)
         force_rmdir(out_dir)
     }
