@@ -20,6 +20,9 @@
 #include <chrono>
 
 #define DAS_POPEN_TIMEOUT 0x7FFFFF01
+// process_poll / process_wait return this while the child is still running (INT32_MIN, so it
+// never collides with a real exit code or signal number).
+#define DAS_PROCESS_RUNNING (-2147483647-1)
 
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
 
@@ -235,6 +238,15 @@ namespace das {
     char * builtin_fs_create_temp_directory ( const char * prefix, char * & error, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen_argv ( const Array & args_arr, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen_argv_pipe ( const Array & args_arr, const TBlock<void,const FILE *,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    DasSubProcess * builtin_spawn_process ( const Array & argv, const char * cwd, const Array & env, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_process_drain ( DasSubProcess * p, const TBlock<void,char *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int builtin_process_poll ( DasSubProcess * p, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int builtin_process_wait ( DasSubProcess * p, float timeout_sec, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void builtin_process_terminate ( DasSubProcess * p, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void builtin_process_kill ( DasSubProcess * p, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int builtin_process_pid ( DasSubProcess * p, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_process_alive ( int32_t pid, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void builtin_close_process ( DasSubProcess * p, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void * register_dynamic_module_silent ( const char * path, const char * mod_name, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void for_each_registered_native_path ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void for_each_registered_dynamic_module ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -317,6 +329,7 @@ namespace das {
 #include <filesystem>
 #include <fstream>
 #include <random>
+#include <cerrno>            // errno for non-blocking process_drain
 
 namespace das {
     void builtin_sleep ( uint32_t msec ) {
@@ -1707,6 +1720,320 @@ namespace das {
 #endif
     }
 
+    // A long-lived child: spawn once, then poll / drain / signal across many ticks. popen_argv
+    // is block-scoped and blocks to EOF; this hands back an opaque handle a supervisor drives on
+    // its own clock. The read end (stdout+stderr merged) is non-blocking so drain never stalls
+    // the tick; on Windows the child sits in a kill-on-close job object and its group is signalled
+    // as a tree, on POSIX the child leads its own process group and killpg reaches the tree.
+    // process_poll / process_wait answer DAS_PROCESS_RUNNING while the child is still alive.
+    struct DasSubProcess {
+#ifdef _WIN32
+        HANDLE hProcess = nullptr;
+        HANDLE hJob = nullptr;
+        HANDLE hRead = INVALID_HANDLE_VALUE;
+        DWORD  pid = 0;
+#else
+        pid_t  pid = -1;
+        int    fd = -1;
+#endif
+        std::string buf;            // partial-line accumulator across drains
+        bool stdoutOpen = true;
+        bool reaped = false;
+        int  exitCode = 0;
+    };
+
+#ifdef _WIN32
+    static string winBuildEnvBlock ( const Array & env ) {
+        vector<string> entries;
+        LPCH base = GetEnvironmentStringsA();
+        if ( base ) {
+            for ( LPCH e = base; *e; e += strlen(e) + 1 ) entries.emplace_back(e);
+            FreeEnvironmentStringsA(base);
+        }
+        char ** ov = (char **) env.data;
+        for ( uint64_t i = 0; i < env.size; ++i ) {
+            if ( !ov[i] ) continue;
+            string entry = ov[i];
+            size_t eq = entry.find('=');
+            string key = eq == string::npos ? entry : entry.substr(0, eq);
+            for ( auto & e : entries ) {           // replace an existing key (case-insensitive)
+                size_t k = e.find('=');
+                string ek = k == string::npos ? e : e.substr(0, k);
+                if ( ek.size() == key.size() && _stricmp(ek.c_str(), key.c_str()) == 0 ) { e.clear(); break; }
+            }
+            entries.push_back(entry);
+        }
+        string block;
+        for ( auto & e : entries ) { if ( e.empty() ) continue; block.append(e); block.push_back('\0'); }
+        block.push_back('\0');                      // the block ends in a second NUL
+        return block;
+    }
+#endif
+
+    DasSubProcess * builtin_spawn_process ( const Array & argv_arr, const char * cwd, const Array & env,
+                                            Context * context, LineInfoArg * at ) {
+        if ( argv_arr.size == 0 ) {
+            context->throw_error_at(at, "spawn_process with empty argv");
+            return nullptr;
+        }
+        char ** argv = (char **) argv_arr.data;
+        if ( !argv[0] ) {
+            context->throw_error_at(at, "spawn_process with null exe");
+            return nullptr;
+        }
+        bool hasCwd = cwd && *cwd;
+#ifdef _WIN32
+        SECURITY_ATTRIBUTES sa;
+        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+        sa.bInheritHandle = TRUE;
+        sa.lpSecurityDescriptor = NULL;
+        HANDLE hRead = NULL, hWrite = NULL;
+        if ( !CreatePipe(&hRead, &hWrite, &sa, 0) ) {
+            context->throw_error_at(at, "spawn_process: CreatePipe failed");
+            return nullptr;
+        }
+        SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);   // parent's read end stays in-process
+        HANDLE hNull = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        HANDLE hJob = CreateJobObjectA(NULL, NULL);
+        if ( hJob ) {
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli;
+            memset(&jeli, 0, sizeof(jeli));
+            jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
+        }
+        STARTUPINFOA si;
+        memset(&si, 0, sizeof(si));
+        si.cb = sizeof(si);
+        si.dwFlags = STARTF_USESTDHANDLES;
+        si.hStdInput = (hNull == INVALID_HANDLE_VALUE) ? NULL : hNull;
+        si.hStdOutput = hWrite;
+        si.hStdError = hWrite;
+        string cmdLine = winBuildCommandLine(argv, argv_arr.size);
+        string envBlock;
+        LPVOID lpEnv = NULL;
+        if ( env.size ) { envBlock = winBuildEnvBlock(env); lpEnv = (LPVOID)&envBlock[0]; }
+        PROCESS_INFORMATION pi;
+        memset(&pi, 0, sizeof(pi));
+        BOOL ok = CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
+            CREATE_NO_WINDOW | CREATE_SUSPENDED, lpEnv, hasCwd ? cwd : NULL, &si, &pi);
+        CloseHandle(hWrite);
+        if ( hNull != INVALID_HANDLE_VALUE ) CloseHandle(hNull);
+        if ( !ok ) {
+            CloseHandle(hRead);
+            if ( hJob ) CloseHandle(hJob);
+            context->throw_error_at(at, "spawn_process: CreateProcess failed");
+            return nullptr;
+        }
+        if ( hJob ) AssignProcessToJobObject(hJob, pi.hProcess);
+        ResumeThread(pi.hThread);
+        CloseHandle(pi.hThread);
+        DasSubProcess * p = new DasSubProcess();
+        p->hProcess = pi.hProcess;
+        p->hJob = hJob;
+        p->hRead = hRead;
+        p->pid = pi.dwProcessId;
+        return p;
+#else
+        vector<char *> cargv;
+        cargv.reserve(argv_arr.size + 1);
+        for ( uint64_t i = 0; i < argv_arr.size; ++i ) cargv.push_back(argv[i] ? argv[i] : (char *)"");
+        cargv.push_back(nullptr);
+        // A relative argv[0] that names a path (has a '/') resolves against the caller's directory,
+        // not the child's cwd - so make it absolute before the child chdir's, matching Windows, where
+        // CreateProcess already searches the exe from the parent's directory rather than lpCurrentDirectory.
+        // A bare name (no '/') is a PATH lookup, which chdir does not affect - leave it alone.
+        string absExe;
+        if ( hasCwd && cargv[0][0] && cargv[0][0] != '/' && strchr(cargv[0], '/') ) {
+            char cwdbuf[4096];
+            if ( getcwd(cwdbuf, sizeof(cwdbuf)) ) {
+                absExe = string(cwdbuf) + "/" + cargv[0];
+                cargv[0] = (char *)absExe.c_str();
+            }
+        }
+        int pipefd[2];
+        if ( pipe(pipefd) == -1 ) {
+            context->throw_error_at(at, "spawn_process: pipe failed");
+            return nullptr;
+        }
+        char ** ov = (char **) env.data;
+        pid_t pid = fork();
+        if ( pid == -1 ) {
+            close(pipefd[0]);
+            close(pipefd[1]);
+            context->throw_error_at(at, "spawn_process: fork failed");
+            return nullptr;
+        }
+        if ( pid == 0 ) {
+            close(pipefd[0]);
+            int devnull = open("/dev/null", O_RDONLY);
+            if ( devnull >= 0 ) { dup2(devnull, STDIN_FILENO); close(devnull); }
+            dup2(pipefd[1], STDOUT_FILENO);
+            dup2(pipefd[1], STDERR_FILENO);
+            close(pipefd[1]);
+            setpgid(0, 0);                          // lead a group so killpg reaches the tree
+            if ( hasCwd && chdir(cwd) != 0 ) _exit(127);
+            for ( uint64_t i = 0; i < env.size; ++i ) if ( ov[i] ) putenv(strdup(ov[i]));
+            execvp(cargv[0], cargv.data());
+            _exit(127);
+        }
+        close(pipefd[1]);
+        fcntl(pipefd[0], F_SETFL, O_NONBLOCK);      // drain never blocks the tick
+        DasSubProcess * p = new DasSubProcess();
+        p->pid = pid;
+        p->fd = pipefd[0];
+        return p;
+#endif
+    }
+
+    bool builtin_process_drain ( DasSubProcess * p, const TBlock<void,char *> & blk,
+                                 Context * context, LineInfoArg * at ) {
+        if ( !p ) { context->throw_error_at(at, "process_drain on null process"); return false; }
+        if ( p->stdoutOpen ) {
+            char tmp[4096];
+#ifdef _WIN32
+            for ( ;; ) {
+                DWORD avail = 0;
+                if ( !PeekNamedPipe(p->hRead, NULL, 0, NULL, &avail, NULL) ) { p->stdoutOpen = false; break; }
+                if ( avail == 0 ) break;
+                DWORD toRead = avail > sizeof(tmp) ? (DWORD)sizeof(tmp) : avail;
+                DWORD got = 0;
+                if ( !ReadFile(p->hRead, tmp, toRead, &got, NULL) || got == 0 ) { p->stdoutOpen = false; break; }
+                p->buf.append(tmp, got);
+            }
+#else
+            for ( ;; ) {
+                ssize_t n = read(p->fd, tmp, sizeof(tmp));
+                if ( n > 0 ) { p->buf.append(tmp, (size_t)n); continue; }
+                if ( n == 0 ) { p->stdoutOpen = false; break; }                 // EOF: child closed stdout
+                if ( errno == EAGAIN || errno == EWOULDBLOCK ) break;           // nothing ready this tick
+                p->stdoutOpen = false; break;                                   // real read error
+            }
+#endif
+        }
+        size_t start = 0, nl;
+        while ( (nl = p->buf.find('\n', start)) != string::npos ) {
+            string line = p->buf.substr(start, nl - start);
+            if ( !line.empty() && line.back() == '\r' ) line.pop_back();
+            char * s = context->allocateString(line.data(), (uint32_t)line.size(), at);
+            vec4f cargs[1]; cargs[0] = cast<char *>::from(s);
+            context->invoke(blk, cargs, nullptr, at);
+            start = nl + 1;
+        }
+        p->buf.erase(0, start);
+        if ( !p->stdoutOpen && !p->buf.empty() ) {                             // a last line with no newline
+            string line = p->buf;
+            if ( !line.empty() && line.back() == '\r' ) line.pop_back();
+            char * s = context->allocateString(line.data(), (uint32_t)line.size(), at);
+            vec4f cargs[1]; cargs[0] = cast<char *>::from(s);
+            context->invoke(blk, cargs, nullptr, at);
+            p->buf.clear();
+        }
+        return p->stdoutOpen;
+    }
+
+    int builtin_process_poll ( DasSubProcess * p, Context * context, LineInfoArg * at ) {
+        if ( !p ) { context->throw_error_at(at, "process_poll on null process"); return DAS_PROCESS_RUNNING; }
+        if ( p->reaped ) return p->exitCode;
+#ifdef _WIN32
+        if ( WaitForSingleObject(p->hProcess, 0) == WAIT_TIMEOUT ) return DAS_PROCESS_RUNNING;
+        DWORD code = 0; GetExitCodeProcess(p->hProcess, &code);
+        p->reaped = true; p->exitCode = (int)code; return p->exitCode;
+#else
+        int status = 0;
+        pid_t r = waitpid(p->pid, &status, WNOHANG);
+        if ( r == 0 ) return DAS_PROCESS_RUNNING;
+        p->reaped = true;
+        p->exitCode = r < 0 ? -1
+            : WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
+        return p->exitCode;
+#endif
+    }
+
+    int builtin_process_wait ( DasSubProcess * p, float timeout_sec, Context * context, LineInfoArg * at ) {
+        if ( !p ) { context->throw_error_at(at, "process_wait on null process"); return DAS_PROCESS_RUNNING; }
+        if ( p->reaped ) return p->exitCode;
+#ifdef _WIN32
+        DWORD ms = timeout_sec <= 0.0f ? INFINITE : (DWORD)(timeout_sec * 1000.0f);
+        if ( WaitForSingleObject(p->hProcess, ms) == WAIT_TIMEOUT ) return DAS_PROCESS_RUNNING;
+        DWORD code = 0; GetExitCodeProcess(p->hProcess, &code);
+        p->reaped = true; p->exitCode = (int)code; return p->exitCode;
+#else
+        auto deadline = std::chrono::steady_clock::now()
+            + std::chrono::milliseconds((int)(timeout_sec * 1000.0f));
+        for ( ;; ) {
+            int status = 0;
+            pid_t r = waitpid(p->pid, &status, WNOHANG);
+            if ( r > 0 ) {
+                p->reaped = true;
+                p->exitCode = WIFEXITED(status) ? WEXITSTATUS(status)
+                    : WIFSIGNALED(status) ? WTERMSIG(status) : status;
+                return p->exitCode;
+            }
+            if ( r < 0 ) { p->reaped = true; p->exitCode = -1; return -1; }
+            if ( timeout_sec > 0.0f && std::chrono::steady_clock::now() >= deadline )
+                return DAS_PROCESS_RUNNING;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+#endif
+    }
+
+    void builtin_process_terminate ( DasSubProcess * p, Context * context, LineInfoArg * at ) {
+        if ( !p ) { context->throw_error_at(at, "process_terminate on null process"); return; }
+#ifdef _WIN32
+        if ( p->hJob ) TerminateJobObject(p->hJob, 15);
+        else if ( p->hProcess ) TerminateProcess(p->hProcess, 15);
+#else
+        killpg(p->pid, SIGTERM);
+#endif
+    }
+
+    void builtin_process_kill ( DasSubProcess * p, Context * context, LineInfoArg * at ) {
+        if ( !p ) { context->throw_error_at(at, "process_kill on null process"); return; }
+#ifdef _WIN32
+        if ( p->hJob ) TerminateJobObject(p->hJob, 9);
+        else if ( p->hProcess ) TerminateProcess(p->hProcess, 9);
+#else
+        killpg(p->pid, SIGKILL);
+#endif
+    }
+
+    int builtin_process_pid ( DasSubProcess * p, Context * context, LineInfoArg * at ) {
+        if ( !p ) { context->throw_error_at(at, "process_pid on null process"); return 0; }
+        return (int)p->pid;
+    }
+
+    bool builtin_process_alive ( int32_t pid, Context *, LineInfoArg * ) {
+        if ( pid <= 0 ) return false;
+#ifdef _WIN32
+        HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD)pid);
+        if ( !h ) return false;
+        DWORD code = 0; BOOL ok = GetExitCodeProcess(h, &code);
+        CloseHandle(h);
+        return ok && code == STILL_ACTIVE;
+#else
+        // signal 0 probes without delivering; EPERM means it exists but is not ours to signal.
+        if ( ::kill((pid_t)pid, 0) == 0 ) return true;
+        return errno == EPERM;
+#endif
+    }
+
+    void builtin_close_process ( DasSubProcess * p, Context *, LineInfoArg * ) {
+        if ( !p ) return;
+#ifdef _WIN32
+        if ( p->hRead && p->hRead != INVALID_HANDLE_VALUE ) CloseHandle(p->hRead);
+        if ( p->hProcess ) CloseHandle(p->hProcess);
+        if ( p->hJob ) CloseHandle(p->hJob);       // kill-on-close reaps a still-running tree
+#else
+        if ( p->fd >= 0 ) close(p->fd);
+        if ( !p->reaped ) {                        // never leave a zombie
+            int status = 0;
+            if ( waitpid(p->pid, &status, WNOHANG) == 0 ) { killpg(p->pid, SIGKILL); waitpid(p->pid, &status, 0); }
+        }
+#endif
+        delete p;
+    }
+
     int builtin_system ( const char * cmd, Context * context, LineInfoArg * at ) {
         if ( !cmd ) {
             context->throw_error_at(at, "system of null");
@@ -2456,6 +2783,7 @@ namespace das {
 
 MAKE_TYPE_FACTORY(FStat, das::FStat)
 MAKE_TYPE_FACTORY(FILE,FILE)
+MAKE_TYPE_FACTORY(SubProcess, das::DasSubProcess)
 MAKE_TYPE_FACTORY(DiskSpaceInfo, das::DiskSpaceInfo)
 
 namespace das {
@@ -2497,6 +2825,7 @@ namespace das {
             addBuiltinDependency(lib, Module::require("strings"));
             // type
             addAnnotation(new DummyTypeAnnotation("FILE", "FILE", 16, 16));
+            addAnnotation(new DummyTypeAnnotation("SubProcess", "das::DasSubProcess", sizeof(void *), alignof(void *)));
             addAnnotation(new FStatAnnotation(lib));
             // seek constants
             addConstant<int32_t>(*this, "seek_set", SEEK_SET);
@@ -2674,6 +3003,35 @@ namespace das {
                 SideEffects::modifyExternal, "builtin_popen_argv_pipe")
                     ->args({"args","scope","context","at"})->unsafeOperation = true;
             addConstant<int32_t>(*this, "popen_timed_out", DAS_POPEN_TIMEOUT);
+            // long-lived child process (spawn once, poll/drain/signal across ticks)
+            addExtern<DAS_BIND_FUN(builtin_spawn_process)>(*this, lib, "spawn_process",
+                SideEffects::modifyExternal, "builtin_spawn_process")
+                    ->args({"argv","cwd","env","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_process_drain)>(*this, lib, "process_drain",
+                SideEffects::modifyExternal, "builtin_process_drain")
+                    ->args({"process","block","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_process_poll)>(*this, lib, "process_poll",
+                SideEffects::modifyExternal, "builtin_process_poll")
+                    ->args({"process","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_process_wait)>(*this, lib, "process_wait",
+                SideEffects::modifyExternal, "builtin_process_wait")
+                    ->args({"process","timeout","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_process_terminate)>(*this, lib, "process_terminate",
+                SideEffects::modifyExternal, "builtin_process_terminate")
+                    ->args({"process","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_process_kill)>(*this, lib, "process_kill",
+                SideEffects::modifyExternal, "builtin_process_kill")
+                    ->args({"process","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_process_pid)>(*this, lib, "process_pid",
+                SideEffects::accessExternal, "builtin_process_pid")
+                    ->args({"process","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_process_alive)>(*this, lib, "process_alive",
+                SideEffects::accessExternal, "builtin_process_alive")
+                    ->args({"pid","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_close_process)>(*this, lib, "close_process",
+                SideEffects::modifyExternal, "builtin_close_process")
+                    ->args({"process","context","at"})->unsafeOperation = true;
+            addConstant<int32_t>(*this, "process_running", DAS_PROCESS_RUNNING);
             addExtern<DAS_BIND_FUN(builtin_system)>(*this, lib, "system",
                 SideEffects::modifyExternal, "builtin_system")
                     ->args({"command","context","at"})->unsafeOperation = true;

@@ -115,6 +115,18 @@ namespace das {
     DAS_API bool builtin_spawn_argv ( const Array & args_arr, Context * context, LineInfoArg * at );
     DAS_API int builtin_popen_argv ( const Array & args_arr, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
     DAS_API int builtin_popen_argv_pipe ( const Array & args_arr, const TBlock<void,const FILE *,const FILE *> & blk, Context * context, LineInfoArg * at );
+    // A long-lived child process: spawned once, polled and drained across many ticks, unlike the
+    // block-scoped popen_argv. The handle (das `SubProcess?`) is opaque; free it with close_process.
+    struct DasSubProcess;
+    DAS_API DasSubProcess * builtin_spawn_process ( const Array & argv, const char * cwd, const Array & env, Context * context, LineInfoArg * at );
+    DAS_API bool builtin_process_drain ( DasSubProcess * p, const TBlock<void,char *> & blk, Context * context, LineInfoArg * at );
+    DAS_API int builtin_process_poll ( DasSubProcess * p, Context * context, LineInfoArg * at );
+    DAS_API int builtin_process_wait ( DasSubProcess * p, float timeout_sec, Context * context, LineInfoArg * at );
+    DAS_API void builtin_process_terminate ( DasSubProcess * p, Context * context, LineInfoArg * at );
+    DAS_API void builtin_process_kill ( DasSubProcess * p, Context * context, LineInfoArg * at );
+    DAS_API int builtin_process_pid ( DasSubProcess * p, Context * context, LineInfoArg * at );
+    DAS_API bool builtin_process_alive ( int32_t pid, Context * context, LineInfoArg * at );
+    DAS_API void builtin_close_process ( DasSubProcess * p, Context * context, LineInfoArg * at );
     DAS_API char * get_full_file_name ( const char * path, Context * context, LineInfoArg * );
     DAS_API char * builtin_resolve_this_module_dir ( const char * baked_path, bool standalone, Context * context );
     DAS_API bool builtin_remove_file ( const char * path );
