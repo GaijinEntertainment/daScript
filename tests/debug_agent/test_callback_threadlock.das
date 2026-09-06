@@ -52,7 +52,6 @@ def test_callback_and_pinvoke_are_serialized(t : T?) {
         var active = atomic32_create()
         var overlap = atomic32_create()
         var tick_done = atomic32_create()
-        var probe_started = atomic32_create()
         let agent_context = unsafe(addr(get_debug_agent_context("callback_threadlock_test")))
         unsafe {
             invoke_in_context(
@@ -68,23 +67,18 @@ def test_callback_and_pinvoke_are_serialized(t : T?) {
                 tick_debug_agent("callback_threadlock_test")
                 tick_done |> set(1)
             }
-            new_thread() @() {
-                probe_started |> set(1)
-                unsafe {
-                    invoke_in_context(*agent_context, "probe_callback_overlap")
-                }
-            }
             while ((entered |> get) == 0) {
                 sleep(10u)
             }
-            while ((probe_started |> get) == 0) {
-                sleep(10u)
-            }
-            sleep(200u)
+            let refused = !unsafe(try_invoke_in_context(*agent_context, "probe_callback_overlap"))
+            t |> success(refused, "a pinvoke is refused while the callback holds the context lock")
+            t |> equal(overlap |> get, 0)
             release |> set(1)
             while ((tick_done |> get) == 0) {
                 sleep(10u)
             }
+            let ran = unsafe(try_invoke_in_context(*agent_context, "probe_callback_overlap"))
+            t |> success(ran, "a pinvoke runs once the callback returned")
         }
         t |> equal(overlap |> get, 0)
         delete_debug_agent_context("callback_threadlock_test")
@@ -94,7 +88,6 @@ def test_callback_and_pinvoke_are_serialized(t : T?) {
             atomic32_remove(active)
             atomic32_remove(overlap)
             atomic32_remove(tick_done)
-            atomic32_remove(probe_started)
         }
     }
 }

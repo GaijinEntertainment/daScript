@@ -1,0 +1,1 @@
+The non-blocking `invoke_in_context`: tries the target context's lock instead of waiting on it.  Returns `true` once the call ran, `false` - running nothing - when another thread holds that context, a debug-agent hook for instance.  Same arguments as `invoke_in_context` by function name, up to 10 extra arguments; the target function must be marked `[export, pinvoke]`.

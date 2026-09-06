@@ -1140,16 +1140,16 @@ namespace debugger {
 
     // pinvoke(context,"function",....)
 
-    vec4f pinvoke_impl ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    static bool pinvoke_named ( Context & context, SimNode_CallBase * call, vec4f * args, vec4f & res, bool tryLock ) {
         auto invCtx = cast<Context *>::to(args[0]);
         if ( !invCtx ) context.throw_error_at(call->debugInfo, "pinvoke with null context");
         auto fn = cast<const char *>::to(args[1]);
         if ( !fn ) context.throw_error_at(call->debugInfo, "can't pinvoke empty string");
         if ( !invCtx->contextMutex ) context.throw_error_at(call->debugInfo,"threadlock_context is not set");
-        vec4f res = v_zero();
+        if ( tryLock && !invCtx->contextMutex->try_lock() ) return false;
         LineInfo exAt;
         string exText;
-        invCtx->threadlock_context([&](){
+        auto body = [&](){
             auto simFn = invCtx->findFunction(fn);
             if ( !simFn ) {
                 exAt = call->debugInfo;
@@ -1178,9 +1178,28 @@ namespace debugger {
                 exAt = invCtx->exceptionAt;
                 exText = invCtx->exception;
             }
-        });
+        };
+        if ( tryLock ) {
+            lock_guard<recursive_mutex> guard(*invCtx->contextMutex, std::adopt_lock);
+            invCtx->lock();
+            body();
+            invCtx->unlock();
+        } else {
+            invCtx->threadlock_context(body);
+        }
         if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
+        return true;
+    }
+
+    vec4f pinvoke_impl ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        vec4f res = v_zero();
+        pinvoke_named(context, call, args, res, false);
         return res;
+    }
+
+    vec4f try_pinvoke_impl ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        vec4f res = v_zero();
+        return cast<bool>::from(pinvoke_named(context, call, args, res, true));
     }
 
     vec4f pinvoke_impl2_core ( Context & context, SimNode_CallBase * call, vec4f * args, int32_t nUserArgs ) {
@@ -1644,6 +1663,28 @@ namespace debugger {
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
             // pinvoke2
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+            addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
+                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f>(*this,lib,"invoke_in_context",
