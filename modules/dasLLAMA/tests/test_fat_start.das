@@ -47,6 +47,19 @@ def test_runtime_snapshot_carries_the_crowns_and_knobs(t : T?) {
     }
 }
 
+// a fat exe's first start runs before the application opens its job queue (the bench applies the
+// box profile first, with_job_que later), so the snapshot cannot ask the queue for anything
+[test]
+def test_the_snapshot_needs_no_job_queue(t : T?) {
+    t |> run("the runtime snapshot is written with no job queue, its lanes receipt 0") @(t : T?) {
+        var snap = dasllama_runtime_snapshot("")
+        t |> success(snap != null, "the snapshot builds outside with_job_que")
+        t |> equal(0, snap?["threads"] ?? -1, "no queue: the lanes receipt is 0, never a throw")
+        t |> success((snap?["q8_token_block"] ?? -1) > 0, "the knob values ride along")
+        delete_json(snap)
+    }
+}
+
 [test]
 def test_first_start_race_writes_the_section_the_apply_reads(t : T?) {
     with_job_que() {

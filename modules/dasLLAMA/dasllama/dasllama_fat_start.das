@@ -22,8 +22,10 @@ require ?das_metal dasllama/dasllama_metal_kernels  // metal_tensor_race_decode 
 //! The `"runtime"` section as a mint or a first-start race writes it: the CURRENT runtime knobs
 //! (defaults unless this process changed them), so the file is complete and hand-editable, plus
 //! the Metal twin crowns. TB/L2-budget refinement stays manual (`harness/tune_tb.das` shows the
-//! cliff; edit under the knee); `threads` is advisory - `DAS_JOBQUE_THREADS` changes it.
+//! cliff; edit under the knee); `threads` is a receipt of the lanes at mint time, 0 when no job
+//! queue exists yet - a fat exe's first start runs before the application opens its queue.
 def public dasllama_runtime_snapshot(metal_crowns : string) : JsonValue? {
+    let lanes = is_job_que_available() ? get_total_hw_jobs() + 1 : 0
     return JV((q8_token_block = get_q8_token_block(), q8_l2_budget = get_q8_l2_budget(),
         matmul_min_chunk_rows = get_matmul_min_chunk_rows(),
         matmul_min_chunk_rows_gemv = get_matmul_min_chunk_rows_gemv(),
@@ -37,7 +39,7 @@ def public dasllama_runtime_snapshot(metal_crowns : string) : JsonValue? {
         act_par_threshold = get_act_par_threshold(), q8_chunks_per_job = get_q8_chunks_per_job(),
         q4_chunks_per_job = get_q4_chunks_per_job(), q8_batch_chunks_per_job = get_q8_batch_chunks_per_job(),
         jobque_spin_us = get_jobque_spin_us(), jobque_join_poll = get_jobque_join_poll(),
-        threads = get_total_hw_jobs() + 1, metal_tensor = metal_crowns,   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
+        threads = lanes, metal_tensor = metal_crowns,   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
         mtp_depth_nextn = get_mtp_depth_nextn(), mtp_depth_assistant = get_mtp_depth_assistant(),
         metal_tall_floor = metal_tall_floor(), metal_devw_small_panel_mb = metal_devw_small_panel_mb(),
         metal_cvt_min_rows = metal_cvt_min_rows()))
