@@ -6,6 +6,7 @@ options auto_inline_functions = false
 
 require daslib/fio
 require clipboard/clipboard
+require stddlg
 require daslib/rtti
 require daslib/ast
 require math
@@ -1527,6 +1528,15 @@ def document_module_validate_code(_root : string) {
     document("Code validation annotations", mod, "validate_code.rst", groups)
 }
 
+def document_module_stddlg(_root : string) {
+    var mod = get_module("stddlg")
+    var groups <- array<DocGroup>(
+        group_by_regex("Standard dialogs", mod, %regex~(dlg_init|get_dlg_ok_from_user|get_dlg_ok_cancel_from_user|get_dlg_save_file|get_dlg_open_file)$%%),
+        group_by_regex("Tray icon", mod, %regex~tray_.*$%%)
+    )
+    document("Standard dialogs and tray icon", mod, "stddlg.rst", groups)
+}
+
 def document_module_stbimage(_root : string) {
     var mod = get_module("stbimage")
     var groups <- array<DocGroup>(
@@ -1892,6 +1902,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_math(root)
     document_module_fio(root)
     document_module_clipboard(root)
+    document_module_stddlg(root)
     document_module_network(root)
     document_module_dashv(root)
     document_module_openai(root)
