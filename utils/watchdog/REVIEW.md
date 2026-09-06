@@ -18,11 +18,11 @@ description** - a reader that stops seeing the name it waits for never fails lou
 tree in the same change** - an unknown key refuses the start, so a stale key in a bundled
 config is a supervisor that never comes up.
 
-**A diff that adds a `require` to `watchdog.das` for a module `has_module` can report absent
-adds that module to the `watchdog` arm of `tests/.das_test` (repo root) in the same change** -
-without the entry the whole test suite fails to compile on a machine where that module is
-missing.
+**A diff that adds a `require` to `watchdog.das` for an optional module - one a build can leave
+out, so `has_module` reports it absent - adds that module to the `watchdog` arm of
+`tests/.das_test` (repo root) in the same change** - without the entry the whole test suite
+fails to compile on a machine where that module is missing.
 
-**A diff that reaches the notification area or the desktop from the supervision path logs the
-reason the call failed and starts and keeps supervising anyway** - the supervisor must run on
-a machine with no desktop.
+**A diff that adds a call into `stddlg`, or spawns a program to show something on the desktop,
+logs the failure as an event on the JSON-lines log and lets the supervisor start and keep
+supervising** - the supervisor must run on a machine with no desktop.

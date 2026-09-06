@@ -73,6 +73,18 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   `globalInitStackSize` reaches the emitter through the rtti `Program` binding in
   `src/builtin/module_builtin_rtti.cpp`, so an `invoke` during init still has das stack for
   its prologue.
+- **The ctor wires what the collector walks, the way `Program::simulate` does** - two pairs
+  with `src/ast/ast_simulate.cpp`: `context.gcEnabled = true` is emitted for a program with
+  `options gc` (simulate reads the same option into the same field), and every used global gets
+  a `VarInfo __gvar_info_<index>` through the emitter's debug helper with
+  `globalVariables[<index>].debugInfo` pointing at it (simulate's `makeVariableDebugInfo`);
+  the collector's global walk in `src/simulate/simulate_gc.cpp` dereferences that info
+  unguarded, so a context that collects with a null one crashes. The flag line is gated on
+  the option because the nano context (`nano/include/daScript/simulate/simulate.h`) has no
+  `gcEnabled`; it does carry `GlobalVariable::debugInfo`, so the infos are emitted for every
+  standalone program. `tests/aot/test_standalone_emit.das` pins the emitted text; the
+  watchdog (`utils/watchdog/main.das`, `options gc`, globals) is the build that compiles and
+  runs it, collecting on its first tick.
 - **There is no `!stopFlags` guard between `[init]` calls** - a panic propagates out of the
   ctor instead of soft-stopping the sequence.
 - **Global init order is fixed by `var->index` assignment**: `StandaloneContextGen`'s

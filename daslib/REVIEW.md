@@ -44,8 +44,8 @@ the daslib side lives in, naming both sides.**
 **When a diff changes one side of a recorded daslib/C++ pair so the two no longer match, it
 changes the other side and updates the pair's architecture-doc entry in the same diff.**
 
-**A diff that adds an architecture-doc entry adds it only where no name, shape, or test can
-carry the fact.**
+**A diff that adds an architecture-doc entry adds it only where no name, shape, or test fails
+when the fact goes false.**
 
 **A diff that changes daslib's nolint scanning - suppression parsing, staleness detection, or
 the header window - keeps `tests/lint/test_nolint_suppression.das` and
@@ -133,9 +133,9 @@ writes out as complete.
 **A diff that changes how a struct's C++ name is built changes every site that spells
 that name the same way.** The name is the module namespace (`aotModuleName`, or
 `aotModuleNameFromString` on the `VarInfo` path) plus the `_S` suffix; the sites that
-spell it are `aotStructName` and the `VarInfo` emitter's inline
-`aotSuffixNameEx(info.name, "_S", ...)`. One site changed alone writes `offsetof`s that
-name a struct declared under a different name.
+spell it are `aotStructName` and `describeCppStructInfoFields`'s inline
+`aotSuffixNameEx(info.name, "_S", ...)` (both `aot_cpp.das`). One site changed alone writes
+`offsetof`s that name a struct declared under a different name.
 
 **A diff that adds or changes a function that emits a struct or enum C++ name - anything
 reaching `aotStructName` / `aotEnumName`, a `CppAot` subclass and `ArgsConverter` alike -

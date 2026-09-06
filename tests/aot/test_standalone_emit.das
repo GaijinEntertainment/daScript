@@ -286,9 +286,9 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> success(find(source, "context.gcEnabled = true;") >= 0, "the collector's own flag is on")
         t |> success(find(source, "VarInfo __gvar_info_") >= 0, "each global gets a debug info the collector walks")
         t |> success(find(source, "].debugInfo = &__gvar_info_") >= 0, "and the context's global table points at it")
-        let plain = generate_standalone_source(t, "_standalone_fio_fixture", out_dir)
+        let plain = generate_standalone_source(t, "_standalone_gc_free_fixture", out_dir)
         t |> success(find(plain, "gcEnabled") < 0, "a program without options gc never names the flag - the nano context has none")
-        t |> success(find(plain, "__gvar_info_") < 0, "and carries no debug info per global")
+        t |> success(find(plain, "].debugInfo = &__gvar_info_") >= 0, "but its globals still carry their debug info, as under the interpreter")
     }
 
     t |> run("a module only dead code reaches stays compile-time-only") @(t : T?) {

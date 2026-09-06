@@ -8,8 +8,9 @@ uses - under `utils/`, or outside `utils/` when `CMakeLists.txt` (beside this fi
 ships it. An arm is one `t |> run(...)` case of a `[test]` function. An arm's load-bearing
 assertions are the ones that prove the change, never a skip-path assertion. A CI row is a
 workflow step whose command reaches the arm. An arm that does not execute where CI runs - it
-skips itself, or a suite gate excludes its file - has load-bearing assertions no CI row can
-run, unless the PR description cites that CI row's log showing the arm ran.
+skips itself, or the suite that row runs does not include its file - has load-bearing
+assertions no CI row can run, unless the PR description cites a CI row's log showing the arm
+ran.
 
 **A file under `utils/` that belongs to a tool other than the one owning the directory it
 sits in is reviewed with that tool's own `REVIEW.md`, where one exists, as well as with this
@@ -44,9 +45,8 @@ assertions no CI row can run, ships with a row that compile-checks it -
 
 **An arm the diff adds or changes that covers a change under `utils/`, whose load-bearing
 assertions no CI row can run, records in the PR description an executed run against the build
-the diff produces: the machine the assertions ran on, what that machine had that CI lacks, and
-the pass count.** A run against an already-deployed artifact proves nothing about the diff
-under review.
+the diff produces: the machine the assertions ran on, why no CI row can run them, and the pass
+count.** A run against an already-deployed artifact proves nothing about the diff under review.
 
 **A diff that adds or renames a key in a `watchdog.json` under this folder names a
 `WatchdogConfig` field in `watchdog/watchdog.das`, in the same change** - an unknown key refuses
