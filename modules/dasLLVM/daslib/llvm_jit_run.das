@@ -42,7 +42,7 @@ let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x71ul   // a CPU class row's cpu is the
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x2f2b1bea97403215ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x1a0961a348189975ul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
