@@ -57,8 +57,9 @@ tray_destroy()
   Registration with a real watcher is proven on the daslinux VM (the panel shows the icon).
 - macOS: the process reads its own status item back through NSStatusItem and a
   `screencapture -R` of the menu bar on the Mac.
-- Windows: message-path test by posting to the hidden window; the icon itself needs an
-  interactive session, so the visual proof is a person at zen2.
+- Windows: the fixture arm proves the availability gate (a service or ssh session reports
+  unavailable and skips; an interactive desktop reaches ready). Nothing scriptable clicks the
+  notification area, so click, menu and balloon are proven by a person at zen2.
 
 ## Follow-ups (not this arc)
 
