@@ -72,12 +72,12 @@ not a chain-shape preference.
 
 **A recurrent (deltanet) layer's window block replaces the attention head; the FFN tail is
 shared.** Per window: the plain requant, the qkv and z batch GEMMs into the window planes, the beta
-and alpha rows into the layer's smalls (f32 arm: the row-strided router GEMV; q8 arm: a batch GEMM
-and a device copy), the conv reading the layer's ring image, the chunked scan over the layer's own
-state slot and the tier's workspace, the o requant and the out GEMM into `pf_xb2`. The scan's phase
-1 runs per (head, chunk); phase 2 per (head, state column slice) - its four GEMMs are independent
-per C column, so `DN_NSP` slices lift the grid from one workgroup per head to heads x slices, the
-raw o rows landing in the o plane; phase 3, the gated out-norm, runs one workgroup per position.
+and alpha rows into the layer's smalls (f32 arm: a 16-position tile GEMM over the `[beta ; alpha]`
+rows; q8 arm: a batch GEMM and a device copy), the conv reading the layer's ring image, the
+sequential scan over the layer's own state slot, the o requant and the out GEMM into `pf_xb2`. The
+scan is the plain per-token delta rule: one 32-lane subgroup per (head, column group), a lane keeps
+16 state rows of its column in registers, the window's tokens loop inside the kernel with two shuffle
+reductions each, the raw o rows land in the tier's workspace for the gated out-norm's one workgroup per position.
 The conv history crosses windows position-major in ring image 0; the last window transposes the
 tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is `_DECODE.md`
 sec.2.2v's). Gated attention rides the batch kernels through a per-head q stride (`qhs = 2 x hs`:

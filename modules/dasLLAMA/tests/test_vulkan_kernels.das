@@ -5347,7 +5347,7 @@ def test_vkd_dn_family(t0 : T?) {
                 feint("dn chain declined on this device (shared-memory cap) - skipping\n")
                 return
             }
-            verify(ensure_dn_conv_cls() && ensure_dn_step_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls() && ensure_dn_scan_p3_cls(),
+            verify(ensure_dn_conv_cls() && ensure_dn_step_cls() && ensure_dn_scan_cls() && ensure_dn_scan_p3_cls(),
                 "the dn class rails must engage on a device over the shared cap")
             let ds = 64
             let nkh = 2
@@ -5638,7 +5638,7 @@ def test_vkd_dn_family(t0 : T?) {
                 delete sc_cls
                 delete q_cls
             }
-            // --- dn_scan p1 + p2 chained: 2 chunks (64 + a 6-row partial), state advanced through both ---
+            // --- dn_scan + the out-norm over 70 rows: the state advanced through every token ---
             {
                 let npos = 70
                 let CS = 64
@@ -5701,12 +5701,9 @@ def test_vkd_dn_family(t0 : T?) {
                     upload_region_at(zd, 0l, addr<uint8 const?>(zh[0]), z_bytes)
                     upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
                     upload_region_at(st2, 0l, addr<uint8 const?>(sth[0]), st_bytes)
-                    var sc1 = set_dn_scan_p1_cls(fixed_array(convd, smd, sl2),
-                        fixed_array(conv_bytes, sm_bytes, slab_bytes),
-                        fixed_array(1u, 8u, 4u))
-                    var sc2 = set_dn_scan_p2_cls(fixed_array(st2, sl2),
-                        fixed_array(st_bytes, slab_bytes),
-                        fixed_array(2u, 4u))
+                    var sc1 = set_dn_scan_cls(fixed_array(convd, st2, smd, sl2),
+                        fixed_array(conv_bytes, st_bytes, sm_bytes, slab_bytes),
+                        fixed_array(1u, 2u, 8u, 4u))
                     var sc3 = set_dn_scan_p3_cls(fixed_array(zd, sl2, smd),
                         fixed_array(z_bytes, slab_bytes, sm_bytes),
                         fixed_array(16u, 4u, 8u))
@@ -5714,14 +5711,11 @@ def test_vkd_dn_family(t0 : T?) {
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw, begin), null)
                     var h : VkHaz
-                    var pc1 = DnScanP1Args(npos = uint(npos), cd = uint(cd), kd = uint(kd),
+                    var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd),
                         nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
                         beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off),
-                        dt_off = uint(dt_off), slab_stride = uint(slab_stride))
-                    enc_dn_scan_p1_cls(raw, h, sc1, pc1, int64(nvh * nch))
-                    var pc2 = DnScanP2Args(npos = uint(npos), di = uint(di), ds = uint(ds),
-                        o_off = uint(o_off), slab_stride = uint(slab_stride), st_off = uint(st_off), nsp = uint(DN_NSP))
-                    enc_dn_scan_p2_cls(raw, h, sc2, pc2, int64(nvh) * DN_NSP)
+                        dt_off = uint(dt_off), o_off = uint(o_off), di = uint(di))
+                    enc_dn_scan_cls(raw, h, sc1, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
                     var pc3 = DnScanP3Args(npos = uint(npos), nvh = uint(nvh), di = uint(di), ds = uint(ds),
                         o_off = uint(o_off), wnorm_off = uint(wnorm_off), eps = eps)
                     enc_dn_scan_p3_cls(raw, h, sc3, pc3, int64(npos))
@@ -5788,7 +5782,7 @@ def test_vkd_dn_family(t0 : T?) {
                     delete st_h
                 }
                 let bad = mismatch_bars(o_cls, o_ref, 1e-2, 1e-2 * max_abs(o_ref))
-                t |> success(bad == 0, "dn_scan p1+p2 matches the CPU oracle ({bad} of {cmp_n} off)")
+                t |> success(bad == 0, "dn_scan + out-norm matches the CPU oracle ({bad} of {cmp_n} off)")
                 delete convh
                 delete zh
                 delete sth
@@ -5796,6 +5790,325 @@ def test_vkd_dn_family(t0 : T?) {
                 delete o_ref
                 delete o_cls
             }
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+[test]
+def test_vkd_dn_ba(t0 : T?) {
+    t0 |> run("dn_ba (the prefill's f32 beta/alpha GEMM) == the CPU dot at a partial tile and past one workgroup") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            verify(ensure_dn_ba_cls(), "the dn_ba class rail must engage on a live device")
+            let dim = 256
+            let nvh = 8
+            let ne = 2 * nvh
+            let woff = 64          // the layer's row base in the f32 plane
+            let ostride = nvh
+            for (npos in [21, 40]) {   // a partial 16-row tile alone; two full tiles + a partial one
+                let ob_b = 16
+                let ob_g = ob_b + npos * ostride + 8
+                let out_n = ob_g + npos * ostride
+                var wh : array<float>
+                var xh : array<float>
+                var want : array<float>
+                wh |> resize(woff + ne * dim)
+                xh |> resize(npos * dim)
+                want |> resize(out_n)
+                for (i in range(length(wh))) {
+                    wh[i] = float(hash_word(uint(i)) % 1000u) / 500.0 - 1.0
+                }
+                for (i in range(length(xh))) {
+                    xh[i] = float(hash_word(uint(i) + 77777u) % 1000u) / 500.0 - 1.0
+                }
+                for (p in range(npos)) {
+                    for (e in range(ne)) {
+                        var acc = 0.0
+                        for (k in range(dim)) {
+                            acc += wh[woff + e * dim + k] * xh[p * dim + k]
+                        }
+                        want[(e < nvh ? ob_b : ob_g) + p * ostride + e % nvh] = acc
+                    }
+                }
+                let w_bytes = int64(length(wh)) * 4l
+                let x_bytes = int64(length(xh)) * 4l
+                let o_bytes = int64(out_n) * 4l
+                let wd = make_device_buf(w_bytes)
+                let xd = make_device_buf(x_bytes)
+                let od = make_device_buf(o_bytes)
+                var host = make_host_buf(o_bytes, true, [cached = true])
+                var got : array<float>
+                got |> resize(out_n)
+                unsafe {
+                    upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
+                    upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
+                    var sc = set_dn_ba_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    var pc = DnBaArgs(npos = uint(npos), dim = uint(dim), nvh = uint(nvh), woff = uint(woff), xstride = uint(dim),
+                        obase_b = uint(ob_b), obase_g = uint(ob_g), ostride = uint(ostride))
+                    enc_dn_ba_cls(raw, h, sc, pc, int64((npos + 15) / 16))
+                    vhz_dep(raw, h, 2u, 0u, true)
+                    cmd_copy_range(raw, od, 0l, host.buf, 0l, o_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(got[0]), host.mapped, o_bytes)
+                }
+                // the untouched words between the two planes must stay untouched - compare the written rows only
+                var bad = 0
+                for (p in range(npos)) {
+                    for (e in range(ne)) {
+                        let at = (e < nvh ? ob_b : ob_g) + p * ostride + e % nvh
+                        if (abs(got[at] - want[at]) > 1e-3 * max(1.0, abs(want[at]))) {
+                            bad++
+                        }
+                    }
+                }
+                t |> success(bad == 0, "dn_ba npos {npos}: {bad} of {npos * ne} outputs off the CPU dot")
+                delete wh
+                delete xh
+                delete want
+                delete got
+            }
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+// the 9B-class geometry the small-model zoo never reaches: 32 value heads over ds 128 (the scan's
+// 8-lane column clusters, all three shuffle stages) and a full 64-row beta/alpha tile; one dispatch
+// each, logged before the submit and timed after it, so a device hang names its kernel
+[test]
+def test_vkd_dn_9b_scan(t0 : T?) {
+    t0 |> run("dn_scan at the 9B geometry (32 heads, ds 128, 512 rows) == the sequential CPU delta rule") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            if (!g_gpu.dn_shared_ok) {
+                feint("dn chain declined on this device (shared-memory cap) - skipping\n")
+                return
+            }
+            verify(ensure_dn_scan_cls(), "the dn_scan class rail must engage on a live device")
+            let ds = 128
+            let nkh = 16
+            let nvh = 32
+            let kd = nkh * ds
+            let di = nvh * ds
+            let cd = 2 * kd + di
+            let npos = 512
+            let beta_off = 16
+            let g_off = beta_off + npos * nvh
+            let a_off = g_off + npos * nvh
+            let dt_off = a_off + nvh
+            let sm_n = dt_off + nvh
+            let o_off = 64   // the o rows sit past a header the kernel must leave alone
+            let o_n = o_off + npos * di
+            var convh : array<float>
+            var sth : array<float>
+            var smh : array<float>
+            convh |> resize(npos * cd)
+            sth |> resize(nvh * ds * ds)
+            smh |> resize(sm_n)
+            for (i in range(npos * cd)) {   // unit-scale q/k rows keep the 512-step recurrence bounded
+                convh[i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
+            }
+            for (i in range(nvh * ds * ds)) {
+                sth[i] = float((i * 13) % 53) * 0.02 - 0.5
+            }
+            for (i in range(sm_n)) {
+                smh[i] = float((i * 17) % 43) * 0.03 - 0.6
+            }
+            for (i in range(nvh)) {
+                smh[a_off + i] = -0.4 - float(i) * 0.1
+            }
+            let conv_bytes = int64(npos * cd) * 4l
+            let st_bytes = int64(nvh * ds * ds) * 4l
+            let sm_bytes = int64(sm_n) * 4l
+            let o_bytes = int64(o_n) * 4l
+            let convd = make_device_buf(conv_bytes)
+            let st2 = make_device_buf(st_bytes)
+            let smd = make_device_buf(sm_bytes)
+            let od = make_device_buf(o_bytes)
+            var host = make_host_buf(o_bytes + st_bytes, true, [cached = true])
+            var got : array<float>
+            got |> resize(o_n + nvh * ds * ds)
+            let wgs = dn_scan_wgs(int64(nvh), int64(ds))
+            unsafe {
+                upload_region_at(convd, 0l, addr<uint8 const?>(convh[0]), conv_bytes)
+                upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
+                upload_region_at(st2, 0l, addr<uint8 const?>(sth[0]), st_bytes)
+                var sc = set_dn_scan_cls(fixed_array(convd, st2, smd, od),
+                    fixed_array(conv_bytes, st_bytes, sm_bytes, o_bytes),
+                    fixed_array(1u, 2u, 8u, 4u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd),
+                    nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                    beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off),
+                    dt_off = uint(dt_off), o_off = uint(o_off), di = uint(di))
+                enc_dn_scan_cls(raw, h, sc, pcs, wgs)
+                vhz_dep(raw, h, 2u | 4u, 0u, true)
+                cmd_copy_range(raw, od, 0l, host.buf, 0l, o_bytes)
+                cmd_copy_range(raw, st2, 0l, host.buf, o_bytes, st_bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                to_log(LOG_INFO, "dn_scan 9B: dispatching {wgs} workgroups over {npos} rows\n")
+                let tick = ref_time_ticks()
+                submit_wait(raw)
+                to_log(LOG_INFO, "dn_scan 9B: submit + wait {get_time_usec(tick)} us\n")
+                memcpy(addr<void?>(got[0]), host.mapped, o_bytes + st_bytes)
+            }
+            // oracle: the sequential delta rule per head, raw o rows (the out-norm is phase 3's)
+            var ref : array<float>
+            ref |> resize(length(got))
+            for (i in range(o_off)) {
+                ref[i] = 0.0
+            }
+            var st_h : array<float>
+            var dvn : array<float>
+            st_h |> resize(ds * ds)
+            dvn |> resize(ds)
+            for (hh in range(nvh)) {
+                let kh = hh % nkh
+                for (e in range(ds * ds)) {
+                    st_h[e] = sth[hh * ds * ds + e]
+                }
+                for (tt in range(npos)) {
+                    let crow = tt * cd
+                    let graw = smh[g_off + tt * nvh + hh] + smh[dt_off + hh]
+                    let eg = exp(smh[a_off + hh] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
+                    let bt = 1.0 / (1.0 + exp(-smh[beta_off + tt * nvh + hh]))
+                    for (j in range(ds)) {
+                        var ks = 0.0
+                        for (i in range(ds)) {
+                            ks += convh[crow + kd + kh * ds + i] * st_h[i * ds + j]
+                        }
+                        dvn[j] = bt * (convh[crow + 2 * kd + hh * ds + j] - eg * ks)
+                    }
+                    for (e in range(ds * ds)) {
+                        st_h[e] = st_h[e] * eg + convh[crow + kd + kh * ds + e / ds] * dvn[e % ds]
+                    }
+                    for (j in range(ds)) {
+                        var qs = 0.0
+                        for (i in range(ds)) {
+                            qs += convh[crow + kh * ds + i] * st_h[i * ds + j]
+                        }
+                        ref[o_off + tt * di + hh * ds + j] = qs
+                    }
+                }
+                for (e in range(ds * ds)) {
+                    ref[o_n + hh * ds * ds + e] = st_h[e]
+                }
+            }
+            let bad = mismatch_bars(got, ref, 1e-2, 1e-2 * max_abs(ref))
+            t |> success(bad == 0, "dn_scan 9B geometry: {bad} of {length(got)} o-row and state values off the sequential oracle")
+            delete convh
+            delete sth
+            delete smh
+            delete got
+            delete ref
+            delete st_h
+            delete dvn
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+[test]
+def test_vkd_dn_9b_ba(t0 : T?) {
+    t0 |> run("dn_ba at the 9B geometry (dim 4096, 32 heads, 512 rows) == the CPU dot") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            verify(ensure_dn_ba_cls(), "the dn_ba class rail must engage on a live device")
+            let dim = 4096
+            let nvh = 32
+            let ne = 2 * nvh
+            let npos = 512
+            let woff = ne * dim   // the second layer's rows: the base offset is under test too
+            let ostride = nvh
+            let ob_b = 16
+            let ob_g = ob_b + npos * ostride + 8
+            let out_n = ob_g + npos * ostride
+            var wh : array<float>
+            var xh : array<float>
+            var want : array<float>
+            wh |> resize(woff + ne * dim)
+            xh |> resize(npos * dim)
+            want |> resize(out_n)
+            for (i in range(length(wh))) {
+                wh[i] = float(hash_word(uint(i)) % 1000u) / 500.0 - 1.0
+            }
+            for (i in range(length(xh))) {
+                xh[i] = float(hash_word(uint(i) + 77777u) % 1000u) / 500.0 - 1.0
+            }
+            for (p in range(npos)) {
+                for (e in range(ne)) {
+                    var acc = 0.0
+                    for (k in range(dim)) {
+                        acc += wh[woff + e * dim + k] * xh[p * dim + k]
+                    }
+                    want[(e < nvh ? ob_b : ob_g) + p * ostride + e % nvh] = acc
+                }
+            }
+            let w_bytes = int64(length(wh)) * 4l
+            let x_bytes = int64(length(xh)) * 4l
+            let o_bytes = int64(out_n) * 4l
+            let wd = make_device_buf(w_bytes)
+            let xd = make_device_buf(x_bytes)
+            let od = make_device_buf(o_bytes)
+            var host = make_host_buf(o_bytes, true, [cached = true])
+            var got : array<float>
+            got |> resize(out_n)
+            let wgs = int64((npos + 15) / 16)
+            unsafe {
+                upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
+                upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
+                var sc = set_dn_ba_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                var pc = DnBaArgs(npos = uint(npos), dim = uint(dim), nvh = uint(nvh), woff = uint(woff), xstride = uint(dim),
+                    obase_b = uint(ob_b), obase_g = uint(ob_g), ostride = uint(ostride))
+                enc_dn_ba_cls(raw, h, sc, pc, wgs)
+                vhz_dep(raw, h, 2u, 0u, true)
+                cmd_copy_range(raw, od, 0l, host.buf, 0l, o_bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                to_log(LOG_INFO, "dn_ba 9B: dispatching {wgs} workgroups over {npos} rows x {ne} outputs x {dim}\n")
+                let tick = ref_time_ticks()
+                submit_wait(raw)
+                to_log(LOG_INFO, "dn_ba 9B: submit + wait {get_time_usec(tick)} us\n")
+                memcpy(addr<void?>(got[0]), host.mapped, o_bytes)
+            }
+            var bad = 0
+            for (p in range(npos)) {
+                for (e in range(ne)) {
+                    let at = (e < nvh ? ob_b : ob_g) + p * ostride + e % nvh
+                    if (abs(got[at] - want[at]) > 1e-3 * max(1.0, abs(want[at]))) {
+                        bad++
+                    }
+                }
+            }
+            t |> success(bad == 0, "dn_ba 9B geometry: {bad} of {npos * ne} outputs off the CPU dot")
+            delete wh
+            delete xh
+            delete want
+            delete got
         } else {
             feint("dasVulkan not present - skipping\n")
         }

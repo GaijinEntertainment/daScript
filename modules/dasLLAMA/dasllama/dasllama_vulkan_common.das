@@ -220,21 +220,22 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 // deltanet chain capacities (npos chunks over DN_WINDOW windows, state carried device-side).
 // Maxima match qwen35 (ds 128, 32 v-heads, conv dim 8192, dconv 4) — vk_moe_dn asserts them
 // and the engine arm fail-closes on bigger models.
-let DN_CS = 64l
-let DN_NSP = 4l   // scan phase 2: column slices of the state per head, one workgroup each (heads x slices workgroups)
 let DN_MAX_DS = 128l
+
+//! The sequential scan's workgroups: one 32-lane subgroup per (head, column group); a lane owns 16
+//! state rows of one column, so ds / 16 lanes share a column and 32 / that many columns share a workgroup.
+def dn_scan_wgs(nvh, ds : int64) : int64 {
+    let cpw = 32l / (ds / 16l)
+    return nvh * ((ds + cpw - 1l) / cpw)
+}
 let DN_MAX_HEADS = 32l
 let DN_MAX_CD = 8_192l
 let DN_MAX_DCONV = 4l
 let DN_WINDOW = 1_024l
-let DN_NCHUNKS = DN_WINDOW / DN_CS
-// phase-1 slab per (head x chunk): 7 CS x ds panels + 2 CS x CS tiles + 4 CS smalls; phase-2
-// per-head area: state working copy + och rows. ~155MB total — the price of the 2-phase scan
-let DN_SLAB = 7l * DN_CS * DN_MAX_DS + 2l * DN_CS * DN_CS + 4l * DN_CS
-let DN_P2_OFF = DN_MAX_HEADS * DN_NCHUNKS * DN_SLAB
-let DN_P2_SLAB = DN_MAX_DS * DN_MAX_DS + DN_CS * DN_MAX_DS
-let DN_O_OFF = DN_P2_OFF + DN_MAX_HEADS * DN_P2_SLAB
-let DN_WS_BYTES = (DN_O_OFF + DN_WINDOW * DN_MAX_HEADS * DN_MAX_DS) * 4l
+// the scan workspace holds the raw o rows alone (position-major, di wide; the out-norm rewrites
+// them in place): 16 MB at the maxima
+let DN_O_OFF = 0l
+let DN_WS_BYTES = DN_WINDOW * DN_MAX_HEADS * DN_MAX_DS * 4l
 let DN_STATE_BYTES = DN_MAX_HEADS * DN_MAX_DS * DN_MAX_DS * 4l
 let DN_META_BYTES = 128l
 // smalls plane float offsets, ending in the conv history region — the per-window smalls
@@ -628,10 +629,9 @@ struct GpuState {
     dn_state_host : HostBuf       // host-cached state readback (chain end)
     dn_tail_host : HostBuf        // host-cached conv-tail readback (the caller's history store)
     dn_state_dev : uint64
-    dn_ws_dev : uint64            // per-head scan slabs + the gated o rows
+    dn_ws_dev : uint64            // the scan's raw o rows, normed in place
     dn_conv_set : VkDescriptorSet
-    dn_scan_set : VkDescriptorSet      // scan phase 1 (class sets are per-class — p2/p3 have their own)
-    dn_scan_p2_set : VkDescriptorSet
+    dn_scan_set : VkDescriptorSet      // the sequential scan (conv rows, state, smalls, the o rows)
     dn_scan_p3_set : VkDescriptorSet   // the gated out-norm over the raw o rows
     dn_rq_set : VkDescriptorSet
     dn_cls_ready : bool                // the window chain's class sets (built by prefill)
@@ -2021,8 +2021,7 @@ struct RLayer {
     dn : DnStep                     // state + smalls + the session owner (the per-op step's shape; its cmd/tok/sets stay unused here)
     // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
     pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
-    pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + smalls -> dn_ws_dev (scan phase 1)
-    pf_dn_scan_p2_set : VkDescriptorSet    // this layer's state + dn_ws (scan phase 2)
+    pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
     pf_dn_scan_p3_set : VkDescriptorSet    // pf_dnz + dn_ws + this layer's smalls (the gated out-norm)
     pf_dn_tail_set : VkDescriptorSet       // pf_dnqkv last taps rows -> this layer's smalls ring image
     pf_dn_ba_set : VkDescriptorSet         // f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (batched router GEMV)
@@ -2266,7 +2265,7 @@ let VHB_COMB = 0x20u      // combine weight/bucket planes
 let VHB_CY = 0x40u        // combine accumulator
 let VHB_SM = 0x80u        // smalls image (dn/at)
 let VHB_ST = 0x100u       // dn recurrent state
-let VHB_WS = 0x200u       // dn slabs/o scratch
+let VHB_WS = 0x200u       // dn o-row scratch
 let VHB_ATQ = 0x400u      // at deinterleaved q rows
 let VHB_ATG = 0x800u      // at gate/o rows
 let VHB_ATK = 0x1000u     // at roped-k panel

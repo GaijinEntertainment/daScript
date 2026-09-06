@@ -34,8 +34,8 @@ rebuilt binary aged the sidecar; Boris ruled no re-mint until Vulkan is fully fu
   partial rope, and the NextN draft arm at `l == n_layers`.
 - Every Vulkan kernel the ladder needs is a class kernel already: the fused decode step
   `dn_step_cls` with its per-layer `DnStep` (state, smalls, parity ring, session owner -
-  `ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2u), the chunked prefill chain
-  `dn_conv_cls` / `dn_scan_p1_cls` / `dn_scan_p2_cls` (`record_dn_cmd`), and the attention
+  `ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2u), the prefill chain
+  `dn_conv_cls` / `dn_scan_cls` / `dn_scan_p3_cls` (`record_dn_cmd`), and the attention
   prep/attention pair `at_prep_cls` / `at_attn_cls` whose `flags` already carry the gated
   deinterleave and the sigmoid epilogue (`record_at_cmd`).
 - The resident token command (`rd_encode_token`) is one recorded chain per layer: requant, q/k/v
@@ -126,10 +126,11 @@ rebuilt binary aged the sidecar; Boris ruled no re-mint until Vulkan is fully fu
    - Recurrent layer, per window: the qkv and z batch GEMMs (`pf_gemm_enc` into new
      `pf_dnqkv [np x cd]` and `pf_dnz [np x di]` planes), the beta/alpha rows for every position
      into the layer's smalls at `DN_SM_BETA`/`DN_SM_G` (position-major `[pos][nvh]`, the layout
-     `dn_scan_p1_cls` reads; q8 arm = a batch GEMM with `d = nvh`, f32 arm = `router_gemv_cls`
-     grown a row count and an x stride), then `dn_conv_cls` (history from the layer's ring image at
-     the shared parity on the first window, from the tail rows after), `dn_scan_p1_cls` /
-     `dn_scan_p2_cls` over the layer's own `L.dn.state_dev` and the tier's `dn_ws_dev`, the o
+     `dn_scan_cls` reads; q8 arm = a batch GEMM with `d = nvh`, f32 arm = `dn_ba_cls`, a
+     16-position tile GEMM over the `[beta ; alpha]` rows), then `dn_conv_cls` (history from the
+     layer's ring image at the shared parity on the first window, from the tail rows after),
+     `dn_scan_cls` (the sequential scan over the layer's own `L.dn.state_dev`, raw o rows into the
+     tier's `dn_ws_dev`) and `dn_scan_p3_cls` (the gated out-norm in place), the o
      requant, the out batch GEMM into `pf_xb2`, and the shared FFN tail. The last window's tail
      rows land in the decode ring's per-channel layout (a small transpose kernel, taps x cd ->
      cd x taps, into the image the next decode step reads); the state stays on device, dirty,

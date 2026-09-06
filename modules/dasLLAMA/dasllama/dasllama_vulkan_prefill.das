@@ -411,7 +411,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
     pfq_ts(raw)
 }
 
-// One recurrent layer's prefill window sets (conv, scan p1/p2, the conv-tail extract, and the
+// One recurrent layer's prefill window sets (conv, the scan, the out-norm, the conv-tail extract, and the
 // f32 arm's row-strided beta/alpha router GEMV); the o requant is the shared g_rd.pf_dnrq_set.
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_dn_layer_sets(l, dim, cd, di : int64) {
@@ -421,14 +421,10 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(g_rd.pf_dnqkv, g_rd.pf_dnconv, L.dn.smalls_dev),
         fixed_array(np * cd * 4l, np * cd * 4l, DND_SMALLS_BYTES),
         fixed_array(VHZ_DNP, VHZ_DNC, VHZ_DNSM))
-    L.pf_dn_scan_set = set_dn_scan_p1_cls(
-        fixed_array(g_rd.pf_dnconv, L.dn.smalls_dev, g_gpu.dn_ws_dev),
-        fixed_array(np * cd * 4l, DND_SMALLS_BYTES, DN_WS_BYTES),
-        fixed_array(VHZ_DNC, VHZ_DNSM, VHZ_DNWS))
-    L.pf_dn_scan_p2_set = set_dn_scan_p2_cls(
-        fixed_array(L.dn.state_dev, g_gpu.dn_ws_dev),
-        fixed_array(L.dn.state_bytes, DN_WS_BYTES),
-        fixed_array(VHZ_DNST, VHZ_DNWS))
+    L.pf_dn_scan_set = set_dn_scan_cls(
+        fixed_array(g_rd.pf_dnconv, L.dn.state_dev, L.dn.smalls_dev, g_gpu.dn_ws_dev),
+        fixed_array(np * cd * 4l, L.dn.state_bytes, DND_SMALLS_BYTES, DN_WS_BYTES),
+        fixed_array(VHZ_DNC, VHZ_DNST, VHZ_DNSM, VHZ_DNWS))
     L.pf_dn_scan_p3_set = set_dn_scan_p3_cls(
         fixed_array(g_rd.pf_dnz, g_gpu.dn_ws_dev, L.dn.smalls_dev),
         fixed_array(np * di * 4l, DN_WS_BYTES, DND_SMALLS_BYTES),
@@ -438,7 +434,7 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(np * cd * 4l, DND_SMALLS_BYTES),
         fixed_array(VHZ_DNP, VHZ_DNSM))
     if (g_rd.dn_ba_f32) {
-        L.pf_dn_ba_set = set_router_gemv_cls(
+        L.pf_dn_ba_set = set_dn_ba_cls(
             fixed_array(g_rd.dn_ba_dev, g_rd.pf_xb, L.dn.smalls_dev),
             fixed_array(g_rd.dn_ba_bytes, np * dim * 4l, DND_SMALLS_BYTES),
             fixed_array(0u, VHZ_XB, VHZ_DNSM))
@@ -464,7 +460,7 @@ def private pf_dn_reset(l, nvh, ds, cd, taps : int64) {
 }
 
 // One recurrent layer's block into the prefill window command: plain requant, qkv + z GEMMs, the
-// beta/alpha rows into the layer smalls, conv, the two-phase scan over its own device state, the
+// beta/alpha rows into the layer smalls, conv, the sequential scan over its own device state, the
 // o requant, and the out GEMM into pf_xb2; the last window transposes the tail into the decode ring.
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen : int64; last : bool) {
@@ -492,10 +488,9 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         pz.wqb, pz.wsb, np * dim, np * (dim / 32l) * 4l, np * di * 4l, VHZ_XQ, VHZ_DNZ, dim, di, L.bz, wlen, false)
     // beta/alpha rows into the layer smalls at the scan's beta/g offsets (position-major [pos][nvh]); the f32 pair shares one profile stamp, the q8 GEMMs stamp themselves
     if (g_rd.dn_ba_f32) {
-        var pcb = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA), xstride = uint(dim), ostride = uint(nvh))
-        enc_router_gemv_cls(raw, h, L.pf_dn_ba_set, pcb, nvh * wlen)
-        var pcg = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off + nvh * dim), obase = uint(DN_SM_G), xstride = uint(dim), ostride = uint(nvh))
-        enc_router_gemv_cls(raw, h, L.pf_dn_ba_set, pcg, nvh * wlen)
+        var pcb = DnBaArgs(npos = uint(wlen), dim = uint(dim), nvh = uint(nvh), woff = uint(L.ba_off), xstride = uint(dim),
+            obase_b = uint(DN_SM_BETA), obase_g = uint(DN_SM_G), ostride = uint(nvh))
+        enc_dn_ba_cls(raw, h, L.pf_dn_ba_set, pcb, (wlen + 15l) / 16l)
         pfq_ts(raw)
     } else {
         let pb = arena_planes(int(KqFmt.q8), L.bbeta)
@@ -515,14 +510,11 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         eps = eps, qscale = 1.0 / sqrt(float(ds)))
     enc_dn_conv_cls(raw, h, L.pf_dn_conv_set, pcc, wlen)
     pfq_ts(raw)
-    var pc1 = DnScanP1Args(npos = uint(wlen), cd = uint(cd), kd = uint(kd), nvh = uint(nvh),
-        nkh = uint(nkh), ds = uint(ds), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
-        a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT), slab_stride = uint(DN_SLAB))
-    enc_dn_scan_p1_cls(raw, h, L.pf_dn_scan_set, pc1, nvh * ((wlen + DN_CS - 1l) / DN_CS))
+    var pcs = DnScanArgs(npos = uint(wlen), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+        beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
+        o_off = uint(DN_O_OFF), di = uint(di))
+    enc_dn_scan_cls(raw, h, L.pf_dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
     pfq_ts(raw)
-    var pc2 = DnScanP2Args(npos = uint(wlen), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
-        slab_stride = uint(DN_SLAB), st_off = uint(DN_P2_OFF), nsp = uint(DN_NSP))
-    enc_dn_scan_p2_cls(raw, h, L.pf_dn_scan_p2_set, pc2, nvh * DN_NSP)
     var pc3 = DnScanP3Args(npos = uint(wlen), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
         wnorm_off = uint(DN_SM_WNORM), eps = eps)
     enc_dn_scan_p3_cls(raw, h, L.pf_dn_scan_p3_set, pc3, wlen)
@@ -547,7 +539,7 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
 }
 
 // the prefill profile's stamps per layer: the attention head's roles (+ qkn), or the recurrent head's
-// (rq_x qkv z [beta alpha | ba] conv scan1 scan2 tail rq_o out), then the shared FFN tail's seven
+// (rq_x qkv z [beta alpha | ba] conv scan onorm tail rq_o out), then the shared FFN tail's seven
 def private pf_roles_per_layer(recurrent : bool) : int64 {
     if (recurrent) {
         return 7l + (g_rd.dn_ba_f32 ? 10l : 11l)
@@ -675,8 +667,8 @@ def private pf_setup {
     }
     if (g_rd.hybrid) {
         ensure_dn_state()   // dn_ws_dev (the scan workspace) + the staging buffers the reset/handoff ride
-        verify(ensure_dn_conv_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls() && ensure_dn_scan_p3_cls()
-            && ensure_dn_tail_cls() && (!g_rd.dn_ba_f32 || ensure_router_gemv_cls()),
+        verify(ensure_dn_conv_cls() && ensure_dn_scan_cls() && ensure_dn_scan_p3_cls()
+            && ensure_dn_tail_cls() && (!g_rd.dn_ba_f32 || ensure_dn_ba_cls()),
             "vk prefill: the deltanet class rails must engage on a live device")
         let cd = g_rd.dn_cd
         let di = g_rd.dn_di
@@ -1254,7 +1246,7 @@ def private pf_prof_report(npos : int64) {
     if (ndn > 0l) {
         let o = g_rd.dn_ba_f32 ? 0l : 1l   // the q8 arm stamps beta and alpha apart
         let ba = g_rd.dn_ba_f32 ? "ba {int(dn[3])}" : "beta {int(dn[3])} alpha {int(dn[4])}"
-        to_log(LOG_INFO, "vk_rdpf dn rq_x {int(dn[0])} qkv {int(dn[1])} z {int(dn[2])} {ba} conv {int(dn[4 + o])} scan1 {int(dn[5 + o])} scan2 {int(dn[6 + o])} tail {int(dn[7 + o])} rq_o {int(dn[8 + o])} out {int(dn[9 + o])} ar1 {int(dn[10 + o])} rq_f {int(dn[11 + o])} gate {int(dn[12 + o])} up {int(dn[13 + o])} act {int(dn[14 + o])} down {int(dn[15 + o])} ar2 {int(dn[16 + o])}\n")
+        to_log(LOG_INFO, "vk_rdpf dn rq_x {int(dn[0])} qkv {int(dn[1])} z {int(dn[2])} {ba} conv {int(dn[4 + o])} scan {int(dn[5 + o])} onorm {int(dn[6 + o])} tail {int(dn[7 + o])} rq_o {int(dn[8 + o])} out {int(dn[9 + o])} ar1 {int(dn[10 + o])} rq_f {int(dn[11 + o])} gate {int(dn[12 + o])} up {int(dn[13 + o])} act {int(dn[14 + o])} down {int(dn[15 + o])} ar2 {int(dn[16 + o])}\n")
     }
 }
 
@@ -1860,20 +1852,16 @@ def private ensure_dn_cls_sets {
     if (g_gpu.dn_cls_ready) {
         return
     }
-    verify(ensure_dn_conv_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls() && ensure_dn_scan_p3_cls() && ensure_cls_dn_rq(),
+    verify(ensure_dn_conv_cls() && ensure_dn_scan_cls() && ensure_dn_scan_p3_cls() && ensure_cls_dn_rq(),
         "vk deltanet chain: the class rails must engage on a live device")
     g_gpu.dn_conv_set = set_dn_conv_cls(
         fixed_array(g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.dn_smalls_dev),
         fixed_array(BATCH_Y_BYTES, BATCH_HQ_BYTES, DN_SMALLS_BYTES),
         fixed_array(VHB_Y1, VHB_HQ, VHB_SM))
-    g_gpu.dn_scan_set = set_dn_scan_p1_cls(
-        fixed_array(g_gpu.hq_dev, g_gpu.dn_smalls_dev, g_gpu.dn_ws_dev),
-        fixed_array(BATCH_HQ_BYTES, DN_SMALLS_BYTES, DN_WS_BYTES),
-        fixed_array(VHB_HQ, VHB_SM, VHB_WS))
-    g_gpu.dn_scan_p2_set = set_dn_scan_p2_cls(
-        fixed_array(g_gpu.dn_state_dev, g_gpu.dn_ws_dev),
-        fixed_array(DN_STATE_BYTES, DN_WS_BYTES),
-        fixed_array(VHB_ST, VHB_WS))
+    g_gpu.dn_scan_set = set_dn_scan_cls(
+        fixed_array(g_gpu.hq_dev, g_gpu.dn_state_dev, g_gpu.dn_smalls_dev, g_gpu.dn_ws_dev),
+        fixed_array(BATCH_HQ_BYTES, DN_STATE_BYTES, DN_SMALLS_BYTES, DN_WS_BYTES),
+        fixed_array(VHB_HQ, VHB_ST, VHB_SM, VHB_WS))
     g_gpu.dn_scan_p3_set = set_dn_scan_p3_cls(
         fixed_array(g_gpu.batch_y2_dev, g_gpu.dn_ws_dev, g_gpu.dn_smalls_dev),
         fixed_array(BATCH_Y_BYTES, DN_WS_BYTES, DN_SMALLS_BYTES),
@@ -1922,18 +1910,15 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
         eps = eps, qscale = 1.0 / sqrt(float(ds)))
     enc_dn_conv_cls(raw, h, g_gpu.dn_conv_set, pcc, rows)
     pfq_ts(raw)   // q3: conv
-    var pc1 = DnScanP1Args(npos = uint(rows), cd = uint(cd), kd = uint(kd), nvh = uint(nvh),
-        nkh = uint(nkh), ds = uint(ds), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
-        a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT), slab_stride = uint(DN_SLAB))
-    enc_dn_scan_p1_cls(raw, h, g_gpu.dn_scan_set, pc1, nvh * ((rows + DN_CS - 1l) / DN_CS))
-    pfq_ts(raw)   // q4: scan phase 1
-    var pc2 = DnScanP2Args(npos = uint(rows), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
-        slab_stride = uint(DN_SLAB), st_off = uint(DN_P2_OFF), nsp = uint(DN_NSP))
-    enc_dn_scan_p2_cls(raw, h, g_gpu.dn_scan_p2_set, pc2, nvh * DN_NSP)
+    var pcs = DnScanArgs(npos = uint(rows), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+        beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
+        o_off = uint(DN_O_OFF), di = uint(di))
+    enc_dn_scan_cls(raw, h, g_gpu.dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
+    pfq_ts(raw)   // q4: the scan
     var pc3 = DnScanP3Args(npos = uint(rows), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
         wnorm_off = uint(DN_SM_WNORM), eps = eps)
     enc_dn_scan_p3_cls(raw, h, g_gpu.dn_scan_p3_set, pc3, rows)
-    pfq_ts(raw)   // q5: scan phase 2 (+ the out-norm)
+    pfq_ts(raw)   // q5: the out-norm
     // conv-tail extraction: last `taps` RAW qkv rows out of y1 before out-proj reuses it
     if (!last) {
         vhz_dep(raw, h, VHB_Y1, VHB_SM, true)

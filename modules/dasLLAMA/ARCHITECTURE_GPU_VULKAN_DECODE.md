@@ -216,8 +216,8 @@ two arms need qk-norm, and a model with either but without it declines by name.
 
 **The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN.md`
 sec.2.2j): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
-rows into the layer's own smalls, the conv, the two-phase chunked scan over the layer's own
-device state slot and the tier's scan workspace, the o requant and the out GEMM into the block
+rows into the layer's own smalls, the conv, the sequential scan over the layer's own device
+state slot (the raw o rows in the tier's workspace), the o requant and the out GEMM into the block
 output, so the window command needs no host round trip per layer. The state slots are the
 decode's (`RLayer.dn`): the prefill zeroes them at window 0 (a position-zero prefill starts the
 forward-only state fresh - the engine's `dn_reset` on the host, the chain's own zero copy on the
