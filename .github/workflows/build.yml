@@ -213,6 +213,7 @@ jobs:
               libflac-dev \
               libclang-dev \
               libx11-dev \
+              libdbus-1-dev \
               libxrandr-dev \
               libxcursor-dev \
               libxinerama-dev \
@@ -687,6 +688,7 @@ jobs:
           libvorbis-dev \
           libflac-dev \
           libx11-dev \
+          libdbus-1-dev \
           libxrandr-dev \
           libxcursor-dev \
           libxinerama-dev \

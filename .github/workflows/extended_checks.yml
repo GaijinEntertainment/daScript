@@ -142,6 +142,7 @@ jobs:
               libgl1-mesa-dev \
               libglfw3-dev \
               libx11-dev \
+              libdbus-1-dev \
               libxrandr-dev \
               libxcursor-dev \
               libxinerama-dev \

@@ -33,6 +33,10 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         *result = has_module("pugixml")
         return
     }
+    if (folder_name == "stddlg") {
+        *result = has_module("stddlg")
+        return
+    }
     if (folder_name == "dasSQLITE") {
         *result = has_module("sqlite")
         return

@@ -388,7 +388,7 @@ set(DAS_AOT_SUITES
     fixed_array flatten fs functional gc glsl handle_types hash_map interfaces jit
     jobque json jsonrpc language linq lint long_array_table loops lpipe lsp
     macro_boost macro_call match math mcp md_boost module_cache module_tests option promote quote
-    reader_macro regex rtti safe_addr soa spoof strings stbimage table_packed template
+    reader_macro regex rtti safe_addr soa spoof stddlg strings stbimage table_packed template
     tests type_lattice type_traits typemacro uri watchdog with_boost delegate)
 foreach(_s IN LISTS DAS_AOT_SUITES)
     string(TOUPPER ${_s} _u)
