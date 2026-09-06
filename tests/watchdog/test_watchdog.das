@@ -237,8 +237,19 @@ def with_tray_watchdog(t : T?; url : string; env : array<string>; blk : block<(v
     unsafe {
         close_process(wd)
     }
-    let cleanup = rmdir_rec_result(root)
-    t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    // close_process kills the watchdog and its tree; Windows releases their handles on the
+    // log and the state dir a moment later, so the removal retries
+    var removed = false
+    for (_attempt in range(40)) {
+        let cleanup = rmdir_rec_result(root)
+        removed = cleanup is value && cleanup as value
+        if (removed || !fexist(root)) {
+            removed = true
+            break
+        }
+        sleep(50u)
+    }
+    t |> success(removed, "temp dir removed")
 }
 
 [test]
