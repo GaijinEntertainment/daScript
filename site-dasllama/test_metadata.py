@@ -107,5 +107,50 @@ class SiteMetadataTest(unittest.TestCase):
         self.assertIn("redir /index.html / 308", snippet)
 
 
+STORYTELLER_SHELL = REPO_ROOT / "examples" / "dasLLAMA" / "storyteller" / "web_shell.html"
+
+
+class StorytellerShellTest(unittest.TestCase):
+    """The storyteller page (examples/dasLLAMA/storyteller/web_shell.html, served at
+    /examples/storyteller/) guards the browser before it loads the program: emcc's script tag
+    lands in an inert template and only a browser that passes the memory64 and isolation probes
+    gets a live copy. A shell that moved the placeholder out of the template would run emcc's
+    user-agent check on Safari again and leave the download line up forever."""
+
+    def setUp(self):
+        self.text = STORYTELLER_SHELL.read_text(encoding="utf-8")
+
+    def test_program_tag_is_inert_until_the_guard_runs(self):
+        placeholder = "{{{ SCRIPT }}}"
+        self.assertEqual(self.text.count(placeholder), 1, "emcc substitutes exactly one placeholder")
+        start = self.text.index('<template id="loader">')
+        end = self.text.index("</template>", start)
+        self.assertIn(placeholder, self.text[start:end], "the placeholder sits inside the loader template")
+        # the guard is the only path to a live program tag: it copies the template's src
+        self.assertIn("document.getElementById('loader').content.querySelector('script')", self.text)
+        self.assertLess(self.text.index("WebAssembly.validate("), self.text.index("function runStoryteller()"),
+                        "the memory64 probe is decided before the program path")
+
+    def test_the_only_live_scripts_are_the_site_files(self):
+        parser = MetadataParser()
+        scripts = []
+        parser.handle_starttag_orig = parser.handle_starttag
+
+        def handle_starttag(tag, attrs):
+            if tag == "script" and dict(attrs).get("src"):
+                scripts.append(dict(attrs)["src"])
+            parser.handle_starttag_orig(tag, attrs)
+
+        parser.handle_starttag = handle_starttag
+        parser.feed(self.text)
+        for src in scripts:
+            self.assertTrue(src.startswith("/files/") or src.startswith("//gc.zgo.at/"),
+                            f"a live script tag the guard does not control: {src}")
+
+    def test_the_notes_name_what_the_browser_lacks(self):
+        for needle in ("memory64", "Safari", "iPhone", "SharedArrayBuffer", "back to the examples", "force=unsupported"):
+            self.assertIn(needle, self.text, f"the shell names {needle!r}")
+
+
 if __name__ == "__main__":
     unittest.main()

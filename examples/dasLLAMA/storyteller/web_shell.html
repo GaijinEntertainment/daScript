@@ -35,14 +35,22 @@
     background: transparent; color: #f2b955; font: inherit; font-size: 16px; cursor: pointer;
   }
   #start:hover { background: #f2b955; color: #12101a; }
+  #note { max-width: 520px; text-align: center; line-height: 1.6; }
+  #note b { color: #f4e9d2; font-weight: 500; }
+  #note a { color: #f2b955; }
 </style>
 </head>
 <body>
 <!-- The storyteller's shell: the dasllama.io nav on top (its css and script come from the
-     site root, /files/), then the stage. The shell fetches the story model, the TTS model and
-     its phoneme packs into MEMFS before the program starts, then waits for a click - browsers
-     only let audio start from a gesture. Models come from ./models/ beside the page, or
-     ?models=<base url>. -->
+     site root, /files/), then the stage. The shell checks the browser first - the build is
+     wasm64 (memory64) with real Web Workers, so it needs an engine with memory64 (Chrome or
+     Edge 133+, Firefox 134+; Safari has none yet, and every iPhone and iPad browser is Safari's
+     engine) on a cross-origin-isolated page; a browser
+     without either gets the note below and never fetches a byte. Otherwise it fetches the
+     story model, the TTS model and its phoneme packs into MEMFS before the program starts,
+     then waits for a click - browsers only let audio start from a gesture. Models come from
+     ./models/ beside the page, or ?models=<base url>. ?force=unsupported shows the note on a
+     supporting browser, for checking the page. -->
 <nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
 <div class="dio-nav__left">
 <button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
@@ -58,11 +66,65 @@
   <p id="status">fetching the models...</p>
   <div id="bar"><i id="fill"></i></div>
   <button id="start">start</button>
+  <p id="note" hidden></p>
 </div>
 </div>
+<!-- emcc's script tag lands inside a template, where it is inert; the guard below appends a live
+     copy only on a browser that can run the build, so an unsupported one loads no program -->
+<template id="loader">{{{ SCRIPT }}}</template>
 <script>
   var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1 };
   window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key]) e.preventDefault(); }, { passive: false });
+
+  // wasm64 (memory64): validate a minimal module whose memory section carries the memory64
+  // flag (0x04) - true only where the engine parses it, unlike a Memory descriptor probe an
+  // engine can silently downgrade. Same probe as daslang.io's examples page.
+  var HAS_WASM64 = (function () {
+    try { return WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])); }
+    catch (e) { return false; }
+  })();
+  // the -pthread build runs its workers on SharedArrayBuffer, which a page gets only when the
+  // server sent the cross-origin isolation headers
+  var HAS_ISOLATION = !!(self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined');
+  var FORCE = new URLSearchParams(location.search).get('force');
+  var SUPPORTED = FORCE === 'unsupported' ? false : (HAS_WASM64 && HAS_ISOLATION);
+
+  function setStatus(text) { document.getElementById('status').textContent = text; }
+  function showNote(status, html) {
+    var note = document.getElementById('note');
+    note.innerHTML = html + '<br><a href="/examples.html">back to the examples</a>';
+    note.hidden = false;
+    setStatus(status);
+    document.getElementById('bar').hidden = true;
+    document.getElementById('start').style.display = 'none';
+  }
+
+  if (!SUPPORTED) {
+    if (FORCE === 'unsupported' || !HAS_WASM64) {
+      showNote('needs a memory64 browser',
+        '<b>This browser cannot run the storyteller.</b><br>The example is dasLLAMA compiled to ' +
+        'WebAssembly memory64, which needs Chrome or Edge 133+ or Firefox 134+ on a desktop. Safari ' +
+        'does not support memory64 yet, and on iPhone and iPad every browser runs on Safari\'s engine.');
+    } else {
+      showNote('needs SharedArrayBuffer',
+        '<b>SharedArrayBuffer is not available on this page.</b><br>The build runs on Web Workers ' +
+        'over it, and a browser grants it only to a cross-origin-isolated page - one the server ' +
+        'sends the Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers for.');
+    }
+  } else {
+    // the probes passed but the program refuses the browser anyway (emcc's own user-agent check
+    // throws "compiled without support for <browser>" at the top of its script): the error
+    // becomes the note while the gate is still up, never a download line that stays forever
+    window.addEventListener('error', function (e) {
+      if (!document.getElementById('gate') || !e.message) return;
+      var text = document.createElement('span');
+      text.textContent = e.message;
+      showNote('this browser cannot run the build', '<b>This browser cannot run the storyteller.</b><br>' + text.innerHTML);
+    });
+    runStoryteller();
+  }
+
+  function runStoryteller() {
 
   // the two prepared images (baked for this build's identity by dasllama-convert --config) and the
   // two English front-end packs - no gguf crosses the wire
@@ -70,7 +132,6 @@
   var modelsBase = new URLSearchParams(location.search).get('models') || 'models/';
   if (!modelsBase.endsWith('/')) modelsBase += '/';
 
-  function setStatus(text) { document.getElementById('status').textContent = text; }
   function setProgress(done, total) {
     document.getElementById('fill').style.width = total ? (100 * done / total) + '%' : '0';
   }
@@ -102,7 +163,7 @@
     }
   }
 
-  var Module = {
+  window.Module = {
     canvas: (function () {
       var c = document.getElementById('canvas');
       c.addEventListener('click', function () { c.focus(); });
@@ -137,7 +198,20 @@
         .catch(function (err) { setStatus('could not fetch the models: ' + err.message); });
     }],
   };
+  // the program: a live copy of the tag emcc put in the template (a cloned template script stays inert)
+  var loader = document.getElementById('loader').content.querySelector('script');
+  var live = document.createElement('script');
+  live.async = true;
+  // a script that never arrives (a partial deploy, a proxy) fires error on the element itself,
+  // with no message and no bubbling - the window listener above never sees it
+  live.onerror = function () {
+    showNote('the program did not load', '<b>The program script did not load.</b><br>' +
+      'Reload the page; if it keeps failing, the deploy is incomplete.');
+  };
+  if (loader.getAttribute('src')) live.src = loader.getAttribute('src');
+  else live.textContent = loader.textContent;
+  document.body.appendChild(live);
+  }
 </script>
-{{{ SCRIPT }}}
 </body>
 </html>
