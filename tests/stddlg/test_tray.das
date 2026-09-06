@@ -165,6 +165,31 @@ def apple_script(script : string) : string {
     }
 }
 
+//! Windows has no scriptable route to a real click on the notification area, so this arm only
+//! proves the availability gate and the create path: a service or ssh session (no visible window
+//! station) reports `@unavailable`, an interactive desktop reaches `@ready`.
+[test]
+def test_tray_windows_smoke(t : T?) {
+    if (!fexist("C:\\Windows\\explorer.exe")) {
+        t |> skip("not Windows")
+        return
+    }
+    t |> run("the fixture reaches ready on an interactive desktop, or reports unavailable") @(t : T?) {
+        var rig : TrayRig
+        let argv <- [das_exe(), fixture_path()]
+        let no_env : array<string>
+        rig.child = unsafe(spawn_process(argv, "", no_env))
+        let first = wait_for_line(t, rig, "@", 30.0)
+        if (first == "@unavailable") {
+            t |> skip("no interactive desktop for this process (session 0 or no taskbar): the icon needs a person at the box")
+        } else {
+            t |> equal(first, "@notify true")
+            t |> equal(wait_for_line(t, rig, "@ready", 30.0), "@ready")
+        }
+        stop_rig(rig)
+    }
+}
+
 [test]
 def test_tray_macos_status_item(t : T?) {
     if (!fexist("/usr/bin/osascript")) {
