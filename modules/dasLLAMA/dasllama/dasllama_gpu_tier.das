@@ -1568,6 +1568,18 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     if (g_rdec_set_cls == null) {
         g_rdec_set_cls = @@rdec_unset_set_cls
     }
+    if (g_rdec_set_dn_layer == null) {
+        g_rdec_set_dn_layer = @@rdec_unset_set_dn_layer
+    }
+    if (g_rdec_upload_dn_ba == null) {
+        g_rdec_upload_dn_ba = @@rdec_unset_upload_dn_ba
+    }
+    if (g_rdec_dn_own == null) {
+        g_rdec_dn_own = @@rdec_unset_dn_own
+    }
+    if (g_rdec_dn_prefill_own == null) {
+        g_rdec_dn_prefill_own = @@rdec_unset_dn_prefill_own
+    }
     if (g_rdec_token == null) {
         g_rdec_token = @@rdec_unset_token
     }
