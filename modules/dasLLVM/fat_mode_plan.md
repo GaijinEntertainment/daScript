@@ -62,3 +62,6 @@ among them - is raced inside the exe at first start, because that race needs no 
 - A per-box kernel sidecar choosing among the baked clones.
 - Chip-keyed shipped runtime sections, if a 14 s first-start race ever proves too slow.
 - A vnni512 class without vbmi for the pre-Ice-Lake Xeons, if anyone ships to one.
+- Per-box profiles for the shipped classes, after dasllama-server ships: an `arm-sme` class for
+  M4/M5, and an AMX crown for `x86-amx` once the tile and the gemv are separate backends -
+  `modules/dasLLAMA/followup_general.md` entry 118 carries the numbers and the plan.
