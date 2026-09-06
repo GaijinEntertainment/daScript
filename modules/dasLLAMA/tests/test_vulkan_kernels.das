@@ -4072,7 +4072,7 @@ def test_vkd_at_attn(t0 : T?) {
 
 [test]
 def test_vkd_fa_cm2(t0 : T?) {
-    t0 |> run("cm2 flash-attention family == the CPU oracle (h64 + h128, f16cvt-staged planes)") <| @(t : T?) {
+    t0 |> run("cm2 flash-attention family == the CPU oracle (h64 + h128 + h256, f16cvt-staged planes)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_f16cvt_cls()) {   // engage the device without touching coopmat rails
                 feint("no Vulkan device - skipping\n")
@@ -4082,14 +4082,14 @@ def test_vkd_fa_cm2(t0 : T?) {
                 feint("device lacks the cm2 flash-attention trio - skipping\n")
                 return
             }
-            verify(ensure_fa_cm2_h64_cls() && ensure_fa_cm2_h128_cls(), "fa class rails must engage on an fa-capable device")
-            verify(ensure_fa_cm2_h64_f16_cls() && ensure_fa_cm2_h128_f16_cls(), "fa f16-out twins must engage on an fa-capable device")
+            verify(ensure_fa_cm2_h64_cls() && ensure_fa_cm2_h128_cls() && ensure_fa_cm2_h256_cls(), "fa class rails must engage on an fa-capable device")
+            verify(ensure_fa_cm2_h64_f16_cls() && ensure_fa_cm2_h128_f16_cls() && ensure_fa_cm2_h256_f16_cls(), "fa f16-out twins must engage on an fa-capable device")
             let nheads = 4
             let kv_mul = 2
             let rows = 77    // partial 64-tile: q0=64 has 13 valid rows — clamp loads + store discard run
             let w0 = 64      // nonzero window base: the causal bound crosses K tiles mid-window
             let scale = 0.125
-            for (hs in [64, 128]) {
+            for (hs in [64, 128, 256]) {
                 let qd = nheads * hs
                 let kvd = (nheads / kv_mul) * hs
                 let kpos = w0 + rows
@@ -4163,9 +4163,12 @@ def test_vkd_fa_cm2(t0 : T?) {
                     if (hs == 64) {
                         enc_fa_cm2_h64_cls(raw2, h2, sfa, pcf, fawgs)
                         enc_fa_cm2_h64_f16_cls(raw2, h2, sfa16, pcf, fawgs)
-                    } else {
+                    } elif (hs == 128) {
                         enc_fa_cm2_h128_cls(raw2, h2, sfa, pcf, fawgs)
                         enc_fa_cm2_h128_f16_cls(raw2, h2, sfa16, pcf, fawgs)
+                    } else {
+                        enc_fa_cm2_h256_cls(raw2, h2, sfa, pcf, fawgs)
+                        enc_fa_cm2_h256_f16_cls(raw2, h2, sfa16, pcf, fawgs)
                     }
                     // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
                     var pcy = ActArgs(nelem = uint(rows * qd), gelu = 0u, nblk = 0u)
@@ -4223,6 +4226,172 @@ def test_vkd_fa_cm2(t0 : T?) {
                 delete y16_fused
                 delete y16_split
             }
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+// the gated h256 stamps at one geometry: a [q | gate] q panel (per-head stride 2 x hs), the f32
+// and f16-out twins against the CPU oracle scaled by the sigmoid of the gate half - the Qwen3.5
+// attention shape. Returns (f32 mismatches, f16-vs-f32 mismatches, outputs compared).
+def private fa_h256_gated_run(nheads, kv_mul, rows, w0 : int) : tuple<bad : int; bad16 : int; n : int> {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let hs = 256
+        let qhs = 2 * hs
+        let scale = 0.0625
+        let qd = nheads * hs
+        let qrow = nheads * qhs
+        let kvd = (nheads / kv_mul) * hs
+        let kpos = w0 + rows
+        var qp : array<float>
+        var kh : array<float>
+        var vh : array<float>
+        qp |> resize(rows * qrow)
+        kh |> resize(kpos * kvd)
+        vh |> resize(kpos * kvd)
+        for (i in range(rows * qrow)) {
+            qp[i] = float((i * 41) % 73) * 0.05 - 1.8
+        }
+        for (i in range(kpos * kvd)) {
+            kh[i] = float((i * 17) % 97) * 0.03 - 1.4
+            vh[i] = float((i * 53) % 89) * 0.04 - 1.7
+        }
+        let qp_bytes = int64(rows * qrow) * 4l
+        let m_bytes = int64(kpos * kvd) * 4l
+        let sh_bytes = int64(kpos * kvd) * 2l
+        let o_bytes = int64(rows * qd) * 4l
+        let o16_bytes = int64(rows * qd) * 2l
+        let qdev = make_device_buf(qp_bytes)
+        let kdev = make_device_buf(m_bytes)
+        let vdev = make_device_buf(m_bytes)
+        let khdev = make_device_buf(sh_bytes)
+        let vhdev = make_device_buf(sh_bytes)
+        let yd = make_device_buf(o_bytes)
+        let yh16 = make_device_buf(o16_bytes)
+        var host = make_host_buf(o_bytes + o16_bytes, true, [cached = true])
+        var y_cls : array<float>
+        var y16 : array<float16>
+        y_cls |> resize(rows * qd)
+        y16 |> resize(rows * qd)
+        unsafe {
+            upload_region_at(qdev, 0l, addr<uint8 const?>(qp[0]), qp_bytes)
+            upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
+            upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
+            var sck = set_f16cvt_cls(fixed_array(kdev, khdev), fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
+            var scv = set_f16cvt_cls(fixed_array(vdev, vhdev), fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
+            var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd),
+                fixed_array(qp_bytes, sh_bytes, sh_bytes, o_bytes), fixed_array(1u, 16u, 32u, 4u))
+            var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16),
+                fixed_array(qp_bytes, sh_bytes, sh_bytes, o16_bytes), fixed_array(1u, 16u, 32u, 64u))
+            var raw2 = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw2, begin), null)
+            var h2 : VkHaz
+            var pcv = ActArgs(nelem = uint(kpos * kvd), gelu = 0u, nblk = 0u)
+            let cvtwgs = int64((kpos * kvd / 4 + 255) / 256)
+            enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
+            enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
+            var pcf = FaCm2Args(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd),
+                kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, qrow = uint(qrow), qhs = uint(qhs))
+            let fawgs = int64(nheads * ((rows + 63) / 64))
+            enc_fa_cm2_h256_g_cls(raw2, h2, sfa, pcf, fawgs)
+            enc_fa_cm2_h256_g_f16_cls(raw2, h2, sfa16, pcf, fawgs)
+            vhz_dep(raw2, h2, 4u | 64u, 0u, true)
+            cmd_copy_whole(raw2, yd, host.buf, o_bytes)
+            cmd_copy_range(raw2, yh16, 0l, host.buf, o_bytes, o16_bytes)
+            vk_check(vkEndCommandBuffer(raw2), null)
+            submit_wait(raw2)
+            memcpy(addr<void?>(y_cls[0]), host.mapped, o_bytes)
+            memcpy(addr<void?>(y16[0]), reinterpret<void?>(intptr(host.mapped) + uint64(o_bytes)), o16_bytes)
+        }
+        // oracle: the q halves pre-scale and round to f16 like the kernel; the gate halves stay f32
+        var qp2 : array<float>
+        var kh2 : array<float>
+        var vh2 : array<float>
+        qp2 |> resize(rows * qrow)
+        kh2 |> resize(kpos * kvd)
+        vh2 |> resize(kpos * kvd)
+        for (i in range(rows * qrow)) {
+            qp2[i] = float(float16(qp[i] * scale))
+        }
+        for (i in range(kpos * kvd)) {
+            kh2[i] = float(float16(kh[i]))
+            vh2[i] = float(float16(vh[i]))
+        }
+        var y_ref : array<float>
+        y_ref |> resize(rows * qd)
+        for (r in range(rows)) {
+            for (hh in range(nheads)) {
+                attn_row_oracle(qp2, r * qrow + hh * qhs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
+                    w0 + r + 1, 1.0, y_ref, r * qd + hh * hs)
+                for (c in range(hs)) {
+                    let g = qp[r * qrow + hh * qhs + hs + c]
+                    y_ref[r * qd + hh * hs + c] *= 1.0 / (1.0 + exp(-g))
+                }
+            }
+        }
+        let bad = mismatch_approx(y_cls, y_ref)
+        var bad16 = 0
+        for (i in range(rows * qd)) {
+            if (abs(float(y16[i]) - y_cls[i]) > 2e-3 * max(1.0, abs(y_cls[i]))) {
+                bad16++
+            }
+        }
+        delete qp
+        delete kh
+        delete vh
+        delete qp2
+        delete kh2
+        delete vh2
+        delete y_ref
+        delete y_cls
+        delete y16
+        return (bad = bad, bad16 = bad16, n = rows * qd)
+    } else {
+        return (bad = 0, bad16 = 0, n = 0)
+    }
+}
+
+[test]
+def test_vkd_fa_cm2_h256_gated(t0 : T?) {
+    t0 |> run("cm2 flash-attention h256 gated == the CPU oracle (q at the head's stride, sigmoid gate on the output)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_f16cvt_cls()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            if (!g_gpu.has_coopmat2_fa) {
+                feint("device lacks the cm2 flash-attention trio - skipping\n")
+                return
+            }
+            verify(ensure_fa_cm2_h256_g_cls() && ensure_fa_cm2_h256_g_f16_cls(), "the gated h256 fa rails must engage on an fa-capable device")
+            let r = fa_h256_gated_run(4, 2, 77, 64)   // partial 64-tile, a nonzero window base
+            t |> success(r.bad == 0, "fa_cm2 h256 gated matches the CPU oracle ({r.bad} of {r.n} off)")
+            t |> success(r.bad16 == 0, "fa_cm2 h256 gated f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+// the 9B's own shape: 16 heads over 4 kv heads, a full 512-row window from position 0
+[test]
+def test_vkd_fa_cm2_h256_9b(t0 : T?) {
+    t0 |> run("cm2 flash-attention h256 gated at the 9B geometry (16 heads / 4 kv, 512 rows at w0 0) == the CPU oracle") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_f16cvt_cls()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            if (!g_gpu.has_coopmat2_fa) {
+                feint("device lacks the cm2 flash-attention trio - skipping\n")
+                return
+            }
+            verify(ensure_fa_cm2_h256_g_cls() && ensure_fa_cm2_h256_g_f16_cls(), "the gated h256 fa rails must engage on an fa-capable device")
+            let r = fa_h256_gated_run(16, 4, 512, 0)
+            t |> success(r.bad == 0, "fa_cm2 h256 gated 9B: matches the CPU oracle ({r.bad} of {r.n} off)")
+            t |> success(r.bad16 == 0, "fa_cm2 h256 gated 9B: f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
         } else {
             feint("dasVulkan not present - skipping\n")
         }

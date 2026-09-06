@@ -62,11 +62,14 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      shared per four-subgroup workgroup (17.5 -> 15.3; staging or the scalars a token ahead measured
      no faster - the dependent chain is what remains) to 2387; the beta/alpha rows f16 on the
      device and the tile GEMM regridded to 16-position x 16-output tiles (9.4 -> 6.1; the bytes
-     alone moved nothing, the grid did) to 2439 (0.965x), tg128 54.2 (0.956x), window 200 ms. What
-     is left in the window, in milliseconds: the FFN GEMMs ~78 across both heads (cm2 tiles, at
-     par); attention 21 = the scalar `DaAttnB` tile at hs 256 (the cm2 fa tile and the h128 twin
-     serve 64/128 only) - P1, the largest single role; scan 15 (a second column per lane would
-     interleave two chains); the dn GEMMs 28; ba 6; conv 5, cls 2, add+rms/act/converts ~9.
+     alone moved nothing, the grid did) to 2439 (0.965x), tg128 54.2 (0.956x), window 200 ms. DONE
+     9/6 (P1): the cm2 flash tile stamps at head 256 with a gated epilogue (`fa_cm2_h256_g[_f16]_cls`,
+     Br 64 / Bc 32, the 64x256 / 256x32 / 32x256 workgroup shapes in dasSpirv): attention 21.05 ->
+     1.29 ms over the 8 layers, window 183 ms, pp512 2660 +- 3 (two r3 pairs: 2659 / 2661) = 1.05x
+     of llama.cpp's 2527 - PREFILL PARITY; tg128 53.5 (0.94x; the decode path is untouched, the 0.7
+     drift from 54.2 is the box). What is left in the window, in milliseconds: the FFN GEMMs ~78
+     across both heads (cm2 tiles, at par); scan 15.6 (a second column per lane would interleave
+     two chains); the dn GEMMs 28.6; ba 6.3; conv 5.2, cls 2, attention 1.3, add+rms/act/converts ~9.
    - tg128 = 18.9 ms GPU/token (host wall 19.4; upstream 17.6): every GEMV role sits at 360-420
      GB/s (bandwidth-bound, at par per byte); the bytes are the gap: the loader's Q8_0 transcode of
      the deltanet qkv (Q5_K in the file, 24 x 33.5M params) and z (Q6_K) planes reads ~400 MB more
@@ -685,5 +688,15 @@ module) is independent and can land any time - it is pure structure.
     into the 1.3 struct; (c) validation messages name a shader module by "internal ID n" only -
     `vkd_class_pipe` has the kernel name in hand, so a `VK_EXT_debug_utils` object name on
     every class pipeline and module would make the next report self-identifying (today the map
-    is `DASLLAMA_VK_SPV_DUMP`'s write order, 1-based). Done = the layer's log empty of (a) and
-    (b) on the 9B window, and a validation message naming `qk_rms_cls` by name.
+    is `DASLLAMA_VK_SPV_DUMP`'s write order, 1-based). (d) found 2026-09-06 on the same window:
+    the cm2 tiles' decode callbacks take the weight block as a PhysicalStorageBuffer pointer the
+    driver forms from the bound plane, and no dasLLAMA buffer is created with the
+    SHADER_DEVICE_ADDRESS usage (VUID RuntimeSpirv-PhysicalStorageBuffer64-11819, first seen on
+    `q8_batch_cm2l_cls` once the deltanet GEMMs took the cm2 tiles; the K-quant cm2 tiles read the
+    same way). The driver serves the reads; the layer's safe mode ZEROES them, so a validated 9B
+    prefill lands garbage logits (top logit 13.37 against 7.76 plain) while the plain run is right -
+    a validation run's numerics are not evidence until (d) lands. Fix = the usage bit in
+    `make_device_buf` (and the slab/import paths), `VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT` on
+    their allocations, and `bufferDeviceAddress` in the 1.2 features at device create (the module
+    already declares the PhysicalStorageBuffer64 addressing model). Done = the layer's log empty of
+    (a), (b) and (d) on the 9B window, and a validation message naming `qk_rms_cls` by name.

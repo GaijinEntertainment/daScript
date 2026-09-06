@@ -1793,14 +1793,19 @@ def facm2_mask(r, c : uint; v : float; qbase, kbase : uint) : float => kbase + c
 [spirv_per_element, unused_argument(r, c)]
 def facm2_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
 
+[spirv_per_element, unused_argument(r, c)]
+def facm2_sigmoid(r, c : uint; v : float) : float => 1.0 / (1.0 + exp(-v))
+
 struct FaCm2Args {
     rows : uint     // window query rows
     w0 : uint       // window base (queries attend positions [0, w0 + row])
-    qd : uint       // q/o row stride (n_heads * hs)
+    qd : uint       // o row stride (n_heads * hs); the q row's too unless qrow says otherwise
     kvd : uint      // k/v row stride (n_kv * hs)
     kv_mul : uint   // GQA ratio (head / kv_mul = kv head)
     kvbase : uint   // element base of this layer's plane in the K/V shadow mirrors
     scale : float
+    qrow : uint     // the q panel's row stride when it is not qd (a gated q plane: [q | gate] per head); 0 = qd
+    qhs : uint      // the q panel's per-head stride (2 x hs on a gated plane); 0 = hs
 }
 
 // hs=64 (tinyllama-class). The h128 twin below differs only in the head-size-shaped tiles —
@@ -2003,6 +2008,131 @@ class FaCm2H128 : FaCm2H128T {
 class FaCm2H128F16 : FaCm2H128T {
     typedef OT = float16
     override OUT16 = true
+}
+
+// hs=256 (Qwen3.5-class): the h128 algorithm at Bc=32 with the head-size-shaped tiles doubled. The
+// q panel may be gated ([q | gate] per head, `qrow`/`qhs` in the args): Q loads at the head's q
+// stride, and the GATED stamps multiply the normalized output by the sigmoid of the gate half
+// before the store (the gate tile rides the same tensor layout, one head-width further in)
+[ |> template_struct_instance]
+class template FaCm2H256T {
+    @ssbo @binding = 0 qpanel : array<float>
+    @ssbo @binding = 1 kh : array<float16>
+    @ssbo @binding = 2 vh : array<float16>
+    @ssbo @binding = 3 outp : array<OT>
+    @push_constant pa : FaCm2Args
+    @template_constant OUT16 : bool = false
+    @template_constant GATED : bool = false
+
+    [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+    def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
+        let qtiles = (pa.rows + 63u) / 64u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 64u
+        let kvh = h / pa.kv_mul
+        let kvlen = pa.w0 + pa.rows
+        let qrow = pa.qrow == 0u ? pa.qd : pa.qrow
+        let qhs = pa.qhs == 0u ? 256u : pa.qhs
+        var tlq : tensorLayout2DPad
+        tensorLayoutCreate(tlq)
+        tensorLayoutSetDimension(tlq, pa.rows, qrow)
+        tensorLayoutSetStride(tlq, qrow, 1u)
+        var tlk : tensorLayout2DPad
+        tensorLayoutCreate(tlk)
+        tensorLayoutSetDimension(tlk, kvlen, pa.kvd)
+        tensorLayoutSetStride(tlk, pa.kvd, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, pa.rows, pa.qd)
+        tensorLayoutSetStride(tlo, pa.qd, 1u)
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var q : coopmatWgAcc_f32_64x256
+        coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * qhs, 256u)
+        coopmatScale(q, pa.scale)
+        var qf : coopmatWgA_f16_64x256
+        coopmatConvert(qf, q)
+        var mrow : coopmatWgAcc_f32_64x32
+        coopmatFill(mrow, -1.7e38)
+        var lrow : coopmatWgAcc_f32_64x32
+        var o : coopmatWgAcc_f32_64x256
+        let kmax = pa.w0 + min(q0 + 64u, pa.rows)
+        var j = 0u
+        while (j < kmax) {
+            var s : coopmatWgAcc_f32_64x32
+            var kt : coopmatWgB_f16_256x32
+            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 32u, kvh * 256u, 256u, tv)
+            s = coopmatMulAdd(qf, kt, s)
+            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
+            var rmax : coopmatWgAcc_f32_64x32
+            coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
+            var mold : coopmatWgAcc_f32_64x32
+            coopmatCopy(mold, mrow)
+            coopmatPerElement(mrow, rmax, @@facm2_pick, mold)
+            coopmatSub(s, s, mrow)
+            coopmatPerElement(s, s, @@facm2_exp)
+            var em : coopmatWgAcc_f32_64x32
+            coopmatSub(em, mold, mrow)
+            coopmatPerElement(em, em, @@facm2_exp)
+            var pf : coopmatWgA_f16_64x32
+            coopmatConvert(pf, s)
+            var rsum : coopmatWgAcc_f32_64x32
+            var one : coopmatWgB_f16_32x32
+            coopmatFill(one, 1.0)
+            rsum = coopmatMulAdd(pf, one, rsum)
+            coopmatMulElem(lrow, em, lrow)
+            coopmatAdd(lrow, lrow, rsum)
+            var emd : coopmatWgAcc_f32_64x256
+            coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
+            coopmatMulElem(o, emd, o)
+            var vt : coopmatWgB_f16_32x256
+            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 32u, kvh * 256u, 256u)
+            o = coopmatMulAdd(pf, vt, o)
+            j += 32u
+        }
+        var ld : coopmatWgAcc_f32_64x256
+        coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
+        coopmatPerElement(ld, ld, @@facm2_recip)
+        coopmatMulElem(o, ld, o)
+        static_if (GATED) {
+            var g : coopmatWgAcc_f32_64x256
+            coopmatLoadTensor(g, qpanel, 0u, tlq, q0, 64u, h * qhs + 256u, 256u)
+            coopmatPerElement(g, g, @@facm2_sigmoid)
+            coopmatMulElem(o, g, o)
+        }
+        static_if (OUT16) {
+            var of : coopmatWgAcc_f16_64x256
+            coopmatConvert(of, o)
+            coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * 256u, 256u)
+        } else {
+            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 256u, 256u)
+        }
+    }
+}
+
+[vk_dispatch(name = "fa_cm2_h256_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256 : FaCm2H256T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_cm2_h256_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256F16 : FaCm2H256T {
+    typedef OT = float16
+    override OUT16 = true
+}
+
+// the gated twins: the sigmoid of the q panel's gate half scales the output
+[vk_dispatch(name = "fa_cm2_h256_g_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256G : FaCm2H256T {
+    typedef OT = float
+    override GATED = true
+}
+
+[vk_dispatch(name = "fa_cm2_h256_g_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256GF16 : FaCm2H256T {
+    typedef OT = float16
+    override OUT16 = true
+    override GATED = true
 }
 
 struct DaAttnBArgs {

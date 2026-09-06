@@ -660,16 +660,18 @@ def private pf_setup {
     let kv16 = g_rd.kv16
     // the cm2 fa tiles read f16 K/V, so f16 mirrors bind directly; f32 keeps the chunked/h128 paths
     g_rd.pf_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
-        && (g_rd.head_size == 64l || g_rd.head_size == 128l))
+        && (g_rd.head_size == 64l || g_rd.head_size == 128l || g_rd.head_size == 256l))
     let fa128s = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
     verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b()
         && (kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls())
         && (fa128s ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
             : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
         && (!g_rd.pf_facm2
-            || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_cls() : ensure_fa_cm2_h128_cls()))
+            || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_cls() : (g_rd.head_size == 128l ? ensure_fa_cm2_h128_cls()
+                : (g_rd.q_gated ? ensure_fa_cm2_h256_g_cls() : ensure_fa_cm2_h256_cls()))))
         && (!g_rd.pf_facm2 || !any6
-            || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_f16_cls() : ensure_fa_cm2_h128_f16_cls()))
+            || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_f16_cls() : (g_rd.head_size == 128l ? ensure_fa_cm2_h128_f16_cls()
+                : (g_rd.q_gated ? ensure_fa_cm2_h256_g_f16_cls() : ensure_fa_cm2_h256_f16_cls()))))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any6 || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
@@ -735,10 +737,10 @@ def private pf_setup {
         if (g_rd.pf_facm2) {
             g_rd.pf_sets[b + 5] = (wo6
                 ? set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_af),
-                    fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 2l),
+                    fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 2l),
                     fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_AQ))
                 : set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn),
-                    fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 4l),
+                    fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l),
                     fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)))
         } else {
             let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
@@ -1047,7 +1049,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     // the cm2 fa tile reads the f16 mirrors directly
                     var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = uint(g_rd.kv_mul), kvbase = uint(mirb),
-                        scale = g_rd.scale)
+                        scale = g_rd.scale, qrow = uint(qrow), qhs = uint(qhs))
                     let fawgs = g_rd.n_heads * ((wlen + 63l) / 64l)
                     if (hs == 64l) {
                         if (fo6) {
@@ -1055,11 +1057,23 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                         } else {
                             enc_fa_cm2_h64_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
                         }
-                    } else {
+                    } elif (hs == 128l) {
                         if (fo6) {
                             enc_fa_cm2_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
                         } else {
                             enc_fa_cm2_h128_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } elif (g_rd.q_gated) {
+                        if (fo6) {
+                            enc_fa_cm2_h256_g_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_cm2_h256_g_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } else {
+                        if (fo6) {
+                            enc_fa_cm2_h256_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_cm2_h256_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
                         }
                     }
                 } else {
@@ -2079,8 +2093,8 @@ def private ensure_at_state {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: attention chain engaged\n")
 }
 
-//! Does the cm2 flash-attention tile serve this window? A coopmat2-fa device, the fa knob, a head
-//! size the tile family carries, and no gated epilogue (the tile has none - gated models keep at_attn).
+//! Does the cm2 flash-attention tile serve this window? A coopmat2-fa device, the fa knob, head 64
+//! or 128, and no gate (this chain wires neither the h256 stamps nor their gated epilogue - gated models keep at_attn).
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-expert-chain")]
 def private at_fa_serves(hs : int64; gated : bool) : bool {
     return !gated && g_gpu.has_coopmat2_fa && vk_fa_on() && (hs == 64l || hs == 128l)

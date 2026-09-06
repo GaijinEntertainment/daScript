@@ -83,7 +83,7 @@ tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is `_
 sec.2.2v's). Gated attention rides the batch kernels through a per-head q stride (`qhs = 2 x hs`:
 the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror
 attention gates on the sigmoid of the gate half); partial rotary is the `half = rot / 2` word.
-Neither arm reaches the cm2 flash tile or the h128 twin: such a model takes `DaAttnB`.
+At head 256 the window takes the h256 cm2 flash stamps (Br 64, Bc 32, the h128 loop with the head-shaped tiles doubled): the gated twins load Q at the head's q stride and scale the normalized output by the sigmoid of the gate half before the store; the h128 coopmat twin stays 128-only.
 
 **A layer's qkv feed comes out of the previous layer's FUSED add+rms twin when the fuse knob is
 on and the feed is not the Q8_K quant form.** The producer is layer l-1's addr_next site, the
@@ -292,8 +292,8 @@ bucket rows ever cross PCIe. Streamed groups take the same arm after the slot bi
 
 **The per-op attention chain runs the same cm2 flash-attention tile the resident chain runs**
 (`fa_cm2_h64` / `h128`, sec.2.2j) when the device carries the coopmat2-fa trio, the fa knob is
-on, the head size is one the tile family stamps, and the model's attention is not gated - the
-tile has no gated epilogue, so gated models keep the flash-style `at_attn` pass. The tile reads
+on, the head size is 64 or 128, and the model's attention is not gated - this chain wires neither
+the h256 stamps nor their gated epilogue, so gated models keep the flash-style `at_attn` pass. The tile reads
 f16 K/V: the chain keeps its f32 roped-k / raw-v planes at absolute positions for the host
 readback the CPU cache store consumes, and fills f16 shadows of them with the base-less
 `f16cvt` over the whole attended prefix each window; the fa output lands in the same out plane
