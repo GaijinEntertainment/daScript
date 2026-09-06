@@ -729,6 +729,14 @@ def find_host_mem(type_bits : uint; cached : bool) : uint {
     return find_memory_type(g_gpu.phys, type_bits, want)
 }
 
+// the validation layer's device-address bookkeeping learns a buffer's range from this query; a
+// PhysicalStorageBuffer access (the cm2 decode callbacks) into a buffer it never saw reads as out of range
+[cold_path]
+def private note_device_address(b : Buffer) {
+    verify(get_buffer_device_address(g_gpu.device, BufferDeviceAddressInfo(buffer = weak_copy(b))) != 0ul,
+        "dasLLAMA vulkan tier: buffer device address query failed")
+}
+
 [cold_path]   // buffer creation — setup, not steady state
 def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_shared : bool = false; soft : bool = false) : HostBuf {
     var bci : BufferCreateInfo
@@ -736,6 +744,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     bci.usage.storage_buffer = storage
     bci.usage.transfer_src = !storage
     bci.usage.transfer_dst = true   // readback staging targets (y DMA copies land here)
+    bci.usage.shader_device_address = storage   // a storage buffer's blocks reach the cm2 decode callbacks as PhysicalStorageBuffer pointers
     if (xfer_shared && g_gpu.xfer_fam >= 0) {
         // stream mirrors: transfer-queue fills + compute-queue heat slices — CONCURRENT dodges ownership transfers
         bci.sharingMode = VkSharingMode.CONCURRENT
@@ -743,8 +752,15 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     }
     var b <- create_buffer(g_gpu.device, bci)   // deliberately never finalized (process-lifetime)
     let req = get_buffer_memory_requirements(g_gpu.device, b)
-    let mai = MemoryAllocateInfo(allocationSize = req.size,
+    var mai = MemoryAllocateInfo(allocationSize = req.size,
                                  memoryTypeIndex = find_host_mem(req.memoryTypeBits, cached))
+    var bda = VkMemoryAllocateFlagsInfo()
+    bda.flags.device_address = true
+    if (storage) {
+        unsafe {
+            mai.next = addr<void?>(bda)
+        }
+    }
     var ares = VkResult.SUCCESS
     var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
     if (ares != VkResult.SUCCESS) {
@@ -759,6 +775,9 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
         return HostBuf()
     }
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
+    if (storage) {
+        note_device_address(b)
+    }
     var mapped : void? = null
     let mf : VkMemoryMapFlags
     unsafe {
@@ -775,6 +794,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     bci.usage.storage_buffer = true
     bci.usage.transfer_dst = true
     bci.usage.transfer_src = true   // y planes DMA back out (device -> host staging)
+    bci.usage.shader_device_address = true   // the cm2 decode callbacks reach a plane's blocks as PhysicalStorageBuffer pointers
     if (xfer_shared && g_gpu.xfer_fam >= 0) {
         // stream slots: transfer-queue fills + compute-queue reads — CONCURRENT dodges ownership transfers
         bci.sharingMode = VkSharingMode.CONCURRENT
@@ -785,19 +805,25 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     // priority 1.0 (default 0.5): under pressure the driver demotes lower-priority (desktop) memory first
     var prio = VkMemoryPriorityAllocateInfoEXT()
     prio.priority = 1.0
+    var bda = VkMemoryAllocateFlagsInfo()   // the usage bit above wants its allocation flagged too
+    bda.flags.device_address = true
+    if (g_gpu.has_memprio) {
+        unsafe {
+            bda.pNext = addr<void?>(prio)
+        }
+    }
     if (g_gpu.rebar_type >= 0 && (req.memoryTypeBits & (1u << uint(g_gpu.rebar_type))) != 0u) {
         // ReBAR attempt — raw alloc so a decline falls back to plain device-local below
         var rmai = VkMemoryAllocateInfo()
         rmai.allocationSize = req.size
         rmai.memoryTypeIndex = uint(g_gpu.rebar_type)
-        if (g_gpu.has_memprio) {
-            unsafe {
-                rmai.pNext = addr<void?>(prio)
-            }
+        unsafe {
+            rmai.pNext = addr<void?>(bda)
         }
         var rmem : VkDeviceMemory
         if (vkAllocateMemory(dev_raw(), rmai, null, rmem) == VkResult.SUCCESS) {
             vk_check(vkBindBufferMemory(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), rmem, 0ul), null)
+            note_device_address(b)
             var mapped : void? = null
             let mf : VkMemoryMapFlags
             unsafe {
@@ -812,13 +838,12 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     want.device_local = true
     var mai = MemoryAllocateInfo(allocationSize = req.size,
                                  memoryTypeIndex = find_memory_type(g_gpu.phys, req.memoryTypeBits, want))
-    if (g_gpu.has_memprio) {
-        unsafe {
-            mai.next = addr<void?>(prio)
-        }
+    unsafe {
+        mai.next = addr<void?>(bda)
     }
     var m <- allocate_memory(g_gpu.device, mai)
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
+    note_device_address(b)
     g_gpu.dev_mem |> insert(b._vk, m._vk)
     return b._vk
 }

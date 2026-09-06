@@ -682,10 +682,11 @@ module) is independent and can land any time - it is pure structure.
     the kernel-unit cells fine - a CPU oracle cannot see an out-of-range READ). Three things the
     same run reported that are not yet fixed: (a) `q8_batch_mm_a_cls`'s
     `OpCooperativeMatrixLoadKHR` carries a Stride the spec wants 16-byte aligned (VUID
-    RuntimeSpirv-OpCooperativeMatrixLoadKHR-08986; the driver tolerates it today); (b) the
-    device create chains `VkPhysicalDeviceShaderIntegerDotProductFeatures` beside
-    `VkPhysicalDeviceVulkan13Features` (VUID VkDeviceCreateInfo-pNext-06532) - fold the feature
-    into the 1.3 struct; (c) validation messages name a shader module by "internal ID n" only -
+    RuntimeSpirv-OpCooperativeMatrixLoadKHR-08986; the driver tolerates it today); (b) DONE
+    2026-09-06 - the coopmat2 device creator (`modules/dasVulkan/daslib/vulkan_boost.das`) names
+    `shaderIntegerDotProduct` on the 1.3 struct whenever that struct is chained and keeps the
+    standalone struct for a device below 1.3 (VUID VkDeviceCreateInfo-pNext-06532 was the two
+    side by side); (c) validation messages name a shader module by "internal ID n" only -
     `vkd_class_pipe` has the kernel name in hand, so a `VK_EXT_debug_utils` object name on
     every class pipeline and module would make the next report self-identifying (today the map
     is `DASLLAMA_VK_SPV_DUMP`'s write order, 1-based). (d) found 2026-09-06 on the same window:
@@ -695,8 +696,14 @@ module) is independent and can land any time - it is pure structure.
     `q8_batch_cm2l_cls` once the deltanet GEMMs took the cm2 tiles; the K-quant cm2 tiles read the
     same way). The driver serves the reads; the layer's safe mode ZEROES them, so a validated 9B
     prefill lands garbage logits (top logit 13.37 against 7.76 plain) while the plain run is right -
-    a validation run's numerics are not evidence until (d) lands. Fix = the usage bit in
-    `make_device_buf` (and the slab/import paths), `VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT` on
-    their allocations, and `bufferDeviceAddress` in the 1.2 features at device create (the module
-    already declares the PhysicalStorageBuffer64 addressing model). Done = the layer's log empty of
-    (a), (b) and (d) on the 9B window, and a validation message naming `qk_rms_cls` by name.
+    a validation run's numerics are not evidence until (d) lands. DONE 2026-09-06: every storage
+    buffer (`make_device_buf`, `make_host_buf` with storage) carries the SHADER_DEVICE_ADDRESS
+    usage, chains `VkMemoryAllocateFlagsInfo` (device_address) on its allocation - both of the
+    device path's allocations and the pinned host mirrors - and queries its device address once
+    after the bind (`note_device_address`): the usage bit alone left the report standing, because
+    the layer learns a buffer's range only from `vkGetBufferDeviceAddress`. The mapped-image import
+    stays a transfer source (no kernel reads it); the device already enabled `bufferDeviceAddress`
+    (the coopmat2 creator sets it and gates coopmat2 on it). Acceptance held: the validated 9B
+    window logs no VUID at all and lands the plain run's logits (7.70 vs 7.76). One residue: under
+    the layer the process then wedges at exit (one core spinning, the card idle) - kill it; a plain
+    run exits clean. Done = a validation message naming `qk_rms_cls` by name.

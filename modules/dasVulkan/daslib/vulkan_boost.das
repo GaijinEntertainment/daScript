@@ -863,8 +863,14 @@ def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; 
     unsafe {
         f2.pNext = addr<void?>(f11)
         f11.pNext = addr<void?>(f12)
-        f12.pNext = addr<void?>(fdot)
-        fdot.pNext = addr<void?>(fcm)
+        if (with_fullsg) {
+            // a 1.3 chain names the integer dot product on its 1.3 struct - the promoted struct beside it is invalid
+            f13.shaderIntegerDotProduct = 1u
+            f12.pNext = addr<void?>(fcm)
+        } else {
+            f12.pNext = addr<void?>(fdot)
+            fdot.pNext = addr<void?>(fcm)
+        }
         fcm.pNext = addr<void?>(fcm2)
         if (with_coopvec) {
             fcm2.pNext = addr<void?>(fcv)
