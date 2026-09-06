@@ -66,4 +66,4 @@ tray_destroy()
 
 - dbusmenu icons and submenus.
 - Windows dark-mode aware icon variants.
-- Watchdog: replace the spawn-based notifications with `tray_notify` once the tray is wired.
+- The watchdog's icon: `plans/watchdog_tray.md`.

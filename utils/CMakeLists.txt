@@ -188,10 +188,11 @@ ADD_CUSTOM_TARGET(run_utils_tests
     COMMENT "Running utils tests"
 )
 
-# watchdog: the supervisor as a standalone context on the full runtime - libDaScript and dasHV
-# as static archives, no compiler, no shared module, no lock on the files it deploys (the shape of
-# examples/standalone/06_full_runtime). Lands in bin/ and installs beside daslang.
-if(NOT DAS_HV_DISABLED)
+# watchdog: the supervisor as a standalone context on the full runtime - libDaScript, dasHV and
+# dasStdDlg (the tray icon) as static archives, no compiler, no shared module, no lock on the files
+# it deploys (the shape of examples/standalone/06_full_runtime). Lands in bin/ and installs beside
+# daslang.
+if(NOT DAS_HV_DISABLED AND NOT DAS_STDDLG_DISABLED)
     set(WATCHDOG_GEN "${CMAKE_CURRENT_BINARY_DIR}/_watchdog_ctx_generated")
     file(MAKE_DIRECTORY "${WATCHDOG_GEN}")
     file(GLOB WATCHDOG_DAS_SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/utils/watchdog/*.das")
@@ -216,7 +217,7 @@ if(NOT DAS_HV_DISABLED)
         "${WATCHDOG_GEN}"
         ${NEED_MODULES_PATH}
         "${PROJECT_SOURCE_DIR}/modules/dasHV/hv/$<CONFIG>/include")
-    target_link_libraries(watchdog PRIVATE libDaScript ${SRC_LIBRARIES} libDasModuleHV)
+    target_link_libraries(watchdog PRIVATE libDaScript ${SRC_LIBRARIES} libDasModuleHV libDasModuleStdDlg)
     SETUP_CPP11(watchdog)
     SETUP_BIN_RPATH(watchdog)
     set_target_properties(watchdog PROPERTIES

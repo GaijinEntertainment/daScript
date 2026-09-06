@@ -13,6 +13,7 @@ require daslib/json_boost
 require daslib/regex
 require daslib/regex_boost
 require dashv/dashv_boost
+require stddlg
 
 //! Supervise a daslang program (`daslang -jit main.das`) or a standalone executable: restart it with
 //! bounded backoff, capture crashes into bundles, report startup stages, poll health. Exit 0 is an
@@ -87,6 +88,10 @@ struct public WatchdogConfig {
     jit_dir : string = ".jitted_scripts"
     @clarg_doc = "Do not collect crash bundles"
     no_crash_bundle : bool
+    @clarg_doc = "Show a status icon in the notification area, where a desktop can reach one"
+    tray : bool
+    @clarg_doc = "Page the tray icon opens; defaults to the health URL's origin"
+    tray_url : string
     @clarg_skip
     server_args : array<string>
 }
@@ -395,10 +400,14 @@ def private powershell_quote(s : string) : string {
 //! Off under tests and on a headless box, where a balloon has no one to reach.
 var public notifications_enabled = true
 
-//! Windows: a PowerShell balloon; macOS: Notification Center via osascript; Linux: notify-send.
-//! A platform with none of those gets nothing - the same never-fatal contract everywhere.
+//! The tray icon while one is up: notifications go through it instead of a spawned helper.
+var private g_tray : WatchdogTray?
+
+//! Through the tray icon while it is up; otherwise Windows: a PowerShell balloon; macOS:
+//! Notification Center via osascript; Linux: notify-send. A platform with none of those gets
+//! nothing - the same never-fatal contract everywhere.
 def public notify(title, message : string; error : bool) {
-    if (!notifications_enabled) return
+    if (!notifications_enabled || (g_tray != null && g_tray->notify(title, message))) return
     let plat = get_platform_name()
     if (plat == "windows") {
         let icon = error ? "Error" : "Info"
@@ -812,6 +821,234 @@ def public collect_crash_bundle(cfg : WatchdogConfig; command : array<string>; c
 // ---------------------------------------------------------------------------------------------
 // the supervision loop, as a state machine the host steps
 
+// ---------------------------------------------------------------------------------------------
+// the tray: a status icon refreshed from supervisor state once per tick, the page it opens, and
+// the shutdown it can ask for
+
+let public TRAY_STATUS_ID = 1
+let public TRAY_OPEN_ID = 2
+let public TRAY_SHUTDOWN_ID = 3
+let private TRAY_MARK_SIDE = 32
+
+//! Plain words for the startup stages on the tray line; the raw names stay in the log.
+let private STAGE_LABELS <- {
+    "jit_cached" => "kernels loaded from the cache",
+    "jit_codegen" => "compiling this box's kernels (a first start takes minutes)",
+    "jit_linked" => "kernels compiled",
+    "exchange_lookup" => "checking the tune exchange",
+    "tuning" => "tuning this box",
+    "tune_restart" => "restarting to apply the tune",
+    "model_load" => "loading the model",
+    "asr_init" => "loading speech recognition",
+    "ready" => "first health check pending"
+}
+
+//! What the tray shows, folded from the supervisor: `healthy` is -1 before the first poll, then 0
+//! or 1; `served` once a health poll has passed since the spawn; `up_seconds` is the healthy
+//! time, or the run time when health is not polled.
+struct public TrayStatus {
+    child_pid : int
+    restart_delay : float
+    last_exit_code : int
+    stopping : bool
+    health_polled : bool
+    healthy : int
+    served : bool
+    up_seconds : float
+    stage : string
+    tune_total : int
+    tune_done : int
+    tune_kernel : string
+}
+
+def private hours_minutes(seconds : float) : string {
+    let mins = int(seconds / 60.0)
+    let m = mins % 60
+    return mins >= 60 ? "{mins / 60}h{m:02d}m" : "{mins}m"
+}
+
+//! The text of the tooltip and the status row, and the coarse state the badge shows: `base`
+//! serving, `amber` working, `red` trouble. "unhealthy" is reserved for a child that served and
+//! then stopped answering - a cold start is minutes of failed polls, and that is "starting up".
+def public tray_status_line(s : TrayStatus) : tuple<text : string; badge : string> {
+    if (s.child_pid == 0) {
+        if (s.stopping) return (text = "stopped", badge = "red")
+        if (s.restart_delay > 0.0) {
+            return (text = "restarting in {int(ceil(s.restart_delay))}s (exit {s.last_exit_code})", badge = "red")
+        }
+        return (text = "starting", badge = "amber")
+    }
+    if (s.stopping) return (text = "shutting down", badge = "amber")
+    if (s.tune_total > 0) {
+        let kernel = empty(s.tune_kernel) ? "" : " ({s.tune_kernel})"
+        return (text = "tuning this box - {s.tune_done}/{s.tune_total} kernels{kernel}", badge = "amber")
+    }
+    if (!s.health_polled) return (text = "running {hours_minutes(s.up_seconds)}", badge = "base")
+    if (s.healthy == 1) return (text = "serving - healthy {hours_minutes(s.up_seconds)}", badge = "base")
+    if (s.healthy == 0 && s.served) {
+        return (text = empty(s.stage) ? "unhealthy" : "unhealthy ({s.stage})", badge = "red")
+    }
+    let words = STAGE_LABELS?[s.stage] ?? s.stage
+    return (text = empty(words) ? "starting up" : "starting up - {words}", badge = "amber")
+}
+
+//! The origin of a URL - scheme and authority with a trailing slash - or empty when it has none.
+def public url_origin(url : string) : string {
+    let scheme_end = find(url, "://")
+    if (scheme_end <= 0) return ""
+    let host_start = scheme_end + 3
+    let rest = slice(url, host_start, length(url))
+    let slash = find(rest, "/")
+    let host = slash < 0 ? rest : slice(rest, 0, slash)
+    if (empty(host)) return ""
+    return "{slice(url, 0, host_start)}{host}/"
+}
+
+def private inside_triangle(px, py, ax, ay, bx, by, cx, cy : float) : bool {
+    let d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by)
+    let d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy)
+    let d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay)
+    let has_neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0
+    let has_pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0
+    return !(has_neg && has_pos)
+}
+
+//! The icon: a filled disc, and for `amber` or `red` a badge in a cleared moat at the lower
+//! right - a triangle while working, a square in trouble. `side` x `side` RGBA8, row-major.
+def public tray_mark(side : int; badge : string) : array<uint8> {
+    var px : array<uint8>
+    px |> resize(side * side * 4)
+    let u = float(side) / 64.0
+    let center = float(side) / 2.0
+    let radius = float(side) * 0.44
+    let moat_r = 16.5 * u
+    let badge_color = badge == "amber" ? int3(242, 183, 61) : int3(217, 109, 79)
+    for (y in range(side)) {
+        for (x in range(side)) {
+            let fx = float(x) + 0.5
+            let fy = float(y) + 0.5
+            var color = int4(0, 0, 0, 0)
+            let dx = fx - center
+            let dy = fy - center
+            if (dx * dx + dy * dy <= radius * radius) {
+                color = int4(70, 130, 200, 255)
+            }
+            if (badge != "base") {
+                let mx = fx - 49.0 * u
+                let my = fy - 49.0 * u
+                if (mx * mx + my * my <= moat_r * moat_r) {
+                    color = int4(0, 0, 0, 0)
+                }
+                let on_badge = (badge == "amber"
+                    ? inside_triangle(fx, fy, 49.0 * u, 35.5 * u, 62.5 * u, 59.2 * u, 35.5 * u, 59.2 * u)
+                    : (fx >= 37.5 * u && fx <= 60.5 * u && fy >= 37.5 * u && fy <= 60.5 * u))
+                if (on_badge) {
+                    color = int4(badge_color.x, badge_color.y, badge_color.z, 255)
+                }
+            }
+            let i = (y * side + x) * 4
+            px[i] = uint8(color.x)
+            px[i + 1] = uint8(color.y)
+            px[i + 2] = uint8(color.z)
+            px[i + 3] = uint8(color.w)
+        }
+    }
+    return <- px
+}
+
+//! The platform's opener, spawned and never waited for.
+def private open_page(url : string; var log : Emitter?) {
+    let plat = get_platform_name()
+    let argv <- (plat == "windows" ? ["rundll32.exe", "url.dll,FileProtocolHandler", url]
+        : (plat == "darwin" ? ["open", url] : ["xdg-open", url]))
+    log->emit("tray_open_requested", JV((url = url)))
+    if (!unsafe(spawn_argv(argv))) {
+        log->emit("tray_open_failed", JV((url = url, opener = argv[0])))
+    }
+}
+
+//! The icon in the notification area. The supervisor refreshes it from a `TrayStatus` and pumps
+//! it once per tick; what the person asked for comes back through the two request flags, so the
+//! tray never calls into the supervisor. Never fatal: without a host it simply does not exist.
+class public WatchdogTray {
+    name : string
+    url : string
+    @do_not_delete log : Emitter?
+    last_text : string
+    last_badge : string
+    last_open_enabled : bool = false
+    open_requested : bool = false
+    shutdown_requested : bool = false
+
+    def WatchdogTray(display_name, page_url : string; var emitter : Emitter?) {
+        name = display_name
+        url = page_url
+        log = emitter
+    }
+
+    //! False where no icon can exist; the reason is on the log as `tray_unavailable`.
+    def create() : bool {
+        if (!tray_available()) {
+            log->emit("tray_unavailable", JV((reason = "no notification area reachable from this process")))
+            return false
+        }
+        if (!tray_create("{name} - starting up")) {
+            log->emit("tray_unavailable", JV((reason = "the notification area refused the icon")))
+            return false
+        }
+        log->emit("tray_started", JV((url = url)))
+        return true
+    }
+
+    //! Writes only on change: the tooltip and the menu on a new line or a change of the Open
+    //! item, the icon on a new badge.
+    def refresh(status : TrayStatus) {
+        let line = tray_status_line(status)
+        let open_enabled = !empty(url) && (status.healthy == 1 || !status.health_polled) && status.child_pid != 0
+        if (line.text != last_text || open_enabled != last_open_enabled) {
+            tray_set_tooltip("{name} - {line.text}")
+            tray_menu_clear()
+            tray_menu_add(TRAY_STATUS_ID, line.text, false, false)
+            if (!empty(url)) {
+                tray_menu_add(TRAY_OPEN_ID, "Open {name}", open_enabled, false)
+            }
+            tray_menu_add_separator()
+            tray_menu_add(TRAY_SHUTDOWN_ID, "Shutdown", true, false)
+            tray_menu_commit()
+            last_text = line.text
+            last_open_enabled = open_enabled
+        }
+        if (line.badge != last_badge) {
+            tray_set_icon(tray_mark(TRAY_MARK_SIDE, line.badge), TRAY_MARK_SIDE, TRAY_MARK_SIDE)
+            last_badge = line.badge
+        }
+    }
+
+    //! Drain the platform's events into the request flags. A left click opens the page, the
+    //! platform pops the menu on a right click.
+    def pump() {
+        tray_poll() $(ev : TrayEvent) {
+            if (ev.kind == TrayEventKind.click || ev.kind == TrayEventKind.double_click) {
+                open_requested = last_open_enabled
+            } elif (ev.kind == TrayEventKind.menu) {
+                if (ev.id == TRAY_OPEN_ID) {
+                    open_requested = true
+                } elif (ev.id == TRAY_SHUTDOWN_ID) {
+                    shutdown_requested = true
+                }
+            }
+        }
+    }
+
+    def notify(title, message : string) : bool {
+        return tray_notify(title, message)
+    }
+
+    def destroy() {
+        tray_destroy()
+    }
+}
+
 def private now_seconds(origin : int64) : float {
     return float(get_time_usec(origin)) / 1000000.0
 }
@@ -852,6 +1089,12 @@ class public Supervisor {
     shutdown_requested_at : float = 0.0
     terminate_sent_at : float = -1.0
     kill_sent_at : float = -1.0
+    tray : WatchdogTray?
+    served_at : float = 0.0
+    last_exit_code : int = 0
+    tune_total : int = 0
+    tune_done : int = 0
+    tune_kernel : string
 
     def Supervisor(config : WatchdogConfig; var emitter : Emitter?; command_line : array<string>; own_pid : int) {
         cfg := config
@@ -908,7 +1151,27 @@ class public Supervisor {
         shutdown_requested_at = 0.0
         terminate_sent_at = -1.0
         kill_sent_at = -1.0
+        served_at = 0.0
+        tune_total = 0
+        tune_done = 0
+        tune_kernel = ""
         return true
+    }
+
+    //! The tune as the tray line reads it: `plan` opens a run of `total` kernels, `begin` names
+    //! the one in flight, `end` counts it, `abort` closes the run.
+    def private fold_tune(kind : string; fields : table<string; string>) {
+        if (kind == "plan") {
+            tune_total = to_int(fields?["total"] ?? "0")
+            tune_done = 0
+            tune_kernel = ""
+        } elif (kind == "begin") {
+            tune_kernel = fields?["name"] ?? ""
+        } elif (kind == "end") {
+            tune_done++
+        } elif (kind == "abort") {
+            tune_total = 0
+        }
     }
 
     def private on_child_line(message : string) {
@@ -924,6 +1187,7 @@ class public Supervisor {
                 }
                 log->emit("tune", JV(fields))
             }
+            fold_tune(event.kind, event.fields)
             return
         }
         // both the tuner's marker and the exchange client's "sidecar applied" marker license the
@@ -980,6 +1244,9 @@ class public Supervisor {
             last_health = healthy_int
             last_health_change = t
             next_heartbeat = t + HEALTH_HEARTBEAT_SECONDS
+            if (healthy && served_at == 0.0) {
+                served_at = t
+            }
         } elif (healthy && t >= next_heartbeat) {
             log->emit("health_heartbeat", JV((pid = child_pid, ok = true, healthy_for_s = round(t - last_health_change))))
             next_heartbeat = t + HEALTH_HEARTBEAT_SECONDS
@@ -1020,6 +1287,7 @@ class public Supervisor {
         log->emit("child_exited", JV((pid = child_pid, code = return_code, uptime_seconds = uptime)))
         unsafe(close_process(child))
         child = null
+        last_exit_code = return_code
         let script_mode = empty(cfg.program)
         if (stopping) {
             finish(0)
@@ -1085,15 +1353,65 @@ class public Supervisor {
             }
         }
         unlink_stop_file()
+        if (tray != null) {
+            tray->destroy()
+            g_tray = null
+            unsafe {
+                delete tray
+            }
+            tray = null
+        }
         log->emit("watchdog_stopped")
         finished = true
         result = code
+    }
+
+    def private status_for_tray() : TrayStatus {
+        let t = now()
+        let alive = child != null
+        var up = 0.0
+        if (alive) {
+            up = cfg.no_health ? t - started_at : (last_health == 1 ? t - last_health_change : 0.0)
+        }
+        return TrayStatus(
+            child_pid = alive ? child_pid : 0,
+            restart_delay = alive ? 0.0 : max(restart_at - t, 0.0),
+            last_exit_code = last_exit_code,
+            stopping = stopping,
+            health_polled = !cfg.no_health,
+            healthy = last_health,
+            served = served_at > 0.0,
+            up_seconds = up,
+            stage = stage.name,
+            tune_total = tune_total,
+            tune_done = tune_done,
+            tune_kernel = tune_kernel)
+    }
+
+    //! Refresh the icon and act on what the person asked for: the page, or a shutdown through
+    //! the same stop ladder as a signal.
+    def private pump_tray() {
+        if (tray == null) return
+        tray->refresh(status_for_tray())
+        tray->pump()
+        if (tray.open_requested) {
+            tray.open_requested = false
+            open_page(tray.url, log)
+        }
+        if (tray.shutdown_requested) {
+            tray.shutdown_requested = false
+            if (!stopping) {
+                log->emit("tray_shutdown_requested")
+                request_stop()
+            }
+        }
     }
 
     //! One supervision step, at most one tick long. True once supervision has ended; `result`
     //! then carries the exit code.
     def tick() : bool {
         if (finished) return true
+        pump_tray()
         if (child == null) {
             if (stopping) {
                 finish(0)
@@ -1169,6 +1487,17 @@ def private wants_help(args : array<string>) : bool {
     return false
 }
 
+//! The icon when a notification area can show one, else null with the reason on the log.
+def private create_tray(cfg : WatchdogConfig; var log : Emitter?) : WatchdogTray? {
+    let url = !empty(cfg.tray_url) ? cfg.tray_url : url_origin(cfg.health_url)
+    var tray = new WatchdogTray(cfg.name, url, log)
+    if (tray->create()) return tray
+    unsafe {
+        delete tray
+    }
+    return null
+}
+
 def public watchdog_start(args : array<string>; program_dir : string; self_pid : int; var exit_code : int&) : Supervisor? {
     exit_code = 0
     if (wants_help(args)) {
@@ -1236,6 +1565,8 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
     }
     var sup = new Supervisor(cfg, log, command, self_pid)
     sup.dump_type = policy.dump_type
+    sup.tray = cfg.tray ? create_tray(cfg, log) : null
+    g_tray = sup.tray
     log->emit("watchdog_started", JV((pid = self_pid, command = JV(command), cwd = cfg.cwd)))
     return sup
 }

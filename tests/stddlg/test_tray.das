@@ -5,6 +5,7 @@ require dastest/testing_boost public
 require daslib/fio
 require strings
 require stddlg
+require _tray_rig
 
 //! Linux tray over a private session bus: this daslang spawns `dbus-daemon`, then a child daslang
 //! running the tray fixture with DBUS_SESSION_BUS_ADDRESS pointing at it, and drives the child's
@@ -17,10 +18,6 @@ def das_exe() : string {
 
 def fixture_path() : string {
     return path_join(get_das_root(), "tests/stddlg/_fixture_tray_child.das")
-}
-
-def dbus_tools_present() : bool {
-    return fexist("/usr/bin/dbus-daemon") && fexist("/usr/bin/dbus-send")
 }
 
 struct TrayRig {
@@ -55,18 +52,9 @@ def wait_for_line(t : T?; var rig : TrayRig; prefix : string; seconds : float) :
 }
 
 def start_bus(t : T?; var rig : TrayRig) : bool {
-    let argv <- ["/usr/bin/dbus-daemon", "--session", "--print-address", "--nofork", "--nopidfile"]
-    let no_env : array<string>
-    rig.bus = unsafe(spawn_process(argv, "", no_env))
-    let started = ref_time_ticks()
-    while (empty(rig.address) && get_time_usec(started) < 15000000) {
-        unsafe(process_drain(rig.bus) $(line) {
-            if (empty(rig.address) && starts_with(line, "unix:")) {
-                rig.address = clone_string(line)
-            }
-        })
-        sleep(5u)
-    }
+    var bus <- spawn_session_bus()
+    rig.bus = bus.bus
+    rig.address = bus.address
     if (empty(rig.address)) {
         t |> failure("dbus-daemon printed no address")
         return false
@@ -114,33 +102,7 @@ def stop_rig(var rig : TrayRig) {
 //! `dbus-send` against the child; `reply` asks for --print-reply and returns the dump, otherwise the
 //! call is fire-and-forget and the result is empty.
 def dbus_send(rig : TrayRig; reply : bool; path : string; method : string; args : array<string>) : string {
-    var argv <- ["/usr/bin/dbus-send", "--bus={rig.address}"]
-    if (reply) {
-        argv |> push("--print-reply")
-    } else {
-        argv |> push("--type=method_call")
-    }
-    argv |> push("--dest={rig.dest}")
-    argv |> push(path)
-    argv |> push(method)
-    argv |> push_from(args)
-    let no_env : array<string>
-    return build_string() $(writer) {
-        unsafe {
-            var p = spawn_process(argv, "", no_env)
-            let started = ref_time_ticks()
-            while (process_poll(p) == process_running && get_time_usec(started) < 10000000) {
-                process_drain(p) $(line) {
-                    writer |> write(line) |> write("\n")
-                }
-                sleep(5u)
-            }
-            process_drain(p) $(line) {
-                writer |> write(line) |> write("\n")
-            }
-            close_process(p)
-        }
-    }
+    return dbus_send_to(rig.address, rig.dest, reply, path, method, args)
 }
 
 def with_rig(t : T?; blk : block<(var rig : TrayRig) : void>) {
@@ -155,27 +117,6 @@ def with_rig(t : T?; blk : block<(var rig : TrayRig) : void>) {
     }
     invoke(blk, rig)
     stop_rig(rig)
-}
-
-def has(t : T?; haystack : string; needle : string; what : string) {
-    t |> success(find(haystack, needle) >= 0, "{what}: expected '{needle}' in\n{haystack}")
-}
-
-//! osascript against the child's status item through System Events; the dump is the script's
-//! stdout and stderr, so a denied accessibility permission reads back as text, not a crash.
-def apple_script(script : string) : string {
-    let argv <- ["/usr/bin/osascript", "-e", script]
-    let no_env : array<string>
-    return build_string() $(writer) {
-        unsafe {
-            var p = spawn_process(argv, "", no_env)
-            process_wait(p, 10.0)
-            process_drain(p) $(line) {
-                writer |> write(line) |> write("\n")
-            }
-            close_process(p)
-        }
-    }
 }
 
 //! Windows has no scriptable route to a real click on the notification area, so this arm only
@@ -267,19 +208,19 @@ def test_tray_over_private_bus(t : T?) {
         with_rig(t) $(var rig : TrayRig) {
             t |> equal(wait_for_line(t, rig, "@create_again", 5.0), "@create_again true")
             let title = dbus_send(rig, true, "/StatusNotifierItem", "org.freedesktop.DBus.Properties.Get", ["string:org.kde.StatusNotifierItem", "string:Title"])
-            has(t, title, "string \"daslang tray fixture\"", "Title after tray_set_tooltip")
+            dump_has(t, title, "string \"daslang tray fixture\"", "Title after tray_set_tooltip")
             t |> success(find(title, "boot tooltip") < 0, "the create-time tooltip is gone after tray_set_tooltip")
             let all = dbus_send(rig, true, "/StatusNotifierItem", "org.freedesktop.DBus.Properties.GetAll", ["string:org.kde.StatusNotifierItem"])
-            has(t, all, "string \"ApplicationStatus\"", "Category")
-            has(t, all, "string \"Active\"", "Status")
-            has(t, all, "object path \"/MenuBar\"", "Menu")
-            has(t, all, "string \"IconPixmap\"", "IconPixmap key")
+            dump_has(t, all, "string \"ApplicationStatus\"", "Category")
+            dump_has(t, all, "string \"Active\"", "Status")
+            dump_has(t, all, "object path \"/MenuBar\"", "Menu")
+            dump_has(t, all, "string \"IconPixmap\"", "IconPixmap key")
             let pixmap = dbus_send(rig, true, "/StatusNotifierItem", "org.freedesktop.DBus.Properties.Get", ["string:org.kde.StatusNotifierItem", "string:IconPixmap"])
-            has(t, pixmap, "int32 2", "pixmap width")
-            has(t, pixmap, "ff ff 00 00", "first pixel as ARGB")
+            dump_has(t, pixmap, "int32 2", "pixmap width")
+            dump_has(t, pixmap, "ff ff 00 00", "first pixel as ARGB")
             let no_args : array<string>
             let xml = dbus_send(rig, true, "/StatusNotifierItem", "org.freedesktop.DBus.Introspectable.Introspect", no_args)
-            has(t, xml, "org.kde.StatusNotifierItem", "introspection")
+            dump_has(t, xml, "org.kde.StatusNotifierItem", "introspection")
         }
     }
     t |> run("Activate and ContextMenu arrive as click and right_click events") @(t : T?) {
@@ -298,18 +239,18 @@ def test_tray_menu_over_private_bus(t : T?) {
     t |> run("the menu layout carries labels, the separator and the checked disabled entry") @(t : T?) {
         with_rig(t) $(var rig : TrayRig) {
             let layout = dbus_send(rig, true, "/MenuBar", "com.canonical.dbusmenu.GetLayout", ["int32:0", "int32:-1", "array:string:"])
-            has(t, layout, "int32 10", "layout ids are the entry ids")
-            has(t, layout, "int32 -2", "a separator carries minus its position minus one")
+            dump_has(t, layout, "int32 10", "layout ids are the entry ids")
+            dump_has(t, layout, "int32 -2", "a separator carries minus its position minus one")
             let shallow = dbus_send(rig, true, "/MenuBar", "com.canonical.dbusmenu.GetLayout", ["int32:0", "int32:0", "array:string:"])
             t |> success(find(shallow, "Open status page") < 0, "recursionDepth 0 answers the root without children")
-            has(t, layout, "string \"Open status page\"", "first label")
-            has(t, layout, "string \"separator\"", "separator")
-            has(t, layout, "string \"Paused\"", "disabled label")
-            has(t, layout, "string \"toggle-state\"", "checkmark")
-            has(t, layout, "string \"Quit\"", "last label")
+            dump_has(t, layout, "string \"Open status page\"", "first label")
+            dump_has(t, layout, "string \"separator\"", "separator")
+            dump_has(t, layout, "string \"Paused\"", "disabled label")
+            dump_has(t, layout, "string \"toggle-state\"", "checkmark")
+            dump_has(t, layout, "string \"Quit\"", "last label")
             t |> success(find(layout, "Throwaway entry") < 0, "tray_menu_clear dropped the committed throwaway menu")
             let version = dbus_send(rig, true, "/MenuBar", "org.freedesktop.DBus.Properties.Get", ["string:com.canonical.dbusmenu", "string:Version"])
-            has(t, version, "uint32 3", "dbusmenu version")
+            dump_has(t, version, "uint32 3", "dbusmenu version")
         }
     }
     t |> run("a clicked menu entry reports its id, a disabled one reports nothing, Quit ends the child") @(t : T?) {

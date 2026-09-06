@@ -6,6 +6,7 @@ require daslib/fio
 require daslib/json_boost
 require daslib/strings_boost
 require ../../utils/watchdog/watchdog.das
+require ../stddlg/_tray_rig.das
 
 // argv[0] is the daslang running dastest; the supervised "program" is that binary running the
 // fixture, so program mode and script mode both spawn a real daslang child. Absolute, because a
@@ -121,6 +122,227 @@ def skip_without_jit(t : T?) : bool {
     if (jit_runs()) return false
     t |> skip("this daslang cannot start the JIT, so script mode (daslang -jit) has no child to supervise here")
     return true
+}
+
+[test]
+def test_tray_status_line(t : T?) {
+    t |> run("each supervisor state has its line and its badge") @(t : T?) {
+        var line = tray_status_line(TrayStatus(child_pid = 0, restart_delay = 2.5, last_exit_code = 9))
+        t |> equal(line.text, "restarting in 3s (exit 9)")
+        t |> equal(line.badge, "red")
+        line = tray_status_line(TrayStatus(child_pid = 0))
+        t |> equal(line.text, "starting", "before the first spawn")
+        t |> equal(line.badge, "amber")
+        line = tray_status_line(TrayStatus(child_pid = 0, stopping = true))
+        t |> equal(line.text, "stopped")
+        t |> equal(line.badge, "red")
+        line = tray_status_line(TrayStatus(child_pid = 1, stopping = true))
+        t |> equal(line.text, "shutting down")
+        t |> equal(line.badge, "amber")
+        line = tray_status_line(TrayStatus(child_pid = 1, tune_total = 5, tune_done = 2, tune_kernel = "gemv"))
+        t |> equal(line.text, "tuning this box - 2/5 kernels (gemv)")
+        t |> equal(line.badge, "amber")
+        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = false, up_seconds = 90.0))
+        t |> equal(line.text, "running 1m", "without health polling a live child is running")
+        t |> equal(line.badge, "base")
+        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true, healthy = 1, up_seconds = 3900.0))
+        t |> equal(line.text, "serving - healthy 1h05m")
+        t |> equal(line.badge, "base")
+        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true, healthy = 0, served = true, stage = "ready"))
+        t |> equal(line.text, "unhealthy (ready)", "unhealthy only after it served once")
+        t |> equal(line.badge, "red")
+        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true, healthy = 0, stage = "jit_codegen"))
+        t |> equal(line.text, "starting up - compiling this box's kernels (a first start takes minutes)")
+        t |> equal(line.badge, "amber")
+        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true, stage = "warp_drive"))
+        t |> equal(line.text, "starting up - warp_drive", "an unknown stage shows its raw name")
+        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true))
+        t |> equal(line.text, "starting up")
+    }
+}
+
+[test]
+def test_url_origin(t : T?) {
+    t |> run("the origin is the scheme and authority with a trailing slash") @(t : T?) {
+        t |> equal(url_origin("http://127.0.0.1:8080/v1/models"), "http://127.0.0.1:8080/")
+        t |> equal(url_origin("https://box.local"), "https://box.local/")
+        t |> equal(url_origin("nonsense"), "")
+        t |> equal(url_origin("http:///v1"), "")
+    }
+}
+
+def pixel(px : array<uint8>; side, x, y : int) : int4 {
+    let i = (y * side + x) * 4
+    return int4(int(px[i]), int(px[i + 1]), int(px[i + 2]), int(px[i + 3]))
+}
+
+[test]
+def test_tray_mark(t : T?) {
+    t |> run("the disc, the moat and the badges land where the states put them") @(t : T?) {
+        let base <- tray_mark(32, "base")
+        t |> equal(length(base), 32 * 32 * 4)
+        t |> success(pixel(base, 32, 16, 16) == int4(70, 130, 200, 255), "the disc at the center")
+        t |> equal(pixel(base, 32, 0, 0).w, 0, "a transparent corner")
+        t |> equal(pixel(base, 32, 24, 25).w, 255, "the plain mark has no moat")
+        let amber <- tray_mark(32, "amber")
+        t |> success(pixel(amber, 32, 24, 25) == int4(242, 183, 61, 255), "the triangle: {pixel(amber, 32, 24, 25)}")
+        t |> equal(pixel(amber, 32, 17, 24).w, 0, "the moat clears the disc around the badge")
+        let red <- tray_mark(32, "red")
+        t |> success(pixel(red, 32, 24, 24) == int4(217, 109, 79, 255), "the square: {pixel(red, 32, 24, 24)}")
+        t |> success(pixel(red, 32, 16, 16) == int4(70, 130, 200, 255), "the disc stays outside the moat")
+    }
+}
+
+// The tray arms run the watchdog under the interpreter as a child of this test - the icon has
+// to live in a process the desktop can see - supervising the park fixture with --no-shutdown,
+// so a stop terminates the child and supervision ends with 0.
+def tray_log_path(root : string) : string {
+    return path_join(root, "logs/wdtray-watchdog.log")
+}
+
+def spawn_tray_watchdog(root, url : string; env : array<string>) : process {
+    let state_dir = path_join(root, "state")
+    mkdir(state_dir)
+    var argv <- [das_exe(), "-dasroot", get_das_root(), path_join(get_das_root(), "utils/watchdog/main.das"), "--",
+        "--tray", "--tray-url", url, "--program", das_exe(), "--name", "wdtray", "--cwd", root,
+        "--no-health", "--no-shutdown", "--stable-seconds", "0.1", "--"]
+    argv |> push_from(child_args(state_dir, "park"))
+    return unsafe(spawn_process(argv, root, env))
+}
+
+//! `unavailable`, `ready` (the child runs under a live icon), or empty after 30 s.
+def wait_for_tray(var wd : process; log_path : string) : string {
+    let started = ref_time_ticks()
+    while (get_time_usec(started) < 30000000) {
+        unsafe(process_drain(wd) $(_line) {
+        })
+        let events <- read_events(log_path)
+        if (count_event(events, "tray_unavailable") > 0) return "unavailable"
+        if (count_event(events, "child_started") > 0) return "ready"
+        sleep(50u)
+    }
+    return ""
+}
+
+def with_tray_watchdog(t : T?; url : string; env : array<string>; blk : block<(var wd : process; root : string; verdict : string) : void>) {
+    let root = make_temp(t, "wd tray ")
+    if (empty(root)) return
+    var wd = spawn_tray_watchdog(root, url, env)
+    let verdict = wait_for_tray(wd, tray_log_path(root))
+    if (empty(verdict)) {
+        t |> failure("the watchdog neither started the tray nor gave it up within 30 s: {event_names(read_events(tray_log_path(root)))}")
+    } else {
+        invoke(blk, wd, root, verdict)
+    }
+    unsafe {
+        close_process(wd)
+    }
+    let cleanup = rmdir_rec_result(root)
+    t |> success(cleanup is value && cleanup as value, "temp dir removed")
+}
+
+[test]
+def test_tray_shutdown_over_private_bus(t : T?) {
+    if (!dbus_tools_present()) {
+        t |> skip("no /usr/bin/dbus-daemon or dbus-send here: the Linux tray rides D-Bus")
+        return
+    }
+    t |> run("the menu carries the status line, Open and Shutdown, and Shutdown ends supervision with 0") @(t : T?) {
+        var bus <- spawn_session_bus()
+        if (empty(bus.address)) {
+            t |> failure("dbus-daemon printed no address")
+        } else {
+            let address = bus.address
+            with_tray_watchdog(t, "http://127.0.0.1:1/", ["DBUS_SESSION_BUS_ADDRESS={address}"]) $(var wd; root; verdict) {
+                if (verdict == "unavailable") {
+                    if (fexist("/usr/include/dbus-1.0/dbus/dbus.h")) {
+                        t |> failure("the watchdog reports no tray although the dbus-1 headers are installed here: stddlg was built without LINUX_DBUS, or libdbus-1.so.3 failed to load")
+                    } else {
+                        t |> skip("this daslang has no Linux tray backend on this box (no libdbus-1-dev at build time)")
+                    }
+                    return
+                }
+                let dest = "org.kde.StatusNotifierItem-{unsafe(process_pid(wd))}-1"
+                // the first refresh precedes the spawn, so the running line lands a tick later
+                var layout = ""
+                let started = ref_time_ticks()
+                while (find(layout, "running") < 0 && get_time_usec(started) < 5000000) {
+                    layout = dbus_send_to(address, dest, true, "/MenuBar", "com.canonical.dbusmenu.GetLayout", ["int32:0", "int32:-1", "array:string:"])
+                    sleep(50u)
+                }
+                dump_has(t, layout, "string \"running ", "the status row")
+                dump_has(t, layout, "string \"Open wdtray\"", "the Open item")
+                dump_has(t, layout, "string \"Shutdown\"", "the Shutdown item")
+                let tooltip = dbus_send_to(address, dest, true, "/StatusNotifierItem", "org.freedesktop.DBus.Properties.Get", ["string:org.kde.StatusNotifierItem", "string:ToolTip"])
+                dump_has(t, tooltip, "wdtray - running", "the tooltip carries the same line")
+                dbus_send_to(address, dest, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:{TRAY_SHUTDOWN_ID}", "string:clicked", "variant:int32:0", "uint32:0"])
+                t |> equal(unsafe(process_wait(wd, 30.0)), 0, "supervision ended with 0 after the tray's Shutdown")
+                let events <- read_events(tray_log_path(root))
+                t |> equal(count_event(events, "tray_started"), 1)
+                t |> equal(count_event(events, "tray_shutdown_requested"), 1)
+                t |> equal(count_event(events, "terminate_requested"), 1, "--no-shutdown stops the parked child by terminating it")
+                t |> equal(count_event(events, "watchdog_stopped"), 1)
+            }
+        }
+        unsafe {
+            close_process(bus.bus)
+        }
+    }
+}
+
+//! macOS: the status item's help text is the tooltip, read back through System Events.
+[test]
+def test_tray_status_item_macos(t : T?) {
+    if (!fexist("/usr/bin/osascript")) {
+        t |> skip("no /usr/bin/osascript here: this arm reads the macOS status item through System Events")
+        return
+    }
+    t |> run("the status item's tooltip is the watchdog's status line") @(t : T?) {
+        let enabled = apple_script("tell application \"System Events\" to get UI elements enabled")
+        if (find(enabled, "true") < 0) {
+            t |> skip("System Events reports accessibility off for this process, so it cannot reach the status item: {enabled}")
+            return
+        }
+        let no_env : array<string>
+        with_tray_watchdog(t, "", no_env) $(var wd; root; verdict) {
+            if (verdict == "unavailable") {
+                t |> skip("no window server session for this process, so no status bar to put an item on")
+                return
+            }
+            let pid = unsafe(process_pid(wd))
+            var help = ""
+            let started = ref_time_ticks()
+            while (find(help, "running") < 0 && get_time_usec(started) < 5000000) {
+                help = apple_script("tell application \"System Events\" to tell (first process whose unix id is {pid}) to get help of menu bar item 1 of menu bar 1")
+                sleep(50u)
+            }
+            dump_has(t, help, "wdtray - running", "the tooltip")
+        }
+    }
+}
+
+//! Windows has no scriptable route to the notification area: this arm proves the wiring reaches
+//! `tray_started` on an interactive desktop and gives the icon up in session 0.
+[test]
+def test_tray_windows_smoke(t : T?) {
+    if (!fexist("C:\\Windows\\explorer.exe")) {
+        t |> skip("not Windows")
+        return
+    }
+    t |> run("the watchdog shows its icon on an interactive desktop, or reports it unavailable") @(t : T?) {
+        let no_env : array<string>
+        with_tray_watchdog(t, "", no_env) $(var wd; root; verdict) {
+            if (verdict == "unavailable") {
+                if (has_env_variable("SESSIONNAME")) {
+                    t |> failure("the watchdog reports no tray although this is an interactive session (SESSIONNAME is set)")
+                } else {
+                    t |> skip("no interactive desktop for this process (session 0, SESSIONNAME unset)")
+                }
+                return
+            }
+            t |> equal(count_event(read_events(tray_log_path(root)), "tray_started"), 1)
+        }
+    }
 }
 
 [test]
