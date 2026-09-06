@@ -4,6 +4,7 @@ options no_aot
 require dastest/testing_boost public
 require daslib/fio
 require strings
+require stddlg
 
 //! Linux tray over a private session bus: this daslang spawns `dbus-daemon`, then a child daslang
 //! running the tray fixture with DBUS_SESSION_BUS_ADDRESS pointing at it, and drives the child's
@@ -79,7 +80,11 @@ def start_child(t : T?; var rig : TrayRig) : bool {
     rig.child = unsafe(spawn_process(argv, "", env))
     let first = wait_for_line(t, rig, "@", 30.0)
     if (first == "@unavailable") {
-        t |> skip("this daslang has no Linux tray backend on this box (built without libdbus-1-dev, or no libdbus-1.so.3), so the D-Bus arms have nothing to drive")
+        if (fexist("/usr/include/dbus-1.0/dbus/dbus.h")) {
+            t |> failure("the child reports no tray backend although the dbus-1 headers are installed here: the module was built without LINUX_DBUS, or libdbus-1.so.3 failed to load")
+        } else {
+            t |> skip("this daslang has no Linux tray backend on this box (no libdbus-1-dev at build time), so the D-Bus arms have nothing to drive")
+        }
         return false
     }
     if (first == "@create_failed") {
@@ -189,9 +194,13 @@ def test_tray_windows_smoke(t : T?) {
         rig.child = unsafe(spawn_process(argv, "", no_env))
         let first = wait_for_line(t, rig, "@", 30.0)
         if (first == "@unavailable") {
-            t |> skip("no interactive desktop for this process (session 0 or no taskbar): the icon needs a person at the box")
+            if (has_env_variable("SESSIONNAME")) {
+                t |> failure("the child reports no tray although this is an interactive session (SESSIONNAME is set): the availability gate is wrong")
+            } else {
+                t |> skip("no interactive desktop for this process (session 0, SESSIONNAME unset): the icon needs a person at the box")
+            }
         } else {
-            t |> equal(first, "@notify true")
+            t |> equal(wait_for_line(t, rig, "@notify", 10.0), "@notify true")
             t |> equal(wait_for_line(t, rig, "@ready", 30.0), "@ready")
         }
         stop_rig(rig)
@@ -230,13 +239,15 @@ def test_tray_macos_status_item(t : T?) {
             stop_rig(rig)
             return
         }
-        let pid = unsafe(process_pid(rig.child))
-        let clicked = apple_script("tell application \"System Events\" to tell (first process whose unix id is {pid}) to click menu bar item 1 of menu bar 1")
-        if (find(clicked, "assistive access") >= 0 || find(clicked, "-1719") >= 0 || find(clicked, "-25211") >= 0) {
-            t |> skip("System Events cannot reach the status item here (accessibility permission): {clicked}")
+        let enabled = apple_script("tell application \"System Events\" to get UI elements enabled")
+        if (find(enabled, "true") < 0) {
+            t |> skip("System Events reports accessibility off for this process, so it cannot reach the status item: {enabled}")
             stop_rig(rig)
             return
         }
+        let pid = unsafe(process_pid(rig.child))
+        let clicked = apple_script("tell application \"System Events\" to tell (first process whose unix id is {pid}) to click menu bar item 1 of menu bar 1")
+        t |> success(find(clicked, "error") < 0, "with accessibility on, the child must own a status item System Events can click: {clicked}")
         t |> equal(wait_for_line(t, rig, "@event click", 10.0), "@event click 0 0 0")
         stop_rig(rig)
     }
@@ -250,8 +261,10 @@ def test_tray_over_private_bus(t : T?) {
     }
     t |> run("the item exposes its StatusNotifierItem properties") @(t : T?) {
         with_rig(t) $(var rig : TrayRig) {
+            t |> equal(wait_for_line(t, rig, "@create_again", 5.0), "@create_again true")
             let title = dbus_send(rig, true, "/StatusNotifierItem", "org.freedesktop.DBus.Properties.Get", ["string:org.kde.StatusNotifierItem", "string:Title"])
-            has(t, title, "string \"daslang tray fixture\"", "Title")
+            has(t, title, "string \"daslang tray fixture\"", "Title after tray_set_tooltip")
+            t |> success(find(title, "boot tooltip") < 0, "the create-time tooltip is gone after tray_set_tooltip")
             let all = dbus_send(rig, true, "/StatusNotifierItem", "org.freedesktop.DBus.Properties.GetAll", ["string:org.kde.StatusNotifierItem"])
             has(t, all, "string \"ApplicationStatus\"", "Category")
             has(t, all, "string \"Active\"", "Status")
@@ -281,6 +294,7 @@ def test_tray_over_private_bus(t : T?) {
             has(t, layout, "string \"Paused\"", "disabled label")
             has(t, layout, "string \"toggle-state\"", "checkmark")
             has(t, layout, "string \"Quit\"", "last label")
+            t |> success(find(layout, "Throwaway entry") < 0, "tray_menu_clear dropped the committed throwaway menu")
             let version = dbus_send(rig, true, "/MenuBar", "org.freedesktop.DBus.Properties.Get", ["string:com.canonical.dbusmenu", "string:Version"])
             has(t, version, "uint32 3", "dbusmenu version")
         }
@@ -315,5 +329,37 @@ def test_tray_over_private_bus(t : T?) {
         with_rig(t) $(var rig : TrayRig) {
             t |> equal(wait_for_line(t, rig, "@notify", 5.0), "@notify false")
         }
+    }
+}
+
+//! The size checks of tray_set_icon run before any backend is consulted, so they are pure daslang:
+//! a rejected call panics and the recover block reports it.
+[sideeffects]
+def icon_rejected(pixels : array<uint8>; width : int; height : int) : bool {
+    var rejected = false
+    try {
+        tray_set_icon(pixels, width, height)
+    } recover {
+        rejected = true
+    }
+    return rejected
+}
+
+[test]
+def test_tray_icon_validation(t : T?) {
+    t |> run("a byte count that does not match width * height * 4 is rejected") @(t : T?) {
+        var px : array<uint8>
+        px |> resize(15)
+        t |> success(icon_rejected(px, 2, 2), "15 bytes for a 2x2 icon")
+    }
+    t |> run("a zero or negative size is rejected") @(t : T?) {
+        let px : array<uint8>
+        t |> success(icon_rejected(px, 0, 0), "0x0")
+        t |> success(icon_rejected(px, 2, -2), "2x-2")
+    }
+    t |> run("a matching size passes the checks even with no tray to receive it") @(t : T?) {
+        var px : array<uint8>
+        px |> resize(16)
+        t |> success(!icon_rejected(px, 2, 2), "16 bytes for 2x2")
     }
 }

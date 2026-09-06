@@ -17,12 +17,16 @@ def main() : int {
         say("@unavailable")
         return 2
     }
-    if (!tray_create("daslang tray fixture")) {
+    if (!tray_create("boot tooltip")) {
         say("@create_failed")
         return 3
     }
+    say("@create_again {tray_create("ignored second tooltip")}")
+    tray_set_tooltip("daslang tray fixture")
     let rgba <- [for (v in [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 128]); uint8(v)]
     tray_set_icon(rgba, 2, 2)
+    tray_menu_add(99, "Throwaway entry", true, false)
+    tray_menu_commit()
     tray_menu_clear()
     tray_menu_add(10, "Open status page", true, false)
     tray_menu_add_separator()

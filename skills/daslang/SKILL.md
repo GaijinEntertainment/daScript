@@ -217,8 +217,10 @@ first when the pointers are non-owning.
 
 ## Error handling
 
-- `panic("msg")` is FATAL - daslang has no exception model. `try { } recover { }` captures
-  the message before exiting; it does NOT recover and continue. Never design APIs around
+- `panic("msg")` (and a runtime error such as a failed bounds check or a C++ `throw_error_at`)
+  unwinds to the nearest enclosing `try { } recover { }`, whose `recover` block runs and
+  execution continues after it, in the interpreter and under the JIT alike; with no enclosing
+  `try` the process dies. There is no exception object to inspect. Never design APIs around
   panic-as-control-flow.
 - `assert(cond, "msg")` may be stripped in release; `verify(cond, "msg")` always runs. The
   message must be a string CONSTANT - for a runtime-value diagnostic write
