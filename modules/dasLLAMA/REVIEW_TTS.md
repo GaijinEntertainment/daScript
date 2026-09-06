@@ -60,15 +60,14 @@ step - implemented in a TTS family file is a defect; it goes in
 `dasllama/dasllama_tts_blocks.das`.**
 
 **Family BEHAVIOR in `dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` -
-a family-keyed branch in the synthesis path, a tensor quirk, a symbol or token rule - is a
-defect; the quirk goes in its family file.** Family DATA is not: the shared carrier holds each
-family's driver data (`kitten : KittenFamily`, `kokoro : KokoroFamily`) and the reader that
-fills it from the gguf or the image, because the image serializer lives there and must see
-every field.
+a family-keyed branch, a tensor quirk, a symbol or token rule - is a defect; the quirk goes in
+its family file.** Family DATA is not: the shared carrier holds each family's data record and
+the reader that fills it from the gguf or the image (`ARCHITECTURE_TTS.md` sec.2.32).
 
-**A diff that adds a field to `KittenFamily` or `KokoroFamily` grows the serializer's
-field-count `verify` in `dasllama/dasllama_styletts2.das` in the same change** - a field the
-count does not know rides no image, and the mapped model serves the gguf's default.
+**A diff that adds a field to a family's data record on the shared carrier (`KittenFamily`,
+`KokoroFamily`) also serializes that field in `serialize_image_meta` and grows the field-count
+`verify` beside it (`dasllama/dasllama_styletts2.das`), in the same change** - an unwritten
+field reads back zero from a mapped image.
 
 **A change to a kernel, a lexicon, a normalizer rule, or a phoneme rule ships the WER and
 UTMOS of `harness/tts_rig.py`, before and after, on every model the change reaches at the

@@ -1,7 +1,8 @@
 # dasLLVM Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`. Planned work: `DEBUGGING.md` (sec. Roadmap).
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
+`ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`. Planned work: `DEBUGGING.md` (sec. Roadmap),
+`fat_mode_plan.md`.
 
 - **A change under `modules/dasLLVM/` runs the module-owned suite** (command and build gate:
   `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
@@ -12,8 +13,11 @@
   takes the new branch.**
 
 - **A test under `tests/` (beside this file) never creates, overwrites, or deletes a
-  git-tracked path - it copies the fixture into a temp directory it makes and writes to the
-  copy.**
+  git-tracked path.**
+
+- **A test under `tests/` here that writes at all writes only under a directory it created for
+  this process, and removes it** - a shared path under `build/` is one two concurrent runs
+  collide on.
 
 - **A diff that adds or changes a branch on the target triple records in its PR body the
   cross-compile (`write_exe`) for that target that exercised the behavior.** The suite runs on
@@ -47,14 +51,15 @@
 - **A change to the tune framework - `daslib/llvm_tune.das` or its tests - is reviewed with
   `skills/internal/llvm_tune_internals.md`.**
 
-- **A test under `tests/` here that asserts output a macro produced during compilation - an
-  `llvm_tune:` line the `[tune]` or `[tune_scope]` apply prints, a `[tune]`-family compile
-  error - or asserts its absence, spawns its child daslang process with `-no-module-cache`; a
-  test whose subject is the cache itself pins its own file with `-module-cache <temp>` instead
-  and never takes the flag.** The front-end module cache is on by default and replays the
-  cached AST without re-running the macro, so a positive assertion lands on the first run and
-  never again, and a silence assertion passes vacuously. A line the runtime guard prints - the
-  covered-box announce, `re-tuning (--tune)` - is not macro output and needs no flag.
+- **A test under `tests/` here that asserts output the front-end module cache replays instead
+  of re-producing - or asserts its absence - spawns its child daslang process with
+  `-no-module-cache`; a test whose subject is the cache itself pins its own file with
+  `-module-cache <temp>` instead and never takes the flag.** The cache is on by default and
+  replays the cached AST without re-running a macro, so an `llvm_tune:` line the `[tune]` or
+  `[tune_scope]` apply prints or a `[tune]`-family compile error lands on the first run and
+  never again, and a silence assertion passes vacuously. A line the backend or the runtime
+  guard prints past the cache - the `LLVM JIT:` announce, the covered-box announce, `re-tuning
+  (--tune)` - is re-produced every run and needs no flag.
 
 - **A diff that adds a top-level section to the tune sidecar (`<app>.tune.json`, written by
   `daslib/llvm_tune.das`) updates `modules/dasLLAMA/dasllama/dasllama_exchange_schema.das` in

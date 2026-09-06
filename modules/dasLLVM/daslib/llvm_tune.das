@@ -17,10 +17,10 @@ require daslib/clargs
 require strings
 require math
 require llvm/daslib/llvm_code public
-require llvm/daslib/llvm_tune_fat_word   // the [llvm_code] spelling for the fat words below - never public, a program has daslib/tune's
 require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_env
 require llvm/daslib/llvm_cpu_class
+require llvm/daslib/llvm_code_shell   // the [llvm_code] spelling for the fat words below - never public, a program has daslib/tune's
 
 //! Generalized tune framework (gemm_generator_plan.md part 2). `[tune_perm(...), ...,
 //! tune(gen="key", fallback="suffix")]` — perm rows first, `tune` last — turns one reference
@@ -992,6 +992,22 @@ def tune_fat_init(baseline : string) {
     if (!empty(pin) && !tune_fat_box_in_class(pin)) {
         panic("DAS_TUNE_FAT_CLASS={pin} pins a CPU class this box is not in ({jit_cpu_class_row(pin).features})")
     }
+    if (!empty(pin)) {
+        // the status rows precede this call: a pin names a class some clone carries, or it dispatches nothing
+        var carried : array<string>
+        var found = false
+        for (s in g_tune_status) {
+            continue if (empty(s.klass))
+            found ||= s.klass == pin
+            if (find_index(carried, s.klass) < 0) {
+                carried |> push(s.klass)
+            }
+        }
+        if (!found && !empty(carried)) {
+            panic("DAS_TUNE_FAT_CLASS={pin} pins a CPU class this exe carries no clone for (it carries: {join(carried, ", ")})")
+        }
+        delete carried
+    }
     var mask = 0
     var names : array<string>
     for (c in split(jit_cpu_class_ladder(brow.arch), ";")) {
@@ -1253,7 +1269,7 @@ def private scope_status_row(prog : Program?; sc : TuneScope; mpath : string; co
     for (fname in fnames) {
         for (st in compileStatus) {
             if (st.fname == fname && (fat ? st.klass == baseline : true)) {
-                if (st.source != "manifest" && st.source != "profile") {
+                if (st.source != "manifest") {
                     fallbacks |> push("{fname}={st.suffix}")
                 }
                 if (fat && st.source != "profile") {
@@ -1778,7 +1794,7 @@ def private fat_ship_set(baseline : string) : array<string> {
 // one class's stamp for `fname`: the class profile's winner when the grid carries it and the
 // class's set passes its requires=, else the first fallback the class's set passes, else "" (reference)
 def private fat_pick(fname, klass : string; perms : array<TunePerm>; args : AnnotationArgumentList;
-                     var source, path : string&) : string {
+                     var source, path : string&; var errors : das_string) : string {
     let features = jit_cpu_class_row(klass).features
     var pk = ""
     var pp = ""
@@ -1804,11 +1820,17 @@ def private fat_pick(fname, klass : string; perms : array<TunePerm>; args : Anno
     if (fv is tString) {
         for (cand in split(fv as tString, ";")) {
             continue if (empty(cand))
+            var known = false
             for (p in perms) {
+                known ||= p.suffix == cand
                 if (p.suffix == cand && requires_ok_in_fingerprint(p.requires, features)) {
                     source = "fallback"
                     return cand
                 }
+            }
+            if (!known) {
+                errors := "[tune] on {fname}: fallback perm '{cand}' is not in the [tune_perm] grid"
+                return ""
             }
         }
     }
@@ -1899,7 +1921,8 @@ def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<Tun
     for (klass in ship) {
         var source = ""
         var path = ""
-        let suffix = fat_pick("{func.name}", klass, perms, args, source, path)
+        let suffix = fat_pick("{func.name}", klass, perms, args, source, path, errors)
+        break if (!empty(errors))
         let cloneName = add_fat_clone(func, klass, genKey, suffix, path, source, perms, errors)
         break if (!empty(errors))
         picks |> push("{klass}={empty(suffix) ? "reference" : suffix}/{source}")
@@ -1942,7 +1965,7 @@ def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<Tun
         func.body := qmacro_block() { $b(arms) }
         func.sideEffectFlags.userScenario = true
         if (tune_verbosity() != "silent") {
-            print("llvm_tune: [tune] {func.name}: fat clones {join(picks, ", ")}\n")
+            print("llvm_tune: [tune] {func.name} (DAS_TUNE_MODE=fat): fat clones {join(picks, ", ")}\n")
         }
         // reference-row-only registries, so harness code referencing <name>_variants() still compiles
         let noPerms : array<TunePerm>
@@ -2050,7 +2073,7 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
         return ok
     }
     if (mode != "normal") {
-        errors := "[tune] on {func.name}: unknown DAS_TUNE_MODE '{mode}' (normal | tune | test)"
+        errors := "[tune] on {func.name}: unknown DAS_TUNE_MODE '{mode}' (normal | tune | test | fat)"
         delete perms
         delete comps
         return false
@@ -3025,17 +3048,17 @@ def private emit_status_init(var errors : string&) {
     if (!empty(rows)) {
         var body : array<ExpressionPtr>
         body |> reserve(length(rows) + 1)
-        if (tune_mode() == "fat") {
-            // the dispatch mask, before any kernel can run: an unset mask still reads as the baseline
-            let baseline = jit_baseline_class()
-            body |> push <| qmacro_expr() {
-                tune_fat_init($v(baseline))
-            }
-        }
         for (row in rows) {
             body |> push <| qmacro_expr() {
                 tune_status_add($v(row.fname), $v(row.scope), $v(row.suffix),
                     $v(row.source), $v(row.manifestPath), $v(row.klass))
+            }
+        }
+        if (tune_mode() == "fat") {
+            // after the rows, so a pin is checked against the clones the exe carries; an unset mask reads as the baseline
+            let baseline = jit_baseline_class()
+            body |> push <| qmacro_expr() {
+                tune_fat_init($v(baseline))
             }
         }
         var fn = qmacro_function("`tune`status`init") $() : void {

@@ -2031,6 +2031,19 @@ def test_cmd_release_fat(t : T?) {
         force_rmdir(tmp_root)
         force_rmdir(out_dir)
     }
+    t |> run("--fat refuses a class name that is not a name before anything builds") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_fat_unsafe"
+        let out_dir = "{get_das_root()}/_test_release_fat_unsafe_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        write_fat_fixture(tmp_root, true)
+        for (bad in ["x86-avx2 DAS_X=1", "x86-avx2;echo", "x86-avx2\"", "../x86-avx2"]) {
+            tt |> success(cmd_release(tmp_root, out_dir, false, false, bad) != 0, "'{bad}' is refused")
+        }
+        tt |> success(!fexist(bundle_exe_path(out_dir, "fatstub")) && !fexist("{bundle_exe_path(out_dir, "fatstub")}.exe"), "no exe was built for a refused class name")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
     t |> run("the gate names the kernel and the class, and passes a fully profiled scope") @(tt : T?) {
         let refusal = release_fat_refusal("fatscope", "fat_kernel;other_kernel", low)
         tt |> success(find(refusal, "scope `fatscope` has no {low} profile entry for fat_kernel, other_kernel") >= 0, "the refusal names the scope, the class and the kernels: {refusal}")

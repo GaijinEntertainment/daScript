@@ -134,7 +134,7 @@ def log_tune_status(appName : string) {
     }
 }
 
-//! The status table as plain strings - the framework's row type never crosses the guard, so the
+//! The status table as plain values - the framework's row type never crosses the guard, so the
 //! caller above is one function in every build; empty without the framework.
 def private tune_status_rows() : array<tuple<fname : string; suffix : string; source : string; klass : string; active : bool>> {
     var rows : array<tuple<fname : string; suffix : string; source : string; klass : string; active : bool>>

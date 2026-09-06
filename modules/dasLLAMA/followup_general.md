@@ -933,11 +933,12 @@
     `dasllama/dasllama_tts_blocks.das` has a cell naming it in `tests/test_tts_blocks.das` -
     list A equals list B; (3) a `set_*_q8` call in a function with no `defer` reaching the
     matching `reset_*_q8` - one grep-shaped cell that retires `REVIEW_AUDIO.md`'s twin rule
-    with it; (4) no family type, family-keyed branch or family metadata key in
-    `dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` - `REVIEW.das`
-    already runs `check_family_seams` for the audio and vision carriers, and `dasllama_tts.das`
-    (`TtsKind`, `KittenFamily` / `KokoroFamily` fields) is the same shape, so a third
-    registration is the gate. Lint note from the same round: PERF026's remedy text advertises
+    with it; (4) no family BEHAVIOR in `dasllama/dasllama_tts_blocks.das` or
+    `dasllama/dasllama_styletts2.das` - a family-keyed branch outside the carrier's reader
+    (`stage_family_data`), a tensor quirk, a symbol or token rule; the family data records and
+    the reader that fills them are the shared carrier's by `REVIEW_TTS.md` - `REVIEW.das`
+    already runs `check_family_seams` for the audio and vision carriers, so a third
+    registration with the reader exempted is the gate. Lint note from the same round: PERF026's remedy text advertises
     `@scratch` generically, but the mark is inert on a `var inscope @scratch` LOCAL (eight TTS
     findings sat on locals already carrying it) - the message should say "move it to a reused
     field", or the rule should honor a scope-lifetime local it can prove.

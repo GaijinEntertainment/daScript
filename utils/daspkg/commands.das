@@ -2296,6 +2296,10 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
             writer |> write("\"")
         }
     }
+    if (!empty(fat) && !is_safe_pkg_name(fat)) {   // the class name is spliced unquoted into the build line
+        to_log(LOG_ERROR, "release --fat: '{fat}' is not a CPU class name (letters, digits, '-', '_' and '.' only)\n")
+        return 1
+    }
     let cmd = "{release_fat_env(fat)}\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args} \"{main_path}\""
     if (!empty(fat)) {
         log("  build: fat exe for the {fat} class (DAS_JIT_BASELINE={fat}, DAS_TUNE_MODE=fat)\n")
@@ -2332,6 +2336,13 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
             for (ts in deps0.tune_scopes) {
                 log("  tune: scope `{ts.name}` ships its {fat}-and-up profile clones (fat: no mint, no sidecar - the exe races its runtime section at first start)\n")
             }
+        } else {
+            // the deps JSON is the only place the fat gate can read; without it the gate never ran
+            to_log(LOG_ERROR, "release --fat {fat}: the release-deps JSON {deps_file} cannot be read, so the fat gate never ran - the build line above says why\n")
+            if (fexist(deps_file)) {
+                remove(deps_file)
+            }
+            return 1
         }
     } else {
         var deps0 : ReleaseDeps

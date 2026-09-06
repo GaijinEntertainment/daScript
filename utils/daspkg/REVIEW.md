@@ -21,15 +21,13 @@ directory).
 **A diff that adds a command or a flag also adds its `print_usage` line and its `README.md`
 table row, in the same change.**
 
-**A `cmd_release` bundle whose main exe ships without a tune sidecar beside it is a defect** - the
-tune sidecar is the `<bundle>.tune.json` file of measured kernel choices the exe reads at run
-time; a tool shipped by `release_include_tool` carries no `[tune]` kernels and needs none, and a
-`--fat` bundle ships none by design: its kernels are baked per CPU class from the library's
-profiles, and the exe writes its own runtime section beside itself at first start.
+**A `cmd_release` bundle built without `--fat` whose main exe ships without a tune sidecar
+beside it is a defect** - the tune sidecar is the `<bundle>.tune.json` file of measured kernel
+choices the exe reads at run time.
 
-**A `--fat` release that ships a `[tune]` kernel whose baseline-class clone came from no profile
-is a defect** - `release_fat_gate` reads the `fat_unprofiled` list of every scope in the deps
-JSON and refuses; a fat exe never tunes, so a fallback stamp there would ship forever.
+**A diff that lets a `--fat` release finish while any scope's `fat_unprofiled` list in the deps
+JSON is non-empty, or while the deps JSON cannot be read, is a defect** - `release_fat_gate`
+refuses; a fat exe never tunes.
 
 **A diff that lets a release path other than `--quick` reuse a sidecar from an earlier run is a
 defect.**
@@ -53,9 +51,9 @@ account for.
 **A test in `test_daspkg.das` that reaches the network is a defect** - network coverage belongs
 in `test_daspkg_git.das`.
 
-**A shell command or filesystem path built from any string a `.das_package` supplies - a
-package, bundle, app, module or tool name - outside `commands.das`, or without an
+**A shell command or filesystem path built from any name this tool did not produce itself - a
+`.das_package` package, bundle, app, module or tool name, or a command-line value that names
+one, a CPU class included - outside `commands.das`, or without an
 `is_safe_pkg_name` check on that string first, is a defect** - `is_safe_pkg_name` is private to
-`commands.das`, and a name carrying a separator or `..` reads or writes outside the directory
-the path was built for. The emcc flags of `release_emcc_arg` are the carve-out: free-form shell
-text by design, appended verbatim.
+`commands.das`, and a string carrying a space, a quote, a separator or `..` splits the command
+or reads outside the directory the path was built for.

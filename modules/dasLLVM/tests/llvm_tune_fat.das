@@ -170,6 +170,15 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
             t |> success(lf |> has("pins a CPU class this box is not in"), "case 4: the refusal names the pin\n{join(lf, "\n")}")
             delete lf
         }
+
+        // 4b. a pin to a class the box is in but the exe carries no clone for refuses to start -
+        //     only the top and the baseline are profiled, so a middle class of the ladder has none
+        if (length(ladder) > 2 && tune_fat_box_in_class(ladder[1])) {
+            var lm : array<string>
+            t |> success(spawn_child("{tune_env_prefix("", "", ladder[1])}\"{exe}.exe\"", lm) != 0, "case 4b: a pin the exe carries no clone for refuses")
+            t |> success(lm |> has("carries no clone for"), "case 4b: the refusal says the exe carries no such clone\n{join(lm, "\n")}")
+            delete lm
+        }
     }
 
     // 5. fat is an exe mode: a -jit run refuses by name

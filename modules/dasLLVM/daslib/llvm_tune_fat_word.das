@@ -3,31 +3,17 @@ options indenting = 4
 
 module llvm_tune_fat_word shared private
 
-require daslib/ast
-require daslib/ast_boost
-require llvm/daslib/llvm_code
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_code
+require daslib/ast_boost
 
 //! The fat dispatch words as LLVM-side globals. `[llvm_code(name = "llvm_tune_fat_word::load",
 //! global = "<name>")]` on a `() : int` stub emits a load of the module global `<name>`; the
 //! `store` twin on an `(int) : void` stub emits the store. The global is one word of process
 //! memory per artifact, so every context of the process reads what the exe's `[init]` wrote -
 //! the pooled forks whose init script never ran included, where a das global stays zero. The
-//! stubs' das bodies serve the interpreter and AOT.
-//!
-//! The `[llvm_code]` spelling this module registers is for `llvm_tune`'s own stubs: `daslib/tune`
-//! carries the user-facing one and requires `llvm_tune`, so `llvm_tune` cannot see it. This one
-//! is visible only where the module is required directly - never from a program, which would
-//! then see two annotations of that name.
-
-[function_macro(name = "llvm_code")]
-class private LlvmCodeWordShell : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
-        return llvm_code_apply(func, group, args, errors)
-    }
-}
+//! stubs' das bodies serve the interpreter and AOT; their `[llvm_code]` spelling is
+//! `llvm_code_shell`'s.
 
 def private word_global(var gc : LlvmCodeCtx) : LLVMOpaqueValue? {
     let gv = find_arg(gc.ann.arguments, "global")

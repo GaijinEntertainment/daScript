@@ -360,7 +360,10 @@ registered skips the cell naming it, never a silent run on the default backend.
 (`lcpp_bench --parity`, via `parity_check` fed a controlled spec) on small carriers - the real
 fixture passes, a flipped id fails, an evidence-less spec is refused, the text-form prompt
 encodes through the tokenizer (E2B), the kq-native arm engages and restores the mode
-(Qwen3-4B Q4_K_M). Requires the bench by relative path (like `test_tok_seed`), so it pays the
+(Qwen3-4B Q4_K_M); plus the timed run's fixture gate (`fixture_gate_check` - the opening
+tokens of the same evidence on the served model, once per model before the rows): the table's
+fixture passes, an opening that matches nothing refuses, a row with no evidence stands aside.
+Requires the bench by relative path (like `test_tok_seed`), so it pays the
 bench's engine compile.
 `test_run_summary.das` - model-free: `run.das`'s own `log_summary` log scraper (last marker line
 wins, end of file closes an unterminated final line, doubled marker yields one line), fed

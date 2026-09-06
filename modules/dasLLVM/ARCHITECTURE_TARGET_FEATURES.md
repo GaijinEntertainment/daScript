@@ -114,9 +114,13 @@ kernel dispatched from a worker would run the baseline clone against planes the 
 laid out for its own class. Process memory has one copy, so a fork reads what the main
 context's `[init]` stored, and the chain's guard is a plain load the backend hoists. The stubs'
 das bodies (the das globals) serve the interpreter and AOT, where there is no fat exe. The
-spelling `[llvm_code]` inside `llvm_tune` comes from that same module, required non-publicly:
-`daslib/tune` carries the user-facing annotation and requires `llvm_tune`, so `llvm_tune` cannot
-see it, and a program must never see both.
+spelling `[llvm_code]` inside `llvm_tune` comes from `daslib/llvm_code_shell.das`, an
+annotation-only module required non-publicly: `daslib/tune` carries the user-facing annotation
+and requires `llvm_tune`, so `llvm_tune` cannot see it, and a program must never see both. The
+shell is its own module rather than a corner of the generator module because `llvm_tune`'s
+closure reaches every program with a `[tune_policy]`, JIT or not: pulling the LLVM bindings in
+there applies their `[extern]` stubs to the `dasbind` builtin in a different set and order per
+process, and the module cache reads that as a builtin hash drift and reparses.
 
 The emitter (`try_llvm_code_function`, `daslib/llvm_jit.das`) reads `tune_class` off the
 annotation and gives the clone's impl three things: the `target-cpu` and `target-features`

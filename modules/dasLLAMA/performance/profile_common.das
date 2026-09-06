@@ -540,7 +540,7 @@ def private tune_gate_verdict(why : string) : bool {
     return false
 }
 
-//! The three-world refusal text, "" when the cell may measure. Generic on purpose (the unused
+//! The four-world refusal text, "" when the cell may measure. Generic on purpose (the unused
 //! parameter is what keeps it one): it names framework functions, so its body must instantiate
 //! only from `tune_gate`'s framework arm - a plain function would compile in every build.
 def private tune_gate_why(_) : string {

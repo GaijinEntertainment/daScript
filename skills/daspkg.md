@@ -28,6 +28,7 @@ The `--root` flag sets the project root directory (default: current directory). 
 | `cleanup` | `cleanup [--force] [--global]` | Remove `modules/` and `daspkg.lock` to reset a project |
 | `doctor` | `doctor` | Check environment (git, cmake, gh) |
 | `release` | `release [--out <dir>]` | Bundle project as a redistributable standalone (exe + shared modules + assets) |
+| `release --fat` | `release --fat <class> [--out <dir>]` | The same bundle as a fat exe: plain code for the CPU class, one clone per profiled class of every `[tune]` kernel, no mint, no sidecar - see "A fat release" below |
 | `release wasm` | `release wasm --root <dir> [--out <dir>] [--wasm-lib-dir <dir>]` | Cross-compile the project to a standalone wasm64 web app (`<name>.{html,js,wasm}`) - see WebAssembly section |
 | `introduce` | `introduce` | Register package in the public index (creates PR on daspkg-index) |
 | `withdraw` | `withdraw` | Remove package from the public index |
@@ -46,6 +47,7 @@ The `--root` flag sets the project root directory (default: current directory). 
 | `--root <path>` | Project root directory (default: current directory) |
 | `--force` | Force reinstall (overrides duplicate/version checks) |
 | `--global`, `-g` | Operate on global modules in `{das_root}/modules/` (see below) |
+| `--fat <class>` | `release` only: build a fat exe for the CPU class (`x86-avx2`, `arm-neon`, ...) - no mint, no sidecar; a kernel with no profile for its baseline clone refuses |
 | `--color` | Enable colored output |
 | `--no-color` | Disable colored output (useful for capturing output) |
 | `--verbose`, `-v` | Print detailed progress |
@@ -180,11 +182,11 @@ def initialize(project_path : string) {
 - Every `.shared_module` dylib the program transitively requires, at the path the exe expects (`modules/<X>/<X>.shared_module`).
 - Every asset matching the project's `release_include` globs.
 
-The recipient can run the bundled exe **without daslang installed**. PR #1 (exe-relative shared modules, merged 2026-05-05) is the prerequisite - the runtime resolves dylibs against the exe's own directory first.
+The recipient can run the bundled exe **without daslang installed** - the runtime resolves dylibs against the exe's own directory first.
 
 **Build-time tuning (the `[tune]` framework):** the `-exe` build's deps JSON reports every `[tune_scope]` with per-key completeness against the app tune sidecar; `cmd_release` always mints: it runs the tuners (`DAS_TUNE_MODE=tune`, `DAS_TUNE_MANIFEST=<sidecar>`), REBUILDS so the exe bakes the measured winners, and ships the sidecar beside the exe as `<bundle>.tune.json` (touched newer than the exe - a sidecar older than the binary reads as stale). `--quick` is the only inheriting mode, and only from a complete, fresh sidecar; a tuner refusal (noise gate / validation) fails the release rather than shipping fallbacks. The exe self-reports its baked stamps via `tune_status()`. See `skills/tune.md`.
 
-**A fat release (`--fat <class>`):** the exe is built under `DAS_JIT_BASELINE=<class>` and `DAS_TUNE_MODE=fat` - its plain code targets the class, every `[tune]` kernel carries one clone per class the library ships a profile for, and the exe picks the clone from cpuid at startup. Nothing mints and no sidecar ships: the deps JSON's `fat_unprofiled` list names any kernel whose baseline clone came from no profile, and one such kernel refuses the release. The exe races its runtime section (the Metal twin crowns among the knobs) at its first start on the box it runs on and keeps it beside itself. `skills/tune.md`, *The fat exe*.
+**A fat release (`--fat <class>`):** the exe is built under `DAS_JIT_BASELINE=<class>` and `DAS_TUNE_MODE=fat` - its plain code targets the class, every `[tune]` kernel carries one clone per class the library ships a profile for, at or above the baseline, and the exe picks the clone from cpuid at startup. Nothing mints and no sidecar ships: the deps JSON's `fat_unprofiled` list names any kernel whose baseline clone came from no profile, and one such kernel refuses the release. A library that registers a first-start hook (dasLLAMA's `set_runtime_race_hook`) races its runtime section - the Metal twin crowns among the knobs - at the exe's first start on the box it runs on and keeps it beside the exe; a library without one runs the knob defaults. `skills/tune.md`, *The fat exe*.
 
 ### `release()` hook in `.das_package`
 

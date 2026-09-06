@@ -12,6 +12,7 @@ def initialize(project_path : string) {
         "llvm_env",     // [EnvConfig] environment-knob registry (ENVIRONMENT.md generates from it)
         "llvm_cpu_class",     // the CPU classes profiles are keyed by, and the DAS_JIT_BASELINE target
         "llvm_code",          // [llvm_code] user-side annotation
+        "llvm_code_shell",    // the [llvm_code] spelling for dasLLVM's own daslib (llvm_tune's fat-word stubs)
         "llvm_jit_code",      // [llvm_code] JIT-side generator registry
         "llvm_user_modules",  // user-extensible require list for generator modules
         "llvm_code_selftest", // worked-example generator + self-test vehicle

@@ -104,11 +104,16 @@ def public dasllama_race_runtime_section() : bool {
     }
 }
 
-//! The first-start hook a fat exe fires: a build that is not fat has a policy rail and a tuner
-//! for its runtime section and does nothing here.
+// once per process: an unwritable sidecar would otherwise race again on every apply
+var private g_fat_start_ran = false
+
+//! The first-start hook a fat exe fires, once per process: a build that is not fat has a policy
+//! rail and a tuner for its runtime section and does nothing here.
 def public dasllama_fat_first_start() : bool {
     static_if (typeinfo module_exists(llvm_tune)) {
-        return tune_fat_built() && dasllama_race_runtime_section()
+        return false if (!tune_fat_built() || g_fat_start_ran)
+        g_fat_start_ran = true
+        return dasllama_race_runtime_section()
     } else {
         return false
     }

@@ -689,6 +689,10 @@ def main() : int {
         to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | all)\n")
         return 2
     }
+    if (cfg.no_tune && !empty(plan.image_arms) && !empty(areas)) {   //! an area's image arms ride the image rail --no-tune turns off
+        to_log(LOG_ERROR, "--no-tune sets DASLLAMA_IMAGE=0 in every child, and areas {join(areas, ",")} own the image arms {plan.image_arms} - drop --no-tune, or run those arms through --suite image --arm\n")
+        return 2
+    }
     var split <- exclude_files(plan.files, cfg.exclude)
     for (file in split.dropped) {
         to_log(LOG_INFO, "EXCLUDED {base_name(file)} (--exclude {cfg.exclude})\n")

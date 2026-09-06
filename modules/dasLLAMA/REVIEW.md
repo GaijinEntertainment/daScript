@@ -1,7 +1,8 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions it indexes. Planned work:
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`; the other
+`ARCHITECTURE_*.md` companions `ARCHITECTURE.md` indexes belong to the routed checklists. Planned work:
 `followup_general.md`, `followup_vulkan.md`, `followup_metal.md` (the Metal tier, and CPU work
 measured on macOS), `PERF_LEDGER.md` (performance goes to the perf ledger, everything else to
 the followup ledgers).
@@ -98,11 +99,13 @@ mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_imag
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter - stamp it
 into the class as a `@template_constant` instead.**
 
-**A function-typed global with a declaration initializer lands in a `dasllama/` file and joins
-that file's boot-restore `[init]`; landing one where `REVIEW.das`'s restore-check walk over
-`dasllama/` cannot reach it is a defect.** A serialized exe restores globals as data, so the
-function value arrives null and the first invoke to reach it dies at exe runtime while every
-`-jit` gate stays green.
+**A function-typed global a serialized exe must re-establish lands in a `dasllama/` file with
+the `[init]` that establishes it at boot; landing one where `REVIEW.das`'s restore-check walk
+over `dasllama/` cannot reach it, or weakening that walk, is a defect.** A serialized exe
+restores globals as data, so a declaration initializer arrives null and the first invoke to
+reach it dies at exe runtime while every `-jit` gate stays green; a global with no declaration
+initializer that another file's `[init]` arms (`set_runtime_race_hook`) is established by that
+`[init]` on every boot, and its null default is the declared "no hook".
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`).** A regrouping
@@ -129,8 +132,9 @@ stay f32 for another reason is ledgered on its own file's sec.1 charter line in 
 without first proving both stdin and stdout are terminals is a defect - emit the question as
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
-**A NEW clock read paired with a print or log of the elapsed interval is a defect in an engine
-file (`dasllama/`) outside a cold one-shot load, bake, map, or tokenizer-build progress log** -
+**A print or log of an elapsed interval in an engine file (`dasllama/`), outside a cold
+one-shot load, bake, map or tokenizer-build progress log and the first-start race report
+(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a), is a defect - whoever read the clock** -
 instrumentation goes through the profiling rails - `profile_tag` / `profile_marker`, `prof_add`,
 `asr_prof_add`, the Vulkan tier's `vk_prof()`-gated ledgers - and the rails and their reasons
 are `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
@@ -172,12 +176,12 @@ An override is an environment knob, an exported runtime setter, or an on-disk st
 a run writes or a user places, never data a build ships - that moves a gate, policy, or
 threshold off its default and thereby changes what the run writes, reads, mints, or computes -
 a timing knob included when it moves computed numerics. A knob
-that changes only WHEN work happens is not one, and a CLI flag is never one. A default-ON knob
-announces on the default path, naming the spelling that turns it off; a default-OFF knob
-announces when it is set. The announce is a line the run prints where the override changes the
-outcome, naming it by the spelling a user would set - the environment variable name, the
-sidecar or file key, or the setter's function name. Per-site repeats are fine; a set-but-inert
-override stays silent.
+that changes only WHEN work happens is not one, and a CLI flag is never one. The announce is a
+line the run prints where the override changes the outcome, naming it by the spelling a user
+would set - the environment variable name, the sidecar or file key, or the setter's function
+name - and, for an override that is on unless turned off, the spelling that turns it off; an
+override with no off spelling says so in its announce. Per-site repeats are fine; a
+set-but-inert override stays silent.
 
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
 left showing the old call, flag, or default after a change to user-facing API is a defect of
@@ -186,6 +190,10 @@ outside this repo can depend on - what it calls, types, requires, or parses (fac
 CLI flags, environment knobs, file formats, defaults, what the installed SDK lets a program
 `require`) - plus the in-repo rig and tool surface: any output another tool parses. A
 console-only diagnostic is not user-facing.
+
+**A diff that makes a statement in an `ARCHITECTURE_*.md` companion, a module-root document,
+or a `//!` docstring false updates it in the same change.** A section no `[arch]` cites and no
+`{#anchor}` arms is checked by the reviewer alone.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's

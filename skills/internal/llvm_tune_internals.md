@@ -102,9 +102,14 @@ Mechanism: `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md` sec.11. Maintenance
   stubs over LLVM-side globals (`llvm_tune_fat_word.das`), never plain das globals: an engine's
   pooled job contexts are forked with the init script skipped, and a das global there is zero,
   which dispatches every worker to the baseline clone. The fixture's `FORK` value is that cell.
-  The stubs need the `[llvm_code]` spelling from that same module - `llvm_tune` cannot require
-  `daslib/tune` - and the require must stay non-public, or a program sees two annotations of
+  The stubs' `[llvm_code]` spelling is `llvm_code_shell.das` - `llvm_tune` cannot require
+  `daslib/tune` - and that require must stay non-public, or a program sees two annotations of
   the name.
+- `llvm_tune` must never require the LLVM bindings (`llvm_boost`, `llvm_jit_code`, anything
+  under `bindings/`): its closure reaches every `[tune_policy]` program, JIT or not, and the
+  bindings' `[extern]` stubs land in the `dasbind` builtin in a per-process set and order, which
+  the module cache reads as a builtin hash drift (`test_tuned.das`'s cache cell reds first).
+  Generators live in modules `llvm_user_modules` requires; the annotation shell is its own module.
 
 ## The dasLLAMA tuner - the worked consumer
 
@@ -137,7 +142,18 @@ directory, redirects the copied lib's `defaults =` at a `tune_defaults/` beside 
 profile files there at runtime, named by this box's own `tune_cpu_class()`, and fakes a
 less-capable minting box with an empty `features` field to force the unlocked-seat race. It
 never writes under the tracked `llvm_tune_profiles_defaults/`; `modules/dasLLVM/REVIEW.das`
-reds a test that does.
+reds a test that does. The fat rail is `llvm_tune_fat.das` (+ `llvm_tune_fat_client.das` /
+`llvm_tune_fat_lib.das`): it writes a profile for the ladder's lowest and top class, builds
+the client as a fat exe with `--jit-dump`, asserts each clone's attribute group and the
+LLVM-side mask word in the IR, then runs the exe unpinned, pinned, and pinned outside the box
+or outside the carried clones; the client's `FORK` value dispatches from a pooled skip-init
+job context. The baseline rail is `llvm_jit_baseline.das`: the announce, the tier bits the
+class bakes, the foreign and unknown class refusals, and the cross-target arm
+(`--jit-target` + `--jit-compile-only`). Both build into a per-process temp directory. A
+change to the fat emitter also gets the served-model rail: a `daspkg release --fat` of
+`lcpp_bench` on an x86 box of a class above the baseline, whose `sanity:` lines must name the
+model table's fixture tokens - the pooled-fork mask bug passed every fixture and only that
+rail showed it.
 
 ## Shipped defaults profiles - where the pieces live
 
