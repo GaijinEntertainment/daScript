@@ -16,8 +16,9 @@ namespace das {
         if ( !text || !*text ) return L"";
         int count = MultiByteToWideChar(CP_UTF8, 0, text, -1, nullptr, 0);
         if ( count <= 0 ) return L"";
-        wstring result(size_t(count - 1), L'\0');
+        wstring result(size_t(count), L'\0');
         MultiByteToWideChar(CP_UTF8, 0, text, -1, &result[0], count);
+        result.resize(size_t(count - 1));
         return result;
     }
 
