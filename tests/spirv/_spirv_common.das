@@ -810,15 +810,13 @@ def public tern_words : array<uint> {
     return clone_to_move(tern_spv)
 }
 
-// ===== a ternary / short-circuit whose operand indexes a global-rooted array: the operand the
-// condition rules out is not evaluated — a branch through a hoisted temp, not OpSelect (OpSelect would
-// load the guarded index out of range). The pure ternaries beside them keep OpSelect. =====
+// ===== tern_lazy: an ssbo load in a ternary / && / || operand - the branched lowering; the pure ternaries beside it stay OpSelect =====
 [compute_shader(local_size_x=64, name="tern_lazy_spv"), marker(no_coverage)]
 def tern_lazy {
     let i = gl_GlobalInvocationID.x
-    let guarded = i < 100u ? fdata[i] : 0.0                 // an ssbo load in the true arm -> branch
-    let both = i > 0u && fdata[i - 1u] > 0.0                // an ssbo load in the && rhs -> branch
-    let either = i == 0u || fdata[i - 1u] < 0.0             // ... and in the || rhs
+    let guarded = i < 100u ? fdata[i] : 0.0
+    let both = i > 0u && fdata[i - 1u] > 0.0
+    let either = i == 0u || fdata[i - 1u] < 0.0
     let pure = guarded > 0.0 ? guarded : -guarded           // nolint:PERF016 -- pure arms: still OpSelect
     fdata[i] = pure + (both ? 1.0 : 0.0) + (either ? 2.0 : 0.0)
 }
@@ -2467,8 +2465,7 @@ def public coopmat2fa_words : array<uint> {
     return clone_to_move(coopmat2fa_spv)
 }
 
-// ===== The h256 flash tiles (Br=64, Bc=32): Q/O 64x256, Qf16 as A 64x256, K^T as B 256x32, V as
-// B 32x256 - the same inner loop at the head size the Qwen3.5 attention runs. =====
+// ===== The h256 flash tiles: the flash-attention inner loop at head size 256 (Br=64, Bc=32) - the shape dasLLAMA's attention runs =====
 [compute_shader(local_size_x=128, name="coopmat2fa256_spv"), marker(no_coverage)]
 def coopmat2fa256_kernel {
     let n = fa_meta[0u]

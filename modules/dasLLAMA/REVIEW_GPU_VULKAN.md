@@ -61,3 +61,20 @@ re-measured so its `=1` row now beats its `=0` row; or `override DECV4 = false` 
 `override DECVEC = false` together, which puts the format back on the scalar callback.** With
 `DECV4 = true` the class never reads `DECVEC`, so `override DECVEC = false` alone leaves the
 hand-written twin running.
+
+**A `?:` inside a `[spirv_kernel]` body never reads a buffer or a `@workgroup` array in either
+arm - read the value into a local above the select, clamping the index where the guard was what
+kept it in range.** The emitter lowers such an arm as a branch (`modules/dasSpirv/ARCHITECTURE.md`
+sec.3.4), so the select stops being an `OpSelect` and the kernel loses its branchless form.
+
+**A diff that changes how many GPU timestamps a resident-driver layer records - the token
+command's stamps in `dasllama/dasllama_vulkan_decode.das`, or the window block's `pfq_ts` calls
+in `dasllama/dasllama_vulkan_prefill.das` - updates that file's per-layer stamp count and role
+table in the same change** (`rdq_sample`; `pf_roles_per_layer` and `pf_prof_report`). Both
+readers index a fixed stamp count per layer, so one extra or missing stamp bills every later role
+to the wrong name.
+
+**A resident override serving a recurrent (deltanet) model declines any call whose position is
+not the session's next deltanet position (`Session.dn_pos`), or resets the state at position
+zero.** The override runs the whole forward itself, so the engine's own forward-only guard never
+runs.

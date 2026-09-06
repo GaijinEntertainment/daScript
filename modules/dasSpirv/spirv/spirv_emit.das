@@ -138,7 +138,7 @@ struct EmitCtx {
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
     user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
     call_temps    : table<uint64; CallTemp>     // intptr(ref-arg Expression) -> its copy-in/out Function-storage temp
-    lazy_temps    : table<uint64; CallTemp>     // intptr(ExprOp3 / ExprOp2 &&,||) whose operand indexes a global-rooted array -> the Function-storage temp its branched lowering stores through
+    lazy_temps    : table<uint64; CallTemp>     //!< intptr(ExprOp3 / ExprOp2 &&,||) whose operand indexes a global-rooted array -> its branched lowering's Function-storage temp
     decode_funcs  : table<uint64; DecodeFn>     // intptr(Function) -> registered cm2 decode function ([spirv_decode], referenced via @@ from coopmatLoadTensorDecode)
     decode_order  : array<uint64>               // decode_funcs keys in stable emission order (first-reference order)
     decode_vec_funcs : table<uint64; DecodeFn>  //!< key: the hand-written twin Function, or the scalar Function a twin was synthesized from
@@ -3173,7 +3173,7 @@ class SpirvEmit : AstVisitor {
     e2pty   : table<uint64; uint>        // intptr(Expression) -> pointee type-id (paired with e2ptr)
     e2align : table<uint64; uint>        // intptr(Expression) -> Aligned literal for the OpLoad (set only for PhysicalStorageBuffer-rooted chains — PSB loads REQUIRE the Aligned memory operand)
     ite_ids : table<uint64; IteIds>      // intptr(ExprIfThenElse) -> its {merge, then, else} labels
-    lazy_ids : table<uint64; IteIds>     // intptr(ExprOp3 / ExprOp2 &&,||) lowered as a branch (ctx.lazy_temps) -> its labels
+    lazy_ids : table<uint64; IteIds>     //!< intptr(ExprOp3 / ExprOp2 &&,||) lowered as a branch (ctx.lazy_temps) -> its labels
     loop_ids : table<uint64; LoopIds>    // intptr(ExprWhile/ExprFor) -> its 5 loop-skeleton labels
     for_src : table<uint64>              // for-source range() call ptrs to intercept in visitExprCall (6.3)
     copy_dst : uint64                    // intptr(ExprCopy.left) while that destination subtree is walked
@@ -3951,10 +3951,8 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
-    // ----- binary: arithmetic / comparison / logical, plus matrix-* via emit_mul; void op2 = compound -----
-    // `&&` / `||` whose right operand indexes a global-rooted array: the short-circuit value lands in
-    // the temp first, and the right operand evaluates only when the left one lets it — the ternary's
-    // branch rail (ctx.lazy_temps). A pure right operand keeps the eager OpLogicalAnd / OpLogicalOr.
+    //! the short-circuit answer stores before the branch: the left-fail edge goes straight to the merge, which reloads the temp.
+    [arch(at="../ARCHITECTURE.md#operand-laziness")]
     def override preVisitExprOp2Right(var expr : ExprOp2?; right : ExpressionPtr) : void {
         let k = intptr(expr)
         if (!key_exists(ctx.lazy_temps, k)) return
@@ -3974,11 +3972,12 @@ class SpirvEmit : AstVisitor {
         ctx.terminated = false
     }
 
+    // ----- binary: arithmetic / comparison / logical, plus matrix-* via emit_mul; void op2 = compound -----
     def override visitExprOp2(var expr : ExprOp2?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let op = "{expr.op}"
         if (key_exists(lazy_ids, intptr(expr))) {
-            e2id[intptr(expr)] = lazy_finish(intptr(expr), expr.right)
+            e2id[intptr(expr)] = lazy_merge_value(intptr(expr), expr.right)
             return expr
         }
         if (expr._type.baseType == Type.tVoid) {        // compound assignment: dst <op>= rhs
@@ -4085,14 +4084,8 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
-    // ----- ternary cond ? a : b. Pure arms lower to OpSelect: branchless, both arms evaluated, the
-    // same rule as eager &&/||; a vector result with a scalar bool condition splats it to a bvecN,
-    // since SPIR-V < 1.4 requires the OpSelect condition width to match the result. An arm that indexes
-    // a global-rooted array (ssbo, block field, @workgroup) lowers as a branch through a hoisted
-    // Function temp instead: OpSelect evaluates both operands, and the arm the condition rules out is
-    // exactly the one whose index the condition was guarding — on the device an out-of-range load is a
-    // fault, not a garbage value. SpirvTempAlloc hoists the temp (ctx.lazy_temps); the labels are
-    // allocated in the Left hook, after the condition is visited, like the if/else hooks. -----
+    //! the branched lowering's labels are allocated here, after the condition is visited - the if/else hook order.
+    [arch(at="../ARCHITECTURE.md#operand-laziness")]
     def override preVisitExprOp3Left(var expr : ExprOp3?; left : ExpressionPtr) : void {
         let k = intptr(expr)
         if (!key_exists(ctx.lazy_temps, k)) return
@@ -4123,8 +4116,8 @@ class SpirvEmit : AstVisitor {
         ctx.terminated = false
     }
 
-    // the branched form's tail: the last operand's store, the merge, and the temp's load as the value
-    def lazy_finish(k : uint64; last : ExpressionPtr) : uint {
+    [arch(at="../ARCHITECTURE.md#operand-laziness")]
+    def lazy_merge_value(k : uint64; last : ExpressionPtr) : uint {
         var bm & = unsafe(*m)
         let ids = lazy_ids?[k] ?? IteIds()
         let ct = ctx.lazy_temps?[k] ?? CallTemp()
@@ -4138,6 +4131,7 @@ class SpirvEmit : AstVisitor {
         return res
     }
 
+    //! a vector OpSelect splats its scalar bool condition to a bvecN: SPIR-V < 1.4 requires the condition width to match the result.
     def override visitExprOp3(var expr : ExprOp3?) : ExpressionPtr {
         var bm & = unsafe(*m)
         if ("{expr.op}" != "?") {
@@ -4145,7 +4139,7 @@ class SpirvEmit : AstVisitor {
             return expr
         }
         if (key_exists(lazy_ids, intptr(expr))) {
-            e2id[intptr(expr)] = lazy_finish(intptr(expr), expr.right)
+            e2id[intptr(expr)] = lazy_merge_value(intptr(expr), expr.right)
             return expr
         }
         let n = component_count(value_base_type(expr._type))
@@ -7574,8 +7568,6 @@ def private detect_recursion(var ctx : EmitCtx; entry : FunctionPtr; var errors 
     return found
 }
 
-// Mini-visitor: does the subtree index a GLOBAL-rooted array (an ssbo, a block field, @workgroup)?
-// A local fixed array is not one: its index is register arithmetic, not a device address.
 class SpirvGlobalIndexScan : AstVisitor {
     @do_not_delete ctx : EmitCtx const?
     found : bool
@@ -7586,6 +7578,7 @@ class SpirvGlobalIndexScan : AstVisitor {
     }
 }
 
+[arch(at="../ARCHITECTURE.md#operand-laziness")]
 def private indexes_global_array(ctx : EmitCtx const?; e : ExpressionPtr) : bool {
     var s = new SpirvGlobalIndexScan(ctx = ctx)
     make_visitor(*s) $(ad) {
@@ -7598,11 +7591,7 @@ def private indexes_global_array(ctx : EmitCtx const?; e : ExpressionPtr) : bool
     return found
 }
 
-// Mini-visitor: hoist one Function-storage OpVariable into the current function's entry block for
-// every by-reference argument of every user-function call in its body, and one for every ternary or
-// short-circuit whose operand indexes a global-rooted array (the emitter's branched lowering stores
-// through it). Run after collect_locals and before the body walk, so the temps lead the entry block
-// (SPIR-V requires all OpVariable there).
+//! runs after collect_locals and before the body walk, so its hoisted temps lead the entry block - SPIR-V requires every OpVariable there.
 class SpirvTempAlloc : AstVisitor {
     adapter : VisitorAdapter?
     @do_not_delete m   : SpirvModule?

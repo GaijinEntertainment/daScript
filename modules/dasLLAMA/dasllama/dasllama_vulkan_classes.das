@@ -572,8 +572,6 @@ struct RouterArgs {
     obase : uint  // output row base (the resident deltanet arm lands beta/alpha rows in the smalls)
 }
 
-// the one-row router GEMV over ne weight rows - the MoE span's f32 router plane, or a hybrid's
-// beta/alpha rows kept f16 on the device (KT); one workgroup per output row
 [ |> template_struct_instance]
 class template RouterGemvT {
     @ssbo @binding = 0 @role = "weight" w : array<KT>   // the rows, row-major [ne x dim] per layer
@@ -614,7 +612,6 @@ class RouterGemv : RouterGemvT {
     typedef KT = float
 }
 
-// the hybrid's beta/alpha rows, f16 on the device
 [vk_dispatch(name = "router_gemv_f16_cls", grid = "ne", params = "ne : int64")]
 class RouterGemvF16 : RouterGemvT {
     typedef KT = float16
@@ -631,9 +628,6 @@ struct DnBaArgs {
     ostride : uint
 }
 
-// the prefill's beta/alpha projection as a GEMM: one workgroup per (16 positions, 16 outputs) tile,
-// x and the weight rows staged 32 k at a time (two elements of each per invocation), one invocation
-// one output; the grid is position tiles x output groups so a 64-row layer fills the card
 [vk_dispatch(name = "dn_ba_cls", grid = "wgs", params = "wgs : int64")]
 class DnBaGemm {
     @ssbo @binding = 0 @role = "weight" w : array<float16>   // the [beta ; alpha] rows per layer, f16 on the device
@@ -643,7 +637,7 @@ class DnBaGemm {
     @workgroup xs : float[528]                 // 16 positions x 32 k, stride 33 (bank-spread)
     @workgroup ws : float[528]                 // 16 rows x 32 k, stride 33
 
-    [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
         let tid = gl_LocalInvocationID.x
         let ne = 2u * pa.nvh
@@ -731,8 +725,6 @@ class TopK {
     def run {
         let tid = gl_LocalInvocationID.x
         let live = tid < pa.ne
-        // the picks below choose between values already in range, so they stay branchless OpSelects:
-        // the one guarded load reads a clamped index, the shared reductions are read once into locals
         let lv = logits[min(tid, pa.ne - 1u)]
         let lg = live ? lv : -3.0e38
         let m0 = subgroupMax(lg)
@@ -947,8 +939,6 @@ struct DnTailArgs {
     hist_off : uint  // the ring image's float offset in smalls
 }
 
-// the prefill window's last taps raw projection rows (position-major) into the decode step's
-// conv-ring image (channel-major, taps consecutive) - one element per thread
 [vk_dispatch(name = "dn_tail_cls", grid = "wgs", params = "wgs : int64")]
 class DnTail {
     @ssbo @binding = 0 src : array<float>      // the projected rows (position-major)
@@ -1161,12 +1151,6 @@ struct DnScanArgs {
     di : uint
 }
 
-// the gated delta rule as the plain per-token recurrence with the state resident in registers:
-// a four-subgroup workgroup per (head, column group), each lane 16 rows of two adjacent columns,
-// the token loop inside the kernel; the token's k and q rows are staged once per workgroup in
-// shared (a double-buffered slot, one barrier per token) and each staged value feeds both of a
-// lane's columns, whose chains are independent and interleave; two xor-shuffle reductions per
-// column per token; the o rows land raw for the out-norm pass.
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
 class DnScan {
     @ssbo @binding = 0 conv : array<float>     // the conv output rows (position-major: q | k | v)
@@ -1177,15 +1161,15 @@ class DnScan {
     @workgroup ks : float[256]                 // the token's k row, two slots of DN_MAX_DS
     @workgroup qs : float[256]                 // the token's q row, two slots
 
-    def cluster_add(v : float; lpc : uint) : float {
+    def cluster_add(v : float; lanes_per_pair : uint) : float {
         var r = v
-        if (lpc > 4u) {
+        if (lanes_per_pair > 4u) {
             r += subgroupShuffleXor(r, 4u)
         }
-        if (lpc > 2u) {
+        if (lanes_per_pair > 2u) {
             r += subgroupShuffleXor(r, 2u)
         }
-        if (lpc > 1u) {
+        if (lanes_per_pair > 1u) {
             r += subgroupShuffleXor(r, 1u)
         }
         return r
@@ -1194,15 +1178,15 @@ class DnScan {
     [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv")]
     def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of two columns, written out
         let ds = pa.ds
-        let lpc = ds / 16u                     // lanes per column pair, 16 state rows each (ds % 16 == 0 host-side)
-        let ppw = 32u / lpc                    // column pairs per subgroup
-        let cpg = 8u * ppw                     // columns per workgroup: four subgroups, two per lane
-        let cgroups = (ds + cpg - 1u) / cpg
+        let lanes_per_pair = ds / 16u          // 16 state rows each; ds % 16 == 0 host-side
+        let pairs_per_subgroup = 32u / lanes_per_pair
+        let cols_per_group = 8u * pairs_per_subgroup
+        let cgroups = (ds + cols_per_group - 1u) / cols_per_group
         let h = gl_WorkGroupID.x / cgroups
         let tid = gl_LocalInvocationID.x
         let sl = gl_SubgroupInvocationID
-        let lane = sl % lpc
-        let col = (gl_WorkGroupID.x % cgroups) * cpg + (gl_SubgroupID * ppw + sl / lpc) * 2u
+        let lane = sl % lanes_per_pair
+        let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + (gl_SubgroupID * pairs_per_subgroup + sl / lanes_per_pair) * 2u
         let live = col < ds                    // a whole cluster shares col and col + 1 (ds is even), so its shuffles stay uniform
         let kh = h % pa.nkh
         let qrow0 = kh * ds                    // the head's q row within a conv row
@@ -1211,41 +1195,41 @@ class DnScan {
         let aa = smalls[pa.a_off + h]
         let dtb = smalls[pa.dt_off + h]
         let sb = h * ds * ds + (live ? col : 0u)
-        let rs = lpc * ds                      // state stride between this lane's rows
+        let row_stride = lanes_per_pair * ds
         var s : float[16]
         s[0] = state[sb + lane * ds]
-        s[1] = state[sb + lane * ds + rs]
-        s[2] = state[sb + lane * ds + 2u * rs]
-        s[3] = state[sb + lane * ds + 3u * rs]
-        s[4] = state[sb + lane * ds + 4u * rs]
-        s[5] = state[sb + lane * ds + 5u * rs]
-        s[6] = state[sb + lane * ds + 6u * rs]
-        s[7] = state[sb + lane * ds + 7u * rs]
-        s[8] = state[sb + lane * ds + 8u * rs]
-        s[9] = state[sb + lane * ds + 9u * rs]
-        s[10] = state[sb + lane * ds + 10u * rs]
-        s[11] = state[sb + lane * ds + 11u * rs]
-        s[12] = state[sb + lane * ds + 12u * rs]
-        s[13] = state[sb + lane * ds + 13u * rs]
-        s[14] = state[sb + lane * ds + 14u * rs]
-        s[15] = state[sb + lane * ds + 15u * rs]
+        s[1] = state[sb + lane * ds + row_stride]
+        s[2] = state[sb + lane * ds + 2u * row_stride]
+        s[3] = state[sb + lane * ds + 3u * row_stride]
+        s[4] = state[sb + lane * ds + 4u * row_stride]
+        s[5] = state[sb + lane * ds + 5u * row_stride]
+        s[6] = state[sb + lane * ds + 6u * row_stride]
+        s[7] = state[sb + lane * ds + 7u * row_stride]
+        s[8] = state[sb + lane * ds + 8u * row_stride]
+        s[9] = state[sb + lane * ds + 9u * row_stride]
+        s[10] = state[sb + lane * ds + 10u * row_stride]
+        s[11] = state[sb + lane * ds + 11u * row_stride]
+        s[12] = state[sb + lane * ds + 12u * row_stride]
+        s[13] = state[sb + lane * ds + 13u * row_stride]
+        s[14] = state[sb + lane * ds + 14u * row_stride]
+        s[15] = state[sb + lane * ds + 15u * row_stride]
         var u : float[16]                      // the same rows of column col + 1
         u[0] = state[sb + lane * ds + 1u]
-        u[1] = state[sb + lane * ds + rs + 1u]
-        u[2] = state[sb + lane * ds + 2u * rs + 1u]
-        u[3] = state[sb + lane * ds + 3u * rs + 1u]
-        u[4] = state[sb + lane * ds + 4u * rs + 1u]
-        u[5] = state[sb + lane * ds + 5u * rs + 1u]
-        u[6] = state[sb + lane * ds + 6u * rs + 1u]
-        u[7] = state[sb + lane * ds + 7u * rs + 1u]
-        u[8] = state[sb + lane * ds + 8u * rs + 1u]
-        u[9] = state[sb + lane * ds + 9u * rs + 1u]
-        u[10] = state[sb + lane * ds + 10u * rs + 1u]
-        u[11] = state[sb + lane * ds + 11u * rs + 1u]
-        u[12] = state[sb + lane * ds + 12u * rs + 1u]
-        u[13] = state[sb + lane * ds + 13u * rs + 1u]
-        u[14] = state[sb + lane * ds + 14u * rs + 1u]
-        u[15] = state[sb + lane * ds + 15u * rs + 1u]
+        u[1] = state[sb + lane * ds + row_stride + 1u]
+        u[2] = state[sb + lane * ds + 2u * row_stride + 1u]
+        u[3] = state[sb + lane * ds + 3u * row_stride + 1u]
+        u[4] = state[sb + lane * ds + 4u * row_stride + 1u]
+        u[5] = state[sb + lane * ds + 5u * row_stride + 1u]
+        u[6] = state[sb + lane * ds + 6u * row_stride + 1u]
+        u[7] = state[sb + lane * ds + 7u * row_stride + 1u]
+        u[8] = state[sb + lane * ds + 8u * row_stride + 1u]
+        u[9] = state[sb + lane * ds + 9u * row_stride + 1u]
+        u[10] = state[sb + lane * ds + 10u * row_stride + 1u]
+        u[11] = state[sb + lane * ds + 11u * row_stride + 1u]
+        u[12] = state[sb + lane * ds + 12u * row_stride + 1u]
+        u[13] = state[sb + lane * ds + 13u * row_stride + 1u]
+        u[14] = state[sb + lane * ds + 14u * row_stride + 1u]
+        u[15] = state[sb + lane * ds + 15u * row_stride + 1u]
         var t = 0u
         while (t < pa.npos) {
             let crow = t * pa.cd
@@ -1264,21 +1248,21 @@ class DnScan {
             let kb = par + lane
             var k : float[16]
             k[0] = ks[kb]
-            k[1] = ks[kb + lpc]
-            k[2] = ks[kb + 2u * lpc]
-            k[3] = ks[kb + 3u * lpc]
-            k[4] = ks[kb + 4u * lpc]
-            k[5] = ks[kb + 5u * lpc]
-            k[6] = ks[kb + 6u * lpc]
-            k[7] = ks[kb + 7u * lpc]
-            k[8] = ks[kb + 8u * lpc]
-            k[9] = ks[kb + 9u * lpc]
-            k[10] = ks[kb + 10u * lpc]
-            k[11] = ks[kb + 11u * lpc]
-            k[12] = ks[kb + 12u * lpc]
-            k[13] = ks[kb + 13u * lpc]
-            k[14] = ks[kb + 14u * lpc]
-            k[15] = ks[kb + 15u * lpc]
+            k[1] = ks[kb + lanes_per_pair]
+            k[2] = ks[kb + 2u * lanes_per_pair]
+            k[3] = ks[kb + 3u * lanes_per_pair]
+            k[4] = ks[kb + 4u * lanes_per_pair]
+            k[5] = ks[kb + 5u * lanes_per_pair]
+            k[6] = ks[kb + 6u * lanes_per_pair]
+            k[7] = ks[kb + 7u * lanes_per_pair]
+            k[8] = ks[kb + 8u * lanes_per_pair]
+            k[9] = ks[kb + 9u * lanes_per_pair]
+            k[10] = ks[kb + 10u * lanes_per_pair]
+            k[11] = ks[kb + 11u * lanes_per_pair]
+            k[12] = ks[kb + 12u * lanes_per_pair]
+            k[13] = ks[kb + 13u * lanes_per_pair]
+            k[14] = ks[kb + 14u * lanes_per_pair]
+            k[15] = ks[kb + 15u * lanes_per_pair]
             var kv = k[0] * s[0]
             kv += k[1] * s[1]
             kv += k[2] * s[2]
@@ -1311,8 +1295,8 @@ class DnScan {
             ku += k[13] * u[13]
             ku += k[14] * u[14]
             ku += k[15] * u[15]
-            kv = cluster_add(kv, lpc)
-            ku = cluster_add(ku, lpc)
+            kv = cluster_add(kv, lanes_per_pair)
+            ku = cluster_add(ku, lanes_per_pair)
             let delta = bt * (v - eg * kv)
             let deltu = bt * (vu - eg * ku)
             let qb = par + lane
@@ -1349,39 +1333,39 @@ class DnScan {
             u[14] = u[14] * eg + k[14] * deltu
             u[15] = u[15] * eg + k[15] * deltu
             var ou = qs[qb] * u[0]
-            ou += qs[qb + lpc] * u[1]
-            ou += qs[qb + 2u * lpc] * u[2]
-            ou += qs[qb + 3u * lpc] * u[3]
-            ou += qs[qb + 4u * lpc] * u[4]
-            ou += qs[qb + 5u * lpc] * u[5]
-            ou += qs[qb + 6u * lpc] * u[6]
-            ou += qs[qb + 7u * lpc] * u[7]
-            ou += qs[qb + 8u * lpc] * u[8]
-            ou += qs[qb + 9u * lpc] * u[9]
-            ou += qs[qb + 10u * lpc] * u[10]
-            ou += qs[qb + 11u * lpc] * u[11]
-            ou += qs[qb + 12u * lpc] * u[12]
-            ou += qs[qb + 13u * lpc] * u[13]
-            ou += qs[qb + 14u * lpc] * u[14]
-            ou += qs[qb + 15u * lpc] * u[15]
+            ou += qs[qb + lanes_per_pair] * u[1]
+            ou += qs[qb + 2u * lanes_per_pair] * u[2]
+            ou += qs[qb + 3u * lanes_per_pair] * u[3]
+            ou += qs[qb + 4u * lanes_per_pair] * u[4]
+            ou += qs[qb + 5u * lanes_per_pair] * u[5]
+            ou += qs[qb + 6u * lanes_per_pair] * u[6]
+            ou += qs[qb + 7u * lanes_per_pair] * u[7]
+            ou += qs[qb + 8u * lanes_per_pair] * u[8]
+            ou += qs[qb + 9u * lanes_per_pair] * u[9]
+            ou += qs[qb + 10u * lanes_per_pair] * u[10]
+            ou += qs[qb + 11u * lanes_per_pair] * u[11]
+            ou += qs[qb + 12u * lanes_per_pair] * u[12]
+            ou += qs[qb + 13u * lanes_per_pair] * u[13]
+            ou += qs[qb + 14u * lanes_per_pair] * u[14]
+            ou += qs[qb + 15u * lanes_per_pair] * u[15]
             var o = qs[qb] * s[0]
-            o += qs[qb + lpc] * s[1]
-            o += qs[qb + 2u * lpc] * s[2]
-            o += qs[qb + 3u * lpc] * s[3]
-            o += qs[qb + 4u * lpc] * s[4]
-            o += qs[qb + 5u * lpc] * s[5]
-            o += qs[qb + 6u * lpc] * s[6]
-            o += qs[qb + 7u * lpc] * s[7]
-            o += qs[qb + 8u * lpc] * s[8]
-            o += qs[qb + 9u * lpc] * s[9]
-            o += qs[qb + 10u * lpc] * s[10]
-            o += qs[qb + 11u * lpc] * s[11]
-            o += qs[qb + 12u * lpc] * s[12]
-            o += qs[qb + 13u * lpc] * s[13]
-            o += qs[qb + 14u * lpc] * s[14]
-            o += qs[qb + 15u * lpc] * s[15]
-            o = cluster_add(o, lpc)
-            ou = cluster_add(ou, lpc)
+            o += qs[qb + lanes_per_pair] * s[1]
+            o += qs[qb + 2u * lanes_per_pair] * s[2]
+            o += qs[qb + 3u * lanes_per_pair] * s[3]
+            o += qs[qb + 4u * lanes_per_pair] * s[4]
+            o += qs[qb + 5u * lanes_per_pair] * s[5]
+            o += qs[qb + 6u * lanes_per_pair] * s[6]
+            o += qs[qb + 7u * lanes_per_pair] * s[7]
+            o += qs[qb + 8u * lanes_per_pair] * s[8]
+            o += qs[qb + 9u * lanes_per_pair] * s[9]
+            o += qs[qb + 10u * lanes_per_pair] * s[10]
+            o += qs[qb + 11u * lanes_per_pair] * s[11]
+            o += qs[qb + 12u * lanes_per_pair] * s[12]
+            o += qs[qb + 13u * lanes_per_pair] * s[13]
+            o += qs[qb + 14u * lanes_per_pair] * s[14]
+            o += qs[qb + 15u * lanes_per_pair] * s[15]
+            o = cluster_add(o, lanes_per_pair)
+            ou = cluster_add(ou, lanes_per_pair)
             if (live && lane == 0u) {
                 orows[pa.o_off + t * pa.di + h * ds + col] = o
                 orows[pa.o_off + t * pa.di + h * ds + col + 1u] = ou
@@ -1390,37 +1374,37 @@ class DnScan {
         }
         if (live) {
             state[sb + lane * ds] = s[0]
-            state[sb + lane * ds + rs] = s[1]
-            state[sb + lane * ds + 2u * rs] = s[2]
-            state[sb + lane * ds + 3u * rs] = s[3]
-            state[sb + lane * ds + 4u * rs] = s[4]
-            state[sb + lane * ds + 5u * rs] = s[5]
-            state[sb + lane * ds + 6u * rs] = s[6]
-            state[sb + lane * ds + 7u * rs] = s[7]
-            state[sb + lane * ds + 8u * rs] = s[8]
-            state[sb + lane * ds + 9u * rs] = s[9]
-            state[sb + lane * ds + 10u * rs] = s[10]
-            state[sb + lane * ds + 11u * rs] = s[11]
-            state[sb + lane * ds + 12u * rs] = s[12]
-            state[sb + lane * ds + 13u * rs] = s[13]
-            state[sb + lane * ds + 14u * rs] = s[14]
-            state[sb + lane * ds + 15u * rs] = s[15]
+            state[sb + lane * ds + row_stride] = s[1]
+            state[sb + lane * ds + 2u * row_stride] = s[2]
+            state[sb + lane * ds + 3u * row_stride] = s[3]
+            state[sb + lane * ds + 4u * row_stride] = s[4]
+            state[sb + lane * ds + 5u * row_stride] = s[5]
+            state[sb + lane * ds + 6u * row_stride] = s[6]
+            state[sb + lane * ds + 7u * row_stride] = s[7]
+            state[sb + lane * ds + 8u * row_stride] = s[8]
+            state[sb + lane * ds + 9u * row_stride] = s[9]
+            state[sb + lane * ds + 10u * row_stride] = s[10]
+            state[sb + lane * ds + 11u * row_stride] = s[11]
+            state[sb + lane * ds + 12u * row_stride] = s[12]
+            state[sb + lane * ds + 13u * row_stride] = s[13]
+            state[sb + lane * ds + 14u * row_stride] = s[14]
+            state[sb + lane * ds + 15u * row_stride] = s[15]
             state[sb + lane * ds + 1u] = u[0]
-            state[sb + lane * ds + rs + 1u] = u[1]
-            state[sb + lane * ds + 2u * rs + 1u] = u[2]
-            state[sb + lane * ds + 3u * rs + 1u] = u[3]
-            state[sb + lane * ds + 4u * rs + 1u] = u[4]
-            state[sb + lane * ds + 5u * rs + 1u] = u[5]
-            state[sb + lane * ds + 6u * rs + 1u] = u[6]
-            state[sb + lane * ds + 7u * rs + 1u] = u[7]
-            state[sb + lane * ds + 8u * rs + 1u] = u[8]
-            state[sb + lane * ds + 9u * rs + 1u] = u[9]
-            state[sb + lane * ds + 10u * rs + 1u] = u[10]
-            state[sb + lane * ds + 11u * rs + 1u] = u[11]
-            state[sb + lane * ds + 12u * rs + 1u] = u[12]
-            state[sb + lane * ds + 13u * rs + 1u] = u[13]
-            state[sb + lane * ds + 14u * rs + 1u] = u[14]
-            state[sb + lane * ds + 15u * rs + 1u] = u[15]
+            state[sb + lane * ds + row_stride + 1u] = u[1]
+            state[sb + lane * ds + 2u * row_stride + 1u] = u[2]
+            state[sb + lane * ds + 3u * row_stride + 1u] = u[3]
+            state[sb + lane * ds + 4u * row_stride + 1u] = u[4]
+            state[sb + lane * ds + 5u * row_stride + 1u] = u[5]
+            state[sb + lane * ds + 6u * row_stride + 1u] = u[6]
+            state[sb + lane * ds + 7u * row_stride + 1u] = u[7]
+            state[sb + lane * ds + 8u * row_stride + 1u] = u[8]
+            state[sb + lane * ds + 9u * row_stride + 1u] = u[9]
+            state[sb + lane * ds + 10u * row_stride + 1u] = u[10]
+            state[sb + lane * ds + 11u * row_stride + 1u] = u[11]
+            state[sb + lane * ds + 12u * row_stride + 1u] = u[12]
+            state[sb + lane * ds + 13u * row_stride + 1u] = u[13]
+            state[sb + lane * ds + 14u * row_stride + 1u] = u[14]
+            state[sb + lane * ds + 15u * row_stride + 1u] = u[15]
         }
     }
 }
@@ -1435,8 +1419,7 @@ struct DnScanP3Args {
     eps : float
 }
 
-// the gated out-norm over the scan's raw o rows, in place - one workgroup per position, one
-// rms per head: rms(o_h) * wnorm, gated by silu(z)
+//! the gated out-norm over the scan's raw o rows, in place: rms(o_h) * wnorm, gated by silu(z)
 [vk_dispatch(name = "dn_scan_p3_cls", grid = "npos", params = "npos : int64")]
 class DnScanP3 {
     @ssbo @binding = 0 zrows : array<float>    // the z gate rows
@@ -1593,13 +1576,13 @@ class template AtAttnTileT {
     @workgroup fl : float[8]
     @workgroup fal : float[8]
 
-    // stage the 8-query tile and reset the online-softmax state; qrow/qhs = the q row and per-head strides
-    def load_q(q0, nrows, qrow, h, hs, qhs : uint) {
+    // stage the 8-query tile and reset the online-softmax state
+    def load_q(q0, nrows, qstride, h, hs, qhs : uint) {
         let tid = gl_LocalInvocationID.x
         var i = tid
         while (i < 8u * hs) {
             let qr = q0 + i / hs
-            fq[i] = qr < nrows ? qpanel[qr * qrow + h * qhs + i % hs] : 0.0
+            fq[i] = qr < nrows ? qpanel[qr * qstride + h * qhs + i % hs] : 0.0
             i += 256u
         }
         if (tid < 8u) {
@@ -1889,7 +1872,7 @@ struct FaCm2Args {
     kv_mul : uint   // GQA ratio (head / kv_mul = kv head)
     kvbase : uint   // element base of this layer's plane in the K/V shadow mirrors
     scale : float
-    qrow : uint     // the q panel's row stride when it is not qd (a gated q plane: [q | gate] per head); 0 = qd
+    qstride : uint  // the q panel's row stride when it is not qd (a gated q plane: [q | gate] per head); 0 = qd
     qhs : uint      // the q panel's per-head stride (2 x hs on a gated plane); 0 = hs
 }
 
@@ -2095,10 +2078,6 @@ class FaCm2H128F16 : FaCm2H128T {
     override OUT16 = true
 }
 
-// hs=256 (Qwen3.5-class): the h128 algorithm at Bc=32 with the head-size-shaped tiles doubled. The
-// q panel may be gated ([q | gate] per head, `qrow`/`qhs` in the args): Q loads at the head's q
-// stride, and the GATED stamps multiply the normalized output by the sigmoid of the gate half
-// before the store (the gate tile rides the same tensor layout, one head-width further in)
 [ |> template_struct_instance]
 class template FaCm2H256T {
     @ssbo @binding = 0 qpanel : array<float>
@@ -2116,12 +2095,12 @@ class template FaCm2H256T {
         let q0 = (gl_WorkGroupID.x % qtiles) * 64u
         let kvh = h / pa.kv_mul
         let kvlen = pa.w0 + pa.rows
-        let qrow = pa.qrow == 0u ? pa.qd : pa.qrow
+        let qstride = pa.qstride == 0u ? pa.qd : pa.qstride
         let qhs = pa.qhs == 0u ? 256u : pa.qhs
         var tlq : tensorLayout2DPad
         tensorLayoutCreate(tlq)
-        tensorLayoutSetDimension(tlq, pa.rows, qrow)
-        tensorLayoutSetStride(tlq, qrow, 1u)
+        tensorLayoutSetDimension(tlq, pa.rows, qstride)
+        tensorLayoutSetStride(tlq, qstride, 1u)
         var tlk : tensorLayout2DPad
         tensorLayoutCreate(tlk)
         tensorLayoutSetDimension(tlk, kvlen, pa.kvd)
@@ -2206,7 +2185,6 @@ class FaCm2H256F16 : FaCm2H256T {
     override OUT16 = true
 }
 
-// the gated twins: the sigmoid of the q panel's gate half scales the output
 [vk_dispatch(name = "fa_cm2_h256_g_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H256G : FaCm2H256T {
     typedef OT = float
@@ -2577,7 +2555,7 @@ class template DaAttnT {
                 gg++
             }
             var o = tot * linv
-            if (pa.gated != 0u) {   // the per-head sigmoid out-gate: the gate half sits beside q in the packed row
+            if (pa.gated != 0u) {
                 let gt = q[h * qstride + hs + tid]
                 o = o / (1.0 + exp(-gt))
             }
@@ -6638,12 +6616,10 @@ class template QknRopeKvT : RmsWgBase {
                 qrows[h * qstride + e1] = r1
             }
         }
-        // the normed, unrotated tail of a partial-rope head goes back in place too
         if (!is_k && tid >= 2u * pa.half && tid < pa.hs) {
             qrows[h * qstride + tid] = row[tid]
         }
-        // v is not roped or normed — the k-head wgs copy their own raw row into the V plane; on a
-        // partial-rope model the normed, unrotated tail of the k head lands in the mirror the same way
+        // v is not roped or normed — the k-head wgs copy their own raw row into the V plane
         if (is_k && tid < pa.hs) {
             let mrow = pa.layerbase + tok[0u].pos * pa.kvd
             static_if (CLAMP16) {

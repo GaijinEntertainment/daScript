@@ -4293,7 +4293,7 @@ def private fa_h256_gated_run(nheads, kv_mul, rows, w0 : int) : tuple<bad : int;
             enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
             enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
             var pcf = FaCm2Args(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd),
-                kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, qrow = uint(qrow), qhs = uint(qhs))
+                kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, qstride = uint(qrow), qhs = uint(qhs))
             let fawgs = int64(nheads * ((rows + 63) / 64))
             enc_fa_cm2_h256_g_cls(raw2, h2, sfa, pcf, fawgs)
             enc_fa_cm2_h256_g_f16_cls(raw2, h2, sfa16, pcf, fawgs)

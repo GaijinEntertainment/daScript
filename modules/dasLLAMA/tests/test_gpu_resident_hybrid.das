@@ -29,10 +29,7 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // windows (the conv tail and the state carry across the window seam).
 
 let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit| - the deltanet bar test_deltanet.das holds too
-// the K-quant fixture's bar: the CPU's grp8 kq dots and the device's kq decode round apart, and the
-// difference sits flat at 0.39-0.57 of a ~12.5 max logit at every step (the Q8 file: 0.19-0.36);
-// no growth over the steps and no lost lead, so it is the chain's noise, not the state - the
-// one-step-off control stays well past this bar
+//! the K-quant bar: CPU-vs-device rounding sits flat at 0.39-0.57 of a ~12.5 max logit at every step (the Q8 file 0.19-0.36), with no growth and the one-step-off control well past it
 let private DN_LOGIT_BAR_REL_KQ = 0.06
 let private PF_WINDOW_ROWS = 512l     // dasllama_vulkan_prefill's PF_WINDOW: a prompt past it runs as sequential windows
 
@@ -137,9 +134,6 @@ def test_gpu_resident_hybrid_two_windows(t : T?) {
     }
 }
 
-// the K-quant fixture (Q4_K_M from the Q8_0 with llama-quantize, ssm_out pinned q8_0 like the 9B
-// UD file): the deltanet qkv (q6_K) and z (q4_K) planes ride the resident driver in their file
-// formats - the kq GEMVs at decode, the k4/k6 cm2 tiles on the f16 feed at prefill
 [test]
 def test_gpu_resident_hybrid_kq(t : T?) {
     t |> run("Qwen3.5-0.8B-Q4_K_M: K-quant deltanet planes on the resident driver vs the CPU chain, one window") @(t : T?) {

@@ -79,15 +79,19 @@ def test_resident_layer_decline(t : T?) {
         t |> equal(resident_layer_decline(m, 0l, hid0, hs, kvd), "")
         t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 lacks a deltanet plane"), "layer 1 named")
         t |> equal(resident_layer_decline(m, 2l, hid0, hs, kvd), "")
-        // planes present, the qkv plane kq-tagged: admitted (the resident GEMVs dispatch per format);
-        // a kq-tagged OUT plane declines by number (the step's o row feeds a q8 GEMV)
         m.dnqkv_offs <- [-1l, 0l, -1l]
         m.dngate_offs <- [-1l, 0l, -1l]
         m.dnout_offs <- [-1l, 0l, -1l]
-        m.dn_ba_f32 = true
+        m.dnbeta_offs <- [-1l, 0l, -1l]
+        m.dnalpha_offs <- [-1l, 0l, -1l]
+        // a K-quant qkv/z pair (same activation class) is served by the resident GEMVs, so the
+        // format is no decline - the reason, if any, is downstream (the seat install, the FFN width)
         m.dnqkv_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        m.dngate_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        m.dnout_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
         let sq = resident_layer_decline(m, 1l, hid0, hs, kvd)
-        t |> success(!names(sq, "kq-tagged") && !names(sq, "format"), "a kq-tagged qkv plane is no decline: '{sq}'")
+        t |> success(!names(sq, "kq-tagged") && !names(sq, "do not serve"), "a K-quant qkv/z pair is no format decline: '{sq}'")
+        // only the OUT plane kq-tagged: the step's o row feeds a q8 GEMV, so the layer declines by number
         m.dnout_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
         t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1's deltanet out plane is kq-tagged"), "kq-tagged out plane named")
         delete m

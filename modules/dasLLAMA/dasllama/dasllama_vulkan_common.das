@@ -222,9 +222,8 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 // and the engine arm fail-closes on bigger models.
 let DN_MAX_DS = 128l
 
-//! The sequential scan's workgroups: four 32-lane subgroups per (head, column group); a lane owns 16
-//! state rows of two adjacent columns, so ds / 16 lanes share a column pair, 32 / that many pairs
-//! share a subgroup, and a workgroup covers four subgroups' columns (its shared k/q row staging serves them all).
+//! The sequential scan's workgroup count for a head count and state width - the lane, subgroup and workgroup shape is sec.2.2j's
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def dn_scan_wgs(nvh, ds : int64) : int64 {
     let cpg = 8l * (32l / (ds / 16l))
     return nvh * ((ds + cpg - 1l) / cpg)
@@ -236,8 +235,7 @@ let DN_MAX_HEADS = 32l
 let DN_MAX_CD = 8_192l
 let DN_MAX_DCONV = 4l
 let DN_WINDOW = 1_024l
-// the scan workspace holds the raw o rows alone (position-major, di wide; the out-norm rewrites
-// them in place): 16 MB at the maxima
+//! the scan workspace holds the raw o rows alone: position-major, di wide, rewritten in place by the out-norm
 let DN_O_OFF = 0l
 let DN_WS_BYTES = DN_WINDOW * DN_MAX_HEADS * DN_MAX_DS * 4l
 let DN_STATE_BYTES = DN_MAX_HEADS * DN_MAX_DS * DN_MAX_DS * 4l
@@ -729,8 +727,7 @@ def find_host_mem(type_bits : uint; cached : bool) : uint {
     return find_memory_type(g_gpu.phys, type_bits, want)
 }
 
-// the validation layer's device-address bookkeeping learns a buffer's range from this query; a
-// PhysicalStorageBuffer access (the cm2 decode callbacks) into a buffer it never saw reads as out of range
+//! the validation layer learns a buffer's range from this query - without it a decode callback's PhysicalStorageBuffer access reads as out of range
 [cold_path]
 def private note_device_address(b : Buffer) {
     verify(get_buffer_device_address(g_gpu.device, BufferDeviceAddressInfo(buffer = weak_copy(b))) != 0ul,

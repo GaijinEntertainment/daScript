@@ -48,8 +48,6 @@ def private pf_qkv6(l : int64) : bool => (pf_f16_feed(g_rd.layers[l].fq)
     && pf_f16_feed(g_rd.layers[l].fk) && pf_f16_feed(g_rd.layers[l].fv))
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_gu6(l : int64) : bool => pf_f16_feed(g_rd.layers[l].f1) && pf_f16_feed(g_rd.layers[l].f3)
-// a recurrent layer's qkv / z / out GEMMs ride the f16-fed cm2 tiles together (the q8 arm's
-// beta/alpha rows, nvh columns wide, stay on the q8 router)
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_dn6(l : int64) : bool => (pf_f16_feed(g_rd.layers[l].fqkv)
     && pf_f16_feed(g_rd.layers[l].fz) && pf_f16_feed(g_rd.layers[l].fout))
@@ -416,9 +414,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
     pfq_ts(raw)
 }
 
-// One recurrent layer's prefill window sets (conv, the scan, the out-norm, the conv-tail extract, the
-// f32 arm's beta/alpha tile GEMM, the cm2 route's f16 feed); the o feed sets are the shared
-// g_rd.pf_dnof_set / pf_dnrq_set.
+//! one recurrent layer's prefill window sets; the o feed sets (`pf_dnof_set` / `pf_dnrq_set`) are shared by every recurrent layer
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     var L & = unsafe(g_rd.layers[l])
@@ -451,8 +447,6 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     }
 }
 
-// Zero every recurrent layer's device state and conv-ring image 0 inside the window command at
-// prefill window 0 (a fresh session): transfer fills, no host round trip.
 def private pf_dn_zero(raw : VkCommandBuffer; var h : VkHaz) {
     let hist_bytes = g_rd.dn_cd * (g_rd.dn_dconv - 1l) * 4l
     vhz_dep(raw, h, 0u, VHZ_DNST | VHZ_DNSM, true)
@@ -464,9 +458,6 @@ def private pf_dn_zero(raw : VkCommandBuffer; var h : VkHaz) {
     }
 }
 
-// One recurrent layer's block into the prefill window command: plain requant, qkv + z GEMMs, the
-// beta/alpha rows into the layer smalls, conv, the sequential scan over its own device state, the
-// o requant, and the out GEMM into pf_xb2; the last window transposes the tail into the decode ring.
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen : int64; last : bool) {
     var L & = unsafe(g_rd.layers[l])
@@ -481,7 +472,6 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let taps = dconv - 1l
     let np = g_rd.pf_np
     let eps = g_rd.eps
-    // the block's feed: f16 rows for the cm2 tiles, the q8 image for whatever stays on the q8 router
     let dn6 = pf_dn6(l)
     if (dn6) {
         var pcc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
@@ -502,7 +492,6 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let pz = arena_planes(L.fz, L.bz)
     pf_gemm_enc(raw, h, b + 2, L.fz, pz.wq, pz.ws, xqb, xsb, g_rd.pf_dnz,
         pz.wqb, pz.wsb, xqn, xsn, np * di * 4l, VHZ_XQ, VHZ_DNZ, dim, di, L.bz, wlen, dn6, cm2_tiles(cd, wlen))
-    // beta/alpha rows into the layer smalls at the scan's beta/g offsets (position-major [pos][nvh]); the f32 pair shares one profile stamp, the q8 GEMMs stamp themselves
     if (g_rd.dn_ba_f32) {
         var pcb = DnBaArgs(npos = uint(wlen), dim = uint(dim), nvh = uint(nvh), woff = uint(L.ba_off), xstride = uint(dim),
             obase_b = uint(DN_SM_BETA), obase_g = uint(DN_SM_G), ostride = uint(nvh))
@@ -520,7 +509,6 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         vhz_dep(raw, h, VHZ_DNBG, VHZ_DNSM, true)
         cmd_copy_range(raw, g_rd.pf_dnbg, 0l, L.dn.smalls_dev, DN_SM_G * 4l, wlen * nvh * 4l)
     }
-    // conv: history is this layer's ring image (zeroed at window 0, prev window's tail after)
     var pcc = DnConvArgs(cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
         hist_mode = 2u, taps_off = uint(DN_SM_TAPS), hist_off = uint(DN_SM_HIST),
         eps = eps, qscale = 1.0 / sqrt(float(ds)))
@@ -535,7 +523,6 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         wnorm_off = uint(DN_SM_WNORM), eps = eps)
     enc_dn_scan_p3_cls(raw, h, L.pf_dn_scan_p3_set, pc3, wlen)
     pfq_ts(raw)
-    // carry the conv tail forward: position-major in image 0 between windows, per-channel into the decode ring on the last
     if (last) {
         var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(wlen - taps), hist_off = uint(DN_SM_HIST))
         vhz_dep(raw, h, VHZ_DNP, VHZ_DNSM, false)
@@ -545,7 +532,6 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         cmd_copy_range(raw, g_rd.pf_dnqkv, (wlen - taps) * cd * 4l, L.dn.smalls_dev, DN_SM_HIST * 4l, taps * cd * 4l)
     }
     pfq_ts(raw)
-    // the o feed off the normed rows (f16 for the cm2 out tile, else the q8 requant), then the out GEMM di -> dim into pf_xb2
     if (dn6) {
         var pco = ActArgs(nelem = uint(wlen * di), gelu = 0u, nblk = 0u)
         enc_f16cvt_cls(raw, h, g_rd.pf_dnof_set, pco, (wlen * di / 4l + 255l) / 256l)
@@ -584,7 +570,7 @@ def private pf_setup {
     g_rd.pf_xb = make_device_buf(np * dim * 4l)
     g_rd.pf_xq = make_device_buf(np * wide)
     g_rd.pf_xs = make_device_buf(np * (wide / 32l) * 4l)
-    let qrow = g_rd.q_gated ? 2l * qd : qd   // gated: [q | gate] per head; rope/attn read q head-strided and gate on the sigmoid of the gate half
+    let qrow = g_rd.q_gated ? 2l * qd : qd
     g_rd.pf_q = make_device_buf(np * qrow * 4l)
     g_rd.pf_kv = make_device_buf(np * 2l * kvd * 4l)
     g_rd.pf_v = make_device_buf(np * kvd * 4l)   // split-path v GEMM output (copied into pf_kv's v half); idle when the merged k|v GEMM serves the layer
@@ -655,7 +641,7 @@ def private pf_setup {
     for (mi in range(nsets)) {
         g_rd.pf_meta[mi] = make_host_buf(BATCH_META_BYTES, true)
     }
-    let mirbytes = g_rd.n_attn * g_rd.seq_cap * kvd * g_rd.kv_esz   // one mirror slot per attention layer (RLayer.mir_idx)
+    let mirbytes = g_rd.n_attn * g_rd.seq_cap * kvd * g_rd.kv_esz
     let normbytes = g_rd.norms_bytes
     let kv16 = g_rd.kv16
     // the cm2 fa tiles read f16 K/V, so f16 mirrors bind directly; f32 keeps the chunked/h128 paths
@@ -702,7 +688,7 @@ def private pf_setup {
         g_rd.pf_dnrq_set = set_rq_cls(fixed_array(g_gpu.dn_ws_dev, g_gpu.hq_dev, g_gpu.hs_dev),
             fixed_array(DN_WS_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(VHZ_DNWS, VHZ_HQ, VHZ_HQ))
-        if (g_gpu.coopmat_mode == 4) {   // the o rows' f16 feed for the cm2 out tile
+        if (g_gpu.coopmat_mode == 4) {
             g_rd.pf_dnof = make_device_buf(np * di * 2l)
             g_rd.pf_dnof_set = set_f16cvt_cls(fixed_array(g_gpu.dn_ws_dev, g_rd.pf_dnof),
                 fixed_array(DN_WS_BYTES, np * di * 2l), fixed_array(VHZ_DNWS, VHZ_HQ))
@@ -726,7 +712,7 @@ def private pf_setup {
                 fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
                 fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
         // (GEMM roles 1/2/3/7/10/11/13 build lazily per router variant at record time)
-        if (!L.recurrent) {   // a recurrent layer's attention roles never fire; its block is rd_pf_recurrent
+        if (!L.recurrent) {
             // 4 rope+store (class: q, kv, Kmir, Vmir, cos)
             let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_cos)
             let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.head_size * 4l)
@@ -832,9 +818,7 @@ def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : ar
     pf_run(nox, tokens, true, emb_scale, cos_batch, npos, logits)
 }
 
-//! After a resident prefill: recurrent layer `l`'s device-advanced state and conv history stay on the
-//! device as the session's (`stp`/`histp` name the owner) - the slot is valid, dirty and bound, so the
-//! first decode's owner bind finds it in place and a host read syncs it down (`dn_flush_layer`).
+//! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp`/`histp` name (valid, dirty, bound)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def vk_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
     if (g_gpu != null && g_gpu.dry) {
@@ -916,7 +900,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             }
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * g_rd.head_size)]), wlen * g_rd.head_size * 4l)
             if (w0 == 0l && g_rd.hybrid) {
-                g_rd.dn_parity = 0   // the prefill's cross-window conv ring is image 0; decode continues from it
+                g_rd.dn_parity = 0
             }
             let bp = int(g_rd.n_layers * PF_ROLES)
             let t_prep = get_time_usec(tp0)
@@ -971,7 +955,6 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 let b = int(l * PF_ROLES)
                 let np = g_rd.pf_np
-                // FFN-tail feeds (shared by both heads): the f16-cm2 and kq forms of gate/up/down
                 let gu6 = pf_gu6(l)
                 let dn6 = pf_f16_feed(g_rd.layers[l].f2)
                 let guk = kq_sb(g_rd.layers[l].f1) && !gu6
@@ -1008,7 +991,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let xqn = fq6 ? np * dim * 2l : np * dim
                 let xsn = fq6 ? 256l : np * (dim / 32l) * 4l
                 let kv_merged = pf_kv_merged(l, dim, kvd)
-                let qrow = g_rd.q_gated ? 2l * qd : qd   // gated: the q GEMM writes [q | gate] per head; rope/attn read q head-strided
+                let qrow = g_rd.q_gated ? 2l * qd : qd
                 let qhs = int(g_rd.q_gated ? 2l * hs : hs)
                 let tq = cm2_tiles(qrow, wlen)
                 let tkv = cm2_tiles(kvd, wlen)
@@ -1049,7 +1032,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     // the cm2 fa tile reads the f16 mirrors directly
                     var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = uint(g_rd.kv_mul), kvbase = uint(mirb),
-                        scale = g_rd.scale, qrow = uint(qrow), qhs = uint(qhs))
+                        scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs))
                     let fawgs = g_rd.n_heads * ((wlen + 63l) / 64l)
                     if (hs == 64l) {
                         if (fo6) {
@@ -1115,7 +1098,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let asn = fo6 ? 256l : np * (qd / 32l) * 4l
                 pf_gemm_enc(raw, h, b + 7, g_rd.layers[l].fo, po.wq, po.ws, aqb, asb, g_rd.pf_xb2,
                     po.wqb, po.wsb, aqn, asn, np * dim * 4l, VHZ_AQ, VHZ_XB2, qd, dim, g_rd.layers[l].bo, wlen, fo6)
-                }   // end the attention head; the FFN tail below serves both heads (block output in pf_xb2)
+                }
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
                 if (fuse_arq && !guk) {
                     if (gu6) {
@@ -1220,8 +1203,6 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     }
 }
 
-// The last window's per-role GPU table: the attention head's roles summed over the attention layers,
-// the recurrent head's over the recurrent ones (a hybrid prints both), each with the layer count.
 [cold_path]   // DASLLAMA_GPU_PROF=1 report leg
 def private pf_prof_report(npos : int64) {
     var want = 5u
@@ -1273,9 +1254,9 @@ def private pf_prof_report(npos : int64) {
         }
     }
     if (ndn > 0l) {
-        let o = g_rd.dn_ba_f32 ? 0l : 1l   // the q8 arm stamps beta and alpha apart
+        let ba_stamp_shift = g_rd.dn_ba_f32 ? 0l : 1l
         let ba = g_rd.dn_ba_f32 ? "ba {int(dn[3])}" : "beta {int(dn[3])} alpha {int(dn[4])}"
-        to_log(LOG_INFO, "vk_rdpf dn rq_x {int(dn[0])} qkv {int(dn[1])} z {int(dn[2])} {ba} conv {int(dn[4 + o])} scan {int(dn[5 + o])} onorm {int(dn[6 + o])} tail {int(dn[7 + o])} rq_o {int(dn[8 + o])} out {int(dn[9 + o])} ar1 {int(dn[10 + o])} rq_f {int(dn[11 + o])} gate {int(dn[12 + o])} up {int(dn[13 + o])} act {int(dn[14 + o])} down {int(dn[15 + o])} ar2 {int(dn[16 + o])}\n")
+        to_log(LOG_INFO, "vk_rdpf dn rq_x {int(dn[0])} qkv {int(dn[1])} z {int(dn[2])} {ba} conv {int(dn[4 + ba_stamp_shift])} scan {int(dn[5 + ba_stamp_shift])} onorm {int(dn[6 + ba_stamp_shift])} tail {int(dn[7 + ba_stamp_shift])} rq_o {int(dn[8 + ba_stamp_shift])} out {int(dn[9 + ba_stamp_shift])} ar1 {int(dn[10 + ba_stamp_shift])} rq_f {int(dn[11 + ba_stamp_shift])} gate {int(dn[12 + ba_stamp_shift])} up {int(dn[13 + ba_stamp_shift])} act {int(dn[14 + ba_stamp_shift])} down {int(dn[15 + ba_stamp_shift])} ar2 {int(dn[16 + ba_stamp_shift])}\n")
     }
 }
 
