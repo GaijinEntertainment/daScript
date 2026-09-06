@@ -127,11 +127,17 @@ def private usedGlobals(program : ProgramPtr) : array<Variable?> {
     return <- globals
 }
 
-//! A `VarInfo` per global through the emitter's own debug helper, built before the helper dumps
-//! its tables so every type they name is in the dump; the collector walks each global through
-//! its info, the way the interpreter's simulate step wires it.
+//! `options gc`: the program collects its own heaps.
+def private standaloneCollects(program : ProgramPtr) : bool {
+    return program._options |> find_arg("gc") ?as tBool ?? false
+}
+
+//! A `VarInfo` per global of a collecting program, made before the helper dumps its tables so
+//! every type they name is in the dump: the collector walks each global through its info, the
+//! way the interpreter's simulate step wires it.
 def private makeGlobalVarInfos(var helper : AotDebugInfoHelper?; program : ProgramPtr) : array<tuple<index : int; info : VarInfo?>> {
-    return <- [for (pvar in usedGlobals(program)); (index = pvar.index, info = helper.helper |> make_variable_debug_info(pvar))]
+    let collects = standaloneCollects(program)
+    return <- [for (pvar in usedGlobals(program)); (index = pvar.index, info = helper.helper |> make_variable_debug_info(pvar)); where collects]
 }
 
 def private writeGlobalVarInfos(var helper : AotDebugInfoHelper?; infos : array<tuple<index : int; info : VarInfo?>>; var tw : StringBuilderWriter) {
@@ -164,13 +170,19 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     write(tw, "    policies.string_heap_size_hint = {string_heap_hint:d};\n");
     write(tw, "    policies.track_allocations = {program._options |> find_arg("track_allocations") ?as tBool ?? program.policies.track_allocations};\n");
     write(tw, "    context.setup({program.totalVariables}/*totalVariables*/, {program.globalStringHeapSize:d} /*globalStringHeapSize*/, policies, \{\});\n");
-    write(tw, "    context.gcEnabled = {program._options |> find_arg("gc") ?as tBool ?? false};\n");
+    // the nano context has neither the collector's flag nor the globals' debug infos
+    let collects = standaloneCollects(program)
+    if (collects) {
+        write(tw, "    context.gcEnabled = true;\n");
+    }
 
     write(tw, "     // start totalVariables\n");
     for (pvar in lookupVariableTable) {
         write(tw, "    InitGlobalVar(context, &context.globalVariables[{pvar.index}/*pvar->index*/], GlobalVarInfo(\"")
         write(tw, "{pvar.name}\", \"{pvar |> get_mangled_name()}\", {pvar._type.sizeOf}, {pvar.flags.global_shared}));\n");
-        write(tw, "    context.globalVariables[{pvar.index}].debugInfo = &__gvar_info_{pvar.index};\n");
+        if (collects) {
+            write(tw, "    context.globalVariables[{pvar.index}].debugInfo = &__gvar_info_{pvar.index};\n");
+        }
     }
     write(tw, "     // end totalVariables\n\n");
     write(tw, "    context.allocateGlobalsAndShared();\n");

@@ -3,10 +3,10 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `README.md`.
 
-**A diff that renames or removes a name the supervisor's output carries - an `event` value on
-the JSON-lines log, a key of one, a startup stage name, or a `@tune` kind or key on the
-`@tune <kind> k=v` lines `watchdog.das` reads from the child - updates every place that name
-appears in the tree in the same change, and names any out-of-tree reader in the PR
+**A diff that renames or removes a name the supervisor writes or reads - an `event` value on
+the JSON-lines log, a field key on such a line, a startup stage name, or a `@tune` kind or key
+on the `@tune <kind> k=v` lines `watchdog.das` reads from the child - updates every place that
+name appears in the tree in the same change, and names any out-of-tree reader in the PR
 description** - a reader that stops seeing the name it waits for never fails loudly.
 
 **A diff that adds a field to `WatchdogConfig` makes it discoverable in the same change: a

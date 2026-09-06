@@ -7,8 +7,9 @@ A tool is a directory that owns one program - its entry point and the files only
 uses - under `utils/`, or outside `utils/` when `CMakeLists.txt` (beside this file) builds or
 ships it. An arm is one `t |> run(...)` case of a `[test]` function. An arm's load-bearing
 assertions are the ones that prove the change, never a skip-path assertion. A CI row is a
-workflow step whose command reaches the arm. An arm that skips itself where CI runs counts as
-one a CI row can run only when the PR description cites that row's log showing the arm ran.
+workflow step whose command reaches the arm. An arm that does not execute where CI runs - it
+skips itself, or a suite gate excludes its file - has load-bearing assertions no CI row can
+run, unless the PR description cites that CI row's log showing the arm ran.
 
 **A file under `utils/` that belongs to a tool other than the one owning the directory it
 sits in is reviewed with that tool's own `REVIEW.md`, where one exists, as well as with this
@@ -38,8 +39,8 @@ no row already covers it.** A row that only compile-checks the arm (`dastest --c
 does not execute them, and a nightly-only row runs them after the merge.
 
 **An arm the diff adds or changes that covers a change under `utils/`, whose load-bearing
-assertions no CI row can run, ships with a row that compile-checks it - `dastest
---compile-only` for a `.das` test - in the same change.**
+assertions no CI row can run, ships with a row that compile-checks it -
+`dastest --compile-only` - in the same change.**
 
 **An arm the diff adds or changes that covers a change under `utils/`, whose load-bearing
 assertions no CI row can run, records in the PR description an executed run against the build
