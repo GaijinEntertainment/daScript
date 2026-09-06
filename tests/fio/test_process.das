@@ -113,8 +113,17 @@ def test_close_kills_a_running_child(t : T?) {
             t |> success(unsafe(process_alive(scoped_pid)), "the child is alive inside the block")
         }
         t |> success(!unsafe(process_alive(scoped_pid)), "leaving the with_process block killed the running child")
-        let cleanup = rmdir_rec_result(root_dir)
-        t |> success(cleanup is value && cleanup as value, "temp dir removed")
+        var removed = false
+        for (_attempt in range(40)) {
+            let cleanup = rmdir_rec_result(root_dir)
+            removed = cleanup is value && cleanup as value
+            if (removed || !fexist(root_dir)) {
+                removed = true
+                break
+            }
+            sleep(50u)
+        }
+        t |> success(removed, "temp dir removed once the killed children released their handles")
     }
 }
 
