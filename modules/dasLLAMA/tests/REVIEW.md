@@ -4,6 +4,11 @@
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
+**A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
+output - or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it, and
+a diff that changes a `[metal_dispatch]` or `[vk_dispatch]` class's dispatch geometry, kargs,
+or kargs fields, apply `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
+
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
 change reaches a test when it alters anything the test's result depends on - the test file, a
@@ -45,10 +50,11 @@ or skip condition.** A clause that only names the file (a brace list, a suite ro
 nothing to correct.
 
 **A diff that changes `run.das`'s flag surface - a flag, a suite name, an area name, or what a
-flag runs - adds it to or corrects it in `CLAUDE.md`'s "Run suites ONLY through the runner" block
-and `../CLAUDE.md`'s "Test workflow" section in the same change.** Both restate the surface for an
-agent that reads them cold; a copy the code has left behind sends that agent to a flag that no
-longer does what the text says.
+flag does, never the roster of files a suite or area lists - adds it to or corrects it in
+`CLAUDE.md`'s "Run suites ONLY through the runner" block and `../CLAUDE.md`'s "Test workflow"
+section in the same change.** Both documents restate the surface for an agent that reads them
+cold; a copy the code has left behind sends that agent to a flag that no longer does what the
+text says.
 
 **A new test file listed in `run.das`'s `model-free` or `stocked` suite, or in no `run.das`
 suite at all, whose name does not say what it covers, gets a `CLAUDE.md` entry in the same
@@ -79,12 +85,16 @@ matmul picks for a given width and row count, and whether that dispatch splits i
 across partial planes); `utils/dasllama-server/test_worker_dispatch.das` (repo root: worker-local fork pools, shared queue policy).
 
 **A diff that adds a gate whose failure means a documented contract changed, rather than a
-kernel regressing, adds it to the pinned set above in the same change** - as a file when every
+kernel regressing, adds it to the pinned set in the same change** - as a file when every
 cell of it pins, as a named cell otherwise.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell
 that returns without asserting - the module is absent, its models are not stocked, no device
 answered, a capability declined - registers `t |> skip` there; `feint` is a print, not a skip.
+
+**A cell whose claim needs a capability the box may lack - a window server, an audio device, a
+module the build omits - registers `t |> skip` on that fact before it asserts; a cell that reds
+on one instead is a defect.**
 
 **A cell's skip condition keys on a fact the box owns - a device capability, a run-mode knob's
 value, a host toolchain's presence, a compile-time module-presence check
@@ -95,14 +105,20 @@ dump a test wrote).** An artifact condition goes permanently false when its prod
 
 **A test that loads a model above the large tier (`LARGE_TIER_BYTES`, `_model_tier.das`)
 without gating on `DASLLAMA_PARITY_FULL=1` is a defect** - `DASLLAMA_PARITY_FULL=1` is a final
-pre-PR switch, not the iteration loop. In this folder the spelling is `model_available`
-(`_model_tier.das`). A test that cannot require `_model_tier.das` open-codes the same env check.
+pre-PR switch, not the iteration loop.
 
-**A test - or a program a test builds or spawns - whose subject is not the `.dlim` image
-rail never calls `load_model`, `load_model_cached`, or `load_model_image` - it loads each
-carrier through that carrier's own loader.** Decoders: `load_model_`
-(`../dasllama/dasllama_load.das`); other carriers: `load_<family>_tower` / `load_<family>_encoder`
-/ `load_<carrier>_model`; TTS: `load_tts_model` or `load_styletts2`.
+**A cell that gates on a stocked model file - a `.gguf` carrier, its shards, or an mmproj - gates
+through `model_available` (`_model_tier.das`), one call per file; a test that cannot require
+`_model_tier.das` open-codes the same two checks: the file and every sibling shard are present,
+and their total size is under `LARGE_TIER_BYTES` unless `DASLLAMA_PARITY_FULL=1` is set.** Every
+other stocked fixture gates on its own presence.
+
+**A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail
+never mints or maps an image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
+calls no `load_model`, `load_model_cached`, or `load_model_image` and loads each carrier through
+that carrier's own loader.** Decoders: `load_model_` (`../dasllama/dasllama_load.das`); other
+carriers: `load_<family>_tower` / `load_<family>_encoder` / `load_<carrier>_model`; TTS:
+`load_tts_model` or `load_styletts2`.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -112,21 +128,6 @@ value; test it through the argv it gates or the mode it selects.**
 registry, and never calls it directly.** A registry is the storage a `register_*` call writes
 and a lookup reads at dispatch - a table, a list, or a single hook global - or the `[EnvConfig]`
 env registry.
-
-**A diff that changes a kernel's dispatch geometry - its grid divisor, threadgroup size, or
-threadgroup-memory length - updates every gate that hand-dispatches that kernel, in the same
-change.** A hand-dispatched gate encodes the geometry itself, so a moved divisor leaves the
-gate dispatching the wrong shape with no error.
-
-**A diff that changes a kernel's kargs - the kernel-argument struct, or any buffer binding -
-updates every gate that hand-binds that kernel, in the same change.** A stale hand bind reads
-the wrong buffer and passes on garbage that happens to compare.
-
-**A kernel that gains a kargs field whose non-default value changes what it computes or which
-elements it reads or writes - a branch selector, a row or element base, a stride - ships, in
-the same change, a gate cell that sets that field to a non-default value.** At the default the
-new field has no visible effect: a CPU oracle that ignores it and the kernel that honors it
-agree.
 
 **A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
 naming the `ggml-vocab-*.gguf` fixture.**
@@ -151,22 +152,6 @@ assert pinning the lane.** Freeform coverage across a pair that rounds different
 forced-feed logits-tolerance form - the same fixed tokens fed to both sides, logits compared
 within a bar. Counting cells - those whose prompt forces a continuation that cannot tie, so
 greedy tokens are fixed - stay token-exact.
-
-**A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
-output - missing a compare against a CPU oracle that can witness the cell's property is a
-defect.**
-
-**A kernel-unit cell fills a GPU output buffer with a sentinel before every dispatch whose
-output it then reads.** An unprefilled output can pass by staying stale - the previous
-dispatch's values, or garbage that happens to sit inside the tolerance bar.
-
-**A cross-dispatch bit-identity compare - comparing the outputs of two dispatches - runs GPU
-against GPU.** No CPU oracle can witness that property.
-
-**A kernel-unit cell whose output buffer is its input buffer, and whose CPU oracle does not
-differ from that input by construction, pairs its compare with an assert that the output
-differs from the input at a known index.** An in-place kernel that never ran leaves the input,
-which can wrongly satisfy a tolerant compare.
 
 **An ASR family with no token-for-token oracle cell is a defect** - the cell compares a
 transcript against a reference leg, external dump or CPU control alike.
@@ -256,11 +241,6 @@ transcendentals is not exact-value: it is not float-portable.
 **An embedding-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A kernel-unit cell that dispatches a `[metal_dispatch]` or `[vk_dispatch]` class no cell
-dispatched before ships a control that reds it in the same change.** A control is a run of
-the same gate that must RED - a poisoned input, a poisoned expectation, a disconnected
-mechanism, or a second independent lane; a gate's own reference is never its control.
-
 **A cell that adds or loosens a tolerance bar ships, in the same change, a control that lands
 outside the new bar.** A bar nothing has ever exceeded is not known to discriminate.
 
@@ -269,17 +249,6 @@ change** - the wire-shape pins, the render pins, and a live server case gated on
 smallest GGUF that sits under `LARGE_TIER_BYTES` (`_model_tier.das`) (the file homes are
 `CLAUDE.md`'s "The per-PR suites - model-free and stocked" and "Out-of-folder test files" notes). A family
 whose vocab carries no thinking or tool markers has no format to test.
-
-**A kernel-unit cell whose kernel reads f16 operands and whose oracle is wider-precision
-feeds inputs that are exact in f16.** Otherwise the compare measures input rounding, and the
-bar has to be loosened until it no longer discriminates.
-
-**A gate for a kernel that attends inside a restricted horizon - a window, a sliding span, a
-block-diagonal range - writes its CPU oracle to attend strictly inside that horizon.** A leak
-then reds the ordinary compare, so the gate needs no separate leak control.
-
-**A cell whose only compare is bit-identity between two kernel forms also compares one of the
-two against a CPU oracle, in the same cell.** Two forms can be bit-equal and both wrong.
 
 **A poison control on a tower the Metal driver serves - a run of the gate with the tower's
 weights zeroed, which must RED - zeroes every weight buffer the served route reads.** Which

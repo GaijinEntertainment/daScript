@@ -246,6 +246,8 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_TEST_FAMILY` | text | unset | Comma-separated filter restricting which model families run. |
 | `DASLLAMA_LLAMA2C_DIR` | path | unset | Directory of llama2.c reference checkpoints for the forward/decode parity tests. |
 | `DASLLAMA_WHISPER_DIR` | path | unset | Directory of whisper models for the audio tests. |
+| `DISPLAY` | text | unset | Ambient platform variable; read only by the storyteller restart test to tell whether a Linux box has a window server for the example's window. |
+| `WAYLAND_DISPLAY` | text | unset | Ambient platform variable (the Wayland twin of DISPLAY); read only by the storyteller restart test. |
 | `DASLLAMA_CORPUS_DIR` | path | unset | Directory of audio corpus files for the transcription tests. |
 | `TMPDIR` | path | /tmp | Scratch directory for test artifacts; set by the OS on macOS. |
 | `TEMP` | path | unset | Windows scratch-directory fallback when TMPDIR is unset (the test runner's log dir). |
