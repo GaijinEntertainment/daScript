@@ -21,12 +21,15 @@ struct public JitCpuClass {
 }
 
 let public JIT_CPU_CLASSES = [
-    JitCpuClass(name = "x86-base", arch = "x86_64", cpu = "x86-64-v2", features = "sse4.2"),
-    JitCpuClass(name = "x86-avx2", arch = "x86_64", cpu = "x86-64-v3", features = "avx2;f16c;fma;sse4.2"),
-    JitCpuClass(name = "x86-vnni256", arch = "x86_64", cpu = "x86-64-v3", features = "avx2;f16c;fma;sse4.2;avxvnni"),
-    JitCpuClass(name = "x86-vnni512", arch = "x86_64", cpu = "x86-64-v4",
+    // the cpu is the arch's bare baseline on every row: a level like x86-64-v3 implies features
+    // the set does not name (bmi2, lzcnt, movbe; v4 adds avx512cd/dq), which the backend would emit
+    // and cpuid is never asked for - the set alone is what the box is tested for and what LLVM enables
+    JitCpuClass(name = "x86-base", arch = "x86_64", cpu = "x86-64", features = "sse4.2"),
+    JitCpuClass(name = "x86-avx2", arch = "x86_64", cpu = "x86-64", features = "avx2;f16c;fma;sse4.2"),
+    JitCpuClass(name = "x86-vnni256", arch = "x86_64", cpu = "x86-64", features = "avx2;f16c;fma;sse4.2;avxvnni"),
+    JitCpuClass(name = "x86-vnni512", arch = "x86_64", cpu = "x86-64",
         features = "avx2;f16c;fma;sse4.2;avx512f;avx512bw;avx512vl;avx512vnni;avx512vbmi"),
-    JitCpuClass(name = "x86-amx", arch = "x86_64", cpu = "x86-64-v4",
+    JitCpuClass(name = "x86-amx", arch = "x86_64", cpu = "x86-64",
         features = "avx2;f16c;fma;sse4.2;avxvnni;avx512f;avx512bw;avx512vl;avx512vnni;avx512vbmi;amx-tile;amx-int8"),
     JitCpuClass(name = "arm-neon", arch = "arm64", cpu = "generic", features = "neon;dotprod;fullfp16;lse"),
     JitCpuClass(name = "arm-i8mm", arch = "arm64", cpu = "generic", features = "neon;dotprod;i8mm;bf16;fullfp16;lse")

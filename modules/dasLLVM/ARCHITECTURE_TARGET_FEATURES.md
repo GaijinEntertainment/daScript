@@ -56,8 +56,11 @@ that requires it declines everywhere and no error names the cause.
 A CPU class is a feature set, never a box model: the set every box of the class carries, spelled
 in LLVM's target-feature names. The classes are the rows of `JIT_CPU_CLASSES`
 (`daslib/llvm_cpu_class.das`): `x86-base`, `x86-avx2`, `x86-vnni256`, `x86-vnni512`, `x86-amx`,
-`arm-neon`, `arm-i8mm`. Each row carries the LLVM cpu its target machine schedules for
-(`x86-64-v3` for avx2, `x86-64-v4` for the AVX-512 classes, `generic` on arm) and its feature set.
+`arm-neon`, `arm-i8mm`. Each row carries the LLVM cpu its target machine schedules for and its
+feature set, and the cpu is the arch's bare baseline (`x86-64`, `generic`) on every row: an LLVM
+cpu level such as `x86-64-v3` implies features the row does not name (bmi2, lzcnt, movbe; `v4`
+adds avx512cd/dq), the backend would emit them, and the membership test below would admit a box
+without them. The set alone is what the backend enables and what cpuid is asked for.
 The set is the fingerprint the class's shipped profile records (`skills/tune.md`, the shipped
 defaults profiles), so a profile and the class it is keyed by state the same silicon. A box is
 in a class when it carries every feature of the set; `tune_cpu_class()` names the highest class
