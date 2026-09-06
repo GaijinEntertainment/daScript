@@ -48,9 +48,13 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2i, 2.2u-2.2v, 2.2aa: the Metal prefill driver's
   GEMM form ladder, dev-W knee map, attention slab, MoE bucket rail, chunked submission, the
   f16 twin dual-store, the last-layer FFN tail, and the dense-KQ tensor mul_mm scaffold.
-- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j-2.2q: the Vulkan resident driver - the prefill window
-  chain, the cm2 decode lanes and tile pick, the class-pipeline build seat, the residency plan,
-  the GPU-slot marks swap, the Q8 requant byte store, and the MoE expert chain on the cm2 tiles.
+- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j-2.2m, 2.2p-2.2q: the Vulkan resident driver's kernels
+  and encode chains - the prefill window chain, the cm2 decode lanes and tile pick, the
+  class-pipeline build seat, the Q8 requant byte store, and the MoE expert chain on the cm2
+  tiles.
+- `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - sec.2.2n-2.2o: what a model has to fit on the card
+  before the driver runs - the residency plan, and the GPU-slot marks swap that lets one slot
+  serve many models.
 - `ARCHITECTURE_GPU_VULKAN_DECODE.md` - sec.2.2r-2.2v: the per-op tier's decode era - the decode
   attention block over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, the
   whole-token decode span, the deltanet decode step's per-session resident state, and the

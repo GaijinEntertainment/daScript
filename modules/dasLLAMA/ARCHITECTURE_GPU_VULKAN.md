@@ -1,14 +1,14 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2j-2.2q, the mechanisms of the Vulkan resident driver: the prefill window
-chain, how a cm2 tile decodes its quant bytes and how one is picked, the class-pipeline build
-seat both shader instruments hang on, the residency plan, the marks swap that lets one GPU slot
-serve many models, the Q8 requant byte store, and the MoE expert chain on the cm2 tiles. The
-decode-era mechanisms of the per-op tier - the decode attention block, the streamed layer's
-split, the whole-token decode span - are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections
-2.2r-2.2t. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md`
-sec.1.5.
+carries sections 2.2j-2.2m and 2.2p-2.2q, the kernels and encode chains of the Vulkan resident
+driver: the prefill window chain, how a cm2 tile decodes its quant bytes and how one is picked,
+the class-pipeline build seat both shader instruments hang on, the Q8 requant byte store, and
+the MoE expert chain on the cm2 tiles. What a model has to fit on the card before any of this
+runs - the residency plan, and the marks swap that lets one GPU slot serve many models - is
+`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2o. The decode-era mechanisms of the
+per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections 2.2r-2.2v. The GPU backend role
+table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
 ### 2.2j The Vulkan resident prefill window chain {#vk-prefill-window-chain}
 
@@ -80,7 +80,13 @@ scan is the plain per-token delta rule: a four-subgroup workgroup per (head, col
 shared and feed both columns, the tokens loop inside the kernel with two shuffle reductions per column each, the raw o rows land in the tier's workspace for the gated out-norm's one workgroup per position.
 The conv history crosses windows position-major in ring image 0; the last window transposes the
 tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is `_DECODE.md`
-sec.2.2v's). Gated attention rides the batch kernels through a per-head q stride (`qhs = 2 x hs`:
+sec.2.2v's). Every window past the first carries at least the conv taps: when the rows left after
+a full window would be fewer than the taps, that window gives them up so the last one holds the
+taps, and only a lone first window can be shorter - its history is zero, so the tail writes the
+ring's leading rows as zero (`DnTailArgs.zero_rows`). Off the f16 feed a K-quant qkv/z pair reads
+the Q8_K activation form, as the attention head's kq planes do, and the q8 beta/alpha arm
+re-requantizes the rows Q8_0 behind the z GEMM (one feed, two forms - the decode's rule).
+Gated attention rides the batch kernels through a per-head q stride (`qhs = 2 x hs`:
 the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror
 attention gates on the sigmoid of the gate half); partial rotary is the `half = rot / 2` word.
 At head 256 the window takes the h256 cm2 flash stamps (Br 64, Bc 32, the h128 loop with the head-shaped tiles doubled): the gated twins load Q at the head's q stride and scale the normalized output by the sigmoid of the gate half before the store; the h128 coopmat twin stays 128-only.
@@ -216,49 +222,6 @@ device that reports the feature sets `g_gpu.full_sg_on` once at device init, and
 pipeline is then built with `REQUIRE_FULL_SUBGROUPS`. A run never mixes pinned and plain
 pipelines, so an A/B compares two whole runs. Plain is the default: pinned measured slower on
 the mm_a gate shape.
-
-### 2.2n The residency plan sizes a whole model before a byte uploads {#resident-plan}
-
-The resident driver is all-or-nothing, so the plan IS the decision, and it is computed from
-`Model` metadata alone. It sizes four numbers against the tier's weight budget: the dense weight
-planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the headroom the auto
-arm leaves unfilled (zero when the user pins VRAM). KV is reserved BEFORE weights and never
-grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
-re-uploading gigabytes. A decline carries a reason, and where the numbers allow one it carries
-the remedy that works - a shorter context, because the weights are fixed and the KV is not.
-
-**The auto arm's headroom is the larger of 2 GiB and 27% of the tier's cap.** WDDM demotes a
-process's buffers to system memory by how full the card is, not by a fixed leave-behind, and a
-demoted plane reads at PCIe speed with no error: on the 16 GB reference card the 9B hybrid at a
-12.5 GB plan (the fixed 2 GiB headroom under the 14.7 GB cap) decoded at 6.8 tok/s, at 12 GB
-pinned 3.4, at 11 GB pinned 49.8. The share keeps a 16 GB card's plan near 10.7 GB and leaves
-an 8 GB card's plan where the fixed term already put it.
-
-An OPTIONAL plane rides only the room left under the budget at THIS context - what remains of
-`budget_bytes - headroom_bytes` after weights, KV and scratch; the reserved headroom itself
-stays unfilled. It never shrinks any of the three, and it reports zero bytes when it does not
-fit - so the same model plans the plane in at a short context and out at a long one. The raw f32 embed
-table is the one optional plane today.
-
-### 2.2o One GPU slot, many models: the marks swap {#gpu-slot-marks}
-
-A multi-model host runs one device tier under several loaded models, and the tier's per-model
-state is offset-keyed - two models' marks installed together route one model's dispatches at
-the other's planes. `GpuModelMarks` is that state WHOLE: the loader-contract marks plus every
-resident-driver per-model global (the activation, the mirror count, the mirror cap, the mirror
-codec, and the device-embed arm). The save moves the installed state out and leaves the globals
-reading as no-model; the restore is its exact inverse. The whole-model drop clears the same set
-and deselects the `"vulkan"` overrides, so a dropped model's prefill and decode take the plain
-CPU path and a later re-arm passes `resident_upload`'s no-active-override gate. The three carry
-the same set, which is why a model's device state never survives into the next. The upload
-rail enforces it from its own side: a load that finds marks still installed - a model deleted
-without the drop, the shape every test process and single-model tool takes - drops that
-model's device state before uploading its own, carrying the load's MoE layer request across
-the drop (the one mark the drop's reset would otherwise zero before the rail reads it).
-Without that drop the second model's stacks
-land beside the first's, and the offset-keyed stack lookup serves whichever model's plane
-registered that offset first: the decode attention block asserts on the geometry change, and a
-model whose geometry matches decodes the earlier model's weights.
 
 ### 2.2p The Q8 requant writers store one quant per byte {#q8-requant-byte-store}
 

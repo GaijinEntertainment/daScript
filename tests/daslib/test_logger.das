@@ -186,6 +186,49 @@ def test_no_open_silent_when_fallback_disabled(t : T?) {
     }
 }
 
-// `logger_install_hook()` is not unit-tested here: the global debug agent it registers
-// outlives the test and swallows dastest's own report print. It is covered end-to-end
-// through the MCP server, whose entry point is `logger_init`.
+def private das_exe() : string {
+    let args <- get_command_line_arguments()
+    return empty(args) ? "" : args[0]
+}
+
+def private run_child(cmd : string; var output : string&) : int {
+    return unsafe(popen_timeout(cmd, 120.0, $(f) {
+        if (f != null) {
+            output = fread(f)
+        }
+    }))
+}
+
+// `logger_install_hook()` is tested through a child process (`_logger_hook_child.das`): the
+// global debug agent it registers keeps the installing context, so an in-process cell would leave
+// a dead agent behind for the harness's next line.
+[test]
+def test_hook_at_field_decimal(t : T?) {
+    t |> run("the hook's at field names the call site's line in decimal") @(t : T?) {
+        let p = temp_log_path()
+        var out : string
+        var cmd = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" \"{get_das_root()}/tests/daslib/_logger_hook_child.das\" -- \"{p}\" 2>&1"
+        if (get_platform_name() == "windows") {
+            cmd = "\"{cmd}\""   // cmd.exe strips the first and last quote of a line that opens with one
+        }
+        let rc = run_child(cmd, out)
+        t |> equal(rc, 0, "the probe process exits clean: {out}")
+        let lines = read_lines(p)
+        remove(p)
+        var at = ""
+        for (line in lines) {
+            continue if (find(line, "hook at-field probe") < 0)
+            let rec = parse_record(t, line)
+            let fields = rec?["fields"]
+            if (fields == null || !(fields.value is _object)) {
+                t |> failure("the hook's record carries no fields object: '{line}'")
+                return
+            }
+            at = field_str(t, fields, "at")
+        }
+        t |> success(!empty(at), "the hook wrote the probe line with an at field")
+        let tail = slice(at, rfind(at, ":") + 1)
+        t |> success(find(at, "0x") < 0, "the line is not hex: '{at}'")
+        t |> success(to_int(tail) > 0 && "{to_int(tail)}" == tail, "the line is a decimal number: '{at}'")
+    }
+}

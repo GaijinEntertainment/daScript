@@ -45,7 +45,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         return false
     }
     let hybrid = dn.cd > 0l
-    if (hybrid && !(dn.ds <= DN_MAX_DS && dn.ds % 32l == 0l && dn.nvh <= DN_MAX_HEADS && dn.cd <= DN_MAX_CD
+    if (hybrid && !(dn.ds <= DN_MAX_DS && dn.ds % 32l == 0l && (dn.ds & (dn.ds - 1l)) == 0l && dn.nvh <= DN_MAX_HEADS && dn.cd <= DN_MAX_CD
             && dn.dconv <= DN_MAX_DCONV && dn.di == dn.nvh * dn.ds && dn.kd == dn.nkh * dn.ds
             && dn.cd == 2l * dn.kd + dn.di && dn.di % 32l == 0l && dn.di <= DND_OQ_BYTES)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: deltanet geometry (cd {dn.cd}, kd {dn.kd}, di {dn.di}, heads {dn.nvh}/{dn.nkh}, state {dn.ds}, conv {dn.dconv}) is outside the step kernel's capacity\n")
@@ -632,10 +632,9 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
         var pcg = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off + nvh * dim), obase = uint(DN_SM_G))
         enc_router_gemv_f16_cls(raw, h, L.s_dnba, pcg, nvh)
     } else {
-        if (kq_sb(L.fqkv)) {   // the row above was requantized Q8_K for the kq GEMVs; the q8 beta/alpha GEMVs read it as Q8_0
+        if (kq_sb(L.fqkv)) {   // the row above was requantized Q8_K for the kq GEMVs; the q8 beta/alpha GEMVs read it as Q8_0 (no stamp: the requant bills to the ba role)
             var pcr = RqArgs(inbase = 0u, nblk = uint(dim / 32l))
             enc_cls_dn_rq(raw, h, L.s_quant_xb, pcr, (dim / 4l + 255l) / 256l)
-            pfq_ts(raw)
         }
         var pcb = GemvArgs(n = uint(dim), d = uint(nvh), nreg = 1u, ybase = uint(DN_SM_BETA))
         gemv_cls_enc(int(KqFmt.q8), raw, h, L.s_dnbeta, pcb, (nvh + rpw - 1l) / rpw)
@@ -653,6 +652,12 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
     gemv_cls_enc(L.fout, raw, h, L.s_dnout, pco, (dim + rpw - 1l) / rpw)
     pfq_ts(raw)
+}
+
+//! The token command's fuse gates, one source for the recorder and the profiler's stamp count: `fuse` = the add+rms+requant twins (b32 quants, no hybrid), `fuse_qkr` = the fused qk-norm+rope pair (also the gated and partial-rope arms, which the split pair lacks)
+def private rd_fuse_gates : tuple<fuse : bool; fuse_qkr : bool> {
+    let fuse = vk_fuse_on() && rd_x_quants_b32() && !g_rd.hybrid
+    return (fuse = fuse, fuse_qkr = g_rd.qk_norm && (fuse || g_rd.q_gated || g_rd.rot != g_rd.head_size))
 }
 
 // The encode half alone: reset + re-encode the token cmd over the already-filled metas/sets.
@@ -676,8 +681,7 @@ def private rd_encode_token {
         cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l)
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.head_size * 4l)
-        let fuse = vk_fuse_on() && rd_x_quants_b32() && !g_rd.hybrid
-        let fuse_qkr = g_rd.qk_norm && (fuse || g_rd.q_gated || g_rd.rot != g_rd.head_size)
+        let (fuse, fuse_qkr) = rd_fuse_gates()
         let rpw = g_gpu.rows_per_wg
         var pc_rq_dim = RqArgs(inbase = 0u, nblk = uint(dim / 32l))
         var pc_rq_qd = RqArgs(inbase = 0u, nblk = uint(qd / 32l))
@@ -777,14 +781,13 @@ def private rdq_role_names(fuse, fuse_qkr, qk_norm : bool) : array<string> {
     return <- ["rq_x", "q", "kv", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
 }
 
-// a recurrent layer's stamps on the token command (rd_encode_dn_head + the shared tail): 13, split rail only
-let private RDQ_DN_ROLES = 13
+// a recurrent layer's stamps on the token command (rd_encode_dn_head + the shared tail), split rail only
 let private RDQ_DN_NAMES <- ["rq_x", "qkv", "z", "ba", "step", "out", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
+let private RDQ_DN_ROLES = length(RDQ_DN_NAMES)
 
 [cold_path]   // DASLLAMA_GPU_PROF reporting leg
 def private rdq_sample {
-    let fuse = vk_fuse_on() && rd_x_quants_b32() && !g_rd.hybrid
-    let fuse_qkr = g_rd.qk_norm && (fuse || g_rd.q_gated || g_rd.rot != g_rd.head_size)
+    let (fuse, fuse_qkr) = rd_fuse_gates()
     var want = fuse ? 3 : 4   // anchor + prologue + [fin_rq — split rail only] + cls
     // per ATTENTION layer counting the split v stamp: fused 13, split rail with the fused qk-norm+rope 15, plain 16 / 15
     let att_rpl = fuse ? 13 : (fuse_qkr ? 15 : (g_rd.qk_norm ? 16 : 15))
@@ -1115,7 +1118,7 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
                    stp : float const?; histp : float const?;
                    dim, cd, kd, di, nvh, nkh, ds, dconv : int64; eps : float) {
     let taps = dconv - 1l
-    assert(ds <= DN_MAX_DS && ds % 32l == 0l && nvh <= DN_MAX_HEADS && cd <= DN_MAX_CD
+    assert(ds <= DN_MAX_DS && ds % 32l == 0l && (ds & (ds - 1l)) == 0l && nvh <= DN_MAX_HEADS && cd <= DN_MAX_CD
            && dconv <= DN_MAX_DCONV && di == nvh * ds && kd == nkh * ds && cd == 2l * kd + di
            && dim % 32l == 0l && di % 32l == 0l && di <= DND_OQ_BYTES,
         "dasLLAMA vulkan tier: deltanet geometry outside step capacity")

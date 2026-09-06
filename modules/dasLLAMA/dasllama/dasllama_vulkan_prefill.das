@@ -473,11 +473,15 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let np = g_rd.pf_np
     let eps = g_rd.eps
     let dn6 = pf_dn6(l)
+    let dnk = !dn6 && kq_sb(L.fqkv)   // off the f16 feed a K-quant qkv/z pair reads the Q8_K activation form, the attention head's fqk twin
     if (dn6) {
         var pcc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
         enc_f16cvt_cls(raw, h, L.pf_dn_cvt_set, pcc0, (wlen * dim / 4l + 255l) / 256l)
     }
-    if (!dn6 || !g_rd.dn_ba_f32) {
+    if (dnk) {
+        var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
+        enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 8l + 255l) / 256l)
+    } elif (!dn6 || !g_rd.dn_ba_f32) {
         var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
         enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
     }
@@ -498,6 +502,10 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         enc_dn_ba_cls(raw, h, L.pf_dn_ba_set, pcb, dn_ba_wgs(wlen, nvh))
         pfq_ts(raw)
     } else {
+        if (dnk) {   // the qkv/z GEMMs read the rows as Q8_K; the q8 beta/alpha GEMMs read them as Q8_0
+            var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
+            enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pcq, (wlen * dim / 4l + 255l) / 256l)
+        }
         let pb = arena_planes(int(KqFmt.q8), L.bbeta)
         pf_gemm_enc(raw, h, b + 3, int(KqFmt.q8), pb.wq, pb.ws, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_dnbg,
             pb.wqb, pb.wsb, np * dim, np * (dim / 32l) * 4l, np * nvh * 4l, VHZ_XQ, VHZ_DNBG, dim, nvh, L.bbeta, wlen, false)
@@ -524,7 +532,9 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     enc_dn_scan_p3_cls(raw, h, L.pf_dn_scan_p3_set, pc3, wlen)
     pfq_ts(raw)
     if (last) {
-        var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(wlen - taps), hist_off = uint(DN_SM_HIST))
+        // a window shorter than the taps is window 0 alone, whose history is zero: the ring's leading rows read as zero
+        var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(max(wlen - taps, 0l)), hist_off = uint(DN_SM_HIST),
+            zero_rows = uint(max(taps - wlen, 0l)))
         vhz_dep(raw, h, VHZ_DNP, VHZ_DNSM, false)
         enc_dn_tail_cls(raw, h, L.pf_dn_tail_set, pct, (cd * taps + int64(WG_X) - 1l) / int64(WG_X))
     } else {
@@ -613,7 +623,7 @@ def private pf_setup {
     var anykq = kq_sb(g_rd.cls_fmt_marker)
     for (L in g_rd.layers) {
         any6 = any6 || pf_f16_feed(L.fq) || pf_f16_feed(L.fo) || pf_f16_feed(L.f1) || pf_f16_feed(L.f2)
-        anykq = anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2)
+        anykq = anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2) || (L.recurrent && (kq_sb(L.fqkv) || kq_sb(L.fz)))
     }
     if (any6) {
         assert(np % 32l == 0l, "dasLLAMA vulkan tier: the s tile's unclamped column needs a 32-row-multiple window")   // the resident planes carry no read slack
@@ -644,9 +654,10 @@ def private pf_setup {
     let mirbytes = g_rd.n_attn * g_rd.seq_cap * kvd * g_rd.kv_esz
     let normbytes = g_rd.norms_bytes
     let kv16 = g_rd.kv16
-    // the cm2 fa tiles read f16 K/V, so f16 mirrors bind directly; f32 keeps the chunked/h128 paths
+    // the cm2 fa tiles read f16 K/V, so f16 mirrors bind directly; f32 keeps the chunked/h128 paths; the gated stamps exist at head 256 alone
     g_rd.pf_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
-        && (g_rd.head_size == 64l || g_rd.head_size == 128l || g_rd.head_size == 256l))
+        && (g_rd.head_size == 64l || g_rd.head_size == 128l || g_rd.head_size == 256l)
+        && (!g_rd.q_gated || g_rd.head_size == 256l))
     let fa128s = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
     verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b()
         && (kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls())
@@ -881,9 +892,15 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let pairs = int(qd / 2l + kvd / 2l)
     unsafe {
         var w0 = 0l
+        let taps = max(g_rd.dn_dconv - 1l, 0l)
         while (w0 < npos) {
             let tp0 = ref_time_ticks()
-            let wlen = min(g_rd.pf_np, npos - w0)
+            var wlen = min(g_rd.pf_np, npos - w0)
+            let rem = npos - w0 - wlen
+            if (rem > 0l && rem < taps) {
+                wlen -= taps - rem   // the last window keeps at least the conv taps: only window 0 can be shorter, and its history is zero
+            }
+            assert(wlen >= taps || w0 == 0l, "vk prefill: a later window shorter than the conv taps")
             let last = w0 + wlen >= npos
             if (use_ids) {
                 g_pf_ids_stage |> resize(wlen)
@@ -1970,7 +1987,7 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
             convw, wnormp, ap, dtp, stp, histp, dim, cd, kd, di, nvh, nkh, ds, dconv, eps)
         return
     }
-    assert(ds <= DN_MAX_DS && ds % 16l == 0l && nvh <= DN_MAX_HEADS && cd <= DN_MAX_CD
+    assert(ds <= DN_MAX_DS && ds % 16l == 0l && (ds & (ds - 1l)) == 0l && nvh <= DN_MAX_HEADS && cd <= DN_MAX_CD
            && dconv <= DN_MAX_DCONV && di == nvh * ds && kd == nkh * ds && cd == 2l * kd + di
            && npos > taps && dim % 32l == 0l && di % 32l == 0l,
         "dasLLAMA vulkan tier: deltanet geometry outside chain capacity")

@@ -430,7 +430,7 @@ let private RDEC_MISC_BYTES = 67_108_864l          // decode smalls + batch act 
 
 // the driver's device allocations past weights + KV — the prefill window buffers dominate.
 // An estimate, deliberately a touch high; the flat term carries the decode/batch smalls.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#resident-plan")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private rdec_scratch_bytes(t : Model) : int64 {
     let c = t.config
     let qd = layer_qd(c, 0l)
@@ -440,7 +440,7 @@ def private rdec_scratch_bytes(t : Model) : int64 {
         + 8l * hid + 4l * layer_head_size(c, 0l)) + c.vocab_size * 4l + RDEC_MISC_BYTES
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#resident-plan")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan {
     let c = t.config
     var p = ResidentPlan(budget_bytes = moe_gpu_weight_budget_())
@@ -755,9 +755,10 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
     planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
     for (pl in planes) {
         if (!rdec_rows_ok(pl.n, pl.f)) {   // unplaceable row: the whole driver declines (all-or-nothing)
+            let why = "a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple"   // pl refers into planes: read it before the delete
             delete planes
             delete need
-            return rdec_decline("a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple")
+            return rdec_decline(why)
         }
         let fi = int(pl.f)
         need[fi] = (need?[fi] ?? 0l) + rdec_blocks_for(pl.n, pl.rows, pl.f)
@@ -909,15 +910,15 @@ var private @scratch g_rdec_tmp : array<float>
 
 // why a resident override handed a call back to the CPU rails; each kind is said once per armed model
 enum private RdecPass {
-    codec           // the session's K/V codec is not the armed mirror codec
-    paged           // a paged K/V cache - the mirror serves the flat cache only
-    gap             // the position is past the mirror's live rows
-    cap             // the mirror's context capacity is reached
-    superseded      // another session's prefill took the single mirror
-    continuation    // a prefill that continues an existing history
-    span            // a non-causal (media) span
-    pinned_off      // the resident prefill is pinned off (a multi-stream scheduler)
-    rewind          // a hybrid's position is not its forward-only deltanet state's next one
+    codec
+    paged
+    gap
+    cap
+    superseded
+    continuation
+    span
+    pinned_off
+    rewind
 }
 
 var private g_rdec_pass_said : table<int>
@@ -1229,7 +1230,7 @@ def gpu_model_marks_init_() : GpuModelMarks {
     return <- GpuModelMarks()
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     moe_gpu_marks_save(st.marks)
     st.rdec_active = g_rdec_active
@@ -1243,7 +1244,7 @@ def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     g_rdec_emb_gpu = false
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
     moe_gpu_marks_restore(st.marks)
     g_rdec_active = st.rdec_active
@@ -1269,7 +1270,7 @@ def moe_gpu_resident_prefills() : int64 => g_rdec_prefills
 //! Capture the INSTALLED model's tier state into `st` (see ``moe_gpu_model_marks_save_``) and
 //! classify what it had: "gpu:resident" | "gpu:rails" | "cpu". The load-time half of a
 //! multi-model host's slot bookkeeping.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def gpu_slot_capture_(var st : GpuModelMarks) : string {
     let was_resident = g_rdec_active
     moe_gpu_model_marks_save_(st)
@@ -1279,7 +1280,7 @@ def gpu_slot_capture_(var st : GpuModelMarks) : string {
 //! Re-arm the INSTALLED model onto the GPU tier (marks already restored): want, arm, resident
 //! upload — through the bake-slice path when `t` is a mapped vulkan-flavor image (a live
 //! re-gather on a planes-trimmed image panics). Returns "gpu:resident" | "gpu:rails" | "cpu".
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def gpu_slot_rearm_(want : GpuTierWant; t : Model) : string {
     set_gpu_tier_want_(want)
     moe_gpu_tier_arm_()
@@ -1308,7 +1309,7 @@ def moe_gpu_hydrate_session_(t : Model; var s : Session) {
 //! Drop the INSTALLED model's whole GPU state (every model-owned device object + the routing
 //! marks); the model keeps serving on the CPU rails, and re-arm = the same three calls a load
 //! runs. Caller guarantees quiescence: no step in flight, sessions hydrated first.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def moe_gpu_drop_model_() {
     if (!moe_gpu_tier_installed()) {
         return
@@ -1350,7 +1351,7 @@ def moe_gpu_drop_model_() {
 //! The upload rail's first step: a model still installed on the tier (its marks armed, or the
 //! resident driver active) is dropped before this load uploads, with the load's own MoE layer
 //! request - the one mark the drop's reset would zero - carried across.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def moe_gpu_drop_installed_before_load(n_layers : int64) {
     if (!moe_gpu_tier_installed() || !(g_rdec_active || moe_gpu_installed_marks_armed())) {
         return
@@ -1415,7 +1416,7 @@ def private dense_ffn_cpu_say(t : Model) {
 // Upload the offloaded layers' expert stacks to the GPU tier from the PREPARED planes. Called at
 // the end of every load rail so DASLLAMA_GPU_MOE_LAYERS behaves identically however the model
 // arrived. Layers go resident from the end while the tier's VRAM budget holds.
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven sequential rail walks sharing one rollback cursor; splitting them hides the partial-group unwind
     moe_gpu_drop_installed_before_load(t.config.n_layers)
     set_moe_gpu_from_layer(t.config.n_layers)   // nothing resident until an upload lands

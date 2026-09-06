@@ -12,6 +12,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_gpu_tier
+require dasllama/dasllama_config
 
 // ===== rdec doubles: record what arrives, answer distinctively =====
 
@@ -264,5 +265,15 @@ def test_rdec_prefill_ids_seam(t : T?) {
         t |> equal(g_ids_npos, 1l)
         t |> equal(g_ids_scale, 1.5)
         t |> equal(logits[0], 43.0)
+    }
+}
+
+[test]
+def test_dlim_vulkan_tag_dn_native(t : T?) {
+    t |> run("the vulkan image identity carries the native-deltanet-planes bit") @(t : T?) {
+        var v = DlimVulkanConfig()
+        let plain = dlim_vulkan_tag(v)
+        v.dn_native = true
+        t |> success(dlim_vulkan_tag(v) != plain, "the tag changes with dn_native: '{plain}' vs '{dlim_vulkan_tag(v)}'")
     }
 }

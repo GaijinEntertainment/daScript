@@ -173,7 +173,10 @@ serves the load. One emitted blob therefore runs on a device without the feature
 operands are pure - branchless, both evaluated. An operand that indexes a global-rooted array (an
 ssbo, a block field, a `@workgroup` array) lowers as a branch instead: `SpirvTempAlloc` hoists a
 Function-storage temp per such node (`ctx.lazy_temps`), the operand the condition admits stores
-through it, and the merge block reloads it as the value. `OpSelect` evaluates both operands, and
+through it, and the merge block reloads it as the value. For `&&` and `||` the left operand's
+answer stores before the branch, so the edge the left operand settles goes straight to the merge;
+the branch labels are allocated after the condition is visited, in the visitor's if/else hook
+order (the left- and right-operand pre-visit hooks). `OpSelect` evaluates both operands, and
 the operand a condition rules out is exactly the one whose index the condition guards - on the
 device an out-of-range load is a fault that surfaces only when the overshoot leaves mapped memory,
 so it tracks allocation layout, not the kernel's inputs. A local fixed array stays eager: its

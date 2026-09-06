@@ -222,7 +222,7 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 // and the engine arm fail-closes on bigger models.
 let DN_MAX_DS = 128l
 
-//! The sequential scan's workgroup count for a head count and state width - the lane, subgroup and workgroup shape is sec.2.2j's
+//! The sequential scan's workgroup count for a head count and state width
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def dn_scan_wgs(nvh, ds : int64) : int64 {
     let cpg = 8l * (32l / (ds / 16l))
@@ -484,7 +484,8 @@ struct GpuState {
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops)
-    decvec_on : bool         // DASLLAMA_VK_DECVEC asked and the device reports the four-wide decode callback (a dry bake creates no pipelines and leaves it off)
+    has_bda : bool           // the device enabled bufferDeviceAddress (the coopmat2 creator alone does): storage buffers carry the device-address usage, allocation flag and query
+    decvec_on : bool        // DASLLAMA_VK_DECVEC asked and the device reports the four-wide decode callback (a dry bake creates no pipelines and leaves it off)
     full_sg_on : bool        // DASLLAMA_VK_FULLSG asked and the device has the feature: every class pipeline pins REQUIRE_FULL_SUBGROUPS
     coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile, 4 = cm2 decode-in-load (the default where the device has it, else 3)
     sm_count : int           // shaderSMCount (VK_NV_shader_sm_builtins; 0 = unknown -> l-tile always, no split-k)
@@ -741,7 +742,8 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     bci.usage.storage_buffer = storage
     bci.usage.transfer_src = !storage
     bci.usage.transfer_dst = true   // readback staging targets (y DMA copies land here)
-    bci.usage.shader_device_address = storage   // a storage buffer's blocks reach the cm2 decode callbacks as PhysicalStorageBuffer pointers
+    let bda_on = storage && g_gpu.has_bda   // a storage buffer's blocks reach the cm2 decode callbacks as PhysicalStorageBuffer pointers
+    bci.usage.shader_device_address = bda_on
     if (xfer_shared && g_gpu.xfer_fam >= 0) {
         // stream mirrors: transfer-queue fills + compute-queue heat slices — CONCURRENT dodges ownership transfers
         bci.sharingMode = VkSharingMode.CONCURRENT
@@ -753,7 +755,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
                                  memoryTypeIndex = find_host_mem(req.memoryTypeBits, cached))
     var bda = VkMemoryAllocateFlagsInfo()
     bda.flags.device_address = true
-    if (storage) {
+    if (bda_on) {
         unsafe {
             mai.next = addr<void?>(bda)
         }
@@ -772,7 +774,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
         return HostBuf()
     }
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
-    if (storage) {
+    if (bda_on) {
         note_device_address(b)
     }
     var mapped : void? = null
@@ -791,7 +793,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     bci.usage.storage_buffer = true
     bci.usage.transfer_dst = true
     bci.usage.transfer_src = true   // y planes DMA back out (device -> host staging)
-    bci.usage.shader_device_address = true   // the cm2 decode callbacks reach a plane's blocks as PhysicalStorageBuffer pointers
+    bci.usage.shader_device_address = g_gpu.has_bda   // the cm2 decode callbacks reach a plane's blocks as PhysicalStorageBuffer pointers
     if (xfer_shared && g_gpu.xfer_fam >= 0) {
         // stream slots: transfer-queue fills + compute-queue reads — CONCURRENT dodges ownership transfers
         bci.sharingMode = VkSharingMode.CONCURRENT
@@ -803,7 +805,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     var prio = VkMemoryPriorityAllocateInfoEXT()
     prio.priority = 1.0
     var bda = VkMemoryAllocateFlagsInfo()   // the usage bit above wants its allocation flagged too
-    bda.flags.device_address = true
+    bda.flags.device_address = g_gpu.has_bda
     if (g_gpu.has_memprio) {
         unsafe {
             bda.pNext = addr<void?>(prio)
@@ -820,7 +822,9 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
         var rmem : VkDeviceMemory
         if (vkAllocateMemory(dev_raw(), rmai, null, rmem) == VkResult.SUCCESS) {
             vk_check(vkBindBufferMemory(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), rmem, 0ul), null)
-            note_device_address(b)
+            if (g_gpu.has_bda) {
+                note_device_address(b)
+            }
             var mapped : void? = null
             let mf : VkMemoryMapFlags
             unsafe {
@@ -840,7 +844,9 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     }
     var m <- allocate_memory(g_gpu.device, mai)
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
-    note_device_address(b)
+    if (g_gpu.has_bda) {
+        note_device_address(b)
+    }
     g_gpu.dev_mem |> insert(b._vk, m._vk)
     return b._vk
 }
@@ -1067,6 +1073,7 @@ def vk_moe_init : bool {
     if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == 4) {
         // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam, g_env_vulkan.vk_decvec)
+        g_gpu.has_bda = true
         to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load, {g_gpu.sm_count} SMs; DASLLAMA_COOPMAT=mm restores the mul_mm tiles)\n")
     } elif (g_gpu.has_coopmat) {
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam, xfam)

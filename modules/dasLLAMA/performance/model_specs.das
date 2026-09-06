@@ -299,6 +299,17 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // the qwen35 hybrid: 18 Gated-DeltaNet recurrent + 6 gated-attention layers
             // (2x-wide Q with sigmoid out-gate, partial NEOX rope 64/256, QK-norm)
             parity <- ev_qwen_count([dn_chunked = true])),
+        // the K-quant twin of the hybrid for the resident driver's native-plane cells
+        // (tests/test_gpu_resident_hybrid.das): qkv q6_K, z q4_K, beta/alpha q4_K, the deltanet
+        // out plane pinned q8_0 like the 9B UD file's (the step's o row is Q8_0)
+        ModelSpec(file = "Qwen3.5-0.8B-Q4_K_M.gguf",
+            recipe = "llama-quantize --allow-requantize --tensor-type ssm_out=q8_0 Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M.gguf Q4_K_M"),
+        // the 9B hybrid with its in-file MTP block, the whole-model driver's parity carrier
+        // (head 256 gated attention, partial rope, Q5_K/Q6_K deltanet planes) and the vulkan
+        // serving census's head-256 row; the local name carries the MTP tag the release's does not
+        ModelSpec(file = "Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf",
+            url = "{HF}/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/main/Qwen3.5-9B-UD-Q5_K_XL.gguf",
+            bytes = 6874345824l, sha256 = "bb0aa4bf2acf4b6d97eca051a7af91200729e9e97449ce98785af9e70f6d703c"),
         // the tensor-arm twin carriers (tests/test_metal_support_matrix.das --arm tensor): small
         // on purpose - q8 drives the mulmm/attn twins, the K-quant one the kq mulmm twins. The
         // arm FAILS (not skips) when they are absent, so every box gets them provisioned here

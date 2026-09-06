@@ -3951,7 +3951,6 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
-    //! the short-circuit answer stores before the branch: the left-fail edge goes straight to the merge, which reloads the temp.
     [arch(at="../ARCHITECTURE.md#operand-laziness")]
     def override preVisitExprOp2Right(var expr : ExprOp2?; right : ExpressionPtr) : void {
         let k = intptr(expr)
@@ -4084,7 +4083,6 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
-    //! the branched lowering's labels are allocated here, after the condition is visited - the if/else hook order.
     [arch(at="../ARCHITECTURE.md#operand-laziness")]
     def override preVisitExprOp3Left(var expr : ExprOp3?; left : ExpressionPtr) : void {
         let k = intptr(expr)

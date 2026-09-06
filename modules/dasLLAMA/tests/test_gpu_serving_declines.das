@@ -26,7 +26,7 @@ def private shell(n_layers : int64; recr_mask : uint64) : Model {
     return <- m
 }
 
-def private names(s : string; part : string) : bool => find(s, part) >= 0
+def private says(s : string; part : string) : bool => find(s, part) >= 0
 
 [test]
 def test_resident_unserved_features(t : T?) {
@@ -44,8 +44,8 @@ def test_resident_unserved_features(t : T?) {
         t |> equal(resident_unserved_features(c), "")
         c.qk_norm = false
         let s = resident_unserved_features(c)
-        t |> success(names(s, "gated attention without qk-norm"), "gated attention named: {s}")
-        t |> success(names(s, "partial rotary (64 of 256) without qk-norm"), "partial rotary named with its widths: {s}")
+        t |> success(says(s, "gated attention without qk-norm"), "gated attention named: {s}")
+        t |> success(says(s, "partial rotary (64 of 256) without qk-norm"), "partial rotary named with its widths: {s}")
         t |> equal(length(split(s, ", ")), 2)
     }
     t |> run("one feature alone is one name, no separator") @(t : T?) {
@@ -77,7 +77,7 @@ def test_resident_layer_decline(t : T?) {
         let hs = layer_head_size(m.config, 0l)
         let kvd = layer_kv_dim(m.config, 0l)
         t |> equal(resident_layer_decline(m, 0l, hid0, hs, kvd), "")
-        t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 lacks a deltanet plane"), "layer 1 named")
+        t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 lacks a deltanet plane"), "layer 1 named")
         t |> equal(resident_layer_decline(m, 2l, hid0, hs, kvd), "")
         m.dnqkv_offs <- [-1l, 0l, -1l]
         m.dngate_offs <- [-1l, 0l, -1l]
@@ -90,10 +90,10 @@ def test_resident_layer_decline(t : T?) {
         m.dngate_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
         m.dnout_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
         let sq = resident_layer_decline(m, 1l, hid0, hs, kvd)
-        t |> success(!names(sq, "kq-tagged") && !names(sq, "do not serve"), "a K-quant qkv/z pair is no format decline: '{sq}'")
+        t |> success(!says(sq, "kq-tagged") && !says(sq, "do not serve"), "a K-quant qkv/z pair is no format decline: '{sq}'")
         // only the OUT plane kq-tagged: the step's o row feeds a q8 GEMV, so the layer declines by number
         m.dnout_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
-        t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1's deltanet out plane is kq-tagged"), "kq-tagged out plane named")
+        t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1's deltanet out plane is kq-tagged"), "kq-tagged out plane named")
         delete m
     }
     t |> run("shared K/V, a missing plane and a differing FFN width each name the layer") @(t : T?) {
@@ -102,11 +102,11 @@ def test_resident_layer_decline(t : T?) {
         let hs = layer_head_size(m.config, 0l)
         let kvd = layer_kv_dim(m.config, 0l)
         m.kv_src[2] = 1l
-        t |> success(names(resident_layer_decline(m, 2l, hid0, hs, kvd), "layer 2 shares layer 1's K/V"), "shared K/V named")
+        t |> success(says(resident_layer_decline(m, 2l, hid0, hs, kvd), "layer 2 shares layer 1's K/V"), "shared K/V named")
         m.wq_offs[0] = -1l
-        t |> success(names(resident_layer_decline(m, 0l, hid0, hs, kvd), "layer 0 lacks a q/k/v plane"), "missing plane named")
+        t |> success(says(resident_layer_decline(m, 0l, hid0, hs, kvd), "layer 0 lacks a q/k/v plane"), "missing plane named")
         m.ffn_w <- [64l, 96l, 64l]
-        t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 FFN width 96"), "FFN width named")
+        t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 FFN width 96"), "FFN width named")
         delete m
     }
 }

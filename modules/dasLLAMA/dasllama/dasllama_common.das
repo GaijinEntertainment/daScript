@@ -1765,7 +1765,6 @@ def moe_layer_kq(t : Model; l : int64) : bool {
     return fmt_at(t.we1_fmt, l) != KqFmt.q8 || fmt_at(t.we2_fmt, l) != KqFmt.q8 || fmt_at(t.we3_fmt, l) != KqFmt.q8
 }
 
-//! Are layer l's deltanet projection planes all q8?
 def dn_layer_q8(t : Model; l : int64) : bool {
     return fmt_at(t.dnqkv_fmt, l) == KqFmt.q8 && fmt_at(t.dngate_fmt, l) == KqFmt.q8 && fmt_at(t.dnout_fmt, l) == KqFmt.q8
 }
@@ -2014,7 +2013,7 @@ struct Session {
     kv_dtype_k : KVDtype      // key codec, snapshotted from the module knob in make_run_state
     kv_dtype_v : KVDtype      // value codec (independent of K by design)
     // resident-driver mirror ownership: gen stamps which session's rows the device KV mirror
-    // holds (0 = never resident-prefilled); hydrated = host KV has been read back since
+    // holds (0 = never resident-prefilled); rdec_host_current = the host KV holds everything the mirror does
     rdec_gen : int64
     rdec_host_current : bool
     dat_gen : int64             // the per-op decode attention block's mirror generation this session claimed (0 = none)

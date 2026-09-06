@@ -2564,7 +2564,8 @@ def public coopmat2_emitter_opcodes : table<uint> {
         SpvOp.ShiftLeftLogical,
         SpvOp.ShiftRightArithmetic,
         SpvOp.ShiftRightLogical,
-        SpvOp.ConstantFalse
+        SpvOp.ConstantFalse,
+        SpvOp.ConstantTrue   // the lazy `||` stores its short-circuit answer before the branch
     ]) {
         s |> insert(uint(op))
     }

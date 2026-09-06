@@ -25,8 +25,9 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // submit per token. The GPU chains and the CPU chain are not bit-identical (GPU exp / f32
 // accumulation order), so the gate is the forced-feed logits-tolerance form: the same fixed tokens
 // fed to both arms, the logits within a bar of the CPU chain after the prefill and at every step,
-// and the one-step-off control that must exceed it. Two prompt lengths: one window, and two
-// windows (the conv tail and the state carry across the window seam).
+// and the one-step-off control that must exceed it. Four prompt lengths: one window, two windows
+// (the conv tail and the state carry across the window seam), one past the window, and two tokens
+// (both conv-tail edges: the last window shorter than the taps).
 
 let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit| - the deltanet bar test_deltanet.das holds too
 //! the K-quant bar: CPU-vs-device rounding sits flat at 0.39-0.57 of a ~12.5 max logit at every step (the Q8 file 0.19-0.36), with no growth and the one-step-off control well past it
@@ -131,6 +132,19 @@ def test_gpu_resident_hybrid_decode(t : T?) {
 def test_gpu_resident_hybrid_two_windows(t : T?) {
     t |> run("Qwen3.5-0.8B: the resident prefill across two windows (the conv tail and state carry the seam)") @(t : T?) {
         hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q8_0.gguf", false)
+    }
+}
+
+// the conv-tail edge: a prompt one past the window (the last window would carry one row, fewer
+// than the three conv taps - the chain keeps it at the taps by shortening the window before), and
+// a prompt shorter than the taps (one window, the ring's leading rows zero)
+[test]
+def test_gpu_resident_hybrid_short_windows(t : T?) {
+    t |> run("Qwen3.5-0.8B: a prompt one past the window - the last window still carries the conv taps") @(t : T?) {
+        hybrid_forced_feed(t, PF_WINDOW_ROWS + 1l, "Qwen3.5-0.8B-Q8_0.gguf", false)
+    }
+    t |> run("Qwen3.5-0.8B: a two-token prompt - one window shorter than the conv taps") @(t : T?) {
+        hybrid_forced_feed(t, 2l, "Qwen3.5-0.8B-Q8_0.gguf", false)
     }
 }
 

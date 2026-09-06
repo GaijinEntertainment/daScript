@@ -447,6 +447,44 @@ def private mismatch_bars(got, want : array<float>; rel, absf : float) : int {
     return bad
 }
 
+//! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
+def private nan_sentinel_upload(dev : uint64; bytes : int64; off : int64 = 0l) {
+    var s : array<uint>
+    s |> resize(bytes / 4l)
+    for (v in s) {
+        v = 0x7fc00000u
+    }
+    unsafe {
+        upload_region_at(dev, off, addr<uint8 const?>(s[0]), bytes)
+    }
+    delete s
+}
+
+// the dot-product cells' bar - 1e-3 of the larger of 1 and the reference - over n outputs from base
+def private rel_mismatches(got, want : array<float>; base, n : int) : int {
+    var bad = 0
+    for (i in range(n)) {
+        if (abs(got[base + i] - want[base + i]) > 1e-3 * max(1.0, abs(want[base + i]))) {
+            bad++
+        }
+    }
+    return bad
+}
+
+// the beta/alpha planes' written positions alone: the words between the two planes stay untouched
+def private ba_plane_mismatches(got, want : array<float>; npos, ne, nvh, ob_b, ob_g, ostride : int) : int {
+    var bad = 0
+    for (p in range(npos)) {
+        for (e in range(ne)) {
+            let at = (e < nvh ? ob_b : ob_g) + p * ostride + e % nvh
+            if (abs(got[at] - want[at]) > 1e-3 * max(1.0, abs(want[at]))) {
+                bad++
+            }
+        }
+    }
+    return bad
+}
+
 def private max_abs(a : array<float>) : float {
     var m = 0.0
     for (v in a) {
@@ -4274,6 +4312,8 @@ def private fa_h256_gated_run(nheads, kv_mul, rows, w0 : int) : tuple<bad : int;
         var y16 : array<float16>
         y_cls |> resize(rows * qd)
         y16 |> resize(rows * qd)
+        nan_sentinel_upload(yd, o_bytes)
+        nan_sentinel_upload(yh16, o16_bytes)
         unsafe {
             upload_region_at(qdev, 0l, addr<uint8 const?>(qp[0]), qp_bytes)
             upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
@@ -6014,6 +6054,7 @@ def test_vkd_dn_ba(t0 : T?) {
                 var host = make_host_buf(o_bytes, true, [cached = true])
                 var got : array<float>
                 got |> resize(out_n)
+                nan_sentinel_upload(od, o_bytes)
                 unsafe {
                     upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
                     upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
@@ -6031,17 +6072,12 @@ def test_vkd_dn_ba(t0 : T?) {
                     submit_wait(raw)
                     memcpy(addr<void?>(got[0]), host.mapped, o_bytes)
                 }
-                // the untouched words between the two planes must stay untouched - compare the written rows only
-                var bad = 0
-                for (p in range(npos)) {
-                    for (e in range(ne)) {
-                        let at = (e < nvh ? ob_b : ob_g) + p * ostride + e % nvh
-                        if (abs(got[at] - want[at]) > 1e-3 * max(1.0, abs(want[at]))) {
-                            bad++
-                        }
-                    }
-                }
+                let bad = ba_plane_mismatches(got, want, npos, ne, nvh, ob_b, ob_g, ostride)
                 t |> success(bad == 0, "dn_ba npos {npos}: {bad} of {npos * ne} outputs off the CPU dot")
+                var poison := got   // the bar's control: one output pushed past it must red
+                poison[ob_g] += 1.0 + 2.0 * abs(want[ob_g])
+                t |> success(ba_plane_mismatches(poison, want, npos, ne, nvh, ob_b, ob_g, ostride) > 0, "dn_ba npos {npos}: the bar reds a poisoned output")
+                delete poison
                 delete wh
                 delete wh16
                 delete xh
@@ -6054,29 +6090,14 @@ def test_vkd_dn_ba(t0 : T?) {
     }
 }
 
-// the 9B-class geometry the small-model zoo never reaches: 32 value heads over ds 128 (the scan's
-// 8-lane column clusters, all three shuffle stages) and a full 64-row beta/alpha tile; one dispatch
-// each, logged before the submit and timed after it, so a device hang names its kernel
-[test]
-def test_vkd_dn_9b_scan(t0 : T?) {
-    t0 |> run("dn_scan at the 9B geometry (32 heads, ds 128, 512 rows) == the sequential CPU delta rule") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                feint("no Vulkan device - skipping\n")
-                return
-            }
-            if (!g_gpu.dn_shared_ok) {
-                feint("dn chain declined on this device (shared-memory cap) - skipping\n")
-                return
-            }
-            verify(ensure_dn_scan_cls(), "the dn_scan class rail must engage on a live device")
-            let ds = 128
-            let nkh = 16
-            let nvh = 32
+// the scan against the sequential CPU delta rule at one geometry: one dispatch, logged before the
+// submit and timed after it, so a device hang names its kernel
+def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        {
             let kd = nkh * ds
             let di = nvh * ds
             let cd = 2 * kd + di
-            let npos = 512
             let beta_off = 16
             let g_off = beta_off + npos * nvh
             let a_off = g_off + npos * nvh
@@ -6114,6 +6135,7 @@ def test_vkd_dn_9b_scan(t0 : T?) {
             var got : array<float>
             got |> resize(o_n + nvh * ds * ds)
             let wgs = dn_scan_wgs(int64(nvh), int64(ds))
+            nan_sentinel_upload(od, o_bytes - int64(o_off) * 4l, int64(o_off) * 4l)   // the header stays as allocated: the oracle holds it at zero
             unsafe {
                 upload_region_at(convd, 0l, addr<uint8 const?>(convh[0]), conv_bytes)
                 upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
@@ -6134,10 +6156,10 @@ def test_vkd_dn_9b_scan(t0 : T?) {
                 cmd_copy_range(raw, od, 0l, host.buf, 0l, o_bytes)
                 cmd_copy_range(raw, st2, 0l, host.buf, o_bytes, st_bytes)
                 vk_check(vkEndCommandBuffer(raw), null)
-                to_log(LOG_INFO, "dn_scan 9B: dispatching {wgs} workgroups over {npos} rows\n")
+                to_log(LOG_INFO, "dn_scan {tag}: dispatching {wgs} workgroups over {npos} rows\n")
                 let tick = ref_time_ticks()
                 submit_wait(raw)
-                to_log(LOG_INFO, "dn_scan 9B: submit + wait {get_time_usec(tick)} us\n")
+                to_log(LOG_INFO, "dn_scan {tag}: submit + wait {get_time_usec(tick)} us\n")
                 memcpy(addr<void?>(got[0]), host.mapped, o_bytes + st_bytes)
             }
             // oracle: the sequential delta rule per head, raw o rows (the out-norm is phase 3's)
@@ -6182,8 +6204,13 @@ def test_vkd_dn_9b_scan(t0 : T?) {
                     ref[o_n + hh * ds * ds + e] = st_h[e]
                 }
             }
-            let bad = mismatch_bars(got, ref, 1e-2, 1e-2 * max_abs(ref))
-            t |> success(bad == 0, "dn_scan 9B geometry: {bad} of {length(got)} o-row and state values off the sequential oracle")
+            let floor = 1e-2 * max_abs(ref)
+            let bad = mismatch_bars(got, ref, 1e-2, floor)
+            t |> success(bad == 0, "dn_scan {tag}: {bad} of {length(got)} o-row and state values off the sequential oracle")
+            var poison := got   // the bar's control: one o value pushed past both bars must red
+            poison[o_off] += 1.0 + 2.0 * max_abs(ref)
+            t |> success(mismatch_bars(poison, ref, 1e-2, floor) > 0, "dn_scan {tag}: the bar reds a poisoned value")
+            delete poison
             delete convh
             delete sth
             delete smh
@@ -6191,6 +6218,49 @@ def test_vkd_dn_9b_scan(t0 : T?) {
             delete ref
             delete st_h
             delete dvn
+        }
+    }
+}
+
+// the 9B-class geometry the small-model zoo never reaches: 32 value heads over ds 128 (the scan's
+// 8-lane column clusters, all three shuffle stages) and a full 64-row beta/alpha tile
+[test]
+def test_vkd_dn_9b_scan(t0 : T?) {
+    t0 |> run("dn_scan at the 9B geometry (32 heads, ds 128, 512 rows) == the sequential CPU delta rule") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            if (!g_gpu.dn_shared_ok) {
+                feint("dn chain declined on this device (shared-memory cap) - skipping\n")
+                return
+            }
+            verify(ensure_dn_scan_cls(), "the dn_scan class rail must engage on a live device")
+            dn_scan_cell(t, "9B", 128, 16, 32, 512)
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+// a narrow state: at ds 32 a column group spans 128 columns, so three of every four lanes are
+// idle - their reads clamp to column 0 and their stores stay off; the last head's idle columns
+// would otherwise read past the conv plane
+[test]
+def test_vkd_dn_scan_narrow(t0 : T?) {
+    t0 |> run("dn_scan at a narrow state (4 heads, ds 32, 64 rows) == the sequential CPU delta rule") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            if (!g_gpu.dn_shared_ok) {
+                feint("dn chain declined on this device (shared-memory cap) - skipping\n")
+                return
+            }
+            verify(ensure_dn_scan_cls(), "the dn_scan class rail must engage on a live device")
+            dn_scan_cell(t, "narrow", 32, 2, 4, 64)
         } else {
             feint("dasVulkan not present - skipping\n")
         }
@@ -6247,6 +6317,7 @@ def test_vkd_dn_9b_ba(t0 : T?) {
             var got : array<float>
             got |> resize(out_n)
             let wgs = dn_ba_wgs(int64(npos), int64(nvh))
+            nan_sentinel_upload(od, o_bytes)
             unsafe {
                 upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
                 upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
@@ -6267,16 +6338,12 @@ def test_vkd_dn_9b_ba(t0 : T?) {
                 to_log(LOG_INFO, "dn_ba 9B: submit + wait {get_time_usec(tick)} us\n")
                 memcpy(addr<void?>(got[0]), host.mapped, o_bytes)
             }
-            var bad = 0
-            for (p in range(npos)) {
-                for (e in range(ne)) {
-                    let at = (e < nvh ? ob_b : ob_g) + p * ostride + e % nvh
-                    if (abs(got[at] - want[at]) > 1e-3 * max(1.0, abs(want[at]))) {
-                        bad++
-                    }
-                }
-            }
+            let bad = ba_plane_mismatches(got, want, npos, ne, nvh, ob_b, ob_g, ostride)
             t |> success(bad == 0, "dn_ba 9B geometry: {bad} of {npos * ne} outputs off the CPU dot")
+            var poison := got   // the bar's control: one output pushed past it must red
+            poison[ob_b] += 1.0 + 2.0 * abs(want[ob_b])
+            t |> success(ba_plane_mismatches(poison, want, npos, ne, nvh, ob_b, ob_g, ostride) > 0, "dn_ba 9B geometry: the bar reds a poisoned output")
+            delete poison
             delete wh
             delete wh16
             delete xh
@@ -6332,6 +6399,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             var host = make_host_buf(o_bytes, true, [cached = true])
             var got : array<float>
             got |> resize(out_n)
+            nan_sentinel_upload(od, o_bytes)
             unsafe {
                 upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
                 upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
@@ -6348,13 +6416,12 @@ def test_vkd_router_gemv_f16(t0 : T?) {
                 submit_wait(raw)
                 memcpy(addr<void?>(got[0]), host.mapped, o_bytes)
             }
-            var bad = 0
-            for (e in range(ne)) {
-                if (abs(got[obase + e] - want[obase + e]) > 1e-3 * max(1.0, abs(want[obase + e]))) {
-                    bad++
-                }
-            }
+            let bad = rel_mismatches(got, want, obase, ne)
             t |> success(bad == 0, "router_gemv_f16: {bad} of {ne} outputs off the CPU dot")
+            var poison := got   // the bar's control: one output pushed past it must red
+            poison[obase] += 1.0 + 2.0 * abs(want[obase])
+            t |> success(rel_mismatches(poison, want, obase, ne) > 0, "router_gemv_f16: the bar reds a poisoned output")
+            delete poison
             delete wh
             delete wh16
             delete xh

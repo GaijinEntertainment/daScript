@@ -41,8 +41,13 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    the recurrent block (conv + chunked scan on the layer's device state), gated attention and
    partial rotary on the batch kernels, and hands the device state to the session for the decode
    (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2j, `_DECODE.md` sec.2.2v; gate
-   `tests/test_gpu_resident_hybrid.das`, one- and two-window cells). The 9B UD file on the
-   resident driver: pp512 1365 (was 95.7; upstream 2527 - 0.54x), tg128 53.3 (upstream 56.7, 0.94x).
+   `tests/test_gpu_resident_hybrid.das`, one- and two-window cells). Every figure in this item:
+   `benchmarks/lcpp_bench.das -m Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf -r 3` (`-p 512 -n 128`) through
+   `bin/Release/daslang.exe -jit` under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1
+   DAS_JOBQUE_THREADS=16` (`DASLLAMA_GPU_PROF=1` for the role tables) on the 5060 Ti box (Windows
+   11), the upstream control `llama-bench -ngl 99` on the same day's build-vulkan (b10660). The
+   9B UD file on the resident driver: pp512 1365 (was 95.7; upstream 2527 - 0.54x), tg128 53.3
+   (upstream 56.7, 0.94x).
    WHERE THE GAPS ARE (DASLLAMA_GPU_PROF=1 role tables, 9/5, 5060 Ti; `vk_rdpf attn`/`dn` and
    `vk_rdec ... dn avg/token` are hybrid-aware now):
    - pp512, one 512-row window = 349 ms GPU (upstream ~203): the deltanet two-phase scan was
@@ -51,7 +56,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      indexed private array). DONE 9/5 (same session): phase 2 per (head, column slice) with a phase
      3 out-norm (`DN_NSP` = 4) and a 2x4 register-tiled GEMM (bit-exact) took the scan to 63 ms
      (scan1 27 + scan2 36), the window to 291 ms, pp512 to 1710 (0.68x). DONE 9/5 (evening): the
-     chunked form is gone - `dn_scan_cls` is llama.cpp's shape, the plain per-token recurrence
+     chunked form is gone - `dn_scan_cls` is upstream's shape, the plain per-token recurrence
      with the state in registers (one 32-lane subgroup per (head, column group), 16 rows per lane,
      the token loop inside the kernel): scan 17.7 ms + out-norm 1.2 (was 63), and the f32
      beta/alpha rows as a 16-position tile GEMM (`dn_ba_cls`, P2): 11.7 ms (was 15.5). Window
@@ -682,7 +687,7 @@ module) is independent and can land any time - it is pure structure.
     moved its first decode step; the MTP cell red behind the SmolLM cells) was the model-swap
     defect: a deleted model's device state stayed installed and the next load uploaded beside
     it, so the offset-keyed stack lookup served the earlier model's planes - the upload rail
-    now drops a still-installed model first (`ARCHITECTURE_GPU_VULKAN.md` 2.2o,
+    now drops a still-installed model first (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` 2.2o,
     `tests/test_gpu_model_swap.das`). The SmolLM reds (chunk sizes, batching, evict, media
     splice, mrope) were cross-lane numerics, not defects: the resident driver's device prefill,
     its batch decode and the CPU prefill agree on every argmax over a few steps and drift by
@@ -723,4 +728,13 @@ module) is independent and can land any time - it is pure structure.
     (the coopmat2 creator sets it and gates coopmat2 on it). Acceptance held: the validated 9B
     window logs no VUID at all and lands the plain run's logits (7.70 vs 7.76). One residue: under
     the layer the process then wedges at exit (one core spinning, the card idle) - kill it; a plain
-    run exits clean. Done = a validation message naming `qk_rms_cls` by name.
+    run exits clean. (e) The tier's kernels assume a 32-lane subgroup - the shuffle reductions'
+    xor ladders, the scan's lane-pair arithmetic (`lanes_per_pair`), the GEMV's rows per workgroup
+    - and the init refuses a smaller `subgroupSize`; a wider one (a wave64 device) runs those
+    arms unmeasured. Done = a validation message naming `qk_rms_cls` by name, and a wave64 run
+    of the kernel-unit suite.
+41. **`tests/test_vulkan_kernels.das`'s device-absent cells feint instead of skipping.** The file's
+    idiom (its header: "every check feints cleanly") predates `tests/REVIEW.md`'s rule that a cell
+    with nothing to assert registers `t |> skip`, so on a box without a Vulkan device every cell of
+    the model-free suite reports PASS having done nothing - the hybrid ladder's fa/dn cells follow
+    the file's idiom. Done = a file-wide conversion to `t |> skip` on the no-device and no-cm2 paths.

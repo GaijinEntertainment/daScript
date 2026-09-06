@@ -5,7 +5,8 @@ document carries sections 2.2r-2.2v: the decode attention block over per-layer K
 the streamed expert layer's GPU/CPU split, the whole-token decode span, the deltanet decode
 step's per-session resident state, and the whole-model driver's hybrid token command. The
 prefill window chain, the cm2 tiles and the MoE expert chain these build on are
-`ARCHITECTURE_GPU_VULKAN.md` sections 2.2j-2.2q.
+`ARCHITECTURE_GPU_VULKAN.md` sections 2.2j-2.2m and 2.2p-2.2q; the residency plan and the marks
+swap under them are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o.
 
 ### 2.2r The per-op tier's decode attention block {#decode-attention-block}
 

@@ -933,10 +933,11 @@ class DnConv {
 }
 
 struct DnTailArgs {
-    cd : uint        // conv width (channels)
-    taps : uint      // history rows (dconv - 1)
-    row0 : uint      // the first tail row in src (the window's last taps raw rows)
-    hist_off : uint  // the ring image's float offset in smalls
+    cd : uint         // conv width (channels)
+    taps : uint       // history rows (dconv - 1)
+    row0 : uint       // the first tail row in src (the window's last taps raw rows)
+    hist_off : uint   // the ring image's float offset in smalls
+    zero_rows : uint  // leading ring rows that read as zero: a lone window shorter than the taps, whose history is zero
 }
 
 [vk_dispatch(name = "dn_tail_cls", grid = "wgs", params = "wgs : int64")]
@@ -951,7 +952,11 @@ class DnTail {
         if (idx < pa.cd * pa.taps) {
             let ch = idx / pa.taps
             let k = idx % pa.taps
-            smalls[pa.hist_off + ch * pa.taps + k] = src[(pa.row0 + k) * pa.cd + ch]
+            var v = 0.0
+            if (k >= pa.zero_rows) {
+                v = src[(pa.row0 + k - pa.zero_rows) * pa.cd + ch]
+            }
+            smalls[pa.hist_off + ch * pa.taps + k] = v
         }
     }
 }
@@ -1191,7 +1196,7 @@ class DnScan {
         let kh = h % pa.nkh
         let qrow0 = kh * ds                    // the head's q row within a conv row
         let krow0 = pa.kd + kh * ds
-        let voff = 2u * pa.kd + h * ds + col
+        let voff = 2u * pa.kd + h * ds + (live ? col : 0u)   // an idle lane reads column 0: past the last head its own column is past the plane
         let aa = smalls[pa.a_off + h]
         let dtb = smalls[pa.dt_off + h]
         let sb = h * ds * ds + (live ? col : 0u)
@@ -6498,8 +6503,11 @@ class template RopeKvStoreBT {
             let j = pr % hpairs
             let rot = j < pa.half
             let cb = p * pa.hs
-            let fcr = rot ? cossin[cb + j] : 1.0
-            let fci = rot ? cossin[cb + pa.half + j] : 0.0
+            let cj = min(j, pa.half - 1u)   // the pass-through pairs past the rotated half read a clamped table entry the select then drops
+            let tcr = cossin[cb + cj]
+            let tci = cossin[cb + pa.half + cj]
+            let fcr = rot ? tcr : 1.0
+            let fci = rot ? tci : 0.0
             let e0 = rot ? (pa.neox != 0u ? j : j * 2u) : 2u * pa.half + 2u * (j - pa.half)
             let e1 = rot ? (pa.neox != 0u ? j + pa.half : j * 2u + 1u) : e0 + 1u
             let apos = pa.pos0 + p

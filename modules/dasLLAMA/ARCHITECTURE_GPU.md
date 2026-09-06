@@ -198,6 +198,12 @@ entry here:**
   the CPU embed. What leaves the window wall is the CPU embed loop and the x upload - the ids
   ride a 4-byte-per-row upload instead. Metal has no twin: its whole-forward driver embeds
   host-side.
+- **The deltanet-resident seats are Vulkan-only.** The whole-model driver's recurrent arm
+  installs SEPARATELY from the resident bundle (`install_moe_gpu_resident_dn`: a recurrent
+  layer's plane set, its beta/alpha rows, the per-token owner bind and the prefill's slot
+  handoff), so a tier without the seats declines a recurrent layer by name
+  (`resident_layer_decline`) and the per-op rails serve it. Metal has no seat to install: its
+  whole-forward driver carries the recurrent branch inside its layer encoder.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
 
@@ -252,7 +258,8 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 `modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
 and why they lose.
 
-Sections 2.2j-2.2q, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`.
+Sections 2.2j-2.2m and 2.2p-2.2q, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`;
+its 2.2n-2.2o - the residency plan and the marks swap - are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`.
 
 ### 2.2w The tower attention routes {#tower-attn-routes}
 

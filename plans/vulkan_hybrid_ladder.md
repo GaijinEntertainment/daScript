@@ -95,7 +95,7 @@ rebuilt binary aged the sidecar; Boris ruled no re-mint until Vulkan is fully fu
    GPU span 19.5 ms/token, wall 20.0; pp512 95.7 (CPU prefill until step 4). Trap fixed: the auto
    VRAM plan (cap - 2 GiB) armed at 12.5 GB of the 16 GB card and WDDM demoted (6.8 tok/s; 12 GB
    pinned 3.4, 11 GB pinned 49.8) - the auto headroom is now max(2 GiB, 27% of the cap)
-   (`ARCHITECTURE_GPU_VULKAN.md` 2.2n). The two-stream server scenario (the 9/4 run: an 8k and a
+   (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` 2.2n). The two-stream server scenario (the 9/4 run: an 8k and a
    short stream in flight together) passed - coherent replies, GC clean, exit 0; it surfaced the
    scheduler's head-of-line wait (~150 s for the short stream behind the 8k prefill) and the
    logger's tee-mode line corruption (fixed in the runtime, commit afbcd4d20). Still owed here:

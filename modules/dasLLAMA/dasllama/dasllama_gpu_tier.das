@@ -246,7 +246,7 @@ typedef RdecUploadEmbF32Fn = function<(fblob : array<float>; off : int64; vocab 
 let public RDEC_EMB_F32_CAP = 512l * 1024l * 1024l
 
 //! The device bytes the f32 embed-gather arm would upload for a (vocab x dim) table - 0 past its cap.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#resident-plan")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def public rdec_emb_f32_bytes(vocab, dim : int64) : int64 {
     let bytes = vocab * dim * 4l
     return bytes > RDEC_EMB_F32_CAP ? 0l : bytes
