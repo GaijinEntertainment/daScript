@@ -1,6 +1,8 @@
 #pragma once
 
 #include "daScript/misc/platform.h"
+#include "daScript/simulate/cast.h"
+#include "daScript/simulate/bind_enum.h"
 
 namespace das {
 
@@ -27,7 +29,8 @@ namespace das {
         bool separator;
     };
 
-    //! One backend per platform; the shared layer owns the single instance and the pending menu.
+    //! One backend per platform; the shared layer owns the single instance, the pending menu, and
+    //! the icon and tooltip it replays into a backend created later.
     struct TrayBackend {
         virtual ~TrayBackend() {}
         virtual bool create(const char * tooltip) = 0;
@@ -42,6 +45,9 @@ namespace das {
     bool TrayPlatformAvailable();
     TrayBackend * TrayPlatformCreate();
 
+    //! Menu entry ids are positive and unique per menu; the largest icon side the API accepts.
+    const int32_t TRAY_ICON_MAX_SIDE = 1024;
+
     class Context;
     struct LineInfoArg;
     template <typename TT> struct TArray;
@@ -52,10 +58,12 @@ namespace das {
     DAS_MOD_API void TraySetIcon(const TArray<uint8_t> & rgba8, int32_t width, int32_t height, Context * context, LineInfoArg * at);
     DAS_MOD_API void TraySetTooltip(const char * text);
     DAS_MOD_API void TrayMenuClear();
-    DAS_MOD_API void TrayMenuAdd(int32_t id, const char * label, bool enabled, bool checked);
+    DAS_MOD_API void TrayMenuAdd(int32_t id, const char * label, bool enabled, bool checked, Context * context, LineInfoArg * at);
     DAS_MOD_API void TrayMenuAddSeparator();
     DAS_MOD_API void TrayMenuCommit();
     DAS_MOD_API void TrayPoll(const TBlock<void, const TrayEvent &> & blk, Context * context, LineInfoArg * at);
     DAS_MOD_API bool TrayNotify(const char * title, const char * body);
     DAS_MOD_API void TrayDestroy();
 }
+
+DAS_BIND_ENUM_CAST(das::TrayEventKind)

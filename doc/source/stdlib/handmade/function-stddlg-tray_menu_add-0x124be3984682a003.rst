@@ -1,1 +1,1 @@
-Appends a menu entry with the id reported back in a menu event, its label, whether it can be chosen, and whether it shows a check mark.
+Appends a menu entry: its id (positive, unique within the menu; the call panics otherwise) is reported back in a menu event, then its label, whether it can be chosen, and whether it shows a check mark.

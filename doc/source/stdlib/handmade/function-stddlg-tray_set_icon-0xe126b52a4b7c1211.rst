@@ -1,1 +1,1 @@
-Replaces the icon with RGBA8 pixels, row-major, width by height; the array must hold exactly width * height * 4 bytes or the call panics.
+Replaces the icon with RGBA8 pixels, row-major, width by height; each side is 1 to 1024 and the array holds exactly width * height * 4 bytes, or the call panics. Before tray_create it is kept and applied to the icon once created.

@@ -1,1 +1,1 @@
-Posts a desktop notification with the given title and body (a balloon on Windows, org.freedesktop.Notifications on Linux, osascript on macOS); false when no notification service answered.
+Posts a desktop notification with the given title and body: a balloon on Windows (true once the shell accepted it), org.freedesktop.Notifications on Linux (true once the daemon answered), osascript on macOS (true once the script ran). False where the host refused the request or no tray exists.

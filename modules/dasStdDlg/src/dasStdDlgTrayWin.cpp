@@ -38,6 +38,8 @@ namespace das {
         vector<TrayMenuEntry> entries;
         vector<TrayEvent> events;
         bool iconAdded = false;
+        bool callbacksV4 = false;
+        bool menuOpen = false;
 
         virtual ~WinTray() override {
             if ( iconAdded ) {
@@ -46,7 +48,12 @@ namespace das {
             }
             if ( menu ) DestroyMenu(menu);
             if ( icon ) DestroyIcon(icon);
-            if ( hwnd ) DestroyWindow(hwnd);
+            if ( hwnd ) {
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+                HWND dying = hwnd;
+                hwnd = nullptr;
+                DestroyWindow(dying);
+            }
             UnregisterClassW(TRAY_WINDOW_CLASS, GetModuleHandleW(nullptr));
         }
 
@@ -68,6 +75,7 @@ namespace das {
             hwnd = CreateWindowExW(0, TRAY_WINDOW_CLASS, L"", WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr, wc.hInstance, this);
             if ( !hwnd ) return false;
             taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+            ChangeWindowMessageFilterEx(hwnd, taskbarCreated, MSGFLT_ALLOW, nullptr);
             menu = CreatePopupMenu();
             return addIcon();
         }
@@ -80,7 +88,7 @@ namespace das {
             copyTip(nid.szTip, sizeof(nid.szTip) / sizeof(nid.szTip[0]), tooltip.c_str());
             if ( !Shell_NotifyIconW(NIM_ADD, &nid) ) return false;
             nid.uVersion = NOTIFYICON_VERSION_4;
-            Shell_NotifyIconW(NIM_SETVERSION, &nid);
+            callbacksV4 = Shell_NotifyIconW(NIM_SETVERSION, &nid) != FALSE;
             iconAdded = true;
             return true;
         }
@@ -88,7 +96,7 @@ namespace das {
         void modifyIcon(UINT flags) {
             if ( !iconAdded ) return;
             NOTIFYICONDATAW nid = iconData();
-            nid.uFlags = flags;
+            nid.uFlags = flags | NIF_TIP | NIF_SHOWTIP;
             nid.hIcon = icon;
             copyTip(nid.szTip, sizeof(nid.szTip) / sizeof(nid.szTip[0]), tooltip.c_str());
             Shell_NotifyIconW(NIM_MODIFY, &nid);
@@ -119,7 +127,8 @@ namespace das {
                 dst[i * 4 + 2] = rgba8[i * 4 + 0];
                 dst[i * 4 + 3] = rgba8[i * 4 + 3];
             }
-            HBITMAP mask = CreateBitmap(width, height, 1, 1, nullptr);
+            vector<uint8_t> maskBits(size_t(((width + 15) / 16) * 2) * size_t(height), 0);
+            HBITMAP mask = CreateBitmap(width, height, 1, 1, maskBits.data());
             ICONINFO ii = {};
             ii.fIcon = TRUE;
             ii.hbmMask = mask;
@@ -128,9 +137,10 @@ namespace das {
             DeleteObject(mask);
             DeleteObject(color);
             if ( !created ) return;
-            if ( icon ) DestroyIcon(icon);
+            HICON previous = icon;
             icon = created;
             modifyIcon(NIF_ICON);
+            if ( previous ) DestroyIcon(previous);
         }
 
         virtual void setTooltip(const char * text) override {
@@ -155,7 +165,6 @@ namespace das {
         virtual void poll(vector<TrayEvent> & out) override {
             MSG msg;
             while ( PeekMessageW(&msg, hwnd, 0, 0, PM_REMOVE) ) {
-                TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
             out.swap(events);
@@ -175,18 +184,44 @@ namespace das {
         }
 
         void showMenu(int32_t x, int32_t y) {
-            if ( !menu || GetMenuItemCount(menu) == 0 ) return;
+            if ( !menu || GetMenuItemCount(menu) == 0 || menuOpen ) return;
+            menuOpen = true;
             SetForegroundWindow(hwnd);
             UINT picked = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, x, y, 0, hwnd, nullptr);
             PostMessageW(hwnd, WM_NULL, 0, 0);
+            menuOpen = false;
             if ( picked != 0 ) events.push_back(TrayEvent{TrayEventKind::menu, int32_t(picked), 0, 0});
+        }
+
+        //! Without the version-4 handshake the shell packs the legacy layout: wParam is the icon id
+        //! and lParam the mouse message, with no coordinates.
+        UINT legacyEvent(LPARAM lParam, int32_t & x, int32_t & y) {
+            POINT cursor = {};
+            GetCursorPos(&cursor);
+            x = cursor.x;
+            y = cursor.y;
+            switch ( UINT(lParam) ) {
+                case WM_LBUTTONUP: return NIN_SELECT;
+                case WM_RBUTTONUP: return WM_CONTEXTMENU;
+                case WM_LBUTTONDBLCLK: return WM_LBUTTONDBLCLK;
+                case NIN_BALLOONUSERCLICK: return NIN_BALLOONUSERCLICK;
+                default: return 0;
+            }
         }
 
         LRESULT onMessage(UINT message, WPARAM wParam, LPARAM lParam) {
             if ( message == TRAY_CALLBACK_MESSAGE ) {
-                int32_t x = GET_X_LPARAM(wParam);
-                int32_t y = GET_Y_LPARAM(wParam);
-                switch ( LOWORD(lParam) ) {
+                int32_t x = 0;
+                int32_t y = 0;
+                UINT event = 0;
+                if ( callbacksV4 ) {
+                    x = GET_X_LPARAM(wParam);
+                    y = GET_Y_LPARAM(wParam);
+                    event = LOWORD(lParam);
+                } else {
+                    event = legacyEvent(lParam, x, y);
+                }
+                switch ( event ) {
                     case NIN_SELECT:
                     case NIN_KEYSELECT:
                         events.push_back(TrayEvent{TrayEventKind::click, 0, x, y});

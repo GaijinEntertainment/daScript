@@ -1,1 +1,1 @@
-Pumps the platform's tray events on the calling thread and invokes the block once per event, in order. Call it from the host's own loop; a right click may run the menu modally inside this call.
+Pumps the tray's platform events on the calling thread - the thread that called tray_create - and invokes the block once per event, in order. Call it from the host's own loop. A right click may run the menu modally inside this call on Windows and macOS, and on macOS this pumps the whole application event queue.

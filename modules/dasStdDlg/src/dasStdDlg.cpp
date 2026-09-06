@@ -73,13 +73,13 @@ public:
             SideEffects::modifyExternal, "TrayMenuClear");
         addExtern<DAS_BIND_FUN(TrayMenuAdd)> (*this, lib, "tray_menu_add",
             SideEffects::modifyExternal, "TrayMenuAdd")
-                ->args({"id", "label", "enabled", "checked"});
+                ->args({"id", "label", "enabled", "checked", "context", "at"});
         addExtern<DAS_BIND_FUN(TrayMenuAddSeparator)> (*this, lib, "tray_menu_add_separator",
             SideEffects::modifyExternal, "TrayMenuAddSeparator");
         addExtern<DAS_BIND_FUN(TrayMenuCommit)> (*this, lib, "tray_menu_commit",
             SideEffects::modifyExternal, "TrayMenuCommit");
         addExtern<DAS_BIND_FUN(TrayPoll)> (*this, lib, "tray_poll",
-            SideEffects::invoke, "TrayPoll")
+            SideEffects::invokeAndAccessExternal, "TrayPoll")
                 ->args({"blk", "context", "at"});
         addExtern<DAS_BIND_FUN(TrayNotify)> (*this, lib, "tray_notify",
             SideEffects::modifyExternal, "TrayNotify")

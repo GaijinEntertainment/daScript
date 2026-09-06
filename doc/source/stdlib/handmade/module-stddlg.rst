@@ -36,4 +36,9 @@ plus a size, so one image serves all platforms:
 ``tray_available`` reports whether this process can show an icon at all: a Linux
 box without a session bus, a macOS process off the main thread or without a window
 server session, and a Windows service session all report false, and ``tray_create``
-then returns false without side effects.
+then returns false.
+
+There is one tray per process, owned by the thread that called ``tray_create``;
+every other ``tray_*`` call, including ``tray_poll``, belongs to that thread. On
+macOS ``tray_create`` gives an unbundled process an accessory activation policy and
+``tray_poll`` pumps the application's whole event queue.

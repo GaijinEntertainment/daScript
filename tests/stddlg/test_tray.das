@@ -253,12 +253,15 @@ def test_tray_macos_status_item(t : T?) {
     }
 }
 
+def skip_without_dbus(t : T?) : bool {
+    if (dbus_tools_present()) return false
+    t |> skip("no /usr/bin/dbus-daemon or dbus-send here: the Linux tray rides D-Bus, other platforms have their own arms")
+    return true
+}
+
 [test]
 def test_tray_over_private_bus(t : T?) {
-    if (!dbus_tools_present()) {
-        t |> skip("no /usr/bin/dbus-daemon or dbus-send here: the Linux tray rides D-Bus, other platforms have their own arms")
-        return
-    }
+    if (skip_without_dbus(t)) return
     t |> run("the item exposes its StatusNotifierItem properties") @(t : T?) {
         with_rig(t) $(var rig : TrayRig) {
             t |> equal(wait_for_line(t, rig, "@create_again", 5.0), "@create_again true")
@@ -286,9 +289,18 @@ def test_tray_over_private_bus(t : T?) {
             t |> equal(wait_for_line(t, rig, "@event right_click", 10.0), "@event right_click 0 1 2")
         }
     }
+}
+
+[test]
+def test_tray_menu_over_private_bus(t : T?) {
+    if (skip_without_dbus(t)) return
     t |> run("the menu layout carries labels, the separator and the checked disabled entry") @(t : T?) {
         with_rig(t) $(var rig : TrayRig) {
             let layout = dbus_send(rig, true, "/MenuBar", "com.canonical.dbusmenu.GetLayout", ["int32:0", "int32:-1", "array:string:"])
+            has(t, layout, "int32 10", "layout ids are the entry ids")
+            has(t, layout, "int32 -2", "a separator carries minus its position minus one")
+            let shallow = dbus_send(rig, true, "/MenuBar", "com.canonical.dbusmenu.GetLayout", ["int32:0", "int32:0", "array:string:"])
+            t |> success(find(shallow, "Open status page") < 0, "recursionDepth 0 answers the root without children")
             has(t, layout, "string \"Open status page\"", "first label")
             has(t, layout, "string \"separator\"", "separator")
             has(t, layout, "string \"Paused\"", "disabled label")
@@ -301,10 +313,10 @@ def test_tray_over_private_bus(t : T?) {
     }
     t |> run("a clicked menu entry reports its id, a disabled one reports nothing, Quit ends the child") @(t : T?) {
         with_rig(t) $(var rig : TrayRig) {
-            dbus_send(rig, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:3", "string:clicked", "variant:int32:0", "uint32:0"])
-            dbus_send(rig, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:1", "string:clicked", "variant:int32:0", "uint32:0"])
+            dbus_send(rig, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:20", "string:clicked", "variant:int32:0", "uint32:0"])
+            dbus_send(rig, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:10", "string:clicked", "variant:int32:0", "uint32:0"])
             t |> equal(wait_for_line(t, rig, "@event menu", 10.0), "@event menu 10 0 0")
-            dbus_send(rig, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:4", "string:clicked", "variant:int32:0", "uint32:0"])
+            dbus_send(rig, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:30", "string:clicked", "variant:int32:0", "uint32:0"])
             t |> equal(wait_for_line(t, rig, "@event menu 30", 10.0), "@event menu 30 0 0")
             t |> equal(unsafe(process_wait(rig.child, 10.0)), 0, "child returned 0 after Quit")
         }
@@ -315,7 +327,7 @@ def test_tray_over_private_bus(t : T?) {
             return
         }
         with_rig(t) $(var rig : TrayRig) {
-            let argv <- ["/usr/bin/busctl", "--address={rig.address}", "call", rig.dest, "/MenuBar", "com.canonical.dbusmenu", "EventGroup", "a(isvu)", "1", "4", "clicked", "i", "0", "0"]
+            let argv <- ["/usr/bin/busctl", "--address={rig.address}", "call", rig.dest, "/MenuBar", "com.canonical.dbusmenu", "EventGroup", "a(isvu)", "1", "30", "clicked", "i", "0", "0"]
             let no_env : array<string>
             unsafe {
                 var p = spawn_process(argv, "", no_env)

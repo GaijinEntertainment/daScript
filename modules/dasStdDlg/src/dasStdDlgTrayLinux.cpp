@@ -15,10 +15,10 @@ namespace das {
     X(dbus_error_free) \
     X(dbus_bus_get_private) \
     X(dbus_bus_request_name) \
-    X(dbus_bus_name_has_owner) \
     X(dbus_bus_add_match) \
     X(dbus_connection_set_exit_on_disconnect) \
     X(dbus_connection_add_filter) \
+    X(dbus_connection_remove_filter) \
     X(dbus_connection_register_object_path) \
     X(dbus_connection_unregister_object_path) \
     X(dbus_connection_read_write_dispatch) \
@@ -38,6 +38,8 @@ namespace das {
     X(dbus_message_is_signal) \
     X(dbus_message_get_member) \
     X(dbus_message_get_interface) \
+    X(dbus_message_get_type) \
+    X(dbus_message_get_sender) \
     X(dbus_message_iter_init) \
     X(dbus_message_iter_get_arg_type) \
     X(dbus_message_iter_get_basic) \
@@ -60,7 +62,7 @@ namespace das {
             if ( !lib ) return false;
 #define DAS_DBUS_RESOLVE(sym) \
             sym = (decltype(&::sym)) dlsym(lib, #sym); \
-            if ( !sym ) { dlclose(lib); lib = nullptr; return false; }
+            if ( !sym ) { dlclose(lib); *this = DBusApi(); return false; }
             DAS_DBUS_SYMBOLS(DAS_DBUS_RESOLVE)
 #undef DAS_DBUS_RESOLVE
             return true;
@@ -215,10 +217,18 @@ namespace das {
         }
     };
 
+    class LinuxTray;
+
+    struct PropertyWriter {
+        const char * name;
+        void (*write)(LinuxTray &, MessageWriter &);
+    };
+
     class LinuxTray final : public TrayBackend {
     public:
         DBusApi & api;
         DBusConnection * conn = nullptr;
+        bool connected = false;
         string busName;
         string appId;
         string tooltip;
@@ -231,11 +241,13 @@ namespace das {
         vector<TrayEvent> events;
         bool sniRegistered = false;
         bool menuRegistered = false;
+        bool filterAdded = false;
 
         LinuxTray() : api(dbusApi()) {}
 
         virtual ~LinuxTray() override {
             if ( !conn ) return;
+            if ( filterAdded ) api.dbus_connection_remove_filter(conn, &LinuxTray::onBusSignal, this);
             if ( sniRegistered ) api.dbus_connection_unregister_object_path(conn, SNI_PATH);
             if ( menuRegistered ) api.dbus_connection_unregister_object_path(conn, MENU_PATH);
             api.dbus_connection_flush(conn);
@@ -253,9 +265,12 @@ namespace das {
                 api.dbus_error_free(&err);
                 return false;
             }
+            connected = true;
             api.dbus_connection_set_exit_on_disconnect(conn, FALSE);
+            static int32_t instanceCounter = 0;
+            ++instanceCounter;
             char nameBuf[128];
-            snprintf(nameBuf, sizeof(nameBuf), "org.kde.StatusNotifierItem-%d-1", int(getpid()));
+            snprintf(nameBuf, sizeof(nameBuf), "org.kde.StatusNotifierItem-%d-%d", int(getpid()), int(instanceCounter));
             busName = nameBuf;
             int rn = api.dbus_bus_request_name(conn, busName.c_str(), DBUS_NAME_FLAG_DO_NOT_QUEUE, &err);
             if ( rn != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER ) {
@@ -269,20 +284,17 @@ namespace das {
             menuVTable.message_function = &LinuxTray::onMenuMessage;
             menuRegistered = api.dbus_connection_register_object_path(conn, MENU_PATH, &menuVTable, this);
             if ( !sniRegistered || !menuRegistered ) return false;
-            api.dbus_connection_add_filter(conn, &LinuxTray::onBusSignal, this, nullptr);
-            string rule = string("type='signal',interface='org.freedesktop.DBus',member='NameOwnerChanged',arg0='") + SNI_WATCHER + "'";
+            filterAdded = api.dbus_connection_add_filter(conn, &LinuxTray::onBusSignal, this, nullptr);
+            string rule = string("type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged',arg0='") + SNI_WATCHER + "'";
             api.dbus_bus_add_match(conn, rule.c_str(), nullptr);
             registerWithWatcher();
             api.dbus_connection_flush(conn);
             return true;
         }
 
+        //! A no-reply call: with no watcher on the bus the daemon answers an error nobody waits for,
+        //! and the NameOwnerChanged filter repeats the call when a watcher appears.
         void registerWithWatcher() {
-            DBusError err;
-            api.dbus_error_init(&err);
-            dbus_bool_t hasOwner = api.dbus_bus_name_has_owner(conn, SNI_WATCHER, &err);
-            api.dbus_error_free(&err);
-            if ( !hasOwner ) return;
             DBusMessage * msg = api.dbus_message_new_method_call(SNI_WATCHER, SNI_WATCHER_PATH, SNI_WATCHER, "RegisterStatusNotifierItem");
             if ( !msg ) return;
             DBusMessageIter iter;
@@ -294,6 +306,7 @@ namespace das {
         }
 
         void emitSignal(const char * path, const char * iface, const char * name, uint32_t revision = 0, bool withLayoutArgs = false) {
+            if ( !connected ) return;
             DBusMessage * sig = api.dbus_message_new_signal(path, iface, name);
             if ( !sig ) return;
             if ( withLayoutArgs ) {
@@ -336,13 +349,16 @@ namespace das {
         }
 
         virtual void poll(vector<TrayEvent> & out) override {
-            api.dbus_connection_read_write_dispatch(conn, 0);
-            while ( api.dbus_connection_dispatch(conn) == DBUS_DISPATCH_DATA_REMAINS ) {}
+            if ( connected ) {
+                if ( !api.dbus_connection_read_write_dispatch(conn, 0) ) connected = false;
+                while ( api.dbus_connection_dispatch(conn) == DBUS_DISPATCH_DATA_REMAINS ) {}
+            }
             out.swap(events);
             events.clear();
         }
 
         virtual bool notify(const char * title, const char * body) override {
+            if ( !connected ) return false;
             DBusMessage * msg = api.dbus_message_new_method_call(NOTIFY_NAME, NOTIFY_PATH, NOTIFY_NAME, "Notify");
             if ( !msg ) return false;
             DBusMessageIter iter;
@@ -384,29 +400,34 @@ namespace das {
             events.push_back(TrayEvent{kind, id, x, y});
         }
 
+        bool readInt32(DBusMessageIter & iter, int32_t & value) {
+            if ( api.dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INT32 ) return false;
+            dbus_int32_t v = 0;
+            api.dbus_message_iter_get_basic(&iter, &v);
+            value = v;
+            return true;
+        }
+
+        bool readString(DBusMessageIter & iter, const char * & value) {
+            if ( api.dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING ) return false;
+            api.dbus_message_iter_get_basic(&iter, &value);
+            return true;
+        }
+
         bool readInt32Pair(DBusMessage * msg, int32_t & a, int32_t & b) {
             DBusMessageIter iter;
-            if ( !api.dbus_message_iter_init(msg, &iter) ) return false;
-            if ( api.dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INT32 ) return false;
-            dbus_int32_t va = 0, vb = 0;
-            api.dbus_message_iter_get_basic(&iter, &va);
-            if ( !api.dbus_message_iter_next(&iter) ) return false;
-            if ( api.dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INT32 ) return false;
-            api.dbus_message_iter_get_basic(&iter, &vb);
+            int32_t va = 0, vb = 0;
+            if ( !api.dbus_message_iter_init(msg, &iter) || !readInt32(iter, va) ) return false;
+            if ( !api.dbus_message_iter_next(&iter) || !readInt32(iter, vb) ) return false;
             a = va;
             b = vb;
             return true;
         }
 
-        bool readStringPair(DBusMessage * msg, const char * & a, const char * & b, bool secondOptional) {
+        bool readStringPair(DBusMessage * msg, const char * & a, const char * & b) {
             DBusMessageIter iter;
-            if ( !api.dbus_message_iter_init(msg, &iter) ) return false;
-            if ( api.dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING ) return false;
-            api.dbus_message_iter_get_basic(&iter, &a);
-            b = nullptr;
-            if ( !api.dbus_message_iter_next(&iter) ) return secondOptional;
-            if ( api.dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING ) return secondOptional;
-            api.dbus_message_iter_get_basic(&iter, &b);
+            if ( !api.dbus_message_iter_init(msg, &iter) || !readString(iter, a) ) return false;
+            if ( !api.dbus_message_iter_next(&iter) || !readString(iter, b) ) return false;
             return true;
         }
 
@@ -414,6 +435,7 @@ namespace das {
             if ( !response ) return;
             api.dbus_connection_send(conn, response, nullptr);
             api.dbus_message_unref(response);
+            api.dbus_connection_flush(conn);
         }
 
         void replyError(DBusMessage * msg, const char * name, const char * text) {
@@ -446,7 +468,7 @@ namespace das {
             });
         }
 
-        void writeEmptyPixmaps(MessageWriter & w) {
+        static void writeEmptyPixmaps(MessageWriter & w) {
             w.container(DBUS_TYPE_ARRAY, "(iiay)", [](MessageWriter &) {});
         }
 
@@ -459,75 +481,73 @@ namespace das {
             });
         }
 
-        bool writeSniProperty(MessageWriter & w, const char * name) {
-            if ( strcmp(name, "Category") == 0 ) { w.variant("s", [](MessageWriter & v) { v.string_("ApplicationStatus"); }); return true; }
-            if ( strcmp(name, "Id") == 0 ) { w.variant("s", [&](MessageWriter & v) { v.string_(appId.c_str()); }); return true; }
-            if ( strcmp(name, "Title") == 0 ) { w.variant("s", [&](MessageWriter & v) { v.string_(tooltip.c_str()); }); return true; }
-            if ( strcmp(name, "Status") == 0 ) { w.variant("s", [](MessageWriter & v) { v.string_("Active"); }); return true; }
-            if ( strcmp(name, "WindowId") == 0 ) { w.variant("i", [](MessageWriter & v) { v.int32(0); }); return true; }
-            if ( strcmp(name, "IconName") == 0 ) { w.variant("s", [](MessageWriter & v) { v.string_(""); }); return true; }
-            if ( strcmp(name, "IconPixmap") == 0 ) { w.variant("a(iiay)", [&](MessageWriter & v) { writePixmaps(v); }); return true; }
-            if ( strcmp(name, "OverlayIconName") == 0 ) { w.variant("s", [](MessageWriter & v) { v.string_(""); }); return true; }
-            if ( strcmp(name, "OverlayIconPixmap") == 0 ) { w.variant("a(iiay)", [&](MessageWriter & v) { writeEmptyPixmaps(v); }); return true; }
-            if ( strcmp(name, "AttentionIconName") == 0 ) { w.variant("s", [](MessageWriter & v) { v.string_(""); }); return true; }
-            if ( strcmp(name, "AttentionIconPixmap") == 0 ) { w.variant("a(iiay)", [&](MessageWriter & v) { writeEmptyPixmaps(v); }); return true; }
-            if ( strcmp(name, "AttentionMovieName") == 0 ) { w.variant("s", [](MessageWriter & v) { v.string_(""); }); return true; }
-            if ( strcmp(name, "ToolTip") == 0 ) { w.variant("(sa(iiay)ss)", [&](MessageWriter & v) { writeToolTip(v); }); return true; }
-            if ( strcmp(name, "ItemIsMenu") == 0 ) { w.variant("b", [](MessageWriter & v) { v.boolean(false); }); return true; }
-            if ( strcmp(name, "Menu") == 0 ) { w.variant("o", [](MessageWriter & v) { v.objectPath(MENU_PATH); }); return true; }
-            if ( strcmp(name, "IconThemePath") == 0 ) { w.variant("s", [](MessageWriter & v) { v.string_(""); }); return true; }
-            return false;
-        }
-
-        static const char * const * sniPropertyNames() {
-            static const char * names[] = {
-                "Category", "Id", "Title", "Status", "WindowId", "IconName", "IconPixmap",
-                "OverlayIconName", "OverlayIconPixmap", "AttentionIconName", "AttentionIconPixmap",
-                "AttentionMovieName", "ToolTip", "ItemIsMenu", "Menu", "IconThemePath", nullptr
+        static const PropertyWriter * sniProperties(size_t & count) {
+            static const PropertyWriter props[] = {
+                {"Category", [](LinuxTray &, MessageWriter & w) { w.variant("s", [](MessageWriter & v) { v.string_("ApplicationStatus"); }); }},
+                {"Id", [](LinuxTray & t, MessageWriter & w) { w.variant("s", [&](MessageWriter & v) { v.string_(t.appId.c_str()); }); }},
+                {"Title", [](LinuxTray & t, MessageWriter & w) { w.variant("s", [&](MessageWriter & v) { v.string_(t.tooltip.c_str()); }); }},
+                {"Status", [](LinuxTray &, MessageWriter & w) { w.variant("s", [](MessageWriter & v) { v.string_("Active"); }); }},
+                {"WindowId", [](LinuxTray &, MessageWriter & w) { w.variant("i", [](MessageWriter & v) { v.int32(0); }); }},
+                {"IconName", [](LinuxTray &, MessageWriter & w) { w.variant("s", [](MessageWriter & v) { v.string_(""); }); }},
+                {"IconPixmap", [](LinuxTray & t, MessageWriter & w) { w.variant("a(iiay)", [&](MessageWriter & v) { t.writePixmaps(v); }); }},
+                {"OverlayIconName", [](LinuxTray &, MessageWriter & w) { w.variant("s", [](MessageWriter & v) { v.string_(""); }); }},
+                {"OverlayIconPixmap", [](LinuxTray &, MessageWriter & w) { w.variant("a(iiay)", [](MessageWriter & v) { writeEmptyPixmaps(v); }); }},
+                {"AttentionIconName", [](LinuxTray &, MessageWriter & w) { w.variant("s", [](MessageWriter & v) { v.string_(""); }); }},
+                {"AttentionIconPixmap", [](LinuxTray &, MessageWriter & w) { w.variant("a(iiay)", [](MessageWriter & v) { writeEmptyPixmaps(v); }); }},
+                {"AttentionMovieName", [](LinuxTray &, MessageWriter & w) { w.variant("s", [](MessageWriter & v) { v.string_(""); }); }},
+                {"ToolTip", [](LinuxTray & t, MessageWriter & w) { w.variant("(sa(iiay)ss)", [&](MessageWriter & v) { t.writeToolTip(v); }); }},
+                {"ItemIsMenu", [](LinuxTray &, MessageWriter & w) { w.variant("b", [](MessageWriter & v) { v.boolean(false); }); }},
+                {"Menu", [](LinuxTray &, MessageWriter & w) { w.variant("o", [](MessageWriter & v) { v.objectPath(MENU_PATH); }); }},
+                {"IconThemePath", [](LinuxTray &, MessageWriter & w) { w.variant("s", [](MessageWriter & v) { v.string_(""); }); }},
             };
-            return names;
+            count = sizeof(props) / sizeof(props[0]);
+            return props;
         }
 
-        bool writeMenuProperty(MessageWriter & w, const char * name) {
-            if ( strcmp(name, "Version") == 0 ) { w.variant("u", [](MessageWriter & v) { v.uint32(3); }); return true; }
-            if ( strcmp(name, "TextDirection") == 0 ) { w.variant("s", [](MessageWriter & v) { v.string_("ltr"); }); return true; }
-            if ( strcmp(name, "Status") == 0 ) { w.variant("s", [](MessageWriter & v) { v.string_("normal"); }); return true; }
-            if ( strcmp(name, "IconThemePath") == 0 ) { w.variant("as", [](MessageWriter & v) { v.container(DBUS_TYPE_ARRAY, "s", [](MessageWriter &) {}); }); return true; }
-            return false;
+        static const PropertyWriter * menuProperties(size_t & count) {
+            static const PropertyWriter props[] = {
+                {"Version", [](LinuxTray &, MessageWriter & w) { w.variant("u", [](MessageWriter & v) { v.uint32(3); }); }},
+                {"TextDirection", [](LinuxTray &, MessageWriter & w) { w.variant("s", [](MessageWriter & v) { v.string_("ltr"); }); }},
+                {"Status", [](LinuxTray &, MessageWriter & w) { w.variant("s", [](MessageWriter & v) { v.string_("normal"); }); }},
+                {"IconThemePath", [](LinuxTray &, MessageWriter & w) { w.variant("as", [](MessageWriter & v) { v.container(DBUS_TYPE_ARRAY, "s", [](MessageWriter &) {}); }); }},
+            };
+            count = sizeof(props) / sizeof(props[0]);
+            return props;
         }
 
-        static const char * const * menuPropertyNames() {
-            static const char * names[] = { "Version", "TextDirection", "Status", "IconThemePath", nullptr };
-            return names;
-        }
-
-        template <typename WriteProp>
-        DBusHandlerResult handleProperties(DBusMessage * msg, const char * const * names, WriteProp && writeProp) {
+        DBusHandlerResult handleProperties(DBusMessage * msg, const char * expectedIface, const PropertyWriter * props, size_t count) {
             if ( api.dbus_message_is_method_call(msg, PROPS_IFACE, "Get") ) {
                 const char * iface = nullptr; const char * prop = nullptr;
-                if ( !readStringPair(msg, iface, prop, false) ) {
+                if ( !readStringPair(msg, iface, prop) ) {
                     replyError(msg, DBUS_ERROR_INVALID_ARGS, "Get expects (ss)");
                     return DBUS_HANDLER_RESULT_HANDLED;
                 }
-                DBusMessage * response = api.dbus_message_new_method_return(msg);
-                DBusMessageIter iter;
-                api.dbus_message_iter_init_append(response, &iter);
-                MessageWriter w(api, &iter);
-                if ( !writeProp(w, prop) ) {
-                    api.dbus_message_unref(response);
-                    replyError(msg, DBUS_ERROR_UNKNOWN_PROPERTY, prop);
+                if ( iface && *iface && strcmp(iface, expectedIface) != 0 ) {
+                    replyError(msg, DBUS_ERROR_UNKNOWN_INTERFACE, iface);
                     return DBUS_HANDLER_RESULT_HANDLED;
                 }
-                reply(msg, response);
+                for ( size_t i = 0; i != count; ++i ) {
+                    if ( strcmp(props[i].name, prop) != 0 ) continue;
+                    replyWith(msg, [&](MessageWriter & w) { props[i].write(*this, w); });
+                    return DBUS_HANDLER_RESULT_HANDLED;
+                }
+                replyError(msg, DBUS_ERROR_UNKNOWN_PROPERTY, prop);
                 return DBUS_HANDLER_RESULT_HANDLED;
             }
             if ( api.dbus_message_is_method_call(msg, PROPS_IFACE, "GetAll") ) {
+                DBusMessageIter iter;
+                const char * iface = nullptr;
+                bool matches = true;
+                if ( api.dbus_message_iter_init(msg, &iter) && readString(iter, iface) && iface && *iface ) {
+                    matches = strcmp(iface, expectedIface) == 0;
+                }
                 replyWith(msg, [&](MessageWriter & w) {
                     w.container(DBUS_TYPE_ARRAY, "{sv}", [&](MessageWriter & dict) {
-                        for ( const char * const * n = names; *n; ++n ) {
+                        if ( !matches ) return;
+                        for ( size_t i = 0; i != count; ++i ) {
                             dict.container(DBUS_TYPE_DICT_ENTRY, nullptr, [&](MessageWriter & entry) {
-                                entry.string_(*n);
-                                writeProp(entry, *n);
+                                entry.string_(props[i].name);
+                                props[i].write(*this, entry);
                             });
                         }
                     });
@@ -538,12 +558,15 @@ namespace das {
         }
 
         DBusHandlerResult sniMessage(DBusMessage * msg) {
+            if ( api.dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_METHOD_CALL ) return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
             if ( api.dbus_message_is_method_call(msg, INTROSPECT_IFACE, "Introspect") ) {
                 replyWith(msg, [](MessageWriter & w) { w.string_(SNI_INTROSPECTION); });
                 return DBUS_HANDLER_RESULT_HANDLED;
             }
-            auto props = handleProperties(msg, sniPropertyNames(), [&](MessageWriter & w, const char * name) { return writeSniProperty(w, name); });
-            if ( props == DBUS_HANDLER_RESULT_HANDLED ) return props;
+            size_t count = 0;
+            const PropertyWriter * props = sniProperties(count);
+            auto handled = handleProperties(msg, SNI_IFACE, props, count);
+            if ( handled == DBUS_HANDLER_RESULT_HANDLED ) return handled;
             const char * member = api.dbus_message_get_member(msg);
             const char * iface = api.dbus_message_get_interface(msg);
             if ( !member || (iface && strcmp(iface, SNI_IFACE) != 0) ) return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
@@ -551,20 +574,47 @@ namespace das {
             if ( strcmp(member, "Activate") == 0 ) {
                 readInt32Pair(msg, x, y);
                 pushEvent(TrayEventKind::click, 0, x, y);
-            } else if ( strcmp(member, "SecondaryActivate") == 0 ) {
-                readInt32Pair(msg, x, y);
-                pushEvent(TrayEventKind::click, 0, x, y);
             } else if ( strcmp(member, "ContextMenu") == 0 ) {
                 readInt32Pair(msg, x, y);
                 pushEvent(TrayEventKind::right_click, 0, x, y);
-            } else if ( strcmp(member, "Scroll") != 0 ) {
+            } else if ( strcmp(member, "SecondaryActivate") != 0 && strcmp(member, "Scroll") != 0 ) {
                 return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
             }
             replyEmpty(msg);
             return DBUS_HANDLER_RESULT_HANDLED;
         }
 
-        void writeMenuItemProperties(MessageWriter & w, const TrayMenuEntry & e) {
+        //! dbusmenu ids: 0 is the root, an entry carries its own positive id, a separator carries
+        //! minus its position minus one - so a click on a layout the host fetched before a rebuild
+        //! still names the entry it showed, or nothing.
+        int32_t layoutIdAt(size_t index) const {
+            const TrayMenuEntry & e = menu[index];
+            return e.separator ? -int32_t(index + 1) : e.id;
+        }
+
+        const TrayMenuEntry * entryByLayoutId(int32_t id) const {
+            if ( id == 0 ) return nullptr;
+            for ( size_t i = 0; i != menu.size(); ++i ) {
+                if ( layoutIdAt(i) == id ) return &menu[i];
+            }
+            return nullptr;
+        }
+
+        bool validLayoutId(int32_t id) const {
+            return id == 0 || entryByLayoutId(id) != nullptr;
+        }
+
+        void dispatchMenuEvent(DBusMessageIter & fields) {
+            int32_t id = 0;
+            const char * eventId = nullptr;
+            if ( !readInt32(fields, id) ) return;
+            if ( !api.dbus_message_iter_next(&fields) || !readString(fields, eventId) ) return;
+            if ( !eventId || strcmp(eventId, "clicked") != 0 ) return;
+            const TrayMenuEntry * e = entryByLayoutId(id);
+            if ( e && !e->separator && e->enabled ) pushEvent(TrayEventKind::menu, e->id, 0, 0);
+        }
+
+        static void writeMenuItemProperties(MessageWriter & w, const TrayMenuEntry & e) {
             w.container(DBUS_TYPE_ARRAY, "{sv}", [&](MessageWriter & dict) {
                 if ( e.separator ) {
                     dict.dictEntry("type", "s", [](MessageWriter & v) { v.string_("separator"); });
@@ -579,56 +629,48 @@ namespace das {
             });
         }
 
-        void writeRootProperties(MessageWriter & w) {
+        static void writeRootProperties(MessageWriter & w) {
             w.container(DBUS_TYPE_ARRAY, "{sv}", [](MessageWriter & dict) {
                 dict.dictEntry("children-display", "s", [](MessageWriter & v) { v.string_("submenu"); });
             });
         }
 
+        void writeNodeProperties(MessageWriter & w, int32_t layoutId) const {
+            if ( layoutId == 0 ) writeRootProperties(w);
+            else writeMenuItemProperties(w, *entryByLayoutId(layoutId));
+        }
+
         void writeLayoutNode(MessageWriter & w, int32_t layoutId, bool withChildren) {
             w.container(DBUS_TYPE_STRUCT, nullptr, [&](MessageWriter & s) {
                 s.int32(layoutId);
-                if ( layoutId == 0 ) writeRootProperties(s);
-                else writeMenuItemProperties(s, menu[size_t(layoutId - 1)]);
+                writeNodeProperties(s, layoutId);
                 s.container(DBUS_TYPE_ARRAY, "v", [&](MessageWriter & children) {
                     if ( layoutId != 0 || !withChildren ) return;
                     for ( size_t i = 0; i != menu.size(); ++i ) {
                         children.variant("(ia{sv}av)", [&](MessageWriter & v) {
-                            writeLayoutNode(v, int32_t(i + 1), false);
+                            writeLayoutNode(v, layoutIdAt(i), false);
                         });
                     }
                 });
             });
         }
 
-        bool validLayoutId(int32_t id) const {
-            return id >= 0 && size_t(id) <= menu.size();
-        }
-
-        void dispatchMenuEvent(DBusMessageIter & fields) {
-            if ( api.dbus_message_iter_get_arg_type(&fields) != DBUS_TYPE_INT32 ) return;
-            dbus_int32_t id = 0;
-            api.dbus_message_iter_get_basic(&fields, &id);
-            if ( !api.dbus_message_iter_next(&fields) || api.dbus_message_iter_get_arg_type(&fields) != DBUS_TYPE_STRING ) return;
-            const char * eventId = nullptr;
-            api.dbus_message_iter_get_basic(&fields, &eventId);
-            if ( !eventId || strcmp(eventId, "clicked") != 0 || id < 1 || !validLayoutId(id) ) return;
-            const TrayMenuEntry & e = menu[size_t(id - 1)];
-            if ( !e.separator && e.enabled ) pushEvent(TrayEventKind::menu, e.id, 0, 0);
-        }
-
         DBusHandlerResult menuMessage(DBusMessage * msg) {
+            if ( api.dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_METHOD_CALL ) return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
             if ( api.dbus_message_is_method_call(msg, INTROSPECT_IFACE, "Introspect") ) {
                 replyWith(msg, [](MessageWriter & w) { w.string_(MENU_INTROSPECTION); });
                 return DBUS_HANDLER_RESULT_HANDLED;
             }
-            auto props = handleProperties(msg, menuPropertyNames(), [&](MessageWriter & w, const char * name) { return writeMenuProperty(w, name); });
-            if ( props == DBUS_HANDLER_RESULT_HANDLED ) return props;
+            size_t count = 0;
+            const PropertyWriter * props = menuProperties(count);
+            auto handled = handleProperties(msg, MENU_IFACE, props, count);
+            if ( handled == DBUS_HANDLER_RESULT_HANDLED ) return handled;
             if ( api.dbus_message_is_method_call(msg, MENU_IFACE, "GetLayout") ) {
                 DBusMessageIter iter;
-                dbus_int32_t parentId = 0;
-                if ( api.dbus_message_iter_init(msg, &iter) && api.dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_INT32 ) {
-                    api.dbus_message_iter_get_basic(&iter, &parentId);
+                int32_t parentId = 0;
+                int32_t depth = -1;
+                if ( api.dbus_message_iter_init(msg, &iter) && readInt32(iter, parentId) ) {
+                    if ( api.dbus_message_iter_next(&iter) ) readInt32(iter, depth);
                 }
                 if ( !validLayoutId(parentId) ) {
                     replyError(msg, DBUS_ERROR_INVALID_ARGS, "GetLayout: unknown parent id");
@@ -636,7 +678,7 @@ namespace das {
                 }
                 replyWith(msg, [&](MessageWriter & w) {
                     w.uint32(menuRevision);
-                    writeLayoutNode(w, parentId, true);
+                    writeLayoutNode(w, parentId, depth != 0);
                 });
                 return DBUS_HANDLER_RESULT_HANDLED;
             }
@@ -646,15 +688,15 @@ namespace das {
                 if ( api.dbus_message_iter_init(msg, &iter) && api.dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_ARRAY ) {
                     DBusMessageIter sub;
                     api.dbus_message_iter_recurse(&iter, &sub);
-                    while ( api.dbus_message_iter_get_arg_type(&sub) == DBUS_TYPE_INT32 ) {
-                        dbus_int32_t id = 0;
-                        api.dbus_message_iter_get_basic(&sub, &id);
+                    int32_t id = 0;
+                    while ( readInt32(sub, id) ) {
                         ids.push_back(id);
                         api.dbus_message_iter_next(&sub);
                     }
                 }
                 if ( ids.empty() ) {
-                    for ( size_t i = 0; i <= menu.size(); ++i ) ids.push_back(int32_t(i));
+                    ids.push_back(0);
+                    for ( size_t i = 0; i != menu.size(); ++i ) ids.push_back(layoutIdAt(i));
                 }
                 replyWith(msg, [&](MessageWriter & w) {
                     w.container(DBUS_TYPE_ARRAY, "(ia{sv})", [&](MessageWriter & arr) {
@@ -662,8 +704,7 @@ namespace das {
                             if ( !validLayoutId(id) ) continue;
                             arr.container(DBUS_TYPE_STRUCT, nullptr, [&](MessageWriter & s) {
                                 s.int32(id);
-                                if ( id == 0 ) writeRootProperties(s);
-                                else writeMenuItemProperties(s, menu[size_t(id - 1)]);
+                                writeNodeProperties(s, id);
                             });
                         }
                     });
@@ -719,22 +760,22 @@ namespace das {
 
         static DBusHandlerResult onBusSignal(DBusConnection *, DBusMessage * msg, void * self) {
             LinuxTray * tray = (LinuxTray *) self;
-            if ( tray->api.dbus_message_is_signal(msg, "org.freedesktop.DBus", "NameOwnerChanged") ) {
-                DBusMessageIter iter;
-                const char * name = nullptr; const char * oldOwner = nullptr; const char * newOwner = nullptr;
-                if ( tray->api.dbus_message_iter_init(msg, &iter) && tray->api.dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_STRING ) {
-                    tray->api.dbus_message_iter_get_basic(&iter, &name);
-                    if ( tray->api.dbus_message_iter_next(&iter) ) tray->api.dbus_message_iter_get_basic(&iter, &oldOwner);
-                    if ( tray->api.dbus_message_iter_next(&iter) ) tray->api.dbus_message_iter_get_basic(&iter, &newOwner);
-                }
-                if ( name && strcmp(name, SNI_WATCHER) == 0 && newOwner && *newOwner ) {
-                    tray->registerWithWatcher();
-                }
-            }
+            DBusApi & api = tray->api;
+            if ( !api.dbus_message_is_signal(msg, "org.freedesktop.DBus", "NameOwnerChanged") ) return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+            const char * sender = api.dbus_message_get_sender(msg);
+            if ( !sender || strcmp(sender, "org.freedesktop.DBus") != 0 ) return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+            DBusMessageIter iter;
+            const char * name = nullptr; const char * oldOwner = nullptr; const char * newOwner = nullptr;
+            if ( !api.dbus_message_iter_init(msg, &iter) || !tray->readString(iter, name) ) return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+            if ( !api.dbus_message_iter_next(&iter) || !tray->readString(iter, oldOwner) ) return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+            if ( !api.dbus_message_iter_next(&iter) || !tray->readString(iter, newOwner) ) return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+            if ( strcmp(name, SNI_WATCHER) == 0 && newOwner && *newOwner ) tray->registerWithWatcher();
             return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
         }
     };
 
+    //! The session bus address is the only discovery path on purpose: libdbus's autolaunch would
+    //! spawn a bus (and an X connection) on a headless box that has no tray to offer.
     bool TrayPlatformAvailable() {
         const char * address = getenv("DBUS_SESSION_BUS_ADDRESS");
         if ( !address || !*address ) return false;

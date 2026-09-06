@@ -18,7 +18,8 @@ links into the static `bin/watchdog` through the module's static twin.
    No GTK, no appindicator: the static watchdog keeps its zero-dependency deploy, and a box
    without a session bus or without libdbus reports no tray instead of failing to start.
    Headers come from `libdbus-1-dev` at build time (pkg-config); without them the Linux
-   backend is the NotImplemented stub, exactly like the dialogs without GTK.
+   backend is the NotImplemented stub. The GTK dialogs stay opt-in (`DAS_STDDLG_GTK`,
+   default off): linking libgtk-3 into the module would reach the static consumers.
 4. **Menus are part of the first cut.** XFCE's tray host delivers no right-click without a
    dbusmenu object, and the point of the icon is a status menu. Same API on all three.
 5. **Notifications ride the tray.** `tray_notify` is a Windows balloon, a
@@ -29,11 +30,11 @@ links into the static `bin/watchdog` through the module's static twin.
 ## API (module `stddlg`)
 
 ```
-tray_available() : bool                  // a backend exists and its host is reachable
+tray_available() : bool                  // a backend exists and the process can reach its bus or desktop
 tray_create(tooltip : string) : bool     // one tray per process
 tray_set_icon(pixels : array<uint8>; width : int; height : int)   // RGBA8, row-major
 tray_set_tooltip(text : string)
-tray_menu_clear(); tray_menu_add(id : int; label : string; enabled : bool; checked : bool)
+tray_menu_clear(); tray_menu_add(id : int; label : string; enabled : bool; checked : bool)   // id positive, unique
 tray_menu_add_separator(); tray_menu_commit()
 tray_poll() <| $(ev : TrayEvent) { ... } // ev.kind : TrayEventKind (click, double_click, right_click, menu, notification), ev.id, ev.x, ev.y
 tray_notify(title : string; body : string) : bool

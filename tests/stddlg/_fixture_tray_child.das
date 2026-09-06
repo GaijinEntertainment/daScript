@@ -1,5 +1,4 @@
 options gen2
-options no_aot
 
 require stddlg
 require daslib/fio
