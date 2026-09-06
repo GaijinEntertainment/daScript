@@ -1150,8 +1150,12 @@ struct DnScanArgs {
 }
 
 // the gated delta rule as the plain per-token recurrence with the state resident in registers:
-// one subgroup per (head, column group), each lane 16 rows of its column, the token loop inside
-// the kernel, two xor-shuffle reductions per token; the o rows land raw for the out-norm pass
+// a four-subgroup workgroup per (head, column group), each lane 16 rows of its column, the token
+// loop inside the kernel; the token's k and q rows are staged once per workgroup in shared (a
+// double-buffered slot, one barrier per token), so a lane issues five loads per token instead of
+// 35 and a head's rows cross L2 once per 16 columns instead of once per 4; two xor-shuffle
+// reductions per token; the o rows land raw for the out-norm pass. The per-token cost that remains
+// is the dependent chain itself: filling the slot or the scalars a token ahead measured no faster.
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
 class DnScan {
     @ssbo @binding = 0 conv : array<float>     // the conv output rows (position-major: q | k | v)
@@ -1159,6 +1163,8 @@ class DnScan {
     @ssbo @binding = 2 smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
     @ssbo @binding = 3 orows : array<float>    // the raw o rows at o_off
     @push_constant pa : DnScanArgs
+    @workgroup ks : float[256]                 // the token's k row, two slots of DN_MAX_DS
+    @workgroup qs : float[256]                 // the token's q row, two slots
 
     def cluster_add(v : float; lpc : uint) : float {
         var r = v
@@ -1174,20 +1180,22 @@ class DnScan {
         return r
     }
 
-    [spirv_kernel(local_size_x = 32, name = "dn_scan_cls_spv")]
+    [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv")]
     def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows, written out
         let ds = pa.ds
         let lpc = ds / 16u                     // lanes per column, 16 state rows each (ds % 16 == 0 host-side)
-        let cpw = 32u / lpc                    // columns per workgroup
-        let cgroups = (ds + cpw - 1u) / cpw
+        let cpw = 32u / lpc                    // columns per subgroup
+        let cpg = 4u * cpw                     // columns per workgroup
+        let cgroups = (ds + cpg - 1u) / cpg
         let h = gl_WorkGroupID.x / cgroups
+        let tid = gl_LocalInvocationID.x
         let sl = gl_SubgroupInvocationID
         let lane = sl % lpc
-        let col = (gl_WorkGroupID.x % cgroups) * cpw + sl / lpc
+        let col = (gl_WorkGroupID.x % cgroups) * cpg + gl_SubgroupID * cpw + sl / lpc
         let live = col < ds                    // a whole cluster shares col, so its shuffles stay uniform
         let kh = h % pa.nkh
-        let qoff = kh * ds + lane
-        let koff = pa.kd + kh * ds + lane
+        let qrow0 = kh * ds                    // the head's q row within a conv row
+        let krow0 = pa.kd + kh * ds
         let voff = 2u * pa.kd + h * ds + col
         let aa = smalls[pa.a_off + h]
         let dtb = smalls[pa.dt_off + h]
@@ -1217,24 +1225,31 @@ class DnScan {
             let eg = exp(aa * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
             let bt = 1.0 / (1.0 + exp(-smalls[pa.beta_off + t * pa.nvh + h]))
             let v = conv[crow + voff]
-            let kb = crow + koff
+            // the token's k and q rows into this token's slot; the other slot was read before the last barrier
+            let par = (t & 1u) * 128u
+            if (tid < ds) {
+                ks[par + tid] = conv[crow + krow0 + tid]
+                qs[par + tid] = conv[crow + qrow0 + tid]
+            }
+            barrier()
+            let kb = par + lane
             var k : float[16]
-            k[0] = conv[kb]
-            k[1] = conv[kb + lpc]
-            k[2] = conv[kb + 2u * lpc]
-            k[3] = conv[kb + 3u * lpc]
-            k[4] = conv[kb + 4u * lpc]
-            k[5] = conv[kb + 5u * lpc]
-            k[6] = conv[kb + 6u * lpc]
-            k[7] = conv[kb + 7u * lpc]
-            k[8] = conv[kb + 8u * lpc]
-            k[9] = conv[kb + 9u * lpc]
-            k[10] = conv[kb + 10u * lpc]
-            k[11] = conv[kb + 11u * lpc]
-            k[12] = conv[kb + 12u * lpc]
-            k[13] = conv[kb + 13u * lpc]
-            k[14] = conv[kb + 14u * lpc]
-            k[15] = conv[kb + 15u * lpc]
+            k[0] = ks[kb]
+            k[1] = ks[kb + lpc]
+            k[2] = ks[kb + 2u * lpc]
+            k[3] = ks[kb + 3u * lpc]
+            k[4] = ks[kb + 4u * lpc]
+            k[5] = ks[kb + 5u * lpc]
+            k[6] = ks[kb + 6u * lpc]
+            k[7] = ks[kb + 7u * lpc]
+            k[8] = ks[kb + 8u * lpc]
+            k[9] = ks[kb + 9u * lpc]
+            k[10] = ks[kb + 10u * lpc]
+            k[11] = ks[kb + 11u * lpc]
+            k[12] = ks[kb + 12u * lpc]
+            k[13] = ks[kb + 13u * lpc]
+            k[14] = ks[kb + 14u * lpc]
+            k[15] = ks[kb + 15u * lpc]
             var kv = k[0] * s[0]
             kv += k[1] * s[1]
             kv += k[2] * s[2]
@@ -1253,7 +1268,7 @@ class DnScan {
             kv += k[15] * s[15]
             kv = cluster_add(kv, lpc)
             let delta = bt * (v - eg * kv)
-            let qb = crow + qoff
+            let qb = par + lane
             s[0] = s[0] * eg + k[0] * delta
             s[1] = s[1] * eg + k[1] * delta
             s[2] = s[2] * eg + k[2] * delta
@@ -1270,22 +1285,22 @@ class DnScan {
             s[13] = s[13] * eg + k[13] * delta
             s[14] = s[14] * eg + k[14] * delta
             s[15] = s[15] * eg + k[15] * delta
-            var o = conv[qb] * s[0]
-            o += conv[qb + lpc] * s[1]
-            o += conv[qb + 2u * lpc] * s[2]
-            o += conv[qb + 3u * lpc] * s[3]
-            o += conv[qb + 4u * lpc] * s[4]
-            o += conv[qb + 5u * lpc] * s[5]
-            o += conv[qb + 6u * lpc] * s[6]
-            o += conv[qb + 7u * lpc] * s[7]
-            o += conv[qb + 8u * lpc] * s[8]
-            o += conv[qb + 9u * lpc] * s[9]
-            o += conv[qb + 10u * lpc] * s[10]
-            o += conv[qb + 11u * lpc] * s[11]
-            o += conv[qb + 12u * lpc] * s[12]
-            o += conv[qb + 13u * lpc] * s[13]
-            o += conv[qb + 14u * lpc] * s[14]
-            o += conv[qb + 15u * lpc] * s[15]
+            var o = qs[qb] * s[0]
+            o += qs[qb + lpc] * s[1]
+            o += qs[qb + 2u * lpc] * s[2]
+            o += qs[qb + 3u * lpc] * s[3]
+            o += qs[qb + 4u * lpc] * s[4]
+            o += qs[qb + 5u * lpc] * s[5]
+            o += qs[qb + 6u * lpc] * s[6]
+            o += qs[qb + 7u * lpc] * s[7]
+            o += qs[qb + 8u * lpc] * s[8]
+            o += qs[qb + 9u * lpc] * s[9]
+            o += qs[qb + 10u * lpc] * s[10]
+            o += qs[qb + 11u * lpc] * s[11]
+            o += qs[qb + 12u * lpc] * s[12]
+            o += qs[qb + 13u * lpc] * s[13]
+            o += qs[qb + 14u * lpc] * s[14]
+            o += qs[qb + 15u * lpc] * s[15]
             o = cluster_add(o, lpc)
             if (live && lane == 0u) {
                 orows[pa.o_off + t * pa.di + h * ds + col] = o
