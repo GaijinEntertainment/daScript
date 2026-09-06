@@ -148,6 +148,67 @@ def has(t : T?; haystack : string; needle : string; what : string) {
     t |> success(find(haystack, needle) >= 0, "{what}: expected '{needle}' in\n{haystack}")
 }
 
+//! osascript against the child's status item through System Events; the dump is the script's
+//! stdout and stderr, so a denied accessibility permission reads back as text, not a crash.
+def apple_script(script : string) : string {
+    let argv <- ["/usr/bin/osascript", "-e", script]
+    let no_env : array<string>
+    return build_string() $(writer) {
+        unsafe {
+            var p = spawn_process(argv, "", no_env)
+            process_wait(p, 10.0)
+            process_drain(p) $(line) {
+                writer |> write(line) |> write("\n")
+            }
+            close_process(p)
+        }
+    }
+}
+
+[test]
+def test_tray_macos_status_item(t : T?) {
+    if (!fexist("/usr/bin/osascript")) {
+        t |> skip("no /usr/bin/osascript here: this arm drives the macOS status item through System Events")
+        return
+    }
+    t |> run("a System Events click on the status item arrives as a click event") @(t : T?) {
+        var rig : TrayRig
+        let argv <- [das_exe(), fixture_path()]
+        let no_env : array<string>
+        rig.child = unsafe(spawn_process(argv, "", no_env))
+        let started = ref_time_ticks()
+        var first = ""
+        while (empty(first) && get_time_usec(started) < 30000000) {
+            drain_child(rig)
+            for (line in rig.lines) {
+                if (starts_with(line, "@")) {
+                    first = line
+                    break
+                }
+            }
+            sleep(5u)
+        }
+        if (first == "@unavailable") {
+            t |> skip("no window server session for this process, so no status bar to put an item on")
+            stop_rig(rig)
+            return
+        }
+        if (empty(wait_for_line(t, rig, "@ready", 30.0))) {
+            stop_rig(rig)
+            return
+        }
+        let pid = unsafe(process_pid(rig.child))
+        let clicked = apple_script("tell application \"System Events\" to tell (first process whose unix id is {pid}) to click menu bar item 1 of menu bar 1")
+        if (find(clicked, "assistive access") >= 0 || find(clicked, "-1719") >= 0 || find(clicked, "-25211") >= 0) {
+            t |> skip("System Events cannot reach the status item here (accessibility permission): {clicked}")
+            stop_rig(rig)
+            return
+        }
+        t |> equal(wait_for_line(t, rig, "@event click", 10.0), "@event click 0 0 0")
+        stop_rig(rig)
+    }
+}
+
 [test]
 def test_tray_over_private_bus(t : T?) {
     if (!dbus_tools_present()) {
