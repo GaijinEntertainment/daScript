@@ -2025,6 +2025,7 @@ struct RLayer {
     pf_dn_scan_p3_set : VkDescriptorSet    // pf_dnz + dn_ws + this layer's smalls (the gated out-norm)
     pf_dn_tail_set : VkDescriptorSet       // pf_dnqkv last taps rows -> this layer's smalls ring image
     pf_dn_ba_set : VkDescriptorSet         // f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (batched router GEMV)
+    pf_dn_cvt_set : VkDescriptorSet        // the cm2 route: pf_xb -> pf_xf, the qkv / z GEMMs' f16 feed
     m_pf_dnqkv, m_pf_dnz, m_pf_dnout, m_pf_dnbeta, m_pf_dnalpha : HostBuf   // the prefill GEMMs' region metas
 }
 
@@ -2112,6 +2113,8 @@ struct RDec {
     pf_dnz : uint64               // [MAX_NPOS x di] z rows
     pf_dnbg : uint64              // [2 x MAX_NPOS x nvh] beta rows then alpha rows (the q8 arm's GEMM out; copied into the layer smalls per window)
     pf_dnrq_set : VkDescriptorSet // the o requant (dn_ws_dev DN_O_OFF rows -> hq/hs), shared by every recurrent layer
+    pf_dnof : uint64              // the o rows' f16 feed for the cm2 out tile [np x di] (the cm2 route; 0 when the device has no cm2)
+    pf_dnof_set : VkDescriptorSet // dn_ws_dev o rows -> pf_dnof, shared by every recurrent layer
 }
 
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows

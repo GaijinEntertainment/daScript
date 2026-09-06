@@ -55,13 +55,15 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      with the state in registers (one 32-lane subgroup per (head, column group), 16 rows per lane,
      the token loop inside the kernel): scan 17.7 ms + out-norm 1.2 (was 63), and the f32
      beta/alpha rows as a 16-position tile GEMM (`dn_ba_cls`, P2): 11.7 ms (was 15.5). Window
-     221 ms, pp512 2010 (0.80x of 2527), tg128 52.6 (0.93x). What is left in the window, last
-     512-row window in microseconds: the FFN GEMMs 78 ms across both heads (cm2 tiles, at par);
-     the dn qkv/z/out GEMMs 42 ms on the q8 batch router (~40 TFLOP/s; the f16-feed cm2 route
-     would give ~20% - P4); attention 21 ms = the scalar `DaAttnB` tile at hs 256 (the cm2 fa tile
-     and the h128 twin serve 64/128 only) - P1; scan 17.7 ms (35 loads per token per lane, latency
-     bound - a two-token unroll is the next scan lever); ba 11.7 ms (f16 rows would halve the
-     read); conv 5 ms, cls 2 ms, add+rms/act/requant ~9 ms.
+     221 ms, pp512 2010 (0.80x of 2527), tg128 52.6 (0.93x). DONE 9/5 (later): the host seams
+     (window-0 fills in the command, the slot handed to the session - item (e)) took pp512 to
+     2282; the dn qkv/z/out GEMMs on the f16-fed cm2 tiles (P4: qkv 21.0 -> 15.4 ms, z 10.2 ->
+     7.1, out 10.4 -> 9.2, two f16 converts +0.5) to 2361 (0.93x). What is left in the window, in
+     milliseconds: the FFN GEMMs ~78 across both heads (cm2 tiles, at par); attention 21 = the
+     scalar `DaAttnB` tile at hs 256 (the cm2 fa tile and the h128 twin serve 64/128 only) - P1;
+     scan 17.7 (35 loads per token per lane, latency bound - a two-token unroll is the next scan
+     lever); the dn GEMMs 32; ba 11.7 (f16 rows would halve the read); conv 5, cls 2,
+     add+rms/act/converts ~9.
    - tg128 = 18.9 ms GPU/token (host wall 19.4; upstream 17.6): every GEMV role sits at 360-420
      GB/s (bandwidth-bound, at par per byte); the bytes are the gap: the loader's Q8_0 transcode of
      the deltanet qkv (Q5_K in the file, 24 x 33.5M params) and z (Q6_K) planes reads ~400 MB more
