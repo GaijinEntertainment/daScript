@@ -1,0 +1,1 @@
+True when this process can reach a tray host: a session bus (DBUS_SESSION_BUS_ADDRESS) plus a loadable libdbus-1 on Linux, the main thread of a window-server session on macOS, an interactive desktop with a taskbar on Windows. On Linux this says the item can be exported, not that a panel is showing icons right now.

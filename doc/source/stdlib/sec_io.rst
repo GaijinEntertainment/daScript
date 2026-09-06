@@ -10,6 +10,7 @@ File I/O, networking, URI parsing, terminal output, and binary serialization.
 
    generated/fio.rst
    generated/clipboard.rst
+   generated/stddlg.rst
    generated/network.rst
    generated/dashv.rst
    generated/dashv_boost.rst

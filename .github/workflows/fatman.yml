@@ -41,6 +41,7 @@ jobs:
             libglu1-mesa-dev \
             mesa-common-dev \
             libx11-dev \
+            libdbus-1-dev \
             libxrandr-dev \
             libxcursor-dev \
             libxinerama-dev \

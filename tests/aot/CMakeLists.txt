@@ -444,6 +444,7 @@ set(DAS_AOT_IRREGULAR
     "dashv|mod|-|-|1"
     "clipboard|reg|AOT_CLIPBOARD_FILES|-|1"
     "minfft|reg|NOT DAS_MINFFT_DISABLED|-|1"
+    "stddlg|reg|NOT DAS_STDDLG_DISABLED|-|1"
     "subset_daslib|mod|-|-|0"
 )
 foreach(_row IN LISTS DAS_AOT_IRREGULAR)
