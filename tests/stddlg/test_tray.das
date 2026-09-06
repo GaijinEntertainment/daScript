@@ -77,8 +77,16 @@ def start_child(t : T?; var rig : TrayRig) : bool {
     let argv <- [das_exe(), fixture_path()]
     let env <- ["DBUS_SESSION_BUS_ADDRESS={rig.address}"]
     rig.child = unsafe(spawn_process(argv, "", env))
-    let ready = wait_for_line(t, rig, "@ready", 30.0)
-    if (empty(ready)) {
+    let first = wait_for_line(t, rig, "@", 30.0)
+    if (first == "@unavailable") {
+        t |> skip("this daslang has no Linux tray backend on this box (built without libdbus-1-dev, or no libdbus-1.so.3), so the D-Bus arms have nothing to drive")
+        return false
+    }
+    if (first == "@create_failed") {
+        t |> failure("the child reached the bus but could not create the item")
+        return false
+    }
+    if (empty(first) || empty(wait_for_line(t, rig, "@ready", 30.0))) {
         return false
     }
     rig.dest = "org.kde.StatusNotifierItem-{unsafe(process_pid(rig.child))}-1"
