@@ -66,3 +66,11 @@ def public llvm_code_generator_name(ann : AnnotationDeclaration const?) : string
     }
     return ""
 }
+
+//! The CPU class a fat-mode clone is stamped for (`tune_class=`), "" for every other function.
+def public llvm_code_class_name(ann : AnnotationDeclaration const?) : string {
+    for (arg in ann.arguments) {
+        if (arg.name == "tune_class" && arg.basicType == Type.tString) return string(arg.sValue)
+    }
+    return ""
+}

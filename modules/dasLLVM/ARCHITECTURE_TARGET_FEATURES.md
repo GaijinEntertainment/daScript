@@ -82,3 +82,44 @@ another class.
 
 At the runtime of a built artifact the variable is inert for dispatch: the class an exe runs on
 is read from cpuid, never from an environment a build left behind.
+
+## 11. The fat mode - one clone per class, picked from cpuid {#fat-mode}
+
+`DAS_TUNE_MODE=fat` is the third `[tune]` mode (the other two: `skills/tune.md`). It is a
+standalone-exe mode under a baseline: `stamp_fat` (`daslib/llvm_tune.das`) refuses a build that is
+not `-exe` and one with no `DAS_JIT_BASELINE`. The ship set is every class of the baseline's
+ladder that some `[tune_scope(defaults=)]` ships a profile for, at or above the baseline, plus
+the baseline itself - most capable first, the baseline last; adding a profile file grows the
+exe. For each `[tune]` function and each class of the ship set the apply adds a generated clone
+`<name>__fat_<class>` (the class with `_` for `-`), stamped with the class profile's winner when
+the grid carries it and the class's set passes its `requires=`, else the first `fallback=` entry
+the class's set passes, else the reference body. Companions clone per class alongside, taking
+their own profile entry when the class's set can run it and the main's pick otherwise. The
+stamp carries one extra `[llvm_code]` argument, `tune_class`, which folds into the cache keys
+with the rest.
+
+The function's own body becomes the dispatch, generated as daslang: one arm per non-baseline
+class, `if ((tune_fat_mask() & bit) != 0) return <clone>(args)`, most capable first, and the
+unguarded baseline call last. The JIT lowers that to a load, a compare per arm and direct
+calls - no function pointer, no `invoke`. A bit is the class's position on its arch's ladder
+(`tune_fat_class_bit`); the mask is one runtime global that starts at zero, so a kernel called
+before the `[init]` filled it runs the baseline clone, which is always correct.
+
+The emitter (`try_llvm_code_function`, `daslib/llvm_jit.das`) reads `tune_class` off the
+annotation and gives the clone's impl three things: the `target-cpu` and `target-features`
+attributes of the class row, so the backend lowers this one function for the class inside a
+module that targets the baseline; the tier gates swapped to the class's set for the span of the
+generator call (`with_class_target_gates`, `daslib/llvm_jit_common.das`), so a generator that
+branches on `g_target_x64_*` emits the class's form; and `noinline`. The last one is
+load-bearing: x86's inliner refuses a callee whose features exceed the caller's, but AArch64's
+admits one whose body carries no target intrinsic, and the inlined copy would then lower for
+the baseline and the clone would be dead code.
+
+The exe's status `[init]` (`emit_status_init`) first calls `tune_fat_init(baseline)`: it refuses
+a box that lacks any feature of the baseline class by name, then sets the mask to every class
+of the ladder the box is in - membership is cpuid only (`tune_fat_box_in_class`), never the
+build's baseline or a force env - or to the one class `DAS_TUNE_FAT_CLASS` pins, refusing a pin
+the box is not in. `tune_status()` lists one row per clone with its class (`klass`), and
+`log_tune_status` marks the classes this box runs. A profile-covered class needs no sidecar and
+no tuner: the exe carries no grid beyond the reference rows, and a re-tune is a new profile and
+a rebuild.

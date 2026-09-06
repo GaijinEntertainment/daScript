@@ -19,6 +19,7 @@ require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_lower
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_jit_code
+require llvm/daslib/llvm_cpu_class
 require llvm/daslib/llvm_user_modules  // nolint:STYLE030,LINT019 - side-effect require: [llvm_code] generator modules must be in THIS module's closure so their [init] registration runs in the context that reads the registry; STYLE030 is policy-gated, so the keep only fires under a require-analysis run
 require llvm/daslib/llvm_dll_utils
 require daslib/ast_boost
@@ -777,7 +778,21 @@ class public LlvmJitVisitor : AstVisitor {
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
         var gc = LlvmCodeCtx(jit = JitCtx(ctx = g_ctx, builder = g_builder, types = types),
                              fn = fun, impl = ffunc, impl_type = g_fn_types[fnmna.impl()], ann = ann)
-        let generated = invoke_llvm_code_generator(gen_name, gc)
+        var generated = false
+        let klass = llvm_code_class_name(ann)
+        if (empty(klass)) {
+            generated = invoke_llvm_code_generator(gen_name, gc)
+        } else {
+            // a fat-mode clone lowers for its class and its generator sees the class's gates;
+            // noinline keeps it a function - AArch64's inliner admits a callee with more features
+            // when its body carries no target intrinsic, and the inlined copy would lower for the baseline
+            LLVMAddTargetDependentFunctionAttr(ffunc, "target-cpu", jit_cpu_class_row(klass).cpu)
+            LLVMAddTargetDependentFunctionAttr(ffunc, "target-features", jit_class_plus_features(klass))
+            LLVMAddAttributeToFunction(ffunc, attributes.noinline)
+            with_class_target_gates(klass) $ {
+                generated = invoke_llvm_code_generator(gen_name, gc)
+            }
+        }
         if (generated) {
             build_wrapper_function(fnmna, fun.arguments, clone_type(fun.result), isCMRES(fun), null, fun.at)
         }

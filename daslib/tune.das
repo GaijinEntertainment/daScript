@@ -122,23 +122,28 @@ def log_tune_status(appName : string) {
         tuned += (r.source == "manifest" || r.source == "profile") ? 1 : 0
     }
     to_log(LOG_INFO, "{appName}: tune status ({tuned}/{length(rows)} kernels tuned for this box):\n")
+    var fat = false
     for (r in rows) {
-        to_log(LOG_INFO, "  {r.fname}: {empty(r.suffix) ? "reference" : r.suffix} ({r.source})\n")
+        // a fat exe lists one row per class clone, and marks the ones this box runs
+        let klass = empty(r.klass) ? "" : " [{r.klass}{r.active ? " <- this box" : ""}]"
+        fat ||= !empty(r.klass)
+        to_log(LOG_INFO, "  {r.fname}{klass}: {empty(r.suffix) ? "reference" : r.suffix} ({r.source})\n")
     }
-    if (tuned < length(rows)) {
+    if (tuned < length(rows) && !fat) {
         to_log(LOG_INFO, "{appName}: run with --tune to tune the remaining kernels for this box\n")
     }
 }
 
 //! The status table as plain strings - the framework's row type never crosses the guard, so the
 //! caller above is one function in every build; empty without the framework.
-def private tune_status_rows() : array<tuple<fname : string; suffix : string; source : string>> {
-    var rows : array<tuple<fname : string; suffix : string; source : string>>
+def private tune_status_rows() : array<tuple<fname : string; suffix : string; source : string; klass : string; active : bool>> {
+    var rows : array<tuple<fname : string; suffix : string; source : string; klass : string; active : bool>>
     static_if (typeinfo module_exists(llvm_tune)) {
         var inscope st <- tune_status()
         rows |> reserve(length(st))
         for (s in st) {
-            rows |> push((fname = s.fname, suffix = s.suffix, source = s.source))
+            let active = !empty(s.klass) && (tune_fat_mask() & tune_fat_class_bit(s.klass)) != 0
+            rows |> push((fname = s.fname, suffix = s.suffix, source = s.source, klass = s.klass, active = active))
         }
     }
     return <- rows

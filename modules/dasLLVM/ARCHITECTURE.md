@@ -105,7 +105,9 @@ re-emits from the reverted module on, same as the edit did.
 
 The backend's override knobs - the escapes that change what a run compiles, tunes, or emits
 beyond its defaults - are: `DAS_TUNE_POLICY` (replaces the declared/injected tune policy),
-`DAS_TUNE_MODE` (grid/tuner compile modes), `DAS_TUNE_MANIFEST` (pins the sidecar),
+`DAS_TUNE_MODE` (grid/tuner compile modes, and `fat` - one clone per shipped CPU class in a
+standalone exe; `ARCHITECTURE_TARGET_FEATURES.md` sec.11), `DAS_TUNE_FAT_CLASS` (pins the class a
+fat exe runs at startup), `DAS_TUNE_MANIFEST` (pins the sidecar),
 `DAS_TUNE_NOISE_CV` (recalibrates the tuner noise gate), `DAS_TUNE_NOISE_OVERRIDE` (mints
 through a failing gate), `--tune` (forced re-mint), `--tune-only` / `DAS_TUNE_ONLY` (re-mints
 only the named families; the policy guard arms it itself for a profile's residue),

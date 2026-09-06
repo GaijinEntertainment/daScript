@@ -129,6 +129,12 @@ The `DAS_TUNE_MODE` environment variable selects the compile-time behavior:
     benches them and records the winner (`tune`), or bit-exact-gates every
     variant against the reference row (`test`).
 
+`fat`
+    A standalone exe (`llvm-jit -exe`) under `DAS_JIT_BASELINE=<class>` that
+    carries one `<name>__fat_<class>` clone per CPU class the library ships a
+    profile for, and picks the clone from cpuid at startup (*The fat exe*
+    below). Refused outside `-exe` and without the baseline.
+
 ```{note}
 
 A sidecar with **no entry** for a function falls through to its
@@ -372,6 +378,41 @@ A frozen artifact must not demand or run tuning:
 One more compile is inert for a different reason: under the host's
 `-documentation` policy - a documentation or reflection root - every tune
 annotation and the policy rail are off. Ask with `is_building_documentation()`.
+
+## The fat exe - `DAS_TUNE_MODE=fat` under a baseline class
+
+One exe that runs on every box of a CPU class and still serves each faster
+class its own kernels:
+
+```text
+
+DAS_JIT_BASELINE=x86-avx2 DAS_TUNE_MODE=fat daslang -exe -output myapp myapp.das
+```
+
+`DAS_JIT_BASELINE` names the class the exe's plain code targets - `x86-base`,
+`x86-avx2`, `x86-vnni256`, `x86-vnni512`, `x86-amx`, `arm-neon` (M1) or
+`arm-i8mm` (M2 and later); a class is a feature set, never a box model, and
+every profile is keyed by one. Under `fat`, every `[tune]` function gets one
+clone per class of its arch's ladder that a `[tune_scope(defaults=)]` ships a
+profile for, at or above the baseline, plus the baseline itself - adding a
+profile file to the defaults directory grows the exe. Each clone stamps its
+class profile's winner (else the `fallback=` chain resolved against the class's
+feature set, else the reference body), is lowered by the backend for its class
+alone, and never inlines into the baseline code around it. Companions clone
+per class alongside. The function's own body becomes the dispatch: a chain of
+direct calls over a runtime mask, most capable class first, the baseline last.
+
+At startup the exe reads cpuid, refuses a box that lacks any feature of the
+baseline class, and sets the mask to every class of the ladder the box is in.
+`DAS_TUNE_FAT_CLASS=<class>` pins one class instead - the A/B lever for the
+clones an exe carries - and refuses a class the box is not in. `tune_status()`
+lists one row per clone with its `klass`, and `log_tune_status` marks the
+classes this box runs.
+
+Kernels are baked: a fat exe carries no grid, no tuner and no policy rail, and
+a re-tune is a new profile and a rebuild. A per-box sidecar beside the exe
+keeps its `"runtime"` section's role (the library reads those knobs at load);
+its `"kernels"` section says nothing to a fat exe.
 
 `daspkg release` applies "untuned does not start" to artifacts at **build
 time**: the `-exe` build's release-deps JSON reports every scope with

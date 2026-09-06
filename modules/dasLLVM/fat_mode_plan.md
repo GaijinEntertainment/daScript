@@ -17,18 +17,17 @@ among them - is raced inside the exe at first start, because that race needs no 
 
 1. **Baseline class** - `DAS_JIT_BASELINE`, the class table, one truth on every rail. Landed:
    `daslib/llvm_cpu_class.das`, `tests/llvm_jit_baseline.das`.
-2. **Fat stamping** in `daslib/llvm_tune.das` - `DAS_TUNE_MODE=fat`, refused outside `-exe`.
-   The ship set is the scope's shipped profiles at or above the baseline on the target arch's
-   ladder; adding a profile file grows the exe. Per `[tune]` function one `<name>__fat_<class>`
-   clone per class, stamped from that class's profile winner, else the fallback chain resolved
-   against the class's set; companions clone alongside. The reference body stays in the AST. A
-   das global class index, filled by the scope's `[init]` from cpuid walking the ship set down;
-   index 0 is the baseline, so an unfilled global is still correct. `DAS_TUNE_FAT_CLASS=` pins
-   the pick. `tune_status` gains a class column.
-3. **Emitter** - a `tune_class=` function gets the `target-cpu` and `target-features` attrs and
-   the tier gates swapped to the class around its generator call; a fat base function is
-   emitted as an IR stub: load the index, switch, tail-call the clone. LLVM refuses to inline a
-   clone with more features into the baseline stub, which keeps the clone's code in the clone.
+2. **Fat stamping** in `daslib/llvm_tune.das` - `DAS_TUNE_MODE=fat`, refused outside `-exe`
+   and without the baseline. Landed (`ARCHITECTURE_TARGET_FEATURES.md` sec.11): the ship set,
+   the per-class clones and companions, the dispatch chain over a runtime class MASK (one bit
+   per ladder class, so a class's membership is its own full feature set - a vnni512 box
+   without vbmi is not in `x86-vnni512` and takes the avx2 clone), `DAS_TUNE_FAT_CLASS`, the
+   `klass` column of `tune_status`. Test: `tests/llvm_tune_fat.das`.
+3. **Emitter** - landed: the clone's `target-cpu` / `target-features` attributes, the tier
+   gates swapped to the class around its generator, and `noinline` (AArch64's inliner would
+   otherwise pull an intrinsic-free clone into the baseline). The dispatch is generated as
+   daslang and lowered by the JIT to a load, compares and direct calls; an IR stub was not
+   needed.
 4. **The runtime section in the exe** - the Metal twin races move from the harness into a
    library module the exe links; the exe runs them once at first start with the progress
    display, writes the sidecar beside itself, reads it from then on.

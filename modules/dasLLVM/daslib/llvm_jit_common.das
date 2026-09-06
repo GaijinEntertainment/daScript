@@ -673,6 +673,50 @@ def public init_jit_target_flags(target_triple : string = ""; host_features_aske
     g_lattice_fp16_ops_native = g_target_is_aarch64 || g_target_x64_f16c
 }
 
+// The tier gates as one CPU class's set, for the span of `blk` - a fat-mode clone's generator
+// emits for its class, not the baseline the process targets; the gates are restored after.
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+def public with_class_target_gates(klass : string; blk : block<void>) {
+    let s_avx2 = g_target_x64_avx2
+    let s_f16c = g_target_x64_f16c
+    let s_vnni256 = g_target_x64_vnni256
+    let s_avx512bw = g_target_x64_avx512bw
+    let s_avx512vnni = g_target_x64_avx512vnni
+    let s_avx512vbmi = g_target_x64_avx512vbmi
+    let s_vnniint8 = g_target_x64_vnniint8
+    let s_amx = g_target_x64_amx
+    let s_dotprod = g_target_arm64_dotprod
+    let s_i8mm = g_target_arm64_i8mm
+    let s_fullfp16 = g_target_arm64_fullfp16
+    let s_lattice = g_lattice_fp16_ops_native
+    g_target_x64_avx2 = g_target_is_x64 && jit_class_has(klass, "avx2")
+    g_target_x64_f16c = g_target_is_x64 && jit_class_has(klass, "f16c")
+    g_target_x64_vnni256 = g_target_x64_avx2 && (jit_class_has(klass, "avxvnni")
+        || (jit_class_has(klass, "avx512vnni") && jit_class_has(klass, "avx512vl")))
+    g_target_x64_avx512bw = g_target_x64_avx2 && jit_class_has(klass, "avx512f") && jit_class_has(klass, "avx512bw")
+    g_target_x64_avx512vnni = g_target_x64_avx512bw && jit_class_has(klass, "avx512vnni")
+    g_target_x64_avx512vbmi = g_target_x64_avx512bw && jit_class_has(klass, "avx512vbmi")
+    g_target_x64_vnniint8 = g_target_x64_avx2 && jit_class_has(klass, "avxvnniint8")
+    g_target_x64_amx = g_target_is_x64 && jit_class_has(klass, "amx-tile") && jit_class_has(klass, "amx-int8")
+    g_target_arm64_dotprod = g_target_is_aarch64 && jit_class_has(klass, "dotprod")
+    g_target_arm64_i8mm = g_target_is_aarch64 && jit_class_has(klass, "i8mm")
+    g_target_arm64_fullfp16 = g_target_is_aarch64 && jit_class_has(klass, "fullfp16")
+    g_lattice_fp16_ops_native = g_target_is_aarch64 || g_target_x64_f16c
+    invoke(blk)
+    g_target_x64_avx2 = s_avx2
+    g_target_x64_f16c = s_f16c
+    g_target_x64_vnni256 = s_vnni256
+    g_target_x64_avx512bw = s_avx512bw
+    g_target_x64_avx512vnni = s_avx512vnni
+    g_target_x64_avx512vbmi = s_avx512vbmi
+    g_target_x64_vnniint8 = s_vnniint8
+    g_target_x64_amx = s_amx
+    g_target_arm64_dotprod = s_dotprod
+    g_target_arm64_i8mm = s_i8mm
+    g_target_arm64_fullfp16 = s_fullfp16
+    g_lattice_fp16_ops_native = s_lattice
+}
+
 [macro_function]
 def public init_jit(cg_opt_level : uint; target_triple : string = ""; host_features : bool = true) {
     // also prevent double init (g_mod != null)
