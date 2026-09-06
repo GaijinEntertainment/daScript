@@ -275,6 +275,9 @@ records/sidecar corpus, so a writer-schema change reds here first.
 runtime section and the checked apply reading it back (the Metal twins race on a Metal box, ~15 s),
 the box-profile apply firing an installed race hook exactly once for a missing section, and the
 fat hook declining outside a fat exe.
+`test_fat_hook_umbrella.das` - model-free: a program requiring the engine umbrella alone (what
+the shipped bench requires, never the facade) carries the first-start race hook - the umbrella's
+`[init]` set registers it, or a fat bench exe would serve Metal uncrowned forever.
 `failed_dasllama_lint_require.das` - model-free, expected-compile-failure: the
 facade lint trips DASLLAMA001 (code 50503) on a direct engine require with no escape.
 `failed_dasllama_lint_sidedoor.das` - model-free, expected-compile-failure: the lint's tree

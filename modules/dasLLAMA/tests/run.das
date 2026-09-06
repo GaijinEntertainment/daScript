@@ -112,6 +112,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_env_registry.das",
                     "modules/dasLLAMA/tests/test_exchange_schema.das",
                     "modules/dasLLAMA/tests/test_facade_docs.das",
+                    "modules/dasLLAMA/tests/test_fat_hook_umbrella.das",
                     "modules/dasLLAMA/tests/test_fat_start.das",
                     "modules/dasLLAMA/tests/test_gen_records_args.das",
                     "modules/dasLLAMA/tests/test_gguf_quant.das",
@@ -244,7 +245,7 @@ def area_tests(area : string) : array<string> {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das",
                     "test_box_ident.das", "test_box_profile.das", "test_dasllama_lint_contracts.das",
                     "test_dasllama_lint_escape.das", "test_dlim_wipe.das", "test_env_registry.das",
-                    "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_fat_start.das", "test_gen_records_args.das",
+                    "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_fat_hook_umbrella.das", "test_fat_start.das", "test_gen_records_args.das",
                     "test_model_specs.das", "test_program_roots.das", "test_run_suites.das", "test_run_summary.das",
                     "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das", "test_tune_interrupt.das" ]
     } elif (area == "llm") {

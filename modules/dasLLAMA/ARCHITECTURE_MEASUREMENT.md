@@ -266,7 +266,9 @@ kernel-form gain of a tensor twin over its simdgroup kernel per twin-race row on
 (`harness/tune_kernels.das`, the metal_crowns family) - and a shipped Mac exe would run
 uncrowned forever. The section needs no rebuild, so the exe
 mints it itself: `dasllama_fat_start` registers `dasllama_fat_first_start` with the box-profile
-apply (`set_runtime_race_hook`), and `apply_box_profile_runtime_checked` fires the hook when the
+apply (`set_runtime_race_hook`) from its `[init]`, and the engine umbrella
+(`dasllama_transformer`) requires the module so every engine program carries the registration -
+the shipped bench requires the umbrella, never the facade; `apply_box_profile_runtime_checked` fires the hook when the
 sidecar is absent, another box's, or carries no runtime section, then reads the file the hook
 wrote. The hook answers false outside a fat exe (`tune_fat_built()`); inside one it runs
 `dasllama_race_runtime_section`: the Metal twin races (`dasllama_metal_crown_race` - both halves,
