@@ -39,7 +39,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    block no longer declines. Qwen3.5-9B UD-Q5_K_XL decodes resident at 49.7 tg (0.88x of
    upstream; was 11.1 on the per-op rails). The PREFILL half followed: the window chain carries
    the recurrent block (conv + chunked scan on the layer's device state), gated attention and
-   partial rotary on the batch kernels, and flushes the state home for the decode's upload
+   partial rotary on the batch kernels, and hands the device state to the session for the decode
    (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2j, `_DECODE.md` sec.2.2v; gate
    `tests/test_gpu_resident_hybrid.das`, one- and two-window cells). The 9B UD file on the
    resident driver: pp512 1365 (was 95.7; upstream 2527 - 0.54x), tg128 53.3 (upstream 56.7, 0.94x).
@@ -77,9 +77,9 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    per-role table labels a recurrent layer's stamps with the attention head's role names; (d) DONE
    9/5 - the f32 arm is `dn_ba_cls`, gated by `test_vkd_dn_ba` (partial and full tiles) and
    `test_vkd_dn_9b_ba` (the 9B geometry); the scan has `test_vkd_dn_9b_scan` beside the family
-   cell, both against the sequential CPU rule; (e) the prefill's
-   state handoff is a flush-to-host + re-upload per recurrent layer at the prompt/decode seam -
-   an owner bind that keeps the device copy would save the round trip (once per generation).
+   cell, both against the sequential CPU rule; (e) DONE 9/5 - the prefill hands each slot to the
+   session (valid, dirty, owned) instead of flushing it home and re-uploading, and window 0 zeroes
+   the slots with fills inside the window command: 48 host round trips gone per prefill.
 3. **KV codecs on device** - Vulkan's mirror serves f16 (the armed default) and f32 through
    the codec-templated kernel stamps; Metal additionally carries q8_0/tq4. Port the quant
    codecs next (the CPU truth is `dasllama_convert`'s KV codec functions; the Metal quant

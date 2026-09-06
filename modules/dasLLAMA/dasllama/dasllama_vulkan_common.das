@@ -2952,6 +2952,13 @@ def cmd_copy_range(raw : VkCommandBuffer; src : uint64; src_off : int64; dst : u
     }
 }
 
+// zero a device range inside a command (a transfer write; offset and size multiples of 4)
+def cmd_fill_zero(raw : VkCommandBuffer; dst : uint64; dst_off : int64; bytes : int64) {
+    unsafe {
+        vkCmdFillBuffer(raw, reinterpret<VkBuffer>(dst), uint64(dst_off), uint64(bytes), 0u)
+    }
+}
+
 // host-wait the transfer timeline up to `v` — the backstop before re-recording the shared xfer
 // cmd, and the sync (cold-miss) completion wait
 def xfer_host_wait(v : uint64) {

@@ -219,12 +219,12 @@ sec.2.2j): a recurrent layer's window block runs the qkv and z batch GEMMs, the 
 rows into the layer's own smalls, the conv, the sequential scan over the layer's own device
 state slot (the raw o rows in the tier's workspace), the o requant and the out GEMM into the block
 output, so the window command needs no host round trip per layer. The state slots are the
-decode's (`RLayer.dn`): the prefill zeroes them at window 0 (a position-zero prefill starts the
-forward-only state fresh - the engine's `dn_reset` on the host, the chain's own zero copy on the
-device) and, after the last window, flushes each layer's state and per-channel conv history home
-to the session (`vk_rdec_prefill_dn_flush`) and marks the slot invalid, so the first decode's
-owner bind uploads the host copy the ordinary way; the host stays the one authority between the
-two chains. The session's deltanet position is the prompt length after the prefill.
+decode's (`RLayer.dn`): the prefill zeroes them at window 0 with transfer fills inside the window
+command (a position-zero prefill starts the forward-only state fresh - the engine's `dn_reset` on
+the host, the fills on the device) and, after the last window, hands each layer's slot to the
+session (`vk_rdec_prefill_dn_own`: valid, dirty, owned, the history in ring image 0), so the first
+decode's owner bind finds the state in place and a host read syncs it down through `dn_flush_layer`;
+no state crosses the bus at the seam. The session's deltanet position is the prompt length after the prefill.
 
 **A session whose rows the mirror lacks takes the mirror from the host cache.** A session that
 prefilled on the CPU rails (a pinned-off resident prefill, a CPU-only session) or that another

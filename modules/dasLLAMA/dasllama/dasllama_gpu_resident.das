@@ -1102,11 +1102,11 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
         rdec_prefill(s.x_b, cb, npos, s.logits)
     }
     if (c.recr_mask != 0ul) {
-        // the device-advanced recurrent state comes home: the host copy is authoritative for the first decode's upload
+        // the device-advanced recurrent state stays on the device as this session's slot; a host read syncs it down (dn_flush_layer)
         for (l in range64(c.n_layers)) {
             continue if (s.dn_state_prefix[l] < 0l)
             unsafe {
-                rdec_dn_prefill_flush(l, addr(s.dn_state[s.dn_state_prefix[l]]), addr(s.dn_conv_state[s.dn_conv_prefix[l]]))
+                rdec_dn_prefill_own(l, addr(s.dn_state[s.dn_state_prefix[l]]), addr(s.dn_conv_state[s.dn_conv_prefix[l]]))
             }
         }
         s.dn_pos = npos

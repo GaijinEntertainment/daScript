@@ -441,22 +441,17 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     }
 }
 
-// Zero this layer's device state and its conv-ring image 0 at prefill window 0 (a fresh session).
-def private pf_dn_reset(l, nvh, ds, cd, taps : int64) {
-    var L & = unsafe(g_rd.layers[l])
-    unsafe {
-        memset32(g_gpu.dn_state_stage.mapped, 0u, int(nvh * ds * ds))
-        memset32(reinterpret<void?>(reinterpret<float?>(g_gpu.dn_smalls.mapped) + DN_SM_HIST), 0u, int(cd * taps))
+// Zero every recurrent layer's device state and conv-ring image 0 inside the window command at
+// prefill window 0 (a fresh session): transfer fills, no host round trip.
+def private pf_dn_zero(raw : VkCommandBuffer; var h : VkHaz) {
+    let hist_bytes = g_rd.dn_cd * (g_rd.dn_dconv - 1l) * 4l
+    vhz_dep(raw, h, 0u, VHZ_DNST | VHZ_DNSM, true)
+    for (L in g_rd.layers) {
+        if (L.recurrent) {
+            cmd_fill_zero(raw, L.dn.state_dev, 0l, L.dn.state_bytes)
+            cmd_fill_zero(raw, L.dn.smalls_dev, DN_SM_HIST * 4l, hist_bytes)
+        }
     }
-    let raw = g_gpu.batch_cmd
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    cmd_copy_whole(raw, g_gpu.dn_state_stage.buf, L.dn.state_dev, L.dn.state_bytes)
-    cmd_copy_range(raw, g_gpu.dn_smalls.buf, DN_SM_HIST * 4l, L.dn.smalls_dev, DN_SM_HIST * 4l, cd * taps * 4l)
-    vk_check(vkEndCommandBuffer(raw), null)
-    submit_wait(g_gpu.batch_cmd)
 }
 
 // One recurrent layer's block into the prefill window command: plain requant, qkv + z GEMMs, the
@@ -804,29 +799,20 @@ def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : ar
     pf_run(nox, tokens, true, emb_scale, cos_batch, npos, logits)
 }
 
-//! After a resident prefill: flush recurrent layer `l`'s device state and per-channel conv history
-//! home to the session, then mark the slot invalid so the first decode uploads the host copy cleanly.
+//! After a resident prefill: recurrent layer `l`'s device-advanced state and conv history stay on the
+//! device as the session's (`stp`/`histp` name the owner) - the slot is valid, dirty and bound, so the
+//! first decode's owner bind finds it in place and a host read syncs it down (`dn_flush_layer`).
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
-def vk_rdec_prefill_dn_flush(l : int64; stp : float?; histp : float?) {
+def vk_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
     if (g_gpu != null && g_gpu.dry) {
         return
     }
     var L & = unsafe(g_rd.layers[l])
-    let raw = g_gpu.batch_cmd
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    cmd_copy_whole(raw, L.dn.state_dev, g_gpu.dn_state_host.buf, L.dn.state_bytes)
-    cmd_copy_range(raw, L.dn.smalls_dev, DN_SM_HIST * 4l, g_gpu.dn_tail_host.buf, 0l, L.dn.ring_bytes)
-    vk_check(vkEndCommandBuffer(raw), null)
-    submit_wait(g_gpu.batch_cmd)
-    unsafe {
-        memcpy(reinterpret<void?>(stp), g_gpu.dn_state_host.mapped, L.dn.state_bytes)
-        memcpy(reinterpret<void?>(histp), g_gpu.dn_tail_host.mapped, L.dn.ring_bytes)
-    }
-    L.dn.valid = false   // the first decode's rdec_dn_own uploads the host copy cleanly
-    L.dn.dirty = false
+    L.dn.parity = g_rd.dn_parity   // the last window's tail landed in the prefill's ring image
+    L.dn.owner_state_addr = intptr(stp)
+    L.dn.owner_hist_addr = intptr(histp)
+    L.dn.valid = true
+    L.dn.dirty = true
 }
 
 //! False when the gather rail cannot build on this device (the caller keeps the CPU embed)
@@ -898,11 +884,6 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * g_rd.head_size)]), wlen * g_rd.head_size * 4l)
             if (w0 == 0l && g_rd.hybrid) {
                 g_rd.dn_parity = 0   // the prefill's cross-window conv ring is image 0; decode continues from it
-                for (rl in range64(g_rd.n_layers)) {
-                    if (g_rd.layers[rl].recurrent) {
-                        pf_dn_reset(rl, g_rd.dn_nvh, g_rd.dn_ds, g_rd.dn_cd, g_rd.dn_dconv - 1l)
-                    }
-                }
             }
             let bp = int(g_rd.n_layers * PF_ROLES)
             let t_prep = get_time_usec(tp0)
@@ -915,6 +896,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             pfq_begin(raw)
             pfq_ts(raw)   // q0: submit start
             var h : VkHaz
+            if (w0 == 0l && g_rd.hybrid) {
+                pf_dn_zero(raw, h)
+            }
             pfq_ts(raw)   // q1: kept for the role-aggregation stamp shape (params ride push now)
             let ropewg = (wlen * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
             let fa128 = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
