@@ -810,6 +810,23 @@ def public tern_words : array<uint> {
     return clone_to_move(tern_spv)
 }
 
+// ===== a ternary / short-circuit whose operand indexes a global-rooted array: the operand the
+// condition rules out is not evaluated — a branch through a hoisted temp, not OpSelect (OpSelect would
+// load the guarded index out of range). The pure ternaries beside them keep OpSelect. =====
+[compute_shader(local_size_x=64, name="tern_lazy_spv"), marker(no_coverage)]
+def tern_lazy {
+    let i = gl_GlobalInvocationID.x
+    let guarded = i < 100u ? fdata[i] : 0.0                 // an ssbo load in the true arm -> branch
+    let both = i > 0u && fdata[i - 1u] > 0.0                // an ssbo load in the && rhs -> branch
+    let either = i == 0u || fdata[i - 1u] < 0.0             // ... and in the || rhs
+    let pure = guarded > 0.0 ? guarded : -guarded           // nolint:PERF016 -- pure arms: still OpSelect
+    fdata[i] = pure + (both ? 1.0 : 0.0) + (either ? 2.0 : 0.0)
+}
+
+def public tern_lazy_words : array<uint> {
+    return clone_to_move(tern_lazy_spv)
+}
+
 // ===== Phase-8.2 vector arithmetic + a folded const-vector operand. Component-wise +/-/ lower to
 // OpFAdd/OpFSub/OpFDiv on the vector result type (scalar_class reads the lane kind); unary - is
 // OpFNegate. float2(0.5,0.5) as an operand folds to ExprConstFloat2 -> OpConstantComposite (the gap
