@@ -5826,16 +5826,17 @@ def test_vkd_dn_ba(t0 : T?) {
                 for (i in range(length(xh))) {
                     xh[i] = float(hash_word(uint(i) + 77777u) % 1000u) / 500.0 - 1.0
                 }
+                var wh16 <- pack_f16(wh)   // the device keeps the rows f16: the oracle dots the rounded weights
                 for (p in range(npos)) {
                     for (e in range(ne)) {
                         var acc = 0.0
                         for (k in range(dim)) {
-                            acc += wh[woff + e * dim + k] * xh[p * dim + k]
+                            acc += float(wh16[woff + e * dim + k]) * xh[p * dim + k]
                         }
                         want[(e < nvh ? ob_b : ob_g) + p * ostride + e % nvh] = acc
                     }
                 }
-                let w_bytes = int64(length(wh)) * 4l
+                let w_bytes = int64(length(wh16)) * 2l
                 let x_bytes = int64(length(xh)) * 4l
                 let o_bytes = int64(out_n) * 4l
                 let wd = make_device_buf(w_bytes)
@@ -5845,7 +5846,7 @@ def test_vkd_dn_ba(t0 : T?) {
                 var got : array<float>
                 got |> resize(out_n)
                 unsafe {
-                    upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
+                    upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
                     upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
                     var sc = set_dn_ba_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
                     var raw = alloc_cmd()
@@ -5854,7 +5855,7 @@ def test_vkd_dn_ba(t0 : T?) {
                     var h : VkHaz
                     var pc = DnBaArgs(npos = uint(npos), dim = uint(dim), nvh = uint(nvh), woff = uint(woff), xstride = uint(dim),
                         obase_b = uint(ob_b), obase_g = uint(ob_g), ostride = uint(ostride))
-                    enc_dn_ba_cls(raw, h, sc, pc, int64((npos + 15) / 16))
+                    enc_dn_ba_cls(raw, h, sc, pc, dn_ba_wgs(int64(npos), int64(nvh)))
                     vhz_dep(raw, h, 2u, 0u, true)
                     cmd_copy_range(raw, od, 0l, host.buf, 0l, o_bytes)
                     vk_check(vkEndCommandBuffer(raw), null)
@@ -5873,6 +5874,7 @@ def test_vkd_dn_ba(t0 : T?) {
                 }
                 t |> success(bad == 0, "dn_ba npos {npos}: {bad} of {npos * ne} outputs off the CPU dot")
                 delete wh
+                delete wh16
                 delete xh
                 delete want
                 delete got
@@ -6056,16 +6058,17 @@ def test_vkd_dn_9b_ba(t0 : T?) {
             for (i in range(length(xh))) {
                 xh[i] = float(hash_word(uint(i) + 77777u) % 1000u) / 500.0 - 1.0
             }
+            var wh16 <- pack_f16(wh)
             for (p in range(npos)) {
                 for (e in range(ne)) {
                     var acc = 0.0
                     for (k in range(dim)) {
-                        acc += wh[woff + e * dim + k] * xh[p * dim + k]
+                        acc += float(wh16[woff + e * dim + k]) * xh[p * dim + k]
                     }
                     want[(e < nvh ? ob_b : ob_g) + p * ostride + e % nvh] = acc
                 }
             }
-            let w_bytes = int64(length(wh)) * 4l
+            let w_bytes = int64(length(wh16)) * 2l
             let x_bytes = int64(length(xh)) * 4l
             let o_bytes = int64(out_n) * 4l
             let wd = make_device_buf(w_bytes)
@@ -6074,9 +6077,9 @@ def test_vkd_dn_9b_ba(t0 : T?) {
             var host = make_host_buf(o_bytes, true, [cached = true])
             var got : array<float>
             got |> resize(out_n)
-            let wgs = int64((npos + 15) / 16)
+            let wgs = dn_ba_wgs(int64(npos), int64(nvh))
             unsafe {
-                upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
+                upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
                 upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
                 var sc = set_dn_ba_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
                 var raw = alloc_cmd()
@@ -6106,6 +6109,85 @@ def test_vkd_dn_9b_ba(t0 : T?) {
             }
             t |> success(bad == 0, "dn_ba 9B geometry: {bad} of {npos * ne} outputs off the CPU dot")
             delete wh
+            delete wh16
+            delete xh
+            delete want
+            delete got
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+// the decode's beta/alpha GEMV over the f16 rows: ne rows at a row base, the ne outputs at an output base
+[test]
+def test_vkd_router_gemv_f16(t0 : T?) {
+    t0 |> run("router_gemv_f16 (the decode's f16 beta/alpha rows) == the CPU dot at a row base and an output base") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            verify(ensure_router_gemv_f16_cls(), "the router_gemv_f16 class rail must engage on a live device")
+            let dim = 4096
+            let ne = 32
+            let woff = ne * dim   // the second layer's alpha rows
+            let obase = 16
+            let out_n = obase + ne + 8
+            var wh : array<float>
+            var xh : array<float>
+            var want : array<float>
+            wh |> resize(woff + ne * dim)
+            xh |> resize(dim)
+            want |> resize(out_n)
+            for (i in range(length(wh))) {
+                wh[i] = float(hash_word(uint(i) + 4242u) % 1000u) / 500.0 - 1.0
+            }
+            for (i in range(dim)) {
+                xh[i] = float(hash_word(uint(i) + 99u) % 1000u) / 500.0 - 1.0
+            }
+            var wh16 <- pack_f16(wh)
+            for (e in range(ne)) {
+                var acc = 0.0
+                for (k in range(dim)) {
+                    acc += float(wh16[woff + e * dim + k]) * xh[k]
+                }
+                want[obase + e] = acc
+            }
+            let w_bytes = int64(length(wh16)) * 2l
+            let x_bytes = int64(dim) * 4l
+            let o_bytes = int64(out_n) * 4l
+            let wd = make_device_buf(w_bytes)
+            let xd = make_device_buf(x_bytes)
+            let od = make_device_buf(o_bytes)
+            var host = make_host_buf(o_bytes, true, [cached = true])
+            var got : array<float>
+            got |> resize(out_n)
+            unsafe {
+                upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
+                upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
+                var sc = set_router_gemv_f16_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase))
+                enc_router_gemv_f16_cls(raw, h, sc, pc, int64(ne))
+                vhz_dep(raw, h, 2u, 0u, true)
+                cmd_copy_range(raw, od, 0l, host.buf, 0l, o_bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                submit_wait(raw)
+                memcpy(addr<void?>(got[0]), host.mapped, o_bytes)
+            }
+            var bad = 0
+            for (e in range(ne)) {
+                if (abs(got[obase + e] - want[obase + e]) > 1e-3 * max(1.0, abs(want[obase + e]))) {
+                    bad++
+                }
+            }
+            t |> success(bad == 0, "router_gemv_f16: {bad} of {ne} outputs off the CPU dot")
+            delete wh
+            delete wh16
             delete xh
             delete want
             delete got

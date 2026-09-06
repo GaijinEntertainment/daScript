@@ -229,6 +229,9 @@ def dn_scan_wgs(nvh, ds : int64) : int64 {
     let cpg = 4l * (32l / (ds / 16l))
     return nvh * ((ds + cpg - 1l) / cpg)
 }
+
+//! The prefill's beta/alpha tile GEMM's workgroups: 16-position tiles x 16-output groups over the 2 x nvh rows.
+def dn_ba_wgs(npos, nvh : int64) : int64 => ((npos + 15l) / 16l) * ((2l * nvh + 15l) / 16l)
 let DN_MAX_HEADS = 32l
 let DN_MAX_CD = 8_192l
 let DN_MAX_DCONV = 4l
@@ -2058,9 +2061,9 @@ struct RDec {
     // the hybrid (deltanet) form: geometry + the buffers every recurrent layer shares
     hybrid : bool
     dn_cd, dn_kd, dn_di, dn_nvh, dn_nkh, dn_ds, dn_dconv : int64
-    dn_ba_f32 : bool              // beta/alpha rows are f32 (dn_ba_dev) rather than q8 arena planes
+    dn_ba_f32 : bool              // beta/alpha rows come as f32 in the file (dn_ba_dev, f16 on the device) rather than q8 arena planes
     dn_proj_dev : uint64          // [cd + di] floats: the fused qkv row, the z row at cd
-    dn_ba_dev : uint64            // f32 arm: every recurrent layer's [beta ; alpha] rows, [2 x nvh x dim] per layer
+    dn_ba_dev : uint64            // f32 arm: every recurrent layer's [beta ; alpha] rows, [2 x nvh x dim] per layer, f16
     dn_ba_bytes : int64
     dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
     dn_parity : int               // the shared conv-ring parity: every recurrent layer steps once per token

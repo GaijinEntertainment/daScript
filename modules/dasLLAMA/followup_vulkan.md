@@ -58,12 +58,15 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      221 ms, pp512 2010 (0.80x of 2527), tg128 52.6 (0.93x). DONE 9/5 (later): the host seams
      (window-0 fills in the command, the slot handed to the session - item (e)) took pp512 to
      2282; the dn qkv/z/out GEMMs on the f16-fed cm2 tiles (P4: qkv 21.0 -> 15.4 ms, z 10.2 ->
-     7.1, out 10.4 -> 9.2, two f16 converts +0.5) to 2361 (0.93x). What is left in the window, in
-     milliseconds: the FFN GEMMs ~78 across both heads (cm2 tiles, at par); attention 21 = the
-     scalar `DaAttnB` tile at hs 256 (the cm2 fa tile and the h128 twin serve 64/128 only) - P1;
-     scan 17.7 (35 loads per token per lane, latency bound - a two-token unroll is the next scan
-     lever); the dn GEMMs 32; ba 11.7 (f16 rows would halve the read); conv 5, cls 2,
-     add+rms/act/converts ~9.
+     7.1, out 10.4 -> 9.2, two f16 converts +0.5) to 2361 (0.93x); the scan's k/q rows staged in
+     shared per four-subgroup workgroup (17.5 -> 15.3; staging or the scalars a token ahead measured
+     no faster - the dependent chain is what remains) to 2387; the beta/alpha rows f16 on the
+     device and the tile GEMM regridded to 16-position x 16-output tiles (9.4 -> 6.1; the bytes
+     alone moved nothing, the grid did) to 2439 (0.965x), tg128 54.2 (0.956x), window 200 ms. What
+     is left in the window, in milliseconds: the FFN GEMMs ~78 across both heads (cm2 tiles, at
+     par); attention 21 = the scalar `DaAttnB` tile at hs 256 (the cm2 fa tile and the h128 twin
+     serve 64/128 only) - P1, the largest single role; scan 15 (a second column per lane would
+     interleave two chains); the dn GEMMs 28; ba 6; conv 5, cls 2, add+rms/act/converts ~9.
    - tg128 = 18.9 ms GPU/token (host wall 19.4; upstream 17.6): every GEMV role sits at 360-420
      GB/s (bandwidth-bound, at par per byte); the bytes are the gap: the loader's Q8_0 transcode of
      the deltanet qkv (Q5_K in the file, 24 x 33.5M params) and z (Q6_K) planes reads ~400 MB more

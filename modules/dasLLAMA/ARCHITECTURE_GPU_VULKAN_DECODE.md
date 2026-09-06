@@ -181,9 +181,9 @@ at the step's beta and g rows, the fused deltanet step (`dn_step_cls`, the same 
 per-op tier's `vk_moe_dn_step` dispatches), and the out GEMV. Both heads leave the block output
 in `xb2`, so the residual add, the FFN and the next layer's norm never know which head ran. The
 deltanet planes are the loader's Q8 transcode; the beta and alpha rows are q8 arena planes when
-the file carries them quantized, or - the F32-on-disk case - one f32 device buffer of every
-recurrent layer's `[beta ; alpha]` rows that the router-form f32 GEMV reads with an output base
-into the smalls. A hybrid takes the split activation rail (no fused add+rms+requant): the f32
+the file carries them quantized, or - the F32-on-disk case - one f16 device copy of every
+recurrent layer's `[beta ; alpha]` rows that the router-form GEMV's f16 twin reads with an output
+base into the smalls. A hybrid takes the split activation rail (no fused add+rms+requant): the f32
 GEMVs read the normed row `xb`, which the fused twin never writes.
 
 **Each recurrent layer owns a device state slot in the per-op step's shape** (`DnStep`: the

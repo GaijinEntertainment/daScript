@@ -572,22 +572,24 @@ struct RouterArgs {
     obase : uint  // output row base (the resident deltanet arm lands beta/alpha rows in the smalls)
 }
 
-[vk_dispatch(name = "router_gemv_cls", grid = "ne", params = "ne : int64")]
-class RouterGemv {
-    @ssbo @binding = 0 @role = "weight" w : array<float>   // the router planes, row-major [ne x dim] per layer
+// the one-row router GEMV over ne weight rows - the MoE span's f32 router plane, or a hybrid's
+// beta/alpha rows kept f16 on the device (KT); one workgroup per output row
+[ |> template_struct_instance]
+class template RouterGemvT {
+    @ssbo @binding = 0 @role = "weight" w : array<KT>   // the rows, row-major [ne x dim] per layer
     @ssbo @binding = 1 x : array<float>       // the FFN-normed row
     @ssbo @binding = 2 logits : array<float>  // ne logits
     @push_constant pa : RouterArgs
     @workgroup part : float[64]
 
-    [spirv_kernel(local_size_x = 256, name = "router_gemv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
         let e = gl_WorkGroupID.x
         let base = pa.woff + e * pa.dim
         var acc = 0.0
         var i = gl_LocalInvocationID.x
         while (i < pa.dim) {
-            acc += w[base + i] * x[i]
+            acc += float(w[base + i]) * x[i]   // nolint:PERF020 -- KT converts; the f32 twin's cast is free
             i += 256u
         }
         let s = subgroupAdd(acc)
@@ -607,6 +609,17 @@ class RouterGemv {
     }
 }
 
+[vk_dispatch(name = "router_gemv_cls", grid = "ne", params = "ne : int64")]
+class RouterGemv : RouterGemvT {
+    typedef KT = float
+}
+
+// the hybrid's beta/alpha rows, f16 on the device
+[vk_dispatch(name = "router_gemv_f16_cls", grid = "ne", params = "ne : int64")]
+class RouterGemvF16 : RouterGemvT {
+    typedef KT = float16
+}
+
 struct DnBaArgs {
     npos : uint
     dim : uint
@@ -618,68 +631,67 @@ struct DnBaArgs {
     ostride : uint
 }
 
-// the prefill's f32 beta/alpha projection as a GEMM: one workgroup per 16 positions computes all
-// 2 x nvh outputs, x and the weight rows staged 32 k at a time (the rows read once per 16 positions,
-// where a per-position GEMV re-reads them per position); one invocation owns one position x 4 outputs
+// the prefill's beta/alpha projection as a GEMM: one workgroup per (16 positions, 16 outputs) tile,
+// x and the weight rows staged 32 k at a time (two elements of each per invocation), one invocation
+// one output; the grid is position tiles x output groups so a 64-row layer fills the card
 [vk_dispatch(name = "dn_ba_cls", grid = "wgs", params = "wgs : int64")]
 class DnBaGemm {
-    @ssbo @binding = 0 @role = "weight" w : array<float>   // the f32 [beta ; alpha] rows per layer
+    @ssbo @binding = 0 @role = "weight" w : array<float16>   // the [beta ; alpha] rows per layer, f16 on the device
     @ssbo @binding = 1 x : array<float>       // the normed rows
     @ssbo @binding = 2 outp : array<float>    // the layer smalls (beta / g rows, position-major)
     @push_constant pa : DnBaArgs
     @workgroup xs : float[528]                 // 16 positions x 32 k, stride 33 (bank-spread)
-    @workgroup ws : float[2112]                // 64 rows x 32 k, stride 33
+    @workgroup ws : float[528]                 // 16 rows x 32 k, stride 33
 
     [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv")]
     def run {
         let tid = gl_LocalInvocationID.x
-        let p0 = gl_WorkGroupID.x * 16u
-        let p = tid / 16u
-        let e0 = (tid % 16u) * 4u
         let ne = 2u * pa.nvh
-        let live = p0 + p < pa.npos && e0 < ne
-        var a0 = 0.0
-        var a1 = 0.0
-        var a2 = 0.0
-        var a3 = 0.0
+        let egroups = (ne + 15u) / 16u
+        let p0 = (gl_WorkGroupID.x / egroups) * 16u
+        let eg0 = (gl_WorkGroupID.x % egroups) * 16u
+        let p = tid / 16u
+        let el = tid % 16u
+        let e = eg0 + el
+        let live = p0 + p < pa.npos && e < ne
+        let r = tid / 32u
+        let k = tid % 32u
+        var a = 0.0
         var kb = 0u
         while (kb < pa.dim) {
-            var i = tid
-            while (i < 16u * 32u) {
-                let r = i / 32u
-                let k = i % 32u
-                xs[r * 33u + k] = p0 + r < pa.npos ? x[(p0 + r) * pa.xstride + kb + k] : 0.0
-                i += 256u
+            if (p0 + r < pa.npos) {
+                xs[r * 33u + k] = x[(p0 + r) * pa.xstride + kb + k]
+            } else {
+                xs[r * 33u + k] = 0.0
             }
-            i = tid
-            while (i < ne * 32u) {
-                let r = i / 32u
-                let k = i % 32u
-                ws[r * 33u + k] = w[pa.woff + r * pa.dim + kb + k]
-                i += 256u
+            if (p0 + r + 8u < pa.npos) {
+                xs[(r + 8u) * 33u + k] = x[(p0 + r + 8u) * pa.xstride + kb + k]
+            } else {
+                xs[(r + 8u) * 33u + k] = 0.0
+            }
+            if (eg0 + r < ne) {
+                ws[r * 33u + k] = float(w[pa.woff + (eg0 + r) * pa.dim + kb + k])
+            } else {
+                ws[r * 33u + k] = 0.0
+            }
+            if (eg0 + r + 8u < ne) {
+                ws[(r + 8u) * 33u + k] = float(w[pa.woff + (eg0 + r + 8u) * pa.dim + kb + k])
+            } else {
+                ws[(r + 8u) * 33u + k] = 0.0
             }
             barrier()
             if (live) {
-                var k = 0u
-                while (k < 32u) {
-                    let xv = xs[p * 33u + k]
-                    a0 += xv * ws[e0 * 33u + k]
-                    a1 += xv * ws[(e0 + 1u) * 33u + k]
-                    a2 += xv * ws[(e0 + 2u) * 33u + k]
-                    a3 += xv * ws[(e0 + 3u) * 33u + k]
-                    k++
+                var kk = 0u
+                while (kk < 32u) {
+                    a += xs[p * 33u + kk] * ws[el * 33u + kk]
+                    kk++
                 }
             }
             barrier()
             kb += 32u
         }
         if (live) {
-            let pp = p0 + p
-            let ob = (e0 < pa.nvh ? pa.obase_b : pa.obase_g) + pp * pa.ostride + (e0 % pa.nvh)
-            outp[ob] = a0
-            outp[ob + 1u] = a1
-            outp[ob + 2u] = a2
-            outp[ob + 3u] = a3
+            outp[(e < pa.nvh ? pa.obase_b : pa.obase_g) + (p0 + p) * pa.ostride + (e % pa.nvh)] = a
         }
     }
 }

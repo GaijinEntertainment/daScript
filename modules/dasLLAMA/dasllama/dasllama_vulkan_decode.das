@@ -58,7 +58,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the device's shared-memory cap declined the deltanet chain - resident driver declines, the per-op rails serve\n")
         return false
     }
-    if (hybrid && !(ensure_dn_step_cls() && ensure_router_gemv_cls())) {
+    if (hybrid && !(ensure_dn_step_cls() && ensure_router_gemv_f16_cls())) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the deltanet step class rail declined on this device - resident driver declines, the per-op rails serve\n")
         return false
     }
@@ -399,7 +399,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_DNP))
         // beta/alpha rows land in the smalls at the step's beta/g offsets
         if (g_rd.dn_ba_f32) {
-            L.s_dnba = set_router_gemv_cls(fixed_array(g_rd.dn_ba_dev, g_rd.xb_dev, L.dn.smalls_dev),
+            L.s_dnba = set_router_gemv_f16_cls(fixed_array(g_rd.dn_ba_dev, g_rd.xb_dev, L.dn.smalls_dev),
                 fixed_array(g_rd.dn_ba_bytes, dim * 4l, DND_SMALLS_BYTES),
                 fixed_array(0u, VHZ_XB, VHZ_DNSM))
         } else {
@@ -429,15 +429,23 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
 }
 
 //! The f32 arm's beta/alpha rows for every recurrent layer, in layer order: per layer `[beta rows
-//! (nvh x dim) ; alpha rows (nvh x dim)]`; a layer's base is its `ba_off` at set_dn_layer.
+//! (nvh x dim) ; alpha rows (nvh x dim)]`; a layer's base is its `ba_off` at set_dn_layer. The
+//! device keeps them as f16 - half the bytes the prefill tile GEMM and the decode GEMV read per row.
 def vk_rdec_upload_dn_ba(rows : array<float>) {
     if (g_gpu != null && g_gpu.dry) {
         return
     }
     assert(g_rd != null && g_rd.hybrid, "vk_rdec_upload_dn_ba before a hybrid prepare")
-    g_rd.dn_ba_bytes = long_length(rows) * 4l
+    var half : array<float16>
+    half |> reserve(long_length(rows))
+    half |> resize(long_length(rows))
+    for (r, hv in rows, half) {
+        hv = float16(r)
+    }
+    g_rd.dn_ba_bytes = long_length(half) * 2l
     g_rd.dn_ba_dev = make_device_buf(g_rd.dn_ba_bytes)
-    upload_region_at(g_rd.dn_ba_dev, 0l, unsafe(addr<uint8 const?>(rows[0])), g_rd.dn_ba_bytes)
+    upload_region_at(g_rd.dn_ba_dev, 0l, unsafe(addr<uint8 const?>(half[0])), g_rd.dn_ba_bytes)
+    delete half
 }
 
 //! Bind a recurrent layer's device slot to the calling session's state (`stp`) and conv history
@@ -630,9 +638,9 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     pfq_ts(raw)
     if (g_rd.dn_ba_f32) {
         var pcb = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA))
-        enc_router_gemv_cls(raw, h, L.s_dnba, pcb, nvh)
+        enc_router_gemv_f16_cls(raw, h, L.s_dnba, pcb, nvh)
         var pcg = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off + nvh * dim), obase = uint(DN_SM_G))
-        enc_router_gemv_cls(raw, h, L.s_dnba, pcg, nvh)
+        enc_router_gemv_f16_cls(raw, h, L.s_dnba, pcg, nvh)
     } else {
         var pcb = GemvArgs(n = uint(dim), d = uint(nvh), nreg = 1u, ybase = uint(DN_SM_BETA))
         gemv_cls_enc(int(KqFmt.q8), raw, h, L.s_dnbeta, pcb, (nvh + rpw - 1l) / rpw)

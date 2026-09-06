@@ -506,7 +506,7 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     if (g_rd.dn_ba_f32) {
         var pcb = DnBaArgs(npos = uint(wlen), dim = uint(dim), nvh = uint(nvh), woff = uint(L.ba_off), xstride = uint(dim),
             obase_b = uint(DN_SM_BETA), obase_g = uint(DN_SM_G), ostride = uint(nvh))
-        enc_dn_ba_cls(raw, h, L.pf_dn_ba_set, pcb, (wlen + 15l) / 16l)
+        enc_dn_ba_cls(raw, h, L.pf_dn_ba_set, pcb, dn_ba_wgs(wlen, nvh))
         pfq_ts(raw)
     } else {
         let pb = arena_planes(int(KqFmt.q8), L.bbeta)
