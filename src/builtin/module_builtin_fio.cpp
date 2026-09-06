@@ -19,9 +19,13 @@
 #include <sstream>
 #include <chrono>
 
+#ifndef _WIN32
+extern char ** environ;
+#endif
+
 #define DAS_POPEN_TIMEOUT 0x7FFFFF01
-// process_poll / process_wait return this while the child is still running (INT32_MIN, so it
-// never collides with a real exit code or signal number).
+// process_poll / process_wait return this while the child is still running: INT32_MIN, a value no
+// signal number and no ordinary exit code takes (a Windows process could return 0x80000000 on purpose).
 #define DAS_PROCESS_RUNNING (-2147483647-1)
 
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
@@ -1736,7 +1740,7 @@ namespace das {
         pid_t  pid = -1;
         int    fd = -1;
 #endif
-        std::string buf;            // partial-line accumulator across drains
+        string buf;                 // partial-line accumulator across drains
         bool stdoutOpen = true;
         bool reaped = false;
         int  exitCode = 0;
@@ -1815,7 +1819,9 @@ namespace das {
         if ( env.size ) { envBlock = winBuildEnvBlock(env); lpEnv = (LPVOID)&envBlock[0]; }
         PROCESS_INFORMATION pi;
         memset(&pi, 0, sizeof(pi));
-        BOOL ok = CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
+        vector<char> cmdBuf(cmdLine.begin(), cmdLine.end());   // CreateProcess may write into the command line
+        cmdBuf.push_back('\0');
+        BOOL ok = CreateProcessA(NULL, cmdBuf.data(), NULL, NULL, TRUE,
             CREATE_NO_WINDOW | CREATE_SUSPENDED, lpEnv, hasCwd ? cwd : NULL, &si, &pi);
         CloseHandle(hWrite);
         if ( hNull != INVALID_HANDLE_VALUE ) CloseHandle(hNull);
@@ -1859,7 +1865,23 @@ namespace das {
             context->throw_error_at(at, "spawn_process: pipe failed");
             return nullptr;
         }
+        // the child's environment, composed here: the parent's entries minus the overridden keys,
+        // then the overrides (the eastl build poisons putenv/setenv, and execvpe is Linux-only)
         char ** ov = (char **) env.data;
+        vector<char *> cenv;
+        if ( env.size ) {
+            for ( char ** e = environ; e && *e; ++e ) {
+                const char * eq = strchr(*e, '=');
+                size_t klen = eq ? (size_t)(eq - *e) : strlen(*e);
+                bool overridden = false;
+                for ( uint64_t i = 0; i < env.size && !overridden; ++i ) {
+                    overridden = ov[i] && strncmp(ov[i], *e, klen) == 0 && ov[i][klen] == '=';
+                }
+                if ( !overridden ) cenv.push_back(*e);
+            }
+            for ( uint64_t i = 0; i < env.size; ++i ) if ( ov[i] ) cenv.push_back(ov[i]);
+            cenv.push_back(nullptr);
+        }
         pid_t pid = fork();
         if ( pid == -1 ) {
             close(pipefd[0]);
@@ -1876,7 +1898,7 @@ namespace das {
             close(pipefd[1]);
             setpgid(0, 0);                          // lead a group so killpg reaches the tree
             if ( hasCwd && chdir(cwd) != 0 ) _exit(127);
-            for ( uint64_t i = 0; i < env.size; ++i ) if ( ov[i] ) putenv(strdup(ov[i]));
+            if ( env.size ) environ = cenv.data();
             execvp(cargv[0], cargv.data());
             _exit(127);
         }
