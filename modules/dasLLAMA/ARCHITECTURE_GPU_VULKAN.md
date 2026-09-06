@@ -72,7 +72,7 @@ not a chain-shape preference.
 
 **A recurrent (deltanet) layer's window block replaces the attention head; the FFN tail is
 shared.** Per window: the block's feed (f16 rows when qkv, z and out all admit the cm2 tiles, else the
-q8 image), the qkv and z GEMMs into the window planes, the beta and alpha rows into the layer's smalls
+q8 image), the qkv and z GEMMs into the window planes (the planes in their file formats - the loader tags a dense hybrid's deltanet planes natively when this driver will be attempted, so a Q5_K/Q6_K file rides the k5/k6 tiles; the out plane is q8, the step's o row feeds it so), the beta and alpha rows into the layer's smalls
 (f32 arm: a 16-position tile GEMM over the `[beta ; alpha]` rows; q8 arm: two q8 GEMMs and copies), the
 conv reading the layer's ring image, the sequential scan over the layer's own state slot, the o rows' feed (f16 or requant) and the out GEMM into `pf_xb2`. The
 scan is the plain per-token delta rule: a four-subgroup workgroup per (head, column group), a lane keeps

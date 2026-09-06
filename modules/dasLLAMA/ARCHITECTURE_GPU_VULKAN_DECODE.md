@@ -180,7 +180,10 @@ GEMV into one projection row (z at offset `cd`), the beta and alpha GEMVs into t
 at the step's beta and g rows, the fused deltanet step (`dn_step_cls`, the same kernel the
 per-op tier's `vk_moe_dn_step` dispatches), and the out GEMV. Both heads leave the block output
 in `xb2`, so the residual add, the FFN and the next layer's norm never know which head ran. The
-deltanet planes are the loader's Q8 transcode; the beta and alpha rows are q8 arena planes when
+deltanet qkv and z planes ride their file formats - the loader tags a dense hybrid's planes
+natively when this driver will be attempted, each GEMV dispatches per format and a superblock
+plane takes the Q8_K x feed - while the out plane is q8, since the step's o row feeds it as Q8_0
+(a K-quant out plane declines the layer); the beta and alpha rows are q8 arena planes when
 the file carries them quantized, or - the F32-on-disk case - one f16 device copy of every
 recurrent layer's `[beta ; alpha]` rows that the router-form GEMV's f16 twin reads with an output
 base into the smalls. A hybrid takes the split activation rail (no fused add+rms+requant): the f32

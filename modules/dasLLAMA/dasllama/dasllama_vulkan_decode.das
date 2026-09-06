@@ -643,6 +643,11 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
         var pcg = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off + nvh * dim), obase = uint(DN_SM_G))
         enc_router_gemv_f16_cls(raw, h, L.s_dnba, pcg, nvh)
     } else {
+        if (kq_sb(L.fqkv)) {   // the row above was requantized Q8_K for the kq GEMVs; the q8 beta/alpha GEMVs read it as Q8_0
+            var pcr = RqArgs(inbase = 0u, nblk = uint(dim / 32l))
+            enc_cls_dn_rq(raw, h, L.s_quant_xb, pcr, (dim / 4l + 255l) / 256l)
+            pfq_ts(raw)
+        }
         var pcb = GemvArgs(n = uint(dim), d = uint(nvh), nreg = 1u, ybase = uint(DN_SM_BETA))
         gemv_cls_enc(int(KqFmt.q8), raw, h, L.s_dnbeta, pcb, (nvh + rpw - 1l) / rpw)
         var pcg = GemvArgs(n = uint(dim), d = uint(nvh), nreg = 1u, ybase = uint(DN_SM_G))

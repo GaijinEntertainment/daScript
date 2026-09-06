@@ -909,6 +909,12 @@ def public dasllama_noisy() : bool {
 def public gpu_want_auto : bool
     => g_env_gpu.gpu ?? g_gpu_want.auto_tier
 
+//! The whole-model driver will be attempted on this box: the loader then keeps a dense hybrid's
+//! deltanet planes in their file formats (the driver's GEMVs and tiles dispatch per format), and
+//! the vulkan image identity carries the same bit.
+def public gpu_want_dn_native : bool
+    => moe_gpu_resident_installed() && gpu_want_auto()
+
 //! Effective tier request, env-else-programmatic — the load walk and the GPU backends read
 //! these instead of the raw env vars.
 

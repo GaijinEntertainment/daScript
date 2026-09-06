@@ -318,7 +318,12 @@ layers through conv + chunked scan on device state, gated partial-rope attention
 and the resident decode steps the recurrent layers on device; forced-feed logits within the
 deltanet bar of the all-CPU chain (the model dropped off the device) after the prefill and at
 every step, one-step-off control, armed + served-prefill witnesses; one-window (40 tokens) and
-two-window (600 tokens) cells; skips without the model or the armed tier.
+two-window (600 tokens) cells; skips without the model or the armed tier. The K-quant twin
+(`Qwen3.5-0.8B-Q4_K_M.gguf`, minted from the Q8_0 with `llama-quantize --allow-requantize
+--tensor-type ssm_out=q8_0` - the deltanet out plane stays q8 like the 9B UD file's) runs the
+same two cells with the deltanet qkv (q6_K) and z (q4_K) planes in their file formats on the
+driver, asserts the loader kept them so, and holds a 6% bar (the K-quant chain's own CPU-vs-device
+noise sits flat at ~4.5% of the max logit at every step; the Q8 file's at ~2.5%).
 `test_gpu_model_swap.das` - stocked suite; two models through one process on the armed tier
 (Qwen3-0.6B, SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own
 weights, the pin on the upload rail dropping a still-installed model's device state first; skips

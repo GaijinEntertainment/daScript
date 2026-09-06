@@ -29,6 +29,11 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // windows (the conv tail and the state carry across the window seam).
 
 let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit| - the deltanet bar test_deltanet.das holds too
+// the K-quant fixture's bar: the CPU's grp8 kq dots and the device's kq decode round apart, and the
+// difference sits flat at 0.39-0.57 of a ~12.5 max logit at every step (the Q8 file: 0.19-0.36);
+// no growth over the steps and no lost lead, so it is the chain's noise, not the state - the
+// one-step-off control stays well past this bar
+let private DN_LOGIT_BAR_REL_KQ = 0.06
 let private PF_WINDOW_ROWS = 512l     // dasllama_vulkan_prefill's PF_WINDOW: a prompt past it runs as sequential windows
 
 def private argmax_of(v : array<float>) : int64 {
@@ -58,13 +63,14 @@ def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks
 }
 
 // prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
-// prefill logits and every step's within the deltanet bar, the one-step-off control past it
-def private hybrid_forced_feed(t : T?; n : int64) {
+// prefill logits and every step's within the deltanet bar, the one-step-off control past it. A
+// K-quant file (`kq`) must keep its deltanet qkv/z planes in their file formats on the driver.
+def private hybrid_forced_feed(t : T?; n : int64; file : string; kq : bool) {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
         return
     }
-    let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+    let path = path_join(models_dir(), file)
     if (!model_available(t, path)) return
     if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
         t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
@@ -72,6 +78,15 @@ def private hybrid_forced_feed(t : T?; n : int64) {
     }
     var tr <- load_model_(path, QuantMode.q8)
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the hybrid (the load log names any decline)")
+    if (kq) {
+        var native = 0l
+        for (l in range64(tr.config.n_layers)) {
+            if (layer_is_recurrent(tr.config, l) && fmt_at(tr.dnqkv_fmt, l) != KqFmt.q8 && fmt_at(tr.dngate_fmt, l) != KqFmt.q8) {
+                native++
+            }
+        }
+        t |> success(native > 0l, "the loader kept the deltanet qkv/z planes in their K-quant file formats ({native} recurrent layers)")
+    }
     with_job_que() {
         setup_dasllama_jobque_()
         var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
@@ -86,9 +101,10 @@ def private hybrid_forced_feed(t : T?; n : int64) {
         var sc <- create_session(tr, KVDtype.f16)
         var cpu <- feed_logits(tr, sc, prompt, toks)
         delete sc
+        let rel = kq ? DN_LOGIT_BAR_REL_KQ : DN_LOGIT_BAR_REL
         for (st in range64(long_length(cpu))) {
             let diff = logits_maxdiff(gpu[st], cpu[st])
-            let bar = DN_LOGIT_BAR_REL * logits_maxabs(cpu[st])
+            let bar = rel * logits_maxabs(cpu[st])
             let ag = argmax_of(gpu[st])
             let ac = argmax_of(cpu[st])
             let what = st == 0l ? "prefill ({n} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})"
@@ -110,13 +126,26 @@ def private hybrid_forced_feed(t : T?; n : int64) {
 [test]
 def test_gpu_resident_hybrid_decode(t : T?) {
     t |> run("Qwen3.5-0.8B: resident prefill + decode with deltanet layers on device vs the CPU chain, one window") @(t : T?) {
-        hybrid_forced_feed(t, 40l)
+        hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q8_0.gguf", false)
     }
 }
 
 [test]
 def test_gpu_resident_hybrid_two_windows(t : T?) {
     t |> run("Qwen3.5-0.8B: the resident prefill across two windows (the conv tail and state carry the seam)") @(t : T?) {
-        hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l)
+        hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q8_0.gguf", false)
+    }
+}
+
+// the K-quant fixture (Q4_K_M from the Q8_0 with llama-quantize, ssm_out pinned q8_0 like the 9B
+// UD file): the deltanet qkv (q6_K) and z (q4_K) planes ride the resident driver in their file
+// formats - the kq GEMVs at decode, the k4/k6 cm2 tiles on the f16 feed at prefill
+[test]
+def test_gpu_resident_hybrid_kq(t : T?) {
+    t |> run("Qwen3.5-0.8B-Q4_K_M: K-quant deltanet planes on the resident driver vs the CPU chain, one window") @(t : T?) {
+        hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q4_K_M.gguf", true)
+    }
+    t |> run("Qwen3.5-0.8B-Q4_K_M: the same across two windows") @(t : T?) {
+        hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q4_K_M.gguf", true)
     }
 }

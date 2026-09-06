@@ -486,11 +486,11 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
             p.weight_bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
         }
         if (layer_is_recurrent(c, l) && l < long_length(t.dnqkv_offs) && t.dnqkv_offs[l] >= 0l) {
-            // the deltanet triple (q8 planes) + the beta/alpha rows (q8 planes, or the f32 rows uploaded whole)
+            // the deltanet triple in its file formats + the beta/alpha rows (q8 planes, or the f32 rows uploaded whole)
             let q8 = int(KqFmt.q8)
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, dn_conv_dim(c), q8)
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, c.ssm_d_inner, q8)
-            p.weight_bytes += moe_gpu_plane_bytes(c.ssm_d_inner, c.dim, q8)
+            p.weight_bytes += moe_gpu_plane_bytes(c.dim, dn_conv_dim(c), int(fmt_at(t.dnqkv_fmt, l)))
+            p.weight_bytes += moe_gpu_plane_bytes(c.dim, c.ssm_d_inner, int(fmt_at(t.dngate_fmt, l)))
+            p.weight_bytes += moe_gpu_plane_bytes(c.ssm_d_inner, c.dim, int(fmt_at(t.dnout_fmt, l)))
             p.weight_bytes += t.dn_ba_f32 ? 2l * c.ssm_dt_rank * c.dim * 4l : 2l * moe_gpu_plane_bytes(c.dim, c.ssm_dt_rank, q8)
         }
     }
@@ -584,6 +584,9 @@ def private rdec_rows_ok(n : int64; f : KqFmt) : bool => (
 // a plane's activation-quant form: 0 = Q8_0 per-32, 1 = Q8_K superblock
 def private rdec_quant_class(f : KqFmt) : int => kq_sb(f) ? 1 : 0
 
+// a deltanet qkv/z plane the resident GEMVs serve: q8, or a superblock format over a width the lattice divides
+def private rdec_dn_fmt_ok(f : KqFmt; n : int64) : bool => (f == KqFmt.q8 || kq_sb(f)) && rdec_rows_ok(n, f)
+
 def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : KqFmt; fv : KqFmt; fo : KqFmt; f1 : KqFmt; f3 : KqFmt; f2 : KqFmt> {
     return (fq = fmt_at(t.wq_fmt, l), fk = fmt_at(t.wk_fmt, l), fv = fmt_at(t.wv_fmt, l),
             fo = fmt_at(t.wo_fmt, l), f1 = fmt_at(t.w1_fmt, l), f3 = fmt_at(t.w3_fmt, l),
@@ -632,12 +635,21 @@ def resident_unserved_features(c : Config) : string {
 def resident_layer_decline(t : Model; l, hid0, hs, kvd : int64) : string {
     let c = t.config
     if (layer_is_recurrent(c, l)) {
-        // the deltanet step reads q8 planes (the loader tags them so for the GPU tiers) and the
-        // beta/alpha rows either as q8 planes or as the f32 rows the driver uploads whole
+        // the deltanet qkv/z planes ride their file formats (the resident GEMVs and tiles dispatch per
+        // format); the out plane is q8 (the step's o row feeds it as Q8_0); the beta/alpha rows are q8
+        // planes or the f32 rows the driver uploads whole
         if (l >= long_length(t.dnqkv_offs) || t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l) {
             return "layer {l} lacks a deltanet plane"
         }
-        if (!dn_layer_q8(t, l)) return "layer {l} carries kq-tagged deltanet planes (the step reads q8)"
+        let fqkv = fmt_at(t.dnqkv_fmt, l)
+        let fz = fmt_at(t.dngate_fmt, l)
+        if (!rdec_dn_fmt_ok(fqkv, c.dim) || !rdec_dn_fmt_ok(fz, c.dim)) {
+            return "layer {l}'s deltanet qkv/z planes carry a format ({int(fqkv)}/{int(fz)}) the resident GEMVs do not serve at width {c.dim}"
+        }
+        if (rdec_quant_class(fqkv) != rdec_quant_class(fz)) {
+            return "layer {l}'s deltanet qkv and z planes mix activation-quant forms ({int(fqkv)}/{int(fz)}) - one x feed serves both"
+        }
+        if (fmt_at(t.dnout_fmt, l) != KqFmt.q8) return "layer {l}'s deltanet out plane is kq-tagged (the step's o row feeds a q8 GEMV)"
         if (!t.dn_ba_f32 && (t.dnbeta_offs[l] < 0l || t.dnalpha_offs[l] < 0l)) return "layer {l} lacks its beta/alpha planes"
         if (!rdec_dn_installed()) return "layer {l} is recurrent and the tier installed no deltanet seats for the whole-model driver"
         if (layer_hidden(t, l) != hid0) return "layer {l} FFN width {layer_hidden(t, l)} differs from layer 0's {hid0}"
@@ -736,9 +748,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
     for (l in range64(c.n_layers)) {
         let lf = resident_layer_fmts(t, l)
         if (layer_is_recurrent(c, l)) {
-            planes |> push((n = dim, rows = dng.cd, f = KqFmt.q8))
-            planes |> push((n = dim, rows = dng.di, f = KqFmt.q8))
-            planes |> push((n = dng.di, rows = dim, f = KqFmt.q8))
+            planes |> push((n = dim, rows = dng.cd, f = fmt_at(t.dnqkv_fmt, l)))   // the triple in its file formats
+            planes |> push((n = dim, rows = dng.di, f = fmt_at(t.dngate_fmt, l)))
+            planes |> push((n = dng.di, rows = dim, f = fmt_at(t.dnout_fmt, l)))
             if (!dng.ba_f32) {
                 planes |> push((n = dim, rows = dng.nvh, f = KqFmt.q8))
                 planes |> push((n = dim, rows = dng.nvh, f = KqFmt.q8))
@@ -800,9 +812,12 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
         let b2 = resident_place(t, lf.f2, t.w2_offs[l], hid0, dim, mr, kg, wb)
         if (b1 < 0l || b3 < 0l || b2 < 0l) return rdec_decline("arena placement failed at layer {l}")
         if (layer_is_recurrent(c, l)) {
-            let bqkv = resident_place(t, KqFmt.q8, t.dnqkv_offs[l], dim, dng.cd, mr, kg, wb)
-            let bz = resident_place(t, KqFmt.q8, t.dngate_offs[l], dim, dng.di, mr, kg, wb)
-            let bout = resident_place(t, KqFmt.q8, t.dnout_offs[l], dng.di, dim, mr, kg, wb)
+            let fqkv = fmt_at(t.dnqkv_fmt, l)
+            let fz = fmt_at(t.dngate_fmt, l)
+            let fout = fmt_at(t.dnout_fmt, l)
+            let bqkv = resident_place(t, fqkv, t.dnqkv_offs[l], dim, dng.cd, mr, kg, wb)
+            let bz = resident_place(t, fz, t.dngate_offs[l], dim, dng.di, mr, kg, wb)
+            let bout = resident_place(t, fout, t.dnout_offs[l], dng.di, dim, mr, kg, wb)
             let bbeta = dng.ba_f32 ? -1l : resident_place(t, KqFmt.q8, t.dnbeta_offs[l], dim, dng.nvh, mr, kg, wb)
             let balpha = dng.ba_f32 ? -1l : resident_place(t, KqFmt.q8, t.dnalpha_offs[l], dim, dng.nvh, mr, kg, wb)
             if (bqkv < 0l || bz < 0l || bout < 0l || (!dng.ba_f32 && (bbeta < 0l || balpha < 0l))) {
@@ -810,7 +825,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
             }
             unsafe {
                 rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, rec_idx * 2l * dng.nvh * dim,
-                    int(KqFmt.q8), int(KqFmt.q8), int(KqFmt.q8), int(lf.f1), int(lf.f3), int(lf.f2),
+                    int(fqkv), int(fz), int(fout), int(lf.f1), int(lf.f3), int(lf.f2),
                     addr<float const?>(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * dng.cd]),
                     addr<float const?>(t.fblob[t.dn_norm_off + l * dng.ds]),
                     addr<float const?>(t.fblob[t.dn_a_off + l * dng.nvh]),

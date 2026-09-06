@@ -79,12 +79,17 @@ def test_resident_layer_decline(t : T?) {
         t |> equal(resident_layer_decline(m, 0l, hid0, hs, kvd), "")
         t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 lacks a deltanet plane"), "layer 1 named")
         t |> equal(resident_layer_decline(m, 2l, hid0, hs, kvd), "")
-        // planes present but kq-tagged: the step reads q8, the layer says so by number
+        // planes present, the qkv plane kq-tagged: admitted (the resident GEMVs dispatch per format);
+        // a kq-tagged OUT plane declines by number (the step's o row feeds a q8 GEMV)
         m.dnqkv_offs <- [-1l, 0l, -1l]
         m.dngate_offs <- [-1l, 0l, -1l]
         m.dnout_offs <- [-1l, 0l, -1l]
+        m.dn_ba_f32 = true
         m.dnqkv_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
-        t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 carries kq-tagged deltanet planes"), "kq-tagged named")
+        let sq = resident_layer_decline(m, 1l, hid0, hs, kvd)
+        t |> success(!names(sq, "kq-tagged") && !names(sq, "format"), "a kq-tagged qkv plane is no decline: '{sq}'")
+        m.dnout_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        t |> success(names(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1's deltanet out plane is kq-tagged"), "kq-tagged out plane named")
         delete m
     }
     t |> run("shared K/V, a missing plane and a differing FFN width each name the layer") @(t : T?) {

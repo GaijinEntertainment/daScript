@@ -73,11 +73,20 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      same box state (a same-day llama-bench control is the only valid baseline - the box read ~6%
      slower on every row today: llama.cpp 2488 / 53.1 against its 9/5 2527 / 56.7); pp512 2586
      (1.04x of the same-day 2488), tg128 49.9 (0.94x). What is left in the window, in milliseconds:
-     the FFN GEMMs ~85 across both heads (cm2 tiles, at par); the dn GEMMs 29.8 (D1: the loader's
-     Q8_0 transcode of the Q5_K/Q6_K qkv and z planes - k-native planes on the cm2 k5/k6 tiles cut
-     the bytes for tg and the dn GEMM time for pp; the one lever left that moves both); scan 10.9
+     the FFN GEMMs ~85 across both heads (cm2 tiles, at par); the dn GEMMs 29.8; scan 10.9
      (four columns per lane measured 15.3 - 64 workgroups starve the 36 SMs; two columns is the
-     shape); ba 5.8; conv 5.3, cls 2, attention 1.3, add+rms/act/converts ~9.
+     shape); ba 5.8; conv 5.3, cls 2, attention 1.3, add+rms/act/converts ~9. DONE 9/6 (D1, the
+     k-native deltanet planes): the loader keeps a dense hybrid's qkv/z planes in their file
+     formats when the whole-model driver will be attempted (`gpu_want_dn_native`, also an image
+     identity bit), the plan tallies, reserves and places the triple by format, the decode's kq
+     GEMVs and the prefill's k5/k6 cm2 tiles serve them; a K-quant OUT plane still declines (the
+     step's o row is Q8_0), and a layer with a q8 beta/alpha arm beside kq qkv/z re-requantizes
+     the row Q8_0 before those GEMVs (one x feed, two forms). 9B UD same-day: tg128 50.1 -> 51.8
+     (0.965x of the 53.7 control; decode qkv 2.21 -> 1.70 ms, z 1.13 -> 0.95; the plan's ctx
+     125655 -> 136087), pp512 2608 -> 2526 (1.02x of 2484): the k5/k6 cm2 tiles run the same
+     GEMMs slower than the q8 tile (window qkv 14.8 -> 17.7 ms, z 6.3 -> 8.3) - the kq cm2 decode
+     callbacks are the next prefill lever (item 11's K-quant tail), or a q8 twin of the two
+     planes for the prefill alone when VRAM allows.
    - tg128 = 18.9 ms GPU/token (host wall 19.4; upstream 17.6): every GEMV role sits at 360-420
      GB/s (bandwidth-bound, at par per byte); the bytes are the gap: the loader's Q8_0 transcode of
      the deltanet qkv (Q5_K in the file, 24 x 33.5M params) and z (Q6_K) planes reads ~400 MB more

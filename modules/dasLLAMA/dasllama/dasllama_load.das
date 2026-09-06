@@ -1437,10 +1437,11 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         t.mtp_ehproj_fmt = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{t.config.n_layers}.nextn.eh_proj.weight")), 2l * t.config.dim)
         any ||= t.mtp_ehproj_fmt != KqFmt.q8
     }
-    // deltanet dn tags: CPU rail only — Metal/GPU tiers bind dn q8; grouped files have no exact transcode
+    // deltanet dn tags: the CPU rail and the whole-model Vulkan driver take the file's formats; the per-op GPU rails and Metal bind dn q8; a grouped file has no exact transcode
+    let dn_native_driver = gpu_want_dn_native() && t.config.n_expert == 0l
     if (t.config.recr_mask != 0ul && !t.dn_grouped
             && get_metal_mode() == MetalMode.off
-            && !(moe_gpu_tier_installed() && (gpu_want_dense() || gpu_want_dn() || gpu_want_dnd()))) {
+            && (dn_native_driver || !(moe_gpu_tier_installed() && (gpu_want_dense() || gpu_want_dn() || gpu_want_dnd())))) {
         t.dnqkv_fmt |> resize(layers)
         t.dngate_fmt |> resize(layers)
         t.dnout_fmt |> resize(layers)

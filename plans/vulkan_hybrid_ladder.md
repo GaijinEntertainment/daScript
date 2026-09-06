@@ -149,6 +149,27 @@ rebuilt binary aged the sidecar; Boris ruled no re-mint until Vulkan is fully fu
 5. Docs: `ARCHITECTURE_GPU_VULKAN_DECODE.md` gains the hybrid token-command section (anchored,
    `[arch]` on the recorder), `followup_vulkan.md` item 2 closes, the decline list in
    `resident_upload` shrinks to what still declines.
+6. The k-native deltanet planes (the last lever that moves both pp and tg). Today the loader
+   tags the deltanet qkv/z/out planes with their file formats only on the CPU-only path
+   (`dasllama_load.das`, the "deltanet dn tags" pass); with a GPU tier installed they stay
+   untagged, `fmt_at` answers q8, and `load_big` transcodes the Q5_K/Q6_K planes to Q8_0 - on
+   the 9B UD that is ~400 MB more per decoded token (the whole tg gap) and the prefill's
+   deltanet GEMMs on the q8 tiles instead of the k5/k6 ones. The resident driver is already
+   format-generic below the tag: `rdec_set_dn_layer` carries `fqkv/fz/fout`, the decode's
+   `gemv_cls_*` dispatch per format with the Q8_K x feed keyed on `kq_sb(L.fqkv)`, and the
+   prefill's `pf_gemm_enc` takes the layer's format with the f16 feed (`pf_dn6`). The work:
+   - Loader: tag natively also when the whole-model driver will be attempted (the Vulkan tier
+     installed, `gpu_want_auto()`, a dense hybrid, no Metal, not a grouped file). A later
+     resident decline leaves those planes on the CPU rail (the per-op deltanet rails read q8),
+     the same cliff a kq file has on the per-op tier today; the log names it.
+   - `resident_plan` tallies the triple by its formats; `resident_place` and the
+     `rdec_set_dn_layer` call pass them; `resident_layer_decline` admits q8 and the superblock
+     formats the resident classes serve, and keeps a decline for a kq-tagged OUT plane (the
+     decode's o feed is the step's Q8_0 row; a Q8_K o requant is a later seat).
+   - Gate: `test_gpu_resident_hybrid` gains the K-quant fixture (Qwen3.5-0.8B-Q4_K_M, minted
+     from the Q8_0 with llama-quantize), the declines test names the out-plane case, the 9B
+     UD pair against a same-day llama-bench control, the profiled window's dn GEMM roles.
+   - Docs: 2.2j / 2.2v say the planes ride their file formats; the loader's tag comment follows.
 
 ## Measurement
 

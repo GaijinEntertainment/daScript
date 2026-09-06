@@ -1765,7 +1765,8 @@ def moe_layer_kq(t : Model; l : int64) : bool {
     return fmt_at(t.we1_fmt, l) != KqFmt.q8 || fmt_at(t.we2_fmt, l) != KqFmt.q8 || fmt_at(t.we3_fmt, l) != KqFmt.q8
 }
 
-// Are layer l's deltanet projection planes all q8? (Metal and the GPU tiers bind/upload dn q8 only.)
+// Are layer l's deltanet projection planes all q8? (Metal and the per-op GPU rails bind dn q8 only; the
+// whole-model Vulkan driver takes the file formats.)
 def dn_layer_q8(t : Model; l : int64) : bool {
     return fmt_at(t.dnqkv_fmt, l) == KqFmt.q8 && fmt_at(t.dngate_fmt, l) == KqFmt.q8 && fmt_at(t.dnout_fmt, l) == KqFmt.q8
 }
