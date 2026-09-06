@@ -266,7 +266,7 @@ class private LogHookAgent : DapiDebugAgent {
         if (empty(log_path) && !log_fallback_to_stderr) return false
         var fields : JsonValue? = null
         if (at != null && at.fileInfo != null) {
-            fields = JV({"at" => JV("{at.fileInfo.name}:{at.line}")})
+            fields = JV({"at" => JV("{at.fileInfo.name}:{int(at.line)}")})
         }
         emit(level, "runtime", string(text), fields)
         return !log_tee

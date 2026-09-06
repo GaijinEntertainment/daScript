@@ -1072,10 +1072,15 @@ namespace das
 
     void Context::to_out ( const LineInfo * at, int level, const char * message ) {
         if (message) {
+            string messageOutlivingAgents;
             if ( !*g_inLogger ) {
                 *g_inLogger = true;
                 bool any = false;
                 for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+                    if ( messageOutlivingAgents.empty() ) {
+                        messageOutlivingAgents = message;
+                        message = messageOutlivingAgents.c_str();
+                    }
                     any |= pAgent->onLog(this, at, level, message);
                 });
                 *g_inLogger = false;
