@@ -143,6 +143,7 @@ def test_process_terminate(t : T?) {
             sleep(5u)
         }
         let pid = unsafe(process_pid(p))
+        t |> equal(unsafe(process_wait(p, 0.2)), process_running, "wait answers process_running when the timeout passes first")
         unsafe(process_terminate(p))
         let rc = unsafe(process_wait(p, 5.0))
         t |> success(rc != process_running, "child stopped after terminate (rc={rc})")

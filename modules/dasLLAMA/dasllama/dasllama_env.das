@@ -726,7 +726,7 @@ struct public ExchangeEnv {
     @clarg_doc = "Sidecar exchange base URL override (tests, mirrors); unset = the baked-in dasllama.io. Setting it is an expressed choice to use the exchange - the first-contact consent question is skipped (announced at boot)."
     exchange_url : string = ""
 
-    @clarg_doc = "One-shot exchange accept-policy override: verified | any | off; unset = the app config's exchange_accept. The watchdog arms 'any' on a relaunch when the user adopts an unverified sidecar over finishing a tune. Setting it is an expressed choice to use the exchange - the first-contact consent question is skipped (announced at boot)."
+    @clarg_doc = "One-shot exchange accept-policy override: verified | any | off; unset = the app config's exchange_accept. A host may arm 'any' for one relaunch to adopt an unverified sidecar over finishing a tune. Setting it is an expressed choice to use the exchange - the first-contact consent question is skipped (announced at boot)."
     exchange_accept : string = ""
 }
 

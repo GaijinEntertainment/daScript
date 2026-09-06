@@ -170,6 +170,23 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> success(find(source, "// @_standalone_dep_call::DepProbe`method ") >= 0, "the foreign class method has a row: it dispatches through its Func slot")
         t |> success(find(source, "__cwd_rename_at") >= 0 || find(source, "builtin_getcwd") >= 0, "the foreign function's body is emitted, not just declared")
         t |> success(find(source, "\"fio_core\", &::register_Module_FIO") >= 0, "an extern reached only from the foreign function still registers its module")
+        // the ctor sizes context.functions by one count and fills one info row per function; with
+        // foreign rows in play the two are computed separately and must agree
+        let alloc_marker = "context.code->allocate( "
+        let alloc_at = find(source, alloc_marker)
+        t |> success(alloc_at >= 0, "the ctor allocates the function table")
+        if (alloc_at >= 0) {
+            let after = slice(source, alloc_at + length(alloc_marker), length(source))
+            let declared = to_int(slice(after, 0, find(after, "/*")))
+            var rows = 0
+            var at = find(source, ", FunctionInfo(\"")
+            while (at >= 0) {
+                rows++
+                at = find(source, ", FunctionInfo(\"", at + 1)
+            }
+            t |> equal(rows, declared, "the table is sized by exactly the rows it fills, foreign rows included")
+            t |> success(rows >= 4, "the foreign function, its class's method, ctor and finalizer are rows: {rows}")
+        }
         t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
     }
 

@@ -125,7 +125,7 @@ def test_discovery(t : T?) {
         let script_mode <- resolve_config(["--no-health"], root)
         t |> equal(script_mode.error, "")
         t |> success(ends_with(script_mode.cfg.script, "main.das"), "script discovered: {script_mode.cfg.script}")
-        t |> success(ends_with(script_mode.cfg.daslang, "daslang"), "daslang discovered beside it: {script_mode.cfg.daslang}")
+        t |> success(ends_with(script_mode.cfg.daslang, "bin/Release/daslang"), "the daslang beside it is the one discovered, not the bare fallback: {script_mode.cfg.daslang}")
         t |> equal(script_mode.cfg.name, base_name(root), "a script names itself after its directory")
         let command <- child_command(script_mode.cfg)
         t |> success(length(command) >= 4 && command[1] == "-jit" && command[3] == "--", "script command shape: {command}")
@@ -303,6 +303,79 @@ def test_supervise_tune_bootstrap(t : T?) {
         t |> equal(count_event(events, "tune_bootstrap_complete"), 1, "{event_names(events)}")
         t |> equal(count_event(events, "crash"), 0)
         t |> equal(count_event(events, "child_started"), 2)
+        unsafe {
+            delete sup
+        }
+        let cleanup = rmdir_rec_result(root)
+        t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+}
+
+[test]
+def test_supervise_tune_abort_backs_off(t : T?) {
+    t |> run("script mode: exit 3 without the restart marker is a tuner abort - relaunched with backoff, not a crash") @(t : T?) {
+        notifications_enabled = false
+        let root = make_temp(t, "wd tune abort ")
+        if (empty(root)) return
+        let state_dir = path_join(root, "state")
+        mkdir(state_dir)
+        let args <- ["--daslang", das_exe(), "--script", fixture_path(), "--name", "wdabort", "--cwd", root,
+            "--no-health", "--stable-seconds", "0.1", "--max-restart-delay", "0.5", "--", state_dir, "tune-abort"]
+        var code = 0
+        var sup = watchdog_start(args, root, 0, code)
+        t |> success(sup != null, "supervision started (code {code})")
+        if (sup == null) return
+        t |> equal(sup->run(), 0)
+        let events <- read_events(sup.cfg.log)
+        t |> equal(count_event(events, "tune_incomplete"), 1, "{event_names(events)}")
+        t |> equal(count_event(events, "tune_bootstrap_complete"), 0, "no marker, no bootstrap")
+        t |> equal(count_event(events, "crash"), 0, "an abort is not a crash")
+        t |> equal(count_event(events, "child_started"), 2)
+        unsafe {
+            delete sup
+        }
+        let cleanup = rmdir_rec_result(root)
+        t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+}
+
+[test]
+def test_request_stop_terminates_with_no_shutdown(t : T?) {
+    t |> run("--no-shutdown: the stop request terminates the child instead of asking it") @(t : T?) {
+        notifications_enabled = false
+        let root = make_temp(t, "wd stop terminate ")
+        if (empty(root)) return
+        let state_dir = path_join(root, "state")
+        mkdir(state_dir)
+        var args <- ["--program", das_exe(), "--name", "wdterm", "--cwd", root, "--no-health", "--no-shutdown", "--"]
+        args |> push_from(child_args(state_dir, "park"))
+        var code = 0
+        var sup = watchdog_start(args, root, 0, code)
+        t |> success(sup != null, "supervision started (code {code})")
+        if (sup == null) return
+        var parked = false
+        let started = ref_time_ticks()
+        while (!parked && get_time_usec(started) < 15000000) {
+            sup->tick()
+            for (ev in read_events(sup.cfg.log)) {
+                if ((ev?["event"] ?? "") == "child" && (ev?["message"] ?? "") == "parked") {
+                    parked = true
+                }
+            }
+        }
+        t |> success(parked, "the child reported it was parked")
+        sup->request_stop()
+        var done = false
+        let stop_started = ref_time_ticks()
+        while (!done && get_time_usec(stop_started) < 15000000) {
+            done = sup->tick()
+        }
+        t |> success(done, "supervision ended after the stop request")
+        t |> equal(sup.result, 0, "a stop the host asked for ends with 0 whatever the child's code")
+        let events <- read_events(sup.cfg.log)
+        t |> equal(count_event(events, "terminate_requested"), 1, "{event_names(events)}")
+        t |> equal(count_event(events, "stop_file_requested"), 0)
+        t |> equal(count_event(events, "shutdown_requested"), 0)
         unsafe {
             delete sup
         }

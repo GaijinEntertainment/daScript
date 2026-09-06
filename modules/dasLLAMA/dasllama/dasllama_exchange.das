@@ -365,8 +365,8 @@ def exchange_consent_status() : string {
     return (word == "accepted" || word == "declined") ? word : ""
 }
 
-//! Record the first-contact choice (console prompt, watchdog dialog, control page — every
-//! surface lands here). Emits the `@sidecar consent` event so the supervisor state follows.
+//! Record the first-contact choice (console prompt, control page — every surface lands
+//! here). Emits the `@sidecar consent` event so the supervisor state follows.
 def exchange_record_consent(accept : bool) : bool {
     let word = accept ? "accepted" : "declined"
     if (!fwrite(exchange_consent_path(), "{word}\n")) {
@@ -401,7 +401,7 @@ def private consent_prompt_console() : bool {
 
 // The gate the resolver runs before the first request leaves. True = a request may be made.
 // No recorded choice: a real terminal asks inline; anything else stays offline this boot and
-// surfaces the question where a human is (watchdog dialog, control page) via the event.
+// surfaces the question where a human is (the control page) via the event.
 def private exchange_consent_gate() : bool {
     let status = exchange_consent_status()
     if (status == "accepted") {

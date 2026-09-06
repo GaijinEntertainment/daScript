@@ -113,8 +113,9 @@ def private config_to_args(config : JsonValue?; cli : array<string>; source : st
             names |> sort()
             return <- err("{source} has unknown key '{key}'; known keys: {join(names, ", ")}", type<array<string>>)
         }
+        // the config's value goes first and the command line's copy after it: clargs keeps the
+        // last occurrence, so a flag on the command line wins without a lookup here
         let flag = "--" + replace(key, "_", "-")
-        if (cli |> has_value(flag)) continue
         if (val is _bool) {
             if (val as _bool) {
                 out |> push(flag)
@@ -1058,16 +1059,9 @@ class public Supervisor {
         restart_at = now() + delay
     }
 
+    //! Runs only once the child is gone - reaped by on_child_exit, never spawned, or left behind
+    //! as unkillable; the stop ladder in tick() is what ends a live child.
     def private finish(code : int) {
-        if (child != null) {
-            unsafe(process_terminate(child))
-            if (unsafe(process_wait(child, 10.0)) == process_running) {
-                unsafe(process_kill(child))
-                unsafe(process_wait(child, 10.0))
-            }
-            unsafe(close_process(child))
-            child = null
-        }
         // only clear the pid file if it is still ours: a second watchdog that took the slot
         // owns it now, and deleting its claim would let a third start alongside it
         if (self_pid != 0 && fexist(cfg.pid_file)) {
