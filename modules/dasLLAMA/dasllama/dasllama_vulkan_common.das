@@ -223,10 +223,10 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 let DN_MAX_DS = 128l
 
 //! The sequential scan's workgroups: four 32-lane subgroups per (head, column group); a lane owns 16
-//! state rows of one column, so ds / 16 lanes share a column, 32 / that many columns share a
-//! subgroup, and a workgroup covers four subgroups' columns (its shared k/q row staging serves them all).
+//! state rows of two adjacent columns, so ds / 16 lanes share a column pair, 32 / that many pairs
+//! share a subgroup, and a workgroup covers four subgroups' columns (its shared k/q row staging serves them all).
 def dn_scan_wgs(nvh, ds : int64) : int64 {
-    let cpg = 4l * (32l / (ds / 16l))
+    let cpg = 8l * (32l / (ds / 16l))
     return nvh * ((ds + cpg - 1l) / cpg)
 }
 

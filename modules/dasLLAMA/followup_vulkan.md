@@ -67,9 +67,15 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      Br 64 / Bc 32, the 64x256 / 256x32 / 32x256 workgroup shapes in dasSpirv): attention 21.05 ->
      1.29 ms over the 8 layers, window 183 ms, pp512 2660 +- 3 (two r3 pairs: 2659 / 2661) = 1.05x
      of llama.cpp's 2527 - PREFILL PARITY; tg128 53.5 (0.94x; the decode path is untouched, the 0.7
-     drift from 54.2 is the box). What is left in the window, in milliseconds: the FFN GEMMs ~78
-     across both heads (cm2 tiles, at par); scan 15.6 (a second column per lane would interleave
-     two chains); the dn GEMMs 28.6; ba 6.3; conv 5.2, cls 2, attention 1.3, add+rms/act/converts ~9.
+     drift from 54.2 is the box). DONE 9/6 (scan ILP): a lane keeps 16 rows of TWO adjacent columns
+     (`dn_scan_cls`, 128 workgroups on the 9B instead of 256; the staged k/q rows feed both
+     columns, the two chains interleave): scan 17.0 -> 10.9 ms and the window 200 -> 189 ms on the
+     same box state (a same-day llama-bench control is the only valid baseline - the box read ~6%
+     slower on every row today: llama.cpp 2488 / 53.1 against its 9/5 2527 / 56.7); pp512 2586
+     (1.04x of the same-day 2488), tg128 49.9 (0.94x). What is left in the window, in milliseconds:
+     the FFN GEMMs ~85 across both heads (cm2 tiles, at par); the dn GEMMs 29.8; scan 10.9 (four
+     columns per lane is the next try - 32 rows of registers stay under the spill line at 16 x 4);
+     ba 5.8; conv 5.3, cls 2, attention 1.3, add+rms/act/converts ~9.
    - tg128 = 18.9 ms GPU/token (host wall 19.4; upstream 17.6): every GEMV role sits at 360-420
      GB/s (bandwidth-bound, at par per byte); the bytes are the gap: the loader's Q8_0 transcode of
      the deltanet qkv (Q5_K in the file, 24 x 33.5M params) and z (Q6_K) planes reads ~400 MB more

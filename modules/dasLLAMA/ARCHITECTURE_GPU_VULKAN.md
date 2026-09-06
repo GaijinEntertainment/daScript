@@ -76,8 +76,8 @@ q8 image), the qkv and z GEMMs into the window planes, the beta and alpha rows i
 (f32 arm: a 16-position tile GEMM over the `[beta ; alpha]` rows; q8 arm: two q8 GEMMs and copies), the
 conv reading the layer's ring image, the sequential scan over the layer's own state slot, the o rows' feed (f16 or requant) and the out GEMM into `pf_xb2`. The
 scan is the plain per-token delta rule: a four-subgroup workgroup per (head, column group), a lane keeps
-16 state rows of its column in registers, the token's k and q rows are staged once per workgroup in
-shared, the tokens loop inside the kernel with two shuffle reductions each, the raw o rows land in the tier's workspace for the gated out-norm's one workgroup per position.
+16 state rows of two adjacent columns in registers (two independent chains that interleave), the token's k and q rows are staged once per workgroup in
+shared and feed both columns, the tokens loop inside the kernel with two shuffle reductions per column each, the raw o rows land in the tier's workspace for the gated out-norm's one workgroup per position.
 The conv history crosses windows position-major in ring image 0; the last window transposes the
 tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is `_DECODE.md`
 sec.2.2v's). Gated attention rides the batch kernels through a per-head q stride (`qhs = 2 x hs`:
