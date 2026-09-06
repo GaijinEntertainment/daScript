@@ -13,9 +13,7 @@ namespace das {
 #define DAS_DBUS_SYMBOLS(X) \
     X(dbus_error_init) \
     X(dbus_error_free) \
-    X(dbus_error_is_set) \
     X(dbus_bus_get_private) \
-    X(dbus_bus_get_unique_name) \
     X(dbus_bus_request_name) \
     X(dbus_bus_name_has_owner) \
     X(dbus_bus_add_match) \
