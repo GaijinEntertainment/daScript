@@ -18,9 +18,12 @@ or the nightly/preflight fails with `error[50101]: AOT link failed`.
 
 If a specific file genuinely can't AOT (emitter bug, a process-spawning or timing test,
 interpreted-only by design): put `options no_aot` IN THE FILE. The AOT build silently skips
-such files (`tests/aot/CMakeLists.txt`), and the runtime skips AOT linking for them, so a
-suite whose every file is `no_aot` still registers in `DAS_AOT_SUITES` like any other. A
-whole directory that can't AOT is gated by the directory filter below instead.
+such files (`tests/aot/CMakeLists.txt`), and the runtime skips AOT linking for the file's own
+functions. **It does not skip the modules the file requires**: `test_aot` still runs the file,
+and a required module that is not in the AOT set (anything outside `daslib/` and the registered
+suites - `utils/watchdog/watchdog.das`, say) fails the link with `error[50101]` on that module's
+functions. A test like that is gated off under `--use-aot` by the directory filter below, and
+its directory still registers in `DAS_AOT_SUITES` like any other.
 
 ## The `tests/.das_test` directory filter - and its root-path caveat
 

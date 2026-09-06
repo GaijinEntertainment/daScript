@@ -99,11 +99,16 @@ This applies to ALL test directories (e.g., `tests/fio/`, `tests/fs/`, `tests/js
 **Exception - a file that genuinely can't AOT** (codegen/emitter bug, a process-spawning or
 timing test, interpreted-only by design): put `options no_aot` in the file. The AOT build
 silently skips such files when it generates stubs, and `test_aot`'s `fail_on_no_aot` skips AOT
-linking for them at runtime - one marker, both halves.
+linking for the file's own functions at runtime - one marker, both halves.
 
 **Trap:** a glob exclusion in `tests/aot/CMakeLists.txt` ALONE is not enough. `test_aot` runs every
 file under `tests/` regardless of what was stub-generated, so an excluded-but-not-`no_aot` file
 fails at runtime with `error[50101]` on all its functions.
+
+**Trap:** `options no_aot` covers the FILE, not what it requires. A test requiring a module
+outside the AOT set (a `utils/` tool's module, say) still fails the link with `error[50101]` on
+that module's functions under `test_aot`; gate its directory off under `--use-aot` in
+`tests/.das_test` (the `watchdog` folder is the precedent).
 
 **Trap - `_`-prefixed fixture MODULES in an existing test dir.** The per-dir AOT globs
 exclude `_*` files (`EXCLUDE REGEX "/_"`), so a new same-dir fixture module (`require`d by a
