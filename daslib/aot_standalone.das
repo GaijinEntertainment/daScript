@@ -129,7 +129,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     let requested_stack = stack_arg ?as tInt ?? int(program.policies.stack)
     let stack_base = requested_stack > 0 && stack_arg is tInt ? requested_stack : max(requested_stack, min_init_stack)
     let stack_size = stack_base + int(program.globalInitStackSize)
-    let usedFunctionCount = length(collectProgramUsedFunctions(program, false, false))
+    let usedFunctionCount = length(collectProgramUsedFunctions(program, true, false))
     write(tw, "{cfg.class_name}::{cfg.class_name}() : Context({stack_size}/*stack*/) \{\n");
     write(tw, "    auto & context = *this;\n");
     write(tw, "    CodeOfPolicies policies;");
@@ -257,14 +257,15 @@ class StandaloneContextGen : CppAot {
         declarations = ss |> string_builder_str();
         ss |> string_builder_clear();
         write(*ss, "\n");
-        let fnn = collectProgramUsedFunctions(prog, false, false);
+        // every used function of every module, declared once (a shared generic instance has one name)
+        let fnn = collectProgramUsedFunctions(prog, true, false);
         var inline_fns : array<string>
+        inline_fns |> reserve(length(fnn))
         for (pfun in fnn) {
-            let needInline = that == pfun._module;
-            if (needInline) {
-                inline_fns.push(describeCppFunc(pfun, collector, cross_platform, true, needInline));
-                used_functions.insert(aotFuncName(pfun));
-            }
+            let name = aotFuncName(pfun)
+            if (used_functions |> key_exists(name)) continue
+            inline_fns.push(describeCppFunc(pfun, collector, cross_platform, true, true));
+            used_functions.insert(name);
         }
         let sep = ";\n";
         let maybe_sem = inline_fns |> empty() ? "" : sep;
@@ -308,7 +309,7 @@ def writeRegistration(var header : StringBuilderWriter;
     write(source, "using namespace {program.thisNamespace};\n");
     write(header, "namespace {cfg.context_name} \{\n");
     write(source, "namespace {cfg.context_name} \{\n");
-    dumpRegisterAot(unsafe(addr(source)), program, context, false, cfg.cross_platform);
+    dumpRegisterAot(unsafe(addr(source)), program, context, true, cfg.cross_platform);
     writeModuleRegistration(source, registrations);
     writeStandaloneContext(program, initFunctions, header, source, cfg, context);
     write(header, "\} // namespace {cfg.context_name}\n");
@@ -374,9 +375,21 @@ def genStandaloneSrc(var program : ProgramPtr;
             make_visitor(*gen) $(adapter) {
                 gen.adapter := adapter
                 program |> visit_module(adapter, program.getThisModule);
+                // a generic instance several modules instantiated is one C++ function: emit the first copy only
+                var emitted : table<string>
+                for (pfun in collectProgramUsedFunctions(program, false, false)) {
+                    emitted |> insert(aotFuncName(pfun))
+                }
+                var foreign <- foreignUsedFunctions(program, false)
+                for (fn in foreign) {
+                    let name = aotFuncName(fn)
+                    if (emitted |> key_exists(name)) continue
+                    emitted |> insert(name)
+                    visit(fn, adapter)
+                }
             }
 
-            initFunctions = addFunctionInfo(collectProgramUsedFunctions(program, false, false), gen.helper);
+            initFunctions = addFunctionInfo(collectProgramUsedFunctions(program, true, false), gen.helper);
             type_defs += gen.declarations;
             gen.declarations = "";
             write(tw, gen.str());
@@ -421,14 +434,22 @@ def private checkAllUsedFunctionsCanAot(program : ProgramPtr) {
 
 def private prepareProgramForEmission(var program : ProgramPtr; context : Context) : BlockVariableCollector? {
     var noAotMarker = new NoAotMarker();
+    var unmarked <- foreignUsedFunctions(program, true)
     make_visitor(*noAotMarker) $(adapter_no_aot) {
         visit(program, adapter_no_aot)
+        for (fn in unmarked) {
+            visit(fn, adapter_no_aot)
+        }
     }
     checkAllUsedFunctionsCanAot(program)
+    var foreign <- foreignUsedFunctions(program, false)
 
     var pmarker = new PrologueMarker();
     make_visitor(*pmarker) $(adapter_p) {
         visit(program, adapter_p)
+        for (fn in foreign) {
+            visit(fn, adapter_p)
+        }
     }
 
     setAotHashes(program, context);
@@ -436,6 +457,9 @@ def private prepareProgramForEmission(var program : ProgramPtr; context : Contex
     var flags = new SetPrinterFlags();
     make_visitor(*flags) $(flags_adapter) {
         visit(program, flags_adapter)
+        for (fn in foreign) {
+            visit(fn, flags_adapter)
+        }
     }
     unsafe {
         delete flags
@@ -446,6 +470,18 @@ def private prepareProgramForEmission(var program : ProgramPtr; context : Contex
     var coll = new BlockVariableCollector();
     make_visitor(*coll) $(adapter_coll) {
         visit(program, adapter_coll)
+        for (fn in foreign) {
+            visit(fn, adapter_coll)
+        }
+        // foreign globals initialize in __init_script too: their temporaries collect under the null key
+        let thisModule = program.getThisModule
+        program.get_ptr() |> for_each_module_no_order($(pm) {
+            if (pm == thisModule) return
+            pm |> for_each_global($(pvar) {
+                if (pvar.index < 0 || !pvar.flags.used || pvar.init == null) return
+                visit_expression(pvar.init, adapter_coll)
+            })
+        })
     }
     return coll
 }

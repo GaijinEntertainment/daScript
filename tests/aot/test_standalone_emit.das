@@ -164,6 +164,15 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> success(find(files.source, "static_assert(sizeof(DepSpan)") < 0, "the source does not redefine the required module's struct")
     }
 
+    t |> run("a required module's used functions emit into the one translation unit, and link their externs' modules") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_foreign_call_fixture", out_dir)
+        t |> success(find(source, "// @_standalone_dep_call::dep_probe ") >= 0, "the foreign function has a row in the function table")
+        t |> success(find(source, "// @_standalone_dep_call::DepProbe`method ") >= 0, "the foreign class method has a row: it dispatches through its Func slot")
+        t |> success(find(source, "__cwd_rename_at") >= 0 || find(source, "builtin_getcwd") >= 0, "the foreign function's body is emitted, not just declared")
+        t |> success(find(source, "\"fio_core\", &::register_Module_FIO") >= 0, "an extern reached only from the foreign function still registers its module")
+        t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
+    }
+
     t |> run("struct and enum signatures put the type definitions in the header") @(t : T?) {
         let files = generate_standalone_files(t, "_standalone_struct_sig_fixture", out_dir)
         t |> success(find(files.header, "static_assert(sizeof(Pair)") >= 0, "the struct definition is in the header")
