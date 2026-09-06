@@ -934,6 +934,7 @@ def test_chat_render_seam(t : T?) {
         with_job_que() {
             setup_dasllama_jobque()
             var m <- load_capped(path)
+            moe_gpu_drop_model()   // one lane: under DASLLAMA_GPU=1 the two paths would split between the device prefill and the CPU continuation
             // classic prefill is bit-exact under ANY chunking (test_prefill's contract), so a
             // byte-equal cache proves the render and eval paths agree token for token
             let saved_mode = get_prefill_attn_mode()
