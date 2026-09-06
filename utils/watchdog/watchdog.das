@@ -764,7 +764,8 @@ def public collect_crash_bundle(cfg : WatchdogConfig; command : array<string>; c
         var resolved : array<string>
         for (dll in jit_dlls) {
             let source = get_full_file_name(is_absolute(dll) ? dll : path_join(cfg.cwd, dll))
-            if (!starts_with(source, cfg.jit_dir) || !fexist(source)) continue
+            let rel = relative_result(source, cfg.jit_dir)
+            if (!(rel is value) || starts_with(rel as value, "..") || !fexist(source)) continue
             resolved |> push(source)
         }
         if (empty(resolved)) {
@@ -784,11 +785,13 @@ def public collect_crash_bundle(cfg : WatchdogConfig; command : array<string>; c
             }
         }
         for (dll in resolved) {
+            let rel = relative_result(dll, cfg.jit_dir)
+            if (!(rel is value)) continue
+            let target_dir = path_join(path_join(bundle, "jitted_scripts"), dir_name(rel as value))
             for (suffix in JIT_ARTIFACT_SUFFIXES) {
                 let source = replace_extension(dll, suffix)
                 if (!fexist(source)) continue
-                let rel = chop(source, length(cfg.jit_dir), length(source) - length(cfg.jit_dir))
-                copy_into(source, dir_name(path_join(path_join(bundle, "jitted_scripts"), rel)))
+                copy_into(source, target_dir)
             }
         }
     }
@@ -837,6 +840,8 @@ class public Supervisor {
     last_health_change : float = 0.0
     shutdown_sent : bool = false
     shutdown_requested_at : float = 0.0
+    terminate_sent_at : float = -1.0
+    kill_sent_at : float = -1.0
 
     def Supervisor(config : WatchdogConfig; var emitter : Emitter?; command_line : array<string>; own_pid : int) {
         cfg := config
@@ -891,6 +896,8 @@ class public Supervisor {
         last_health_change = started_at
         shutdown_sent = false
         shutdown_requested_at = 0.0
+        terminate_sent_at = -1.0
+        kill_sent_at = -1.0
         return true
     }
 
@@ -982,6 +989,7 @@ class public Supervisor {
             log->emit("stop_file_requested", JV((path = cfg.stop_file)))
         } elif (cfg.no_shutdown) {
             unsafe(process_terminate(child))
+            terminate_sent_at = now()
             log->emit("terminate_requested")
         } else {
             request_shutdown(cfg.shutdown_url, log)
@@ -1103,8 +1111,28 @@ class public Supervisor {
         if (stopping && !shutdown_sent) {
             send_stop_request()
         }
-        if (stopping && shutdown_sent && t - shutdown_requested_at > cfg.stop_timeout) {
-            unsafe(process_terminate(child))
+        // a stop is a ladder with an end: the request, terminate once the stop timeout passes,
+        // kill ten seconds later, and ten seconds after that the child is left behind - a child
+        // that ignores every signal must not hold the supervisor forever
+        if (stopping && shutdown_sent) {
+            if (terminate_sent_at < 0.0) {
+                if (t - shutdown_requested_at > cfg.stop_timeout) {
+                    unsafe(process_terminate(child))
+                    terminate_sent_at = t
+                    log->emit("terminate_requested", JV((after_s = round_to(t - shutdown_requested_at, 1))))
+                }
+            } elif (kill_sent_at < 0.0) {
+                if (t - terminate_sent_at > 10.0) {
+                    unsafe(process_kill(child))
+                    kill_sent_at = t
+                    log->emit("kill_requested")
+                }
+            } elif (t - kill_sent_at > 10.0) {
+                log->emit("child_unkillable", JV((pid = child_pid)))
+                child = null
+                finish(1)
+                return true
+            }
         }
         poll_health(t)
         let rc = unsafe(process_poll(child))

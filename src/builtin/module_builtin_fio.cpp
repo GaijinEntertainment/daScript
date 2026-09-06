@@ -1825,7 +1825,10 @@ namespace das {
             context->throw_error_at(at, "spawn_process: CreateProcess failed");
             return nullptr;
         }
-        if ( hJob ) AssignProcessToJobObject(hJob, pi.hProcess);
+        if ( hJob && !AssignProcessToJobObject(hJob, pi.hProcess) ) {
+            CloseHandle(hJob);      // a job we cannot assign (a restrictive parent job) must not shadow hProcess
+            hJob = NULL;
+        }
         ResumeThread(pi.hThread);
         CloseHandle(pi.hThread);
         DasSubProcess * p = new DasSubProcess();

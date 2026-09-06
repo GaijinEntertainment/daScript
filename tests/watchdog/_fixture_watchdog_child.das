@@ -33,6 +33,7 @@ def main() : int {
     let run = run_number(args[0])
     let mode = args[1]
     if (mode == "crash-then-ok") {
+        print("[I] LLVM JIT: DLL cache hit .jitted_scripts/sub/fake.dll\n")
         print("listening on http://127.0.0.1:1/\n")
         return run == 1 ? 9 : 0
     }

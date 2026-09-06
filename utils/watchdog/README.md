@@ -54,8 +54,10 @@ comes back from the child's `main`: a das `exit(N)` is an abnormal termination a
 
 Ctrl-C or SIGTERM asks the child to stop: through `--stop-file` (the path is handed to the child
 in the `--stop-env` variable, `CADMUS_STOP_FILE` by default, and the file is created on the
-request), through a POST to `--shutdown-url`, or with `--no-shutdown` by terminating it. After
-`--stop-timeout` seconds the child is terminated regardless. Supervision then ends with 0.
+request), through a POST to `--shutdown-url`, or with `--no-shutdown` by terminating it. The
+stop is a ladder with an end: after `--stop-timeout` seconds the child is terminated, ten
+seconds later killed, and ten seconds after that left behind (`child_unkillable`, exit 1).
+Supervision otherwise ends with 0.
 
 Two watchdogs would mean two children fighting over one port, so the pid file (`--pid-file`,
 `logs/<name>-watchdog.pid` by default) both records and protects: a second start refuses while
@@ -85,7 +87,8 @@ at 20 MB with five backups, and echoed to stdout. The events: `watchdog_started`
 `health_heartbeat`, `recovered`, `child_exited`, `intentional_shutdown`,
 `tune_bootstrap_complete`, `tune_incomplete`, `config_restart_relaunch`, `crash`,
 `crash_bundle`, `stop_file_requested`, `shutdown_requested`, `terminate_requested`,
-`watchdog_already_running`, `wer_ready` / `wer_not_ready` / `wer_installed`, `watchdog_stopped`.
+`kill_requested`, `child_unkillable`, `watchdog_already_running`, `wer_ready` / `wer_not_ready` /
+`wer_installed`, `watchdog_stopped`.
 The deploy scripts and the control pages read this log; renaming an event is a contract change.
 
 ## Crash capture

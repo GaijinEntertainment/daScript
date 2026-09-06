@@ -171,6 +171,7 @@ SET(DAS_UTILS_TO_TEST
     internal/ast-fuzz
     internal/requirefix
     internal/test-release
+    daspkg/test_daspkg.das
 )
 
 FOREACH(_das ${DAS_UTILS_TO_TEST})
