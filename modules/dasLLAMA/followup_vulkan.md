@@ -73,9 +73,11 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      same box state (a same-day llama-bench control is the only valid baseline - the box read ~6%
      slower on every row today: llama.cpp 2488 / 53.1 against its 9/5 2527 / 56.7); pp512 2586
      (1.04x of the same-day 2488), tg128 49.9 (0.94x). What is left in the window, in milliseconds:
-     the FFN GEMMs ~85 across both heads (cm2 tiles, at par); the dn GEMMs 29.8; scan 10.9 (four
-     columns per lane is the next try - 32 rows of registers stay under the spill line at 16 x 4);
-     ba 5.8; conv 5.3, cls 2, attention 1.3, add+rms/act/converts ~9.
+     the FFN GEMMs ~85 across both heads (cm2 tiles, at par); the dn GEMMs 29.8 (D1: the loader's
+     Q8_0 transcode of the Q5_K/Q6_K qkv and z planes - k-native planes on the cm2 k5/k6 tiles cut
+     the bytes for tg and the dn GEMM time for pp; the one lever left that moves both); scan 10.9
+     (four columns per lane measured 15.3 - 64 workgroups starve the 36 SMs; two columns is the
+     shape); ba 5.8; conv 5.3, cls 2, attention 1.3, add+rms/act/converts ~9.
    - tg128 = 18.9 ms GPU/token (host wall 19.4; upstream 17.6): every GEMV role sits at 360-420
      GB/s (bandwidth-bound, at par per byte); the bytes are the gap: the loader's Q8_0 transcode of
      the deltanet qkv (Q5_K in the file, 24 x 33.5M params) and z (Q6_K) planes reads ~400 MB more
