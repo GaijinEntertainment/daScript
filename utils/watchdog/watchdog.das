@@ -171,17 +171,20 @@ def private load_config(folder : string) : LoadedConfig {
     return LoadedConfig(js = js)
 }
 
-//! What to supervise, from the bundle layout: `main.das` beside `bin/Release/daslang(.exe)` means
-//! script mode; exactly one `*.exe` means that program. Ambiguity is an error, never a guess.
-def private discover_target(var cfg : WatchdogConfig; folder : string) : string {
+//! What to supervise, from the layout: `main.das` means script mode when a daslang sits beside it
+//! (`bin/Release/daslang(.exe)`) or beside the watchdog itself (a source tree keeps both in `bin/`);
+//! exactly one `*.exe` means that program. Ambiguity is an error, never a guess.
+def private discover_target(var cfg : WatchdogConfig; folder, program_dir : string) : string {
     let script = path_join(folder, "main.das")
-    for (candidate in ["bin/Release/daslang.exe", "bin/Release/daslang", "bin/daslang.exe", "bin/daslang"]) {
-        let exe = path_join(folder, candidate)
-        if (fexist(script) && fexist(exe)) {
+    if (fexist(script)) {
+        if (!empty(cfg.daslang)) {
             cfg.script = script
-            if (empty(cfg.daslang)) {
-                cfg.daslang = exe
-            }
+            return ""
+        }
+        let exe = find_daslang(daslang_roots(program_dir, folder))
+        if (fexist(exe)) {
+            cfg.script = script
+            cfg.daslang = exe
             return ""
         }
     }
@@ -201,7 +204,13 @@ def private discover_target(var cfg : WatchdogConfig; folder : string) : string 
     if (length(exes) > 1) {
         return "watchdog: {folder} holds {length(exes)} executables; pick one with --program or {CONFIG_NAME}"
     }
-    return "watchdog: nothing to supervise in {folder} - expected a single *.exe, or main.das beside bin/Release/daslang. Use --program/--script or ship {CONFIG_NAME}."
+    return "watchdog: nothing to supervise in {folder} - expected a single *.exe, or main.das with a daslang beside it or beside the watchdog. Use --program/--script or ship {CONFIG_NAME}."
+}
+
+//! Where a daslang may sit, nearest first: beside the script, beside the watchdog, and one level
+//! up from the watchdog - `bin/watchdog` in a source tree finds `bin/daslang` through its parent.
+def private daslang_roots(program_dir, cwd : string) : array<string> {
+    return <- [cwd, program_dir, dir_name(program_dir)]
 }
 
 def private find_daslang(dirs : array<string>) : string {
@@ -254,14 +263,14 @@ def public resolve_config(args : array<string>; program_dir : string) : Resolved
     }
     cfg.cwd = get_full_file_name(cfg.cwd)
     if (empty(cfg.program) && empty(cfg.script)) {
-        let why = discover_target(cfg, cfg.cwd)
+        let why = discover_target(cfg, cfg.cwd, program_dir)
         if (!empty(why)) return ResolvedConfig(error = why)
     }
     if (empty(cfg.name)) {
         cfg.name = !empty(cfg.program) ? stem(cfg.program) : base_name(cfg.cwd)
     }
     if (empty(cfg.daslang)) {
-        cfg.daslang = find_daslang([program_dir, cfg.cwd])
+        cfg.daslang = find_daslang(daslang_roots(program_dir, cfg.cwd))
     }
     if (empty(cfg.log)) {
         cfg.log = "logs/{cfg.name}-watchdog.log"

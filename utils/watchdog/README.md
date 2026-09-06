@@ -26,9 +26,10 @@ That works because the watchdog resolves what to supervise in this order, first 
    sets the *default* for that flag, so a flag still overrides it. An unknown key is a hard error:
    silently ignoring a typo would supervise the program with the wrong wiring and nothing would
    say so. A `server_args` array is the default for what follows `--`.
-3. **Layout discovery** - `main.das` next to `bin/Release/daslang(.exe)` means
-   `daslang -jit main.das`; exactly one `*.exe` in the directory means that program. Anything
-   ambiguous is an error, never a guess.
+3. **Layout discovery** - `main.das` means `daslang -jit main.das`, with the daslang found beside
+   it (`bin/Release/daslang(.exe)`) or beside the watchdog itself, which is how `bin/watchdog`
+   in a source tree finds `bin/daslang`; exactly one `*.exe` in the directory means that
+   program. Anything ambiguous is an error, never a guess.
 
 Everything after `--` goes to the child verbatim. From the source tree the watchdog does not sit
 beside what it supervises, so pass `--cwd`:
