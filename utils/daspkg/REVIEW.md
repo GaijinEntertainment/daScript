@@ -23,7 +23,13 @@ table row, in the same change.**
 
 **A `cmd_release` bundle whose main exe ships without a tune sidecar beside it is a defect** - the
 tune sidecar is the `<bundle>.tune.json` file of measured kernel choices the exe reads at run
-time; a tool shipped by `release_include_tool` carries no `[tune]` kernels and needs none.
+time; a tool shipped by `release_include_tool` carries no `[tune]` kernels and needs none, and a
+`--fat` bundle ships none by design: its kernels are baked per CPU class from the library's
+profiles, and the exe writes its own runtime section beside itself at first start.
+
+**A `--fat` release that ships a `[tune]` kernel whose baseline-class clone came from no profile
+is a defect** - `release_fat_gate` reads the `fat_unprofiled` list of every scope in the deps
+JSON and refuses; a fat exe never tunes, so a fallback stamp there would ship forever.
 
 **A diff that lets a release path other than `--quick` reuse a sidecar from an earlier run is a
 defect.**

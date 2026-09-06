@@ -73,6 +73,10 @@ struct DaspkgArgs {
     @clarg_doc = "During `release`, accept a complete existing sidecar instead of re-minting — the ONLY mode that inherits"
     quick : bool
 
+    @clarg_name = "fat"
+    @clarg_doc = "During `release`, build a FAT exe for this CPU class (x86-avx2, x86-vnni512, arm-neon, ...): the plain code targets the class, every [tune] kernel ships one clone per class the library has a profile for, and the exe picks the clone from cpuid at startup. No mint and no shipped sidecar - the kernels come from the profiles, and a kernel with no profile entry for the class refuses the release"
+    fat : string = ""
+
     @clarg_name = "wasm"
     @clarg_doc = "Target wasm64 (memory64): `build --wasm` builds the wasm64 runtime + module archives; `release wasm` ships compiled .wasm artifacts"
     wasm : bool
@@ -1418,6 +1422,7 @@ struct private TuneScopeDep {
     tuner : string                  //!< tuner harness path ("" = none declared)
     complete : bool                 //!< every [tune] kernel of this scope has a fresh sidecar entry
     fallbacks : string              //!< fallback stamps selected by this same compile/host
+    fat_unprofiled : string         //!< fat builds: the [tune] kernels whose baseline clone came from no profile
 }
 
 struct private ReleaseDeps {
@@ -1456,6 +1461,30 @@ def private sidecar_provenance_line(manifest : string) : string {
     let line = "noise={doc?["provenance"]?["noise"] ?? "?"} mode={doc?["provenance"]?["mode"] ?? "?"} sha={doc?["provenance"]?["engine_sha"] ?? "?"} written={doc?["provenance"]?["written"] ?? "?"} box={doc?["provenance"]?["box"] ?? "?"}"
     delete_json(doc)
     return line
+}
+
+// the env prefix a fat release builds its exe under: the baseline class and the fat tune mode
+def private release_fat_env(fat : string) : string {
+    return empty(fat) ? "" : (get_platform_name() == "windows" ?
+        "set \"DAS_JIT_BASELINE={fat}\"&& set \"DAS_TUNE_MODE=fat\"&& " :
+        "DAS_JIT_BASELINE={fat} DAS_TUNE_MODE=fat ")
+}
+
+// a fat release ships profile clones only: the refusal text for one scope whose baseline
+// clones came from no profile (`unprofiled` = the deps JSON's ';'-joined list), "" when empty
+def release_fat_refusal(scope, unprofiled, fat : string) : string {
+    if (empty(unprofiled)) return ""
+    return "release --fat {fat}: scope `{scope}` has no {fat} profile entry for {replace(unprofiled, ";", ", ")} - a fat exe ships profile clones, never fallback stamps; mint a {fat} profile for the library (a full mint on a {fat} box, then tune_profile_export) or release without --fat"
+}
+
+def private release_fat_gate(deps : ReleaseDeps; fat : string) : string {
+    for (ts in deps.tune_scopes) {
+        let refusal = release_fat_refusal(ts.name, ts.fat_unprofiled, fat)
+        if (!empty(refusal)) {
+            return refusal
+        }
+    }
+    return ""
 }
 
 def private release_tuner_cmd(daslang : string; ts : TuneScopeDep; paranoid : bool) : string {
@@ -2139,10 +2168,13 @@ def private release_note_ship_manifest(manifest : string; var ship_manifest : st
     }
 }
 
-def cmd_release(root : string; out_dir : string; paranoid = false; quick = false) : int { // nolint:STYLE037,STYLE038 — phased orchestrator sharing bundle state end to end; the real split belongs to the daspkg cleanup pass
+def cmd_release(root : string; out_dir : string; paranoid = false; quick = false; fat = "") : int { // nolint:STYLE037,STYLE038 — phased orchestrator sharing bundle state end to end; the real split belongs to the daspkg cleanup pass
     let release_t0 = ref_time_ticks()
     if (paranoid && quick) {
         to_log(LOG_WARNING, "release: --paranoid no longer changes the tuner's budget; --quick wins\n")
+    }
+    if (!empty(fat) && quick) {
+        to_log(LOG_WARNING, "release: --quick means nothing under --fat - a fat exe mints nothing and inherits nothing; its kernels come from the class profiles\n")
     }
     // Reset the patchelf availability cache so a daspkg process that releases
     // multiple bundles can pick up a patchelf install between calls.
@@ -2264,7 +2296,10 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
             writer |> write("\"")
         }
     }
-    let cmd = "\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args} \"{main_path}\""
+    let cmd = "{release_fat_env(fat)}\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args} \"{main_path}\""
+    if (!empty(fat)) {
+        log("  build: fat exe for the {fat} class (DAS_JIT_BASELINE={fat}, DAS_TUNE_MODE=fat)\n")
+    }
     let build_t0 = ref_time_ticks()
     let rc = run_cmd(cmd, output)
     if (rc != 0) {
@@ -2281,7 +2316,24 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     //     COMPLETE one (an incomplete/stale scope mints even under --quick: the frozen exe
     //     itself never tunes, so shipping it unmeasured is not an option).
     var ship_manifest = ""   // the resolved scope manifest step 2.6 ships (see there)
-    {
+    if (!empty(fat)) {
+        // a fat exe mints nothing: its kernels are the class profiles' clones, and a kernel the
+        // baseline class has no profile entry for would ship a fallback stamp forever
+        var deps0 : ReleaseDeps
+        if (read_release_deps(deps_file, deps0)) {
+            let refusal = release_fat_gate(deps0, fat)
+            if (!empty(refusal)) {
+                to_log(LOG_ERROR, "{refusal}\n")
+                if (fexist(deps_file)) {
+                    remove(deps_file)
+                }
+                return 1
+            }
+            for (ts in deps0.tune_scopes) {
+                log("  tune: scope `{ts.name}` ships its {fat}-and-up profile clones (fat: no mint, no sidecar - the exe races its runtime section at first start)\n")
+            }
+        }
+    } else {
         var deps0 : ReleaseDeps
         if (read_release_deps(deps_file, deps0)) {
             var tuned_any = false
@@ -2441,7 +2493,11 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     // freshly-minted exe on M4's first standalone run
     let sidecar_default = "{slice(main_path, 0, length(main_path) - 4)}.tune.json"
     let sidecar_src = (!empty(ship_manifest) && fexist(ship_manifest)) ? ship_manifest : sidecar_default
-    if (fexist(sidecar_src)) {
+    if (!empty(fat)) {
+        // no sidecar ships with a fat exe: its kernels are baked per class, and it writes its own
+        // runtime section beside itself at first start on the box it runs on
+        log("  ship: no tune sidecar (fat exe - the runtime section is raced at first start)\n")
+    } elif (fexist(sidecar_src)) {
         let sidecar_rel = "{bundle_name}.tune.json"
         let sidecar_dst = path_join(bundle_dir, sidecar_rel)
         var serr : string

@@ -7,6 +7,13 @@ Figure rules here bind the surfaces this module owns - its code comments, the PR
 under it, and a checked-in doc under this module. A number on a served page answers to
 `site/REVIEW.md` or `site-dasllama/REVIEW.md` (repo root) instead.
 
+**A race that runs inside an application - the first-start race of a fat exe
+(`dasllama/dasllama_fat_start.das`), or any race a diff adds to the load path - never loads a
+model, spawns a child process, or races a kernel; a confirm belongs to the harness alone**
+(`ARCHITECTURE_MEASUREMENT.md` sec.2.42). A shipped exe carries no vehicle model and no harness
+script, so a confirm there is a hang or a silent skip, and a kernel race there would mint winners
+the baked clones cannot serve.
+
 **A `PERF_LEDGER.md` entry never states a tok/s figure or a turn wall that the `-jit` script
 produced - a `-jit` A/B pair enters as its ratio, with the arms' absolute rates left in the
 run's report.** A served turn is one whole prefill-plus-decode run; a turn wall is its wall.

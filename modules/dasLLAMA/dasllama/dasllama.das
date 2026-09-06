@@ -39,6 +39,7 @@ require dasllama/dasllama_vision_io public     // image decode to RGB8 VisionIma
 require dasllama/dasllama_math                 // engine-level knobs (wrapped below, not re-exported)
 require dasllama/dasllama_gpu_tier             // GPU tier status + marks (wrapped below, not re-exported)
 require dasllama/dasllama_gpu_resident         // resident slot-switch/pin surface (wrapped below, not re-exported)
+require dasllama/dasllama_fat_start   // nolint:STYLE030,LINT019 — [init]-only: registers a fat exe's first-start race of the runtime section (Metal twin crowns) with the box-profile apply
 
 // This facade owns the good names; the engine spells each wrapped function with a trailing
 // underscore (load_model_, eval_, ...) so the public re-export above and the documented stub

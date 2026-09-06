@@ -1982,6 +1982,62 @@ def test_cmd_release_ships_minted_scope_manifest(t : T?) {
     }
 }
 
+// a fat release's fixture: a scope shipping class profiles under ./defaults and one [tune]
+// kernel over the add_plus_k selftest generator; `with_profile` decides whether the host's
+// lowest class gets a profile entry for the kernel
+def private write_fat_fixture(tmp_root : string; with_profile : bool) {
+    mkdir(tmp_root)
+    mkdir("{tmp_root}/defaults")
+    let arch = get_architecture_name()
+    let low = arch == "x86_64" ? "x86-avx2" : "arm-neon"
+    let features = arch == "x86_64" ? "avx2;f16c;fma;sse4.2" : "neon;dotprod;fullfp16;lse"
+    if (with_profile) {
+        fwrite("{tmp_root}/defaults/{low}.tune-defaults.json",
+            "\{ \"kernels\" : \{ \"fat_kernel\" : \"k2\" \}, \"provenance\" : \{ \"features\" : \"{features}\" \} \}")
+    }
+    fwrite("{tmp_root}/main.das", "options gen2\nrequire daslib/tune\nrequire llvm/daslib/llvm_tune\n[tune_scope(name=\"fatscope\", defaults=\"./defaults\")]\nstruct FatScope \{\n    unused : int\n\}\n[tune_perm(k = 0), tune_perm(k = 1), tune_perm(k = 2), tune(gen = \"llvm_code_selftest::add_plus_k\", fallback = \"k1\")]\ndef fat_kernel(a, b : int) : int \{\n    return a + b\n\}\n[export, tune_policy(missing = \"fallback\")]\ndef main() \{\n    print(\"R \{fat_kernel(length(get_command_line_arguments()), 3)}\\n\")\n\}\n")
+    fwrite("{tmp_root}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"fatstub\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+}
+
+[test]
+def test_cmd_release_fat(t : T?) {
+    let arch = get_architecture_name()
+    let low = arch == "x86_64" ? "x86-avx2" : "arm-neon"
+    t |> run("--fat ships the class profile's clones, mints nothing, and ships no sidecar") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_fat"
+        let out_dir = "{get_das_root()}/_test_release_fat_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        write_fat_fixture(tmp_root, true)
+        let rc = cmd_release(tmp_root, out_dir, false, false, low)
+        tt |> equal(0, rc, "cmd_release --fat {low} returns 0")
+        tt |> success(!fexist("{tmp_root}/main.tune.json"), "a fat release mints no sidecar beside the script")
+        let bundle_dir = dir_name(bundle_exe_path(out_dir, "fatstub"))
+        tt |> success(!fexist(path_join(bundle_dir, "fatstub.tune.json")), "the bundle ships no tune sidecar")
+        tt |> success(fexist(bundle_exe_path(out_dir, "fatstub")) || fexist("{bundle_exe_path(out_dir, "fatstub")}.exe"), "the fat exe is in the bundle")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+    t |> run("--fat refuses a kernel the baseline class has no profile entry for") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_fat_none"
+        let out_dir = "{get_das_root()}/_test_release_fat_none_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        write_fat_fixture(tmp_root, false)
+        let rc = cmd_release(tmp_root, out_dir, false, false, low)
+        tt |> success(rc != 0, "a fallback-stamped baseline clone refuses the release")
+        let bundle_dir = dir_name(bundle_exe_path(out_dir, "fatstub"))
+        tt |> success(!fexist(path_join(bundle_dir, RELEASE_MANIFEST)), "the refused release never finishes its bundle")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+    t |> run("the gate names the kernel and the class, and passes a fully profiled scope") @(tt : T?) {
+        let refusal = release_fat_refusal("fatscope", "fat_kernel;other_kernel", low)
+        tt |> success(find(refusal, "scope `fatscope` has no {low} profile entry for fat_kernel, other_kernel") >= 0, "the refusal names the scope, the class and the kernels: {refusal}")
+        tt |> equal(release_fat_refusal("fatscope", "", low), "", "a scope whose baseline clones all came from a profile passes")
+    }
+}
+
 [test]
 def test_cmd_release_native_dep(t : T?) {
     var dasSQLITE_present = false

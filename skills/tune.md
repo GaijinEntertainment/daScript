@@ -412,7 +412,11 @@ classes this box runs.
 Kernels are baked: a fat exe carries no grid, no tuner and no policy rail, and
 a re-tune is a new profile and a rebuild. A per-box sidecar beside the exe
 keeps its `"runtime"` section's role (the library reads those knobs at load);
-its `"kernels"` section says nothing to a fat exe.
+its `"kernels"` section says nothing to a fat exe. `daspkg release --fat
+<class>` builds one: no mint, no shipped sidecar, and a kernel whose
+baseline-class clone came from no profile refuses the release (the deps JSON's
+`fat_unprofiled` list names it). dasLLAMA's fat exe races its runtime section
+at first start on the box it runs on and keeps it beside itself.
 
 `daspkg release` applies "untuned does not start" to artifacts at **build
 time**: the `-exe` build's release-deps JSON reports every scope with
@@ -439,8 +443,10 @@ command line - the AST module cache keys on the root script and the `DAS*`
 environment, so a warm compile stamped this run's file too; a bare `--tune`
 after `--` is not in the key, which is why the policy guard reads it at
 runtime. No declaration is needed; `DAS_TUNE_MANIFEST` overrides the location, and
-`set_tune_manifest_runtime_path` points just the get/set APIs elsewhere for
-self-managed harnesses.
+`set_tune_manifest_runtime_path` points the get/set APIs at a file of the
+process's own choosing - a self-managed harness, a test - and outranks the
+env, so a test redirecting its sidecar in-process never writes the box
+manifest a runner pinned for it.
 
 A sidecar whose mtime **predates the running binary's** is stale: its
 `"kernels"` read as absent (stamps fall back, the policy rail re-tunes), and

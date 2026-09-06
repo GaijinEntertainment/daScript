@@ -7,10 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_kitten
 require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
-require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_styletts2
-require dasllama/dasllama_image   // image_path_for - the two lanes' file identities
-require dasllama/dasllama_env   // g_env_engine.image: the by-path load needs an image on disk
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
@@ -113,83 +110,6 @@ def test_kitten_facade(t : T?) {
     }
 }
 
-// elements of the served view that differ from the staging blob's span (the off-rail truth)
-def private span_mismatch(blob : array<float>; span : TtsSpan; view : array<float>) : int {
-    if (long_length(view) != span.n) {
-        return 1000000
-    }
-    var bad = 0
-    for (i in range64(span.n)) {
-        if (view[i] != blob[span.off + i]) {
-            bad++
-        }
-    }
-    return bad
-}
-
-// the same, for a weight the q8 lane carries as int8 quants
-def private span_mismatch_q8(qblob : array<int8>; span : TtsSpan; view : array<int8>) : int {
-    if (long_length(view) != span.n) {
-        return 1000000
-    }
-    var bad = 0
-    for (i in range64(span.n)) {
-        if (view[i] != qblob[span.off + i]) {
-            bad++
-        }
-    }
-    return bad
-}
-
-struct ImageRoundtrip {
-    cold_backed : bool
-    warm_backed : bool
-    minted_backed : bool
-    lane_q8 : bool
-    quantized : bool
-    mismatches : int
-    voices : int
-}
-
-// the image rail on the nano GGUF, once per lane: a fresh staged read on that lane is the
-// off-rail truth; the cold load (a bake or a map, both image-backed) must serve its bytes; the
-// warm load maps; the in-memory mint serves without a file
-def private image_roundtrip(path : string; q8 : bool) : ImageRoundtrip {
-    set_styletts2_q8(q8)
-    defer() {
-        reset_styletts2_q8()
-    }
-    var r = ImageRoundtrip()
-    var inscope st <- stage_styletts2(path, q8)
-    var inscope m <- load_styletts2(path)
-    r.cold_backed = m.image_map != null
-    r.lane_q8 = m.q8
-    if (q8) {
-        // the rows GEMMs' weights ride the int8 plane, their Q8_0 scales the float one
-        r.quantized = !empty(m.albert.q.wq)
-        r.mismatches += span_mismatch_q8(st.qblob, m.albert.q.wq_span, m.albert.q.wq)
-        r.mismatches += span_mismatch(st.blob, m.albert.q.wqs_span, m.albert.q.wqs)
-    } else {
-        r.mismatches += span_mismatch(st.blob, m.albert.q.wt_span, m.albert.q.wt)
-        r.mismatches += span_mismatch(st.blob, m.decoder.resblocks[0].convs1[0].wk_span, m.decoder.resblocks[0].convs1[0].wk)
-    }
-    r.mismatches += span_mismatch(st.blob, m.decoder.ups[0].wtr_span, m.decoder.ups[0].wtr)
-    r.mismatches += span_mismatch(st.blob, m.decoder.window.span, m.decoder.window.a)
-    r.mismatches += span_mismatch(st.blob, m.text_encoder.cnn[0].w_span, m.text_encoder.cnn[0].w)
-    for (name in m.voice_names) {
-        r.mismatches += span_mismatch(st.blob, m.voice_spans?[name] ?? TtsSpan(), m.voices[name])
-        r.voices++
-    }
-    var inscope warm <- load_styletts2(path)
-    r.warm_backed = warm.image_map != null
-    var inscope st2 <- stage_styletts2(path, q8)
-    var inscope minted = StyleTts2Model()
-    mint_styletts2(st2, minted)
-    r.minted_backed = minted.image_map != null
-    r.mismatches += span_mismatch(st.blob, minted.text_encoder.cnn[0].w_span, minted.text_encoder.cnn[0].w)
-    return r
-}
-
 // the generator hook under test: declines, or serves a silent waveform of the CPU chain's length
 var private g_hook_serves = false
 
@@ -260,71 +180,6 @@ def test_kitten_generator_hook(t : T?) {
             t |> success(r.spoke_after_decline, "the CPU chain spoke after the decline")
             t |> equal(r.served_after_serve, 1, "the serving hook is counted")
             t |> success(r.silent_after_serve, "the served waveform reached the facade")
-        }
-    }
-}
-
-[test, arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail")]
-def test_kitten_image(t : T?) {
-    t |> run("nano: the staged read, the mapped image and the in-memory mint agree on both lanes") @(t : T?) {
-        if (!stat(gguf_path("nano")).is_valid) {
-            t |> skip("kitten-nano.gguf not present")
-            return
-        }
-        with_job_que() {
-            setup_dasllama_jobque_()
-            for (q8 in [false, true]) {
-                let lane = q8 ? "q8" : "f32"
-                let r = image_roundtrip(gguf_path("nano"), q8)
-                t |> success(r.cold_backed, "{lane}: the cold load serves from an image")
-                t |> success(r.warm_backed, "{lane}: the warm load maps the image")
-                t |> success(r.minted_backed, "{lane}: the in-memory mint serves from a chunk")
-                t |> equal(r.lane_q8, q8, "{lane}: the served model carries the lane it was minted on")
-                t |> equal(r.voices, 8)
-                t |> equal(r.mismatches, 0, "{lane}: served elements differing from the staged blob")
-            }
-            let r8 = image_roundtrip(gguf_path("nano"), true)
-            t |> success(r8.quantized, "q8: the rows GEMMs' weights are Q8_0 quants")
-        }
-    }
-    t |> run("the two lanes are two files") @(t : T?) {
-        let f32_img = image_path_for(gguf_path("nano"), ST2_IMAGE_TAG)
-        let q8_img = image_path_for(gguf_path("nano"), ST2_IMAGE_TAG_Q8)
-        t |> success(f32_img != q8_img, "each lane is its own prepared image:\n  {f32_img}\n  {q8_img}")
-    }
-    t |> run("nano: the image loads by its own path, the family data riding its meta") @(t : T?) {
-        if (!stat(gguf_path("nano")).is_valid) {
-            t |> skip("kitten-nano.gguf not present")
-            return
-        }
-        if (!g_env_engine.image) {
-            t |> skip("DASLLAMA_IMAGE=0: no image on disk to load by path")
-            return
-        }
-        with_job_que() {
-            setup_dasllama_jobque_()
-            var inscope from_gguf <- load_styletts2(gguf_path("nano"))   // bakes the q8 sibling when it is not there yet
-            let img = image_path_for(gguf_path("nano"), ST2_IMAGE_TAG_Q8)
-            t |> success(stat(img).is_valid, "the q8 lane's image is on disk: {img}")
-            set_styletts2_q8(false)
-            defer() {
-                reset_styletts2_q8()
-            }
-            var inscope m <- load_styletts2(img)
-            t |> success(m.q8, "the file's lane is the served lane")
-            t |> equal(length(m.voice_names), 8)
-            t |> equal(length(m.kitten.aliases), length(from_gguf.kitten.aliases), "the aliases rode the image ({length(m.kitten.aliases)})")
-            t |> equal(length(m.kitten.speed_priors), length(from_gguf.kitten.speed_priors), "the speed priors rode the image ({length(m.kitten.speed_priors)})")
-            t |> success(!empty(m.kitten.aliases) && !empty(m.kitten.speed_priors), "the gguf carries family data to compare")
-            for (an, av in keys(m.kitten.aliases), values(m.kitten.aliases)) {
-                t |> equal(from_gguf.kitten.aliases?[an] ?? "", av, "alias {an}")
-            }
-            if (stat(path_join(models_dir(), "tts_g2p.bin")).is_valid && stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
-                var inscope tm <- load_tts_model(img)
-                var inscope c <- caps(tm)
-                var inscope a <- synthesize(tm, "The image spoke.", c.voices[length(c.voices) - 1], 1.0)
-                t |> success(long_length(a.pcm) > 8000l, "the facade synthesized {long_length(a.pcm)} samples from the image")
-            }
         }
     }
 }

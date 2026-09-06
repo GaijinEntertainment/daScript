@@ -28,11 +28,15 @@ among them - is raced inside the exe at first start, because that race needs no 
    otherwise pull an intrinsic-free clone into the baseline). The dispatch is generated as
    daslang and lowered by the JIT to a load, compares and direct calls; an IR stub was not
    needed.
-4. **The runtime section in the exe** - the Metal twin races move from the harness into a
-   library module the exe links; the exe runs them once at first start with the progress
-   display, writes the sidecar beside itself, reads it from then on.
-5. **Release** - `daspkg release --fat`: no remint; the untuned-does-not-start gate becomes
-   profile completeness per ship-set class.
+4. **The runtime section in the exe** - landed (`modules/dasLLAMA/ARCHITECTURE_MEASUREMENT.md`
+   sec.2.42): `dasllama/dasllama_fat_start.das` owns the runtime snapshot and the Metal twin
+   race the harness now calls too, and registers the first-start hook the box-profile apply
+   fires for a missing section; a fat exe races once, writes the sidecar beside itself, and
+   the next start reads it. Test: `modules/dasLLAMA/tests/test_fat_start.das`.
+5. **Release** - landed: `daspkg release --fat <class>` builds under the baseline and the fat
+   mode, mints nothing, ships no sidecar, and refuses a kernel whose baseline clone came from
+   no profile (the deps JSON's `fat_unprofiled`). Test: `test_cmd_release_fat` in
+   `utils/daspkg/test_daspkg.das`.
 
 ## Rules decided up front
 

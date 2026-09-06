@@ -20,12 +20,12 @@ require dasllama/dasllama_math_aarch64_neon   // laneq4x4 template (the repack b
 require dasllama/dasllama_kv_codec   // nolint:STYLE030 — side-effect: the KV-codec *_template kernels for the cross-module scan
 require dasllama/dasllama_convert    // side-effect: the f16 row-convert templates for the cross-module scan
 require dasllama/dasllama_common // the runtime-knob getters (the profile's "runtime" section snapshots them)
+require dasllama/dasllama_fat_start   // dasllama_runtime_snapshot + dasllama_metal_crown_race - the runtime section's writer and race, shared with a fat exe's first start
 require dasllama/dasllama_mtp_gemma   // gemma_drafter_sidecar - the assistant-depth confirm's vehicle test
 require dasllama/dasllama_tune   // [dasllama_grid] emitter
 require llvm/daslib/llvm_tune    // tune_sidecar_merge — the app-sidecar upsert writer
 require daslib/tune              // [tune_policy] - inert without dasLLVM
-require ?das_metal dasllama/dasllama_metal_prefill  // metal_tensor_race (Apple static_if half)
-require ?das_metal dasllama/dasllama_metal_kernels  // metal_tensor_race_decode (Apple static_if half)
+require ?das_metal dasllama/dasllama_metal_prefill  // the Metal prefill constants the runtime snapshot records (Apple static_if half)
 require tuner_cli               // the shared tuner CLI
 require tuner_noise             // the noise gate + the measured floor, shared with the other half
 require daslib/aarch64_neon // sdot4_laneq (referenced by the cloned laneq template bodies)
@@ -2341,16 +2341,6 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
     return report("dot_q8q8_laneq4x4", names, best, ok)
 }
 
-// one METAL_TWIN race row: log it and bank the family when the tensor twin won
-def private metal_twin_absorb(var wins : array<string>; var ran : bool&; r) {
-    ran = true
-    let mt_note = empty(r.note) ? "" : " ({r.note})"
-    tune_detail("METAL_TWIN {r.family}: base={r.base_ms}ms tensor={r.twin_ms}ms -> {r.winner}{mt_note}\n")
-    if (r.winner == "tensor") {
-        wins |> push(r.family)
-    }
-}
-
 let CONFIRM_TG_MARGIN = 1.005lf
 
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
@@ -2621,8 +2611,8 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         print("note: TUNED_KERNEL_COUNT is {TUNED_KERNEL_COUNT} but {length(g_results)} kernels ran - the progress bar was scaled wrong; update the constant\n")
     }
 
-    // Metal-4 tensor twin race: each tensor pso twin runs against its shipped simdgroup kernel
-    // on this box's GPU; winners join the runtime "metal_tensor" crown list (empty = simdgroup
+    // Metal-4 tensor twin race (dasllama_fat_start owns the race; the confirms below are the
+    // harness's alone): winners join the runtime "metal_tensor" crown list (empty = simdgroup
     // everywhere — the pre-M5 expectation). Skips cleanly with no Metal device.
     var metal_crowns : string   // nolint:LINT003,LINT019 — written by the das_metal arm
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2630,14 +2620,10 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         var mt_ran = false
         tune_progress_kernel_begin("metal_crowns", 0)
         if (!partialMint) {   // a filtered mint leaves "runtime" untouched - no crowns to record
-            // the two race halves come through different require paths, so their result element
-            // types do not unify into one typed local - absorb each returned array where it lands
-            for (r in metal_tensor_race()) {
-                metal_twin_absorb(mt_wins, mt_ran, r)
-            }
-            for (r in metal_tensor_race_decode()) {
-                metal_twin_absorb(mt_wins, mt_ran, r)
-            }
+            var race <- dasllama_metal_crown_race()
+            delete mt_wins
+            mt_wins <- race.wins
+            mt_ran = race.ran
             if (mt_ran) {
                 confirm_serving_crown("kq_gemv_iq2xxs_f4", mt_wins)
             }
@@ -2655,27 +2641,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
 
     // softmax_sink shares softmax's loop shape exactly (one extra scalar joins the reduction), so it
     // mirrors softmax's winner instead of paying its own sweep.
-    // The "runtime" section snapshots the CURRENT runtime knobs (defaults unless this process changed
-    // them) so the written profile is complete and hand-editable: load_model applies it via
-    // apply_box_profile_runtime. TB/L2-budget refinement stays manual (tune_tb.das shows the raw
-    // cliff; edit the file under the knee); "threads" is advisory — set DAS_JOBQUE_THREADS to change it.
-    var runtime = JV((q8_token_block = get_q8_token_block(), q8_l2_budget = get_q8_l2_budget(),
-        matmul_min_chunk_rows = get_matmul_min_chunk_rows(),
-        matmul_min_chunk_rows_gemv = get_matmul_min_chunk_rows_gemv(),
-        target_chunk_work = get_target_chunk_work(), gemv_lane_cap = get_gemv_lane_cap(),
-        batch_lane_cap = get_batch_lane_cap(), batch_grid_2d = get_batch_grid_2d(),
-        dispatch_worker_limit = get_dispatch_worker_limit_(),
-        team_rank_gate = get_team_rank_gate(),   // -1 = unset (apply skips negatives; env/que default rules)
-        attn_par_threshold = get_attn_par_threshold(),
-        requant_par_threshold = get_requant_par_threshold(), norm_par_threshold = get_norm_par_threshold(),
-        rope_par_threshold = get_rope_par_threshold(), kv_store_par_threshold = get_kv_store_par_threshold(),
-        act_par_threshold = get_act_par_threshold(), q8_chunks_per_job = get_q8_chunks_per_job(),
-        q4_chunks_per_job = get_q4_chunks_per_job(), q8_batch_chunks_per_job = get_q8_batch_chunks_per_job(),
-        jobque_spin_us = get_jobque_spin_us(), jobque_join_poll = get_jobque_join_poll(),
-        threads = get_total_hw_jobs() + 1, metal_tensor = metal_crowns,
-        mtp_depth_nextn = get_mtp_depth_nextn(), mtp_depth_assistant = get_mtp_depth_assistant(),
-    metal_tall_floor = metal_tall_floor(), metal_devw_small_panel_mb = metal_devw_small_panel_mb(),
-    metal_cvt_min_rows = metal_cvt_min_rows()))   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
+    var runtime = dasllama_runtime_snapshot(metal_crowns)
     if (partialMint) {
         // a filtered mint must not clobber the runtime knobs (hand-edited TB/L2 refinements
         // live there): a null runtime leaves the sidecar section untouched

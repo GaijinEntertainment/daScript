@@ -144,13 +144,13 @@ def set_tune_manifest_runtime_path(p : string) {
     g_runtime_manifest = p
 }
 
-    //! The tune sidecar location: `DAS_TUNE_MANIFEST` env, else a harness override, else
-    //! `<app>.tune.json` beside the app (the root script, or the binary when there is none).
-    //! Never "" — every app has a sidecar location.
+    //! The tune sidecar location: the in-process override (`set_tune_manifest_runtime_path` names
+    //! a file of the process's own choosing, so it outranks the ambient env), else `DAS_TUNE_MANIFEST`,
+    //! else `<app>.tune.json` beside the app (root script, or the binary). Never "".
 def tune_manifest_path() : string {
+    if (!empty(g_runtime_manifest)) return g_runtime_manifest
     let env = g_env_tune.tune_manifest
     if (!empty(env)) return env
-    if (!empty(g_runtime_manifest)) return g_runtime_manifest
     let app = tune_app_script()
     return sidecar_for(empty(app) ? running_binary() : app)
 }
@@ -924,11 +924,18 @@ def tune_status_add(fname, scope, suffix, source, manifestPath : string; klass :
 // ===== fat mode (runtime) =====
 
 var private g_tune_fat_mask = 0
+var private g_tune_fat_built = false
 
 //! The classes this box runs a fat exe's clones for, one bit per class (`tune_fat_class_bit`);
 //! 0 until the exe's `[init]` ran, which every dispatch reads as the baseline clone.
 def tune_fat_mask() : int {
     return g_tune_fat_mask
+}
+
+//! True inside a fat exe once its `[init]` ran - what a library asks before it races the
+//! runtime section at first start (a plain build has a policy rail and a tuner for that).
+def tune_fat_built() : bool {
+    return g_tune_fat_built
 }
 
 //! A class's bit in the fat mask: its position on its arch's ladder, most capable class first.
@@ -975,6 +982,7 @@ def tune_fat_init(baseline : string) {
         }
     }
     g_tune_fat_mask = mask
+    g_tune_fat_built = true
     let pinned = empty(pin) ? "" : " (DAS_TUNE_FAT_CLASS={pin} pins the class)"
     to_log(LOG_INFO, "llvm_tune: fat kernels - this box runs the {join(names, ", ")} clones{pinned}\n")
     delete names
@@ -1139,13 +1147,29 @@ struct TuneScopeStatus {
     tuner : string      //!< tuner harness path ("" = none declared)
     complete : bool     //!< every demanded kernel has a fresh sidecar entry and the version pin (if any) matched
     fallbacks : string  //!< ';'-joined fname=suffix stamps selected by this compile/host
+    fat_unprofiled : string   //!< fat builds: ';'-joined [tune] kernels whose BASELINE clone came from no profile (fallback or reference) - what a fat release refuses to ship
 }
 
     //! Every declared scope in `prog` with its per-key completeness against the app sidecar,
     //! read OFF THE AST, not this module's macro globals — those are per-requiring-context
     //! copies, so a caller in another macro module reads an empty bank. Deduped by name.
 def tune_scopes_status(prog : Program?) : array<TuneScopeStatus> {
-    // pass 1: the declared scopes (name, tuner, covers) off the [tune_scope] annotations
+    var found <- declared_scopes(prog)
+    // pass 2: each scope's demanded kernels across its declaring + covers= modules
+    var rows : array<TuneScopeStatus>
+    rows |> reserve(length(found))
+    let mpath = tune_manifest_path()
+    var compileStatus <- collect_status(prog)
+    for (sc in found) {
+        rows |> push(scope_status_row(prog, sc, mpath, compileStatus))
+    }
+    delete compileStatus
+    delete found
+    return <- rows
+}
+
+// pass 1: the declared scopes (name, tuner, covers, version pin) off the [tune_scope] annotations, deduped by name
+def private declared_scopes(prog : Program?) : array<TuneScope> {
     var found : array<TuneScope>
     var seen : table<string>
     prog |> for_each_module() $(mod) {
@@ -1179,49 +1203,55 @@ def tune_scopes_status(prog : Program?) : array<TuneScopeStatus> {
             }
         }
     }
-    // pass 2: each scope's demanded kernels across its declaring + covers= modules
-    var rows : array<TuneScopeStatus>
-    rows |> reserve(length(found))
-    let mpath = tune_manifest_path()
-    var compileStatus <- collect_status(prog)
-    for (sc in found) {
-        var wanted : table<string>
-        wanted |> insert(sc.modName)
-        for (m in split(sc.covers, ";")) {
-            if (!empty(m)) {
-                wanted |> insert(m)
-            }
-        }
-        var fnames : array<string>
-        prog |> for_each_module() $(mod) {
-            if (wanted |> key_exists("{mod.name}")) {
-                module_kernel_fnames(mod, fnames)
-            }
-        }
-        if (!empty(sc.versionKey)) {
-            fnames |> push("{TUNE_VERSION_TOKEN}{sc.versionKey}={sc.versionExpected}")
-        }
-        var fallbacks : array<string>
-        for (fname in fnames) {
-            for (st in compileStatus) {
-                if (st.fname == fname && st.source != "manifest") {
-                    fallbacks |> push("{fname}={st.suffix}")
-                    break
-                }
-            }
-        }
-        rows |> push(TuneScopeStatus(name = sc.scopeName, manifest = mpath,
-            tuner = sc.tunerPath,
-            complete = tune_sidecar_entries_complete(mpath, join(fnames, ";")),
-            fallbacks = join(fallbacks, ";")))
-        delete wanted
-        delete fnames
-        delete fallbacks
-    }
-    delete compileStatus
-    delete found
     delete seen
-    return <- rows
+    return <- found
+}
+
+// one scope's status row: its demanded kernels, their fallback stamps, and under fat the
+// baseline clones that came from no profile
+def private scope_status_row(prog : Program?; sc : TuneScope; mpath : string; compileStatus : array<TuneStatus>) : TuneScopeStatus {
+    var wanted : table<string>
+    wanted |> insert(sc.modName)
+    for (m in split(sc.covers, ";")) {
+        if (!empty(m)) {
+            wanted |> insert(m)
+        }
+    }
+    var fnames : array<string>
+    prog |> for_each_module() $(mod) {
+        if (wanted |> key_exists("{mod.name}")) {
+            module_kernel_fnames(mod, fnames)
+        }
+    }
+    if (!empty(sc.versionKey)) {
+        fnames |> push("{TUNE_VERSION_TOKEN}{sc.versionKey}={sc.versionExpected}")
+    }
+    var fallbacks : array<string>
+    var unprofiled : array<string>
+    let fat = tune_mode() == "fat"
+    let baseline = jit_baseline_class()
+    for (fname in fnames) {
+        for (st in compileStatus) {
+            if (st.fname == fname && (fat ? st.klass == baseline : true)) {
+                if (st.source != "manifest" && st.source != "profile") {
+                    fallbacks |> push("{fname}={st.suffix}")
+                }
+                if (fat && st.source != "profile") {
+                    unprofiled |> push(fname)
+                }
+                break
+            }
+        }
+    }
+    let row = TuneScopeStatus(name = sc.scopeName, manifest = mpath,
+        tuner = sc.tunerPath,
+        complete = tune_sidecar_entries_complete(mpath, join(fnames, ";")),
+        fallbacks = join(fallbacks, ";"), fat_unprofiled = join(unprofiled, ";"))
+    delete wanted
+    delete fnames
+    delete fallbacks
+    delete unprofiled
+    return row
 }
 
 // A scope's version pin travels INSIDE the ';'-joined demand list as one `@version:key=value`
@@ -1802,9 +1832,9 @@ def private fat_arm(fn : FunctionPtr; cloneName : string; bit : int) : Expressio
     let isVoid = fn.result.baseType == Type.tVoid
     if (bit == 0) {
         if (isVoid) {
+            // the last statement of the function: the call alone, one expression for the splice
             return <- qmacro_expr() {
                 $e(call)
-                return
             }
         }
         return <- qmacro_expr() {

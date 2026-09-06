@@ -112,6 +112,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_env_registry.das",
                     "modules/dasLLAMA/tests/test_exchange_schema.das",
                     "modules/dasLLAMA/tests/test_facade_docs.das",
+                    "modules/dasLLAMA/tests/test_fat_start.das",
                     "modules/dasLLAMA/tests/test_gen_records_args.das",
                     "modules/dasLLAMA/tests/test_gguf_quant.das",
                     "modules/dasLLAMA/tests/test_gguf_shards.das",
@@ -243,7 +244,7 @@ def area_tests(area : string) : array<string> {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das",
                     "test_box_ident.das", "test_box_profile.das", "test_dasllama_lint_contracts.das",
                     "test_dasllama_lint_escape.das", "test_dlim_wipe.das", "test_env_registry.das",
-                    "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_gen_records_args.das",
+                    "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_fat_start.das", "test_gen_records_args.das",
                     "test_model_specs.das", "test_program_roots.das", "test_run_suites.das", "test_run_summary.das",
                     "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das", "test_tune_interrupt.das" ]
     } elif (area == "llm") {
@@ -277,6 +278,8 @@ def area_image_arms(area : string) : string {
         return "gemma4uv,gemma4v,gemma3v,gemma4e,tower"
     } elif (area == "llm") {
         return "mechanics,smol,untied,metal"
+    } elif (area == "tts") {
+        return "kitten"
     }
     return ""
 }
@@ -296,7 +299,7 @@ let MODULE_AREAS <- {
     "dasllama_styletts2" => "tts", "dasllama_textnorm" => "tts", "dasllama_tts" => "tts",
     "dasllama_tts_blocks" => "tts", "dasllama_tts_types" => "tts",
     "dasllama_exchange" => "infra", "dasllama_exchange_schema" => "infra", "dasllama_lint" => "infra",
-    "dasllama_version" => "infra",
+    "dasllama_version" => "infra", "dasllama_fat_start" => "infra",
     "dasllama_chat" => "llm,vision,audio", "dasllama_tools" => "llm,vision,audio",
     "dasllama_arch_gemma2" => "llm", "dasllama_arch_gemma3" => "llm", "dasllama_arch_gemma4" => "llm",
     "dasllama_arch_glm4moe" => "llm", "dasllama_arch_gptoss" => "llm", "dasllama_arch_llama" => "llm",

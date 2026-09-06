@@ -24,3 +24,10 @@ def fat_kv() : int {
 def fat_add(a, b : int) : int {
     return a + b
 }
+
+// a void kernel: its dispatch arms call and return with no value, and the generator declines
+// the signature, so every clone runs this reference body
+[tune_perm(k = 0), tune_perm(k = 1), tune(gen = "llvm_code_selftest::add_plus_k", fallback = "k1")]
+def fat_void(var acc : int&; a : int) : void {
+    acc = a + 1
+}

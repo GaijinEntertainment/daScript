@@ -99,10 +99,10 @@ pre-PR switch, not the iteration loop. In this folder the spelling is `model_ava
 (`_model_tier.das`). A test that cannot require `_model_tier.das` open-codes the same env check.
 
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image
-rail never calls `load_model`, `load_model_cached`, or `load_model_image` - it loads each
-carrier through that carrier's own loader.** Decoders load through `load_model_`
-(`../dasllama/dasllama_load.das`); every other carrier loads through its own
-`load_<family>_tower` / `load_<family>_encoder` / `load_<carrier>_model`.
+rail never calls `load_model`, `load_model_cached`, or `load_model_image` - each carrier loads
+through the loader its family file exports.** Decoders: `load_model_`
+(`../dasllama/dasllama_load.das`); other carriers: `load_<family>_tower` / `load_<family>_encoder`
+/ `load_<carrier>_model`; the TTS pair: `load_tts_model` (facade) or `load_styletts2` (carrier).
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -184,10 +184,10 @@ the backend, the flash-attention setting, and the mmproj precision the dump came
 defect.**
 
 **A cell that does not establish every process-wide driver setter and serving-lane knob its
-claim depends on, and restore each knob it set in-process to the value it had on entry before
-returning, is a defect.** This holds even when the claim needs the knob at its DEFAULT value.
-The mechanism (why a hook left set silently changes which implementation the next cell
-measures) is `CLAUDE.md`'s "Metal fixtures" section.
+claim depends on, and leave every family pin unset and every driver setter it touched at its
+default before returning, is a defect.** This holds even when the claim needs the knob at its
+DEFAULT value: the between-cell contract is the unpinned default and `reset_<family>_q8` the
+restore; why a hook left set changes what the next cell measures is `CLAUDE.md`'s "Metal fixtures".
 
 **A cell claiming a family serving lane that does not pin it through the family's own lane
 knobs - `set_<family>_q8` / `reset_<family>_q8`, canary's `set_canary_enc_q8` /

@@ -11,7 +11,9 @@ require llvm_tune_fat_lib
 [export, tune_policy(missing = "fallback")]
 def main : int {
     let n = length(get_command_line_arguments())   // aliases a process-global Array header - do not delete
-    print("RESULT {fat_add(n, 3)} KV {fat_kv()}\n")
+    var acc = 0
+    fat_void(acc, n)
+    print("RESULT {fat_add(n, 3)} KV {fat_kv()} VOID {acc}\n")
     var st <- tune_status()
     for (s in st) {
         let active = (tune_fat_mask() & tune_fat_class_bit(s.klass)) != 0

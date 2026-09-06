@@ -497,8 +497,11 @@ def tune_summary() : string {
 
 //! The bench cells' provenance gate: REFUSE to measure on fallback kernel winners. A
 //! stale/absent sidecar silently downgrades every ``[tune]`` kernel with only [I]-level
-//! warnings — the m4 pilot shipped a full board that way. Three worlds, because
-//! ``tune_status()`` populates in exactly one of them:
+//! warnings — the m4 pilot shipped a full board that way. Four worlds, because
+//! ``tune_status()`` populates in two of them:
+//! * **fat exe** (``daspkg release --fat``): the kernels are the class profiles' clones and the
+//!   status rows name each clone's class and source - the gate passes when every clone this
+//!   box runs came from a profile; a fat run is never a box mint, so it is no board row.
 //! * **standalone exe** (the board rig): winners are BAKED at build time, so the status table
 //!   is empty by design — provenance is the sidecar the release shipped beside the binary.
 //! * **``DAS_TUNE_MANIFEST`` pinned**: stamps apply, status stays empty (framework gap,
@@ -543,7 +546,9 @@ def private tune_gate_verdict(why : string) : bool {
 def private tune_gate_why(_) : string {
     var why = ""
     let mpath = g_env_core.tune_manifest
-    if (is_standalone_exe()) {
+    if (is_standalone_exe() && tune_fat_built()) {
+        why = fat_gate_why(0)
+    } elif (is_standalone_exe()) {
         // the release ships <exe>.tune.json from the same mint that baked the winners in
         let sc = tune_manifest_path()
         if (!stat(sc).is_valid) {
@@ -585,6 +590,42 @@ def private tune_gate_why(_) : string {
         }
     }
     return why
+}
+
+// the fat exe's world: of each kernel's clones, the one this box runs is the most capable class
+// of the mask, and it must have come from a profile. Generic for the same reason as tune_gate_why.
+def private fat_gate_why(_) : string {
+    var st <- tune_status()
+    var bestBit : table<string; int>
+    var bestSrc : table<string; string>
+    for (r in st) {
+        continue if (empty(r.klass))
+        let bit = tune_fat_class_bit(r.klass)
+        continue if ((tune_fat_mask() & bit) == 0)
+        let cur = (bestBit |> key_exists(r.fname)) ? bestBit[r.fname] : 2147483647
+        if (bit < cur) {
+            bestBit[r.fname] = bit
+            bestSrc[r.fname] = "{r.source}:{r.klass}"
+        }
+    }
+    delete st
+    var bad = 0
+    var sample = ""
+    for (fname, src in keys(bestSrc), values(bestSrc)) {
+        if (!(src |> starts_with("profile:"))) {
+            bad++
+            if (empty(sample)) {
+                sample = "{fname}={src}"
+            }
+        }
+    }
+    if (empty(bestSrc)) {
+        return "fat exe: tune_status carries no clone rows - the exe cannot name its kernels"
+    }
+    if (bad > 0) {
+        return "fat exe: {bad}/{length(bestSrc)} kernels run a clone that came from no profile (first: {sample}) - ship a profile for that class"
+    }
+    return ""
 }
 
 //! True when a das run cannot name the winners it measured under — an empty ``tune`` or

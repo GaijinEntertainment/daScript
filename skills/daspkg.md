@@ -184,6 +184,8 @@ The recipient can run the bundled exe **without daslang installed**. PR #1 (exe-
 
 **Build-time tuning (the `[tune]` framework):** the `-exe` build's deps JSON reports every `[tune_scope]` with per-key completeness against the app tune sidecar; `cmd_release` always mints: it runs the tuners (`DAS_TUNE_MODE=tune`, `DAS_TUNE_MANIFEST=<sidecar>`), REBUILDS so the exe bakes the measured winners, and ships the sidecar beside the exe as `<bundle>.tune.json` (touched newer than the exe - a sidecar older than the binary reads as stale). `--quick` is the only inheriting mode, and only from a complete, fresh sidecar; a tuner refusal (noise gate / validation) fails the release rather than shipping fallbacks. The exe self-reports its baked stamps via `tune_status()`. See `skills/tune.md`.
 
+**A fat release (`--fat <class>`):** the exe is built under `DAS_JIT_BASELINE=<class>` and `DAS_TUNE_MODE=fat` - its plain code targets the class, every `[tune]` kernel carries one clone per class the library ships a profile for, and the exe picks the clone from cpuid at startup. Nothing mints and no sidecar ships: the deps JSON's `fat_unprofiled` list names any kernel whose baseline clone came from no profile, and one such kernel refuses the release. The exe races its runtime section (the Metal twin crowns among the knobs) at its first start on the box it runs on and keeps it beside itself. `skills/tune.md`, *The fat exe*.
+
 ### `release()` hook in `.das_package`
 
 A package's `.das_package` declares what `daspkg release` should ship:

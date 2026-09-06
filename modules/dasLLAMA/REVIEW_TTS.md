@@ -59,9 +59,16 @@ only the reference's own operation order reproduces the reference.
 step - implemented in a TTS family file is a defect; it goes in
 `dasllama/dasllama_tts_blocks.das`.**
 
-**A family type, a family-keyed branch, or a family metadata key in
-`dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` is a defect - the
-family's quirk goes in its family file.**
+**Family BEHAVIOR in `dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` -
+a family-keyed branch in the synthesis path, a tensor quirk, a symbol or token rule - is a
+defect; the quirk goes in its family file.** Family DATA is not: the shared carrier holds each
+family's driver data (`kitten : KittenFamily`, `kokoro : KokoroFamily`) and the reader that
+fills it from the gguf or the image, because the image serializer lives there and must see
+every field.
+
+**A diff that adds a field to `KittenFamily` or `KokoroFamily` grows the serializer's
+field-count `verify` in `dasllama/dasllama_styletts2.das` in the same change** - a field the
+count does not know rides no image, and the mapped model serves the gguf's default.
 
 **A change to a kernel, a lexicon, a normalizer rule, or a phoneme rule ships the WER and
 UTMOS of `harness/tts_rig.py`, before and after, on every model the change reaches at the

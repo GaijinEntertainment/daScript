@@ -795,6 +795,7 @@ struct private TuneScopeDep {
     tuner : string                  //!< tuner harness path ("" = none declared)
     complete : bool                 //!< every [tune] kernel of this scope has a fresh sidecar entry
     fallbacks : string              //!< fallback stamps selected by this same compile/host
+    fat_unprofiled : string         //!< fat builds: the [tune] kernels whose baseline clone came from no profile
 }
 
 struct private ReleaseDeps {
@@ -886,7 +887,8 @@ def private write_release_deps(prog : Program?) {
     deps.tune_scopes |> reserve(length(tstat))
     for (ts in tstat) {
         deps.tune_scopes |> push(TuneScopeDep(name = ts.name, manifest = ts.manifest,
-            tuner = ts.tuner, complete = ts.complete, fallbacks = ts.fallbacks))
+            tuner = ts.tuner, complete = ts.complete, fallbacks = ts.fallbacks,
+            fat_unprofiled = ts.fat_unprofiled))
     }
     delete tstat
     let dst_path = cfg.list_shared_modules
