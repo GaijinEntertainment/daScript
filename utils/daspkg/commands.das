@@ -1299,9 +1299,15 @@ def cmd_check(root : string; json : bool = false; is_global : bool = false) {
     return 0
 }
 
+//! The one gate a `.das_package` string passes before it reaches a path or a shell command line:
+//! letters, digits, `_`, `-` and `.`, and not `.` or `..` - an allowlist, because the strings
+//! are spliced unquoted into `run_cmd` lines, where a space splits argv and `;` or `$(` run.
 def private is_safe_pkg_name(name : string) : bool {
     if (empty(name) || name == "." || name == "..") return false
-    return !(find(name, "/") >= 0 || find(name, "\\") >= 0)
+    for (c in name) {
+        if (!(is_alpha(c) || is_number(c) || c == '_' || c == '-' || c == '.')) return false
+    }
+    return true
 }
 
 def cmd_cleanup(root : string; force : bool; is_global : bool = false) : int { // nolint:STYLE038 — flat removal checklist (modules/, lock, caches), one arm per artifact
@@ -2150,7 +2156,7 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     // separators / `..` so a hostile or typo'd name can't escape out_dir
     // when path_join + force_rmdir run below.
     if (!is_safe_pkg_name(bundle_name)) {
-        to_log(LOG_ERROR, "Error: unsafe bundle name `{bundle_name}` (must not contain path separators or be `.` / `..`)\n")
+        to_log(LOG_ERROR, "Error: unsafe bundle name `{bundle_name}` (letters, digits, `_`, `-` and `.` only; not `.` or `..`)\n")
         return 1
     }
     // macOS: emit a clickable .app bundle. The exe + dylibs + modules go into
@@ -2667,12 +2673,12 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
                                  wasm_lib_dir, runtime_archive, shell_path : string;
                                  include_globs, exclude_globs, disabled_modules, app_emcc_args : array<string>) : int {
     if (!is_safe_pkg_name(app_name)) {
-        to_log(LOG_ERROR, "release wasm: unsafe app name `{app_name}` (no path separators / `.` / `..`)\n")
+        to_log(LOG_ERROR, "release wasm: unsafe app name `{app_name}` (letters, digits, `_`, `-` and `.` only; not `.` or `..`)\n")
         return 1
     }
     for (m in disabled_modules) {   // a .das_package string that reaches the cross-compile command line
         if (!is_safe_pkg_name(m)) {
-            to_log(LOG_ERROR, "release wasm: unsafe module name `{m}` in release_wasm_disable_module (no path separators / `.` / `..` / spaces)\n")
+            to_log(LOG_ERROR, "release wasm: unsafe module name `{m}` in release_wasm_disable_module (letters, digits, `_`, `-` and `.` only; not `.` or `..`)\n")
             return 1
         }
     }
