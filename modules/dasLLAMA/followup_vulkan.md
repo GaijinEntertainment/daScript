@@ -732,7 +732,9 @@ module) is independent and can land any time - it is pure structure.
     xor ladders, the scan's lane-pair arithmetic (`lanes_per_pair`), the GEMV's rows per workgroup
     - and the init refuses a smaller `subgroupSize`; a wider one (a wave64 device) runs those
     arms unmeasured. Done = a validation message naming `qk_rms_cls` by name, and a wave64 run
-    of the kernel-unit suite.
+    of the kernel-unit suite. The emitter's operand laziness itself - eager `select` / bool `&`
+    `|` as language surface, the purity heuristic dropped, the 12 kernel sites converted - is
+    `plans/shader_emitter_followups.md` item 1.
 41. **`tests/test_vulkan_kernels.das`'s device-absent cells feint instead of skipping.** The file's
     idiom (its header: "every check feints cleanly") predates `tests/REVIEW.md`'s rule that a cell
     with nothing to assert registers `t |> skip`, so on a box without a Vulkan device every cell of
