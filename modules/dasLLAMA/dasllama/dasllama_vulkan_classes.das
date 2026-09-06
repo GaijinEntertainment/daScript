@@ -566,10 +566,12 @@ class DecCombine {
 }
 
 struct RouterArgs {
-    ne : uint     // expert rows
-    dim : uint    // row width
-    woff : uint   // this layer's row base in the span's router plane (elements)
-    obase : uint  // output row base (the resident deltanet arm lands beta/alpha rows in the smalls)
+    ne : uint       // expert rows
+    dim : uint      // row width
+    woff : uint     // this layer's row base in the span's router plane (elements)
+    obase : uint    // output row base (the resident deltanet arm lands beta/alpha rows in the smalls)
+    xstride : uint  // a batched call: workgroup wid serves x row wid / ne (0 on a one-row call)
+    ostride : uint  // ... and lands its ne outputs at obase + row * ostride
 }
 
 [vk_dispatch(name = "router_gemv_cls", grid = "ne", params = "ne : int64")]
@@ -582,12 +584,14 @@ class RouterGemv {
 
     [spirv_kernel(local_size_x = 256, name = "router_gemv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
-        let e = gl_WorkGroupID.x
+        let e = gl_WorkGroupID.x % pa.ne
+        let row = gl_WorkGroupID.x / pa.ne
         let base = pa.woff + e * pa.dim
+        let xb = row * pa.xstride
         var acc = 0.0
         var i = gl_LocalInvocationID.x
         while (i < pa.dim) {
-            acc += w[base + i] * x[i]
+            acc += w[base + i] * x[xb + i]
             i += 256u
         }
         let s = subgroupAdd(acc)
@@ -602,7 +606,7 @@ class RouterGemv {
                 tot += part[sgi]
                 sgi++
             }
-            logits[pa.obase + e] = tot
+            logits[pa.obase + row * pa.ostride + e] = tot
         }
     }
 }
@@ -840,6 +844,32 @@ class DnConv {
             let s = ch < 2u * pa.kd ? nsc[ch / pa.ds] : 1.0
             outr[p * pa.cd + ch] = row[ch] * s
             ch += 256u
+        }
+    }
+}
+
+struct DnTailArgs {
+    cd : uint        // conv width (channels)
+    taps : uint      // history rows (dconv - 1)
+    row0 : uint      // the first tail row in src (the window's last taps raw rows)
+    hist_off : uint  // the ring image's float offset in smalls
+}
+
+// the prefill window's last taps raw projection rows (position-major) into the decode step's
+// conv-ring image (channel-major, taps consecutive) - one element per thread
+[vk_dispatch(name = "dn_tail_cls", grid = "wgs", params = "wgs : int64")]
+class DnTail {
+    @ssbo @binding = 0 src : array<float>      // the projected rows (position-major)
+    @ssbo @binding = 1 smalls : array<float>   // the layer's smalls (the ring image at hist_off)
+    @push_constant pa : DnTailArgs
+
+    [spirv_kernel(local_size_x = 256, name = "dn_tail_cls_spv")]
+    def run {
+        let idx = gl_GlobalInvocationID.x
+        if (idx < pa.cd * pa.taps) {
+            let ch = idx / pa.taps
+            let k = idx % pa.taps
+            smalls[pa.hist_off + ch * pa.taps + k] = src[(pa.row0 + k) * pa.cd + ch]
         }
     }
 }
@@ -1469,13 +1499,13 @@ class template AtAttnTileT {
     @workgroup fl : float[8]
     @workgroup fal : float[8]
 
-    // stage the 8-query tile and reset the online-softmax state
-    def load_q(q0, nrows, qd, h, hs : uint) {
+    // stage the 8-query tile and reset the online-softmax state; qrow/qhs = the q row and per-head strides
+    def load_q(q0, nrows, qrow, h, hs, qhs : uint) {
         let tid = gl_LocalInvocationID.x
         var i = tid
         while (i < 8u * hs) {
             let qr = q0 + i / hs
-            fq[i] = qr < nrows ? qpanel[qr * qd + h * hs + i % hs] : 0.0
+            fq[i] = qr < nrows ? qpanel[qr * qrow + h * qhs + i % hs] : 0.0
             i += 256u
         }
         if (tid < 8u) {
@@ -1545,11 +1575,14 @@ class template AtAttnTileT {
     }
 
     // the mirror-window kernel (DaAttnB's pass): batched causal attention over the decode
-    // mirrors, K/V read at kbase/vbase, out = plain rows (no gating); dpl-guarded accumulators
-    // serve hs 32..256. pa/outp are instance-declared (DaAttnBArgs); AtAttn overrides run
+    // mirrors, K/V read at kbase/vbase; q read head-strided (qhs), the gated epilogue multiplies
+    // by the sigmoid of the head's gate half; dpl-guarded accumulators serve hs 32..256.
+    // pa/outp are instance-declared (DaAttnBArgs); AtAttn overrides run
     [spirv_kernel(local_size_x = 256)]
     def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qd = pa.nh * pa.hs
+        let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
+        let qrow = pa.nh * qhs
         let dpl = pa.hs / 32u
         let qtiles = (pa.npos + 7u) / 8u
         let h = gl_WorkGroupID.x / qtiles
@@ -1558,7 +1591,7 @@ class template AtAttnTileT {
         let r = tid / 32u
         let c = tid % 32u
         let kvh = h / pa.kv_mul
-        load_q(q0, pa.npos, qd, h, pa.hs)
+        load_q(q0, pa.npos, qrow, h, pa.hs, qhs)
         var o0 = 0.0
         var o1 = 0.0
         var o2 = 0.0
@@ -1621,10 +1654,16 @@ class template AtAttnTileT {
         if (q0 + r < pa.npos) {
             let inv = 1.0 / fl[r]
             let ob = (q0 + r) * qd + h * pa.hs + c
+            let gb = (q0 + r) * qrow + h * qhs + pa.hs + c
             var jj = 0u
             while (jj < dpl) {
-                outp[ob + jj * 32u] = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
+                var v = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
                     : (jj == 4u ? o4 : (jj == 5u ? o5 : (jj == 6u ? o6 : o7))))))) * inv
+                if (pa.gated != 0u) {
+                    let g = qpanel[gb + jj * 32u]
+                    v = v / (1.0 + exp(-g))
+                }
+                outp[ob + jj * 32u] = v
                 jj++
             }
         }
@@ -1648,7 +1687,7 @@ class AtAttn : AtAttnTileT {
         let r = tid / 32u
         let c = tid % 32u
         let kvh = h / pa.kv_mul
-        load_q(q0, pa.rows, pa.qd, h, pa.hs)
+        load_q(q0, pa.rows, pa.qd, h, pa.hs, pa.hs)
         var o0 = 0.0
         var o1 = 0.0
         var o2 = 0.0
@@ -1967,6 +2006,8 @@ struct DaAttnBArgs {
     vbase : uint
     w0 : uint       // window base (queries attend mirror positions [0, w0 + row])
     scale : float
+    qhs : uint      // per-head q stride: hs, or 2 * hs on a gated model ([q | gate] per head)
+    gated : uint    // multiply each head's output by the sigmoid of its gate half
 }
 
 // batched causal attention over the decode mirrors (the template's run): K/V read at kbase/vbase,
@@ -6090,12 +6131,13 @@ struct QkRmsArgs {
     hs : uint
     nh : uint
     nkvh : uint
-    qstride : uint
+    qstride : uint   // q row stride
     kstride : uint
     kbase : uint
     qwoff : uint
     kwoff : uint
     eps : float
+    qhs : uint       // per-head q stride: hs, or 2 * hs on a gated model
 }
 
 // per-head RMSNorm on q/k between the projections and rope (qk_norm models), one wg per
@@ -6114,7 +6156,8 @@ class QkRms : RmsWgBase {
         let r = wid / per
         let hh = wid % per
         let is_q = hh < pa.nh
-        let base = is_q ? r * pa.qstride + hh * pa.hs : pa.kbase + r * pa.kstride + (hh - pa.nh) * pa.hs
+        let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
+        let base = is_q ? r * pa.qstride + hh * qhs : pa.kbase + r * pa.kstride + (hh - pa.nh) * pa.hs
         let wbase = is_q ? pa.qwoff : pa.kwoff
         let tid = gl_LocalInvocationID.x
         var ss = 0.0
@@ -6216,15 +6259,16 @@ struct RopeKvBArgs {
     qd : uint
     kvd : uint
     hs : uint
-    half : uint
+    half : uint      // rotation pairs per head; pairs past it pass through (k and v stored unrotated)
     neox : uint
     kpair0 : uint    // first k pair's per-position index
-    ppp : uint       // rotation pairs per position
+    ppp : uint       // pairs per position (hs / 2 per head, rotated or not)
     layerbase : uint // this layer's K/V mirror base
     npos : uint
     pos0 : uint      // the window's first absolute position
     voff : uint
     kstride : uint
+    qhs : uint       // per-head q stride: hs, or 2 * hs on a gated model ([q | gate] per head, the gate half left in place)
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
@@ -6247,13 +6291,15 @@ class template RopeKvStoreBT {
             let lp = gid % pa.ppp
             let is_k = lp >= pa.kpair0
             let pr = is_k ? lp - pa.kpair0 : lp
-            let h = pr / pa.half
-            let j = pr % pa.half
+            let hpairs = pa.hs / 2u
+            let h = pr / hpairs
+            let j = pr % hpairs
+            let rot = j < pa.half
             let cb = p * pa.hs
-            let fcr = cossin[cb + j]
-            let fci = cossin[cb + pa.half + j]
-            let e0 = pa.neox != 0u ? j : j * 2u
-            let e1 = pa.neox != 0u ? j + pa.half : j * 2u + 1u
+            let fcr = rot ? cossin[cb + j] : 1.0
+            let fci = rot ? cossin[cb + pa.half + j] : 0.0
+            let e0 = rot ? (pa.neox != 0u ? j : j * 2u) : 2u * pa.half + 2u * (j - pa.half)
+            let e1 = rot ? (pa.neox != 0u ? j + pa.half : j * 2u + 1u) : e0 + 1u
             let apos = pa.pos0 + p
             if (is_k) {
                 let kb = p * pa.kstride + h * pa.hs
@@ -6272,8 +6318,9 @@ class template RopeKvStoreBT {
                     vmir[mo + e0] = kvrows[vb + e0]
                     vmir[mo + e1] = kvrows[vb + e1]
                 }
-            } else {
-                let qb = p * pa.qd + h * pa.hs
+            } elif (rot) {
+                let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
+                let qb = p * (pa.qd / pa.hs) * qhs + h * qhs
                 let a0 = qrows[qb + e0]
                 let a1 = qrows[qb + e1]
                 qrows[qb + e0] = a0 * fcr - a1 * fci

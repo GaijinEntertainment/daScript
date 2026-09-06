@@ -627,13 +627,6 @@ def resident_unserved_features(c : Config) : string {
     return names
 }
 
-//! Does the resident PREFILL window chain serve this config's shape? Its recurrent, gated-q and
-//! partial-rope arms are not written yet: such a model prefills on the CPU and the resident decode
-//! takes the mirror over.
-def resident_prefill_shape_ok(c : Config) : bool {
-    return c.recr_mask == 0ul && !c.q_gated && (c.rope_dim == 0l || c.rope_dim == c.head_size)
-}
-
 //! Why layer `l` keeps the whole-model driver off the model - "" when the layer fits the
 //! recorder's one fixed geometry (hidden `hid0`, head size `hs`, kv width `kvd`, own K/V).
 def resident_layer_decline(t : Model; l, hid0, hs, kvd : int64) : string {
@@ -923,7 +916,6 @@ enum private RdecPass {
     span            // a non-causal (media) span
     pinned_off      // the resident prefill is pinned off (a multi-stream scheduler)
     rewind          // a hybrid's position is not its forward-only deltanet state's next one
-    hybrid_prefill  // the resident window chain has no recurrent, gated-q or partial-rope arm yet
 }
 
 var private g_rdec_pass_said : table<int>
@@ -959,8 +951,6 @@ def private rdec_pass_once(kind : RdecPass; a, b : int64) {
         why = "the eval carries a non-causal span"
     } elif (kind == RdecPass.rewind) {
         why = "position {a} is not the deltanet state's next position {b} (the recurrent state is forward-only)"
-    } elif (kind == RdecPass.hybrid_prefill) {
-        why = "the resident window chain has no recurrent, gated-q or partial-rope arm yet - the CPU prefills, the resident decode takes the mirror over"
     } else {
         why = "the resident prefill is pinned off (a multi-stream scheduler owns the sessions)"
     }
@@ -1081,10 +1071,6 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
         rdec_pass_once(RdecPass.span, 0l, 0l)
         return false
     }
-    if (!resident_prefill_shape_ok(t.config)) {
-        rdec_pass_once(RdecPass.hybrid_prefill, 0l, 0l)
-        return false
-    }
     if (start_pos != 0l) {
         // continuation over OUR device-held history: hydrate host KV, then decline to the CPU loop
         if (g_rdec_cnt > 0l && s.rdec_gen == g_rdec_gen && !s.rdec_hydrated) {
@@ -1099,6 +1085,9 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     }
     // a DIFFERENT session's re-prefill steals the single mirror — fine for serial flows; a stranded owner's decode fails LOUD via the ownership guard
     let c = t.config
+    if (c.recr_mask != 0ul) {
+        dn_reset(s)   // the recurrent state is forward-only: a position-zero prefill starts it fresh (the window chain zeroes its device slots)
+    }
     let hs = layer_head_size(c, 0l)
     let half = hs / 2l
     g_rdec_tmp |> resize(npos * hs)   // the rope-row batch borrows the scratch row
@@ -1112,10 +1101,21 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     } else {
         rdec_prefill(s.x_b, cb, npos, s.logits)
     }
+    if (c.recr_mask != 0ul) {
+        // the device-advanced recurrent state comes home: the host copy is authoritative for the first decode's upload
+        for (l in range64(c.n_layers)) {
+            continue if (s.dn_state_prefix[l] < 0l)
+            unsafe {
+                rdec_dn_prefill_flush(l, addr(s.dn_state[s.dn_state_prefix[l]]), addr(s.dn_conv_state[s.dn_conv_prefix[l]]))
+            }
+        }
+        s.dn_pos = npos
+    }
     g_rdec_cnt = npos   // the mirror now holds [0, npos) — the decode's continuity witness
     g_rdec_gen ++
     s.rdec_gen = g_rdec_gen
     s.rdec_hydrated = false
+    g_rdec_prefills++
     prefill_override_logits_done()
     return true
 }
@@ -1194,10 +1194,10 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
     return true
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
+[hot_path, unused_argument(t), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
 def private vulkan_embed_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
     return (active_prefill_override() == "vulkan" && g_rdec_active && g_resident_prefill_allowed && g_rdec_emb_gpu
-        && resident_prefill_shape_ok(t.config) && start_pos == 0l && npos <= g_rdec_cap
+        && start_pos == 0l && npos <= g_rdec_cap
         && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null
         && s.attn_uniform_end == 0l && empty(s.mrope_pos) && !s.ds_active)
 }
@@ -1264,6 +1264,11 @@ def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
 //! Is the resident whole-stack decode driver active for the INSTALLED model? (The arm-outcome
 //! discriminator status surfaces read: resident beats rails beats cpu.)
 def moe_gpu_resident_active() : bool => g_rdec_active
+
+var private g_rdec_prefills = 0l
+
+//! How many prompts the resident window chain has prefilled in this process (a test's served witness)
+def moe_gpu_resident_prefills() : int64 => g_rdec_prefills
 
 //! Capture the INSTALLED model's tier state into `st` (see ``moe_gpu_model_marks_save_``) and
 //! classify what it had: "gpu:resident" | "gpu:rails" | "cpu". The load-time half of a

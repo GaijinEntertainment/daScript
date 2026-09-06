@@ -37,15 +37,22 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    token command carries recurrent layers (the fused step over per-layer state slots), gated
    attention and partial rotary, the K/V mirror has one slot per attention layer, and the nextn
    block no longer declines. Qwen3.5-9B UD-Q5_K_XL decodes resident at 49.7 tg (0.88x of
-   upstream; was 11.1 on the per-op rails). STILL OPEN in this item: (a) the resident PREFILL
-   window chain has no recurrent, gated-q or partial-rope arm - a hybrid prefills on the CPU
-   (95.7 pp512 on the 9B vs upstream 2527) and the decode takes the mirror over
-   (`resident_prefill_shape_ok`); (b) the other families Metal serves - MoE (Wave C), gemma4
-   (PLE, sandwich norms), gpt-oss (sinks, swiglu_oai) - stay per-op; (c) the decode-role
-   profiler (`rdq_sample`) has no per-role table for the hybrid stamp count - it reports the
-   whole span only; (d) the q8 beta/alpha arm serves the 0.8B (Q8_0 rows), the f32 arm the 9B
-   (F32 rows) - a kernel-unit cell for `router_gemv_cls` at a non-zero `obase` is owed
-   (`REVIEW_GPU.md`'s new-kargs-field rule; today the 9B model run is the only witness).
+   upstream; was 11.1 on the per-op rails). The PREFILL half followed: the window chain carries
+   the recurrent block (conv + chunked scan on the layer's device state), gated attention and
+   partial rotary on the batch kernels, and flushes the state home for the decode's upload
+   (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2j, `_DECODE.md` sec.2.2v; gate
+   `tests/test_gpu_resident_hybrid.das`, one- and two-window cells). The 9B UD file on the
+   resident driver: pp512 1365 (was 95.7; upstream 2527 - 0.54x, a gap: the prefill's per-role
+   profile on a hybrid is the next lever), tg128 53.3 (upstream 56.7, 0.94x). STILL OPEN in this item:
+   (b) the other families Metal serves - MoE (Wave C), gemma4 (PLE, sandwich norms), gpt-oss
+   (sinks, swiglu_oai) - stay per-op; (c) the decode-role profiler (`rdq_sample`) has no
+   per-role table for the hybrid stamp count - it reports the whole span only, and the prefill's
+   per-role table labels a recurrent layer's stamps with the attention head's role names; (d) the
+   q8 beta/alpha arm serves the 0.8B (Q8_0 rows), the f32 arm the 9B (F32 rows) - a kernel-unit
+   cell for `router_gemv_cls` at a non-zero `obase` and a row stride is owed (`REVIEW_GPU.md`'s
+   new-kargs-field rule; today the 9B model run is the only witness); (e) the prefill's
+   state handoff is a flush-to-host + re-upload per recurrent layer at the prompt/decode seam -
+   an owner bind that keeps the device copy would save the round trip (once per generation).
 3. **KV codecs on device** - Vulkan's mirror serves f16 (the armed default) and f32 through
    the codec-templated kernel stamps; Metal additionally carries q8_0/tq4. Port the quant
    codecs next (the CPU truth is `dasllama_convert`'s KV codec functions; the Metal quant

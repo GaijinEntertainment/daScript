@@ -214,10 +214,21 @@ stored back in place (q) or into the mirror (k). The split qk-rms + rope pair ca
 arm, so a gated or partial-rope model takes the fused kernel whatever the fuse gate says; the
 two arms need qk-norm, and a model with either but without it declines by name.
 
-**A session whose rows the mirror lacks takes the mirror from the host cache.** A hybrid's
-prompt prefills on the CPU today (the window chain has no recurrent, gated-q or partial-rope
-arm yet - `resident_prefill_shape_ok`), and a session another session's prefill superseded is
-hydrated; in both the host cache is authoritative, so the decode override uploads the
-attention layers' rows `[0, pos)` into the mirror (`rdec_take_mirror`), mints a generation and
-serves - the same sync the batch decode does per row. The gap decline remains for a session
-that owns the mirror and asks past its rows.
+**The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN.md`
+sec.2.2j): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
+rows into the layer's own smalls, the conv, the two-phase chunked scan over the layer's own
+device state slot and the tier's scan workspace, the o requant and the out GEMM into the block
+output, so the window command needs no host round trip per layer. The state slots are the
+decode's (`RLayer.dn`): the prefill zeroes them at window 0 (a position-zero prefill starts the
+forward-only state fresh - the engine's `dn_reset` on the host, the chain's own zero copy on the
+device) and, after the last window, flushes each layer's state and per-channel conv history home
+to the session (`vk_rdec_prefill_dn_flush`) and marks the slot invalid, so the first decode's
+owner bind uploads the host copy the ordinary way; the host stays the one authority between the
+two chains. The session's deltanet position is the prompt length after the prefill.
+
+**A session whose rows the mirror lacks takes the mirror from the host cache.** A session that
+prefilled on the CPU rails (a pinned-off resident prefill, a CPU-only session) or that another
+session's prefill superseded is hydrated on the host; the decode override uploads the attention
+layers' rows `[0, pos)` into the mirror (`rdec_take_mirror`), mints a generation and serves - the
+same sync the batch decode does per row. The gap decline remains for a session that owns the
+mirror and asks past its rows.

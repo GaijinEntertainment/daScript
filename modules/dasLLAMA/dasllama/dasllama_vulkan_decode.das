@@ -582,7 +582,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
             var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(kvd / hs),
                 qstride = uint(qd), kstride = uint(kvd), kbase = uint(qd),
                 qwoff = uint(nlfin + dim + l * 2l * hs), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hs),
-                eps = g_rd.eps)
+                eps = g_rd.eps, qhs = uint(hs))
             enc_qk_rms_cls(raw, h, L.s_qkn, pcn, g_rd.n_heads + kvd / hs)
             pfq_ts(raw)
         }

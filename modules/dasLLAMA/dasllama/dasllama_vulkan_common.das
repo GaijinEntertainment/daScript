@@ -2014,6 +2014,13 @@ struct RLayer {
     s_dnstep : VkDescriptorSet
     m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
     dn : DnStep                     // state + smalls + the session owner (the per-op step's shape; its cmd/tok/sets stay unused here)
+    // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
+    pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
+    pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + smalls -> dn_ws_dev (scan phase 1)
+    pf_dn_scan_p2_set : VkDescriptorSet    // pf_dnz + this layer's state + dn_ws + smalls (scan phase 2)
+    pf_dn_tail_set : VkDescriptorSet       // pf_dnqkv last taps rows -> this layer's smalls ring image
+    pf_dn_ba_set : VkDescriptorSet         // f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (batched router GEMV)
+    m_pf_dnqkv, m_pf_dnz, m_pf_dnout, m_pf_dnbeta, m_pf_dnalpha : HostBuf   // the prefill GEMMs' region metas
 }
 
 struct RDec {
@@ -2093,6 +2100,13 @@ struct RDec {
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
     pf_emb_set : VkDescriptorSet
     pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [l*2] = the ffn site, [l*2+1] = addr_next
+    // the hybrid arm: the recurrent layers' window planes (the scan rides the tier's dn_ws_dev,
+    // the o requant its DN_O_OFF rows -> hq/hs). Per-layer sets live on RLayer (smalls/state differ).
+    pf_dnqkv : uint64             // [MAX_NPOS x cd] projected qkv rows
+    pf_dnconv : uint64            // [MAX_NPOS x cd] the conv output rows the scan reads
+    pf_dnz : uint64               // [MAX_NPOS x di] z rows
+    pf_dnbg : uint64              // [2 x MAX_NPOS x nvh] beta rows then alpha rows (the q8 arm's GEMM out; copied into the layer smalls per window)
+    pf_dnrq_set : VkDescriptorSet // the o requant (dn_ws_dev DN_O_OFF rows -> hq/hs), shared by every recurrent layer
 }
 
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
@@ -2283,6 +2297,10 @@ let VHZ_DNP = 0x80000u    // deltanet projection row (qkv + z)
 let VHZ_DNST = 0x100000u  // deltanet per-layer state (in place)
 let VHZ_DNSM = 0x200000u  // deltanet per-layer smalls (beta/g rows + the conv ring)
 let VHZ_DNO = 0x400000u   // deltanet requantized o row (oq + os)
+let VHZ_DNWS = 0x800000u  // the deltanet window chain's scan workspace (dn_ws_dev)
+let VHZ_DNBG = 0x1000000u // the prefill's beta/alpha rows scratch (pf_dnbg)
+let VHZ_DNC = 0x2000000u  // the prefill's deltanet conv output rows (pf_dnconv)
+let VHZ_DNZ = 0x4000000u  // the prefill's deltanet z rows (pf_dnz)
 
 struct VkHaz {
     w : uint            // bits with a pending (unbarriered) write

@@ -54,7 +54,8 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_VULKAN_DECODE.md` - sec.2.2r-2.2v: the per-op tier's decode era - the decode
   attention block over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, the
   whole-token decode span, the deltanet decode step's per-session resident state, and the
-  whole-model driver's hybrid token command (recurrent layers, gated attention, partial rotary).
+  whole-model driver's hybrid token command and prefill (recurrent layers, gated attention,
+  partial rotary, the prefill-to-decode state handoff).
 - `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.39: the Metal speculative round over the batch driver's
   same-slab verify, the box knob that sets the depth a round drafts, and the kernel
   argument-alignment contract enforced at every dispatch.

@@ -313,10 +313,12 @@ from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
 shape is named in the text a user reads, a served one yields "".
 `test_gpu_resident_hybrid.das` - stocked suite; the whole-model resident driver on a deltanet
-hybrid (Qwen3.5-0.8B-Q8_0, `DASLLAMA_GPU=1`): the CPU prefills, the resident decode takes the
-mirror over and steps the recurrent layers on device; forced-feed logits within the deltanet bar
-of the all-CPU chain (the model dropped off the device), one-step-off control, armed witness;
-skips without the model or the armed tier.
+hybrid (Qwen3.5-0.8B-Q8_0, `DASLLAMA_GPU=1`): the resident window chain prefills (recurrent
+layers through conv + chunked scan on device state, gated partial-rope attention over the mirror)
+and the resident decode steps the recurrent layers on device; forced-feed logits within the
+deltanet bar of the all-CPU chain (the model dropped off the device) after the prefill and at
+every step, one-step-off control, armed + served-prefill witnesses; one-window (40 tokens) and
+two-window (600 tokens) cells; skips without the model or the armed tier.
 `test_gpu_model_swap.das` - stocked suite; two models through one process on the armed tier
 (Qwen3-0.6B, SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own
 weights, the pin on the upload rail dropping a still-installed model's device state first; skips

@@ -136,6 +136,7 @@ typedef RdecSetLayerFn = function<(l : int64; mir_idx : int64; bq : int64; bk : 
 typedef RdecSetDnLayerFn = function<(l : int64; bqkv : int64; bz : int64; bout : int64; bbeta : int64; balpha : int64; b1 : int64; b3 : int64; b2 : int64; ba_off : int64; fqkv : int; fz : int; fout : int; f1 : int; f3 : int; f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) : void>
 typedef RdecUploadDnBaFn = function<(rows : array<float>) : void>
 typedef RdecDnOwnFn = function<(l : int64; stp : float?; histp : float?) : void>
+typedef RdecDnPrefillFlushFn = function<(l : int64; stp : float?; histp : float?) : void>
 typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int) : void>
 typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; pos : int64; cnt : int64; var logits : array<float>) : void>
 typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) : void>
@@ -159,6 +160,8 @@ def private rdec_unset_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2
 def private rdec_unset_upload_dn_ba(rows : array<float>) {}
 [unused_argument(l, stp, histp)]
 def private rdec_unset_dn_own(l : int64; stp : float?; histp : float?) {}
+[unused_argument(l, stp, histp)]
+def private rdec_unset_dn_prefill_flush(l : int64; stp : float?; histp : float?) {}
 [unused_argument(cls_block, cls_fmt)]
 def private rdec_unset_set_cls(cls_block : int64; cls_fmt : int) {}
 [unused_argument(x, cossin, pos, cnt, logits)]
@@ -193,14 +196,16 @@ var g_rdec_installed = false
 var g_rdec_set_dn_layer = @@rdec_unset_set_dn_layer
 var g_rdec_upload_dn_ba = @@rdec_unset_upload_dn_ba
 var g_rdec_dn_own = @@rdec_unset_dn_own
+var g_rdec_dn_prefill_flush = @@rdec_unset_dn_prefill_flush
 var g_rdec_dn_installed = false
 
 //! Install the resident driver's hybrid (deltanet) seats - separately, so a tier without them
 //! declines recurrent layers by name instead of serving a model it cannot step.
-def public install_moe_gpu_resident_dn(set_dn_layer : RdecSetDnLayerFn; upload_dn_ba : RdecUploadDnBaFn; dn_own : RdecDnOwnFn) {
+def public install_moe_gpu_resident_dn(set_dn_layer : RdecSetDnLayerFn; upload_dn_ba : RdecUploadDnBaFn; dn_own : RdecDnOwnFn; dn_prefill_flush : RdecDnPrefillFlushFn) {
     g_rdec_set_dn_layer = set_dn_layer
     g_rdec_upload_dn_ba = upload_dn_ba
     g_rdec_dn_own = dn_own
+    g_rdec_dn_prefill_flush = dn_prefill_flush
     g_rdec_dn_installed = true
 }
 
@@ -208,6 +213,9 @@ def public rdec_dn_installed() : bool => g_rdec_dn_installed
 def public rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) { invoke(g_rdec_set_dn_layer, l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off, fqkv, fz, fout, f1, f3, f2, convw, wnormp, ap, dtp) }
 def public rdec_upload_dn_ba(rows : array<float>) { invoke(g_rdec_upload_dn_ba, rows) }
 def public rdec_dn_own(l : int64; stp : float?; histp : float?) { invoke(g_rdec_dn_own, l, stp, histp) }
+//! After a resident prefill: flush layer `l`'s device deltanet state and per-channel conv history
+//! home to the session (`stp`/`histp`), so the first decode uploads it cleanly (device state kept fresh).
+def public rdec_dn_prefill_flush(l : int64; stp : float?; histp : float?) { invoke(g_rdec_dn_prefill_flush, l, stp, histp) }
 
 //! Install the resident whole-stack decode driver (a GPU backend calls this at [init]).
 def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn; prepare : RdecPrepareFn;

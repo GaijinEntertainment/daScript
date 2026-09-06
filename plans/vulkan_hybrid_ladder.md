@@ -95,10 +95,53 @@ rebuilt binary aged the sidecar; Boris ruled no re-mint until Vulkan is fully fu
    GPU span 19.5 ms/token, wall 20.0; pp512 95.7 (CPU prefill until step 4). Trap fixed: the auto
    VRAM plan (cap - 2 GiB) armed at 12.5 GB of the 16 GB card and WDDM demoted (6.8 tok/s; 12 GB
    pinned 3.4, 11 GB pinned 49.8) - the auto headroom is now max(2 GiB, 27% of the cap)
-   (`ARCHITECTURE_GPU_VULKAN.md` 2.2n). Still owed here: the two-stream server scenario (the
-   9/4 run), `harness/parity.das` pinned greedy on the 0.8B under `DASLLAMA_GPU=1`.
-4. Prefill: the window chain's recurrent and gated arms. Gate: prefill parity cells on the 0.8B,
-   pp512 row on the 9B.
+   (`ARCHITECTURE_GPU_VULKAN.md` 2.2n). The two-stream server scenario (the 9/4 run: an 8k and a
+   short stream in flight together) passed - coherent replies, GC clean, exit 0; it surfaced the
+   scheduler's head-of-line wait (~150 s for the short stream behind the 8k prefill) and the
+   logger's tee-mode line corruption (fixed in the runtime, commit afbcd4d20). Still owed here:
+   `harness/parity.das` pinned greedy on the 0.8B under `DASLLAMA_GPU=1`, the pp512 row on the 9B
+   with the resident prefill (step 4).
+4. DONE - Prefill: the window chain's recurrent and gated arms (`pf_setup` / `pf_run`,
+   dasllama_vulkan_prefill.das). Gate green on the 0.8B: prefill logits within 0.19-0.24 of the
+   CPU chain on a bar of ~0.5 at 40, 128, 200, 256, 384, 511 and 600 (two windows) tokens, every
+   fed step within 0.23-0.31, argmax equal, controls red. Found on the way: the prefill addressed
+   the K/V mirror by layer index (the hybrid mirror has one slot per attention layer), and the
+   rope/attention sets declared the q plane at `qd` rows while a gated q row is `2 x qd` - rows
+   past 256 fell outside the bound range. The 9B UD file, resident prefill + decode: pp512
+   1365.0 +- 4.6 (was 95.7 on the CPU prefill; upstream 2527, 0.54x - a GAP, the per-role prefill
+   profile is the next lever), tg128 53.3 +- 0.1 (was 49.7; upstream 56.7, 0.94x). As built:
+   `rd_pf_recurrent` per
+   recurrent layer (the FFN tail shared with the attention head), per-layer conv/scan/tail sets on
+   `RLayer`, the o requant shared, beta/alpha by the row-strided `router_gemv_cls` (f32) or a
+   batch GEMM + copy (q8); gated q and partial rope by a per-head q stride (`qhs`) and the
+   `half = rot / 2` pass-through on `rope_kv_b` / `qk_rms` / `da_attn_b` (no `at_prep` detour -
+   the mirror attention gates in its epilogue); the state comes home through
+   `vk_rdec_prefill_dn_flush` and the decode's owner bind re-uploads it. The original design notes
+   follow; where they differ, the code above is what landed:
+   - Mirror slots: `mirb = l * seq_cap * kvd` in `pf_run` becomes `L.mir_idx * ...`, and
+     `pf_setup`'s `mirbytes` uses `n_attn` (the decode side already does).
+   - Recurrent layer, per window: the qkv and z batch GEMMs (`pf_gemm_enc` into new
+     `pf_dnqkv [np x cd]` and `pf_dnz [np x di]` planes), the beta/alpha rows for every position
+     into the layer's smalls at `DN_SM_BETA`/`DN_SM_G` (position-major `[pos][nvh]`, the layout
+     `dn_scan_p1_cls` reads; q8 arm = a batch GEMM with `d = nvh`, f32 arm = `router_gemv_cls`
+     grown a row count and an x stride), then `dn_conv_cls` (history from the layer's ring image at
+     the shared parity on the first window, from the tail rows after), `dn_scan_p1_cls` /
+     `dn_scan_p2_cls` over the layer's own `L.dn.state_dev` and the tier's `dn_ws_dev`, the o
+     requant, the out batch GEMM into `pf_xb2`, and the shared FFN tail. The last window's tail
+     rows land in the decode ring's per-channel layout (a small transpose kernel, taps x cd ->
+     cd x taps, into the image the next decode step reads); the state stays on device, dirty,
+     owned by the prefilling session (`rdn`-style owner bind before the window).
+   - Gated attention: the q batch GEMM at `2 x qd`; `at_prep_cls` (deinterleave + qk-norm +
+     partial rope, the per-op chain's kernel) writes the compact q panel and a gate stash from
+     one smalls buffer holding every attention layer's rms_q row plus the window's cos/sin rows
+     (its `rms_off` is a push offset); k/v keep `rope_kv_b` with `half = rot / 2`, q pairs
+     excluded; `DaAttnBT` gains the `gated` epilogue reading the stash (the cm2 fa tile has none,
+     so a gated model takes the DaAttnB pair). Partial rope alone is the `half` word.
+   - The prefill then serves hybrids and `resident_prefill_shape_ok` widens; the embed gate
+     follows; `rdec_take_mirror` stays for CPU-prefilled and superseded sessions.
+   Gate: prefill parity cells on the 0.8B (the resident window chain vs the CPU chunked prefill
+   within the deltanet bar), the decode cell unchanged, pp512 row on the 9B toward the 2527
+   reference.
 5. Docs: `ARCHITECTURE_GPU_VULKAN_DECODE.md` gains the hybrid token-command section (anchored,
    `[arch]` on the recorder), `followup_vulkan.md` item 2 closes, the decline list in
    `resident_upload` shrinks to what still declines.
