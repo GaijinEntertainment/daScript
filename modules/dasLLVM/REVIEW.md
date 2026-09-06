@@ -92,7 +92,7 @@
 - **A feature name used in a `requires=` list or a `g_target_*` tier gate
   (`daslib/llvm_jit_common.das`) has its cpuid line in `das_cpu_supports`
   (`src/builtin/module_builtin_runtime.cpp`, repo root) in the same diff**
-  (`ARCHITECTURE.md#x64-tier-gates`). A name the cpuid table does not know answers false on
+  (`ARCHITECTURE_TARGET_FEATURES.md#x64-tier-gates`). A name the cpuid table does not know answers false on
   every box, so every perm that requires it silently declines to its fallback and no error names
   the cause.
 

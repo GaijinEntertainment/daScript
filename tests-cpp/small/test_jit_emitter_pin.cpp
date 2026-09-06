@@ -27,6 +27,7 @@ static const char * EMITTER_FILES[] = {
     "llvm_jit_lower.das",
     "llvm_targets.das",
     "llvm_user_modules.das",
+    "llvm_cpu_class.das",
 };
 
 // normalized to LF so Windows and Linux checkouts agree

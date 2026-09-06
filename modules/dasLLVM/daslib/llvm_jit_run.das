@@ -13,6 +13,7 @@ require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_env
+require llvm/daslib/llvm_cpu_class
 
 require daslib/ast_boost
 require daslib/strings_boost
@@ -41,7 +42,7 @@ let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x70ul   // the wasm feature string drop
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x6edb28d5b95231c2ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xa59495fe0389528eul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -254,6 +255,11 @@ def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_
     }
     // aarch64 i8mm is an emission input (the +i8mm append): a warm pre-i8mm cache must not serve an i8mm host
     h = (h ^ (cpu_supports("i8mm") ? 64ul : 0ul)) * JIT_FNV_PRIME
+    // a baseline class (DAS_JIT_BASELINE) picks the machine, the gates and the tune ladder - its artifact never serves a host run
+    let baseline = jit_baseline_class()
+    if (!empty(baseline)) {
+        h = (h ^ hash(baseline)) * JIT_FNV_PRIME
+    }
     // Cross-compile artifacts key on their triple — a --jit-target DLL must not cache-hit a host run (foreign-arch dlopen)
     if (!empty(target_triple)) {
         h = (h ^ hash(target_triple)) * JIT_FNV_PRIME
@@ -825,14 +831,29 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     // truth, decided here — flags and machine must never diverge: host-F16C flags on a
     // generic machine lower fp16 through libcalls msvcrt never links, and generic flags
     // on a host machine decline every generated kernel to its reference body).
-    let exe_host_cpu = gen_exe && empty(target_triple) && has_generated_kernel(prog, jit_all_functions)
+    // A baseline class (DAS_JIT_BASELINE) replaces the box on every rail - exe, DLL and AOT object
+    // alike: the machine, the gates and the tune ladder all read the class, so the artifact runs
+    // on every box of that class. It never crosses architectures; that is --jit-target's job.
+    let baseline = jit_baseline_class()
+    if (!empty(baseline)) {
+        let target_arch = (empty(target_triple) ? get_architecture_name()
+            : ((starts_with(target_triple, "aarch64") || starts_with(target_triple, "arm64")) ? "arm64"
+            : ((starts_with(target_triple, "x86_64") || starts_with(target_triple, "amd64")) ? "x86_64" : target_triple)))
+        let berr = jit_baseline_error(target_arch)
+        if (!empty(berr)) {
+            panic("LLVM JIT: {berr}")
+        }
+        let row = jit_cpu_class_row(baseline)
+        to_log(LOG_INFO, "LLVM JIT: DAS_JIT_BASELINE={baseline} - targeting the {baseline} class (cpu {row.cpu}, features {row.features}) instead of this box\n")
+    }
+    let exe_host_cpu = gen_exe && empty(target_triple) && empty(baseline) && has_generated_kernel(prog, jit_all_functions)
     if (exe_host_cpu) {
         to_log(LOG_INFO, "LLVM EXE: targeting the current box (CPU + features) - the build carries [llvm_code] kernels\n")
     }
     // AOT objects target the host CPU: the .o is statically linked into a binary that runs on this
     // box (same contract as the JIT), so bake host features — this force-appends +dotprod on aarch64,
     // without which the dasLLAMA Q8 SDOT kernels have no instruction to select and codegen aborts.
-    let use_host_cpu = emit_aot_object ? true : (!gen_exe || exe_host_cpu)
+    let use_host_cpu = empty(baseline) && (emit_aot_object ? true : (!gen_exe || exe_host_cpu))
     init_jit_target_flags(target_triple, use_host_cpu)
     make_visitor(*disableJitVisitor) $(disableJitVisitorAdapter) {
         prog |> for_each_module() $(mod) {

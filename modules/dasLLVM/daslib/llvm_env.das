@@ -33,6 +33,10 @@ struct public JitEnv {
 
     @clarg_doc = "The arm64 twin (e.g. dotprod,i8mm)."
     jit_arm64_force_features : string = ""
+
+    @clarg_default_doc = "unset (the build targets the running box)"
+    @clarg_doc = "Build for a CPU class instead of this box: x86-base, x86-avx2, x86-vnni256, x86-vnni512, x86-amx, arm-neon, or arm-i8mm (llvm_cpu_class). The target machine, the emitter's tier gates, requires= eligibility and the shipped-profile ladder all read the class's feature set, so an -exe built here runs on every box of that class; the class must belong to the build's architecture. Environment-only by construction: the AST module cache keys on DAS*, and a flag would serve stamps minted for another class."
+    jit_baseline : string = ""
 }
 
 let public g_env_jit = env_config(type<JitEnv>)

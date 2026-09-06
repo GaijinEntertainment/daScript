@@ -19,6 +19,7 @@ require math
 require llvm/daslib/llvm_code public
 require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_env
+require llvm/daslib/llvm_cpu_class
 
 //! Generalized tune framework (gemm_generator_plan.md part 2). `[tune_perm(...), ...,
 //! tune(gen="key", fallback="suffix")]` — perm rows first, `tune` last — turns one reference
@@ -1292,11 +1293,16 @@ struct private TunePerm {
     args : array<tuple<argname : string; argvalue : RttiValue>>
 }
 
-    // Host cpuid OR'd with the DAS_JIT_*_FORCE_FEATURES override — keep in lockstep with
-    // llvm_jit_common's x64_target_feature. requires= is an ELIGIBILITY hint for fallback
-    // selection only; the generator's own decline predicate stays the emission truth.
+    // The baseline class's set (DAS_JIT_BASELINE) or else host cpuid, OR'd with the force env —
+    // in lockstep with llvm_jit_common's x64_target_feature. requires= is an ELIGIBILITY hint for
+    // fallback selection only; the generator's own decline predicate stays the emission truth.
 def private fallback_feature_ok(name : string) : bool {
-    if (cpu_supports(name)) return true
+    let baseline = jit_baseline_class()
+    if (!empty(baseline)) {
+        if (jit_class_has(baseline, name)) return true
+    } elif (cpu_supports(name)) {
+        return true
+    }
     for (part in split(g_env_jit.jit_x64_force_features, ",")) {
         if (part == name) return true
     }
@@ -1342,7 +1348,7 @@ let private TUNE_KNOWN_FEATURES = "avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx5
     //! The ';'-joined subset of the known `requires=` feature names this box passes — stamped
     //! into every sidecar's provenance as `features`, which is what lets a shipped profile say
     //! exactly which gated seats its minting box could and could not race.
-[arch(at = "../ARCHITECTURE.md#x64-tier-gates")]
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#x64-tier-gates")]
 def tune_feature_fingerprint() : string {
     var have <- [for (f in split(TUNE_KNOWN_FEATURES, ";")); f; where fallback_feature_ok(f)]
     let joined = join(have, ";")
@@ -1354,6 +1360,10 @@ def tune_feature_fingerprint() : string {
     //! follow the seats `requires=` can gate, not box models: two boxes of one class stamp the
     //! same winners, so one profile serves them all; an arch with no ladder gets a key no profile matches.
 def tune_cpu_class() : string {
+    let baseline = jit_baseline_class()
+    if (!empty(baseline)) {
+        return baseline
+    }
     let arch = get_architecture_name()
     if (arch == "x86_64") {
         if (fallback_feature_ok("avx512vnni") && fallback_feature_ok("avx512bw")) {
@@ -1373,9 +1383,7 @@ def tune_cpu_class() : string {
     //! Profile candidates for this box, most specific first — a box above the best shipped
     //! profile adopts the nearest lower class and races only what that class could not.
 def tune_class_chain() : array<string> {
-    let ladder = (get_architecture_name() == "x86_64"
-        ? "x86-amx;x86-vnni512;x86-vnni256;x86-avx2;x86-base"
-        : "arm-i8mm;arm-neon")
+    let ladder = jit_cpu_class_ladder(get_architecture_name())
     let own = tune_cpu_class()
     var chain : array<string>
     var seen = false

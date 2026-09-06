@@ -16,6 +16,7 @@ require llvm/daslib/llvm_targets
 
 require llvm/daslib/llvm_dsl
 require llvm/daslib/llvm_env
+require llvm/daslib/llvm_cpu_class
 require daslib/ast_boost
 require daslib/strings
 require daslib/strings_boost
@@ -444,11 +445,11 @@ var public g_target_x64_amx = false
 // targets. Gates emission that calls Linux-only externs (the amx witness's arch_prctl).
 var public g_target_os_linux = false
 
-// ARMv8.2 DotProd (SDOT — the aarch64_neon sdot4 family, the idot ss form); rails: ARCHITECTURE.md#aarch64-feature-truth
+// ARMv8.2 DotProd (SDOT — the aarch64_neon sdot4 family, the idot ss form); rails: ARCHITECTURE_TARGET_FEATURES.md#aarch64-feature-truth
 var public g_target_arm64_dotprod = false
 
 // ARMv8.6 i8mm (SMMLA — 2×2 s8 matrix-multiply-accumulate; Apple M2/A15+, Graviton3+; M1 has
-// DotProd only). Host truth is LLVMGetHostCPUFeatures "+i8mm" OR cpu_supports (ARCHITECTURE.md#aarch64-feature-truth).
+// DotProd only). Host truth is LLVMGetHostCPUFeatures "+i8mm" OR cpu_supports (ARCHITECTURE_TARGET_FEATURES.md#aarch64-feature-truth).
 var public g_target_arm64_i8mm = false
 
 // ARMv8.2 fullfp16 (native half arithmetic — fadd.4h/8h etc.). Detected as i8mm, except
@@ -456,7 +457,12 @@ var public g_target_arm64_i8mm = false
 // Linux host strings carry +fullfp16, and on macOS the host CPU name implies it in the backend.
 var public g_target_arm64_fullfp16 = false
 
+// A baseline class (DAS_JIT_BASELINE) reads as forced: its feature set is the tier truth on the
+// generic rail, exactly like the force env, and the env's names still append after it.
 def private arm64_forced_feature(name : string) : bool {
+    if (jit_baseline_has(name)) {
+        return true
+    }
     for (part in split(g_env_jit.jit_arm64_force_features, ",")) {
         if (part == name) {
             return true
@@ -467,7 +473,12 @@ def private arm64_forced_feature(name : string) : bool {
 
 def public arm64_forced_plus_features() : string {
     let plus <- [for (part in split(g_env_jit.jit_arm64_force_features, ",")); "+{part}"; where !empty(part)]
-    return join(plus, ",")
+    return join_plus_features(jit_class_plus_features(jit_baseline_class()), join(plus, ","))
+}
+
+// the baseline class's append first, the env's forced names after it (the last spelling of a name wins in LLVM)
+def private join_plus_features(base, forced : string) : string {
+    return empty(base) ? forced : (empty(forced) ? base : "{base},{forced}")
 }
 
 // "+name" present in LLVM's host-features string (comma-separated "+feat"/"-feat" entries;
@@ -483,6 +494,9 @@ def private host_llvm_feature(name : string) : bool {
 }
 
 def private x64_forced_feature(name : string) : bool {
+    if (jit_baseline_has(name)) {
+        return true
+    }
     for (part in split(g_env_jit.jit_x64_force_features, ",")) {
         if (part == name) {
             return true
@@ -507,7 +521,7 @@ def private x64_tier_feature(name : string; cross : bool) : bool {
 // Empty when the env is unset.
 def public x64_forced_plus_features() : string {
     let plus <- [for (part in split(g_env_jit.jit_x64_force_features, ",")); "+{part}"; where !empty(part)]
-    return join(plus, ",")
+    return join_plus_features(jit_class_plus_features(jit_baseline_class()), join(plus, ","))
 }
 
 // Cross-compile a wasm object for a -pthread (SharedArrayBuffer) runtime: adds
@@ -612,8 +626,10 @@ def public init_jit_clopts() {
 // Pure target truth, no LLVM state touched: safe and required BEFORE init_jit, whose DisableJitVisitor
 // consults these gates. init_jit re-runs it — pass the SAME host_features or pass and emission diverge.
 // host_features=false targets a GENERIC CPU: cpuid gates stay off, since leaked F16C emits libcalls.
-[arch(at = "../ARCHITECTURE.md#aarch64-feature-truth"), arch(at = "../ARCHITECTURE.md#x64-tier-gates")]
-def public init_jit_target_flags(target_triple : string = ""; host_features : bool = true) {
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#aarch64-feature-truth"), arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#x64-tier-gates")]
+def public init_jit_target_flags(target_triple : string = ""; host_features_asked : bool = true) {
+    // a baseline class replaces the running box: its set is the only tier truth, whatever the caller asked
+    let host_features = host_features_asked && empty(jit_baseline_class())
     g_target_host_features = host_features
     g_target_is_wasm = target_triple |> starts_with("wasm")
     // Host path (empty triple): the module targets the host, so the daslang binary's own arch is the
@@ -904,7 +920,7 @@ def public with_target_machine(triple, cpu, features : string; opt_level : uint;
     LLVMDisposeTargetMachine(targetMachine)
 }
 
-[macro_function, arch(at = "../ARCHITECTURE.md#aarch64-feature-truth")]
+[macro_function, arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#aarch64-feature-truth")]
 def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) : LLVMTargetMachineRef {
     LLVMInitializeAllTargetInfos()
     LLVMInitializeAllTargets()
@@ -941,10 +957,14 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
     } else {
         let forced = g_target_is_x64 ? x64_forced_plus_features() : (g_target_is_aarch64 ? arm64_forced_plus_features() : "")
         let feats = empty(forced) ? features_msg : (empty(features_msg) ? forced : "{features_msg},{forced}")
-        if (!empty(forced)) {
-            to_log(LOG_INFO, "LLVM JIT: {g_target_is_x64 ? "DAS_JIT_X64_FORCE_FEATURES" : "DAS_JIT_ARM64_FORCE_FEATURES"} appends {forced} to the generic machine {cpu_msg}\n")
+        let env_forced = g_target_is_x64 ? g_env_jit.jit_x64_force_features : (g_target_is_aarch64 ? g_env_jit.jit_arm64_force_features : "")
+        // the baseline class names the machine's cpu; the generic rail otherwise leaves it to LLVM's default
+        let baseline = jit_baseline_class()
+        let cpu = (use_host_cpu || empty(baseline)) ? cpu_msg : jit_cpu_class_row(baseline).cpu
+        if (!empty(env_forced)) {
+            to_log(LOG_INFO, "LLVM JIT: {g_target_is_x64 ? "DAS_JIT_X64_FORCE_FEATURES" : "DAS_JIT_ARM64_FORCE_FEATURES"} appends {env_forced} to the machine {cpu}\n")
         }
-        targetMachine = create_target_machine(triple_msg, cpu_msg, feats, opt_level)
+        targetMachine = create_target_machine(triple_msg, cpu, feats, opt_level)
     }
 
     if (use_host_cpu) {

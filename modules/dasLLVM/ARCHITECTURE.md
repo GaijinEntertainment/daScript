@@ -2,6 +2,7 @@
 
 The design document `REVIEW.md` cites. Numbered sections are the stable reference targets;
 usage and installation live in `README.md`, the debugger rail and its roadmap in `DEBUGGING.md`.
+Companion: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU classes).
 
 ## 1. The jit backend pipeline
 
@@ -112,7 +113,9 @@ only the named families; the policy guard arms it itself for a profile's residue
 partition to re-emit, bypassing the obj cache), `DAS_JIT_PROBE_LTO` (split partitions emit
 bitcode and the link runs lld LTO - a dev probe artifact), `DAS_JIT_X64_FORCE_FEATURES` /
 `DAS_JIT_ARM64_FORCE_FEATURES` (force CPU features past detection - emission, the cache keys,
-and `cpu_supports`-based tune eligibility all follow), and the runtime escape API
+and `cpu_supports`-based tune eligibility all follow), `DAS_JIT_BASELINE` (build for a CPU class
+instead of the box - the machine, the gates, the tune ladder and the cache keys all follow;
+`ARCHITECTURE_TARGET_FEATURES.md` sec.10), and the runtime escape API
 `tune_suppress_mint(knob)` (a library `[init]` suppresses the auto/restart mint; the caller
 passes the knob name it acts for). The announce contract: an override announces at the point
 it CHANGES THE OUTCOME - at least one line naming the knob (its env spelling, or the
@@ -128,31 +131,10 @@ Environment knobs load ONCE, at context init, into the `[EnvConfig]` structs `g_
 In-process overrides therefore go through the tune setters (`tune_set_verbosity`,
 `tune_set_noise_cv`, ...), which also arm spawned children by exporting the matching variable.
 
-## 4. Host CPU feature truth on aarch64 {#aarch64-feature-truth}
+## 4. Host CPU feature truth on aarch64
 
-An aarch64 host target reads its CPU features from two sources, because neither answers alone.
-`LLVMGetHostCPUFeatures` returns an EMPTY string on macOS - there the CPU name is meant to imply
-the features - and a part this LLVM cannot name maps to the generic CPU, where SDOT and SMMLA
-have no instruction to select and codegen aborts. `cpu_supports` reads the operating system
-instead (sysctl / `AT_HWCAP` / `IsProcessorFeaturePresent`), so it answers for silicon LLVM has
-never heard of. The tier gates (`init_jit_target_flags` - `g_target_arm64_dotprod`, `_i8mm`,
-`_fullfp16`) and the target machine's feature string (`create_default_target_machine`) therefore
-take the union of the two: an LLVM host-string hit OR a `cpu_supports` hit (fullfp16 additionally
-reads darwin-arm64 as always-on - every Apple Silicon part has it). One asymmetry: the host rail's
-machine string carries `+dotprod` unconditionally (every part the JIT has run on has it), while the
-DotProd GATE probes like its siblings - on an ARMv8.0 host the gate declines and the `sdot4` family
-compiles its fallback, whatever the string says. A cross-compile triple takes neither - only the force env - and so
-does a generic-CPU standalone exe (one carrying no `[llvm_code]` kernel): its machine is the
-ARMv8.0 baseline, which cannot select SDOT or SMMLA, so the DotProd and i8mm gates
-(`g_target_arm64_dotprod`, `g_target_arm64_i8mm`) stay off there and every `aarch64_neon` call
-that needs either compiles its daslang fallback body. The gates and the machine string are one
-truth on both rails: a force-env feature raises the gate AND is appended to the generic machine.
-
-The two ways a feature reaches the target machine's string license different things. A
-detection-derived append - `+dotprod` always, `+i8mm` when `cpu_supports` confirms it - is
-EXECUTION-safe: the silicon running this process really has the instruction. A
-`DAS_JIT_ARM64_FORCE_FEATURES` append is EMISSION-only: it may name silicon this box does not
-have, so the artifact is for another machine and executing it here traps.
+Moved to `ARCHITECTURE_TARGET_FEATURES.md` sec.4, with sec.6 (the x64 tier gates) and sec.10
+(CPU classes and `DAS_JIT_BASELINE`).
 
 ## 5. The tune sidecar is a module-cache dependency {#tune-sidecar-cache-pin}
 
@@ -182,26 +164,9 @@ staleness gate itself compares the sidecar's mtime with the running binary's, wh
 hash sees; the host closes that hole by keying its default module cache on the binary's
 mtime and size, so a rebuild is a fresh cache rather than a hit on pre-rebuild stamps.
 
-## 6. The x64 kernel-matrix tier gates {#x64-tier-gates}
+## 6. The x64 kernel-matrix tier gates
 
-An x64 host target publishes eight boolean gates (`g_target_x64_*`), one per instruction tier the
-kernel matrix and the tune grids select on: `avx2`, `f16c`, `vnni256` (256-bit VPDPBUSD by either
-VEX AVX-VNNI or EVEX AVX512-VNNI+VL), `avx512bw` (zmm byte ops - BW, not merely F), `avx512vnni`
-(zmm VPDPBUSD; implies bw, the sign trick around it is BW), `avx512vbmi` (VPERMI2B / VPERMB /
-VPMULTISHIFTQB - the grid formats' symbol lattice), `vnniint8` (VEX VPDPBSSD, native s8 x s8),
-and `amx` (both amx-tile and amx-int8; the per-process XTILEDATA grant is a separate runtime step
-the family's own witness performs). `init_jit_target_flags` decides each from cpuid truth OR'd with
-the `DAS_JIT_X64_FORCE_FEATURES` emission-only override; a cross triple or a generic target
-(`host_features = false`) drops to forced-only truth - cpuid is not consulted, the force env is
-the only tier source there.
-
-The cpuid truth is `das_cpu_supports` (`src/builtin/module_builtin_runtime.cpp`), a hand-kept table
-keyed by the LLVM target-feature spelling - so the force env and `llc -mattr` take the same names.
-A tier feature usually lands as three parts: its cpuid line there, its name in
-`TUNE_KNOWN_FEATURES` (`daslib/llvm_tune.das`, the profile fingerprint the `requires=` gates are
-checked against), and - when the emitters branch on it - a `g_target_x64_*` gate. The cpuid line
-is the load-bearing one: a name missing from the table answers false on every box, so the perm
-that requires it declines everywhere and no error names the cause.
+Moved to `ARCHITECTURE_TARGET_FEATURES.md` sec.6.
 
 ## 7. A constant-folded GEP is not an instruction {#gep-constant-fold}
 

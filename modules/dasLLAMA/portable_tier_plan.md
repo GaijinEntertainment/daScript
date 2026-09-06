@@ -242,7 +242,7 @@ file.
    tables now gate on `g_target_arm64_dotprod` / `g_target_arm64_i8mm` (host rail: always /
    detected; generic and cross rails: the force env only), and a force-env feature reaches the
    generic machine's string, so the gates and the machine stay one truth
-   (`modules/dasLLVM/ARCHITECTURE.md#aarch64-feature-truth`). The generic exe runs the NEON
+   (`modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#aarch64-feature-truth`). The generic exe runs the NEON
    tier on the scalar `sdot4` fallback - slower than the portable backend's auto-vectorized
    `dot_q8q8`; whether the `[init]` backend gates should also consult the exe's feature rail is a
    stage-2 question, alongside the same shape under AOT. Gates: `tests/jit_tests/aarch64_neon.das`
