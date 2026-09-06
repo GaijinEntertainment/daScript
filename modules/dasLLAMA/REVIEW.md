@@ -1,11 +1,10 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`; the other
-`ARCHITECTURE_*.md` companions `ARCHITECTURE.md` indexes belong to the routed checklists. Planned work:
-`followup_general.md`, `followup_vulkan.md`, `followup_metal.md` (the Metal tier, and CPU work
-measured on macOS), `PERF_LEDGER.md` (performance goes to the perf ledger, everything else to
-the followup ledgers).
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md` (the other
+companions belong to the routed checklists). Planned work: `followup_general.md`,
+`followup_vulkan.md`, `followup_metal.md` (the Metal tier, and CPU work measured on macOS),
+`PERF_LEDGER.md` (performance goes to the perf ledger, everything else to the followup ledgers).
 
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
@@ -73,12 +72,11 @@ function does not thereby pick up the other modality's checklist.
 **A change to `dasllama/dasllama_tts.das`, `dasllama/dasllama_tts_types.das`,
 `dasllama/dasllama_tts_blocks.das`, `dasllama/dasllama_styletts2.das`, a TTS family file -
 one `dasllama/dasllama_<family>.das` holding a single speech-synthesis family - a text
-front-end file - one stage of the pass that turns text into phonemes
-(`dasllama/dasllama_textnorm.das`, `dasllama/dasllama_postag.das`,
-`dasllama/dasllama_g2p.das`) - the front-end packs' mint (`harness/build_g2p_data.py`,
-`harness/train_postag.py`, `harness/mint_postag_silver.py`, `performance/build_tts_data.das`),
-or a call that pins the TTS weight lane (`set_tts_q8` / `set_styletts2_q8`), wherever the diff
-puts it, applies `REVIEW_TTS.md`.**
+front-end file - one stage of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
+`dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - the front-end packs' mint
+(`harness/build_g2p_data.py`, `harness/train_postag.py`, `harness/mint_postag_silver.py`,
+`performance/build_tts_data.das`), or a call that pins the TTS weight lane (`set_tts_q8` /
+`set_styletts2_q8`), wherever the diff puts it, applies `REVIEW_TTS.md`.**
 
 **A diff that adds a file under `dasllama/`, moves code between files, or lands a kernel,
 codec, transform, tokenizer, tool-wire, media-IO or registration concern in a new place
@@ -102,10 +100,9 @@ into the class as a `@template_constant` instead.**
 **A function-typed global a serialized exe must re-establish lands in a `dasllama/` file with
 the `[init]` that establishes it at boot; landing one where `REVIEW.das`'s restore-check walk
 over `dasllama/` cannot reach it, or weakening that walk, is a defect.** A serialized exe
-restores globals as data, so a declaration initializer arrives null and the first invoke to
-reach it dies at exe runtime while every `-jit` gate stays green; a global with no declaration
-initializer that another file's `[init]` arms (`set_runtime_race_hook`) is established by that
-`[init]` on every boot, and its null default is the declared "no hook".
+restores globals as data, so a declaration initializer arrives null and dies at the first invoke
+while every `-jit` gate stays green; a global another file's `[init]` arms (`set_runtime_race_hook`)
+has no initializer, and its null default is the declared "no hook".
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`).** A regrouping
@@ -132,12 +129,11 @@ stay f32 for another reason is ledgered on its own file's sec.1 charter line in 
 without first proving both stdin and stdout are terminals is a defect - emit the question as
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
-**A print or log of an elapsed interval in an engine file (`dasllama/`), outside a cold
-one-shot load, bake, map or tokenizer-build progress log and the first-start race report
-(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a), is a defect - whoever read the clock** -
-instrumentation goes through the profiling rails - `profile_tag` / `profile_marker`, `prof_add`,
-`asr_prof_add`, the Vulkan tier's `vk_prof()`-gated ledgers - and the rails and their reasons
-are `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
+**A print or log of an elapsed interval in an engine file (`dasllama/`), outside a cold one-shot
+load, bake, map or tokenizer-build progress log and the first-start race report
+(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a), is a defect - whoever read the clock** - instrumentation
+goes through the profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the
+Vulkan tier's `vk_prof()`-gated ledgers), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
 
 **A clock value that changes what the program DOES - control flow, eviction, a generated
 name; not a reported wall-clock time or a best-of reduction over reported wall-clock times -
@@ -148,15 +144,13 @@ apart from the ad-hoc profiling an engine file may not carry.
 quantum - one batch of prompt tokens the prefill path processes in a single pass - is COVERED
 by an annotated region entry** - `[hot_path]`, any of the `[no_alloc]` / `[no_env]` /
 `[no_io]` contracts, or `[cold_path]` on its only reaching entry. Covered means an annotated
-entry reaches it: an annotation binds every function the annotated entry calls, so an
-interior function carries nothing of its own; an entry no annotated entry reaches carries the
-annotation itself, and a function reached only through a registered function value is
-reached by no annotated entry. A region entry is the outermost such function (a kernel `*_encode` /
-`*_decode`, a step driver, the CPU decoder's `forward_*` entries); a loop reached only from a
-load, stage, bake, or convert path is not one.
+entry reaches it: an annotation binds every function the entry calls, so an interior function
+carries nothing of its own; an entry no annotated entry reaches carries the annotation itself,
+and a function reached only through a registered function value is reached by none. A region
+entry is the outermost such function (a kernel `*_encode` / `*_decode`, a step driver, the CPU
+decoder's `forward_*` entries); a loop reached only from a load, stage, bake, or convert path is not one.
 
-**A renamed per-token function is not new: its annotation moves with the name in the same
-change.**
+**A renamed per-token function is not new: its annotation moves with the name in the same change.**
 
 **A change to code or data of `encode`/`bpe_encode` or anything they reach in
 `dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`
@@ -174,26 +168,23 @@ template strings any of them look up, records a run of this folder's
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.**
 An override is an environment knob, an exported runtime setter, or an on-disk state file - one
 a run writes or a user places, never data a build ships - that moves a gate, policy, or
-threshold off its default and thereby changes what the run writes, reads, mints, or computes -
-a timing knob included when it moves computed numerics. A knob
-that changes only WHEN work happens is not one, and a CLI flag is never one. The announce is a
-line the run prints where the override changes the outcome, naming it by the spelling a user
-would set - the environment variable name, the sidecar or file key, or the setter's function
-name - and, for an override that is on unless turned off, the spelling that turns it off; an
-override with no off spelling says so in its announce. Per-site repeats are fine; a
-set-but-inert override stays silent.
+threshold off its default and so changes what the run writes, reads, mints, or computes (a
+timing knob included when it moves numerics); a knob that changes only WHEN work happens is not
+one, and a CLI flag never is. The announce is a line printed where the override changes the
+outcome, naming it by the spelling a user would set (the env variable, the sidecar or file key,
+the setter's name) and, for one that is on unless turned off, the spelling that turns it off;
+one with no off spelling says so. Per-site repeats are fine; a set-but-inert override is silent.
 
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
 left showing the old call, flag, or default after a change to user-facing API is a defect of
-the change, not of the docs.** User-facing means anything a consumer
-outside this repo can depend on - what it calls, types, requires, or parses (facade functions,
-CLI flags, environment knobs, file formats, defaults, what the installed SDK lets a program
-`require`) - plus the in-repo rig and tool surface: any output another tool parses. A
-console-only diagnostic is not user-facing.
+the change, not of the docs.** User-facing means anything a consumer outside this repo can
+depend on - what it calls, types, requires, or parses (facade functions, CLI flags, environment
+knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
+rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
 
-**A diff that makes a statement in an `ARCHITECTURE_*.md` companion, a module-root document,
-or a `//!` docstring false updates it in the same change.** A section no `[arch]` cites and no
-`{#anchor}` arms is checked by the reviewer alone.
+**A diff that makes a statement in an `ARCHITECTURE_*.md` companion, a module-root document, or
+a `//!` docstring false updates it in the same change** - a section no `[arch]` cites is the
+reviewer's alone.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's
