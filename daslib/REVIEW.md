@@ -38,8 +38,8 @@ survives into the sibling loop's exit path and unbalances its counter.
 
 **A diff that adds or changes a daslib fact - code or a `//!` contract - whose truth is
 decided by a C++-side definition, with no test, lint, or compile error failing when the two
-sides no longer match, records the pair in the architecture doc, in its module's section,
-naming both sides.**
+sides no longer match, records the pair in the architecture doc, in the section of the file
+the daslib side lives in, naming both sides.**
 
 **When a diff changes one side of a recorded daslib/C++ pair so the two no longer match, it
 changes the other side and updates the pair's architecture-doc entry in the same diff.**
@@ -117,8 +117,8 @@ set without the cap is a silently missed finding; raising a cap without the over
 suggestion that does not compile.
 
 **A diff that adds or changes an emit entry point - a function that runs the emit visitor
-(`CppAot` or any subclass of it) and then returns or writes the generated C++ - keeps the
-error check ahead of that return or write.** The error check is the program's
+(`CppAot` or any subclass of it) and then writes the generated C++ to a file - keeps the
+error check ahead of that file write.** The error check is the program's
 `macroException`/`failToCompile` state, read directly or through `log_aot_emit_errors`; a
 codegen exception mid-visit leaves partial C++.
 

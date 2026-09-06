@@ -3,8 +3,11 @@ options no_aot
 options stack = 1_048_576
 
 require daslib/aot_standalone
+require daslib/aot_cpp
 require daslib/ast_boost
+require daslib/strings_boost
 require daslib/fio
+require math
 require daslib/rtti
 require strings
 require dastest/testing_boost public
@@ -219,6 +222,99 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> success(saw_program, "the before_emit block ran with a non-null program")
         remove(path_join(out_dir, "_standalone_novars_fixture.das.cpp"))
         remove(path_join(out_dir, "_standalone_novars_fixture.das.h"))
+    }
+
+    t |> run("a context reaching no C++ module beyond builtin registers nothing") @(t : T?) {
+        let files = generate_standalone_files(t, "_standalone_novars_fixture", out_dir)
+        t |> success(find(files.header, "standalone_modules.h") < 0, "no registry header for the registry-free tier")
+        t |> success(find(files.header, "class Standalone : public Context \{") >= 0, "the context derives from Context alone")
+        t |> success(find(files.source, "DECLARE_MODULE") < 0, "no module is declared")
+    }
+
+    t |> run("an extern call links and registers its module, builtin modules first") @(t : T?) {
+        let files = generate_standalone_files(t, "_standalone_fio_fixture", out_dir)
+        let source = files.source
+        t |> success(find(source, " // require fio_core\n") >= 0, "fio_core is linked")
+        t |> success(find(source, "fio_core - compile time only") < 0, "fio_core is not pruned")
+        t |> success(find(source, "aot_builtin_fio.h") >= 0, "the fio AOT header is included")
+        t |> success(find(files.header, "standalone_modules.h") >= 0, "the header includes the registry")
+        t |> success(find(files.header, "class Standalone : public StandaloneModuleScope, public Context \{") >= 0, "the module scope is the first base, ahead of Context")
+        t |> success(find(source, "DECLARE_MODULE(Module_FIO);") >= 0, "Module_FIO is declared")
+        let builtin_row = find(source, "\{ \"$\", &::register_Module_BuiltIn, 0 \}")
+        let strings_row = find(source, "&::register_Module_Strings")
+        let fio_row = find(source, "&::register_Module_FIO")
+        t |> success(builtin_row >= 0, "the builtin module is a row at rank 0")
+        t |> success(strings_row > builtin_row && fio_row > strings_row, "strings registers before fio_core, whose constructor requires it by name")
+        t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
+    }
+
+    t |> run("a handled type alone links its module") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_handle_fixture", out_dir)
+        t |> success(find(source, " // require fio_core\n") >= 0, "fio_core is linked for the FILE handle")
+        t |> success(find(source, "DECLARE_MODULE(Module_FIO);") >= 0, "Module_FIO is declared")
+    }
+
+    t |> run("a module only dead code reaches stays compile-time-only") @(t : T?) {
+        let files = generate_standalone_files(t, "_standalone_dead_fio_fixture", out_dir)
+        t |> success(find(files.source, "fio_core - compile time only") >= 0, "fio_core is pruned: only an unused function names FILE? and calls its extern")
+        t |> success(find(files.source, "DECLARE_MODULE") < 0, "no module is declared")
+        t |> success(find(files.header, "StandaloneModuleScope") < 0, "the context has no module scope")
+    }
+
+    t |> run("the function table has one row per emitted function, numbered from zero") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_fio_fixture", out_dir)
+        let total_pos = find(source, "context.totalFunctions = ")
+        t |> success(total_pos >= 0, "totalFunctions is emitted")
+        let digits_from = total_pos + length("context.totalFunctions = ")
+        let total = to_int(slice(source, digits_from, find(source, "/*totalFunctions*/;", digits_from)))
+        let rows = length(split(source, ", FunctionInfo(")) - 1
+        t |> equal(rows, total, "one row per slot")
+        t |> success(find(source, "\{0, FunctionInfo(") >= 0, "rows are numbered from zero")
+        t |> success(find(source, "\{{total}, FunctionInfo(") < 0, "no row past the table")
+    }
+
+    t |> run("registration lists the builtin modules first with non-decreasing ranks") @(t : T?) {
+        let input = path_join(get_das_root(), "tests/aot/_standalone_fio_fixture.das")
+        var names : array<string>
+        var ranks : array<int>
+        using() $(var cop : CodeOfPolicies) {
+            standalone_cop(cop)
+            ast_gc_guard() {
+                standalone_aot(input, out_dir, false, false, cop) $(var program : ProgramPtr) {
+                    for (entry in standaloneModuleRegistration(program)) {
+                        names |> push(string(entry.mod.name))
+                        ranks |> push(entry.rank)
+                    }
+                }
+            }
+        }
+        t |> success(length(names) >= 2, "the fixture registers more than the builtin module")
+        t |> success(!empty(names) && names[0] == "$" && ranks[0] == 0, "the builtin module is first, at rank 0")
+        t |> success((names |> find_index("strings")) < (names |> find_index("fio_core")), "strings precedes fio_core")
+        for (i in range(1, length(ranks))) {
+            t |> success(ranks[i] >= ranks[i - 1], "ranks never decrease")
+        }
+        remove(path_join(out_dir, "_standalone_fio_fixture.das.cpp"))
+        remove(path_join(out_dir, "_standalone_fio_fixture.das.h"))
+    }
+
+    t |> run("DEFAULT_MODULE_ORDER mirrors register_builtin_modules_impl") @(t : T?) {
+        var registrar : array<string>
+        fopen(path_join(get_das_root(), "src/builtin/modules.cpp"), "rb") $(fr) {
+            if (fr != null) {
+                for (line in split(fread(fr), "\n")) {
+                    let at = find(line, "NEED_MODULE(")
+                    if (at >= 0) {
+                        registrar |> push(slice(line, at + length("NEED_MODULE("), find(line, ")")))
+                    }
+                }
+            }
+        }
+        t |> success(!empty(registrar), "src/builtin/modules.cpp lists the builtin registrations")
+        t |> equal(length(registrar), length(DEFAULT_MODULE_ORDER), "the same number of modules on both sides")
+        for (i in range(min(length(registrar), length(DEFAULT_MODULE_ORDER)))) {
+            t |> equal(registrar[i], DEFAULT_MODULE_ORDER[i], "the same module at position {i}")
+        }
     }
 
     rmdir(out_dir)

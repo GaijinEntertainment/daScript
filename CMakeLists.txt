@@ -1771,6 +1771,7 @@ SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/simulate_visit_op.h
     include/daScript/simulate/simulate_visit_op_undef.h
     include/daScript/simulate/standalone_ctx_utils.h
+    include/daScript/simulate/standalone_modules.h
 )
 
 install(FILES

@@ -315,6 +315,34 @@ compiler, and cross-compiling for bare metal still needs portability work in the
 
 `nano/README.md` is the build recipe and `nano/ARCHITECTURE.md` lists what nano trades away.
 
+## A standalone context on the full runtime
+
+**The same `-ctx` generation (`daslang utils/aot/main.das -- -ctx script.das out/`) links
+against the full runtime when the script reaches a C++ module beyond the `builtin` module
+itself** - dasHV, fio, or any module the script calls a function from or names a type from. Link
+`libDaScript`, which already carries `builtin`, `math`, `strings`, `fio` and the rest of the
+builtin set, plus the static archive of each module outside it (dasHV is `libDasModuleHV`), and
+add the include directory its AOT header pulls in (dasHV's pulls libhv's headers). The binary
+compiles nothing at run time - it parses no source and loads no shared module - but unlike nano
+it links the full `libDaScript`.
+
+**The generated context owns module registration.** Handled types resolve through the module
+registry, so the first context constructed registers the modules it links, and the last
+context destroyed shuts them down with `Module::ShutdownStandalone`, not `Module::Shutdown` -
+the latter also resets the interpreter's fused-node tables, and no interpreter is linked. Keep
+contexts inside `main`: a context that outlives it would shut the registry down from a static
+destructor, after the runtime's own statics are gone. The embedder constructs the context and
+makes no `Module::Initialize()` / `Module::Shutdown()` call. A host that registered the builtin module owns the registry instead: it registers every
+module the context links and calls `Module::Initialize()` before constructing it, and calls
+`Module::Shutdown()` itself; a module it did not register stops the program at construction,
+by name - the runtime cannot add to an initialized registry and keep `Initialize`/`Shutdown`
+balanced.
+
+**Only what the program reaches is linked** - a module the script used at compile time alone is
+neither included nor registered. Worked example: `examples/standalone/06_full_runtime/` - read
+it for the shape; building it needs the daslang repository, since the bundle carries no dasHV
+headers or archive. The recipe above works from a bundle for any C++ module you build yourself.
+
 ## Diagnostics - `TextPrinter`, never `fprintf(stderr, ...)`
 
 ```cpp

@@ -41,6 +41,10 @@ cortex-m4 with `-Os --gc-sections` and newlib.
 | `05_compile_time_table` | a CSV baked into a table by the compiler | 144 KB | 78,028 |
 | full-runtime standalone context, for scale | | 472 KB | - |
 
+`06_full_runtime` beside those five is not a nano program: the same `-ctx` output
+linked against the full runtime, because its script reaches C++ modules (dasHV, fio).
+Its README says what that keeps and what it costs; it is not in the table above.
+
 The x64 column includes the platform's C runtime, so what it measures is the
 difference nano makes on a host, not an embedded footprint. The cortex-m4 column
 is the real one: of `01_pure`'s 75,540 bytes, roughly 29 KB is the nano runtime,

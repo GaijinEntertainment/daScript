@@ -231,6 +231,7 @@ Z3 SMT solver bindings as a dynamic module, dasLLVM-style.
 - **Unwind tables on emitted functions** when the host uses C++ exceptions (#3347)
 - **JIT debug tooling** (#3511); **`llvm_tune` per-box UX** (#3403) - scope / policy / `--tune`, self-tuning servers, `-exe` fix
 - **AOT batch-composition hash fix** (`g_isInAot` leak) + `aot_cpp` made AOT-linkable (#3409); **AOT fuzzer-failure hardening** (#3303)
+- **Standalone contexts link C++ modules** (#3947) - a `-ctx` context that reaches dasHV, fio or any handled type registers the modules it links (the builtin set in the C++ registrar's order, then dependencies-first) on first construction through a process-wide list (`include/daScript/simulate/standalone_modules.h`), so several generated contexts in one binary share one registry lifetime that ends with `Module::ShutdownStandalone` when the last context is destroyed; a builtin module the program calls at run time keeps its AOT header, the function table is dense (a slot per function the context still reaches), and `examples/standalone/06_full_runtime` (dasHV + fio, static, compiles nothing at run time, loads no shared module) is the worked example and a small-lane test
 - **LLVM-AOT in a large embedding host** (#3715) - scalar call ABI matched at bool/reference seams, target triple + data layout pinned on emitted objects, `-dll-path`/`DAS_DLL_PATH` dasbind search, per-object glob-init deferred to first link
 
 #### Runtime, Tooling, and Hosting

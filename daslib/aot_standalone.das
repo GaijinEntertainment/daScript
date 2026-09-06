@@ -24,7 +24,9 @@ struct StandaloneContextCfg {
     context_name : string;
     class_name : string;
     cpp_output_dir : string;
-    cross_platform : bool
+    cross_platform : bool;
+    //! the context links C++ modules beyond the builtin one, so its constructor registers them
+    registers_modules : bool
 };
 
 def aotFunctionName(str : string) {
@@ -127,6 +129,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     let requested_stack = stack_arg ?as tInt ?? int(program.policies.stack)
     let stack_base = requested_stack > 0 && stack_arg is tInt ? requested_stack : max(requested_stack, min_init_stack)
     let stack_size = stack_base + int(program.globalInitStackSize)
+    let usedFunctionCount = length(collectProgramUsedFunctions(program, false, false))
     write(tw, "{cfg.class_name}::{cfg.class_name}() : Context({stack_size}/*stack*/) \{\n");
     write(tw, "    auto & context = *this;\n");
     write(tw, "    CodeOfPolicies policies;");
@@ -148,8 +151,8 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     write(tw, "    context.allocateGlobalsAndShared();\n");
     write(tw, "    if ( context.globals ) memset(context.globals, 0, context.getGlobalSize());\n");
     write(tw, "    context.totalVariables = {program.totalVariables}/*totalVariables*/;\n");
-    write(tw, "    context.functions = (SimFunction *) context.code->allocate( {program.totalFunctions}/*totalFunctions*/*sizeof(SimFunction) );\n");
-    write(tw, "    context.totalFunctions = {program.totalFunctions}/*totalFunctions*/;\n");
+    write(tw, "    context.functions = (SimFunction *) context.code->allocate( {usedFunctionCount}/*totalFunctions*/*sizeof(SimFunction) );\n");
+    write(tw, "    context.totalFunctions = {usedFunctionCount}/*totalFunctions*/;\n");
     write(tw, "    bool anyPInvoke = false;\n");
 
     write(tw, "    if ( anyPInvoke || {program.policies.threadlock_context || program.policies.debugger}");
@@ -202,7 +205,10 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
 def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var header : StringBuilderWriter, var source : StringBuilderWriter; cfg : StandaloneContextCfg; var context : Context) {
 
     write(header, "\n\n");
-    write(header, "class {cfg.class_name} : public Context \{\n");
+    //! the module scope is the FIRST base: constructed before Context, destroyed after it, so the
+    //! registry outlives the context's own teardown
+    let bases = cfg.registers_modules ? "public StandaloneModuleScope, public Context" : "public Context"
+    write(header, "class {cfg.class_name} : {bases} \{\n");
     write(header, "public:\n");
     write(header, "    {cfg.class_name}();\n");
     writeStandaloneContextMethods(program, header, "", true, cfg);
@@ -268,22 +274,48 @@ class StandaloneContextGen : CppAot {
 };
 
 
+def writeModuleDeclarations(var header, source : StringBuilderWriter; registrations : array<StandaloneModuleEntry>) {
+    //! the header carries the registry include (the class derives from its scope base); the
+    //! source carries the module declarations its registration table takes addresses of
+    if (empty(registrations)) return
+    write(header, "#include \"daScript/simulate/standalone_modules.h\"\n");
+    write(source, "#include \"daScript/simulate/standalone_modules.h\"\n");
+    for (entry in registrations) {
+        write(source, "DECLARE_MODULE({entry.mod.cppClassName});\n");
+    }
+}
+
+def writeModuleRegistration(var source : StringBuilderWriter; registrations : array<StandaloneModuleEntry>) {
+    //! This TU's linked C++ modules join the process-wide list before main; the first context's
+    //! `StandaloneModuleScope` base (standalone_modules.h) registers the union once, and the last
+    //! context's destruction shuts down, so several contexts in one binary share one lifetime.
+    if (empty(registrations)) return
+    write(source, "static const StandaloneModule das_standalone_modules[] = \{\n");
+    for (entry in registrations) {
+        write(source, "    \{ \"{entry.mod.name}\", &::register_{entry.mod.cppClassName}, {entry.rank} \},\n");
+    }
+    write(source, "\};\n");
+    write(source, "static const bool das_standalone_modules_added = standaloneAddModules(das_standalone_modules, {length(registrations)});\n\n");
+}
+
 def writeRegistration(var header : StringBuilderWriter;
                       var source : StringBuilderWriter;
                       initFunctions : string;
                       var program : ProgramPtr;
                       cfg : StandaloneContextCfg;
+                      registrations : array<StandaloneModuleEntry>;
                       var context : Context) {
     write(source, "using namespace {program.thisNamespace};\n");
     write(header, "namespace {cfg.context_name} \{\n");
     write(source, "namespace {cfg.context_name} \{\n");
     dumpRegisterAot(unsafe(addr(source)), program, context, false, cfg.cross_platform);
+    writeModuleRegistration(source, registrations);
     writeStandaloneContext(program, initFunctions, header, source, cfg, context);
     write(header, "\} // namespace {cfg.context_name}\n");
     write(source, "\} // namespace {cfg.context_name}\n");
 }
 
-def GetFunctionInfo(pfun : Function?, info : string) {
+def GetFunctionInfo(pfun : Function?; index : int; info : string) {
     return build_string() $(tw) {
         let args = ["\"{pfun.name}\"",
                     "\"{pfun |> get_mangled_name()}\"",
@@ -296,7 +328,7 @@ def GetFunctionInfo(pfun : Function?, info : string) {
                     "{pfun._module.moduleFlags.promoted}",
                     "{pfun.result.isRefType && !pfun.result.flags.ref}",
                     "{pfun.moreFlags.pinvoke}"]
-        write(tw, "        \{{pfun.index}, FunctionInfo({args|>join(", ")}), &{info}\},\n");
+        write(tw, "        \{{index}, FunctionInfo({args|>join(", ")}), &{info}\},\n");
     }
 }
 
@@ -308,9 +340,13 @@ def addFunctionInfo(fnn : array<Function?>; var helper : AotDebugInfoHelper?) {
         lookupFunctionTable.push((pfun, info));
     }
 
+    //! the table is dense: a slot per function the context still reaches, in emission order,
+    //! so a standalone context carries no row for what the interpreter would have removed
     return build_string() $(tw) {
+        var index = 0
         for ((fun_info, info) in lookupFunctionTable) {
-            write(tw, GetFunctionInfo(fun_info, funcInfoName(info)));
+            write(tw, GetFunctionInfo(fun_info, index, funcInfoName(info)));
+            index++
         }
     }
 }
@@ -414,8 +450,9 @@ def private prepareProgramForEmission(var program : ProgramPtr; context : Contex
     return coll
 }
 
-def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var pctx : smart_ptr<Context>; cfg : StandaloneContextCfg) : bool {
+def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string>; registrations : array<StandaloneModuleEntry>; var pctx : smart_ptr<Context>; cfg : StandaloneContextCfg) : bool {
     //! Runs the standalone AOT visitor on the program to generate C++ source and header files.
+    //! `registrations` are the C++ modules the generated constructor registers, in order.
     //! Returns false (writing nothing) when emission collected errors.
     assume context = *pctx;
 
@@ -440,13 +477,14 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
 
         write(source, "#include \"daScript/simulate/standalone_ctx_utils.h\"\n");
         write(source, "{join(modules, "")}");
+        writeModuleDeclarations(header, source, registrations);
         write(source, "#include \"{mod.name.empty() ? cfg.context_name : string(mod.name)}.das.h\"\n\n");
         write(source, AOT_HEADERS);
 
         write(source, "namespace das \{\n");
         write(header, "namespace das \{\n");
             let initFunctions = genStandaloneSrc(program, header, source, cfg, coll);
-            writeRegistration(header, source, initFunctions, program, cfg, context);
+            writeRegistration(header, source, initFunctions, program, cfg, registrations, context);
         write(source, "\} // namespace das\n");
         write(header, "\} // namespace das\n");
 
@@ -492,7 +530,7 @@ def public standalone_aot(input : string; output_dir : string; cross_platform : 
     //! without compiling the program a second time.
     let file_name = input |> split_by_chars("/\\") |> back()
     let ctx_name = (file_name |> split("."))[0]
-    let cfg = StandaloneContextCfg(context_name = ctx_name,
+    var cfg = StandaloneContextCfg(context_name = ctx_name,
                                    class_name = "Standalone",
                                    cpp_output_dir = output_dir,
                                    cross_platform = cross_platform)
@@ -507,7 +545,9 @@ def public standalone_aot(input : string; output_dir : string; cross_platform : 
                 panic("Standalone context called on non aot module {input}")
             } else {
                 before_emit |> invoke(program)
-                ok = runStandaloneVisitor(program, modules_str, pctx, cfg)
+                let registrations <- standaloneModuleRegistration(program)
+                cfg.registers_modules = !empty(registrations)
+                ok = runStandaloneVisitor(program, modules_str, registrations, pctx, cfg)
             }
         }
     }
