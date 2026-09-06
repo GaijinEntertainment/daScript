@@ -12,6 +12,8 @@ require daslib/fio
 //   tune-abort       run 1 exits 3 with no restart marker; run 2 exits 0
 //   park             prints a line, waits for the stop file named by CADMUS_STOP_FILE (or, with
 //                    none named, to be terminated), exits 0
+//   chatty           prints twenty thousand lines and exits 0 - what the supervisor's heaps see
+//                    from a talkative child
 // Codes return from main: a das exit() is an abnormal termination and reports 1.
 def run_number(state_dir : string) : int {
     let path = path_join(state_dir, "runs")
@@ -52,6 +54,12 @@ def main() : int {
     }
     if (mode == "tune-abort") {
         return run == 1 ? 3 : 0
+    }
+    if (mode == "chatty") {
+        for (i in range(20000)) {
+            print("line {i} of a child that never stops talking about itself\n")
+        }
+        return 0
     }
     if (mode == "park") {
         print("parked\n")

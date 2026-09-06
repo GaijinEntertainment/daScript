@@ -83,7 +83,9 @@ between them.
 ## The log
 
 `logs/<name>-watchdog.log` (`--log`), one JSON object per line, `{"ts", "event", ...}`, rotated
-at 20 MB with five backups, and echoed to stdout. The events: `watchdog_started`,
+at 20 MB with five backups, and echoed to stdout. `health_heartbeat` and `watchdog_stopped`
+carry `heap_bytes` and `string_heap_bytes`, the supervisor's own live heaps: the host collects
+them between ticks, and a number that only grows across heartbeats is a leak. The events: `watchdog_started`,
 `child_started`, `spawn_failed`, `child` (one per line the child wrote), `stage`, `tune`,
 `health`, `health_heartbeat`, `recovered`, `child_exited`, `intentional_shutdown`,
 `tune_bootstrap_complete`, `tune_incomplete`, `config_restart_relaunch`, `crash`,
@@ -108,13 +110,18 @@ visible to which tier.
 `--tray` (the `tray` key in `watchdog.json`) puts a status icon in the notification area: a
 disc, plain while the child serves, wearing an amber triangle while it starts or tunes and a red
 square when it is unhealthy, crashed or waiting to restart. The tooltip and the menu's first row
-carry one status line - `starting up - loading the model`, `tuning this box - 3/12 kernels`,
-`serving - healthy 2h05m`, `unhealthy (ready)`, `restarting in 4s (exit 9)`. `Open <name>`, also
-a left click, opens `--tray-url` (by default the health URL's origin) and is enabled only while
-the health check is green; `Shutdown` enters the same stop ladder as Ctrl-C. Where no desktop,
-session bus or backend can show an icon, the log says `tray_unavailable` and supervision runs
-without one: the icon is never fatal. On Linux it is a StatusNotifierItem over the session bus,
-so a systemd service with no `DBUS_SESSION_BUS_ADDRESS` gets none.
+carry one status line - `starting up - loading the model`, `tuning this box - 3/12 kernels
+(gemv)`, `serving - healthy 2h05m`, `unhealthy (ready)`, `crashed (exit 9) - collecting the
+report`, `restarting in 4s (exit 9)`. `Open <name>`, also a left click, opens the page named by
+`--tray-url`, or the health URL's origin when health is polled and no page is named; it is
+enabled while the health check is green, or while the child runs when health is not polled and
+the page was named. With `--no-health` and no `--tray-url` there is no page and no row.
+`Shutdown` enters the same stop ladder as Ctrl-C. Where no desktop, session bus or backend can
+show an icon, the log says `tray_unavailable` and supervision runs without one: the icon is
+never fatal. On Linux it is a StatusNotifierItem over the session bus, so a systemd service
+with no `DBUS_SESSION_BUS_ADDRESS` gets none. The icon is pumped from the supervision tick, so
+on Windows and macOS supervision pauses - no health poll, no log drain, no restart - for as
+long as the menu is held open; Linux draws the menu in the panel and is unaffected.
 
 ## Notifications
 
@@ -139,7 +146,7 @@ a supervisor.
 - `watchdog.das` - the library: configuration, discovery, the log, stages, crash capture, the
   tray, and `Supervisor`, a state machine the host ticks (`tick()` / `request_stop()` / `run()`).
 - `main.das` - the entry for both hosts: `start` / `tick` / `request_stop` / `result` for the
-  executable, `main` for the interpreter.
+  executable, `main` for the interpreter; it collects the heaps between ticks.
 - `main.cpp` - the executable's `main`: argv, the pid, the signals, the loop.
 - `smoke_test.cmake` - the `watchdog_smoke` ctest: the binary supervising a daslang child through
   a crash and a clean exit. The library's own tests are `tests/watchdog/`.

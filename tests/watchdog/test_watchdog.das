@@ -127,8 +127,11 @@ def skip_without_jit(t : T?) : bool {
 [test]
 def test_tray_status_line(t : T?) {
     t |> run("each supervisor state has its line and its badge") @(t : T?) {
-        var line = tray_status_line(TrayStatus(child_pid = 0, restart_delay = 2.5, last_exit_code = 9))
+        var line = tray_status_line(TrayStatus(child_pid = 0, restart_seconds = 3, last_exit_code = 9))
         t |> equal(line.text, "restarting in 3s (exit 9)")
+        t |> equal(line.badge, "red")
+        line = tray_status_line(TrayStatus(child_pid = 0, capturing = true, last_exit_code = 9))
+        t |> equal(line.text, "crashed (exit 9) - collecting the report", "while the report is collected")
         t |> equal(line.badge, "red")
         line = tray_status_line(TrayStatus(child_pid = 0))
         t |> equal(line.text, "starting", "before the first spawn")
@@ -142,22 +145,56 @@ def test_tray_status_line(t : T?) {
         line = tray_status_line(TrayStatus(child_pid = 1, tune_total = 5, tune_done = 2, tune_kernel = "gemv"))
         t |> equal(line.text, "tuning this box - 2/5 kernels (gemv)")
         t |> equal(line.badge, "amber")
-        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = false, up_seconds = 90.0))
+        line = tray_status_line(TrayStatus(child_pid = 1, tune_total = 5, tune_done = 2))
+        t |> equal(line.text, "tuning this box - 2/5 kernels", "between two kernels no name is shown")
+        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = false, up_minutes = 1))
         t |> equal(line.text, "running 1m", "without health polling a live child is running")
         t |> equal(line.badge, "base")
-        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true, healthy = 1, up_seconds = 3900.0))
+        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true, healthy = 1, up_minutes = 65))
         t |> equal(line.text, "serving - healthy 1h05m")
         t |> equal(line.badge, "base")
         line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true, healthy = 0, served = true, stage = "ready"))
         t |> equal(line.text, "unhealthy (ready)", "unhealthy only after it served once")
         t |> equal(line.badge, "red")
+        line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true, healthy = 0, served = true))
+        t |> equal(line.text, "unhealthy", "with no stage seen")
         line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true, healthy = 0, stage = "jit_codegen"))
         t |> equal(line.text, "starting up - compiling this box's kernels (a first start takes minutes)")
         t |> equal(line.badge, "amber")
         line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true, stage = "warp_drive"))
         t |> equal(line.text, "starting up - warp_drive", "an unknown stage shows its raw name")
         line = tray_status_line(TrayStatus(child_pid = 1, health_polled = true))
-        t |> equal(line.text, "starting up")
+        t |> equal(line.text, "starting up", "healthy defaults to the before-the-first-poll sentinel")
+    }
+    t |> run("two folds compare without text, and a minute rolling over is a change") @(t : T?) {
+        let a = TrayStatus(child_pid = 1, health_polled = true, healthy = 1, up_minutes = 5, stage = "ready")
+        t |> success(same_status(a, TrayStatus(child_pid = 1, health_polled = true, healthy = 1, up_minutes = 5, stage = "ready")))
+        t |> success(!same_status(a, TrayStatus(child_pid = 1, health_polled = true, healthy = 1, up_minutes = 6, stage = "ready")))
+        t |> success(!same_status(a, TrayStatus(child_pid = 1, health_polled = true, healthy = 0, up_minutes = 5, stage = "ready")))
+    }
+}
+
+[test]
+def test_tune_fold(t : T?) {
+    t |> run("plan opens the run, begin names the kernel, the last end closes it") @(t : T?) {
+        var f = TuneFold()
+        let plan <- {"scope" => "kernels", "total" => "2"}
+        fold_tune_event(f, "plan", plan)
+        t |> equal(f.total, 2)
+        let first <- {"name" => "gemv"}
+        fold_tune_event(f, "begin", first)
+        t |> equal(f.kernel, "gemv")
+        fold_tune_event(f, "step", first)
+        fold_tune_event(f, "end", first)
+        t |> equal(f.done, 1)
+        t |> equal(f.kernel, "", "a finished kernel is not named as in flight")
+        let second <- {"name" => "gemm"}
+        fold_tune_event(f, "begin", second)
+        fold_tune_event(f, "end", second)
+        t |> equal(f.total, 0, "the run closed after the last kernel")
+        let bad <- {"total" => "garbage"}
+        fold_tune_event(f, "plan", bad)
+        t |> equal(f.total, 0, "an unreadable total opens nothing")
     }
 }
 
@@ -166,8 +203,32 @@ def test_url_origin(t : T?) {
     t |> run("the origin is the scheme and authority with a trailing slash") @(t : T?) {
         t |> equal(url_origin("http://127.0.0.1:8080/v1/models"), "http://127.0.0.1:8080/")
         t |> equal(url_origin("https://box.local"), "https://box.local/")
+        t |> equal(url_origin("http://box.local?check=ready"), "http://box.local/", "a query with no path")
+        t |> equal(url_origin("http://box.local#frag"), "http://box.local/", "a fragment with no path")
+        t |> equal(url_origin("  http://box.local/x  "), "http://box.local/", "surrounding whitespace")
+        t |> equal(url_origin("http://[::1]:8080/x"), "http://[::1]:8080/")
         t |> equal(url_origin("nonsense"), "")
         t |> equal(url_origin("http:///v1"), "")
+    }
+}
+
+[test]
+def test_tray_page_and_open(t : T?) {
+    t |> run("the page comes from --tray-url, else the polled health URL's origin, else nowhere") @(t : T?) {
+        t |> equal(tray_page_url("http://box:1/", "http://127.0.0.1:8080/v1/models", true), "http://box:1/")
+        t |> equal(tray_page_url("", "http://127.0.0.1:8080/v1/models", true), "http://127.0.0.1:8080/")
+        t |> equal(tray_page_url("", "http://127.0.0.1:8080/v1/models", false), "", "a page nobody checks is not offered")
+        t |> equal(tray_page_url("http://box:1/", "http://127.0.0.1:8080/v1/models", false), "http://box:1/")
+    }
+    t |> run("Open is live while green, or while the child runs when health is not polled") @(t : T?) {
+        let url = "http://box:1/"
+        t |> success(tray_open_enabled(TrayStatus(child_pid = 1, health_polled = true, healthy = 1), url))
+        t |> success(!tray_open_enabled(TrayStatus(child_pid = 1, health_polled = true, healthy = 0), url))
+        t |> success(!tray_open_enabled(TrayStatus(child_pid = 1, health_polled = true), url), "not before the first poll")
+        t |> success(tray_open_enabled(TrayStatus(child_pid = 1, health_polled = false), url))
+        t |> success(!tray_open_enabled(TrayStatus(child_pid = 0, health_polled = false), url), "no child, no page")
+        t |> success(!tray_open_enabled(TrayStatus(child_pid = 1, health_polled = false, stopping = true), url))
+        t |> success(!tray_open_enabled(TrayStatus(child_pid = 1, health_polled = true, healthy = 1), ""), "no page, no Open")
     }
 }
 
@@ -194,19 +255,24 @@ def test_tray_mark(t : T?) {
 }
 
 // The tray arms run the watchdog under the interpreter as a child of this test - the icon has
-// to live in a process the desktop can see - supervising the park fixture with --no-shutdown,
-// so a stop terminates the child and supervision ends with 0.
+// to live in a process the desktop can see. Every arm ends through finish(), with the icon torn
+// down: the park fixture leaves on the stop file, which the tray's Shutdown writes on Linux and
+// the arms that cannot click write themselves; the crash-then-ok fixture leaves on its own.
 def tray_log_path(root : string) : string {
     return path_join(root, "logs/wdtray-watchdog.log")
 }
 
-def spawn_tray_watchdog(root, url : string; env : array<string>) : process {
+def tray_stop_file(root : string) : string {
+    return path_join(root, "stop")
+}
+
+def spawn_tray_watchdog(root, url, mode : string; env : array<string>) : process {
     let state_dir = path_join(root, "state")
     mkdir(state_dir)
     var argv <- [das_exe(), "-dasroot", get_das_root(), path_join(get_das_root(), "utils/watchdog/main.das"), "--",
         "--tray", "--tray-url", url, "--program", das_exe(), "--name", "wdtray", "--cwd", root,
-        "--no-health", "--no-shutdown", "--stable-seconds", "0.1", "--"]
-    argv |> push_from(child_args(state_dir, "park"))
+        "--no-health", "--stop-file", tray_stop_file(root), "--stable-seconds", "0.1", "--max-restart-delay", "0.5", "--"]
+    argv |> push_from(child_args(state_dir, mode))
     return unsafe(spawn_process(argv, root, env))
 }
 
@@ -224,10 +290,24 @@ def wait_for_tray(var wd : process; log_path : string) : string {
     return ""
 }
 
-def with_tray_watchdog(t : T?; url : string; env : array<string>; blk : block<(var wd : process; root : string; verdict : string) : void>) {
+//! The exit code once the watchdog ends, draining its stdout meanwhile - it echoes every log
+//! line there, and a full pipe would park it; `process_running` past the deadline.
+def wait_exit_draining(var wd : process; seconds : float) : int {
+    let started = ref_time_ticks()
+    while (float(get_time_usec(started)) < seconds * 1000000.0) {
+        unsafe(process_drain(wd) $(_line) {
+        })
+        let rc = unsafe(process_poll(wd))
+        if (rc != process_running) return rc
+        sleep(20u)
+    }
+    return process_running
+}
+
+def with_tray_watchdog(t : T?; url, mode : string; env : array<string>; blk : block<(var wd : process; root : string; verdict : string) : void>) {
     let root = make_temp(t, "wd tray ")
     if (empty(root)) return
-    var wd = spawn_tray_watchdog(root, url, env)
+    var wd = spawn_tray_watchdog(root, url, mode, env)
     let verdict = wait_for_tray(wd, tray_log_path(root))
     if (empty(verdict)) {
         t |> failure("the watchdog neither started the tray nor gave it up within 30 s: {event_names(read_events(tray_log_path(root)))}")
@@ -237,7 +317,7 @@ def with_tray_watchdog(t : T?; url : string; env : array<string>; blk : block<(v
     unsafe {
         close_process(wd)
     }
-    // close_process kills the watchdog and its tree; Windows releases their handles on the
+    // on a failed arm close_process kills the watchdog; Windows releases the handles on the
     // log and the state dir a moment later, so the removal retries
     var removed = false
     for (_attempt in range(40)) {
@@ -252,6 +332,15 @@ def with_tray_watchdog(t : T?; url : string; env : array<string>; blk : block<(v
     t |> success(removed, "temp dir removed")
 }
 
+//! Ends a parked run the way an operator's Shutdown would on a platform the test cannot click.
+def stop_parked_run(t : T?; var wd : process; root : string) {
+    fwrite(tray_stop_file(root), "stop\n")
+    t |> equal(wait_exit_draining(wd, 30.0), 0, "supervision ended with 0 once the child left on the stop file")
+    let events <- read_events(tray_log_path(root))
+    t |> equal(count_event(events, "intentional_shutdown"), 1)
+    t |> equal(count_event(events, "watchdog_stopped"), 1)
+}
+
 [test]
 def test_tray_shutdown_over_private_bus(t : T?) {
     if (!dbus_tools_present()) {
@@ -264,7 +353,7 @@ def test_tray_shutdown_over_private_bus(t : T?) {
             t |> failure("dbus-daemon printed no address")
         } else {
             let address = bus.address
-            with_tray_watchdog(t, "http://127.0.0.1:1/", ["DBUS_SESSION_BUS_ADDRESS={address}"]) $(var wd; root; verdict) {
+            with_tray_watchdog(t, "http://127.0.0.1:1/", "park", ["DBUS_SESSION_BUS_ADDRESS={address}"]) $(var wd; root; verdict) {
                 if (verdict == "unavailable") {
                     if (fexist("/usr/include/dbus-1.0/dbus/dbus.h")) {
                         t |> failure("the watchdog reports no tray although the dbus-1 headers are installed here: stddlg was built without LINUX_DBUS, or libdbus-1.so.3 failed to load")
@@ -282,16 +371,16 @@ def test_tray_shutdown_over_private_bus(t : T?) {
                     sleep(50u)
                 }
                 dump_has(t, layout, "string \"running ", "the status row")
-                dump_has(t, layout, "string \"Open wdtray\"", "the Open item")
+                dump_has(t, layout, "string \"Open wdtray\"", "the Open item, named by --tray-url under --no-health")
                 dump_has(t, layout, "string \"Shutdown\"", "the Shutdown item")
                 let tooltip = dbus_send_to(address, dest, true, "/StatusNotifierItem", "org.freedesktop.DBus.Properties.Get", ["string:org.kde.StatusNotifierItem", "string:ToolTip"])
                 dump_has(t, tooltip, "wdtray - running", "the tooltip carries the same line")
                 dbus_send_to(address, dest, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:{TRAY_SHUTDOWN_ID}", "string:clicked", "variant:int32:0", "uint32:0"])
-                t |> equal(unsafe(process_wait(wd, 30.0)), 0, "supervision ended with 0 after the tray's Shutdown")
+                t |> equal(wait_exit_draining(wd, 30.0), 0, "supervision ended with 0 after the tray's Shutdown")
                 let events <- read_events(tray_log_path(root))
                 t |> equal(count_event(events, "tray_started"), 1)
                 t |> equal(count_event(events, "tray_shutdown_requested"), 1)
-                t |> equal(count_event(events, "terminate_requested"), 1, "--no-shutdown stops the parked child by terminating it")
+                t |> equal(count_event(events, "stop_file_requested"), 1, "Shutdown asks the parked child through the stop file")
                 t |> equal(count_event(events, "watchdog_stopped"), 1)
             }
         }
@@ -315,7 +404,7 @@ def test_tray_status_item_macos(t : T?) {
             return
         }
         let no_env : array<string>
-        with_tray_watchdog(t, "", no_env) $(var wd; root; verdict) {
+        with_tray_watchdog(t, "", "park", no_env) $(var wd; root; verdict) {
             if (verdict == "unavailable") {
                 t |> skip("no window server session for this process, so no status bar to put an item on")
                 return
@@ -328,6 +417,7 @@ def test_tray_status_item_macos(t : T?) {
                 sleep(50u)
             }
             dump_has(t, help, "wdtray - running", "the tooltip")
+            stop_parked_run(t, wd, root)
         }
     }
 }
@@ -342,7 +432,7 @@ def test_tray_windows_smoke(t : T?) {
     }
     t |> run("the watchdog shows its icon on an interactive desktop, or reports it unavailable") @(t : T?) {
         let no_env : array<string>
-        with_tray_watchdog(t, "", no_env) $(var wd; root; verdict) {
+        with_tray_watchdog(t, "", "park", no_env) $(var wd; root; verdict) {
             if (verdict == "unavailable") {
                 if (has_env_variable("SESSIONNAME")) {
                     t |> failure("the watchdog reports no tray although this is an interactive session (SESSIONNAME is set)")
@@ -352,7 +442,59 @@ def test_tray_windows_smoke(t : T?) {
                 return
             }
             t |> equal(count_event(read_events(tray_log_path(root)), "tray_started"), 1)
+            stop_parked_run(t, wd, root)
         }
+    }
+}
+
+//! Supervision under --tray completes whether the icon exists - finish() tears it down and the
+//! crash notification went through it - or not: the icon is never fatal.
+[test]
+def test_tray_supervision_completes(t : T?) {
+    t |> run("crash-then-ok under --tray ends with 0 with or without an icon") @(t : T?) {
+        let no_env : array<string>
+        with_tray_watchdog(t, "", "crash-then-ok", no_env) $(var wd; root; verdict) {
+            t |> equal(wait_exit_draining(wd, 60.0), 0, "supervision ended with 0 (tray {verdict})")
+            let events <- read_events(tray_log_path(root))
+            t |> equal(count_event(events, "child_started"), 2)
+            t |> equal(count_event(events, "crash"), 1)
+            t |> equal(count_event(events, "watchdog_stopped"), 1)
+            t |> equal(count_event(events, "tray_started") + count_event(events, "tray_unavailable"), 1, "the icon came up or said why not: {event_names(events)}")
+        }
+    }
+}
+
+def event_number(events : array<JsonValue?>; name, key : string) : double {
+    for (ev in events) {
+        if ((ev?["event"] ?? "") == name) return ev?[key] ?? -1.0lf
+    }
+    return -1.0lf
+}
+
+//! The supervisor's own heaps stay bounded under a talkative child: every line becomes a log
+//! record, and the host collects between ticks.
+[test]
+def test_heaps_stay_bounded_under_a_chatty_child(t : T?) {
+    t |> run("twenty thousand child lines leave the string heap under two megabytes") @(t : T?) {
+        let root = make_temp(t, "wd chatty ")
+        if (empty(root)) return
+        let state_dir = path_join(root, "state")
+        mkdir(state_dir)
+        var argv <- [das_exe(), "-dasroot", get_das_root(), path_join(get_das_root(), "utils/watchdog/main.das"), "--",
+            "--program", das_exe(), "--name", "wdchatty", "--cwd", root, "--no-health", "--"]
+        argv |> push_from(child_args(state_dir, "chatty"))
+        let no_env : array<string>
+        var wd = unsafe(spawn_process(argv, root, no_env))
+        t |> equal(wait_exit_draining(wd, 120.0), 0, "supervision ended with 0")
+        unsafe {
+            close_process(wd)
+        }
+        let events <- read_events(path_join(root, "logs/wdchatty-watchdog.log"))
+        t |> equal(count_event(events, "child"), 20000, "every line reached the log")
+        let strings = event_number(events, "watchdog_stopped", "string_heap_bytes")
+        t |> success(strings > 0.0lf && strings < 2.0lf * 1024.0lf * 1024.0lf, "string heap at the end: {strings} bytes")
+        let cleanup = rmdir_rec_result(root)
+        t |> success(cleanup is value && cleanup as value, "temp dir removed")
     }
 }
 
@@ -523,6 +665,7 @@ def test_supervise_crash_then_clean_exit(t : T?) {
         t |> equal(count_event(events, "intentional_shutdown"), 1)
         t |> equal(count_event(events, "watchdog_stopped"), 1)
         t |> equal(count_event(events, "stage"), 4, "the JIT line and the ready line moved the stage on both runs")
+        t |> equal(count_event(events, "tray_started") + count_event(events, "tray_unavailable"), 0, "no --tray, no icon and no attempt at one")
         var bundles = 0
         dir(sup.cfg.crash_dir) $(fname) {
             if (starts_with(fname, "wdtest-")) {

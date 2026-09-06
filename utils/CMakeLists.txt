@@ -19,8 +19,9 @@ add_custom_target(check_dasgen
 # watchdog: the supervisor as a standalone context on the full runtime - libDaScript, dasHV and
 # dasStdDlg (the tray icon) as static archives, no compiler, no shared module, no lock on the files
 # it deploys (the shape of examples/standalone/06_full_runtime). Lands in bin/ and installs beside
-# daslang. It needs no LLVM, so it sits above the -exe utilities' early return.
-if(NOT DAS_HV_DISABLED AND NOT DAS_STDDLG_DISABLED)
+# daslang. It needs no LLVM, so it sits above the -exe utilities' early return; both module
+# targets exist only when their modules are enabled and included.
+if(TARGET libDasModuleHV AND TARGET libDasModuleStdDlg)
     set(WATCHDOG_GEN "${CMAKE_CURRENT_BINARY_DIR}/_watchdog_ctx_generated")
     file(MAKE_DIRECTORY "${WATCHDOG_GEN}")
     file(GLOB WATCHDOG_DAS_SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/utils/watchdog/*.das")

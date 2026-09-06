@@ -109,8 +109,9 @@ def collectInitFunctionAotNames(program : ProgramPtr; var context : Context) : a
     return <- initNames
 }
 
-def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var tw : StringBuilderWriter, program : ProgramPtr; var context : Context) {   // nolint:STYLE038 - flat emitter - one write per ctor section
-    var lookupVariableTable : array<Variable?>;
+//! The globals the context carries, in the order the constructor initializes them.
+def private usedGlobals(program : ProgramPtr) : array<Variable?> {
+    var globals : array<Variable?>
     if (program.totalVariables > 0) {
         program.get_ptr() |> for_each_module_no_order($(pm) {
             pm |> for_each_global($(pvar) {
@@ -119,10 +120,32 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
                     panic("Internal compiler errors. Simulating variable which is not used{pvar.name}");
                     return
                 }
-                lookupVariableTable.push(pvar);
+                globals.push(pvar);
             });
         });
     }
+    return <- globals
+}
+
+//! A `VarInfo` per global through the emitter's own debug helper, built before the helper dumps
+//! its tables so every type they name is in the dump; the collector walks each global through
+//! its info, the way the interpreter's simulate step wires it.
+def private makeGlobalVarInfos(var helper : AotDebugInfoHelper?; program : ProgramPtr) : array<tuple<index : int; info : VarInfo?>> {
+    return <- [for (pvar in usedGlobals(program)); (index = pvar.index, info = helper.helper |> make_variable_debug_info(pvar))]
+}
+
+def private writeGlobalVarInfos(var helper : AotDebugInfoHelper?; infos : array<tuple<index : int; info : VarInfo?>>; var tw : StringBuilderWriter) {
+    for (entry in infos) {
+        let suffix = "_gvar_{entry.index}"
+        helper->writeDim(unsafe(addr(tw)), entry.info, suffix)
+        helper->writeArgTypes(unsafe(addr(tw)), entry.info, suffix)
+        helper->writeArgNames(unsafe(addr(tw)), entry.info, suffix)
+        write(tw, "VarInfo __gvar_info_{entry.index} = \{ {helper->describeCppVarFuncInfo(entry.info.name, entry.info, suffix)} \};\n")
+    }
+}
+
+def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var tw : StringBuilderWriter, program : ProgramPtr; var context : Context) {   // nolint:STYLE038 - flat emitter - one write per ctor section
+    let lookupVariableTable <- usedGlobals(program)
 
     let min_init_stack = 16384
     let stack_arg = program._options |> find_arg("stack")
@@ -141,11 +164,13 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     write(tw, "    policies.string_heap_size_hint = {string_heap_hint:d};\n");
     write(tw, "    policies.track_allocations = {program._options |> find_arg("track_allocations") ?as tBool ?? program.policies.track_allocations};\n");
     write(tw, "    context.setup({program.totalVariables}/*totalVariables*/, {program.globalStringHeapSize:d} /*globalStringHeapSize*/, policies, \{\});\n");
+    write(tw, "    context.gcEnabled = {program._options |> find_arg("gc") ?as tBool ?? false};\n");
 
     write(tw, "     // start totalVariables\n");
     for (pvar in lookupVariableTable) {
         write(tw, "    InitGlobalVar(context, &context.globalVariables[{pvar.index}/*pvar->index*/], GlobalVarInfo(\"")
         write(tw, "{pvar.name}\", \"{pvar |> get_mangled_name()}\", {pvar._type.sizeOf}, {pvar.flags.global_shared}));\n");
+        write(tw, "    context.globalVariables[{pvar.index}].debugInfo = &__gvar_info_{pvar.index};\n");
     }
     write(tw, "     // end totalVariables\n\n");
     write(tw, "    context.allocateGlobalsAndShared();\n");
@@ -390,9 +415,11 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
 
             initFunctions = addFunctionInfo(collectProgramUsedFunctions(program, true, false), gen.helper);
+            let globalInfos <- makeGlobalVarInfos(gen.helper, program)
             type_defs += gen.declarations;
             gen.declarations = "";
             write(tw, gen.str());
+            writeGlobalVarInfos(gen.helper, globalInfos, tw)
             unsafe {
                 delete gen.collector
                 delete gen
