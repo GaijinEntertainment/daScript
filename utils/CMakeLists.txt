@@ -16,6 +16,58 @@ add_custom_target(check_dasgen
     COMMENT "Checking generated builtin .inc files are up to date (dasgen)"
 )
 
+# watchdog: the supervisor as a standalone context on the full runtime - libDaScript, dasHV and
+# dasStdDlg (the tray icon) as static archives, no compiler, no shared module, no lock on the files
+# it deploys (the shape of examples/standalone/06_full_runtime). Lands in bin/ and installs beside
+# daslang. It needs no LLVM, so it sits above the -exe utilities' early return.
+if(NOT DAS_HV_DISABLED AND NOT DAS_STDDLG_DISABLED)
+    set(WATCHDOG_GEN "${CMAKE_CURRENT_BINARY_DIR}/_watchdog_ctx_generated")
+    file(MAKE_DIRECTORY "${WATCHDOG_GEN}")
+    file(GLOB WATCHDOG_DAS_SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/utils/watchdog/*.das")
+    add_custom_command(
+        OUTPUT "${WATCHDOG_GEN}/main.das.cpp" "${WATCHDOG_GEN}/main.das.h"
+        COMMAND $<TARGET_FILE:daslang>
+            "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
+            -- -ctx "${PROJECT_SOURCE_DIR}/utils/watchdog/main.das"
+            "${WATCHDOG_GEN}/"
+        DEPENDS daslang
+            ${WATCHDOG_DAS_SOURCES}
+            "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
+            "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das"
+            "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        COMMENT "Standalone AOT (full runtime): watchdog"
+        VERBATIM
+    )
+    add_executable(watchdog
+        "${PROJECT_SOURCE_DIR}/utils/watchdog/main.cpp" "${WATCHDOG_GEN}/main.das.cpp")
+    target_include_directories(watchdog PRIVATE
+        "${WATCHDOG_GEN}"
+        ${NEED_MODULES_PATH}
+        "${PROJECT_SOURCE_DIR}/modules/dasHV/hv/$<CONFIG>/include")
+    target_link_libraries(watchdog PRIVATE libDaScript ${SRC_LIBRARIES} libDasModuleHV libDasModuleStdDlg)
+    SETUP_CPP11(watchdog)
+    SETUP_BIN_RPATH(watchdog)
+    set_target_properties(watchdog PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin
+        FOLDER "utils")
+    if(NOT MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_custom_command(TARGET watchdog POST_BUILD
+            COMMAND ${CMAKE_STRIP} $<TARGET_FILE:watchdog>
+            COMMENT "Stripping watchdog")
+    endif()
+    INSTALL(TARGETS watchdog RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
+    add_test(NAME watchdog_smoke
+        COMMAND ${CMAKE_COMMAND}
+            -DWATCHDOG=$<TARGET_FILE:watchdog>
+            -DDASLANG=$<TARGET_FILE:daslang>
+            -DDAS_ROOT=${PROJECT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/watchdog_smoke
+            -P ${PROJECT_SOURCE_DIR}/utils/watchdog/smoke_test.cmake)
+    set_tests_properties(watchdog_smoke PROPERTIES LABELS "small" TIMEOUT 120)
+    add_dependencies(test-small watchdog)
+endif()
+
 # Build daslang utilities as standalone executables using -exe mode.
 # Each utility's entry .das is compiled via daslang -exe and the
 # resulting binary is placed next to the daslang compiler binary
@@ -188,54 +240,3 @@ ADD_CUSTOM_TARGET(run_utils_tests
     COMMENT "Running utils tests"
 )
 
-# watchdog: the supervisor as a standalone context on the full runtime - libDaScript, dasHV and
-# dasStdDlg (the tray icon) as static archives, no compiler, no shared module, no lock on the files
-# it deploys (the shape of examples/standalone/06_full_runtime). Lands in bin/ and installs beside
-# daslang.
-if(NOT DAS_HV_DISABLED AND NOT DAS_STDDLG_DISABLED)
-    set(WATCHDOG_GEN "${CMAKE_CURRENT_BINARY_DIR}/_watchdog_ctx_generated")
-    file(MAKE_DIRECTORY "${WATCHDOG_GEN}")
-    file(GLOB WATCHDOG_DAS_SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/utils/watchdog/*.das")
-    add_custom_command(
-        OUTPUT "${WATCHDOG_GEN}/main.das.cpp" "${WATCHDOG_GEN}/main.das.h"
-        COMMAND $<TARGET_FILE:daslang>
-            "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
-            -- -ctx "${PROJECT_SOURCE_DIR}/utils/watchdog/main.das"
-            "${WATCHDOG_GEN}/"
-        DEPENDS daslang
-            ${WATCHDOG_DAS_SOURCES}
-            "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
-            "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das"
-            "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
-        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-        COMMENT "Standalone AOT (full runtime): watchdog"
-        VERBATIM
-    )
-    add_executable(watchdog
-        "${PROJECT_SOURCE_DIR}/utils/watchdog/main.cpp" "${WATCHDOG_GEN}/main.das.cpp")
-    target_include_directories(watchdog PRIVATE
-        "${WATCHDOG_GEN}"
-        ${NEED_MODULES_PATH}
-        "${PROJECT_SOURCE_DIR}/modules/dasHV/hv/$<CONFIG>/include")
-    target_link_libraries(watchdog PRIVATE libDaScript ${SRC_LIBRARIES} libDasModuleHV libDasModuleStdDlg)
-    SETUP_CPP11(watchdog)
-    SETUP_BIN_RPATH(watchdog)
-    set_target_properties(watchdog PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin
-        FOLDER "utils")
-    if(NOT MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
-        add_custom_command(TARGET watchdog POST_BUILD
-            COMMAND ${CMAKE_STRIP} $<TARGET_FILE:watchdog>
-            COMMENT "Stripping watchdog")
-    endif()
-    INSTALL(TARGETS watchdog RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
-    add_test(NAME watchdog_smoke
-        COMMAND ${CMAKE_COMMAND}
-            -DWATCHDOG=$<TARGET_FILE:watchdog>
-            -DDASLANG=$<TARGET_FILE:daslang>
-            -DDAS_ROOT=${PROJECT_SOURCE_DIR}
-            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/watchdog_smoke
-            -P ${PROJECT_SOURCE_DIR}/utils/watchdog/smoke_test.cmake)
-    set_tests_properties(watchdog_smoke PROPERTIES LABELS "small" TIMEOUT 120)
-    add_dependencies(test-small watchdog)
-endif()

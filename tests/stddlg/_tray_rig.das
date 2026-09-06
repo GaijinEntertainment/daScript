@@ -12,10 +12,17 @@ def dbus_tools_present() : bool {
     return fexist("/usr/bin/dbus-daemon") && fexist("/usr/bin/dbus-send")
 }
 
-//! `dbus-daemon --session` and its address; the address is empty when the daemon printed none
-//! within 15 s. The caller owns the daemon and closes it.
+//! A `dbus-daemon` on a private bus and its address; the address is empty when the daemon printed
+//! none within 15 s. The caller owns the daemon and closes it. The bus gets its own config with
+//! no service directories: the stock session config would activate the desktop's notification
+//! daemon on demand, and an arm that asserts "no daemon here" would then find one.
 def spawn_session_bus() : tuple<bus : process; address : string> {
-    let argv <- ["/usr/bin/dbus-daemon", "--session", "--print-address", "--nofork", "--nopidfile"]
+    let config_path = "/tmp/das-tray-bus-{ref_time_ticks()}.conf"
+    fwrite(config_path, "<!DOCTYPE busconfig PUBLIC \"-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN\" \"http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd\">\n"
+        + "<busconfig><type>session</type><listen>unix:tmpdir=/tmp</listen>"
+        + "<policy context=\"default\"><allow send_destination=\"*\" eavesdrop=\"true\"/><allow eavesdrop=\"true\"/><allow own=\"*\"/></policy>"
+        + "</busconfig>\n")
+    let argv <- ["/usr/bin/dbus-daemon", "--config-file={config_path}", "--print-address", "--nofork", "--nopidfile"]
     let no_env : array<string>
     var bus = unsafe(spawn_process(argv, "", no_env))
     var address = ""
@@ -28,6 +35,7 @@ def spawn_session_bus() : tuple<bus : process; address : string> {
         })
         sleep(5u)
     }
+    remove(config_path)
     return (bus = bus, address = address)
 }
 
