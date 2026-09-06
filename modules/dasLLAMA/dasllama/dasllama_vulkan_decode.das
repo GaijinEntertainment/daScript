@@ -767,26 +767,32 @@ def private rd_encode_token {
     g_rd.tok_recorded = true
 }
 
-// The per-stamp role names, in the order rdq_sample aggregates them (see the kv/rq_x notes below).
+// The per-stamp role names of an attention layer, in the order rdq_sample aggregates them (see the
+// kv/rq_x notes below); a split-rail layer with the fused qk-norm+rope (gated / partial-rope models) stamps once there.
 def private rdq_role_names(fuse, fuse_qkr, qk_norm : bool) : array<string> {
     return <- ["q", "kv", fuse_qkr ? "qknrope" : "rope", "attn", "rq_a", "wo", "arrq_f", "gate", "up", "actrq", "down", "arrq_n"] if (fuse)
+    return <- ["rq_x", "q", "kv", "qknrope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"] if (fuse_qkr)
     return <- ["rq_x", "q", "kv", "qkn", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"] if (qk_norm)
     return <- ["rq_x", "q", "kv", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
 }
 
+// a recurrent layer's stamps on the token command (rd_encode_dn_head + the shared tail): 13, split rail only
+let private RDQ_DN_ROLES = 13
+let private RDQ_DN_NAMES <- ["rq_x", "qkv", "z", "ba", "step", "out", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
+
 [cold_path]   // DASLLAMA_GPU_PROF reporting leg
 def private rdq_sample {
-    // the fuse gate must MATCH rd_encode_token's or the aggregation walks the wrong shape
-    let fuse = vk_fuse_on() && rd_x_quants_b32()
-    let fuse_qkr = fuse && g_rd.qk_norm
+    // the fuse gates must MATCH rd_encode_token's or the aggregation walks the wrong shape
+    let fuse = vk_fuse_on() && rd_x_quants_b32() && !g_rd.hybrid
+    let fuse_qkr = g_rd.qk_norm && (fuse || g_rd.q_gated || g_rd.rot != g_rd.head_size)
     var want = fuse ? 3 : 4   // anchor + prologue + [fin_rq — split rail only] + cls
-    // fused is 13 either way: merging qkn into rope exactly offsets keeping a separate rope
-    let base_rpl = fuse ? 13 : (g_rd.qk_norm ? 16 : 15)
+    // per ATTENTION layer counting the split v stamp: fused 13, split rail with the fused qk-norm+rope 15, plain 16 / 15
+    let att_rpl = fuse ? 13 : (fuse_qkr ? 15 : (g_rd.qk_norm ? 16 : 15))
     for (L in g_rd.layers) {
-        want += base_rpl - (L.kv_merged ? 1 : 0)
+        want += L.recurrent ? RDQ_DN_ROLES : att_rpl - (L.kv_merged ? 1 : 0)
     }
     if (g_rdq_n != uint(want)) {
-        // a hybrid's recurrent heads stamp their own count (no per-role table yet): the whole command's GPU span reads off the first and last stamps
+        // an unexpected stamp count: the whole command's GPU span reads off the first and last stamps
         unsafe {
             var tp = reinterpret<uint64?>(g_pfq_buf.mapped)
             g_rdq_total += double(tp[g_rdq_n - 1u] - tp[0u]) * double(g_pfq_period) / 1000.0lf
@@ -810,10 +816,19 @@ def private rdq_sample {
     }
     g_rdq_pro += pfq_us(1u)
     // k+v aggregate into ONE "kv" slot (split = 2 stamps); fused drops rq_x, so the kv slot shifts down
-    let nroles = base_rpl - 1
+    let nroles = att_rpl - 1
     let kv_at = fuse ? 1 : 2
     var qi = 2u
+    var ndn = 0l
     for (L in g_rd.layers) {
+        if (L.recurrent) {
+            for (s in range(RDQ_DN_ROLES)) {
+                g_rdq_dn[s] += pfq_us(qi)
+                qi++
+            }
+            ndn++
+            continue
+        }
         var s = 0
         while (s < nroles) {
             g_rdq_role[s] += pfq_us(qi)
@@ -841,7 +856,16 @@ def private rdq_sample {
             }
         }
         delete names
-        to_log(LOG_INFO, "vk_rdec gpu avg/token over {g_rdq_count}: prologue {int(g_rdq_pro / n)} {rs}tail {int(g_rdq_tail / n)} total {int(g_rdq_total / n)}\n")
+        let natt = long_length(g_rd.layers) - ndn
+        to_log(LOG_INFO, "vk_rdec gpu avg/token over {g_rdq_count}: prologue {int(g_rdq_pro / n)} {rs}tail {int(g_rdq_tail / n)} total {int(g_rdq_total / n)} (attention layers {natt}, recurrent {ndn})\n")
+        if (ndn > 0l) {
+            let ds = build_string() $(w) {
+                for (s in range(RDQ_DN_ROLES)) {
+                    w |> write("{RDQ_DN_NAMES[s]} {int(g_rdq_dn[s] / n)} ")
+                }
+            }
+            to_log(LOG_INFO, "vk_rdec dn avg/token: {ds}\n")
+        }
     }
 }
 

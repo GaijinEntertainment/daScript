@@ -5347,7 +5347,7 @@ def test_vkd_dn_family(t0 : T?) {
                 feint("dn chain declined on this device (shared-memory cap) - skipping\n")
                 return
             }
-            verify(ensure_dn_conv_cls() && ensure_dn_step_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls(),
+            verify(ensure_dn_conv_cls() && ensure_dn_step_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls() && ensure_dn_scan_p3_cls(),
                 "the dn class rails must engage on a device over the shared cap")
             let ds = 64
             let nkh = 2
@@ -5704,9 +5704,12 @@ def test_vkd_dn_family(t0 : T?) {
                     var sc1 = set_dn_scan_p1_cls(fixed_array(convd, smd, sl2),
                         fixed_array(conv_bytes, sm_bytes, slab_bytes),
                         fixed_array(1u, 8u, 4u))
-                    var sc2 = set_dn_scan_p2_cls(fixed_array(zd, st2, sl2, smd),
-                        fixed_array(z_bytes, st_bytes, slab_bytes, sm_bytes),
-                        fixed_array(16u, 2u, 4u, 8u))
+                    var sc2 = set_dn_scan_p2_cls(fixed_array(st2, sl2),
+                        fixed_array(st_bytes, slab_bytes),
+                        fixed_array(2u, 4u))
+                    var sc3 = set_dn_scan_p3_cls(fixed_array(zd, sl2, smd),
+                        fixed_array(z_bytes, slab_bytes, sm_bytes),
+                        fixed_array(16u, 4u, 8u))
                     var raw = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -5717,9 +5720,11 @@ def test_vkd_dn_family(t0 : T?) {
                         dt_off = uint(dt_off), slab_stride = uint(slab_stride))
                     enc_dn_scan_p1_cls(raw, h, sc1, pc1, int64(nvh * nch))
                     var pc2 = DnScanP2Args(npos = uint(npos), di = uint(di), ds = uint(ds),
-                        o_off = uint(o_off), wnorm_off = uint(wnorm_off),
-                        slab_stride = uint(slab_stride), st_off = uint(st_off), eps = eps)
-                    enc_dn_scan_p2_cls(raw, h, sc2, pc2, int64(nvh))
+                        o_off = uint(o_off), slab_stride = uint(slab_stride), st_off = uint(st_off), nsp = uint(DN_NSP))
+                    enc_dn_scan_p2_cls(raw, h, sc2, pc2, int64(nvh) * DN_NSP)
+                    var pc3 = DnScanP3Args(npos = uint(npos), nvh = uint(nvh), di = uint(di), ds = uint(ds),
+                        o_off = uint(o_off), wnorm_off = uint(wnorm_off), eps = eps)
+                    enc_dn_scan_p3_cls(raw, h, sc3, pc3, int64(npos))
                     vhz_dep(raw, h, 2u | 4u, 0u, true)
                     cmd_copy_range(raw, sl2, int64(o_off) * 4l, host.buf, 0l, o_bytes)
                     cmd_copy_range(raw, st2, 0l, host.buf, o_bytes, st_bytes)

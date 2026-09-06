@@ -42,8 +42,32 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    partial rotary on the batch kernels, and flushes the state home for the decode's upload
    (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2j, `_DECODE.md` sec.2.2v; gate
    `tests/test_gpu_resident_hybrid.das`, one- and two-window cells). The 9B UD file on the
-   resident driver: pp512 1365 (was 95.7; upstream 2527 - 0.54x, a gap: the prefill's per-role
-   profile on a hybrid is the next lever), tg128 53.3 (upstream 56.7, 0.94x). STILL OPEN in this item:
+   resident driver: pp512 1365 (was 95.7; upstream 2527 - 0.54x), tg128 53.3 (upstream 56.7, 0.94x).
+   WHERE THE GAPS ARE (DASLLAMA_GPU_PROF=1 role tables, 9/5, 5060 Ti; `vk_rdpf attn`/`dn` and
+   `vk_rdec ... dn avg/token` are hybrid-aware now):
+   - pp512, one 512-row window = 349 ms GPU (upstream ~203): the deltanet two-phase scan was
+     141 ms (scan2 97 + scan1 45; 24 layers, ~5.9 ms/layer - P2 ran ONE workgroup per head, 16 of
+     36 SMs, and the staged GEMM did two shared loads per FMA with its C tile in a dynamically
+     indexed private array). DONE 9/5 (same session): phase 2 per (head, column slice) with a phase
+     3 out-norm (`DN_NSP` = 4) and a 2x4 register-tiled GEMM (bit-exact) took the scan to 63 ms
+     (scan1 27 + scan2 36), the window to 291 ms, pp512 to 1710 (0.68x). Still in the scan: the
+     GEMMs stage f32 through shared without cooperative matrices, and phase 1's serial unit-lower
+     solve idles 3/4 of the workgroup - a coopmat (f16 operands, f32 state) form is the next scan
+     lever, P3b. The rest of the window: the FFN GEMMs 104 ms (cm2 tiles at ~47-51 TFLOP/s, at par); the dn
+     qkv/z/out GEMMs 42 ms on the q8 batch router (~40 TFLOP/s; the f16-feed cm2 route would give
+     ~20% - P4); attention 20 ms = the scalar `DaAttnB` tile at hs 256 (the cm2 fa tile and the
+     h128 twin serve 64/128 only) - P1; the f32 beta/alpha router GEMV 15 ms (one workgroup per
+     (row, position), the 4096-wide f32 rows re-read per position, 6.4 GB/window) - P2, a real
+     GEMM over transcoded rows; conv 5 ms, cls 2 ms, add+rms/act/requant ~9 ms.
+   - tg128 = 18.9 ms GPU/token (host wall 19.4; upstream 17.6): every GEMV role sits at 360-420
+     GB/s (bandwidth-bound, at par per byte); the bytes are the gap: the loader's Q8_0 transcode of
+     the deltanet qkv (Q5_K in the file, 24 x 33.5M params) and z (Q6_K) planes reads ~400 MB more
+     per token than upstream = ~1.0 of the 1.1 ms gap - lever D1 = the k-native dn planes
+     (`PERF_LEDGER.md` k4 dn planes; the resident GEMVs already serve every KqFmt); the rest is
+     small-dispatch latency: the f32 beta/alpha pair 0.39 ms (2 dispatches x 24 layers at 64 GB/s -
+     D2: one dispatch, or f16/q8 rows), add+rms pairs 0.68 ms + requants 0.16 (the fused ar+rq twin
+     is off on a hybrid because the f32 GEMVs read xb - D3).
+   STILL OPEN in this item:
    (b) the other families Metal serves - MoE (Wave C), gemma4 (PLE, sandwich norms), gpt-oss
    (sinks, swiglu_oai) - stay per-op; (c) the decode-role profiler (`rdq_sample`) has no
    per-role table for the hybrid stamp count - it reports the whole span only, and the prefill's

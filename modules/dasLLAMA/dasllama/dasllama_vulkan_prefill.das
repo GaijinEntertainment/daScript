@@ -426,9 +426,13 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(np * cd * 4l, DND_SMALLS_BYTES, DN_WS_BYTES),
         fixed_array(VHZ_DNC, VHZ_DNSM, VHZ_DNWS))
     L.pf_dn_scan_p2_set = set_dn_scan_p2_cls(
-        fixed_array(g_rd.pf_dnz, L.dn.state_dev, g_gpu.dn_ws_dev, L.dn.smalls_dev),
-        fixed_array(np * di * 4l, L.dn.state_bytes, DN_WS_BYTES, DND_SMALLS_BYTES),
-        fixed_array(VHZ_DNZ, VHZ_DNST, VHZ_DNWS, VHZ_DNSM))
+        fixed_array(L.dn.state_dev, g_gpu.dn_ws_dev),
+        fixed_array(L.dn.state_bytes, DN_WS_BYTES),
+        fixed_array(VHZ_DNST, VHZ_DNWS))
+    L.pf_dn_scan_p3_set = set_dn_scan_p3_cls(
+        fixed_array(g_rd.pf_dnz, g_gpu.dn_ws_dev, L.dn.smalls_dev),
+        fixed_array(np * di * 4l, DN_WS_BYTES, DND_SMALLS_BYTES),
+        fixed_array(VHZ_DNZ, VHZ_DNWS, VHZ_DNSM))
     L.pf_dn_tail_set = set_dn_tail_cls(
         fixed_array(g_rd.pf_dnqkv, L.dn.smalls_dev),
         fixed_array(np * cd * 4l, DND_SMALLS_BYTES),
@@ -486,13 +490,13 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let pz = arena_planes(L.fz, L.bz)
     pf_gemm_enc(raw, h, b + 2, L.fz, pz.wq, pz.ws, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_dnz,
         pz.wqb, pz.wsb, np * dim, np * (dim / 32l) * 4l, np * di * 4l, VHZ_XQ, VHZ_DNZ, dim, di, L.bz, wlen, false)
-    pfq_ts(raw)
-    // beta/alpha rows into the layer smalls at the scan's beta/g offsets (position-major [pos][nvh])
+    // beta/alpha rows into the layer smalls at the scan's beta/g offsets (position-major [pos][nvh]); the f32 pair shares one profile stamp, the q8 GEMMs stamp themselves
     if (g_rd.dn_ba_f32) {
         var pcb = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA), xstride = uint(dim), ostride = uint(nvh))
         enc_router_gemv_cls(raw, h, L.pf_dn_ba_set, pcb, nvh * wlen)
         var pcg = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off + nvh * dim), obase = uint(DN_SM_G), xstride = uint(dim), ostride = uint(nvh))
         enc_router_gemv_cls(raw, h, L.pf_dn_ba_set, pcg, nvh * wlen)
+        pfq_ts(raw)
     } else {
         let pb = arena_planes(int(KqFmt.q8), L.bbeta)
         pf_gemm_enc(raw, h, b + 3, int(KqFmt.q8), pb.wq, pb.ws, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_dnbg,
@@ -505,7 +509,6 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         vhz_dep(raw, h, VHZ_DNBG, VHZ_DNSM, true)
         cmd_copy_range(raw, g_rd.pf_dnbg, 0l, L.dn.smalls_dev, DN_SM_G * 4l, wlen * nvh * 4l)
     }
-    pfq_ts(raw)
     // conv: history is this layer's ring image (zeroed at window 0, prev window's tail after)
     var pcc = DnConvArgs(cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
         hist_mode = 2u, taps_off = uint(DN_SM_TAPS), hist_off = uint(DN_SM_HIST),
@@ -518,8 +521,11 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     enc_dn_scan_p1_cls(raw, h, L.pf_dn_scan_set, pc1, nvh * ((wlen + DN_CS - 1l) / DN_CS))
     pfq_ts(raw)
     var pc2 = DnScanP2Args(npos = uint(wlen), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
-        wnorm_off = uint(DN_SM_WNORM), slab_stride = uint(DN_SLAB), st_off = uint(DN_P2_OFF), eps = eps)
-    enc_dn_scan_p2_cls(raw, h, L.pf_dn_scan_p2_set, pc2, nvh)
+        slab_stride = uint(DN_SLAB), st_off = uint(DN_P2_OFF), nsp = uint(DN_NSP))
+    enc_dn_scan_p2_cls(raw, h, L.pf_dn_scan_p2_set, pc2, nvh * DN_NSP)
+    var pc3 = DnScanP3Args(npos = uint(wlen), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
+        wnorm_off = uint(DN_SM_WNORM), eps = eps)
+    enc_dn_scan_p3_cls(raw, h, L.pf_dn_scan_p3_set, pc3, wlen)
     pfq_ts(raw)
     // carry the conv tail forward: position-major in image 0 between windows, per-channel into the decode ring on the last
     if (last) {
@@ -538,7 +544,15 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let pout = arena_planes(L.fout, L.bout)
     pf_gemm_enc(raw, h, b + 7, L.fout, pout.wq, pout.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_xb2,
         pout.wqb, pout.wsb, BATCH_HQ_BYTES, BATCH_HS_BYTES, np * dim * 4l, VHZ_HQ, VHZ_XB2, di, dim, L.bout, wlen, false)
-    pfq_ts(raw)
+}
+
+// the prefill profile's stamps per layer: the attention head's roles (+ qkn), or the recurrent head's
+// (rq_x qkv z [beta alpha | ba] conv scan1 scan2 tail rq_o out), then the shared FFN tail's seven
+def private pf_roles_per_layer(recurrent : bool) : int64 {
+    if (recurrent) {
+        return 7l + (g_rd.dn_ba_f32 ? 10l : 11l)
+    }
+    return g_rd.qk_norm ? 16l : 15l
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]   // once per residency — buffers, sets, fa arming
@@ -661,7 +675,7 @@ def private pf_setup {
     }
     if (g_rd.hybrid) {
         ensure_dn_state()   // dn_ws_dev (the scan workspace) + the staging buffers the reset/handoff ride
-        verify(ensure_dn_conv_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls()
+        verify(ensure_dn_conv_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls() && ensure_dn_scan_p3_cls()
             && ensure_dn_tail_cls() && (!g_rd.dn_ba_f32 || ensure_router_gemv_cls()),
             "vk prefill: the deltanet class rails must engage on a live device")
         let cd = g_rd.dn_cd
@@ -1179,27 +1193,68 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
         }
         memcpy(addr<void?>(logits[0]), g_rd.pf_logits_host.mapped, g_rd.vocab * 4l)
         // per-role GPU aggregation, LAST window, only when every stamp landed; overlapped levels (q|k|v, gate|up) bill the level on the last member's delta
-        let rpl = g_rd.qk_norm ? 16l : 15l
-        if (vk_prof() && g_pfq_n == 5u + uint(g_rd.n_layers * rpl)) {
-            var role : double[16]
-            for (l in range64(g_rd.n_layers)) {
-                for (s in range64(rpl)) {
-                    role[s] += pfq_us(uint(3l + l * rpl) + uint(s))
-                }
-            }
-            let nq = 3u + uint(g_rd.n_layers * rpl)
-            var tot = 0.0lf
-            for (s in range64(rpl)) {
-                tot += role[s]
-            }
-            tot += pfq_us(2u) + pfq_us(nq) + pfq_us(nq + 1u)
-            // the qkn dispatch stamps between v and rope_kv, shifting every later role by one
-            if (g_rd.qk_norm) {
-                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} qkn {int(role[4])} rope_kv {int(role[5])} attn {int(role[6])} rq_a {int(role[7])} wo {int(role[8])} ar1 {int(role[9])} rq_f {int(role[10])} gate {int(role[11])} up {int(role[12])} act {int(role[13])} down {int(role[14])} ar2 {int(role[15])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
+        if (vk_prof()) {
+            pf_prof_report(npos)
+        }
+    }
+}
+
+// The last window's per-role GPU table: the attention head's roles summed over the attention layers,
+// the recurrent head's over the recurrent ones (a hybrid prints both), each with the layer count.
+[cold_path]   // DASLLAMA_GPU_PROF=1 report leg
+def private pf_prof_report(npos : int64) {
+    var want = 5u
+    for (L in g_rd.layers) {
+        want += uint(pf_roles_per_layer(L.recurrent))
+    }
+    if (g_pfq_n != want) {
+        to_log(LOG_INFO, "vk_rdpf gpu: roles unaggregated ({g_pfq_n} stamps, the table expects {want})\n")
+        return
+    }
+    var att : double[16]
+    var dn : double[18]
+    var natt = 0l
+    var ndn = 0l
+    var qi = 3u
+    for (L in g_rd.layers) {
+        let n = pf_roles_per_layer(L.recurrent)
+        for (s in range64(n)) {
+            if (L.recurrent) {
+                dn[s] += pfq_us(qi + uint(s))
             } else {
-                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} rope_kv {int(role[4])} attn {int(role[5])} rq_a {int(role[6])} wo {int(role[7])} ar1 {int(role[8])} rq_f {int(role[9])} gate {int(role[10])} up {int(role[11])} act {int(role[12])} down {int(role[13])} ar2 {int(role[14])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
+                att[s] += pfq_us(qi + uint(s))
             }
         }
+        qi += uint(n)
+        if (L.recurrent) {
+            ndn++
+        } else {
+            natt++
+        }
+    }
+    var tot = pfq_us(2u) + pfq_us(qi) + pfq_us(qi + 1u)
+    var tatt = 0.0lf
+    for (v in att) {
+        tatt += v
+    }
+    var tdn = 0.0lf
+    for (v in dn) {
+        tdn += v
+    }
+    tot += tatt + tdn
+    to_log(LOG_INFO, "vk_rdpf gpu ({npos} tokens, last window) prologue {int(pfq_us(2u))} fin_rq {int(pfq_us(qi))} cls {int(pfq_us(qi + 1u))} attention layers {natt}: {int(tatt)} recurrent layers {ndn}: {int(tdn)} total {int(tot)} us\n")
+    if (natt > 0l) {
+        // the qkn dispatch stamps between v and rope_kv, shifting every later role by one
+        if (g_rd.qk_norm) {
+            to_log(LOG_INFO, "vk_rdpf attn rq_x {int(att[0])} q {int(att[1])} k {int(att[2])} v {int(att[3])} qkn {int(att[4])} rope_kv {int(att[5])} attn {int(att[6])} rq_a {int(att[7])} wo {int(att[8])} ar1 {int(att[9])} rq_f {int(att[10])} gate {int(att[11])} up {int(att[12])} act {int(att[13])} down {int(att[14])} ar2 {int(att[15])}\n")
+        } else {
+            to_log(LOG_INFO, "vk_rdpf attn rq_x {int(att[0])} q {int(att[1])} k {int(att[2])} v {int(att[3])} rope_kv {int(att[4])} attn {int(att[5])} rq_a {int(att[6])} wo {int(att[7])} ar1 {int(att[8])} rq_f {int(att[9])} gate {int(att[10])} up {int(att[11])} act {int(att[12])} down {int(att[13])} ar2 {int(att[14])}\n")
+        }
+    }
+    if (ndn > 0l) {
+        let o = g_rd.dn_ba_f32 ? 0l : 1l   // the q8 arm stamps beta and alpha apart
+        let ba = g_rd.dn_ba_f32 ? "ba {int(dn[3])}" : "beta {int(dn[3])} alpha {int(dn[4])}"
+        to_log(LOG_INFO, "vk_rdpf dn rq_x {int(dn[0])} qkv {int(dn[1])} z {int(dn[2])} {ba} conv {int(dn[4 + o])} scan1 {int(dn[5 + o])} scan2 {int(dn[6 + o])} tail {int(dn[7 + o])} rq_o {int(dn[8 + o])} out {int(dn[9 + o])} ar1 {int(dn[10 + o])} rq_f {int(dn[11 + o])} gate {int(dn[12 + o])} up {int(dn[13 + o])} act {int(dn[14 + o])} down {int(dn[15 + o])} ar2 {int(dn[16 + o])}\n")
     }
 }
 
@@ -1805,7 +1860,7 @@ def private ensure_dn_cls_sets {
     if (g_gpu.dn_cls_ready) {
         return
     }
-    verify(ensure_dn_conv_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls() && ensure_cls_dn_rq(),
+    verify(ensure_dn_conv_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls() && ensure_dn_scan_p3_cls() && ensure_cls_dn_rq(),
         "vk deltanet chain: the class rails must engage on a live device")
     g_gpu.dn_conv_set = set_dn_conv_cls(
         fixed_array(g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.dn_smalls_dev),
@@ -1816,9 +1871,13 @@ def private ensure_dn_cls_sets {
         fixed_array(BATCH_HQ_BYTES, DN_SMALLS_BYTES, DN_WS_BYTES),
         fixed_array(VHB_HQ, VHB_SM, VHB_WS))
     g_gpu.dn_scan_p2_set = set_dn_scan_p2_cls(
-        fixed_array(g_gpu.batch_y2_dev, g_gpu.dn_state_dev, g_gpu.dn_ws_dev, g_gpu.dn_smalls_dev),
-        fixed_array(BATCH_Y_BYTES, DN_STATE_BYTES, DN_WS_BYTES, DN_SMALLS_BYTES),
-        fixed_array(VHB_Y2, VHB_ST, VHB_WS, VHB_SM))
+        fixed_array(g_gpu.dn_state_dev, g_gpu.dn_ws_dev),
+        fixed_array(DN_STATE_BYTES, DN_WS_BYTES),
+        fixed_array(VHB_ST, VHB_WS))
+    g_gpu.dn_scan_p3_set = set_dn_scan_p3_cls(
+        fixed_array(g_gpu.batch_y2_dev, g_gpu.dn_ws_dev, g_gpu.dn_smalls_dev),
+        fixed_array(BATCH_Y_BYTES, DN_WS_BYTES, DN_SMALLS_BYTES),
+        fixed_array(VHB_Y2, VHB_WS, VHB_SM))
     g_gpu.dn_rq_set = set_rq_cls(
         fixed_array(g_gpu.dn_ws_dev, g_gpu.hq_dev, g_gpu.hs_dev),
         fixed_array(DN_WS_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
@@ -1869,9 +1928,12 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     enc_dn_scan_p1_cls(raw, h, g_gpu.dn_scan_set, pc1, nvh * ((rows + DN_CS - 1l) / DN_CS))
     pfq_ts(raw)   // q4: scan phase 1
     var pc2 = DnScanP2Args(npos = uint(rows), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
-        wnorm_off = uint(DN_SM_WNORM), slab_stride = uint(DN_SLAB), st_off = uint(DN_P2_OFF), eps = eps)
-    enc_dn_scan_p2_cls(raw, h, g_gpu.dn_scan_p2_set, pc2, nvh)
-    pfq_ts(raw)   // q5: scan phase 2
+        slab_stride = uint(DN_SLAB), st_off = uint(DN_P2_OFF), nsp = uint(DN_NSP))
+    enc_dn_scan_p2_cls(raw, h, g_gpu.dn_scan_p2_set, pc2, nvh * DN_NSP)
+    var pc3 = DnScanP3Args(npos = uint(rows), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
+        wnorm_off = uint(DN_SM_WNORM), eps = eps)
+    enc_dn_scan_p3_cls(raw, h, g_gpu.dn_scan_p3_set, pc3, rows)
+    pfq_ts(raw)   // q5: scan phase 2 (+ the out-norm)
     // conv-tail extraction: last `taps` RAW qkv rows out of y1 before out-proj reuses it
     if (!last) {
         vhz_dep(raw, h, VHB_Y1, VHB_SM, true)

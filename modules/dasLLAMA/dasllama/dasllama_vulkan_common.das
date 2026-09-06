@@ -221,6 +221,7 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 // Maxima match qwen35 (ds 128, 32 v-heads, conv dim 8192, dconv 4) — vk_moe_dn asserts them
 // and the engine arm fail-closes on bigger models.
 let DN_CS = 64l
+let DN_NSP = 4l   // scan phase 2: column slices of the state per head, one workgroup each (heads x slices workgroups)
 let DN_MAX_DS = 128l
 let DN_MAX_HEADS = 32l
 let DN_MAX_CD = 8_192l
@@ -629,8 +630,9 @@ struct GpuState {
     dn_state_dev : uint64
     dn_ws_dev : uint64            // per-head scan slabs + the gated o rows
     dn_conv_set : VkDescriptorSet
-    dn_scan_set : VkDescriptorSet      // scan phase 1 (class sets are per-class — p2 has its own)
+    dn_scan_set : VkDescriptorSet      // scan phase 1 (class sets are per-class — p2/p3 have their own)
     dn_scan_p2_set : VkDescriptorSet
+    dn_scan_p3_set : VkDescriptorSet   // the gated out-norm over the raw o rows
     dn_rq_set : VkDescriptorSet
     dn_cls_ready : bool                // the window chain's class sets (built by prefill)
     dn_ready : bool
@@ -1617,6 +1619,9 @@ def vk_drop_model_state {
     for (i in range(16)) {
         g_rdq_role[i] = 0.0lf
     }
+    for (i in range(13)) {
+        g_rdq_dn[i] = 0.0lf
+    }
     // host-visible buffers: host_mem tracks every make_host_buf result minus the exempt pair
     for (buf, mem in keys(g_gpu.host_mem), values(g_gpu.host_mem)) {
         unsafe {
@@ -2017,7 +2022,8 @@ struct RLayer {
     // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
     pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
     pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + smalls -> dn_ws_dev (scan phase 1)
-    pf_dn_scan_p2_set : VkDescriptorSet    // pf_dnz + this layer's state + dn_ws + smalls (scan phase 2)
+    pf_dn_scan_p2_set : VkDescriptorSet    // this layer's state + dn_ws (scan phase 2)
+    pf_dn_scan_p3_set : VkDescriptorSet    // pf_dnz + dn_ws + this layer's smalls (the gated out-norm)
     pf_dn_tail_set : VkDescriptorSet       // pf_dnqkv last taps rows -> this layer's smalls ring image
     pf_dn_ba_set : VkDescriptorSet         // f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (batched router GEMV)
     m_pf_dnqkv, m_pf_dnz, m_pf_dnout, m_pf_dnbeta, m_pf_dnalpha : HostBuf   // the prefill GEMMs' region metas
@@ -2166,6 +2172,7 @@ var g_rdq_total = 0.0lf
 var g_rdq_pro = 0.0lf
 var g_rdq_tail = 0.0lf
 var g_rdq_role : double[16]
+var g_rdq_dn : double[13]   // a hybrid's recurrent-head roles (rdq_sample's second table)
 var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
 
 let PFQ_CAP = 2048u

@@ -71,18 +71,19 @@ the copies carry a `//!` naming this section, and the placement is a driver-defe
 not a chain-shape preference.
 
 **A recurrent (deltanet) layer's window block replaces the attention head; the FFN tail is
-shared.** Per window: the plain requant, the qkv and z batch GEMMs into the window planes, the
-beta and alpha rows into the layer's smalls at the scan's beta/g offsets (f32 arm: the
-row-strided router GEMV; q8 arm: a batch GEMM and a device copy), the conv reading the layer's
-ring image, the two-phase scan over the layer's own state slot and the tier's scan workspace,
-the o requant and the out GEMM into `pf_xb2`. The conv history crosses windows position-major in
-ring image 0 (the per-op chain's `hist_mode 2` form); on the last window the tail transposes into
-the decode step's per-channel layout (`dn_tail_cls`) - the decode handoff is
-`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v's. Gated attention rides the batch kernels through a
-per-head q stride (`qhs = 2 x hs`: the q GEMM writes `[q | gate]` per head, qk-rms and rope read
-q head-strided in place, the mirror attention gates its output on the sigmoid of the gate half);
-partial rotary is the `half = rot / 2` word, the pairs past it passing through (k and v stored
-unrotated). The cm2 flash tile and the h128 twin carry neither arm: such a model takes `DaAttnB`.
+shared.** Per window: the plain requant, the qkv and z batch GEMMs into the window planes, the beta
+and alpha rows into the layer's smalls (f32 arm: the row-strided router GEMV; q8 arm: a batch GEMM
+and a device copy), the conv reading the layer's ring image, the chunked scan over the layer's own
+state slot and the tier's workspace, the o requant and the out GEMM into `pf_xb2`. The scan's phase
+1 runs per (head, chunk); phase 2 per (head, state column slice) - its four GEMMs are independent
+per C column, so `DN_NSP` slices lift the grid from one workgroup per head to heads x slices, the
+raw o rows landing in the o plane; phase 3, the gated out-norm, runs one workgroup per position.
+The conv history crosses windows position-major in ring image 0; the last window transposes the
+tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is `_DECODE.md`
+sec.2.2v's). Gated attention rides the batch kernels through a per-head q stride (`qhs = 2 x hs`:
+the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror
+attention gates on the sigmoid of the gate half); partial rotary is the `half = rot / 2` word.
+Neither arm reaches the cm2 flash tile or the h128 twin: such a model takes `DaAttnB`.
 
 **A layer's qkv feed comes out of the previous layer's FUSED add+rms twin when the fuse knob is
 on and the feed is not the Q8_K quant form.** The producer is layer l-1's addr_next site, the

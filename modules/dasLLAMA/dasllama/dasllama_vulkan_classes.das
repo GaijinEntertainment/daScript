@@ -1055,61 +1055,111 @@ class DnStepFused {
 // ===== deltanet: the two-phase chunked scan =====
 
 // the slab + staged-GEMM machinery both phases share: C[MxN] (+)= A[MxK] * B[KxN] over the
-// DN_WS work surface, 16-deep K stages through shared, C in per-thread Private registers
+// DN_WS work surface, 16-deep K stages through shared, each invocation a 2x4 C tile in registers
+// (one A pair and one B quad per 8 FMAs); a GEMM past 256 tiles runs in waves, restaging per wave
 class DnScanBase {
     @ssbo @binding = 2 slab : array<float>   // the DN_WS work surface (every GEMM operand)
     @workgroup tm : float[4096]              // the 64x64 unit-lower solve tile
     @workgroup ta : float[2048]
     @workgroup tb : float[2048]
-    @private_global acc64 : float[64]        // per-invocation C accumulator (ds*ds/256 max)
 
-    def gemm(cofs, aofs, bofs : uint; mm, kk, nn : uint; lda, ldb, ldc : uint; accum : uint) {
+    def gemm(cofs, aofs, bofs : uint; mm, kk, nn : uint; lda, ldb, ldc : uint; accum : uint) {   // nolint:STYLE037,STYLE038 — one staged GEMM pass; the tile-edge guards are its shape
         let tid = gl_LocalInvocationID.x
-        var o = tid
-        var oi = 0u
-        while (o < mm * nn) {
-            acc64[oi] = accum == 0u ? 0.0 : slab[cofs + (o / nn) * ldc + o % nn]
-            oi++
-            o += 256u
-        }
-        var kb = 0u
-        while (kb < kk) {
-            let kt = min(kk - kb, 16u)
-            var i = tid
-            while (i < mm * kt) {
-                ta[(i / kt) * 16u + i % kt] = slab[aofs + (i / kt) * lda + kb + i % kt]
-                i += 256u
-            }
-            i = tid
-            while (i < kt * nn) {
-                tb[(i / nn) * 128u + i % nn] = slab[bofs + (kb + i / nn) * ldb + i % nn]
-                i += 256u
-            }
-            barrier()
-            o = tid
-            oi = 0u
-            while (o < mm * nn) {
-                let r = o / nn
-                let c = o % nn
-                var acc = acc64[oi]
-                var k2 = 0u
-                while (k2 < kt) {
-                    acc += ta[r * 16u + k2] * tb[k2 * 128u + c]
-                    k2++
+        let tcols = (nn + 3u) / 4u
+        let ntiles = ((mm + 1u) / 2u) * tcols
+        var wave = 0u
+        while (wave * 256u < ntiles) {
+            let tile = tid + wave * 256u
+            let live = tile < ntiles
+            let r0 = (tile / tcols) * 2u
+            let c0 = (tile % tcols) * 4u
+            let row1 = r0 + 1u < mm
+            var a00 = 0.0
+            var a01 = 0.0
+            var a02 = 0.0
+            var a03 = 0.0
+            var a10 = 0.0
+            var a11 = 0.0
+            var a12 = 0.0
+            var a13 = 0.0
+            if (live && accum != 0u) {
+                let cr = cofs + r0 * ldc + c0
+                a00 = slab[cr]
+                a01 = c0 + 1u < nn ? slab[cr + 1u] : 0.0
+                a02 = c0 + 2u < nn ? slab[cr + 2u] : 0.0
+                a03 = c0 + 3u < nn ? slab[cr + 3u] : 0.0
+                if (row1) {
+                    a10 = slab[cr + ldc]
+                    a11 = c0 + 1u < nn ? slab[cr + ldc + 1u] : 0.0
+                    a12 = c0 + 2u < nn ? slab[cr + ldc + 2u] : 0.0
+                    a13 = c0 + 3u < nn ? slab[cr + ldc + 3u] : 0.0
                 }
-                acc64[oi] = acc
-                oi++
-                o += 256u
             }
-            barrier()
-            kb += 16u
-        }
-        o = tid
-        oi = 0u
-        while (o < mm * nn) {
-            slab[cofs + (o / nn) * ldc + o % nn] = acc64[oi]
-            oi++
-            o += 256u
+            var kb = 0u
+            while (kb < kk) {
+                let kt = min(kk - kb, 16u)
+                var i = tid
+                while (i < mm * kt) {
+                    ta[(i / kt) * 16u + i % kt] = slab[aofs + (i / kt) * lda + kb + i % kt]
+                    i += 256u
+                }
+                i = tid
+                while (i < kt * nn) {
+                    tb[(i / nn) * 128u + i % nn] = slab[bofs + (kb + i / nn) * ldb + i % nn]
+                    i += 256u
+                }
+                barrier()
+                if (live) {
+                    // columns past nn and a row past mm read stale shared values into accumulators the store never writes
+                    var k2 = 0u
+                    while (k2 < kt) {
+                        let tbk = k2 * 128u + c0
+                        let b0 = tb[tbk]
+                        let b1 = tb[tbk + 1u]
+                        let b2 = tb[tbk + 2u]
+                        let b3 = tb[tbk + 3u]
+                        let x0 = ta[r0 * 16u + k2]
+                        a00 += x0 * b0
+                        a01 += x0 * b1
+                        a02 += x0 * b2
+                        a03 += x0 * b3
+                        let x1 = ta[(r0 + 1u) * 16u + k2]
+                        a10 += x1 * b0
+                        a11 += x1 * b1
+                        a12 += x1 * b2
+                        a13 += x1 * b3
+                        k2++
+                    }
+                }
+                barrier()
+                kb += 16u
+            }
+            if (live) {
+                let cr = cofs + r0 * ldc + c0
+                slab[cr] = a00
+                if (c0 + 1u < nn) {
+                    slab[cr + 1u] = a01
+                }
+                if (c0 + 2u < nn) {
+                    slab[cr + 2u] = a02
+                }
+                if (c0 + 3u < nn) {
+                    slab[cr + 3u] = a03
+                }
+                if (row1) {
+                    slab[cr + ldc] = a10
+                    if (c0 + 1u < nn) {
+                        slab[cr + ldc + 1u] = a11
+                    }
+                    if (c0 + 2u < nn) {
+                        slab[cr + ldc + 2u] = a12
+                    }
+                    if (c0 + 3u < nn) {
+                        slab[cr + ldc + 3u] = a13
+                    }
+                }
+            }
+            wave++
         }
         memoryBarrierBuffer()
         barrier()
@@ -1287,34 +1337,38 @@ struct DnScanP2Args {
     npos : uint
     di : uint
     ds : uint
-    o_off : uint
-    wnorm_off : uint
+    o_off : uint      // the raw o rows' base in the slab (phase 3 norms them in place)
     slab_stride : uint
-    st_off : uint    // per-head state+och working region base
-    eps : float
+    st_off : uint     // per-head state working region base
+    nsp : uint        // column slices of the state per head, one workgroup each (0 = one)
 }
 
-// phase 2: chunks sequentially, only the 4 state-dependent GEMMs + the gated out-norm
-[vk_dispatch(name = "dn_scan_p2_cls", grid = "nvh", params = "nvh : int64")]
+// phase 2: chunks sequentially, only the 4 state-dependent GEMMs. Every GEMM's C columns are
+// independent, so workgroup (head, slice) owns a column slice of the state, of d and of the raw o
+// rows - the grid is heads x slices, not heads; the out-norm needs whole rows and is phase 3's
+[vk_dispatch(name = "dn_scan_p2_cls", grid = "wgs", params = "wgs : int64")]
 class DnScanP2 : DnScanBase {
-    @ssbo @binding = 0 zrows : array<float>    // the z gate rows
     @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state
-    @ssbo @binding = 3 smalls : array<float>   // wnorm (push offset)
     @push_constant pa : DnScanP2Args
 
     [spirv_kernel(local_size_x = 256, name = "dn_scan_p2_cls_spv")]
     def run {
-        let h = gl_WorkGroupID.x
+        let nsp = max(pa.nsp, 1u)
+        let h = gl_WorkGroupID.x / nsp
+        let sl = gl_WorkGroupID.x % nsp
         let ds = pa.ds
+        let sw = ds / nsp
+        let cs0 = sl * sw
         let tid = gl_LocalInvocationID.x
         let CS = 64u
         let nch = (pa.npos + CS - 1u) / CS
         let st = pa.st_off + h * (ds * ds + CS * ds)
-        let och = st + ds * ds
-        // the persistent state works in its slab copy (one GEMM surface for everything)
+        // the state slice works in its slab copy (one GEMM surface for everything)
         var i0 = tid
-        while (i0 < ds * ds) {
-            slab[st + i0] = state[h * ds * ds + i0]
+        while (i0 < ds * sw) {
+            let r = i0 / sw
+            let cc = cs0 + i0 % sw
+            slab[st + r * ds + cc] = state[h * ds * ds + r * ds + cc]
             i0 += 256u
         }
         memoryBarrierBuffer()
@@ -1330,50 +1384,79 @@ class DnScanP2 : DnScanBase {
             let kgT = slb + 6u * CS * ds
             let kq = slb + 7u * CS * ds + CS * CS
             let gcum = slb + 7u * CS * ds + 2u * CS * CS
-            // d = vnloc + w S (in place over phase 1's local half)
-            gemm(vnew, w, st, cl, ds, ds, ds, ds, ds, 1u)
-            // o = (q e^gcum) S + KQ d
-            gemm(och, qc, st, cl, ds, ds, ds, ds, ds, 0u)
-            gemm(och, kq, vnew, cl, cl, ds, CS, ds, ds, 1u)
-            // gated out-norm straight into the o rows: rms(och) * wnorm, silu(z)-gated
-            if (tid < cl) {
-                let ob = och + tid * ds
-                var sum = 0.0
-                var j3 = 0u
-                while (j3 < ds) {
-                    let v = slab[ob + j3]
-                    sum += v * v
-                    j3++
-                }
-                let scale = 1.0 / sqrt(sum / float(ds) + pa.eps)
-                let orow = pa.o_off + (c0 + tid) * pa.di + h * ds
-                let zrow = (c0 + tid) * pa.di + h * ds
-                j3 = 0u
-                while (j3 < ds) {
-                    let zv = zrows[zrow + j3]
-                    let xn = slab[ob + j3] * scale * smalls[pa.wnorm_off + j3]
-                    slab[orow + j3] = xn * (zv / (1.0 + exp(-zv)))
-                    j3++
-                }
-            }
-            barrier()
+            let orow = pa.o_off + c0 * pa.di + h * ds + cs0
+            // d = vnloc + w S (in place over phase 1's local half), this slice's columns
+            gemm(vnew + cs0, w, st + cs0, cl, ds, sw, ds, ds, ds, 1u)
+            // o = (q e^gcum) S + KQ d, straight into the raw o rows
+            gemm(orow, qc, st + cs0, cl, ds, sw, ds, ds, pa.di, 0u)
+            gemm(orow, kq, vnew + cs0, cl, cl, sw, CS, ds, pa.di, 1u)
             // state advance, once per chunk: S = e^glast S + kgT d
             let egl = exp(slab[gcum + cl - 1u])
             var e = tid
-            while (e < ds * ds) {
-                slab[st + e] = slab[st + e] * egl
+            while (e < ds * sw) {
+                let se = st + (e / sw) * ds + cs0 + e % sw
+                slab[se] = slab[se] * egl
                 e += 256u
             }
             memoryBarrierBuffer()
             barrier()
-            gemm(st, kgT, vnew, ds, cl, ds, CS, ds, ds, 1u)
+            gemm(st + cs0, kgT, vnew + cs0, ds, cl, sw, CS, ds, ds, 1u)
             c++
         }
-        // the advanced state back to its persistent plane
+        // the advanced slice back to its persistent plane
         i0 = tid
-        while (i0 < ds * ds) {
-            state[h * ds * ds + i0] = slab[st + i0]
+        while (i0 < ds * sw) {
+            let r = i0 / sw
+            let cc = cs0 + i0 % sw
+            state[h * ds * ds + r * ds + cc] = slab[st + r * ds + cc]
             i0 += 256u
+        }
+    }
+}
+
+struct DnScanP3Args {
+    npos : uint
+    nvh : uint
+    di : uint
+    ds : uint
+    o_off : uint      // the raw o rows' base in orows
+    wnorm_off : uint  // the out-norm weight row in smalls
+    eps : float
+}
+
+// phase 3: the gated out-norm over the raw o rows, in place - one workgroup per position, one
+// rms per head: rms(o_h) * wnorm, gated by silu(z)
+[vk_dispatch(name = "dn_scan_p3_cls", grid = "npos", params = "npos : int64")]
+class DnScanP3 {
+    @ssbo @binding = 0 zrows : array<float>    // the z gate rows
+    @ssbo @binding = 1 orows : array<float>    // the work surface holding the raw o rows at o_off
+    @ssbo @binding = 2 smalls : array<float>   // wnorm (push offset)
+    @push_constant pa : DnScanP3Args
+    @workgroup hinv : float[64]                // per-head inverse rms (heads <= 64)
+
+    [spirv_kernel(local_size_x = 256, name = "dn_scan_p3_cls_spv")]
+    def run {
+        let p = gl_WorkGroupID.x
+        let tid = gl_LocalInvocationID.x
+        let ds = pa.ds
+        let ob = pa.o_off + p * pa.di
+        if (tid < pa.nvh) {
+            var sum = 0.0
+            var j = 0u
+            while (j < ds) {
+                let v = orows[ob + tid * ds + j]
+                sum += v * v
+                j++
+            }
+            hinv[tid] = 1.0 / sqrt(sum / float(ds) + pa.eps)
+        }
+        barrier()
+        var e = tid
+        while (e < pa.di) {
+            let zv = zrows[p * pa.di + e]
+            let xn = orows[ob + e] * hinv[e / ds] * smalls[pa.wnorm_off + e % ds]
+            orows[ob + e] = xn * (zv / (1.0 + exp(-zv)))
+            e += 256u
         }
     }
 }

@@ -108,8 +108,11 @@ rebuilt binary aged the sidecar; Boris ruled no re-mint until Vulkan is fully fu
    the K/V mirror by layer index (the hybrid mirror has one slot per attention layer), and the
    rope/attention sets declared the q plane at `qd` rows while a gated q row is `2 x qd` - rows
    past 256 fell outside the bound range. The 9B UD file, resident prefill + decode: pp512
-   1365.0 +- 4.6 (was 95.7 on the CPU prefill; upstream 2527, 0.54x - a GAP, the per-role prefill
-   profile is the next lever), tg128 53.3 +- 0.1 (was 49.7; upstream 56.7, 0.94x). As built:
+   1365.0 +- 4.6 (was 95.7 on the CPU prefill; upstream 2527, 0.54x), tg128 53.3 +- 0.1 (was
+   49.7; upstream 56.7, 0.94x). The per-role profile (`followup_vulkan.md` item 2 carries the
+   tables) put 141 of the window's 349 ms in the deltanet scan; splitting phase 2 per state column
+   slice (+ a phase-3 out-norm) and register-tiling the staged GEMM took the scan to 63 ms and
+   pp512 to 1710.6 +- 15.6 (0.68x). As built:
    `rd_pf_recurrent` per
    recurrent layer (the FFN tail shared with the attention head), per-layer conv/scan/tail sets on
    `RLayer`, the o requant shared, beta/alpha by the row-strided `router_gemv_cls` (f32) or a
