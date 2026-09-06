@@ -81,6 +81,10 @@ def test_ship_tools(t : T?) {
         var none : array<string>
         t |> equal(ship_tools("pkg", bundle, ["absent"], none, das_root), 1, "a tool no build produced fails the release")
         t |> equal(length(none), 0)
+        fwrite(path_join(root, "escaped{ext}"), "outside")
+        var unsafe_name : array<string>
+        t |> equal(ship_tools("pkg", bundle, ["../escaped"], unsafe_name, das_root), 1, "a name with a path separator is refused before any path is built")
+        t |> success(!fexist(path_join(bundle, "escaped{ext}")), "nothing was copied for the refused name")
         let cleanup = rmdir_rec_result(root)
         t |> success(cleanup is value && cleanup as value, "temp dir removed")
     }

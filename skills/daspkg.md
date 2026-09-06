@@ -195,9 +195,9 @@ def release() {
     release_name("MyApp")               // optional; defaults to package_name() / root dir
     release_include("data/**")          // ship matching files (glob; multiple calls accumulate)
     release_include("*.png")
-    release_include_from("utils/lint/lint_rules.json")        // a file OUTSIDE the package
-    release_include_from("utils/lint/lint_rules.json", "tools/rules.json")  // ... with an explicit dest
-    release_include_tool("watchdog")    // a built tool from bin/ (bin/Release/ on an MSVC tree), .exe added per platform
+    release_include_from("dastest/dastest.das")        // a file OUTSIDE the package
+    release_include_from("dastest/dastest.das", "tools/dastest.das")  // ... with an explicit dest
+    release_include_tool("watchdog")    // a built tool from the build's bin/, .exe added per platform
     release_exclude("data/secret/**")
     release_shared_module("dasSQLITE")  // force-include a dylib not auto-detected
     release_include_symbols()           // ship debug symbols into <bundle>/symbols/
@@ -232,16 +232,16 @@ If a module is loaded only at runtime (e.g. data files read while the .das is ne
 
 The bundle is the host platform only. Cross-compilation is deferred until daslang itself supports it; v1 has no platform-tag suffix or auto-archive (`--zip` etc.). Recipients can tar/zip the directory themselves.
 
-### Shipping a file from outside the package - `release_include_from()`
+### Shipping files from outside the package - `release_include_from()` / `release_include_tool()`
 
 `release_include` globs **downward from the package root**, so it cannot reach shared tooling that
 lives elsewhere in the tree. `release_include_from(source[, dest])` resolves `source` against
 `<das_root>` and copies it to `dest` (relative to the bundle root; defaults to `source`'s file
 name, and may name a subdirectory).
 
-A built tool has a platform-dependent name and location - `bin/watchdog` in an SDK or a
-single-config tree, `bin/Release/watchdog.exe` in an MSVC tree - so `release_include_tool("watchdog")`
-names it once: daspkg resolves the exe and copies it to the bundle root. This is how
+A built tool has a platform-dependent name and location - `bin/watchdog`, or the per-config
+subdirectory and `.exe` on an MSVC tree - so `release_include_tool("watchdog")` names it once:
+daspkg resolves the exe and copies it to the bundle root. This is how
 `utils/dasllama-server` (and the dictation bot in the das-telegram package) ships the one
 supervisor, `utils/watchdog/`'s static executable.
 

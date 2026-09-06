@@ -83,13 +83,13 @@ between them.
 
 `logs/<name>-watchdog.log` (`--log`), one JSON object per line, `{"ts", "event", ...}`, rotated
 at 20 MB with five backups, and echoed to stdout. The events: `watchdog_started`,
-`child_started`, `child` (one per line the child wrote), `stage`, `tune`, `health`,
-`health_heartbeat`, `recovered`, `child_exited`, `intentional_shutdown`,
+`child_started`, `spawn_failed`, `child` (one per line the child wrote), `stage`, `tune`,
+`health`, `health_heartbeat`, `recovered`, `child_exited`, `intentional_shutdown`,
 `tune_bootstrap_complete`, `tune_incomplete`, `config_restart_relaunch`, `crash`,
-`crash_bundle`, `stop_file_requested`, `shutdown_requested`, `terminate_requested`,
-`kill_requested`, `child_unkillable`, `watchdog_already_running`, `wer_ready` / `wer_not_ready` /
-`wer_installed`, `watchdog_stopped`.
-The deploy scripts and the control pages read this log; renaming an event is a contract change.
+`crash_bundle`, `stop_file_requested`, `shutdown_requested`, `shutdown_request_failed`,
+`terminate_requested`, `kill_requested`, `child_unkillable`, `watchdog_already_running`,
+`wer_ready` / `wer_not_ready` / `wer_installed` / `wer_install_failed`, `watchdog_stopped`.
+In-tree readers: `smoke_test.cmake` and `tests/watchdog/test_watchdog.das`.
 
 ## Crash capture
 

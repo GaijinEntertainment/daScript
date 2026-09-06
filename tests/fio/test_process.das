@@ -22,6 +22,28 @@ def child_argv(fixture, ready, release : string) : array<string> {
     return [das_exe(), "-dasroot", get_das_root(), fixture, "--", ready, release]
 }
 
+def make_temp_root(t : T?; prefix : string) : string {
+    let tmp = create_temp_directory_result(prefix)
+    if (!(tmp is value)) {
+        t |> failure("could not create temp directory: {tmp as error}")
+        return ""
+    }
+    return tmp as value
+}
+
+// drain until the child's ready file appears; the file event drives it, the clock only guards
+def wait_for_ready(t : T?; var p : process; ready : string) {
+    let started = ref_time_ticks()
+    while (!fexist(ready)) {
+        unsafe(process_drain(p) $(_line) {})
+        if (get_time_usec(started) > 15000000) {
+            t |> failure("child never signaled ready")
+            return
+        }
+        sleep(5u)
+    }
+}
+
 [test]
 def test_process_lifecycle(t : T?) {
     t |> run("spawn, drain lines, poll running, wait exit code, apply env + cwd") @(t : T?) {
@@ -71,6 +93,32 @@ def test_process_lifecycle(t : T?) {
 }
 
 [test]
+def test_close_kills_a_running_child(t : T?) {
+    t |> run("closing the handle - explicitly, or leaving a with_process block - kills a child still running") @(t : T?) {
+        let root_dir = make_temp_root(t, "das process close ")
+        if (empty(root_dir)) return
+        let fixture = path_join(get_das_root(), "tests/fio/_fixture_process_child.das")
+        let noenv : array<string>
+        var explicit_pid = 0
+        var p = unsafe(spawn_process(child_argv(fixture, path_join(root_dir, "ready1"), path_join(root_dir, "never1")), "", noenv))
+        wait_for_ready(t, p, path_join(root_dir, "ready1"))
+        explicit_pid = unsafe(process_pid(p))
+        t |> success(unsafe(process_alive(explicit_pid)), "the child is alive before close")
+        unsafe(close_process(p))
+        t |> success(!unsafe(process_alive(explicit_pid)), "close_process killed the running child")
+        var scoped_pid = 0
+        with_process(child_argv(fixture, path_join(root_dir, "ready2"), path_join(root_dir, "never2"))) $(var q) {
+            wait_for_ready(t, q, path_join(root_dir, "ready2"))
+            scoped_pid = unsafe(process_pid(q))
+            t |> success(unsafe(process_alive(scoped_pid)), "the child is alive inside the block")
+        }
+        t |> success(!unsafe(process_alive(scoped_pid)), "leaving the with_process block killed the running child")
+        let cleanup = rmdir_rec_result(root_dir)
+        t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+}
+
+[test]
 def test_process_terminate(t : T?) {
     t |> run("terminate stops a child parked on a release that never comes") @(t : T?) {
         let tmp = create_temp_directory_result("das process kill ")
@@ -87,7 +135,7 @@ def test_process_terminate(t : T?) {
         t |> success(p != null, "spawn_process returned a handle")
         let started = ref_time_ticks()
         while (!fexist(ready)) {
-            unsafe(process_drain(p) $(line) {})
+            unsafe(process_drain(p) $(_line) {})
             if (get_time_usec(started) > 15000000) {
                 t |> failure("child never signaled ready")
                 break

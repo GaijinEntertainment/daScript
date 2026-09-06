@@ -178,7 +178,7 @@ def release_include_if_missing(pattern : string) {
     _release_spec.include_if_missing_globs |> push(pattern)
 }
 
-//! Ship a file that lives OUTSIDE this package — `release_include` only globs downward from the package root, so shared tooling (e.g. `utils/watchdog/watchdog.py`) is unreachable to it. `source` is relative to `<das_root>`; `dest` is relative to the bundle root and defaults to `source`'s file name. Errors loudly if the source is missing, so a moved file fails the release instead of silently shipping nothing.
+//! Ship a file that lives OUTSIDE this package — `release_include` only globs downward from the package root, so shared tooling (e.g. `dastest/dastest.das`) is unreachable to it. `source` is relative to `<das_root>`; `dest` is relative to the bundle root and defaults to `source`'s file name. Errors loudly if the source is missing, so a moved file fails the release instead of silently shipping nothing.
 def release_include_from(source, dest : string) {
     _release_spec.external_files |> push("{source}@{dest}")
 }

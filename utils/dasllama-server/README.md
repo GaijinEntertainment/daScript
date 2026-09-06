@@ -257,9 +257,9 @@ boot resolver and submit check are never registered and every `/exchange*` route
 expressed. Setting any `exchange_*` key (TOML or env) IS that choice; on the zero-config
 path the recorded choice lives in `<app>.tune.consent` beside the sidecar
 (`accepted`/`declined`, one word). With no recorded choice: an interactive terminal asks
-inline (Enter = Accept); a supervised boot emits `@sidecar consent state=needed` - the
-watchdog shows a native Accept/Decline dialog - and this page's exchange card carries the
-same banner (`POST /exchange/consent`). Until one of those answers, the box tunes locally
+inline (Enter = Accept); a supervised boot emits `@sidecar consent state=needed`, and this
+page's exchange card carries the banner (`POST /exchange/consent`). Until one of those
+answers, the box tunes locally
 and no request leaves. The `gpu` key (`auto | off | metal | metal-required | vulkan`) is the first-class
 backend selector, and **defaults-first: unset (with no legacy `--metal` flag) behaves as
 `auto`** - the boot probes the box and serves on the best detected backend (the Metal rails

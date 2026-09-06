@@ -1989,6 +1989,10 @@ def public ship_tools(bundle_name, dst_dir : string; tools : array<string>; var 
     let ext = get_platform_name() == "windows" ? ".exe" : ""
     shipped |> reserve(length(shipped) + length(tools))
     for (name in tools) {
+        if (!is_safe_pkg_name(name)) {
+            to_log(LOG_ERROR, "release: `{bundle_name}` declared release_include_tool(\"{name}\") - a tool is a bare name, no path separators\n")
+            return 1
+        }
         var src = path_join(das_root, "bin/{name}{ext}")
         if (!fexist(src)) {
             src = path_join(das_root, "bin/Release/{name}{ext}")
@@ -2003,6 +2007,8 @@ def public ship_tools(bundle_name, dst_dir : string; tools : array<string>; var 
             to_log(LOG_ERROR, "release: copy_file({src} -> {dst}) failed: {err}\n")
             return 1
         }
+        scrub_external_rpaths(dst)
+        ship_symbols_for(src, shipped)
         shipped |> push("{name}{ext}")
     }
     log("  ship tools: {length(tools)} file(s)\n")
