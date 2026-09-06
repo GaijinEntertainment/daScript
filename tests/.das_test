@@ -13,6 +13,11 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         *result = has_module("dashv")
         return
     }
+    // the supervisor polls health over dasHV's client
+    if (folder_name == "watchdog") {
+        *result = has_module("dashv")
+        return
+    }
     if (folder_name == "dasPUGIXML") {
         *result = has_module("pugixml")
         return
