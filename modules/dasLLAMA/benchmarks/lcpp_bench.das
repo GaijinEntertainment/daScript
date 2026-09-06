@@ -1171,6 +1171,49 @@ def parity_check(model : string; spec : ModelSpec) : bool {
     return ok
 }
 
+// The frozen-fixture gate of a TIMED run: once per model, untimed, on the served stack itself
+// (image rail, tuned kernels, the modes the run measures under). When the model-set table
+// carries greedy evidence for the file, the served model must reproduce the fixture's opening
+// tokens - a finite, non-degenerate argmax alone passed a pipeline whose every logit was
+// wrong (the fat exe dispatching its workers to the baseline clone). The bar is half the
+// checked span as a matching PREFIX: a broken pipeline matches nothing, a genuine near-tie
+// flip on the served stack cascades from one position on, and the confident fixtures hold
+// past the bar. The --parity pregate stays the strict token-for-token rail.
+let private FIXTURE_GATE_TOKENS = 8l
+
+def private bench_fixture_gate(var t : Model; spec : ModelSpec; fmt : OutFmt) : bool {
+    if (empty(spec.parity.gen)) {
+        say(fmt, "sanity: no frozen fixture for {spec.file} in the model-set table - the finiteness gate alone stands\n")
+        return true
+    }
+    var prompt <- (empty(spec.parity.prompt_text) ? clone_to_move(spec.parity.prompt)
+        : encode_(t, spec.parity.prompt_text, true, false))
+    let n_check = min(FIXTURE_GATE_TOKENS, long_length(spec.parity.gen))
+    let full_seq = t.config.seq_len
+    t.config.seq_len = long_length(prompt) + n_check + 8l   // the run's own KV cap may sit below the fixture; only these positions run
+    var got <- parity_greedy(t, prompt, n_check)
+    t.config.seq_len = full_seq
+    var same = 0l
+    while (same < long_length(got) && got[same] == spec.parity.gen[same]) {
+        same++
+    }
+    let ok = same * 2l >= n_check
+    if (ok) {
+        say(fmt, "sanity: frozen fixture - {same}/{n_check} opening tokens match \"{parity_eyeball(t, got)}\"\n")
+    } else {
+        say(fmt, "REFUSED: frozen fixture - {same}/{n_check} opening tokens match; got \"{parity_eyeball(t, got)}\" want \"{parity_eyeball(t, spec.parity.gen)}\"; the serving pipeline is wrong and its timings would be meaningless\n")
+    }
+    delete got
+    delete prompt
+    return ok
+}
+
+//! The timed run's fixture gate on an already-loaded model - public so a test can drive it with
+//! the table's own spec and a deliberately wrong one.
+def fixture_gate_check(var t : Model; spec : ModelSpec) : bool {
+    return bench_fixture_gate(t, spec, OutFmt.txt)
+}
+
 // Prompt corpus: segments separated by lines of two percent signs, '#' segments skipped.
 def private load_corpus(path : string) : array<string> {
     var texts : array<string>
@@ -1520,6 +1563,15 @@ def main() : int {
         modelArch = "{t.arch}"
         activeB = active_params_b(t)
         execFmt = model_exec_fmt(t)
+        {
+            var inscope spec <- spec_by_file(base_name(mpath))
+            if (empty(spec.file)) {
+                spec.file = base_name(mpath)
+            }
+            if (!bench_fixture_gate(t, spec, fmt)) {
+                panic("lcpp_bench: the frozen-fixture gate refused {base_name(mpath)} - see the REFUSED line")
+            }
+        }
         if (cfg.prof) {
             dispatch_census(t, fmt)
         }

@@ -48,8 +48,8 @@ bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks 
 
 `daspkg release` tunes any incomplete scope, rebuilds so the exe bakes the winners, and ships the
 sidecar beside it - which is also the exe's provenance: the tune gate checks that shipped sidecar,
-because `tune_status()` is empty by design in a standalone exe (the winners are compiled in, so the
-policy rail never runs). A missing exe - or one older than ANY dasLLAMA source it bakes - is a hard
+because a standalone exe's `tune_status()` carries no manifest rows (the winners are compiled in,
+so the policy rail never runs; a fat exe's rows are its class clones, and the gate reads those). A missing exe - or one older than ANY dasLLAMA source it bakes - is a hard
 stop with the build line printed; the rig never rebuilds silently, because that would put minutes of
 hidden work inside a measurement run. Measured (old paranoid protocol): 886 s from cold, `--quick` 85 s.
 

@@ -531,6 +531,14 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/mcp/test_tools.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/mcp/test_crosstree_guard.das
 
+    - name: "Test daspkg"
+      if: matrix.role != 'core'
+      # the release gates (`--fat` among them) live here; the nightly index workflow was the only
+      # other row that ran this suite, so a gate regression stayed invisible until the next night
+      run: |
+        set -eux
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/daspkg/test_daspkg.das --timeout 900
+
     - name: "Test DAP MCP bridge (python)"
       if: matrix.target == 'linux'
       run: |

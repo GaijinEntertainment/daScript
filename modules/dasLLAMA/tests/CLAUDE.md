@@ -44,9 +44,9 @@ every child runs with `DAS_TUNE_POLICY=reference`, so the `[tune]` families and 
 hints fall to their reference bodies - the portable tier's arm of the gate. That arm also runs
 with `DASLLAMA_IMAGE=0`: the reference policy is a different box identity, and a `.dlim` minted
 under it would GC-purge the box's tuned images, so the runner refuses `--no-tune` with the
-`image` and `image-vulkan` suites, and the two image-reading cells outside them (`test_tts_kitten`'s
-image cell, `test_audio_embedder`'s direct-route cell) skip on the knob and keep their coverage on
-the tuned arm. The runner redirects
+`image` and `image-vulkan` suites, and the one image-reading cell outside them
+(`test_audio_embedder`'s direct-route cell) skips on the knob and keeps its coverage on the tuned
+arm. The runner redirects
 the COMPLETE output to a log file, and prints that path on the DONE line. It owns the dastest
 timeout, and repeats a file only when `--nreps` is passed explicitly (default 1, never
 best-of-N). Every child runs `-jit -module-cache .jitted_scripts/module_cache/dastest.dascache`;
@@ -161,7 +161,9 @@ carrier, model-free - runs with no model stocked; also the layout fingerprint an
 bake tables, whose rebuild-not-append contract and per-format key arithmetic are pure taxonomy
 over a job list) `smol untied metal metal-untied gemma tower whisper voxtral
 parakeet qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
-mtower`; `gemma4e` is the E2B metal-blob
+mtower kitten`; `kitten` is the TTS area's arm - the StyleTTS2 carrier (kitten-nano) through
+`load_styletts2` on both lanes, and the image loaded by its own path with the family data
+riding its meta; `gemma4e` is the E2B metal-blob
 mint+map arm - the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
 embedding table's plane is short) runs after the blob plane borrows, so a fresh mint and a warm
 map must both clear it; `gemma4uv-metal` is the GPU tower
@@ -268,6 +270,14 @@ its refusal arms); plus the committed-records sweeps: image-chat receipts match 
 resolves to its committed generation archive.
 `test_exchange_schema.das` - model-free: the exchange validator, sweeping the ENTIRE in-tree
 records/sidecar corpus, so a writer-schema change reds here first.
+`test_fat_start.das` - model-free: the runtime section's writer and a fat exe's first-start race
+(`dasllama_fat_start`) - the snapshot's crowns and knobs, the race writing the redirected sidecar's
+runtime section and the checked apply reading it back (the Metal twins race on a Metal box, ~15 s),
+the box-profile apply firing an installed race hook exactly once for a missing section, and the
+fat hook declining outside a fat exe.
+`test_fat_hook_umbrella.das` - model-free: a program requiring the engine umbrella alone (what
+the shipped bench requires, never the facade) carries the first-start race hook - the umbrella's
+`[init]` set registers it, or a fat bench exe would serve Metal uncrowned forever.
 `failed_dasllama_lint_require.das` - model-free, expected-compile-failure: the
 facade lint trips DASLLAMA001 (code 50503) on a direct engine require with no escape.
 `failed_dasllama_lint_sidedoor.das` - model-free, expected-compile-failure: the lint's tree
@@ -353,7 +363,10 @@ registered skips the cell naming it, never a silent run on the default backend.
 (`lcpp_bench --parity`, via `parity_check` fed a controlled spec) on small carriers - the real
 fixture passes, a flipped id fails, an evidence-less spec is refused, the text-form prompt
 encodes through the tokenizer (E2B), the kq-native arm engages and restores the mode
-(Qwen3-4B Q4_K_M). Requires the bench by relative path (like `test_tok_seed`), so it pays the
+(Qwen3-4B Q4_K_M); plus the timed run's fixture gate (`fixture_gate_check` - the opening
+tokens of the same evidence on the served model, once per model before the rows): the table's
+fixture passes, an opening that matches nothing refuses, a row with no evidence stands aside.
+Requires the bench by relative path (like `test_tok_seed`), so it pays the
 bench's engine compile.
 `test_run_summary.das` - model-free: `run.das`'s own `log_summary` log scraper (last marker line
 wins, end of file closes an unterminated final line, doubled marker yields one line), fed
@@ -539,9 +552,8 @@ both sit, the American twin serves alone, an empty directory panics naming it.
 the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-<size>.gguf` +
 `tts_oracle/kitten_<size>/` under the models dir, both from `performance/build_tts_data.das`)
 run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
-sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings;
-the image cell (skips under `DASLLAMA_IMAGE=0`) loads kitten-nano through `load_styletts2` on a
-`.dlim` - the speed priors and aliases ride the image meta, the q8 sibling bakes when absent.
+sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings.
+The kitten image rail is the `image` suite's `kitten` arm (the TTS area's), not a cell here.
 `test_tts_kokoro.das` - stocked suite; model-free cells: the symbol map over a synthetic phoneme
 string, the out-of-vocabulary drop, the style-row clamps, and the pack-name language rule
 (`<language><f|m>_` for all nine codes, and every other shape reading "" whatever letter it opens

@@ -23,19 +23,21 @@ checklist on its own.
 - **A diff that changes `KeyHash` (`runtime_table.h`) or `WrapsBuiltinValue` (`cast.h`) states
   in its own PR description which key types change hash value.**
 
-- **A diff that makes the hot path more expensive per evaluated expression is a defect - an
-  added load, branch, call, copy, or counter, a direct call becoming indirect, a static
-  dispatch becoming virtual, and an unboxed value becoming a boxed round-trip all count.**
-  The hot path is a `SimNode::eval*` method, any helper such a method calls on every
-  evaluation, the dispatchers `Context::callOrFastcall` / `callWithCopyOnReturn` /
-  `invoke` / `invokeEx` (`simulate.h`), or an AOT-side function or template under this
-  folder that generated code executes per evaluated expression. Such a diff - including one
-  an optimized build flattens to nothing - lands its entry under `ARCHITECTURE.md`'s
-  sanctioned hot-path additions in the same diff: what was added, where, why correctness
-  required it, and the alternative that was rejected. Cost is judged in the build the repo
-  ships: a change that costs more only under a relaxed-math or otherwise non-default compiler
-  flag states which flavor and how much in its PR description, and ledgers only when the
-  shipped build pays.
+- **A diff that makes the hot path cost more per evaluated expression in the build the repo
+  ships is a defect.** The hot path is a `SimNode::eval*` method, any helper such a method
+  calls on every evaluation, the dispatchers `Context::callOrFastcall` /
+  `callWithCopyOnReturn` / `invoke` / `invokeEx` (`simulate.h`), or an AOT-side function or
+  template under this folder that generated code executes per evaluated expression. An added
+  load, branch, call, copy, or counter, a direct call becoming indirect, a static dispatch
+  becoming virtual, or an unboxed value becoming a boxed round-trip is that defect unless the
+  PR names the check showing the shipped build's codegen unchanged - the burden is the
+  author's, because a diff cannot show optimized codegen.
+
+- **A diff that adds work to the hot path - whether or not the shipped build flattens it -
+  lands its entry under `ARCHITECTURE.md`'s sanctioned hot-path additions in the same diff:
+  what was added, where, why correctness required it, and the alternative that was rejected.**
+  A change that costs more only under a relaxed-math or otherwise non-default compiler flag
+  states which flavor and how much in its PR description.
 
 - **A diff that changes the layout of a `debug_info.h` struct - a field added, removed,
   reordered, or retyped, or a base changed - states a per-consumer verdict (updated / no

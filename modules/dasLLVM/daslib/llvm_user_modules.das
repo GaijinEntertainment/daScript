@@ -6,6 +6,7 @@ options no_global_variables = false
 module llvm_user_modules shared private
 
 require llvm/daslib/llvm_code_selftest
+require llvm/daslib/llvm_tune_fat_word
 require ?dasllama/dasllama_gemm_gen dasllama/dasllama_gemm_register  // nolint:STYLE030,LINT019 — used inside the static_if below; on builds without the package both the require and the branch drop (path guard: pure-das package, nothing C++ to guard on)
 
 //! User-extensible wiring for `[llvm_code]` generator modules. The JIT calls
@@ -28,6 +29,7 @@ def public register_user_llvm_code_generators {
     }
     g_registered = true
     llvm_code_selftest::register_selftest()  // worked example + self-test generator (add_i32, add_plus_k)
+    llvm_tune_fat_word::register_fat_word()  // the fat dispatch mask as an LLVM-side word
     static_if (typeinfo module_exists(dasllama_gemm_register)) {
         dasllama_gemm_register::register_dasllama_gemm_code_generators()
     }

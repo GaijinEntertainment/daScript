@@ -47,9 +47,10 @@ stripped through `vkd_pipes_rebuild`) interleaved in one process, two rounds eac
 `DECVEC` verdict comes from one instrument. A new arm joins one of the three.
 
 **A measured number proves its kernel provenance through `tune_gate()`
-(`performance/profile_common.das`), one arm per world it can run in.** Three worlds, because
-`tune_status()` populates in exactly one of them: a standalone exe checks the sidecar the
-release shipped beside it; a `DAS_TUNE_MANIFEST` run checks that file; a plain script checks
+(`performance/profile_common.das`), one arm per world it can run in.** Four worlds, because
+`tune_status()` populates in two of them: a standalone exe checks the sidecar the release
+shipped beside it; a fat exe (sec.2.42a) checks that every kernel's most capable active class
+row is a profile stamp; a `DAS_TUNE_MANIFEST` run checks that file; a plain script checks
 that every `[tune]` row stamps a manifest winner. An invocation no arm covers refuses - or
 worse, measures on fallback kernels - which is why every measuring entry point calls the gate
 before its first timed rep. Two rig shapes fall outside "measuring entry point" by the
@@ -255,3 +256,30 @@ written: `mint_gen_ms` (the generator half), `mint_kernels_ms` (the loop-hint ha
 box's tune-history directory carry them too, so the box's longitudinal record answers what
 shipping a profile cost without re-running the mint - a console line that scrolled past is not
 that record.
+
+### 2.42a A fat exe races its runtime section at first start {#fat-first-start}
+
+A fat exe (`DAS_TUNE_MODE=fat`, `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md` sec.11) ships
+its kernels baked per CPU class and carries no tuner and no policy rail, so nothing would ever
+mint the sidecar's `"runtime"` section - the Metal twin crowns among its knobs, a 2-4x
+kernel-form gain of a tensor twin over its simdgroup kernel per twin-race row on the M5 Max
+(`harness/tune_kernels.das`, the metal_crowns family) - and a shipped Mac exe would run
+uncrowned forever. The section needs no rebuild, so the exe
+mints it itself: `dasllama_fat_start` registers `dasllama_fat_first_start` with the box-profile
+apply (`set_runtime_race_hook`) from its `[init]`, and the engine umbrella
+(`dasllama_transformer`) requires the module so every engine program carries the registration -
+the shipped bench requires the umbrella, never the facade; `apply_box_profile_runtime_checked` fires the hook when the
+sidecar is absent, another box's, or carries no runtime section, then reads the file the hook
+wrote. The hook answers false outside a fat exe (`tune_fat_built()`); inside one it runs
+`dasllama_race_runtime_section`: the Metal twin races (`dasllama_metal_crown_race` - both halves,
+synthetic, no model) under the tune progress display, then `dasllama_runtime_snapshot` - the same
+writer the mint's kernel half ends with - merged into the app sidecar beside the exe with the
+kernels section untouched. The next start reads it and races nothing. A box without a Metal
+device records the knob defaults, so the file still documents the box. An unwritable location
+keeps the crowns for the process and says so; `DAS_TUNE_MANIFEST` moves the file.
+
+What a first start never does: load a model, spawn a child, or race a kernel. The tuner's
+confirms - the generator half's end-to-end prefill A/B, the kernel half's serving and MTP depth
+confirms - each spawn a daslang child on a harness script and a vehicle model, and they are the
+harness's alone; under `harness/dasllama_tuner.das` on the M5 Max they were 147 of the
+metal_crowns family's 161 s, the twin race itself 14 s.

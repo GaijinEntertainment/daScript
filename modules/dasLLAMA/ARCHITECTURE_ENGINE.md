@@ -209,6 +209,10 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
 - **`dasllama_parity.das`** - CPU-reference caches for the parity instruments. Test-facing, but
   library-side because the caches outlive a single suite.
 - **`dasllama_prefix.das`** - the prefix/page cache for evaluated token history.
+- **`dasllama_fat_start.das`** - a fat exe's first start: the runtime-section snapshot the
+  tuner's kernel half also writes, the Metal twin crown race (synthetic, no model), and the
+  first-start hook it registers with the box-profile apply (`ARCHITECTURE_MEASUREMENT.md`
+  sec.2.42a).
 - **`dasllama_lint.das`** - the facade boundary as a compile-time lint (DASLLAMA001): every
   engine module carries it, so a consumer requiring anything under `modules/dasLLAMA/` but the
   entry modules (facade, scheduler, exchange pair) fails to compile. Escape:

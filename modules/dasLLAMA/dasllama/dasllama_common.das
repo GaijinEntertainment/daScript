@@ -1455,6 +1455,24 @@ def public box_profile_runtime_applied() : bool {
     return g_box_profile_runtime_applied
 }
 
+// the race that mints a missing runtime section in place (a fat exe's first start); it writes
+// the app sidecar and answers true, and the checked apply then reads the file it wrote
+var private g_runtime_race_hook : function<() : bool>
+var private g_runtime_race_armed = false
+
+//! Install the first-start race (`dasllama_fat_start` registers the fat exe's); returns the
+//! previous hook so a caller can restore it.
+def public set_runtime_race_hook(hook : function<() : bool>) : function<() : bool> {
+    let old = g_runtime_race_hook
+    g_runtime_race_hook = hook
+    g_runtime_race_armed = hook != null   // restoring a null previous hook disarms; an armed null would be invoked
+    return old
+}
+
+def private runtime_race_writes() : bool {
+    return g_runtime_race_armed && invoke(g_runtime_race_hook)
+}
+
 //! Why the checked apply declined the box sidecar - the `TuneSidecarReason` name, "" when it
 //! did not decline (or was never asked).
 def public box_profile_runtime_declined() : string {
@@ -1476,7 +1494,11 @@ def apply_box_profile_runtime(path : string = "") {
 def apply_box_profile_runtime_checked(path : string) {
     g_box_profile_runtime_applied = false   // both flags describe THIS apply, never an earlier one
     g_box_profile_runtime_declined = ""
-    let reason = box_profile_verdict_at(path)
+    var reason = box_profile_verdict_at(path)
+    // no section of this box's own to apply: the first-start race, when one is installed, mints it now
+    if ((reason == "absent" || reason == "foreign_box") && runtime_race_writes()) {
+        reason = box_profile_verdict_at(path)
+    }
     if (reason == "absent") {
         g_box_profile_runtime_declined = reason
         return
@@ -1490,6 +1512,9 @@ def apply_box_profile_runtime_checked(path : string) {
         to_log(LOG_INFO, "dasLLAMA: tune sidecar predates the binary - kernel winners fall back; the runtime knobs are box state and apply\n")
     }
     apply_box_profile_runtime_at(path)
+    if (g_box_profile_runtime_declined == "no_runtime_section" && runtime_race_writes()) {
+        apply_box_profile_runtime_at(path)
+    }
 }
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]

@@ -25,7 +25,8 @@ stamps the winning permutation onto the function before codegen.
 The sidecar is **per-app**: `<app>.tune.json` beside the app - the root
 script this process runs (the first `.das` on the command line), or the
 binary itself when there is none (standalone exe, embedded host).
-`DAS_TUNE_MANIFEST` overrides the location outright. A sidecar **older than
+`DAS_TUNE_MANIFEST` overrides the location; an in-process
+`set_tune_manifest_runtime_path` outranks the env. A sidecar **older than
 the running binary is stale** and its `"kernels"` winners read as absent
 everywhere - a rebuilt binary invalidates every measured winner, so
 copied-around stale files can never resurrect dead measurements. The
@@ -128,6 +129,12 @@ The `DAS_TUNE_MODE` environment variable selects the compile-time behavior:
     `<name>_variants()` registry (name -> function-pointer rows). A harness
     benches them and records the winner (`tune`), or bit-exact-gates every
     variant against the reference row (`test`).
+
+`fat`
+    A standalone exe (`llvm-jit -exe`) under `DAS_JIT_BASELINE=<class>` that
+    carries one `<name>__fat_<class>` clone per CPU class the library ships a
+    profile for, and picks the clone from cpuid at startup (*The fat exe*
+    below). Refused outside `-exe` and without the baseline.
 
 ```{note}
 
@@ -356,17 +363,18 @@ A frozen artifact must not demand or run tuning:
   off: a stamp changes the function's semantic hash, so a stamped function
   would fail the AOT link. Under `-jit` the JIT supersedes AOT bodies and
   tuned stamps stay live.
-* **Standalone exe** (`llvm-jit -exe`) still *stamps* - an exe built beside a
+* **Standalone exe** (`daslang -exe`) still *stamps* - an exe built beside a
   sidecar ships those winners (a local-use artifact by definition), and one
-  built without ships the build box's class-profile stamps, or the generic
-  `fallback=` stamps when no profile covers it - but the policy rail
-  is dead (no `[tune_policy]`, no `--tune`). The exe DOES get the status
-  `[init]`, so the artifact self-reports its baked stamps
-  (`tune_status()` / `log_tune_status` work inside a standalone exe). A
-  native exe carrying any `[llvm_code]` kernel also *targets the build box*
-  (CPU **and** feature gates, decided before the target-flag pass) so the
-  stamped generators actually emit instead of declining to their reference
-  bodies on the generic-CPU rail; a kernel-free exe stays
+  built without ships the class-profile stamps of the build box's class - or
+  of the `DAS_JIT_BASELINE` class - or the generic `fallback=` stamps when no
+  profile covers it - but the policy rail is dead (no `[tune_policy]`, no
+  `--tune`). The exe DOES get the status `[init]`, so the artifact
+  self-reports its baked stamps (`tune_status()` / `log_tune_status` work
+  inside a standalone exe). A native exe carrying any `[llvm_code]` kernel
+  also *targets the build box* (CPU **and** feature gates, decided before the
+  target-flag pass) so the stamped generators actually emit instead of
+  declining to their reference bodies on the generic-CPU rail; under
+  `DAS_JIT_BASELINE` it targets the class instead, and a kernel-free exe stays
   generic/redistributable.
 
 One more compile is inert for a different reason: under the host's
@@ -380,13 +388,56 @@ tuner **re-mints on every release** - a frozen exe never tunes, so an
 unmeasured winner would ship forever. `--quick` is the only mode that
 inherits an existing sidecar, and only a complete, fresh one; an incomplete
 or stale sidecar mints even under `--quick`. A tuner that *refuses* (the
-noise probe's hard ceiling, a supervisor interrupt) fails the release
-outright rather than shipping fallbacks quietly. daspkg then rebuilds so the exe bakes the
+noise probe's hard ceiling, a supervisor interrupt) fails the release rather
+than shipping fallbacks quietly. daspkg then rebuilds so the exe bakes the
 measured winners, and ships the sidecar beside the exe as
 `<bundle>.tune.json` (touched newer than the exe - the `"runtime"` knob
 section travels with the artifact, and the file documents the baked
 winners). The sidecar it measures against is the source-side one beside the
 app script; the bundle gets a byte-identical copy.
+
+## The fat exe - `DAS_TUNE_MODE=fat` under a baseline class
+
+One exe that runs on every box of a CPU class and still serves each faster
+class its own kernels:
+
+```text
+
+DAS_JIT_BASELINE=x86-avx2 DAS_TUNE_MODE=fat daslang -exe -output myapp myapp.das
+```
+
+`DAS_JIT_BASELINE` names the class the exe's plain code targets - `x86-base`,
+`x86-avx2`, `x86-vnni256`, `x86-vnni512`, `x86-amx`, `arm-neon` (M1) or
+`arm-i8mm` (M2 and later); a class is a feature set, never a box model, and
+every profile is keyed by one. Under `fat`, every `[tune]` function gets one
+clone per class of its arch's ladder that a `[tune_scope(defaults=)]` ships a
+profile for, at or above the baseline, plus the baseline itself - adding a
+profile file to the defaults directory grows the exe. Each clone stamps its
+class profile's winner (else the `fallback=` chain resolved against the class's
+feature set, else the reference body), is lowered by the backend for its class
+alone, and never inlines into the baseline code around it. Companions clone
+per class alongside. The function's own body becomes the dispatch: a chain of
+direct calls over a runtime mask, most capable class first, the baseline last.
+The mask is one LLVM-side word of process memory, so a job context forked
+with its init script skipped dispatches like the main context.
+
+At startup the exe reads cpuid, refuses a box that lacks any feature of the
+baseline class, and sets the mask to every class of the ladder the box is in.
+`DAS_TUNE_FAT_CLASS=<class>` pins one class instead - the A/B lever for the
+clones an exe carries - and refuses a class the box is not in. `tune_status()`
+lists one row per clone with its `klass`, and `log_tune_status` marks the
+classes this box runs.
+
+Kernels are baked: a fat exe carries no grid, no tuner and no policy rail, and
+a re-tune is a new profile and a rebuild. A per-box sidecar beside the exe
+keeps its `"runtime"` section's role (the library reads those knobs at load);
+its `"kernels"` section says nothing to a fat exe. `daspkg release --fat
+<class>` builds one: no mint, no shipped sidecar, and a kernel whose
+baseline-class clone came from no profile refuses the release (the deps JSON's
+`fat_unprofiled` list names it). `[tuned]` loop-hint kernels do not clone:
+they take the baseline class's profile, so a fat exe's hinted loops run the
+baseline's hints on every class. dasLLAMA's fat exe races its runtime section
+at first start on the box it runs on and keeps it beside itself.
 
 ## Sidecar location and staleness
 
@@ -398,8 +449,10 @@ command line - the AST module cache keys on the root script and the `DAS*`
 environment, so a warm compile stamped this run's file too; a bare `--tune`
 after `--` is not in the key, which is why the policy guard reads it at
 runtime. No declaration is needed; `DAS_TUNE_MANIFEST` overrides the location, and
-`set_tune_manifest_runtime_path` points just the get/set APIs elsewhere for
-self-managed harnesses.
+`set_tune_manifest_runtime_path` points the get/set APIs at a file of the
+process's own choosing - a self-managed harness, a test - and outranks the
+env, so a test redirecting its sidecar in-process never writes the box
+manifest a runner pinned for it.
 
 A sidecar whose mtime **predates the running binary's** is stale: its
 `"kernels"` read as absent (stamps fall back, the policy rail re-tunes), and

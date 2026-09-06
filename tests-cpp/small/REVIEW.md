@@ -4,7 +4,7 @@
 doc: `skills/internal/writing_cpp_tests.md` (repo root).
 
 **A diff that widens or removes a pin assertion also changes, in the same PR, what that
-assertion watches - the struct, offset, or file named in the pin's own assertion text.** A
+assertion watches - the layout, offset, or file set the pin names.** A
 pin test (`*_pin.cpp`) asserts that a compiled-in layout, offset, or watched file set stays
 put.
 

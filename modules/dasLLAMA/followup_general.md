@@ -933,11 +933,12 @@
     `dasllama/dasllama_tts_blocks.das` has a cell naming it in `tests/test_tts_blocks.das` -
     list A equals list B; (3) a `set_*_q8` call in a function with no `defer` reaching the
     matching `reset_*_q8` - one grep-shaped cell that retires `REVIEW_AUDIO.md`'s twin rule
-    with it; (4) no family type, family-keyed branch or family metadata key in
-    `dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` - `REVIEW.das`
-    already runs `check_family_seams` for the audio and vision carriers, and `dasllama_tts.das`
-    (`TtsKind`, `KittenFamily` / `KokoroFamily` fields) is the same shape, so a third
-    registration is the gate. Lint note from the same round: PERF026's remedy text advertises
+    with it; (4) no family BEHAVIOR in `dasllama/dasllama_tts_blocks.das` or
+    `dasllama/dasllama_styletts2.das` - a family-keyed branch outside the carrier's reader
+    (`stage_family_data`), a tensor quirk, a symbol or token rule; the family data records and
+    the reader that fills them are the shared carrier's by `REVIEW_TTS.md` - `REVIEW.das`
+    already runs `check_family_seams` for the audio and vision carriers, so a third
+    registration with the reader exempted is the gate. Lint note from the same round: PERF026's remedy text advertises
     `@scratch` generically, but the mark is inert on a `var inscope @scratch` LOCAL (eight TTS
     findings sat on locals already carrying it) - the message should say "move it to a reused
     field", or the rule should honor a scope-lifetime local it can prove.
@@ -1346,3 +1347,19 @@
    top-level key absent from `README.md`. (k) `REVIEW_IMAGE`: an addition on the left of a
    `> msize` compare in `dasllama_image.das`; `REVIEW_TTS`: `styletts2_synthesize` carries
    `[hot_path]`; a family name or tag string in the two shared TTS files.
+118. **Per-box profiles for the classes the fat exe ships - after dasllama-server ships and
+   releases run.** Two of the same nature, each a box and a mint rather than fat-mode plumbing
+   (`modules/dasLLVM/fat_mode_plan.md`, Later). (a) M4/M5: the shipped `arm-i8mm` profile is
+   one mint for M2 through M5, and on the M4 Pro its picks lose ~5% to the `arm-neon` baseline
+   on the CPU (562 vs 593 tok/s pp512 E2B q8, 3 reps); M4 and M5 carry SME and M2/M3 do not,
+   so an `arm-sme` class is the boundary - one `sme` line in `das_cpu_supports` (darwin sysctl
+   `hw.optional.arm.FEAT_SME`), one `JIT_CPU_CLASSES` row, one mint. (b) Intel AMX: the shipped
+   `x86-amx` profile crowns no AMX perm, so the class ties `x86-vnni512` (2888 vs 2949 tok/s
+   pp512 Qwen3-0.6B q8 on the 8488C). The session-5 SPR record says why: `nrsplit1` ties vnni at
+   24 lanes, wins at 48 (+15% geomean) and wins the classifier everywhere (1.45-1.84x), but the
+   tuner's confirm rejected the crown end to end (2969 vs 3218 tok/s) because the gemv companion
+   rides the family's stamp and decode lost 8.5%. The fix is families as separate backends - the
+   tile on AMX, the gemv on vnni, mixed per slot by the `set_batch_backend` hybrid rail - then a
+   re-mint on an AMX box at the served lane count with the confirm; and the AMX class must never
+   inherit the vnni class's `bias128` perm (-15% on AMX). Both land as profile files the fat exe
+   picks up with no plumbing change; the AWS SPR AMI (`dasbox-spr-20260710`) is the AMX box.

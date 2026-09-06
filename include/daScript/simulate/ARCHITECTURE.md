@@ -38,7 +38,7 @@ to 8), so a disagreement shows on a one-key table as much as on a large one.
 
 ## Sanctioned hot-path additions
 
-The ledger the checklist's hot-path rule routes to. Each entry: what was added, where, why
+The ledger the checklist's hot-path rules route to. Each entry: what was added, where, why
 correctness required it, and the alternative that was rejected.
 
 - **CRT scalar transcendentals** (`sim_policy.h`) - the scalar float arms of `Exp`, `Exp2`,

@@ -41,6 +41,37 @@ def test_parity_pregate_ids_form(t : T?) {
     }
 }
 
+// The timed run's fixture gate (the sanity line every lcpp_bench row set opens with): fed the
+// table's own fixture the served model reproduces the opening; an opening that matches nothing
+// refuses; a row with no evidence stands aside and leaves the finiteness gate alone.
+[test]
+def test_fixture_gate(t : T?) {
+    t |> run("the timed run's fixture gate passes the table's fixture, refuses a wrong opening, stands aside without evidence") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        var inscope spec <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
+        let path = path_join(models_dir(), spec.file)
+        if (!model_available(t, path)) return
+        allow_cpu_prefill()
+        var m <- load_model_(path, spec.parity.quant)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            t |> success(fixture_gate_check(m, spec), "the table's own fixture reproduces on the served model")
+            var inscope wrong <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
+            for (i in range(length(wrong.parity.gen))) {
+                wrong.parity.gen[i] = wrong.parity.gen[i] + 1l
+            }
+            t |> success(!fixture_gate_check(m, wrong), "an opening that matches nothing is refused")
+            var inscope bare <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
+            bare.parity.gen |> clear()
+            t |> success(fixture_gate_check(m, bare), "a row with no evidence stands aside")
+        }
+        delete m
+    }
+}
+
 [test]
 def test_parity_pregate_text_form(t : T?) {
     t |> run("a text-form fixture encodes through the model's tokenizer") @(t : T?) {

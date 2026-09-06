@@ -33,6 +33,10 @@ struct public JitEnv {
 
     @clarg_doc = "The arm64 twin (e.g. dotprod,i8mm)."
     jit_arm64_force_features : string = ""
+
+    @clarg_default_doc = "unset (the build targets the running box)"
+    @clarg_doc = "Build for a CPU class instead of this box: x86-base, x86-avx2, x86-vnni256, x86-vnni512, x86-amx, arm-neon, or arm-i8mm (llvm_cpu_class). The target machine, the emitter's tier gates, requires= eligibility and the shipped-profile ladder all read the class's feature set, so an -exe built here runs on every box of that class; the class must belong to the build's architecture. Environment-only by construction: the AST module cache keys on DAS*, and a flag would serve stamps minted for another class."
+    jit_baseline : string = ""
 }
 
 let public g_env_jit = env_config(type<JitEnv>)
@@ -77,6 +81,10 @@ struct public TuneEnv {
     @clarg_default_doc = "unset (every family races)"
     @clarg_doc = "Comma-separated re-mint filter: a tuner races only kernel families whose name contains one of these tokens, and every skipped family's sidecar entry survives the upsert. Set by --tune-only on the application; the tuner children inherit it."
     tune_only : string = ""
+
+    @clarg_default_doc = "unset (every class this box is in)"
+    @clarg_doc = "Runtime pin for a fat exe (DAS_TUNE_MODE=fat): the one CPU class whose kernel clones run, in place of every class cpuid says this box is in. A class the box is not in refuses to start. The A/B lever for the clones an exe carries."
+    tune_fat_class : string = ""
 
     @clarg_default_doc = "0"
     @clarg_doc = "Relaunch depth, armed by the auto policy's re-exec for its child. A relaunched process that still reads a scope as untuned neither tunes nor relaunches again - it reports that the tune did not converge and runs the stamps it has - so a tune that cannot converge costs one restart instead of stacking processes until the box runs out of memory."

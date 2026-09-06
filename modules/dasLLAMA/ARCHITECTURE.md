@@ -62,10 +62,11 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   MoE region split.
 - `ARCHITECTURE_MEDIA.md` - sec.2.13-2.16: the padded tower GEMM widths, the family GPU hooks,
   the tower weight lane, and the plain-Model ASR decoders.
-- `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10, 2.20, 2.21, 2.26-2.28, 2.40-2.41: the benchmark
-  rig, the tune gate, the sanctioned instrumentation rails, kernel-race fidelity, the gemv's own
-  tune seat, the CPU kernel bench's fixture conditions, the speculative round's ruler record, the
-  `[tuned]` perm precedence, and the mint wall in the sidecar's provenance.
+- `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10, 2.20, 2.21, 2.26-2.28, 2.40-2.41, 2.42a: the
+  benchmark rig, the tune gate, the sanctioned instrumentation rails, kernel-race fidelity, the
+  gemv's own tune seat, the CPU kernel bench's fixture conditions, the speculative round's ruler
+  record, the `[tuned]` perm precedence, the mint wall in the sidecar's provenance, and the fat
+  exe's first-start race.
 - `ARCHITECTURE_CPU_KERNELS.md` - sec.2.22-2.24, 2.42: the sub-block-packed k3/k6 planes, the grid
   formats' panel and row-group decodes, the VBMI symbol lattice, and the tier that selects on the
   target rather than the host.

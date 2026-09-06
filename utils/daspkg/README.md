@@ -38,7 +38,7 @@ daslang utils/daspkg/main.das -- install --global dasImgui
 | `build` | Build all C/C++ packages (cmake) |
 | `check` | Verify installed packages are present |
 | `doctor` | Check environment (git, cmake, gh) |
-| `release [--out <dir>] [--paranoid \| --quick]` | Bundle project as a redistributable standalone. Release ALWAYS mints the tune sidecar; `--quick` is the only mode that inherits a complete existing one |
+| `release [--out <dir>] [--paranoid \| --quick \| --fat <class>]` | Bundle project as a redistributable standalone. Release ALWAYS mints the tune sidecar; `--quick` is the only mode that inherits a complete existing one; `--fat <class>` builds a fat exe from the class profiles instead (no mint, no sidecar) |
 | `introduce [url]` | Submit a package to the index via PR |
 | `withdraw <name>` | Remove a package from the index via PR |
 
@@ -58,6 +58,7 @@ All package commands accept `--global` / `-g` to operate on global modules.
 | `--out <path>` | Output directory for `release` (default: current directory) |
 | `--paranoid` | Accepted for compatibility; the tuner runs one margin-decided protocol and this flag no longer changes the budget |
 | `--quick` | During `release`, accept a complete existing sidecar instead of re-minting (an incomplete or stale scope still mints - an exe never ships unmeasured). Forgetting it costs one re-mint, never correctness |
+| `--fat <class>` | During `release`, build a fat exe for a CPU class (`x86-avx2`, `x86-vnni512`, `x86-amx`, `arm-neon`, `arm-i8mm`, ...): the plain code targets the class, every `[tune]` kernel ships one clone per class the library has a profile for, and the exe picks the clone from cpuid at startup. No mint and no shipped sidecar; a kernel with no profile entry for the class refuses the release. `skills/tune.md`, *The fat exe* |
 
 ## Global modules
 

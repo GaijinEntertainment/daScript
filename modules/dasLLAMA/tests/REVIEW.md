@@ -100,9 +100,9 @@ pre-PR switch, not the iteration loop. In this folder the spelling is `model_ava
 
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image
 rail never calls `load_model`, `load_model_cached`, or `load_model_image` - it loads each
-carrier through that carrier's own loader.** Decoders load through `load_model_`
-(`../dasllama/dasllama_load.das`); every other carrier loads through its own
-`load_<family>_tower` / `load_<family>_encoder` / `load_<carrier>_model`.
+carrier through that carrier's own loader.** Decoders: `load_model_`
+(`../dasllama/dasllama_load.das`); other carriers: `load_<family>_tower` / `load_<family>_encoder`
+/ `load_<carrier>_model`; TTS: `load_tts_model` or `load_styletts2`.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -184,10 +184,10 @@ the backend, the flash-attention setting, and the mmproj precision the dump came
 defect.**
 
 **A cell that does not establish every process-wide driver setter and serving-lane knob its
-claim depends on, and restore each knob it set in-process to the value it had on entry before
-returning, is a defect.** This holds even when the claim needs the knob at its DEFAULT value.
-The mechanism (why a hook left set silently changes which implementation the next cell
-measures) is `CLAUDE.md`'s "Metal fixtures" section.
+claim depends on, and leave every family pin unset on return - whether or not this cell set
+one - and every driver setter it touched at its default, is a defect.** This holds even when
+the claim needs the knob at its DEFAULT value. `reset_<family>_q8` is the restore; why a hook
+left set changes what the next cell measures is `CLAUDE.md`'s "Metal fixtures".
 
 **A cell claiming a family serving lane that does not pin it through the family's own lane
 knobs - `set_<family>_q8` / `reset_<family>_q8`, canary's `set_canary_enc_q8` /
@@ -199,7 +199,7 @@ whichever lane the box's policy picked.
 `set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - and whose subject is not that lane
 knob itself mints in memory through the family's `stage_*` + `mint_*` pair, never through a
 `.dlim`-baking loader (`load_<family>_tower` / `load_<family>_encoder` / `load_<carrier>_model` /
-`load_model` / `load_model_cached` / `load_model_image`).** A disk bake under a pinned lane
+`load_styletts2` / `load_model` / `load_model_cached` / `load_model_image`).** A disk bake under a pinned lane
 GC-purges the serving lane's `.dlim` beside the model, and the next direct-image load in
 another suite panics on the wrong identity.
 

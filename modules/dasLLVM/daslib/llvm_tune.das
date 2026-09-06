@@ -19,6 +19,8 @@ require math
 require llvm/daslib/llvm_code public
 require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_env
+require llvm/daslib/llvm_cpu_class
+require llvm/daslib/llvm_code_shell   // the [llvm_code] spelling for the fat words below - never public, a program has daslib/tune's
 
 //! Generalized tune framework (gemm_generator_plan.md part 2). `[tune_perm(...), ...,
 //! tune(gen="key", fallback="suffix")]` — perm rows first, `tune` last — turns one reference
@@ -55,7 +57,8 @@ require llvm/daslib/llvm_env
 
 // ===== manifest + mode =====
 
-//! Compile-time tune mode from the `DAS_TUNE_MODE` env var: "normal" (default), "tune", "test".
+//! Compile-time tune mode from the `DAS_TUNE_MODE` env var: "normal" (default), "tune", "test",
+//! "fat" (one clone per shipped CPU class, `-exe` only).
 def tune_mode() : string {
     let m = g_env_tune.tune_mode
     return empty(m) ? "normal" : m
@@ -142,13 +145,13 @@ def set_tune_manifest_runtime_path(p : string) {
     g_runtime_manifest = p
 }
 
-    //! The tune sidecar location: `DAS_TUNE_MANIFEST` env, else a harness override, else
-    //! `<app>.tune.json` beside the app (the root script, or the binary when there is none).
-    //! Never "" — every app has a sidecar location.
+    //! The tune sidecar location: the in-process override (`set_tune_manifest_runtime_path` names
+    //! a file of the process's own choosing, so it outranks the ambient env), else `DAS_TUNE_MANIFEST`,
+    //! else `<app>.tune.json` beside the app (root script, or the binary). Never "".
 def tune_manifest_path() : string {
+    if (!empty(g_runtime_manifest)) return g_runtime_manifest
     let env = g_env_tune.tune_manifest
     if (!empty(env)) return env
-    if (!empty(g_runtime_manifest)) return g_runtime_manifest
     let app = tune_app_script()
     return sidecar_for(empty(app) ? running_binary() : app)
 }
@@ -361,11 +364,18 @@ def private pin_module_cache_dependency(path : string) {
 }
 
 def private pin_profile_chain(defaultsDir : string) {
-    var chain <- tune_class_chain()
+    // a fat build reads every class of the ladder, not only the chain below this box's class
+    var chain <- tune_mode() == "fat" ? fat_ladder() : tune_class_chain()
     for (c in chain) {
         pin_module_cache_dependency(path_join(defaultsDir, "{c}.tune-defaults.json"))
     }
     delete chain
+}
+
+// the whole ladder of the baseline's arch, most capable class first
+def private fat_ladder() : array<string> {
+    let arch = jit_cpu_class_row(jit_baseline_class()).arch
+    return <- [for (c in split(jit_cpu_class_ladder(arch), ";")); c; where !empty(c)]
 }
 
 // the sidecar's "kernels" section as a flat { function name : perm suffix } map;
@@ -410,8 +420,9 @@ def tune_manifest_get(fname : string) : string {
     return r
 }
 
-def private locate_profile_doc(defaultsDir, verKey, verVal : string; compileTime : bool; var klass, ppath : string&) : JsonValue? {
-    var chain <- tune_class_chain()
+// `onlyClass` names one class to read instead of walking the chain - a fat build's per-class pick
+def private locate_profile_doc(defaultsDir, verKey, verVal : string; compileTime : bool; var klass, ppath : string&; onlyClass : string = "") : JsonValue? {
+    var chain <- empty(onlyClass) ? tune_class_chain() : [onlyClass]
     var doc : JsonValue?
     for (c in chain) {
         let p = path_join(defaultsDir, "{c}.tune-defaults.json")
@@ -448,7 +459,7 @@ def private no_kernels() : table<string; string> {
 }
 
 //! A scope whose version pin cannot resolve is skipped, not an error: its pinned module may not be on the AST yet at this kernel's compile.
-def private profile_kernels(var klass, ppath : string&) : table<string; string> {
+def private profile_kernels(var klass, ppath : string&; onlyClass : string = "") : table<string; string> {
     klass = ""
     ppath = ""
     var kernels : table<string; string>
@@ -478,7 +489,7 @@ def private profile_kernels(var klass, ppath : string&) : table<string; string> 
                 var k = ""
                 var p = ""
                 pin_profile_chain(dir)
-                var doc = locate_profile_doc(dir, verKey, verVal, true, k, p)
+                var doc = locate_profile_doc(dir, verKey, verVal, true, k, p, onlyClass)
                 continue if (doc == null)
                 let ks = doc?["kernels"]
                 if (ks != null && ks.value is _object) {
@@ -898,16 +909,119 @@ struct TuneStatus {
     fname : string
     scope : string          // [tune_scope] name, "" when env/app-manifest driven
     suffix : string         // winning perm suffix, "" for the reference body
-    source : string         // "manifest" | "fallback" | "reference"
+    source : string         // "manifest" | "profile" | "fallback" | "reference"
     manifestPath : string   // the manifest the winner came from (or would come from)
+    klass : string          // a fat build's clone class; "" for a single-stamp build
 }
 
 var private g_tune_status : array<TuneStatus>
 
 //! Hook the `[tune_policy]`-injected [init] calls once per tuned function.
-def tune_status_add(fname, scope, suffix, source, manifestPath : string) {
+def tune_status_add(fname, scope, suffix, source, manifestPath : string; klass : string = "") {
     g_tune_status |> push(TuneStatus(fname = fname, scope = scope, suffix = suffix,
-        source = source, manifestPath = manifestPath))
+        source = source, manifestPath = manifestPath, klass = klass))
+}
+
+// ===== fat mode (runtime) =====
+
+// the interpreter's copies of the two words; under the JIT the [llvm_code] stubs below read and
+// write one LLVM-side global each instead (`llvm_tune_fat_word`), which every context of the
+// process shares - a pooled fork whose init script never ran has these das globals at zero
+var private g_tune_fat_mask = 0
+var private g_tune_fat_built = 0
+
+//! The classes this box runs a fat exe's clones for, one bit per class (`tune_fat_class_bit`);
+//! 0 until the exe's `[init]` ran, which every dispatch reads as the baseline clone.
+[llvm_code(name = "llvm_tune_fat_word::load", global = "das.tune.fat_mask")]
+def tune_fat_mask() : int {
+    return g_tune_fat_mask
+}
+
+[llvm_code(name = "llvm_tune_fat_word::store", global = "das.tune.fat_mask")]
+def private tune_fat_mask_set(mask : int) {
+    g_tune_fat_mask = mask
+}
+
+[llvm_code(name = "llvm_tune_fat_word::load", global = "das.tune.fat_built")]
+def private tune_fat_built_word() : int {
+    return g_tune_fat_built
+}
+
+[llvm_code(name = "llvm_tune_fat_word::store", global = "das.tune.fat_built")]
+def private tune_fat_built_set(built : int) {
+    g_tune_fat_built = built
+}
+
+//! True inside a fat exe once its `[init]` ran - what a library asks before it races the
+//! runtime section at first start (a plain build has a policy rail and a tuner for that).
+def tune_fat_built() : bool {
+    return tune_fat_built_word() != 0
+}
+
+//! A class's bit in the fat mask: its position on its arch's ladder, most capable class first.
+def tune_fat_class_bit(klass : string) : int {
+    let row = jit_cpu_class_row(klass)
+    for (i, c in count(), split(jit_cpu_class_ladder(row.arch), ";")) {
+        if (c == klass) {
+            return 1 << i
+        }
+    }
+    return 0
+}
+
+//! True when this box carries every feature of the class - cpuid only, never the build's
+//! baseline or a force env, because the question is what the silicon underneath can run.
+def tune_fat_box_in_class(klass : string) : bool {
+    let row = jit_cpu_class_row(klass)
+    return false if (empty(row.name) || row.arch != get_architecture_name())
+    for (f in split(row.features, ";")) {
+        return false if (!empty(f) && !cpu_supports(f))
+    }
+    return true
+}
+
+//! A fat exe's `[init]`: refuse a box below the baseline, then set the mask to every class of the
+//! ladder this box is in - or the one `DAS_TUNE_FAT_CLASS` pins, when the box is in it.
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+def tune_fat_init(baseline : string) {
+    let brow = jit_cpu_class_row(baseline)
+    if (!tune_fat_box_in_class(baseline)) {
+        panic("this program was built for the {baseline} CPU class ({brow.features}) and this {get_architecture_name()} box does not carry all of it")
+    }
+    let pin = strip(g_env_tune.tune_fat_class)
+    if (!empty(pin) && !tune_fat_box_in_class(pin)) {
+        panic("DAS_TUNE_FAT_CLASS={pin} pins a CPU class this box is not in ({jit_cpu_class_row(pin).features})")
+    }
+    if (!empty(pin)) {
+        // the status rows precede this call: a pin names a class some clone carries, or it dispatches nothing
+        var carried : array<string>
+        var found = false
+        for (s in g_tune_status) {
+            continue if (empty(s.klass))
+            found ||= s.klass == pin
+            if (find_index(carried, s.klass) < 0) {
+                carried |> push(s.klass)
+            }
+        }
+        if (!found && !empty(carried)) {
+            panic("DAS_TUNE_FAT_CLASS={pin} pins a CPU class this exe carries no clone for (it carries: {join(carried, ", ")})")
+        }
+        delete carried
+    }
+    var mask = 0
+    var names : array<string>
+    for (c in split(jit_cpu_class_ladder(brow.arch), ";")) {
+        continue if (empty(c))
+        if (empty(pin) ? tune_fat_box_in_class(c) : c == pin) {
+            mask |= tune_fat_class_bit(c)
+            names |> push(c)
+        }
+    }
+    tune_fat_mask_set(mask)
+    tune_fat_built_set(1)
+    let pinned = empty(pin) ? "" : " (DAS_TUNE_FAT_CLASS={pin} pins the class)"
+    to_log(LOG_INFO, "llvm_tune: fat kernels - this box runs the {join(names, ", ")} clones{pinned}\n")
+    delete names
 }
 
 //! The program's tune decisions — one row per `[tune]` function. Populated whenever the
@@ -1069,13 +1183,29 @@ struct TuneScopeStatus {
     tuner : string      //!< tuner harness path ("" = none declared)
     complete : bool     //!< every demanded kernel has a fresh sidecar entry and the version pin (if any) matched
     fallbacks : string  //!< ';'-joined fname=suffix stamps selected by this compile/host
+    fat_unprofiled : string   //!< fat builds: ';'-joined [tune] kernels whose BASELINE clone came from no profile (fallback or reference) - what a fat release refuses to ship
 }
 
     //! Every declared scope in `prog` with its per-key completeness against the app sidecar,
     //! read OFF THE AST, not this module's macro globals — those are per-requiring-context
     //! copies, so a caller in another macro module reads an empty bank. Deduped by name.
 def tune_scopes_status(prog : Program?) : array<TuneScopeStatus> {
-    // pass 1: the declared scopes (name, tuner, covers) off the [tune_scope] annotations
+    var found <- declared_scopes(prog)
+    // pass 2: each scope's demanded kernels across its declaring + covers= modules
+    var rows : array<TuneScopeStatus>
+    rows |> reserve(length(found))
+    let mpath = tune_manifest_path()
+    var compileStatus <- collect_status(prog)
+    for (sc in found) {
+        rows |> push(scope_status_row(prog, sc, mpath, compileStatus))
+    }
+    delete compileStatus
+    delete found
+    return <- rows
+}
+
+// pass 1: the declared scopes (name, tuner, covers, version pin) off the [tune_scope] annotations, deduped by name
+def private declared_scopes(prog : Program?) : array<TuneScope> {
     var found : array<TuneScope>
     var seen : table<string>
     prog |> for_each_module() $(mod) {
@@ -1109,49 +1239,55 @@ def tune_scopes_status(prog : Program?) : array<TuneScopeStatus> {
             }
         }
     }
-    // pass 2: each scope's demanded kernels across its declaring + covers= modules
-    var rows : array<TuneScopeStatus>
-    rows |> reserve(length(found))
-    let mpath = tune_manifest_path()
-    var compileStatus <- collect_status(prog)
-    for (sc in found) {
-        var wanted : table<string>
-        wanted |> insert(sc.modName)
-        for (m in split(sc.covers, ";")) {
-            if (!empty(m)) {
-                wanted |> insert(m)
-            }
-        }
-        var fnames : array<string>
-        prog |> for_each_module() $(mod) {
-            if (wanted |> key_exists("{mod.name}")) {
-                module_kernel_fnames(mod, fnames)
-            }
-        }
-        if (!empty(sc.versionKey)) {
-            fnames |> push("{TUNE_VERSION_TOKEN}{sc.versionKey}={sc.versionExpected}")
-        }
-        var fallbacks : array<string>
-        for (fname in fnames) {
-            for (st in compileStatus) {
-                if (st.fname == fname && st.source != "manifest") {
-                    fallbacks |> push("{fname}={st.suffix}")
-                    break
-                }
-            }
-        }
-        rows |> push(TuneScopeStatus(name = sc.scopeName, manifest = mpath,
-            tuner = sc.tunerPath,
-            complete = tune_sidecar_entries_complete(mpath, join(fnames, ";")),
-            fallbacks = join(fallbacks, ";")))
-        delete wanted
-        delete fnames
-        delete fallbacks
-    }
-    delete compileStatus
-    delete found
     delete seen
-    return <- rows
+    return <- found
+}
+
+// one scope's status row: its demanded kernels, their fallback stamps, and under fat the
+// baseline clones that came from no profile
+def private scope_status_row(prog : Program?; sc : TuneScope; mpath : string; compileStatus : array<TuneStatus>) : TuneScopeStatus {
+    var wanted : table<string>
+    wanted |> insert(sc.modName)
+    for (m in split(sc.covers, ";")) {
+        if (!empty(m)) {
+            wanted |> insert(m)
+        }
+    }
+    var fnames : array<string>
+    prog |> for_each_module() $(mod) {
+        if (wanted |> key_exists("{mod.name}")) {
+            module_kernel_fnames(mod, fnames)
+        }
+    }
+    if (!empty(sc.versionKey)) {
+        fnames |> push("{TUNE_VERSION_TOKEN}{sc.versionKey}={sc.versionExpected}")
+    }
+    var fallbacks : array<string>
+    var unprofiled : array<string>
+    let fat = tune_mode() == "fat"
+    let baseline = jit_baseline_class()
+    for (fname in fnames) {
+        for (st in compileStatus) {
+            if (st.fname == fname && (fat ? st.klass == baseline : true)) {
+                if (st.source != "manifest") {
+                    fallbacks |> push("{fname}={st.suffix}")
+                }
+                if (fat && st.source != "profile") {
+                    unprofiled |> push(fname)
+                }
+                break
+            }
+        }
+    }
+    let row = TuneScopeStatus(name = sc.scopeName, manifest = mpath,
+        tuner = sc.tunerPath,
+        complete = tune_sidecar_entries_complete(mpath, join(fnames, ";")),
+        fallbacks = join(fallbacks, ";"), fat_unprofiled = join(unprofiled, ";"))
+    delete wanted
+    delete fnames
+    delete fallbacks
+    delete unprofiled
+    return row
 }
 
 // A scope's version pin travels INSIDE the ';'-joined demand list as one `@version:key=value`
@@ -1292,11 +1428,16 @@ struct private TunePerm {
     args : array<tuple<argname : string; argvalue : RttiValue>>
 }
 
-    // Host cpuid OR'd with the DAS_JIT_*_FORCE_FEATURES override — keep in lockstep with
-    // llvm_jit_common's x64_target_feature. requires= is an ELIGIBILITY hint for fallback
-    // selection only; the generator's own decline predicate stays the emission truth.
+    // The baseline class's set (DAS_JIT_BASELINE) or else host cpuid, OR'd with the force env —
+    // in lockstep with llvm_jit_common's x64_target_feature. requires= is an ELIGIBILITY hint for
+    // fallback selection only; the generator's own decline predicate stays the emission truth.
 def private fallback_feature_ok(name : string) : bool {
-    if (cpu_supports(name)) return true
+    let baseline = jit_baseline_class()
+    if (!empty(baseline)) {
+        if (jit_class_has(baseline, name)) return true
+    } elif (cpu_supports(name)) {
+        return true
+    }
     for (part in split(g_env_jit.jit_x64_force_features, ",")) {
         if (part == name) return true
     }
@@ -1342,7 +1483,7 @@ let private TUNE_KNOWN_FEATURES = "avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx5
     //! The ';'-joined subset of the known `requires=` feature names this box passes — stamped
     //! into every sidecar's provenance as `features`, which is what lets a shipped profile say
     //! exactly which gated seats its minting box could and could not race.
-[arch(at = "../ARCHITECTURE.md#x64-tier-gates")]
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#x64-tier-gates")]
 def tune_feature_fingerprint() : string {
     var have <- [for (f in split(TUNE_KNOWN_FEATURES, ";")); f; where fallback_feature_ok(f)]
     let joined = join(have, ";")
@@ -1354,6 +1495,10 @@ def tune_feature_fingerprint() : string {
     //! follow the seats `requires=` can gate, not box models: two boxes of one class stamp the
     //! same winners, so one profile serves them all; an arch with no ladder gets a key no profile matches.
 def tune_cpu_class() : string {
+    let baseline = jit_baseline_class()
+    if (!empty(baseline)) {
+        return baseline
+    }
     let arch = get_architecture_name()
     if (arch == "x86_64") {
         if (fallback_feature_ok("avx512vnni") && fallback_feature_ok("avx512bw")) {
@@ -1373,9 +1518,7 @@ def tune_cpu_class() : string {
     //! Profile candidates for this box, most specific first — a box above the best shipped
     //! profile adopts the nearest lower class and races only what that class could not.
 def tune_class_chain() : array<string> {
-    let ladder = (get_architecture_name() == "x86_64"
-        ? "x86-amx;x86-vnni512;x86-vnni256;x86-avx2;x86-base"
-        : "arm-i8mm;arm-neon")
+    let ladder = jit_cpu_class_ladder(get_architecture_name())
     let own = tune_cpu_class()
     var chain : array<string>
     var seen = false
@@ -1533,9 +1676,9 @@ def private take_perms(func : FunctionPtr; var errors : das_string) : array<Tune
     // The appended declaration's own apply does not run for macro-added annotations, so force
     // the side effects here — without userScenario the front end const-folds constant-arg calls
     // before they reach the JIT. tune_suffix/tune_from ride along as the stamped-truth record.
-def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePerm; from, source : string) {
+def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePerm; from, source : string; klass : string = "") {
     var aargs : array<tuple<argname : string; argvalue : RttiValue>>
-    aargs |> reserve(length(perm.args) + 4)
+    aargs |> reserve(length(perm.args) + 5)
     aargs |> push((argname = "name", argvalue = RttiValue(tString = genKey)))
     for (a in perm.args) {
         aargs |> push((argname = a.argname, argvalue = a.argvalue))
@@ -1543,6 +1686,10 @@ def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePe
     aargs |> push((argname = "tune_suffix", argvalue = RttiValue(tString = perm.suffix)))
     aargs |> push((argname = "tune_from", argvalue = RttiValue(tString = from)))
     aargs |> push((argname = "tune_source", argvalue = RttiValue(tString = source)))
+    if (!empty(klass)) {
+        // the emitter lowers the clone for this class (llvm_jit try_llvm_code_function)
+        aargs |> push((argname = "tune_class", argvalue = RttiValue(tString = klass)))
+    }
     fn |> append_annotation("tune", "llvm_code", aargs)
     fn.sideEffectFlags.userScenario = true
     delete aargs
@@ -1615,6 +1762,223 @@ def private emit_registry(var mod : Module?; base : FunctionPtr; perms : array<T
         return false
     }
     return true
+}
+
+// ===== fat mode (compile time) =====
+
+// `x86-vnni512` -> `x86_vnni512`, the class as an identifier piece
+def private class_ident(klass : string) : string {
+    return replace(klass, "-", "_")
+}
+
+// the classes a fat exe carries clones for: every class of the baseline's ladder that some
+// scope ships a profile for, plus the baseline itself; most capable first, the baseline last
+def private fat_ship_set(baseline : string) : array<string> {
+    var ship : array<string>
+    var ladder <- fat_ladder()
+    for (c in ladder) {
+        break if (c == baseline)
+        var k = ""
+        var p = ""
+        var prof <- profile_kernels(k, p, c)
+        delete prof
+        if (!empty(p)) {
+            ship |> push(c)
+        }
+    }
+    ship |> push(baseline)
+    delete ladder
+    return <- ship
+}
+
+// one class's stamp for `fname`: the class profile's winner when the grid carries it and the
+// class's set passes its requires=, else the first fallback the class's set passes, else "" (reference)
+def private fat_pick(fname, klass : string; perms : array<TunePerm>; args : AnnotationArgumentList;
+                     var source, path : string&; var errors : das_string) : string {
+    let features = jit_cpu_class_row(klass).features
+    var pk = ""
+    var pp = ""
+    var prof <- profile_kernels(pk, pp, klass)
+    let suffix = prof?[fname] ?? ""
+    delete prof
+    source = ""
+    path = ""
+    if (!empty(suffix) && suffix != "reference") {
+        for (p in perms) {
+            if (p.suffix == suffix && requires_ok_in_fingerprint(p.requires, features)) {
+                source = "profile"
+                path = pp
+                return suffix
+            }
+        }
+    } elif (suffix == "reference") {
+        source = "profile"
+        path = pp
+        return ""
+    }
+    let fv = find_arg(args, "fallback")
+    if (fv is tString) {
+        for (cand in split(fv as tString, ";")) {
+            continue if (empty(cand))
+            var known = false
+            for (p in perms) {
+                known ||= p.suffix == cand
+                if (p.suffix == cand && requires_ok_in_fingerprint(p.requires, features)) {
+                    source = "fallback"
+                    return cand
+                }
+            }
+            if (!known) {
+                errors := "[tune] on {fname}: fallback perm '{cand}' is not in the [tune_perm] grid"
+                return ""
+            }
+        }
+    }
+    source = "reference"
+    return ""
+}
+
+// a clone of `fn` named for the class, stamped with `suffix` (none for the reference body)
+def private add_fat_clone(fn : FunctionPtr; klass, genKey, suffix, from, source : string;
+                          perms : array<TunePerm>; var errors : das_string) : string {
+    var clone = clone_function(fn)
+    let name = "{fn.name}__fat_{class_ident(klass)}"
+    clone.name := name
+    if (!empty(suffix)) {
+        for (p in perms) {
+            if (p.suffix == suffix) {
+                stamp_llvm_code(clone, genKey, p, from, source, klass)
+            }
+        }
+    }
+    clone.flags.generated = true
+    if (!(compiling_module() |> add_function(clone))) {
+        errors := "[tune] on {fn.name}: failed to add the {klass} clone {name}"
+    }
+    return name
+}
+
+// `<clone>(<every argument of fn, by name>)`
+def private fat_call(fn : FunctionPtr; cloneName : string) : ExpressionPtr {
+    var call <- new ExprCall(at = fn.at, name := cloneName)
+    for (arg in fn.arguments) {
+        call.arguments |> emplace_new(new ExprVar(at = fn.at, name := "{arg.name}"))
+    }
+    return <- call
+}
+
+// one dispatch arm: `if ((tune_fat_mask() & bit) != 0) return <clone>(args)`, or the unguarded
+// baseline call when bit is 0 (the last arm); a void kernel calls and returns
+def private fat_arm(fn : FunctionPtr; cloneName : string; bit : int) : ExpressionPtr {
+    var call <- fat_call(fn, cloneName)
+    let isVoid = fn.result.baseType == Type.tVoid
+    if (bit == 0) {
+        if (isVoid) {
+            // the last statement of the function: the call alone, one expression for the splice
+            return <- qmacro_expr() {
+                $e(call)
+            }
+        }
+        return <- qmacro_expr() {
+            return $e(call)
+        }
+    }
+    if (isVoid) {
+        return <- qmacro_expr() {
+            if ((tune_fat_mask() & $v(bit)) != 0) {
+                $e(call)
+                return
+            }
+        }
+    }
+    return <- qmacro_expr() {
+        if ((tune_fat_mask() & $v(bit)) != 0) {
+            return $e(call)
+        }
+    }
+}
+
+    //! `DAS_TUNE_MODE=fat`: one `<name>__fat_<class>` clone per ship-set class, each stamped from its
+    //! class's profile (else the fallback chain under the class's set), and the function's own body
+    //! becomes the dispatch chain over `tune_fat_mask()`, baseline clone last. `-exe` only.
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<TunePerm>; var comps : array<TuneCompanion>;   // nolint:STYLE037 - one flat pass per class: pick, clone, companions, dispatch arm
+                      args : AnnotationArgumentList; var errors : das_string) : bool {
+    if (!tune_exe_gate()) {
+        errors := "[tune] on {func.name}: DAS_TUNE_MODE=fat is a standalone-exe mode - build with llvm-jit -exe"
+        return false
+    }
+    let baseline = jit_baseline_class()
+    if (empty(baseline)) {
+        errors := "[tune] on {func.name}: DAS_TUNE_MODE=fat needs DAS_JIT_BASELINE=<class>, the class the exe's plain code targets ({jit_cpu_class_names()})"
+        return false
+    }
+    var ship <- fat_ship_set(baseline)
+    var arms : array<ExpressionPtr>
+    var picks : array<string>
+    arms |> reserve(length(ship))
+    picks |> reserve(length(ship))
+    for (klass in ship) {
+        var source = ""
+        var path = ""
+        let suffix = fat_pick("{func.name}", klass, perms, args, source, path, errors)
+        break if (!empty(errors))
+        let cloneName = add_fat_clone(func, klass, genKey, suffix, path, source, perms, errors)
+        break if (!empty(errors))
+        picks |> push("{klass}={empty(suffix) ? "reference" : suffix}/{source}")
+        for (c in comps) {
+            // a companion's own profile entry wins when the class's set can run it; else it follows the main
+            var own = ""
+            var csource = source
+            var cpath = path
+            if (source == "profile") {
+                var pk = ""
+                var pp = ""
+                var prof <- profile_kernels(pk, pp, klass)
+                own = prof?["{c.fnname}"] ?? ""
+                delete prof
+                var ownOk = false
+                for (p in perms) {
+                    ownOk ||= p.suffix == own && requires_ok_in_fingerprint(p.requires, jit_cpu_class_row(klass).features)
+                }
+                own = ownOk ? own : ""
+            }
+            if (empty(own)) {
+                own = suffix
+            } else {
+                csource = "profile"
+                cpath = path
+            }
+            add_fat_clone(c.fn, klass, c.genkey, own, cpath, csource, perms, errors)
+            break if (!empty(errors))
+        }
+        break if (!empty(errors))
+        arms |> push(fat_arm(func, cloneName, klass == baseline ? 0 : tune_fat_class_bit(klass)))
+    }
+    if (empty(errors)) {
+        // the companions' own dispatch: same class arms, so a kernel and its layout query switch together
+        for (c in comps) {
+            var carms <- [for (klass in ship); fat_arm(c.fn, "{c.fnname}__fat_{class_ident(klass)}", klass == baseline ? 0 : tune_fat_class_bit(klass))]
+            c.fn.body := qmacro_block() { $b(carms) }
+            c.fn.sideEffectFlags.userScenario = true
+        }
+        func.body := qmacro_block() { $b(arms) }
+        func.sideEffectFlags.userScenario = true
+        if (tune_verbosity() != "silent") {
+            print("llvm_tune: [tune] {func.name} (DAS_TUNE_MODE=fat): fat clones {join(picks, ", ")}\n")
+        }
+        // reference-row-only registries, so harness code referencing <name>_variants() still compiles
+        let noPerms : array<TunePerm>
+        var rok = emit_registry(compiling_module(), func, noPerms, errors)
+        for (c in comps) {
+            if (rok) {
+                rok = emit_registry(compiling_module(), c.fn, noPerms, errors)
+            }
+        }
+    }
+    delete picks
+    delete ship
+    return empty(errors)
 }
 
 // ===== the annotations =====
@@ -1702,8 +2066,14 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
         delete comps
         return ok
     }
+    if (mode == "fat") {
+        let ok = stamp_fat(func, genKey, perms, comps, args, errors)
+        delete perms
+        delete comps
+        return ok
+    }
     if (mode != "normal") {
-        errors := "[tune] on {func.name}: unknown DAS_TUNE_MODE '{mode}' (normal | tune | test)"
+        errors := "[tune] on {func.name}: unknown DAS_TUNE_MODE '{mode}' (normal | tune | test | fat)"
         delete perms
         delete comps
         return false
@@ -2599,6 +2969,7 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
             var suffix = ""
             var from = ""
             var stampedSource = ""
+            var klass = ""
             for (ann in fn.annotations) {
                 if (ann.annotation.name == "tune") {
                     isTuned = true
@@ -2609,9 +2980,22 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
                     if (fv is tString) { from = fv as tString }
                     let tv = find_arg(ann.arguments, "tune_source")
                     if (tv is tString) { stampedSource = tv as tString }
+                    let cv = find_arg(ann.arguments, "tune_class")
+                    if (cv is tString) { klass = cv as tString }
                 }
             }
-            if (isTuned) {
+            // a fat build's rows are its clones, one per class - the [tune] function itself is the dispatch
+            let fatName = "{fn.name}"
+            let fatAt = find(fatName, "__fat_")
+            if (fatAt > 0 && fn.flags.generated && (!empty(klass) || tune_mode() == "fat")) {
+                let base = slice(fatName, 0, fatAt)
+                if (empty(klass)) {
+                    klass = replace(slice(fatName, fatAt + length("__fat_")), "_", "-")
+                }
+                let source = !empty(stampedSource) ? stampedSource : "reference"
+                rows |> push(TuneStatus(fname = base, scope = scopeName,
+                    suffix = suffix, source = source, manifestPath = from, klass = klass))
+            } elif (isTuned && tune_mode() != "fat") {
                 let source = !empty(stampedSource) ? stampedSource : (empty(suffix) ? "reference" : (empty(from) ? "fallback" : "manifest"))
                 let mpath = !empty(from) ? from : sidecar
                 rows |> push(TuneStatus(fname = "{fn.name}", scope = scopeName,
@@ -2653,7 +3037,7 @@ def private tune_policy_gated() : bool {
     // -exe owes the status [init] even under a DAS_TUNE_MANIFEST redirect (report ≠ policy —
     // else a redirect-built exe ships stamp-less rows); stamp-free/grid still win
 def private exe_status_report() : bool {
-    return tune_exe_gate() && !tune_stamp_free_gate() && tune_mode() == "normal"
+    return tune_exe_gate() && !tune_stamp_free_gate() && (tune_mode() == "normal" || tune_mode() == "fat")
 }
 
 // the runtime status table: one tune_status_add per [tune] function, off the stamped AST
@@ -2663,11 +3047,18 @@ def private emit_status_init(var errors : string&) {
     var rows <- collect_status(get_ptr(compiling_program()))
     if (!empty(rows)) {
         var body : array<ExpressionPtr>
-        body |> reserve(length(rows))
+        body |> reserve(length(rows) + 1)
         for (row in rows) {
             body |> push <| qmacro_expr() {
                 tune_status_add($v(row.fname), $v(row.scope), $v(row.suffix),
-                    $v(row.source), $v(row.manifestPath))
+                    $v(row.source), $v(row.manifestPath), $v(row.klass))
+            }
+        }
+        if (tune_mode() == "fat") {
+            // after the rows, so a pin is checked against the clones the exe carries; an unset mask reads as the baseline
+            let baseline = jit_baseline_class()
+            body |> push <| qmacro_expr() {
+                tune_fat_init($v(baseline))
             }
         }
         var fn = qmacro_function("`tune`status`init") $() : void {
