@@ -217,11 +217,14 @@ first when the pointers are non-owning.
 
 ## Error handling
 
-- `panic("msg")` (and a runtime error such as a failed bounds check or a C++ `throw_error_at`)
-  unwinds to the nearest enclosing `try { } recover { }`, whose `recover` block runs and
-  execution continues after it, in the interpreter and under the JIT alike; with no enclosing
-  `try` the process dies. There is no exception object to inspect. Never design APIs around
-  panic-as-control-flow.
+- `panic("msg")`, and any runtime error (a failed bounds check, an error raised by a bound C++
+  function), unwinds to the nearest enclosing `try { } recover { }`; the `recover` block runs
+  and execution continues after it, in every execution tier. `recover` binds nothing - there is
+  no exception value to match on; the message is `this_context().last_exception`
+  (`require daslib/rtti`), with a trailing newline. A function containing `try`/`recover` is
+  not JIT-compiled - it runs interpreted. With no enclosing `try` the error unwinds out of the
+  script: the daslang CLI prints it and exits nonzero, an embedding host gets it back as a
+  context error. Never design APIs around panic-as-control-flow.
 - `assert(cond, "msg")` may be stripped in release; `verify(cond, "msg")` always runs. The
   message must be a string CONSTANT - for a runtime-value diagnostic write
   `if (!cond) panic("bad n = {n}")`. An asserted expression with side effects (invoking a
