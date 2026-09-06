@@ -54,7 +54,7 @@ def private panic_text_of(blk : block<() : void>) : string {
 // its dialect pick taken out, so a synthesis can be held against the string it should have read.
 // Noise never moves the length, so the seed here need not be the facade's.
 def private samples_for(var m : TtsModel; ps : string; voice : string) : int64 {
-    var inscope ids <- kokoro_token_ids(m.kokoro, ps)
+    var inscope ids <- kokoro_token_ids(m.model.kokoro, ps)
     var inscope style : array<float>
     styletts2_style(m.model, voice, kokoro_style_row(ps, m.model.style_rows), style)
     var tm = TtsTimings()
@@ -131,7 +131,10 @@ def test_kokoro_oracle(t : T?) {
             return
         }
         delete g_family
-        g_family <- load_kokoro_family(gguf_path())
+        {
+            var inscope staged <- load_styletts2(gguf_path())
+            g_family := staged.kokoro
+        }
         t |> success(length(g_family.sym) > 100, "{length(g_family.sym)} symbols in the vocabulary")
         var inscope ids <- kokoro_token_ids(g_family, "hˈɛlO wˈɜɹld")   // nolint:STYLE039
         t |> equal(length(ids), 14, "two pads around twelve known symbols")
@@ -210,8 +213,8 @@ def test_kokoro_dialects(t : T?) {
             // every British symbol has to be in the model's own vocabulary, or the token
             // builder drops it silently and the voice speaks a shortened line
             var inscope cps <- utf8_to_cpts(ps_gb)
-            var inscope ids_gb <- kokoro_token_ids(m.kokoro, ps_gb)
-            var inscope ids_us <- kokoro_token_ids(m.kokoro, ps_us)
+            var inscope ids_gb <- kokoro_token_ids(m.model.kokoro, ps_gb)
+            var inscope ids_us <- kokoro_token_ids(m.model.kokoro, ps_us)
             t |> equal(length(ids_gb), length(cps) + 2, "no British symbol falls out of the vocabulary")
             var same_tokens = length(ids_us) == length(ids_gb)
             for (a, b in ids_us, ids_gb) {

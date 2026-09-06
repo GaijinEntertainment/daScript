@@ -11,7 +11,7 @@ require ?das_metal dasllama/dasllama_metal_gemm  // the production 32x32 GEMM MS
 require dasllama/dasllama_metal_kernels  // the production GEMV MSL (v0 baseline)
 require daslib/typemacro_boost  // [template_struct_instance] - the simdgroup-matrix lab stamps
 require ?das_metal dasllama/dasllama_metal_prefill  // MetalKqMulMmK45TensorT - the Metal-4 tensor GEMM stamped at verify widths
-require llvm/daslib/f16_cvt  // f16 bit converts for the K-quant superblock fills
+require daslib/f16_cvt  // f16 bit converts for the K-quant superblock fills
 require math  // used only inside the Apple static_if half
 require strings
 

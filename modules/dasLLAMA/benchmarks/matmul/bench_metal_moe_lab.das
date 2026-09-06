@@ -10,7 +10,7 @@ require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarat
 require metal/msl_shader
 require dasllama/dasllama_metal_prefill   // the production MoE mul_mm MSL (zero copy drift)
 require dasllama/dasllama_metal_kernels   // the production MoE GEMV + geglu MSL (zero copy drift)
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require daslib/fio   // used only inside the Apple static_if half
 require math   // used only inside the Apple static_if half
 require daslib/math_bits   // uint_bits_to_float in the lcppe kernel

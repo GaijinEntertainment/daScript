@@ -218,7 +218,7 @@ def write_sitemap(root: Path, entries: list[dict], stories: list[dict], site_url
     newest = entries[0]['date'] if entries else None
     newest_story = stories[0]['date'] if stories else None
     # ONE line: site-dasllama/REVIEW.das reads it as the top-level page census
-    urls = [('', newest), ('stories.html', newest_story), ('ladder.html', None), ('sidecars.html', None)]
+    urls = [('', newest), ('examples.html', None), ('stories.html', newest_story), ('ladder.html', None), ('sidecars.html', None)]
     urls += [(f'stories/{s["slug"]}.html', s['date']) for s in stories]
     body = '\n'.join(
         f'<url><loc>{site_url}/{page}</loc>'

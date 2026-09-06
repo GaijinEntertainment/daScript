@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/tune
 require llvm_tune_scope_client_lib
 
 // Resolver fixture for llvm_tune_scope.das (no [test] on purpose — the suite just compiles

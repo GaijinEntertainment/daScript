@@ -184,20 +184,6 @@ def public valid_jit_max_file_time_override(value : float) : bool {
     return value == -1.0 || value >= 0.0
 }
 
-//! The pure half of the lint gate's rail selection: `--lint-skip-exe-rail`
-//! keeps the host + linux-mirror interp rails and drops the -exe compiled one.
-def public lint_runs_exe_rail(skip_exe_rail : bool) : bool {
-    return !skip_exe_rail
-}
-
-//! The lint gate's Pass detail — the only observable that distinguishes a
-//! full three-rail pass from a rail-skipping one (both return GateStatus.Pass).
-def public lint_pass_detail(n_files : int; ran_exe_rail : bool) : string {
-    return (ran_exe_rail
-        ? "{n_files} file(s) clean on all three rails (host, linux-mirror, exe)"
-        : "{n_files} file(s) clean on interp rails (host, linux-mirror); exe rail skipped")
-}
-
 //! Resolve the read-only per-user config. ``DAS_PREFLIGHT_CONFIG`` overrides
 //! the platform default for hermetic tests and unusual installations.
 def public default_preflight_config_path() : string {

@@ -2,6 +2,7 @@ options gen2
 
 module llvm_tune_scope_client_verlib2 public
 
+require daslib/tune public
 require llvm/daslib/llvm_tune public
 require llvm_tune_scope_verlib  // nolint:STYLE030 — version_of= below names TESTVER by string
 

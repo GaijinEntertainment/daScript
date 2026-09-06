@@ -65,7 +65,8 @@ family's quirk goes in its family file.**
 
 **A change to a kernel, a lexicon, a normalizer rule, or a phoneme rule ships the WER and
 UTMOS of `harness/tts_rig.py`, before and after, on every model the change reaches at the
-rig's voice, in the PR body.**
+rig's voice, in the PR body - unless a corpus-identity cell in `tests/test_tts_g2p.das` proves
+the change moves no phoneme of the 200-sentence corpus, which pins the audio bit for bit.**
 
 **A text normalization or grapheme-to-phoneme error `harness/tts_rig.py`'s transcripts
 expose lands as a failing-first case in `tests/test_tts_textnorm.das` or

@@ -95,10 +95,11 @@ beside it: a projector, a draft head, an assistant sidecar, an image fixture - p
 `companions` of the row that pins its carrier, and names it from every other row that consumes
 it.** Uniqueness itself is `../tests/test_model_specs.das`'s to enforce.
 
-**A diff that adds or changes a `serve_*` field on a row of `model_specs()`, or any `serve_*`
-function in `model_specs.das`, lands `utils/dasllama-server/test_model_catalog.das` (repo
-root) green in the same change** - the serving catalog is a view over these rows, so its gates
-red on a row this folder ships.
+**A diff that changes what any `serve_*` function in `model_specs.das` returns - a `serve_*`
+field on a row, the function's body, or a `companions` entry with a `url` on a row a `serve_*`
+view reads - lands `utils/dasllama-server/test_model_catalog.das` (repo root) green in the same
+change** - the serving catalog is a view over these rows, so its gates red on a row this folder
+ships.
 
 **A convert, a bench, or a tune-state write reached from `fetch_models.das --fetch` is a
 defect - `--fetch` downloads only.** Each has its own home: a conversion recipe runs under

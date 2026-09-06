@@ -11,7 +11,8 @@ require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/json_boost  // read_json / read_json_field (re-exports daslib/json)
-require llvm/daslib/llvm_tune   // the per-app tune sidecar (path, staleness, kernels read)
+require daslib/strings_boost  // nolint:STYLE030,LINT019 - split/find, reached only by the no-framework fallback-chain scan
+require ?llvm llvm/daslib/llvm_tune  // OPTIONAL: the per-app tune sidecar (path, staleness, kernels read)
 
 // ===== Tune spec =====
 
@@ -277,24 +278,36 @@ def private tuned_template_name(func : FunctionPtr; args : AnnotationArgumentLis
     return "{func.name}_template"     // convention: dot -> dot_template
 }
 
-//! The ONE per-app tune sidecar (`<app>.tune.json` beside the root script/binary;
-//! `DAS_TUNE_MANIFEST` env overrides) — shared by `[tuned]` compile-time reads, runtime apply,
-//! `[tune]` generator winners, and the tuner harness write. Loop hints live under `"kernels"`, knobs under `"runtime"`.
+//! The ONE per-app tune sidecar (`<app>.tune.json` beside the root script/binary; `DAS_TUNE_MANIFEST`
+//! env overrides) — shared by `[tuned]` compile-time reads, runtime apply, `[tune]` generator winners,
+//! and the tuner harness write. Hints under `"kernels"`, knobs under `"runtime"`; "" with no framework.
 def box_profile_path() : string {
-    return tune_manifest_path()
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return tune_manifest_path()
+    } else {
+        return ""
+    }
 }
 
 //! The sidecar is older than the running binary — its measurements are dead (the runtime
 //! apply skips it; the compile-time reads already treat it as absent).
 def box_profile_stale() : bool {
-    return tune_sidecar_stale(tune_manifest_path())
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return tune_sidecar_stale(tune_manifest_path())
+    } else {
+        return false
+    }
 }
 
-//! Why the sidecar at `path` would not serve this box: `stale_binary` (a rebuild killed the
-//! kernel winners; the runtime knobs are still this box's state), `foreign_box` / `unreadable`
-//! (another box's state, or not a sidecar), `absent`; anything else reads as fresh and ours.
-def box_profile_verdict_at(path : string) : TuneSidecarReason {
-    return tune_sidecar_verdict(path, "runtime").reason
+//! Why the sidecar at `path` would not serve this box, as the `TuneSidecarReason` NAME - `stale_binary`
+//! (a rebuild killed the kernel winners; the runtime knobs are still this box's state), `foreign_box` /
+//! `unreadable`, `absent`; anything else reads as fresh and ours, and with no framework it is `absent`.
+def box_profile_verdict_at(path : string) : string {   // nolint:LINT012,LINT019 - `path` is read only in the framework arm
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return "{tune_sidecar_verdict(path, "runtime").reason}"
+    } else {
+        return "absent"
+    }
 }
 
 
@@ -306,15 +319,24 @@ def private fallback_perm(args : AnnotationArgumentList) : string {
     let dv = find_arg(args, "fallback")
     if (dv is tString) {
         // ';'-chain of `suffix` or `suffix:requires` — one annotation, a per-ISA default
-        let picked = tune_pick_fallback(dv as tString)
-        if (!empty(picked)) return picked
+        static_if (typeinfo module_exists(llvm_tune)) {
+            let picked = tune_pick_fallback(dv as tString)
+            if (!empty(picked)) return picked
+        } else {
+            // no CPU-feature probe here, so take the first unconditional entry - the chain's ISA-neutral tail
+            for (entry in split(dv as tString, ";")) {
+                if (!empty(entry) && find(entry, ":") < 0) return entry
+            }
+        }
     }
     return DEFAULT_PERM
 }
 
-def private report_perm(fname, perm, source : string) : string {
-    if (tune_verbosity() == "verbose") {
-        print("dasllama_tune: {fname} <- {perm} ({source})\n")
+def private report_perm(fname, perm, source : string) : string {   // nolint:LINT012,LINT019 - `fname`/`source` are read only in the framework arm
+    static_if (typeinfo module_exists(llvm_tune)) {
+        if (tune_verbosity() == "verbose") {
+            print("dasllama_tune: {fname} <- {perm} ({source})\n")
+        }
     }
     return perm
 }
@@ -325,19 +347,25 @@ def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : st
     let fname = "{func.name}"
     let fb = fallback_perm(args)
     g_fallbacks[fname] = fb
-    if (tune_policy_env() == "reference") {
-        // the true kill switch, [tune]'s twin: the template's own loops, no hints stamped
-        return report_perm(fname, "plain", "reference policy")
+    static_if (typeinfo module_exists(llvm_tune)) {
+        if (tune_policy_env() == "reference") {
+            // the true kill switch, [tune]'s twin: the template's own loops, no hints stamped
+            return report_perm(fname, "plain", "reference policy")
+        }
+        let av = find_arg(args, "perm")
+        if (av is tString) return av as tString
+        var pickSource = ""
+        let cfg = tune_kernel_pick(fname, pickSource)
+        if (!empty(cfg)) {
+            return report_perm(fname, cfg, pickSource)
+        }
+        let declared = find_arg(args, "fallback") is tString
+        return report_perm(fname, fb, declared ? "fallback" : "default")
+    } else {
+        // no policy env and no sidecar here: the `perm=` pin still names a row, else the chain's answer
+        let av = find_arg(args, "perm")
+        return av is tString ? av as tString : fb
     }
-    let av = find_arg(args, "perm")
-    if (av is tString) return av as tString
-    var pickSource = ""
-    let cfg = tune_kernel_pick(fname, pickSource)
-    if (!empty(cfg)) {
-        return report_perm(fname, cfg, pickSource)
-    }
-    let declared = find_arg(args, "fallback") is tString
-    return report_perm(fname, fb, declared ? "fallback" : "default")
 }
 
 // Template lives in the compiling module for production `[tuned]`; the profiler harness

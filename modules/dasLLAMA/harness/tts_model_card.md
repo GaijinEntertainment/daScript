@@ -35,10 +35,11 @@ no phonemizer: the front end is data, and the data is in the two packs.
 | `kitten-mini.gguf` | KittenTTS mini 0.8, f32 | 295975008 | `e127a95c6ffa390eccc5956e7156ff055e9f30078cf16361cbcd0eea6c21fdb5` |
 | `kokoro-82m.gguf` | Kokoro-82M v1.0 with its 54 voice packs, f32 | 352965024 | `e0d6584b5b650730bd62e7b105a2e9502384bbe3fbebf3030113560355e6232f` |
 | `tts_g2p.bin` | the grapheme-to-phoneme pack: misaki's gold and silver lexicons in both English dialects (one merged table per tier), CMUdict 0.7a rendered into the American inventory, the g2p_en GRU spelling model | 14011554 | `d7b6afea7a0901a877d10531054d3f967845c58f415f0ea937decd8a3081ccd5` |
+| `tts_g2p_en_us.bin` | the same pack with the American tier alone - no British values, CMUdict pruned of every word the American lexicon carries; the web serving set's pack, British voices are not offered on it | 10257455 | `6f69d2e74565bd7d876b8d1f4042bf8c1c5b615387fa26ff45215cf447932154` |
 | `tts_postag.bin` | the tokenizer exception table and the averaged-perceptron PTB tagger | 12566510 | `38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4` |
 
-The two packs sit beside whichever GGUF you load; the loader reads them from the model's
-directory. The GGUFs carry f32 weights: dasLLAMA quantizes the served layouts to Q8_0 at first
+The packs sit beside whichever GGUF you load; the loader reads them from the model's
+directory - `tts_g2p.bin` when it is there, else `tts_g2p_en_us.bin`. The GGUFs carry f32 weights: dasLLAMA quantizes the served layouts to Q8_0 at first
 load and keeps the result beside the file as a prepared image, so the f32 file is also the
 reference lane.
 

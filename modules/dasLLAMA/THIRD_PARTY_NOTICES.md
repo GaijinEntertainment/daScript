@@ -35,7 +35,7 @@ derive from the Silero VAD project (https://github.com/snakers4/silero-vad), Cop
 ## Text-to-speech front end
 
 The TTS front end and the two TTS families reimplement, and pack data from, the following
-works. The packed files (`tts_g2p.bin`, `tts_postag.bin`, `kitten-nano.gguf`,
+works. The packed files (`tts_g2p.bin` and its American-only twin `tts_g2p_en_us.bin`, `tts_postag.bin`, `kitten-nano.gguf`,
 `kitten-mini.gguf`, `kokoro-82m.gguf`, the `tts_oracle/` dumps) are built by the `harness/` scripts into the
 model store (`performance/build_tts_data.das`), each beside a license file naming these
 sources; nothing under this repository redistributes the data itself.

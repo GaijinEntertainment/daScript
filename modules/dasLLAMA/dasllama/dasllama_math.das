@@ -16,7 +16,7 @@ require dasllama/dasllama_tune  // [tuned]: reconstitute dot from dot_template w
 require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb — the fmt-id kq plane strides
 require dasllama/dasllama_gpu_tier public  // the device-cooperation seam (split out 2026-07-29) — re-exported for the 112 requirers
-require llvm/daslib/f16_cvt  // f16<->f32 converts: JIT half intrinsics on aarch64 / x64+F16C, exact bit-twiddle elsewhere
+require daslib/f16_cvt  // f16<->f32 converts: JIT half intrinsics on aarch64 / x64+F16C, exact bit-twiddle elsewhere
 
 // dasLLAMA numeric primitives — naive fp32 baseline (curriculum step 1).
 // Correctness first; optimization (blocking, float4, threading) comes later.
@@ -25,11 +25,20 @@ require llvm/daslib/f16_cvt  // f16<->f32 converts: JIT half intrinsics on aarch
 // can be passed zero-copy as views into one big model blob and outputs can be written
 // straight into a view (e.g. the KV cache). Dims/indices are int64 for large models.
 
-//! The library-seam ``-jit`` stop: dasLLAMA inference NEVER runs interpreted (kernels 10-40x
-//! slower). Inference seams call it; scaffolding that only parses or peeks never crosses it.
+//! True when the engine's kernels are the C++ the AOT emitter produced - the host linked this
+//! module's stubs (examples/dasLLAMA, `-use-aot`). A runtime probe of one kernel's binding, not
+//! `aot_enabled()`: that one folds at compile time, differently under AOT generation and the
+//! AOT-consuming run, and would desync every caller's semantic hash (error[50101]).
+def aot_kernels_linked() : bool {
+    return is_aot_function(@@ < (var x : float?; size : int64) : void > silu)
+}
+
+//! The library-seam compiled-tier stop: dasLLAMA inference NEVER runs interpreted (kernels 10-40x
+//! slower). The JIT, a standalone exe, and linked AOT stubs each pass; inference seams call it,
+//! scaffolding that only parses or peeks never crosses it.
 def guard_interp_inference(what : string) {
-    if (!jit_enabled() && !is_standalone_exe()) {
-        panic("dasLLAMA: {what} requires -jit (or a compiled exe) - interpreted inference runs the kernels 10-40x slower")
+    if (!jit_enabled() && !is_standalone_exe() && !aot_kernels_linked()) {
+        panic("dasLLAMA: {what} requires -jit, a compiled exe, or an AOT host with the engine's stubs (-use-aot) - interpreted inference runs the kernels 10-40x slower")
     }
 }
 
@@ -287,7 +296,7 @@ def dasllama_jobque_threads_cap() {
 // Elsewhere mode 2 is a REAL mask — stays opt-in. DAS_JOBQUE_AFFINITY and app calls override.
 [init]
 def dasllama_jobque_affinity_default() {
-    if (get_platform_name() == "darwin" && get_jobque_affinity() < 0) {
+    if (get_platform_name() == "darwin" && empty(get_target_triple()) && get_jobque_affinity() < 0) {   // the HOST's darwin, never a cross artifact's
         set_jobque_affinity(2)
     }
 }
@@ -2046,9 +2055,9 @@ def matmul_q8q8(var y : array<float>; wq : array<int8>; ws : array<float>; woff 
     }
 }
 
-//! Batched Q8·Q8 GEMM for prefill: same weight-stationary nest as matmul_batch over the SDOT kernel.
-//! Activations PRE-quantized per token into (xq [ntok x n], xs [ntok x n/32]). Y token-major
-//! [ntok x d]. Bit-for-bit ntok× matmul_q8q8. Dispatches to the active backend. n % 32 == 0.
+//! Batched Q8·Q8 GEMM for prefill over PRE-quantized activations (xq [ntok x n], xs [ntok x n/32]),
+//! Y token-major [ntok x d], n % 32 == 0. Bit-for-bit ntok× matmul_q8q8 on the portable backend;
+//! a generated backend's tile and token-tail perms fold differently (test_q8q8_family holds them within the dot's envelope).
 def matmul_q8q8_batch(var y : array<float>; wq : array<int8> | #; ws : array<float> | #; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
     unsafe {
         invoke(g_mm_q8q8_batch, addr(y[0]),

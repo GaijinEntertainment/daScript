@@ -179,17 +179,21 @@ let g_intrin_lookup <- {
     "math::normalize" => @@intrinsic_math_normalize
 }
 
-// AArch64 NEON intrinsics (the llvm/aarch64_neon header), consulted only when the JIT target is
+// AArch64 NEON intrinsics (the daslib/aarch64_neon module), consulted only when the JIT target is
 // aarch64. On any other target has_intrinsic returns false for these keys and the call's own
 // daslang body — the portable fallback in the declaring module — compiles as a normal function.
 // That silent degrade-to-fallback contract holds for every table in this section.
 let g_aarch64_intrin_lookup <- {
+    "aarch64_neon::tbl16_lo" => @@intrinsic_tbl16,
+    "aarch64_neon::tbl16_hi" => @@intrinsic_tbl16
+}
+let g_aarch64_dotprod_intrin_lookup <- {   // ARMv8.2 DotProd
     "aarch64_neon::sdot4" => @@intrinsic_sdot4,
     "aarch64_neon::sdot4_laneq" => @@intrinsic_sdot4_laneq,
     "aarch64_neon::sdot4_w" => @@intrinsic_sdot4_w,
-    "aarch64_neon::sdot4_laneq_w" => @@intrinsic_sdot4_laneq_w,
-    "aarch64_neon::tbl16_lo" => @@intrinsic_tbl16,
-    "aarch64_neon::tbl16_hi" => @@intrinsic_tbl16,
+    "aarch64_neon::sdot4_laneq_w" => @@intrinsic_sdot4_laneq_w
+}
+let g_aarch64_i8mm_intrin_lookup <- {   // ARMv8.6 i8mm
     "aarch64_neon::smmla" => @@intrinsic_smmla
 }
 
@@ -223,7 +227,7 @@ let g_x64_avx512vnni_intrin_lookup <- {   // zmm VPDPBUSD (the bw gate is a prer
     "x64_avx::dot64_acc16_vnni" => @@intrinsic_dot64_acc16_vnni_x64
 }
 
-// Half<->float converts (the llvm/daslib/f16_cvt module) — one TARGET-INDEPENDENT table, consulted
+// Half<->float converts (the daslib/f16_cvt module) — one TARGET-INDEPENDENT table, consulted
 // when the target lowers fpext/fptrunc through half in hardware: any aarch64 (scalar fcvt is
 // ARMv8.0 baseline, no finer gate) or x86-64 with F16C (g_target_x64_f16c). Elsewhere the calls
 // compile their exact bit-twiddle daslang bodies — a half convert without hardware support would
@@ -276,6 +280,16 @@ def public has_intrinsic(expr : ExprCallFunc?) {
             result = true
         }
     }
+    if (!result && g_target_arm64_dotprod) {
+        g_aarch64_dotprod_intrin_lookup |> get(call_name) $(_pfun) {
+            result = true
+        }
+    }
+    if (!result && g_target_arm64_i8mm) {
+        g_aarch64_i8mm_intrin_lookup |> get(call_name) $(_pfun) {
+            result = true
+        }
+    }
     if (!result && g_target_x64_avx2) {
         g_x64_intrin_lookup |> get(call_name) $(_pfun) {
             result = true
@@ -317,6 +331,16 @@ def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder
     }
     if (result == null && g_target_is_aarch64) {
         g_aarch64_intrin_lookup |> get(call_name) $(pfun) {
+            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
+        }
+    }
+    if (result == null && g_target_arm64_dotprod) {
+        g_aarch64_dotprod_intrin_lookup |> get(call_name) $(pfun) {
+            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
+        }
+    }
+    if (result == null && g_target_arm64_i8mm) {
+        g_aarch64_i8mm_intrin_lookup |> get(call_name) $(pfun) {
             result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
         }
     }
@@ -1513,10 +1537,6 @@ def intrinsic_math_sinh_cosh_tanh(var ctx : JitCtx; expr : ExprCallFunc?; argume
 }
 
 // ===== the idot family: exact integer dots on the 8-bit lattice =====
-// Two lowerings: the signed x signed form emits ONE @llvm.aarch64.neon.sdot on the aarch64
-// host-features rail (g_target_host_features = exactly when +dotprod is force-appended, see
-// init_jit_target_flags); everything else gets generic widen-multiply IR. The AArch64 backend
-// does NOT fold the generic form to SDOT (probe: zip/uzp/smull expansion), hence the native arm.
 // The unsigned x signed form needs USDOT (i8mm — absent on M1); it rides the i8mm un-gate item.
 def private idot_products(var ctx : JitCtx; expr : ExprCallFunc?; a, b : LLVMOpaqueValue?; aIdx : int) : LLVMOpaqueValue? {   // nolint:LINT014 — shared by the idot intrinsics
     let v16i32 = LLVMVectorType(ctx.types.t_int32, 16u)
@@ -1543,9 +1563,55 @@ def private idot_sdot_aarch64(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : 
     return LLVMBuildCall2(ctx.builder, fnTy, decl, callArgs, "idot4")
 }
 
+// The exact wasm SIMD128 int8 dot: extmul halves + pairwise widening adds + one even/odd fold. Returns
+// null when this LLVM lacks the pairwise intrinsic, so callers fall through to the generic lowering.
+[arch(at = "../ARCHITECTURE.md#idot-lowerings")]
+def private idot_wasm_simd128(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let v8i16 = LLVMVectorType(ctx.types.t_int16, 8u)
+    let v4i32 = ctx.types.LLVMInt4Type()
+    let id = LLVMLookupIntrinsicID("llvm.wasm.extadd.pairwise.signed")
+    var declTypes <- [v4i32]                        // overloaded on the widened result vector type
+    var decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, declTypes) : null
+    if (decl == null) {
+        return null
+    }
+    var fnArgTypes <- [v8i16]
+    var fnTy = LLVMFunctionType(v4i32, fnArgTypes)
+    let alo = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, a, a, [0, 1, 2, 3, 4, 5, 6, 7], ""), v8i16, "")
+    let ahi = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, a, a, [8, 9, 10, 11, 12, 13, 14, 15], ""), v8i16, "")
+    let blo = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, b, b, [0, 1, 2, 3, 4, 5, 6, 7], ""), v8i16, "")
+    let bhi = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, b, b, [8, 9, 10, 11, 12, 13, 14, 15], ""), v8i16, "")
+    var plo <- [LLVMBuildMul(ctx.builder, alo, blo, "idot_lo")]
+    var phi <- [LLVMBuildMul(ctx.builder, ahi, bhi, "idot_hi")]
+    let qlo = LLVMBuildCall2(ctx.builder, fnTy, decl, plo, "idot_pairs_lo")
+    let qhi = LLVMBuildCall2(ctx.builder, fnTy, decl, phi, "idot_pairs_hi")
+    let even = LLVMBuildShuffleVector(ctx.builder, ctx.types, qlo, qhi, [0, 2, 4, 6], "")
+    let odd = LLVMBuildShuffleVector(ctx.builder, ctx.types, qlo, qhi, [1, 3, 5, 7], "")
+    var s = LLVMBuildAdd(ctx.builder, even, odd, "idot4")
+    if (acc != null) {
+        s = LLVMBuildAdd(ctx.builder, acc, s, "idot4_acc")
+    }
+    return s
+}
+
+[arch(at = "../ARCHITECTURE.md#idot-lowerings")]
 def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let aUnsigned = expr.arguments[0]._type.vectorBaseType == Type.tUInt8
-    if (g_target_is_aarch64 && g_target_host_features && !aUnsigned) {
+    if (g_target_is_wasm && !aUnsigned) {
+        let v4i32 = ctx.types.LLVMInt4Type()
+        var s = idot_wasm_simd128(ctx, null, arguments[0], arguments[1])
+        if (s != null) {
+            let rid = LLVMLookupIntrinsicID("llvm.vector.reduce.add")
+            var rtys <- [v4i32]
+            var rdecl = rid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, rid, rtys) : null
+            if (rdecl != null) {
+                var rtyp = LLVMFunctionType(ctx.types.t_int32, [v4i32])
+                var rargs <- [s]
+                return LLVMBuildCall2(ctx.builder, rtyp, rdecl, rargs, "idot")
+            }
+        }
+    }
+    if (g_target_arm64_dotprod && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var s = idot_sdot_aarch64(ctx, LLVMConstNull(v4i32), arguments[0], arguments[1])
         if (s != null) {
@@ -1577,7 +1643,13 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
     let hasAcc = length(arguments) == 3
     let aIdx = hasAcc ? 1 : 0
     let aUnsigned = expr.arguments[aIdx]._type.vectorBaseType == Type.tUInt8
-    if (g_target_is_aarch64 && g_target_host_features && !aUnsigned) {
+    if (g_target_is_wasm && !aUnsigned) {
+        var s = idot_wasm_simd128(ctx, hasAcc ? arguments[0] : null, arguments[aIdx], arguments[aIdx + 1])
+        if (s != null) {
+            return s
+        }
+    }
+    if (g_target_arm64_dotprod && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var acc = hasAcc ? arguments[0] : LLVMConstNull(v4i32)
         var s = idot_sdot_aarch64(ctx, acc, arguments[aIdx], arguments[aIdx + 1])

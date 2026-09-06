@@ -41,8 +41,9 @@ require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
 require dasllama/dasllama_convert
 require dasllama/dasllama_gguf   // transcode_q*k_superblock — the kq fixture pack rail
-require llvm/daslib/f16_cvt   // f32_to_f16 — the kq fixtures pack disk superblock headers
+require daslib/f16_cvt   // f32_to_f16 — the kq fixtures pack disk superblock headers
 require llvm/daslib/llvm_tune
+require daslib/tune             // [tune_policy] - inert without dasLLVM
 require daslib/random
 require daslib/json   // JsonValue — the null runtime arg of the deferred sidecar merge
 require daslib/json_boost   // JV over tuples — the per-variant race rows

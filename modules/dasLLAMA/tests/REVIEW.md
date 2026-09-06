@@ -45,8 +45,8 @@ or skip condition.** A clause that only names the file (a brace list, a suite ro
 nothing to correct.
 
 **A diff that changes `run.das`'s flag surface - a flag, a suite name, an area name, or what a
-flag runs - corrects `CLAUDE.md`'s "Run suites ONLY through the runner" block and
-`../CLAUDE.md`'s "Test workflow" section in the same change.** Both restate the surface for an
+flag runs - adds it to or corrects it in `CLAUDE.md`'s "Run suites ONLY through the runner" block
+and `../CLAUDE.md`'s "Test workflow" section in the same change.** Both restate the surface for an
 agent that reads them cold; a copy the code has left behind sends that agent to a flag that no
 longer does what the text says.
 
@@ -172,12 +172,12 @@ which can wrongly satisfy a tolerant compare.
 transcript against a reference leg, external dump or CPU control alike.
 
 **A test in this folder that loads a stocked artifact whose producer the test cannot name is a
-defect.** Stocked artifacts are model files, mmprojs, image fixtures, and oracle dumps. Any
-one of these names the producer: a row in `../performance/model_specs.das`; a row's
+defect.** A stocked artifact is anything the test reads out of `models_dir()` that this repo's
+build does not produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps.
+Any one of these names the producer: a row in `../performance/model_specs.das`; a row's
 `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
-script beside `model_specs.das` in `../performance/`. For an oracle dump, the mint script
-stocked beside the dumps under `models_dir()` also counts, and the test that loads the dump
-names it.
+script beside `model_specs.das` in `../performance/`; for an oracle dump, the mint script stocked
+beside the dumps under `models_dir()`, named by the test that loads the dump.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header -
 the backend, the flash-attention setting, and the mmproj precision the dump came from - is a
@@ -213,10 +213,10 @@ one CPU inference reads) and the stages a decode override selects on that model'
 (`blob_twin(t, path, seq_cap)`, `test_metal_decode_parity.das`), in one session.** The planar
 model and its blob twin share one shape, so one session serves both.
 
-**A diff that adds a model-loading block to a `run.das` MODEL suite (every suite the
-`--family` filter reaches - not the model-free suite) tags it with its family.** The family
-tag is the token passed to `family_on(t, name)` (`_model_tier.das`). An untagged block
-silently joins every family's gate.
+**A diff that adds a model-loading block to a `run.das` MODEL suite (`decode`, `mtp`, `prefill`,
+`matrix`, `image`, `image-vulkan`, `coverage` - not `model-free` or `stocked`) tags it with its
+family.** The family tag is the token passed to `family_on(t, name)` (`_model_tier.das`). An
+untagged block silently joins every family's gate.
 
 **No CPU-control batch parity runs against `Llama-3.3-70B-Instruct-Q4_K_M.gguf`.** The
 batched code paths get their parity on small models, through pins.

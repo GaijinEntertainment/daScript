@@ -126,7 +126,9 @@ Annotation traits all carry the `struct_` prefix - plain `has_annotation` does n
 argument to already be a struct or handled type, `safe_has_field` does not. `<name>` takes the
 bare field name, not a string: `typeinfo safe_has_field<hp>(obj)`.
 
-**Existence** - `builtin_module_exists(name)` (how a binding is made optional),
+**Existence** - `builtin_module_exists(name)` (a module registered in the process - how a
+C++ binding is made optional), `module_exists(name)` (a module visible from the compiling module,
+C++ or das - the check behind a guarded require's target, same answer inside a tool's nested compile),
 `builtin_annotation_exists(type<T>)` (true for registered native types),
 `builtin_function_exists(@@<sig> name)` (native functions only - a daslang-defined function is a
 compile error here).

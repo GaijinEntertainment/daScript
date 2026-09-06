@@ -4,6 +4,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_g2p
 require dasllama/dasllama_postag
+require dasllama/dasllama_tts   // g2p_pack_path - the directory rule the facade loads by
 require strings
 require daslib/strings_boost
 require daslib/fio
@@ -11,6 +12,7 @@ require dasllama/dasllama_unicode   // utf8_to_cpts: the inventory sweep reads c
 require _tts_corpus
 require _tts_corpus_gb
 require _model_tier   // models_dir(): tts_g2p.bin and tts_postag.bin live in the model store
+require daslib/rtti   // this_context().last_exception: the American-only pack's British refusal is read as text
 
 // TTS grapheme-to-phoneme against the 200-sentence corpus: phoneme-identical with the reference
 // front end (arm E of the fidelity experiment, fed the same normalized text), the heteronym
@@ -244,6 +246,67 @@ def private write_pack_header(path : string; version : int) {
         uint8(version), uint8(0), uint8(0), uint8(0), uint8(0), uint8(0)]
     fwrite(f, bytes)
     fclose(f)
+}
+
+[test]
+def test_us_only_pack(t : T?) {
+    t |> run("the American-only pack reads the corpus as the full pack does and refuses British") @(t : T?) {
+        return if (!data_present(t))
+        let us_path = path_join(models_dir(), "tts_g2p_en_us.bin")
+        if (!stat(us_path).is_valid) {
+            t |> skip("tts_g2p_en_us.bin absent in {models_dir()}")
+            return
+        }
+        let full <- load_g2p(g2p_path())
+        let us <- load_g2p(us_path)
+        let tg <- load_pos_tagger(tagger_path())
+        t |> success(!full.us_only, "the full pack carries both tiers")
+        t |> success(us.us_only, "the American pack says so in its source line: {us.source}")
+        let rows <- load_tts_corpus()
+        var differs = 0
+        for (r in rows) {
+            let a = g2p_phonemize(full, tg, r.norm)
+            let b = g2p_phonemize(us, tg, r.norm)
+            if (a != b) {
+                differs++
+                to_log(LOG_INFO, "tts g2p us-only differs {r.id}: full {a}\n       us   {b}\n")
+            }
+        }
+        t |> equal(differs, 0, "American readings identical on {length(rows)} sentences")
+        var refused = ""
+        try {
+            let gb = g2p_phonemize(us, tg, "the water is warm", true)
+            to_log(LOG_INFO, "tts g2p us-only british read: {gb}\n")
+        } recover {
+            refused = this_context().last_exception
+        }
+        t |> success(find(refused, "American tier only") >= 0, "British on the American pack is refused by name: {refused}")
+        let gb_full = g2p_phonemize(full, tg, "the water is warm", true)
+        t |> success(!empty(gb_full), "the control: the full pack reads British")
+    }
+    t |> run("the directory rule: the full pack wins where both sit, the American twin serves alone, an empty directory panics") @(tt : T?) {
+        return if (!data_present(tt))
+        let us_path = path_join(models_dir(), "tts_g2p_en_us.bin")
+        if (!stat(us_path).is_valid) {
+            tt |> skip("tts_g2p_en_us.bin absent in {models_dir()}")
+            return
+        }
+        tt |> equal(g2p_pack_path(models_dir()), g2p_path(), "both packs beside the models: the full pack wins")
+        let only_us = tmp_path("packs_us")
+        mkdir(only_us)
+        write_pack_header(path_join(only_us, "tts_g2p_en_us.bin"), 2)   // the path rule stats, it never reads
+        tt |> equal(g2p_pack_path(only_us), path_join(only_us, "tts_g2p_en_us.bin"), "the American twin serves alone")
+        let none = tmp_path("packs_none")
+        mkdir(none)
+        var refused = ""
+        try {
+            let p : string = g2p_pack_path(none)
+            to_log(LOG_INFO, "tts g2p pack path on an empty dir answered {p}\n")
+        } recover {
+            refused = this_context().last_exception
+        }
+        tt |> success(find(refused, "no phoneme pack") >= 0, "an empty directory panics naming the packs it lacks: {refused}")
+    }
 }
 
 [test]

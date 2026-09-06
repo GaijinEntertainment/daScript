@@ -1,7 +1,7 @@
 # dasLLAMA architecture - text to speech
 
 The companion `ARCHITECTURE.md` indexes: the TTS file charters (sec.1.7c) and the mechanisms the
-TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the contract.
+TTS files implement (sec.2.28-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) is the contract.
 
 ## 1. File charters
 
@@ -44,7 +44,8 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   the DRESS vowel before a linking rhotic as SQUARE, having nothing in the string to tell merry
   from Mary. A vowel the two lexicons give no evidence for before a dropped rhotic keeps that
   rhotic rather than losing it. The bath-trap split reaches only lexicon
-  words. Loads `tts_g2p.bin`, pack
+  words. Loads a phoneme pack - `tts_g2p.bin` (both dialect tiers) or `tts_g2p_en_us.bin` (the
+  American tier alone, sec.2.43) - pack
   version 2 (`harness/build_g2p_data.py`: the gold tier extended by
   `harness/g2p_local_additions.json`, the US and GB keys merged into one string table per
   tier, the GRU stored as f16, CMUdict pruned of the words both dialects' lexicons carry -
@@ -56,7 +57,9 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   parity rails for all three stages.
 - **`dasllama_tts_types.das`** - the TTS floor: `TtsCaps`, `TtsAudio` (f32 PCM + rate), `TtsNoise`
   (the source noise a synthesis consumed - captured from the oracle, or drawn into a reused
-  carrier). Family files require this, never each other.
+  carrier), and the two family data records the shared carrier serializes - `KittenFamily` (speed
+  priors, voice aliases) and `KokoroFamily` (the symbol vocabulary) - plain data, no family logic.
+  Family files require this, never each other.
 - **`dasllama_tts_blocks.das`** - the StyleTTS2-lineage block home, the TTS twin of
   `dasllama_tower.das`, in the two layouts of sec.2.28: Conv1d (dense, depthwise, forward and
   transposed), the dense layer, LayerNorm over rows and over channels, InstanceNorm and AdaIN,
@@ -85,23 +88,27 @@ TTS files implement (sec.2.28-2.35). `ARCHITECTURE_COMMON.md` (repo root) is the
   rows-form input, the style and the source spectrum as rows and answers with the waveform or
   declines; the SineGen phase chain and the harmonic STFT stay on the CPU in both routes
   (sec.2.33), the trace rail keeps the CPU chain, and engage is read from the counters. No
-  driver fills the slot yet. The assembly names no family; a family's quirk lives in its family
-  file.
+  driver fills the slot yet. The carrier also holds each family's DATA - the `KittenFamily` /
+  `KokoroFamily` records of `dasllama_tts_types.das`, read from the GGUF's `kitten.*` /
+  `kokoro.symbol_*` metadata by `stage_family_data` - because the image meta serializes them and a
+  `.dlim` load has no GGUF to read them from (sec.2.32); the family LOGIC that interprets those
+  records lives in the family files.
 - **`dasllama_kitten.das`** - the KittenTTS family (nano and mini): the reference driver's symbol
-  table, re-spacing rule and style-row rule (the chunk's character count), its speed priors and
-  voice aliases (`kitten.*` metadata), its 5000-sample tail trim, and the rewrite of the front
-  end's inventory into the espeak-style IPA these models consume. A phoneme the symbol table
+  table, re-spacing rule and style-row rule (the chunk's character count), how the speed priors
+  and voice aliases of its `KittenFamily` record are applied, its 5000-sample tail trim, and the
+  rewrite of the front end's inventory into the espeak-style IPA these models consume. A phoneme the symbol table
   does not carry takes its separator space with it, so a dropped symbol never leaves a doubled
   space token where the model was trained on none.
 - **`dasllama_kokoro.das`** - the Kokoro family (Kokoro-82M): the reference pipeline's
-  vocabulary (`kokoro.symbol_*` metadata - the front end's own inventory, no rewrite), its token
-  wrapping and style-row rule (the phoneme string's character count less one). Fifty-four voice
+  vocabulary (the `KokoroFamily` symbol record - the front end's own inventory, no rewrite), its
+  token wrapping and style-row rule (the phoneme string's character count less one). Fifty-four voice
   packs of 510 rows, each named `<language><f|m>_<name>`; a pack's language is read from that
   shape and only from it, because the language letters are ordinary first letters of ordinary
   names, so a name of any other shape has no language rather than the one its first letter spells.
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
-  picked by `general.architecture`; `tts_g2p.bin` and `tts_postag.bin` read from the GGUF's
-  directory; the packs it leaves out are named once in the log), `caps` (the voices the front
+  picked by `general.architecture` - from a GGUF or from a prepared `.dlim`; the phoneme pack
+  and `tts_postag.bin` read from the model's directory, the full pack preferred over the
+  American-only twin, sec.2.43; the packs it leaves out are named once in the log), `caps` (the voices the front
   end can drive - a Kokoro pack's name carries its language, and only the languages the family
   declares are listed or accepted; the rest refuse with the language in the message, or, where
   the name carried none, with the fact that the front end cannot phonemize it), `tts_voice_lang`
@@ -223,8 +230,14 @@ control). Two lanes, each its own image: `tts-q8`, the served default - the rows
 weights as Q8_0 quants in an int8 plane repacked for the box's backend, the tag config-bound -
 and `tts-f32`, the file's planes under a config-free tag, the reference lane the parity rail
 and the block test hold against, which carries no optimization duty: the rig held q8 at f32
-quality, and f32 costs memory for nothing. The meta blob carries the scalars, the spans and the
-voice roster through the leaf structs' own `serialize` overloads; the loader binds every weight
+quality, and f32 costs memory for nothing. The meta blob carries the scalars, the spans, the
+voice roster and the family's driver data (Kitten's per-voice speed priors and alias names,
+Kokoro's symbol table - staged from the GGUF's `kitten.*` / `kokoro.*` keys with the weights)
+through the leaf structs' own `serialize` overloads, so an image serves without its GGUF: a
+`.dlim` path maps the lane the file was baked on, whatever the policy asks (`load_styletts2`
+tries the policy's tag first, then the other), and `dasllama-convert` bakes one offline
+(`bake_styletts2_image`, `-o` anywhere) under a supplied `--config` for another box's identity.
+The loader binds every weight
 array as a borrowed view over the mapped plane after the parse (post-load runs before the
 planes bind), so the carrier and every struct holding it take an explicit `finalize`. The
 layout fingerprint refuses a struct-shape change by name; a served-layout change that keeps the
@@ -266,3 +279,13 @@ exposes `expected` so the normalizer cell and the rig read the one correction; t
 (`harness/mint_tts_g2p_fixture.py`) carries the table so a re-mint reproduces it. The reference
 line is the reference arms' own WAVs re-scored from the experiment's transcripts on the same
 forms with the same scorer, the clock suffix ("a m", "am") counted as one word on both sides.
+
+### 2.43 The phoneme pack ships in two tiers {#tts-g2p-pack-tiers}
+
+`build_g2p_data.py` mints two packs from one source: `tts_g2p.bin`, carrying both dialect tiers,
+and `tts_g2p_en_us.bin` under `--dialect us`, the American tier alone - four megabytes smaller,
+and what the web serving set ships. A pack names its own tier in its source line, which `load_g2p`
+reads into `G2pModel.us_only`. `load_tts_model` takes the full pack from the model's directory when
+it is there and the American-only twin otherwise, and panics when neither is. On the American-only
+pack `g2p_phonemize` refuses a British request by name and `caps` offers no British voice, so a
+Kokoro `bf_*` / `bm_*` pack is simply not on the list.

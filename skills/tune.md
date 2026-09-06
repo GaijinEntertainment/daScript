@@ -1,11 +1,20 @@
 # Kernel tuning - `[tune]` and the per-app tune sidecar
 
-`llvm/daslib/llvm_tune` turns **one reference function into a tuned kernel
-family**: a grid of code-generation permutations, a per-app record of which
-one wins, and a small policy rail that keeps an application honest about
-whether it is running tuned code. It sits on top of `[llvm_code]` (the
-JIT-time external code generator), so the family only *generates* under the
-LLVM JIT; on every other tier the reference body runs verbatim.
+`daslib/tune` turns **one reference function into a tuned kernel family**: a
+grid of code-generation permutations, a per-app record of which one wins, and
+a small policy rail that keeps an application honest about whether it is
+running tuned code. It sits on top of `[llvm_code]` (the JIT-time external
+code generator), so the family only *generates* under the LLVM JIT; on every
+other tier the reference body runs verbatim.
+
+`daslib/tune` registers all six annotations - `[tune]`, `[tune_perm]`,
+`[tune_companion]`, `[tune_scope]`, `[tune_policy]`, `[llvm_code]` - and the
+default-policy pass; the framework behind them is `llvm/daslib/llvm_tune`,
+which `daslib/tune` reaches through the `?llvm` witness guard (present exactly when the build is configured with dasLLVM) and re-exports; a direct `require llvm/daslib/llvm_tune` marks a program as framework-only - without dasLLVM its files still compile, but the shells are inert and no `<name>_variants()` registry exists. **Any program
+that reaches the framework through `daslib/tune` alone can spell the annotations and compile whether or not dasLLVM is configured.**
+Without dasLLVM every one of them does nothing at all - no sidecar read, no
+stamp, no `<name>_variants()` registry, no tuner spawn - and the reference
+body IS the function.
 
 The design goal is that a shipped application reaches *its own box's* floor
 with **defaults that are data** - a small JSON sidecar - rather than a fork
@@ -38,7 +47,7 @@ under `"kernels"`, library runtime knobs under `"runtime"`.
 ```das
 
 options gen2
-require llvm/daslib/llvm_tune
+require daslib/tune
 
 // one reference function, a grid of [llvm_code] generator permutations,
 // and a per-ISA fallback for an app with no sidecar yet.
@@ -169,10 +178,10 @@ CPU class's profile at compile time instead of racing.
 ```{warning}
 
 The default-`auto` policy fires only for app roots that **see**
-`llvm_tune` - a library owning scopes must re-export it
-(`require llvm/daslib/llvm_tune public`), or its apps silently get no
-default policy. Re-export `llvm_tune` alone, not your module's whole
-public surface (a blanket `public` on a module that also re-exports
+`daslib/tune` - a library owning scopes must re-export it
+(`require daslib/tune public`), or its apps silently get no default
+policy. Re-export `daslib/tune` alone, not your module's whole public
+surface (a blanket `public` on a module that also re-exports
 `jobque_boost` floods requirers with name ambiguities).
 ```
 

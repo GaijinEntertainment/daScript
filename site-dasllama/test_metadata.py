@@ -11,6 +11,7 @@ REPO_ROOT = ROOT.parent
 # and REVIEW.das reads this list to hold each served .html to it
 PAGES = {
     "index.html": "https://dasllama.io/",
+    "examples.html": "https://dasllama.io/examples.html",
     "stories.html": "https://dasllama.io/stories.html",
     "ladder.html": "https://dasllama.io/ladder.html",
     "sidecars.html": "https://dasllama.io/sidecars.html",

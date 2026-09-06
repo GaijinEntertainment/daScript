@@ -2042,32 +2042,36 @@ namespace das
         #endif
     }
 
-    // The cross-compilation TARGET platform, or "" on a normal (non-cross) run.
-    // Unlike get_platform_name() (the host, a compile-time #if), this reads the
-    // active jit cross-compile target from the command line (`--jit-target=<triple>`
-    // after `--`) -- already in g_CommandLineArguments at process start, so it is
-    // valid at .das_module-initialize time, before the jit codegen macro runs.
-    // Lets a .das_module register a target-native module only when cross-compiling
-    // for that target (e.g. dasOpenGL registers its wasm GLES3 module for emscripten,
-    // while a normal desktop run keeps the pure-das opengl.das). Only the wasm triple
-    // is mapped today (-> "emscripten"); other cross targets return "".
-    const char * das_get_cross_platform_name() {
+    // The --jit-target triple this compile emits for, "" on a native compile. Read from the
+    // command line (`--jit-target=<triple>` or `--jit-target <triple>` after `--`), already in
+    // g_CommandLineArguments at process start, so it is valid at .das_module-initialize time,
+    // before the jit codegen macro runs. A property of the whole compile (the triple is fixed
+    // before the first module parses), so the folds below are compile-time constants: an artifact
+    // for another machine decides its tiers from the target. das_get_cross_platform_name maps the
+    // triple to a platform name - only the wasm triples are mapped today (-> "emscripten"), which
+    // lets a .das_module register a target-native module only when cross-compiling for that
+    // target (dasOpenGL registers its wasm GLES3 module for emscripten; a desktop run keeps the
+    // pure-das opengl.das).
+    const char * das_get_target_triple() {
         char ** argv = (char **) g_CommandLineArguments.data;
         uint64_t n = g_CommandLineArguments.size;
+        const char * found = "";   // the LAST occurrence wins, as every other argv reader here takes it
         for ( uint64_t i=0; i<n; ++i ) {
             const char * a = argv[i];
             if ( !a ) continue;
-            const char * triple = nullptr;
             if ( strncmp(a, "--jit-target=", 13)==0 ) {
-                triple = a + 13;
-            } else if ( strcmp(a, "--jit-target")==0 && i+1<n ) {
-                triple = argv[i+1];
-            }
-            if ( triple ) {
-                if ( strncmp(triple, "wasm", 4)==0 || strstr(triple, "emscripten") ) return "emscripten";
-                return "";
+                found = a + 13;
+            } else if ( strcmp(a, "--jit-target")==0 && i+1<n && argv[i+1] ) {
+                found = argv[i+1];
             }
         }
+        return found;
+    }
+
+    const char * das_get_cross_platform_name() {
+        const char * triple = das_get_target_triple();
+        if ( !triple[0] ) return "";
+        if ( strncmp(triple, "wasm", 4)==0 || strstr(triple, "emscripten") ) return "emscripten";
         return "";
     }
 
@@ -2081,11 +2085,28 @@ namespace das
             return "arm64";
         #elif defined(__arm__) || defined(_M_ARM)
             return "arm";
-        #elif defined(__EMSCRIPTEN__)
+        #elif defined(__wasm64__)
+            return "wasm64";
+        #elif defined(__EMSCRIPTEN__) || defined(__wasm32__)
             return "wasm32";
         #else
             return "unknown";
         #endif
+    }
+
+    // the architecture the compile EMITS for: the target triple's on a cross-compile, the host's
+    // otherwise. get_architecture_name is a #if on the host compiler, so a kernel-tier gate that
+    // asks it registers the host's tiers into a foreign artifact; this is the one such a gate asks.
+    const char * das_get_target_architecture_name() {
+        const char * triple = das_get_target_triple();
+        if ( !triple[0] ) return das_get_architecture_name();
+        if ( strncmp(triple, "wasm64", 6)==0 ) return "wasm64";
+        if ( strncmp(triple, "wasm", 4)==0 ) return "wasm32";
+        if ( strncmp(triple, "x86_64", 6)==0 || strncmp(triple, "amd64", 5)==0 ) return "x86_64";
+        if ( strncmp(triple, "aarch64", 7)==0 || strncmp(triple, "arm64", 5)==0 ) return "arm64";
+        if ( strncmp(triple, "i386", 4)==0 || strncmp(triple, "i686", 4)==0 ) return "x86";
+        if ( strncmp(triple, "arm", 3)==0 || strncmp(triple, "thumb", 5)==0 ) return "arm";
+        return "unknown";
     }
 
 #if defined(__aarch64__) || defined(_M_ARM64)
@@ -2926,6 +2947,12 @@ namespace das
             SideEffects::none, "das_get_cross_platform_name");
         addExternInline<DAS_BIND_FUN(das_get_architecture_name)>(*this, lib, "get_architecture_name",
             SideEffects::none, "das_get_architecture_name");
+        // the two target-side folds (see the definitions): SideEffects::none like the pair above,
+        // so a kernel-tier [init] gate and a static_if see the artifact's target, not the host
+        addExternInline<DAS_BIND_FUN(das_get_target_triple)>(*this, lib, "get_target_triple",
+            SideEffects::none, "das_get_target_triple");
+        addExternInline<DAS_BIND_FUN(das_get_target_architecture_name)>(*this, lib, "get_target_architecture_name",
+            SideEffects::none, "das_get_target_architecture_name");
         // accessExternal (NOT ::none) on purpose: CPU features are a property of the RUNNING box,
         // so this must never const-fold into AOT artifacts built on a different machine.
         addExternInline<DAS_BIND_FUN(das_cpu_supports)>(*this, lib, "cpu_supports",

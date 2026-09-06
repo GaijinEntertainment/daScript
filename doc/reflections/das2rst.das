@@ -145,7 +145,7 @@ require strudel/strudel_sf2_voice
 require strudel/strudel_pattern
 require spirv/spirv_reflect
 require dasllama/dasllama
-require llvm/daslib/llvm_tune   // documentation context keeps [tune] fully inert
+require ?llvm llvm/daslib/llvm_tune   // nolint:STYLE030,LINT019 — the framework's is_building_documentation check keeps [tune] inert; a build without dasLLVM has no framework to keep inert
 
 def document_module_math(_root : string) {
     var mod = get_module("math")
@@ -199,7 +199,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%),
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments|with_argv)$%%),
         group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock|get_time_nsec|mktime|iso8601_now|format_time|clock)$%%),
-        group_by_regex("Platform queries", mod, %regex~(get_context_share_counter|das_is_dll_build|das_is_exceptions_enabled|is_standalone_exe|get_platform_name|get_running_platform_name|get_cross_platform_name|get_architecture_name|cpu_supports)$%%),
+        group_by_regex("Platform queries", mod, %regex~(get_context_share_counter|das_is_dll_build|das_is_exceptions_enabled|is_standalone_exe|get_platform_name|get_running_platform_name|get_cross_platform_name|get_architecture_name|get_target_triple|get_target_architecture_name|cpu_supports)$%%),
         group_by_regex("String formatting", mod, %regex~(fmt)$%%),
         hide_group(group_by_regex("Temp string reclaim", mod, %regex~(_temp_string_result)$%%)),
         group_by_regex("Argument consumption", mod, %regex~(consume_argument)$%%),
@@ -401,7 +401,7 @@ def document_module_dasllama_tts(_root : string) {
     }
     var mod = [find_module("dasllama_tts"), find_module("dasllama_tts_types")]
     var groups <- array<DocGroup>(
-        group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|caps|tts_voice_lang|finalize)$%%),
+        group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|g2p_pack_path|caps|tts_voice_lang|finalize)$%%),
         group_by_regex("Text front end", mod, %regex~(tts_normalize|tts_phonemize|tts_chunks)$%%),
         group_by_regex("Synthesis", mod, %regex~(synthesize|synthesize_stream)$%%),
         group_by_regex("The served lane", mod, %regex~(set_tts_q8|reset_tts_q8|tts_serves_q8)$%%),

@@ -31,10 +31,8 @@ struct TtsModel {
     //! A loaded TTS model: the shared assembly, the family's driver data, and the front-end packs
     //! read beside the GGUF. Load with ``load_tts_model``; ``delete`` frees every plane and pack.
     kind : TtsKind                          //! the family the GGUF's architecture named
-    model : StyleTts2Model = StyleTts2Model()   //! the shared StyleTTS2-lineage assembly and its voices
+    model : StyleTts2Model = StyleTts2Model()   //! the shared StyleTTS2-lineage assembly, its voices and the family's driver data
     scratch : St2Scratch = St2Scratch()   //! the activation carrier every synthesis reuses
-    kitten : KittenFamily                   //! the KittenTTS driver data (symbol table, aliases, speed priors)
-    kokoro : KokoroFamily                   //! the Kokoro driver data (vocabulary)
     g2p : G2pModel                          //! ``tts_g2p.bin``: lexicons, rules and the fallback chain
     tagger : PosTagger                      //! ``tts_postag.bin``: the tokenizer and part-of-speech tagger
 }
@@ -45,32 +43,41 @@ def finalize(var m : TtsModel) {
     //! Free the model's planes, the carrier and both packs; ``delete m`` runs it.
     delete m.model
     delete m.scratch
-    delete m.kitten
-    delete m.kokoro
     delete m.g2p
     delete m.tagger
 }
 
 def load_tts_model(path : string) : TtsModel {
-    //! Load a TTS GGUF (KittenTTS or Kokoro, picked from its architecture); ``tts_g2p.bin`` and
-    //! ``tts_postag.bin`` come from the same directory. The rows GEMMs serve as the lane
-    //! ``tts_serves_q8`` names at the time of the load.
+    //! Load a TTS model: a converted GGUF (KittenTTS or Kokoro, picked from its architecture) or its prepared
+    //! ``.dlim`` image, which serves without the GGUF; ``tts_g2p.bin`` and ``tts_postag.bin`` come from the same directory.
+    //! A GGUF serves the rows GEMMs on the lane ``tts_serves_q8`` names at load time; an image serves the lane it was baked on.
     var inscope m = TtsModel()
     m.model <- load_styletts2(path)
     if (m.model.family == "kitten-tts") {
         m.kind = TtsKind.kitten
-        m.kitten <- load_kitten_family(path)
     } elif (m.model.family == "kokoro") {
         m.kind = TtsKind.kokoro
-        m.kokoro <- load_kokoro_family(path)
     } else {
         panic("dasLLAMA tts: '{path}' has architecture '{m.model.family}', which is not a TTS family")
     }
     let dir = dir_name(path)
-    m.g2p <- load_g2p(path_join(dir, "tts_g2p.bin"))
+    m.g2p <- load_g2p(g2p_pack_path(dir))
     m.tagger <- load_pos_tagger(path_join(dir, "tts_postag.bin"))
     log_dropped_voices(m)
     return <- m
+}
+
+//! The phoneme pack a model directory serves: the full pack when present, else the American-only
+//! twin; neither is a panic naming the directory.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-g2p-pack-tiers")]
+def g2p_pack_path(dir : string) : string {
+    let full = path_join(dir, "tts_g2p.bin")
+    return full if (stat(full).is_valid)
+    let us = path_join(dir, "tts_g2p_en_us.bin")
+    if (!stat(us).is_valid) {
+        panic("dasLLAMA tts: no phoneme pack beside the model - neither {full} nor {us}")
+    }
+    return us
 }
 
 [cold_path]
@@ -105,12 +112,12 @@ def tts_serves_q8() : bool {
 }
 
 def private front_end_langs(m : TtsModel) : array<string> {
-    //! The languages the front end phonemizes for this model, as the reference pipeline's
-    //! codes. Both families ship American English; Kokoro adds British, which its ``bf_*`` and
-    //! ``bm_*`` packs speak. A family speaks a language only once its lexicon rung lands here.
+    //! The languages the front end phonemizes for this model, as the reference pipeline's codes. Both
+    //! families ship American English; Kokoro adds British (its ``bf_*`` / ``bm_*`` packs) when the phoneme
+    //! pack carries the British tier. A family speaks a language only once its lexicon rung lands here.
     var inscope langs : array<string>
     langs |> push("en-us")
-    if (m.kind == TtsKind.kokoro) {
+    if (m.kind == TtsKind.kokoro && !m.g2p.us_only) {
         langs |> push("en-gb")
     }
     return <- langs
@@ -329,9 +336,9 @@ def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; sp
     let clock = ref_time_ticks()
     let ps_misaki = g2p_phonemize(m.g2p, m.tagger, norm, voice_lang(m, vname) == "en-gb")
     let is_kitten = m.kind == TtsKind.kitten
-    var inscope ids <- is_kitten ? kitten_token_ids(kitten_phonemes_from_misaki(ps_misaki)) : kokoro_token_ids(m.kokoro, ps_misaki)
+    var inscope ids <- is_kitten ? kitten_token_ids(kitten_phonemes_from_misaki(ps_misaki)) : kokoro_token_ids(m.model.kokoro, ps_misaki)
     let row = is_kitten ? kitten_style_row(norm, m.model.style_rows) : kokoro_style_row(ps_misaki, m.model.style_rows)
-    let sp = is_kitten ? speed * (m.kitten.speed_priors?[vname] ?? 1.0) : speed
+    let sp = is_kitten ? speed * (m.model.kitten.speed_priors?[vname] ?? 1.0) : speed
     var inscope style : array<float>
     styletts2_style(m.model, vname, row, style)
     out.timings.front_end_us = int64(get_time_usec(clock))
@@ -345,7 +352,7 @@ def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; sp
 }
 
 def private resolve_voice(m : TtsModel; voice : string) : string {
-    let vname = m.kind == TtsKind.kitten ? kitten_voice(m.kitten, m.model, voice) : (styletts2_has_voice(m.model, voice) ? voice : "")
+    let vname = m.kind == TtsKind.kitten ? kitten_voice(m.model.kitten, m.model, voice) : (styletts2_has_voice(m.model, voice) ? voice : "")
     if (empty(vname)) {
         panic("dasLLAMA tts: unknown voice '{voice}'")
     }

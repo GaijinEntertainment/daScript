@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/tune
 require llvm/daslib/llvm_tune
 
 // Template fixture for llvm_tune_manifest.das (no [test] on purpose — the suite just

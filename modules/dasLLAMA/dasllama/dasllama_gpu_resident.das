@@ -17,7 +17,7 @@ require dasllama/dasllama_kqformat
 require dasllama/dasllama_math
 require dasllama/dasllama_rope        // build_rope_row_packed — the one source for every resident rope row
 require dasllama/dasllama_gemm_schema // Q8_BLOCK_ELEMS / KQ_SUPERBLOCK_ELEMS — device block sizing
-require llvm/daslib/f16_cvt   // f32_to_f16 — the trim pass re-packs the emb scale plane
+require daslib/f16_cvt   // f32_to_f16 — the trim pass re-packs the emb scale plane
 require dasllama/dasllama_par
 require dasllama/dasllama_env
 require math

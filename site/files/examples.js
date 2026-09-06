@@ -258,7 +258,7 @@
                      '<div class="forge-ex-player__fallback-glyph" aria-hidden="true">⚠</div>' +
                      '<div class="forge-ex-player__fallback-head">Needs a memory64 browser</div>' +
                      '<p class="forge-ex-player__fallback-body">' + esc(ex.name) + ' bundles the Dear ImGui ' +
-                       'module compiled to wasm64 — it runs on Chrome, Edge or Firefox 133+ (engines with ' +
+                       'module compiled to wasm64 — it runs on Chrome or Edge 133+ and Firefox 134+ (engines with ' +
                        'WebAssembly memory64). The universal interpreter can’t bind a native module, so ' +
                        'this one has no interpreted fallback.</p>' +
                      '<a class="forge-ex-player__fallback-btn" href="' + esc(ex.srcUrl) + '" target="_blank" rel="noopener">view source ↗</a>' +

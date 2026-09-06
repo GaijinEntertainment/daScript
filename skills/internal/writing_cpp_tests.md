@@ -38,7 +38,7 @@ TEST_CASE("my feature does X") {
 
 Optionally drop `tests-cpp/small/test_my_feature.das` next to it; load via `getDasRoot() + "/tests-cpp/small/test_my_feature.das"`.
 
-Rebuild - `cmake --build build`. The new test appears in `ctest -N` automatically (no CMake edit needed).
+Rebuild - `cmake --build build`. The new test appears in `ctest -N` automatically; the glob needs no CMake edit. A test that must be compiled differently from the rest of the exe - a per-source flag such as the fast-math one on `test_isnan_fastmath.cpp` - adds its `set_source_files_properties` line to `tests-cpp/CMakeLists.txt`, and its TU `#error`s when built without the flag, so a moved or renamed file cannot silently build the ordinary way and stay green.
 
 **Don't include doctest with `DOCTEST_CONFIG_IMPLEMENT`** - that's owned exclusively by `doctest_main.cpp`. Including the header without that macro is the right pattern for every other TU.
 

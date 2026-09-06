@@ -47,9 +47,9 @@ require dasllama/dasllama_gpu_resident         // resident slot-switch/pin surfa
 // ===== Model, session, tokenizer =====
 
 def setup_dasllama_jobque() {
-    //! Configure the job queue for dasLLAMA's fork/join matmul dispatch: pooled fork contexts,
-    //! batched dispatch, and the worker spin-before-park window (``jobque_spin_us``; 0 disables).
-    //! Call INSIDE ``with_job_que()``, before the first ``generate``/``eval``.
+    //! Configure the job queue for dasLLAMA's fork/join matmul dispatch: pooled fork contexts, batched dispatch, the worker spin-before-park window (``jobque_spin_us``; 0 disables).
+    //! Call INSIDE ``with_job_que()``, before the first ``generate``/``eval``. The fork-context pool is PER CONTEXT:
+    //! a ``new_thread`` body that runs inference calls this again, or every parallel kernel clones the whole program (90x slower).
     setup_dasllama_jobque_()
 }
 

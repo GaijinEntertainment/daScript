@@ -12,7 +12,7 @@ require ?das_metal dasllama/dasllama_metal_decode  // stats/mirror/shutdown rail
 require ?das_metal dasllama/dasllama_metal_common  // the greedy chain's stats and mode (arm 15)
 require ?das_metal dasllama/dasllama_metal_prefill  // the Metal-prefill→GPU-decode hybrid arm
 require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
-require llvm/daslib/f16_cvt  // f16 KV row decode in the tolerance gate (Apple half only)
+require daslib/f16_cvt  // f16 KV row decode in the tolerance gate (Apple half only)
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join/stat, used only inside the das_metal static_if halves
 require math

@@ -338,13 +338,14 @@ def release() {
 
 `release_wasm_main` exists because the desktop entry often `require`s host-only stacks (live-reload, libhv HTTP, threaded jobque) that don't cross-compile. The web variant swaps those for a `live_stub` shim (plain GLFW window + frame clock + no-op `[live_command]`) and guards music off (threaded strudel needs the jobque worker; SFX is single-threaded and stays on). One `.das_package` drives both targets.
 
-**Module-side hooks** (in a module's own `.das_package`, accumulated across all linked modules):
+**Module-side hooks** (in a module's own `.das_package`, accumulated across all linked modules; an app's own `.das_package` may call `release_emcc_arg` too - its flags come last on the link line, so they win):
 
 | Hook | Effect |
 |---|---|
 | `release_emcc_arg("-sUSE_GLFW=3")` | Append an emcc link flag (dasGlfw declares this) |
 | `release_embed_file(src, dst)` | `--embed-file src@dst` into MEMFS (dasStbImage embeds its HUD font) |
-| `release_web_shell("path.html")` | Override the default canvas shell (`web/templates/wasm_canvas_shell.html`) |
+| `release_web_shell("path.html")` | Override the default canvas shell (`web/templates/wasm_canvas_shell.html`). The link exports `FS` and `ENV`, so a shell's `Module.preRun` can stage files into MEMFS (`Module.FS.writeFile`) and set environment knobs (`Module.ENV.X = ...` - the C environment is built from it at startup, later writes never reach `getenv`); hold the run with `addRunDependency` while fetching |
+| `release_wasm_disable_module("dasvulkan")` | Keep a host module out of the cross-compile so its guarded `require ?name` resolves as absent, as the wasm build sees it (the rail disables dashv itself; an app reaching vulkan, das_metal or das_accelerate names those) |
 
 ### Game source contract (cross-compiles UNCHANGED)
 

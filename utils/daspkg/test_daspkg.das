@@ -1781,6 +1781,12 @@ def test_run_das_package_release(t : T?) {
         tt |> equal(2, length(info.wasm_archives))
         tt |> equal("_wasm/liblibDasModuleTest.a", info.wasm_archives[0])
         tt |> equal("_wasm/liblibTestApp.a", info.wasm_archives[1])
+        // the two wasm-only knobs cross the same hand-written marshaller: a dropped copy would
+        // cross-compile with the module mounted and the flag missing, silently
+        tt |> equal(1, length(info.wasm_disabled_modules))
+        tt |> equal("dasvulkan", info.wasm_disabled_modules[0])
+        tt |> equal(1, length(info.emcc_args))
+        tt |> equal("--profiling-funcs", info.emcc_args[0])
     }
     t |> run("returns true with empty spec when release() is missing") @(tt : T?) {
         var info : PackageReleaseInfo
@@ -1866,6 +1872,34 @@ def test_cmd_release_pure_daslang(t : T?) {
 }
 
 [test]
+def test_cmd_release_refuses_unsafe_bundle_name(t : T?) {
+    // the bundle name is a .das_package string that reaches path_join, force_rmdir and shell
+    // command lines; the guard admits letters, digits, `_`, `-` and `.` only - a space or a
+    // shell metacharacter is refused before anything is built or removed
+    for (bad in ["bad name", "bad;name", "bad$(name)", "bad\"name"]) {
+        t |> run("refuses bundle name `{bad}`") @(tt : T?) {
+            let tmp_root = "{get_das_root()}/_test_release_badname"
+            let out_dir = "{get_das_root()}/_test_release_badname_out"
+            force_rmdir(tmp_root)
+            force_rmdir(out_dir)
+            mkdir(tmp_root)
+            fopen("{tmp_root}/main.das", "wb") $(f) {
+                fwrite(f, "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+            }
+            let escaped = replace(replace(bad, "\\", "\\\\"), "\"", "\\\"")
+            fopen("{tmp_root}/.das_package", "wb") $(f) {
+                fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"{escaped}\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+            }
+            let rc = cmd_release(tmp_root, out_dir)
+            tt |> equal(1, rc, "cmd_release refuses the name")
+            tt |> success(!fexist(out_dir), "nothing was built or removed under {out_dir}")
+            force_rmdir(tmp_root)
+            force_rmdir(out_dir)
+        }
+    }
+}
+
+[test]
 def test_cmd_release_ships_minted_scope_manifest(t : T?) {
     t |> run("a tune scope's RESOLVED manifest ships beside the exe") @(tt : T?) {
         let tmp_root = "{get_das_root()}/_test_release_tunescope"
@@ -1881,7 +1915,7 @@ def test_cmd_release_ships_minted_scope_manifest(t : T?) {
             fwrite(f, payload)
         }
         fopen("{tmp_root}/main.das", "wb") $(f) {
-            fwrite(f, "options gen2\nrequire llvm/daslib/llvm_tune\n[tune_scope(name=\"stubscope\", tuner=\"stub_tuner.das\")]\nstruct StubScope \{\n    unused : int\n\}\n[export]\ndef main() \{\n    print(\"hi\\n\")\n\}\n")
+            fwrite(f, "options gen2\nrequire daslib/tune\nrequire llvm/daslib/llvm_tune\n[tune_scope(name=\"stubscope\", tuner=\"stub_tuner.das\")]\nstruct StubScope \{\n    unused : int\n\}\n[export]\ndef main() \{\n    print(\"hi\\n\")\n\}\n")
         }
         fopen("{tmp_root}/stub_tuner.das", "wb") $(f) {
             fwrite(f, "options gen2\nrequire daslib/fio\n[export]\ndef main() \{\n    fopen(get_env_variable(\"DAS_TUNE_MANIFEST\"), \"wb\") $(mf) \{\n        fwrite(mf, fread(\"{tmp_root}/stub_payload.json\"))\n    \}\n\}\n")

@@ -242,6 +242,10 @@ profile (`performance/defaults`), the annotation's `fallback` `;`-chain, then `D
 FILE its answer came from, so a verbose compile names which of the two stamped each kernel. A box
 the shipped profile covers therefore compiles tuned kernels without racing anything, and a box it
 does not cover falls to the fallback chain - never to another box's winners.
+With no tune framework in the build the first three steps do not exist - no policy env, no sidecar,
+no profile - so the ladder is the `perm=` pin, then the `fallback` chain's first UNCONDITIONAL entry
+(a `suffix:requires` seat cannot be judged with no feature probe), then `DEFAULT_PERM`, and the
+compile reports nothing.
 
 ### 2.41 The mint's own wall rides in the sidecar's provenance {#mint-wall-provenance}
 

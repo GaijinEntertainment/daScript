@@ -22,6 +22,8 @@ namespace das {
     DAS_API bool is_compiling ( );
     DAS_API bool is_compiling_macros ( );
     DAS_API bool is_standalone_exe ( );
+    DAS_API bool das_is_jit_function ( const Func func );
+    DAS_API bool das_is_aot_function ( const Func func );
     DAS_API uint64_t get_context_share_counter ( Context * context );
 
     DAS_API char * builtin_das_root ( Context * context, LineInfoArg * at );
@@ -301,6 +303,8 @@ namespace das {
     const char * das_get_platform_name();
     const char * das_get_cross_platform_name();
     const char * das_get_architecture_name();
+    const char * das_get_target_triple();
+    const char * das_get_target_architecture_name();
     DAS_API bool das_cpu_supports ( const char * feature );
 
     DAS_API char * fmt_i8 ( const char * fmt, int8_t value, Context * context, LineInfoArg * at );

@@ -8,6 +8,10 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
 ## Layout
 
 - `index.html` - news-first home (identity masthead, feed, how-to-get, ladder teaser)
+- `examples.html` - the browser examples: one card per example, each opening the example on its own
+  page under `examples/<id>/` (the storyteller's page is `examples/dasLLAMA/storyteller/web_shell.html`
+  in the repo, built by `daspkg release wasm`; its model set is the rolling `dasllama-web` GitHub
+  release the deploy downloads beside it); posters under `files/examples/`
 - `stories.html` - the stories index (title, date, tag, lede per story), generated from
   `_stories/` between the `stories:begin` markers by `build_news.py`; the index rows use
   `forge.css`'s shared blog-list language (`forge-blog-*`), so their styling is shared with
@@ -49,6 +53,10 @@ ledgered follow-up.
 ## Preview
 
     py -3 serve.py     # http://127.0.0.1:8932/ - stages shared css like the deploy does
+
+`serve.py` maps `/examples/<id>/` onto `../web/output64/examples/<id>/` and sends the two
+cross-origin-isolation headers the Caddy vhost sends under `/examples/` (`utils/internal/dasllama-ladder/caddy.snippet`),
+so a locally built example runs here as deployed once its model set sits in `<id>/models/`.
 
 `serve.py` also proxies `/api/*` to a locally running ladder service on 127.0.0.1:8201
 (mirroring the Caddy vhost), so a preview against real data is: start

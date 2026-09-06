@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>examples — dasllama.io</title>
+<meta name="description" content="dasLLAMA examples you can run: the engine compiled to WebAssembly in your browser, or built for your machine. Nothing here runs interpreted."/>
+<meta property="og:title" content="dasllama.io examples"/>
+<meta property="og:description" content="The engine, compiled: run it in the browser or build it for your machine."/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://dasllama.io/examples.html"/>
+<link rel="canonical" href="https://dasllama.io/examples.html"/>
+<link rel="icon" href="files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="stylesheet" href="files/fonts/fonts.css"/>
+<link rel="stylesheet" href="files/forge.css"/>
+<link rel="stylesheet" href="files/dasllama-table.css"/>
+<link rel="stylesheet" href="files/dasllama-io.css"/>
+<script src="files/dasllama-io.js" defer></script>
+<script src="files/github-star.js" defer></script>
+<!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="examples.html">examples</a><a class="dio-tab" href="stories.html">stories</a><a class="dio-tab" href="ladder.html">ladder</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+</div></div></nav>
+
+<header class="dio-head"><div class="forge-container"><div class="dio-head__row">
+<div>
+<h1>The engine, <em>running.</em></h1>
+<p class="dio-head__lede">Every example here is dasLLAMA itself - compiled to WebAssembly and running in your browser, or built for your machine.</p>
+</div>
+</div></div></header>
+
+<section class="forge-ex-grid" style="padding-top:12px">
+<div class="forge-container">
+<div class="forge-ex-grid__list" style="grid-template-columns:repeat(auto-fill,minmax(400px,1fr))">
+
+<a class="forge-ex-card" href="examples/storyteller/storyteller.html" aria-label="open Storyteller">
+  <div class="forge-ex-card__screen">
+    <img class="forge-ex-card__poster" src="files/examples/storyteller-poster.png" alt="Storyteller screenshot" loading="lazy"/>
+    <div class="forge-ex-card__scanlines" aria-hidden="true"></div>
+    <div class="forge-ex-card__hover"><span class="forge-ex-card__playbtn" aria-hidden="true">▶</span></div>
+  </div>
+  <div class="forge-ex-card__body">
+    <div class="forge-ex-card__titlerow">
+      <h3 class="forge-ex-card__name">Storyteller</h3>
+      <span class="forge-ex-card__kind">llm + tts · in the browser</span>
+    </div>
+    <p class="forge-ex-card__desc">A small story model writes a children's tale one token at a time while KittenTTS reads it aloud. Both models arrive as prepared <code>.dlim</code> images; the whole engine runs in your browser, the speech thread and the parallel kernels on Web Workers.</p>
+    <div class="forge-ex-card__tags"><span class="forge-ex-tag">llm</span><span class="forge-ex-tag">tts</span><span class="forge-ex-tag">wasm64</span><span class="forge-ex-tag">threads</span></div>
+    <div class="forge-ex-card__foot"><span>space · next story</span><span>Chrome or Edge 133+, Firefox 134+ (memory64)</span></div>
+  </div>
+</a>
+
+</div>
+<p class="dio-head__lede" style="margin-top:28px;max-width:720px">Source for every example lives under <a href="https://github.com/GaijinEntertainment/daScript/tree/master/examples/dasLLAMA">examples/dasLLAMA</a> in the repository; the browser builds are made with <code>daspkg release wasm</code> from the same sources.</p>
+</div>
+</section>
+
+<footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="examples.html">examples</a><a class="dio-footer__link" href="stories.html">stories</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+<div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>
+
+</div></body></html>

@@ -12,7 +12,7 @@ require dasllama/dasllama_common   // MoeGate, select_decode_override
 require dasllama/dasllama_blocks   // registers the vulkan_moe_span decode override at init
 require dasllama/dasllama_moe   // moe_select_core: the host select the span's device top-k mirrors
 require ?vulkan dasllama/dasllama_math_vulkan  // the decode attention block + FFN tail under test; the test installs the hooks explicitly (no env gate)
-require llvm/daslib/f16_cvt
+require daslib/f16_cvt
 require math
 require _vk_kq_fixtures
 

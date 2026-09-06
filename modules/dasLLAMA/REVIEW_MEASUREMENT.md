@@ -47,11 +47,12 @@ decision in the report of the run that took it and in the PR that lands the kern
 winner enters the ledger only through a re-measured board cell.
 
 **A diff that makes the engine serve tokens by a route no board cell exercises mints that cell
-in the same change.** A route is what a request takes end to end: a weight format, a modality,
-a family, a backend, a serving lane (q8 or f32), a GPU tower (a GPU-run vision or audio
-encoder), a sampler class (greedy, sampled) through the speculative round (a decode step that
-drafts several tokens and verifies them in one pass), or the path a run with no flags and no
-environment overrides takes.
+in the same change.** A route is anything that changes which code serves the tokens end to end:
+a weight format, a modality, a family, a backend, a serving lane (q8 or f32), a GPU tower (a
+GPU-run vision or audio encoder), a sampler class (greedy, sampled) through the speculative
+round (a decode step that drafts several tokens and verifies them in one pass), a compile tier
+(JIT, AOT, interpreted reference bodies), a cross target (wasm64), or the path a run with no
+flags and no environment overrides takes.
 
 **A diff that claims to make an already-served path faster, from an author whose box mints
 that path, re-mints a board row (`performance/records/<box>.json`) that exercises that path, in
@@ -83,3 +84,9 @@ board cell or ruler record produced names the record and row instead of the harn
 sits in the figure's own sentence, in a table heading that covers the table's rows, in a
 section-level provenance line that covers the paragraphs under it, or in a citation of the
 `PERF_LEDGER.md` entry whose provenance line covers it.
+
+**A diff that pins the kernel backend - `pin_kernel_backend`, `select_kernel_backend`, or
+`DASLLAMA_PIN_BACKEND` - pins it before the load it governs, and on a name the box has not
+registered refuses or skips rather than running on the default.** The loader repacks weights
+into the pinned backend's layout, so a pin set after the load never reaches them, and a
+misspelled pin that falls through measures the default backend under the pinned one's name.

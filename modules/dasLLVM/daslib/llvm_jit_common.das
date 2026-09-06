@@ -444,6 +444,9 @@ var public g_target_x64_amx = false
 // targets. Gates emission that calls Linux-only externs (the amx witness's arch_prctl).
 var public g_target_os_linux = false
 
+// ARMv8.2 DotProd (SDOT — the aarch64_neon sdot4 family, the idot ss form); rails: ARCHITECTURE.md#aarch64-feature-truth
+var public g_target_arm64_dotprod = false
+
 // ARMv8.6 i8mm (SMMLA — 2×2 s8 matrix-multiply-accumulate; Apple M2/A15+, Graviton3+; M1 has
 // DotProd only). Host truth is LLVMGetHostCPUFeatures "+i8mm" OR cpu_supports (ARCHITECTURE.md#aarch64-feature-truth).
 var public g_target_arm64_i8mm = false
@@ -460,6 +463,11 @@ def private arm64_forced_feature(name : string) : bool {
         }
     }
     return false
+}
+
+def public arm64_forced_plus_features() : string {
+    let plus <- [for (part in split(g_env_jit.jit_arm64_force_features, ",")); "+{part}"; where !empty(part)]
+    return join(plus, ",")
 }
 
 // "+name" present in LLVM's host-features string (comma-separated "+feat"/"-feat" entries;
@@ -512,6 +520,7 @@ var public g_target_wasm_threads = false
 // mismatch. Diagnoses the MSVC-host vs wasm/clang-target C++ ABI layout class. Opt-in, off by default.
 var public g_jit_check_handled_abi = false
 
+[arch(at = "../ARCHITECTURE.md#idot-lowerings")]
 def private wasm_target_features() : string {
     return g_target_wasm_threads ? "+simd128,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+nontrapping-fptoint"
 }
@@ -634,6 +643,8 @@ def public init_jit_target_flags(target_triple : string = ""; host_features : bo
     g_target_os_linux = (empty(target_triple)
         ? get_platform_name() == "linux"
         : find(target_triple, "linux") >= 0)
+    g_target_arm64_dotprod = g_target_is_aarch64 && (arm64_forced_feature("dotprod")
+        || (empty(target_triple) && host_features && (host_llvm_feature("dotprod") || cpu_supports("dotprod"))))
     g_target_arm64_i8mm = g_target_is_aarch64 && (arm64_forced_feature("i8mm")
         || (empty(target_triple) && host_features && (host_llvm_feature("i8mm") || cpu_supports("i8mm"))))
     // aarch64 fullfp16 (see declaration comment): darwin-arm64 == Apple Silicon == always.
@@ -922,20 +933,18 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
             feats = "{feats},+i8mm"
         }
         // a forced feature's artifact cache-hits on the target box without a linker there
-        let forced_arm <- [for (part in split(g_env_jit.jit_arm64_force_features, ",")); "+{part}"; where !empty(part)]
+        let forced_arm = arm64_forced_plus_features()
         if (!empty(forced_arm)) {
-            feats = "{feats},{join(forced_arm, ",")}"
+            feats = "{feats},{forced_arm}"
         }
         targetMachine = create_target_machine(triple_msg, cpu_msg, feats, opt_level)
-    } elif (use_host_cpu && g_target_is_x64 && !empty(x64_forced_plus_features())) {
-        // DAS_JIT_X64_FORCE_FEATURES emission-only override (see the g_target_x64_* declaration
-        // comment): append AFTER the host features — the last occurrence of a feature wins in
-        // LLVM's SubtargetFeatures, so "+avx512f" here overrides the host list's "-avx512f".
-        let forced = x64_forced_plus_features()
-        let feats = empty(features_msg) ? forced : "{features_msg},{forced}"
-        targetMachine = create_target_machine(triple_msg, cpu_msg, feats, opt_level)
     } else {
-        targetMachine = create_target_machine(triple_msg, cpu_msg, features_msg, opt_level)
+        let forced = g_target_is_x64 ? x64_forced_plus_features() : (g_target_is_aarch64 ? arm64_forced_plus_features() : "")
+        let feats = empty(forced) ? features_msg : (empty(features_msg) ? forced : "{features_msg},{forced}")
+        if (!empty(forced)) {
+            to_log(LOG_INFO, "LLVM JIT: {g_target_is_x64 ? "DAS_JIT_X64_FORCE_FEATURES" : "DAS_JIT_ARM64_FORCE_FEATURES"} appends {forced} to the generic machine {cpu_msg}\n")
+        }
+        targetMachine = create_target_machine(triple_msg, cpu_msg, feats, opt_level)
     }
 
     if (use_host_cpu) {

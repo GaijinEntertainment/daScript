@@ -26,7 +26,7 @@ before - a new route requires all of its fields - adds that field to every `cont
 request to that route, in the same change.**
 
 **A diff that changes what a route answers - an item, a field, or a value, including one a
-required `dasllama/*` module supplies - re-captures every fixture under `tests/fixtures/` that
+`dasllama/*` module supplies - re-captures every fixture under `tests/fixtures/` that
 records that route, in the same change.** The fixtures are the recorded response shape.
 
 **A diff that makes `control.html` or a Playwright `.spec.js` under `tests/` (beside this file)
@@ -35,3 +35,8 @@ fixture for the route that answers with that key first.**
 
 **A diff that adds a key to what a route answers lists it in that route's `README.md` row, in
 the same change.** The row is where a consumer learns the key exists.
+
+**A reference to a `dasllama_exchange` or `llvm_tune` symbol in this folder outside a
+`static_if (typeinfo module_exists(<that module>))` arm is a defect - a signature cannot carry that
+guard, so it never names one of their types.** Both modules are optional (`require ?llvm`) and do
+not exist in a build without dasLLVM; the unguarded reference fails that build's compile.
