@@ -26,6 +26,10 @@ def spawn_session_bus() : tuple<bus : process; address : string> {
     let no_env : array<string>
     var bus = unsafe(spawn_process(argv, "", no_env))
     var address = ""
+    if (bus == null) {
+        remove(config_path)
+        return (bus = bus, address = address)
+    }
     let started = ref_time_ticks()
     while (empty(address) && get_time_usec(started) < 15000000) {
         unsafe(process_drain(bus) $(line) {

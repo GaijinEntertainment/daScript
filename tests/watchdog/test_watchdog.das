@@ -384,8 +384,10 @@ def test_tray_shutdown_over_private_bus(t : T?) {
                 t |> equal(count_event(events, "watchdog_stopped"), 1)
             }
         }
-        unsafe {
-            close_process(bus.bus)
+        if (bus.bus != null) {
+            unsafe {
+                close_process(bus.bus)
+            }
         }
     }
 }

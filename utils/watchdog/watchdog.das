@@ -1301,7 +1301,8 @@ class public Supervisor {
             }
         } elif (healthy && t >= next_heartbeat) {
             var beat <- {"pid" => JV(child_pid), "ok" => JV(true), "healthy_for_s" => JV(round(t - last_health_change))}
-            for (key, val in keys(heap_gauges()), values(heap_gauges())) {
+            var gauges <- heap_gauges()
+            for (key, val in keys(gauges), values(gauges)) {
                 beat[key] = val
             }
             log->emit("health_heartbeat", JV(beat))
