@@ -83,6 +83,46 @@ def program_mode_args(root, state_dir, mode : string) : array<string> {
     return <- args
 }
 
+// A supervision that never ends fails the test instead of hanging the sweep: tick with a
+// deadline, and past it stop the supervisor and name the events it logged.
+def run_bounded(t : T?; var sup : Supervisor?; seconds : float) : int {
+    let started = ref_time_ticks()
+    while (!sup->tick()) {
+        if (float(get_time_usec(started)) > seconds * 1000000.0) {
+            t |> failure("supervision did not end within {seconds} s: {event_names(read_events(sup.cfg.log))}")
+            sup->request_stop()
+            let grace = ref_time_ticks()
+            while (!sup->tick() && get_time_usec(grace) < 30000000) {
+                sleep(50u)
+            }
+            break
+        }
+        sleep(10u)
+    }
+    return sup.result
+}
+
+// Script mode is `daslang -jit <script>`, and a daslang that cannot start the JIT (no LLVM
+// library beside it) has no script-mode child to supervise. The fixture with no arguments
+// returns 2; any other code from a -jit run means the JIT never came up.
+def jit_runs() : bool {
+    let argv <- [das_exe(), "-jit", fixture_path()]
+    let no_env : array<string>
+    var code : int
+    unsafe {
+        var p = spawn_process(argv, "", no_env)
+        code = process_wait(p, 60.0)
+        close_process(p)
+    }
+    return code == 2
+}
+
+def skip_without_jit(t : T?) : bool {
+    if (jit_runs()) return false
+    t |> skip("this daslang cannot start the JIT, so script mode (daslang -jit) has no child to supervise here")
+    return true
+}
+
 [test]
 def test_config_layering(t : T?) {
     t |> run("watchdog.json sets flag defaults, a flag on the command line wins, -- goes to the child") @(t : T?) {
@@ -125,7 +165,7 @@ def test_discovery(t : T?) {
         let script_mode <- resolve_config(["--no-health"], root)
         t |> equal(script_mode.error, "")
         t |> success(ends_with(script_mode.cfg.script, "main.das"), "script discovered: {script_mode.cfg.script}")
-        t |> success(ends_with(script_mode.cfg.daslang, "bin/Release/daslang"), "the daslang beside it is the one discovered, not the bare fallback: {script_mode.cfg.daslang}")
+        t |> success(ends_with(replace(script_mode.cfg.daslang, "\\", "/"), "bin/Release/daslang"), "the daslang beside it is the one discovered, not the bare fallback: {script_mode.cfg.daslang}")
         t |> equal(script_mode.cfg.name, base_name(root), "a script names itself after its directory")
         let command <- child_command(script_mode.cfg)
         t |> success(length(command) >= 4 && command[1] == "-jit" && command[3] == "--", "script command shape: {command}")
@@ -135,7 +175,7 @@ def test_discovery(t : T?) {
         fwrite(path_join(root, "tree/bin/daslang"), "")
         let in_tree <- resolve_config(["--no-health", "--cwd", root], path_join(root, "tree/bin"))
         t |> equal(in_tree.error, "")
-        t |> success(ends_with(in_tree.cfg.daslang, "tree/bin/daslang"), "no daslang beside the script: the one beside the watchdog serves it: {in_tree.cfg.daslang}")
+        t |> success(ends_with(replace(in_tree.cfg.daslang, "\\", "/"), "tree/bin/daslang"), "no daslang beside the script: the one beside the watchdog serves it: {in_tree.cfg.daslang}")
         remove(path_join(root, "tree/bin/daslang"))
         let alone <- resolve_config(["--no-health", "--cwd", root], path_join(root, "tree"))
         t |> success(find(alone.error, "nothing to supervise") >= 0, "main.das with no daslang in reach is refused: {alone.error}")
@@ -241,7 +281,7 @@ def test_supervise_crash_then_clean_exit(t : T?) {
         var sup = watchdog_start(program_mode_args(root, state_dir, "crash-then-ok"), root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
-        t |> equal(sup->run(), 0, "supervision ends with 0 after the child's clean exit")
+        t |> equal(run_bounded(t, sup, 60.0), 0, "supervision ends with 0 after the child's clean exit")
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "child_started"), 2, "the child ran twice: {event_names(events)}")
         t |> equal(event_int(events, "crash", "code"), 9, "the first exit was reported as a crash")
@@ -281,7 +321,7 @@ def test_supervise_config_restart(t : T?) {
         var sup = watchdog_start(program_mode_args(root, state_dir, "config-restart"), root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
-        t |> equal(sup->run(), 0)
+        t |> equal(run_bounded(t, sup, 60.0), 0)
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "config_restart_relaunch"), 1, "{event_names(events)}")
         t |> equal(count_event(events, "crash"), 0, "no crash was reported")
@@ -297,6 +337,7 @@ def test_supervise_config_restart(t : T?) {
 [test]
 def test_supervise_tune_bootstrap(t : T?) {
     t |> run("script mode: exit 3 after the restart marker relaunches at once") @(t : T?) {
+        if (skip_without_jit(t)) return
         notifications_enabled = false
         let root = make_temp(t, "wd tune ")
         if (empty(root)) return
@@ -308,7 +349,7 @@ def test_supervise_tune_bootstrap(t : T?) {
         var sup = watchdog_start(args, root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
-        t |> equal(sup->run(), 0)
+        t |> equal(run_bounded(t, sup, 60.0), 0)
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "tune_bootstrap_complete"), 1, "{event_names(events)}")
         t |> equal(count_event(events, "crash"), 0)
@@ -324,6 +365,7 @@ def test_supervise_tune_bootstrap(t : T?) {
 [test]
 def test_supervise_tune_abort_backs_off(t : T?) {
     t |> run("script mode: exit 3 without the restart marker is a tuner abort - relaunched with backoff, not a crash") @(t : T?) {
+        if (skip_without_jit(t)) return
         notifications_enabled = false
         let root = make_temp(t, "wd tune abort ")
         if (empty(root)) return
@@ -335,7 +377,7 @@ def test_supervise_tune_abort_backs_off(t : T?) {
         var sup = watchdog_start(args, root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
-        t |> equal(sup->run(), 0)
+        t |> equal(run_bounded(t, sup, 60.0), 0)
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "tune_incomplete"), 1, "{event_names(events)}")
         t |> equal(count_event(events, "tune_bootstrap_complete"), 0, "no marker, no bootstrap")
