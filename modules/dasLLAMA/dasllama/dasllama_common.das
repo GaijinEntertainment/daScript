@@ -1465,7 +1465,7 @@ var private g_runtime_race_armed = false
 def public set_runtime_race_hook(hook : function<() : bool>) : function<() : bool> {
     let old = g_runtime_race_hook
     g_runtime_race_hook = hook
-    g_runtime_race_armed = true
+    g_runtime_race_armed = hook != null   // restoring a null previous hook disarms; an armed null would be invoked
     return old
 }
 

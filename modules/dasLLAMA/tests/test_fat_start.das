@@ -111,6 +111,22 @@ def test_the_apply_fires_the_race_hook_only_for_a_missing_section(t : T?) {
     }
 }
 
+// restoring a null previous hook must disarm the race, or the next apply on a missing section
+// would invoke a null function
+[test]
+def test_restoring_a_null_hook_disarms_the_race(t : T?) {
+    t |> run("a null hook restored after a fake one leaves the apply declining, never invoking") @(t : T?) {
+        let orig = set_runtime_race_hook(@@fake_race)
+        let none : function<() : bool>
+        set_runtime_race_hook(none)   // a null goes in: disarmed, whatever was armed before
+        with_temp_sidecar(t) $(path : string) {
+            apply_box_profile_runtime_checked(path)
+            t |> equal("absent", box_profile_runtime_declined(), "an absent section with no hook armed declines and races nothing")
+        }
+        set_runtime_race_hook(orig)
+    }
+}
+
 [test]
 def test_the_fat_hook_is_inert_outside_a_fat_exe(t : T?) {
     with_temp_sidecar(t) $(path) {
