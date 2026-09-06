@@ -25,7 +25,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE_FILES = os.path.normpath(os.path.join(HERE, "..", "site", "files"))
-EXAMPLES_OUT = os.path.normpath(os.path.join(HERE, "..", "web", "output64", "examples"))
+EXAMPLES_OUT = os.path.realpath(os.path.join(HERE, "..", "web", "output64", "examples"))
 SHARED = {"forge.css", "nav-dropdown.css", "dasllama-table.css", "github-star.js"}
 PORT = 8932
 LADDER = "http://127.0.0.1:8201"
@@ -78,10 +78,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if name in SHARED:
                 return os.path.join(SITE_FILES, name)
         if clean.startswith("/examples/"):
-            rel = os.path.normpath(clean[len("/examples/"):])
-            # an absolute remainder (a doubled slash) would make os.path.join drop the base
-            if rel and not rel.startswith("..") and not os.path.isabs(rel):
-                return os.path.join(EXAMPLES_OUT, rel)
+            rel = clean[len("/examples/"):]
+            # containment, not pattern checks: `..`, an absolute remainder (a doubled slash) and a
+            # drive-qualified one on Windows (`C:foo`) all resolve outside EXAMPLES_OUT and fall
+            # through to the site tree, where no such path exists
+            full = os.path.realpath(os.path.join(EXAMPLES_OUT, rel))
+            if rel and full.startswith(EXAMPLES_OUT + os.sep):
+                return full
         return super().translate_path(path)
 
 
