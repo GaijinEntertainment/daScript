@@ -42,6 +42,13 @@ discovery (``main.das`` beside ``bin/Release/daslang`` → ``daslang -jit
 main.das``; exactly one ``*.exe`` → that program — anything ambiguous is
 an error, never a guess).  Everything after ``--`` goes to the child.
 
+``--tray`` (the ``tray`` key in ``watchdog.json``) puts a status icon in the
+notification area: a mark badged by state, the status line as its tooltip and
+the menu's first row, ``Open <name>`` for the page named by ``--tray-url`` (or
+the health URL's origin), live while the health check is green, and
+``Shutdown``.  Where no desktop can show one, the log says ``tray_unavailable``
+and supervision runs without it.
+
 .. seealso::
 
    :ref:`utils_daspkg` -- ``release_include_tool("watchdog")`` ships the executable inside a package release

@@ -280,6 +280,17 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> success(find(source, "DECLARE_MODULE(Module_FIO);") >= 0, "Module_FIO is declared")
     }
 
+    t |> run("options gc and persistent_heap reach the context, so heap_collect is allowed there") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_gc_fixture", out_dir)
+        t |> success(find(source, "policies.persistent_heap = true;") >= 0, "the persistent heap policy is on")
+        t |> success(find(source, "context.gcEnabled = true;") >= 0, "the collector's own flag is on")
+        t |> success(find(source, "VarInfo __gvar_info_") >= 0, "each global gets a debug info the collector walks")
+        t |> success(find(source, "].debugInfo = &__gvar_info_") >= 0, "and the context's global table points at it")
+        let plain = generate_standalone_source(t, "_standalone_gc_free_fixture", out_dir)
+        t |> success(find(plain, "gcEnabled") < 0, "a program without options gc never names the flag - the nano context has none")
+        t |> success(find(plain, "].debugInfo = &__gvar_info_") >= 0, "but its globals still carry their debug info, as under the interpreter")
+    }
+
     t |> run("a module only dead code reaches stays compile-time-only") @(t : T?) {
         let files = generate_standalone_files(t, "_standalone_dead_fio_fixture", out_dir)
         t |> success(find(files.source, "fio_core - compile time only") >= 0, "fio_core is pruned: only an unused function names FILE? and calls its extern")

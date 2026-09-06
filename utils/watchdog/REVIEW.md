@@ -3,11 +3,11 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `README.md`.
 
-**A diff that renames or removes a name on the JSON-lines log - an `event` value, a key of one,
-or a startup stage name - updates every reader in the same change: the event list and the stage
-list in `README.md`, `smoke_test.cmake`, and `tests/watchdog/test_watchdog.das` (repo root), and
-names any out-of-tree reader in the PR description** - the log is the wire everything
-downstream reads, and a reader that stops seeing the event it waits for never fails loudly.
+**A diff that renames or removes a name the supervisor writes or reads - an `event` value on
+the JSON-lines log, a field key on such a line, a startup stage name, or a `@tune` kind or key
+on the `@tune <kind> k=v` lines `watchdog.das` reads from the child - updates every place that
+name appears in the tree in the same change, and names any out-of-tree reader in the PR
+description** - a reader that stops seeing the name it waits for never fails loudly.
 
 **A diff that adds a field to `WatchdogConfig` makes it discoverable in the same change: a
 `@clarg_doc` on a flag field, or - for a `@clarg_skip` field - its key exemption in
@@ -17,3 +17,12 @@ downstream reads, and a reader that stops seeing the event it waits for never fa
 **A diff that removes or renames a `WatchdogConfig` field updates every `watchdog.json` in the
 tree in the same change** - an unknown key refuses the start, so a stale key in a bundled
 config is a supervisor that never comes up.
+
+**A diff that adds a `require` to `watchdog.das` for an optional module - one a build can leave
+out, so `has_module` reports it absent - adds that module to the `watchdog` arm of
+`tests/.das_test` (repo root) in the same change** - without the entry the whole test suite
+fails to compile on a machine where that module is missing.
+
+**A diff that adds a call into `stddlg`, or spawns a program to show something on the desktop,
+logs the failure as an event on the JSON-lines log and lets the supervisor start and keep
+supervising** - the supervisor must run on a machine with no desktop.

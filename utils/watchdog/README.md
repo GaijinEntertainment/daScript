@@ -6,8 +6,8 @@ It supervises `utils/dasllama-server` (JIT) in-tree and the dictation bot in the
 package (a baked exe).
 
 It ships as a static executable, `bin/watchdog` (`bin/Release/watchdog.exe` in an MSVC tree): a
-`-ctx` standalone context on the full runtime with `libDaScript` and dasHV linked as static
-archives. It compiles nothing at run time, loads no shared module, and holds no lock on any file
+`-ctx` standalone context on the full runtime with `libDaScript`, dasHV and dasStdDlg linked as
+static archives. It compiles nothing at run time, loads no shared module, and holds no lock on any file
 a deploy replaces, so a deploy can overwrite the runtime while the watchdog runs. The same code
 runs under the interpreter for development: `daslang utils/watchdog/main.das -- --cwd <dir>`.
 
@@ -53,7 +53,7 @@ comes back from the child's `main`: a das `exit(N)` is an abnormal termination a
 
 ## Stopping it
 
-Ctrl-C or SIGTERM asks the child to stop: through `--stop-file` (the path is handed to the child
+Ctrl-C, SIGTERM or the tray's `Shutdown` item asks the child to stop: through `--stop-file` (the path is handed to the child
 in the `--stop-env` variable, `CADMUS_STOP_FILE` by default, and the file is created on the
 request), through a POST to `--shutdown-url`, or with `--no-shutdown` by terminating it. The
 stop is a ladder with an end: after `--stop-timeout` seconds the child is terminated, ten
@@ -83,13 +83,17 @@ between them.
 ## The log
 
 `logs/<name>-watchdog.log` (`--log`), one JSON object per line, `{"ts", "event", ...}`, rotated
-at 20 MB with five backups, and echoed to stdout. The events: `watchdog_started`,
+at 20 MB with five backups, and echoed to stdout. `health_heartbeat` and `watchdog_stopped`
+carry `heap_bytes` and `string_heap_bytes`, the supervisor's own live heaps: the host collects
+them between ticks, and a number that only grows across heartbeats is a leak. The events: `watchdog_started`,
 `child_started`, `spawn_failed`, `child` (one per line the child wrote), `stage`, `tune`,
 `health`, `health_heartbeat`, `recovered`, `child_exited`, `intentional_shutdown`,
 `tune_bootstrap_complete`, `tune_incomplete`, `config_restart_relaunch`, `crash`,
 `crash_bundle`, `stop_file_requested`, `shutdown_requested`, `shutdown_request_failed`,
 `terminate_requested`, `kill_requested`, `child_unkillable`, `watchdog_already_running`,
-`wer_ready` / `wer_not_ready` / `wer_installed` / `wer_install_failed`, `watchdog_stopped`.
+`wer_ready` / `wer_not_ready` / `wer_installed` / `wer_install_failed`, `tray_started`,
+`tray_unavailable`, `tray_open_requested`, `tray_open_failed`, `tray_shutdown_requested`,
+`watchdog_stopped`.
 In-tree readers: `smoke_test.cmake` and `tests/watchdog/test_watchdog.das`.
 
 ## Crash capture
@@ -101,11 +105,29 @@ newest `--crash-bundles`. WER local dumps need a one-time elevated `--install-lo
 the dump is not acceptable. See `examples/crash/README.md` for which failure families are
 visible to which tier.
 
+## The tray icon
+
+`--tray` (the `tray` key in `watchdog.json`) puts a status icon in the notification area: a
+disc, plain while the child serves, wearing an amber triangle while it starts or tunes and a red
+square when it is unhealthy, crashed or waiting to restart. The tooltip and the menu's first row
+carry one status line - `starting up - loading the model`, `tuning this box - 3/12 kernels
+(gemv)`, `serving - healthy 2h05m`, `unhealthy (ready)`, `crashed (exit 9) - collecting the
+report`, `restarting in 4s (exit 9)`. `Open <name>`, also a left click, opens the page named by
+`--tray-url`, or the health URL's origin when health is polled and no page is named; it is
+enabled while the health check is green, or while the child runs when health is not polled and
+the page was named. With `--no-health` and no `--tray-url` there is no page and no row.
+`Shutdown` enters the same stop ladder as Ctrl-C. Where no desktop, session bus or backend can
+show an icon, the log says `tray_unavailable` and supervision runs without one: the icon is
+never fatal. On Linux it is a StatusNotifierItem over the session bus, so a systemd service
+with no `DBUS_SESSION_BUS_ADDRESS` gets none. The icon is pumped from the supervision tick, so
+on Windows and macOS supervision pauses - no health poll, no log drain, no restart - for as
+long as the menu is held open; Linux draws the menu in the panel and is unaffected.
+
 ## Notifications
 
-A crash, a recovery and a refused start raise a desktop notification: a PowerShell balloon on
-Windows, Notification Center through `osascript` on macOS, `notify-send` on Linux, nothing where
-none exists. Never fatal.
+A crash, a recovery and a refused start raise a desktop notification: through the tray icon
+while it is up, otherwise a PowerShell balloon on Windows, Notification Center through
+`osascript` on macOS, `notify-send` on Linux, nothing where none exists. Never fatal.
 
 ## Shipping it
 
@@ -121,10 +143,10 @@ a supervisor.
 
 ## Layout
 
-- `watchdog.das` - the library: configuration, discovery, the log, stages, crash capture, and
-  `Supervisor`, a state machine the host ticks (`tick()` / `request_stop()` / `run()`).
+- `watchdog.das` - the library: configuration, discovery, the log, stages, crash capture, the
+  tray, and `Supervisor`, a state machine the host ticks (`tick()` / `request_stop()` / `run()`).
 - `main.das` - the entry for both hosts: `start` / `tick` / `request_stop` / `result` for the
-  executable, `main` for the interpreter.
+  executable, `main` for the interpreter; it collects the heaps between ticks.
 - `main.cpp` - the executable's `main`: argv, the pid, the signals, the loop.
 - `smoke_test.cmake` - the `watchdog_smoke` ctest: the binary supervising a daslang child through
   a crash and a clean exit. The library's own tests are `tests/watchdog/`.

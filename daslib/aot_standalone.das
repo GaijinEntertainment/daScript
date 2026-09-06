@@ -109,20 +109,48 @@ def collectInitFunctionAotNames(program : ProgramPtr; var context : Context) : a
     return <- initNames
 }
 
-def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var tw : StringBuilderWriter, program : ProgramPtr; var context : Context) {   // nolint:STYLE038 - flat emitter - one write per ctor section
-    var lookupVariableTable : array<Variable?>;
+//! The globals the context carries, in the order the constructor initializes them; a used global
+//! without an index is the compiler's error, collected like every other emit error.
+def private usedGlobals(var program : ProgramPtr) : array<Variable?> {
+    var globals : array<Variable?>
     if (program.totalVariables > 0) {
         program.get_ptr() |> for_each_module_no_order($(pm) {
             pm |> for_each_global($(pvar) {
                 if (!pvar.flags.used) return
                 if (pvar.index < 0) {
-                    panic("Internal compiler errors. Simulating variable which is not used{pvar.name}");
+                    macro_error(program, pvar.at, "standalone AOT: global {pvar.name} is used but was never allocated an index")
                     return
                 }
-                lookupVariableTable.push(pvar);
+                globals.push(pvar);
             });
         });
     }
+    return <- globals
+}
+
+//! `options gc`: the program collects its own heaps.
+def private standaloneCollects(program : ProgramPtr) : bool {
+    return program._options |> find_arg("gc") ?as tBool ?? false
+}
+
+//! A `VarInfo` per global, made before the helper dumps its tables so every type they name is in
+//! the dump: the collector walks each global through its info, the way the interpreter's
+//! simulate step wires it.
+def private makeGlobalVarInfos(var helper : AotDebugInfoHelper?; globals : array<Variable?>) : array<tuple<index : int; info : VarInfo?>> {
+    return <- [for (pvar in globals); (index = pvar.index, info = helper.helper |> make_variable_debug_info(pvar))]
+}
+
+def private writeGlobalVarInfos(var helper : AotDebugInfoHelper?; infos : array<tuple<index : int; info : VarInfo?>>; var tw : StringBuilderWriter) {
+    for (entry in infos) {
+        let suffix = "_gvar_{entry.index}"
+        helper->writeDim(unsafe(addr(tw)), entry.info, suffix)
+        helper->writeArgTypes(unsafe(addr(tw)), entry.info, suffix)
+        helper->writeArgNames(unsafe(addr(tw)), entry.info, suffix)
+        write(tw, "VarInfo __gvar_info_{entry.index} = \{ {helper->describeCppVarFuncInfo(entry.info.name, entry.info, suffix)} \};\n")
+    }
+}
+
+def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var tw : StringBuilderWriter, program : ProgramPtr; lookupVariableTable : array<Variable?>; var context : Context) {   // nolint:STYLE038 - flat emitter - one write per ctor section
 
     let min_init_stack = 16384
     let stack_arg = program._options |> find_arg("stack")
@@ -141,11 +169,16 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     write(tw, "    policies.string_heap_size_hint = {string_heap_hint:d};\n");
     write(tw, "    policies.track_allocations = {program._options |> find_arg("track_allocations") ?as tBool ?? program.policies.track_allocations};\n");
     write(tw, "    context.setup({program.totalVariables}/*totalVariables*/, {program.globalStringHeapSize:d} /*globalStringHeapSize*/, policies, \{\});\n");
+    // the nano context has no collector flag
+    if (standaloneCollects(program)) {
+        write(tw, "    context.gcEnabled = true;\n");
+    }
 
     write(tw, "     // start totalVariables\n");
     for (pvar in lookupVariableTable) {
         write(tw, "    InitGlobalVar(context, &context.globalVariables[{pvar.index}/*pvar->index*/], GlobalVarInfo(\"")
         write(tw, "{pvar.name}\", \"{pvar |> get_mangled_name()}\", {pvar._type.sizeOf}, {pvar.flags.global_shared}));\n");
+        write(tw, "    context.globalVariables[{pvar.index}].debugInfo = &__gvar_info_{pvar.index};\n");
     }
     write(tw, "     // end totalVariables\n\n");
     write(tw, "    context.allocateGlobalsAndShared();\n");
@@ -202,7 +235,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     write(tw, "\}\n");
 }
 
-def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var header : StringBuilderWriter, var source : StringBuilderWriter; cfg : StandaloneContextCfg; var context : Context) {
+def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var header : StringBuilderWriter, var source : StringBuilderWriter; cfg : StandaloneContextCfg; globals : array<Variable?>; var context : Context) {
 
     write(header, "\n\n");
     //! the module scope is the FIRST base: constructed before Context, destroyed after it, so the
@@ -215,7 +248,7 @@ def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var
     write(header, "\};\n");
 
     writeStandaloneContextMethods(program, source, "{cfg.class_name}::", false, cfg);
-    writeStandaloneCtor(cfg, initFunctions, source, program, context);
+    writeStandaloneCtor(cfg, initFunctions, source, program, globals, context);
 }
 
 class StandaloneContextGen : CppAot {
@@ -305,13 +338,14 @@ def writeRegistration(var header : StringBuilderWriter;
                       var program : ProgramPtr;
                       cfg : StandaloneContextCfg;
                       registrations : array<StandaloneModuleEntry>;
+                      globals : array<Variable?>;
                       var context : Context) {
     write(source, "using namespace {program.thisNamespace};\n");
     write(header, "namespace {cfg.context_name} \{\n");
     write(source, "namespace {cfg.context_name} \{\n");
     dumpRegisterAot(unsafe(addr(source)), program, context, true, cfg.cross_platform);
     writeModuleRegistration(source, registrations);
-    writeStandaloneContext(program, initFunctions, header, source, cfg, context);
+    writeStandaloneContext(program, initFunctions, header, source, cfg, globals, context);
     write(header, "\} // namespace {cfg.context_name}\n");
     write(source, "\} // namespace {cfg.context_name}\n");
 }
@@ -356,7 +390,7 @@ def addFunctionInfo(fnn : array<Function?>; var helper : AotDebugInfoHelper?) {
 def genStandaloneSrc(var program : ProgramPtr;
                      var header : StringBuilderWriter;
                      var source : StringBuilderWriter; cfg : StandaloneContextCfg;
-                     var coll : BlockVariableCollector?) {
+                     var coll : BlockVariableCollector?; globals : array<Variable?>) {
     var initFunctions : string;
     var type_defs = "";
     let ctx_generated = build_string() $(tw) {
@@ -390,9 +424,11 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
 
             initFunctions = addFunctionInfo(collectProgramUsedFunctions(program, true, false), gen.helper);
+            let globalInfos <- makeGlobalVarInfos(gen.helper, globals)
             type_defs += gen.declarations;
             gen.declarations = "";
             write(tw, gen.str());
+            writeGlobalVarInfos(gen.helper, globalInfos, tw)
             unsafe {
                 delete gen.collector
                 delete gen
@@ -493,6 +529,7 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
     assume context = *pctx;
 
     var coll = prepareProgramForEmission(program, context)
+    let globals <- usedGlobals(program)
 
     let mod = program.getThisModule;
     let mod_name = mod.moduleFlags.promoted ? "" : string(mod.name);
@@ -519,8 +556,8 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
 
         write(source, "namespace das \{\n");
         write(header, "namespace das \{\n");
-            let initFunctions = genStandaloneSrc(program, header, source, cfg, coll);
-            writeRegistration(header, source, initFunctions, program, cfg, registrations, context);
+            let initFunctions = genStandaloneSrc(program, header, source, cfg, coll, globals);
+            writeRegistration(header, source, initFunctions, program, cfg, registrations, globals, context);
         write(source, "\} // namespace das\n");
         write(header, "\} // namespace das\n");
 
