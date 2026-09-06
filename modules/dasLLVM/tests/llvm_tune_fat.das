@@ -142,13 +142,14 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     t |> success(find(topAttrs, "\"target-features\"=\"{jit_class_plus_features(top)}\"") >= 0, "case 1: the {top} clone carries its class's features: {topAttrs}")
     t |> success(find(topAttrs, "noinline") >= 0, "case 1: the {top} clone is a function, never inlined into the baseline: {topAttrs}")
     t |> success(find(lowAttrs, "\"target-cpu\"=\"{jit_cpu_class_row(low).cpu}\"") >= 0 && find(lowAttrs, topOnly) < 0, "case 1: the {low} clone carries the baseline's cpu and none of the top class's features: {lowAttrs}")
+    t |> success(lb |> has("@das.tune.fat_mask = internal unnamed_addr global i32 0"), "case 1: the dispatch mask is an LLVM-side word, not a das global")
 
     let can_run = get_platform_name() != "windows" && das_is_dll_build()
     if (can_run && fexist("{exe}.exe")) {
         // 2. the exe dispatches from cpuid: the top clone when this box is in the class, else the baseline's
         var lr : array<string>
         t |> equal(spawn_child("{tune_env_prefix("", "", "")}\"{exe}.exe\"", lr), 0, "case 2: the fat exe runs\n{join(lr, "\n")}")
-        t |> success(lr |> has(boxInTop ? "RESULT 6 KV 2 VOID 2" : "RESULT 4 KV 0 VOID 2"), "case 2: the {boxInTop ? top : low} clone and its companion ran, and the void kernel's arm dispatched (box in {top}: {boxInTop})\n{join(lr, "\n")}")
+        t |> success(lr |> has(boxInTop ? "RESULT 6 KV 2 VOID 2 FORK 6" : "RESULT 4 KV 0 VOID 2 FORK 4"), "case 2: the {boxInTop ? top : low} clone and its companion ran, the void kernel's arm dispatched, and a pooled fork whose init never ran dispatched to the same clone (box in {top}: {boxInTop})\n{join(lr, "\n")}")
         t |> success(lr |> has("STATUS fat_add|{low}|k0|profile|active"), "case 2: the baseline clone is always active")
         t |> success(lr |> has("STATUS fat_add|{top}|k2|profile|{boxInTop ? "active" : "idle"}"), "case 2: the top clone's row says whether this box runs it")
         t |> success(lr |> has("fat kernels - this box runs the"), "case 2: the init announces the classes")
@@ -158,7 +159,7 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
         // 3. DAS_TUNE_FAT_CLASS pins the pick to the baseline whatever cpuid says
         var lp : array<string>
         t |> equal(spawn_child("{tune_env_prefix("", "", low)}\"{exe}.exe\"", lp), 0, "case 3: the pinned exe runs")
-        t |> success(lp |> has("RESULT 4 KV 0 VOID 2"), "case 3: the pinned baseline clone ran\n{join(lp, "\n")}")
+        t |> success(lp |> has("RESULT 4 KV 0 VOID 2 FORK 4"), "case 3: the pinned baseline clone ran, in the pooled fork too\n{join(lp, "\n")}")
         t |> success(lp |> has("DAS_TUNE_FAT_CLASS={low} pins the class"), "case 3: the pin announces itself")
         delete lp
 

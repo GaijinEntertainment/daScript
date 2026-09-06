@@ -42,7 +42,7 @@ let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x70ul   // the wasm feature string drop
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x820a38de6001269dul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xbb27ea0fe1919e2aul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 

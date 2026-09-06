@@ -17,6 +17,7 @@ require daslib/clargs
 require strings
 require math
 require llvm/daslib/llvm_code public
+require llvm/daslib/llvm_tune_fat_word   // the [llvm_code] spelling for the fat words below - never public, a program has daslib/tune's
 require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_env
 require llvm/daslib/llvm_cpu_class
@@ -923,19 +924,38 @@ def tune_status_add(fname, scope, suffix, source, manifestPath : string; klass :
 
 // ===== fat mode (runtime) =====
 
+// the interpreter's copies of the two words; under the JIT the [llvm_code] stubs below read and
+// write one LLVM-side global each instead (`llvm_tune_fat_word`), which every context of the
+// process shares - a pooled fork whose init script never ran has these das globals at zero
 var private g_tune_fat_mask = 0
-var private g_tune_fat_built = false
+var private g_tune_fat_built = 0
 
 //! The classes this box runs a fat exe's clones for, one bit per class (`tune_fat_class_bit`);
 //! 0 until the exe's `[init]` ran, which every dispatch reads as the baseline clone.
+[llvm_code(name = "llvm_tune_fat_word::load", global = "das.tune.fat_mask")]
 def tune_fat_mask() : int {
     return g_tune_fat_mask
+}
+
+[llvm_code(name = "llvm_tune_fat_word::store", global = "das.tune.fat_mask")]
+def private tune_fat_mask_set(mask : int) {
+    g_tune_fat_mask = mask
+}
+
+[llvm_code(name = "llvm_tune_fat_word::load", global = "das.tune.fat_built")]
+def private tune_fat_built_word() : int {
+    return g_tune_fat_built
+}
+
+[llvm_code(name = "llvm_tune_fat_word::store", global = "das.tune.fat_built")]
+def private tune_fat_built_set(built : int) {
+    g_tune_fat_built = built
 }
 
 //! True inside a fat exe once its `[init]` ran - what a library asks before it races the
 //! runtime section at first start (a plain build has a policy rail and a tuner for that).
 def tune_fat_built() : bool {
-    return g_tune_fat_built
+    return tune_fat_built_word() != 0
 }
 
 //! A class's bit in the fat mask: its position on its arch's ladder, most capable class first.
@@ -981,8 +1001,8 @@ def tune_fat_init(baseline : string) {
             names |> push(c)
         }
     }
-    g_tune_fat_mask = mask
-    g_tune_fat_built = true
+    tune_fat_mask_set(mask)
+    tune_fat_built_set(1)
     let pinned = empty(pin) ? "" : " (DAS_TUNE_FAT_CLASS={pin} pins the class)"
     to_log(LOG_INFO, "llvm_tune: fat kernels - this box runs the {join(names, ", ")} clones{pinned}\n")
     delete names

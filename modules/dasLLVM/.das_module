@@ -15,6 +15,7 @@ def initialize(project_path : string) {
         "llvm_jit_code",      // [llvm_code] JIT-side generator registry
         "llvm_user_modules",  // user-extensible require list for generator modules
         "llvm_code_selftest", // worked-example generator + self-test vehicle
+        "llvm_tune_fat_word", // the fat dispatch mask as an LLVM-side word (load/store generators)
         "llvm_tune"           // [tune] framework: perm grids, three modes, the manifest
     ]
     let bindings_paths = [

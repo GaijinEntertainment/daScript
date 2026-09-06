@@ -98,6 +98,13 @@ Mechanism: `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md` sec.11. Maintenance
   build's `DAS_JIT_BASELINE` or a force env for the pick.
 - Every `pin_profile_chain` under fat pins the WHOLE ladder, because the ship set reads classes
   above the baseline.
+- The runtime words (`tune_fat_mask`, `tune_fat_built` and their setters) are `[llvm_code]`
+  stubs over LLVM-side globals (`llvm_tune_fat_word.das`), never plain das globals: an engine's
+  pooled job contexts are forked with the init script skipped, and a das global there is zero,
+  which dispatches every worker to the baseline clone. The fixture's `FORK` value is that cell.
+  The stubs need the `[llvm_code]` spelling from that same module - `llvm_tune` cannot require
+  `daslib/tune` - and the require must stay non-public, or a program sees two annotations of
+  the name.
 
 ## The dasLLAMA tuner - the worked consumer
 

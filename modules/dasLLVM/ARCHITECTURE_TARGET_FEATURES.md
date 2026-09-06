@@ -102,8 +102,21 @@ The function's own body becomes the dispatch, generated as daslang: one arm per 
 class, `if ((tune_fat_mask() & bit) != 0) return <clone>(args)`, most capable first, and the
 unguarded baseline call last. The JIT lowers that to a load, a compare per arm and direct
 calls - no function pointer, no `invoke`. A bit is the class's position on its arch's ladder
-(`tune_fat_class_bit`); the mask is one runtime global that starts at zero, so a kernel called
-before the `[init]` filled it runs the baseline clone, which is always correct.
+(`tune_fat_class_bit`); the mask starts at zero, so a kernel called before the `[init]` filled
+it runs the baseline clone, which is always correct.
+
+The mask is an LLVM-side word, not a das global: `tune_fat_mask()` and its setter are
+`[llvm_code]` stubs whose generators (`daslib/llvm_tune_fat_word.das`) emit a load and a store
+of one module global, `das.tune.fat_mask` (`tune_fat_built()` rides a second one). A das global
+lives per context, and an engine's job contexts are pooled forks cloned with the init script
+skipped (`set_jobque_fork_pool(keep, skipInit)`), so their copy would stay zero and every
+kernel dispatched from a worker would run the baseline clone against planes the main context
+laid out for its own class. Process memory has one copy, so a fork reads what the main
+context's `[init]` stored, and the chain's guard is a plain load the backend hoists. The stubs'
+das bodies (the das globals) serve the interpreter and AOT, where there is no fat exe. The
+spelling `[llvm_code]` inside `llvm_tune` comes from that same module, required non-publicly:
+`daslib/tune` carries the user-facing annotation and requires `llvm_tune`, so `llvm_tune` cannot
+see it, and a program must never see both.
 
 The emitter (`try_llvm_code_function`, `daslib/llvm_jit.das`) reads `tune_class` off the
 annotation and gives the clone's impl three things: the `target-cpu` and `target-features`

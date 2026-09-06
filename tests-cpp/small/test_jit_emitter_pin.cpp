@@ -28,6 +28,7 @@ static const char * EMITTER_FILES[] = {
     "llvm_targets.das",
     "llvm_user_modules.das",
     "llvm_cpu_class.das",
+    "llvm_tune_fat_word.das",
 };
 
 // normalized to LF so Windows and Linux checkouts agree

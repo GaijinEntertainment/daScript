@@ -401,6 +401,8 @@ feature set, else the reference body), is lowered by the backend for its class
 alone, and never inlines into the baseline code around it. Companions clone
 per class alongside. The function's own body becomes the dispatch: a chain of
 direct calls over a runtime mask, most capable class first, the baseline last.
+The mask is one LLVM-side word of process memory, so a job context forked
+with its init script skipped dispatches like the main context.
 
 At startup the exe reads cpuid, refuses a box that lacks any feature of the
 baseline class, and sets the mask to every class of the ladder the box is in.
