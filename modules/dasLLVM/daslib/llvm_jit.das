@@ -4886,12 +4886,12 @@ class public LlvmJitVisitor : AstVisitor {
     def override visitExprGoto(expr : ExprGoto?) : ExpressionPtr {
         if (expr.subexpr != null) {
             var labI = getE(expr.subexpr)
+            var badLab = append_basic_block("invalid_label")
+            var sw = LLVMBuildSwitch(g_builder, labI, badLab, uint(length(sortedLabels)))
             for (kv in sortedLabels) {
-                var nextLab = append_basic_block("not_label_{kv.index}")
-                let isL = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, labI, types.ConstI32(uint64(kv.index)), "")
-                LLVMBuildCondBr(g_builder, isL, kv.blk, nextLab)
-                LLVMPositionBuilderAtEnd(g_builder, nextLab)
+                LLVMAddCase(sw, types.ConstI32(uint64(kv.index)), kv.blk)
             }
+            LLVMPositionBuilderAtEnd(g_builder, badLab)
             build_exception("invalid label index", expr.at)
         } else {
             var lab = labels[expr.labelName]
