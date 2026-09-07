@@ -1369,6 +1369,7 @@ def private kq_fmt_of(gt : int) : KqFmt {
 // Fill the per-kind weight format tags from the file's tensor types (q8-mode loads with the
 // kquant_native knob on). Fused-projection arches (Phi3) split attn_qkv/ffn_up at row-aligned
 // slice offsets, so every slice stays superblock-aligned; one disk tensor = one tag for its slices.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE038 — a flat tag-assignment run: one weight kind per line
     if (t.quant != QuantMode.q8 || !get_kquant_native()
             || (t.config.fused_qkv && t.config.dim % 256l != 0l)) {   // fused slice offsets are dim-multiples
@@ -1437,10 +1438,10 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         t.mtp_ehproj_fmt = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{t.config.n_layers}.nextn.eh_proj.weight")), 2l * t.config.dim)
         any ||= t.mtp_ehproj_fmt != KqFmt.q8
     }
-    // deltanet dn tags: CPU rail only — Metal/GPU tiers bind dn q8; grouped files have no exact transcode
+    let dn_native_driver = gpu_want_dn_native() && t.config.n_expert == 0l
     if (t.config.recr_mask != 0ul && !t.dn_grouped
             && get_metal_mode() == MetalMode.off
-            && !(moe_gpu_tier_installed() && (gpu_want_dense() || gpu_want_dn() || gpu_want_dnd()))) {
+            && (dn_native_driver || !(moe_gpu_tier_installed() && (gpu_want_dense() || gpu_want_dn() || gpu_want_dnd())))) {
         t.dnqkv_fmt |> resize(layers)
         t.dngate_fmt |> resize(layers)
         t.dnout_fmt |> resize(layers)

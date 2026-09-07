@@ -180,8 +180,13 @@ entry here:**
   build, because MoltenVK's over-cap failure is an opaque `INITIALIZATION_FAILED` - and the
   resident driver declines residency with it (`vk_rdec_prepare`). `[metal_dispatch]` has no
   footprint gate: Metal's own pipeline compile fails loudly with the footprint in the error.
-- **Vulkan has no shapes module yet** - `resident_upload` declines ad hoc by feature name; the
-  gap is `followup_vulkan.md` item 1, not a precedent to copy.
+- **Vulkan has no shapes module yet** - `resident_upload` declines ad hoc by feature name, and
+  every decline says its reason: the whole-model driver's gates speak through one
+  `resident driver declined - <reason>; the per-op rails serve` line, each per-op rail walk
+  reports the layers it left on the CPU with the first layer's reason and its VRAM-budget stop,
+  a dense model's FFN gets its own line (the per-op tier has no dense-FFN rail), and the
+  per-call resident overrides say each pass-to-CPU reason once per armed model
+  (`rdec_pass_once`). The gap is `followup_vulkan.md` item 1, not a precedent to copy.
 - **The device-side token-embedding gather is Vulkan-only.** The engine asks one probe before
   it embeds (`register_embed_gpu_gate`, `dasllama_common.das`); on true it stashes the token
   ids, skips the CPU embed loop, and the resident driver gathers the rows on device through
@@ -193,6 +198,12 @@ entry here:**
   the CPU embed. What leaves the window wall is the CPU embed loop and the x upload - the ids
   ride a 4-byte-per-row upload instead. Metal has no twin: its whole-forward driver embeds
   host-side.
+- **The deltanet-resident seats are Vulkan-only.** The whole-model driver's recurrent arm
+  installs SEPARATELY from the resident bundle (`install_moe_gpu_resident_dn`: a recurrent
+  layer's plane set, its beta/alpha rows, the per-token owner bind and the prefill's slot
+  handoff), so a tier without the seats declines a recurrent layer by name
+  (`resident_layer_decline`) and the per-op rails serve it. Metal has no seat to install: its
+  whole-forward driver carries the recurrent branch inside its layer encoder.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
 
@@ -247,7 +258,8 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 `modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
 and why they lose.
 
-Sections 2.2j-2.2q, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`.
+Sections 2.2j-2.2m and 2.2p-2.2q, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`;
+its 2.2n-2.2o - the residency plan and the marks swap - are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`.
 
 ### 2.2w The tower attention routes {#tower-attn-routes}
 

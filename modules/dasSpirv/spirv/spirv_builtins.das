@@ -450,6 +450,12 @@ struct coopmatWgB_f16_128x32 {}
 [arch(at="../ARCHITECTURE.md#cm2-tile-markers")]
 struct coopmatWgAcc_f16_64x128 {}
 struct coopmatWgAcc_f32_64x128 {}
+// the h256 flash tiles (Br=64, Bc=32): Q & O 64x256, Qf16 as A, K^T as B 256x32, V as B 32x256
+struct coopmatWgA_f16_64x256 {}
+struct coopmatWgB_f16_256x32 {}
+struct coopmatWgB_f16_32x256 {}
+struct coopmatWgAcc_f16_64x256 {}
+struct coopmatWgAcc_f32_64x256 {}
 // the int8 twins (q8 x q8 -> s32 at workgroup scope; K-tile 32)
 struct coopmatWgA_s8_64x32 {}
 struct coopmatWgB_s8_32x16 {}
@@ -496,6 +502,11 @@ def public coopmatMulAdd(a : coopmatWgA_f16_64x128; b : coopmatWgB_f16_128x32; c
 def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f32_64x128) : coopmatWgAcc_f32_64x128 { return c }
+// the h256 Bc=32 pair: S = Qf16 @ K^T, O += P @ V (rowsum = P @ One is the h128 trio's)
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x256; b : coopmatWgB_f16_256x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x256; c : coopmatWgAcc_f32_64x256) : coopmatWgAcc_f32_64x256 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x16; c : coopmatWgAcc_s32_64x16) : coopmatWgAcc_s32_64x16 { return c }
 [unused_argument(a, b), sideeffects]

@@ -220,20 +220,24 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 // deltanet chain capacities (npos chunks over DN_WINDOW windows, state carried device-side).
 // Maxima match qwen35 (ds 128, 32 v-heads, conv dim 8192, dconv 4) — vk_moe_dn asserts them
 // and the engine arm fail-closes on bigger models.
-let DN_CS = 64l
 let DN_MAX_DS = 128l
+
+//! The sequential scan's workgroup count for a head count and state width
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def dn_scan_wgs(nvh, ds : int64) : int64 {
+    let cpg = 8l * (32l / (ds / 16l))
+    return nvh * ((ds + cpg - 1l) / cpg)
+}
+
+//! The prefill's beta/alpha tile GEMM's workgroups: 16-position tiles x 16-output groups over the 2 x nvh rows.
+def dn_ba_wgs(npos, nvh : int64) : int64 => ((npos + 15l) / 16l) * ((2l * nvh + 15l) / 16l)
 let DN_MAX_HEADS = 32l
 let DN_MAX_CD = 8_192l
 let DN_MAX_DCONV = 4l
 let DN_WINDOW = 1_024l
-let DN_NCHUNKS = DN_WINDOW / DN_CS
-// phase-1 slab per (head x chunk): 7 CS x ds panels + 2 CS x CS tiles + 4 CS smalls; phase-2
-// per-head area: state working copy + och rows. ~155MB total — the price of the 2-phase scan
-let DN_SLAB = 7l * DN_CS * DN_MAX_DS + 2l * DN_CS * DN_CS + 4l * DN_CS
-let DN_P2_OFF = DN_MAX_HEADS * DN_NCHUNKS * DN_SLAB
-let DN_P2_SLAB = DN_MAX_DS * DN_MAX_DS + DN_CS * DN_MAX_DS
-let DN_O_OFF = DN_P2_OFF + DN_MAX_HEADS * DN_P2_SLAB
-let DN_WS_BYTES = (DN_O_OFF + DN_WINDOW * DN_MAX_HEADS * DN_MAX_DS) * 4l
+//! the scan workspace holds the raw o rows alone: position-major, di wide, rewritten in place by the out-norm
+let DN_O_OFF = 0l
+let DN_WS_BYTES = DN_WINDOW * DN_MAX_HEADS * DN_MAX_DS * 4l
 let DN_STATE_BYTES = DN_MAX_HEADS * DN_MAX_DS * DN_MAX_DS * 4l
 let DN_META_BYTES = 128l
 // smalls plane float offsets, ending in the conv history region — the per-window smalls
@@ -480,7 +484,8 @@ struct GpuState {
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops)
-    decvec_on : bool         // DASLLAMA_VK_DECVEC asked and the device reports the four-wide decode callback (a dry bake creates no pipelines and leaves it off)
+    has_bda : bool           // the device enabled bufferDeviceAddress (the coopmat2 creator alone does): storage buffers carry the device-address usage, allocation flag and query
+    decvec_on : bool        // DASLLAMA_VK_DECVEC asked and the device reports the four-wide decode callback (a dry bake creates no pipelines and leaves it off)
     full_sg_on : bool        // DASLLAMA_VK_FULLSG asked and the device has the feature: every class pipeline pins REQUIRE_FULL_SUBGROUPS
     coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile, 4 = cm2 decode-in-load (the default where the device has it, else 3)
     sm_count : int           // shaderSMCount (VK_NV_shader_sm_builtins; 0 = unknown -> l-tile always, no split-k)
@@ -627,10 +632,10 @@ struct GpuState {
     dn_state_host : HostBuf       // host-cached state readback (chain end)
     dn_tail_host : HostBuf        // host-cached conv-tail readback (the caller's history store)
     dn_state_dev : uint64
-    dn_ws_dev : uint64            // per-head scan slabs + the gated o rows
+    dn_ws_dev : uint64            // the scan's raw o rows, normed in place
     dn_conv_set : VkDescriptorSet
-    dn_scan_set : VkDescriptorSet      // scan phase 1 (class sets are per-class — p2 has its own)
-    dn_scan_p2_set : VkDescriptorSet
+    dn_scan_set : VkDescriptorSet      // the sequential scan (conv rows, state, smalls, the o rows)
+    dn_scan_p3_set : VkDescriptorSet   // the gated out-norm over the raw o rows
     dn_rq_set : VkDescriptorSet
     dn_cls_ready : bool                // the window chain's class sets (built by prefill)
     dn_ready : bool
@@ -723,6 +728,13 @@ def find_host_mem(type_bits : uint; cached : bool) : uint {
     return find_memory_type(g_gpu.phys, type_bits, want)
 }
 
+//! the validation layer learns a buffer's range from this query - without it a decode callback's PhysicalStorageBuffer access reads as out of range
+[cold_path]
+def private note_device_address(b : Buffer) {
+    verify(get_buffer_device_address(g_gpu.device, BufferDeviceAddressInfo(buffer = weak_copy(b))) != 0ul,
+        "dasLLAMA vulkan tier: buffer device address query failed")
+}
+
 [cold_path]   // buffer creation — setup, not steady state
 def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_shared : bool = false; soft : bool = false) : HostBuf {
     var bci : BufferCreateInfo
@@ -730,6 +742,8 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     bci.usage.storage_buffer = storage
     bci.usage.transfer_src = !storage
     bci.usage.transfer_dst = true   // readback staging targets (y DMA copies land here)
+    let bda_on = storage && g_gpu.has_bda   // a storage buffer's blocks reach the cm2 decode callbacks as PhysicalStorageBuffer pointers
+    bci.usage.shader_device_address = bda_on
     if (xfer_shared && g_gpu.xfer_fam >= 0) {
         // stream mirrors: transfer-queue fills + compute-queue heat slices — CONCURRENT dodges ownership transfers
         bci.sharingMode = VkSharingMode.CONCURRENT
@@ -737,8 +751,15 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     }
     var b <- create_buffer(g_gpu.device, bci)   // deliberately never finalized (process-lifetime)
     let req = get_buffer_memory_requirements(g_gpu.device, b)
-    let mai = MemoryAllocateInfo(allocationSize = req.size,
+    var mai = MemoryAllocateInfo(allocationSize = req.size,
                                  memoryTypeIndex = find_host_mem(req.memoryTypeBits, cached))
+    var bda = VkMemoryAllocateFlagsInfo()
+    bda.flags.device_address = true
+    if (bda_on) {
+        unsafe {
+            mai.next = addr<void?>(bda)
+        }
+    }
     var ares = VkResult.SUCCESS
     var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
     if (ares != VkResult.SUCCESS) {
@@ -753,6 +774,9 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
         return HostBuf()
     }
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
+    if (bda_on) {
+        note_device_address(b)
+    }
     var mapped : void? = null
     let mf : VkMemoryMapFlags
     unsafe {
@@ -769,6 +793,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     bci.usage.storage_buffer = true
     bci.usage.transfer_dst = true
     bci.usage.transfer_src = true   // y planes DMA back out (device -> host staging)
+    bci.usage.shader_device_address = g_gpu.has_bda   // the cm2 decode callbacks reach a plane's blocks as PhysicalStorageBuffer pointers
     if (xfer_shared && g_gpu.xfer_fam >= 0) {
         // stream slots: transfer-queue fills + compute-queue reads — CONCURRENT dodges ownership transfers
         bci.sharingMode = VkSharingMode.CONCURRENT
@@ -779,19 +804,27 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     // priority 1.0 (default 0.5): under pressure the driver demotes lower-priority (desktop) memory first
     var prio = VkMemoryPriorityAllocateInfoEXT()
     prio.priority = 1.0
+    var bda = VkMemoryAllocateFlagsInfo()   // the usage bit above wants its allocation flagged too
+    bda.flags.device_address = g_gpu.has_bda
+    if (g_gpu.has_memprio) {
+        unsafe {
+            bda.pNext = addr<void?>(prio)
+        }
+    }
     if (g_gpu.rebar_type >= 0 && (req.memoryTypeBits & (1u << uint(g_gpu.rebar_type))) != 0u) {
         // ReBAR attempt — raw alloc so a decline falls back to plain device-local below
         var rmai = VkMemoryAllocateInfo()
         rmai.allocationSize = req.size
         rmai.memoryTypeIndex = uint(g_gpu.rebar_type)
-        if (g_gpu.has_memprio) {
-            unsafe {
-                rmai.pNext = addr<void?>(prio)
-            }
+        unsafe {
+            rmai.pNext = addr<void?>(bda)
         }
         var rmem : VkDeviceMemory
         if (vkAllocateMemory(dev_raw(), rmai, null, rmem) == VkResult.SUCCESS) {
             vk_check(vkBindBufferMemory(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), rmem, 0ul), null)
+            if (g_gpu.has_bda) {
+                note_device_address(b)
+            }
             var mapped : void? = null
             let mf : VkMemoryMapFlags
             unsafe {
@@ -806,13 +839,14 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     want.device_local = true
     var mai = MemoryAllocateInfo(allocationSize = req.size,
                                  memoryTypeIndex = find_memory_type(g_gpu.phys, req.memoryTypeBits, want))
-    if (g_gpu.has_memprio) {
-        unsafe {
-            mai.next = addr<void?>(prio)
-        }
+    unsafe {
+        mai.next = addr<void?>(bda)
     }
     var m <- allocate_memory(g_gpu.device, mai)
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
+    if (g_gpu.has_bda) {
+        note_device_address(b)
+    }
     g_gpu.dev_mem |> insert(b._vk, m._vk)
     return b._vk
 }
@@ -1039,6 +1073,7 @@ def vk_moe_init : bool {
     if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == 4) {
         // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam, g_env_vulkan.vk_decvec)
+        g_gpu.has_bda = true
         to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load, {g_gpu.sm_count} SMs; DASLLAMA_COOPMAT=mm restores the mul_mm tiles)\n")
     } elif (g_gpu.has_coopmat) {
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam, xfam)
@@ -1611,10 +1646,14 @@ def vk_drop_model_state {
     g_rdq_n = 0u          // decode-role profiler likewise — averages must not span models
     g_rdq_count = 0l
     g_rdq_total = 0.0lf
+    g_rdq_wall_us = 0.0lf
     g_rdq_pro = 0.0lf
     g_rdq_tail = 0.0lf
     for (i in range(16)) {
         g_rdq_role[i] = 0.0lf
+    }
+    for (i in range(13)) {
+        g_rdq_dn[i] = 0.0lf
     }
     // host-visible buffers: host_mem tracks every make_host_buf result minus the exempt pair
     for (buf, mem in keys(g_gpu.host_mem), values(g_gpu.host_mem)) {
@@ -2001,6 +2040,26 @@ struct RLayer {
     m_q, m_k, m_v, m_wo : HostBuf
     m_gate, m_up, m_down : HostBuf
     made : bool
+    // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
+    recurrent : bool
+    mir_idx : int64 = -1l           // this attention layer's K/V mirror slot; -1 = recurrent (no KV)
+    bqkv, bz, bout, bbeta, balpha : int64   // arena blocks: fused qkv, z gate, out projection, the q8 beta/alpha rows (-1 on the f32 arm)
+    fqkv, fz, fout : int
+    ba_off : int64                  // the f32 arm: this layer's [beta ; alpha] row base in dn_ba_dev (elements)
+    s_dnqkv, s_dnz, s_dnout : VkDescriptorSet
+    s_dnbeta, s_dnalpha : VkDescriptorSet   // q8 arm: GEMVs landing in the smalls at the beta/g rows
+    s_dnba : VkDescriptorSet                // f32 arm: the router-form GEMV over dn_ba_dev, two pushes
+    s_dnstep : VkDescriptorSet
+    m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
+    dn : DnStep                     // state + smalls + the session owner (the per-op step's shape; its cmd/tok/sets stay unused here)
+    // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
+    pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
+    pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
+    pf_dn_scan_p3_set : VkDescriptorSet    // pf_dnz + dn_ws + this layer's smalls (the gated out-norm)
+    pf_dn_tail_set : VkDescriptorSet       // pf_dnqkv last taps rows -> this layer's smalls ring image
+    pf_dn_ba_set : VkDescriptorSet         // f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (batched router GEMV)
+    pf_dn_cvt_set : VkDescriptorSet        // the cm2 route: pf_xb -> pf_xf, the qkv / z GEMMs' f16 feed
+    m_pf_dnqkv, m_pf_dnz, m_pf_dnout, m_pf_dnbeta, m_pf_dnalpha : HostBuf   // the prefill GEMMs' region metas
 }
 
 struct RDec {
@@ -2024,7 +2083,19 @@ struct RDec {
     gate_dev, up_dev : uint64
     ffnout_dev : uint64
     xb2_dev : uint64              // wo output
-    k_mirror, v_mirror : uint64   // [n_layers x seq_cap x kv_dim] elements of the kv16 codec
+    k_mirror, v_mirror : uint64   // [n_attn x seq_cap x kv_dim] elements of the kv16 codec (attention layers own rows; RLayer.mir_idx)
+    n_attn : int64                // attention layers = mirror slots
+    q_gated : bool                // the q GEMV writes [q | gate] per head (2*qd rows); rope/attention read q head-strided
+    rot : int64                   // rotary width per head (hs, or the partial-rope width)
+    // the hybrid (deltanet) form: geometry + the buffers every recurrent layer shares
+    hybrid : bool
+    dn_cd, dn_kd, dn_di, dn_nvh, dn_nkh, dn_ds, dn_dconv : int64
+    dn_ba_f32 : bool              // beta/alpha rows come as f32 in the file (dn_ba_dev, f16 on the device) rather than q8 arena planes
+    dn_proj_dev : uint64          // [cd + di] floats: the fused qkv row, the z row at cd
+    dn_ba_dev : uint64            // f32 arm: every recurrent layer's [beta ; alpha] rows, [2 x nvh x dim] per layer, f16
+    dn_ba_bytes : int64
+    dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
+    dn_parity : int               // the shared conv-ring parity: every recurrent layer steps once per token
     norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     cos_dev : uint64              // this token's rope row (cos[half] + sin[half])
     logits_dev : uint64
@@ -2068,6 +2139,15 @@ struct RDec {
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
     pf_emb_set : VkDescriptorSet
     pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [l*2] = the ffn site, [l*2+1] = addr_next
+    // the hybrid arm: the recurrent layers' window planes (the scan rides the tier's dn_ws_dev,
+    // the o requant its DN_O_OFF rows -> hq/hs). Per-layer sets live on RLayer (smalls/state differ).
+    pf_dnqkv : uint64             // [MAX_NPOS x cd] projected qkv rows
+    pf_dnconv : uint64            // [MAX_NPOS x cd] the conv output rows the scan reads
+    pf_dnz : uint64               // [MAX_NPOS x di] z rows
+    pf_dnbg : uint64              // [2 x MAX_NPOS x nvh] beta rows then alpha rows (the q8 arm's GEMM out; copied into the layer smalls per window)
+    pf_dnrq_set : VkDescriptorSet // the o requant (dn_ws_dev DN_O_OFF rows -> hq/hs), shared by every recurrent layer
+    pf_dnof : uint64              // the o rows' f16 feed for the cm2 out tile [np x di] (the cm2 route; 0 when the device has no cm2)
+    pf_dnof_set : VkDescriptorSet // dn_ws_dev o rows -> pf_dnof, shared by every recurrent layer
 }
 
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
@@ -2127,6 +2207,8 @@ var g_rdq_total = 0.0lf
 var g_rdq_pro = 0.0lf
 var g_rdq_tail = 0.0lf
 var g_rdq_role : double[16]
+var g_rdq_dn : double[13]   // a hybrid's recurrent-head roles (rdq_sample's second table)
+var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
 
 let PFQ_CAP = 2048u
 var g_pfq_pool : QueryPool
@@ -2219,7 +2301,7 @@ let VHB_COMB = 0x20u      // combine weight/bucket planes
 let VHB_CY = 0x40u        // combine accumulator
 let VHB_SM = 0x80u        // smalls image (dn/at)
 let VHB_ST = 0x100u       // dn recurrent state
-let VHB_WS = 0x200u       // dn slabs/o scratch
+let VHB_WS = 0x200u       // dn o-row scratch
 let VHB_ATQ = 0x400u      // at deinterleaved q rows
 let VHB_ATG = 0x800u      // at gate/o rows
 let VHB_ATK = 0x1000u     // at roped-k panel
@@ -2253,6 +2335,14 @@ let VHS_GACTS = 0x400000u  // the gate/up feed images
 let VHS_LOG = 0x800000u   // the router logits
 let VHS_META = 0x1000000u  // the three stacks' slot metas + the combine weights
 let VHZ_SK = 0x40000u     // cm2 split-k partial planes (the reduce's input scratch) — shares the VHZ namespace with the roles it interleaves
+let VHZ_DNP = 0x80000u    // deltanet projection row (qkv + z)
+let VHZ_DNST = 0x100000u  // deltanet per-layer state (in place)
+let VHZ_DNSM = 0x200000u  // deltanet per-layer smalls (beta/g rows + the conv ring)
+let VHZ_DNO = 0x400000u   // deltanet requantized o row (oq + os)
+let VHZ_DNWS = 0x800000u  // the deltanet window chain's scan workspace (dn_ws_dev)
+let VHZ_DNBG = 0x1000000u // the prefill's beta/alpha rows scratch (pf_dnbg)
+let VHZ_DNC = 0x2000000u  // the prefill's deltanet conv output rows (pf_dnconv)
+let VHZ_DNZ = 0x4000000u  // the prefill's deltanet z rows (pf_dnz)
 
 struct VkHaz {
     w : uint            // bits with a pending (unbarriered) write
@@ -2895,6 +2985,13 @@ def cmd_copy_range(raw : VkCommandBuffer; src : uint64; src_off : int64; dst : u
     var region = VkBufferCopy(srcOffset = uint64(src_off), dstOffset = uint64(dst_off), size = uint64(bytes))
     unsafe {
         vkCmdCopyBuffer(raw, reinterpret<VkBuffer>(src), reinterpret<VkBuffer>(dst), 1u, addr(region))
+    }
+}
+
+// zero a device range inside a command (a transfer write; offset and size multiples of 4)
+def cmd_fill_zero(raw : VkCommandBuffer; dst : uint64; dst_off : int64; bytes : int64) {
+    unsafe {
+        vkCmdFillBuffer(raw, reinterpret<VkBuffer>(dst), uint64(dst_off), uint64(bytes), 0u)
     }
 }
 

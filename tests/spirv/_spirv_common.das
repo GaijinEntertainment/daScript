@@ -810,6 +810,21 @@ def public tern_words : array<uint> {
     return clone_to_move(tern_spv)
 }
 
+// ===== tern_lazy: an ssbo load in a ternary / && / || operand - the branched lowering; the pure ternaries beside it stay OpSelect =====
+[compute_shader(local_size_x=64, name="tern_lazy_spv"), marker(no_coverage)]
+def tern_lazy {
+    let i = gl_GlobalInvocationID.x
+    let guarded = i < 100u ? fdata[i] : 0.0
+    let both = i > 0u && fdata[i - 1u] > 0.0
+    let either = i == 0u || fdata[i - 1u] < 0.0
+    let pure = guarded > 0.0 ? guarded : -guarded           // nolint:PERF016 -- pure arms: still OpSelect
+    fdata[i] = pure + (both ? 1.0 : 0.0) + (either ? 2.0 : 0.0)
+}
+
+def public tern_lazy_words : array<uint> {
+    return clone_to_move(tern_lazy_spv)
+}
+
 // ===== Phase-8.2 vector arithmetic + a folded const-vector operand. Component-wise +/-/ lower to
 // OpFAdd/OpFSub/OpFDiv on the vector result type (scalar_class reads the lane kind); unary - is
 // OpFNegate. float2(0.5,0.5) as an operand folds to ExprConstFloat2 -> OpConstantComposite (the gap
@@ -2450,6 +2465,79 @@ def public coopmat2fa_words : array<uint> {
     return clone_to_move(coopmat2fa_spv)
 }
 
+// ===== The h256 flash tiles: the flash-attention inner loop at head size 256 (Br=64, Bc=32) - the shape dasLLAMA's attention runs =====
+[compute_shader(local_size_x=128, name="coopmat2fa256_spv"), marker(no_coverage)]
+def coopmat2fa256_kernel {
+    let n = fa_meta[0u]
+    let kv = fa_meta[1u]
+    let ti = gl_WorkGroupID.x
+    var tlq : tensorLayout2DPad
+    tensorLayoutCreate(tlq)
+    tensorLayoutSetDimension(tlq, n, 256u)
+    tensorLayoutSetStride(tlq, 256u, 1u)
+    var tlk : tensorLayout2DPad
+    tensorLayoutCreate(tlk)
+    tensorLayoutSetDimension(tlk, kv, 256u)
+    tensorLayoutSetStride(tlk, 256u, 1u)
+    var tlo : tensorLayout2D
+    tensorLayoutCreate(tlo)
+    tensorLayoutSetDimension(tlo, n, 256u)
+    tensorLayoutSetStride(tlo, 256u, 1u)
+    var tv : tensorView2Dt
+    tensorViewCreate(tv)
+    var q : coopmatWgAcc_f32_64x256
+    coopmatLoadTensor(q, fa_q, 0u, tlq, ti * 64u, 64u, 0u, 256u)
+    coopmatScale(q, 0.0625)
+    var qf : coopmatWgA_f16_64x256
+    coopmatConvert(qf, q)
+    var mrow : coopmatWgAcc_f32_64x32
+    coopmatFill(mrow, -1.7e38)
+    var lrow : coopmatWgAcc_f32_64x32
+    var o : coopmatWgAcc_f32_64x256
+    var j = 0u
+    while (j < kv) {
+        var s : coopmatWgAcc_f32_64x32
+        var kt : coopmatWgB_f16_256x32
+        coopmatLoadTensor(kt, fa_k, 0u, tlk, j, 32u, 0u, 256u, tv)
+        s = coopmatMulAdd(qf, kt, s)
+        coopmatPerElement(s, s, @@fa_mask, ti * 64u, j)
+        var rmax : coopmatWgAcc_f32_64x32
+        coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@fa_max)
+        var mold : coopmatWgAcc_f32_64x32
+        coopmatCopy(mold, mrow)
+        coopmatPerElement(mrow, rmax, @@fa_pick_max, mold)
+        coopmatSub(s, s, mrow)
+        coopmatPerElement(s, s, @@fa_exp)
+        var em : coopmatWgAcc_f32_64x32
+        coopmatSub(em, mold, mrow)
+        coopmatPerElement(em, em, @@fa_exp)
+        var pa : coopmatWgA_f16_64x32
+        coopmatConvert(pa, s)
+        var rsum : coopmatWgAcc_f32_64x32
+        var one : coopmatWgB_f16_32x32
+        coopmatFill(one, 1.0)
+        rsum = coopmatMulAdd(pa, one, rsum)
+        coopmatMulElem(lrow, em, lrow)
+        coopmatAdd(lrow, lrow, rsum)
+        var emd : coopmatWgAcc_f32_64x256
+        coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@fa_smear)
+        coopmatMulElem(o, emd, o)
+        var vt : coopmatWgB_f16_32x256
+        coopmatLoadTensor(vt, fa_v, 0u, tlk, j, 32u, 0u, 256u)
+        o = coopmatMulAdd(pa, vt, o)
+        j += 32u
+    }
+    var ld : coopmatWgAcc_f32_64x256
+    coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@fa_smear)
+    coopmatPerElement(ld, ld, @@fa_recip)
+    coopmatMulElem(o, ld, o)
+    coopmatStoreTensor(o, fa_o, 0u, tlo, ti * 64u, 64u, 0u, 256u)
+}
+
+def public coopmat2fa256_words : array<uint> {
+    return clone_to_move(coopmat2fa256_spv)
+}
+
 // The cm2 fixture adds the tensor-addressing type/builder opcodes, the tensor-addressed coopmat
 // load/store, OpCooperativeMatrixLengthKHR, and OpPhi (coopmatClamp's hand-emitted element loop is
 // the emitter's ONLY OpPhi — das loops lower through Function-storage locals). The decode function's
@@ -2476,7 +2564,8 @@ def public coopmat2_emitter_opcodes : table<uint> {
         SpvOp.ShiftLeftLogical,
         SpvOp.ShiftRightArithmetic,
         SpvOp.ShiftRightLogical,
-        SpvOp.ConstantFalse
+        SpvOp.ConstantFalse,
+        SpvOp.ConstantTrue   // the lazy `||` stores its short-circuit answer before the branch
     ]) {
         s |> insert(uint(op))
     }

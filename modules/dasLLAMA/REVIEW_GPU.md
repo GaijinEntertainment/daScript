@@ -72,16 +72,14 @@ device-to-device copy loop is already coalesced and conforms.
 
 **Never decide a kernel row's validity or owner by scanning the per-bucket base and count
 arrays - a bucket is the run of rows one expert owns in the bucket-ordered buffer - read the
-one per-row entry instead.** The bucket-building kernel writes that per-row
-entry. The scan repeats on every thread of every row's threadgroup, and it grows with the
-bucket count.
+one per-row entry instead.** The bucket-building kernel writes that per-row entry. The scan
+repeats on every thread of every row's threadgroup, and it grows with the bucket count.
 
 **Never test the validity of a row in the bucket-ordered buffer - where each expert owns one
 run of rows - against the pad sentinel `0xFFFFFFFF`; compare the row's per-row bucket entry,
 the one the bucket-building kernel writes, with the live entry count (positions x experts per
-token, `npos * nk`) instead.** Rows past the last expert's stamped
-tail hold stale pool bytes, not the sentinel, and an equality test sends their token index
-out of bounds.
+token, `npos * nk`) instead.** Rows past the last expert's stamped tail hold stale pool
+bytes, not the sentinel, and an equality test sends their token index out of bounds.
 
 **Never gate an early `return` in a kernel body that runs a cooperative op - a `barrier()`, a
 simdgroup matrix op, or a cross-lane reduction - on a per-thread value; gate it on a
@@ -154,12 +152,16 @@ an `upload_region` upload never written after arming - is a defect unless it car
 defect; a per-encode field either omits `@role` or names the access its body performs.**
 `weight` tells the generated builder the buffer needs no per-encode hazard tracking.
 
-**A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
-`[vk_dispatch]` declaration, or a new instance of a template carrying one - covers that class
-in `tests/test_kernel_coverage.das`, one of two ways.** Either a census row there dispatches
-the class, or the diff names it in that file's `CENSUS_NEVER_DISPATCHED` with the reason no
-row can reach it - the two lists together are the file's coverage claim, and a class in
-neither makes that claim false.
+**A diff that adds a Metal kernel class under `dasllama/` - a `[metal_kernel]` def, or a new
+instance of a template carrying one - either adds a census row to
+`tests/test_kernel_coverage.das` that dispatches it, or names it in that file's
+`CENSUS_NEVER_DISPATCHED` with the reason no row can reach it.** The two lists together are the
+file's coverage claim.
+
+**A diff that adds a Vulkan kernel class under `dasllama/` - a `[vk_dispatch]` declaration, or a
+new instance of a template carrying one - adds a census row to `tests/test_kernel_coverage.das`
+that dispatches it; a class no census model reaches gets a census model that does.**
+`CENSUS_NEVER_DISPATCHED` covers Metal classes only.
 
 **Every field of a new kernel class declared in `dasllama/` carries at least one of the
 annotations its `[metal_dispatch]` / `[vk_dispatch]` builder reads - `@binding`, `@role`,
@@ -204,7 +206,7 @@ own init/release pair.
 **A string-typed Metal decline reason is a defect - a Metal decline reason is an enum value in
 `dasllama/dasllama_metal_shapes.das`, one enum per driver.**
 
-**A decline counter beside the decline site is a defect - decline counting lives in
+**A Metal decline counter beside the decline site is a defect - decline counting lives in
 `dasllama/dasllama_metal_common.das`.**
 
 **A diff that adds or removes a Metal-only or Vulkan-only hook, role, served path, or
@@ -213,24 +215,34 @@ lists included, a seat of the `dasllama_gpu_tier` cooperation SPI excluded (the 
 standing entry sends those to the tier's role row) - lands its own entry in
 `ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the same change, even when that list
 already carries an asymmetry of the same class, and even when the diff also extends the file's
-sec.1.5 role row.** One backend serving the same
-path faster or slower is not such a change.
+sec.1.5 role row.** One backend serving the same path faster or slower is not such a change.
 
 **A change to code that a served GPU decode or prefill path executes ships GPU-vs-CPU parity
-on one q8 and one kq (K-quant) model the changed path serves, with the mirror codec armed
-where the changed path reads a K/V mirror.** That code is anything a served GPU decode or prefill call executes OR that
-selects what it executes - a driver, a kernel class it dispatches, that class's builder, a
-servability gate, a race that picks which kernel serves, a forwarder default, a weight-region
-or residency path, the tier forwarders and the Vulkan tier-dispatch seams
-(`dasllama/dasllama_vulkan_seams.das`) the call routes through; never the bake paths, never a
-comment. The parity run is `harness/parity.das` on either backend, `benchmarks/lcpp_bench.das
---parity` (`performance/model_specs.das`'s fixed model list) on either backend, or - on Metal
-only - an in-suite `tests/test_metal_*_parity.das` instrument run through `tests/run.das`.
+on one q8 and one kq (K-quant) model the changed path serves.** That code is anything a
+served GPU decode or prefill call executes OR that selects what it
+executes - a driver, a kernel class it dispatches, that class's builder, a servability gate, a
+race that picks which kernel serves, a forwarder default, a weight-region or residency path,
+the tier forwarders and the Vulkan tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`)
+the call routes through; never the bake paths, never a comment.
+
+**Parity evidence counts only when it comes from `harness/parity.das`,
+`benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model list), or an
+in-suite parity instrument run through `tests/run.das` that feeds both sides the same fixed
+tokens and compares the logits against a fixed tolerance - Metal's
+`tests/test_metal_*_parity.das`, Vulkan's `tests/test_gpu_resident_hybrid.das`.**
 
 **Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
 Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows the tier that serves
 the changed path armed (`resident driver armed` for the whole-model driver, `GPU MoE tier: ...
-resident` for the per-op tier).** The Vulkan driver declines codec-mismatched sessions silently.
+resident` for the per-op tier).** A log showing neither arming line measured the CPU.
+
+**Vulkan parity evidence counts only when the run armed the mirror codec - the K/V mirror's
+element type, f16 or f32 - that the changed path reads.** `DASLLAMA_VK_KV32=1` arms f32; f16
+is the default and needs no flag.
+
+**Vulkan parity evidence whose log carries a `resident override passed a call` line for the
+changed path does not count.** That line is the Vulkan driver naming a call it handed back to
+the CPU path.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq
@@ -251,6 +263,11 @@ decode/prefill hook `dasllama/dasllama_gpu_resident.das` registers in
 **An override that byte-copies mirror bytes across codecs is a defect - bytes move only between
 same-codec session rows and mirror rows.** A cross-codec copy corrupts the host's authoritative
 cache.
+
+**A resident override that serves a recurrent (deltanet) model zeroes the deltanet state on a
+call at position zero, and declines every call at a nonzero position other than the session's
+next deltanet position (`Session.dn_pos`).** The override runs the whole forward itself, so the
+engine's own forward-only guard never runs.
 
 **A module-level variable in a GPU driver file whose value depends on the installed model
 gets a model-swap discharge in the same change that adds it** - the vulkan tier files

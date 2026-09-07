@@ -32,16 +32,84 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    `resident_upload` rejects 12 family features ad hoc, by name). Build
    `dasllama_vulkan_shapes` on the Metal pattern: portable, no `vulkan` require, feeds the
    same decline-reason reporting.
-2. **Family coverage in the resident driver** - today it serves the llama-family std shape
-   only. Metal's drivers serve MoE (Wave C), DeltaNet hybrids (Wave D), gemma4 (PLE,
-   sandwich norms), gpt-oss (sinks, swiglu_oai). The vulkan kernels for MoE/deltanet already
-   exist in the cooperative tier - the work is resident-driver plumbing, not new shaders.
-   Walkthrough datum (2026-08-06): qwen35-0.8B serves CORRECTLY on the per-op rails but the
-   per-layer submit+fence cadence caps it at 35% tg / 8% pp of the upstream whole-graph run -
-   the hybrid-ladder extension is the fix, and the carrier conversion already made
-   dn_step_cls a TokMeta class kernel, so recurrent layers can encode straight into the
-   recorded token cmd; what remains is ladder plumbing (recurrent roles in rd_record_token,
-   dn state on g_rd).
+2. **Family coverage in the resident driver** - the DECODE half of the deltanet hybrid ladder
+   landed (`plans/vulkan_hybrid_ladder.md`; `ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v): the
+   token command carries recurrent layers (the fused step over per-layer state slots), gated
+   attention and partial rotary, the K/V mirror has one slot per attention layer, and the nextn
+   block no longer declines. Qwen3.5-9B UD-Q5_K_XL decodes resident at 49.7 tg (0.88x of
+   upstream; was 11.1 on the per-op rails). The PREFILL half followed: the window chain carries
+   the recurrent block (conv + chunked scan on the layer's device state), gated attention and
+   partial rotary on the batch kernels, and hands the device state to the session for the decode
+   (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2j, `_DECODE.md` sec.2.2v; gate
+   `tests/test_gpu_resident_hybrid.das`, one- and two-window cells). Every figure in this item:
+   `benchmarks/lcpp_bench.das -m Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf -r 3` (`-p 512 -n 128`) through
+   `bin/Release/daslang.exe -jit` under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1
+   DAS_JOBQUE_THREADS=16` (`DASLLAMA_GPU_PROF=1` for the role tables) on the 5060 Ti box (Windows
+   11), the upstream control `llama-bench -ngl 99` on the same day's build-vulkan (b10660). The
+   9B UD file on the resident driver: pp512 1365 (was 95.7; upstream 2527 - 0.54x), tg128 53.3
+   (upstream 56.7, 0.94x).
+   WHERE THE GAPS ARE (DASLLAMA_GPU_PROF=1 role tables, 9/5, 5060 Ti; `vk_rdpf attn`/`dn` and
+   `vk_rdec ... dn avg/token` are hybrid-aware now):
+   - pp512, one 512-row window = 349 ms GPU (upstream ~203): the deltanet two-phase scan was
+     141 ms (scan2 97 + scan1 45; 24 layers, ~5.9 ms/layer - P2 ran ONE workgroup per head, 16 of
+     36 SMs, and the staged GEMM did two shared loads per FMA with its C tile in a dynamically
+     indexed private array). DONE 9/5 (same session): phase 2 per (head, column slice) with a phase
+     3 out-norm (`DN_NSP` = 4) and a 2x4 register-tiled GEMM (bit-exact) took the scan to 63 ms
+     (scan1 27 + scan2 36), the window to 291 ms, pp512 to 1710 (0.68x). DONE 9/5 (evening): the
+     chunked form is gone - `dn_scan_cls` is upstream's shape, the plain per-token recurrence
+     with the state in registers (one 32-lane subgroup per (head, column group), 16 rows per lane,
+     the token loop inside the kernel): scan 17.7 ms + out-norm 1.2 (was 63), and the f32
+     beta/alpha rows as a 16-position tile GEMM (`dn_ba_cls`, P2): 11.7 ms (was 15.5). Window
+     221 ms, pp512 2010 (0.80x of 2527), tg128 52.6 (0.93x). DONE 9/5 (later): the host seams
+     (window-0 fills in the command, the slot handed to the session - item (e)) took pp512 to
+     2282; the dn qkv/z/out GEMMs on the f16-fed cm2 tiles (P4: qkv 21.0 -> 15.4 ms, z 10.2 ->
+     7.1, out 10.4 -> 9.2, two f16 converts +0.5) to 2361 (0.93x); the scan's k/q rows staged in
+     shared per four-subgroup workgroup (17.5 -> 15.3; staging or the scalars a token ahead measured
+     no faster - the dependent chain is what remains) to 2387; the beta/alpha rows f16 on the
+     device and the tile GEMM regridded to 16-position x 16-output tiles (9.4 -> 6.1; the bytes
+     alone moved nothing, the grid did) to 2439 (0.965x), tg128 54.2 (0.956x), window 200 ms. DONE
+     9/6 (P1): the cm2 flash tile stamps at head 256 with a gated epilogue (`fa_cm2_h256_g[_f16]_cls`,
+     Br 64 / Bc 32, the 64x256 / 256x32 / 32x256 workgroup shapes in dasSpirv): attention 21.05 ->
+     1.29 ms over the 8 layers, window 183 ms, pp512 2660 +- 3 (two r3 pairs: 2659 / 2661) = 1.05x
+     of llama.cpp's 2527 - PREFILL PARITY; tg128 53.5 (0.94x; the decode path is untouched, the 0.7
+     drift from 54.2 is the box). DONE 9/6 (scan ILP): a lane keeps 16 rows of TWO adjacent columns
+     (`dn_scan_cls`, 128 workgroups on the 9B instead of 256; the staged k/q rows feed both
+     columns, the two chains interleave): scan 17.0 -> 10.9 ms and the window 200 -> 189 ms on the
+     same box state (a same-day llama-bench control is the only valid baseline - the box read ~6%
+     slower on every row today: llama.cpp 2488 / 53.1 against its 9/5 2527 / 56.7); pp512 2586
+     (1.04x of the same-day 2488), tg128 49.9 (0.94x). What is left in the window, in milliseconds:
+     the FFN GEMMs ~85 across both heads (cm2 tiles, at par); the dn GEMMs 29.8; scan 10.9
+     (four columns per lane measured 15.3 - 64 workgroups starve the 36 SMs; two columns is the
+     shape); ba 5.8; conv 5.3, cls 2, attention 1.3, add+rms/act/converts ~9. DONE 9/6 (D1, the
+     k-native deltanet planes): the loader keeps a dense hybrid's qkv/z planes in their file
+     formats when the whole-model driver will be attempted (`gpu_want_dn_native`, also an image
+     identity bit), the plan tallies, reserves and places the triple by format, the decode's kq
+     GEMVs and the prefill's k5/k6 cm2 tiles serve them; a K-quant OUT plane still declines (the
+     step's o row is Q8_0), and a layer with a q8 beta/alpha arm beside kq qkv/z re-requantizes
+     the row Q8_0 before those GEMVs (one x feed, two forms). 9B UD same-day: tg128 50.1 -> 51.8
+     (0.965x of the 53.7 control; decode qkv 2.21 -> 1.70 ms, z 1.13 -> 0.95; the plan's ctx
+     125655 -> 136087), pp512 2608 -> 2526 (1.02x of 2484): the k5/k6 cm2 tiles run the same
+     GEMMs slower than the q8 tile (window qkv 14.8 -> 17.7 ms, z 6.3 -> 8.3) - the kq cm2 decode
+     callbacks are the next prefill lever (item 11's K-quant tail), or a q8 twin of the two
+     planes for the prefill alone when VRAM allows.
+   - tg128 = 18.9 ms GPU/token (host wall 19.4; upstream 17.6): every GEMV role sits at 360-420
+     GB/s (bandwidth-bound, at par per byte); the bytes are the gap: the loader's Q8_0 transcode of
+     the deltanet qkv (Q5_K in the file, 24 x 33.5M params) and z (Q6_K) planes reads ~400 MB more
+     per token than upstream = ~1.0 of the 1.1 ms gap - lever D1 = the k-native dn planes
+     (`PERF_LEDGER.md` k4 dn planes; the resident GEMVs already serve every KqFmt); the rest is
+     small-dispatch latency: the f32 beta/alpha pair 0.39 ms (2 dispatches x 24 layers at 64 GB/s -
+     D2: one dispatch, or f16/q8 rows), add+rms pairs 0.68 ms + requants 0.16 (the fused ar+rq twin
+     is off on a hybrid because the f32 GEMVs read xb - D3).
+   STILL OPEN in this item:
+   (b) the other families Metal serves - MoE (Wave C), gemma4 (PLE, sandwich norms), gpt-oss
+   (sinks, swiglu_oai) - stay per-op; (c) the decode-role profiler (`rdq_sample`) has no
+   per-role table for the hybrid stamp count - it reports the whole span only, and the prefill's
+   per-role table labels a recurrent layer's stamps with the attention head's role names; (d) DONE
+   9/5 - the f32 arm is `dn_ba_cls`, gated by `test_vkd_dn_ba` (partial and full tiles) and
+   `test_vkd_dn_9b_ba` (the 9B geometry); the scan has `test_vkd_dn_9b_scan` beside the family
+   cell, both against the sequential CPU rule; (e) DONE 9/5 - the prefill hands each slot to the
+   session (valid, dirty, owned) instead of flushing it home and re-uploading, and window 0 zeroes
+   the slots with fills inside the window command: 48 host round trips gone per prefill.
 3. **KV codecs on device** - Vulkan's mirror serves f16 (the armed default) and f32 through
    the codec-templated kernel stamps; Metal additionally carries q8_0/tq4. Port the quant
    codecs next (the CPU truth is `dasllama_convert`'s KV codec functions; the Metal quant
@@ -619,7 +687,7 @@ module) is independent and can land any time - it is pure structure.
     moved its first decode step; the MTP cell red behind the SmolLM cells) was the model-swap
     defect: a deleted model's device state stayed installed and the next load uploaded beside
     it, so the offset-keyed stack lookup served the earlier model's planes - the upload rail
-    now drops a still-installed model first (`ARCHITECTURE_GPU_VULKAN.md` 2.2o,
+    now drops a still-installed model first (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` 2.2o,
     `tests/test_gpu_model_swap.das`). The SmolLM reds (chunk sizes, batching, evict, media
     splice, mrope) were cross-lane numerics, not defects: the resident driver's device prefill,
     its batch decode and the CPU prefill agree on every argmax over a few steps and drift by
@@ -627,3 +695,48 @@ module) is independent and can land any time - it is pure structure.
     claim bit-exact mechanics, so they pin the CPU lane (`moe_gpu_drop_model` after the load).
     Done = the file green, twice in a row, under `DASLLAMA_GPU=1` on the 5060 Ti, the cell
     order free.
+
+40. **The 2026-09-05 hang hunt's residue (the Khronos layer under GPU-assisted validation, safe
+    mode, robustness OFF, on the 9B pp512 window).** The hang itself was the emitter's eager
+    `?:` (`modules/dasSpirv/ARCHITECTURE.md` sec.3, "Operand laziness follows the language"):
+    `qk_rms_cls` read `krows` at every q-row offset, 12.6 MB past a 4 MiB binding, and faulted
+    the card once the overshoot left mapped VRAM (512 rows dead, 128 rows fine, the 0.8B fine,
+    the kernel-unit cells fine - a CPU oracle cannot see an out-of-range READ). Three things the
+    same run reported that are not yet fixed: (a) `q8_batch_mm_a_cls`'s
+    `OpCooperativeMatrixLoadKHR` carries a Stride the spec wants 16-byte aligned (VUID
+    RuntimeSpirv-OpCooperativeMatrixLoadKHR-08986; the driver tolerates it today); (b) DONE
+    2026-09-06 - the coopmat2 device creator (`modules/dasVulkan/daslib/vulkan_boost.das`) names
+    `shaderIntegerDotProduct` on the 1.3 struct whenever that struct is chained and keeps the
+    standalone struct for a device below 1.3 (VUID VkDeviceCreateInfo-pNext-06532 was the two
+    side by side); (c) validation messages name a shader module by "internal ID n" only -
+    `vkd_class_pipe` has the kernel name in hand, so a `VK_EXT_debug_utils` object name on
+    every class pipeline and module would make the next report self-identifying (today the map
+    is `DASLLAMA_VK_SPV_DUMP`'s write order, 1-based). (d) found 2026-09-06 on the same window:
+    the cm2 tiles' decode callbacks take the weight block as a PhysicalStorageBuffer pointer the
+    driver forms from the bound plane, and no dasLLAMA buffer is created with the
+    SHADER_DEVICE_ADDRESS usage (VUID RuntimeSpirv-PhysicalStorageBuffer64-11819, first seen on
+    `q8_batch_cm2l_cls` once the deltanet GEMMs took the cm2 tiles; the K-quant cm2 tiles read the
+    same way). The driver serves the reads; the layer's safe mode ZEROES them, so a validated 9B
+    prefill lands garbage logits (top logit 13.37 against 7.76 plain) while the plain run is right -
+    a validation run's numerics are not evidence until (d) lands. DONE 2026-09-06: every storage
+    buffer (`make_device_buf`, `make_host_buf` with storage) carries the SHADER_DEVICE_ADDRESS
+    usage, chains `VkMemoryAllocateFlagsInfo` (device_address) on its allocation - both of the
+    device path's allocations and the pinned host mirrors - and queries its device address once
+    after the bind (`note_device_address`): the usage bit alone left the report standing, because
+    the layer learns a buffer's range only from `vkGetBufferDeviceAddress`. The mapped-image import
+    stays a transfer source (no kernel reads it); the device already enabled `bufferDeviceAddress`
+    (the coopmat2 creator sets it and gates coopmat2 on it). Acceptance held: the validated 9B
+    window logs no VUID at all and lands the plain run's logits (7.70 vs 7.76). One residue: under
+    the layer the process then wedges at exit (one core spinning, the card idle) - kill it; a plain
+    run exits clean. (e) The tier's kernels assume a 32-lane subgroup - the shuffle reductions'
+    xor ladders, the scan's lane-pair arithmetic (`lanes_per_pair`), the GEMV's rows per workgroup
+    - and the init refuses a smaller `subgroupSize`; a wider one (a wave64 device) runs those
+    arms unmeasured. Done = a validation message naming `qk_rms_cls` by name, and a wave64 run
+    of the kernel-unit suite. The emitter's operand laziness itself - eager `select` / bool `&`
+    `|` as language surface, the purity heuristic dropped, the 12 kernel sites converted - is
+    `plans/shader_emitter_followups.md` item 1.
+41. **`tests/test_vulkan_kernels.das`'s device-absent cells feint instead of skipping.** The file's
+    idiom (its header: "every check feints cleanly") predates `tests/REVIEW.md`'s rule that a cell
+    with nothing to assert registers `t |> skip`, so on a box without a Vulkan device every cell of
+    the model-free suite reports PASS having done nothing - the hybrid ladder's fa/dn cells follow
+    the file's idiom. Done = a file-wide conversion to `t |> skip` on the no-device and no-cm2 paths.

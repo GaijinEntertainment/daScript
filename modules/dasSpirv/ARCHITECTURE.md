@@ -167,6 +167,21 @@ stream and removes the capability, the extension declaration, and each
 twin's `OpFunction` stays in the module, unreferenced, and the mandatory scalar `DecodeFunc`
 serves the load. One emitted blob therefore runs on a device without the feature.
 
+### 3.4 Operand laziness follows the language {#operand-laziness}
+
+`cond ? a : b`, `&&` and `||` lower to `OpSelect` / `OpLogicalAnd` / `OpLogicalOr` while both
+operands are pure - branchless, both evaluated. An operand that indexes a global-rooted array (an
+ssbo, a block field, a `@workgroup` array) lowers as a branch instead: `SpirvTempAlloc` hoists a
+Function-storage temp per such node (`ctx.lazy_temps`), the operand the condition admits stores
+through it, and the merge block reloads it as the value. For `&&` and `||` the left operand's
+answer stores before the branch, so the edge the left operand settles goes straight to the merge;
+the branch labels are allocated after the condition is visited, in the visitor's if/else hook
+order (the left- and right-operand pre-visit hooks). `OpSelect` evaluates both operands, and
+the operand a condition rules out is exactly the one whose index the condition guards - on the
+device an out-of-range load is a fault that surfaces only when the overshoot leaves mapped memory,
+so it tracks allocation layout, not the kernel's inputs. A local fixed array stays eager: its
+index is register arithmetic, not a device address.
+
 ## 4. Test architecture - "every emitted instruction has a test"
 
 The behavioral layers, then the enforcement gates (all in main-tree `tests/spirv/` except the

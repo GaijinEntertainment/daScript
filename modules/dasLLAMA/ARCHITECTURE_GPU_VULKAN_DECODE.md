@@ -1,11 +1,12 @@
 # dasLLAMA Architecture - the Vulkan per-op tier's decode era
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries sections 2.2r-2.2u: the decode attention block over per-layer K/V mirrors,
-the streamed expert layer's GPU/CPU split, the whole-token decode span, and the deltanet decode
-step's per-session resident state. The prefill window
-chain, the cm2 tiles and the MoE expert chain these build on are `ARCHITECTURE_GPU_VULKAN.md`
-sections 2.2j-2.2q.
+document carries sections 2.2r-2.2v: the decode attention block over per-layer K/V mirrors,
+the streamed expert layer's GPU/CPU split, the whole-token decode span, the deltanet decode
+step's per-session resident state, and the whole-model driver's hybrid token command. The
+prefill window chain, the cm2 tiles and the MoE expert chain these build on are
+`ARCHITECTURE_GPU_VULKAN.md` sections 2.2j-2.2m and 2.2p-2.2q; the residency plan and the marks
+swap under them are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o.
 
 ### 2.2r The per-op tier's decode attention block {#decode-attention-block}
 
@@ -168,3 +169,74 @@ authoritative at once. The engine reaches those seams through the tier's forward
 `dn_flush_layer` per layer before any CPU read of `dn_state` or the conv history,
 `moe_gpu_dn_release` for one session's copies, and `moe_gpu_dn_invalidate` for every copy at
 once.
+
+### 2.2v The whole-model driver's hybrid token command {#hybrid-token-command}
+
+**A recurrent layer rides the same recorded token command as an attention layer.** The
+whole-model driver (`ARCHITECTURE_GPU.md` sec.1.5, `dasllama_gpu_resident.das`) records one
+command per model whose per-layer body is one of two heads followed by the shared FFN tail: an
+attention head (q/k/v GEMVs, the fused qk-norm and rope storing the mirror row, decode attention
+over the mirror, the wo requant and GEMV) or a recurrent head - the fused qkv GEMV and the z
+GEMV into one projection row (z at offset `cd`), the beta and alpha GEMVs into the layer's smalls
+at the step's beta and g rows, the fused deltanet step (`dn_step_cls`, the same kernel the
+per-op tier's `vk_moe_dn_step` dispatches), and the out GEMV. Both heads leave the block output
+in `xb2`, so the residual add, the FFN and the next layer's norm never know which head ran. The
+deltanet qkv and z planes ride their file formats - the loader tags a dense hybrid's planes
+natively where this driver will be attempted or no GPU rail wants them (Metal off, the file not
+grouped, since a grouped file has no exact transcode, and either the whole-model driver armed on
+an expert-free model or a tier whose per-op dense and deltanet rails are unwanted; every other
+case transcodes them to q8, because Metal and the per-op rails bind deltanet q8 only), each GEMV
+dispatches per format and a superblock plane takes the Q8_K x feed - while the out plane is q8,
+since the step's o row feeds it as Q8_0
+(a K-quant out plane declines the layer); the beta and alpha rows are q8 arena planes when
+the file carries them quantized, or - the F32-on-disk case - one f16 device copy of every
+recurrent layer's `[beta ; alpha]` rows that the router-form GEMV's f16 twin reads with an output
+base into the smalls. A hybrid takes the split activation rail (no fused add+rms+requant): the f32
+GEMVs read the normed row `xb`, which the fused twin never writes.
+
+**Each recurrent layer owns a device state slot in the per-op step's shape** (`DnStep`: the
+state, the smalls with the parity-double-buffered conv ring, the owner's host addresses), and
+the session-ownership rule of sec.2.2u holds unchanged: before a token the driver binds every
+recurrent slot to the calling session (`vk_rdec_dn_own` - the owner's path is one pointer
+compare; a foreign dirty slot flushes home first, then the session's state and history come
+up), the engine's flush, release and invalidate seams walk these slots beside the per-op
+table, and a session's position-zero reset releases them like any other copy. The conv-ring
+parity is ONE word for the whole model, in the shared `TokMeta` the command already carries:
+every recurrent layer steps once per token, so every slot reads the same image and the driver
+flips the word after each submit; an uploaded history lands in the image the next step reads.
+
+**The K/V mirror has one slot per ATTENTION layer.** A recurrent layer keeps no K/V, so the
+mirror is sized `n_attn x seq_cap x kv_dim` and each attention layer carries its slot index
+(`RLayer.mir_idx`); the K/V sync, readback and hydrate seams address by slot and return at
+once on a recurrent layer. The attention geometry (head size, q and kv widths) is the first
+attention layer's - on qwen35 layer 0 is recurrent.
+
+**Gated attention and partial rotary ride the fused qk-norm+rope kernel and the decode
+attention kernel, not a detour.** On a gated model the q GEMV writes `2 x qd` rows in the
+loader's per-head `[q | gate]` layout; the fused kernel reads and writes q head-strided
+(`qstride = 2 x hs`) and leaves the gate half in place, and the attention kernel reads q by the
+same stride and multiplies each head's output by the sigmoid of its gate half before the store.
+On a partial-rope model the rotation half is `rot / 2`, the cos and sin row is built over `rot`
+(its frequencies are `rot`-based, the CPU form's), and the normed unrotated tail of a head is
+stored back in place (q) or into the mirror (k). The split qk-rms + rope pair carries neither
+arm, so a gated or partial-rope model takes the fused kernel whatever the fuse gate says; the
+two arms need qk-norm, and a model with either but without it declines by name.
+
+**The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN.md`
+sec.2.2j): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
+rows into the layer's own smalls, the conv, the sequential scan over the layer's own device
+state slot (the raw o rows in the tier's workspace), the o requant and the out GEMM into the block
+output, so the window command needs no host round trip per layer. The state slots are the
+decode's (`RLayer.dn`): the prefill zeroes them at window 0 with transfer fills inside the window
+command (a position-zero prefill starts the forward-only state fresh - the engine's `dn_reset` on
+the host, the fills on the device) and, after the last window, hands each layer's slot to the
+session (`vk_rdec_prefill_dn_own`: valid, dirty, owned, the history in ring image 0), so the first
+decode's owner bind finds the state in place and a host read syncs it down through `dn_flush_layer`;
+no state crosses the bus at the seam. The session's deltanet position is the prompt length after the prefill.
+
+**A session whose rows the mirror lacks takes the mirror from the host cache.** A session that
+prefilled on the CPU rails (a pinned-off resident prefill, a CPU-only session) or that another
+session's prefill superseded is hydrated on the host; the decode override uploads the attention
+layers' rows `[0, pos)` into the mirror (`rdec_take_mirror`), mints a generation and serves - the
+same sync the batch decode does per row. The gap decline remains for a session that owns the
+mirror and asks past its rows.

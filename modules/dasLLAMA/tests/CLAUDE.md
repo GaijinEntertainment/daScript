@@ -308,6 +308,27 @@ the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lan
 tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream
 deltanet cell needs Qwen3.5-0.8B-Q8_0 and `DASLLAMA_GPU=1` on a box whose tier serves the
 deltanet decode step, and skips otherwise.
+`test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
+from a Config or a synthetic Model shell (`resident_unserved_features`,
+`attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
+shape is named in the text a user reads, a served one yields "".
+`test_gpu_resident_hybrid.das` - stocked suite; the whole-model resident driver on a deltanet
+hybrid (Qwen3.5-0.8B-Q8_0, `DASLLAMA_GPU=1`): the resident window chain prefills (recurrent
+layers through conv + chunked scan on device state, gated partial-rope attention over the
+device K/V mirror) and the resident decode advances the recurrent layers on device; forced-feed
+logits within the 4% deltanet bar of the all-CPU chain (the model dropped off the device) after
+the prefill and at every step, the one-step-off compare against the CPU chain's next step as
+the must-EXCEED control, and counter witnesses that the resident tier armed and that the
+prefill served on the device; one-window (a 40-row prompt, inside one window), two-window (a
+prompt one window plus 88 rows long), one-past-the-window (one row past one window: the chain
+shortens the preceding window so the last one still carries the conv taps) and two-token (a
+prompt shorter than the conv taps: the conv history ring's leading rows are zero) cells; skips
+without the model or the armed tier. The K-quant twin (`Qwen3.5-0.8B-Q4_K_M.gguf`, minted from
+the Q8_0 by the recipe its `../performance/model_specs.das` row carries, which pins one
+tensor - the deltanet out projection (`ssm_out`) - to Q8_0) runs the same one-window and
+two-window cells with the deltanet qkv (q6_K) and z (q4_K) planes in their file formats on the
+driver, asserts the loader kept them so, and holds a 6% bar (the K-quant chain's device-vs-CPU
+noise runs near double the Q8 file's, flat across steps).
 `test_gpu_model_swap.das` - stocked suite; two models through one process on the armed tier
 (Qwen3-0.6B, SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own
 weights, the pin on the upload rail dropping a still-installed model's device state first; skips

@@ -46,7 +46,19 @@ def test_exe_smoke(t : T?) {
         var out = ""
         let prev_untuned = env_value_of("DASLLAMA_ALLOW_UNTUNED")
         set_env_variable("DASLLAMA_ALLOW_UNTUNED", "1")   //! inherited by the child; /usr/bin/env does not exist on Windows
-        let rc = run_and_capture([exe, "--", model], out, 300.0)
+        //! the artifact links the producing daslang's runtime DLLs, which resolve through PATH and never from the
+        //! temp dir - so the run prepends that daslang's dir through the shell; the command opens with `set` or an
+        //! assignment, never a quote, which cmd.exe would strip
+        let bin_dir = dir_name(self_daslang())
+        var cmd = "PATH=\"{bin_dir}:$PATH\" \"{exe}\" -- \"{model}\" 2>&1"
+        if (get_platform_name() == "windows") {
+            cmd = "set \"PATH={bin_dir};%PATH%\"&& \"{exe}\" -- \"{model}\" 2>&1"
+        }
+        let rc = unsafe(popen_timeout(cmd, 300.0, $(f) {
+            if (f != null) {
+                out = fread(f)
+            }
+        }))
         set_env_variable("DASLLAMA_ALLOW_UNTUNED", prev_untuned)
         t |> equal(0, rc, "the exe runs clean: {slice(out, max(0, length(out) - 400))}")
         t |> success(find(out, "EXE_SMOKE_OK") >= 0, "the generate completed in the exe: {slice(out, max(0, length(out) - 400))}")

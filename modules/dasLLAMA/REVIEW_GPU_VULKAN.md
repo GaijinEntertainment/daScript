@@ -1,8 +1,8 @@
 # dasLLAMA Vulkan Tier Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU_VULKAN.md` and `ARCHITECTURE_GPU_VULKAN_DECODE.md`. Planned work:
-`followup_vulkan.md`.
+docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` and
+`ARCHITECTURE_GPU_VULKAN_DECODE.md`. Planned work: `followup_vulkan.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
@@ -28,12 +28,21 @@ mask.** The vendor driver's shader compiler pattern-matches only the 16-bit spel
 block-load path, and a runtime byte select loses that path for the whole kernel.
 
 **A diff that changes when `vk_rdec_prefill_ids` - the resident prefill that takes token ids
-rather than embeddings - accepts a call, or changes the override that routes to it
-(`vulkan_resident_prefill`), updates `vulkan_embed_gpu_gate` in the same change** - the
-override and the gate live in `dasllama/dasllama_gpu_resident.das`, `vk_rdec_prefill_ids` in
-`dasllama/dasllama_vulkan_prefill.das`. The engine skips the CPU embed when that gate returns
-true, so a gate true where the prefill path declines hands the next consumer an unfilled
-residual stream.
+rather than embeddings - accepts a call, or when the override that routes to it
+(`vulkan_resident_prefill`) accepts one, updates `vulkan_embed_gpu_gate` in the same
+change** - the override and the gate live in `dasllama/dasllama_gpu_resident.das`,
+`vk_rdec_prefill_ids` in `dasllama/dasllama_vulkan_prefill.das`. The engine skips the CPU
+embed when that gate returns true, so a gate true where the prefill path declines hands the
+next consumer an unfilled residual stream.
+
+**A Vulkan-tier serving gate that decides at load - a predicate or per-layer loop whose false
+branch or `continue` routes work to the CPU path - logs at load how many layers or planes it
+left on the CPU and the reason it left them.** A silent decline is a fallback a user finds
+only by profiling.
+
+**A Vulkan-tier serving gate that decides per call - a predicate or loop whose false branch or
+`continue` routes work to the CPU path - logs the concrete reason it declined, once per reason
+per armed model.**
 
 **A prefill GEMM dispatched at a nonzero start row never asks `cm2_split_k` for a split - it
 encodes unsplit.** The split-k reduce sums partial planes counted from row 0, so a dispatch
@@ -61,3 +70,17 @@ re-measured so its `=1` row now beats its `=0` row; or `override DECV4 = false` 
 `override DECVEC = false` together, which puts the format back on the scalar callback.** With
 `DECV4 = true` the class never reads `DECVEC`, so `override DECVEC = false` alone leaves the
 hand-written twin running.
+
+**A diff that changes how many GPU timestamps the resident decode's token command records - the
+`pfq_ts` calls in `dasllama/dasllama_vulkan_decode.das` - updates the stamp count `rdq_sample`
+expects, and with it the role-name table and accumulator of every layer kind whose count
+moved: attention's `rdq_role_names` with `g_rdq_role`, recurrent's `RDQ_DN_NAMES` with
+`g_rdq_dn`, both accumulators in `dasllama/dasllama_vulkan_common.das` - in the same change.**
+`rdq_sample` indexes a fixed count per layer, so one extra or missing timestamp reports every
+later stamp under the wrong role name.
+
+**A diff that changes how many GPU timestamps the resident prefill's window command records - a
+`pfq_ts` call in `pf_run` or in any function `pf_run` reaches, all in
+`dasllama/dasllama_vulkan_prefill.das` - updates `pf_roles_per_layer` and that file's
+`pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
+missing timestamp reports every later stamp under the wrong role name.

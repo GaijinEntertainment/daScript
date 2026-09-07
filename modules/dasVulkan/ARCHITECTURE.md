@@ -186,7 +186,10 @@ misses either fails `vkCreateDevice` or lets a kernel use a feature the device n
 ## 11. The Vulkan 1.3 subgroup pair {#subgroup-pair}
 
 `subgroupSizeControl` and `computeFullSubgroups` are a pair: a compute pipeline may set
-`REQUIRE_FULL_SUBGROUPS` only on a device where both are enabled.
+`REQUIRE_FULL_SUBGROUPS` only on a device where both are enabled. When the coopmat2 creator
+chains that 1.3 struct it also carries `shaderIntegerDotProduct` on it: the feature was promoted
+in 1.3, and a chain holding both the 1.3 struct and the standalone dot-product struct is invalid,
+so the standalone struct serves only a device below 1.3.
 `compute_full_subgroups_supported` reports the pair, returning false below API 1.3 before it
 reads any feature bit, because the struct carrying them is 1.3 core.
 

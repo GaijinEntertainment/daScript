@@ -569,24 +569,25 @@ struct RouterArgs {
     ne : uint     // expert rows
     dim : uint    // row width
     woff : uint   // this layer's row base in the span's router plane (elements)
+    obase : uint  // output row base (the resident deltanet arm lands beta/alpha rows in the smalls)
 }
 
-[vk_dispatch(name = "router_gemv_cls", grid = "ne", params = "ne : int64")]
-class RouterGemv {
-    @ssbo @binding = 0 @role = "weight" w : array<float>   // the router planes, row-major [ne x dim] per layer
+[ |> template_struct_instance]
+class template RouterGemvT {
+    @ssbo @binding = 0 @role = "weight" w : array<KT>   // the rows, row-major [ne x dim] per layer
     @ssbo @binding = 1 x : array<float>       // the FFN-normed row
     @ssbo @binding = 2 logits : array<float>  // ne logits
     @push_constant pa : RouterArgs
     @workgroup part : float[64]
 
-    [spirv_kernel(local_size_x = 256, name = "router_gemv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
         let e = gl_WorkGroupID.x
         let base = pa.woff + e * pa.dim
         var acc = 0.0
         var i = gl_LocalInvocationID.x
         while (i < pa.dim) {
-            acc += w[base + i] * x[i]
+            acc += float(w[base + i]) * x[i]   // nolint:PERF020 -- KT converts; the f32 twin's cast is free
             i += 256u
         }
         let s = subgroupAdd(acc)
@@ -601,7 +602,90 @@ class RouterGemv {
                 tot += part[sgi]
                 sgi++
             }
-            logits[e] = tot
+            logits[pa.obase + e] = tot
+        }
+    }
+}
+
+[vk_dispatch(name = "router_gemv_cls", grid = "ne", params = "ne : int64")]
+class RouterGemv : RouterGemvT {
+    typedef KT = float
+}
+
+[vk_dispatch(name = "router_gemv_f16_cls", grid = "ne", params = "ne : int64")]
+class RouterGemvF16 : RouterGemvT {
+    typedef KT = float16
+}
+
+struct DnBaArgs {
+    npos : uint
+    dim : uint
+    nvh : uint       // beta rows (the alpha rows follow them in w)
+    woff : uint      // this layer's [beta ; alpha] row base in w (elements)
+    xstride : uint   // x row stride (elements)
+    obase_b : uint   // beta output base in outp: row p's nvh values at obase_b + p * ostride
+    obase_g : uint   // alpha output base, the same layout
+    ostride : uint
+}
+
+[vk_dispatch(name = "dn_ba_cls", grid = "wgs", params = "wgs : int64")]
+class DnBaGemm {
+    @ssbo @binding = 0 @role = "weight" w : array<float16>   // the [beta ; alpha] rows per layer, f16 on the device
+    @ssbo @binding = 1 x : array<float>       // the normed rows
+    @ssbo @binding = 2 outp : array<float>    // the layer smalls (beta / g rows, position-major)
+    @push_constant pa : DnBaArgs
+    @workgroup xs : float[528]                 // 16 positions x 32 k, stride 33 (bank-spread)
+    @workgroup ws : float[528]                 // 16 rows x 32 k, stride 33
+
+    [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+    def run {
+        let tid = gl_LocalInvocationID.x
+        let ne = 2u * pa.nvh
+        let egroups = (ne + 15u) / 16u
+        let p0 = (gl_WorkGroupID.x / egroups) * 16u
+        let eg0 = (gl_WorkGroupID.x % egroups) * 16u
+        let p = tid / 16u
+        let el = tid % 16u
+        let e = eg0 + el
+        let live = p0 + p < pa.npos && e < ne
+        let r = tid / 32u
+        let k = tid % 32u
+        var a = 0.0
+        var kb = 0u
+        while (kb < pa.dim) {
+            if (p0 + r < pa.npos) {
+                xs[r * 33u + k] = x[(p0 + r) * pa.xstride + kb + k]
+            } else {
+                xs[r * 33u + k] = 0.0
+            }
+            if (p0 + r + 8u < pa.npos) {
+                xs[(r + 8u) * 33u + k] = x[(p0 + r + 8u) * pa.xstride + kb + k]
+            } else {
+                xs[(r + 8u) * 33u + k] = 0.0
+            }
+            if (eg0 + r < ne) {
+                ws[r * 33u + k] = float(w[pa.woff + (eg0 + r) * pa.dim + kb + k])
+            } else {
+                ws[r * 33u + k] = 0.0
+            }
+            if (eg0 + r + 8u < ne) {
+                ws[(r + 8u) * 33u + k] = float(w[pa.woff + (eg0 + r + 8u) * pa.dim + kb + k])
+            } else {
+                ws[(r + 8u) * 33u + k] = 0.0
+            }
+            barrier()
+            if (live) {
+                var kk = 0u
+                while (kk < 32u) {
+                    a += xs[p * 33u + kk] * ws[el * 33u + kk]
+                    kk++
+                }
+            }
+            barrier()
+            kb += 32u
+        }
+        if (live) {
+            outp[(e < pa.nvh ? pa.obase_b : pa.obase_g) + (p0 + p) * pa.ostride + (e % pa.nvh)] = a
         }
     }
 }
@@ -641,7 +725,8 @@ class TopK {
     def run {
         let tid = gl_LocalInvocationID.x
         let live = tid < pa.ne
-        let lg = live ? logits[tid] : -3.0e38
+        let lv = logits[min(tid, pa.ne - 1u)]
+        let lg = live ? lv : -3.0e38
         let m0 = subgroupMax(lg)
         if (gl_SubgroupInvocationID == 0u) {
             part[gl_SubgroupID] = m0
@@ -657,7 +742,8 @@ class TopK {
             wg_max[0u] = m
         }
         barrier()
-        let e = live ? exp(max(lg - wg_max[0u], -80.0)) : 0.0
+        let wmax = wg_max[0u]
+        let e = live ? exp(max(lg - wmax, -80.0)) : 0.0
         let s0 = subgroupAdd(e)
         if (gl_SubgroupInvocationID == 0u) {
             part[gl_SubgroupID] = s0
@@ -673,7 +759,8 @@ class TopK {
             wg_sum[0u] = tot
         }
         barrier()
-        var p = live ? e / wg_sum[0u] : -3.0e38
+        let wsum = wg_sum[0u]
+        var p = live ? e / wsum : -3.0e38
         var j = 0u
         while (j < pa.k) {
             let vm = subgroupMax(p)
@@ -688,9 +775,11 @@ class TopK {
                 var bi = parti[0u]
                 var sgi = 1u
                 while (sgi < gl_NumSubgroups) {
-                    if (part[sgi] > bv || (part[sgi] == bv && parti[sgi] < bi)) {
-                        bv = part[sgi]
-                        bi = parti[sgi]
+                    let pv = part[sgi]
+                    let pi = parti[sgi]
+                    if (pv > bv || (pv == bv && pi < bi)) {
+                        bv = pv
+                        bi = pi
                     }
                     sgi++
                 }
@@ -839,6 +928,35 @@ class DnConv {
             let s = ch < 2u * pa.kd ? nsc[ch / pa.ds] : 1.0
             outr[p * pa.cd + ch] = row[ch] * s
             ch += 256u
+        }
+    }
+}
+
+struct DnTailArgs {
+    cd : uint         // conv width (channels)
+    taps : uint       // history rows (dconv - 1)
+    row0 : uint       // the first tail row in src (the window's last taps raw rows)
+    hist_off : uint   // the ring image's float offset in smalls
+    zero_rows : uint  // leading ring rows that read as zero: a lone window shorter than the taps, whose history is zero
+}
+
+[vk_dispatch(name = "dn_tail_cls", grid = "wgs", params = "wgs : int64")]
+class DnTail {
+    @ssbo @binding = 0 src : array<float>      // the projected rows (position-major)
+    @ssbo @binding = 1 smalls : array<float>   // the layer's smalls (the ring image at hist_off)
+    @push_constant pa : DnTailArgs
+
+    [spirv_kernel(local_size_x = 256, name = "dn_tail_cls_spv")]
+    def run {
+        let idx = gl_GlobalInvocationID.x
+        if (idx < pa.cd * pa.taps) {
+            let ch = idx / pa.taps
+            let k = idx % pa.taps
+            var v = 0.0
+            if (k >= pa.zero_rows) {
+                v = src[(pa.row0 + k - pa.zero_rows) * pa.cd + ch]
+            }
+            smalls[pa.hist_off + ch * pa.taps + k] = v
         }
     }
 }
@@ -1021,328 +1139,323 @@ class DnStepFused {
     }
 }
 
-// ===== deltanet: the two-phase chunked scan =====
+// ===== deltanet: the sequential scan + the gated out-norm =====
 
-// the slab + staged-GEMM machinery both phases share: C[MxN] (+)= A[MxK] * B[KxN] over the
-// DN_WS work surface, 16-deep K stages through shared, C in per-thread Private registers
-class DnScanBase {
-    @ssbo @binding = 2 slab : array<float>   // the DN_WS work surface (every GEMM operand)
-    @workgroup tm : float[4096]              // the 64x64 unit-lower solve tile
-    @workgroup ta : float[2048]
-    @workgroup tb : float[2048]
-    @private_global acc64 : float[64]        // per-invocation C accumulator (ds*ds/256 max)
-
-    def gemm(cofs, aofs, bofs : uint; mm, kk, nn : uint; lda, ldb, ldc : uint; accum : uint) {
-        let tid = gl_LocalInvocationID.x
-        var o = tid
-        var oi = 0u
-        while (o < mm * nn) {
-            acc64[oi] = accum == 0u ? 0.0 : slab[cofs + (o / nn) * ldc + o % nn]
-            oi++
-            o += 256u
-        }
-        var kb = 0u
-        while (kb < kk) {
-            let kt = min(kk - kb, 16u)
-            var i = tid
-            while (i < mm * kt) {
-                ta[(i / kt) * 16u + i % kt] = slab[aofs + (i / kt) * lda + kb + i % kt]
-                i += 256u
-            }
-            i = tid
-            while (i < kt * nn) {
-                tb[(i / nn) * 128u + i % nn] = slab[bofs + (kb + i / nn) * ldb + i % nn]
-                i += 256u
-            }
-            barrier()
-            o = tid
-            oi = 0u
-            while (o < mm * nn) {
-                let r = o / nn
-                let c = o % nn
-                var acc = acc64[oi]
-                var k2 = 0u
-                while (k2 < kt) {
-                    acc += ta[r * 16u + k2] * tb[k2 * 128u + c]
-                    k2++
-                }
-                acc64[oi] = acc
-                oi++
-                o += 256u
-            }
-            barrier()
-            kb += 16u
-        }
-        o = tid
-        oi = 0u
-        while (o < mm * nn) {
-            slab[cofs + (o / nn) * ldc + o % nn] = acc64[oi]
-            oi++
-            o += 256u
-        }
-        memoryBarrierBuffer()
-        barrier()
-    }
-}
-
-struct DnScanP1Args {
+struct DnScanArgs {
     npos : uint
     cd : uint
     kd : uint
     nvh : uint
     nkh : uint
     ds : uint
-    beta_off : uint
-    g_off : uint
+    beta_off : uint   // raw beta per (pos, head) in smalls; sigmoid in kernel
+    g_off : uint      // raw g per (pos, head); the decay is exp(a * softplus(g + dt))
     a_off : uint
     dt_off : uint
-    slab_stride : uint   // floats per (head x chunk) slab region
+    o_off : uint      // the raw o rows' base in orows (position-major, di wide)
+    di : uint
 }
 
-// phase 1: every state-independent piece per (head x chunk) — panels, decay-scaled A, the
-// unit-lower solve, the local vnew half, the transition operand
-[vk_dispatch(name = "dn_scan_p1_cls", grid = "wgs", params = "wgs : int64")]
-class DnScanP1 : DnScanBase {
-    @ssbo @binding = 0 conv : array<float>     // the conv output rows (position-major)
-    @ssbo @binding = 1 smalls : array<float>   // beta/g/a/dt planes (push offsets)
-    @push_constant pa : DnScanP1Args
+[vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
+class DnScan {
+    @ssbo @binding = 0 conv : array<float>     // the conv output rows (position-major: q | k | v)
+    @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state [nvh][ds][ds]
+    @ssbo @binding = 2 smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
+    @ssbo @binding = 3 orows : array<float>    // the raw o rows at o_off
+    @push_constant pa : DnScanArgs
+    @workgroup ks : float[256]                 // the token's k row, two slots of DN_MAX_DS
+    @workgroup qs : float[256]                 // the token's q row, two slots
 
-    [spirv_kernel(local_size_x = 256, name = "dn_scan_p1_cls_spv")]
-    def run {   // nolint:STYLE038 — the verbatim phase-1 pass, parity-locked to the shipped kernel
+    def cluster_add(v : float; lanes_per_pair : uint) : float {
+        var r = v
+        if (lanes_per_pair > 4u) {
+            r += subgroupShuffleXor(r, 4u)
+        }
+        if (lanes_per_pair > 2u) {
+            r += subgroupShuffleXor(r, 2u)
+        }
+        if (lanes_per_pair > 1u) {
+            r += subgroupShuffleXor(r, 1u)
+        }
+        return r
+    }
+
+    [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv")]
+    def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of two columns, written out
         let ds = pa.ds
+        let lanes_per_pair = ds / 16u          // 16 state rows each; ds % 16 == 0 host-side
+        let pairs_per_subgroup = 32u / lanes_per_pair
+        let cols_per_group = 8u * pairs_per_subgroup
+        let cgroups = (ds + cols_per_group - 1u) / cols_per_group
+        let h = gl_WorkGroupID.x / cgroups
         let tid = gl_LocalInvocationID.x
-        let CS = 64u
-        let nch = (pa.npos + CS - 1u) / CS
-        let wid = gl_WorkGroupID.x
-        let h = wid / nch
-        let c0 = (wid % nch) * CS
-        let cl = min(CS, pa.npos - c0)
-        let slb = pa.slab_stride * wid
-        let qc = slb
-        let kcT = slb + CS * ds
-        let kb = slb + 2u * CS * ds
-        let vb = slb + 3u * CS * ds
-        let w = slb + 4u * CS * ds
-        let vnew = slb + 5u * CS * ds
-        let kgT = slb + 6u * CS * ds
-        let tmg = slb + 7u * CS * ds
-        let kq = tmg + CS * CS
-        let gcum = kq + CS * CS
-        let egc = gcum + CS
-        let kgc = gcum + 2u * CS
-        let bvec = gcum + 3u * CS
+        let sl = gl_SubgroupInvocationID
+        let lane = sl % lanes_per_pair
+        let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + (gl_SubgroupID * pairs_per_subgroup + sl / lanes_per_pair) * 2u
+        let live = col < ds                    // a whole cluster shares col and col + 1 (ds is even), so its shuffles stay uniform
         let kh = h % pa.nkh
-        let qoff = kh * ds
-        let koff = pa.kd + kh * ds
-        let voff = 2u * pa.kd + h * ds
+        let qrow0 = kh * ds                    // the head's q row within a conv row
+        let krow0 = pa.kd + kh * ds
+        let voff = 2u * pa.kd + h * ds + (live ? col : 0u)   // an idle lane reads column 0: past the last head its own column is past the plane
         let aa = smalls[pa.a_off + h]
         let dtb = smalls[pa.dt_off + h]
-        // per-token transforms: beta = sigmoid(raw), g-cumsum of a*softplus(raw + dt)
-        if (tid == 0u) {
-            var gacc = 0.0
-            var t = 0u
-            while (t < cl) {
-                let graw = smalls[pa.g_off + (c0 + t) * pa.nvh + h] + dtb
-                gacc += aa * (graw > 20.0 ? graw : log(1.0 + exp(graw)))
-                slab[gcum + t] = gacc
-                slab[egc + t] = exp(gacc)
-                slab[bvec + t] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + (c0 + t) * pa.nvh + h]))
-                t++
-            }
-        }
-        memoryBarrierBuffer()
-        barrier()
-        // panels off the conv rows: qc/kb/vb row-major cl x ds, kcT transposed ds x CS
-        var e = tid
-        while (e < cl * ds) {
-            let i = e / ds
-            let j = e % ds
-            let crow = (c0 + i) * pa.cd
-            let kv = conv[crow + koff + j]
-            let bv = slab[bvec + i]
-            slab[qc + i * ds + j] = conv[crow + qoff + j]
-            slab[kcT + j * CS + i] = kv
-            slab[kb + i * ds + j] = kv * bv
-            slab[vb + i * ds + j] = conv[crow + voff + j] * bv
-            e += 256u
-        }
-        memoryBarrierBuffer()
-        barrier()
-        // A = (k_beta k^T) decay-scaled strictly lower (negated); KQ keeps its diagonal
-        gemm(tmg, kb, kcT, cl, ds, cl, ds, CS, CS, 0u)
-        gemm(kq, qc, kcT, cl, ds, cl, ds, CS, CS, 0u)
-        e = tid
-        while (e < cl * cl) {
-            let i = e / cl
-            let j = e % cl
-            if (j < i) {
-                let d = exp(slab[gcum + i] - slab[gcum + j])
-                slab[tmg + i * CS + j] = -slab[tmg + i * CS + j] * d
-                slab[kq + i * CS + j] = slab[kq + i * CS + j] * d
-            } elif (j == i) {
-                slab[tmg + i * CS + j] = 1.0
-            } else {
-                slab[tmg + i * CS + j] = 0.0
-                slab[kq + i * CS + j] = 0.0
-            }
-            e += 256u
-        }
-        memoryBarrierBuffer()
-        barrier()
-        // unit-lower solve in shared, rows finalized top-down
-        e = tid
-        while (e < cl * cl) {
-            tm[(e / cl) * CS + e % cl] = slab[tmg + (e / cl) * CS + e % cl]
-            e += 256u
-        }
-        barrier()
-        var i2 = 1u
-        while (i2 < cl) {
-            var fin = 0.0
-            if (tid < i2) {
-                fin = tm[i2 * CS + tid]
-                var t2 = tid + 1u
-                while (t2 < i2) {
-                    fin += tm[i2 * CS + t2] * tm[t2 * CS + tid]
-                    t2++
-                }
+        let sb = h * ds * ds + (live ? col : 0u)
+        let row_stride = lanes_per_pair * ds
+        var s : float[16]
+        s[0] = state[sb + lane * ds]
+        s[1] = state[sb + lane * ds + row_stride]
+        s[2] = state[sb + lane * ds + 2u * row_stride]
+        s[3] = state[sb + lane * ds + 3u * row_stride]
+        s[4] = state[sb + lane * ds + 4u * row_stride]
+        s[5] = state[sb + lane * ds + 5u * row_stride]
+        s[6] = state[sb + lane * ds + 6u * row_stride]
+        s[7] = state[sb + lane * ds + 7u * row_stride]
+        s[8] = state[sb + lane * ds + 8u * row_stride]
+        s[9] = state[sb + lane * ds + 9u * row_stride]
+        s[10] = state[sb + lane * ds + 10u * row_stride]
+        s[11] = state[sb + lane * ds + 11u * row_stride]
+        s[12] = state[sb + lane * ds + 12u * row_stride]
+        s[13] = state[sb + lane * ds + 13u * row_stride]
+        s[14] = state[sb + lane * ds + 14u * row_stride]
+        s[15] = state[sb + lane * ds + 15u * row_stride]
+        var u : float[16]                      // the same rows of column col + 1
+        u[0] = state[sb + lane * ds + 1u]
+        u[1] = state[sb + lane * ds + row_stride + 1u]
+        u[2] = state[sb + lane * ds + 2u * row_stride + 1u]
+        u[3] = state[sb + lane * ds + 3u * row_stride + 1u]
+        u[4] = state[sb + lane * ds + 4u * row_stride + 1u]
+        u[5] = state[sb + lane * ds + 5u * row_stride + 1u]
+        u[6] = state[sb + lane * ds + 6u * row_stride + 1u]
+        u[7] = state[sb + lane * ds + 7u * row_stride + 1u]
+        u[8] = state[sb + lane * ds + 8u * row_stride + 1u]
+        u[9] = state[sb + lane * ds + 9u * row_stride + 1u]
+        u[10] = state[sb + lane * ds + 10u * row_stride + 1u]
+        u[11] = state[sb + lane * ds + 11u * row_stride + 1u]
+        u[12] = state[sb + lane * ds + 12u * row_stride + 1u]
+        u[13] = state[sb + lane * ds + 13u * row_stride + 1u]
+        u[14] = state[sb + lane * ds + 14u * row_stride + 1u]
+        u[15] = state[sb + lane * ds + 15u * row_stride + 1u]
+        var t = 0u
+        while (t < pa.npos) {
+            let crow = t * pa.cd
+            let graw = smalls[pa.g_off + t * pa.nvh + h] + dtb
+            let eg = exp(aa * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
+            let bt = 1.0 / (1.0 + exp(-smalls[pa.beta_off + t * pa.nvh + h]))
+            let v = conv[crow + voff]
+            let vu = conv[crow + voff + 1u]
+            // the token's k and q rows into this token's slot; the other slot was read before the last barrier
+            let par = (t & 1u) * 128u
+            if (tid < ds) {
+                ks[par + tid] = conv[crow + krow0 + tid]
+                qs[par + tid] = conv[crow + qrow0 + tid]
             }
             barrier()
-            if (tid < i2) {
-                tm[i2 * CS + tid] = fin
+            let kb = par + lane
+            var k : float[16]
+            k[0] = ks[kb]
+            k[1] = ks[kb + lanes_per_pair]
+            k[2] = ks[kb + 2u * lanes_per_pair]
+            k[3] = ks[kb + 3u * lanes_per_pair]
+            k[4] = ks[kb + 4u * lanes_per_pair]
+            k[5] = ks[kb + 5u * lanes_per_pair]
+            k[6] = ks[kb + 6u * lanes_per_pair]
+            k[7] = ks[kb + 7u * lanes_per_pair]
+            k[8] = ks[kb + 8u * lanes_per_pair]
+            k[9] = ks[kb + 9u * lanes_per_pair]
+            k[10] = ks[kb + 10u * lanes_per_pair]
+            k[11] = ks[kb + 11u * lanes_per_pair]
+            k[12] = ks[kb + 12u * lanes_per_pair]
+            k[13] = ks[kb + 13u * lanes_per_pair]
+            k[14] = ks[kb + 14u * lanes_per_pair]
+            k[15] = ks[kb + 15u * lanes_per_pair]
+            var kv = k[0] * s[0]
+            kv += k[1] * s[1]
+            kv += k[2] * s[2]
+            kv += k[3] * s[3]
+            kv += k[4] * s[4]
+            kv += k[5] * s[5]
+            kv += k[6] * s[6]
+            kv += k[7] * s[7]
+            kv += k[8] * s[8]
+            kv += k[9] * s[9]
+            kv += k[10] * s[10]
+            kv += k[11] * s[11]
+            kv += k[12] * s[12]
+            kv += k[13] * s[13]
+            kv += k[14] * s[14]
+            kv += k[15] * s[15]
+            var ku = k[0] * u[0]
+            ku += k[1] * u[1]
+            ku += k[2] * u[2]
+            ku += k[3] * u[3]
+            ku += k[4] * u[4]
+            ku += k[5] * u[5]
+            ku += k[6] * u[6]
+            ku += k[7] * u[7]
+            ku += k[8] * u[8]
+            ku += k[9] * u[9]
+            ku += k[10] * u[10]
+            ku += k[11] * u[11]
+            ku += k[12] * u[12]
+            ku += k[13] * u[13]
+            ku += k[14] * u[14]
+            ku += k[15] * u[15]
+            kv = cluster_add(kv, lanes_per_pair)
+            ku = cluster_add(ku, lanes_per_pair)
+            let delta = bt * (v - eg * kv)
+            let deltu = bt * (vu - eg * ku)
+            let qb = par + lane
+            s[0] = s[0] * eg + k[0] * delta
+            s[1] = s[1] * eg + k[1] * delta
+            s[2] = s[2] * eg + k[2] * delta
+            s[3] = s[3] * eg + k[3] * delta
+            s[4] = s[4] * eg + k[4] * delta
+            s[5] = s[5] * eg + k[5] * delta
+            s[6] = s[6] * eg + k[6] * delta
+            s[7] = s[7] * eg + k[7] * delta
+            s[8] = s[8] * eg + k[8] * delta
+            s[9] = s[9] * eg + k[9] * delta
+            s[10] = s[10] * eg + k[10] * delta
+            s[11] = s[11] * eg + k[11] * delta
+            s[12] = s[12] * eg + k[12] * delta
+            s[13] = s[13] * eg + k[13] * delta
+            s[14] = s[14] * eg + k[14] * delta
+            s[15] = s[15] * eg + k[15] * delta
+            u[0] = u[0] * eg + k[0] * deltu
+            u[1] = u[1] * eg + k[1] * deltu
+            u[2] = u[2] * eg + k[2] * deltu
+            u[3] = u[3] * eg + k[3] * deltu
+            u[4] = u[4] * eg + k[4] * deltu
+            u[5] = u[5] * eg + k[5] * deltu
+            u[6] = u[6] * eg + k[6] * deltu
+            u[7] = u[7] * eg + k[7] * deltu
+            u[8] = u[8] * eg + k[8] * deltu
+            u[9] = u[9] * eg + k[9] * deltu
+            u[10] = u[10] * eg + k[10] * deltu
+            u[11] = u[11] * eg + k[11] * deltu
+            u[12] = u[12] * eg + k[12] * deltu
+            u[13] = u[13] * eg + k[13] * deltu
+            u[14] = u[14] * eg + k[14] * deltu
+            u[15] = u[15] * eg + k[15] * deltu
+            var ou = qs[qb] * u[0]
+            ou += qs[qb + lanes_per_pair] * u[1]
+            ou += qs[qb + 2u * lanes_per_pair] * u[2]
+            ou += qs[qb + 3u * lanes_per_pair] * u[3]
+            ou += qs[qb + 4u * lanes_per_pair] * u[4]
+            ou += qs[qb + 5u * lanes_per_pair] * u[5]
+            ou += qs[qb + 6u * lanes_per_pair] * u[6]
+            ou += qs[qb + 7u * lanes_per_pair] * u[7]
+            ou += qs[qb + 8u * lanes_per_pair] * u[8]
+            ou += qs[qb + 9u * lanes_per_pair] * u[9]
+            ou += qs[qb + 10u * lanes_per_pair] * u[10]
+            ou += qs[qb + 11u * lanes_per_pair] * u[11]
+            ou += qs[qb + 12u * lanes_per_pair] * u[12]
+            ou += qs[qb + 13u * lanes_per_pair] * u[13]
+            ou += qs[qb + 14u * lanes_per_pair] * u[14]
+            ou += qs[qb + 15u * lanes_per_pair] * u[15]
+            var o = qs[qb] * s[0]
+            o += qs[qb + lanes_per_pair] * s[1]
+            o += qs[qb + 2u * lanes_per_pair] * s[2]
+            o += qs[qb + 3u * lanes_per_pair] * s[3]
+            o += qs[qb + 4u * lanes_per_pair] * s[4]
+            o += qs[qb + 5u * lanes_per_pair] * s[5]
+            o += qs[qb + 6u * lanes_per_pair] * s[6]
+            o += qs[qb + 7u * lanes_per_pair] * s[7]
+            o += qs[qb + 8u * lanes_per_pair] * s[8]
+            o += qs[qb + 9u * lanes_per_pair] * s[9]
+            o += qs[qb + 10u * lanes_per_pair] * s[10]
+            o += qs[qb + 11u * lanes_per_pair] * s[11]
+            o += qs[qb + 12u * lanes_per_pair] * s[12]
+            o += qs[qb + 13u * lanes_per_pair] * s[13]
+            o += qs[qb + 14u * lanes_per_pair] * s[14]
+            o += qs[qb + 15u * lanes_per_pair] * s[15]
+            o = cluster_add(o, lanes_per_pair)
+            ou = cluster_add(ou, lanes_per_pair)
+            if (live && lane == 0u) {
+                orows[pa.o_off + t * pa.di + h * ds + col] = o
+                orows[pa.o_off + t * pa.di + h * ds + col + 1u] = ou
             }
-            barrier()
-            i2++
+            t++
         }
-        e = tid
-        while (e < cl * cl) {
-            slab[tmg + (e / cl) * CS + e % cl] = tm[(e / cl) * CS + e % cl]
-            e += 256u
-        }
-        // d = T v_beta - (T (k_beta e^gcum)) S — kb scaled in place, minus folded into the scale
-        e = tid
-        while (e < cl * ds) {
-            slab[kb + e] = slab[kb + e] * -slab[egc + e / ds]
-            e += 256u
-        }
-        memoryBarrierBuffer()
-        barrier()
-        gemm(w, tmg, kb, cl, cl, ds, CS, ds, ds, 0u)
-        gemm(vnew, tmg, vb, cl, cl, ds, CS, ds, ds, 0u)
-        // qc scaled in place to (q e^gcum) — phase 2's och GEMM reads it directly
-        e = tid
-        while (e < cl * ds) {
-            slab[qc + e] = slab[qc + e] * slab[egc + e / ds]
-            e += 256u
-        }
-        // transition piece: kgT = (k e^{glast - gcum})^T, phase 2's state-advance A operand
-        let glast = slab[gcum + cl - 1u]
-        if (tid < cl) {
-            slab[kgc + tid] = exp(glast - slab[gcum + tid])
-        }
-        memoryBarrierBuffer()
-        barrier()
-        e = tid
-        while (e < ds * cl) {
-            let j = e / cl
-            let i = e % cl
-            slab[kgT + j * CS + i] = slab[kcT + j * CS + i] * slab[kgc + i]
-            e += 256u
+        if (live) {
+            state[sb + lane * ds] = s[0]
+            state[sb + lane * ds + row_stride] = s[1]
+            state[sb + lane * ds + 2u * row_stride] = s[2]
+            state[sb + lane * ds + 3u * row_stride] = s[3]
+            state[sb + lane * ds + 4u * row_stride] = s[4]
+            state[sb + lane * ds + 5u * row_stride] = s[5]
+            state[sb + lane * ds + 6u * row_stride] = s[6]
+            state[sb + lane * ds + 7u * row_stride] = s[7]
+            state[sb + lane * ds + 8u * row_stride] = s[8]
+            state[sb + lane * ds + 9u * row_stride] = s[9]
+            state[sb + lane * ds + 10u * row_stride] = s[10]
+            state[sb + lane * ds + 11u * row_stride] = s[11]
+            state[sb + lane * ds + 12u * row_stride] = s[12]
+            state[sb + lane * ds + 13u * row_stride] = s[13]
+            state[sb + lane * ds + 14u * row_stride] = s[14]
+            state[sb + lane * ds + 15u * row_stride] = s[15]
+            state[sb + lane * ds + 1u] = u[0]
+            state[sb + lane * ds + row_stride + 1u] = u[1]
+            state[sb + lane * ds + 2u * row_stride + 1u] = u[2]
+            state[sb + lane * ds + 3u * row_stride + 1u] = u[3]
+            state[sb + lane * ds + 4u * row_stride + 1u] = u[4]
+            state[sb + lane * ds + 5u * row_stride + 1u] = u[5]
+            state[sb + lane * ds + 6u * row_stride + 1u] = u[6]
+            state[sb + lane * ds + 7u * row_stride + 1u] = u[7]
+            state[sb + lane * ds + 8u * row_stride + 1u] = u[8]
+            state[sb + lane * ds + 9u * row_stride + 1u] = u[9]
+            state[sb + lane * ds + 10u * row_stride + 1u] = u[10]
+            state[sb + lane * ds + 11u * row_stride + 1u] = u[11]
+            state[sb + lane * ds + 12u * row_stride + 1u] = u[12]
+            state[sb + lane * ds + 13u * row_stride + 1u] = u[13]
+            state[sb + lane * ds + 14u * row_stride + 1u] = u[14]
+            state[sb + lane * ds + 15u * row_stride + 1u] = u[15]
         }
     }
 }
 
-struct DnScanP2Args {
+struct DnScanP3Args {
     npos : uint
+    nvh : uint
     di : uint
     ds : uint
-    o_off : uint
-    wnorm_off : uint
-    slab_stride : uint
-    st_off : uint    // per-head state+och working region base
+    o_off : uint      // the raw o rows' base in orows
+    wnorm_off : uint  // the out-norm weight row in smalls
     eps : float
 }
 
-// phase 2: chunks sequentially, only the 4 state-dependent GEMMs + the gated out-norm
-[vk_dispatch(name = "dn_scan_p2_cls", grid = "nvh", params = "nvh : int64")]
-class DnScanP2 : DnScanBase {
+//! the gated out-norm over the scan's raw o rows, in place: rms(o_h) * wnorm, gated by silu(z)
+[vk_dispatch(name = "dn_scan_p3_cls", grid = "npos", params = "npos : int64")]
+class DnScanP3 {
     @ssbo @binding = 0 zrows : array<float>    // the z gate rows
-    @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state
-    @ssbo @binding = 3 smalls : array<float>   // wnorm (push offset)
-    @push_constant pa : DnScanP2Args
+    @ssbo @binding = 1 orows : array<float>    // the work surface holding the raw o rows at o_off
+    @ssbo @binding = 2 smalls : array<float>   // wnorm (push offset)
+    @push_constant pa : DnScanP3Args
+    @workgroup hinv : float[64]                // per-head inverse rms (heads <= 64)
 
-    [spirv_kernel(local_size_x = 256, name = "dn_scan_p2_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "dn_scan_p3_cls_spv")]
     def run {
-        let h = gl_WorkGroupID.x
-        let ds = pa.ds
+        let p = gl_WorkGroupID.x
         let tid = gl_LocalInvocationID.x
-        let CS = 64u
-        let nch = (pa.npos + CS - 1u) / CS
-        let st = pa.st_off + h * (ds * ds + CS * ds)
-        let och = st + ds * ds
-        // the persistent state works in its slab copy (one GEMM surface for everything)
-        var i0 = tid
-        while (i0 < ds * ds) {
-            slab[st + i0] = state[h * ds * ds + i0]
-            i0 += 256u
+        let ds = pa.ds
+        let ob = pa.o_off + p * pa.di
+        if (tid < pa.nvh) {
+            var sum = 0.0
+            var j = 0u
+            while (j < ds) {
+                let v = orows[ob + tid * ds + j]
+                sum += v * v
+                j++
+            }
+            hinv[tid] = 1.0 / sqrt(sum / float(ds) + pa.eps)
         }
-        memoryBarrierBuffer()
         barrier()
-        var c = 0u
-        while (c < nch) {
-            let c0 = c * CS
-            let cl = min(CS, pa.npos - c0)
-            let slb = pa.slab_stride * (h * nch + c)
-            let qc = slb
-            let w = slb + 4u * CS * ds
-            let vnew = slb + 5u * CS * ds
-            let kgT = slb + 6u * CS * ds
-            let kq = slb + 7u * CS * ds + CS * CS
-            let gcum = slb + 7u * CS * ds + 2u * CS * CS
-            // d = vnloc + w S (in place over phase 1's local half)
-            gemm(vnew, w, st, cl, ds, ds, ds, ds, ds, 1u)
-            // o = (q e^gcum) S + KQ d
-            gemm(och, qc, st, cl, ds, ds, ds, ds, ds, 0u)
-            gemm(och, kq, vnew, cl, cl, ds, CS, ds, ds, 1u)
-            // gated out-norm straight into the o rows: rms(och) * wnorm, silu(z)-gated
-            if (tid < cl) {
-                let ob = och + tid * ds
-                var sum = 0.0
-                var j3 = 0u
-                while (j3 < ds) {
-                    let v = slab[ob + j3]
-                    sum += v * v
-                    j3++
-                }
-                let scale = 1.0 / sqrt(sum / float(ds) + pa.eps)
-                let orow = pa.o_off + (c0 + tid) * pa.di + h * ds
-                let zrow = (c0 + tid) * pa.di + h * ds
-                j3 = 0u
-                while (j3 < ds) {
-                    let zv = zrows[zrow + j3]
-                    let xn = slab[ob + j3] * scale * smalls[pa.wnorm_off + j3]
-                    slab[orow + j3] = xn * (zv / (1.0 + exp(-zv)))
-                    j3++
-                }
-            }
-            barrier()
-            // state advance, once per chunk: S = e^glast S + kgT d
-            let egl = exp(slab[gcum + cl - 1u])
-            var e = tid
-            while (e < ds * ds) {
-                slab[st + e] = slab[st + e] * egl
-                e += 256u
-            }
-            memoryBarrierBuffer()
-            barrier()
-            gemm(st, kgT, vnew, ds, cl, ds, CS, ds, ds, 1u)
-            c++
-        }
-        // the advanced state back to its persistent plane
-        i0 = tid
-        while (i0 < ds * ds) {
-            state[h * ds * ds + i0] = slab[st + i0]
-            i0 += 256u
+        var e = tid
+        while (e < pa.di) {
+            let zv = zrows[p * pa.di + e]
+            let xn = orows[ob + e] * hinv[e / ds] * smalls[pa.wnorm_off + e % ds]
+            orows[ob + e] = xn * (zv / (1.0 + exp(-zv)))
+            e += 256u
         }
     }
 }
@@ -1469,12 +1582,12 @@ class template AtAttnTileT {
     @workgroup fal : float[8]
 
     // stage the 8-query tile and reset the online-softmax state
-    def load_q(q0, nrows, qd, h, hs : uint) {
+    def load_q(q0, nrows, qstride, h, hs, qhs : uint) {
         let tid = gl_LocalInvocationID.x
         var i = tid
         while (i < 8u * hs) {
             let qr = q0 + i / hs
-            fq[i] = qr < nrows ? qpanel[qr * qd + h * hs + i % hs] : 0.0
+            fq[i] = qr < nrows ? qpanel[qr * qstride + h * qhs + i % hs] : 0.0
             i += 256u
         }
         if (tid < 8u) {
@@ -1544,11 +1657,14 @@ class template AtAttnTileT {
     }
 
     // the mirror-window kernel (DaAttnB's pass): batched causal attention over the decode
-    // mirrors, K/V read at kbase/vbase, out = plain rows (no gating); dpl-guarded accumulators
-    // serve hs 32..256. pa/outp are instance-declared (DaAttnBArgs); AtAttn overrides run
+    // mirrors, K/V read at kbase/vbase; q read head-strided (qhs), the gated epilogue multiplies
+    // by the sigmoid of the head's gate half; dpl-guarded accumulators serve hs 32..256.
+    // pa/outp are instance-declared (DaAttnBArgs); AtAttn overrides run
     [spirv_kernel(local_size_x = 256)]
     def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qd = pa.nh * pa.hs
+        let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
+        let qrow = pa.nh * qhs
         let dpl = pa.hs / 32u
         let qtiles = (pa.npos + 7u) / 8u
         let h = gl_WorkGroupID.x / qtiles
@@ -1557,7 +1673,7 @@ class template AtAttnTileT {
         let r = tid / 32u
         let c = tid % 32u
         let kvh = h / pa.kv_mul
-        load_q(q0, pa.npos, qd, h, pa.hs)
+        load_q(q0, pa.npos, qrow, h, pa.hs, qhs)
         var o0 = 0.0
         var o1 = 0.0
         var o2 = 0.0
@@ -1620,10 +1736,16 @@ class template AtAttnTileT {
         if (q0 + r < pa.npos) {
             let inv = 1.0 / fl[r]
             let ob = (q0 + r) * qd + h * pa.hs + c
+            let gb = (q0 + r) * qrow + h * qhs + pa.hs + c
             var jj = 0u
             while (jj < dpl) {
-                outp[ob + jj * 32u] = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
+                var v = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
                     : (jj == 4u ? o4 : (jj == 5u ? o5 : (jj == 6u ? o6 : o7))))))) * inv
+                if (pa.gated != 0u) {
+                    let g = qpanel[gb + jj * 32u]
+                    v = v / (1.0 + exp(-g))
+                }
+                outp[ob + jj * 32u] = v
                 jj++
             }
         }
@@ -1647,7 +1769,7 @@ class AtAttn : AtAttnTileT {
         let r = tid / 32u
         let c = tid % 32u
         let kvh = h / pa.kv_mul
-        load_q(q0, pa.rows, pa.qd, h, pa.hs)
+        load_q(q0, pa.rows, pa.qd, h, pa.hs, pa.hs)
         var o0 = 0.0
         var o1 = 0.0
         var o2 = 0.0
@@ -1744,14 +1866,19 @@ def facm2_mask(r, c : uint; v : float; qbase, kbase : uint) : float => kbase + c
 [spirv_per_element, unused_argument(r, c)]
 def facm2_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
 
+[spirv_per_element, unused_argument(r, c)]
+def facm2_sigmoid(r, c : uint; v : float) : float => 1.0 / (1.0 + exp(-v))
+
 struct FaCm2Args {
     rows : uint     // window query rows
     w0 : uint       // window base (queries attend positions [0, w0 + row])
-    qd : uint       // q/o row stride (n_heads * hs)
+    qd : uint       // o row stride (n_heads * hs); the q row's too unless qrow says otherwise
     kvd : uint      // k/v row stride (n_kv * hs)
     kv_mul : uint   // GQA ratio (head / kv_mul = kv head)
     kvbase : uint   // element base of this layer's plane in the K/V shadow mirrors
     scale : float
+    qstride : uint  // the q panel's row stride when it is not qd (a gated q plane: [q | gate] per head); 0 = qd
+    qhs : uint      // the q panel's per-head stride (2 x hs on a gated plane); 0 = hs
 }
 
 // hs=64 (tinyllama-class). The h128 twin below differs only in the head-size-shaped tiles —
@@ -1956,6 +2083,126 @@ class FaCm2H128F16 : FaCm2H128T {
     override OUT16 = true
 }
 
+[ |> template_struct_instance]
+class template FaCm2H256T {
+    @ssbo @binding = 0 qpanel : array<float>
+    @ssbo @binding = 1 kh : array<float16>
+    @ssbo @binding = 2 vh : array<float16>
+    @ssbo @binding = 3 outp : array<OT>
+    @push_constant pa : FaCm2Args
+    @template_constant OUT16 : bool = false
+    @template_constant GATED : bool = false
+
+    [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+    def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
+        let qtiles = (pa.rows + 63u) / 64u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 64u
+        let kvh = h / pa.kv_mul
+        let kvlen = pa.w0 + pa.rows
+        let qstride = pa.qstride == 0u ? pa.qd : pa.qstride
+        let qhs = pa.qhs == 0u ? 256u : pa.qhs
+        var tlq : tensorLayout2DPad
+        tensorLayoutCreate(tlq)
+        tensorLayoutSetDimension(tlq, pa.rows, qstride)
+        tensorLayoutSetStride(tlq, qstride, 1u)
+        var tlk : tensorLayout2DPad
+        tensorLayoutCreate(tlk)
+        tensorLayoutSetDimension(tlk, kvlen, pa.kvd)
+        tensorLayoutSetStride(tlk, pa.kvd, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, pa.rows, pa.qd)
+        tensorLayoutSetStride(tlo, pa.qd, 1u)
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var q : coopmatWgAcc_f32_64x256
+        coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * qhs, 256u)
+        coopmatScale(q, pa.scale)
+        var qf : coopmatWgA_f16_64x256
+        coopmatConvert(qf, q)
+        var mrow : coopmatWgAcc_f32_64x32
+        coopmatFill(mrow, -1.7e38)
+        var lrow : coopmatWgAcc_f32_64x32
+        var o : coopmatWgAcc_f32_64x256
+        let kmax = pa.w0 + min(q0 + 64u, pa.rows)
+        var j = 0u
+        while (j < kmax) {
+            var s : coopmatWgAcc_f32_64x32
+            var kt : coopmatWgB_f16_256x32
+            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 32u, kvh * 256u, 256u, tv)
+            s = coopmatMulAdd(qf, kt, s)
+            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
+            var rmax : coopmatWgAcc_f32_64x32
+            coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
+            var mold : coopmatWgAcc_f32_64x32
+            coopmatCopy(mold, mrow)
+            coopmatPerElement(mrow, rmax, @@facm2_pick, mold)
+            coopmatSub(s, s, mrow)
+            coopmatPerElement(s, s, @@facm2_exp)
+            var em : coopmatWgAcc_f32_64x32
+            coopmatSub(em, mold, mrow)
+            coopmatPerElement(em, em, @@facm2_exp)
+            var pf : coopmatWgA_f16_64x32
+            coopmatConvert(pf, s)
+            var rsum : coopmatWgAcc_f32_64x32
+            var one : coopmatWgB_f16_32x32
+            coopmatFill(one, 1.0)
+            rsum = coopmatMulAdd(pf, one, rsum)
+            coopmatMulElem(lrow, em, lrow)
+            coopmatAdd(lrow, lrow, rsum)
+            var emd : coopmatWgAcc_f32_64x256
+            coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
+            coopmatMulElem(o, emd, o)
+            var vt : coopmatWgB_f16_32x256
+            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 32u, kvh * 256u, 256u)
+            o = coopmatMulAdd(pf, vt, o)
+            j += 32u
+        }
+        var ld : coopmatWgAcc_f32_64x256
+        coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
+        coopmatPerElement(ld, ld, @@facm2_recip)
+        coopmatMulElem(o, ld, o)
+        static_if (GATED) {
+            var g : coopmatWgAcc_f32_64x256
+            coopmatLoadTensor(g, qpanel, 0u, tlq, q0, 64u, h * qhs + 256u, 256u)
+            coopmatPerElement(g, g, @@facm2_sigmoid)
+            coopmatMulElem(o, g, o)
+        }
+        static_if (OUT16) {
+            var of : coopmatWgAcc_f16_64x256
+            coopmatConvert(of, o)
+            coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * 256u, 256u)
+        } else {
+            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 256u, 256u)
+        }
+    }
+}
+
+[vk_dispatch(name = "fa_cm2_h256_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256 : FaCm2H256T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_cm2_h256_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256F16 : FaCm2H256T {
+    typedef OT = float16
+    override OUT16 = true
+}
+
+[vk_dispatch(name = "fa_cm2_h256_g_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256G : FaCm2H256T {
+    typedef OT = float
+    override GATED = true
+}
+
+[vk_dispatch(name = "fa_cm2_h256_g_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256GF16 : FaCm2H256T {
+    typedef OT = float16
+    override OUT16 = true
+    override GATED = true
+}
+
 struct DaAttnBArgs {
     npos : uint     // window query rows
     nh : uint
@@ -1966,6 +2213,8 @@ struct DaAttnBArgs {
     vbase : uint
     w0 : uint       // window base (queries attend mirror positions [0, w0 + row])
     scale : float
+    qhs : uint      // per-head q stride: hs, or 2 * hs on a gated model ([q | gate] per head)
+    gated : uint    // multiply each head's output by the sigmoid of its gate half
 }
 
 // batched causal attention over the decode mirrors (the template's run): K/V read at kbase/vbase,
@@ -2197,6 +2446,8 @@ struct DaAttnArgs {
     kbase : uint    // layer base into the shared K mirror (0 for the standalone seam)
     vbase : uint
     scale : float   // the KV count to attend rides tok[0].cnt
+    qstride : uint  // q head stride: 0 = hs; 2*hs on a gated-q model ([q | gate] per head)
+    gated : uint    // 1 = multiply the head's output by sigmoid of its gate half before the store
 }
 
 // decode attention (one query row): one wg per head, GQA, KT-typed K/V mirror. Online softmax
@@ -2224,9 +2475,10 @@ class template DaAttnT {
         let npart = 256u / hs     // V-phase partial groups; thread tid = group g, output dim c
         let g = tid / hs
         let c = tid % hs
+        let qstride = pa.qstride == 0u ? hs : pa.qstride
         var i = tid
         while (i < hs) {
-            qrow[i] = q[h * hs + i]
+            qrow[i] = q[h * qstride + i]
             i += 256u
         }
         if (tid == 0u) {
@@ -2307,7 +2559,12 @@ class template DaAttnT {
                 tot += sc[gg * hs + tid]
                 gg++
             }
-            y[h * hs + tid] = tot * linv
+            var o = tot * linv
+            if (pa.gated != 0u) {
+                let gt = q[h * qstride + hs + tid]
+                o = o / (1.0 + exp(-gt))
+            }
+            y[h * hs + tid] = o
         }
     }
 }
@@ -6081,12 +6338,13 @@ struct QkRmsArgs {
     hs : uint
     nh : uint
     nkvh : uint
-    qstride : uint
+    qstride : uint   // q row stride
     kstride : uint
     kbase : uint
     qwoff : uint
     kwoff : uint
     eps : float
+    qhs : uint       // per-head q stride: hs, or 2 * hs on a gated model
 }
 
 // per-head RMSNorm on q/k between the projections and rope (qk_norm models), one wg per
@@ -6105,7 +6363,8 @@ class QkRms : RmsWgBase {
         let r = wid / per
         let hh = wid % per
         let is_q = hh < pa.nh
-        let base = is_q ? r * pa.qstride + hh * pa.hs : pa.kbase + r * pa.kstride + (hh - pa.nh) * pa.hs
+        let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
+        let base = is_q ? r * pa.qstride + hh * qhs : pa.kbase + r * pa.kstride + (hh - pa.nh) * pa.hs
         let wbase = is_q ? pa.qwoff : pa.kwoff
         let tid = gl_LocalInvocationID.x
         var ss = 0.0
@@ -6207,15 +6466,16 @@ struct RopeKvBArgs {
     qd : uint
     kvd : uint
     hs : uint
-    half : uint
+    half : uint      // rotation pairs per head; pairs past it pass through (k and v stored unrotated)
     neox : uint
     kpair0 : uint    // first k pair's per-position index
-    ppp : uint       // rotation pairs per position
+    ppp : uint       // pairs per position (hs / 2 per head, rotated or not)
     layerbase : uint // this layer's K/V mirror base
     npos : uint
     pos0 : uint      // the window's first absolute position
     voff : uint
     kstride : uint
+    qhs : uint       // per-head q stride: hs, or 2 * hs on a gated model ([q | gate] per head, the gate half left in place)
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
@@ -6238,13 +6498,18 @@ class template RopeKvStoreBT {
             let lp = gid % pa.ppp
             let is_k = lp >= pa.kpair0
             let pr = is_k ? lp - pa.kpair0 : lp
-            let h = pr / pa.half
-            let j = pr % pa.half
+            let hpairs = pa.hs / 2u
+            let h = pr / hpairs
+            let j = pr % hpairs
+            let rot = j < pa.half
             let cb = p * pa.hs
-            let fcr = cossin[cb + j]
-            let fci = cossin[cb + pa.half + j]
-            let e0 = pa.neox != 0u ? j : j * 2u
-            let e1 = pa.neox != 0u ? j + pa.half : j * 2u + 1u
+            let cj = min(j, pa.half - 1u)   // the pass-through pairs past the rotated half read a clamped table entry the select then drops
+            let tcr = cossin[cb + cj]
+            let tci = cossin[cb + pa.half + cj]
+            let fcr = rot ? tcr : 1.0
+            let fci = rot ? tci : 0.0
+            let e0 = rot ? (pa.neox != 0u ? j : j * 2u) : 2u * pa.half + 2u * (j - pa.half)
+            let e1 = rot ? (pa.neox != 0u ? j + pa.half : j * 2u + 1u) : e0 + 1u
             let apos = pa.pos0 + p
             if (is_k) {
                 let kb = p * pa.kstride + h * pa.hs
@@ -6263,8 +6528,9 @@ class template RopeKvStoreBT {
                     vmir[mo + e0] = kvrows[vb + e0]
                     vmir[mo + e1] = kvrows[vb + e1]
                 }
-            } else {
-                let qb = p * pa.qd + h * pa.hs
+            } elif (rot) {
+                let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
+                let qb = p * (pa.qd / pa.hs) * qhs + h * qhs
                 let a0 = qrows[qb + e0]
                 let a1 = qrows[qb + e1]
                 qrows[qb + e0] = a0 * fcr - a1 * fci
@@ -6290,13 +6556,14 @@ struct QknRopeArgs {
     qd : uint
     kvd : uint
     hs : uint
-    half : uint
+    half : uint     // rotation pairs per head: hs/2, or rot/2 on a partial-rope model (the rest of the head passes through)
     neox : uint
     nh : uint       // q heads (wgs >= nh are k heads)
     layerbase : uint   // this layer's K/V mirror base; the row rides tok[0].pos
     qwoff : uint    // q norm-weight row base in wn
     kwoff : uint
     eps : float
+    qstride : uint  // q head stride in qrows: 0 = hs; 2*hs on a gated-q model ([q | gate] per head, roped in place)
 }
 
 // qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row; verbatim
@@ -6321,7 +6588,8 @@ class template QknRopeKvT : RmsWgBase {
         let is_k = wid >= pa.nh
         let h = is_k ? wid - pa.nh : wid
         let tid = gl_LocalInvocationID.x
-        let sbase = is_k ? pa.qd + h * pa.hs : h * pa.hs
+        let qstride = pa.qstride == 0u ? pa.hs : pa.qstride
+        let sbase = is_k ? pa.qd + h * pa.hs : h * qstride
         var v = 0.0
         if (tid < pa.hs) {
             v = is_k ? kvsrc[sbase + tid] : qrows[sbase + tid]
@@ -6352,17 +6620,26 @@ class template QknRopeKvT : RmsWgBase {
                     kmir[mrow + h * pa.hs + e1] = r1
                 }
             } else {
-                qrows[h * pa.hs + e0] = r0
-                qrows[h * pa.hs + e1] = r1
+                qrows[h * qstride + e0] = r0
+                qrows[h * qstride + e1] = r1
             }
+        }
+        if (!is_k && tid >= 2u * pa.half && tid < pa.hs) {
+            qrows[h * qstride + tid] = row[tid]
         }
         // v is not roped or normed — the k-head wgs copy their own raw row into the V plane
         if (is_k && tid < pa.hs) {
             let mrow = pa.layerbase + tok[0u].pos * pa.kvd
             static_if (CLAMP16) {
                 vmir[mrow + h * pa.hs + tid] = float16(clamp(kvsrc[pa.qd + pa.kvd + h * pa.hs + tid], -65504.0, 65504.0))
+                if (tid >= 2u * pa.half) {
+                    kmir[mrow + h * pa.hs + tid] = float16(clamp(row[tid], -65504.0, 65504.0))
+                }
             } else {
                 vmir[mrow + h * pa.hs + tid] = kvsrc[pa.qd + pa.kvd + h * pa.hs + tid]
+                if (tid >= 2u * pa.half) {
+                    kmir[mrow + h * pa.hs + tid] = row[tid]
+                }
             }
         }
     }

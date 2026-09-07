@@ -123,9 +123,20 @@ var g_moe_gpu_attn_route = true        // runtime routing gate over the attentio
 // symbol. reserve/place fill the arenas; prepare/norms/set_layer/set_cls build it; token runs one forward.
 typedef RdecReserveFn = function<(fmt : int; cap_blocks : int64) : bool>
 typedef RdecPlaceFn = function<(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64; fmt : int) : int64>
-typedef RdecPrepareFn = function<(n_layers : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float; qk_norm : bool; kv16 : bool) : bool>
+//! The deltanet geometry a hybrid model hands the resident driver at prepare; `cd == 0` = no
+//! recurrent layers. `ba_f32`: the beta/alpha rows are f32 (uploaded whole through
+//! `rdec_upload_dn_ba`) rather than q8 arena planes.
+struct RdecDnGeom {
+    cd, kd, di, nvh, nkh, ds, dconv : int64
+    ba_f32 : bool
+}
+typedef RdecPrepareFn = function<(n_layers : int64; n_attn : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom) : bool>
 typedef RdecNormsFn = function<(norms : array<float>) : void>
-typedef RdecSetLayerFn = function<(l : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int) : void>
+typedef RdecSetLayerFn = function<(l : int64; mir_idx : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int) : void>
+typedef RdecSetDnLayerFn = function<(l : int64; bqkv : int64; bz : int64; bout : int64; bbeta : int64; balpha : int64; b1 : int64; b3 : int64; b2 : int64; ba_off : int64; fqkv : int; fz : int; fout : int; f1 : int; f3 : int; f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) : void>
+typedef RdecUploadDnBaFn = function<(rows : array<float>) : void>
+typedef RdecDnOwnFn = function<(l : int64; stp : float?; histp : float?) : void>
+typedef RdecDnPrefillOwnFn = function<(l : int64; stp : float?; histp : float?) : void>
 typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int) : void>
 typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; pos : int64; cnt : int64; var logits : array<float>) : void>
 typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) : void>
@@ -137,12 +148,20 @@ typedef RdecReadKvBulkFn = function<(l : int64; kp : uint8?; vp : uint8?; npos :
 def private rdec_unset_reserve(fmt : int; cap_blocks : int64) : bool => false
 [unused_argument(wq, ws, n, rows, fmt)]
 def private rdec_unset_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => -1l
-[unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16)]
-def private rdec_unset_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool) : bool => false
+[unused_argument(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16, q_gated, rot, dn)]
+def private rdec_unset_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom) : bool => false
 [unused_argument(norms)]
 def private rdec_unset_norms(norms : array<float>) {}
-[unused_argument(l, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2)]
-def private rdec_unset_set_layer(l, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) {}
+[unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2)]
+def private rdec_unset_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) {}
+[unused_argument(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off, fqkv, fz, fout, f1, f3, f2, convw, wnormp, ap, dtp)]
+def private rdec_unset_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) {}
+[unused_argument(rows)]
+def private rdec_unset_upload_dn_ba(rows : array<float>) {}
+[unused_argument(l, stp, histp)]
+def private rdec_unset_dn_own(l : int64; stp : float?; histp : float?) {}
+[unused_argument(l, stp, histp)]
+def private rdec_unset_dn_prefill_own(l : int64; stp : float?; histp : float?) {}
 [unused_argument(cls_block, cls_fmt)]
 def private rdec_unset_set_cls(cls_block : int64; cls_fmt : int) {}
 [unused_argument(x, cossin, pos, cnt, logits)]
@@ -174,6 +193,30 @@ var g_rdec_sync_kv = @@rdec_unset_sync
 var g_rdec_read_kv = @@rdec_unset_read
 var g_rdec_read_kv_bulk = @@rdec_unset_read_bulk
 var g_rdec_installed = false
+var g_rdec_set_dn_layer = @@rdec_unset_set_dn_layer
+var g_rdec_upload_dn_ba = @@rdec_unset_upload_dn_ba
+var g_rdec_dn_own = @@rdec_unset_dn_own
+var g_rdec_dn_prefill_own = @@rdec_unset_dn_prefill_own
+var g_rdec_dn_installed = false
+
+//! Install the resident driver's hybrid (deltanet) seats - separately, so a tier without them
+//! declines recurrent layers by name instead of serving a model it cannot step.
+def public install_moe_gpu_resident_dn(set_dn_layer : RdecSetDnLayerFn; upload_dn_ba : RdecUploadDnBaFn; dn_own : RdecDnOwnFn; dn_prefill_own : RdecDnPrefillOwnFn) {
+    g_rdec_set_dn_layer = set_dn_layer
+    g_rdec_upload_dn_ba = upload_dn_ba
+    g_rdec_dn_own = dn_own
+    g_rdec_dn_prefill_own = dn_prefill_own
+    g_rdec_dn_installed = true
+}
+
+def public rdec_dn_installed() : bool => g_rdec_dn_installed
+def public rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) { invoke(g_rdec_set_dn_layer, l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off, fqkv, fz, fout, f1, f3, f2, convw, wnormp, ap, dtp) }
+def public rdec_upload_dn_ba(rows : array<float>) { invoke(g_rdec_upload_dn_ba, rows) }
+def public rdec_dn_own(l : int64; stp : float?; histp : float?) { invoke(g_rdec_dn_own, l, stp, histp) }
+//! After a resident prefill: layer `l`'s device-advanced deltanet state and conv history become the
+//! session's (`stp`/`histp` name the owner) - the slot stays valid and dirty, so the first decode's
+//! owner bind finds it in place and a host read syncs it down through `dn_flush_layer`.
+def public rdec_dn_prefill_own(l : int64; stp : float?; histp : float?) { invoke(g_rdec_dn_prefill_own, l, stp, histp) }
 
 //! Install the resident whole-stack decode driver (a GPU backend calls this at [init]).
 def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn; prepare : RdecPrepareFn;
@@ -203,7 +246,7 @@ typedef RdecUploadEmbF32Fn = function<(fblob : array<float>; off : int64; vocab 
 let public RDEC_EMB_F32_CAP = 512l * 1024l * 1024l
 
 //! The device bytes the f32 embed-gather arm would upload for a (vocab x dim) table - 0 past its cap.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#resident-plan")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def public rdec_emb_f32_bytes(vocab, dim : int64) : int64 {
     let bytes = vocab * dim * 4l
     return bytes > RDEC_EMB_F32_CAP ? 0l : bytes
@@ -243,9 +286,9 @@ def public rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : 
 def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)
 def public rdec_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => invoke(g_rdec_place, wq, ws, n, rows, fmt)
-def public rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool) : bool => invoke(g_rdec_prepare, n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16)
+def public rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom) : bool => invoke(g_rdec_prepare, n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16, q_gated, rot, dn)
 def public rdec_upload_norms(norms : array<float>) { invoke(g_rdec_norms, norms) }
-def public rdec_set_layer(l, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) { invoke(g_rdec_set_layer, l, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2) }
+def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int) { invoke(g_rdec_set_cls, cls_block, cls_fmt) }
 def public rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) { invoke(g_rdec_token, x, cossin, pos, cnt, logits) }
 def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, npos, logits) }
@@ -865,6 +908,12 @@ def public dasllama_noisy() : bool {
 //! negative and a wash). Any DASLLAMA_GPU_* knob still overrides individually.
 def public gpu_want_auto : bool
     => g_env_gpu.gpu ?? g_gpu_want.auto_tier
+
+//! The whole-model driver will be attempted on this box: the loader then keeps a dense hybrid's
+//! deltanet planes in their file formats (the driver's GEMVs and tiles dispatch per format), and
+//! the vulkan image identity carries the same bit.
+def public gpu_want_dn_native : bool
+    => moe_gpu_resident_installed() && gpu_want_auto()
 
 //! Effective tier request, env-else-programmatic — the load walk and the GPU backends read
 //! these instead of the raw env vars.
@@ -1518,6 +1567,18 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_set_cls == null) {
         g_rdec_set_cls = @@rdec_unset_set_cls
+    }
+    if (g_rdec_set_dn_layer == null) {
+        g_rdec_set_dn_layer = @@rdec_unset_set_dn_layer
+    }
+    if (g_rdec_upload_dn_ba == null) {
+        g_rdec_upload_dn_ba = @@rdec_unset_upload_dn_ba
+    }
+    if (g_rdec_dn_own == null) {
+        g_rdec_dn_own = @@rdec_unset_dn_own
+    }
+    if (g_rdec_dn_prefill_own == null) {
+        g_rdec_dn_prefill_own = @@rdec_unset_dn_prefill_own
     }
     if (g_rdec_token == null) {
         g_rdec_token = @@rdec_unset_token

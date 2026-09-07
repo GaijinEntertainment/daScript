@@ -32,7 +32,8 @@ require strings
 require _model_tier
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
-// The KERNEL COVERAGE census (REVIEW: "A diff that adds a [metal_kernel] under ../dasllama/ either has that kernel dispatched by a census row in test_kernel_coverage.das ... or names its kernel class in that file's CENSUS_NEVER_DISPATCHED"): drive the small-model zoo across the
+// The KERNEL COVERAGE census (REVIEW_GPU.md: a Metal kernel class is dispatched by a census row here or named in
+// CENSUS_NEVER_DISPATCHED; a Vulkan kernel class is dispatched by a census row): drive the small-model zoo across the
 // format / graph / batch-shape / KV-codec axes and report which compiled kernels were never
 // dispatched — LOUD WARNINGS, never an auto-dead verdict. A zero means "nothing this zoo runs
 // dispatched it", never "unreachable" — deleting a kernel additionally needs a reachability
@@ -619,20 +620,23 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
         let vocab = tr.config.vocab_size
         with_job_que() {
             setup_dasllama_jobque()
-            var s = make_run_state(tr.config, KVDtype.f32, KVDtype.f32)
-            let p <- encode(tr, counting_prompt(1, 40), true, false)
-            eval_(tr, s, p)
-            var cur = greedy_top(s.logits, vocab)
-            for (_i in range(2)) {
-                var one <- [cur]
-                eval_(tr, s, one)
-                delete one
-                cur = greedy_top(s.logits, vocab)
+            // an f32 session rides the per-op rails; an f16 one (the armed mirror codec) the whole-model driver
+            for (kdt in [KVDtype.f32, KVDtype.f16]) {
+                var s = make_run_state(tr.config, kdt, kdt)
+                let p <- encode(tr, counting_prompt(1, 40), true, false)
+                eval_(tr, s, p)
+                var cur = greedy_top(s.logits, vocab)
+                for (_i in range(2)) {
+                    var one <- [cur]
+                    eval_(tr, s, one)
+                    delete one
+                    cur = greedy_top(s.logits, vocab)
+                }
+                var p2 <- encode(tr, counting_prompt(50, 90), false, false)
+                eval_(tr, s, p2)
+                delete p2
+                delete s
             }
-            var p2 <- encode(tr, counting_prompt(50, 90), false, false)
-            eval_(tr, s, p2)
-            delete p2
-            delete s
             for (nb in nbs) {
                 var ss : array<Session>
                 ss |> reserve(nb)
@@ -687,6 +691,9 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             vk_cov_model(t, path_join(models_dir(), "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"), "qwen3", none)
             // qwen3.5 q8: the DeltaNet chains (conv/step/scan + the decode step)
             vk_cov_model(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"), "qwen35", none)
+            // qwen3.5 9B (large tier): head-256 gated attention on the cm2 flash stamps, the
+            // K-quant deltanet planes on the resident driver
+            vk_cov_model(t, path_join(models_dir(), "Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf"), "qwen35", none)
             // the MoE rows (expert FFN/qkv chains + heat cache) sit above the small tier
             vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe", none)
             vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe", none)

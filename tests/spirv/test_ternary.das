@@ -34,3 +34,16 @@ def test_ternary_select(t : T?) {
         delete words
     }
 }
+
+[test]
+def test_ternary_lazy_operand(t : T?) {
+    t |> run("ternary / && / || with an ssbo load in an operand -> a branch, pure ones stay OpSelect") <| @(t : T?) {
+        var words <- tern_lazy_words()
+        t |> equal(count_op(words, SpvOp.SelectionMerge), 3, "lazy: three branched operands -> three OpSelectionMerge")
+        // the fixture's three pure ternaries: the abs-shaped pick and the two bool-to-float picks
+        t |> equal(count_op(words, SpvOp.Select), 3, "lazy: the pure ternaries alone stay OpSelect")
+        t |> success(has_op(words, SpvOp.ConstantFalse) && has_op(words, SpvOp.ConstantTrue), "lazy: && stores false, || stores true before the branch")
+        validate(t, words, "tern_lazy")
+        delete words
+    }
+}

@@ -19,8 +19,12 @@ let RELAXED_DOT = "llvm.wasm.relaxed.dot"
 
 def private spawn_child(cmd : string; var lines : array<string>) : int {
     var rc : int
+    var full = "{cmd} 2>&1"
+    if (get_platform_name() == "windows") {
+        full = "\"{full}\""   // cmd.exe strips the first and last quote of a line that opens with one
+    }
     unsafe {
-        rc = popen_timeout("{cmd} 2>&1", 300.0) $(f) {
+        rc = popen_timeout(full, 300.0) $(f) {
             if (f == null) {
                 return
             }

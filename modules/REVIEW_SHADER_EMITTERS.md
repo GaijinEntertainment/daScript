@@ -44,3 +44,10 @@ capability is anything that changes how a kernel is written or how its body is l
 emitter compiles, where that emitter does not handle it, ships, in the same change, either
 that emitter's lowering of the declaration or a test showing the emitter rejects the
 declaration by name.** A declaration in that module is available to both emitters.
+
+**A `?:`, `&&`, or `||` in a `[spirv_kernel]` or `[compute_shader]` body, or in any `def` that
+body calls, never indexes a global - a module global, a `@workgroup` array, or a
+`self.<member>` resource - in an operand the condition can skip; read the value into a local
+above the operator instead, and when the condition was the only thing keeping the index in
+range, clamp the index.** The emitter lowers such an operand as a branch
+(`dasSpirv/ARCHITECTURE.md`, "Operand laziness follows the language").

@@ -138,6 +138,7 @@ struct EmitCtx {
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
     user_order    : array<uint64>               // user_funcs keys in stable emission order (collect_dependencies order)
     call_temps    : table<uint64; CallTemp>     // intptr(ref-arg Expression) -> its copy-in/out Function-storage temp
+    lazy_temps    : table<uint64; CallTemp>     //!< intptr(ExprOp3 / ExprOp2 &&,||) whose operand indexes a global-rooted array -> its branched lowering's Function-storage temp
     decode_funcs  : table<uint64; DecodeFn>     // intptr(Function) -> registered cm2 decode function ([spirv_decode], referenced via @@ from coopmatLoadTensorDecode)
     decode_order  : array<uint64>               // decode_funcs keys in stable emission order (first-reference order)
     decode_vec_funcs : table<uint64; DecodeFn>  //!< key: the hand-written twin Function, or the scalar Function a twin was synthesized from
@@ -3172,6 +3173,7 @@ class SpirvEmit : AstVisitor {
     e2pty   : table<uint64; uint>        // intptr(Expression) -> pointee type-id (paired with e2ptr)
     e2align : table<uint64; uint>        // intptr(Expression) -> Aligned literal for the OpLoad (set only for PhysicalStorageBuffer-rooted chains — PSB loads REQUIRE the Aligned memory operand)
     ite_ids : table<uint64; IteIds>      // intptr(ExprIfThenElse) -> its {merge, then, else} labels
+    lazy_ids : table<uint64; IteIds>     //!< intptr(ExprOp3 / ExprOp2 &&,||) lowered as a branch (ctx.lazy_temps) -> its labels
     loop_ids : table<uint64; LoopIds>    // intptr(ExprWhile/ExprFor) -> its 5 loop-skeleton labels
     for_src : table<uint64>              // for-source range() call ptrs to intercept in visitExprCall (6.3)
     copy_dst : uint64                    // intptr(ExprCopy.left) while that destination subtree is walked
@@ -3949,10 +3951,34 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
+    [arch(at="../ARCHITECTURE.md#operand-laziness")]
+    def override preVisitExprOp2Right(var expr : ExprOp2?; right : ExpressionPtr) : void {
+        let k = intptr(expr)
+        if (!key_exists(ctx.lazy_temps, k)) return
+        var bm & = unsafe(*m)
+        let is_and = "{expr.op}" == "&&"
+        let l = value_of(expr.left)
+        let ct = ctx.lazy_temps?[k] ?? CallTemp()
+        let merge = alloc_id(bm)
+        let rhs_l = alloc_id(bm)
+        lazy_ids[k] = IteIds(merge = merge, then_l = rhs_l, else_l = merge)
+        emit(bm, SEC_FUNCS, SpvOp.Store, ct.ptr_id, const_bool(bm, !is_and))
+        if (l != 0u) {
+            emit(bm, SEC_FUNCS, SpvOp.SelectionMerge, merge, uint(SpvSelectionControl.None))
+            emit(bm, SEC_FUNCS, SpvOp.BranchConditional, l, is_and ? rhs_l : merge, is_and ? merge : rhs_l)
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Label, rhs_l)
+        ctx.terminated = false
+    }
+
     // ----- binary: arithmetic / comparison / logical, plus matrix-* via emit_mul; void op2 = compound -----
     def override visitExprOp2(var expr : ExprOp2?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let op = "{expr.op}"
+        if (key_exists(lazy_ids, intptr(expr))) {
+            e2id[intptr(expr)] = lazy_merge_value(intptr(expr), expr.right)
+            return expr
+        }
         if (expr._type.baseType == Type.tVoid) {        // compound assignment: dst <op>= rhs
             let rhs = value_of(expr.right)
             let p = ptr_of(expr.left)
@@ -4057,14 +4083,61 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
-    // ----- ternary cond ? a : b -> OpSelect. Branchless; both arms are evaluated (eager) which is
-    // correct for side-effect-free shader operands, same rule as eager &&/||. A vector result with a
-    // scalar bool condition is splatted to a bvecN: SPIR-V < 1.4 OpSelect requires the condition width
-    // to match the result component count. -----
+    [arch(at="../ARCHITECTURE.md#operand-laziness")]
+    def override preVisitExprOp3Left(var expr : ExprOp3?; left : ExpressionPtr) : void {
+        let k = intptr(expr)
+        if (!key_exists(ctx.lazy_temps, k)) return
+        var bm & = unsafe(*m)
+        let cond = value_of(expr.subexpr)
+        let merge = alloc_id(bm)
+        let then_l = alloc_id(bm)
+        let else_l = alloc_id(bm)
+        lazy_ids[k] = IteIds(merge = merge, then_l = then_l, else_l = else_l)
+        if (cond != 0u) {   // a 0 cond failed to lower (error already pushed) — no 0-operand branch
+            emit(bm, SEC_FUNCS, SpvOp.SelectionMerge, merge, uint(SpvSelectionControl.None))
+            emit(bm, SEC_FUNCS, SpvOp.BranchConditional, cond, then_l, else_l)
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Label, then_l)
+        ctx.terminated = false
+    }
+
+    def override preVisitExprOp3Right(var expr : ExprOp3?; right : ExpressionPtr) : void {
+        let k = intptr(expr)
+        if (!key_exists(lazy_ids, k)) return
+        var bm & = unsafe(*m)
+        let ids = lazy_ids?[k] ?? IteIds()
+        let ct = ctx.lazy_temps?[k] ?? CallTemp()
+        let tv = value_of(expr.left)
+        if (tv != 0u) emit(bm, SEC_FUNCS, SpvOp.Store, ct.ptr_id, tv)
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.merge)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.else_l)
+        ctx.terminated = false
+    }
+
+    [arch(at="../ARCHITECTURE.md#operand-laziness")]
+    def lazy_merge_value(k : uint64; last : ExpressionPtr) : uint {
+        var bm & = unsafe(*m)
+        let ids = lazy_ids?[k] ?? IteIds()
+        let ct = ctx.lazy_temps?[k] ?? CallTemp()
+        let v = value_of(last)
+        if (v != 0u) emit(bm, SEC_FUNCS, SpvOp.Store, ct.ptr_id, v)
+        emit(bm, SEC_FUNCS, SpvOp.Branch, ids.merge)
+        emit(bm, SEC_FUNCS, SpvOp.Label, ids.merge)
+        ctx.terminated = false
+        let res = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.Load, ct.value_type, res, ct.ptr_id)
+        return res
+    }
+
+    //! a vector OpSelect splats its scalar bool condition to a bvecN: SPIR-V < 1.4 requires the condition width to match the result.
     def override visitExprOp3(var expr : ExprOp3?) : ExpressionPtr {
         var bm & = unsafe(*m)
         if ("{expr.op}" != "?") {
             errs |> push("unsupported ternary operator '{expr.op}'")
+            return expr
+        }
+        if (key_exists(lazy_ids, intptr(expr))) {
+            e2id[intptr(expr)] = lazy_merge_value(intptr(expr), expr.right)
             return expr
         }
         let n = component_count(value_base_type(expr._type))
@@ -7493,9 +7566,30 @@ def private detect_recursion(var ctx : EmitCtx; entry : FunctionPtr; var errors 
     return found
 }
 
-// Mini-visitor: hoist one Function-storage OpVariable into the current function's entry block for
-// every by-reference argument of every user-function call in its body. Run after collect_locals and
-// before the body walk, so the temps lead the entry block (SPIR-V requires all OpVariable there).
+class SpirvGlobalIndexScan : AstVisitor {
+    @do_not_delete ctx : EmitCtx const?
+    found : bool
+    def override preVisitExprAt(expr : ExprAt?) : void {
+        if (root_global_of(ctx, expr.subexpr) != null) {
+            found = true
+        }
+    }
+}
+
+[arch(at="../ARCHITECTURE.md#operand-laziness")]
+def private indexes_global_array(ctx : EmitCtx const?; e : ExpressionPtr) : bool {
+    var s = new SpirvGlobalIndexScan(ctx = ctx)
+    make_visitor(*s) $(ad) {
+        visit(e, ad)
+    }
+    let found = s.found
+    unsafe {
+        delete s
+    }
+    return found
+}
+
+//! runs after collect_locals and before the body walk, so its hoisted temps lead the entry block - SPIR-V requires every OpVariable there.
 class SpirvTempAlloc : AstVisitor {
     adapter : VisitorAdapter?
     @do_not_delete m   : SpirvModule?
@@ -7531,6 +7625,25 @@ class SpirvTempAlloc : AstVisitor {
         let uf = ctx.user_funcs?[tgt] ?? UserFunc()
         if (!uf.valid) return
         alloc_arg_temps(uf.fn, expr.arguments, 2, 1)
+    }
+    def alloc_lazy_temp(k : uint64; t : TypeDeclPtr) {
+        if (!is_emittable_value_type(t)) return   // the body visitor reports the unsupported result type
+        var bm & = unsafe(*m)
+        let vt = emit_value_type(bm, t, errs)
+        if (vt == 0u) return
+        let ptr_t = type_pointer(bm, SpvStorageClass.Function, vt)
+        let pid = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.Variable, ptr_t, pid, uint(SpvStorageClass.Function))
+        ctx.lazy_temps |> insert(k, CallTemp(ptr_id = pid, value_type = vt))
+    }
+    def override preVisitExprOp3(expr : ExprOp3?) : void {
+        if ("{expr.op}" != "?" || (!indexes_global_array(ctx, expr.left) && !indexes_global_array(ctx, expr.right))) return
+        alloc_lazy_temp(intptr(expr), expr._type)
+    }
+    def override preVisitExprOp2(expr : ExprOp2?) : void {
+        let op = "{expr.op}"
+        if ((op != "&&" && op != "||") || !indexes_global_array(ctx, expr.right)) return
+        alloc_lazy_temp(intptr(expr), expr._type)
     }
 }
 

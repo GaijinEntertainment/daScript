@@ -1,14 +1,14 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2j-2.2q, the mechanisms of the Vulkan resident driver: the prefill window
-chain, how a cm2 tile decodes its quant bytes and how one is picked, the class-pipeline build
-seat both shader instruments hang on, the residency plan, the marks swap that lets one GPU slot
-serve many models, the Q8 requant byte store, and the MoE expert chain on the cm2 tiles. The
-decode-era mechanisms of the per-op tier - the decode attention block, the streamed layer's
-split, the whole-token decode span - are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections
-2.2r-2.2t. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md`
-sec.1.5.
+carries sections 2.2j-2.2m and 2.2p-2.2q, the kernels and encode chains of the Vulkan resident
+driver: the prefill window chain, how a cm2 tile decodes its quant bytes and how one is picked,
+the class-pipeline build seat both shader instruments hang on, the Q8 requant byte store, and
+the MoE expert chain on the cm2 tiles. What a model has to fit on the card before any of this
+runs - the residency plan, and the marks swap that lets one GPU slot serve many models - is
+`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2o. The decode-era mechanisms of the
+per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections 2.2r-2.2v. The GPU backend role
+table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
 ### 2.2j The Vulkan resident prefill window chain {#vk-prefill-window-chain}
 
@@ -69,6 +69,27 @@ prefix of the output while a second identical copy at the end of the same comman
 reads it whole. The intervening attention, requant and `wo` work is what closes that window;
 the copies carry a `//!` naming this section, and the placement is a driver-defect mitigation,
 not a chain-shape preference.
+
+**A recurrent (deltanet) layer's window block replaces the attention head; the FFN tail is
+shared.** Per window: the block's feed (f16 rows when qkv, z and out all admit the cm2 tiles, else the
+q8 image), the qkv and z GEMMs into the window planes (the planes in their file formats - the loader tags a dense hybrid's deltanet planes natively when this driver will be attempted, so a Q5_K/Q6_K file rides the k5/k6 tiles; the out plane is q8, the step's o row feeds it so), the beta and alpha rows into the layer's smalls
+(f32 arm: a 16-position tile GEMM over the `[beta ; alpha]` rows, its grid position tiles by 16-output groups with one output per invocation, so a layer of only `2 x nvh` rows - 64 on the 9B - still fills the card; q8 arm: two q8 GEMMs and copies), the
+conv reading the layer's ring image, the sequential scan over the layer's own state slot, the o rows' feed (f16 or requant) and the out GEMM into `pf_xb2`. The
+scan is the plain per-token delta rule: a four-subgroup workgroup per (head, column group), a lane keeps
+16 state rows of two adjacent columns in registers (two independent chains that interleave), the token's k and q rows are staged once per workgroup in
+shared and feed both columns, the tokens loop inside the kernel with two shuffle reductions per column each, the raw o rows land in the tier's workspace for the gated out-norm's one workgroup per position.
+The conv history crosses windows position-major in ring image 0; the last window transposes the
+tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is `_DECODE.md`
+sec.2.2v's). Every window past the first carries at least the conv taps: when the rows left after
+a full window would be fewer than the taps, that window gives them up so the last one holds the
+taps, and only a lone first window can be shorter - its history is zero, so the tail writes the
+ring's leading rows as zero (`DnTailArgs.zero_rows`). Off the f16 feed a K-quant qkv/z pair reads
+the Q8_K activation form, as the attention head's kq planes do, and the q8 beta/alpha arm
+re-requantizes the rows Q8_0 behind the z GEMM (one feed, two forms - the decode's rule).
+Gated attention rides the batch kernels through a per-head q stride (`qhs = 2 x hs`:
+the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror
+attention gates on the sigmoid of the gate half); partial rotary is the `half = rot / 2` word.
+At head 256 the window takes the h256 cm2 flash stamps (Br 64, Bc 32, the h128 loop with the head-shaped tiles doubled): the gated twins load Q at the head's q stride and scale the normalized output by the sigmoid of the gate half before the store; the h128 coopmat twin stays 128-only.
 
 **A layer's qkv feed comes out of the previous layer's FUSED add+rms twin when the fuse knob is
 on and the feed is not the Q8_K quant form.** The producer is layer l-1's addr_next site, the
@@ -202,42 +223,6 @@ pipeline is then built with `REQUIRE_FULL_SUBGROUPS`. A run never mixes pinned a
 pipelines, so an A/B compares two whole runs. Plain is the default: pinned measured slower on
 the mm_a gate shape.
 
-### 2.2n The residency plan sizes a whole model before a byte uploads {#resident-plan}
-
-The resident driver is all-or-nothing, so the plan IS the decision, and it is computed from
-`Model` metadata alone. It sizes four numbers against the tier's weight budget: the dense weight
-planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the headroom the auto
-arm leaves unfilled (zero when the user pins VRAM). KV is reserved BEFORE weights and never
-grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
-re-uploading gigabytes. A decline carries a reason, and where the numbers allow one it carries
-the remedy that works - a shorter context, because the weights are fixed and the KV is not.
-
-An OPTIONAL plane rides only the room left under the budget at THIS context - what remains of
-`budget_bytes - headroom_bytes` after weights, KV and scratch; the reserved headroom itself
-stays unfilled. It never shrinks any of the three, and it reports zero bytes when it does not
-fit - so the same model plans the plane in at a short context and out at a long one. The raw f32 embed
-table is the one optional plane today.
-
-### 2.2o One GPU slot, many models: the marks swap {#gpu-slot-marks}
-
-A multi-model host runs one device tier under several loaded models, and the tier's per-model
-state is offset-keyed - two models' marks installed together route one model's dispatches at
-the other's planes. `GpuModelMarks` is that state WHOLE: the loader-contract marks plus every
-resident-driver per-model global (the activation, the mirror count, the mirror cap, the mirror
-codec, and the device-embed arm). The save moves the installed state out and leaves the globals
-reading as no-model; the restore is its exact inverse. The whole-model drop clears the same set
-and deselects the `"vulkan"` overrides, so a dropped model's prefill and decode take the plain
-CPU path and a later re-arm passes `resident_upload`'s no-active-override gate. The three carry
-the same set, which is why a model's device state never survives into the next. The upload
-rail enforces it from its own side: a load that finds marks still installed - a model deleted
-without the drop, the shape every test process and single-model tool takes - drops that
-model's device state before uploading its own, carrying the load's MoE layer request across
-the drop (the one mark the drop's reset would otherwise zero before the rail reads it).
-Without that drop the second model's stacks
-land beside the first's, and the offset-keyed stack lookup serves whichever model's plane
-registered that offset first: the decode attention block asserts on the geometry change, and a
-model whose geometry matches decodes the earlier model's weights.
-
 ### 2.2p The Q8 requant writers store one quant per byte {#q8-requant-byte-store}
 
 Every requant writer on the class rail - the prefill and decode-tail kernels that write Q8_0 or
@@ -270,8 +255,8 @@ bucket rows ever cross PCIe. Streamed groups take the same arm after the slot bi
 
 **The per-op attention chain runs the same cm2 flash-attention tile the resident chain runs**
 (`fa_cm2_h64` / `h128`, sec.2.2j) when the device carries the coopmat2-fa trio, the fa knob is
-on, the head size is one the tile family stamps, and the model's attention is not gated - the
-tile has no gated epilogue, so gated models keep the flash-style `at_attn` pass. The tile reads
+on, the head size is 64 or 128, and the model's attention is not gated - this chain wires neither
+the h256 stamps nor their gated epilogue, so gated models keep the flash-style `at_attn` pass. The tile reads
 f16 K/V: the chain keeps its f32 roped-k / raw-v planes at absolute positions for the host
 readback the CPU cache store consumes, and fills f16 shadows of them with the base-less
 `f16cvt` over the whole attended prefix each window; the fa output lands in the same out plane
