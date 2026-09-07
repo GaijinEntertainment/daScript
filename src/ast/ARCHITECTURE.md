@@ -40,3 +40,40 @@ gated on the serializer's `quietCache`. The host sets that flag for the default 
 on unasked for an ordinary run; ungated, each of those lines would be output every user sees on
 an ordinary edit. An explicit `-module-cache` leaves the flag off, so those runs get the lines
 together with the host's verdict.
+
+## 2. The module scan and the descriptor manifest (`dyn_modules.cpp`)
+
+`require_dynamic_modules` walks `<dasroot>/modules/`, then the project root's, then each
+`-load_module` folder, and for every `.das_module` it finds calls `init_dyn_modules`. A
+descriptor is a daslang program whose `initialize(project_path)` registers require paths
+(`register_native_path`) and C++ modules (`register_dynamic_module`); those two builtins in
+`module_builtin_fio.cpp` are the whole surface a descriptor's effect reaches. A descriptor compiles
+under `ignore_shared_modules`: the shared daslib modules it requires neither come from nor land in
+the environment's promoted set, so the program compiled after the scan has the same module set -
+and the same module-cache records, `daslib/builtin` first - whether the scan compiled, replayed
+or was skipped with `-no-dynamic-modules`. Compiling and running the descriptors is the scan's
+cost - about 19 ms for the 28 in this tree - so the scan keeps a manifest beside each descriptor,
+`.das_module.manifest`, holding the rows the registry received from it.
+
+The manifest is a property of the module tree, not of the caller: the rows depend on the
+descriptor's bytes, its folder, the das root and the binary kind, and on nothing the script or
+the cwd brings, so the file sits next to the descriptor, an SDK bundle can ship it pre-generated,
+and a read-only tree simply compiles on every start. Its key is the descriptor's size and
+content hash (`hash_block64`, no stat), the dll-build flag (`das_is_dll_build()` is the one guard
+whose answer differs between binaries sharing a tree) and the folder path the rows were recorded
+under; a mismatch on any of them recompiles that descriptor and rewrites its manifest. The file
+is line-oriented, tab-separated, with a format version on its first line and an `end` line
+carrying the row count; a missing `end`, a count mismatch, an unknown row kind or a wrong field
+count is damage, and damage means recompile and rewrite, never a partial replay. No field may
+hold a tab or newline: a descriptor that registers such a string gets no manifest rather than an
+escaped one. The writer goes through a `.tmp` and a rename.
+
+Recording is armed around one descriptor run: each builtin appends the arguments it actually
+received, in order, and `register_dynamic_module` records its call whatever the outcome and adds
+the das-visible module name once the load succeeded. Replay calls the same two builtins with the
+recorded rows in recorded order, so the Quiet deferral and the post-scan retry of a sibling
+`DT_NEEDED` dlopen behave as on a compiled start. `no_manifest()` inside `initialize` marks the
+descriptor as one that runs on every start: its manifest carries the stamp and the flag and no
+rows, and is not rewritten. With `DAS_TRACE_MODULE_LOAD=1` the scan prints one line per
+descriptor - `replayed N row(s)`, `compiled (<why>), manifest written (N row(s))`,
+`compiled (no_manifest)`, or why a manifest was not written.

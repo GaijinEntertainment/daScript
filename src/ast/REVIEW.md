@@ -12,3 +12,10 @@
   same change.** The gate scans that one function's body, so a print moved out of it is a print
   the gate no longer checks, and an ungated line there is output every user of the default cache
   sees.
+
+- **A diff that adds a builtin a `.das_module` descriptor can call to change the require
+  resolver or the module registry records the call in the descriptor manifest in the same change
+  (`ARCHITECTURE.md` sec.2), and a diff that changes what a recorded row means bumps the
+  manifest's format version.** A replayed start never runs the descriptor, so an effect the
+  recorder does not see is an effect every warm start silently lacks, and a row an older reader
+  misreads is a wrong registration with no diagnostic.

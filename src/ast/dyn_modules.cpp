@@ -4,9 +4,12 @@
 #include <daScript/ast/ast.h>                  // ModuleGroup, CompileDaScript
 #include <daScript/simulate/aot_builtin_fio.h> // dirent, DIR, readdir
 #include <daScript/misc/sysos.h>
-#include <daScript/misc/string_writer.h>       // TextWriter
+#include <daScript/misc/string_writer.h>       // TextWriter, LOG (the env-gated scan trace)
+#include <daScript/misc/anyhash.h>             // hash_block64 - the descriptor's content stamp
+#include <daScript/misc/env_cfg.h>             // get_dasenv_trace_module_load
 #include <cctype>                              // tolower (case-insensitive basename normalize)
 #include <cstdio>                              // fprintf(stderr) for the shadow-shadows-global diagnostic
+#include <cstdlib>                             // atoi - the manifest's on_error field
 
 das::FileAccessPtr get_file_access( char * pak );
 
@@ -27,68 +30,282 @@ enum class Result {
     Exception,
 };
 
+static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filename, const string & path, TextWriter &tout) {
+    ModuleGroup dummyGroup;
+    CodeOfPolicies policies;
+    policies.no_init_check = true;
+    policies.ignore_shared_modules = true;  // ARCHITECTURE.md sec.2: the scan leaves no promoted module behind
+    auto program = compileDaScript(mod_filename, fa, tout, dummyGroup, policies);
+    if ( program->failed() ) {
+        for ( auto & err : program->errors ) {
+            tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+        }
+        return Result::CE;
+    }
+    auto pctx = SimulateWithErrReport(program, tout);
+    if ( !pctx ) {
+        return Result::SimError;
+    }
+    auto fnVec = pctx->findFunctions(INIT_NAME);
+    das::vector<SimFunction *> fnMVec;
+    for ( auto fnAS : fnVec ) {
+        if ( verifyCall<void, const char *>(fnAS->debugInfo, dummyGroup) ) {
+            fnMVec.push_back(fnAS);
+        }
+    }
+    if ( fnMVec.size()==0 ) {
+        tout << "function '"  << INIT_NAME << "' not found in '" << path << "'\n";
+        return Result::CE;
+    } else if ( fnMVec.size()>1 ) {
+        tout << "too many options for '" << INIT_NAME << "'\ncandidates are:\n";
+        for ( auto fnAS : fnMVec ) {
+            tout << "    " << fnAS->mangledName << "\n";
+        }
+        return Result::CE;
+    }
+    auto fnTest = fnMVec.back();
+    pctx->restart();
+    char * fname = pctx->allocateString(path.c_str(),uint32_t(path.length()),nullptr);
+    vec4f args[1] = {
+        cast<char *>::from(fname)
+    };
+    pctx->evalWithCatch(fnTest, args);
+    if ( auto ex = pctx->getException() ) {
+        tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
+        return Result::Exception;
+    }
+    return Result::OK;
+}
+
+static constexpr const char *MANIFEST_SUFFIX = ".das_module.manifest";   // ARCHITECTURE.md sec.2
+static constexpr const char *MANIFEST_HEADER = "das_module_manifest\t1";
+
+static bool trace_scan() {
+    static const bool on = []{
+        const char * e = get_dasenv_trace_module_load();
+        return e && e[0] && e[0] != '0';
+    }();
+    return on;
+}
+
+static bool is_dll_build() {
+#if DAS_ENABLE_DLL
+    return true;
+#else
+    return false;
+#endif
+}
+
+enum class ManifestVerdict { Missing, Stale, Damaged, OptOut, Replay };
+
+struct ManifestRead {
+    ManifestVerdict verdict = ManifestVerdict::Missing;
+    das::vector<DynModuleManifestRow> rows;
+    string why;
+};
+
+static das::vector<string> split_tabs(const string & line) {
+    das::vector<string> fields;
+    size_t start = 0;
+    for ( ;; ) {
+        auto tab = line.find('\t', start);
+        if ( tab == string::npos ) {
+            fields.push_back(line.substr(start));
+            return fields;
+        }
+        fields.push_back(line.substr(start, tab - start));
+        start = tab + 1;
+    }
+}
+
+static string hex64(uint64_t v) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%016llx", (unsigned long long) v);
+    return buf;
+}
+
+static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64_t descHash, const string & root) {
+    ManifestRead res;
+    FILE * f = fopen(file.c_str(), "rb");
+    if ( !f ) {
+        return res;
+    }
+    string text;
+    char buf[4096];
+    for ( size_t n; (n = fread(buf, 1, sizeof(buf), f)) > 0; ) {
+        text.append(buf, n);
+    }
+    fclose(f);
+    das::vector<string> lines;
+    for ( size_t start = 0; start < text.size(); ) {
+        auto nl = text.find('\n', start);
+        if ( nl == string::npos ) {
+            lines.push_back(text.substr(start));
+            break;
+        }
+        lines.push_back(text.substr(start, nl - start));
+        start = nl + 1;
+    }
+    auto damaged = [&](const char * why) {
+        res.verdict = ManifestVerdict::Damaged;
+        res.rows.clear();
+        res.why = why;
+        return res;
+    };
+    auto stale = [&](const char * why) {
+        res.verdict = ManifestVerdict::Stale;
+        res.rows.clear();
+        res.why = why;
+        return res;
+    };
+    if ( lines.size() < 5 ) return damaged("fewer than 5 lines");
+    if ( lines[0] != MANIFEST_HEADER ) return stale("format version");
+    auto stamp = split_tabs(lines[1]);
+    if ( stamp.size() != 3 || stamp[0] != "stamp" ) return damaged("stamp line");
+    if ( stamp[1] != to_string(descSize) || stamp[2] != hex64(descHash) ) return stale("descriptor changed");
+    auto dll = split_tabs(lines[2]);
+    if ( dll.size() != 2 || dll[0] != "dll" ) return damaged("dll line");
+    if ( dll[1] != (is_dll_build() ? "1" : "0") ) return stale("binary kind");
+    auto rootLine = split_tabs(lines[3]);
+    if ( rootLine.size() != 2 || rootLine[0] != "root" ) return damaged("root line");
+    if ( rootLine[1] != root ) return stale("module folder moved");
+    bool optOut = false;
+    size_t i = 4;
+    for ( ; i < lines.size(); ++i ) {
+        auto fields = split_tabs(lines[i]);
+        if ( fields.empty() ) return damaged("empty line");
+        const auto & kind = fields[0];
+        if ( kind == "end" ) break;
+        if ( kind == "np" ) {
+            if ( fields.size() != 4 ) return damaged("np field count");
+            DynModuleManifestRow row;
+            row.a = fields[1]; row.b = fields[2]; row.c = fields[3];
+            res.rows.push_back(das::move(row));
+        } else if ( kind == "dm" ) {
+            if ( fields.size() != 5 ) return damaged("dm field count");
+            DynModuleManifestRow row;
+            row.dynamic = true;
+            row.a = fields[1]; row.b = fields[2]; row.on_error = atoi(fields[3].c_str()); row.c = fields[4];
+            res.rows.push_back(das::move(row));
+        } else if ( kind == "no_manifest" ) {
+            if ( fields.size() != 1 ) return damaged("no_manifest field count");
+            optOut = true;
+        } else {
+            return damaged("unknown row kind");
+        }
+    }
+    if ( i >= lines.size() ) return damaged("no end line");
+    auto endLine = split_tabs(lines[i]);
+    if ( endLine.size() != 2 || endLine[1] != to_string(res.rows.size()) ) return damaged("end row count");
+    for ( ++i; i < lines.size(); ++i ) {
+        if ( !lines[i].empty() ) return damaged("content after end");
+    }
+    if ( optOut && !res.rows.empty() ) return damaged("no_manifest with rows");
+    res.verdict = optOut ? ManifestVerdict::OptOut : ManifestVerdict::Replay;
+    return res;
+}
+
+static bool field_ok(const string & s) {
+    return s.find('\t') == string::npos && s.find('\n') == string::npos && s.find('\r') == string::npos;
+}
+
+static bool write_manifest(const string & file, uint32_t descSize, uint64_t descHash, const string & root,
+                           const das::vector<DynModuleManifestRow> & rows, bool optOut, string & why) {
+    if ( !field_ok(root) ) { why = "the module folder path contains a tab or newline"; return false; }
+    string text = string(MANIFEST_HEADER) + "\n";
+    text += "stamp\t" + to_string(descSize) + "\t" + hex64(descHash) + "\n";
+    text += string("dll\t") + (is_dll_build() ? "1" : "0") + "\n";
+    text += "root\t" + root + "\n";
+    if ( optOut ) {
+        text += "no_manifest\n";
+        text += "end\t0\n";
+    } else {
+        for ( auto & row : rows ) {
+            if ( !field_ok(row.a) || !field_ok(row.b) || !field_ok(row.c) ) {
+                why = "a recorded argument contains a tab or newline";
+                return false;
+            }
+            if ( row.dynamic ) {
+                text += "dm\t" + row.a + "\t" + row.b + "\t" + to_string(row.on_error) + "\t" + row.c + "\n";
+            } else {
+                text += "np\t" + row.a + "\t" + row.b + "\t" + row.c + "\n";
+            }
+        }
+        text += "end\t" + to_string(rows.size()) + "\n";
+    }
+    const string tmp = file + ".tmp";
+    FILE * f = fopen(tmp.c_str(), "wb");
+    if ( !f ) { why = "cannot create " + tmp; return false; }
+    const bool wrote = fwrite(text.data(), 1, text.size(), f) == text.size();
+    fclose(f);
+    if ( !wrote ) { remove(tmp.c_str()); why = "short write to " + tmp; return false; }
+#if defined(_WIN32)
+    remove(file.c_str());   // rename does not replace on Windows
+#endif
+    if ( rename(tmp.c_str(), file.c_str()) != 0 ) { remove(tmp.c_str()); why = "cannot rename " + tmp; return false; }
+    return true;
+}
+
 static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter &tout, bool debug = false) {
     const auto mod_filename = path + "/" + MODULE_SUFFIX;
     if (debug) {
         tout << "try file: " << mod_filename << ".\n";
     }
     auto fi = fa->getFileInfo(mod_filename);
-    if (fi) {
-        ModuleGroup dummyGroup;
-        if (debug) {
-            tout << "file found: " << mod_filename << ".\n";
-        }
-        CodeOfPolicies policies;
-        policies.no_init_check = true;
-        auto program = compileDaScript(mod_filename, fa, tout, dummyGroup, policies);
-        if ( program->failed() ) {
-            for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-            }
-            return Result::CE;
-        } else {
-            auto pctx = SimulateWithErrReport(program, tout);
-            if ( !pctx ) {
-                return Result::SimError;
-            } else {
-                auto fnVec = pctx->findFunctions(INIT_NAME);
-                das::vector<SimFunction *> fnMVec;
-                for ( auto fnAS : fnVec ) {
-                    if ( verifyCall<void, const char *>(fnAS->debugInfo, dummyGroup) ) {
-                        fnMVec.push_back(fnAS);
-                    }
-                }
-                if ( fnMVec.size()==0 ) {
-                    tout << "function '"  << INIT_NAME << "' not found in '" << path << "'\n";
-                    return Result::CE;
-                } else if ( fnMVec.size()>1 ) {
-                    tout << "too many options for '" << INIT_NAME << "'\ncandidates are:\n";
-                    for ( auto fnAS : fnMVec ) {
-                        tout << "    " << fnAS->mangledName << "\n";
-                    }
-                    return Result::CE;
-                } else {
-                    auto fnTest = fnMVec.back();
-                    pctx->restart();
-                    char * fname = pctx->allocateString(path.c_str(),uint32_t(path.length()),nullptr);
-                    vec4f args[1] = {
-                        cast<char *>::from(fname)
-                    };
-                    pctx->evalWithCatch(fnTest, args);
-                    if ( auto ex = pctx->getException() ) {
-                        tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
-                        return Result::Exception;
-                    }
-                    return Result::OK;
-                }
-            }
-        }
-    } else {
+    if (!fi) {
         if (debug) {
             tout << "file not found: " << mod_filename << ".\n";
         }
         return Result::OK;
     }
+    if (debug) {
+        tout << "file found: " << mod_filename << ".\n";
+    }
+    const char * src = nullptr;
+    uint32_t len = 0;
+    fi->getSourceAndLength(src, len);
+    const uint64_t stamp = src ? hash_block64((const uint8_t *) src, len) : 0;
+    const string manifest = path + "/" + MANIFEST_SUFFIX;
+    auto mr = src ? read_manifest(manifest, len, stamp, path) : ManifestRead();
+    if ( mr.verdict == ManifestVerdict::Replay ) {
+        for ( auto & row : mr.rows ) {
+            if ( row.dynamic ) {
+                replay_dynamic_module(row.a.c_str(), row.b.c_str(), row.on_error);
+            } else {
+                replay_native_path(row.a.c_str(), row.b.c_str(), row.c.c_str());
+            }
+        }
+        if ( trace_scan() ) {
+            LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": replayed " << mr.rows.size() << " row(s)\n";
+        }
+        return Result::OK;
+    }
+    const bool record = src && mr.verdict != ManifestVerdict::OptOut;
+    if ( record ) begin_dynamic_module_recording();
+    auto res = run_descriptor(fa, mod_filename, path, tout);
+    if ( !record ) {
+        if ( trace_scan() ) {
+            LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": compiled (" << (src ? "no_manifest" : "no source") << ")\n";
+        }
+        return res;
+    }
+    das::vector<DynModuleManifestRow> rows;
+    bool optOut = false;
+    end_dynamic_module_recording(rows, optOut);
+    if ( res != Result::OK ) {
+        if ( trace_scan() ) {
+            LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": compiled with errors, no manifest\n";
+        }
+        return res;
+    }
+    string why;
+    const bool written = write_manifest(manifest, len, stamp, path, rows, optOut, why);
+    if ( trace_scan() ) {
+        LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": compiled (" << (mr.why.empty() ? "no manifest" : mr.why) << ")"
+            << (written ? (optOut ? ", no_manifest recorded" : ", manifest written (" + to_string(rows.size()) + " row(s))")
+                        : ", manifest not written: " + why) << "\n";
+    }
+    return res;
 }
 
 // Normalize a module-folder basename for case-insensitive shadow comparisons

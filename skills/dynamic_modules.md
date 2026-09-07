@@ -83,6 +83,24 @@ the package root is the working directory, so the compiler finds `namespace/modu
 relative to it. No `.das_project` is needed. The descriptor is what makes the same
 require work after `daspkg install` drops the package into a consumer's `modules/`.
 
+## The manifest beside the descriptor
+
+The scan runs every descriptor as a daslang program on every start, and that costs more than
+the rest of a small program's startup. So after a descriptor runs, the scan writes what it
+registered to `.das_module.manifest` next to it, and later starts replay those rows without
+compiling the descriptor. The file is keyed by the descriptor's content, its folder and the
+binary kind: edit the descriptor, move the module or switch binaries and the next start
+recompiles it and rewrites the manifest. It is generated - gitignore it (this repo does) - and
+a read-only tree just compiles on every start.
+
+A descriptor whose registrations depend on something the file's content cannot see - a probe
+of the machine, a variant picked by hardware - opts out by calling `no_manifest()` inside
+`initialize`; it then runs on every start. Everything a descriptor registers is replayed, so
+the opt-out is only for a descriptor whose answer changes between starts.
+
+`DAS_TRACE_MODULE_LOAD=1` prints one line per descriptor saying whether it was replayed or
+compiled, and why.
+
 ## Adding a `.das` file to an existing module needs the same edit
 
 Require-root registration is manifest-driven: a file not named in the module's

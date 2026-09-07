@@ -19,6 +19,11 @@ this document states what the folder is and why its tests take the shape they do
   serves the record, a changed file re-parses from that module on and says so.
 - `test_generic_instance_origin.das` - a generic instance restored from the cache keeps its
   origin generic, so a fresh program compiled in the same process after the restore resolves it.
+- `test_descriptor_manifest.das` - the module scan's descriptor manifest (`src/ast/ARCHITECTURE.md`
+  sec.2) on a project root the test writes: the first start compiles the descriptor and writes
+  the manifest beside it, the second replays it, an edited descriptor recompiles once, a manifest
+  missing its `end` line recompiles and is rewritten, and a `no_manifest()` descriptor compiles
+  on every start; each verdict is read from the `DAS_TRACE_MODULE_LOAD=1` line the child prints.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
   `mc_generic_origin_*`); a case needing a macro-bearing module graph puts it here instead of
   writing the script inline.

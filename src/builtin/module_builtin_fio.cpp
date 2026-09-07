@@ -15,6 +15,7 @@
 #include "daScript/misc/sysos.h"
 #include "daScript/misc/string_writer.h"   // LOG / LogLevel — env-gated module-load trace
 #include "daScript/misc/env_cfg.h"
+#include "daScript/ast/dyn_modules.h"       // the descriptor manifest recorder
 
 #include <sstream>
 #include <chrono>
@@ -254,6 +255,7 @@ namespace das {
     void * register_dynamic_module_silent ( const char * path, const char * mod_name, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void for_each_registered_native_path ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void for_each_registered_dynamic_module ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void builtin_no_manifest ( Context * context, LineInfoArg * at ) GENERATE_IO_STUB
 #undef GENERATE_IO_STUB
 
     // entry points that report via `ctx` instead of `context`
@@ -306,6 +308,10 @@ namespace das {
     DAS_API void retry_pending_dynamic_modules () GENERATE_IO_STUB
     DAS_API string describe_pending_dynamic_modules () GENERATE_IO_STUB_RET
     DAS_API int report_pending_dynamic_modules () GENERATE_IO_STUB_RET
+    DAS_API void begin_dynamic_module_recording () GENERATE_IO_STUB
+    DAS_API void end_dynamic_module_recording ( vector<DynModuleManifestRow> &, bool & ) GENERATE_IO_STUB
+    DAS_API void replay_native_path ( const char *, const char *, const char * ) GENERATE_IO_STUB
+    DAS_API void replay_dynamic_module ( const char *, const char *, int ) GENERATE_IO_STUB
 
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
@@ -2276,6 +2282,29 @@ namespace das {
     // after the folder scan, so module enumeration order stops mattering.
     static vector<tuple<string,string,string>> g_pending_dynamic_modules; // path, cpp_class_name, last dlopen error
 
+    // the descriptor manifest recorder (dyn_modules.h), armed by the scan around one descriptor run
+    static bool                         g_manifest_recording = false;
+    static bool                         g_manifest_opt_out = false;
+    static vector<DynModuleManifestRow> g_manifest_rows;
+
+    DAS_API void begin_dynamic_module_recording () {
+        g_manifest_recording = true;
+        g_manifest_opt_out = false;
+        g_manifest_rows.clear();
+    }
+
+    DAS_API void end_dynamic_module_recording ( vector<DynModuleManifestRow> & rows, bool & optOut ) {
+        rows.swap(g_manifest_rows);
+        optOut = g_manifest_opt_out;
+        g_manifest_recording = false;
+        g_manifest_opt_out = false;
+        g_manifest_rows.clear();
+    }
+
+    void builtin_no_manifest ( Context *, LineInfoArg * ) {   // the descriptor runs on every start
+        if ( g_manifest_recording ) g_manifest_opt_out = true;
+    }
+
     // Env-gated per-attempt module-load trace (default off). Set
     // DAS_TRACE_MODULE_LOAD=1 to surface each dlopen — turns a swallowed
     // 'missing prerequisite' into a visible "FAILED — <dlerror>" line.
@@ -2292,6 +2321,17 @@ namespace das {
     // ordering). A loadable-but-broken artifact (registrator missing, build-id
     // mismatch) always reports — to the context if any, else LOG(error) (#2580).
     void *register_dynamic_module(const char *path, const char *mod_name, int on_error, Context * context, LineInfoArg * at ) {
+        size_t manifestRow = size_t(-1);    // recorded whatever the outcome: a replay retries a Quiet failure the same way
+
+        if ( g_manifest_recording ) {
+            manifestRow = g_manifest_rows.size();
+            DynModuleManifestRow row;
+            row.dynamic = true;
+            row.a = path ? path : "";
+            row.b = mod_name ? mod_name : "";
+            row.on_error = on_error;
+            g_manifest_rows.push_back(das::move(row));
+        }
         string actualPath(path);
 #ifndef NDEBUG
         // Debug builds produce _debug.shared_module; rewrite the path so that
@@ -2365,10 +2405,15 @@ namespace das {
         }
         *ModuleKarma += unsigned(intptr_t(mod));
         g_registered_dynamic_modules.emplace_back(path, mod_name, mod->name);
+        if ( manifestRow != size_t(-1) ) g_manifest_rows[manifestRow].c = mod->name;
         return lib;
     }
     void *register_dynamic_module_silent(const char *path, const char *mod_name, Context * context, LineInfoArg * at ) {
         return register_dynamic_module(path, mod_name, static_cast<int>(RegisterOnError::Quiet), context, at);
+    }
+
+    DAS_API void replay_dynamic_module ( const char * path, const char * cpp_class, int on_error ) {
+        register_dynamic_module(path, cpp_class, on_error, nullptr, nullptr);
     }
 
     // Re-attempt modules whose dlopen was deferred (Quiet failure during the
@@ -2443,6 +2488,17 @@ namespace das {
         }
         cur_mod->paths.emplace_back(src_path, dst_path);
         g_registered_native_paths.emplace_back(mod_name, src_path, dst_path);
+        if ( g_manifest_recording ) {
+            DynModuleManifestRow row;
+            row.a = mod_name ? mod_name : "";
+            row.b = src_path ? src_path : "";
+            row.c = dst_path ? dst_path : "";
+            g_manifest_rows.push_back(das::move(row));
+        }
+    }
+
+    DAS_API void replay_native_path ( const char * mod_name, const char * src, const char * dst ) {
+        register_native_path(mod_name, src, dst, nullptr, nullptr);
     }
 
     void for_each_registered_native_path ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) {
@@ -3094,6 +3150,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(for_each_registered_native_path)>(*this, lib, "for_each_registered_native_path",
                 SideEffects::accessExternal, "for_each_registered_native_path")
                     ->args({"block", "context","at"});
+            addExtern<DAS_BIND_FUN(builtin_no_manifest)>(*this, lib, "no_manifest",
+                SideEffects::modifyExternal, "builtin_no_manifest")
+                    ->args({"context","at"});
             addExtern<DAS_BIND_FUN(sanitize_command_line)>(*this, lib, "sanitize_command_line",
                 SideEffects::none, "sanitize_command_line")
                     ->args({"var","context","at"})->setTempStringResult();
