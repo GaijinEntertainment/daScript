@@ -470,6 +470,27 @@ def gate_review_md(ctx : PreflightCtx) : GateResult {
         output = join(findings, "\n"))
 }
 
+//! CI's `Test review-md discovery` step, suite for suite
+let REVIEW_MD_TEST_SUITES <- ["utils/internal/review-md/test_scan.das", "utils/internal/review-md/test_gate.das",
+    "utils/internal/review-md/test_walkers.das", "utils/internal/make-pr/test_gates.das", "utils/internal/preflight/tests"]
+
+def gate_review_md_tests(ctx : PreflightCtx) : GateResult {
+    let t0 = ref_time_ticks()
+    if (!review_md_tests_reach(ctx.changed_all)) {
+        return GateResult(name = "review-md-tests", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "no REVIEW.das, walker, make-pr, preflight or dastest change vs {ctx.base}")
+    }
+    for (suite in REVIEW_MD_TEST_SUITES) {
+        let r = run_argv([ctx.daslang, "dastest/dastest.das", "--", "--failures-only", "--test", suite], 600.0)
+        if (r.rc != 0) {
+            return GateResult(name = "review-md-tests", status = GateStatus.Fail, seconds = seconds_since(t0),
+                detail = "{suite} is red (mirrors CI's extended_checks 'Test review-md discovery' step) - a gate or walker change needs its fixture updated too",
+                output = r.out)
+        }
+    }
+    return GateResult(name = "review-md-tests", status = GateStatus.Pass, seconds = seconds_since(t0))
+}
+
 def gate_md_ascii(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     let changed = run_argv(["git", "diff", "--name-only", "{ctx.base}..HEAD"])
@@ -1562,6 +1583,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "lint", tier = "fast", doc = "lint changed .das on two rails (host, linux-mirror), zero warnings"),
         GateInfo(name = "hash-refs", tier = "fast", doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
         GateInfo(name = "review-md", tier = "fast", doc = "REVIEW.das gates of every folder the diff touches (utils/internal/review-md; CI's extended_checks step runs every gate)"),
+        GateInfo(name = "review-md-tests", tier = "fast", doc = "the review-md discovery suites (walker fixtures, make-pr gate tests, preflight's own) when the diff touches a REVIEW.das or those tools (mirrors CI's extended_checks step)"),
         GateInfo(name = "md-ascii", tier = "fast", doc = "ci/fix_md_ascii.py --check when the diff touches .md (mirrors CI's Markdown ASCII gate in extended_checks)"),
         GateInfo(name = "ast-verify", tier = "fast", doc = "daslang -dry-run --ast-verify-batch on changed .das (parallel, 300s/file; mirrors CI) - an AST verify line, a crash, or a timeout fails"),
         GateInfo(name = "cpp-syntax", tier = "fast", doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
@@ -1803,6 +1825,8 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 r <- gate_hash_refs()
             } elif (info.name == "review-md") {
                 r <- gate_review_md(ctx)
+            } elif (info.name == "review-md-tests") {
+                r <- gate_review_md_tests(ctx)
             } elif (info.name == "md-ascii") {
                 r <- gate_md_ascii(ctx)
             } elif (info.name == "ast-verify") {

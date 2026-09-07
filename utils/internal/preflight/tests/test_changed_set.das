@@ -30,6 +30,16 @@ def test_reach_hit(t : T?) {
     t |> success(!reach_hit(none, imgui), "an empty diff misses every reach set")
 }
 
+[test]
+def test_review_md_tests_reach(t : T?) {
+    t |> success(review_md_tests_reach(["utils/REVIEW.das"]), "a gate under utils/ reaches the suites")
+    t |> success(review_md_tests_reach(["modules/dasLLAMA/REVIEW.das", "plans/x.md"]), "a module's gate reaches them")
+    t |> success(review_md_tests_reach(["utils/internal/review-md/gate.das"]), "the walkers reach them")
+    t |> success(review_md_tests_reach(["dastest/review_gate.das"]), "the gate library reaches them")
+    t |> success(!review_md_tests_reach(["utils/watchdog/REVIEW.md", "utils/watchdog/watchdog.das"]), "a checklist or a tool edit misses them")
+    t |> success(!review_md_tests_reach(["modules/dasLLAMA/dasllama/PREVIEW.das"]), "a name that merely ends in the letters misses them")
+}
+
 // The compile sweep's root filter: program roots under the swept trees, never tests, generated files,
 // fixtures, or a module tree nested inside an example through a junction.
 [test]

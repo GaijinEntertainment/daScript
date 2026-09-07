@@ -41,7 +41,7 @@ def make_pilot_fixture(t : T?; tree, root : string) {
     write_at(t, root, "CMakeLists.txt", "INSTALL(FILES src/utils/good-tool/main.das DESTINATION utils/good-tool)\n")
     write_at(t, root, "utils/CMakeLists.txt", "set(DAS_UTILS\n    good-tool\n)\nset(DAS_UTILS_SHIPPED_EXES good-tool)\n")
     write_at(t, root, "utils/good-tool/main.das", "options gen2\n")
-    write_at(t, root, "utils/good-tool/REVIEW.md", "stays in DAS_UTILS_SHIPPED_EXES\n")
+    write_at(t, root, "utils/good-tool/README.md", "ships as a prebuilt exe - the DAS_UTILS_SHIPPED_EXES entry\n")
     write_at(t, root, "utils/internal/tidy-tool/main.das", "options gen2\n")
     write_at(t, root, "doc/source/reference/utils/good_tool.rst", "page\n")
     write_at(t, root, "doc/source/reference/utils.rst", "   utils/good_tool.rst\n")
