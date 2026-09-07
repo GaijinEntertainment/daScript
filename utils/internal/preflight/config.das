@@ -284,3 +284,10 @@ def public load_preflight_settings(path : string; var error : string&) : Preflig
 
     return settings
 }
+
+//! CI's changed-set lint reads `.das` and `.md` alike (extended_checks: `-- '*.das' '*.md'`); a
+//! changed file of either kind goes to the lint gate, and nothing else does
+def is_lint_input(path : string) : bool {
+    let ext = extension(path)
+    return ext == ".das" || ext == ".md"
+}

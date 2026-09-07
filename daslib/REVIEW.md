@@ -33,8 +33,9 @@ initializer reports the variable.
 state scoped to that construct.** State an early return leaves set poisons the next
 construct's visit.
 
-**Never keep per-loop visitor state in a bare scalar - keep it in a stack.** A scalar
-survives into the sibling loop's exit path and unbalances its counter.
+**Visitor state that must be restored to a value saved when its construct was entered lives in
+a stack, never in a bare scalar.** A saved value kept in a scalar survives into the sibling
+construct's exit path and unbalances it.
 
 **A diff that adds or changes a daslib fact - code or a `//!` contract - whose truth is
 decided by a C++-side definition, with no test, lint, or compile error failing when the two
@@ -42,7 +43,12 @@ sides no longer match, records the pair in the architecture doc, in the section 
 the daslib side lives in, naming both sides.**
 
 **When a diff changes one side of a recorded daslib/C++ pair so the two no longer match, it
-changes the other side and updates the pair's architecture-doc entry in the same diff.**
+changes the other side in the same diff.**
+
+**A diff that renames, deletes, or changes the behavior of a daslib name that an
+`ARCHITECTURE*.md` in this folder spells updates that entry in the same change.** The doc is
+read as the current tree, and a name that no longer resolves or a scope that no longer holds is
+trusted until someone reads the code.
 
 **A diff that adds an architecture-doc entry adds it only where no name, shape, test, lint, or
 compile error fails when the entry's fact goes false.**

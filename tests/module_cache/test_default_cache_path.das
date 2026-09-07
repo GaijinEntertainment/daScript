@@ -109,7 +109,8 @@ def test_fallback_verdict_names_the_cutoff(t : T?) {
     fwrite(leafB, "options gen2\nmodule mc_leaf_b\ndef leaf_b() : int \{\n    return 20\n\}\n")
     var warm : string
     t |> success(report_child(t, "verdict warm", run(cmd, warm), warm, "MARK_verdict 21"), "the edited leaf is recompiled")
-    t |> success(find(warm, "deser: FALLBACK - 1 module(s) served from cache") >= 0, "the verdict counts the module served before the cutoff:\n{warm}")
+    //! two served: daslib/builtin's record and mc_leaf_a's, then the cutoff at mc_leaf_b
+    t |> success(find(warm, "deser: FALLBACK - 2 module(s) served from cache") >= 0, "the verdict counts the modules served before the cutoff:\n{warm}")
     t |> success(find(warm, "mc_leaf_b.das") >= 0 && find(warm, "(file changed)") >= 0, "the verdict names the cutoff file and its reason:\n{warm}")
     var err : string
     rmdir_rec(tmp, err)
@@ -168,7 +169,8 @@ def test_source_stamp_is_content(t : T?) {
     fwrite(leaf, "options gen2\nmodule mc_stamp_leaf\ndef leaf() : int \{\n    return 3\n\}\n")
     var edited : string
     t |> success(report_child(t, "stamp edited", run(cmd, edited), edited, "MARK_stamp 3"), "a same-size edit is recompiled")
-    t |> success(find(edited, "file changed at") >= 0 && find(edited, "mc_stamp_leaf.das") >= 0, "the same-size edit is a cutoff at the leaf:\n{edited}")
+    //! daslib/builtin's record serves first, so the cutoff verdict takes its served-count form
+    t |> success(find(edited, "deser: FALLBACK - 1 module(s) served from cache") >= 0 && find(edited, "mc_stamp_leaf.das") >= 0 && find(edited, "(file changed)") >= 0, "the same-size edit is a cutoff at the leaf:\n{edited}")
     t |> success(find(edited, "ser: file content changed") >= 0, "the loud cache names the content change:\n{edited}")
     var err : string
     rmdir_rec(tmp, err)

@@ -1,0 +1,1 @@
+Called from a ``.das_module`` descriptor's ``initialize``: marks the descriptor as one that runs on every start, so the module scan keeps no manifest of its registrations and never replays them. Use it when what the descriptor registers depends on something its file content cannot see.

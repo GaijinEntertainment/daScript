@@ -40,3 +40,48 @@ gated on the serializer's `quietCache`. The host sets that flag for the default 
 on unasked for an ordinary run; ungated, each of those lines would be output every user sees on
 an ordinary edit. An explicit `-module-cache` leaves the flag off, so those runs get the lines
 together with the host's verdict.
+
+## 2. The module scan and the descriptor manifest (`dyn_modules.cpp`)
+
+`require_dynamic_modules` walks `<dasroot>/modules/`, then the project root's, then each
+`-load_module` folder, and for every `.das_module` it finds calls `init_dyn_modules`. A
+descriptor is a daslang program whose `initialize(project_path)` registers require paths
+(`register_native_path`) and C++ modules (`register_dynamic_module`); those two builtins in
+`module_builtin_fio.cpp` are the whole surface a descriptor's effect reaches. A descriptor compiles
+under `ignore_shared_modules`: the shared daslib modules it requires neither come from nor land in
+the environment's promoted set, so the program compiled after the scan has the same module set -
+and the same module-cache records, `daslib/builtin` first - whether the scan compiled, replayed
+or was skipped with `-no-dynamic-modules`. Compiling and running the descriptors is the scan's
+cost, and it grows with the number of descriptors in the tree, so the scan keeps a manifest beside each descriptor, `.das_module.manifest`, holding the rows the
+registry received from it.
+
+The manifest is a property of the module tree, not of the script or the cwd: the rows depend on
+the descriptor's bytes and on four process-wide inputs a descriptor can read - its folder
+(`project_path`), the das root (`get_das_root()`), the binary kind (`das_is_dll_build()`) and the
+cross-compile target (`get_cross_platform_name()`, which `dasOpenGL`'s descriptor consults to
+register its module for the web target only) - so the file sits next to the descriptor, and a
+read-only tree simply compiles on every start. Its key
+is the descriptor's size and content hash (`hash_block64`, no stat) plus those four inputs, one
+line each (`root`, `dll`, `dasroot`, `target`), plus one `dep` line per file the descriptor's
+compile read - every module in its program with a file name, the daslib ones included - carrying
+that file's size and hash as the scan's `FileAccess` serves it (hashed once per file per
+access, whatever the descriptor count); a mismatch on any of them recompiles that descriptor
+and rewrites its manifest, so a native run and a `--jit-target` run of one tree alternate
+rewrites rather than serve each other's rows, and a descriptor whose rows come from a module it
+requires recompiles when that module changes. The file is line-oriented, tab-separated, with a
+format version (`MANIFEST_HEADER`) on its first line and an `end` line carrying the row count
+(`dep` lines are key, not rows); a missing `end`, a count mismatch, an unknown row kind, a wrong
+field count or a `dm` row whose `on_error` is not one of `RegisterOnError`'s three values is
+damage, and the reader answers damage with a recompile and a rewrite, not a partial replay. The
+writer refuses a descriptor whose recorded string holds a tab or newline (`field_ok`), rather
+than an escaped form the reader would have to decode, and goes through a `.tmp` and a rename.
+
+Recording is armed around one descriptor run: each builtin appends the arguments it actually
+received, in order, and `register_dynamic_module` records its call whatever the outcome and adds
+the das-visible module name once the load succeeded. Replay calls the same two builtins with the
+recorded rows in recorded order, so the Quiet deferral and the post-scan retry of a sibling
+`DT_NEEDED` dlopen behave as on a compiled start. `no_manifest()` inside `initialize` marks the
+descriptor as one that runs on every start: its manifest carries the stamp and the flag and no
+rows, and is not rewritten. With `DAS_TRACE_MODULE_LOAD=1` the scan prints one line per
+descriptor - `replayed N row(s)`, `compiled (<why>), manifest written (N row(s))`,
+`compiled (no_manifest)`, or why a manifest was not written.

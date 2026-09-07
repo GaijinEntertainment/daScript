@@ -108,7 +108,7 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     //    makes scope 2 tune after scope 1 already created the file), then the re-exec'd
     //    compile stamps both winners and the k2 tier actually executes
     var l3 : array<string>
-    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -no-module-cache -jit \"{client}\"", l3), 0)
+    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\"", l3), 0)
     t |> success(l3 |> has("FAKE TUNER ->"))
     t |> success(l3 |> has("FAKE TUNER2 ->"))
     t |> success(l3 |> has("scope_add <- k2 ("))
@@ -193,13 +193,13 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     let autoSidecar = "{get_this_module_dir()}/llvm_tune_scope_client_auto.tune.json"
     remove(autoSidecar)
     var l9 : array<string>
-    t |> equal(spawn_child("{tune_env("")}\"{bin}\" -no-module-cache -jit \"{autoClient}\"", l9), 0)
+    t |> equal(spawn_child("{tune_env("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{autoClient}\"", l9), 0)
     t |> success(l9 |> has("FAKE TUNER ->"))
     t |> success(l9 |> has("FAKE TUNER2 ->"))
     t |> success(l9 |> has("RESULT 7"))
     t |> success(l9 |> has("STATUS scope_add|llvm_tune_scope_probe|k2|manifest"))
     var l9b : array<string>
-    t |> equal(spawn_child("{tune_env("")}\"{bin}\" -no-module-cache -jit \"{autoClient}\"", l9b), 0)
+    t |> equal(spawn_child("{tune_env("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{autoClient}\"", l9b), 0)
     t |> success(!(l9b |> has("FAKE TUNER")))
     t |> success(l9b |> has("RESULT 7"))
 
@@ -207,7 +207,7 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     //     stamps (RESULT 6 = 2+3+k1)
     remove(autoSidecar)
     var l10 : array<string>
-    t |> equal(spawn_child("{tune_env("fallback")}\"{bin}\" -no-module-cache -jit \"{autoClient}\"", l10), 0)
+    t |> equal(spawn_child("{tune_env("fallback")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{autoClient}\"", l10), 0)
     t |> success(!(l10 |> has("FAKE TUNER")))
     t |> success(l10 |> has("RESULT 6"))
 
@@ -216,7 +216,7 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     //     fallback stamps, same RESULT 6 as the env kill switch
     remove(autoSidecar)
     var l11 : array<string>
-    t |> equal(spawn_child("{tune_env("")}\"{bin}\" -no-module-cache -jit \"{autoClient}\" -- --jit-opt-level=0", l11), 0)
+    t |> equal(spawn_child("{tune_env("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{autoClient}\" -- --jit-opt-level=0", l11), 0)
     t |> success(!(l11 |> has("FAKE TUNER")))
     t |> success(l11 |> has("RESULT 6"))
 
@@ -224,7 +224,7 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     //     the injected fallback — the tuner runs and the tuned tier serves
     remove(autoSidecar)
     var l12 : array<string>
-    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -no-module-cache -jit \"{autoClient}\" -- --jit-opt-level=0", l12), 0)
+    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{autoClient}\" -- --jit-opt-level=0", l12), 0)
     t |> success(l12 |> has("FAKE TUNER ->"))
     t |> success(l12 |> has("RESULT 7"))
 
@@ -234,7 +234,7 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     let supSidecar = "{get_this_module_dir()}/llvm_tune_scope_client_suppress.tune.json"
     remove(supSidecar)
     var l13 : array<string>
-    t |> equal(spawn_child("{tune_env("")}\"{bin}\" -no-module-cache -jit \"{supClient}\"", l13), 0)
+    t |> equal(spawn_child("{tune_env("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{supClient}\"", l13), 0)
     t |> success(!(l13 |> has("FAKE TUNER")))
     t |> success(l13 |> has("mint SUPPRESSED (TEST_SUPPRESS=1)"))
     t |> success(l13 |> has("RESULT 6"))
@@ -247,13 +247,13 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     let verSidecar = "{get_this_module_dir()}/llvm_tune_scope_client_ver.tune.json"
     remove(verSidecar)
     var l14 : array<string>
-    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -no-module-cache -jit \"{verClient}\"", l14), 0)
+    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{verClient}\"", l14), 0)
     t |> success(l14 |> has("FAKE TUNER VER ->"))
     t |> success(l14 |> has("FAKE TUNER VER2 ->"))   // the version_key= scope tunes too
     t |> success(l14 |> has("RESULT 7"))
     t |> success(l14 |> has("RESULT2 7"))
     var l14b : array<string>
-    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -no-module-cache -jit \"{verClient}\"", l14b), 0)
+    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{verClient}\"", l14b), 0)
     t |> success(!(l14b |> has("FAKE TUNER")))   // both pins satisfied by the mint — no re-tune loop
     t |> success(l14b |> has("RESULT 7"))
     t |> success(l14b |> has("RESULT2 7"))

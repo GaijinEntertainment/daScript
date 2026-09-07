@@ -301,6 +301,7 @@ class public LlvmJitVisitor : AstVisitor {
     // LIFO matches visitor recursion, so nested `[[..],[..]]` just push/pop (no per-expr bookkeeping).
     heapMkaData : array<LLVMOpaqueValue?>
     v2v : table<Variable?; LLVMOpaqueValue?>
+    g2v : table<Variable?; LLVMOpaqueValue?>    //! a solid-context global's entry-block pointer, cleared per LLVM function
     v2t : table<LLVMOpaqueValue?; LLVMOpaqueType?>
     call2cmres : table<Expression?; LLVMOpaqueValue?>
     ffunc, wfunc : LLVMOpaqueValue?
@@ -961,6 +962,7 @@ class public LlvmJitVisitor : AstVisitor {
         assert(g_builder != null, "missing builder")
         thisFunc = fun
         uid.reset(fun)
+        g2v |> clear()
         ldu_hint = LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS
         let fnmna = uid.get_dll_fn_name(fun)
         ffunc = LLVMGetNamedFunction(g_mod, fnmna.impl())
@@ -4886,12 +4888,12 @@ class public LlvmJitVisitor : AstVisitor {
     def override visitExprGoto(expr : ExprGoto?) : ExpressionPtr {
         if (expr.subexpr != null) {
             var labI = getE(expr.subexpr)
+            var badLab = append_basic_block("invalid_label")
+            var sw = LLVMBuildSwitch(g_builder, labI, badLab, uint(length(sortedLabels)))
             for (kv in sortedLabels) {
-                var nextLab = append_basic_block("not_label_{kv.index}")
-                let isL = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, labI, types.ConstI32(uint64(kv.index)), "")
-                LLVMBuildCondBr(g_builder, isL, kv.blk, nextLab)
-                LLVMPositionBuilderAtEnd(g_builder, nextLab)
+                LLVMAddCase(sw, types.ConstI32(uint64(kv.index)), kv.blk)
             }
+            LLVMPositionBuilderAtEnd(g_builder, badLab)
             build_exception("invalid label index", expr.at)
         } else {
             var lab = labels[expr.labelName]
@@ -6048,26 +6050,29 @@ class public LlvmJitVisitor : AstVisitor {
             }
         } else {
             var tryV = tryGetV(expr.variable)
-            if (tryV == null) {
+            let isSolidContext = expr.variable._module.moduleFlags.isSolidContext
+            if (tryV == null && isSolidContext) {
+                g2v |> get(expr.variable) $(cached) {
+                    tryV = cached
+                }
+            }
+            if (tryV == null && !isSolidContext) {
+                let mnh = hash(get_mangled_name(expr.variable))
+                let vptr = get_global_offset_by_mnh(mnh, expr.variable.flags.global_shared, "global_var_{expr.variable.name}_mnh_ptr")
+                tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
+            } elif (tryV == null) {
                 at_function_entry() {
-                    let isSolidContext = expr.variable._module.moduleFlags.isSolidContext
-                    var vptr : LLVMOpaqueValue?
-                    if (!isSolidContext) {
-                        let mnh = hash(get_mangled_name(expr.variable))
-                        vptr = get_global_offset_by_mnh(mnh, expr.variable.flags.global_shared, "global_var_{expr.variable.name}_mnh_ptr")
-                        vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
-                    } else {
-                        // Globals base = context->globals, via the host-baked
-                        // offsetof(Context, globals); index by stackTop. host==target
-                        // (native or wasm64), so the baked Context offset is correct.
-                        var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), "")
-                        let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                        var gp = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
-                        let global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
-                        vptr = LLVMBuildGEP2(g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(expr.variable.stackTop)), "")
-                    }
+                    // Globals base = context->globals, via the host-baked
+                    // offsetof(Context, globals); index by stackTop. host==target
+                    // (native or wasm64), so the baked Context offset is correct.
+                    var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), "")
+                    let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                    var gp = LLVMBuildGEP2(g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                    let global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), gp, "")
+                    let vptr = LLVMBuildGEP2(g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(expr.variable.stackTop)), "")
                     tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
                 }
+                g2v[expr.variable] = tryV
             }
             if (expr.varFlags.r2v) {
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), tryV, expr._type.alignOf, "global_var_r2v_{expr.variable.name}"))

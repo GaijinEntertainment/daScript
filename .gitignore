@@ -35,6 +35,9 @@ modules/**/_build/
 bin/
 # JIT stores dll's here
 .jitted_scripts/
+# the descriptor manifest the module scan writes beside each .das_module (src/ast/ARCHITECTURE.md sec.2)
+.das_module.manifest
+.das_module.manifest.tmp
 # All build libraries stored here
 lib/
 # dasTreeSitter vendors Tree-sitter's source directory named `lib`; it is an
@@ -123,6 +126,8 @@ utils/**/modules/
 # that -project_root flows through correctly).
 !utils/mcp/tests/_pretend_root/modules/
 !utils/mcp/tests/_pretend_root/modules/**
+utils/mcp/tests/_pretend_root/modules/**/.das_module.manifest
+utils/mcp/tests/_pretend_root/modules/**/.das_module.manifest.tmp
 
 # Claude Code (local settings + runtime state). Exceptions: .claude/skills/
 # carries the checked-in daslang LSP plugin manifest — it must travel with the

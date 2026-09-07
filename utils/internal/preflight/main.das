@@ -5,7 +5,7 @@ options persistent_heap
 // preflight — run CI's gates locally before pushing. Gate ↔ CI-lane mapping
 // and the manual commands this tool automates: skills/internal/preflight.md.
 //
-// Fast tier (default): format --verify, lint on changed .das, clang
+// Fast tier (default): format --verify, lint on changed .das and .md, clang
 // frontend (syntax-only) pass on changed C++ — escalates to a full
 // src+tests-cpp sweep when a header changed, since a header edit can break
 // template instantiation in TUs the diff never touched. --full adds the
@@ -111,6 +111,7 @@ struct PreflightCtx {
     clang_is_cl : bool
     base : string
     changed_das : array<string>
+    changed_md : array<string>      // the lint gate reads these beside changed_das, as CI does
     changed_cpp : array<string>
     changed_all : array<string>     // every changed path vs base, any extension, plus untracked files - the reach tests read this
     changed_hdr : int
@@ -321,7 +322,7 @@ def in_core_scope(path : string) : bool {
     return starts_with(g, "src/") || starts_with(g, "include/") || starts_with(g, "tests-cpp/")
 }
 
-def collect_changed_files(base : string; var das_files, cpp_files : array<string>&; var hdr_count : int&) {
+def collect_changed_files(base : string; var das_files, md_files, cpp_files : array<string>&; var hdr_count : int&) {
     var seen : table<string>
     let probe = run_argv(["git", "rev-parse", "--verify", "--quiet", base])
     var ranges : array<string>
@@ -341,6 +342,8 @@ def collect_changed_files(base : string; var das_files, cpp_files : array<string
             let ext = extension(f)
             if (ext == ".das") {
                 das_files |> push(f)
+            } elif (is_lint_input(f)) {
+                md_files |> push(f)
             } elif (ext == ".cpp" || ext == ".cc") {
                 cpp_files |> push(f)
             } elif (ext == ".h" || ext == ".hpp" || ext == ".inc") {
@@ -595,11 +598,12 @@ def gate_format(ctx : PreflightCtx) : GateResult {
 // outside the PR — staleness belongs to the nightly whole-tree -j 1 pass.
 def gate_lint(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
-    if (empty(ctx.changed_das)) {
+    if (empty(ctx.changed_das) && empty(ctx.changed_md)) {
         return GateResult(name = "lint", status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "no .das files changed vs {ctx.base}")
+            detail = "no .das or .md files changed vs {ctx.base}")
     }
     var files <- [for (f in ctx.changed_das); f]
+    files |> push_from(ctx.changed_md)
     var host_args <- [ctx.daslang, "utils/lint/main.das", "--"]
     host_args |> push_from(files)
     host_args |> push("--quiet")
@@ -1580,7 +1584,7 @@ def gate_table() : array<GateInfo> {
     return <- [
         GateInfo(name = "untracked", tier = "fast", doc = "no untracked files at PR time — commit, delete, or ignore each"),
         GateInfo(name = "format", tier = "fast", doc = "formatter --verify on tracked .das (mirrors CI)"),
-        GateInfo(name = "lint", tier = "fast", doc = "lint changed .das on two rails (host, linux-mirror), zero warnings"),
+        GateInfo(name = "lint", tier = "fast", doc = "lint changed .das and .md on two rails (host, linux-mirror), zero warnings"),
         GateInfo(name = "hash-refs", tier = "fast", doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
         GateInfo(name = "review-md", tier = "fast", doc = "REVIEW.das gates of every folder the diff touches (utils/internal/review-md; CI's extended_checks step runs every gate)"),
         GateInfo(name = "review-md-tests", tier = "fast", doc = "the review-md discovery suites (walker fixtures, make-pr gate tests, preflight's own) when the diff touches a REVIEW.das or those tools (mirrors CI's extended_checks step)"),
@@ -1778,13 +1782,14 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     let clang_info = find_clang(cfg.clang, ctx.build_dir)
     ctx.clang = clang_info.exe
     ctx.clang_is_cl = clang_info.is_cl
-    collect_changed_files(cfg.base, ctx.changed_das, ctx.changed_cpp, ctx.changed_hdr)
+    collect_changed_files(cfg.base, ctx.changed_das, ctx.changed_md, ctx.changed_cpp, ctx.changed_hdr)
     ctx.changed_all <- collect_changed_paths(cfg.base)
 
     let tier = cfg.full ? "full" : "fast"
     let n_das = length(ctx.changed_das)
+    let n_md = length(ctx.changed_md)
     let n_cpp = length(ctx.changed_cpp)
-    to_log(LOG_INFO, "preflight: {tier} tier; daslang={ctx.daslang}; base={cfg.base}; {n_das} das / {n_cpp} cpp changed\n")
+    to_log(LOG_INFO, "preflight: {tier} tier; daslang={ctx.daslang}; base={cfg.base}; {n_das} das / {n_md} md / {n_cpp} cpp changed\n")
     let settings_label = fexist(settings_path) ? settings_path : "built-in defaults"
     to_log(LOG_INFO, "preflight: JIT workers={ctx.jit_jobs}; max-file-time={ctx.jit_max_file_time}s; settings={settings_label}\n")
 

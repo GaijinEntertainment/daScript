@@ -661,21 +661,6 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             LLVMBuildCall2(ib, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
     }
-    // native paths re-root at run time like dynamic modules; counterpart emission site: inject_main
-    let reg_native_path_type = LLVMFunctionType(t.t_void,
-        fixed_array<LLVMTypeRef>(t.LLVMVoidPtrType(), t.LLVMVoidPtrType(), t.LLVMVoidPtrType(), t.LLVMVoidPtrType())
-    )
-    var jit_reg_native_path = LLVMGetNamedFunction(g_mod, "jit_register_native_path_resolve")
-    if (jit_reg_native_path == null) {
-        jit_reg_native_path = LLVMAddFunctionWithType(g_mod, "jit_register_native_path_resolve", reg_native_path_type)
-    }
-    for_each_registered_native_path() $(mod_name, src_path, dst_path) {
-        let mod_str = get_string_constant_ptr(ib, mod_name)
-        let src_str = get_string_constant_ptr(ib, src_path)
-        let rel_str = get_string_constant_ptr(ib, compute_modules_relative_suffix(dst_path))
-        let dst_str = get_string_constant_ptr(ib, dst_path)
-        LLVMBuildCall2(ib, reg_native_path_type, jit_reg_native_path, fixed_array(mod_str, src_str, rel_str, dst_str), "")
-    }
     if (!empty(extern_resolver.registered_modules) || !empty(used_modules)) {
         let init_done_type = LLVMFunctionType(t.t_void, array<LLVMTypeRef>())
         var jit_init_done = LLVMGetNamedFunction(g_mod, "jit_initialize_modules_done")
@@ -1117,25 +1102,6 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     // for `daspkg release` to ship dylibs + traverse dep packages.
     write_release_deps(prog)
 
-    // Register native paths (das include paths) loaded during compilation; jit_register_native_path_resolve
-    // (module_jit.cpp) re-roots the destination at run time. Counterpart emission site: collect_external_functions.
-    let reg_native_path_type = LLVMFunctionType(types.t_void,
-        fixed_array<LLVMTypeRef>(
-            types.LLVMVoidPtrType(), // const char * mod_name
-            types.LLVMVoidPtrType(), // const char * src_path
-            types.LLVMVoidPtrType(), // const char * rel_dst ("" = no /modules/ segment)
-            types.LLVMVoidPtrType()  // const char * fallback_abs_dst
-        )
-    )
-    var jit_reg_native_path = LLVMAddFunctionWithType(g_mod, "jit_register_native_path_resolve", reg_native_path_type)
-    for_each_registered_native_path() $(mod_name, src_path, dst_path) {
-        let mod_str = get_string_constant_ptr(builder, mod_name)
-        let src_str = get_string_constant_ptr(builder, src_path)
-        let rel_str = get_string_constant_ptr(builder, compute_modules_relative_suffix(dst_path))
-        let dst_str = get_string_constant_ptr(builder, dst_path)
-        LLVMBuildCall2(builder, reg_native_path_type, jit_reg_native_path, fixed_array(mod_str, src_str, rel_str, dst_str), "")
-    }
-
     // Call initialize_modules() — built by CollectExternVisitor during collect_external_functions
     let init_modules_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
     var init_modules_fn = LLVMGetNamedFunction(g_mod, "initialize_modules")
@@ -1246,6 +1212,26 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     // fails every module dlopen silently, so shipping a dynamic module forces the full-lib link.
     if (ships_dynamic) {
         needs_whole_lib = true
+    }
+
+    // the rows feed the compile-time require resolver, which only a whole-lib exe links (ARCHITECTURE.md sec.10)
+    if (needs_whole_lib) {
+        let reg_native_path_type = LLVMFunctionType(types.t_void,
+            fixed_array<LLVMTypeRef>(
+                types.LLVMVoidPtrType(), // const char * mod_name
+                types.LLVMVoidPtrType(), // const char * src_path
+                types.LLVMVoidPtrType(), // const char * rel_dst ("" = no /modules/ segment)
+                types.LLVMVoidPtrType()  // const char * fallback_abs_dst
+            )
+        )
+        var jit_reg_native_path = LLVMAddFunctionWithType(g_mod, "jit_register_native_path_resolve", reg_native_path_type)
+        for_each_registered_native_path() $(mod_name, src_path, dst_path) {
+            let mod_str = get_string_constant_ptr(builder, mod_name)
+            let src_str = get_string_constant_ptr(builder, src_path)
+            let rel_str = get_string_constant_ptr(builder, compute_modules_relative_suffix(dst_path))
+            let dst_str = get_string_constant_ptr(builder, dst_path)
+            LLVMBuildCall2(builder, reg_native_path_type, jit_reg_native_path, fixed_array(mod_str, src_str, rel_str, dst_str), "")
+        }
     }
 
     // Whole-compiler-lib link: register the fusion engine (needed by simulate). Skip on wasm —
