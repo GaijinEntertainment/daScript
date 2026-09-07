@@ -16,7 +16,10 @@ name: dasllama-server release
 #
 # The matrix is the SDK's: linux x86_64, linux arm64, darwin arm64, windows x64. A fat build
 # needs no target hardware - the clones compile from the shipped profiles - so every class ships
-# from these runners; only tuning needs the box, and a fat exe never tunes.
+# from these runners; only tuning needs the box, and a fat exe never tunes. The Linux cells
+# build on ubuntu-22.04: a bundle carries the glibc and libstdc++ floor of the box that built
+# it, and 22.04's (glibc 2.35) admits Debian 12 and every later Ubuntu, where 24.04's (2.39)
+# refused Debian 12 with `GLIBC_2.38 not found`.
 on:
   push:
     branches-ignore: [master]
@@ -58,11 +61,11 @@ jobs:
       matrix:
         include:
           - name: linux-x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
             fat_class: x86-avx2
             ext: tar.gz
           - name: linux-arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-22.04-arm
             fat_class: arm-neon
             ext: tar.gz
           - name: darwin-arm64
@@ -129,7 +132,7 @@ jobs:
           LEAN="-DDAS_TUTORIAL_DISABLED=ON -DDAS_AOT_EXAMPLES_DISABLED=ON"
           case "${{ runner.os }}" in
             Linux)
-              CC=clang CXX=clang++ cmake --no-warn-unused-cli -B build -G Ninja -DCMAKE_BUILD_TYPE=Release $ACTIVE_MODULES $LEAN
+              CC=clang-15 CXX=clang++-15 cmake --no-warn-unused-cli -B build -G Ninja -DCMAKE_BUILD_TYPE=Release $ACTIVE_MODULES $LEAN
               ;;
             macOS)
               CC=clang CXX=clang++ cmake --no-warn-unused-cli -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
