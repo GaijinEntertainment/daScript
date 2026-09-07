@@ -131,3 +131,13 @@ def test_failed_files_block(t : T?) {
     let many = "FAILURES:\n" + join(rows, "\n") + "\n"
     t |> equal(failed_files_block(many), "tests/t0.das, tests/t1.das, tests/t2.das, tests/t3.das, tests/t4.das, and 2 more", "five named, the rest counted")
 }
+
+// CI's changed-set lint reads .das and .md in one command; the local gate must not read less
+[test]
+def test_lint_inputs(t : T?) {
+    t |> success(is_lint_input("daslib/lint.das"), "a .das file is a lint input")
+    t |> success(is_lint_input("modules/dasLLVM/ARCHITECTURE.md"), "a .md file is a lint input - LINT027's line gate reads it")
+    t |> success(!is_lint_input("doc/source/index.rst"), "an .rst is not")
+    t |> success(!is_lint_input("src/ast/ast.cpp"), "a .cpp is not")
+    t |> success(!is_lint_input("utils/internal/preflight/ci_only_das.txt"), "a .txt is not")
+}
