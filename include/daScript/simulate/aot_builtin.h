@@ -301,9 +301,9 @@ namespace das {
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args );
 
     const char * das_get_platform_name();
-    const char * das_get_cross_platform_name();
+    DAS_API const char * das_get_cross_platform_name();   // the module scan keys a descriptor manifest on it
     const char * das_get_architecture_name();
-    const char * das_get_target_triple();
+    DAS_API const char * das_get_target_triple();
     const char * das_get_target_architecture_name();
     DAS_API bool das_cpu_supports ( const char * feature );
 

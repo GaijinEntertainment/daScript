@@ -52,21 +52,26 @@ under `ignore_shared_modules`: the shared daslib modules it requires neither com
 the environment's promoted set, so the program compiled after the scan has the same module set -
 and the same module-cache records, `daslib/builtin` first - whether the scan compiled, replayed
 or was skipped with `-no-dynamic-modules`. Compiling and running the descriptors is the scan's
-cost - about 19 ms for the 28 in this tree - so the scan keeps a manifest beside each descriptor,
-`.das_module.manifest`, holding the rows the registry received from it.
+cost - a third of an interpreter hello world's start with the two dozen descriptors in this tree -
+so the scan keeps a manifest beside each descriptor, `.das_module.manifest`, holding the rows the
+registry received from it.
 
-The manifest is a property of the module tree, not of the caller: the rows depend on the
-descriptor's bytes, its folder, the das root and the binary kind, and on nothing the script or
-the cwd brings, so the file sits next to the descriptor, an SDK bundle can ship it pre-generated,
-and a read-only tree simply compiles on every start. Its key is the descriptor's size and
-content hash (`hash_block64`, no stat), the dll-build flag (`das_is_dll_build()` is the one guard
-whose answer differs between binaries sharing a tree) and the folder path the rows were recorded
-under; a mismatch on any of them recompiles that descriptor and rewrites its manifest. The file
-is line-oriented, tab-separated, with a format version on its first line and an `end` line
+The manifest is a property of the module tree, not of the script or the cwd: the rows depend on
+the descriptor's bytes and on four process-wide inputs a descriptor can read - its folder
+(`project_path`), the das root (`get_das_root()`), the binary kind (`das_is_dll_build()`) and the
+cross-compile target (`get_cross_platform_name()`, which `dasOpenGL`'s descriptor consults to
+register its module for the web target only) - so the file sits next to the descriptor, an SDK
+bundle can ship it pre-generated, and a read-only tree simply compiles on every start. Its key
+is the descriptor's size and content hash (`hash_block64`, no stat) plus those four inputs, one
+line each (`root`, `dll`, `dasroot`, `target`); a mismatch on any of them recompiles that
+descriptor and rewrites its manifest, so a native run and a `--jit-target` run of one tree
+alternate rewrites rather than serve each other's rows. The file is line-oriented,
+tab-separated, with a format version (`MANIFEST_HEADER`) on its first line and an `end` line
 carrying the row count; a missing `end`, a count mismatch, an unknown row kind or a wrong field
-count is damage, and damage means recompile and rewrite, never a partial replay. No field may
-hold a tab or newline: a descriptor that registers such a string gets no manifest rather than an
-escaped one. The writer goes through a `.tmp` and a rename.
+count is damage, and the reader answers damage with a recompile and a rewrite, not a partial
+replay. The writer (`field_ok`) writes no manifest for a descriptor whose recorded string holds a
+tab or newline, rather than an escaped form the reader would have to decode. The writer goes
+through a `.tmp` and a rename.
 
 Recording is armed around one descriptor run: each builtin appends the arguments it actually
 received, in order, and `register_dynamic_module` records its call whatever the outcome and adds

@@ -88,9 +88,10 @@ require work after `daspkg install` drops the package into a consumer's `modules
 The scan runs every descriptor as a daslang program on every start, and that costs more than
 the rest of a small program's startup. So after a descriptor runs, the scan writes what it
 registered to `.das_module.manifest` next to it, and later starts replay those rows without
-compiling the descriptor. The file is keyed by the descriptor's content, its folder and the
-binary kind: edit the descriptor, move the module or switch binaries and the next start
-recompiles it and rewrites the manifest. It is generated - gitignore it (this repo does) - and
+compiling the descriptor. The file is keyed by the descriptor's content and the four inputs a
+descriptor can read - its folder, the das root, the binary kind and the `--jit-target`
+cross-compile name: edit the descriptor, move the module or the tree, switch binaries or targets
+and the next start recompiles it and rewrites the manifest. It is generated - gitignore it (this repo does) - and
 a read-only tree just compiles on every start.
 
 A descriptor whose registrations depend on something the file's content cannot see - a probe

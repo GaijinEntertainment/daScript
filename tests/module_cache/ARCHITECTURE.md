@@ -22,8 +22,9 @@ this document states what the folder is and why its tests take the shape they do
 - `test_descriptor_manifest.das` - the module scan's descriptor manifest (`src/ast/ARCHITECTURE.md`
   sec.2) on a project root the test writes: the first start compiles the descriptor and writes
   the manifest beside it, the second replays it, an edited descriptor recompiles once, a manifest
-  missing its `end` line recompiles and is rewritten, and a `no_manifest()` descriptor compiles
-  on every start; each verdict is read from the `DAS_TRACE_MODULE_LOAD=1` line the child prints.
+  missing its `end` line recompiles and is rewritten, a `--jit-target` run keys apart from a
+  native one, and a `no_manifest()` descriptor compiles on every start; each verdict is read
+  from the `DAS_TRACE_MODULE_LOAD=1` line the child prints.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
   `mc_generic_origin_*`); a case needing a macro-bearing module graph puts it here instead of
   writing the script inline.
@@ -36,6 +37,8 @@ in-process sees none of them. Each case therefore spawns the daslang binary dast
 under (`argv[0]`): the default-path case on scripts it writes to a temp directory, asserting on
 the child's stdout and on the files under `.jitted_scripts/module_cache/` in the cwd; the
 explicit-cache cases on a driver under `_fixtures/` with `-module-cache` pointed into a temp
-directory, asserting on the child's stdout. Each removes what it wrote. A child's stdout is
-echoed on failure, because the exit code alone would turn a one-line answer into an exit-code
-hunt.
+directory, asserting on the child's stdout; the manifest case on a project root under a temp
+directory, asserting on the scan trace. Each removes what it wrote under its own directory;
+the `.das_module.manifest` sidecars every child's module scan warms beside the tree's
+descriptors are the scan's, gitignored, and stay. A child's stdout is echoed on failure,
+because the exit code alone would turn a one-line answer into an exit-code hunt.

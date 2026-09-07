@@ -100,6 +100,16 @@ def test_descriptor_manifest(t : T?) {
         t |> success(report_child(t, "damaged", run(cmd, out), out, "PROBE 42"), "the damaged manifest is not replayed")
         t |> equal("compiled (no end line), manifest written (1 row(s))", probe_line(out), "the trace names the damage:\n{out}")
     }
+    t |> run("a cross-compile target is part of the key: a --jit-target run never replays a native manifest") @(t : T?) {
+        //! dasOpenGL's descriptor registers its module only when get_cross_platform_name() says emscripten -
+        //! an argv input, so a native manifest must not serve a --jit-target run, nor the other way round
+        var out : string
+        t |> success(report_child(t, "target", run("{cmd} -- --jit-target=wasm32-unknown-emscripten", out), out, "PROBE 42"), "the require resolves under the target")
+        t |> equal("compiled (compile target), manifest written (1 row(s))", probe_line(out), "the target keys the manifest apart:\n{out}")
+        var back : string
+        t |> success(report_child(t, "native again", run(cmd, back), back, "PROBE 42"), "the native run resolves the require")
+        t |> equal("compiled (compile target), manifest written (1 row(s))", probe_line(back), "the native run keys apart from the target's manifest:\n{back}")
+    }
     t |> run("no_manifest() inside the descriptor makes it run on every start") @(t : T?) {
         fwrite(descriptor, DESCRIPTOR_OPT_OUT)
         var out : string

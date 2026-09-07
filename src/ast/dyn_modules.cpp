@@ -3,6 +3,7 @@
 #include <daScript/misc/das_common.h>          // SimulateWithErrReport
 #include <daScript/ast/ast.h>                  // ModuleGroup, CompileDaScript
 #include <daScript/simulate/aot_builtin_fio.h> // dirent, DIR, readdir
+#include <daScript/simulate/aot_builtin.h>     // das_get_cross_platform_name - a manifest key input
 #include <daScript/misc/sysos.h>
 #include <daScript/misc/string_writer.h>       // TextWriter, LOG (the env-gated scan trace)
 #include <daScript/misc/anyhash.h>             // hash_block64 - the descriptor's content stamp
@@ -124,7 +125,21 @@ static string hex64(uint64_t v) {
     return buf;
 }
 
-static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64_t descHash, const string & root) {
+// the inputs a descriptor's rows can depend on beyond its own bytes: its folder, the das root
+// (`get_das_root()`), and the cross-compile target (`get_cross_platform_name()`, read from argv)
+struct ManifestKey {
+    string root, dasRoot, target;
+};
+
+static ManifestKey manifest_key(const string & path) {
+    ManifestKey key;
+    key.root = path;
+    key.dasRoot = getDasRoot();
+    key.target = das_get_cross_platform_name();
+    return key;
+}
+
+static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64_t descHash, const ManifestKey & key) {
     ManifestRead res;
     FILE * f = fopen(file.c_str(), "rb");
     if ( !f ) {
@@ -158,7 +173,7 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
         res.why = why;
         return res;
     };
-    if ( lines.size() < 5 ) return damaged("fewer than 5 lines");
+    if ( lines.size() < 7 ) return damaged("fewer than 7 lines");
     if ( lines[0] != MANIFEST_HEADER ) return stale("format version");
     auto stamp = split_tabs(lines[1]);
     if ( stamp.size() != 3 || stamp[0] != "stamp" ) return damaged("stamp line");
@@ -168,9 +183,15 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
     if ( dll[1] != (is_dll_build() ? "1" : "0") ) return stale("binary kind");
     auto rootLine = split_tabs(lines[3]);
     if ( rootLine.size() != 2 || rootLine[0] != "root" ) return damaged("root line");
-    if ( rootLine[1] != root ) return stale("module folder moved");
+    if ( rootLine[1] != key.root ) return stale("module folder moved");
+    auto dasRootLine = split_tabs(lines[4]);
+    if ( dasRootLine.size() != 2 || dasRootLine[0] != "dasroot" ) return damaged("dasroot line");
+    if ( dasRootLine[1] != key.dasRoot ) return stale("das root moved");
+    auto targetLine = split_tabs(lines[5]);
+    if ( targetLine.size() != 2 || targetLine[0] != "target" ) return damaged("target line");
+    if ( targetLine[1] != key.target ) return stale("compile target");
     bool optOut = false;
-    size_t i = 4;
+    size_t i = 6;
     for ( ; i < lines.size(); ++i ) {
         auto fields = split_tabs(lines[i]);
         if ( fields.empty() ) return damaged("empty line");
@@ -209,13 +230,15 @@ static bool field_ok(const string & s) {
     return s.find('\t') == string::npos && s.find('\n') == string::npos && s.find('\r') == string::npos;
 }
 
-static bool write_manifest(const string & file, uint32_t descSize, uint64_t descHash, const string & root,
+static bool write_manifest(const string & file, uint32_t descSize, uint64_t descHash, const ManifestKey & key,
                            const das::vector<DynModuleManifestRow> & rows, bool optOut, string & why) {
-    if ( !field_ok(root) ) { why = "the module folder path contains a tab or newline"; return false; }
+    if ( !field_ok(key.root) || !field_ok(key.dasRoot) || !field_ok(key.target) ) { why = "a key path contains a tab or newline"; return false; }
     string text = string(MANIFEST_HEADER) + "\n";
     text += "stamp\t" + to_string(descSize) + "\t" + hex64(descHash) + "\n";
     text += string("dll\t") + (is_dll_build() ? "1" : "0") + "\n";
-    text += "root\t" + root + "\n";
+    text += "root\t" + key.root + "\n";
+    text += "dasroot\t" + key.dasRoot + "\n";
+    text += "target\t" + key.target + "\n";
     if ( optOut ) {
         text += "no_manifest\n";
         text += "end\t0\n";
@@ -266,7 +289,8 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     fi->getSourceAndLength(src, len);
     const uint64_t stamp = src ? hash_block64((const uint8_t *) src, len) : 0;
     const string manifest = path + "/" + MANIFEST_SUFFIX;
-    auto mr = src ? read_manifest(manifest, len, stamp, path) : ManifestRead();
+    const ManifestKey key = manifest_key(path);
+    auto mr = src ? read_manifest(manifest, len, stamp, key) : ManifestRead();
     if ( mr.verdict == ManifestVerdict::Replay ) {
         for ( auto & row : mr.rows ) {
             if ( row.dynamic ) {
@@ -299,7 +323,7 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
         return res;
     }
     string why;
-    const bool written = write_manifest(manifest, len, stamp, path, rows, optOut, why);
+    const bool written = write_manifest(manifest, len, stamp, key, rows, optOut, why);
     if ( trace_scan() ) {
         LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": compiled (" << (mr.why.empty() ? "no manifest" : mr.why) << ")"
             << (written ? (optOut ? ", no_manifest recorded" : ", manifest written (" + to_string(rows.size()) + " row(s))")
