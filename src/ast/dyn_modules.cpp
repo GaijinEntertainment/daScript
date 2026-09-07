@@ -31,7 +31,8 @@ enum class Result {
     Exception,
 };
 
-static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filename, const string & path, TextWriter &tout) {
+static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filename, const string & path, TextWriter &tout,
+                             das::vector<string> * deps = nullptr) {
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
     policies.no_init_check = true;
@@ -42,6 +43,15 @@ static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filena
             tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
         }
         return Result::CE;
+    }
+    if ( deps ) {   // every module with a file, the descriptor itself excluded - the manifest's key
+        program->library.foreach([&](Module * mod) -> bool {
+            if ( !mod->fileName.empty() && mod->fileName != mod_filename
+                && das::find(deps->begin(), deps->end(), mod->fileName) == deps->end() ) {
+                deps->push_back(mod->fileName);
+            }
+            return true;
+        }, "*");
     }
     auto pctx = SimulateWithErrReport(program, tout);
     if ( !pctx ) {
@@ -79,7 +89,7 @@ static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filena
 }
 
 static constexpr const char *MANIFEST_SUFFIX = ".das_module.manifest";   // ARCHITECTURE.md sec.2
-static constexpr const char *MANIFEST_HEADER = "das_module_manifest\t1";
+static constexpr const char *MANIFEST_HEADER = "das_module_manifest\t2";
 
 static bool trace_scan() {
     static const bool on = []{
@@ -125,6 +135,45 @@ static string hex64(uint64_t v) {
     return buf;
 }
 
+struct DepStamp {
+    string path;
+    uint32_t size = 0;
+    uint64_t hash = 0;
+};
+
+// one hash per file per FileAccess, however many descriptors share it
+static bool dep_stamp(const smart_ptr<FileAccess> & fa, const string & path, uint32_t & size, uint64_t & hash) {
+    struct Entry { const FileInfo * fi; uint32_t size; uint64_t hash; };
+    static thread_local const FileAccess * owner = nullptr;
+    static thread_local das::unordered_map<string, Entry> cache;
+    if ( owner != fa.get() ) {
+        owner = fa.get();
+        cache.clear();
+    }
+    auto fi = fa->getFileInfo(path);
+    if ( !fi ) return false;
+    auto it = cache.find(path);
+    if ( it != cache.end() && it->second.fi == fi ) {
+        size = it->second.size;
+        hash = it->second.hash;
+        return true;
+    }
+    const char * src = nullptr;
+    uint32_t len = 0;
+    fi->getSourceAndLength(src, len);
+    if ( !src ) return false;
+    size = len;
+    hash = hash_block64((const uint8_t *) src, len);
+    cache[path] = Entry{fi, size, hash};
+    return true;
+}
+
+static bool parse_on_error(const string & s, int & value) {   // RegisterOnError: Quiet, ErrorMsg, Fail
+    if ( s.size() != 1 || s[0] < '0' || s[0] > '2' ) return false;
+    value = s[0] - '0';
+    return true;
+}
+
 // the inputs a descriptor's rows can depend on beyond its own bytes: its folder, the das root
 // (`get_das_root()`), and the cross-compile target (`get_cross_platform_name()`, read from argv)
 struct ManifestKey {
@@ -139,7 +188,8 @@ static ManifestKey manifest_key(const string & path) {
     return key;
 }
 
-static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64_t descHash, const ManifestKey & key) {
+static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64_t descHash, const ManifestKey & key,
+                                  const smart_ptr<FileAccess> & fa) {
     ManifestRead res;
     FILE * f = fopen(file.c_str(), "rb");
     if ( !f ) {
@@ -197,7 +247,13 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
         auto fields = split_tabs(lines[i]);
         const auto & kind = fields[0];
         if ( kind == "end" ) break;
-        if ( kind == "np" ) {
+        if ( kind == "dep" ) {
+            if ( fields.size() != 4 ) return damaged("dep field count");
+            uint32_t size = 0;
+            uint64_t hash = 0;
+            if ( !dep_stamp(fa, fields[1], size, hash) ) return stale("dependency missing");
+            if ( fields[2] != to_string(size) || fields[3] != hex64(hash) ) return stale("dependency changed");
+        } else if ( kind == "np" ) {
             if ( fields.size() != 4 ) return damaged("np field count");
             DynModuleManifestRow row;
             row.a = fields[1]; row.b = fields[2]; row.c = fields[3];
@@ -206,7 +262,8 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
             if ( fields.size() != 5 ) return damaged("dm field count");
             DynModuleManifestRow row;
             row.dynamic = true;
-            row.a = fields[1]; row.b = fields[2]; row.on_error = atoi(fields[3].c_str()); row.c = fields[4];
+            if ( !parse_on_error(fields[3], row.on_error) ) return damaged("dm on_error field");
+            row.a = fields[1]; row.b = fields[2]; row.c = fields[4];
             res.rows.push_back(das::move(row));
         } else if ( kind == "no_manifest" ) {
             if ( fields.size() != 1 ) return damaged("no_manifest field count");
@@ -231,7 +288,8 @@ static bool field_ok(const string & s) {
 }
 
 static bool write_manifest(const string & file, uint32_t descSize, uint64_t descHash, const ManifestKey & key,
-                           const das::vector<DynModuleManifestRow> & rows, bool optOut, string & why) {
+                           const das::vector<DepStamp> & deps, const das::vector<DynModuleManifestRow> & rows,
+                           bool optOut, string & why) {
     if ( !field_ok(key.root) || !field_ok(key.dasRoot) || !field_ok(key.target) ) { why = "a key path contains a tab or newline"; return false; }
     string text = string(MANIFEST_HEADER) + "\n";
     text += "stamp\t" + to_string(descSize) + "\t" + hex64(descHash) + "\n";
@@ -239,6 +297,10 @@ static bool write_manifest(const string & file, uint32_t descSize, uint64_t desc
     text += "root\t" + key.root + "\n";
     text += "dasroot\t" + key.dasRoot + "\n";
     text += "target\t" + key.target + "\n";
+    for ( auto & dep : deps ) {
+        if ( !field_ok(dep.path) ) { why = "a dependency path contains a tab or newline"; return false; }
+        text += "dep\t" + dep.path + "\t" + to_string(dep.size) + "\t" + hex64(dep.hash) + "\n";
+    }
     if ( optOut ) {
         text += "no_manifest\n";
         text += "end\t0\n";
@@ -290,7 +352,7 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     const uint64_t stamp = src ? hash_block64((const uint8_t *) src, len) : 0;
     const string manifest = path + "/" + MANIFEST_SUFFIX;
     const ManifestKey key = manifest_key(path);
-    auto mr = src ? read_manifest(manifest, len, stamp, key) : ManifestRead();
+    auto mr = src ? read_manifest(manifest, len, stamp, key, fa) : ManifestRead();
     if ( mr.verdict == ManifestVerdict::Replay ) {
         for ( auto & row : mr.rows ) {
             if ( row.dynamic ) {
@@ -306,7 +368,8 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     }
     const bool record = src && mr.verdict != ManifestVerdict::OptOut;
     if ( record ) begin_dynamic_module_recording();
-    auto res = run_descriptor(fa, mod_filename, path, tout);
+    das::vector<string> depFiles;
+    auto res = run_descriptor(fa, mod_filename, path, tout, record ? &depFiles : nullptr);
     if ( !record ) {
         if ( trace_scan() ) {
             LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": compiled (" << (src ? "no_manifest" : "no source") << ")\n";
@@ -323,7 +386,14 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
         return res;
     }
     string why;
-    const bool written = write_manifest(manifest, len, stamp, key, rows, optOut, why);
+    das::vector<DepStamp> deps;
+    for ( auto & dep : depFiles ) {
+        DepStamp d;
+        d.path = dep;
+        if ( !dep_stamp(fa, dep, d.size, d.hash) ) { why = "cannot stamp " + dep; break; }
+        deps.push_back(das::move(d));
+    }
+    const bool written = why.empty() && write_manifest(manifest, len, stamp, key, deps, rows, optOut, why);
     if ( trace_scan() ) {
         LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": compiled (" << (mr.why.empty() ? "no manifest" : mr.why) << ")"
             << (written ? (optOut ? ", no_manifest recorded" : ", manifest written (" + to_string(rows.size()) + " row(s))")

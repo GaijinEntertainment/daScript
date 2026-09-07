@@ -39,6 +39,9 @@ let DESCRIPTOR_TABBED = "options gen2\nrequire daslib/fio\n\n[export]\ndef initi
 //! a C++ module row on an artifact that is not there: the Quiet overload defers the dlopen
 //! failure and never fails the descriptor
 let DESCRIPTOR_DM = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_dynamic_module(\"\{project_path\}/absent.shared_module\", \"Module_Absent\")\n\}\n"
+//! the require path comes from a module the descriptor requires: its content is part of the key
+let DESCRIPTOR_DEP = "options gen2\nrequire daslib/fio\nrequire ./helper\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"manifest_probe\", helper_name(), \"\{project_path\}/hello.das\")\n\}\n"
+let HELPER = "options gen2\nmodule helper\ndef helper_name() : string \{\n    return \"hello\"\n\}\n"
 let DESCRIPTOR_BROKEN = "options gen2\n\n[export]\ndef initialize(project_path : string) \{\n    this_is_not_a_function()\n\}\n"
 
 //! the scan trace line for a module's descriptor: `[module] descriptor <path>/.das_module: <verdict>`
@@ -63,13 +66,20 @@ def count_of(text : string; needle : string) : int {
     return n
 }
 
-//! the good manifest's lines: header, stamp, dll, root, dasroot, target, the np row, end
+//! the good manifest's lines: header, stamp, dll, root, dasroot, target, the dep lines, the np row, end
 def manifest_lines(manifest : string) : array<string> {
     var lines <- split(fread(manifest), "\n")
     if (!empty(lines) && empty(lines[length(lines) - 1])) {
         lines |> pop()
     }
     return <- lines
+}
+
+def index_of_prefix(lines : array<string>; prefix : string) : int {
+    for (i in range(length(lines))) {
+        if (lines[i] |> starts_with(prefix)) return i
+    }
+    return -1
 }
 
 def with_line(lines : array<string>; idx : int; text : string) : string {
@@ -149,7 +159,8 @@ def arms_record_and_replay(t : T?; fx : Fixture) {
         t |> equal("compiled (no manifest), manifest written (1 row(s))", probe_line(out), "the trace says compiled and written:\n{out}")
         t |> success(stat(manifest).is_valid, "the manifest sits beside the descriptor")
         let text = fread(manifest)
-        t |> success(text |> starts_with("das_module_manifest\t1\n"), "the manifest opens with its format version: {text}")
+        t |> success(text |> starts_with("das_module_manifest\t2\n"), "the manifest opens with its format version: {text}")
+        t |> success(find(text, "\ndep\t") >= 0 && find(text, "/daslib/fio.das\t") >= 0, "the manifest stamps the files the descriptor's compile read: {text}")
         t |> success(find(text, "\nnp\tmanifest_probe\thello\t") >= 0, "the manifest carries the recorded row: {text}")
         t |> success(find(text, "\nend\t1\n") >= 0, "the manifest closes with its row count: {text}")
     }
@@ -196,10 +207,13 @@ def arms_rejections(t : T?; fx : Fixture) {
     }
     t |> run("every other rejection: no row of a manifest the reader cannot vouch for is replayed") @(t : T?) {
         let lines <- manifest_lines(manifest)
-        t |> equal(8, length(lines), "the good manifest is eight lines: {join(lines, " | ")}")
-        return if (length(lines) != 8)
+        let np = index_of_prefix(lines, "np\t")
+        let dep = index_of_prefix(lines, "dep\t")
+        let end = length(lines) - 1
+        t |> success(np > 6 && dep > 5 && dep < np && (lines[end] |> starts_with("end\t")), "the good manifest is six key lines, dep lines, the np row and end: {join(lines, " | ")}")
+        return if (np < 0 || dep < 0)
         expect_rewrite(t, cmd, manifest, join([for (i in range(4)); lines[i]], "\n") + "\n", "fewer than 7 lines")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 0, "das_module_manifest\t2"), "format version")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 0, "das_module_manifest\t9"), "format version")
         expect_rewrite(t, cmd, manifest, with_line(lines, 1, "stamp\t1"), "stamp line")
         expect_rewrite(t, cmd, manifest, with_line(lines, 2, lines[2] == "dll\t0" ? "dll\t1" : "dll\t0"), "binary kind")
         expect_rewrite(t, cmd, manifest, with_line(lines, 3, "rooted\t{fx.modDir}"), "root line")
@@ -207,15 +221,39 @@ def arms_rejections(t : T?; fx : Fixture) {
         expect_rewrite(t, cmd, manifest, with_line(lines, 4, "dasroot"), "dasroot line")
         expect_rewrite(t, cmd, manifest, with_line(lines, 4, "dasroot\t{fx.tmp}"), "das root moved")
         expect_rewrite(t, cmd, manifest, with_line(lines, 5, "target"), "target line")
-        expect_rewrite(t, cmd, manifest, with_line_inserted(lines, 6, ""), "empty line")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 6, "np\tmanifest_probe\thello"), "np field count")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 6, "dm\ta\tb"), "dm field count")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 6, "no_manifest\tx"), "no_manifest field count")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 6, "xx\ta\tb\tc"), "unknown row kind")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 7, "end\t2"), "end row count")
+        expect_rewrite(t, cmd, manifest, with_line_inserted(lines, np, ""), "empty line")
+        expect_rewrite(t, cmd, manifest, with_line(lines, dep, "dep\t{fx.modDir}/nope.das\t1"), "dep field count")
+        expect_rewrite(t, cmd, manifest, with_line(lines, dep, "dep\t{fx.modDir}/nope.das\t1\t0000000000000000"), "dependency missing")
+        expect_rewrite(t, cmd, manifest, with_line(lines, dep, "dep\t{fx.modDir}/hello.das\t1\t0000000000000000"), "dependency changed")
+        expect_rewrite(t, cmd, manifest, with_line(lines, np, "np\tmanifest_probe\thello"), "np field count")
+        expect_rewrite(t, cmd, manifest, with_line(lines, np, "dm\ta\tb"), "dm field count")
+        expect_rewrite(t, cmd, manifest, with_line(lines, np, "dm\ta\tb\tx\tc"), "dm on_error field")
+        expect_rewrite(t, cmd, manifest, with_line(lines, np, "dm\ta\tb\t3\tc"), "dm on_error field")
+        expect_rewrite(t, cmd, manifest, with_line(lines, np, "no_manifest\tx"), "no_manifest field count")
+        expect_rewrite(t, cmd, manifest, with_line(lines, np, "xx\ta\tb\tc"), "unknown row kind")
+        expect_rewrite(t, cmd, manifest, with_line(lines, end, "end\t2"), "end row count")
         expect_rewrite(t, cmd, manifest, join(lines, "\n") + "\njunk\n", "content after end")
-        expect_rewrite(t, cmd, manifest, with_line_inserted(lines, 7, "no_manifest"), "no_manifest with rows")
+        expect_rewrite(t, cmd, manifest, with_line_inserted(lines, end, "no_manifest"), "no_manifest with rows")
         t |> equal(join(lines, "\n") + "\n", fread(manifest), "the last rewrite restored the good manifest")
+    }
+    t |> run("a module the descriptor requires is part of the key: editing it recompiles the descriptor") @(t : T?) {
+        let helper = path_join(fx.modDir, "helper.das")
+        fwrite(helper, HELPER)
+        fwrite(fx.descriptor, DESCRIPTOR_DEP)
+        var out : string
+        t |> success(report_child(t, "dep", run(cmd, out), out, "PROBE 42"), "the require resolves through the helper's answer")
+        t |> equal("compiled (descriptor changed), manifest written (1 row(s))", probe_line(out), "the dep descriptor compiles once:\n{out}")
+        t |> success(find(fread(manifest), "/helper.das\t") >= 0, "the helper is stamped in the manifest, by the path the require resolved: {fread(manifest)}")
+        var warm : string
+        t |> success(report_child(t, "dep warm", run(cmd, warm), warm, "PROBE 42"), "the dep descriptor replays")
+        t |> equal("replayed 1 row(s)", probe_line(warm), "an unchanged helper replays:\n{warm}")
+        fwrite(helper, "{HELPER}// edited\n")
+        var edited : string
+        t |> success(report_child(t, "dep edited", run(cmd, edited), edited, "PROBE 42"), "the require resolves after the helper edit")
+        t |> equal("compiled (dependency changed), manifest written (1 row(s))", probe_line(edited), "the helper's stamp mismatch recompiles the descriptor:\n{edited}")
+        var again : string
+        t |> success(report_child(t, "dep edited warm", run(cmd, again), again, "PROBE 42"), "the rewritten manifest resolves the require")
+        t |> equal("replayed 1 row(s)", probe_line(again), "the rewritten manifest replays:\n{again}")
     }
     t |> run("a cross-compile target is part of the key: a --jit-target run never replays a native manifest") @(t : T?) {
         //! dasOpenGL's descriptor registers its module only when get_cross_platform_name() says emscripten -

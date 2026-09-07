@@ -63,13 +63,17 @@ cross-compile target (`get_cross_platform_name()`, which `dasOpenGL`'s descripto
 register its module for the web target only) - so the file sits next to the descriptor, an SDK
 bundle can ship it pre-generated, and a read-only tree simply compiles on every start. Its key
 is the descriptor's size and content hash (`hash_block64`, no stat) plus those four inputs, one
-line each (`root`, `dll`, `dasroot`, `target`); a mismatch on any of them recompiles that
-descriptor and rewrites its manifest, so a native run and a `--jit-target` run of one tree
-alternate rewrites rather than serve each other's rows. The file is line-oriented,
-tab-separated, with a format version (`MANIFEST_HEADER`) on its first line and an `end` line
-carrying the row count; a missing `end`, a count mismatch, an unknown row kind or a wrong field
-count is damage, and the reader answers damage with a recompile and a rewrite, not a partial
-replay. The writer (`field_ok`) writes no manifest for a descriptor whose recorded string holds a
+line each (`root`, `dll`, `dasroot`, `target`), plus one `dep` line per file the descriptor's
+compile read - every module in its program with a file name, the daslib ones included - carrying
+that file's size and hash as the scan's `FileAccess` serves it (hashed once per file per
+access, whatever the descriptor count); a mismatch on any of them recompiles that descriptor
+and rewrites its manifest, so a native run and a `--jit-target` run of one tree alternate
+rewrites rather than serve each other's rows, and a descriptor whose rows come from a module it
+requires recompiles when that module changes. The file is line-oriented, tab-separated, with a
+format version (`MANIFEST_HEADER`) on its first line and an `end` line carrying the row count
+(`dep` lines are key, not rows); a missing `end`, a count mismatch, an unknown row kind, a wrong
+field count or a `dm` row whose `on_error` is not one of `RegisterOnError`'s three values is
+damage, and the reader answers damage with a recompile and a rewrite, not a partial replay. The writer (`field_ok`) writes no manifest for a descriptor whose recorded string holds a
 tab or newline, rather than an escaped form the reader would have to decode. The writer goes
 through a `.tmp` and a rename.
 
