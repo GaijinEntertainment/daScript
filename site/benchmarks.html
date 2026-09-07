@@ -265,14 +265,18 @@
             { key: ".NET", label: ".NET", das: false }
         ],
         "Startup": [
-            { key: "DAS INTERPRETER", label: "DAS interp", das: true },
-            { key: "DAS JIT", label: "DAS JIT", das: true },
-            { key: "DAS EXE", label: "DAS exe", das: true },
-            { key: "ZIG", label: "Zig exe", das: false }
+            { key: "hello world", label: "hello world", das: false }
         ]
     };
+    // the startup board is one row per runtime: the record keys hello world's lanes by language, and
+    // the row's das flag comes from the lane's name
+    var STARTUP_LABELS = {
+        "DAS INTERPRETER": "DAS interp", "DAS JIT": "DAS JIT", "DAS EXE": "DAS exe", "C++": "C++", "ZIG": "Zig",
+        "LUAU --codegen": "Luau codegen", "LUAU": "Luau", "LUA": "Lua", "LUAJIT -joff": "LuaJIT -joff", "LUAJIT": "LuaJIT",
+        "QUIRREL": "Quirrel", "QUICKJS": "QuickJS", "MONO --interpreter": "Mono interp", "MONO": "Mono", ".NET": ".NET"
+    };
     var BOARD_HINT = {
-        "Startup": "wall time of one launch: start, one kernel iteration, exit \u00b7 exe lanes carry the artifact size (a das exe links the runtime library dynamically, a zig exe is static)"
+        "Startup": "hello world, one launch the way the lane's kernels are launched \u00b7 an exe cell carries the artifact size (a das exe links the runtime library dynamically, a zig exe is static)"
     };
     var state = { platform: "windows", board: "Interpreted", view: "bars", sortCol: -1, sortDesc: false, data: null };
 
@@ -302,7 +306,31 @@
     }
     function ratioText(r) { return r >= 100 ? "\u00d7" + r.toFixed(0) : r >= 10 ? "\u00d7" + r.toFixed(1) : "\u00d7" + r.toFixed(2); }
 
+    function startupRows() {
+        var p = state.data[state.platform];
+        var hello = (p.sections["Startup"] || {})["hello world"] || {};
+        var half = (p.halfRangeOverMedian["Startup"] || {})["hello world"] || {};
+        var sizes = (p.sizes["Startup"] || {})["hello world"] || {};
+        var rows = [];
+        var best = Math.min.apply(null, Object.keys(hello).map(function (k) { return hello[k]; }).filter(function (v) { return v > 0; }));
+        if (!isFinite(best)) best = null;
+        (p.startupOrder || Object.keys(hello)).forEach(function (lane) {
+            if (hello[lane] == null) return;
+            rows.push({ name: STARTUP_LABELS[lane] || lane, das: lane.indexOf("DAS ") === 0, vals: [hello[lane]], best: best,
+                        halfRangeOverMedian: [half[lane] != null ? half[lane] : null], sizes: [sizes[lane] != null ? sizes[lane] : null] });
+        });
+        if (state.sortCol >= 0) {
+            rows.sort(function (a, b) {
+                var x = state.sortCol === 0 ? a.name : a.vals[0], y = state.sortCol === 0 ? b.name : b.vals[0];
+                var c = x < y ? -1 : x > y ? 1 : 0;
+                return state.sortDesc ? -c : c;
+            });
+        }
+        return rows;
+    }
+
     function currentRows() {
+        if (state.board === "Startup") return startupRows();
         var tests = state.data[state.platform].sections[state.board];
         var lanes = LANES[state.board];
         var rows = [];
@@ -350,7 +378,7 @@
         var rows = currentRows();
         var tbl = document.getElementById("bm-table");
 
-        var html = "<thead><tr><th" + thClassAttr(0, false) + ">benchmark</th>";
+        var html = "<thead><tr><th" + thClassAttr(0, false) + ">" + (state.board === "Startup" ? "runtime" : "benchmark") + "</th>";
         lanes.forEach(function (l, i) {
             html += "<th" + thClassAttr(i + 1, l.das) + ">" + l.label + "</th>";
         });
@@ -360,9 +388,9 @@
             var slug = PLAYGROUND_SLUGS[r.name];
             var name = escapeHtml(r.name);
             var label = slug ? "<a href='/playground/?example=" + slug + "'>" + name + "</a>" : name;
-            html += "<tr><td class='bm-td-name'>" + label + "</td>";
+            html += "<tr><td class='bm-td-name" + (r.das ? " bm-das" : "") + "'>" + label + "</td>";
             r.vals.forEach(function (v, i) {
-                var das = lanes[i].das;
+                var das = r.das != null ? r.das : lanes[i].das;
                 if (v == null) { html += "<td class='bm-num bm-dim" + (das ? " bm-das" : "") + "'>-</td>"; return; }
                 if (v === 0) { html += "<td class='bm-num bm-dim" + (das ? " bm-das" : "") + "' title='below timer resolution'>~0</td>"; return; }
                 var isBest = v === r.best;
@@ -390,7 +418,8 @@
             });
         });
 
-        renderSummary(lanes, rows);
+        if (state.board === "Startup") document.getElementById("bm-summary").innerHTML = "";
+        else renderSummary(lanes, rows);
         renderProvenance();
         renderHero();
     }
@@ -482,6 +511,7 @@
                 (cap[sec][t] || []).forEach(function (r) {
                     lanes[r.language] = r.time;
                     if (r.size > 0) laneSizes[r.language] = r.size;
+                    if (sec === "Startup") (out.startupOrder = out.startupOrder || []).push(r.language);
                     if (r.samples && r.samples.length > 1 && r.time > 0) {
                         laneHalfRangeOverMedian[r.language] = (Math.max.apply(null, r.samples) - Math.min.apply(null, r.samples)) / 2 / r.time;
                         sampleCounts[r.samples.length] = true;
