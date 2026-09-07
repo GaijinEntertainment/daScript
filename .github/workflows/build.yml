@@ -82,7 +82,7 @@ jobs:
     if: >-
       (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
       || (github.event_name != 'schedule' && needs.pre_job.outputs.should_skip != 'true')
-    name: "build (${{ matrix.target }}, ${{ matrix.architecture }}, ${{ matrix.cmake_preset }}, ${{ matrix.sanitizers }})"
+    name: "build (${{ matrix.target }}, ${{ matrix.architecture }}, ${{ matrix.cmake_preset }}, ${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && ', fastmath' || '' }})"
     runs-on: ${{ matrix.runner }}
     # actions: write needed for `gh cache delete` in the sccache refresh step.
     permissions:
@@ -257,7 +257,7 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
-        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}
+        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
 
     - name: "Override das_llvm_disabled for LLVM-free matrix cells"
       if: (matrix.target == 'windows' && matrix.architecture == 32) || matrix.llvm_disabled == 'ON'
@@ -272,8 +272,9 @@ jobs:
           cmake)
             case "${{ matrix.target }}${{ matrix.architecture }}" in
               linux64)
-                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G \
-                        "${{ matrix.cmake_generator }}" -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }}
+                CC=${{ matrix.fast_math == 'ON' && 'gcc' || 'clang' }} CXX=${{ matrix.fast_math == 'ON' && 'g++' || 'clang++' }} cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G \
+                        "${{ matrix.cmake_generator }}" -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} \
+                        -DDAS_FAST_MATH=${{ matrix.fast_math || 'OFF' }}
                 cd build
                 ninja
                 ;;
@@ -316,14 +317,14 @@ jobs:
       if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'
       env:
         GH_TOKEN: ${{ github.token }}
-        SCKEY: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}
+        SCKEY: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
       run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
     - name: "Save sccache objects"
       if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/sccache
-        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}
+        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
 
     # NOTE: the "Prewarm JIT cache" step (jit_cache_all_tests, ~17 min on the
     # win64 lane) is GONE: the JIT sweep now runs isolated-PARALLEL and mints
@@ -365,6 +366,7 @@ jobs:
             printf 'leak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
             export LSAN_OPTIONS="suppressions=$(pwd)/suppressions.txt"
             export TSAN_OPTIONS="suppressions=$(pwd)/.github/tsan_suppressions.txt"
+            export UBSAN_OPTIONS="print_stacktrace=1"
             # Sanitizer matrix: only run language tests under JIT (full test
             # suite under asan/tsan/ubsan adds ~10m wall-clock without proportionate
             # coverage value). Non-sanitizer keeps the full sweep.
@@ -445,6 +447,7 @@ jobs:
             printf 'leak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
             export LSAN_OPTIONS="suppressions=$(pwd)/suppressions.txt"
             export TSAN_OPTIONS="suppressions=$(pwd)/.github/tsan_suppressions.txt"
+            export UBSAN_OPTIONS="print_stacktrace=1"
             cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_aot
             ;;
         esac

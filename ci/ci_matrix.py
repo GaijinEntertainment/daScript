@@ -52,6 +52,10 @@ def build_cells(event_name):
         for san in ("asan", "tsan", "ubsan"):
             cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers=san,
                               runner="ubuntu-latest", build_name="linux_" + san, nightly_only="ON", **cmake))
+        # the tree built -ffast-math, the way an embedder that passes it does (dagor is one)
+        cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers="none",
+                          fast_math="ON", runner="ubuntu-latest", build_name="linux_fastmath",
+                          nightly_only="ON", **cmake))
     return cells
 
 

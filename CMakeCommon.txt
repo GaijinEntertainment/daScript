@@ -119,6 +119,15 @@ ENDMACRO()
 
 MACRO(SETUP_COMPILER)
     SETUP_SANITIZERS()
+    IF(DAS_FAST_MATH)
+        IF(MSVC AND NOT ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"))
+            MESSAGE(STATUS "Enabling fast math (/fp:fast)")
+            ADD_COMPILE_OPTIONS(/fp:fast)
+        ELSE()
+            MESSAGE(STATUS "Enabling fast math (-ffast-math)")
+            ADD_COMPILE_OPTIONS(-ffast-math)
+        ENDIF()
+    ENDIF()
     # DAS_STRICT_ALIASING keeps the optimization on, which is what makes gcc's
     # uninitialized analysis see through vec4f puns. The warning itself stays off
     # either way (the tree has known punning sites, a separate cleanup), but with

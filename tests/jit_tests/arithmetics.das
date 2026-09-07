@@ -47,15 +47,6 @@ def test_div(t : T?; a, b : auto(TT)) {
     }
 }
 
-// A host may build the runtime with -ffast-math (dagor does), which lets a/b become
-// a*(1/b) and flushes denormals - so the vector path and the scalar reference stop being
-// bit-equal. Probed through module-level vars so the compiler cannot fold the answer.
-var private g_probe_x = -200.0
-var private g_probe_s = 7.0
-
-def private host_recips_division() : bool {
-    return (float3(g_probe_x, g_probe_x, g_probe_x) / g_probe_s).x != g_probe_x / g_probe_s
-}
 
 def test_div_vec(t : T?; a, b : auto(TT)) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > div_jit))
@@ -160,7 +151,7 @@ def test_arithmetics_op2(t : T?) {
 
 [test]
 def test_arithmetics_vec_and_scalar_op2(t : T?) {
-    if (host_recips_division()) {
+    if (HOST_FAST_MATH) {
         t |> skip("host runtime is built -ffast-math: vector division is a reciprocal multiply, not bit-equal to the scalar reference")
         return
     }

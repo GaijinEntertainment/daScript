@@ -14,6 +14,10 @@ def roundtrip_float4(v : float4) : float4 => v
 
 [test]
 def test_float4_conformance(t : T?) {
+    if (HOST_FAST_MATH) {
+        t |> skip("host runtime is built -ffast-math: the arithmetic arm compares vector against scalar bit-for-bit, which a reciprocal multiply breaks")
+        return
+    }
     t |> run("sizeof and alignof") @(t : T?) {
         t |> equal(typeinfo sizeof(type<float4>), 16)
         t |> equal(typeinfo alignof(type<float4>), 4)
