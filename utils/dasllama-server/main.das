@@ -680,11 +680,11 @@ def parse_args() {
     g_args_parsed = true
     g_args_ready = false
     g_exit_code = 0
-    // JIT is mandatory: the kernels are per-box JIT-tuned [llvm_code], the tune framework needs
-    // a live JIT, and a baked standalone -exe additionally mis-wires shared-module [init] globals
-    // (the vulkan GPU-tier arm probe bakes null -> crash). There is no correct non-JIT path here.
-    if (!jit_enabled()) {
-        to_log(LOG_ERROR, "dasllama-server requires the JIT — run: daslang -jit main.das -- ... (a baked -exe is unsupported)\n")
+    // compiled code only: the kernels are [llvm_code] - JIT-tuned on this box under -jit, or the
+    // baked per-class clones of a daspkg release exe. The interpreter would serve them a hundred
+    // times slower, so it is refused rather than run.
+    if (!jit_enabled() && !is_standalone_exe()) {
+        to_log(LOG_ERROR, "dasllama-server needs compiled kernels — run: daslang -jit main.das -- ... or the released dasllama-server executable\n")
         g_exit_code = 1
         request_exit()
         return

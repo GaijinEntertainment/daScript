@@ -6,8 +6,8 @@ It supervises `utils/dasllama-server` (JIT) in-tree and the dictation bot in the
 package (a baked exe).
 
 It ships as a static executable, `bin/watchdog` (`bin/Release/watchdog.exe` in an MSVC tree): a
-`-ctx` standalone context on the full runtime with `libDaScript`, dasHV and dasStdDlg linked as
-static archives. It compiles nothing at run time, loads no shared module, and holds no lock on any file
+`-ctx` standalone context on the full runtime with `libDaScript`, dasHV, dasStdDlg and dasStbImage
+linked as static archives. It compiles nothing at run time, loads no shared module, and holds no lock on any file
 a deploy replaces, so a deploy can overwrite the runtime while the watchdog runs. The same code
 runs under the interpreter for development: `daslang utils/watchdog/main.das -- --cwd <dir>`.
 
@@ -28,8 +28,10 @@ That works because the watchdog resolves what to supervise in this order, first 
    say so. A `server_args` array is the default for what follows `--`.
 3. **Layout discovery** - `main.das` means `daslang -jit main.das`, with the daslang found beside
    it (`bin/Release/daslang(.exe)`) or beside the watchdog itself, which is how `bin/watchdog`
-   in a source tree finds `bin/daslang`; exactly one `*.exe` in the directory means that
-   program. Anything ambiguous is an error, never a guess.
+   in a source tree finds `bin/daslang`; exactly one program in the directory means that
+   program - a `*.exe`, or on a Unix layout a regular file with no extension, which is what a
+   daspkg bundle names its exe; the watchdog's own executable is never a candidate. Anything
+   ambiguous is an error, never a guess.
 
 Everything after `--` goes to the child verbatim. From the source tree the watchdog does not sit
 beside what it supervises, so pass `--cwd`:
@@ -92,8 +94,8 @@ them between ticks, and a number that only grows across heartbeats is a leak. Th
 `crash_bundle`, `stop_file_requested`, `shutdown_requested`, `shutdown_request_failed`,
 `terminate_requested`, `kill_requested`, `child_unkillable`, `watchdog_already_running`,
 `wer_ready` / `wer_not_ready` / `wer_installed` / `wer_install_failed`, `tray_started`,
-`tray_unavailable`, `tray_open_requested`, `tray_open_failed`, `tray_shutdown_requested`,
-`watchdog_stopped`.
+`tray_unavailable`, `tray_icon_unavailable`, `tray_open_requested`, `tray_open_failed`,
+`tray_shutdown_requested`, `watchdog_stopped`.
 In-tree readers: `smoke_test.cmake` and `tests/watchdog/test_watchdog.das`.
 
 ## Crash capture
@@ -109,7 +111,12 @@ visible to which tier.
 
 `--tray` (the `tray` key in `watchdog.json`) puts a status icon in the notification area: a
 disc, plain while the child serves, wearing an amber triangle while it starts or tunes and a red
-square when it is unhealthy, crashed or waiting to restart. The tooltip and the menu's first row
+square when it is unhealthy, crashed or waiting to restart. `--tray-icon <file>` (the
+`tray_icon` key; a path relative to `--cwd`) replaces the disc with the program's own mark, a
+PNG or an ICO whose frames are PNG-compressed - the largest square frame up to 64 px is shown,
+and the badge is drawn over it the same way. PNG is the one codec the static binary decodes; a
+file it cannot read is logged as `tray_icon_unavailable` with the reason, and the disc shows.
+The tooltip and the menu's first row
 carry one status line - `starting up - loading the model`, `tuning this box - 3/12 kernels
 (gemv)`, `serving - healthy 2h05m`, `unhealthy (ready)`, `crashed (exit 9) - collecting the
 report`, `restarting in 4s (exit 9)`. `Open <name>`, also a left click, opens the page named by
@@ -136,10 +143,13 @@ A package manifest names the tool once for every platform:
 ```das
 release_include_tool("watchdog")         // bin/watchdog or bin/Release/watchdog.exe -> bundle root
 release_include("watchdog.json")
+release_include("tray.ico")              // when watchdog.json names it as the tray_icon
 ```
 
 A build without the executable fails the release rather than shipping a bundle quietly short
-a supervisor.
+a supervisor. In the bundle the watchdog discovers the baked exe beside it (the one program in
+the directory that is not the watchdog), so the same `watchdog.json` serves a `daspkg release`
+bundle and a `daslang -jit main.das` deployment.
 
 ## Layout
 

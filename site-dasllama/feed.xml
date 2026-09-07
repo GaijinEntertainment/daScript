@@ -4,8 +4,24 @@
 <author><name>dasllama.io</name></author>
 <link href="https://dasllama.io/"/>
 <link href="https://dasllama.io/feed.xml" rel="self"/>
-<updated>2026-09-05T00:00:00Z</updated>
+<updated>2026-09-07T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
+<entry>
+<title>dasllama-server is a download now - one archive per platform, no daslang install.</title>
+<link href="https://dasllama.io/#n-2026-09-07-download-dasllama-server"/>
+<id>https://dasllama.io/#n-2026-09-07-download-dasllama-server</id>
+<updated>2026-09-07T00:00:00Z</updated>
+<content type="html">&lt;p&gt;The OpenAI-compatible server ships as a standalone bundle for macOS (Apple silicon), Windows
+x64, Linux x86_64 and Linux arm64, from the rolling
+&lt;a href=&quot;https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-server&quot;&gt;dasllama-server release&lt;/a&gt;
+on GitHub - the links are in &lt;em&gt;get it&lt;/em&gt; above. Unpack it, start the watchdog (on a Mac, the app),
+and the control page at &lt;code&gt;127.0.0.1:8080&lt;/code&gt; opens on the model catalog: pick a model, it downloads,
+the server restarts into it. The exe is a fat build - plain code for the platform&#x27;s baseline CPU
+class, with one clone of every tuned kernel per class the engine ships a profile for, chosen from
+cpuid when it starts; on a Mac the Metal kernel choices are raced once, at the first start. The
+fastest a box can serve is still &lt;code&gt;daslang -jit&lt;/code&gt; from the SDK, tuned on that box - the download is
+the good default, the SDK is the ceiling.&lt;/p&gt;</content>
+</entry>
 <entry>
 <title>dasLLAMA runs in the browser - the storyteller, compiled to wasm64, opens the new examples page.</title>
 <link href="https://dasllama.io/#n-2026-09-05-storyteller-in-the-browser"/>

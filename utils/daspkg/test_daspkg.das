@@ -1906,6 +1906,62 @@ def test_cmd_release_pure_daslang(t : T?) {
     }
 }
 
+// the tool release_launcher names must be a real build product: the watchdog the tree builds
+// where dasHV, dasStdDlg and dasStbImage are in
+def private built_watchdog_path() : string {
+    let ext = get_platform_name() == "windows" ? ".exe" : ""
+    for (rel in ["bin/watchdog{ext}", "bin/Release/watchdog{ext}"]) {
+        let candidate = path_join(get_das_root(), rel)
+        if (fexist(candidate)) return candidate
+    }
+    return ""
+}
+
+[test]
+def test_cmd_release_launcher(t : T?) {
+    t |> run("release_launcher names the shipped tool the macOS .app opens; a tool not shipped refuses before the build") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_launcher"
+        let out_dir = "{get_das_root()}/_test_release_launcher_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"launched\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n    release_launcher(\"watchdog\")\n\}\n")
+        }
+        let refused = cmd_release(tmp_root, out_dir)
+        tt |> equal(1, refused, "a launcher no release_include_tool ships is refused")
+        tt |> success(!fexist(bundle_exe_path(out_dir, "launched")), "and nothing was built")
+        if (empty(built_watchdog_path())) {
+            to_log(LOG_INFO, "test_cmd_release_launcher: no built watchdog in this tree; the .app half skips\n")
+            force_rmdir(tmp_root)
+            force_rmdir(out_dir)
+            return
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"launched\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n    release_include_tool(\"watchdog\")\n    release_launcher(\"watchdog\")\n\}\n")
+        }
+        let rc = cmd_release(tmp_root, out_dir)
+        tt |> equal(0, rc, "cmd_release returns 0 with the tool shipped")
+        let artifacts = bundle_artifacts_dir(out_dir, "launched")
+        let ext = get_platform_name() == "windows" ? ".exe" : ""
+        tt |> success(fexist(path_join(artifacts, "watchdog{ext}")), "the launcher tool sits beside the exe")
+        tt |> success(fexist(bundle_exe_path(out_dir, "launched")), "the exe itself still ships")
+        if (get_platform_name() == "darwin") {
+            let plist = fread(path_join(bundle_root_dir(out_dir, "launched"), "Contents/Info.plist"))
+            let key_at = find(plist, "<key>CFBundleExecutable</key>")
+            tt |> success(key_at >= 0, "the plist names an executable")
+            let value_at = find(plist, "<string>", key_at)
+            tt |> success(value_at >= 0 && starts_with(slice(plist, value_at, length(plist)), "<string>watchdog</string>"),
+                "CFBundleExecutable is the launcher, so a double click on the .app starts the supervisor:\n{plist}")
+        }
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+}
+
 [test]
 def test_cmd_release_refuses_unsafe_bundle_name(t : T?) {
     // the bundle name is a .das_package string that reaches path_join, force_rmdir and shell

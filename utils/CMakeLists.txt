@@ -16,12 +16,13 @@ add_custom_target(check_dasgen
     COMMENT "Checking generated builtin .inc files are up to date (dasgen)"
 )
 
-# watchdog: the supervisor as a standalone context on the full runtime - libDaScript, dasHV and
-# dasStdDlg (the tray icon) as static archives, no compiler, no shared module, no lock on the files
-# it deploys (the shape of examples/standalone/06_full_runtime). Lands in bin/ and installs beside
-# daslang. It needs no LLVM, so it sits above the -exe utilities' early return; both module
-# targets exist only when their modules are enabled and included.
-if(TARGET libDasModuleHV AND TARGET libDasModuleStdDlg)
+# watchdog: the supervisor as a standalone context on the full runtime - libDaScript, dasHV,
+# dasStdDlg (the tray icon) and dasStbImage (the icon file's PNG decoder) as static archives, no
+# compiler, no shared module, no lock on the files it deploys (the shape of
+# examples/standalone/06_full_runtime). Lands in bin/ and installs beside daslang. It needs no
+# LLVM, so it sits above the -exe utilities' early return; the module targets exist only when
+# their modules are enabled and included.
+if(TARGET libDasModuleHV AND TARGET libDasModuleStdDlg AND TARGET libDasModuleStbImage)
     set(WATCHDOG_GEN "${CMAKE_CURRENT_BINARY_DIR}/_watchdog_ctx_generated")
     file(MAKE_DIRECTORY "${WATCHDOG_GEN}")
     file(GLOB WATCHDOG_DAS_SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/utils/watchdog/*.das")
@@ -46,7 +47,7 @@ if(TARGET libDasModuleHV AND TARGET libDasModuleStdDlg)
         "${WATCHDOG_GEN}"
         ${NEED_MODULES_PATH}
         "${PROJECT_SOURCE_DIR}/modules/dasHV/hv/$<CONFIG>/include")
-    target_link_libraries(watchdog PRIVATE libDaScript ${SRC_LIBRARIES} libDasModuleHV libDasModuleStdDlg)
+    target_link_libraries(watchdog PRIVATE libDaScript ${SRC_LIBRARIES} libDasModuleHV libDasModuleStdDlg libDasModuleStbImage)
     SETUP_CPP11(watchdog)
     SETUP_BIN_RPATH(watchdog)
     set_target_properties(watchdog PROPERTIES

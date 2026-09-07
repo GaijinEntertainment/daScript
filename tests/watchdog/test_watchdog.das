@@ -562,14 +562,78 @@ def test_discovery(t : T?) {
         let ambiguous <- resolve_config([], root)
         t |> success(find(ambiguous.error, "2 executables") >= 0, "two exes are refused: {ambiguous.error}")
         remove(path_join(root, "two.exe"))
+        fwrite(path_join(root, "watchdog.exe"), "")
         let program_mode <- resolve_config([], root)
         t |> equal(program_mode.error, "")
-        t |> equal(program_mode.cfg.name, "one", "an executable names itself")
+        t |> equal(program_mode.cfg.name, "one", "an executable names itself, and the watchdog's own exe is never the candidate")
         remove(path_join(root, "one.exe"))
+        remove(path_join(root, "watchdog.exe"))
         let nothing <- resolve_config([], root)
         t |> success(find(nothing.error, "nothing to supervise") >= 0, "an empty directory is an error: {nothing.error}")
         let cleanup = rmdir_rec_result(root)
         t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+    t |> run("a daspkg bundle on a Unix layout: the extensionless exe beside the watchdog, its config and its assets") @(t : T?) {
+        let root = make_temp(t, "wd bundle ")
+        if (empty(root)) return
+        fwrite(path_join(root, "dasllama-server"), "")
+        fwrite(path_join(root, "watchdog"), "")
+        fwrite(path_join(root, "watchdog.json"), "\{\"no_health\": true\}")
+        fwrite(path_join(root, "control.html"), "")
+        fwrite(path_join(root, ".daspkg_release.manifest"), "")
+        mkdir(path_join(root, "modules"))
+        let bundle <- resolve_config([], root)
+        if (get_platform_name() == "windows") {
+            t |> success(find(bundle.error, "nothing to supervise") >= 0, "an extensionless file is not a program on Windows: {bundle.error}")
+        } else {
+            t |> equal(bundle.error, "")
+            t |> success(ends_with(bundle.cfg.program, "dasllama-server"), "the extensionless exe is the program: {bundle.cfg.program}")
+            t |> equal(bundle.cfg.name, "dasllama-server", "and names the supervision")
+            fwrite(path_join(root, "dasllama-bench"), "")
+            let two <- resolve_config([], root)
+            t |> success(find(two.error, "2 executables") >= 0, "two extensionless files are ambiguous: {two.error}")
+        }
+        let cleanup = rmdir_rec_result(root)
+        t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+}
+
+[test]
+def test_tray_icon(t : T?) {
+    t |> run("the dasllama mark's ICO decodes to its largest PNG frame, and the badge lands on it") @(t : T?) {
+        let path = path_join(get_das_root(), "utils/dasllama-server/tray.ico")
+        var icon <- tray_icon_load(path)
+        t |> equal(icon.error, "", "the ICO loads")
+        t |> equal(icon.side, 48, "the largest frame within {TRAY_ICON_FRAME_MAX} px is the 48")
+        t |> equal(length(icon.rgba), 48 * 48 * 4)
+        var opaque = 0
+        for (i in range(48 * 48)) {
+            if (icon.rgba[i * 4 + 3] == 255u8) {
+                opaque++
+            }
+        }
+        t |> success(opaque > 0 && opaque < 48 * 48, "the mark has opaque pixels and transparent ones: {opaque}")
+        var red := icon.rgba
+        tray_badge(red, 48, "red")
+        t |> success(pixel(red, 48, 36, 36) == int4(217, 109, 79, 255), "the square sits at the lower right: {pixel(red, 48, 36, 36)}")
+        t |> equal(pixel(red, 48, 25, 36).w, 0, "the moat clears the mark around the badge")
+        t |> success(pixel(red, 48, 10, 10) == pixel(icon.rgba, 48, 10, 10), "the mark stays outside the moat")
+        var base := icon.rgba
+        tray_badge(base, 48, "base")
+        var changed = 0
+        for (b, o in base, icon.rgba) {
+            if (b != o) {
+                changed++
+            }
+        }
+        t |> equal(changed, 0, "the base badge leaves the mark alone")
+    }
+    t |> run("a file that is not an image, and a file that is not there, name the reason") @(t : T?) {
+        let text <- tray_icon_load(path_join(get_das_root(), "utils/dasllama-server/watchdog.json"))
+        t |> success(find(text.error, "neither a PNG nor an ICO") >= 0, "{text.error}")
+        t |> equal(text.side, 0)
+        let missing <- tray_icon_load(path_join(get_das_root(), "utils/dasllama-server/no-such.ico"))
+        t |> success(find(missing.error, "cannot read") >= 0, "{missing.error}")
     }
 }
 

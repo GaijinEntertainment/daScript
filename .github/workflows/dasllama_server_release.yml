@@ -1,0 +1,188 @@
+name: dasllama-server release
+
+# Builds the standalone dasllama-server bundle per platform - a fat exe (one clone of every
+# [tune] kernel per shipped CPU-class profile, picked from cpuid at start) with the watchdog
+# beside it - and publishes it to the rolling `dasllama-server` release, the one the download
+# links on dasllama.io point at, plus the daslang release that triggered the run.
+#
+# Triggers:
+#   * release: prereleased - full matrix, uploads dasllama-server-<os>-<arch>.<ext> to the
+#     rolling release (--clobber) and to the daslang release being cut.
+#   * workflow_dispatch - full matrix build + smoke; uploads to the rolling release only when
+#     the `publish` input is set. A dispatch without it is a build check, nothing moves.
+#
+# The matrix is the SDK's: linux x86_64, linux arm64, darwin arm64, windows x64. A fat build
+# needs no target hardware - the clones compile from the shipped profiles - so every class ships
+# from these runners; only tuning needs the box, and a fat exe never tunes.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Upload the bundles to the rolling dasllama-server release"
+        type: boolean
+        default: false
+  release:
+    types: [prereleased]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            runner: ubuntu-latest
+            fat_class: x86-avx2
+            ext: tar.gz
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            fat_class: arm-neon
+            ext: tar.gz
+          - name: darwin-arm64
+            runner: macos-26
+            fat_class: arm-neon
+            ext: zip
+          - name: windows-x64
+            runner: windows-latest
+            fat_class: x86-avx2
+            ext: zip
+
+    steps:
+      - name: SCM Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake and Ninja
+        uses: lukka/get-cmake@latest
+
+      - if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Set up MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install required dev packages
+        run: |
+          set -eux
+          case "${{ runner.os }}" in
+            Linux)
+              sudo bash ci/apt_install.sh --no-install-recommends \
+                libatomic-ops-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev libglfw3-dev \
+                libfreetype6-dev libudev-dev libopenal-dev libvorbis-dev libflac-dev libx11-dev \
+                libdbus-1-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libssl-dev
+              ;;
+            macOS)
+              brew install bison openssl
+              ;;
+          esac
+
+      - name: Restore vcpkg + openssl (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache/restore@v4
+        with:
+          path: vcpkg
+          key: vcpkg-x64-windows-v2
+
+      - name: Install openssl (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if [ ! -x vcpkg/vcpkg.exe ] && [ ! -x vcpkg/vcpkg ]; then
+              git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
+          fi
+          ./vcpkg/vcpkg install openssl:x64-windows --binarycaching
+          echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
+          rm -rf vcpkg/buildtrees vcpkg/downloads vcpkg/packages
+
+      - name: Configure and build daslang with the release modules
+        run: |
+          set -eux
+          ACTIVE_MODULES=$(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f2 | sed 's|^|-D|' | xargs)
+          LEAN="-DDAS_TUTORIAL_DISABLED=ON -DDAS_AOT_EXAMPLES_DISABLED=ON"
+          case "${{ runner.os }}" in
+            Linux)
+              CC=clang CXX=clang++ cmake --no-warn-unused-cli -B build -G Ninja -DCMAKE_BUILD_TYPE=Release $ACTIVE_MODULES $LEAN
+              ;;
+            macOS)
+              CC=clang CXX=clang++ cmake --no-warn-unused-cli -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_CXX_FLAGS="-Wno-elaborated-enum-base" $ACTIVE_MODULES $LEAN
+              ;;
+            Windows)
+              export PATH="/c/Strawberry/perl/bin:$PATH"
+              cmake --no-warn-unused-cli -B build -G Ninja -DCMAKE_BUILD_TYPE=Release $ACTIVE_MODULES $LEAN \
+                -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+              ;;
+          esac
+          cmake --build build --config Release --parallel
+
+      - name: Release the server as a fat ${{ matrix.fat_class }} bundle
+        run: |
+          set -eux
+          if [[ "${{ runner.os }}" == "Windows" ]]; then DASLANG=bin/daslang.exe; else DASLANG=bin/daslang; fi
+          test -x "$DASLANG"
+          "$DASLANG" utils/daspkg/main.das -- release --fat ${{ matrix.fat_class }} --root utils/dasllama-server --out dist
+
+      - name: Smoke-test the bundle
+        # the exe loads its runtime and shared modules and answers --help; the supervisor too
+        run: |
+          set -eux
+          case "${{ runner.os }}" in
+            macOS)   APP=dist/dasllama-server.app/Contents/MacOS; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog" ;;
+            Windows) APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog.exe" ;;
+            *)       APP=dist/dasllama-server; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog" ;;
+          esac
+          test -f "$APP/control.html"
+          test -f "$APP/tray.ico"
+          test -f "$APP/watchdog.json"
+          "$SERVER" --help
+          "$WATCHDOG" --help
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            grep -A1 CFBundleExecutable dist/dasllama-server.app/Contents/Info.plist | grep -q '<string>watchdog</string>'
+          fi
+
+      - name: Package
+        run: |
+          set -eux
+          mkdir -p artifacts
+          ASSET="dasllama-server-${{ matrix.name }}.${{ matrix.ext }}"
+          case "${{ runner.os }}" in
+            macOS)   ditto -c -k --sequesterRsrc --keepParent dist/dasllama-server.app "artifacts/$ASSET" ;;
+            Windows) (cd dist && 7z a "../artifacts/$ASSET" dasllama-server) ;;
+            *)       tar -czf "artifacts/$ASSET" -C dist dasllama-server ;;
+          esac
+          cd artifacts
+          (sha256sum "$ASSET" 2>/dev/null || shasum -a 256 "$ASSET") > "$ASSET.sha256"
+          cat "$ASSET.sha256"
+          ls -la
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dasllama-server-${{ matrix.name }}
+          path: artifacts/*
+          if-no-files-found: error
+
+      - name: Upload to the daslang release being cut
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/* --clobber
+
+      - name: Publish to the rolling dasllama-server release
+        if: github.event_name == 'release' || inputs.publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eux
+          if ! gh release view dasllama-server --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create dasllama-server --repo "$GITHUB_REPOSITORY" --latest=false \
+              --title "dasllama-server - standalone downloads (rolling)" \
+              --notes "The OpenAI-compatible dasLLAMA server as a standalone download per platform, no daslang install needed. Rolling: every asset is replaced in place when a daslang release is cut. Unpack, start watchdog (the .app on macOS), open http://127.0.0.1:8080/ - utils/dasllama-server/README.md."
+          fi
+          gh release upload dasllama-server --repo "$GITHUB_REPOSITORY" artifacts/* --clobber
