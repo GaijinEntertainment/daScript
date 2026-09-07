@@ -278,3 +278,18 @@ carry is a startup `jit_register_native_path_resolve` call - an exe-file lookup 
 several hundred for a hello world - and a build-machine path baked into the binary. A whole-lib
 exe (`dastest.exe`, which compiles test files at run time) still carries every row, re-rooted at
 run time the way dynamic modules are.
+
+## 11. A global's address is a memory(none) lookup at its use site
+
+JIT code reaches a das global through `jit_get_global_mnh(mnh, ctx)` (`jit_get_shared_mnh` for a
+shared one): the mangled-name hash is static, and the offset it names is added to the context's
+globals base, which is what a cross-context call needs - the same JIT function runs on any context
+of the program, each with its own base, so the address cannot be baked. The emitter
+(`visitExprVar`, `daslib/llvm_jit.das`) emits the call where the variable is used and declares it
+`memory(none)` (`daslib/llvm_jit_common.das`): the result depends on nothing but its arguments for
+the lifetime of the context, so LLVM CSEs one use against a dominating one, hoists a loop's lookup
+into the preheader, and - the call not being `speculatable` - never moves it ahead of a branch, so
+a global written on one branch is looked up on that branch only. Every access to a global in a
+function therefore shares one base pointer, which is what lets LLVM see `xs[j]` and `xs[j + 1]` as
+adjacent. Under `options solid_context` the address is instead `context->globals + stackTop`,
+computed once per function in the entry block.
